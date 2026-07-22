@@ -18,7 +18,10 @@ namespace NumSharp.Interop.PythonNet
         ///     coupling to the source.
         ///
         ///     <para>0-d exporters produce scalar NDArrays. complex64 buffers (format 'Zf') are widened
-        ///     to <see cref="NPTypeCode.Complex"/> (complex128) during the copy.</para>
+        ///     to <see cref="NPTypeCode.Complex"/> (complex128) during the copy. UCS-4 text buffers
+        ///     (format 'w' / 4-byte 'u' — numpy '&lt;U1', linux/macOS <c>array.array('u')</c>) are narrowed
+        ///     to <see cref="NPTypeCode.Char"/> (UTF-16) during the copy; non-BMP code points throw, as a
+        ///     single <see cref="char"/> cannot hold a surrogate pair.</para>
         /// </summary>
         /// <param name="obj">The buffer-protocol exporter to copy.</param>
         /// <param name="requireGIL">
@@ -38,8 +41,7 @@ namespace NumSharp.Interop.PythonNet
 
                 string format = mv.format;
                 long itemsize = mv.itemsize;
-                bool widenComplex64 = IsComplex64Format(format);
-                NPTypeCode tc = widenComplex64 ? NPTypeCode.Complex : FromBufferFormat(format, itemsize);
+                DtypeCompatibilityKind kind = ResolveDtypeCompatibility(format, itemsize, out NPTypeCode tc);
 
                 long[] dims = mv.shape;
                 Shape shape = dims.Length == 0 ? new Shape() : new Shape(dims);
@@ -57,7 +59,7 @@ namespace NumSharp.Interop.PythonNet
                     // uniformly safe. Only a read-only SIMPLE lock is needed here; it is released as
                     // soon as the bytes are blitted.
                     using PyBuffer buf = mv.GetBuffer(PyBUF.SIMPLE);
-                    CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, widenComplex64);
+                    CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, kind);
                 }
                 else
                 {
@@ -65,7 +67,7 @@ namespace NumSharp.Interop.PythonNet
                     // then blit the C-ordered bytes. The bytes object is a plain contiguous exporter.
                     using PyObject bytesObj = mv.tobytes("C");
                     using PyBuffer buf = bytesObj.GetBuffer(PyBUF.SIMPLE);
-                    CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, widenComplex64);
+                    CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, kind);
                 }
 
                 return dest;
@@ -91,7 +93,8 @@ namespace NumSharp.Interop.PythonNet
         ///         pointer comes from a <c>PyBUF.STRIDED</c> buffer and the exact shape/strides from the
         ///         <c>memoryview</c> itself, reconstructing the strided view (incl. negative strides) —
         ///         so a view is produced whenever the layout is representable, not only for numpy. Only
-        ///         genuinely irreducible layouts (complex64, big-endian, non-element strides) decline.</item>
+        ///         genuinely irreducible layouts (complex64, UCS-4 text, big-endian, non-element strides)
+        ///         decline.</item>
         ///     </list>
         ///
         ///     <para><b>Lifetime:</b> the lease is released when the LAST NumSharp view over the memory —
@@ -155,9 +158,10 @@ namespace NumSharp.Interop.PythonNet
                         // protocol hands us the base pointer via a PyBUF.STRIDED request and the
                         // memoryview reports the exact shape/strides. Reconstruct the strided view
                         // rather than declining — only genuinely irreducible layouts (complex64,
-                        // big-endian, non-element strides) throw here, and in Auto mode those become
-                        // the copy fallback. Extract the metadata, then release the metadata view
-                        // before taking the lease buffer (same discipline as the contiguous path).
+                        // UCS-4 text, big-endian, non-element strides) throw here, and in Auto mode
+                        // those become the copy fallback. Extract the metadata, then release the
+                        // metadata view before taking the lease buffer (same discipline as the
+                        // contiguous path).
                         string sFormat = mv.format;
                         long sItemsize = mv.itemsize;
                         long[] sDims = mv.shape;
@@ -386,11 +390,26 @@ namespace NumSharp.Interop.PythonNet
 
             long dataPtr;
             bool readOnly;
+            if (!ai.HasKey(PythonRuntimeInterop.NameData))
+                throw new NotSupportedException(
+                    "__array_interface__ has no 'data' entry — the spec then defers to the object's own buffer protocol, which this object does not export. Use ToNDArray (copy), or np.asarray(obj) first.");
             using (PyObject data = ai[PythonRuntimeInterop.NameData])
             {
+                // The spec allows 'data' to be the (pointer, readonly) TUPLE or a buffer-like object
+                // (PIL.Image emits bytes). Only the tuple form names an address a view can share — and
+                // the gate must be a real type check: PySequence_Tuple would happily turn bytes into a
+                // tuple of BYTE VALUES, silently promoting the first pixel byte to a pointer.
+                if (!PyTuple.IsTupleType(data))
+                    throw new NotSupportedException(
+                        "__array_interface__['data'] is not a (pointer, readonly) tuple — buffer-object data (PIL images, ...) names no address a zero-copy view could share. Use ToNDArray (copy), or np.asarray(obj) first.");
                 using var dataTuple = PyTuple.AsTuple(data);
+                if (dataTuple.Length() != 2)
+                    throw new NotSupportedException(
+                        $"__array_interface__['data'] tuple has {dataTuple.Length()} items, expected (pointer, readonly).");
                 using (PyObject p = dataTuple[0]) dataPtr = p.As<long>();
-                using (PyObject r = dataTuple[1]) readOnly = r.As<bool>();
+                // The readonly flag is read by TRUTHINESS, not As<bool>: the spec shows a bool, but
+                // real-world producers emit 0/1 ints too, and pythonnet's bool conversion rejects ints.
+                using (PyObject r = dataTuple[1]) readOnly = r.IsTrue();
             }
 
             if (readOnly && !allowReadonly)
@@ -489,23 +508,90 @@ namespace NumSharp.Interop.PythonNet
 
         // ---- copy internals ----------------------------------------------------------------------
 
-        private static unsafe void CopyBuffer(void* src, long srcBytes, NDArray dest, long expectedSourceBytes, bool widenComplex64)
+        /// <summary>
+        ///     How <see cref="ToNDArray"/> materializes one PEP 3118 element type into a NumSharp dtype.
+        ///     A source whose element type is bit-identical to a NumSharp dtype is a straight blit; the
+        ///     two element types whose only NumSharp counterpart is a DIFFERENT width need an
+        ///     element-wise conversion during the copy (and so can never be a zero-copy view — the view
+        ///     path lets <see cref="FromBufferFormat"/> throw the copy guidance instead). Resolved once
+        ///     per import by <see cref="ResolveDtypeCompatibility"/> and consumed by <see cref="CopyBuffer"/>.
+        /// </summary>
+        private enum DtypeCompatibilityKind
+        {
+            /// <summary>Element type is bit-identical to its NumSharp dtype — a straight byte blit.</summary>
+            Blit,
+
+            /// <summary>complex64 ('Zf'): widen each (float32, float32) pair to a 16-byte <see cref="Complex"/>.</summary>
+            WidenComplex64,
+
+            /// <summary>UCS-4 text ('w' / '1w' / 4-byte 'u'): narrow each code point to a UTF-16 <see cref="char"/> (BMP only).</summary>
+            NarrowUcs4,
+        }
+
+        /// <summary>
+        ///     Classify a PEP 3118 element type by the <see cref="DtypeCompatibilityKind"/> path
+        ///     <see cref="ToNDArray"/> must take, and hand back the destination <paramref name="tc"/>
+        ///     the path implies. The two conversion kinds pick their widened/narrowed dtype directly;
+        ///     the blit kind defers to <see cref="FromBufferFormat"/> (which also raises the verbatim
+        ///     errors for the unsupported/big-endian/UCS-4-view cases).
+        /// </summary>
+        private static DtypeCompatibilityKind ResolveDtypeCompatibility(string format, long itemsize, out NPTypeCode tc)
+        {
+            if (IsComplex64Format(format))
+            {
+                tc = NPTypeCode.Complex;
+                return DtypeCompatibilityKind.WidenComplex64;
+            }
+
+            if (IsUcs4TextFormat(format, itemsize))
+            {
+                tc = NPTypeCode.Char;
+                return DtypeCompatibilityKind.NarrowUcs4;
+            }
+
+            tc = FromBufferFormat(format, itemsize);
+            return DtypeCompatibilityKind.Blit;
+        }
+
+        private static unsafe void CopyBuffer(void* src, long srcBytes, NDArray dest, long expectedSourceBytes, DtypeCompatibilityKind kind)
         {
             if (srcBytes != expectedSourceBytes)
                 throw new InvalidOperationException($"exporter produced {srcBytes} bytes, expected {expectedSourceBytes}.");
 
-            if (widenComplex64)
+            switch (kind)
             {
-                var s = (float*)src;
-                var d = (Complex*)dest.Storage.Address;
-                long n = dest.size;
-                for (long i = 0; i < n; i++)
-                    d[i] = new Complex(s[2 * i], s[2 * i + 1]);
-            }
-            else
-            {
-                long destBytes = (long)dest.size * dest.dtypesize;
-                Buffer.MemoryCopy(src, dest.Storage.Address, destBytes, srcBytes);
+                case DtypeCompatibilityKind.WidenComplex64:
+                {
+                    var s = (float*)src;
+                    var d = (Complex*)dest.Storage.Address;
+                    long n = dest.size;
+                    for (long i = 0; i < n; i++)
+                        d[i] = new Complex(s[2 * i], s[2 * i + 1]);
+                    break;
+                }
+
+                case DtypeCompatibilityKind.NarrowUcs4:
+                {
+                    var s = (uint*)src;
+                    var d = (char*)dest.Storage.Address;
+                    long n = dest.size;
+                    for (long i = 0; i < n; i++)
+                    {
+                        uint cp = s[i];
+                        if (cp > 0xFFFF)
+                            throw new NotSupportedException(
+                                $"UCS-4 text contains non-BMP code point U+{cp:X} at element {i}; a NumSharp Char is a single UTF-16 code unit (this code point needs a surrogate pair).");
+                        d[i] = (char)cp;
+                    }
+                    break;
+                }
+
+                default:   // Blit — bit-identical element type
+                {
+                    long destBytes = (long)dest.size * dest.dtypesize;
+                    Buffer.MemoryCopy(src, dest.Storage.Address, destBytes, srcBytes);
+                    break;
+                }
             }
         }
 
@@ -515,6 +601,25 @@ namespace NumSharp.Interop.PythonNet
                 return false;
             int i = "<>=@!".IndexOf(format[0]) >= 0 ? 1 : 0;
             return format.Substring(i) == "Zf";
+        }
+
+        /// <summary>
+        ///     True for elementwise UCS-4 text formats — 'w' (PEP 3118 UCS-4; numpy '&lt;U1' exports the
+        ///     count-prefixed '1w') and 4-byte 'u' (linux/macOS wchar_t). Big-endian markers return
+        ///     false so <see cref="FromBufferFormat"/> raises its byte-swap guidance instead of the
+        ///     narrow path reading swapped code points. Multi-char text ('3w' — numpy '&lt;U3') stays
+        ///     false: each element is a whole string, not one code point.
+        /// </summary>
+        private static bool IsUcs4TextFormat(string format, long itemSize)
+        {
+            if (string.IsNullOrEmpty(format) || itemSize != 4)
+                return false;
+            char c0 = format[0];
+            if (c0 == '>' || c0 == '!')
+                return false;
+            int i = "<=@".IndexOf(c0) >= 0 ? 1 : 0;
+            string code = format.Substring(i);
+            return code == "w" || code == "1w" || code == "u";
         }
 
         private static long[] TupleToLongs(PyObject tupleLike)

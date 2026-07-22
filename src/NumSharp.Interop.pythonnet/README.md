@@ -19,8 +19,8 @@ Everything is packaging over four operations on the static `NDArrayPythonInterop
 |---|---|---|
 | NumSharp → Python | `ToNumpy(nd)` | **zero-copy numpy view** of NumSharp's buffer — shared mutation, source rooted; full layout fidelity (slices, transposes, Fortran order, negative strides; broadcasts become read-only; scalars become 0-d) |
 | NumSharp → Python | `ToNumpyCopy(nd)` | independent numpy array (no shared memory, no lifetime coupling) |
-| Python → NumSharp | `ToNDArray(py)` | **copy** any PEP 3118 exporter into a fresh C-contiguous `NDArray` (honors strides / Fortran order; complex64 widens to complex128; 0-d becomes a scalar) |
-| Python → NumSharp | `ToNDArrayView(py[, allowReadonly])` | **zero-copy NDArray view** over Python memory — shared mutation, via three routes: C-contiguous buffers through a locked `PyBuffer` lease; non-contiguous **numpy** arrays through `__array_interface__`; and non-contiguous **non-numpy** exporters (a sliced / offset / reversed `memoryview`, a strided `array.array` memoryview) through a `PyBUF.STRIDED` pointer + the memoryview's own shape/strides. Only genuinely irreducible layouts (complex64, big-endian, non-element strides) decline |
+| Python → NumSharp | `ToNDArray(py)` | **copy** any PEP 3118 exporter into a fresh C-contiguous `NDArray` (honors strides / Fortran order; complex64 widens to complex128; UCS-4 text narrows to `Char`, BMP only; 0-d becomes a scalar) |
+| Python → NumSharp | `ToNDArrayView(py[, allowReadonly])` | **zero-copy NDArray view** over Python memory — shared mutation, via three routes: C-contiguous buffers through a locked `PyBuffer` lease; non-contiguous **numpy** arrays through `__array_interface__`; and non-contiguous **non-numpy** exporters (a sliced / offset / reversed `memoryview`, a strided `array.array` memoryview) through a `PyBUF.STRIDED` pointer + the memoryview's own shape/strides. Only genuinely irreducible layouts (complex64, UCS-4 text, big-endian, non-element strides) decline |
 
 The lease buffer is always acquired **through the exporter's `memoryview`**, never the raw object: the memoryview is CPython's canonical, uniformly-behaved buffer exporter, so this sidesteps pythonnet 3.0.x's per-exporter `GetBuffer` bugs — a raw `ctypes` array hard-crashes `obj.GetBuffer` on *every* flag, while the memoryview over the same memory leases cleanly. Measured coverage across 50 exporter varieties: **47 view, 2 copy** (`complex64`, sub-item strides — both genuinely unrepresentable), 1 unsupported (big-endian multi-byte).
 
@@ -57,7 +57,7 @@ using (Py.GIL())
 
 | Mode | Meaning |
 |---|---|
-| `Auto` *(default)* | **Zero-copy view when the dtype/layout permits, an independent copy only when a view is impossible** — never a blanket copy. On decode the fallback is real (complex64, big-endian, non-contiguous non-numpy exporters copy; everything else stays a view). On encode a view and a copy have identical dtype coverage, so Auto always yields a view. |
+| `Auto` *(default)* | **Zero-copy view when the dtype/layout permits, an independent copy only when a view is impossible** — never a blanket copy. On decode the fallback is real (complex64 widens, UCS-4 text narrows, sub-item strides linearize — as copies; big-endian multi-byte is refused by both paths; everything else stays a view). On encode a view and a copy have identical dtype coverage, so Auto always yields a view. |
 | `View` | Always share; **decline** the conversion (return no value) if a view is impossible — a loud failure for callers who depend on shared memory. |
 | `Copy` | Always an independent copy — no shared memory, no Py_buffer lock, total coverage. |
 
@@ -90,7 +90,7 @@ Import views also **do not own their data** (like `np.frombuffer(...)`, whose `f
   ```
 - **Engine lifetime**: import views die with the interpreter. `PythonEngine.Shutdown()` releases all outstanding leases crash-free (a registered shutdown handler), but the NDArrays over that memory must not be touched afterwards (disposing them stays safe). Exports still held by Python are swept right after shutdown completes — no leak survives the engine.
 - **`PythonEngine.Shutdown` on .NET 8+**: pythonnet crashes in its own BinaryFormatter state-stashing. Opt out first: `RuntimeData.FormatterType = typeof(NoopFormatter);` (`NoopFormatter` ships from pythonnet 3.0.4 onward — guaranteed by the 3.0.5 floor below).
-- **dtypes**: all NumSharp dtypes map except `Decimal` (no numpy equivalent — convert first); `Char` is exported as `uint16` (UTF-16 code units). Big-endian buffers are rejected (byte-swap first: `arr.astype(arr.dtype.newbyteorder('<'))`). complex64 imports copy-widen to complex128 (no zero-copy view).
+- **dtypes**: all NumSharp dtypes map except `Decimal` (no numpy equivalent — convert first); `Char` is exported as `uint16` (UTF-16 code units) and imported from 2-byte wchar buffers (PEP 3118 `'u'`: `array.array('u')` on Windows, `ctypes.c_wchar`) as a zero-copy view. Big-endian buffers are rejected (byte-swap first: `arr.astype(arr.dtype.newbyteorder('<'))`). complex64 imports copy-widen to complex128, UCS-4 text (numpy `<U1`, 4-byte wchar, `'w'`) copy-narrows to `Char` (BMP only) — neither has a zero-copy view.
 - **pythonnet versions**: the dependency is `[3.0.5, 4.0.0)`. `PyBuffer` is broken for shape/strides/format flags, so metadata is read through Python's `memoryview` and only the crash-free `PyBUF.SIMPLE`/`PyBUF.WRITABLE` are used — the same code path works on every v3. The source compiles clean against all of 3.0.0–3.1.0; 3.0.5 is the floor because it is the oldest release that covers the Python versions people actually run (see below).
 
 ### Choosing a pythonnet version

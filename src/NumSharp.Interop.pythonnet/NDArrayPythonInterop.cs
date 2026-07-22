@@ -200,6 +200,10 @@ namespace NumSharp.Interop.PythonNet
                 "i8" => NPTypeCode.Int64, "u8" => NPTypeCode.UInt64,
                 "f2" => NPTypeCode.Half,  "f4" => NPTypeCode.Single, "f8" => NPTypeCode.Double,
                 "c16" => NPTypeCode.Complex,
+                "c8" => throw new NotSupportedException(
+                    $"numpy dtype '{dtypeStr}' (complex64) has no exact NumSharp dtype. ToNDArray widens it to Complex (complex128) as a copy; a zero-copy view is impossible."),
+                "U1" => throw new NotSupportedException(
+                    $"numpy dtype '{dtypeStr}' is UCS-4 text; NumSharp's Char is a 2-byte UTF-16 code unit, so a zero-copy view is impossible. ToNDArray narrows it to Char as a copy (BMP code points only)."),
                 _ => throw new NotSupportedException($"numpy dtype '{dtypeStr}' has no NumSharp dtype.")
             };
         }
@@ -220,9 +224,11 @@ namespace NumSharp.Interop.PythonNet
 
         /// <summary>
         ///     PEP 3118 struct format code (+ itemsize to disambiguate 'l'/'i' across platforms) -&gt; NumSharp
-        ///     dtype. An empty format is raw bytes. Big-endian data ('&gt;' / '!' markers) is rejected for
-        ///     multi-byte types — NumSharp buffers are native-endian and a silent reinterpretation would
-        ///     byte-swap every value.
+        ///     dtype. An empty format is raw bytes. Text units map by width: 'u' (wchar_t) of itemsize 2 is a
+        ///     UTF-16 code unit — exactly <see cref="NPTypeCode.Char"/> (numpy itself cannot import 'u');
+        ///     4-byte 'u'/'w' (UCS-4) cannot be viewed and throws with copy guidance. Big-endian data
+        ///     ('&gt;' / '!' markers) is rejected for multi-byte types — NumSharp buffers are native-endian
+        ///     and a silent reinterpretation would byte-swap every value.
         /// </summary>
         public static NPTypeCode FromBufferFormat(string format, long itemSize)
         {
@@ -248,6 +254,17 @@ namespace NumSharp.Interop.PythonNet
                 case "e": return NPTypeCode.Half;
                 case "f": return NPTypeCode.Single;
                 case "d": return NPTypeCode.Double;
+                case "g":                                     // C long double (np.longdouble exports 'g' at EVERY width)
+                    if (itemSize == 8) return NPTypeCode.Double; // MSVC long double IS IEEE double — bit-exact, viewable
+                    throw new NotSupportedException(
+                        $"buffer format 'g' (itemsize {itemSize}) is an extended-precision long double with no NumSharp dtype. Convert first: arr.astype(np.float64).");
+                case "u":                                     // wchar_t text unit (array.array('u'), ctypes.c_wchar) — width is the platform's wchar_t
+                    if (itemSize == 2) return NPTypeCode.Char;   // UTF-16 code unit == System.Char, bit-exact
+                    if (itemSize == 1) return NPTypeCode.Byte;   // degenerate single-byte text unit: raw bytes
+                    goto case "w";                               // 4-byte wchar_t (linux/macOS) is UCS-4
+                case "w": case "1w":                          // UCS-4 code points (PEP 3118 'w'; numpy '<U1' exports '1w')
+                    throw new NotSupportedException(
+                        $"buffer format '{format}' (itemsize {itemSize}) is UCS-4 text; NumSharp's Char is a 2-byte UTF-16 code unit, so a zero-copy view is impossible. ToNDArray narrows it to Char as a copy (BMP code points only).");
                 case "Zd": return NPTypeCode.Complex;         // complex128
                 case "Zf": throw new NotSupportedException(
                     "buffer format 'Zf' (complex64) has no exact NumSharp dtype. ToNDArray widens it to Complex (complex128) as a copy; a zero-copy view is impossible.");

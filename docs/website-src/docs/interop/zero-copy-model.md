@@ -153,7 +153,7 @@ even[3] = (NDArray)(byte)99;                 // logical 3 -> byte 6
 
 ## What cannot be viewed (and therefore copies)
 
-Exactly three things. Each throws inside the view attempt, which in `Auto` is the signal to copy.
+Exactly four things. Each throws inside the view attempt, which in `Auto` is the signal to copy.
 
 ### complex64
 
@@ -167,6 +167,24 @@ NDArray nd = ImportOf("c");        // Complex (complex128), values preserved, in
 
 Viewing it as `float32[..., 2]` *would* be zero-copy, but it would silently hand back a different
 dtype and shape than the caller asked for — so the copy is the correct answer, not a limitation.
+
+### UCS-4 text
+
+A 4-byte text unit — numpy's `<U1`, `array.array('u')` where `wchar_t` is 4 bytes (linux/macOS),
+Python 3.13's `array.array('w')` — holds one UCS-4 code point; NumSharp's `Char` is a 2-byte UTF-16
+code unit. There is no reinterpretation — the code points must be narrowed, and narrowing is a copy.
+BMP only: an astral code point needs a surrogate *pair*, and silently emitting half a pair would
+corrupt text, so it is refused.
+
+```csharp
+PyExec("u = np.array(['a', 'Z'], dtype='U1')");
+NDArray nd = ImportOf("u");        // Char (UTF-16), values preserved, independent
+```
+
+Where the unit is already 2 bytes — `array.array('u')` on Windows, `ctypes.c_wchar` — the buffer
+*is* UTF-16 and **views zero-copy** as `Char`, a mapping numpy itself cannot make (PEP 3118 `'u'`
+sits on numpy's unsupported list). Multi-character elements (`<U2` and wider) are whole strings,
+not code points, and are rejected outright.
 
 ### Big-endian multi-byte data
 

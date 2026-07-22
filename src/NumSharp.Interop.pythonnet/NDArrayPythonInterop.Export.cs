@@ -157,8 +157,10 @@ namespace NumSharp.Interop.PythonNet
         ///     Expose a C-contiguous NumSharp array as a Python <c>memoryview</c> of raw bytes
         ///     (format 'B') — for non-numpy consumers of the buffer protocol (<c>PIL.Image.frombuffer</c>,
         ///     <c>struct.unpack_from</c>, sockets, ...). Zero-copy and writable: mutations through the
-        ///     memoryview are visible in NumSharp. The NumSharp buffer is rooted exactly like
-        ///     <see cref="ToNumpy(NDArray, bool?)"/> — it survives until the last Python-side reference dies.
+        ///     memoryview are visible in NumSharp. Contiguous views at a non-zero offset (np.unstack /
+        ///     np.split children) export exactly their <c>[offset, offset + size)</c> window. The NumSharp
+        ///     buffer is rooted exactly like <see cref="ToNumpy(NDArray, bool?)"/> — it survives until the
+        ///     last Python-side reference dies.
         /// </summary>
         /// <inheritdoc cref="ToNumpy(NDArray, bool?)"/>
         /// <exception cref="InvalidOperationException">The source is not C-contiguous — materialize first
@@ -172,7 +174,7 @@ namespace NumSharp.Interop.PythonNet
             _ = ToBufferFormat(source.typecode);   // dtype gate (Decimal throws)
 
             var shape = source.Shape;
-            if (!shape.IsContiguous || shape.Offset != 0)
+            if (!shape.IsContiguous)
                 throw new InvalidOperationException(
                     "the array is not C-contiguous; a flat memoryview would misrepresent it. Materialize first: np.ascontiguousarray(nd) or nd.copy().");
 
@@ -186,8 +188,12 @@ namespace NumSharp.Interop.PythonNet
                 ExportKeeper keeper = null;
                 try
                 {
+                    // A contiguous view is a dense [offset, offset + size) window over its backing
+                    // block (np.unstack / np.split children keep the WHOLE parent block with a
+                    // non-zero offset — probed) — export exactly that window, nothing around it.
                     long nbytes = shape.Size * source.dtypesize;
-                    using PyObject ctBuf = ctypes.c_char.mul(nbytes).from_address((long)slice.Address);
+                    long dataPtr = (long)slice.Address + (long)shape.Offset * source.dtypesize;
+                    using PyObject ctBuf = ctypes.c_char.mul(nbytes).from_address(dataPtr);
 
                     using (PyObject raw = builtins.memoryview(ctBuf))
                         mv = raw.cast("B");   // the memoryview holds its own exporter ref on ctBuf

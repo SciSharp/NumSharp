@@ -15,13 +15,15 @@ namespace NumSharp.Interop.PythonNet
         ///     view is impossible.</b> Shared memory whenever it is achievable, a safe copy as the
         ///     fallback — never a blanket copy.
         ///
-        ///     <para>On <b>decode</b> the fallback is real: complex64, big-endian, and non-contiguous
-        ///     non-numpy exporters have no zero-copy NumSharp representation and transparently become
-        ///     copies, while contiguous / strided-numpy sources stay zero-copy views (read-only sources
-        ///     become NON-WRITEABLE views). On <b>encode</b> a view and a copy have identical dtype
-        ///     coverage — both need a numpy-expressible dtype — so Auto always yields a view, and the
-        ///     only unrepresentable dtype (<see cref="NPTypeCode.Decimal"/>) falls through to pythonnet's
-        ///     CLR wrapping either way.</para>
+        ///     <para>On <b>decode</b> the fallback is real: complex64 (widened), UCS-4 text (narrowed to
+        ///     Char, BMP only), and sub-item strides (linearized) have no zero-copy NumSharp
+        ///     representation and transparently become copies, while contiguous / strided / non-numpy
+        ///     exporter sources stay zero-copy views (read-only sources become NON-WRITEABLE views);
+        ///     big-endian multi-byte data is refused by BOTH paths rather than silently byte-swapped.
+        ///     On <b>encode</b> a view and a copy have identical dtype coverage — both need a
+        ///     numpy-expressible dtype — so Auto always yields a view, and the only unrepresentable
+        ///     dtype (<see cref="NPTypeCode.Decimal"/>) falls through to pythonnet's CLR wrapping
+        ///     either way.</para>
         /// </summary>
         Auto = 0,
 
