@@ -68,6 +68,31 @@ namespace NumSharp.Interop.UnitTests
 
         protected IDisposable Gil() => Py.GIL();
 
+        /// <summary>
+        ///     Gate for third-party-library claims (docs spec §8.3): attempts the import under the
+        ///     GIL and reports Inconclusive when the package is absent — real proof wherever the
+        ///     package exists, silent where it doesn't, so CI stays green on a bare image.
+        /// </summary>
+        protected static void SkipUnless(string module)
+        {
+            bool available;
+            using (Py.GIL())
+            {
+                try
+                {
+                    using var m = Py.Import(module);
+                    available = true;
+                }
+                catch (PythonException)
+                {
+                    available = false;
+                }
+            }
+
+            if (!available)
+                Assert.Inconclusive($"python package '{module}' is not installed");
+        }
+
         protected void PyExec(string code)
         {
             using (Py.GIL()) Scope.Exec(code);
