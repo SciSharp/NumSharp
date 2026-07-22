@@ -608,6 +608,19 @@ namespace NumSharp.Interop.UnitTests
             NDArray widened = ImportOf("c8v");
             widened.typecode.Should().Be(NPTypeCode.Complex);
             widened.Dispose();
+
+            // Char — "a 2-byte wchar buffer (PEP 3118 'u') views zero-copy as Char; UCS-4 text
+            // (numpy <U1, 4-byte wchar, 'w') copy-narrows to Char in ToNDArray (BMP only)"
+            NDArrayPythonInterop.FromBufferFormat("u", 2).Should().Be(NPTypeCode.Char,
+                "the docs map 2-byte wchar text units onto Char");
+            PyExec("u1v = np.array(['a', 'b'], dtype='U1')");
+            NDArray narrowed = ImportOf("u1v");
+            narrowed.typecode.Should().Be(NPTypeCode.Char);
+            ReadAt<char>(narrowed, 1).Should().Be('b');
+            narrowed.Dispose();
+            PyExec("u1astral = np.array(['\\U0001F600'], dtype='U1')");
+            ((Action)(() => ImportOf("u1astral").Dispose()))
+                .Should().Throw<NotSupportedException>("the docs promise astral code points are refused");
         }
 
         /// <summary>"Big-endian buffers are rejected rather than silently byte-swapped."</summary>

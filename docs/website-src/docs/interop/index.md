@@ -10,7 +10,7 @@ NumSharp arrays are raw, unmanaged, densely-typed buffers — exactly the shape 
 
 Guides — every sample maps 1:1 to a test in `NumSharp.Interop.UnitTests`:
 
-- [The Zero-Copy Model](zero-copy-model.md): how a conversion decides **view or copy** — the `Auto` decision tree, the three routes that produce a view, the three layouts that genuinely cannot be shared (`complex64`, big-endian, sub-item strides), the `Py_buffer` lock you accept when you share, and the measured coverage (47 view / 2 copy / 1 rejected across 50 exporter varieties).
+- [The Zero-Copy Model](zero-copy-model.md): how a conversion decides **view or copy** — the `Auto` decision tree, the three routes that produce a view, the four layouts that genuinely cannot be shared (`complex64`, UCS-4 text, big-endian, sub-item strides), the `Py_buffer` lock you accept when you share, and the measured coverage (47 view / 2 copy / 1 rejected across 50 exporter varieties).
 - [Numpy.NET — coexistence & migration](numpy-net.md): zero-copy interop with SciSharp's `Numpy`/`Numpy.Bare` packages — wrap NumSharp buffers in their `NDarray`, lease their arrays into NumSharp, one shared engine, and the GIL rule their library needs.
 
 ## The Interop Contract

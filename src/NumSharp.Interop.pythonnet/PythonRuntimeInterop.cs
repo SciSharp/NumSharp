@@ -15,7 +15,11 @@ namespace NumSharp.Interop.PythonNet
     ///     <para><b>Lock ordering invariant (deadlock freedom):</b> the GIL is ALWAYS acquired before
     ///     the drain gate (<see cref="_drainGate"/>), never after — no thread ever waits for the GIL
     ///     while holding the gate, so an app thread that keeps the GIL long-term (e.g. never calls
-    ///     <c>PythonEngine.BeginAllowThreads()</c>) can still drain inline. Release hooks that may run
+    ///     <c>PythonEngine.BeginAllowThreads()</c>) can still drain inline. And the gate is never held
+    ///     ACROSS a lease disposal: "holding the GIL" is not stable through <c>PyBuffer_Release</c> —
+    ///     an mmap's dealloc bounces the GIL via <c>Py_BEGIN/END_ALLOW_THREADS</c>, so a disposal made
+    ///     under the gate would wait to RE-take the GIL while the thread that won it waits on the gate
+    ///     (probed deadlock; see <see cref="DrainPending"/>). Release hooks that may run
     ///     on threads already holding the GIL — or on finalizer threads — never block at all:
     ///     <see cref="ImportLease.Release"/> only enqueues (lock-free) and
     ///     <see cref="ExportKeeper.Release"/> touches CLR state only.</para>
@@ -447,6 +451,16 @@ namespace NumSharp.Interop.PythonNet
         ///     holds the GIL long-term (e.g. a main thread that never calls
         ///     <see cref="PythonEngine.BeginAllowThreads"/>): the inline drains those conversions run
         ///     would block on the gate forever.</para>
+        ///
+        ///     <para><b>And the gate is never held ACROSS a disposal.</b> Releasing a lease can bounce
+        ///     the GIL: an mmap's dealloc wraps its unmap syscalls in <c>Py_BEGIN/END_ALLOW_THREADS</c>,
+        ///     so <c>PyBuffer_Release</c> DROPS the GIL mid-call and re-takes it. A second drain that
+        ///     wins the dropped GIL then blocks on the gate — with the gate held across the dispose
+        ///     that is a GIL/gate lock-order inversion (probed deadlock with an anonymous-mmap lease:
+        ///     one thread inside <c>PyBuffer_Release</c> holding the gate and waiting to re-take the
+        ///     GIL, the drain worker holding the GIL and parked on <c>Monitor.Enter</c>). The gate
+        ///     therefore guards only dequeue + teardown-state reads; <see cref="ImportLease"/> disposal
+        ///     is idempotent, so concurrent drains alternating over the queue stay correct.</para>
         /// </summary>
         internal static void DrainPending()
         {
@@ -469,17 +483,25 @@ namespace NumSharp.Interop.PythonNet
             // this GIL acquisition — inherent to pythonnet embedding (PyGILState_Ensure on a dying
             // interpreter). The shutdown handler minimizes it by draining everything itself first.
             using (Py.GIL())
-            lock (_drainGate)
             {
-                if (Volatile.Read(ref _engineTorndown) == 1)
+                while (true)
                 {
-                    while (_pendingDisposals.TryDequeue(out var lease))
-                        lease.DisposeAfterEngineDeath();
-                    return;
-                }
+                    ImportLease lease;
+                    lock (_drainGate)
+                    {
+                        if (Volatile.Read(ref _engineTorndown) == 1)
+                        {
+                            while (_pendingDisposals.TryDequeue(out var dead))
+                                dead.DisposeAfterEngineDeath();
+                            return;
+                        }
 
-                while (_pendingDisposals.TryDequeue(out var lease))
-                    lease.DisposeUnderGil();
+                        if (!_pendingDisposals.TryDequeue(out lease))
+                            return;
+                    }
+
+                    lease.DisposeUnderGil();   // outside the gate — the dealloc may bounce the GIL (mmap)
+                }
             }
         }
 
@@ -505,23 +527,39 @@ namespace NumSharp.Interop.PythonNet
         private static void OnEngineShutdown()
         {
             using (Py.GIL())          // GIL before gate — same ordering as DrainPending
-            lock (_drainGate)
             {
-                Volatile.Write(ref _engineTorndown, 1);
+                List<ImportLease> queued;
+                List<ImportLease> live;
+                lock (_drainGate)
+                {
+                    Volatile.Write(ref _engineTorndown, 1);
 
-                while (_pendingDisposals.TryDequeue(out var lease))
+                    queued = new List<ImportLease>();
+                    while (_pendingDisposals.TryDequeue(out var lease))
+                        queued.Add(lease);
+                    live = new List<ImportLease>(_imports.Keys);
+                }
+
+                // Dispose OUTSIDE the gate (still under the GIL, still inside the shutdown handler —
+                // the interpreter stays alive until this handler returns). Same inversion guard as
+                // DrainPending: an mmap lease's dealloc bounces the GIL, and a drain thread that
+                // wins it must find the gate free — _engineTorndown is already set, so it routes to
+                // the after-death branch and exits without touching Python.
+                foreach (var lease in queued)
                     lease.DisposeUnderGil();
-
-                foreach (var lease in _imports.Keys)
+                foreach (var lease in live)
                     lease.ForceReleaseUnderGil();
 
-                CaptureOrphanedExports();
+                lock (_drainGate)
+                {
+                    CaptureOrphanedExports();
 
-                DisposeSessionCache();
-                DisposeModule(ref _numpy);
-                DisposeModule(ref _ctypes);
-                DisposeModule(ref _builtins);
-                DisposeModule(ref _weakref);
+                    DisposeSessionCache();
+                    DisposeModule(ref _numpy);
+                    DisposeModule(ref _ctypes);
+                    DisposeModule(ref _builtins);
+                    DisposeModule(ref _weakref);
+                }
             }
 
             // pythonnet clears all registered codecs during shutdown (PyObjectConversions.Reset),

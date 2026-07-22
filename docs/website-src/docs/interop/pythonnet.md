@@ -237,10 +237,10 @@ numpy `ndarray` subclasses (`matrix`, `memmap`, user subclasses) decode via an `
 | `Int64` / `UInt64` | `int64` / `uint64` | |
 | `Half` / `Single` / `Double` | `float16` / `float32` / `float64` | |
 | `Complex` | `complex128` | complex64 sources **copy-widen** to `Complex` in `ToNDArray` (no zero-copy view) |
-| `Char` | `uint16` (`<u2`) | UTF-16 code units — numpy has no char dtype |
+| `Char` | `uint16` (`<u2`) | UTF-16 code units — numpy has no char dtype. Text imports: a 2-byte wchar buffer (PEP 3118 `'u'` — `array.array('u')` on Windows, `ctypes.c_wchar`) **views** zero-copy as `Char`; UCS-4 text (numpy `<U1`, 4-byte wchar, `'w'`) **copy-narrows** to `Char` in `ToNDArray` (BMP only — astral code points are refused) |
 | `Decimal` | — | No numpy equivalent (16-byte, non-IEEE); throws with guidance. Convert first: `nd.astype(NPTypeCode.Double)` |
 
-**Big-endian** buffers (`>i4`, `!H`, ...) are rejected rather than silently byte-swapped — byte-swap on the Python side first: `arr.astype(arr.dtype.newbyteorder('<'))`. Exotic numpy dtypes (`datetime64`, `object`, structured/void) have no NumSharp representation and are rejected with clear errors.
+**Big-endian** buffers (`>i4`, `!H`, ...) are rejected rather than silently byte-swapped — byte-swap on the Python side first: `arr.astype(arr.dtype.newbyteorder('<'))`. Exotic numpy dtypes (`datetime64`, `object`, structured/void, multi-char `<U2`+) have no NumSharp representation and are rejected with clear errors.
 
 ---
 

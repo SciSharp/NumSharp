@@ -290,6 +290,42 @@ namespace NumSharp.Interop.UnitTests
         }
 
         /// <summary>
+        ///     UCS-4 text — "the code points must be narrowed, and narrowing is a copy"; astral code
+        ///     points are refused; a 2-byte text unit views zero-copy as Char.
+        /// </summary>
+        [TestMethod]
+        public void Unviewable_Ucs4Text_CopiesAndNarrows()
+        {
+            PyExec("u = np.array(['a', 'Z'], dtype='U1')");
+            NDArray nd = ImportOf("u");        // Char (UTF-16), values preserved, independent
+
+            nd.typecode.Should().Be(NPTypeCode.Char);
+            ReadAt<char>(nd, 0).Should().Be('a', "values preserved");
+            ReadAt<char>(nd, 1).Should().Be('Z');
+
+            WriteAt(nd, 'q', 0);
+            PyStr("u[0]").Should().Be("a", "independent");
+            nd.Dispose();
+
+            // "numpy's <U1 holds one UCS-4 code point (4 bytes); NumSharp's Char is a 2-byte UTF-16 code unit."
+            PyLong("np.dtype('U1').itemsize").Should().Be(4);
+            sizeof(char).Should().Be(2);
+
+            // "an astral code point needs a surrogate pair ... so it is refused"
+            PyExec("astral = np.array(['\\U0001F600'], dtype='U1')");
+            ((Action)(() => ImportOf("astral").Dispose()))
+                .Should().Throw<NotSupportedException>().WithMessage("*non-BMP*");
+
+            // "Where the unit is already 2 bytes the buffer IS UTF-16 and views zero-copy as Char" —
+            // the pure map pin; the live 2-byte-wchar view runs in ViewabilityMatrixTests on windows.
+            NDArrayPythonInterop.FromBufferFormat("u", 2).Should().Be(NPTypeCode.Char);
+
+            // "Multi-character elements (<U2 and wider) ... are rejected outright."
+            PyExec("multi = np.array(['abc'], dtype='U3')");
+            ((Action)(() => ImportOf("multi").Dispose())).Should().Throw<NotSupportedException>();
+        }
+
+        /// <summary>
         ///     Big-endian multi-byte is rejected; "single-byte big-endian dtypes (>i1, |u1, |b1) DO
         ///     view — byte order is meaningless at one byte wide".
         /// </summary>

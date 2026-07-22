@@ -182,6 +182,37 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
+        public void MemoryView_ContiguousOffsetWindow_ExportsExactlyThatWindow()
+        {
+            // np.unstack / np.split children are C-contiguous views at offset != 0 over the WHOLE
+            // parent block — the memoryview must cover [offset, offset + size), nothing around it.
+            var m = np.arange(24).reshape(4, 6).astype(NPTypeCode.Double);
+            NDArray row1 = np.unstack(m)[1];
+            row1.Shape.Offset.Should().BeGreaterThan(0, "the scenario is only meaningful on an offset view");
+            row1.Shape.IsContiguous.Should().BeTrue();
+
+            ExportMemoryViewTo("w1", row1);
+            PyLong("len(w1)").Should().Be(48, "6 float64s — the row's window, not the 24-element block");
+            PyBool("bytes(w1) == np.arange(6.0, 12.0).tobytes()").Should().BeTrue("the window starts at element 6, not at the block start");
+
+            PyExec("w1[0:8] = np.float64(-1.5).tobytes()");
+            ReadAt<double>(m, 1, 0).Should().BeApproximately(-1.5, 1e-12, "memoryview writes land in the parent's row 1");
+            ReadAt<double>(m, 0, 0).Should().BeApproximately(0.0, 1e-12, "elements before the window are untouched");
+            ReadAt<double>(m, 2, 0).Should().BeApproximately(12.0, 1e-12, "elements after the window are untouched");
+        }
+
+        [TestMethod]
+        public void MemoryView_SplitChild_ExportsItsParentWindow()
+        {
+            var m = np.arange(24).reshape(4, 6).astype(NPTypeCode.Double);
+            NDArray lower = np.split(m, 2)[1];   // rows 2..3 — contiguous, offset 12
+            lower.Shape.Offset.Should().Be(12);
+
+            ExportMemoryViewTo("w2", lower);
+            PyBool("bytes(w2) == np.arange(12.0, 24.0).tobytes()").Should().BeTrue("split children export exactly their window");
+        }
+
+        [TestMethod]
         public void DisposedSource_IsRefusedNotDereferenced()
         {
             var nd = np.arange(3);

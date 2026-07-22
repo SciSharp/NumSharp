@@ -117,5 +117,50 @@ namespace NumSharp.Interop.UnitTests
             ((Action)(() => NDArrayPythonInterop.FromBufferFormat("x", 1)))
                 .Should().Throw<NotSupportedException>().WithMessage("*'x'*");
         }
+
+        [TestMethod]
+        public void FromBufferFormat_WcharTextUnits_MapByWidth()
+        {
+            // 'u' is wchar_t: 2 bytes on windows — a UTF-16 code unit, which IS System.Char. numpy
+            // itself cannot import 'u' (its _pep3118_unsupported_map lists it as "UCS-2 strings");
+            // NumSharp natively has the dtype numpy lacks, so the mapping legitimately exceeds numpy.
+            NDArrayPythonInterop.FromBufferFormat("u", 2).Should().Be(NPTypeCode.Char, "a 2-byte wchar_t is exactly a UTF-16 code unit");
+            NDArrayPythonInterop.FromBufferFormat("<u", 2).Should().Be(NPTypeCode.Char, "ctypes.c_wchar arrays export '<u'");
+            NDArrayPythonInterop.FromBufferFormat("u", 1).Should().Be(NPTypeCode.Byte, "a degenerate single-byte text unit is raw bytes");
+
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("u", 4)))
+                .Should().Throw<NotSupportedException>().WithMessage("*UCS-4*ToNDArray*", "4-byte wchar_t (linux/macOS) narrows only as a copy");
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("w", 4)))
+                .Should().Throw<NotSupportedException>().WithMessage("*UCS-4*ToNDArray*", "'w' is UCS-4 by definition (array.array('w') on 3.13+)");
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("1w", 4)))
+                .Should().Throw<NotSupportedException>().WithMessage("*UCS-4*ToNDArray*", "numpy '<U1' exports the count-prefixed '1w'");
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat(">u", 2)))
+                .Should().Throw<NotSupportedException>().WithMessage("*big-endian*", "UTF-16 is byte-order sensitive — 2-byte 'u' is not exempt like 1-byte codes");
+        }
+
+        [TestMethod]
+        public void FromBufferFormat_LongDouble_MapsByWidth()
+        {
+            // np.longdouble exports buffer format 'g' at EVERY width. On MSVC long double IS IEEE
+            // double (itemsize 8) — bit-exact, so it views; extended-precision widths have no
+            // NumSharp dtype and are refused with astype guidance.
+            NDArrayPythonInterop.FromBufferFormat("g", 8).Should().Be(NPTypeCode.Double, "MSVC long double is IEEE double");
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("g", 16)))
+                .Should().Throw<NotSupportedException>().WithMessage("*float64*", "x87/quad long double has no NumSharp dtype");
+        }
+
+        [TestMethod]
+        public void FromNumpyDtypeStr_Complex64AndUcs4_ThrowWithConversionGuidance()
+        {
+            // The typestr twins of buffer 'Zf' / '1w' — reachable through __array_interface__ when a
+            // NON-contiguous complex64 / U1 numpy array is viewed — must carry the same guidance as
+            // the buffer-format path, not the generic "has no NumSharp dtype".
+            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr("<c8")))
+                .Should().Throw<NotSupportedException>().WithMessage("*complex64*ToNDArray*");
+            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr("<U1")))
+                .Should().Throw<NotSupportedException>().WithMessage("*UCS-4*ToNDArray*");
+            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr("<U3")))
+                .Should().Throw<NotSupportedException>("multi-char unicode elements are whole strings, not single code points");
+        }
     }
 }
