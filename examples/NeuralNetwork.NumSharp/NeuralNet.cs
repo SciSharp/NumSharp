@@ -134,7 +134,7 @@ namespace NeuralNetwork.NumSharp
                     NDArray ytrain = y[$"{start}:{end}"];
 
                     //Run forward for all the layers to predict the value for the training set
-                    NDArray ypred = Forward(xtrain);
+                    NDArray ypred = Forward(xtrain, training: true);
 
                     //Find the loss/cost value for the prediction wrt expected result
                     NDArray costVal = Cost.Forward(ypred, ytrain);
@@ -152,6 +152,11 @@ namespace NeuralNetwork.NumSharp
 
                     //Run back-propagation accross all the layers
                     Backward(grad);
+
+                    //Weight penalties: gradient contribution applied centrally
+                    //(see BaseLayer.ApplyRegularizerGradients).
+                    foreach (var layer in Layers)
+                        layer.ApplyRegularizerGradients();
 
                     //Optimizer step counter — Adam et al. expect a monotonically
                     //increasing iteration index across the entire run, not a
@@ -257,20 +262,26 @@ namespace NeuralNetwork.NumSharp
         /// <returns></returns>
         public NDArray Predict(NDArray x)
         {
-            return Forward(x);
+            return Forward(x, training: false);
         }
 
         /// <summary>
         /// Internal method to execute forward method accross all the layers
         /// </summary>
-        /// <param name="x"></param>
-        /// <returns></returns>
-        private NDArray Forward(NDArray x)
+        /// <param name="x">Input batch.</param>
+        /// <param name="training">
+        /// Sets <see cref="BaseLayer.Training"/> on every layer before its
+        /// Forward — Dropout only drops and BatchNorm only updates its running
+        /// statistics when this is true.
+        /// </param>
+        private NDArray Forward(NDArray x, bool training)
         {
             BaseLayer lastLayer = null;
 
             foreach (var layer in Layers)
             {
+                layer.Training = training;
+
                 if (lastLayer == null)
                     layer.Forward(x);
                 else

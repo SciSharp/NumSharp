@@ -21,7 +21,8 @@ present; `take_along_axis`, `sliding_window_view`, scatter-add, `einsum`,
 | Area | Have | Notes |
 |---|---|---|
 | Model | `NeuralNet` (Sequential), `MlpTrainer` | Train/Predict, `EpochEnd` event; MlpTrainer adds periodic test eval |
-| Layers | `FullyConnected`, `FullyConnectedFused` | Dense only. Fused variant folds bias+ReLU into one NDIter kernel |
+| Layers | `FullyConnected`, `FullyConnectedFused`, `Dropout`, `BatchNormalization`, `LayerNormalization`, `Embedding`, `Flatten`, `Reshape` | Fused variant folds bias+ReLU into one NDIter kernel; P4 added the regularization/normalization set behind a `Training` flag |
+| Regularizers | ✅ P4 | `L1`, `L2`, `L1L2`, attached per parameter key and applied by the trainer |
 | Activations | `ReLU`, `Sigmoid`, `Softmax` | `BaseActivation.Get()` resolves only `"relu"`/`"sigmoid"` — Softmax class exists but is **unreachable by name** |
 | Losses | `MeanSquaredError`, `BinaryCrossEntropy`, `CategoricalCrossentropy`, `SoftmaxCrossEntropy` | SCE is the combined stable form, lives in `MnistMlp/` |
 | Metrics | `Accuacy` (sic), `BinaryAccuacy` (sic), `MeanAbsoluteError` | Typo'd class names kept for compat |
@@ -214,7 +215,54 @@ Original planning table kept below for reference:
 | First-class LR schedulers: `StepDecay`, `ExponentialDecay`, `CosineAnnealing`, `LinearWarmup` | Keras `schedules`, PyTorch `lr_scheduler` | replaces the buggy in-place `DecayRate` mutation; scheduler owns `lr(t)`, optimizer just reads it |
 | **Fused optimizer updates** | (perf) | rewrite Adam's ~14-temp update as one/two `np.evaluate` expressions per param — this is the flagship application of core's own fusion engine, and the honest replacement for the demo's inverted fusion-probe story |
 
-### P4 — Regularization & normalization layers
+### P4 — Regularization & normalization layers — ✅ DONE
+
+Shipped every row: the `Training` flag on `BaseLayer` (the contract change),
+`Dropout`, `BatchNormalization`, `LayerNormalization`, `Embedding`,
+`Flatten`/`Reshape`, and `Regularizers/` (L1/L2/L1L2). All registered with
+`ModelArchitecture`, all serializing through `ModelWeights` — BatchNorm's
+running statistics included, via the `NonTrainable` slot P1 added for them.
+
+Verified two independent ways. The Keras oracle grew from 93 to **111 cases**
+(`verify_edge_cases.cs`: **160 checks**), with P4 layer gradients taken from
+`jax.grad` over `keras.Layer.stateless_call` — differentiating the ACTUAL Keras
+implementation rather than a re-derivation. `tests/verify_p4.cs` (**102
+checks**) covers what a single-layer oracle cannot: flag plumbing, running-stat
+state machine, seed determinism, serialization round-trips, and independent
+finite-difference gradient checks. Total gate coverage is now **479 checks**
+across four scripts; the demo's headline run is unchanged (99.90%).
+
+**Findings worth keeping:**
+
+1. **Keras's defaults are not the common ones — probe, don't assume.**
+   BatchNorm and LayerNorm both use `epsilon = 1e-3`, not the 1e-5/1e-6
+   everyone else uses, and the variance is the **population** (ddof=0) one for
+   both the normalization AND the running-variance update. On a batch of 3 the
+   sample variance changes the output ~20%; on a batch of 256 it is invisible.
+   `Embedding`'s default initializer is `RandomUniform(±0.05)`, not Glorot.
+2. **The oracle caught a real bug: L1's subgradient at `w = 0`.**
+   `np.sign(0)` is 0, but `jax.grad(jnp.abs)` at ±0.0 is **+1** — Keras/JAX's
+   `x >= 0` branch, the same convention P2 found in LeakyReLU. `w = 0` is
+   exactly where an L1 penalty spends its time, so the wrong value stalls every
+   weight the penalty has already driven there.
+3. **Running statistics cannot live in `Parameters`.** Optimizers iterate it and
+   demand a `Grads` entry per key, so a running mean parked there either crashes
+   the step or gets "optimized". Hence `NonTrainable`, added in P1.
+4. **A flag beat a signature change.** `Forward(x, training)` would have broken
+   every existing layer, activation and verification script for no behavioral
+   gain. The cost of the flag is that it must be SET — so the gate spies on
+   forward calls per mode rather than trusting the trainer.
+5. **The backward passes use the folded form**
+   `dx = invStd·(dxhat - mean(dxhat) - xhat·mean(dxhat·xhat))`, algebraically
+   identical to the textbook `dvar`/`dmean` chain once `Σ(x-μ) = 0` is
+   substituted, and exact with a non-zero epsilon since epsilon only enters
+   through `σ`. Four temporaries instead of nine. Both forms are written out in
+   the source so the equivalence is checkable.
+6. **`jax.grad` refuses integer inputs**, which is the same fact `Embedding`
+   encodes by leaving `InputGrad` null — the oracle generator skips `dx` there
+   rather than working around it.
+
+Original planning table kept below for reference:
 
 | Feature | Ref | Core deps | Notes |
 |---|---|---|---|
@@ -288,7 +336,7 @@ kernels later.
 | 2 | ~~P1 shuffle + validation + checkpoint + save/load~~ ✅ DONE | turns the demo into a usable framework; zero new math |
 | 3 | ~~P2 activations/losses (esp. `Tanh`, `LeakyReLU`, `SparseCCE`)~~ ✅ DONE | hours of work each, immediate expressiveness |
 | 4 | P3 `AdamW` + schedulers + fused Adam | modern training defaults; the fusion story redeemed |
-| 5 | P4 `Dropout` + `BatchNorm` (+ the train/eval flag) | the two layers that gate real-dataset accuracy |
+| 5 | ~~P4 `Dropout` + `BatchNorm` (+ the train/eval flag)~~ ✅ DONE | the two layers that gate real-dataset accuracy |
 | 6 | P5 conv stack + real-MNIST CNN | the headline capability jump |
 | 7 | P6 attention/RNN | already unblocked by batched matmul |
 | 8 | P7 autograd/functional | decide after the library has users |

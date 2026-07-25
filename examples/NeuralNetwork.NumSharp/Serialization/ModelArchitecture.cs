@@ -49,6 +49,29 @@ namespace NeuralNetwork.NumSharp.Serialization
                 c.GetInt("input_dim"),
                 c.GetInt("units"),
                 c.GetString("activation", "")));
+
+            Register("Dropout", c => new Dropout(c.GetFloat("rate")));
+
+            Register("BatchNormalization", c => new BatchNormalization(
+                c.GetInt("features"),
+                c.GetFloat("momentum", 0.99f),
+                c.GetFloat("epsilon", 1e-3f),
+                c.GetBool("scale", true),
+                c.GetBool("center", true)));
+
+            Register("LayerNormalization", c => new LayerNormalization(
+                c.GetInt("features"),
+                c.GetFloat("epsilon", 1e-3f),
+                c.GetBool("scale", true),
+                c.GetBool("center", true)));
+
+            Register("Embedding", c => new Embedding(
+                c.GetInt("input_dim"),
+                c.GetInt("output_dim")));
+
+            Register("Flatten", c => new Flatten());
+
+            Register("Reshape", c => new Reshape(c.GetIntArray("target_shape")));
         }
 
         /// <summary>

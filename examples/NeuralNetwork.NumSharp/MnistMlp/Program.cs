@@ -7,6 +7,7 @@ using NeuralNetwork.NumSharp.Callbacks;
 using NeuralNetwork.NumSharp.Cost;
 using NeuralNetwork.NumSharp.Layers;
 using NeuralNetwork.NumSharp.Optimizers;
+using NeuralNetwork.NumSharp.Regularizers;
 using NeuralNetwork.NumSharp.Serialization;
 using NumSharp;
 using NumSharp.Backends;
@@ -93,7 +94,10 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             // ---- 4. P1 showcase: serialization + callbacks ----
             RunP1Showcase(layers, trainX, trainY, testX, testY, result.FinalTestAcc);
 
-            // ---- 5. Instrumentation ----
+            // ---- 5. P4 showcase: regularization + normalization layers ----
+            RunP4Showcase(trainX, trainY, testX, testY);
+
+            // ---- 6. Instrumentation ----
             int cacheAfter = GeneratedDelegates.InnerLoopCount;
             Console.WriteLine("Kernel / delegate instrumentation:");
             Console.WriteLine($"  IL kernel cache entries : {cacheBefore} -> {cacheAfter} (delta {cacheAfter - cacheBefore})");
@@ -180,6 +184,69 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             Console.WriteLine($"  csv log          : {csvPath}");
             foreach (string line in File.ReadLines(csvPath).Take(4))
                 Console.WriteLine($"      {line}");
+            Console.WriteLine();
+        }
+
+        // =====================================================================
+        // P4 showcase — Dropout + BatchNormalization in a real stack, and the
+        // train/eval mode switch that both of them read.
+        // =====================================================================
+
+        private static void RunP4Showcase(NDArray trainX, NDArray trainY, NDArray testX, NDArray testY)
+        {
+            Console.WriteLine("P4 — regularization & normalization layers:");
+
+            np.random.seed(90210);
+            var model = new List<BaseLayer>
+            {
+                new FullyConnected(InputDim, HiddenDim, "relu"),
+                new BatchNormalization(HiddenDim),
+                new Dropout(0.2f),
+                new FullyConnected(HiddenDim, OutputDim),
+            };
+
+            // An L2 penalty on the first layer's kernel, applied by the trainer.
+            model[0].Regularizers["w"] = new L2(1e-4f);
+
+            var run = MlpTrainer.Train(
+                model, new SoftmaxCrossEntropy(), new Adam(lr: 0.001f),
+                trainX, trainY, testX, testY,
+                epochs: 8, batchSize: BatchSize, numClasses: OutputDim,
+                shuffle: true, validationSplit: 0.1f, verbose: 0);
+
+            Console.WriteLine($"  stack        : Dense(relu) -> BatchNorm -> Dropout(0.2) -> Dense   (+ L2 1e-4 on the kernel)");
+            Console.WriteLine($"  8 epochs     : loss {run.EpochLoss[0]:F4} -> {run.EpochLoss[^1]:F4}, " +
+                              $"val_acc {run.EpochValAcc[0] * 100:F2}% -> {run.EpochValAcc[^1] * 100:F2}%, " +
+                              $"test_acc {run.FinalTestAcc * 100:F2}%");
+
+            // The mode flag is observable: Dropout randomizes and BatchNorm uses
+            // batch statistics while Training is true, and neither does in
+            // inference — so the SAME input gives different outputs.
+            NDArray probe = trainX[$"0:{BatchSize}"];
+
+            NDArray Run(bool training)
+            {
+                NDArray act = probe;
+                foreach (var layer in model)
+                {
+                    layer.Training = training;
+                    layer.Forward(act);
+                    act = layer.Output;
+                }
+                return act;
+            }
+
+            NDArray evalA = Run(false);
+            NDArray evalB = Run(false);
+            NDArray trainA = Run(true);
+
+            Console.WriteLine($"  Training=false is deterministic : max|eval1-eval2| = {MaxAbsDiff(evalA, evalB):g4}");
+            Console.WriteLine($"  Training=true  differs          : max|train-eval|  = {MaxAbsDiff(trainA, evalA):g4}");
+            Console.WriteLine($"  BatchNorm running mean[0..3]    : " +
+                              string.Join(", ", Enumerable.Range(0, 4)
+                                  .Select(i => model[1].NonTrainable["moving_mean"].GetSingle(i).ToString("F4"))));
+            Console.WriteLine("  (Running statistics are non-trainable state: they ride in the .npz");
+            Console.WriteLine("   checkpoint but never reach the optimizer.)");
             Console.WriteLine();
         }
 

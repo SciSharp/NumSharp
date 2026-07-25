@@ -189,15 +189,28 @@ namespace NeuralNetwork.NumSharp.MnistMlp
                         }
 
                         // --- forward ---
+                        // Training=true switches Dropout on and makes BatchNorm
+                        // use (and update) THIS batch's statistics. Every eval
+                        // path below leaves it false.
                         NDArray act = xBatch;
                         foreach (var layer in layers)
                         {
+                            layer.Training = true;
                             layer.Forward(act);
                             act = layer.Output;
                         }
 
                         // --- loss + accuracy ---
                         float batchLoss = (float)cost.Forward(act, yBatch);
+
+                        // Weight penalties are part of the reported loss, as in
+                        // Keras — otherwise a regularized run appears to be
+                        // training worse than it is.
+                        float penalty = 0f;
+                        foreach (var layer in layers)
+                            penalty += layer.RegularizationPenalty();
+                        batchLoss += penalty;
+
                         epochLossSum += (double)batchLoss * count;
 
                         NDArray predIdx = np.argmax(act, axis: 1);
@@ -212,6 +225,16 @@ namespace NeuralNetwork.NumSharp.MnistMlp
                             layers[i].Backward(grad);
                             grad = layers[i].InputGrad;
                         }
+
+                        // Regularizer gradients are added centrally rather than
+                        // by each layer's Backward, so a layer author cannot
+                        // forget to honour one someone attached to their layer.
+                        // (A no-op per layer when nothing is attached — do NOT
+                        // gate it on `penalty != 0`, which conflates "no
+                        // regularizer" with "a regularizer that happens to score
+                        // zero right now".)
+                        foreach (var layer in layers)
+                            layer.ApplyRegularizerGradients();
 
                         // --- optimizer step ---
                         // Model-wide clipping must see every layer's gradients at
@@ -336,9 +359,12 @@ namespace NeuralNetwork.NumSharp.MnistMlp
                 NDArray xBatch = x[$"{start}:{end}"];
                 NDArray yBatch = yLabels[$"{start}:{end}"];
 
+                // Training=false: Dropout passes through, BatchNorm uses its
+                // running statistics and does NOT update them.
                 NDArray act = xBatch;
                 foreach (var layer in layers)
                 {
+                    layer.Training = false;
                     layer.Forward(act);
                     act = layer.Output;
                 }
@@ -374,6 +400,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
                 NDArray act = x[$"{start}:{end}"];
                 foreach (var layer in layers)
                 {
+                    layer.Training = false;
                     layer.Forward(act);
                     act = layer.Output;
                 }

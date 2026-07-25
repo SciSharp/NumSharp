@@ -25,6 +25,7 @@ using NeuralNetwork.NumSharp.Initializers;
 using NeuralNetwork.NumSharp.Layers;
 using NeuralNetwork.NumSharp.Metrics;
 using NeuralNetwork.NumSharp.MnistMlp;
+using NeuralNetwork.NumSharp.Regularizers;
 using NumSharp;
 using NumSharp.Backends;
 
@@ -129,6 +130,158 @@ foreach (var c in doc.RootElement.GetProperty("cases").EnumerateArray())
                     Check(id + " limit", maxAbsAll <= lim.GetSingle() + 1e-6f, $"max={maxAbsAll} limit={lim.GetSingle()}");
                 break;
             }
+            // ---------------- P4 layers ----------------
+            case "dropout":
+            {
+                float rate = (float)c.GetProperty("params").GetProperty("rate").GetDouble();
+                var exp = expected;
+                float expScale = (float)exp.GetProperty("scale").GetDouble();
+
+                var drop = new Dropout(rate);
+                var ones = np.ones(new Shape(200, 20), NPTypeCode.Single);
+
+                // Training: survivors carry EXACTLY the 1/(1-rate) scale.
+                np.random.seed(20240726);
+                drop.Training = true;
+                drop.Forward(ones);
+                var outFlat = np.reshape(drop.Output, new Shape((int)drop.Output.size));
+
+                float seenScale = 0f;
+                int kept = 0;
+                bool onlyTwoValues = true;
+                for (int i = 0; i < outFlat.size; i++)
+                {
+                    float v = outFlat.GetSingle(i);
+                    if (v == 0f) continue;
+                    kept++;
+                    if (seenScale == 0f) seenScale = v;
+                    else if (v != seenScale) onlyTwoValues = false;
+                }
+
+                if (rate == 0f)
+                {
+                    Check(id + " rate=0 is identity", kept == outFlat.size && seenScale == 1f,
+                          $"kept={kept}/{outFlat.size} scale={seenScale}");
+                }
+                else
+                {
+                    Check(id + " support is {0, 1/(1-rate)}", onlyTwoValues, $"saw multiple nonzero values");
+                    Check(id + " scale", FloatClose(seenScale, expScale), $"actual={seenScale} keras={expScale}");
+                    // The mask is RNG-specific (MT19937 here, Keras's own there),
+                    // so the KEPT FRACTION is checked statistically: 4000 draws
+                    // give a standard error under 0.008, and 0.05 is >6 sigma.
+                    float frac = (float)kept / outFlat.size;
+                    Check(id + " kept fraction ~ 1-rate", Math.Abs(frac - (1f - rate)) < 0.05f,
+                          $"kept={frac:F4} expected~{1f - rate:F4}");
+                }
+
+                // Backward must reuse the SAME scaled mask, so grad/output ratio
+                // is constant wherever the output survived.
+                drop.Backward(np.ones(ones.Shape, NPTypeCode.Single));
+                var gFlat = np.reshape(drop.InputGrad, new Shape((int)drop.InputGrad.size));
+                bool maskMatches = true;
+                for (int i = 0; i < gFlat.size; i++)
+                    if ((outFlat.GetSingle(i) == 0f) != (gFlat.GetSingle(i) == 0f))
+                    { maskMatches = false; break; }
+                Check(id + " backward reuses the forward mask", maskMatches);
+
+                // Inference is the identity, whatever the rate.
+                drop.Training = false;
+                drop.Forward(ones);
+                Check(id + " inference is identity",
+                      exp.GetProperty("eval_is_identity").GetInt32() == 1 &&
+                      (float)np.sum(np.abs(drop.Output - ones)) == 0f);
+                break;
+            }
+
+            case "batchnorm":
+            {
+                var inputs = c.GetProperty("inputs");
+                var p = c.GetProperty("params");
+                bool training = p.GetProperty("training").GetBoolean();
+                float momentum = (float)p.GetProperty("momentum").GetDouble();
+                float epsilon = (float)p.GetProperty("epsilon").GetDouble();
+
+                NDArray x = ToNDArrayND(inputs.GetProperty("x"));
+                NDArray upstream = ToNDArrayND(inputs.GetProperty("upstream"));
+                int features = (int)x.shape[1];
+
+                var bn = new BatchNormalization(features, momentum, epsilon);
+                bn.Parameters["gamma"] = ToNDArrayND(inputs.GetProperty("gamma"));
+                bn.Parameters["beta"] = ToNDArrayND(inputs.GetProperty("beta"));
+                bn.NonTrainable["moving_mean"] = ToNDArrayND(inputs.GetProperty("moving_mean"));
+                bn.NonTrainable["moving_variance"] = ToNDArrayND(inputs.GetProperty("moving_variance"));
+
+                bn.Training = training;
+                bn.Forward(x);
+                Assert(id + " y", bn.Output, expected.GetProperty("y"));
+                Assert(id + " moving_mean", bn.NonTrainable["moving_mean"], expected.GetProperty("moving_mean_out"));
+                Assert(id + " moving_variance", bn.NonTrainable["moving_variance"], expected.GetProperty("moving_variance_out"));
+
+                bn.Backward(upstream);
+                Assert(id + " dx", bn.InputGrad, expected.GetProperty("dx"));
+                Assert(id + " dgamma", bn.Grads["gamma"], expected.GetProperty("dgamma"));
+                Assert(id + " dbeta", bn.Grads["beta"], expected.GetProperty("dbeta"));
+                break;
+            }
+
+            case "layernorm":
+            {
+                var inputs = c.GetProperty("inputs");
+                float epsilon = (float)c.GetProperty("params").GetProperty("epsilon").GetDouble();
+
+                NDArray x = ToNDArrayND(inputs.GetProperty("x"));
+                NDArray upstream = ToNDArrayND(inputs.GetProperty("upstream"));
+
+                var ln = new LayerNormalization((int)x.shape[1], epsilon);
+                ln.Parameters["gamma"] = ToNDArrayND(inputs.GetProperty("gamma"));
+                ln.Parameters["beta"] = ToNDArrayND(inputs.GetProperty("beta"));
+
+                ln.Forward(x);
+                Assert(id + " y", ln.Output, expected.GetProperty("y"));
+
+                ln.Backward(upstream);
+                Assert(id + " dx", ln.InputGrad, expected.GetProperty("dx"));
+                Assert(id + " dgamma", ln.Grads["gamma"], expected.GetProperty("dgamma"));
+                Assert(id + " dbeta", ln.Grads["beta"], expected.GetProperty("dbeta"));
+                break;
+            }
+
+            case "embedding":
+            {
+                var inputs = c.GetProperty("inputs");
+                NDArray w = ToNDArrayND(inputs.GetProperty("w"));
+                NDArray idx = ToIntNDArray(inputs.GetProperty("indices"));
+                NDArray upstream = ToNDArrayND(inputs.GetProperty("upstream"));
+
+                var emb = new Embedding((int)w.shape[0], (int)w.shape[1]);
+                emb.Parameters["w"] = w;
+
+                emb.Forward(idx);
+                Assert(id + " y", emb.Output, expected.GetProperty("y"));
+
+                emb.Backward(upstream);
+                Assert(id + " dw (scatter-ADD)", emb.Grads["w"], expected.GetProperty("dw"));
+                Check(id + " InputGrad is null (indices aren't differentiable)", emb.InputGrad is null);
+                break;
+            }
+
+            case "regularizer":
+            {
+                var p = c.GetProperty("params");
+                NDArray w = ToNDArrayND(c.GetProperty("inputs").GetProperty("w"));
+                BaseRegularizer reg = name switch
+                {
+                    "l1" => new L1((float)p.GetProperty("l1").GetDouble()),
+                    "l2" => new L2((float)p.GetProperty("l2").GetDouble()),
+                    "l1l2" => new L1L2((float)p.GetProperty("l1").GetDouble(), (float)p.GetProperty("l2").GetDouble()),
+                    _ => throw new ArgumentException($"unknown regularizer {name}"),
+                };
+                AssertScalar(id + " penalty", reg.Penalty(w), expected.GetProperty("penalty"));
+                Assert(id + " gradient", reg.Gradient(w), expected.GetProperty("grad"));
+                break;
+            }
+
             default:
                 Check(id, false, $"unknown kind '{kind}'");
                 break;
@@ -233,6 +386,42 @@ static NDArray ToNDArray(JsonElement e)
 
 static float ReadFloat(JsonElement v)
     => v.ValueKind == JsonValueKind.String ? ParseSentinel(v.GetString()) : (float)v.GetDouble();
+
+/// <summary>Shape of an arbitrarily-nested JSON array (first element per level).</summary>
+static int[] NestedShape(JsonElement e)
+{
+    var dims = new List<int>();
+    JsonElement cur = e;
+    while (cur.ValueKind == JsonValueKind.Array)
+    {
+        int len = cur.GetArrayLength();
+        dims.Add(len);
+        if (len == 0) break;
+        cur = cur.EnumerateArray().First();
+    }
+    return dims.ToArray();
+}
+
+/// <summary>
+/// N-dimensional float32 reader — the P4 layers need 3-D (sequence embeddings)
+/// where the original ToNDArray only handled 1-D and 2-D.
+/// </summary>
+static NDArray ToNDArrayND(JsonElement e)
+{
+    float[] flat = Flatten(e).ToArray();
+    int[] dims = NestedShape(e);
+    NDArray nd = np.array(flat);
+    return dims.Length <= 1 ? nd : np.reshape(nd, new Shape(dims));
+}
+
+/// <summary>N-dimensional int32 reader (embedding indices).</summary>
+static NDArray ToIntNDArray(JsonElement e)
+{
+    int[] flat = Flatten(e).Select(v => (int)v).ToArray();
+    int[] dims = NestedShape(e);
+    NDArray nd = np.array(flat);
+    return dims.Length <= 1 ? nd : np.reshape(nd, new Shape(dims));
+}
 
 static int[] ToIntArray(JsonElement e) => e.EnumerateArray().Select(x => x.GetInt32()).ToArray();
 

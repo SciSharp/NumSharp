@@ -51,11 +51,30 @@ examples/NeuralNetwork.NumSharp/
 │
 ├── Layers/
 │   ├── BaseLayer.cs           Abstract: Input, Output, Parameters["w"/"b"],
-│   │                           Grads[...], InputGrad. Subclasses override
-│   │                           Forward/Backward.
+│   │                           Grads[...], InputGrad, NonTrainable[...],
+│   │                           Training flag, Regularizers[...]. Subclasses
+│   │                           override Forward/Backward (+ GetConfig).
 │   ├── FullyConnected.cs      Dense layer with bias + He/Xavier init (float32).
 │   │                           Optional kernel/bias BaseInitializer overrides
 │   │                           (null keeps the historical seeded defaults).
+│   ├── Dropout.cs             Inverted dropout: train scales survivors by
+│   │                           1/(1-rate), inference is the identity. Caches
+│   │                           the SCALED mask so backward reuses it exactly.
+│   ├── BatchNormalization.cs  2-D (N,C). Keras defaults momentum=0.99,
+│   │                           epsilon=1e-3 (NOT 1e-5), POPULATION variance.
+│   │                           gamma/beta in Parameters; moving_mean and
+│   │                           moving_variance in NonTrainable.
+│   ├── LayerNormalization.cs  Per-SAMPLE over the features; no running state,
+│   │                           ignores Training, works at batch size 1.
+│   ├── Embedding.cs           Gather forward; backward is a scatter-ADD
+│   │                           (duplicate indices accumulate). InputGrad stays
+│   │                           null — indices aren't differentiable.
+│   └── Reshape.cs             Flatten + Reshape (target shape excludes batch).
+│
+├── Regularizers/
+│   └── BaseRegularizer.cs     L1 / L2 / L1L2 + Get(name). Keras scaling has NO
+│                               1/2, so d(l2·Σw²)/dw = 2·l2·w. L1's subgradient
+│                               at 0 is +1 (Keras/JAX `w >= 0`), NOT np.sign's 0.
 │   └── Activations/
 │       ├── BaseActivation.cs  Get(name), case-insensitive: relu, sigmoid,
 │       │                       softmax, tanh, leaky_relu, elu, gelu,
@@ -171,6 +190,8 @@ examples/NeuralNetwork.NumSharp/
 │                               csproj Compile Remove). See Testing below.
 ├── tests/verify_p1.cs         131-check P1 gate (serialization, clipping, the
 │                               four callbacks, trainer behavior).
+├── tests/verify_p4.cs         102-check P4 gate (Training-flag plumbing, layer
+│                               state machines, FD gradients, serialization).
 ├── Open.snk                   Strong-name key shared with NumSharp.Core.
 └── NeuralNetwork.NumSharp.csproj   Exe, net8.0+net10.0, AllowUnsafeBlocks.
 ```
@@ -195,7 +216,7 @@ cache-hit on every subsequent forward/backward pass.
 
 | File | What it does |
 |---|---|
-| `Program.cs` | Entry point. Loads data, builds 2-FC model, runs fusion probe, trains via MlpTrainer, runs the **P1 showcase** (weights→.npz + architecture→JSON, rebuild-from-JSON and reload — random 8.9% → restored 99.90%, then a 12-epoch fit driven by EarlyStopping + ReduceLROnPlateau + ModelCheckpoint + CSVLogger with `validationSplit: 0.1` and `ClipNorm = 1.0`), reports IL-kernel cache + delegate-slot counts. The showcase is deliberately a SEPARATE short run so the headline 100-epoch numbers stay comparable across commits. |
+| `Program.cs` | Entry point. Loads data, builds 2-FC model, runs fusion probe, trains via MlpTrainer, runs the **P1 showcase** (weights→.npz + architecture→JSON, rebuild-from-JSON and reload — random 8.9% → restored 99.90%, then a 12-epoch fit driven by EarlyStopping + ReduceLROnPlateau + ModelCheckpoint + CSVLogger with `validationSplit: 0.1` and `ClipNorm = 1.0`) and the **P4 showcase** (Dense→BatchNorm→Dropout→Dense + L2, 8 epochs; then the same input forwarded with `Training` false twice and true once, showing eval is deterministic and train differs), reports IL-kernel cache + delegate-slot counts. Both showcases are deliberately SEPARATE short runs so the headline 100-epoch numbers stay comparable across commits. |
 | `MnistLoader.cs` | IDX parser (big-endian) + learnable synthetic fallback (shared class templates across train/test, sigma=2.5 noise). |
 | `FullyConnectedFused.cs` | FC with bias + optional fused activation. Three NDIter kernels (two forward, one backward), cache keys are stable strings. |
 | `SoftmaxCrossEntropy.cs` | Combined loss computed in LOG space (log-softmax via log-sum-exp) so extreme logits give the true loss — a clipped softmax-then-log caps at -log(eps) ≈ 16.1 where e.g. logits (-1000, 0) should give 1000 (Keras from_logits=True parity, oracle-pinned). Caches softmax; (softmax-labels)/batch backward. Also ships `OneHot` helper. |
@@ -253,6 +274,31 @@ takes `shuffle` (default **true**, Keras's default), `validationSplit`,
 - `TrainResult` gained `EpochValLoss`, `EpochValAcc`, `EpochsRun` and
   `StoppedEarly`. `Epochs` remains the number REQUESTED; `EpochsRun` is what
   actually ran.
+
+## Train/eval mode contract (P4)
+
+`BaseLayer.Training` is the Keras `training=` / PyTorch `model.eval()` analog,
+as a **flag** rather than a `Forward` parameter — the signature change would
+break every existing layer, activation and verification script for no
+behavioral gain.
+
+- **Default is `false`**, so a bare `Forward` is always inference.
+- `MlpTrainer` sets it **true** around the training forward pass and **false**
+  in `Evaluate`/`EvaluateFull`; `NeuralNet.Train` sets true, `NeuralNet.Predict`
+  sets false. **A hand-rolled loop must do the same** — otherwise Dropout does
+  not drop and BatchNorm normalizes with stale running statistics, and both
+  failures are silent (the model trains, just worse).
+- Only `Dropout` and `BatchNormalization` read it. `LayerNormalization`
+  deliberately does not — it has no running state and behaves identically in
+  both modes.
+
+**Regularizers are applied by the TRAINER, not by each layer's `Backward`.**
+After the backward sweep the trainer calls `layer.ApplyRegularizerGradients()`
+on every layer and adds `layer.RegularizationPenalty()` to the reported loss
+(as Keras does). Centralizing it means a layer author cannot forget to honour a
+regularizer someone attached to their layer. Do NOT gate the gradient call on
+`penalty != 0` — that conflates "no regularizer" with "a regularizer that
+happens to score zero right now".
 
 **Checkpoint keys are POSITIONAL, not by layer `Name`.** `Name` comes from
 `Util.GetNext()`, a process-global counter that never resets — build the same
@@ -391,25 +437,79 @@ filing: NDIter broadcast-operand inner-loop throughput vs the Direct kernels.
 
 ## Testing
 
-No dedicated MSTest project yet (roadmap P-cross-cutting). THREE committed
-gates, all dotnet-run file-based apps under `tests/`. Run them all after any
-source change — and see sharp edge 5c: **clear the runfile cache first**, or a
-gate replays a stale build.
+No dedicated MSTest project yet (roadmap P-cross-cutting). FOUR committed
+gates, all dotnet-run file-based apps under `tests/` — **479 checks total**
+(86 + 160 + 131 + 102). Run them all after any source change — and see sharp
+edge 5c: **clear the runfile cache first**, or a gate replays a stale build.
 
-### Gate 2: `tests/verify_edge_cases.cs` — the Keras edge-case oracle (94 checks)
+```bash
+rm -rf "$LOCALAPPDATA/Temp/dotnet/runfile/verify_"*
+cd examples/NeuralNetwork.NumSharp/tests
+for f in verify_p0_p2 verify_edge_cases verify_p1 verify_p4; do dotnet run $f.cs; done
+```
+
+### Gate 4: `tests/verify_p4.cs` — regularization & normalization (102 checks)
+
+The VALUES and GRADIENTS of the P4 layers are pinned against real Keras by
+Gate 2; this gate covers what an oracle over single layers cannot see:
+
+- **The Training flag is actually plumbed** — a spy layer counts forwards per
+  mode and proves `MlpTrainer` trains with it true and scores with it false,
+  that `Evaluate` is pure inference, and that `NeuralNet.Predict`/`Train` agree.
+- **Running statistics update in training and NOT in inference**, and are absent
+  from `Parameters` so an optimizer step over a BatchNorm layer does not throw.
+- **Dropout** seed-determinism through `np.random`, `rate=0` as the identity in
+  training, and E[x] preservation over 160 000 draws.
+- **Independent finite-difference gradient checks** for BatchNorm (training AND
+  inference branches) and LayerNorm — computed with no Keras involved, so the
+  hand-derived backward passes have a second opinion.
+- **Embedding**: duplicate-index accumulation checked by hand (7 and 70 from
+  three occurrences of one row), index dtypes, 2-D sequence input, and a real
+  3-layer stack that trains with the null `InputGrad` at its head.
+- **Regularizer wiring**: the penalty reaching the reported loss, the gradient
+  reaching the optimizer (a zero-input run where the ONLY gradient is the
+  penalty's, so the weights must decay).
+- **Serialization**: the new layers through `.npz` + architecture JSON, with a
+  reloaded model asserted to EVALUATE identically — which is the reason
+  BatchNorm's running statistics are in the archive at all.
+
+```bash
+cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_p4.cs
+# → RESULT: 102 passed, 0 failed
+```
+
+### Gate 2: `tests/verify_edge_cases.cs` — the Keras edge-case oracle (160 checks)
 
 House oracle philosophy scaled to this project: `tests/gen_keras_oracle.py`
 runs **real Keras 3 (JAX backend, float32)** — values AND `jax.grad`
-gradients through the actual Keras losses — plus Keras metric classes and
-scikit-learn, and writes the committed corpus
-`tests/corpus/keras_edge_oracle.json` (93 cases). The replay runs with **no
+gradients through the actual Keras losses and LAYERS — plus Keras metric
+classes and scikit-learn, and writes the committed corpus
+`tests/corpus/keras_edge_oracle.json` (111 cases). The replay runs with **no
 Python**. Coverage: activation values over ±inf/NaN/±1e30/saturation/kink
 grids + gradient grids; softmax -inf lanes and huge-logit ties; loss values
 and gradients at clip boundaries, |e|==delta Huber boundary, zero margins,
 label-conversion edges, ±300 log-cosh tails, from-logits parity for
 SoftmaxCrossEntropy at ±1000 logits; metric threshold-exact/tie/
 zero-denominator conventions; initializer std targets sampled from Keras's
-own initializers (5-seed means, conv-rank fans).
+own initializers (5-seed means, conv-rank fans); and the **P4 layers**.
+
+**P4 layer gradients come from `jax.grad` over `keras.Layer.stateless_call`**,
+so the oracle differentiates the ACTUAL Keras implementation rather than a
+re-derivation of it. Every layer case carries a non-uniform upstream cotangent
+— a vector of ones hides an axis mix-up, and LayerNorm's gamma/beta gradients
+reduce over a different axis than its input gradient. Cases: BatchNorm
+train+inference forward, `dx`/`dgamma`/`dbeta`, and the running-stat update
+(plus a batch-of-1 case where the variance is exactly 0 so epsilon alone
+divides — the case that separates 1e-3 from 1e-5); LayerNorm the same plus a
+batch-independence pair; Embedding with duplicate / all-same / no-repeat
+indices and 2-D sequence input; Dropout's inverted-scaling contract; and the
+regularizer penalties with their gradients.
+
+Two generator details that are load-bearing: `training=` is forwarded only to
+layers whose `call()` declares it (LayerNormalization and Embedding raise
+`TypeError` otherwise), and an **integer input is skipped for `dx`** because
+`jax.grad` refuses to differentiate it — which is the same fact our `Embedding`
+encodes by leaving `InputGrad` null.
 
 Excused divergences are explicit in the corpus (`expected_ns` + reason,
 printed at replay — MisalignedRegistry spirit, never silent). Currently two:
@@ -419,15 +519,20 @@ projection while ours is the exact gradient of OUR forward (FD-verified).
 
 ```bash
 cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_edge_cases.cs
-# → RESULT: 94 passed, 0 failed, 2 excused-documented divergences
+# → RESULT: 160 passed, 0 failed, 2 excused-documented divergences
 # regenerate corpus (needs keras>=3.15 + jax + scikit-learn):
-python gen_keras_oracle.py
+KERAS_BACKEND=jax python gen_keras_oracle.py
 ```
 
-Bugs this oracle caught on first run: `relu(-inf)` returned NaN (the
+Bugs this oracle caught on first run. P2: `relu(-inf)` returned NaN (the
 `(x>0)*x` form), LeakyReLU's gradient at exactly 0 (Keras/JAX use `x >= 0`),
 and SoftmaxCrossEntropy capping extreme-logit losses at -log(eps) ≈ 16.1
-instead of the true value (now log-sum-exp).
+instead of the true value (now log-sum-exp). P4: **L1's subgradient at
+`w = 0`** — `np.sign(0)` is 0, but `jax.grad(abs)` at ±0.0 is **+1**, the same
+`x >= 0` convention as LeakyReLU. That is exactly where an L1 penalty spends
+its time, so the wrong value stalls every weight the penalty has already
+driven to zero. Fixed via `L1.SubGradient`; do not "simplify" it back to
+`np.sign`.
 
 ### Gate 1: `tests/verify_p0_p2.cs` — behavior + formula checks (86 checks)
 
@@ -552,6 +657,16 @@ with this 2-layer MLP should land ~97-98% after 10-20 epochs.
 - **Architecture JSON covers only registered layer types.** `ModelArchitecture`
   refuses to serialize a layer with no factory rather than emitting something
   that cannot be read back. Register user layers explicitly.
+- **BatchNorm/LayerNorm are 2-D only.** `(N, C)` inputs; the `(N, C, H, W)`
+  reduction over spatial axes arrives with the P5 conv stack. Both throw a
+  named `NotSupportedException` rather than silently normalizing the wrong axis.
+- **Embedding's gradient is DENSE.** A `(vocab, dim)` zero array is allocated per
+  backward and scattered into. Real frameworks keep a sparse gradient for large
+  vocabularies, which needs optimizer support this project does not have.
+- **`Reshape` needs an explicit shape** — no inferred `-1` dimension.
+- **Regularizers attach per parameter key**, and only the trainer applies them.
+  A hand-rolled training loop must call `ApplyRegularizerGradients()` and add
+  `RegularizationPenalty()` itself.
 - **`NeuralNet.Train` is the thin loop.** It gained callbacks and global-norm
   clipping, but shuffling, validation and partial final batches live in
   `MlpTrainer.Train`. Use `MlpTrainer` for real training.

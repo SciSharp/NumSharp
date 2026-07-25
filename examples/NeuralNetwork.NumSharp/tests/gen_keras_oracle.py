@@ -363,6 +363,196 @@ for name, shapes in INIT_SHAPES.items():
         cases.append(row)
 
 # ======================================================================
+# 5. P4 layers — Dropout / BatchNormalization / LayerNormalization /
+#    Embedding, values AND gradients, through the REAL Keras layers.
+#
+#    Gradients come from jax.grad over keras Layer.stateless_call, so the
+#    oracle differentiates the actual Keras implementation rather than a
+#    re-derivation of it. Every case carries an explicit upstream cotangent
+#    so the recorded gradient is dL/d* for L = sum(out * upstream) — a
+#    non-uniform upstream is what catches an axis mix-up that a vector of
+#    ones would hide.
+# ======================================================================
+def _vars_in_order(layer, names, trainable=True):
+    """Keras variables for `names`, in the order stateless_call expects."""
+    pool = layer.trainable_variables if trainable else layer.non_trainable_variables
+    by_name = {}
+    for v in pool:
+        key = v.path.split("/")[-1]
+        by_name[key] = v
+    missing = [n for n in names if n not in by_name]
+    if missing:
+        raise RuntimeError(f"{layer.__class__.__name__}: missing {missing}, have {list(by_name)}")
+    ordered = [by_name[n] for n in names]
+    # sanity: the pool must be exactly these, in this order
+    assert [v.path for v in pool] == [v.path for v in ordered], \
+        f"variable order mismatch: {[v.path for v in pool]} vs {[v.path for v in ordered]}"
+    return ordered
+
+
+def _layer_grads(layer, x, tv, ntv, upstream, training):
+    """(y, dx, [dtv...], ntv_out) for one Keras layer via stateless_call.
+
+    `training=` is only forwarded to layers whose call() declares it —
+    LayerNormalization and Embedding do not, and passing it is a TypeError.
+    """
+    import inspect as _inspect
+    kw = {}
+    if "training" in _inspect.signature(layer.call).parameters:
+        kw["training"] = training
+
+    def fwd(x_, tv_):
+        out, _ = layer.stateless_call(tv_, ntv, x_, **kw)
+        return out
+
+    y, ntv_out = layer.stateless_call(tv, ntv, jnp.array(x), **kw)
+    loss = lambda x_, tv_: jnp.sum(fwd(x_, tv_) * jnp.array(upstream))
+
+    # An integer input is not differentiable — jax.grad refuses it outright.
+    # That is the same fact our Embedding encodes by leaving InputGrad null.
+    if np.issubdtype(np.asarray(x).dtype, np.integer):
+        dtv = jax.grad(lambda tv_: loss(jnp.array(x), tv_))(tv)
+        dx = None
+    else:
+        dx, dtv = jax.grad(loss, argnums=(0, 1))(jnp.array(x), tv)
+
+    return (np.asarray(y, F32),
+            None if dx is None else np.asarray(dx, F32),
+            [np.asarray(g, F32) for g in dtv],
+            [np.asarray(v, F32) for v in ntv_out])
+
+
+# ---- Dropout: the inverted-dropout CONTRACT (the mask itself is RNG-specific,
+#      so what is pinned is the scale, the support {0, 1/(1-rate)} and the
+#      inference passthrough).
+for rate in (0.0, 0.25, 0.5, 0.9):
+    ones = np.ones((200, 20), F32)
+    d = keras.layers.Dropout(rate, seed=1234)
+    train_out = np.asarray(d(jnp.array(ones), training=True), F32)
+    eval_out = np.asarray(d(jnp.array(ones), training=False), F32)
+    nonzero = np.unique(train_out[train_out != 0])
+    add("dropout", "contract", {"rate": rate},
+        {"scale": float(1.0 / (1.0 - rate)) if rate < 1 else 0.0,
+         "nonzero_values": sorted(float(v) for v in nonzero),
+         "eval_is_identity": bool(np.array_equal(eval_out, ones)),
+         "kept_fraction": float((train_out != 0).mean())},
+        params={"rate": rate},
+        note="inverted dropout: survivors scale by 1/(1-rate); inference is the identity")
+
+# ---- BatchNormalization: training forward+backward, running-stat update, and
+#      the inference path off non-default running statistics.
+BN_X = np.array([[1.0, 2.0, -3.0], [3.0, 5.0, 0.5], [7.0, 11.0, -1.0], [-2.0, 0.0, 4.0]], F32)
+BN_UP = np.array([[1.0, -2.0, 0.5], [0.25, 3.0, -1.0], [-0.5, 1.0, 2.0], [2.0, -0.25, 0.75]], F32)
+BN_GAMMA = np.array([1.5, -0.5, 2.0], F32)
+BN_BETA = np.array([0.25, -1.0, 0.5], F32)
+BN_MM = np.array([0.5, 1.0, -0.5], F32)
+BN_MV = np.array([2.0, 4.0, 0.25], F32)
+
+for training in (True, False):
+    bn = keras.layers.BatchNormalization()
+    bn.build(BN_X.shape)
+    tvs = _vars_in_order(bn, ["gamma", "beta"])
+    ntvs = _vars_in_order(bn, ["moving_mean", "moving_variance"], trainable=False)
+    tv = [jnp.array(BN_GAMMA), jnp.array(BN_BETA)]
+    ntv = [jnp.array(BN_MM), jnp.array(BN_MV)]
+
+    y, dx, (dgamma, dbeta), (mm_out, mv_out) = _layer_grads(bn, BN_X, tv, ntv, BN_UP, training)
+    add("batchnorm", "train" if training else "inference",
+        {"x": BN_X, "gamma": BN_GAMMA, "beta": BN_BETA,
+         "moving_mean": BN_MM, "moving_variance": BN_MV, "upstream": BN_UP},
+        {"y": y, "dx": dx, "dgamma": dgamma, "dbeta": dbeta,
+         "moving_mean_out": mm_out, "moving_variance_out": mv_out},
+        params={"training": training, "momentum": float(bn.momentum), "epsilon": float(bn.epsilon)},
+        note=("population(ddof=0) variance; running = momentum*old + (1-momentum)*batch"
+              if training else "inference uses the running statistics and does NOT update them"))
+
+# batch of 1 in training mode: variance is exactly 0, so epsilon alone carries
+# the division — the case that separates 1e-3 from 1e-5.
+bn1 = keras.layers.BatchNormalization()
+bn1.build((1, 3))
+x1 = np.array([[4.0, -1.0, 0.0]], F32)
+up1 = np.array([[1.0, 1.0, 1.0]], F32)
+y, dx, (dgamma, dbeta), (mm_out, mv_out) = _layer_grads(
+    bn1, x1, [jnp.array(BN_GAMMA), jnp.array(BN_BETA)],
+    [jnp.array(np.zeros(3, F32)), jnp.array(np.ones(3, F32))], up1, True)
+add("batchnorm", "train", {"x": x1, "gamma": BN_GAMMA, "beta": BN_BETA,
+                           "moving_mean": np.zeros(3, F32), "moving_variance": np.ones(3, F32),
+                           "upstream": up1},
+    {"y": y, "dx": dx, "dgamma": dgamma, "dbeta": dbeta,
+     "moving_mean_out": mm_out, "moving_variance_out": mv_out},
+    params={"training": True, "momentum": 0.99, "epsilon": 1e-3},
+    note="batch_of_1 — zero variance, epsilon alone divides")
+
+# ---- LayerNormalization: per-sample statistics, no running state.
+LN_X = np.array([[1.0, 2.0, -3.0, 0.5], [3.0, 5.0, 0.5, -1.0], [0.0, 0.0, 0.0, 0.0]], F32)
+LN_UP = np.array([[1.0, -2.0, 0.5, 0.25], [0.25, 3.0, -1.0, 1.0], [-0.5, 1.0, 2.0, -1.5]], F32)
+LN_GAMMA = np.array([1.5, -0.5, 2.0, 0.75], F32)
+LN_BETA = np.array([0.25, -1.0, 0.5, 0.0], F32)
+
+ln = keras.layers.LayerNormalization()
+ln.build(LN_X.shape)
+_vars_in_order(ln, ["gamma", "beta"])
+y, dx, (dgamma, dbeta), _ = _layer_grads(
+    ln, LN_X, [jnp.array(LN_GAMMA), jnp.array(LN_BETA)], [], LN_UP, True)
+add("layernorm", "default", {"x": LN_X, "gamma": LN_GAMMA, "beta": LN_BETA, "upstream": LN_UP},
+    {"y": y, "dx": dx, "dgamma": dgamma, "dbeta": dbeta},
+    params={"epsilon": float(ln.epsilon)},
+    note="row 2 is all-zeros: variance 0, epsilon alone divides; gamma/beta grads reduce over the BATCH")
+
+# LayerNorm must not depend on the batch: the same row scored alone.
+ln1 = keras.layers.LayerNormalization()
+ln1.build((1, 4))
+y1, dx1, (dg1, db1), _ = _layer_grads(
+    ln1, LN_X[:1], [jnp.array(LN_GAMMA), jnp.array(LN_BETA)], [], LN_UP[:1], True)
+add("layernorm", "single_row", {"x": LN_X[:1], "gamma": LN_GAMMA, "beta": LN_BETA, "upstream": LN_UP[:1]},
+    {"y": y1, "dx": dx1, "dgamma": dg1, "dbeta": db1},
+    params={"epsilon": 1e-3},
+    note="batch-independence: identical to row 0 of the batched case")
+
+# ---- Embedding: gather + the scatter-ADD backward. Duplicate indices are the
+#      point — an assignment loop keeps only the last and passes every test
+#      that has no repeats.
+EMB_W = np.array([[0.1, 0.2], [-0.3, 0.4], [0.5, -0.6], [0.7, 0.8], [-0.9, 1.0]], F32)
+for tag, idx, up in [
+    ("duplicates", np.array([0, 2, 2, 0, 4], np.int32),
+     np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]], F32)),
+    ("no_repeats", np.array([1, 3], np.int32),
+     np.array([[1.0, -1.0], [2.0, -2.0]], F32)),
+    ("all_same", np.array([3, 3, 3], np.int32),
+     np.array([[1.0, 1.0], [2.0, 2.0], [4.0, 4.0]], F32)),
+]:
+    emb = keras.layers.Embedding(EMB_W.shape[0], EMB_W.shape[1])
+    emb.build((None,))
+    _vars_in_order(emb, ["embeddings"])
+    y, _, (dw,), _ = _layer_grads(emb, idx, [jnp.array(EMB_W)], [], up, True)
+    add("embedding", "1d", {"w": EMB_W, "indices": idx.tolist(), "upstream": up},
+        {"y": y, "dw": dw}, note=tag)
+
+# 2-D (batch, timesteps) indices -> (batch, timesteps, dim)
+idx2 = np.array([[0, 1], [1, 1]], np.int32)
+up2 = np.array([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]], F32)
+emb2 = keras.layers.Embedding(EMB_W.shape[0], EMB_W.shape[1])
+emb2.build((None, None))
+y, _, (dw,), _ = _layer_grads(emb2, idx2, [jnp.array(EMB_W)], [], up2, True)
+add("embedding", "2d", {"w": EMB_W, "indices": idx2.tolist(), "upstream": up2},
+    {"y": y, "dw": dw}, note="sequence input; index 1 repeats three times across the batch")
+
+# ---- Regularizers: penalty AND the gradient that must match it.
+REG_W = np.array([[1.0, -2.0], [3.0, -4.0], [0.0, 0.5]], F32)
+for kind, kwargs, obj in [
+    ("l1", {"l1": 0.1}, keras.regularizers.L1(0.1)),
+    ("l2", {"l2": 0.1}, keras.regularizers.L2(0.1)),
+    ("l1l2", {"l1": 0.1, "l2": 0.05}, keras.regularizers.L1L2(0.1, 0.05)),
+    ("l1", {"l1": 0.01}, keras.regularizers.L1()),      # Keras default strength
+    ("l2", {"l2": 0.01}, keras.regularizers.L2()),
+]:
+    penalty = float(obj(jnp.array(REG_W)))
+    grad = np.asarray(jax.grad(lambda w: obj(w))(jnp.array(REG_W)), F32)
+    add("regularizer", kind, {"w": REG_W}, {"penalty": penalty, "grad": grad},
+        params=kwargs,
+        note="Keras has NO 1/2 on L2, so d(l2*sum(w^2))/dw = 2*l2*w; sign(0)=0 for L1")
+
+# ======================================================================
 out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "corpus", "keras_edge_oracle.json")
 os.makedirs(os.path.dirname(out), exist_ok=True)
 meta = {
