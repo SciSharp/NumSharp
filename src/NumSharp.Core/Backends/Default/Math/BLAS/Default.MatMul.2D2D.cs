@@ -51,6 +51,12 @@ namespace NumSharp.Backends
                         $"Output shape {@out.Shape} incompatible with matmul result shape ({M}, {N})");
             }
 
+            // Opt-in byte-parity backend (np.parity_matmul): a route-for-route port of NumPy's
+            // @TYPE@_matmul over the same CBLAS binary NumPy calls. Off by default, and consulted
+            // before the SIMD paths because it must own the whole product to reproduce the bits.
+            if (Kernels.Blas.BlasParity.TryMatmul2D(left, right, result))
+                return result;
+
             // Stride-aware SIMD path for same-type float / double.
             if (TryMatMulSimd(left, right, result, M, K, N))
                 return result;
