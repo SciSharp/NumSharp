@@ -13,6 +13,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- tests/ holds standalone dotnet-run verification scripts (file-based
+         apps with their own #: directives) — they must not compile into the
+         demo executable. -->
+    <Compile Remove="tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
   </ItemGroup>
 

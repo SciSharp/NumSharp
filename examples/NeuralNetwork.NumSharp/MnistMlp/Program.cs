@@ -17,9 +17,12 @@ namespace NeuralNetwork.NumSharp.MnistMlp
     ///   1. Data load — real IDX files if present, otherwise deterministic
     ///      synthetic tensors (~10% accuracy at best; swap in real data to
     ///      train for real).
-    ///   2. Fusion probe — a small correctness + perf comparison of the fused
-    ///      NDIter bias+ReLU kernel against the naive np.add + np.maximum
-    ///      composition. Confirms the fast path is live before we train.
+    ///   2. Fusion probe — correctness + perf of the fused bias+ReLU kernel
+    ///      (hand-rolled NDIter AND the productized np.evaluate) against the
+    ///      naive np.add + np.maximum composition, at TWO sizes: the training
+    ///      shape (small — iterator setup dominates, the unfused whole-array
+    ///      SIMD kernels win) and a large tensor (fusion's single memory pass
+    ///      wins). Both are reported honestly; see the CLAUDE.md perf notes.
     ///   3. Training — 2-layer MLP (784 -> 128 ReLU -> 10) with Adam +
     ///      SoftmaxCrossEntropy loss. Per-epoch loss / accuracy, plus final
     ///      test-set accuracy.
@@ -101,7 +104,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
 
         private static void RunFusionProbe(NDArray trainX, NDArray trainY)
         {
-            Console.WriteLine("Fusion probe (one batch, bias+ReLU post-matmul):");
+            Console.WriteLine("Fusion probe (bias+ReLU post-matmul; fused NDIter vs np.evaluate vs naive):");
 
             NDArray W = np.random.normal(0.0, Math.Sqrt(2.0 / InputDim), new Shape(InputDim, HiddenDim))
                                .astype(NPTypeCode.Single);
@@ -118,48 +121,77 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             double maxDiff = MaxAbsDiff(fused, naive);
             Console.WriteLine($"  correctness  : max |fused - naive| = {maxDiff:g4}  ->  {(maxDiff < 1e-5 ? "PASS" : "FAIL")}");
 
-            // Time 200 post-matmul bias+ReLU fusions vs. naive add + maximum.
+            // np.evaluate (the productized fusion API) must agree bit-for-bit too.
             NDArray preact = np.dot(x, W);
-            const int probePasses = 200;
+            NDArray viaEvaluate = np.empty_like(preact);
+            np.evaluate(NDExpr.Max(NDExpr.Arr(preact) + NDExpr.Arr(b), NDExpr.Const(0f)), @out: viaEvaluate);
+            NDArray viaNaive = np.maximum(np.add(preact, b), (NDArray)0f);
+            double evalDiff = MaxAbsDiff(viaEvaluate, viaNaive);
+            Console.WriteLine($"  np.evaluate  : max |evaluate - naive| = {evalDiff:g4}  ->  {(evalDiff < 1e-5 ? "PASS" : "FAIL")}");
 
-            // Warm BOTH paths up-front. 500 iterations is enough to cover
-            // first-time IL emission + .NET's tiered JIT promotion to the
-            // optimized tier (the default JitThreshold is ~30 on net8 but
-            // the promoted tier can take longer to kick in on net10).
-            WarmProbe(preact, b, iterations: 500);
+            // Two sizes, reported honestly: at the training shape (128x128 = 16K
+            // elements) iterator setup dominates and the unfused whole-array SIMD
+            // kernels win; on a large tensor the fused single memory pass wins.
+            ProbeSize("training shape 128x128", preact, b, passes: 200, warmup: 500);
 
-            double fusedMs = TimeProbe(preact, b, probePasses, fusedPath: true);
-            double naiveMs = TimeProbe(preact, b, probePasses, fusedPath: false);
-            Console.WriteLine($"  speed        : fused {fusedMs:F3} ms vs naive {naiveMs:F3} ms  ->  {naiveMs / fusedMs:F2}x");
+            NDArray bigPreact = np.random.normal(0, 1, new Shape(2048, 2048)).astype(NPTypeCode.Single);
+            NDArray bigBias   = np.zeros(new Shape(2048), NPTypeCode.Single);
+            ProbeSize("large tensor 2048x2048", bigPreact, bigBias, passes: 20, warmup: 5);
             Console.WriteLine();
         }
 
-        private static void WarmProbe(NDArray preact, NDArray bias, int iterations)
+        private enum ProbePath
         {
-            for (int i = 0; i < iterations; i++)
+            FusedIter,  // hand-rolled NDIterRef + ExecuteExpression (this demo's kernels)
+            Evaluate,   // np.evaluate — the productized fusion API in core
+            Naive,      // np.add + np.maximum, two whole-array SIMD kernels + an intermediate
+        }
+
+        private static void ProbeSize(string label, NDArray preact, NDArray bias, int passes, int warmup)
+        {
+            // Warm ALL paths up-front. At the small size 500 iterations covers
+            // first-time IL emission + .NET's tiered JIT promotion to the
+            // optimized tier; the large size reuses the already-hot kernels and
+            // only needs to touch its memory once or twice.
+            for (int i = 0; i < warmup; i++)
             {
-                NDArray h = np.empty_like(preact);
-                FusePostMatmulBiasRelu(preact, bias, h);
-                _ = np.maximum(np.add(preact, bias), (NDArray)0f);
+                TimeProbe(preact, bias, 1, ProbePath.FusedIter);
+                TimeProbe(preact, bias, 1, ProbePath.Evaluate);
+                TimeProbe(preact, bias, 1, ProbePath.Naive);
             }
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
+
+            double fusedMs = TimeProbe(preact, bias, passes, ProbePath.FusedIter);
+            double evalMs  = TimeProbe(preact, bias, passes, ProbePath.Evaluate);
+            double naiveMs = TimeProbe(preact, bias, passes, ProbePath.Naive);
+            Console.WriteLine($"  {label,-22} : fusedIter {fusedMs:F3} ms | np.evaluate {evalMs:F3} ms | naive {naiveMs:F3} ms");
+            Console.WriteLine($"  {"",-22}   naive/fusedIter {naiveMs / fusedMs:F2}x   naive/np.evaluate {naiveMs / evalMs:F2}x   (>1 = fusion faster)");
         }
 
-        private static double TimeProbe(NDArray preact, NDArray bias, int passes, bool fusedPath)
+        private static double TimeProbe(NDArray preact, NDArray bias, int passes, ProbePath path)
         {
             var sw = Stopwatch.StartNew();
             for (int i = 0; i < passes; i++)
             {
-                if (fusedPath)
+                switch (path)
                 {
-                    NDArray h = np.empty_like(preact);
-                    FusePostMatmulBiasRelu(preact, bias, h);
-                }
-                else
-                {
-                    _ = np.maximum(np.add(preact, bias), (NDArray)0f);
+                    case ProbePath.FusedIter:
+                    {
+                        NDArray h = np.empty_like(preact);
+                        FusePostMatmulBiasRelu(preact, bias, h);
+                        break;
+                    }
+                    case ProbePath.Evaluate:
+                    {
+                        NDArray h = np.empty_like(preact);
+                        np.evaluate(NDExpr.Max(NDExpr.Arr(preact) + NDExpr.Arr(bias), NDExpr.Const(0f)), @out: h);
+                        break;
+                    }
+                    case ProbePath.Naive:
+                        _ = np.maximum(np.add(preact, bias), (NDArray)0f);
+                        break;
                 }
             }
             sw.Stop();

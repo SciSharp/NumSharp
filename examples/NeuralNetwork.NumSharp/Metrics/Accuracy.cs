@@ -9,13 +9,10 @@ namespace NeuralNetwork.NumSharp.Metrics
     /// of shape (batch, numClasses) and one-hot labels of the same shape.
     /// Computes argmax-per-row on both, counts matches, returns a scalar
     /// NDArray of the fraction correct in [0, 1].
-    ///
-    /// Class name retains the original misspelling ("Accuacy") for backward
-    /// compatibility with any existing callers.
     /// </summary>
-    public class Accuacy : BaseMetric
+    public class Accuracy : BaseMetric
     {
-        public Accuacy() : base("accuracy") { }
+        public Accuracy() : base("accuracy") { }
 
         public override NDArray Calculate(NDArray preds, NDArray labels)
         {
@@ -24,5 +21,13 @@ namespace NeuralNetwork.NumSharp.Metrics
             NDArray matches  = (predIdx == labelIdx).astype(NPTypeCode.Single);
             return np.mean(matches);
         }
+    }
+
+    /// <summary>
+    /// Backward-compatibility shim for the original misspelled class name.
+    /// </summary>
+    [Obsolete("Use Accuracy — this class name was a typo in the original scaffolding.")]
+    public class Accuacy : Accuracy
+    {
     }
 }

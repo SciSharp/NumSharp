@@ -54,38 +54,91 @@ examples/NeuralNetwork.NumSharp/
 │   │                           Grads[...], InputGrad. Subclasses override
 │   │                           Forward/Backward.
 │   ├── FullyConnected.cs      Dense layer with bias + He/Xavier init (float32).
-│   │                           Composes an optional BaseActivation by name.
+│   │                           Optional kernel/bias BaseInitializer overrides
+│   │                           (null keeps the historical seeded defaults).
 │   └── Activations/
-│       ├── BaseActivation.cs  Get(name): resolves "relu"/"sigmoid" by name.
+│       ├── BaseActivation.cs  Get(name), case-insensitive: relu, sigmoid,
+│       │                       softmax, tanh, leaky_relu, elu, gelu,
+│       │                       silu/swish, softplus, selu; ""/linear/none →
+│       │                       null; unknown name THROWS.
 │       ├── ReLU.cs            (NDArray > 0) * NDArray formulation (works).
 │       ├── Sigmoid.cs         1/(1+exp(-x)); Backward uses cached Output.
-│       └── Softmax.cs         Numerically-stable row-wise softmax;
-│                               Backward = Output * (grad - Σ(grad*Output, axis=1, keepdims)).
+│       ├── Softmax.cs         Numerically-stable row-wise softmax;
+│       │                       Backward = Output * (grad - Σ(grad*Output, axis=1, keepdims)).
+│       ├── Tanh.cs            np.tanh; Backward = grad * (1 - y²).
+│       ├── LeakyReLU.cs       alpha=0.3 (Keras layer default; PyTorch uses 0.01).
+│       ├── ELU.cs             alpha=1; neg-branch grad reuses y: αeˣ = y + α.
+│       ├── GELU.cs            tanh APPROXIMATION (no np.erf in core yet);
+│       │                       caches tanh(u) for the exact-derivative backward.
+│       ├── SiLU.cs            x·σ(x) (Swish); caches σ.
+│       ├── Softplus.cs        max(x,0)+log1p(exp(-|x|)) — overflow-safe form.
+│       └── SELU.cs            fixed λ/α self-normalizing constants; pair with
+│                               LecunNormal init.
 │
 ├── Cost/
 │   ├── BaseCost.cs            Abstract: Forward, Backward, float Epsilon.
 │   ├── CategoricalCrossentropy.cs  L = -Σ(y*log(clip(p))) / batch;
 │   │                                dL/dp = -y / clip(p) / batch.
+│   ├── SparseCategoricalCrossentropy.cs  Same loss, INTEGER labels
+│   │                                (Byte/Int32/Int64) — no one-hot matrix.
+│   │                                Gather is an explicit loop (core lacks
+│   │                                take_along_axis).
 │   ├── BinaryCrossEntropy.cs       mean(-y*log(clip(p)) - (1-y)*log(1-clip(p)));
 │   │                                dL/dp = (p - y) / (p*(1-p)) / N.
-│   └── MeanSquaredError.cs    mean((preds - labels)²); ∇ = 2*(preds-labels)/batch.
+│   ├── MeanSquaredError.cs    mean((preds - labels)²); ∇ = 2*(preds-labels)/batch.
+│   ├── Huber.cs               delta=1; quadratic≤δ, linear beyond; ∇ scaled 1/size.
+│   ├── KLDivergence.cs        mean over batch of Σ yt·log(yt/yp), both clipped [eps,1].
+│   ├── Hinge.cs               max(1-yt·yp, 0); {0,1} labels auto-converted to ±1
+│   │                           (Keras _maybe_convert_labels).
+│   └── LogCosh.cs             |e|+log1p(exp(-2|e|))-ln2 (safe); ∇ = tanh(e)/size.
 │
 ├── Metrics/
 │   ├── BaseMetric.cs          Abstract: Calculate(preds, labels) → NDArray.
-│   ├── Accuracy.cs            class Accuacy (typo preserved). argmax(preds,1)
-│   │                           == argmax(labels,1), mean.
-│   ├── BinaryAccuacy.cs       round(clip(preds, 0, 1)) == labels, mean.
-│   └── MeanAbsoluteError.cs   mean(|preds - labels|).
+│   ├── Accuracy.cs            Accuracy (+ [Obsolete] Accuacy shim). argmax
+│   │                           (preds,1) == argmax(labels,1), mean.
+│   ├── BinaryAccuacy.cs       BinaryAccuracy (+ [Obsolete] BinaryAccuacy shim).
+│   ├── MeanAbsoluteError.cs   mean(|preds - labels|).
+│   ├── Precision.cs           binary TP/(TP+FP), threshold param (strict >),
+│   │                           0 when nothing predicted positive (Keras).
+│   ├── Recall.cs              binary TP/(TP+FN), same conventions.
+│   ├── F1Score.cs             harmonic P/R; F1Average.Binary (thresholded) or
+│   │                           .Macro (argmax per-class, unweighted mean).
+│   ├── TopKCategoricalAccuracy.cs  tf.in_top_k tie semantics: correct when
+│   │                           #{p_j > p_true} < K.
+│   ├── RootMeanSquaredError.cs
+│   └── R2Score.cs             sklearn semantics incl. constant-labels edge.
+│
+├── Initializers/              Keras keras.initializers port; all draws flow
+│   │                           through np.random → deterministic under seed.
+│   ├── BaseInitializer.cs     Initialize(Shape) → float32; ComputeFans
+│   │                           (Keras _compute_fans); Get(name) resolver
+│   │                           (unknown throws, "" → null = layer default).
+│   ├── SimpleInitializers.cs  Zeros, Ones, Constant, RandomNormal(0,.05),
+│   │                           RandomUniform(±.05).
+│   ├── VarianceScaling.cs     The workhorse + thin subclasses GlorotUniform/
+│   │                           Normal, HeUniform/Normal, LecunUniform/Normal.
+│   │                           *_normal are TRUNCATED at 2σ with Keras's
+│   │                           /0.87962566103423978 std correction (rejection
+│   │                           resampling, still seed-deterministic).
+│   └── Orthogonal.cs          Modified Gram-Schmidt in f64 (core lacks
+│   │                           linalg.qr); positive R diag ⇒ Haar, same as
+│   │                           numpy's q *= sign(diag(r)). Rank>2 flattens
+│   │                           Keras-style; rows<cols orthonormalizes rowsᵀ.
 │
 ├── Optimizers/
 │   ├── BaseOptimizer.cs       Abstract. Get("sgd") / Get("adam") resolvers.
-│   ├── SGD.cs                 Vanilla SGD; classical momentum; inverse-time
-│   │                           LR decay.
+│   ├── SGD.cs                 Vanilla SGD; classical momentum. Inverse-time
+│   │                           decay lr_t = lr0/(1+decay·t) computed FRESH
+│   │                           from the base rate (never mutated).
 │   └── Adam.cs                First/second moments with proper np.zeros init.
 │                               Step counter must be monotonic across run.
+│                               Same non-mutating decay as SGD.
 │
 ├── MnistMlp/                  The runnable experiment. Files described below.
 │
+├── tests/verify_p0_p2.cs      86-check verification script (dotnet-run file-
+│                               based app; excluded from the demo build via
+│                               csproj Compile Remove). See Testing below.
 ├── Open.snk                   Strong-name key shared with NumSharp.Core.
 └── NeuralNetwork.NumSharp.csproj   Exe, net8.0+net10.0, AllowUnsafeBlocks.
 ```
@@ -161,11 +214,16 @@ which read a single element, not a batch. Correct form:
 For batched predictions you need `axis: 1`. The metrics previously returned
 scalars that matched two scalar argmaxes — broken for batches.
 
-### 4. `np.allclose` mutates its arguments
-`np.allclose` calls `astype(Double, copy:false)` on both operands, which
-in-place flips their dtype from Single to Double. Use a manual max-abs-diff
-loop if you need the operands untouched. (This is a NumSharp core library
-bug — not fixed here.)
+### 4. `np.allclose` used to mutate its arguments — FIXED in core
+Historical: `np.allclose`/`np.isclose`/`np.where` called
+`astype(Double, copy:false)` on their operands, and core's `Cast(copy:false)`
+swapped the input's storage in-place — silently flipping caller arrays from
+Single to Double. Fixed in core (`Default.Cast.cs`): `astype(copy:false)` now
+follows NumPy semantics — returns the input itself only when no conversion is
+needed, otherwise allocates a new array and NEVER touches the input (pinned by
+`NDArray.astype.Test.cs` and `tests/verify_p0_p2.cs`). The manual max-abs-diff
+loop in `Program.MaxAbsDiff` predates the fix and is now just a plain
+correctness check, not a workaround.
 
 ### 5. `np.argmax(preds, axis:1)` returns Int64
 When comparing against `labels.GetByte(i)` use `predIdx.GetInt64(i)` —
@@ -192,40 +250,70 @@ after `np.random.normal(...)` which returns float64 by default.
 
 ## Perf characteristics
 
+Measured 2026-07-25 on core `badd9c37`, **Release**, net8.0 (Debug taints
+kernels ~2x — never quote Debug numbers).
+
 **100-epoch training on 6000 synthetic / 1000 test (batch=128, Adam, sigma=2.5):**
 - Epoch 1: loss ≈ 1.12, train_acc ≈ 73% (random init → partial fit)
 - Epoch 2: loss ≈ 0.009, train_acc ≈ 99.9%
-- Epoch 100: loss ≈ 0, test_acc ≈ 99.89%
-- Total training time: ~70 s (net8.0)
+- Epoch 100: loss ≈ 0, test_acc ≈ 99.9%
+- Total training time: ~13–16 s (was ~70 s when this doc was first written —
+  core's elementwise/GEMM work since then did most of that)
 
-**Fusion probe on post-matmul bias+ReLU, batch (128, 128) fp32:**
-- Fused (1 NDIter): ~0.14 ms
-- Naive (np.add + np.maximum): ~0.36 ms
-- Speedup: ~2.5x
+**Fusion probe (bias+ReLU post-matmul; three paths × two sizes):**
+
+| Size | fused NDIter | np.evaluate | naive add+maximum | naive/fused |
+|---|---|---|---|---|
+| 128×128 (16K) | ~0.09 ms | ~0.10 ms | ~0.06 ms | **0.60x — naive wins** |
+| 2048×2048 (4.2M) | ~18.7 ms | ~18.4 ms | ~4.8 ms | **0.26x — naive wins** |
+
+**The fusion premise is currently INVERTED for this expression.** The original
+2.5x fused-wins measurement predates core's DirectILKernelGenerator SIMD
+elementwise/broadcast kernels; those unfused whole-array passes now run at
+full memory bandwidth and beat the NDIter per-chunk path at every size for a
+2-op expression. np.evaluate's documented 3.2–6.1x wins are on LONG chains
+(many intermediates eliminated) — bias+ReLU is too short a chain to amortize
+the iterator. The demo keeps the fused layers as an architecture/correctness
+showcase and the probe now reports both sizes honestly. Core follow-up worth
+filing: NDIter broadcast-operand inner-loop throughput vs the Direct kernels.
 
 **Instrumentation (after a 100-epoch run):**
-- IL kernel cache entries: delta of 6 (all unique fused expressions)
+- IL kernel cache entries: delta of 10 (unique fused expressions + probe paths)
 - NDExpr delegate slots: 0 (pure DSL, no captured lambdas)
 
 ---
 
 ## Testing
 
-No dedicated MSTest project. The **smoke test** for the NN scaffolding lives
-in-line as a `dotnet run` stdin script — 29 checks covering:
-- Softmax forward + backward (finite-difference gradient check)
-- Sigmoid (saturation limits)
-- CCE / BCE (loss values + backward components)
-- Accuracy / BinaryAccuacy (argmax + round)
-- FullyConnected with bias (shape checks)
-- SGD vanilla + momentum (hand-computed trajectories)
-- `BaseOptimizer.Get("sgd")` / `Get("adam")`
+No dedicated MSTest project yet (roadmap P-cross-cutting). The committed gate
+is **`tests/verify_p0_p2.cs`** — a dotnet-run file-based app with 86 checks:
 
-Run pattern for ad-hoc sanity checks:
+- P0 behavior pins: astype(copy:false) non-mutation, allclose/where operand
+  dtypes, activation resolver (softmax registered, unknown throws), fused
+  string ctor, SGD/Adam non-compounding decay from the base rate,
+  Evaluate scoring the partial final batch
+- All 7 new activations: forward + backward vs NumPy 2.4.2 reference
+  constants AND central-difference gradient checks (kink points at x=0 for
+  leaky_relu/selu are excluded from FD — central differences measure the
+  average one-sided slope there)
+- All 5 new losses: values + gradients vs NumPy constants + FD grids
+- Metrics vs hand/NumPy-computed constants (precision/recall/F1 binary+macro,
+  top-k tie semantics, RMSE, R², typo-shim compat)
+- Initializers: seeded determinism, mean/std within 3%, 2σ truncation bound,
+  uniform bounds, orthogonality (QᵀQ=I tall / QQᵀ=I wide, gain²)
+
+```bash
+cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_p0_p2.cs
+# → RESULT: 86 passed, 0 failed
+```
+(Must run from tests/ — a csproj in the CWD makes `dotnet run` pick the
+project instead of the file. The csproj excludes tests/** from compilation.)
+
+Ad-hoc sanity checks still work as stdin scripts:
 ```bash
 cat /tmp/script.cs | dotnet_run
 ```
-where the script references the two projects via `#:project`.
+where the script references the project via `#:project`.
 
 ---
 
@@ -238,9 +326,10 @@ into a single NDIter — the fusion demo's point. Both share the BaseLayer
 contract and are interchangeable in a NeuralNet pipeline.
 
 **Why do the metric classes have typos in their names?**
-`Accuacy`, `BinaryAccuacy` — misspelled in the original scaffolding, kept
-for backward compat with any external caller. Fixing the implementation
-without renaming the class is the lower-risk path.
+`Accuacy`, `BinaryAccuacy` — misspelled in the original scaffolding. The
+correctly-named `Accuracy` / `BinaryAccuracy` are now the real classes; the
+typo'd names survive as `[Obsolete]` shims subclassing them, so external
+callers keep compiling (with a warning) and can migrate at leisure.
 
 **Why is SoftmaxCrossEntropy in `MnistMlp/` instead of `Cost/`?**
 It's the combined-form loss — assumes softmax is applied internally, not by
@@ -273,6 +362,8 @@ with this 2-layer MLP should land ~97-98% after 10-20 epochs.
   pressure. Fixable by fusing Adam's update into NDIter like the rest,
   but out of scope for the current demo.
 - **No model serialization.** Parameters can't be saved / loaded yet.
-- **Activation resolution by string only.** `FullyConnected` takes `act =
-  "relu"` etc. `FullyConnectedFused` uses an enum (`FusedActivation`) —
-  the two are slightly inconsistent.
+- **Only relu (or none) fuses.** `FullyConnectedFused` accepts the same
+  string-activation surface as `FullyConnected` now, but only ReLU has a
+  fused kernel — anything else throws with a pointer at `FullyConnected`.
+- **GELU is the tanh approximation.** Core has no `np.erf`; the exact-erf
+  form (Keras `approximate=False`, PyTorch default) differs by ~1e-3.

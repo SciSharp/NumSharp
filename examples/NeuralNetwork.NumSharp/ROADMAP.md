@@ -31,22 +31,30 @@ present; `take_along_axis`, `sliding_window_view`, scatter-add, `einsum`,
 | Serialization | — | None. Weights cannot be saved/loaded |
 | Training loop | ordered batches, whole-batch floor | No shuffling, no validation split, no callbacks, no gradient clipping |
 
-**Known defects to fix before building on top (P0):**
+**Known defects to fix before building on top (P0)** — ✅ ALL FIXED
+(verified by `tests/verify_p0_p2.cs`, 86 checks):
 
-1. `BaseActivation.Get("softmax")` returns `null` — the class exists but isn't registered.
-2. `FullyConnected` selects activation by string, `FullyConnectedFused` by enum — inconsistent surface.
-3. `SGD`/`Adam` `DecayRate` **compounds** onto the already-decayed rate
-   (`lr *= 1/(1+decay·t)`) instead of Keras's `lr_t = lr0/(1+decay·t)`.
-   Inert at the default `decay=0`, wrong the moment anyone enables it.
-4. `MlpTrainer.Evaluate` floor-divides into whole batches — with 1000 test
-   samples at batch 128 only 896 are scored.
-5. Stale perf docs: the fusion probe now measures **0.73×** (fused *slower*
-   than naive) in Release on current core — the naive `np.add`+`np.maximum`
-   path got ~6× faster since the CLAUDE.md was written, while the hand-rolled
-   NDIter path didn't. Training is 12.8 s, not ~70 s; kernel-cache delta is 9,
-   not 6. The demo predates `np.evaluate` and should migrate to it.
-6. Core bug leaking into this project: `np.allclose` mutates operand dtypes
-   (documented workaround: manual max-abs-diff).
+1. ~~`BaseActivation.Get("softmax")` returns `null`~~ — registered; resolver
+   is now case-insensitive, `""`/`linear`/`none` → null, unknown names throw.
+2. ~~String-vs-enum activation surfaces~~ — `FullyConnectedFused` gained the
+   string ctor (only fused-capable names resolve; others throw with a pointer
+   at `FullyConnected`).
+3. ~~`SGD`/`Adam` `DecayRate` compounds~~ — both compute
+   `lr_t = lr0/(1+decay·t)` fresh from the never-mutated base rate.
+4. ~~`MlpTrainer.Evaluate` floor-divides~~ — scores every sample; the final
+   batch may be partial.
+5. ~~Stale perf docs~~ — CLAUDE.md rewritten from 2026-07-25 Release
+   measurements; the probe now reports three paths (hand-rolled NDIter,
+   np.evaluate, naive) at two sizes. **Finding: the inversion is real at every
+   size** — even at 4.2M elements the unfused whole-array SIMD kernels beat
+   the NDIter fused path ~4× for this 2-op expression; np.evaluate's
+   documented wins need long chains. Core follow-up candidate: NDIter
+   broadcast-operand inner-loop throughput vs Direct kernels.
+6. ~~`np.allclose` mutates operand dtypes~~ — fixed **in core**:
+   `Cast(copy:false)` now follows NumPy semantics (self only when no
+   conversion; a conversion allocates and never touches the input). Repairs
+   `np.allclose`/`np.isclose`/`np.where` operand corruption; pinned by the
+   rewritten `NDArray.astype.Test.cs` (12,017-test core suite green).
 
 ---
 
@@ -89,12 +97,12 @@ Phases are ordered by (usability gained) / (effort), and each phase is
 shippable on its own. "Ref" = which Python library defines the semantics we
 match.
 
-### P0 — Hygiene (fix what exists)
+### P0 — Hygiene (fix what exists) — ✅ DONE
 
-All six defects in §1. Plus: re-tune or re-frame the fusion probe (larger
-tensors and/or `np.evaluate`) so the demo's premise holds again, and refresh
-the project CLAUDE.md perf section. No new features until the foundation is
-honest.
+All six defects in §1 fixed (see the checklist there). The fusion probe was
+re-framed rather than re-tuned: it measures three paths at two sizes and the
+finding is that the unfused SIMD kernels win at both — recorded honestly in
+CLAUDE.md instead of chasing a size where fusion looks good.
 
 ### P1 — Training-loop parity (pure C#, no new math)
 
@@ -115,7 +123,21 @@ The gap between "demo" and "usable framework" is almost entirely here.
 | Partial final batch | Keras | stop flooring `n/batchSize` in trainer and evaluator |
 | Progress verbosity | Keras `verbose=` | 0/1/2 modes on the trainer |
 
-### P2 — Activations, losses, metrics, initializers (elementwise; all core-ready)
+### P2 — Activations, losses, metrics, initializers — ✅ DONE
+
+Shipped (all rows below): activations Tanh/LeakyReLU/ELU/GELU(tanh-approx)/
+SiLU/Softplus/SELU + full resolver registration; losses
+SparseCategoricalCrossentropy/Huber/KLDivergence/Hinge/LogCosh; metrics
+Precision/Recall/F1Score(binary+macro)/TopKCategoricalAccuracy/
+RootMeanSquaredError/R2Score + Accuracy/BinaryAccuracy rename with
+`[Obsolete]` typo shims; the full `Initializers/` module (VarianceScaling with
+Keras-exact truncated normals, Glorot/He/LeCun ×{uniform,normal}, Orthogonal
+via Gram-Schmidt, Zeros/Ones/Constant/RandomNormal/RandomUniform, `Get(name)`
+resolver) wired into both dense layers as opt-in `kernelInitializer`/
+`biasInitializer` params (null keeps the historical seeded defaults
+bit-for-bit). Verified by `tests/verify_p0_p2.cs`: NumPy 2.4.2 reference
+constants, finite-difference gradient grids, initializer statistics.
+Original planning table kept below for reference:
 
 | Kind | Add | Ref | Notes |
 |---|---|---|---|
@@ -210,9 +232,9 @@ kernels later.
 
 | Rank | Item | Why first |
 |---|---|---|
-| 1 | P0 hygiene | everything else builds on it; two of the bugs silently corrupt training configs |
+| 1 | ~~P0 hygiene~~ ✅ DONE | everything else builds on it; two of the bugs silently corrupt training configs |
 | 2 | P1 shuffle + validation + checkpoint + save/load | turns the demo into a usable framework; zero new math |
-| 3 | P2 activations/losses (esp. `Tanh`, `LeakyReLU`, `SparseCCE`) | hours of work each, immediate expressiveness |
+| 3 | ~~P2 activations/losses (esp. `Tanh`, `LeakyReLU`, `SparseCCE`)~~ ✅ DONE | hours of work each, immediate expressiveness |
 | 4 | P3 `AdamW` + schedulers + fused Adam | modern training defaults; the fusion story redeemed |
 | 5 | P4 `Dropout` + `BatchNorm` (+ the train/eval flag) | the two layers that gate real-dataset accuracy |
 | 6 | P5 conv stack + real-MNIST CNN | the headline capability jump |

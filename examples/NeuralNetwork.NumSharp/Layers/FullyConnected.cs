@@ -1,5 +1,6 @@
 using System;
 using NeuralNetwork.NumSharp.Activations;
+using NeuralNetwork.NumSharp.Initializers;
 using NumSharp;
 using NumSharp.Backends;
 
@@ -27,7 +28,8 @@ namespace NeuralNetwork.NumSharp.Layers
         public bool UseBias { get; set; }
         public BaseActivation Activation { get; set; }
 
-        public FullyConnected(int input_dim, int output_neurons, string act = "", bool useBias = true)
+        public FullyConnected(int input_dim, int output_neurons, string act = "", bool useBias = true,
+                              BaseInitializer kernelInitializer = null, BaseInitializer biasInitializer = null)
             : base("fc")
         {
             InputDim   = input_dim;
@@ -35,16 +37,29 @@ namespace NeuralNetwork.NumSharp.Layers
             UseBias    = useBias;
             Activation = BaseActivation.Get(act);
 
-            // He init for ReLU; Xavier for everything else (linear, sigmoid, softmax, ...).
-            bool isReLU = string.Equals(act, "relu", StringComparison.OrdinalIgnoreCase);
-            double stddev = isReLU
-                ? Math.Sqrt(2.0 /  input_dim)
-                : Math.Sqrt(2.0 / (input_dim + output_neurons));
+            if (kernelInitializer != null)
+            {
+                Parameters["w"] = kernelInitializer.Initialize(new Shape(input_dim, output_neurons));
+            }
+            else
+            {
+                // Historical default kept bit-for-bit (seeded runs stay reproducible):
+                // UNtruncated He normal for ReLU, Xavier/Glorot normal otherwise.
+                // Pass an Initializers.* instance for the Keras-exact (truncated)
+                // variants.
+                bool isReLU = string.Equals(act, "relu", StringComparison.OrdinalIgnoreCase);
+                double stddev = isReLU
+                    ? Math.Sqrt(2.0 /  input_dim)
+                    : Math.Sqrt(2.0 / (input_dim + output_neurons));
 
-            Parameters["w"] = np.random.normal(0.0, stddev, new Shape(input_dim, output_neurons))
-                                       .astype(NPTypeCode.Single);
+                Parameters["w"] = np.random.normal(0.0, stddev, new Shape(input_dim, output_neurons))
+                                           .astype(NPTypeCode.Single);
+            }
+
             if (UseBias)
-                Parameters["b"] = np.zeros(new Shape(output_neurons), NPTypeCode.Single);
+                Parameters["b"] = biasInitializer != null
+                    ? biasInitializer.Initialize(new Shape(output_neurons))
+                    : np.zeros(new Shape(output_neurons), NPTypeCode.Single);
         }
 
         public override void Forward(NDArray x)

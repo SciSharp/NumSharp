@@ -148,18 +148,20 @@ namespace NeuralNetwork.NumSharp.MnistMlp
         /// <summary>
         /// Runs the layer stack forward over the full dataset in batches,
         /// taking argmax per row and counting matches against integer labels.
-        /// Uses the same batch size as training so batches divide evenly.
+        /// The final batch may be smaller than <paramref name="batchSize"/> —
+        /// every sample is scored (the old floor-division silently dropped the
+        /// remainder: 1000 test samples at batch 128 scored only 896).
         /// </summary>
         public static float Evaluate(List<BaseLayer> layers, NDArray x, NDArray yLabels, int batchSize)
         {
             int n = (int)x.shape[0];
-            int numBatches = n / batchSize;
+            if (n == 0)
+                return 0f;
             int correct = 0;
 
-            for (int b = 0; b < numBatches; b++)
+            for (int start = 0; start < n; start += batchSize)
             {
-                int start = b * batchSize;
-                int end   = start + batchSize;
+                int end = Math.Min(start + batchSize, n);
                 NDArray xBatch = x[$"{start}:{end}"];
                 NDArray yBatch = yLabels[$"{start}:{end}"];
 
@@ -174,7 +176,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
                 correct += CountMatches(predIdx, yBatch);
             }
 
-            return (float)correct / (numBatches * batchSize);
+            return (float)correct / n;
         }
 
         /// <summary>

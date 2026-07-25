@@ -9,13 +9,10 @@ namespace NeuralNetwork.NumSharp.Metrics
     /// 0/1 labels, both the same shape. Rounds each prediction to 0 or 1
     /// (threshold 0.5) and returns the fraction of elements matching the
     /// labels.
-    ///
-    /// Class name retains the original misspelling ("BinaryAccuacy") for
-    /// backward compatibility.
     /// </summary>
-    public class BinaryAccuacy : BaseMetric
+    public class BinaryAccuracy : BaseMetric
     {
-        public BinaryAccuacy() : base("binary_accuracy") { }
+        public BinaryAccuracy() : base("binary_accuracy") { }
 
         public override NDArray Calculate(NDArray preds, NDArray labels)
         {
@@ -27,5 +24,13 @@ namespace NeuralNetwork.NumSharp.Metrics
             NDArray matches = (rounded == labels).astype(NPTypeCode.Single);
             return np.mean(matches);
         }
+    }
+
+    /// <summary>
+    /// Backward-compatibility shim for the original misspelled class name.
+    /// </summary>
+    [Obsolete("Use BinaryAccuracy — this class name was a typo in the original scaffolding.")]
+    public class BinaryAccuacy : BinaryAccuracy
+    {
     }
 }
