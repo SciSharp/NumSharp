@@ -38,6 +38,20 @@ namespace NumSharp.UnitTest.Fuzz
             /// <summary>W14: when true, NumPy raised on this op+operands; the harness asserts
             /// NumSharp ALSO throws (error parity) rather than silently producing a result.</summary>
             public bool Expects_Throw { get; set; }
+
+            /// <summary>
+            ///     The exception NumPy raised, captured verbatim at generation time. Cases emitted
+            ///     before the error-text upgrade carry none and stay on the weaker "threw
+            ///     something" assertion; cases that carry one are held to NumPy's actual message.
+            /// </summary>
+            public ErrorInfo Error { get; set; }
+        }
+
+        /// <summary>NumPy's exception: the Python class name and <c>str(e)</c>, verbatim.</summary>
+        public sealed class ErrorInfo
+        {
+            public string Type { get; set; }
+            public string Text { get; set; }
         }
 
         public sealed class Operand
@@ -50,11 +64,41 @@ namespace NumSharp.UnitTest.Fuzz
             public string Buffer { get; set; }
         }
 
+        /// <summary>
+        ///     One comparable result. The historical shape — a single array described by
+        ///     (dtype, shape, C-contiguous bytes) — remains the default; <see cref="Kind"/> widens
+        ///     it so ops whose result is NOT one array can be gated by the same corpus.
+        ///
+        ///     <list type="bullet">
+        ///       <item><c>array</c> (or absent) — dtype + shape + bytes, the original contract.</item>
+        ///       <item><c>scalar</c> — the same comparison; the op returns a C# scalar that
+        ///             <see cref="OpRegistry"/> wraps in a 0-d NDArray (the np.allclose pattern
+        ///             already in the registry). Kept distinct only so the corpus reads honestly.</item>
+        ///       <item><c>dtype</c> — the op returns a dtype (NPTypeCode); compare
+        ///             <see cref="Value"/> against its NumPy dtype name.</item>
+        ///       <item><c>text</c> — the op returns a string (printing); compare verbatim.</item>
+        ///       <item><c>tuple</c> — the op returns N arrays; compare ARITY and every slot. This
+        ///             supersedes the older which/piece params, which gate one slot per case and
+        ///             therefore never assert how many slots there were.</item>
+        ///     </list>
+        /// </summary>
         public sealed class Expected
         {
+            /// <summary>array | scalar | dtype | text | tuple. Absent means array (legacy cases).</summary>
+            public string Kind { get; set; }
+
             public string Dtype { get; set; }
             public long[] Shape { get; set; }
             public string Buffer { get; set; }
+
+            /// <summary>Expected dtype name (kind=dtype) or expected string (kind=text).</summary>
+            public string Value { get; set; }
+
+            /// <summary>Per-slot results for kind=tuple, in NumPy's tuple order.</summary>
+            public Expected[] Slots { get; set; }
+
+            /// <summary>Normalized kind — legacy cases carry none and mean "array".</summary>
+            public string KindOrArray => string.IsNullOrEmpty(Kind) ? "array" : Kind;
         }
 
         /// <summary>Resolve a corpus file copied next to the test assembly under Fuzz/corpus/.</summary>

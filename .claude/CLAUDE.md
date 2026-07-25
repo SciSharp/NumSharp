@@ -1124,6 +1124,20 @@ test/NumSharp.UnitTest/IO/            .npy/.npz format gate (no Python)
 ```
 
 - **Generators live in `test/oracle/`** and write the corpus into `test/NumSharp.UnitTest/Fuzz/corpus/` (path resolved relative to `test/oracle/`). CI replays the committed corpus, never the generators.
+- **Result kinds & error messages.** `expected.kind` widens the corpus past "one array": `array`
+  (default — dtype+shape+bytes), `scalar` (a C# scalar wrapped 0-d), `dtype` (compared by NumPy
+  dtype NAME — gates the promotion table directly), `text` (printing, verbatim) and `tuple` (N
+  slots, **arity asserted**). `error: {type, text}` records NumPy's exception verbatim, so error
+  cases assert the actual MESSAGE, not merely that something was thrown (the legacy
+  `expects_throw`-only cases keep the weaker assertion). Three tiers use them: **`iter.jsonl`**
+  (4,605 — materialized `ndindex`/`ndenumerate`/`nditer`/`broadcast` TRACES: the value stream,
+  multi_index, c_index/f_index and external_loop chunk lengths across order C/F/A/K × 22 layouts;
+  traversal ORDER has no other gate, and every other tier depends on it), **`dtype_text.jsonl`**
+  (2,111 — `promote_types`/`result_type`/`min_scalar_type`/`can_cast`/`isscalar`/`iscomplexobj`/
+  `isrealobj`/`size`/`array_str`/`array_repr`/`nonzero` at any rank) and **`errors_full.jsonl`**
+  (688 raising cells over 22 distinct NumPy messages — the cells every value generator SKIPS).
+  Comparators: `FuzzCorpusTests.Kinds.cs`; callables: `OpRegistry.Kinds.cs`; ledger: `Fuzz/README.md`
+  → Table 0.
 - **Three `FuzzMatrix` gates**: `FuzzCorpusTests` (the op corpus — ~63K cases across the tiers, checking dtype + shape + bytes + error parity + per-file minimum-count floors; Char woven into 18 tier files, 12 `Decimal*` tiers: unary/binary/reduce/scan/power/varstd/matmul/astype/stat/where/sort/manip), `IndexOracleTests` (the index oracle — `index_curated` 2,273 + `index_dtype` 104 + `index_setter_dtype` 10 (cross-dtype cast-on-set) + `index_random` 10,000; the advanced-indexing parity gate), and `MetamorphicTests` (12 NumPy-free invariants incl. Half/Complex/Decimal/bool/char + strided views). A failing op case auto-shrinks to a 1-element repro.
 - **Dtype coverage**: per-mode dtype axes widened toward `ALL_DTYPES`. **Char** (no NumPy dtype) is woven into 18 tier files via the uint16 proxy (`gen_oracle.char_tier`, relabelled uint16→char). **Decimal** (no NumPy analog) rides an independent C# oracle (`gen_decimal_oracle.cs`, naive scalar `System.Decimal`; incl. axis reductions, empty, negative int powers). Verified Char/clip-bool/round/dot bugs are carved from the green corpus and reproduced under `[OpenBugs]` (`OpenBugs.Char.cs`, `OpenBugs.DtypeCoverage.cs`, `OpenBugs.FuzzGaps.cs`) — NOT excused in `MisalignedRegistry`.
 - **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul rounding bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors groupa`) + `python test/oracle/gen_index_oracle.py` (the `index_*` tiers) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl` + `dotnet run test/oracle/gen_decimal_oracle.cs` (the `decimal_*` tiers), then `dotnet build` (copies the corpus to test output).

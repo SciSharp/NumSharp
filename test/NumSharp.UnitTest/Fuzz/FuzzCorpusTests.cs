@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Fuzz
     ///     whole matrix is visible at once (not first-failure-wins). Runs in CI under FuzzMatrix.
     /// </summary>
     [TestClass]
-    public class FuzzCorpusTests
+    public partial class FuzzCorpusTests
     {
         [TestMethod]
         [TestCategory("FuzzMatrix")]
@@ -326,9 +326,12 @@ namespace NumSharp.UnitTest.Fuzz
             ["decimal_unary.jsonl"] = 72,
             ["decimal_varstd.jsonl"] = 17,
             ["decimal_where.jsonl"] = 3,
+            ["dtype_text.jsonl"] = 2000,
             ["errors.jsonl"] = 8,
+            ["errors_full.jsonl"] = 650,
             ["exp_f32.jsonl"] = 22,
             ["groupa.jsonl"] = 82,
+            ["iter.jsonl"] = 4400,
             ["logic.jsonl"] = 1775,
             ["manip.jsonl"] = 6060,
             ["matmul.jsonl"] = 769,
@@ -375,61 +378,36 @@ namespace NumSharp.UnitTest.Fuzz
                         operands = new[] { operands[0], operands[0] };
 
                     // W14 error parity: NumPy raised here; NumSharp must throw too (not silently
-                    // produce a result). A throw of ANY kind passes; a normal return is the divergence.
+                    // produce a result). Legacy cases carry no recorded exception and pass on a
+                    // throw of ANY kind; cases carrying NumPy's message are held to that message.
+                    // See CheckError in FuzzCorpusTests.Kinds.cs.
                     if (c.Expects_Throw)
                     {
-                        bool threw = false;
-                        try { _ = OpRegistry.Apply(c.Op, c.Params, operands); }
-                        catch { threw = true; }
-                        if (!threw)
-                        {
-                            var reason = MisalignedRegistry.Classify(c, DivergenceKind.Value, null, null, default, empty);
-                            if (reason != null) Bump(documented, reason);
-                            else failures.Add($"{c.Id} [{c.Layout}]: NumPy raises but NumSharp produced a result (error-parity gap)");
-                        }
+                        CheckError(c, operands, failures, documented);
                         continue;
                     }
 
-                    var result = OpRegistry.Apply(c.Op, c.Params, operands);
-                    var tc = FuzzCorpus.DtypeToTC(c.Expected.Dtype);
-
-                    // NEP50: result dtype must match NumPy exactly (the headline promotion failure).
-                    if (result.typecode != tc)
+                    // Result-kind dispatch. "array" is the original single-NDArray contract; the
+                    // other kinds gate ops whose result is not one array (see FuzzCorpus.Expected).
+                    switch (c.Expected.KindOrArray)
                     {
-                        var reason = MisalignedRegistry.Classify(c, DivergenceKind.Dtype, null, null, tc, empty);
-                        if (reason != null) Bump(documented, reason);
-                        else failures.Add($"{c.Id} [{c.Layout}]: result dtype {result.typecode} != NumPy {c.Expected.Dtype}");
-                        continue;
-                    }
-                    // Broadcasting: result shape must match NumPy.
-                    if (!ShapeEquals(result.Shape.dimensions, c.Expected.Shape))
-                    {
-                        var reason = MisalignedRegistry.Classify(c, DivergenceKind.Shape, null, null, tc, empty);
-                        if (reason != null) Bump(documented, reason);
-                        else failures.Add($"{c.Id} [{c.Layout}]: result shape [{string.Join(",", result.Shape.dimensions)}] " +
-                                          $"!= NumPy [{string.Join(",", c.Expected.Shape)}]");
-                        continue;
-                    }
-
-                    var actual = FuzzCorpus.ResultBytes(result);
-                    var expected = FuzzCorpus.FromHex(c.Expected.Buffer);
-
-                    var diffs = BitDiff.Compare(expected, actual, tc);
-                    if (diffs.Count > 0)
-                    {
-                        var reason = MisalignedRegistry.Classify(c, DivergenceKind.Value, expected, actual, tc, diffs);
-                        if (reason != null)
-                        {
-                            Bump(documented, reason);
-                        }
-                        else
-                        {
-                            var shrunk = Shrinker.ShrinkElementwise(c, diffs[0].Index);
-                            failures.Add($"{c.Id} [{c.Layout}]: " +
-                                string.Join(", ", diffs.Take(3).Select(d => $"@{d.Index} exp {d.Expected} act {d.Actual}")) +
-                                (diffs.Count > 3 ? $" (+{diffs.Count - 3} more)" : "") +
-                                (shrunk != null ? $"\n      minimal repro: {shrunk}" : ""));
-                        }
+                        case "array":
+                        case "scalar":
+                            CompareArray(c, OpRegistry.Apply(c.Op, c.Params, operands),
+                                         c.Expected, null, failures, documented);
+                            break;
+                        case "tuple":
+                            CompareTuple(c, operands, failures, documented);
+                            break;
+                        case "dtype":
+                            CompareDtypeResult(c, operands, failures, documented);
+                            break;
+                        case "text":
+                            CompareTextResult(c, operands, failures, documented);
+                            break;
+                        default:
+                            failures.Add($"{c.Id}: unknown expected.kind '{c.Expected.Kind}'");
+                            break;
                     }
                 }
                 catch (Exception e)

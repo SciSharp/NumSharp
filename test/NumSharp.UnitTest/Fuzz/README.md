@@ -40,12 +40,25 @@ A divergence is one of: **bit-exact** (passes), a **documented difference** in `
   (NEP50 promotion), then result **shape** (broadcasting), then the raw result **bytes**
   (bit-exact; NaN tokenized, Decimal compared by canonical value). Any divergence not classified
   by `MisalignedRegistry` fails the tier.
-- **Error parity** (`errors.jsonl` and any corpus case flagged `expects_throw`): NumPy raised at
-  generation time, so NumSharp must throw **something** — a throw of ANY exception type passes;
-  a normal return is the divergence. **Exception type/message parity is NOT asserted** (NumSharp
-  does not mirror Python's exception taxonomy). The reverse direction is gated on every ordinary
-  case: NumSharp throwing where NumPy returned a result is a `Threw` divergence — a failure
-  unless a registry branch excuses it.
+- **Result kinds** — `expected.kind` selects what is compared, so ops whose result is not a single
+  array are gated by the same corpus: `array` (default, the dtype/shape/bytes contract above),
+  `scalar` (a C# scalar wrapped 0-d, the `np.allclose` pattern), `dtype` (compared by NumPy dtype
+  NAME — this is how the promotion table itself gets gated, not just some binary op's result
+  dtype), `text` (printing, compared verbatim), and `tuple` (N slots, **arity asserted first** —
+  the older which/piece params gate one slot per case and so structurally cannot catch a wrong
+  slot count). Comparators live in `FuzzCorpusTests.Kinds.cs`, callables in `OpRegistry.Kinds.cs`.
+- **Error parity** — two tiers, deliberately different in strength:
+  - *legacy* (`errors.jsonl`, and any case flagged `expects_throw` without an `error` object):
+    NumSharp must throw **something**; a throw of ANY type passes, a normal return is the
+    divergence. Exception type/message are not asserted.
+  - *message parity* (`errors_full.jsonl`, and any case carrying `error: {type, text}`): NumPy's
+    exception class and `str(e)` are recorded at generation time and NumSharp is held to **both** —
+    the type via a NumPy-class → .NET-type map (identical names, which NumSharp uses for
+    `ValueError`/`TypeError`/`IndexError`/`AxisError`, always match), and the message **verbatim**
+    after stripping .NET's `" (Parameter 'x')"` framing. This tier exists because every value
+    generator SKIPS the cells where NumPy raises, so those cells previously had no gate at all.
+  - The reverse direction is gated on every ordinary case: NumSharp throwing where NumPy returned
+    a result is a `Threw` divergence — a failure unless a registry branch excuses it.
 - **Index oracle** (`IndexOracleTests`): compares result shape, values, and **which side raised**
   — if both NumPy and NumSharp raise, the case passes regardless of exception type. NumPy's
   exception name is carried in the corpus (`err`) for failure messages only, never for parity.
@@ -95,6 +108,9 @@ python test/oracle/gen_oracle.py comparison       # ==,!=,<,>,<=,>=
 python test/oracle/gen_oracle.py unary            # negate/abs/sqrt/trig/exp/log/...
 python test/oracle/gen_oracle.py reduce           # sum/prod/min/max/mean/std/var/argmax/argmin/all/any
 python test/oracle/gen_oracle.py where            # np.where(cond,x,y)
+python test/oracle/gen_oracle.py iter             # ndindex/ndenumerate/nditer/broadcast TRACES (order gate)
+python test/oracle/gen_oracle.py dtype_text       # dtype/scalar/text/tuple result kinds
+python test/oracle/gen_oracle.py errors_full      # the raising cells every value generator skips
 python test/oracle/gen_oracle.py place            # np.place(arr,mask,vals)
 python test/oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer (gufunc shapes, C/F layouts)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
@@ -134,6 +150,25 @@ neighbouring cell fails the gate — and `MisalignedRegistryTightnessTests` (Ope
 pins each scope with paired not-excused/still-excused cases. "Hits" = excused-case count in the
 2026-07-07 full-gate sweep (83/83 green, net10.0+net8.0); a 0-hit branch is live code kept as a
 guard and a removal candidate once confirmed dead.
+
+### Table 0 — divergences found by the result-kind / error / iterator tiers
+
+Added with `iter.jsonl` (4,605), `dtype_text.jsonl` (2,111) and `errors_full.jsonl` (688). Every
+row is scoped in `MisalignedRegistry` branches K1–K9, so each is counted and printed on every run.
+
+| Finding | Where | Status |
+|---|---|---|
+| `np.nditer(0-d, external_loop)` → `it[0]` **kills the process** (AccessViolation): `GetInnerLoopSizePtr` reads `Shape[-1]` | `np.nditer.cs` indexer | **FIXED** — 0-d answered directly, as `NDIterTyped.ReadInnerLoop` already did |
+| `order='A'` over a transposed 3-D operand picks a different axis ordering than NumPy | K1 | known bug |
+| `external_loop` coalesces fewer dimensions → more/shorter chunks (values agree, chunk lengths do not) | K1 | known bug |
+| `isscalar(0-d array)` → True, NumPy False | K2 | known bug |
+| `nonzero(0-d)` returns a tuple, NumPy raises | K3 | known bug |
+| complex-input ufunc rejection: same refusal, NumSharp's own wording/type | K4 | known gap |
+| …and the rejection is **skipped entirely** on a zero-size complex operand (NumPy validates the loop, not the data) | K5 | known bug |
+| `power(bool, negative int)` misses the integer-power guard | K6 | known bug |
+| `power(int, negative int)` trips `Debug.Fail("index < Count, Memory corruption expected")` instead of NumPy's ValueError — in Release that path has no assert | K8 | known bug (memory safety) |
+| `result_type(mixed signed/unsigned, 0-D operand)` throws instead of resolving | K9 | known bug |
+| NEP50 weak-scalar reached via the error path (int64+uint64 succeeds where NumPy refuses) | K7 | intended |
 
 ### Table 1 — live `MisalignedRegistry` excuse branches
 

@@ -5,7 +5,21 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Fuzz
 {
-    public enum DivergenceKind { Dtype, Shape, Value, Threw }
+    /// <summary>
+    ///     How a case diverged. <see cref="ErrorText"/> is the error-parity upgrade: the op DID
+    ///     throw (so it is not <see cref="Threw"/>, which means "threw where NumPy returned a
+    ///     value"), but its message is not the one NumPy produced. <see cref="Arity"/> is a
+    ///     tuple-kind result with the wrong number of slots, and <see cref="Text"/> a
+    ///     text-kind result whose string differs.
+    ///
+    ///     <para>
+    ///     NOTE the <c>diffs.Count > 0</c> guard on every ULP branch below. <c>diffs.All(...)</c>
+    ///     is VACUOUSLY TRUE for an empty diff list, so a divergence carrying no per-element diffs
+    ///     — an error-parity gap, a text mismatch, a wrong arity — would otherwise be silently
+    ///     excused as "within 2 ULP" by a branch that never examined anything.
+    ///     </para>
+    /// </summary>
+    public enum DivergenceKind { Dtype, Shape, Value, Threw, ErrorText, Arity, Text }
 
     /// <summary>
     ///     The explicit, documented set of NumSharp-vs-NumPy behavioral differences that are
@@ -62,7 +76,7 @@ namespace NumSharp.UnitTest.Fuzz
             // (2) Complex true-division ~1 ULP. Excuse only divide, only complex result, only when every
             //     differing element is within 2 ULP — a gross error still fails.
             if (kind == DivergenceKind.Value && c.Op == "divide" && tc == NPTypeCode.Complex
-                && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
+                && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex)";
 
             // ----------------------------------------------------------------------------------
@@ -160,7 +174,7 @@ namespace NumSharp.UnitTest.Fuzz
                 // add/subtract run the same naive component formulas on both sides; only FMA
                 // contraction / evaluation order can differ -> every diff capped at 2 ULP.
                 if ((c.Op == "add" || c.Op == "subtract")
-                    && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
+                    && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                     return "complex add/subtract within 2 ULP (FMA contraction) [documented]";
                 // multiply: npy_cmul vs System.Numerics.Complex round (ac-bd)/(ad+bc) differently
                 // (FMA contraction). In the catastrophic-cancellation regime (ac ~ bd) the RELATIVE
@@ -169,7 +183,7 @@ namespace NumSharp.UnitTest.Fuzz
                 // detection: every differing component within 16 ULP *of the element's own
                 // magnitude* (not of itself). A divergence larger than that is a real kernel bug.
                 if (c.Op == "multiply"
-                    && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 16)))
+                    && diffs.Count > 0 && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 16)))
                     return "complex multiply cancellation / ~ULP at element magnitude (npy_cmul vs System.Numerics) [documented #12]";
                 // power: Complex.Pow (polar exp(w*log z)) vs npy_cpow (special-cases small integer
                 // exponents via repeated squaring) — measured on the corpus the finite interior
@@ -178,7 +192,7 @@ namespace NumSharp.UnitTest.Fuzz
                 // at 512 ULP of the ELEMENT's magnitude (same absolute-error anchor as multiply:
                 // still catches sign flips / wrong magnitudes) and excuse the non-finite edges.
                 if (c.Op == "power"
-                    && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 512)
+                    && diffs.Count > 0 && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 512)
                                       || NonFiniteInvolved(expected, actual, d.Index)))
                     return "complex power ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow) [documented F5]";
             }
@@ -288,7 +302,7 @@ namespace NumSharp.UnitTest.Fuzz
                 // CombineVectors), so it is NOT excused — a flat regression fails the gate. The
                 // axis (vertical/strided) SIMD min/max path still drops NaN; excuse only that.
                 // (mean/std/var/sum propagate NaN on both paths already, via arithmetic.)
-                if (kind == DivergenceKind.Value && diffs.Count > 0 && diffs.All(d => d.Expected == "NaN")
+                if (kind == DivergenceKind.Value && diffs.Count > 0 && diffs.Count > 0 && diffs.All(d => d.Expected == "NaN")
                     && c.Params != null
                     && c.Params.TryGetValue("axis", out var axEl)
                     && axEl.ValueKind != System.Text.Json.JsonValueKind.Null)
@@ -316,7 +330,7 @@ namespace NumSharp.UnitTest.Fuzz
             // unit of the 28th significant digit (relative 1e-27) — a real iteration/accumulation
             // bug diverges orders of magnitude more and still fails.
             if (c.Op == "std" && tc == NPTypeCode.Decimal && kind == DivergenceKind.Value
-                && diffs.All(DecimalLastDigitDiff))
+                && diffs.Count > 0 && diffs.All(DecimalLastDigitDiff))
                 return "decimal std: independent 28-digit sqrt implementations differ in the last digit [documented]";
 
             // (4) Unary result-dtype: the transcendental ufuncs (sqrt/cbrt/exp/log/sin/cos/tan) now
@@ -367,7 +381,7 @@ namespace NumSharp.UnitTest.Fuzz
             //     npy_exp, neither of which NumSharp reproduces bit-for-bit today.
             if (kind == DivergenceKind.Value && c.Operands.Length == 1
                 && !(c.Op == "exp" && tc == NPTypeCode.Single)
-                && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
+                && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "unary ~ULP (transcendental/magnitude algorithm difference)";
 
             // (6) np.negative on unsigned integers was FIXED in Phase 1 F4: np.negative now routes
@@ -383,7 +397,7 @@ namespace NumSharp.UnitTest.Fuzz
             //     504-point bit-exact sweep — so the WHOLE set is held to a TIGHT 3-ULP gate; a real
             //     regression fails.
             if (kind == DivergenceKind.Value && c.Operands.Length == 1 && tc == NPTypeCode.Complex
-                && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 3)))
+                && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 3)))
                 return "complex unary within 3 ULP (full NumPy-algorithm port)";
 
             // (7) The only complex-unary divergences beyond 3 ULP are three pathological regimes, each
@@ -427,8 +441,102 @@ namespace NumSharp.UnitTest.Fuzz
             //     int8/int16/uint8/uint16/uint32; the sign-bit 0x80..0 for int32/int64/uint64).
             //     Strided / sliced / broadcast integer operands are read in place (no longer throw).
 
+            // =================================================================================
+            // Result-kind and error-parity tiers (iter / dtype_text / errors_full). These gate
+            // claims the corpus could not express before: traversal ORDER, tuple ARITY, dtype and
+            // text results, and NumPy's actual error MESSAGE. Everything below was measured when
+            // those tiers were first run, and each branch is scoped to the exact cell so a
+            // neighbouring regression still fails.
+            // =================================================================================
+
+            // (K1) np.nditer traversal on three layouts. Two distinct causes, both real:
+            //   * order='A' over a TRANSPOSED 3-D operand — NumSharp picks a different axis
+            //     ordering than NumPy's stride-sorted 'A'/'K' heuristic, so the value stream, the
+            //     multi_index stream and BOTH tracked-index streams (c_index/f_index) all differ.
+            //   * external_loop CHUNKING — NumSharp coalesces fewer dimensions than NumPy, so it
+            //     emits more (shorter) chunks: the concatenated values agree but the chunk-length
+            //     slot does not (e.g. [8] vs NumPy's [4], [6] vs [1]).
+            // Scoped to nditer_* on these three layouts; every other layout/order is gated exactly.
+            if (c.Op != null && c.Op.StartsWith("nditer_")
+                && (c.Layout == "transposed_3d" || c.Layout == "strided_2d_cols"
+                    || c.Layout == "negstride_2d_offset"))
+                return "nditer traversal: order='A' axis ordering over a transposed 3-D operand, and "
+                     + "external_loop coalescing fewer dimensions than NumPy [known bug]";
+
+            // (K2) np.isscalar on a 0-D ARRAY. NumPy answers False — a 0-d ndarray is an array, not
+            // a scalar, which is one of its best-known gotchas — while NumSharp answers True.
+            if (c.Op == "isscalar" && c.Operands.Length == 1 && c.Operands[0].Shape.Length == 0)
+                return "isscalar(0-d array): NumSharp True, NumPy False (a 0-d ndarray is not a scalar) [known bug]";
+
+            // (K3) np.nonzero on a 0-D array. NumPy 2.x REFUSES it ("Calling nonzero on 0d arrays is
+            // not allowed. Use np.atleast_1d(scalar).nonzero() instead."); NumSharp returns a tuple.
+            if (c.Op == "nonzero_all" && c.Operands.Length == 1 && c.Operands[0].Shape.Length == 0)
+                return "nonzero(0-d): NumPy raises ValueError, NumSharp returns a tuple [known bug]";
+
+            // (K4) Complex-input ufunc rejection — the WORDING, not the decision. Both sides refuse
+            // cbrt/floor/ceil/trunc/deg2rad/rad2deg/floor_divide/mod on complex input; NumPy raises
+            // its ufunc TypeError, NumSharp a NotSupportedException with its own text. (The bitwise
+            // and invert loops DO produce NumPy's message verbatim, so the machinery exists — these
+            // kernels simply do not use it.)
+            if (kind == DivergenceKind.ErrorText && ComplexRejectOps.Contains(c.Op)
+                && c.Operands.Any(o => o.Dtype == "complex128"))
+                return "complex ufunc rejection wording: NotSupportedException('operation X not supported "
+                     + "for Complex') vs NumPy's ufunc TypeError [known gap]";
+
+            // (K5) …and on a ZERO-SIZE complex operand the rejection is skipped ENTIRELY: NumSharp
+            // returns an empty result because the kernel never runs, where NumPy still raises —
+            // NumPy validates the LOOP (can this dtype be handled at all?), not the data.
+            if (kind == DivergenceKind.Value && ComplexRejectOps.Contains(c.Op)
+                && c.Operands.Any(o => o.Dtype == "complex128")
+                && c.Operands.Any(o => o.Shape.Any(d => d == 0)))
+                return "complex ufunc rejection SKIPPED on a zero-size operand (NumPy validates the "
+                     + "loop, not the data) [known bug]";
+
+            // (K6) power with a bool base and a negative integer exponent: the integer-power guard
+            // ("Integers to negative integer powers are not allowed.") is missing on the bool loop.
+            if (kind == DivergenceKind.Value && c.Op == "power"
+                && c.Operands.Any(o => o.Dtype == "bool"))
+                return "power(bool, negative int): missing the 'Integers to negative integer powers' "
+                     + "guard on the bool loop [known bug]";
+
+            // (K8) power(int, NEGATIVE int) does not raise NumPy's clean
+            // ValueError("Integers to negative integer powers are not allowed."). It runs into an
+            // internal bounds assertion instead — Debug.Fail("index < Count, Memory corruption
+            // expected") — which a Debug test host converts to an exception but a RELEASE build
+            // does not: there the same path reads out of bounds. Worth treating as a memory-safety
+            // bug, not merely a message mismatch.
+            if (kind == DivergenceKind.ErrorText && c.Op == "power"
+                && c.Operands.All(o => o.Dtype.StartsWith("int") || o.Dtype.StartsWith("uint")))
+                return "power(int, negative int): trips the internal 'index < Count, Memory corruption "
+                     + "expected' assert instead of raising NumPy's ValueError [known bug]";
+
+            // (K9) np.result_type over a mixed signed/unsigned pair where one operand is 0-D THROWS
+            // (ArgumentException 'Destination array was not long enough' / OverflowException)
+            // instead of resolving a dtype.
+            if (kind == DivergenceKind.Threw && c.Op == "result_type_arrays")
+                return "result_type(mixed signed/unsigned, 0-D operand): throws instead of resolving "
+                     + "a promotion [known bug]";
+
+            // (K7) NEP50 weak-scalar, reached through the ERROR path rather than the dtype one.
+            // Documented difference (1) at the top of this file: NumSharp treats a 0-D operand as a
+            // WEAK scalar, so pairings NumPy refuses outright (int64 with uint64, which have no
+            // common integer type) instead promote and succeed.
+            if ((kind == DivergenceKind.Value || kind == DivergenceKind.ErrorText)
+                && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0))
+                return "NEP50 weak-scalar (error path): a 0-D operand promotes weakly, so a pairing "
+                     + "NumPy refuses succeeds instead";
+
             return null;
         }
+
+        /// <summary>
+        ///     The ufuncs NumPy has no complex loop for. NumSharp refuses them too, but with its own
+        ///     exception type and wording — see branches (K4)/(K5).
+        /// </summary>
+        private static readonly System.Collections.Generic.HashSet<string> ComplexRejectOps = new()
+        {
+            "cbrt", "floor", "ceil", "trunc", "deg2rad", "rad2deg", "floor_divide", "mod"
+        };
 
         /// <summary>Element count of a corpus operand (0-d shape [] counts as 1).</summary>
         private static long ElementCount(FuzzCorpus.Operand o)

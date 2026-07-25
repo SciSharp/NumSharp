@@ -548,6 +548,15 @@ namespace NumSharp
                     if (!it.HasExternalLoop)
                         return AliasView(ptr, dtype, 1, 1, scalar: true);
 
+                    // A 0-d operand has NO inner dimension, and GetInnerLoopSizePtr reads
+                    // Shape[NDim - 1] — i.e. Shape[-1] — which is an ACCESS VIOLATION, not an
+                    // exception: it takes the process down. This is the same trap
+                    // NDIterTyped.ReadInnerLoop absorbs (see np.nditer.Typed.cs); the public
+                    // indexer has to absorb it too. Probed: NumPy yields ONE 1-element 1-D chunk
+                    // here (np.nditer(np.array(3), flags=['external_loop']) -> array([3])).
+                    if (it.NDim == 0)
+                        return AliasView(ptr, dtype, 1, 1, scalar: false);
+
                     long count = *it.GetInnerLoopSizePtr();
                     long stride = it.GetInnerLoopElementStride(i);
                     return AliasView(ptr, dtype, count, stride, scalar: false);

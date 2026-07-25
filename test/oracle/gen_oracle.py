@@ -2875,6 +2875,487 @@ def blas_identity():
     except OSError as e:
         info["blas_error"] = str(e)
     return info
+# =====================================================================================
+# Result KINDS and ERROR parity.
+#
+# The corpus could originally express exactly ONE comparable thing: a single array, checked
+# as (dtype, shape, C-contiguous bytes). Three classes of op fell outside that shape and so
+# outside the gate entirely — tuple-returning, dtype/scalar-returning, and text-returning —
+# and every raising case was reduced to "NumSharp threw something".
+#
+#   expected.kind  : array (default) | scalar | dtype | text | tuple
+#   error          : {"type": <python class>, "text": str(e)}   — NumPy's exception, verbatim
+#
+# The generators below emit those kinds. They write their own tier files rather than
+# interleaving rows into the existing ones: the value tiers are large and shared, and
+# rewriting 87K committed lines to add error rows would bury the change in churn.
+# =====================================================================================
+
+
+def _exc(e):
+    """NumPy's exception recorded verbatim — the Python class name and str(e)."""
+    return {"type": type(e).__name__, "text": str(e)}
+
+
+def _arr_expected(r, kind=None):
+    """(dtype, shape, bytes) for one array result — the historical `expected` shape."""
+    r = np.asarray(r)
+    # Shape BEFORE ascontiguousarray, which forces ndim>=1 and would corrupt a 0-D result.
+    exp = {"dtype": r.dtype.name,
+           "shape": [int(d) for d in r.shape],
+           "buffer": np.ascontiguousarray(r).tobytes().hex()}
+    if kind:
+        exp["kind"] = kind
+    return exp
+
+
+def _tuple_expected(arrays):
+    """kind=tuple — every slot recorded, so ARITY is asserted as well as the values."""
+    return {"kind": "tuple", "slots": [_arr_expected(a) for a in arrays]}
+
+
+def _case(op, params, operands, expected, layout, valueclass="mixed", cid=None):
+    c = {"id": cid, "op": op, "params": params, "operands": operands,
+         "expected": expected, "layout": layout, "valueclass": valueclass}
+    return c
+
+
+# ---- iterator traces ----------------------------------------------------------------
+#
+# np.ndindex / np.ndenumerate / np.nditer / np.broadcast return no array, which is why they
+# were left out of this corpus. But what they actually promise is an ORDER, and the
+# materialized trace of that order IS an array — so it bit-compares like anything else.
+# Nothing else in the corpus can see a traversal-order drift: every other tier consumes
+# NDIter's output already reduced to a value.
+
+NDINDEX_SHAPES = [(), (1,), (3,), (0,), (2, 3), (3, 1), (1, 3), (0, 3), (3, 0),
+                  (2, 2, 2), (2, 1, 3), (4, 1, 1), (5, 2), (1, 1, 1, 1), (2, 3, 4)]
+
+# Layouts whose iteration order is NOT the memory order — where an order bug actually shows.
+ITER_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
+                "f_contiguous_3d", "transposed_2d", "transposed_3d", "strided_step2_1d",
+                "negstride_1d", "negstride_2d_offset", "strided_2d_cols", "strided_outer_2d",
+                "simple_slice_offset_1d", "sliced_composed", "broadcast_1d_to_2d",
+                "broadcast_row_partial", "scalar_0d", "one_element_1d", "highrank_5d",
+                "singleton_dim_3d", "newaxis_inserted", "reshape_view_2d"]
+
+ITER_DTYPES = ["bool", "int8", "uint16", "int32", "int64", "float16", "float32",
+               "float64", "complex128"]
+
+ITER_ORDERS = ["C", "F", "A", "K"]
+
+
+def gen_ndindex():
+    cases = []
+    for i, shp in enumerate(NDINDEX_SHAPES):
+        idxs = list(np.ndindex(*shp))
+        ndim = len(shp)
+        arr = np.array(idxs, dtype=np.intp).reshape(len(idxs), ndim)
+        cases.append(_case("ndindex", {"shape": [int(d) for d in shp]}, [],
+                           _arr_expected(arr), "generator", "index",
+                           cid=f"ndindex/{'x'.join(str(d) for d in shp) or '0d'}/{i}"))
+    return cases
+
+
+def gen_ndenumerate(dtypes, layout_names):
+    """(index, value) for every element — always LOGICAL C-order, whatever the layout."""
+    cases = []
+    n = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            pairs = list(np.ndenumerate(view))
+            idx = np.array([p[0] for p in pairs], dtype=np.intp).reshape(len(pairs), view.ndim)
+            vals = np.array([p[1] for p in pairs], dtype=view.dtype) if pairs \
+                else np.empty(0, view.dtype)
+            cases.append(_case("ndenumerate", {}, [describe(base, view)],
+                               _tuple_expected([idx, vals]), ln, "index",
+                               cid=f"ndenumerate/{ln}/{s}/{n}"))
+            n += 1
+    return cases
+
+
+def gen_nditer(dtypes, layout_names, orders):
+    """
+    The four observable streams of an nditer pass: values in iteration order, the
+    multi_index stream, the tracked flat index (c_index / f_index), and — under
+    external_loop — the CHUNK LENGTHS, i.e. how the iterator coalesced the dimensions.
+    """
+    cases = []
+    n = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            for order in orders:
+                # values
+                try:
+                    with np.nditer(view, order=order) as it:
+                        vals = np.array([x.copy() for x in it], dtype=view.dtype)
+                    cases.append(_case("nditer_values", {"order": order}, [operand],
+                                       _arr_expected(vals), ln, "iter",
+                                       cid=f"nditer_values/{ln}/{s}/{order}/{n}"))
+                    n += 1
+                except Exception as e:
+                    cases.append(_error_case("nditer_values", {"order": order}, [operand], e, ln,
+                                             cid=f"nditer_values/{ln}/{s}/{order}/{n}"))
+                    n += 1
+                    continue
+
+                # multi_index + the values it labels
+                try:
+                    rows, mvals = [], []
+                    with np.nditer(view, flags=["multi_index"], order=order) as it:
+                        while not it.finished:
+                            rows.append(it.multi_index)
+                            mvals.append(it[0].copy())
+                            it.iternext()
+                    midx = np.array(rows, dtype=np.intp).reshape(len(rows), view.ndim)
+                    mv = np.array(mvals, dtype=view.dtype) if mvals else np.empty(0, view.dtype)
+                    cases.append(_case("nditer_multi_index", {"order": order}, [operand],
+                                       _tuple_expected([midx, mv]), ln, "iter",
+                                       cid=f"nditer_multi_index/{ln}/{s}/{order}/{n}"))
+                    n += 1
+                except Exception:
+                    pass
+
+                # tracked flat index, both spellings
+                for flag in ("c_index", "f_index"):
+                    try:
+                        seen = []
+                        with np.nditer(view, flags=[flag], order=order) as it:
+                            while not it.finished:
+                                seen.append(it.index)
+                                it.iternext()
+                        cases.append(_case("nditer_index", {"order": order, "index": flag}, [operand],
+                                           _arr_expected(np.array(seen, dtype=np.intp)), ln, "iter",
+                                           cid=f"nditer_index/{flag}/{ln}/{s}/{order}/{n}"))
+                        n += 1
+                    except Exception:
+                        pass
+
+                # external_loop: concatenated values + chunk lengths
+                try:
+                    chunks, lens = [], []
+                    with np.nditer(view, flags=["external_loop"], order=order) as it:
+                        while not it.finished:
+                            chunk = it[0]
+                            lens.append(len(chunk))
+                            chunks.append(chunk.copy())
+                            it.iternext()
+                    flatv = np.concatenate(chunks) if chunks else np.empty(0, view.dtype)
+                    cases.append(_case("nditer_extloop", {"order": order}, [operand],
+                                       _tuple_expected([flatv, np.array(lens, dtype=np.intp)]),
+                                       ln, "iter",
+                                       cid=f"nditer_extloop/{ln}/{s}/{order}/{n}"))
+                    n += 1
+                except Exception:
+                    pass
+    return cases
+
+
+def gen_nditer_pair(dt_pairs, pair_layout_names, orders):
+    """Two operands walked in lockstep — broadcasting resolved inside the iterator."""
+    cases = []
+    n = 0
+    for ln in pair_layout_names:
+        fn = PAIR_LAYOUTS[ln]
+        for (sa, sb) in dt_pairs:
+            ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
+            operands = [describe(ba, va), describe(bb, vb)]
+            for order in orders:
+                try:
+                    sa_vals, sb_vals = [], []
+                    with np.nditer([va, vb], order=order) as it:
+                        while not it.finished:
+                            sa_vals.append(it[0].copy())
+                            sb_vals.append(it[1].copy())
+                            it.iternext()
+                    arr_a = np.array(sa_vals, dtype=va.dtype) if sa_vals else np.empty(0, va.dtype)
+                    arr_b = np.array(sb_vals, dtype=vb.dtype) if sb_vals else np.empty(0, vb.dtype)
+                    cases.append(_case("nditer_pair", {"order": order}, operands,
+                                       _tuple_expected([arr_a, arr_b]), ln, "iter",
+                                       cid=f"nditer_pair/{ln}/{sa},{sb}/{order}/{n}"))
+                    n += 1
+                except Exception:
+                    pass
+    return cases
+
+
+def gen_broadcast(dt_pairs, pair_layout_names):
+    """np.broadcast: the resolved shape and the per-operand value streams."""
+    cases = []
+    n = 0
+    for ln in pair_layout_names:
+        fn = PAIR_LAYOUTS[ln]
+        for (sa, sb) in dt_pairs:
+            ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
+            operands = [describe(ba, va), describe(bb, vb)]
+            try:
+                b = np.broadcast(va, vb)
+                shp = np.array(b.shape, dtype=np.intp)
+                tuples = list(b)
+                arr_a = np.array([t[0] for t in tuples], dtype=va.dtype) if tuples \
+                    else np.empty(0, va.dtype)
+                arr_b = np.array([t[1] for t in tuples], dtype=vb.dtype) if tuples \
+                    else np.empty(0, vb.dtype)
+            except Exception:
+                continue
+            cases.append(_case("broadcast_shape", {}, operands, _arr_expected(shp), ln, "iter",
+                               cid=f"broadcast_shape/{ln}/{sa},{sb}/{n}"))
+            cases.append(_case("broadcast_values", {}, operands,
+                               _tuple_expected([arr_a, arr_b]), ln, "iter",
+                               cid=f"broadcast_values/{ln}/{sa},{sb}/{n}"))
+            n += 1
+    return cases
+
+
+def gen_iter():
+    cases = gen_ndindex()
+    cases += gen_ndenumerate(ITER_DTYPES, ITER_LAYOUTS)
+    cases += gen_nditer(ITER_DTYPES, ITER_LAYOUTS, ITER_ORDERS)
+    cases += gen_nditer_pair(DT_PAIRS[:12], list(PAIR_LAYOUTS.keys()), ["C", "K"])
+    cases += gen_broadcast(DT_PAIRS[:12], list(PAIR_LAYOUTS.keys()))
+    return cases
+
+
+# ---- dtype / scalar / text / tuple results ------------------------------------------
+
+DTYPE_TEXT_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "transposed_2d",
+                      "strided_step2_1d", "negstride_1d", "scalar_0d", "one_element_1d",
+                      "empty_2d", "broadcast_1d_to_2d", "highrank_5d", "c_contiguous_3d"]
+
+MIN_SCALAR_VALUES = [0, 1, -1, 127, 128, 255, 256, -128, -129, 32767, 65535, 2 ** 31 - 1,
+                     2 ** 31, 2 ** 63 - 1, 0.5, -0.5, 1e10, 1e-10, True, False]
+
+CASTING_RULES = ["no", "equiv", "safe", "same_kind", "unsafe"]
+
+
+def gen_dtype_text():
+    """
+    The three non-array result kinds, plus the tuple kind on real multi-output ops.
+
+    The promotion helpers (result_type / promote_types / min_scalar_type) are the NEP50
+    table itself; until now it was only ever gated INDIRECTLY, through the dtype of some
+    binary op's result.
+    """
+    cases = []
+    n = 0
+
+    # --- dtype-returning: the promotion table, gated directly ---
+    for a in ALL_DTYPES:
+        for b in ALL_DTYPES:
+            r = np.promote_types(a, b)
+            cases.append(_case("promote_types", {"a": a, "b": b}, [],
+                               {"kind": "dtype", "value": r.name}, "generator", "dtype",
+                               cid=f"promote_types/{a},{b}/{n}"))
+            n += 1
+            r2 = np.result_type(np.dtype(a), np.dtype(b))
+            cases.append(_case("result_type_dtypes", {"a": a, "b": b}, [],
+                               {"kind": "dtype", "value": r2.name}, "generator", "dtype",
+                               cid=f"result_type_dtypes/{a},{b}/{n}"))
+            n += 1
+
+    for v in MIN_SCALAR_VALUES:
+        r = np.min_scalar_type(v)
+        if r.name not in ALL_DTYPES:      # e.g. float16 for tiny floats is fine; longdouble is not
+            continue
+        cases.append(_case("min_scalar_type", {"value": v}, [],
+                           {"kind": "dtype", "value": r.name}, "generator", "dtype",
+                           cid=f"min_scalar_type/{v}/{n}"))
+        n += 1
+
+    # result_type over real arrays (operand dtypes, not just dtype tokens)
+    for ln in ["pp_contig_contig", "pp_contig_fortran", "pp_scalar_right", "pp_broadcast_row"]:
+        fn = PAIR_LAYOUTS[ln]
+        for (sa, sb) in DT_PAIRS:
+            ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
+            r = np.result_type(va, vb)
+            cases.append(_case("result_type_arrays", {}, [describe(ba, va), describe(bb, vb)],
+                               {"kind": "dtype", "value": r.name}, ln, "dtype",
+                               cid=f"result_type_arrays/{ln}/{sa},{sb}/{n}"))
+            n += 1
+
+    # --- scalar-returning predicates (wrapped 0-d, the np.allclose pattern) ---
+    for frm in ALL_DTYPES:
+        for to in ALL_DTYPES:
+            for rule in CASTING_RULES:
+                r = np.can_cast(np.dtype(frm), np.dtype(to), casting=rule)
+                cases.append(_case("can_cast", {"from": frm, "to": to, "casting": rule}, [],
+                                   _arr_expected(np.bool_(r), "scalar"), "generator", "predicate",
+                                   cid=f"can_cast/{frm}->{to}/{rule}/{n}"))
+                n += 1
+
+    for ln in DTYPE_TEXT_LAYOUTS:
+        fn = LAYOUTS[ln]
+        for s in ITER_DTYPES:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            for opname, val in (("isscalar", np.isscalar(view)),
+                                ("iscomplexobj", np.iscomplexobj(view)),
+                                ("isrealobj", np.isrealobj(view))):
+                cases.append(_case(opname, {}, [operand], _arr_expected(np.bool_(val), "scalar"),
+                                   ln, "predicate", cid=f"{opname}/{ln}/{s}/{n}"))
+                n += 1
+            cases.append(_case("size", {"axis": None}, [operand],
+                               _arr_expected(np.int64(np.size(view)), "scalar"), ln, "predicate",
+                               cid=f"size/{ln}/{s}/{n}"))
+            n += 1
+
+            # --- text-returning: printing, held verbatim ---
+            for opname, f in (("array_str", np.array_str), ("array_repr", np.array_repr)):
+                cases.append(_case(opname, {}, [operand],
+                                   {"kind": "text", "value": f(view)}, ln, "text",
+                                   cid=f"{opname}/{ln}/{s}/{n}"))
+                n += 1
+
+            # --- tuple-returning: nonzero over ANY rank (all slots + arity) ---
+            # 0-d raises in NumPy 2.x ("Calling nonzero on 0d arrays is not allowed"), which
+            # is worth pinning as an error case rather than skipping.
+            try:
+                nz = np.nonzero(view)
+            except Exception as e:
+                cases.append(_error_case("nonzero_all", {}, [operand], e, ln, kind="tuple",
+                                         cid=f"nonzero_all/{ln}/{s}/err/{n}"))
+                n += 1
+            else:
+                cases.append(_case("nonzero_all", {}, [operand], _tuple_expected(nz), ln, "tuple",
+                                   cid=f"nonzero_all/{ln}/{s}/{n}"))
+                n += 1
+
+    return cases
+
+
+# ---- error parity -------------------------------------------------------------------
+#
+# Every value generator SKIPS the cells where NumPy raises ("error-parity is tested
+# separately" — it was not, beyond 24 hand-picked cases that asserted only that SOMETHING
+# was thrown). This re-runs the same deterministic matrices and keeps exactly the skipped
+# cells, recording NumPy's exception type and message verbatim.
+
+# Flood guard, set generously: the deterministic matrices raise in ~700 cells spread over ~22
+# distinct messages, so nothing is dropped today and every (layout, dtype) instance is kept —
+# the message is only half the claim, the other half is that NumSharp raises on the same CELLS.
+# If a future matrix makes one message explode, the cap trims it and gen_errors_full reports it.
+ERROR_INSTANCES_PER_MESSAGE = 1000
+
+
+def _error_case(op, params, operands, exc, layout, cid=None, kind=None):
+    expected = {"kind": kind} if kind else {}
+    return {"id": cid, "op": op, "params": params, "operands": operands,
+            "expected": expected, "expects_throw": True, "error": _exc(exc),
+            "layout": layout, "valueclass": "error"}
+
+
+def gen_errors_full():
+    cases = []
+    seen = {}
+    n = 0
+
+    def keep(op, exc):
+        """Cap identical (op, type, message) triples so one broken cell can't flood the tier."""
+        k = (op, type(exc).__name__, str(exc))
+        seen[k] = seen.get(k, 0) + 1
+        return seen[k] <= ERROR_INSTANCES_PER_MESSAGE
+
+    def unary_matrix(ops_map, dtypes, layout_names):
+        nonlocal n
+        for ln in layout_names:
+            fn = LAYOUTS[ln]
+            for s in dtypes:
+                base, view = fn(np.dtype(s))
+                operand = None
+                for opname, f in ops_map.items():
+                    try:
+                        f(view)
+                    except Exception as e:
+                        if not keep(opname, e):
+                            continue
+                        operand = operand or describe(base, view)
+                        cases.append(_error_case(opname, {}, [operand], e, ln,
+                                                 cid=f"{opname}/{ln}/{s}/err/{n}"))
+                        n += 1
+
+    def binary_matrix(ops_map, dt_pairs, pair_layout_names):
+        nonlocal n
+        for ln in pair_layout_names:
+            fn = PAIR_LAYOUTS[ln]
+            for (sa, sb) in dt_pairs:
+                ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
+                operands = None
+                for opname, f in ops_map.items():
+                    try:
+                        f(va, vb)
+                    except Exception as e:
+                        if not keep(opname, e):
+                            continue
+                        operands = operands or [describe(ba, va), describe(bb, vb)]
+                        cases.append(_error_case(opname, {}, operands, e, ln,
+                                                 cid=f"{opname}/{ln}/{sa},{sb}/err/{n}"))
+                        n += 1
+
+    def reduce_matrix(ops_map, dtypes, layout_names):
+        nonlocal n
+        for ln in layout_names:
+            fn = LAYOUTS[ln]
+            for s in dtypes:
+                base, view = fn(np.dtype(s))
+                operand = None
+                for opname, f in ops_map.items():
+                    for axis in _axes(view.ndim):
+                        if opname in ("argmax", "argmin") and axis is None:
+                            continue
+                        for keepdims in (False, True):
+                            try:
+                                np.asarray(f(view, axis, keepdims))
+                            except Exception as e:
+                                if not keep(opname, e):
+                                    continue
+                                operand = operand or describe(base, view)
+                                cases.append(_error_case(
+                                    opname, {"axis": axis, "keepdims": keepdims}, [operand], e, ln,
+                                    cid=f"{opname}/{ln}/{s}/axis={axis}/kd={int(keepdims)}/err/{n}"))
+                                n += 1
+
+    unary_matrix(UNARY_OPS, UNARY_DTYPES, list(LAYOUTS.keys()))
+    unary_matrix(UNARY_EXTRA_OPS, ALL_DTYPES, list(LAYOUTS.keys()))
+    unary_matrix(INVERT_OP, ALL_DTYPES, list(LAYOUTS.keys()))
+    binary_matrix(BINARY_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+    binary_matrix(DIVMOD_POWER_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+    binary_matrix(COMPARISON_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+    binary_matrix(BITWISE_BIN_OPS, BITWISE_DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+    reduce_matrix(REDUCE_OPS, REDUCE_DTYPES, REDUCE_LAYOUTS)
+
+    # Iterator construction errors — the zero-sized-operand guard and ndindex's negative dims.
+    for shp in [(-1,), (2, -3), (-1, -1)]:
+        try:
+            list(np.ndindex(*shp))
+        except Exception as e:
+            cases.append(_error_case("ndindex", {"shape": [int(d) for d in shp]}, [], e,
+                                     "generator", cid=f"ndindex/neg/{shp}/err/{n}"))
+            n += 1
+
+    for ln in ["empty_2d", "empty_composed"]:
+        if ln not in LAYOUTS:
+            continue
+        base, view = LAYOUTS[ln](np.dtype("int32"))
+        for order in ["C", "K"]:
+            try:
+                with np.nditer(view, order=order) as it:
+                    _ = [x.copy() for x in it]
+            except Exception as e:
+                cases.append(_error_case("nditer_values", {"order": order},
+                                         [describe(base, view)], e, ln,
+                                         cid=f"nditer_values/{ln}/empty/{order}/err/{n}"))
+                n += 1
+
+    distinct = len({(c["op"], c["error"]["type"], c["error"]["text"]) for c in cases})
+    dropped = sum(max(0, v - ERROR_INSTANCES_PER_MESSAGE) for v in seen.values())
+    print(f"  ({len(cases)} raising cells over {distinct} distinct NumPy messages"
+          + (f"; {dropped} instances dropped by the per-message cap" if dropped else "") + ")")
+    return cases
 
 
 def write_jsonl(path, cases):
@@ -2890,7 +3371,14 @@ def main():
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.UnitTest", "Fuzz", "corpus"))
     mode = sys.argv[1] if len(sys.argv) > 1 else "smoke"
 
-    if mode == "smoke":
+    if mode == "iter":
+        # Iterator traces — see gen_iter. Order/layout resolution has no other gate.
+        write_jsonl(os.path.join(corpus_dir, "iter.jsonl"), gen_iter())
+    elif mode == "dtype_text":
+        write_jsonl(os.path.join(corpus_dir, "dtype_text.jsonl"), gen_dtype_text())
+    elif mode == "errors_full":
+        write_jsonl(os.path.join(corpus_dir, "errors_full.jsonl"), gen_errors_full())
+    elif mode == "smoke":
         srcs = ["float64", "int32", "float32"]
         dsts = ["int32", "float64", "uint8", "int16"]
         layouts = list(LAYOUTS.keys())

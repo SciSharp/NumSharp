@@ -10,7 +10,7 @@ namespace NumSharp.UnitTest.Fuzz
     ///     The matching NumPy call lives in test/oracle/gen_oracle.py; this is the C# side of that pair.
     ///     New op tiers (binary arith, comparison, unary, reductions, where/place) extend this switch.
     /// </summary>
-    public static class OpRegistry
+    public static partial class OpRegistry
     {
         public static NDArray Apply(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
@@ -343,8 +343,10 @@ namespace NumSharp.UnitTest.Fuzz
                 case "nanstd": case "nanvar": case "nanmedian":
                     return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), ops[0]);
 
+                // Array/scalar-result ops added with the result-kind upgrade (iterator traces,
+                // scalar-returning predicates) live in OpRegistry.Kinds.cs.
                 default:
-                    throw new NotSupportedException($"op '{op}' is not registered in OpRegistry");
+                    return ApplyExtended(op, p, ops);
             }
         }
 
