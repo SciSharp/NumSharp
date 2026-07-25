@@ -1135,7 +1135,17 @@ test/NumSharp.UnitTest/IO/            .npy/.npz format gate (no Python)
   traversal ORDER has no other gate, and every other tier depends on it), **`dtype_text.jsonl`**
   (2,111 — `promote_types`/`result_type`/`min_scalar_type`/`can_cast`/`isscalar`/`iscomplexobj`/
   `isrealobj`/`size`/`array_str`/`array_repr`/`nonzero` at any rank) and **`errors_full.jsonl`**
-  (688 raising cells over 22 distinct NumPy messages — the cells every value generator SKIPS).
+  (688 raising cells over 22 distinct NumPy messages — the cells every value generator SKIPS) and
+  **`out_where.jsonl`** (3,727 — ufunc `out=`/`where=` over 7 out layouts × 9 mask layouts × 28
+  ufuncs; each case records BOTH the returned view AND the entire base buffer behind `out`, so
+  masked-off slots are proven to keep their prior contents and a kernel writing outside a
+  strided/offset/negstride window is caught — previously reached only through `maximum_out`/
+  `minimum_out`/`clip_out`, 11 contiguous unmasked cases each).
+  A fourth, **** (3,727), gates ufunc / across 7 out layouts x 9 mask
+  layouts x 28 ufuncs: each case records BOTH the returned view and the ENTIRE base buffer behind
+  , so masked-off slots are proven to retain their prior contents and a kernel writing outside
+  a strided/offset/negstride view window is caught (previously reached only via maximum_out/
+  minimum_out/clip_out — 11 contiguous, unmasked cases each).
   Comparators: `FuzzCorpusTests.Kinds.cs`; callables: `OpRegistry.Kinds.cs`; ledger: `Fuzz/README.md`
   → Table 0.
 - **Three `FuzzMatrix` gates**: `FuzzCorpusTests` (the op corpus — ~63K cases across the tiers, checking dtype + shape + bytes + error parity + per-file minimum-count floors; Char woven into 18 tier files, 12 `Decimal*` tiers: unary/binary/reduce/scan/power/varstd/matmul/astype/stat/where/sort/manip), `IndexOracleTests` (the index oracle — `index_curated` 2,273 + `index_dtype` 104 + `index_setter_dtype` 10 (cross-dtype cast-on-set) + `index_random` 10,000; the advanced-indexing parity gate), and `MetamorphicTests` (12 NumPy-free invariants incl. Half/Complex/Decimal/bool/char + strided views). A failing op case auto-shrinks to a 1-element repro.

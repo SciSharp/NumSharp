@@ -111,6 +111,7 @@ python test/oracle/gen_oracle.py where            # np.where(cond,x,y)
 python test/oracle/gen_oracle.py iter             # ndindex/ndenumerate/nditer/broadcast TRACES (order gate)
 python test/oracle/gen_oracle.py dtype_text       # dtype/scalar/text/tuple result kinds
 python test/oracle/gen_oracle.py errors_full      # the raising cells every value generator skips
+python test/oracle/gen_oracle.py out_where        # ufunc out=/where= x out layout x mask layout
 python test/oracle/gen_oracle.py place            # np.place(arr,mask,vals)
 python test/oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer (gufunc shapes, C/F layouts)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
@@ -169,6 +170,13 @@ row is scoped in `MisalignedRegistry` branches K1–K9, so each is counted and p
 | `power(int, negative int)` trips `Debug.Fail("index < Count, Memory corruption expected")` instead of NumPy's ValueError — in Release that path has no assert | K8 | known bug (memory safety) |
 | `result_type(mixed signed/unsigned, 0-D operand)` throws instead of resolving | K9 | known bug |
 | NEP50 weak-scalar reached via the error path (int64+uint64 succeeds where NumPy refuses) | K7 | intended |
+| ufunc `out=` on a read-only **broadcast** view: NumSharp writes through it (587 cases), contradicting its own `Shape.IsWriteable == false` rule | K10 | known bug |
+| `isnan` into a **strided bool `out`**: results land on the wrong elements (contiguous out is correct) | K12 | known bug |
+| `exp(1.0f)` in a (4,5) float32 array returns `0x402df854` from `np.exp(x)`, `np.exp(x, out)` and `np.exp(x, out, where)` alike, while NumPy **and the committed `unary.jsonl` expectation for the same values/shape/dtype** say `0x402df855` — the unary tier is green, so the same op on the same data disagrees depending on how the array was built | K11 | **open question** |
+
+`out=`/`where=` results that are *clean*: no out-of-window writes in any layout (strided / offset /
+negstride / F / transposed all keep the bytes outside the view intact), and masked-off slots retain
+their prior contents in every one of the 882 `where=all_false` cases.
 
 ### Table 1 — live `MisalignedRegistry` excuse branches
 

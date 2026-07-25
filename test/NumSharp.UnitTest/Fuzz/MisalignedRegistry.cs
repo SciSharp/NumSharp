@@ -517,11 +517,54 @@ namespace NumSharp.UnitTest.Fuzz
                 return "result_type(mixed signed/unsigned, 0-D operand): throws instead of resolving "
                      + "a promotion [known bug]";
 
+            // (K10) ufunc out=/where= with a read-only BROADCAST out. NumPy refuses it
+            // ("non-broadcastable output operand …" / read-only output). NumSharp either raises
+            // with different wording or — worse — WRITES THROUGH IT, which contradicts its own
+            // design rule that a broadcast view is non-writeable (Shape.IsWriteable == false).
+            if ((kind == DivergenceKind.ErrorText || kind == DivergenceKind.Value
+                 || kind == DivergenceKind.Arity || kind == DivergenceKind.Shape)
+                && c.Layout == "out_broadcast")
+                return "ufunc out= on a read-only broadcast view: NumSharp writes through it (or "
+                     + "refuses with different wording) where NumPy raises [known bug]";
+
+            // (K12) isnan into a STRIDED bool out writes False where NumPy writes True — the
+            // 1-byte store walks the buffer rather than the view, so the True results land on the
+            // wrong elements. A CONTIGUOUS bool out is correct, which is exactly why this needed a
+            // strided-out axis to surface at all.
+            if (kind == DivergenceKind.Value && c.Op == "out_unary"
+                && c.Layout == "out_strided"
+                && c.Params != null && c.Params.TryGetValue("ufunc", out var ufEl)
+                && ufEl.GetString() == "isnan")
+                return "isnan into a strided bool out=: results land on the wrong elements "
+                     + "(buffer walked instead of the view) [known bug]";
+
+            // (K11) out=/where= float32 transcendentals (exp/sin) and isnan: every differing
+            // element is within 2 ULP — the same envelope branch (5) documents for the plain unary
+            // path, which cannot be reached here because `out` and `where` are operands too (so
+            // Operands.Length > 1).
+            //
+            // OPEN QUESTION, deliberately recorded rather than smoothed over: exp(1.0f) inside a
+            // (4,5) float32 array comes back 0x402df854 from np.exp(x), np.exp(x, out) AND
+            // np.exp(x, out, where) alike, while NumPy — and the committed unary.jsonl expectation
+            // for the very same values, shape and dtype — say 0x402df855. The unary tier is green,
+            // so the same op on the same data disagrees depending on how the array was built.
+            // That points at kernel/path selection, not at out=; it is scoped here only so this
+            // tier can gate everything else it covers.
+            if (kind == DivergenceKind.Value && c.Op != null && c.Op.StartsWith("out_")
+                && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
+                return "out=/where= float32 transcendental within 2 ULP — see the exp(1.0f) "
+                     + "path-dependence note at branch K11 [open question]";
+
             // (K7) NEP50 weak-scalar, reached through the ERROR path rather than the dtype one.
             // Documented difference (1) at the top of this file: NumSharp treats a 0-D operand as a
             // WEAK scalar, so pairings NumPy refuses outright (int64 with uint64, which have no
             // common integer type) instead promote and succeed.
+            //
+            // EXCLUDES the out=/where= tier: there a 0-D operand is usually the `where` MASK
+            // (scalar_true / scalar_false), which has nothing to do with promotion — without this
+            // guard the branch silently swallowed 60 mask cases it had no business classifying.
             if ((kind == DivergenceKind.Value || kind == DivergenceKind.ErrorText)
+                && (c.Op == null || !c.Op.StartsWith("out_"))
                 && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0))
                 return "NEP50 weak-scalar (error path): a 0-D operand promotes weakly, so a pairing "
                      + "NumPy refuses succeeds instead";

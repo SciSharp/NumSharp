@@ -53,6 +53,26 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void ErrorsFull() => RunCorpus("errors_full.jsonl");
 
+        /// <summary>
+        ///     ufunc <c>out=</c> / <c>where=</c>. Previously reached only through maximum_out /
+        ///     minimum_out / clip_out (11 cases each, contiguous out, no mask), so nothing these
+        ///     parameters actually promise was gated. Every case records TWO slots — what the call
+        ///     returned, and the ENTIRE base buffer behind <c>out</c> — because:
+        ///
+        ///     <list type="bullet">
+        ///       <item><c>where</c> masking is defined by what does NOT change, so the out array's
+        ///             prior contents are an operand and are re-checked afterwards.</item>
+        ///       <item>a strided / offset / negstride / F-order / transposed <c>out</c> is where a
+        ///             kernel that walks the buffer instead of the view corrupts elements OUTSIDE
+        ///             the window — which a view-shaped comparison cannot see.</item>
+        ///     </list>
+        ///
+        ///     A read-only (broadcast) <c>out</c> must be refused; those ride the error machinery.
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void OutWhere() => RunCorpus("out_where.jsonl");
+
         // ---- comparators -------------------------------------------------------------------
 
         /// <summary>

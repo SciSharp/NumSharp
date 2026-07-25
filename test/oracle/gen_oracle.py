@@ -3228,6 +3228,209 @@ def gen_dtype_text():
     return cases
 
 
+# ---- ufunc out= / where= ------------------------------------------------------------
+#
+# The elementwise core accepts out=/where= on ~40 ufuncs, but the corpus reached them only
+# through maximum_out / minimum_out / clip_out (11 cases each), all with a CONTIGUOUS out and
+# no mask at all. Everything the parameters actually promise was ungated:
+#
+#   * `where` masking is defined by what does NOT change. Recording the out array's PRIOR
+#     contents as an operand and re-checking them afterwards is the whole assertion.
+#   * a STRIDED / OFFSET / NEGSTRIDE / F-order / TRANSPOSED out is where a kernel that walks
+#     the buffer instead of the view corrupts elements outside the window — invisible to a
+#     view-shaped comparison, which is why every case also records the full base buffer.
+#   * `out` joins the broadcast but is never STRETCHED, and a read-only (broadcast) out must
+#     be refused: those land as error cases with NumPy's message.
+
+OUT_VIEW_KINDS = ["c", "f", "strided", "negstride", "offset", "transposed", "broadcast"]
+
+# (name, builder) — masks over the result shape, plus the broadcast and scalar spellings.
+WHERE_KINDS = [None, "all_true", "all_false", "alternating", "checker", "row_broadcast",
+               "scalar_true", "scalar_false", "strided_mask"]
+
+OUT_SHAPES = [(6,), (4, 5), (2, 3, 4)]
+
+# ufunc -> the input dtypes to drive it with (its natural domain).
+OUT_BINARY_UFUNCS = {
+    "add": ["int32", "float64", "float32", "uint8"],
+    "subtract": ["int32", "float64"],
+    "multiply": ["int64", "float32"],
+    "divide": ["float64", "int32"],
+    "power": ["float64", "int32"],
+    "mod": ["int32", "float64"],
+    "floor_divide": ["int32", "float64"],
+    "arctan2": ["float64", "float32"],
+    "bitwise_and": ["int32", "uint8", "bool"],
+    "bitwise_or": ["int64"],
+    "bitwise_xor": ["uint16"],
+    "less": ["int32", "float64"],
+    "greater_equal": ["float32"],
+    "equal": ["int32"],
+}
+
+OUT_UNARY_UFUNCS = {
+    "sqrt": ["float64", "float32"],
+    "negative": ["int32", "float64"],
+    "abs": ["int32", "float64"],
+    "square": ["float64", "int32"],
+    "exp": ["float64", "float32"],
+    "log": ["float64"],
+    "sin": ["float64", "float32"],
+    "floor": ["float64"],
+    "ceil": ["float32"],
+    "rint": ["float64"],
+    "sign": ["int32", "float64"],
+    "reciprocal": ["float64", "int32"],
+    "invert": ["int32", "uint8"],
+    "isnan": ["float64"],
+}
+
+
+def _out_view(shape, dt, kind):
+    """
+    A (base, view) pair whose VIEW has exactly `shape` in the requested layout. The base is
+    always larger than or equal to the view so the elements outside the window are real and
+    can be checked for corruption.
+    """
+    dt = np.dtype(dt)
+    n = int(np.prod(shape)) if shape else 1
+    if kind == "c":
+        base = _fill(n, dt).reshape(shape)
+        return base, base
+    if kind == "f":
+        # The BASE must stay C-contiguous: describe() serializes it with base.tobytes(), which
+        # is a C-order walk, while the recorded strides/offset are PHYSICAL. An F-ordered base
+        # (np.asfortranarray) makes those two disagree and every F case reads as a divergence
+        # that is really a corpus bug. F-contiguity is expressed the way layout_catalog does it
+        # — a transposed view over a C base (see its f_contiguous_2d).
+        base = _fill(n, dt).reshape(tuple(reversed(shape)))
+        return base, base.T
+    if kind == "strided":                      # every other column of a doubly-wide base
+        wide_shape = tuple(shape[:-1]) + (shape[-1] * 2,)
+        base = _fill(int(np.prod(wide_shape)), dt).reshape(wide_shape)
+        return base, base[..., ::2]
+    if kind == "negstride":
+        base = _fill(n, dt).reshape(shape)
+        return base, base[..., ::-1]
+    if kind == "offset":                       # window starts 3 elements into the buffer
+        base = _fill(n + 3, dt)
+        return base, base[3:].reshape(shape)
+    if kind == "transposed":
+        # A NON-reversing permutation, so this stays distinct from "f" (whose .T reverses every
+        # axis). Only meaningful at rank >= 3; lower ranks are covered by "f".
+        if len(shape) < 3:
+            return None
+        src = (shape[1], shape[0]) + tuple(shape[2:])
+        base = _fill(n, dt).reshape(src)
+        return base, base.transpose(1, 0, *range(2, len(shape)))
+    if kind == "broadcast":                    # read-only: NumPy must REFUSE this as out
+        base = _fill(int(shape[-1]), dt)
+        return base, np.broadcast_to(base, shape)
+    raise ValueError(kind)
+
+
+def _where_mask(shape, kind):
+    """The mask operand, or None for NumPy's default where=True."""
+    if kind is None:
+        return None
+    n = int(np.prod(shape)) if shape else 1
+    if kind == "all_true":
+        return np.ones(shape, dtype=bool)
+    if kind == "all_false":
+        return np.zeros(shape, dtype=bool)
+    if kind == "alternating":
+        return (np.arange(n) % 2 == 0).reshape(shape)
+    if kind == "checker":
+        return (np.arange(n) % 3 != 0).reshape(shape)
+    if kind == "row_broadcast":                # (1, …, k) stretched over the leading axes
+        if len(shape) < 2:
+            return None
+        m = np.zeros((1,) * (len(shape) - 1) + (shape[-1],), dtype=bool)
+        m[..., ::2] = True
+        return m
+    if kind == "scalar_true":
+        return np.array(True)
+    if kind == "scalar_false":
+        return np.array(False)
+    if kind == "strided_mask":
+        wide = np.zeros(tuple(shape[:-1]) + (shape[-1] * 2,), dtype=bool)
+        wide[..., ::4] = True
+        return wide[..., ::2]
+    raise ValueError(kind)
+
+
+def gen_out_where():
+    cases = []
+    n = 0
+
+    def emit(opname, ufunc, f, inputs, shape, out_kind, where_kind, dts):
+        """Build out/where, capture the PRIOR state, run, and record both slots."""
+        nonlocal n
+        # The natural result dtype, so `out` needs no cast (the cast rules are their own axis).
+        try:
+            probe = f(*inputs)
+        except Exception:
+            return
+        built = _out_view(shape, probe.dtype, out_kind)
+        if built is None:
+            return
+        out_base, out_view = built
+        if out_view.shape != tuple(shape):
+            return
+        mask = _where_mask(shape, where_kind)
+        if where_kind is not None and mask is None:
+            return
+
+        operands = [describe(_cbase(i.shape, i.dtype) if i.base is None else i.base, i)
+                    for i in inputs]
+        # PRIOR contents recorded here, BEFORE the ufunc writes — this is what "masked-off
+        # slots keep their prior contents" is checked against.
+        operands.append(describe(out_base, out_view))
+        if mask is not None:
+            mask_base = mask if mask.base is None else mask.base
+            operands.append(describe(mask_base, mask))
+
+        params = {"ufunc": ufunc, "where": mask is not None}
+        cid = f"{opname}/{ufunc}/{'x'.join(map(str, shape))}/{dts}/out={out_kind}/where={where_kind}/{n}"
+        try:
+            returned = f(*inputs, out=out_view, **({"where": mask} if mask is not None else {}))
+        except Exception as e:
+            cases.append(_error_case(opname, params, operands, e, f"out_{out_kind}",
+                                     kind="tuple", cid=cid))
+            n += 1
+            return
+
+        cases.append(_case(opname, params, operands,
+                           _tuple_expected([np.asarray(returned), out_base.ravel()]),
+                           f"out_{out_kind}", "outwhere", cid=cid))
+        n += 1
+
+    for shape in OUT_SHAPES:
+        cnt = int(np.prod(shape))
+        for ufunc, dts in OUT_BINARY_UFUNCS.items():
+            f = getattr(np, "remainder" if ufunc == "mod" else ufunc)
+            # The full out x where cross product for `add`; a representative slice for the rest,
+            # so the tier stays a few thousand cases rather than tens of thousands.
+            wheres = WHERE_KINDS if ufunc == "add" else [None, "alternating", "all_false", "row_broadcast"]
+            for s in dts:
+                a = _fill(cnt, np.dtype(s)).reshape(shape)
+                b = np.roll(_fill(cnt, np.dtype(s)), 1).reshape(shape)
+                for out_kind in OUT_VIEW_KINDS:
+                    for wk in wheres:
+                        emit("out_binary", ufunc, f, (a, b), shape, out_kind, wk, s)
+
+        for ufunc, dts in OUT_UNARY_UFUNCS.items():
+            f = getattr(np, "absolute" if ufunc == "abs" else ufunc)
+            wheres = WHERE_KINDS if ufunc == "sqrt" else [None, "alternating", "all_false"]
+            for s in dts:
+                x = _fill(cnt, np.dtype(s)).reshape(shape)
+                for out_kind in OUT_VIEW_KINDS:
+                    for wk in wheres:
+                        emit("out_unary", ufunc, f, (x,), shape, out_kind, wk, s)
+
+    return cases
+
+
 # ---- error parity -------------------------------------------------------------------
 #
 # Every value generator SKIPS the cells where NumPy raises ("error-parity is tested
@@ -3376,6 +3579,8 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "iter.jsonl"), gen_iter())
     elif mode == "dtype_text":
         write_jsonl(os.path.join(corpus_dir, "dtype_text.jsonl"), gen_dtype_text())
+    elif mode == "out_where":
+        write_jsonl(os.path.join(corpus_dir, "out_where.jsonl"), gen_out_where())
     elif mode == "errors_full":
         write_jsonl(os.path.join(corpus_dir, "errors_full.jsonl"), gen_errors_full())
     elif mode == "smoke":

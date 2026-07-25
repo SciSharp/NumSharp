@@ -338,6 +338,7 @@ namespace NumSharp.UnitTest.Fuzz
             ["matmul_parity.jsonl"] = 342,
             ["modf.jsonl"] = 51,
             ["nanreduce.jsonl"] = 6692,
+            ["out_where.jsonl"] = 3500,
             ["params.jsonl"] = 966,
             ["place.jsonl"] = 12,
             ["random_smoke.jsonl"] = 1600,

@@ -251,6 +251,36 @@ namespace NumSharp.UnitTest.Fuzz
                     return new[] { x, y };
                 }
 
+                // ---- ufunc out= / where= --------------------------------------------------
+                //
+                // TWO slots on purpose. Slot 0 is what the call returned; slot 1 is the ENTIRE
+                // base buffer behind `out`. The second is what gives this tier teeth:
+                //
+                //   * `where` masking is defined by what does NOT change — masked-off slots keep
+                //     their prior contents — and "unchanged" is only observable if the prior
+                //     contents are recorded and re-checked. The operand descriptor carries them.
+                //   * when `out` is a STRIDED, OFFSET or NEGSTRIDE view, a kernel that walks the
+                //     buffer instead of the view corrupts elements OUTSIDE the window. A
+                //     view-shaped comparison cannot see that; the base buffer can.
+                case "out_binary":
+                case "out_unary":
+                {
+                    bool binary = op == "out_binary";
+                    string ufunc = p["ufunc"].GetString();
+                    int outIndex = binary ? 2 : 1;
+
+                    var target = ops[outIndex];
+                    var mask = p.TryGetValue("where", out var w) && w.GetBoolean()
+                        ? ops[outIndex + 1]
+                        : null;
+
+                    var returned = binary
+                        ? ApplyBinaryOut(ufunc, ops[0], ops[1], target, mask)
+                        : ApplyUnaryOut(ufunc, ops[0], target, mask);
+
+                    return new[] { returned, BaseBuffer(target) };
+                }
+
                 case "unravel_index_all":
                     return np.unravel_index(ops[0], ParseIntArray(p["shape"]));
 
@@ -305,6 +335,60 @@ namespace NumSharp.UnitTest.Fuzz
         }
 
         // ---- helpers ------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The WHOLE buffer behind an operand, as a flat 1-D array. FuzzCorpus.Reconstruct
+        ///     builds every operand as a view aliasing a 1-D contiguous storage of exactly
+        ///     bufferSize elements, so a length-bufferSize vector over the same storage is that
+        ///     buffer — including the elements the view's window does not address.
+        /// </summary>
+        private static NDArray BaseBuffer(NDArray view)
+            => new NDArray(view.Storage, Shape.Vector(view.Shape.bufferSize));
+
+        /// <summary>
+        ///     NumPy's <c>f(x1, x2, out=…, where=…)</c>. Passing <c>where: null</c> is NumPy's
+        ///     default <c>where=True</c> (compute every element), which is NOT the same as a
+        ///     mask of all False — hence the tier generates both.
+        /// </summary>
+        private static NDArray ApplyBinaryOut(string ufunc, NDArray a, NDArray b, NDArray o, NDArray w)
+            => ufunc switch
+            {
+                "add" => np.add(a, b, o, w),
+                "subtract" => np.subtract(a, b, o, w),
+                "multiply" => np.multiply(a, b, o, w),
+                "divide" => np.divide(a, b, o, w),
+                "power" => np.power(a, b, o, w),
+                "mod" => np.mod(a, b, o, w),
+                "floor_divide" => np.floor_divide(a, b, o, w),
+                "arctan2" => np.arctan2(a, b, o, w),
+                "bitwise_and" => np.bitwise_and(a, b, o, w),
+                "bitwise_or" => np.bitwise_or(a, b, o, w),
+                "bitwise_xor" => np.bitwise_xor(a, b, o, w),
+                "less" => np.less(a, b, o, w),
+                "greater_equal" => np.greater_equal(a, b, o, w),
+                "equal" => np.equal(a, b, o, w),
+                _ => throw new NotSupportedException($"out_binary ufunc '{ufunc}'")
+            };
+
+        private static NDArray ApplyUnaryOut(string ufunc, NDArray x, NDArray o, NDArray w)
+            => ufunc switch
+            {
+                "sqrt" => np.sqrt(x, o, w),
+                "negative" => np.negative(x, o, w),
+                "abs" => np.abs(x, o, w),
+                "square" => np.square(x, o, w),
+                "exp" => np.exp(x, o, w),
+                "log" => np.log(x, o, w),
+                "sin" => np.sin(x, o, w),
+                "floor" => np.floor(x, o, w),
+                "ceil" => np.ceil(x, o, w),
+                "rint" => np.rint(x, o, w),
+                "sign" => np.sign(x, o, w),
+                "reciprocal" => np.reciprocal(x, o, w),
+                "invert" => np.invert(x, o, w),
+                "isnan" => np.isnan(x, o, w),
+                _ => throw new NotSupportedException($"out_unary ufunc '{ufunc}'")
+            };
 
         /// <summary>An (N, ndim) int64 index matrix — NumPy's <c>np.array(list_of_indices)</c>.</summary>
         private static NDArray IndexMatrix(List<long[]> rows, int ndim)
