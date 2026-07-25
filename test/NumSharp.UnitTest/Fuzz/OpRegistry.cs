@@ -228,6 +228,50 @@ namespace NumSharp.UnitTest.Fuzz
                 case "trace": return np.trace(ops[0]);                              // Group A
                 case "diagonal": return np.diagonal(ops[0]);                        // Group A
 
+                // ---- diag / tri family ----------------------------------------------------
+                // `tri` is a pure generator: ops[0] is a 1-element carrier whose dtype selects
+                // tri's dtype (the corpus loops dtype through it), N/M/k come from params.
+                case "tri":
+                    return np.tri(p["N"].GetInt32(),
+                                  p["M"].ValueKind == JsonValueKind.Null ? (int?)null : p["M"].GetInt32(),
+                                  p["k"].GetInt32(), ops[0].typecode);
+                case "diag": return np.diag(ops[0], ParseK(p));
+                case "diagflat": return np.diagflat(ops[0], ParseK(p));
+                case "tril": return np.tril(ops[0], ParseK(p));
+                case "triu": return np.triu(ops[0], ParseK(p));
+
+                // Mutating: fill_diagonal writes into ops[0] and the mutated operand IS the result.
+                case "fill_diagonal":
+                    np.fill_diagonal(ops[0], np.array(ParseLongArray(p["val"])), p["wrap"].GetBoolean());
+                    return ops[0];
+
+                // Index-tuple generators — `which` selects the recorded tuple element (as nonzero does).
+                case "diag_indices":
+                    return np.diag_indices(p["n"].GetInt32(), p["ndim"].GetInt32())[p["which"].GetInt32()];
+                case "tril_indices":
+                    return np.tril_indices(p["n"].GetInt32(), p["k"].GetInt32(), ParseNullableInt(p, "m"))[p["which"].GetInt32()];
+                case "triu_indices":
+                    return np.triu_indices(p["n"].GetInt32(), p["k"].GetInt32(), ParseNullableInt(p, "m"))[p["which"].GetInt32()];
+                case "diag_indices_from":
+                    return np.diag_indices_from(ops[0])[p["which"].GetInt32()];
+                case "tril_indices_from":
+                    return np.tril_indices_from(ops[0], p["k"].GetInt32())[p["which"].GetInt32()];
+                case "triu_indices_from":
+                    return np.triu_indices_from(ops[0], p["k"].GetInt32())[p["which"].GetInt32()];
+                case "mask_indices":
+                {
+                    // The corpus serialises the mask FUNCTION by name; re-bind it here.
+                    var fname = p["func"].GetString();
+                    Func<NDArray, int, NDArray> mask = fname switch
+                    {
+                        "triu" => (a, kk) => np.triu(a, kk),
+                        "tril" => (a, kk) => np.tril(a, kk),
+                        "diag" => (a, kk) => np.diag(a, kk),
+                        _ => throw new NotSupportedException($"mask_indices func '{fname}'")
+                    };
+                    return np.mask_indices(p["n"].GetInt32(), mask, p["k"].GetInt32())[p["which"].GetInt32()];
+                }
+
                 // Group A: rounding + flattened diff + nan order-statistics.
                 case "round_": return np.round_(ops[0], p["decimals"].GetInt32());
                 case "ediff1d": return np.ediff1d(ops[0]);
@@ -288,6 +332,14 @@ namespace NumSharp.UnitTest.Fuzz
         private static Shape ShapeFrom(JsonElement v, long bufferSize)
             => new Shape(ParseLongArray(v.GetProperty("shape")), ParseLongArray(v.GetProperty("strides")),
                          v.GetProperty("offset").GetInt64(), bufferSize);
+
+        /// <summary>Diagonal offset; absent means the default 0.</summary>
+        private static int ParseK(IReadOnlyDictionary<string, JsonElement> p)
+            => p.TryGetValue("k", out var k) ? k.GetInt32() : 0;
+
+        /// <summary>A param that is either an int or JSON null (NumPy's `M=None` / `m=None`).</summary>
+        private static int? ParseNullableInt(IReadOnlyDictionary<string, JsonElement> p, string name)
+            => p.TryGetValue(name, out var v) && v.ValueKind != JsonValueKind.Null ? v.GetInt32() : (int?)null;
 
         private static int? ParseAxis(IReadOnlyDictionary<string, JsonElement> p)
             => p.TryGetValue("axis", out var ax) && ax.ValueKind != JsonValueKind.Null ? ax.GetInt32() : (int?)null;

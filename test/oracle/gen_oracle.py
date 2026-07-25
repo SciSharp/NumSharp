@@ -882,6 +882,26 @@ def gen_manip(dtypes, layout_names):
                 jobs.append(("trim_zeros", {"trim": "b"}, lambda v: np.trim_zeros(v, "b")))
                 jobs.append(("trim_zeros", {"trim": "fb", "axis": 0},
                              lambda v: np.trim_zeros(v, "fb", axis=0)))
+                # tril/triu apply to the LAST TWO axes; a 1-D input squares up to (n, n)
+                # (NumPy's `tri(*m.shape[-2:])` quirk) and a 0-d input raises, so nd >= 1.
+                # Same-shape for nd >= 2, so no corpus blow-up; k spans keep/drop/saturate.
+                jobs.append(("tril", {}, lambda v: np.tril(v)))
+                jobs.append(("triu", {}, lambda v: np.triu(v)))
+                jobs.append(("tril", {"k": 1}, lambda v: np.tril(v, 1)))
+                jobs.append(("triu", {"k": 1}, lambda v: np.triu(v, 1)))
+                jobs.append(("tril", {"k": -1}, lambda v: np.tril(v, -1)))
+                jobs.append(("triu", {"k": -1}, lambda v: np.triu(v, -1)))
+            if nd in (1, 2):
+                # diag's two branches differ in kind: 1-D CONSTRUCTS an (n+|k|)^2 matrix,
+                # 2-D EXTRACTS a read-only diagonal view. Both stay small here (n <= 8).
+                jobs.append(("diag", {}, lambda v: np.diag(v)))
+                jobs.append(("diag", {"k": 1}, lambda v: np.diag(v, 1)))
+                jobs.append(("diag", {"k": -1}, lambda v: np.diag(v, -1)))
+            if sz <= 8:
+                # diagflat squares the FULL size, so it is capped here to keep the corpus
+                # small; gen_diag_tri covers the bigger/strided shapes at controlled sizes.
+                jobs.append(("diagflat", {}, lambda v: np.diagflat(v)))
+                jobs.append(("diagflat", {"k": 2}, lambda v: np.diagflat(v, 2)))
             if nd >= 2:
                 jobs.append(("swapaxes", {"a1": 0, "a2": nd - 1}, lambda v, nd=nd: np.swapaxes(v, 0, nd - 1)))
                 jobs.append(("moveaxis", {"src": 0, "dst": nd - 1}, lambda v, nd=nd: np.moveaxis(v, 0, nd - 1)))
@@ -1732,6 +1752,171 @@ def gen_trace_diag(dtypes):
     return cases
 
 
+def gen_diag_tri(dtypes):
+    """The diag/tri family that gen_manip's layout x dtype loop cannot express.
+
+    Three groups, all appended after gen_trace_diag so existing ids stay stable:
+      1. `tri` — a pure GENERATOR (no array input). The operand is a 1-element carrier
+         whose dtype selects tri's dtype; N/M/k come from params.
+      2. `diag`/`diagflat`/`tril`/`triu` on hand-built strided / F / negative-stride /
+         offset 2-D views at controlled sizes (diagflat squares its input, so gen_manip
+         caps it at size 8 — the bigger and non-contiguous shapes live here).
+      3. `fill_diagonal` (mutating; result IS the mutated operand, like place/copyto) and
+         the index-tuple generators (`*_indices`, `*_indices_from`, `mask_indices`), which
+         return a tuple — `which` selects the element recorded, as gen_nonzero does.
+    """
+    cases = []
+    n = 0
+
+    def emit(opname, params, operands, r, layout):
+        nonlocal n
+        r = np.asarray(r)
+        cases.append({
+            "id": f"{opname}/{layout}/{n}",
+            "op": opname,
+            "params": params,
+            "operands": operands,
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": layout,
+            "valueclass": "mixed",
+        })
+        n += 1
+
+    # -- 1. tri: dtype rides the carrier operand; N/M/k sweep the clamp/saturate corners.
+    for dt in dtypes:
+        carrier = _cbase((1,), np.dtype(dt))
+        for (N, M, k) in [(4, None, 0), (3, 5, 0), (3, 5, 1), (3, 5, -1), (5, 3, 2),
+                          (5, 3, -2), (4, 4, 10), (4, 4, -10), (0, None, 0), (3, 0, 0),
+                          (0, 3, 0), (-2, None, 0), (3, -2, 0), (1, 1, 0)]:
+            try:
+                r = np.tri(N, M, k, dtype=np.dtype(dt))
+            except Exception:
+                continue
+            emit("tri", {"N": N, "M": M, "k": k}, [describe(carrier, carrier)], r,
+                 f"{N}x{M}k{k}/{dt}")
+
+    # -- 2. diag / diagflat / tril / triu over non-contiguous 2-D views.
+    for dt in dtypes:
+        b_tall = _cbase((6, 4), np.dtype(dt))
+        b_wide = _cbase((4, 6), np.dtype(dt))
+        b_sq = _cbase((5, 5), np.dtype(dt))
+        b_1d = _cbase((9,), np.dtype(dt))
+        views = [
+            ("sliced_T", b_tall, b_tall[1:5].T),          # offset + transposed
+            ("strided_cols", b_wide, b_wide[:, ::2]),     # last-axis stride != 1
+            ("negstride_cols", b_wide, b_wide[:, ::-1]),  # negative last-axis stride
+            ("negstride_rows", b_sq, b_sq[::-1]),         # negative row stride
+            ("f_order", b_sq, b_sq.T),                    # F-contiguous
+            ("offset_sub", b_sq, b_sq[1:4, 1:4]),         # offset sub-block
+            ("strided_1d", b_1d, b_1d[::3]),              # 1-D step view
+            ("negstride_1d", b_1d, b_1d[::-2]),           # 1-D negative step
+        ]
+        for (tag, base, view) in views:
+            for k in (0, 1, -1, 3):
+                for opname, f in (("diag", np.diag), ("diagflat", np.diagflat),
+                                  ("tril", np.tril), ("triu", np.triu)):
+                    try:
+                        r = np.asarray(f(view, k))
+                    except Exception:
+                        continue
+                    emit(opname, {"k": k}, [describe(base, view)], r, f"{tag}/{dt}")
+
+    # -- 3a. fill_diagonal: mutating. NumPy's flat-slice addressing is layout-independent,
+    # so (as gen_place does) the oracle mutates a C-contiguous COPY of the view while the
+    # harness mutates the real view — both must land on the same logical contents.
+    for dt in dtypes:
+        for (tag, shape) in [("square", (4, 4)), ("tall", (6, 3)), ("wide", (3, 6)),
+                             ("cube", (3, 3, 3)), ("tall_narrow", (7, 2))]:
+            base = _cbase(shape, np.dtype(dt))
+            for wrap in (False, True):
+                for val in ([7], [1, 2, 3], [1, 2, 3, 4, 5]):
+                    after = np.array(base, copy=True)
+                    try:
+                        np.fill_diagonal(after, np.array(val, dtype=np.dtype(dt)), wrap)
+                    except Exception:
+                        continue
+                    emit("fill_diagonal", {"val": val, "wrap": wrap},
+                         [describe(base, base)], after, f"{tag}/{dt}/w{int(wrap)}")
+
+        # non-contiguous destinations — the alias-block writer must honour real strides.
+        nb = _cbase((5, 8), np.dtype(dt))
+        for (tag, mk) in [("dst_strided", lambda b: b[:, ::2]),
+                          ("dst_negstride", lambda b: b[:, ::-1]),
+                          ("dst_T", lambda b: b.T),
+                          ("dst_offset", lambda b: b[1:4, 1:5])]:
+            base = np.array(nb, copy=True)
+            view = mk(base)
+            after_base = np.array(nb, copy=True)
+            try:
+                np.fill_diagonal(mk(after_base), np.array([9], dtype=np.dtype(dt)), False)
+            except Exception:
+                continue
+            # Record the mutated VIEW's contents (the harness returns the view too).
+            emit("fill_diagonal", {"val": [9], "wrap": False},
+                 [describe(base, view)], mk(after_base), f"{tag}/{dt}")
+
+    # -- 3b. index-tuple generators. Results are int64 coordinates, so one dtype suffices
+    # for the array-taking forms; `which` picks the tuple element being recorded.
+    idx_dt = np.dtype("int32")
+    carrier = _cbase((1,), idx_dt)
+    for (nn, ndim) in [(4, 2), (3, 3), (1, 2), (0, 2), (5, 4), (3, 1), (-1, 2)]:
+        for which in range(max(ndim, 0)):
+            try:
+                r = np.diag_indices(nn, ndim)[which]
+            except Exception:
+                continue
+            emit("diag_indices", {"n": nn, "ndim": ndim, "which": which},
+                 [describe(carrier, carrier)], r, f"{nn}nd{ndim}w{which}")
+
+    for (nn, k, m) in [(4, 0, None), (4, 1, None), (4, -1, None), (4, 0, 6), (4, 0, 2),
+                       (5, 2, 3), (3, 10, None), (3, -10, None), (0, 0, None),
+                       (3, 0, 0), (1, 0, None), (-2, 0, None), (3, 0, -2)]:
+        for opname, f in (("tril_indices", np.tril_indices), ("triu_indices", np.triu_indices)):
+            for which in (0, 1):
+                try:
+                    r = f(nn, k, m)[which]
+                except Exception:
+                    continue
+                emit(opname, {"n": nn, "k": k, "m": m, "which": which},
+                     [describe(carrier, carrier)], r, f"{nn}k{k}m{m}w{which}")
+
+    for shape in [(4, 4), (3, 5), (5, 3), (0, 0), (1, 1)]:
+        arr = _cbase(shape, idx_dt)
+        for k in (0, 1, -1):
+            for opname, f in (("tril_indices_from", np.tril_indices_from),
+                              ("triu_indices_from", np.triu_indices_from)):
+                for which in (0, 1):
+                    try:
+                        r = f(arr, k)[which]
+                    except Exception:
+                        continue
+                    emit(opname, {"k": k, "which": which}, [describe(arr, arr)], r,
+                         f"{shape[0]}x{shape[1]}k{k}w{which}")
+        if shape[0] == shape[1]:
+            for which in (0, 1):
+                try:
+                    r = np.diag_indices_from(arr)[which]
+                except Exception:
+                    continue
+                emit("diag_indices_from", {"which": which}, [describe(arr, arr)], r,
+                     f"{shape[0]}x{shape[1]}w{which}")
+
+    # mask_indices takes a FUNCTION — the name is serialised and re-bound C#-side.
+    for (fname, fobj) in [("triu", np.triu), ("tril", np.tril), ("diag", np.diag)]:
+        for nn in (4, 3, 1, 0):
+            for k in (0, 1, -1):
+                try:
+                    res = np.mask_indices(nn, fobj, k)
+                except Exception:
+                    continue
+                for which in range(len(res)):
+                    emit("mask_indices", {"n": nn, "func": fname, "k": k, "which": which},
+                         [describe(carrier, carrier)], res[which], f"{fname}{nn}k{k}w{which}")
+
+    return cases
+
+
 def gen_ediff1d(dtypes, layout_names):
     """np.ediff1d — consecutive differences of the FLATTENED array (n-1 elements)."""
     cases = []
@@ -2054,6 +2239,7 @@ def main():
         cases = gen_matmul(MATMUL_SHAPE_CASES, MATMUL_DTYPES, MATMUL_LAYOUTS)
         cases += gen_matmul_edges(MATMUL_EDGE_DTYPES)                  # G14: negstride + k=0
         cases += gen_trace_diag(TRACE_DTYPES)                          # Group A: trace/diagonal
+        cases += gen_diag_tri(TRACE_DTYPES)                            # diag/tri family
         cases += char_tier("matmul")                                   # G9
         write_jsonl(os.path.join(corpus_dir, "matmul.jsonl"), cases)
     elif mode == "rounding":

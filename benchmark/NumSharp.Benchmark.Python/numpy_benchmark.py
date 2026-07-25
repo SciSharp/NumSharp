@@ -707,6 +707,60 @@ def run_manipulation_benchmarks(n: int, iterations: int) -> List[BenchmarkResult
     r.name, r.category, r.suite, r.dtype = "np.trim_zeros", "TrimZeros", "Manipulation", dtype_name
     results.append(r)
 
+    # The two-dimensional base family (journey3): diag / diagflat / tri / tril / triu /
+    # fill_diagonal / tril_indices / triu_indices. Three distinct cost classes, kept apart
+    # deliberately: diag(2-D) is an O(1) read-only diagonal VIEW (measures dispatch overhead);
+    # tri/tril/triu are the O(N) workers where NumPy pays for an N*M bool mask plus a full
+    # `where` select; fill_diagonal and diag(1-D)/diagflat are sparse/alloc-bound. The 1-D
+    # input is sized to sqrt(n) so the CONSTRUCTED n x n matrix stays ~n elements.
+    arr_1d_sq = np.random.random(rows) * 100
+    fill_target = np.random.random((rows, cols)) * 100
+
+    def np_diag_2d(): return np.diag(arr_2d)
+    r = benchmark(np_diag_2d, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.diag", "Diag", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_diag_1d(): return np.diag(arr_1d_sq)
+    r = benchmark(np_diag_1d, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.diag(a1d)", "Diag", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_diagflat(): return np.diagflat(arr_1d_sq)
+    r = benchmark(np_diagflat, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.diagflat", "Diag", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_tri(): return np.tri(rows, cols)
+    r = benchmark(np_tri, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.tri", "Tri", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_tril(): return np.tril(arr_2d)
+    r = benchmark(np_tril, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.tril", "Tri", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_triu(): return np.triu(arr_2d)
+    r = benchmark(np_triu, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.triu", "Tri", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_fill_diagonal(): np.fill_diagonal(fill_target, 1.0); return fill_target
+    r = benchmark(np_fill_diagonal, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.fill_diagonal", "FillDiagonal", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_tril_indices(): return np.tril_indices(rows, 0, cols)[0]
+    r = benchmark(np_tril_indices, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.tril_indices", "TriIndices", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_triu_indices(): return np.triu_indices(rows, 0, cols)[0]
+    r = benchmark(np_triu_indices, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.triu_indices", "TriIndices", "Manipulation", dtype_name
+    results.append(r)
+
     return results
 
 # =============================================================================
