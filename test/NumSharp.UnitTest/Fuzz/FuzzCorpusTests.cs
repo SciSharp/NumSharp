@@ -294,7 +294,7 @@ namespace NumSharp.UnitTest.Fuzz
             ["exp_f32.jsonl"] = 22,
             ["groupa.jsonl"] = 82,
             ["logic.jsonl"] = 1775,
-            ["manip.jsonl"] = 6053,
+            ["manip.jsonl"] = 6060,
             ["matmul.jsonl"] = 769,
             ["modf.jsonl"] = 51,
             ["nanreduce.jsonl"] = 6692,

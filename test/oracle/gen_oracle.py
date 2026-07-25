@@ -1046,7 +1046,7 @@ R_SLICE_EXPRS = [
 
 # Weak python-scalar tails. The kind letter picks the C# boxed type (long / double / bool)
 # so the NEP50 weak-vs-strong mapping is under the gate, not just the values.
-_SCALAR_KIND = {"i": int, "f": float, "b": bool}
+_SCALAR_KIND = {"i": int, "f": float, "b": bool, "u": int}
 
 
 def _scalar_py(entry):
@@ -1282,6 +1282,42 @@ def gen_index_tricks(dtypes):
                        [describe(b, b)], f"overflow/{dt}/{value}")
         except Exception:
             continue
+
+    # -- 5. edge sweep: the ndmin ceiling and the uint64 weak-integer default ------------
+    # NumPy validates ndmin against NPY_MAXDIMS inside array(..., ndmin=n), so an oversized
+    # directive raises for EVERY entry kind. NumSharp had to grow the same guard: without it
+    # the per-axis expansion loop walks `ndmin` times (54 s at 100_000, unbounded at 2**31-1).
+    b1 = _cbase((2,), np.dtype("int64"))
+    for ndmin in (64, 65, 100000, 2 ** 31 - 1):
+        for (tag, exprs, operands, scalars) in [
+            ("array", [], [describe(b1, b1)], []),
+            ("slice", [("0:3", slice(0, 3))], [], []),
+            ("scalar", [], [], [["i", 5]]),
+        ]:
+            directive = f"0,{ndmin}"
+            try:
+                r = build("r", directive, exprs, [b1] if operands else [], scalars)
+            except ValueError:
+                emit_throw("r_", params_of("r", directive, exprs, scalars), operands,
+                           f"ndmin_cap/{ndmin}/{tag}")
+                continue
+            except Exception:
+                continue
+            emit("r_", params_of("r", directive, exprs, scalars), operands, r,
+                 f"ndmin_cap/{ndmin}/{tag}")
+
+    # An all-literal key whose integer does not fit int64 lifts the default to uint64
+    # (result_type(2**63) and result_type(2**64-1) are both uint64). The "u" scalar kind
+    # boxes it as a C# ulong, which is the only C# type that can carry the value.
+    for value in (2 ** 63, 2 ** 64 - 1, 2 ** 63 - 1):
+        kind = "u" if value >= 2 ** 63 else "i"
+        for concat in ("r", "c"):
+            try:
+                r = build(concat, None, [], [], [[kind, value]])
+            except Exception:
+                continue
+            emit(f"{concat}_", params_of(concat, None, [], [[kind, value]]), [], r,
+                 f"weak_uint64/{value}")
 
     return cases
 

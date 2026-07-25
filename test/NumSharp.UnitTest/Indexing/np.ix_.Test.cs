@@ -149,6 +149,34 @@ namespace NumSharp.UnitTest.Indexing
             np.ix_((1, 2))[0].Should().BeShaped(2).And.BeOfValues(1, 2);
         }
 
+        [TestMethod]
+        public void Ix_NullSequence_ThrowsTheSameValueErrorAsNumPy()
+        {
+            // NumPy arrives here by a different route — asarray(None) is a 0-d object array, whose
+            // ndim is 0 — but the observable answer is this ValueError, not a bare
+            // ArgumentNullException from inside the conversion helper.
+            new Action(() => np.ix_((object)null))
+                .Should().Throw<ValueError>().WithMessage("Cross index must be 1 dimensional*");
+            new Action(() => np.ix_(new long[] { 1 }, null))
+                .Should().Throw<ValueError>().WithMessage("Cross index must be 1 dimensional*");
+        }
+
+        [TestMethod]
+        public void Ix_HighArity_BuildsTheFullRankMesh()
+        {
+            // The output rank equals the sequence count, so a 32-way mesh is 32-D. NumPy caps at
+            // 64 dimensions; NumSharp has no such cap anywhere, so this is only checked for
+            // structural sanity (each operand keeps its own non-unit axis).
+            var seqs = new object[32];
+            for (int i = 0; i < seqs.Length; i++)
+                seqs[i] = new long[] { 0 };
+
+            var mesh = np.ix_(seqs);
+            mesh.Length.Should().Be(32);
+            mesh[0].ndim.Should().Be(32);
+            mesh[31].ndim.Should().Be(32);
+        }
+
         // ------------------------------------------------------------------ s_ / index_exp
 
         [TestMethod]

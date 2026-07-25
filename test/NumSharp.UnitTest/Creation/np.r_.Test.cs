@@ -407,6 +407,104 @@ namespace NumSharp.UnitTest.Creation
                 .WithMessage("all the input array dimensions except for the concatenation axis*");
         }
 
+        // ------------------------------------------------------------------ edge & extremes sweep
+
+        [TestMethod]
+        public void R_NdminBeyondNumPysDimensionCeiling_Throws()
+        {
+            // ndmin arrives from a user-typed directive, so an out-of-range one must be REJECTED,
+            // not walked: expanding to ndmin=100,000 one axis at a time measured 54 s (quadratic),
+            // and int.MaxValue would never return. NumPy caps at NPY_MAXDIMS and says so.
+            np.r_["0,64", new long[] { 1, 2 }].ndim.Should().Be(64);
+
+            foreach (var directive in new[] { "0,65", "0,100000", "0,2147483647" })
+            {
+                new Action(() => _ = np.r_[directive, new long[] { 1, 2 }])
+                    .Should().Throw<ValueError>().WithMessage("ndmin must be <= ndmax (64)*");
+            }
+
+            // Every entry kind goes through the same guard — array, slice and scalar alike.
+            new Action(() => _ = np.r_["0,65", "0:3"]).Should().Throw<ValueError>();
+            new Action(() => _ = np.r_["0,65", 5]).Should().Throw<ValueError>();
+
+            // A non-positive ndmin stays a no-op, exactly as upstream.
+            np.r_["0,0", new long[] { 1, 2 }].ndim.Should().Be(1);
+            np.r_["0,-1", new long[] { 1, 2 }].ndim.Should().Be(1);
+            np.r_["0,-2147483648", new long[] { 1, 2 }].ndim.Should().Be(1);
+        }
+
+        [TestMethod]
+        public void R_AllLiteralIntegerBeyondInt64_ResolvesToUInt64()
+        {
+            // np.r_[2**63] and np.r_[2**64-1] are both uint64 — the weak-integer default lifts
+            // from int64 when a literal does not fit it.
+            np.r_[ulong.MaxValue].Should().BeOfType(NPTypeCode.UInt64).And.BeShaped(1);
+            np.r_[9223372036854775808UL].typecode.Should().Be(NPTypeCode.UInt64);
+            np.r_[1L, ulong.MaxValue].typecode.Should().Be(NPTypeCode.UInt64);
+            // …but only when it has to: long.MaxValue still fits int64.
+            np.r_[long.MaxValue].typecode.Should().Be(NPTypeCode.Int64);
+            np.r_[long.MinValue].typecode.Should().Be(NPTypeCode.Int64);
+            // A strong operand still decides, and the literal is then range-checked against it.
+            new Action(() => _ = np.r_[np.array(new byte[] { 1 }), ulong.MaxValue])
+                .Should().Throw<OverflowException>();
+        }
+
+        [TestMethod]
+        public void R_ExtremeFloatValues_RoundTripBitExactly()
+        {
+            // -0.0 must keep its sign bit, and nan/inf/subnormals must survive the concatenate.
+            np.r_[-0.0].tobytes('C').Should().BeEquivalentTo(
+                new byte[] { 0, 0, 0, 0, 0, 0, 0, 0x80 }, "NumPy: 0000000000000080");
+            double.IsNaN(np.r_[double.NaN].GetValue<double>(0)).Should().BeTrue();
+            np.r_[double.PositiveInfinity, 1].GetValue<double>(0).Should().Be(double.PositiveInfinity);
+            np.r_[double.Epsilon].GetValue<double>(0).Should().Be(double.Epsilon);
+            // A float literal saturates rather than raising, unlike an integer literal.
+            np.r_[np.array(new[] { 1.0f }), 1e300].GetValue<float>(1).Should().Be(float.PositiveInfinity);
+        }
+
+        [TestMethod]
+        public void R_WeakIntegerBoundaries_AreExactlyOneOffFromThrowing()
+        {
+            np.r_[np.array(new sbyte[] { 1 }), 127].typecode.Should().Be(NPTypeCode.SByte);
+            np.r_[np.array(new sbyte[] { 1 }), -128].typecode.Should().Be(NPTypeCode.SByte);
+            new Action(() => _ = np.r_[np.array(new sbyte[] { 1 }), 128]).Should().Throw<OverflowException>();
+            new Action(() => _ = np.r_[np.array(new sbyte[] { 1 }), -129]).Should().Throw<OverflowException>();
+        }
+
+        [TestMethod]
+        public void R_DirectiveIsPerCall_NotStickyOnTheSingleton()
+        {
+            // np.r_ is a static singleton whose axis/ndmin/trans1d LOOK like instance state. Build
+            // copies them to locals, so a directive must not leak into the next call — nor across
+            // threads, which is the failure mode that would only show under load.
+            var a = np.array(new long[] { 1, 2 });
+            np.r_["0,2", a].ndim.Should().Be(2);
+            np.r_[a].ndim.Should().Be(1, "the previous call's ndmin must not persist");
+            np.c_[a].ndim.Should().Be(2, "c_ keeps its own defaults");
+
+            int bad = 0;
+            System.Threading.Tasks.Parallel.For(0, 64, _ =>
+            {
+                if (np.r_["0,2", a, a].ndim != 2) System.Threading.Interlocked.Increment(ref bad);
+                if (np.r_[a, 5L].ndim != 1) System.Threading.Interlocked.Increment(ref bad);
+            });
+            bad.Should().Be(0, "the concatenators must be stateless under concurrent use");
+        }
+
+        [TestMethod]
+        public void R_ErrorOrder_MatchesNumPy_DirectiveBeforeShape()
+        {
+            var row = np.array(new long[,] { { 1, 2 } });
+            var vec = np.array(new long[] { 1, 2 });
+
+            // NumPy reports the bad directive, not the (also invalid) shapes behind it.
+            new Action(() => _ = np.r_["q", row, vec])
+                .Should().Throw<ValueError>().WithMessage("unknown special directive*");
+            // A trailing directive is caught during the walk, before any concatenate.
+            new Action(() => _ = np.r_[np.array(new sbyte[] { 1 }), 1000, "0"])
+                .Should().Throw<ValueError>().WithMessage("special directives must be the first entry.*");
+        }
+
         [TestMethod]
         public void Concatenators_AreSingletonsWithNumPysZeroLength()
         {

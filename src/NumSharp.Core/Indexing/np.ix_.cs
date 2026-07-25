@@ -45,6 +45,15 @@ namespace NumSharp
                 var item = args[k];
                 NDArray New;
 
+                if (item is null)
+                {
+                    // NumPy reaches the same error by a different route: asarray(None) is a 0-d
+                    // object array, whose ndim is 0. NumSharp has no object dtype, so the outcome
+                    // is reproduced directly rather than letting asanyarray raise a bare
+                    // ArgumentNullException from three frames down.
+                    throw new ValueError("Cross index must be 1 dimensional");
+                }
+
                 if (item is NDArray already)
                 {
                     New = already;

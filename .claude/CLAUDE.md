@@ -330,14 +330,19 @@ works as an entry too, so `np.s_[…]` composes into `np.r_[…]`.
   a silently-ignored 4th field, and `"r"`/`"c"` matrix coercion (routed through `np.asmatrix`, since
   NumSharp has no `matrix` subclass). Verbatim errors: `special directives must be the first entry.`,
   `unknown special directive` / `unknown special directive '0,q'` (the comma form quotes, the bare form
-  does not).
+  does not), and `ndmin must be <= ndmax (64)` — `ndmin` comes from a user-typed directive, and
+  without NumPy's `NPY_MAXDIMS` cap a typo like `"0,2147483647"` walks the per-axis expansion loop
+  two billion times (measured 54 s at `ndmin=100000`, quadratic) instead of failing instantly. A
+  non-positive `ndmin` stays a no-op, as upstream.
 - **`np.ix_(params object[])` → `NDArray[]`** — open mesh. The dtype is **PRESERVED**, not forced to
   `intp`: `ix_` does no integer validation, so a float or int8 sequence rides through and only fails at
   the later indexing call; the one exception is NumPy's own, casting an **empty non-ndarray** input to
   int64 so it does not default to float64. A bool sequence is a mask (`nonzero`). Results are **views**
   that write through, built with `expand_dims` rather than `reshape` so a stride-0/read-only operand
   keeps its strides AND its non-writeable flag (reshape materializes those and would hand back a
-  writeable copy, which NumPy does not do). `ValueError("Cross index must be 1 dimensional")`.
+  writeable copy, which NumPy does not do). `ValueError("Cross index must be 1 dimensional")` — which
+  a **null** sequence also raises, reproducing the outcome NumPy reaches via `asarray(None)`'s 0-d
+  object array rather than leaking a bare `ArgumentNullException` from the conversion helper.
 - **`np.s_[…]` / `np.index_exp[…]`** — capture an index expression instead of applying it. The
   **indexer surface mirrors `NDArray`'s**, because NumPy's `s_` passes ANY index object straight
   through (`np.s_[[1,2]]` is the list, `np.s_[..., mask]` the tuple) — so the contract is
@@ -362,8 +367,23 @@ the Python literal); `char`, `Half` and `decimal` — which have no Python liter
 int8, `np.r_[i8, NDArray.Scalar(1L)]` is int64. A weak integer that does not fit the adopted dtype
 raises `OverflowException("Python integer 1000 out of bounds for int8")` rather than wrapping, reusing
 `NDExprTypeRules.CheckIntLiteralFits`; a weak float saturates to ±inf instead (`np.r_[f4, 1e300]`).
+An all-literal key whose integer does not fit int64 lifts the default to **uint64** (`np.r_[2**63]`
+and `np.r_[2**64-1]` are both uint64 upstream; in C# only a `ulong` can carry the value).
 NumSharp has a single complex width, so NumPy's `result_type(float32, 1j) → complex64` collapses onto
 `Complex`.
+
+**Edge sweep (post-ship).** Probed outside the corpus envelope along the magnitude / structural /
+resource / null / acceptance / adversarial / call-form dimensions. Three fixes came out of it — the
+`ndmin` ceiling, the uint64 weak default and `ix_(null)`, all described above. Matched and worth not
+re-proving: `-0.0` keeps its sign bit, NaN/±inf/subnormals round-trip, the weak-integer boundaries are
+exact to ±1 (`i8+127` fine, `+128` raises), `9e18:9e18+2` collapses to empty as it does upstream,
+huge slice expressions raise an honest `OutOfMemoryException` rather than wrapping a byte count, and
+NumPy's error ORDER holds (a bad directive is reported before the shapes behind it). `np.r_`/`np.c_`
+are **stateless singletons** — a directive is copied to locals per call, so it neither persists to the
+next call nor leaks across threads (checked under `Parallel.For`). Deliberate divergences: a `null`
+ENTRY throws (NumPy builds an object array, a dtype NumSharp lacks — same call as `fill_diagonal`),
+`np.ix_("abc")` is accepted as a char sequence (NumSharp's house string→char-array conversion; NumPy
+rejects it as 0-d), and a sub-1e-15 slice step reports `np.arange`'s inherited "step can't be 0".
 
 **Deliberate divergence — no `bmat` branch.** NumPy routes a single bare string key into
 `matrixlib.bmat`, which resolves the words in it against the CALLER'S Python frame

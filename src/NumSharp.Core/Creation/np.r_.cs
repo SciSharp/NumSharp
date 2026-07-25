@@ -80,6 +80,29 @@ namespace NumSharp
             /// <summary>NumPy's <c>__len__</c>, which is 0 for these objects.</summary>
             public int Count => 0;
 
+            /// <summary>
+            ///     NumPy's <c>NPY_MAXDIMS</c> — the ceiling <c>array(…, ndmin=n)</c> validates against.
+            /// </summary>
+            private const int MaxDims = 64;
+
+            /// <summary>
+            ///     <c>array(a, ndmin=ndmin)</c>: pad with leading length-1 axes, rejecting an ndmin past
+            ///     NumPy's dimension ceiling first.
+            /// </summary>
+            /// <remarks>
+            ///     The guard is not cosmetic. <c>ndmin</c> arrives from a user-typed directive string, and
+            ///     without it a typo like <c>"0,2147483647"</c> walks a per-axis expand_dims loop two
+            ///     billion times — measured 54 s at ndmin=100 000 and quadratic — where NumPy rejects it
+            ///     immediately. A ndmin of 0 or less stays a no-op, as it is upstream.
+            /// </remarks>
+            private static NDArray AtLeastNdmin(NDArray a, int ndmin)
+            {
+                if (ndmin > MaxDims)
+                    throw new ValueError($"ndmin must be <= ndmax ({MaxDims})");
+
+                return AtLeastNdView(a, ndmin);
+            }
+
             private NDArray Build(object[] key)
             {
                 if (key is null)
@@ -235,7 +258,7 @@ namespace NumSharp
                 NDArray newobj = spec.Materialize();
                 if (ndmin > 1)
                 {
-                    newobj = AtLeastNdView(newobj, ndmin);
+                    newobj = AtLeastNdmin(newobj, ndmin);
                     if (trans1d != -1)
                         newobj = swapaxes(newobj, -1, trans1d);
                 }
@@ -253,7 +276,7 @@ namespace NumSharp
                 NDArray arr = item as NDArray ?? asanyarray(item);
                 int itemNdim = arr.ndim;
 
-                NDArray newobj = AtLeastNdView(arr, ndmin);
+                NDArray newobj = AtLeastNdmin(arr, ndmin);
                 if (trans1d != -1 && itemNdim < ndmin)
                 {
                     int k2 = ndmin - itemNdim;
@@ -477,6 +500,12 @@ namespace NumSharp
                 public NPTypeCode Code => _code;
                 public WeakKind Weak => _weak;
 
+                /// <summary>
+                ///     A weak integer literal too large for int64 — which lifts an all-literal key's
+                ///     default from int64 to uint64, as NumPy's <c>result_type(2**64-1)</c> does.
+                /// </summary>
+                public bool ExceedsInt64 => _scalar is ulong u && u > long.MaxValue;
+
                 public NDArray Materialize(NPTypeCode final, int ndmin)
                 {
                     NDArray arr;
@@ -494,7 +523,7 @@ namespace NumSharp
                             arr = arr.astype(final);
                     }
 
-                    return AtLeastNdView(arr, ndmin);
+                    return AtLeastNdmin(arr, ndmin);
                 }
             }
 
@@ -505,6 +534,7 @@ namespace NumSharp
             private static NPTypeCode ResolveDtype(List<Operand> objs)
             {
                 bool anyStrong = false;
+                bool anyBeyondInt64 = false;
                 NPTypeCode strong = NPTypeCode.Empty;
                 WeakKind weak = WeakKind.Strong;
 
@@ -515,19 +545,22 @@ namespace NumSharp
                         strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, op.Code) : op.Code;
                         anyStrong = true;
                     }
-                    else if (op.Weak > weak)
+                    else
                     {
-                        weak = op.Weak;
+                        if (op.Weak > weak)
+                            weak = op.Weak;
+                        anyBeyondInt64 |= op.ExceedsInt64;
                     }
                 }
 
                 if (!anyStrong)
                 {
-                    // All literals — NEP50 defaults.
+                    // All literals — NEP50 defaults. An integer literal past int64 lifts the default
+                    // to uint64 (NumPy: result_type(2**63) and result_type(2**64-1) are both uint64).
                     return weak switch
                     {
                         WeakKind.Bool => NPTypeCode.Boolean,
-                        WeakKind.Int => NPTypeCode.Int64,
+                        WeakKind.Int => anyBeyondInt64 ? NPTypeCode.UInt64 : NPTypeCode.Int64,
                         WeakKind.Float => NPTypeCode.Double,
                         _ => NPTypeCode.Complex
                     };

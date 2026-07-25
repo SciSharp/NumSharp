@@ -297,6 +297,9 @@ namespace NumSharp.UnitTest.Fuzz
                         key.Add(kind switch
                         {
                             "i" => s[1].GetInt64(),
+                            // "u" is the only way to carry a literal past long.MaxValue; boxing it
+                            // as ulong is what lifts the weak-integer default to uint64.
+                            "u" => s[1].GetUInt64(),
                             "f" => s[1].GetDouble(),
                             "b" => (object)s[1].GetBoolean(),
                             _ => throw new NotSupportedException($"scalar kind '{kind}'")
