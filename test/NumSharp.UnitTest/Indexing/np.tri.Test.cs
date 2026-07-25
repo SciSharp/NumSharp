@@ -218,6 +218,77 @@ namespace NumSharp.UnitTest.Indexing
         }
 
         [TestMethod]
+        public void Tri_And_Triangle_SaturateAtExtremeK_WithoutOverflow()
+        {
+            // k is added to a row index, so int.MinValue/MaxValue must clamp rather than wrap.
+            var m = np.arange(12).reshape(3, 4);
+            np.tril(m, int.MaxValue).Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+            np.tril(m, int.MinValue).Should().BeOfValues(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            np.triu(m, int.MaxValue).Should().BeOfValues(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            np.triu(m, int.MinValue).Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+
+            np.count_nonzero(np.tri(3, 4, int.MaxValue)).Should().Be(12);
+            np.count_nonzero(np.tri(3, 4, int.MinValue)).Should().Be(0);
+
+            np.tril_indices(3, int.MaxValue)[0].Should().BeShaped(9);
+            np.tril_indices(3, int.MinValue)[0].Should().BeShaped(0);
+            np.triu_indices(3, int.MaxValue)[0].Should().BeShaped(0);
+            np.triu_indices(3, int.MinValue)[0].Should().BeShaped(9);
+
+            // diag's 2-D branch clamps to an empty diagonal; the 1-D branch would need an
+            // (n + |k|)^2 matrix, so it reports the size rather than overflowing.
+            np.diag(m, int.MaxValue).Should().BeShaped(0);
+            np.diag(m, int.MinValue).Should().BeShaped(0);
+            new Action(() => np.diag(np.array(1, 2, 3), int.MaxValue))
+                .Should().Throw<ArgumentException>().WithMessage("array is too big*");
+        }
+
+        [TestMethod]
+        public void Tril_AboveTheWriteOnceThreshold_StillZeroesTheDroppedTriangle()
+        {
+            // tri/tril/triu pick their allocation strategy by size (np.tri.cs WriteOnceMaxBytes,
+            // 64 MiB): below it they allocate UNINITIALISED and zero the dropped run themselves,
+            // above it they lean on np.zeros. Every other test here sits on the small side, so
+            // this one crosses the boundary — a missing zero-fill on the large path would leave
+            // allocator garbage in the dropped triangle.
+            const int n = 3000;                       // 3000^2 * 8 B = 72 MB > 64 MiB
+            var ones = np.ones(new Shape(n, n), NPTypeCode.Double);
+
+            long expectedLower = (long)n * (n + 1) / 2;   // k = 0 lower triangle incl. diagonal
+            np.count_nonzero(np.tril(ones)).Should().Be(expectedLower);
+            np.count_nonzero(np.triu(ones)).Should().Be(expectedLower);
+            np.count_nonzero(np.tri(n, n, 0, NPTypeCode.Double)).Should().Be(expectedLower);
+
+            var lower = np.tril(ones);
+            lower.GetValue<double>(0, 0).Should().Be(1d);
+            lower.GetValue<double>(n - 1, 0).Should().Be(1d);
+            lower.GetValue<double>(0, n - 1).Should().Be(0d, "the dropped triangle must be zeroed, not garbage");
+            lower.GetValue<double>(1, 2).Should().Be(0d);
+        }
+
+        [TestMethod]
+        public void Tril_ThreeD_NonContiguousLayouts()
+        {
+            var a = np.arange(24).reshape(2, 3, 4);
+
+            // transposed last two axes -> (2,4,3)
+            np.tril(np.transpose(a, new[] {0, 2, 1})).Should()
+                .BeShaped(2, 4, 3)
+                .And.BeOfValues(0, 0, 0, 1, 5, 0, 2, 6, 10, 3, 7, 11,
+                                12, 0, 0, 13, 17, 0, 14, 18, 22, 15, 19, 23);
+
+            // reversed last axis
+            np.tril(a[":, :, ::-1"]).Should()
+                .BeOfValues(3, 0, 0, 0, 7, 6, 0, 0, 11, 10, 9, 0,
+                            15, 0, 0, 0, 19, 18, 0, 0, 23, 22, 21, 0);
+
+            // F-contiguous
+            np.triu(np.asfortranarray(a)).Should()
+                .BeOfValues(0, 1, 2, 3, 0, 5, 6, 7, 0, 0, 10, 11,
+                            12, 13, 14, 15, 0, 17, 18, 19, 0, 0, 22, 23);
+        }
+
+        [TestMethod]
         public void Tril_PreservesSpecialFloatValues()
         {
             // Kept cells keep NaN / +inf / -0.0 bit-for-bit; dropped cells become +0.0.

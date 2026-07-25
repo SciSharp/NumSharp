@@ -90,17 +90,28 @@ namespace NumSharp
             if (!a.Shape.IsWriteable)
                 throw new ArgumentException("underlying array is read-only");
 
+            if (val is null)
+                // NumPy's `None` reaches the dtype's converter: nan for a float array, TypeError
+                // for an integral one. In C# a null `val` is a caller bug either way, and
+                // silently writing nan/zero would hide it.
+                throw new ArgumentNullException(nameof(val));
+
             // The overwhelmingly common call is a SCALAR fill. Building it straight at the
             // destination dtype skips asanyarray's dtype inference plus the ravel/astype pair,
             // and a stride-0 broadcast view then supplies `count` copies for free — the copy
             // machinery reads it just as happily as a materialised buffer.
+            //
+            // ONLY genuine scalars may take it: NDArray.Scalar goes through IConvertible, so a
+            // C# array / List (NumPy's list-valued `val`, which must tile) would throw. Those —
+            // along with Half and Complex, which are not IConvertible — take the general path.
             NDArray values;
-            if (!(val is NDArray source))
+            if (val is IConvertible && !(val is string))
             {
                 values = np.broadcast_to(NDArray.Scalar(val, a.typecode), new Shape(count));
             }
             else
             {
+                var source = val as NDArray ?? np.asanyarray(val);
                 if (source.size == 0)
                     return; // NumPy: assigning an empty sequence leaves the diagonal untouched.
 

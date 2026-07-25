@@ -241,8 +241,11 @@ namespace NumSharp.UnitTest.Fuzz
                 case "triu": return np.triu(ops[0], ParseK(p));
 
                 // Mutating: fill_diagonal writes into ops[0] and the mutated operand IS the result.
+                // The value is handed over as a RAW long[] rather than an NDArray on purpose —
+                // `val` is object-typed and NumPy accepts any array_like, so this keeps the
+                // asanyarray/tiling path (not just the NDArray one) under the differential gate.
                 case "fill_diagonal":
-                    np.fill_diagonal(ops[0], np.array(ParseLongArray(p["val"])), p["wrap"].GetBoolean());
+                    np.fill_diagonal(ops[0], ParseLongArray(p["val"]), p["wrap"].GetBoolean());
                     return ops[0];
 
                 // Index-tuple generators — `which` selects the recorded tuple element (as nonzero does).

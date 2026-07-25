@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
@@ -373,6 +375,104 @@ namespace NumSharp.UnitTest.Indexing
             var f = np.asfortranarray(np.zeros(new Shape(3, 4), NPTypeCode.Int32));
             np.fill_diagonal(f, 8);
             f.Should().BeOfValues(8, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8, 0);
+        }
+
+        [TestMethod]
+        public void FillDiagonal_AcceptsEveryValueShape_NotJustScalarsAndNDArrays()
+        {
+            // `val` is object-typed, and NumPy accepts any array_like (list, tuple, range,
+            // nested list). The scalar fast path goes through IConvertible, so C# arrays and
+            // collections MUST keep taking the general asanyarray route — a regression here is
+            // invisible to the oracle, whose `val` always arrives as an NDArray.
+            void Check(object val, params int[] expectedDiagonal)
+            {
+                var a = np.zeros(new Shape(3, 3), NPTypeCode.Int32);
+                np.fill_diagonal(a, val);
+                np.diagonal(a).Should().BeOfValues(expectedDiagonal.Cast<object>().ToArray());
+            }
+
+            Check(5, 5, 5, 5);                                    // scalar
+            Check(2.7, 2, 2, 2);                                  // scalar, truncating cast
+            Check(true, 1, 1, 1);                                 // bool scalar
+            Check(new int[] {1, 2, 3}, 1, 2, 3);                  // C# array
+            Check(new long[] {4, 5, 6}, 4, 5, 6);                 // wider C# array
+            Check(new double[] {7.0, 8.0}, 7, 8, 7);              // narrowing + cyclic tile
+            Check(new List<int> {1, 2}, 1, 2, 1);                 // collection + cyclic tile
+            Check(new int[,] {{1, 2}, {3, 4}}, 1, 2, 3);          // 2-D array is raveled
+            Check(new int[] {42}, 42, 42, 42);                    // single-element array
+            Check(np.array(9, 8, 7), 9, 8, 7);                    // NDArray
+        }
+
+        [TestMethod]
+        public void FillDiagonal_AcceptsNonConvertibleScalars()
+        {
+            // Half and Complex do NOT implement IConvertible, so they must fall through to the
+            // general path rather than tripping the scalar fast path.
+            var c = np.zeros(new Shape(3, 3), NPTypeCode.Complex);
+            np.fill_diagonal(c, new System.Numerics.Complex(1, 2));
+            c.GetValue<System.Numerics.Complex>(1, 1).Should().Be(new System.Numerics.Complex(1, 2));
+            c.GetValue<System.Numerics.Complex>(0, 1).Should().Be(System.Numerics.Complex.Zero);
+
+            var h = np.zeros(new Shape(3, 3), NPTypeCode.Half);
+            np.fill_diagonal(h, (Half)2);
+            h.GetValue<Half>(2, 2).Should().Be((Half)2);
+        }
+
+        [TestMethod]
+        public void FillDiagonal_NullValue_Throws()
+        {
+            // NumPy's None reaches the dtype converter (nan for float, TypeError for int); a null
+            // here is a caller bug, and silently writing nan/zero would hide it.
+            var a = np.zeros(new Shape(3, 3), NPTypeCode.Int32);
+            new Action(() => np.fill_diagonal(a, null)).Should().Throw<ArgumentNullException>();
+        }
+
+        [TestMethod]
+        public void FillDiagonal_WrapWritesThroughNonContiguousViews()
+        {
+            // wrap x non-contiguous is the combination the oracle tier does not reach (its
+            // non-contiguous destinations are all wrap=false). Values are real NumPy 2.4.2 output.
+            var t = np.zeros(new Shape(3, 7), NPTypeCode.Int32);
+            np.fill_diagonal(t.T, 5, true);
+            t.Should().BeOfValues(5, 0, 0, 0, 5, 0, 0, 0, 5, 0, 0, 0, 5, 0, 0, 0, 5, 0, 0, 0, 5);
+
+            var neg = np.zeros(new Shape(7, 3), NPTypeCode.Int32);
+            np.fill_diagonal(neg[":, ::-1"], 5, true);
+            neg.Should().BeOfValues(0, 0, 5, 0, 5, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 5, 0, 5, 0, 0);
+
+            // Reversing the ROWS lands on the same base cells as reversing the columns here:
+            // view (i,i) maps to base (6-i, i), which mirrors the column-reversed mapping.
+            var negRow = np.zeros(new Shape(7, 3), NPTypeCode.Int32);
+            np.fill_diagonal(negRow["::-1"], 5, true);
+            negRow.Should().BeOfValues(0, 0, 5, 0, 5, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 5, 0, 5, 0, 0);
+
+            var f = np.asfortranarray(np.zeros(new Shape(7, 3), NPTypeCode.Int32));
+            np.fill_diagonal(f, 5, true);
+            f.Should().BeOfValues(5, 0, 0, 0, 5, 0, 0, 0, 5, 0, 0, 0, 5, 0, 0, 0, 5, 0, 0, 0, 5);
+
+            var tiled = np.zeros(new Shape(7, 3), NPTypeCode.Int32);
+            np.fill_diagonal(tiled, new int[] {1, 2, 3, 4}, true);
+            tiled.Should().BeOfValues(1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 1, 0, 0, 0, 2);
+        }
+
+        [TestMethod]
+        public void FillDiagonal_NDimensional_WritesThroughNonContiguousViews()
+        {
+            var cube = np.zeros(new Shape(3, 3, 3), NPTypeCode.Int32);
+            np.fill_diagonal(np.transpose(cube, new[] {2, 1, 0}), 4);
+            np.count_nonzero(cube).Should().Be(3);
+            cube.GetValue<int>(0, 0, 0).Should().Be(4);
+            cube.GetValue<int>(2, 2, 2).Should().Be(4);
+
+            var sub = np.zeros(new Shape(5, 5, 5), NPTypeCode.Int32);
+            np.fill_diagonal(sub["1:4, 1:4, 1:4"], 4);
+            sub.GetValue<int>(1, 1, 1).Should().Be(4);
+            sub.GetValue<int>(3, 3, 3).Should().Be(4);
+            np.count_nonzero(sub).Should().Be(3);
+
+            var hyper = np.zeros(new Shape(2, 2, 2, 2), NPTypeCode.Int32);
+            np.fill_diagonal(np.transpose(hyper, new[] {3, 2, 1, 0}), 6);
+            np.count_nonzero(hyper).Should().Be(2);
         }
 
         [TestMethod]
