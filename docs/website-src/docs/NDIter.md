@@ -10,6 +10,7 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
 
 - [Overview](#overview)
 - [Public Iteration Surface](#public-iteration-surface)
+  - [Typed iteration — `np.nditer<T>` / `np.nditer_chunks<T>`](#typed-iteration--unboxed-elements-and-span-chunks)
 - [What NDIter Is](#what-nditer-is)
 - [Divergences from NumPy](#divergences-from-numpy)
 - [Iterator State](#iterator-state)
@@ -76,12 +77,57 @@ NumSharp implements all of it in managed code with `NativeMemory.AllocZeroed` fo
 | You want | Use | Notes |
 |----------|-----|-------|
 | Every element of one array, C-order | `foreach (var x in ndarray)` or `ndarray.GetAtIndex(i)` | Resolves slices, strides, offset, and stride-0 broadcast; no intermediate copy. |
+| Every element **unboxed / by reference** | `foreach (ref T x in np.nditer<T>(a))` | The fast path. See [Typed iteration](#typed-iteration--unboxed-elements-and-span-chunks). |
+| A **`Span<T>` per inner loop**, to vectorize | `foreach (Span<T> c in np.nditer_chunks<T>(a))` | Hands the chunk straight to `TensorPrimitives` / `Vector<T>`. A contiguous array is one chunk. |
+| NumPy's `nditer` object, with its full flag surface | `using var it = np.nditer(a, flags: …)` | `multi_index`, `external_loop`, `buffered`, `op_axes`, `itviews`, `copy()`, … — the parity surface. |
+| `(index, value)` pairs in logical C-order | `foreach (var (idx, v) in np.ndenumerate(a))` | `np.ndenumerate<T>(a)` yields unboxed `T`. |
+| Just the index space of a shape | `foreach (var idx in np.ndindex(3, 2))` | Pure odometer; no operands. |
 | Each operand of a broadcast, flattened | `np.broadcast(a, b, …).iters[i]` — a `NDFlatIterator` | One flat C-order stream per operand, each stretched to the broadcast shape (e.g. `np.broadcast([1,2,3], [[10],[20]]).iters[0]` yields `1,2,3,1,2,3`). |
 | The broadcast itself, as tuples | `foreach (object[] vals in np.broadcast(a, b, …))` | NumPy's `np.broadcast` object: one per-operand value tuple per step, with a live `.index` cursor, `.numiter`, `.size`, and `.reset()`. |
 
-There is **no separate per-element iterator class** — `NDIter` drives every kernel, and the element-level surface above is built on the same `Shape`/stride machinery (`GetAtIndex`). `NDFlatIterator` (`NumSharp.Backends.Iteration`) is the small public analog of NumPy's `flatiter`; it is re-enumerable, unlike NumPy's one-shot flatiters.
+All of these are built on the same `Shape`/stride machinery; `np.nditer` and the typed forms are driven by `NDIterRef` itself. `NDFlatIterator` (`NumSharp.Backends.Iteration`) is the small public analog of NumPy's `flatiter`; it is re-enumerable, unlike NumPy's one-shot flatiters.
 
 Like NumSharp's `NDIter`, `np.broadcast(...)` accepts **any number of operands** — NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp does not (see [Divergences from NumPy](#divergences-from-numpy)).
+
+### Typed iteration — unboxed elements and Span chunks
+
+A NumSharp extension with no NumPy counterpart: Python has no unboxed generics, so `np.nditer`'s `it[0]` must hand back an array object. NumSharp's can hand back a **reference**.
+
+```csharp
+// element-wise, by reference — reads and writes go straight to the array
+foreach (ref double x in np.nditer<double>(a, writeable: true))
+    x *= 2;
+
+// chunk-wise — one Span per inner loop, ready to vectorize
+foreach (Span<double> c in np.nditer_chunks<double>(a, writeable: true))
+    TensorPrimitives.Multiply(c, 2.0, c);
+```
+
+Both run on the same `NDIterRef` as `np.nditer`, so every memory layout behaves identically — contiguous, F-order, transposed, reversed, sliced, broadcast, 0-d and empty. What is gone is the per-element `NDArray` view, which is what made the boxed form slow.
+
+**Why it matters** (100K `float64`, Release, best-of-9; ratios are NumPy ÷ NumSharp, so higher is faster):
+
+| Approach | Time | vs NumPy |
+|----------|------|----------|
+| `np.nditer` `it[0]` (boxed, parity surface) | 59 ms | 0.18× |
+| `np.nditer<T>` | 0.167 ms | **40×** |
+| `np.nditer_chunks<T>` | 0.162 ms | **41×** |
+| `np.nditer_chunks<T>` + `Vector<T>` | 0.027 ms | **249×** |
+| *raw pointer walk (floor)* | *0.047 ms* | — |
+
+NumPy reference: `for x in np.nditer(a)` = 6.681 ms. The boxed cell is not an engine problem — a bare `iternext()` walk of the same 100K elements takes 0.61 ms against NumPy's 2.60 ms (4.3×). The whole deficit is the ~0.6 µs `NDArray` view built per element.
+
+**Rules of the road:**
+
+- **The dtype must match exactly.** A `ref` cannot convert, so `np.nditer<double>` over an `int32` array **throws** rather than reinterpreting the bytes. Cast first with `astype`.
+- **Order is `'K'` (memory order)**, matching `np.nditer` exactly — on a reversed view `a[:, ::-1]` of `arange(6).reshape(2,3)` both libraries yield `0 1 2 3 4 5`, and both yield `2 1 0 5 4 3` under `order: 'C'`. `'K'` is also what lets reversed / F-contiguous / transposed views coalesce into a single chunk. Pass `order: 'C'` for the logical order `np.ndenumerate` uses.
+- **`writeable: true` is required to write**, and a broadcast view is rejected with NumPy's own message, `operand array with iterator write flag set is read-only`.
+- **`nditer_chunks<T>` needs a unit-stride inner loop.** A `Span<T>` is contiguous by definition, so a stepped view such as `a[":, ::2"]` is rejected up front — at `GetEnumerator`, never mid-loop. Use `np.nditer<T>`, which handles any stride, or iterate a `.copy()`.
+- **An empty array iterates zero times**, where `np.nditer` raises `Iteration of zero-sized operands is not enabled` unless given NumPy's `zerosize_ok`. Deliberate: forcing `if (a.size > 0)` around every `foreach` is not how C# collections behave.
+- **Re-enumeration restarts.** The value returned by `np.nditer<T>(…)` holds no unmanaged state; each `foreach` builds a fresh iterator. This is deliberately unlike the class-based `np.nditer`, which is its own iterator (NumPy's `iter(x) is x`) and therefore *resumes*.
+- **Disposal is automatic under `foreach`** — C# disposes a `ref struct` enumerator through the same pattern that drives it, and that is what frees the iterator state. If you drive `MoveNext()` by hand, dispose it yourself.
+
+Being `ref struct`s, the enumerators cannot escape to a field, a lambda or an `async` frame — the compiler enforces the lifetime the `ref`/`Span` needs. For fusing several operations into one pass instead of walking elements yourself, see [Tier 3C — Expression DSL](#tier-3c--expression-dsl) and `np.evaluate`.
 
 ---
 
@@ -1439,7 +1485,7 @@ Seventeen worked examples grouped by API tier.
 15. [Heaviside step function](#15-heaviside-step-function)
 16. [Polynomial evaluation via Horner's method](#16-polynomial-evaluation-via-horners-method)
 17. [Piecewise: absolute value of sine (abs(sin(x)))](#17-piecewise-absolute-value-of-sine-abssinx)
-18. [User-defined activation via NDExpr.Call](#18-user-defined-activation-via-npyexprcall)
+18. [User-defined activation via NDExpr.Call](#18-user-defined-activation-via-ndexprcall)
 19. [Reflected MethodInfo with an instance method](#19-reflected-methodinfo-with-an-instance-method)
 
 ### 1. Three-operand binary over a 3-D contiguous array
