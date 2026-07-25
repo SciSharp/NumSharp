@@ -303,7 +303,8 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
 `compress`, `extract`, `indices`, `place`, `put`, `ravel_multi_index`, `take`, `unravel_index`, `where`
 
 ### Iteration
-`nditer`, `ndenumerate`, `ndindex` (plus the pre-existing `broadcast`)
+`nditer`, `ndenumerate`, `ndindex` (plus the pre-existing `broadcast`), and the NumSharp-extension
+typed forms `nditer<T>` / `nditer_chunks<T>`
 
 The three NumPy iteration objects, all following the `np.broadcast` house shape — a lowercase
 factory returning a PascalCase nested class — and all **their own iterator** (NumPy's `iter(x) is x`),
@@ -365,22 +366,88 @@ in the engine, while NumPy INFERS the dtype by promoting the operands that have 
 `np.nditer([a, null])` allocates `int64` for an `int64` input and `np.nditer([int_a, float_b, null])`
 allocates `float64`. That inference lives in the wrapper, where NumPy puts it.
 
-**Perf (NPY/NS, higher = NumSharp faster; best-of-7, Release, 100K elements):** `ndindex` **1.5×**,
-`ndenumerate` **3.0×**, `nditer` with `multi_index` **8.4×**, `external_loop` ~parity — but the
-per-element `it[0]` loop is **0.17×**. The iteration ENGINE is not the problem: a bare `iternext()`
-walk of 100K elements takes 0.59 ms against NumPy's 16.6 ms for the same loop (~28× faster). The whole
-deficit is the per-element `NDArray` view object (~0.95 µs each), which is far fatter than NumPy's 0-d
-array — `new NDArray(storage, shape)` re-aliases the storage, so the hot 0-d path takes the direct
-slice ctor instead (measured 2× cheaper) and the strided `external_loop` path (once per CHUNK, not per
-element) keeps the storage route. Closing the rest means optimizing `NDArray` construction itself
-(engine resolution + ARC refcounting), which is a core-wide change, not an `nditer` one. The
-NumSharp-idiomatic fast paths — `external_loop`, `np.evaluate`, vectorized ops — avoid the per-element
-view entirely.
+**Perf (NPY/NS, higher = NumSharp faster; best-of-9, Release, 100K float64):** `ndindex` **1.5×**,
+`ndenumerate` **3.3×**, `nditer` with `multi_index` **8.0×**, `external_loop` ~parity — but the
+per-element `it[0]` loop is **0.16–0.18×** (56–76 ms across runs; the variance is GC, it allocates
+100K `NDArray`s). The iteration ENGINE is not the problem: a bare `iternext()` walk of 100K elements
+takes 0.61 ms against NumPy's 2.60 ms for the same bare walk (**4.3×**). The whole deficit is the
+per-element `NDArray` view (~0.6 µs each) — `new NDArray(storage, shape)` re-aliases the storage, so
+the hot 0-d path takes the direct slice ctor instead (measured 2× cheaper) and the strided
+`external_loop` path (once per CHUNK, not per element) keeps the storage route.
+
+**Do NOT try to fix `it[0]` by re-seating a cached view** — measured, and it is a silent-wrong-answer
+trap. `UnmanagedStorage` keeps **three** synchronized address caches: the public `byte* Address`, the
+`IArraySlice InternalArray`, and a per-dtype `ArraySlice<T> _arrayXxx` field. Re-seating `Address`
+alone makes `GetAtIndex`/`ToString`/casts correct while `np.sum(it[0])` and `it[0] * 2` silently
+return **0**; re-seating `Address` + `InternalArray` fixes the reductions and still leaves the
+arithmetic operators and comparisons stale. The re-seat is fast (0.68 ms boxed, ~16× NumPy, vs 59 ms
+today) but is only safe if every cache is updated behind one `UnmanagedStorage` method — and any
+future cache added there re-breaks it silently. That is the core-wide change, and this is why.
+The NumSharp-idiomatic fast paths — the typed iterators below, `np.evaluate`, vectorized ops — avoid
+the per-element view entirely instead.
 
 **Gate:** unit tests only (`Indexing/np.ndindex.Test.cs`, `Indexing/np.ndenumerate.Test.cs`,
 `APIs/np.nditer.Test.cs` — 83 tests from probed NumPy 2.4.2 output). These are iteration PROTOCOLS,
 not value-producing ops, so they have no `(dtype, shape, bytes)` result for the differential-fuzz
 corpus to bit-compare and are deliberately absent from `gen_oracle.py`/`OpRegistry.cs`.
+
+### Typed iteration — `np.nditer<T>` / `np.nditer_chunks<T>` (NumSharp extension)
+
+The unboxed counterparts of `np.nditer`, over the same `NDIterRef` engine. NumPy has no equivalent
+(Python has no unboxed generics), so there is no oracle tier — the gate is
+`APIs/np.nditer.Typed.Test.cs` (23 tests), which pins them against the boxed `np.nditer` and
+`ndenumerate` across every layout and all 15 dtypes.
+
+```csharp
+foreach (ref double x in np.nditer<double>(a, writeable: true)) x *= 2;              // element-wise
+foreach (Span<double> c in np.nditer_chunks<double>(a, writeable: true))             // chunk-wise
+    TensorPrimitives.Multiply(c, 2.0, c);
+```
+
+**Perf (NPY/NS, 100K float64, vs NumPy's `for x in np.nditer(a)` = 6.681 ms):** `np.nditer<T>`
+**40×** (0.167 ms), `nditer_chunks<T>` **41×** (0.162 ms), chunks + `Vector<T>` **249×** (0.027 ms).
+The raw-pointer floor is 0.047 ms, so the element walk costs ~1.6 ns/element over it — that residue is
+`MoveNext`, and a leaner one-cursor variant measured no better. Layout cost is flat (0.16–0.19 ms for
+contiguous / F / reversed / offset / broadcast).
+
+**Five things this design had to get right — do not re-break:**
+- **`GetEnumerator()` must NOT return `this`.** Unlike `np.Broadcast`, these own unmanaged state, so
+  the first `foreach` frees what the second would walk — a use-after-free, caught by a test. The
+  factory returns a **`readonly struct` enumerable holding no unmanaged state**, whose
+  `GetEnumerator()` builds a FRESH `NDIterRef` (0.4 µs). So re-enumeration restarts — deliberately
+  unlike the class-based `np.nditer`, which is its own iterator (NumPy's `iter(x) is x`) and resumes.
+- **`foreach` disposes a `ref struct` enumerator through the same pattern**, no `IDisposable` needed;
+  that is what frees the state. Hand-driven `MoveNext` loops must dispose themselves.
+- **The walk is chunk-driven, not element-driven.** `EXTERNAL_LOOP` is always on and `MoveNext` walks
+  the inner loop with pointer arithmetic, touching the iterator only at a chunk boundary — a
+  contiguous array is ONE chunk, so per-element iterator cost is ~zero. The naive
+  `Iternext()`-per-element form measured 0.47 ms, 3× worse.
+- **Never buffered.** A `ref`/`Span` into a buffer dangles the moment the next fill lands; unbuffered
+  pointers are absolute into the operand, which is also why the enumerator can advance the iterator
+  *before* handing out the captured chunk.
+- **Order is `'K'` (memory order), matching `np.nditer` exactly** — probed: `a[:, ::-1]` of
+  `arange(6).reshape(2,3)` yields `0 1 2 3 4 5` in BOTH libraries, and `2 1 0 5 4 3` under `order='C'`.
+  It is also what makes reversed/F/transposed views coalesce to one chunk. Pass `order: 'C'` for the
+  logical order `ndenumerate` uses.
+
+Two deliberate divergences, both pinned by tests: a **dtype mismatch throws** (a `ref` cannot convert,
+so reinterpreting the bytes would hand out garbage — `np.nditer<double>` on an int32 array is an
+error, not a cast), and an **empty array iterates zero times** where the boxed form demands NumPy's
+`zerosize_ok` flag (forcing `if (a.size > 0)` around every `foreach` is not how C# collections
+behave). `nditer_chunks<T>` additionally rejects a **non-unit-stride** inner loop up front —
+`a[":, ::2"]` — because a `Span<T>` is contiguous by definition; the single-operand inner stride is
+fixed for the whole iteration, so this is detected at `GetEnumerator` and never mid-loop.
+
+**Four `NDIterRef` defects found while building this (all routed around, none fixed):**
+`GetInnerLoopSizePtr()` **access-violates on a 0-d operand** (reads `Shape[-1]`; the internal
+`ResolveInnerLoopCount` already guards it, the public accessor does not); `GetInnerStrideArray()`
+returns **element** strides while the kernel contract (`ForEach`/`ExecuteGeneric`) takes **byte**
+strides from the private `GetInnerLoopByteStrides()`, with no public byte-stride accessor;
+`ResetToIterIndexRange` + `EXTERNAL_LOOP` **does not clamp the inner count to the range**, so it reads
+past the array end — which blocks parallel range-splitting (NumPy requires `NPY_ITER_RANGED` at
+construction for exactly this reason; splitting by array SLICE works today and measured **3.2×** on 8
+workers); and NumPy's unbuffered `external_loop` coalesces `[:, ::2]` into **1** chunk where NumSharp
+emits **500**. The first two are absorbed by `TypedIterHelpers.ReadInnerLoop`.
 
 ### Fused Expressions (NumSharp extension)
 `evaluate` — `np.evaluate(expr[, operands][, out])` compiles an `NDExpr` tree to ONE NDIter pass: every elementwise node runs inside a single inner-loop kernel, so chained expressions allocate no intermediates and read each operand once (NumPy-ecosystem equivalent: `numexpr.evaluate`; measured 3.2–6.1× faster than NumPy 2.4.2 on 4M chains, 1.2–4× over NumSharp's own unfused chains — gate: the `benchmark/fusion` subsystem of `benchmark/run_benchmark.py`).
@@ -544,6 +611,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NdArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |
 | Iteration APIs (nditer/ndindex/ndenumerate) | `APIs/np.nditer.cs`, `Indexing/np.{ndindex,ndenumerate}.cs` |
+| Typed iteration (nditer&lt;T&gt;/nditer_chunks&lt;T&gt;) | `APIs/np.nditer.Typed.cs` (ref-struct enumerators + `TypedIterHelpers`) |
 | Expression DSL (np.evaluate) | `Backends/Iterators/NDExpr.cs` (nodes + emission), `NDExpr.Typing.cs` (per-node NumPy result_type pass), `NDExpr.Evaluate.cs` (array leaves, binding, reductions, operators), `Backends/Default/Math/DefaultEngine.Evaluate.cs` (host) |
 | ILKernelGenerator | `Backends/Kernels/ILKernelGenerator*.cs` (per-chunk, NDIter-driven) |
 | DirectILKernelGenerator | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 63 partials) |
