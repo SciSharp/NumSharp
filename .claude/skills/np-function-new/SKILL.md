@@ -20,6 +20,15 @@ parity audit, an experiment across candidates) are legitimate — state which ph
 and stop there; and a **dependency extension** surfaced by the Phase-2 dependency audit is in-scope
 when the function cannot reach parity without it.
 
+**Drawing the family boundary.** When the request names "and neighbouring functions", or a concept
+rather than a function, size the family BEFORE Phase 1. NumPy's own source file is the strongest
+signal: names defined together upstream generally share the abstraction and the helpers, so
+splitting them means implementing the shared primitive twice — the tri/diag cluster all lives in
+`_twodim_base_impl.py`, and `tril`/`triu` are literally `where(tri(...), m, 0)`. When two readings
+of the request differ materially in work (a 5-function reading vs a 13-function one), put the
+options to the user instead of picking silently. Scope is theirs, it is cheap to ask before
+probing, and expensive to redo after.
+
 ## Mental model
 
 NumPy 2.4.2 is the **source of truth** — not its docs, not memory: the **live interpreter** plus the
@@ -38,12 +47,18 @@ prove your design preserves it. Breaking NumSharp changes to reach NumPy parity 
 | 2 | Design | Integration decision: composition vs engine, kernel contract, file placement |
 | 3 | Implement | Builds clean; spot-parity probes agree |
 | 4 | Verify | Unit tests green + FuzzMatrix tier green (or divergence documented) |
-| 5 | Benchmark | NPY/NS measured and reported honestly |
+| 5 | Benchmark | NPY/NS measured and reported honestly; any optimization re-verified through Phase 4 |
 | 6 | Document + commit | CLAUDE.md API list updated; one extensive commit |
 
-**Audit mode** (the op already exists — "verify/modernize/why does np.foo differ"): the phases
-reorder — inventory existing coverage first, signature-diff, probe OUTSIDE the corpus envelope,
-classify findings (wins included). Playbook: `references/audit.md`.
+The map is a ratchet with one exception: **Phase 5 can un-gate Phase 4**, because optimizing means
+editing the implementation. Treat a Phase-5 code change as re-entering Phase 4, not as polish.
+
+**Audit mode** — two triggers, one playbook (`references/audit.md`): the op already exists
+("verify/modernize/why does np.foo differ"), or you just shipped it and are sweeping its edges
+("do a pass over edge cases", "find missing support"). Both reorder the phases — inventory existing
+coverage, signature-diff, probe OUTSIDE the corpus envelope, classify findings (wins included). The
+post-ship sweep is not a re-run of Phase 4; its entire subject is what the gates you just turned
+green cannot express.
 
 ### Phase 1 — Probe (NumPy source + live behavior)
 
@@ -57,6 +72,18 @@ classify findings (wins included). Playbook: `references/audit.md`.
   (`np.shares_memory` + writeability + write-through), and the layout families in
   `references/variations.md` that apply to this op.
 - Never implement from documentation or recall alone — probe.
+- **The docstring is not the contract; the body is.** `np.diag`'s docstring promises "a copy of its
+  k-th diagonal" and the 2-D branch returns a **read-only view** — `shares_memory` says so. Probe
+  view-vs-copy on every branch even when the prose sounds settled.
+- **Incidental consequences of NumPy's spelling are still behaviour.** `tril` squares a 1-D input
+  into an `(n, n)` result only because the body reads `tri(*m.shape[-2:])`, and a 0-d input escapes
+  as `tri()`'s own missing-argument `TypeError`. Reproduce such **leaked implementation errors
+  verbatim** — house precedent is the `mmap_mode` texts in project CLAUDE.md. You cannot derive
+  either behaviour from the documentation; you read them off the composition.
+- **For tuple returns, probe identity and arity, not just values.** `diag_indices` returns THE SAME
+  array object in every slot (`(idx,) * ndim` — a write through one is visible through all), and
+  `mask_indices`' arity follows its callback's rank rather than `n`. Both are observable, so both
+  are parity.
 
 **Exit DOD:** 100% understanding — how the function reacts to every parameter/mode, what NumPy's
 optimizations are, and which of ours apply.
@@ -126,6 +153,15 @@ optimizations are, and which of ours apply.
 - **THE gate — wire the op into the differential-fuzz oracle.** Invoke the **`oracle`** skill: add
   the `gen_oracle.py` job + the `OpRegistry.cs` case, regenerate (pinned `numpy==2.4.2`), run the
   tier. Char rides the uint16 proxy automatically; Decimal needs a `gen_decimal_oracle.cs` entry.
+- **Prove the new coverage has teeth before trusting it green.** A tier that passes on the first run
+  is as consistent with "not wired up" as with "correct" — `OpRegistry`'s `default:` throws, so a
+  missing case fails loudly, but a mis-keyed param or an op that never got emitted just sits silent.
+  Break it on purpose once: rename your `OpRegistry` case, confirm the tier goes red on YOUR cases,
+  revert. Two minutes, and it converts "green" from a hope into evidence.
+- **Watch output-size blow-up when joining a layout × dtype tier.** Those tiers multiply every job
+  by ~26 layouts × ~15 dtypes, so an op whose output is superlinear in its input balloons the
+  committed corpus — `diagflat` squares its input, turning a 24-element operand into a 576-element
+  expectation. Cap such jobs by operand size and give the larger/strided shapes a dedicated tier.
 - **When the op has no corpus-comparable result, say so instead of forcing a tier.** The corpus
   compares `(dtype, shape, bytes)`, so an op that returns no array — an iteration protocol, a
   context manager, an object exposing a cursor — cannot ride it. That is a narrow exemption, not a
@@ -154,6 +190,35 @@ optimizations are, and which of ours apply.
   When the located cost turns out to be core-wide (object construction, engine resolution,
   refcounting), take whatever win is local and in-scope, then write the residue down with its cause
   — quietly shipping it, or unilaterally rewriting a core constructor, are both worse.
+- **When two strategies trade allocation against writes, measure both across a size sweep** rather
+  than reasoning from instruction counts. Fresh large allocations arrive already zeroed from the OS,
+  so a "wasteful" pre-zeroing `np.zeros` can cost nothing while an "obviously cheaper" write-once
+  pass touches twice the memory. One measured case inverted sharply at 64 MiB — write-once 6.0 ms vs
+  11.0 ms just below it, 18.9 ms vs 13.5 ms just above. Encode the measured crossover with its
+  evidence in a named constant, not a guessed round number.
+- **Don't geomean across cost classes.** An O(1) view, an O(N) fill and an O(√N) sparse write mean
+  different things, and averaging them yields a number describing nothing. Separate them in the
+  benchmark class and report them apart — it also keeps you honest about which sub-1.0 cells are
+  dispatch overhead on a tiny op versus real algorithmic loss.
+
+**Phase 5 writes code, so it re-opens Phase 4.** This is the one place the phase map lies: every
+other phase only adds to the last, but an optimization is a new **branch** — on size, on layout, on
+operand type — and Phase 4's gates only cover the forms the corpus can express. A real regression
+shipped this way: a scalar fast path added to `fill_diagonal` routed every non-`NDArray` value
+through an `IConvertible` conversion, so `int[]`, `List<int>` and `int[,]` began throwing
+`InvalidCastException` — while the unit tests, the tier, and the hand-written parity harness all
+stayed green, because every one of them passes that argument as an `NDArray`. After any change made
+for speed, re-run the unit tests AND the tier, then probe what they structurally cannot see:
+
+- **The acceptance surface of polymorphic parameters.** A corpus serializes each parameter to ONE
+  canonical form, so the other accepted forms — C# arrays, collections, non-`IConvertible` scalars
+  like `Half`/`Complex`, `null` — are invisible to it. Enumerate what the parameter's declared type
+  actually admits and probe each. Then close the hole properly: where you can, widen the oracle to
+  hand the argument over in a NON-canonical form (passing a raw `long[]` instead of wrapping it in
+  `np.array`) so the general path is gated from then on, and add unit tests for the rest.
+- **Both sides of a size- or layout-selected branch.** A threshold means every small test you
+  already wrote exercises one half of the code. Add a case that crosses it — a large-allocation
+  path that forgets to zero its output produces allocator garbage no small test can see.
 
 ### Phase 6 — Document + commit
 
@@ -177,6 +242,8 @@ optimizations are, and which of ours apply.
 - [ ] Oracle: op in `gen_oracle.py` + `OpRegistry.cs`, FuzzMatrix tier green — or the op returns no
       array at all and the exemption is recorded in CLAUDE.md
 - [ ] Benchmark pair added; NPY/NS reported; every <1.0 cell explained
+- [ ] Every Phase-5 optimization re-verified: unit tests + tier re-run, acceptance surface of each
+      polymorphic parameter probed, both sides of any size/layout-selected branch tested
 - [ ] CLAUDE.md API list updated; extensive commit
 
 ## Gotchas
@@ -213,6 +280,16 @@ optimizations are, and which of ours apply.
 - **`dotnet run <path.cs>` caches per script path** — a probe can replay a stale build and look like
   your fix failed. `references/probing.md` has the symptom and the two one-line fixes; reach for it
   whenever a result doesn't move after a change you can see in the source.
+- **Normalize line endings before diffing NumSharp output against NumPy output.** The C# side writes
+  CRLF and Python writes LF, so `diff` marks EVERY line changed and a perfect 165/165 match reads as
+  165/165 failures. Pipe both through `tr -d '\r'` first. Watch too for harness-only formatting
+  differences masquerading as parity bugs (complex printed `(1.0+0.0j)` vs NumPy's `(1+0j)` is the
+  same value) — fix the harness, not the implementation.
+- **Test-harness dtype traps:** `np.arange` yields **Int64**, so `GetAtIndex<int>` / `GetValue<int>`
+  on its results trips a `Debug.Fail` inside the test host; coordinate element access is
+  `GetValue<T>(i, j)` (there is no two-argument `GetData<T>`); and `BeOfValues` has no loop for
+  Half/Decimal, so assert those dtypes via `count_nonzero` or `GetValue<T>` instead. These surface
+  as test failures that look like implementation bugs and are not.
 - **The working tree may not be yours alone.** Another session writing into the same checkout will
   break your build from files you never touched. Don't repair or revert someone else's in-flight
   work: identify whose file it is (`git status`, timestamps), wait or work around it, and at commit
@@ -231,9 +308,12 @@ optimizations are, and which of ours apply.
   NaN-in-set-ops.
 - `references/new-ufunc.md` — the ~12-touchpoint checklist for a brand-new elementwise ufunc
   (the ATan2 archetype), loop-signature policy from `ufunc.types`, the two rejection error texts.
-- `references/audit.md` — auditing an existing op: coverage inventory, signature diff,
-  outside-the-envelope probes, finding classification (with the evidence table from the
-  five-function audit pass).
+- `references/audit.md` — auditing an existing op **and sweeping the one you just shipped**
+  ("do a pass over edge cases" lands here): coverage inventory, signature diff, the
+  outside-the-envelope probe dimensions (acceptance surface of polymorphic params, both sides of
+  size-selected branches, param combos the tier skips, extreme scalars, `null`), finding
+  classification, and the evidence tables from the five-function audit and the 13-function
+  post-ship sweep.
 - `references/optimizations.md` — the house optimization catalog (specialization, loop shaping,
   SIMD primitives, memory, algorithmic, bridging, semantic compliance, caching).
 - `references/variations.md` — the 51-variation input space a parity claim covers (layouts,
