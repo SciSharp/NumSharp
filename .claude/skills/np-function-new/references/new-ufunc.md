@@ -21,7 +21,7 @@ emit instead of ATan2's scalar-Math-call pattern.
 | 9 | `Backends/Iterators/NDExpr.cs` | Factory (`public static NDExpr X(NDExpr a, NDExpr b) => new BinaryNode(BinaryOp.X, a, b)`) — without this, `np.evaluate` fusion silently can't use the op |
 | 10 | `Backends/Iterators/NDExpr.Typing.cs` | The per-node result_type rule (e.g. `BinaryOp.X when intish => NDExprTypeRules.FloatTier(common)`) — must equal the ufunc's loop-dtype policy exactly |
 | 11 | oracle (Phase 4) | `gen_oracle.py` binary/unary tier job + `OpRegistry.cs` case — see the `oracle` skill |
-| 12 | benchmark (Phase 5) | C# `[Benchmark]` + NumPy twin — see the `benchmark` skill |
+| 12 | benchmark (Phase 6) | C# `[Benchmark]` + NumPy twin — see the `benchmark` skill |
 
 Unary ops mirror the same list through `UnaryOp` / the unary partials; the np API shape drops `x2`.
 

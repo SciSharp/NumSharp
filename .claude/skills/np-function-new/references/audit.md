@@ -7,7 +7,7 @@ The workflow's phases assume you are building; an audit reorders them. Two trigg
 - **Sweeping the op you just shipped** — "do a pass over edge cases", "find missing support". Skip
   §1 (you have the inventory in your head) and go straight to §3, whose whole subject is what the
   gates you just turned green structurally cannot see. This is high-yield precisely because it is
-  not a re-run of Phase 4: a sweep after a clean Phase-6 commit found a live `InvalidCastException`
+  not a re-run of Phase 4: a sweep after a clean Phase-7 commit found a live `InvalidCastException`
   on the second-most-common way to call the function.
 
 Validated by a real audit pass over five implemented functions (`sum`, `quantile`, `concatenate`,
@@ -35,42 +35,20 @@ Classify every difference:
   one-NumPy-shaped-overload convention; `quantile`/`concatenate` are the modern exemplars.
   Modernizing = add the NumPy-shaped overload; keep the old ones for source compat.
 
-## 3. Behavioral differential OUTSIDE the corpus envelope
+## 3. Run the Phase-5 sweep
 
-**Corpus-green is bounded by the corpus envelope.** The reduce tier's operands are ≤ 24 elements;
-NumPy's pairwise-summation blocking (block 128, unroll 8) never engages there, so accumulation-tree
-differences are structurally invisible to a green gate. Probed proof: `sum` of 1000× `0.1f` —
-NumPy `0x42c80002`, NumSharp `0x42c80004`, 1 ULP apart, tier green the whole time.
+The dimension catalog is Phase 5's and lives in **`edge-sweep.md`** — magnitude, structural,
+resource, parameter/`null`, acceptance-surface, adversarial-combination, call-form and
+threshold-crossing extremes, plus the two mechanical triage rules. Work it from there; auditing
+adds exactly one dimension of its own, because only a shipped implementation has a history:
 
-Audit probes therefore target what the tiers *cannot* see:
-
-- **Large-N accumulation** — cross the blocking thresholds (129, 1000, 100_003 elements), compare
-  BYTES not values.
-- **Param combos the tiers skip** — `dtype=` + `out=` together, `casting=` failures, `axis=()`.
-  Generalize this: enumerate your parameters' cross-product and find the cells the generator never
-  emits. The diag/tri corpus wrote every non-contiguous `fill_diagonal` destination with
-  `wrap=false`, so `wrap` × non-contiguous — 37 real combinations — had zero coverage until probed
-  by hand (all 37 turned out bit-exact, which is exactly the outcome that makes the gap invisible).
-- **The acceptance surface of polymorphic parameters.** A corpus serializes each argument to ONE
-  canonical form, so everything else the declared type admits is untested by construction. For an
-  `object`-typed value: scalars, `NDArray`, C# arrays (incl. rectangular 2-D), `IEnumerable`
-  collections, non-`IConvertible` scalars (`Half`, `Complex`), and `null`. This is where the
-  post-ship sweep found its bug — a scalar fast path had narrowed acceptance so `int[]` threw, with
-  every gate still green. Fix it at both ends: unit tests for the surface, plus widen the oracle to
-  pass a NON-canonical form so the general path stays gated.
-- **Both sides of a size- or layout-selected branch.** Any threshold splits the code in two and
-  every ordinary test sits on one side. Cross it deliberately, and prefer an invariant that holds
-  regardless of size — `tril(a, k) + triu(a, k+1) == a` catches a missing zero-fill on the large
-  path without needing a stored expectation.
-- **Extreme and degenerate scalar params** — `int.MinValue`/`int.MaxValue` for offsets that get
-  added to an index (do they saturate or wrap?), negative sizes, and the allocation ceiling
-  (`diag` of a 1-D with a huge `k` needs an `(n+|k|)²` matrix — report, don't overflow).
-- **`null` for every reference parameter.** NumPy's `None` often has real semantics (`fill_diagonal`
-  with `None` writes nan to a float array); decide deliberately whether to mirror it or reject, and
-  record the choice. Silently no-op'ing is the one answer that is always wrong.
-- **Call granularity for stateful APIs** — RNG: `normal(size=5)` must equal five `normal()` calls
-  (the gauss-cache carry; probed identical, seed 42 bytes exact).
-- **Error-order pairs** — two invalid things at once; which text fires first.
+- **The corpus envelope.** Green is bounded by what the tiers actually contain. The reduce tier's
+  operands are ≤ 24 elements, so NumPy's pairwise-summation blocking (block 128, unroll 8) never
+  engages and accumulation-tree differences cannot show. Probed proof: `sum` of 1000× `0.1f` —
+  NumPy `0x42c80002`, NumSharp `0x42c80004`, 1 ULP apart, tier green the whole time. Cross the
+  blocking thresholds (129, 1000, 100_003) and compare BYTES, not values. Then ask the same
+  question of every other tier your op rides: what is its size, layout and dtype envelope, and what
+  lives outside it?
 
 ## 4. Classify every finding — wins included
 
@@ -96,11 +74,11 @@ Audit probes therefore target what the tiers *cannot* see:
 
 ## Post-ship sweep evidence (diag/tri family, 13 functions)
 
-Run immediately after a green Phase 6 — 76 unit tests, FuzzMatrix 91/91, full suite 11,904 passing.
+Run immediately after a green Phase 7 — 76 unit tests, FuzzMatrix 91/91, full suite 11,904 passing.
 
 | Probe dimension | Result |
 |---|---|
-| Acceptance surface of `object val` | **BUG** — `int[]`/`long[]`/`double[]`/`List`/`int[,]` all threw `InvalidCastException`; a Phase-5 scalar fast path had narrowed acceptance. Invisible to every gate (all pass `val` as `NDArray`) |
+| Acceptance surface of `object val` | **BUG** — `int[]`/`long[]`/`double[]`/`List`/`int[,]` all threw `InvalidCastException`; a Phase-6 scalar fast path had narrowed acceptance. Invisible to every gate (all pass `val` as `NDArray`) |
 | `null` value argument | **Unspecified** — silently wrote nothing; NumPy's `None` yields nan (float) / TypeError (int). Now throws, documented as a deliberate divergence |
 | Size-selected branch (64 MiB) | **Untested half** — every test sat below the threshold; the large path had no coverage. Verified via `tril(k)+triu(k+1)==a` at 59 MB and 78 MB |
 | `wrap` × non-contiguous | 37 combinations uncovered by the tier; all 37 bit-exact once probed |

@@ -47,18 +47,18 @@ prove your design preserves it. Breaking NumSharp changes to reach NumPy parity 
 | 2 | Design | Integration decision: composition vs engine, kernel contract, file placement |
 | 3 | Implement | Builds clean; spot-parity probes agree |
 | 4 | Verify | Unit tests green + FuzzMatrix tier green (or divergence documented) |
-| 5 | Benchmark | NPY/NS measured and reported honestly; any optimization re-verified through Phase 4 |
-| 6 | Document + commit | CLAUDE.md API list updated; one extensive commit |
+| 5 | Sweep | Every edge/extreme dimension probed; every finding classified |
+| 6 | Benchmark | NPY/NS measured and reported honestly; any optimization re-verified through Phases 4–5 |
+| 7 | Document + commit | CLAUDE.md API list updated; one extensive commit |
 
-The map is a ratchet with one exception: **Phase 5 can un-gate Phase 4**, because optimizing means
-editing the implementation. Treat a Phase-5 code change as re-entering Phase 4, not as polish.
+The map is a ratchet with one exception: **Phase 6 can un-gate Phases 4–5**, because optimizing
+means editing the implementation. Treat a Phase-6 code change as re-entering verification, not as
+polish.
 
-**Audit mode** — two triggers, one playbook (`references/audit.md`): the op already exists
-("verify/modernize/why does np.foo differ"), or you just shipped it and are sweeping its edges
-("do a pass over edge cases", "find missing support"). Both reorder the phases — inventory existing
-coverage, signature-diff, probe OUTSIDE the corpus envelope, classify findings (wins included). The
-post-ship sweep is not a re-run of Phase 4; its entire subject is what the gates you just turned
-green cannot express.
+**Audit mode** — the op already exists ("verify/modernize/why does np.foo differ"), or you are
+sweeping one you shipped earlier ("do a pass over edge cases", "find missing support"). Same
+Phase-5 sweep, plus the two steps a stranger's code needs first: inventory existing coverage and
+signature-diff. Playbook: `references/audit.md`.
 
 ### Phase 1 — Probe (NumPy source + live behavior)
 
@@ -172,7 +172,47 @@ optimizations are, and which of ours apply.
 - **Exit DOD:** tier green. Real divergences get fixed; intended ones get documented in
   `MisalignedRegistry` — never silently excused.
 
-### Phase 5 — Benchmark
+### Phase 5 — Sweep the edges and the extremes
+
+Phases 1 and 4 share a blind spot, and it is structural rather than a matter of diligence. Phase 1
+probes the inputs you thought to ask about; Phase 4 proves parity over the forms the corpus can
+*serialize* — one canonical spelling per argument, operands in the tens of elements, shapes a
+generator finds natural. Neither is adversarial. This phase is: assume the implementation is wrong
+and go hunt the input that proves it. It is the cheapest phase per bug found, because it starts
+from the code you now understand and attacks it where nothing has looked yet.
+
+Work the dimension catalog in **`references/edge-sweep.md`** — magnitude and value extremes,
+structural extremes (rank, degenerate and interior-zero shapes), resource extremes (the
+`size × itemsize` overflow class), parameter extremes including `null`, the acceptance surface of
+every polymorphic parameter, adversarial combinations (aliasing, in-place, error-order pairs), and
+the call forms your tests never use. It carries the probe harness and the evidence from real
+sweeps.
+
+Two triage rules make most of this mechanical — neither needs a NumPy comparison to fire:
+
+- **A raw .NET framework exception at the API boundary is always a finding.**
+  `DivideByZeroException`, `NullReferenceException`, `IndexOutOfRangeException`,
+  `InvalidCastException`, `OverflowException` — NumPy never answers with these, so each one marks a
+  guard that was never written. Probed live: `np.zeros((0,3)).reshape(-1, 0)` throws
+  `DivideByZeroException` where NumPy raises
+  `ValueError: cannot reshape array of size 0 into shape (0)` — a degenerate dimension reaching a
+  divisor. You can spot these without knowing what the right answer is.
+- **Silent success where NumPy refuses is worse than a crash**, and it is the finding most likely
+  to be a memory-safety bug rather than a cosmetic one. Probed live:
+  `np.zeros((2^31, 2^31))` constructs an array whose `size` is right (2⁶²) but whose byte count
+  (2⁶⁵) cannot exist; element `[0,0]` reads 0 and the last element reads garbage — an
+  out-of-bounds read where NumPy raises `ValueError: array is too big; ...`. Contrast
+  `np.zeros(2^40)`, which correctly throws `OutOfMemoryException`: the guard exists for some paths
+  and not others, which is exactly the shape of bug only a sweep finds.
+
+**Exit criterion is not "no findings" — it is every dimension probed and every finding
+classified**: fixed now, pinned under `[OpenBugs]`, excused in `MisalignedRegistry`, or recorded as
+a deliberate divergence in the CLAUDE.md paragraph. Matches are worth writing down too: this
+session's sweep confirmed NumSharp reproduces NumPy's *silent integer wrap* exactly
+(`abs(i64.min)` stays negative, `sum` overflow wraps, `u64.max + 1 == 0`) — behavior that a
+well-meaning "fix" toward checked arithmetic would break, so the record protects it.
+
+### Phase 6 — Benchmark
 
 - Invoke the **`benchmark`** skill: add the C# `[Benchmark]` + NumPy twin, smoke them, report
   **NPY/NS** (`>1` = NumSharp faster; higher is better).
@@ -201,14 +241,15 @@ optimizations are, and which of ours apply.
   benchmark class and report them apart — it also keeps you honest about which sub-1.0 cells are
   dispatch overhead on a tiny op versus real algorithmic loss.
 
-**Phase 5 writes code, so it re-opens Phase 4.** This is the one place the phase map lies: every
+**Phase 6 writes code, so it re-opens Phases 4–5.** This is the one place the phase map lies: every
 other phase only adds to the last, but an optimization is a new **branch** — on size, on layout, on
 operand type — and Phase 4's gates only cover the forms the corpus can express. A real regression
 shipped this way: a scalar fast path added to `fill_diagonal` routed every non-`NDArray` value
 through an `IConvertible` conversion, so `int[]`, `List<int>` and `int[,]` began throwing
 `InvalidCastException` — while the unit tests, the tier, and the hand-written parity harness all
 stayed green, because every one of them passes that argument as an `NDArray`. After any change made
-for speed, re-run the unit tests AND the tier, then probe what they structurally cannot see:
+for speed, re-run the unit tests AND the tier, then re-sweep the dimensions your change touched
+(`references/edge-sweep.md`) — at minimum these two, which is where optimizations actually break:
 
 - **The acceptance surface of polymorphic parameters.** A corpus serializes each parameter to ONE
   canonical form, so the other accepted forms — C# arrays, collections, non-`IConvertible` scalars
@@ -220,7 +261,7 @@ for speed, re-run the unit tests AND the tier, then probe what they structurally
   already wrote exercises one half of the code. Add a case that crosses it — a large-allocation
   path that forgets to zero its output produces allocator garbage no small test can see.
 
-### Phase 6 — Document + commit
+### Phase 7 — Document + commit
 
 - Update `.claude/CLAUDE.md` → "Supported np.* APIs": add the name to its category list; if the
   function has notable semantics, add a per-function paragraph in the house pattern (see the
@@ -241,8 +282,11 @@ for speed, re-run the unit tests AND the tier, then probe what they structurally
 - [ ] Unit tests generated from real NumPy output
 - [ ] Oracle: op in `gen_oracle.py` + `OpRegistry.cs`, FuzzMatrix tier green — or the op returns no
       array at all and the exemption is recorded in CLAUDE.md
+- [ ] Sweep run (`references/edge-sweep.md`): magnitude, structural, resource, parameter, acceptance
+      surface, adversarial-combination and call-form dimensions probed — every finding classified,
+      no raw .NET exception left reachable, no silent success where NumPy refuses
 - [ ] Benchmark pair added; NPY/NS reported; every <1.0 cell explained
-- [ ] Every Phase-5 optimization re-verified: unit tests + tier re-run, acceptance surface of each
+- [ ] Every Phase-6 optimization re-verified: unit tests + tier re-run, acceptance surface of each
       polymorphic parameter probed, both sides of any size/layout-selected branch tested
 - [ ] CLAUDE.md API list updated; extensive commit
 
@@ -308,15 +352,15 @@ for speed, re-run the unit tests AND the tier, then probe what they structurally
   NaN-in-set-ops.
 - `references/new-ufunc.md` — the ~12-touchpoint checklist for a brand-new elementwise ufunc
   (the ATan2 archetype), loop-signature policy from `ufunc.types`, the two rejection error texts.
-- `references/audit.md` — auditing an existing op **and sweeping the one you just shipped**
-  ("do a pass over edge cases" lands here): coverage inventory, signature diff, the
-  outside-the-envelope probe dimensions (acceptance surface of polymorphic params, both sides of
-  size-selected branches, param combos the tier skips, extreme scalars, `null`), finding
-  classification, and the evidence tables from the five-function audit and the 13-function
-  post-ship sweep.
+- `references/edge-sweep.md` — **Phase 5's dimension catalog**: magnitude/value, structural,
+  resource, parameter, acceptance-surface, adversarial-combination and call-form extremes; the two
+  mechanical triage rules; the reusable probe harness; the evidence from real sweeps.
+- `references/audit.md` — audit mode (the op already exists, or you shipped it a while ago): the
+  coverage inventory and signature-diff steps that precede the sweep, finding classification, and
+  the evidence tables from the five-function audit and the 13-function post-ship sweep.
 - `references/optimizations.md` — the house optimization catalog (specialization, loop shaping,
   SIMD primitives, memory, algorithmic, bridging, semantic compliance, caching).
 - `references/variations.md` — the 51-variation input space a parity claim covers (layouts,
   pairwise paths, operand flags, iteration flags, composite paths).
-- Skills: **`oracle`** (the FuzzMatrix gate — Phase 4), **`benchmark`** (the perf harness — Phase 5).
+- Skills: **`oracle`** (the FuzzMatrix gate — Phase 4), **`benchmark`** (the perf harness — Phase 6).
 - Project `.claude/CLAUDE.md` — DOD, architecture, kernel Q&A, supported-API catalog.
