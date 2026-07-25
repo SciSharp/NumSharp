@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -65,7 +65,7 @@ namespace NumSharp.Backends
         /// stack dims — the matrix dims are left intact — then runs the 2-D kernel per batch element.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        protected static NDArray BatchedMatmul(NDArray lhs, NDArray rhs)
+        protected virtual NDArray BatchedMatmul(NDArray lhs, NDArray rhs)
         {
             long n = lhs.shape[lhs.ndim - 2];
             long k = lhs.shape[lhs.ndim - 1];

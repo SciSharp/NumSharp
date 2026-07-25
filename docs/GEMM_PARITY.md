@@ -1,11 +1,13 @@
-# `np.parity_matmul` — byte-identical `np.dot` / `np.matmul`
+# `NumSharp.Interop.BLAS` — byte-identical `np.dot` / `np.matmul`
 
-> **✅ IMPLEMENTED (2026-07-25).** Opt-in backend in
-> `src/NumSharp.Core/Backends/Kernels/Blas/` (`CBlasNative`, `BlasParity{,.Matmul,.Dot,.Entry}`),
-> public switch `np.parity_matmul(...)` in `APIs/np.parity_matmul.cs`, hooks in
-> `DefaultEngine.Dot` and `DefaultEngine.MultiplyMatrix`, gate
+> **✅ IMPLEMENTED (2026-07-25).** Optional package `src/NumSharp.Interop.BLAS/`
+> (`BlasEngine : DefaultEngine`, `Blas`, `CBlasNative`, `BlasParity{,.Matmul,.Dot,.Entry}`),
+> installed through the one seam Core exposes (`BackendFactory.Default`), gate
 > `FuzzCorpusTests.MatmulParity` over the 342-case `matmul_parity` corpus tier.
-> Measured: **342/342 bit-exact with the backend on, 294/342 divergent with it off.**
+> Measured: **342/342 bit-exact with the engine installed, 294/342 divergent without it.**
+>
+> **NumSharp.Core stays 100 % managed C#** — it contains no BLAS code, no P/Invoke and no native
+> dependency. With this package absent every matrix product is NumSharp's own SIMD GEMM.
 
 Status date: 2026-07-25 · Branch: `journey3` · Issue:
 [SciSharp/NumSharp#626](https://github.com/SciSharp/NumSharp/issues/626)
@@ -48,16 +50,23 @@ wheel or CPU change.
 
 ## 3. What was built (strategy S-A)
 
-An **opt-in** backend that P/Invokes the *very same BLAS binary* the target NumPy calls, driven by
+An **optional package** that P/Invokes the *very same BLAS binary* the target NumPy calls, driven by
 a **route-for-route port of NumPy's two matrix-product dispatchers**. Same binary + same route +
 same flags ⇒ same bits by construction.
 
+```powershell
+dotnet add package NumSharp.Interop.BLAS
+```
+
 ```csharp
-np.parity_matmul(true);                                  // auto-discover numpy's OpenBLAS
-np.parity_matmul(true, @"…\numpy.libs\libscipy_openblas64_-74a4….dll", threads: 1);
-np.parity_matmul(false);                                 // back to NumSharp's SIMD GEMM (default)
-np.parity_matmul_enabled;                                // bool
-np.parity_matmul_info();                                 // path + symbol scheme + int width + threads + build string
+using NumSharp.Interop.Blas;
+
+// Referencing the package IS the opt-in: a [ModuleInitializer] installs the engine if a CBLAS
+// library can be found, and silently does nothing if one cannot.
+Blas.Enable(@"…\numpy.libs\libscipy_openblas64_-74a4….dll", threads: 1);  // pin, for byte parity
+Blas.Enabled;                                            // bool
+Blas.Info;                                               // path + symbol scheme + int width + threads + build string
+Blas.Disable();                                          // back to NumSharp's managed SIMD GEMM
 ```
 
 Discovery order: explicit path/directory → `NUMSHARP_PARITY_BLAS` → the `numpy.libs` folder of any
@@ -68,13 +77,19 @@ a stock LP64 `cblas_sgemm` is also bound, with the integer width marshalled per 
 
 ### Nothing else changes
 
-NumSharp's GEBP/FMA SIMD GEMM is untouched and remains the default. The two hooks are single
-`if (…TryX(…)) return …;` lines that only fire when the switch is on:
+NumSharp's GEBP/FMA SIMD GEMM is untouched and remains the default. `BlasEngine` subclasses
+`DefaultEngine` and overrides exactly **two** members; every other op, dtype, kernel and iterator is
+the managed code it inherits, and anything the port cannot service falls straight through to `base`:
 
-| Hook | Mirrors |
+| Override | Mirrors |
 |---|---|
-| `DefaultEngine.Dot` (top) | `PyArray_MatrixProduct2` → `cblas_matrixproduct` (ndim ≤ 2) + the `dotfunc` iterator tail (ndim > 2) |
-| `DefaultEngine.MultiplyMatrix` (before the SIMD paths) | `@TYPE@_matmul`, the gufunc behind `np.matmul` and `@` — also every batch element of a stacked matmul |
+| `Dot` | `PyArray_MatrixProduct2` → `cblas_matrixproduct` (ndim ≤ 2) + the `dotfunc` iterator tail (ndim > 2) |
+| `MultiplyMatrix` | `@TYPE@_matmul`, the gufunc behind `np.matmul` and `@` — also every batch element of a stacked matmul |
+
+The only change inside Core was to open that seam: `MultiplyMatrix` and `BatchedMatmul` went from
+`protected static` to `protected virtual`, and `BackendFactory` gained the settable `Default`
+engine. **An `NDArray` binds its engine at construction**, so install the package's engine before
+creating the arrays you want it to compute with.
 
 ## 4. Why BOTH dispatchers had to be ported
 
@@ -112,7 +127,7 @@ vacuous (an element stride is aligned by construction).
 N-D `dot`; mixed `float32 × float64` (cast to the common type first, exactly as NumPy's
 `PyArray_FromAny` does); zero-sized extents.
 
-**Not covered (silently keeps the native path):** every other dtype. Integer and bool products are
+**Not covered (falls through to the managed kernel):** every other dtype. Integer and bool products are
 bit-exact by construction anyway — modular integer addition is associative, so summation order
 cannot change the result. `Complex` (`cblas_zgemm`) and `Half` are the only real gaps.
 
@@ -121,7 +136,7 @@ cannot change the result. `Complex` (`cblas_zgemm`) and `Half` are the only real
 Acceptance harness: 110 hand-built cases (NumPy saves backing arrays + a view recipe both stacks
 apply; NumSharp replays and bit-compares) and the 342-case committed corpus tier.
 
-| Gate | Backend off | Backend on |
+| Gate | Managed engine | `BlasEngine` |
 |---|---|---|
 | 110-case acceptance harness | 20 bit-exact | **110 bit-exact** |
 | `matmul_parity` corpus tier (342) | 294 divergent | **342 bit-exact** |
@@ -143,10 +158,11 @@ place a 50-step float32 MLP train produces byte-identical `w1`/`w2`/`b1`/`b2`.
 | 1024³ | f64 | 134.5 | **33.8** | 32.3 |
 | 2048³ | f64 | 3860 | **292.6** | 310.6 |
 
-The parity path is 1.7×–13× *faster* than NumSharp's own GEMM (it is OpenBLAS, after all), so
-turning it on costs nothing but a native dependency. It stays opt-in regardless: NumSharp ships no
-native binaries, and a parity backend that silently loaded whatever BLAS it found would make
-results depend on the machine's Python installation.
+The BLAS path is 1.7×–13× *faster* than NumSharp's own GEMM (it is OpenBLAS, after all), so
+installing the package costs nothing but a native dependency — which is exactly why it is a separate
+package rather than part of Core. NumSharp ships no native binaries: the package binds whatever
+BLAS the consumer already has, because bundling one would make results depend on which copy won the
+loader race, and parity is a claim about a specific binary.
 
 ## 7. The host pin
 
@@ -165,9 +181,15 @@ dotnet build                                     # copies the corpus to the test
 dotnet test --filter "FullyQualifiedName~FuzzCorpusTests.MatmulParity"
 ```
 
+The test assembly suppresses the package's module-load auto-install
+(`Fuzz/BlasEngineAutoInstallGuard.cs` sets `NUMSHARP_BLAS_AUTOINSTALL=0`) and enables the engine
+per-test instead: every other tier asserts NumSharp's OWN kernels, and an install triggered at
+whatever moment the first parity type is touched would silently change which engine the tests
+around it used.
+
 ## 8. Traps
 
-- **The thread count is part of the answer.** `parity_matmul(..., threads: n)` is not a
+- **The thread count is part of the answer.** `Blas.Enable(..., threads: n)` is not a
   performance knob, it is a correctness knob. The gate pins it to the value recorded at generation
   time so a host whose default differs still matches.
 - **`a @ a.T` is not a gemm.** Both dispatchers detect the shared data pointer and call `?syrk`,

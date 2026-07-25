@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <AssemblyName>NumSharp.Interop.BLAS</AssemblyName>
+    <RootNamespace>NumSharp.Interop.Blas</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+
+    <!-- NuGet package (co-versioned with NumSharp) -->
+    <PackageId>NumSharp.Interop.BLAS</PackageId>
+    <Version>0.60.0</Version>
+    <Authors>SciSharp STACK</Authors>
+    <Product>NumSharp</Product>
+    <Description>Optional external-CBLAS matrix-product backend for NumSharp. Reference the package and np.dot / np.matmul compute float32/float64 products through a CBLAS library (OpenBLAS, MKL, Accelerate, reference CBLAS) instead of NumSharp's managed SIMD GEMM — faster on large matrices, and BIT-IDENTICAL to a NumPy that calls the same binary, via a route-for-route port of NumPy's two matrix-product dispatchers. NumSharp.Core itself stays 100% managed C# with no native dependency: with this package absent, every kernel is NumSharp's own.</Description>
+    <PackageTags>NumSharp;NumPy;BLAS;OpenBLAS;cblas;gemm;matmul;interop;scientific-computing;bit-exact</PackageTags>
+    <PackageProjectUrl>https://github.com/SciSharp/NumSharp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageOutputPath>../../packages</PackageOutputPath>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- In-repo: ProjectReference (packs as a NuGet dependency on "NumSharp" $(Version)).
+         NO native asset is shipped: the BLAS binary is whatever the consumer already has (their
+         numpy wheel's OpenBLAS, a system libblas, MKL, ...). Shipping one would defeat the point —
+         parity is a claim about the SPECIFIC binary the reference stack calls, and bundling a
+         second copy would only make results depend on which one won the loader race. -->
+    <ProjectReference Include="../NumSharp.Core/NumSharp.Core.csproj" />
+  </ItemGroup>
+
+</Project>

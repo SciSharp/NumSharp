@@ -1,9 +1,11 @@
 using System;
+using NumSharp;
+using NumSharp.Backends;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace NumSharp.Backends.Kernels.Blas
+namespace NumSharp.Interop.Blas
 {
     /// <summary>Row/column storage order — mirrors <c>enum CBLAS_ORDER</c> in npy_cblas.h.</summary>
     internal enum CBlasOrder

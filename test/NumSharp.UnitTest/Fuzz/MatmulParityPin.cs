@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using NumSharp;
+using NumSharp.Interop.Blas;
 
 namespace NumSharp.UnitTest.Fuzz
 {
@@ -52,7 +53,7 @@ namespace NumSharp.UnitTest.Fuzz
         {
             try
             {
-                np.parity_matmul(true, threads: Blas_Threads > 0 ? Blas_Threads : 0);
+                Blas.Enable(threads: Blas_Threads > 0 ? Blas_Threads : 0);
             }
             catch (Exception e)
             {
@@ -62,10 +63,10 @@ namespace NumSharp.UnitTest.Fuzz
                        "point NUMSHARP_PARITY_BLAS at its BLAS to run this gate.";
             }
 
-            var info = np.parity_matmul_info() ?? string.Empty;
+            var info = Blas.Info ?? string.Empty;
             if (!string.IsNullOrEmpty(Blas_Library) && !info.Contains(Blas_Library, StringComparison.OrdinalIgnoreCase))
             {
-                np.parity_matmul(false);
+                Blas.Disable();
                 return $"matmul_parity is host-pinned to '{Blas_Library}' (numpy {Numpy}); this host " +
                        $"loaded a different BLAS: {info}. Different binaries round differently — " +
                        "regenerate the corpus here (python test/oracle/gen_oracle.py matmul_parity) " +
@@ -74,7 +75,7 @@ namespace NumSharp.UnitTest.Fuzz
 
             if (!string.IsNullOrEmpty(Blas_Corename) && !info.Contains(Blas_Corename, StringComparison.OrdinalIgnoreCase))
             {
-                np.parity_matmul(false);
+                Blas.Disable();
                 return $"matmul_parity is host-pinned to the '{Blas_Corename}' OpenBLAS kernel " +
                        $"({Blas_Config}); this CPU dispatched to a different one: {info}. " +
                        "DYNAMIC_ARCH picks a different accumulator layout per micro-architecture.";

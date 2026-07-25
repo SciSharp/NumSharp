@@ -225,6 +225,16 @@ namespace NumSharp.UnitTest.Fuzz
                 case "matmul": return np.matmul(ops[0], ops[1]);
                 case "dot": return np.dot(ops[0], ops[1]);
                 case "outer": return np.outer(ops[0], ops[1]);
+
+                // A matrix times its OWN transpose — the syrk shortcut both of NumPy's matrix
+                // -product dispatchers take when the two operands share a data pointer. The
+                // corpus gives every operand its own buffer, so the self-product cannot be
+                // expressed as two operands: the op name carries the transpose and the product
+                // is formed here from the single stored operand (matmul_parity tier).
+                case "dot_aat": return np.dot(ops[0], ops[0].T);
+                case "dot_ata": return np.dot(ops[0].T, ops[0]);
+                case "matmul_aat": return np.matmul(ops[0], ops[0].T);
+                case "matmul_ata": return np.matmul(ops[0].T, ops[0]);
                 case "trace": return np.trace(ops[0]);                              // Group A
                 case "diagonal": return np.diagonal(ops[0]);                        // Group A
 

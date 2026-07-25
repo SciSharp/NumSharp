@@ -75,6 +75,51 @@ np                Static API class (like `import numpy as np`)
 └── np.*          Functions in Creation/, Math/, Statistics/, Logic/, etc.
 ```
 
+### NumSharp.Core is 100 % managed C# — optional packages are the only native path
+
+`NumSharp.Core` has **no native dependency and no P/Invoke**: every kernel is its own managed code,
+and that is the default a user gets. An out-of-box backend arrives ONLY as a separate NuGet package
+that **subclasses `DefaultEngine`**, overrides the operations it accelerates, and installs itself
+into the one seam Core exposes for it:
+
+```csharp
+public static TensorEngine BackendFactory.Default { get; set; }   // null = the built-in managed engine
+```
+
+`BackendFactory.GetEngine()` returns `Default ?? DefaultEngine`, so a package sets that property
+(typically from a `[ModuleInitializer]`, making the package reference itself the opt-in) and every
+`NDArray` created *afterwards* resolves to the subclass. **An `NDArray` binds its engine at
+construction** — install the backend before creating arrays, or earlier arrays keep the managed one.
+Whatever a subclass does not override stays NumSharp's own code, so an optional package can only
+change *how* an op is computed, never *whether* it can be.
+
+| Package | Engine | Overrides | Why |
+|---------|--------|-----------|-----|
+| `NumSharp.Interop.BLAS` (`src/NumSharp.Interop.BLAS/`) | `BlasEngine : DefaultEngine` | `Dot`, `MultiplyMatrix` | float32/float64 matrix products through an external CBLAS (OpenBLAS/MKL/…) — faster on large matrices, and **byte-identical to a NumPy that calls the same binary**. Ships no native asset: it binds whatever BLAS the consumer already has. See below and `docs/GEMM_PARITY.md`. |
+
+**`NumSharp.Interop.BLAS`** exists because no portable algorithm can match NumPy's float matrix
+products: for f32/f64 mat@mat NumPy **always** calls cblas (since gh-23588 it copies non-blasable
+operands into a temp rather than take its own portable loop), and scipy-openblas' `sgemm` uses an
+arch-specific **multi-accumulator** scheme matching neither a sequential mul+add chain nor a
+sequential FMA chain — NumSharp's managed GEMM differed on **94.5 %** of a `(128,784)@(784,128)` f32
+product (max ~976 K ULP) and **45 %** at K=10, which compounds until 50 Adam steps spread it to 73 %
+of a weight matrix. The engine is a route-for-route port of **both** NumPy dispatchers, because they
+are different C code and **disagree** when an operand is not blasable (a stride-2 matrix @ vector:
+`np.dot` takes gemv-on-a-copy, `np.matmul` the portable loop — 278/300 elements differ): `Dot` →
+`cblas_matrixproduct` + the N-D `dotfunc` tail (which is NOT gemm), `MultiplyMatrix` →
+`@TYPE@_matmul`'s five routes incl. the `a @ a.T` **syrk** shortcut and NumPy's copy/transpose
+rules. Strides are ported in ELEMENTS (NumPy's are bytes — same logic with `itemsize == 1`). Scope
+is Single/Double; every other dtype falls through to the managed kernel (integer products are
+bit-exact by construction — modular addition is associative). **Three load-bearing details:** the
+result bits depend on the BLAS **thread count** (1/2/4/24 threads give four different answers), a
+**named library is binding** (`Blas.Enable(path)` / `NUMSHARP_PARITY_BLAS` is never silently
+substituted — parity is a claim about one binary), and the BLAS path is *faster* than the managed
+GEMM anyway (1.7–13×; 2048³ f64 293 ms vs 3860 ms). API: `Blas.Enable(library, threads)` /
+`Blas.Disable()` / `Blas.Enabled` / `Blas.Info`; `NUMSHARP_BLAS_AUTOINSTALL=0` opts out of the
+module-load install. Gate: the **host-pinned** `matmul_parity` corpus tier (342 cases — 342
+bit-exact with the engine, 294 divergent without it) which goes `Inconclusive`, never red, on a host
+that cannot load the pinned library.
+
 ## Key Design Decisions
 
 | Decision | Rationale |
@@ -774,9 +819,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 `NDArray.ToString()` is a **byte-exact port of NumPy 2.4.2's array printing** (`numpy/_core/arrayprint.py` + `dragon4.c`): `ToString()` / `ToString(false)` → `np.array_str` (`[0 1 2]`, the `str()` form), `ToString(true)` → `np.array_repr` (`array([0, 1, 2], dtype=…)`, the `repr()` form). Covers decimal-point float alignment, the maxprec/unique/fixed floatmodes, exp-format cutoffs (per-dtype, native-precision ratio), nan/inf fields, complex, summarization at `threshold` (with `…` and edgeitems), line wrapping at `linewidth`, the 0-d `str`-vs-`repr` asymmetry (`5.0` vs `5.`), and repr dtype/shape suffixes. Float digit generation leans on .NET's shortest-round-trip `ToString("R")` (== Dragon4 unique) but routes **all rounding** through `ToString("F"|"E"+precision)` (rounds the true binary value, IEEE half-to-even) — never the shortest string (the latter diverges ~50 % on adversarial ties). NumSharp's `Char` dtype uses string rendering (no NumPy equivalent). Validated against NumPy 2.4.2 across ~18 000 fuzz cases.
 
 ### Other
-`around`, `asscalar`, `copyto`, `round_`, `size`, `multithreading` (NumSharp extension — `np.multithreading(enabled, max_threads)` opt-in threaded kernels), `parity_matmul` (NumSharp extension — opt-in **byte-identical** `np.dot`/`np.matmul`)
-
-`np.parity_matmul(enabled, library = null, threads = 0)` makes `np.dot` / `np.matmul` reproduce NumPy's float32/float64 results **BIT-FOR-BIT**, by P/Invoking the *same CBLAS binary NumPy calls* through a route-for-route port of NumPy's two matrix-product dispatchers. **Off by default; NumSharp's SIMD GEMM is untouched and stays the fast path.** It exists because no portable algorithm can match NumPy here: for f32/f64 mat@mat NumPy always calls cblas (since gh-23588 it copies non-blasable operands into a temp rather than take the portable loop), and scipy-openblas' `sgemm` uses an arch-specific **multi-accumulator** scheme matching neither a sequential mul+add chain nor a sequential FMA chain — NumSharp's own GEMM differed on **94.5 %** of a `(128,784)@(784,128)` f32 product (max ~976 K ULP) and **45 %** at K=10. Both dispatchers are mirrored because they are different C code and **disagree** when an operand is not blasable (a stride-2 matrix @ vector: `np.dot` takes gemv-on-a-copy, `np.matmul` the portable loop — 278/300 elements differ): `Dot` → `cblas_matrixproduct` + the N-D `dotfunc` tail (which is NOT gemm), `MultiplyMatrix` → `@TYPE@_matmul`'s five routes incl. the `a @ a.T` **syrk** shortcut and NumPy's copy/transpose rules. Strides are ported in ELEMENTS (NumPy's are bytes — same logic with `itemsize == 1`). Scope is Single/Double; every other dtype keeps the native path (integer products are bit-exact by construction — modular addition is associative). **Three load-bearing details:** the result bits depend on the BLAS **thread count** (1/2/4/24 threads give four different answers), a **named library is binding** (an explicit path or `NUMSHARP_PARITY_BLAS` is never silently substituted — parity is a claim about one binary), and the parity path is *faster* than the native GEMM anyway (1.7–13×; 2048³ f64 293 ms vs 3860 ms). Gate: the **host-pinned** `matmul_parity` corpus tier (342 cases — 342 bit-exact on, 294 divergent off) which goes `Inconclusive`, never red, on a host that cannot load the pinned library. See `docs/GEMM_PARITY.md`, `Backends/Kernels/Blas/`, issue #626.
+`around`, `asscalar`, `copyto`, `round_`, `size`, `multithreading` (NumSharp extension — `np.multithreading(enabled, max_threads)` opt-in threaded kernels)
 
 ### Operators
 - Arithmetic: `+`, `-`, `*`, `/`, `%`, unary `-`

@@ -1,28 +1,35 @@
 using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
+using NumSharp.Backends;
+using NumSharp.Interop.Blas;
 
 namespace NumSharp.UnitTest.Backends
 {
     /// <summary>
-    ///     The <see cref="np.parity_matmul(bool,string,int)"/> switch itself — the contract around
-    ///     the backend, not the bits. The bits are gated by the host-pinned
-    ///     <c>matmul_parity</c> corpus tier (<c>FuzzCorpusTests.MatmulParity</c>); everything here
-    ///     must hold on any machine, and the few tests that need a real BLAS say so and go
-    ///     Inconclusive without one.
+    ///     The contract around the optional <c>NumSharp.Interop.BLAS</c> engine — that installing it
+    ///     is opt-in, that it degrades to the built-in managed engine for everything it does not
+    ///     serve, and that a named library is never silently substituted. The BITS are gated
+    ///     separately by the host-pinned <c>matmul_parity</c> corpus tier
+    ///     (<c>FuzzCorpusTests.MatmulParity</c>); everything here must hold on any machine, and the
+    ///     tests that need a real BLAS say so and go Inconclusive without one.
     /// </summary>
+    /// <remarks>
+    ///     Order matters in every test that computes: an <see cref="NDArray"/> resolves its engine
+    ///     when it is CONSTRUCTED, so operands must be built after the engine is installed.
+    /// </remarks>
     [TestClass]
     public class MatmulParityBackendTests
     {
         [TestCleanup]
-        public void Cleanup() => np.parity_matmul(false);
+        public void Cleanup() => Blas.Disable();
 
         /// <summary>A BLAS-less machine must still be able to run these; skip loudly if so.</summary>
         private static void RequireBlas()
         {
             try
             {
-                np.parity_matmul(true);
+                Blas.Enable();
             }
             catch (Exception e)
             {
@@ -31,19 +38,46 @@ namespace NumSharp.UnitTest.Backends
         }
 
         [TestMethod]
-        public void Disabled_ByDefault()
+        public void NotInstalled_ByDefault_TheEngineIsTheManagedOne()
         {
-            // Nothing in the library may turn this on implicitly — the native GEMM is the default.
-            np.parity_matmul(false);
-            Assert.IsFalse(np.parity_matmul_enabled);
+            // NumSharp.Core is 100% managed: nothing may swap the engine implicitly. (The test
+            // assembly suppresses the package's module-load auto-install — see
+            // BlasEngineAutoInstallGuard — precisely so this stays observable.)
+            Blas.Disable();
+            Assert.IsFalse(Blas.Enabled);
+            Assert.IsNull(BackendFactory.Default);
+            Assert.IsInstanceOfType(BackendFactory.GetEngine(), typeof(DefaultEngine));
+            Assert.IsNotInstanceOfType(BackendFactory.GetEngine(), typeof(BlasEngine));
         }
 
         [TestMethod]
-        public void Disable_IsAlwaysSafe_EvenWithNoLibraryLoaded()
+        public void Enable_InstallsASubclassOfTheManagedEngine()
         {
-            np.parity_matmul(false);
-            np.parity_matmul(false);
-            Assert.IsFalse(np.parity_matmul_enabled);
+            RequireBlas();
+            Assert.IsTrue(Blas.Enabled);
+            var engine = BackendFactory.GetEngine();
+            Assert.IsInstanceOfType(engine, typeof(BlasEngine));
+            // The point of the subclass: it IS the default engine, so every op it does not override
+            // is still NumSharp's own managed code.
+            Assert.IsInstanceOfType(engine, typeof(DefaultEngine));
+        }
+
+        [TestMethod]
+        public void Disable_RestoresTheManagedEngine()
+        {
+            RequireBlas();
+            Blas.Disable();
+            Assert.IsFalse(Blas.Enabled);
+            Assert.IsNull(BackendFactory.Default);
+            Assert.IsNotInstanceOfType(BackendFactory.GetEngine(), typeof(BlasEngine));
+        }
+
+        [TestMethod]
+        public void Disable_IsAlwaysSafe_EvenWithNothingInstalled()
+        {
+            Blas.Disable();
+            Blas.Disable();
+            Assert.IsFalse(Blas.Enabled);
         }
 
         [TestMethod]
@@ -53,9 +87,9 @@ namespace NumSharp.UnitTest.Backends
             // loaded must fail — even on a machine where auto-discovery would happily find NumPy's
             // OpenBLAS and produce confidently wrong bits.
             var ex = Assert.ThrowsException<DllNotFoundException>(
-                () => np.parity_matmul(true, "K:/definitely/not/a/blas/here.dll"));
+                () => Blas.Enable("K:/definitely/not/a/blas/here.dll"));
             StringAssert.Contains(ex.Message, "no other one is substituted");
-            Assert.IsFalse(np.parity_matmul_enabled, "a failed load must leave the switch off");
+            Assert.IsFalse(Blas.Enabled, "a failed load must leave the engine uninstalled");
         }
 
         [TestMethod]
@@ -63,56 +97,60 @@ namespace NumSharp.UnitTest.Backends
         {
             // The running test assembly is a perfectly loadable PE that exports no cblas_sgemm.
             var self = typeof(MatmulParityBackendTests).Assembly.Location;
-            Assert.ThrowsException<EntryPointNotFoundException>(() => np.parity_matmul(true, self));
-            Assert.IsFalse(np.parity_matmul_enabled);
+            Assert.ThrowsException<EntryPointNotFoundException>(() => Blas.Enable(self));
+            Assert.IsFalse(Blas.Enabled);
         }
 
         [TestMethod]
-        public void Enable_ReportsTheLoadedLibrary()
+        public void TryEnable_ReportsFailureInsteadOfThrowing()
+        {
+            // The module-load path: referencing the package must never break an app that has no
+            // native BLAS anywhere.
+            Assert.IsFalse(Blas.TryEnable("K:/definitely/not/a/blas/here.dll"));
+            Assert.IsFalse(Blas.Enabled);
+        }
+
+        [TestMethod]
+        public void Info_DescribesTheLoadedLibrary_OrIsNull()
         {
             RequireBlas();
-            Assert.IsTrue(np.parity_matmul_enabled);
-            var info = np.parity_matmul_info();
+            var info = Blas.Info;
             Assert.IsNotNull(info);
             StringAssert.Contains(info, "symbols");
             StringAssert.Contains(info, "threads");
         }
 
         [TestMethod]
-        public void Info_IsNull_BeforeAnyLibraryIsLoaded_OrDescribesOne()
-        {
-            // Once a library is loaded it stays loaded (unloading a BLAS mid-process is not worth
-            // the risk), so this asserts the only invariant that always holds.
-            var info = np.parity_matmul_info();
-            Assert.IsTrue(info == null || info.Contains("symbols"));
-        }
-
-        [TestMethod]
-        public void ParityPath_ProducesTheSameSHAPE_AndDTYPE_AsTheNativePath()
+        public void ParityEngine_ProducesTheSameSHAPE_AndDTYPE_AsTheManagedOne()
         {
             RequireBlas();
             var a = np.arange(12).astype(NPTypeCode.Single).reshape(3, 4);
             var b = np.arange(20).astype(NPTypeCode.Single).reshape(4, 5);
-
             var parity = np.dot(a, b);
-            np.parity_matmul(false);
-            var native = np.dot(a, b);
+
+            Blas.Disable();
+            var na = np.arange(12).astype(NPTypeCode.Single).reshape(3, 4);
+            var nb = np.arange(20).astype(NPTypeCode.Single).reshape(4, 5);
+            var native = np.dot(na, nb);
 
             CollectionAssert.AreEqual(native.shape, parity.shape);
             Assert.AreEqual(native.typecode, parity.typecode);
         }
 
         [TestMethod]
-        public void IntegerProducts_KeepTheNativePath_AndAreUnaffected()
+        public void IntegerProducts_FallThroughToTheManagedKernel()
         {
             // Integer addition is associative even when it wraps, so summation order cannot change
-            // an integer matrix product — the parity backend deliberately does not claim these.
+            // an integer matrix product — the BLAS engine deliberately does not claim these and
+            // must hand them straight back to the base implementation.
+            Blas.Disable();
+            var na = np.arange(6).astype(NPTypeCode.Int32).reshape(2, 3);
+            var nb = np.arange(6).astype(NPTypeCode.Int32).reshape(3, 2);
+            var native = np.matmul(na, nb);
+
+            RequireBlas();
             var a = np.arange(6).astype(NPTypeCode.Int32).reshape(2, 3);
             var b = np.arange(6).astype(NPTypeCode.Int32).reshape(3, 2);
-
-            np.parity_matmul(false);
-            var native = np.matmul(a, b);
-            RequireBlas();
             var parity = np.matmul(a, b);
 
             Assert.AreEqual(NPTypeCode.Int32, parity.typecode);
@@ -120,7 +158,7 @@ namespace NumSharp.UnitTest.Backends
         }
 
         [TestMethod]
-        public void EveryShapeRoute_RoundTripsThroughTheParityBackend()
+        public void EveryShapeRoute_RoundTripsThroughTheParityEngine()
         {
             // Values are not asserted here (that is the corpus tier's job, pinned to a host) — this
             // asserts the port never throws or mis-shapes on any of the routes it dispatches:
@@ -176,11 +214,24 @@ namespace NumSharp.UnitTest.Backends
         }
 
         [TestMethod]
+        public void EveryOtherOperation_StaysTheManagedImplementation()
+        {
+            // The engine overrides exactly two members; installing it must not change anything else.
+            RequireBlas();
+            var a = np.arange(6).astype(NPTypeCode.Double).reshape(2, 3);
+            Assert.AreEqual(15.0, (double)np.sum(a));
+            Assert.AreEqual(2.0, (double)np.max(a[0]));
+            CollectionAssert.AreEqual(new long[] { 3, 2 }, np.transpose(a).shape);
+            CollectionAssert.AreEqual(new long[] { 2, 3 }, (a + a).shape);
+            Assert.AreEqual(NPTypeCode.Double, np.sqrt(a).typecode);
+        }
+
+        [TestMethod]
         public void ThreadPin_IsReportedBack()
         {
             RequireBlas();
-            np.parity_matmul(true, threads: 1);
-            var info = np.parity_matmul_info();
+            Blas.Enable(threads: 1);
+            var info = Blas.Info;
             // OpenBLAS reports the count back; a reference CBLAS has no such entry point (-1).
             Assert.IsTrue(info.Contains("threads 1") || info.Contains("threads -1"), info);
         }

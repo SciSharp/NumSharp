@@ -21,14 +21,6 @@ namespace NumSharp.Backends
             //If a is an N - D array and b is a 1 - D array, it is a sum product over the last axis of a and b.
             //If a is an N - D array and b is an M - D array(where M >= 2), it is a sum product over the last axis of a and the second-to - last axis of b:
             //  dot(a, b)[i, j, k, m] = sum(a[i, j,:] * b[k,:, m])
-            // Opt-in byte-parity backend (np.parity_matmul). np.dot has its OWN dispatcher in NumPy
-            // (cblas_matrixproduct + the dotfunc iterator tail), which is not matmul's — the two
-            // disagree on e.g. a strided matrix times a vector — so the parity port is consulted
-            // here, ahead of every shape branch below. Off by default.
-            NDArray parity;
-            if (Kernels.Blas.BlasParity.TryDot(left, right, out parity))
-                return parity;
-
             var leftshape = left.Shape;
             var rightshape = right.Shape;
             var isLeftScalar = leftshape.IsScalar;

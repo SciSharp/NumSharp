@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -27,7 +27,7 @@ namespace NumSharp.Backends
         /// </remarks>
         [SuppressMessage("ReSharper", "JoinDeclarationAndInitializer")]
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        protected static NDArray MultiplyMatrix(NDArray left, NDArray right, NDArray @out = null)
+        protected virtual NDArray MultiplyMatrix(NDArray left, NDArray right, NDArray @out = null)
         {
             Debug.Assert(left.Shape.NDim == 2);
             Debug.Assert(right.Shape.NDim == 2);
@@ -50,12 +50,6 @@ namespace NumSharp.Backends
                     throw new IncorrectShapeException(
                         $"Output shape {@out.Shape} incompatible with matmul result shape ({M}, {N})");
             }
-
-            // Opt-in byte-parity backend (np.parity_matmul): a route-for-route port of NumPy's
-            // @TYPE@_matmul over the same CBLAS binary NumPy calls. Off by default, and consulted
-            // before the SIMD paths because it must own the whole product to reproduce the bits.
-            if (Kernels.Blas.BlasParity.TryMatmul2D(left, right, result))
-                return result;
 
             // Stride-aware SIMD path for same-type float / double.
             if (TryMatMulSimd(left, right, result, M, K, N))

@@ -2619,6 +2619,264 @@ def char_tier(mode):
     return _relabel_dtype(raw, _C, "char")
 
 
+# ---------------------------------------------------------------------------
+# T-parity — np.dot / np.matmul BYTE parity for the opt-in BLAS backend
+# (np.parity_matmul). Unlike every other tier this one is HOST-PINNED: NumPy
+# computes float matrix products with cblas, and scipy-openblas' sgemm/dgemm
+# accumulate in an arch-specific multi-accumulator scheme whose bits depend on
+# the BLAS binary, the CPU kernel it dispatches to, AND the thread count. The
+# expected bytes below are therefore only reproducible on a host that loads the
+# SAME library and dispatches the same way, which is why the tier ships a
+# `matmul_parity.host.jsonl` pin and the C# gate goes Inconclusive (never red)
+# when the host does not match. Same precedent as the MSVC-pinned cast kernels.
+#
+# The ordinary `matmul` tier cannot cover this: its operands are tiny integers
+# and its largest contraction is k=4, where every summation order agrees. Real
+# divergence starts at k=10 (45% of elements on the MLP shapes) and reaches 94%
+# at k=784, so this tier sweeps k across the blocking boundaries with random
+# float values, in every layout the two dispatchers route differently.
+MATMUL_PARITY_DTYPES = ["float32", "float64"]
+
+# k values: 1..4 (agreeing region), the powers of two and their +-1 neighbours
+# (OpenBLAS panel edges), NumSharp's own KC=256 boundary, and the MLP's 784.
+MATMUL_PARITY_KS = [1, 2, 3, 4, 5, 7, 8, 9, 10, 15, 16, 17, 31, 32, 33, 63, 64, 65,
+                    127, 128, 129, 255, 256, 257, 511, 512, 784]
+
+
+def _mp_values(shape, dt, rng, valueclass="normal"):
+    """Operand values. Random by default — regular ramps hide reassociation error."""
+    n = int(np.prod(shape)) if shape else 1
+    if valueclass == "wide":
+        # Magnitudes spanning ~40 decades: summation order dominates the result.
+        mant = rng.standard_normal(n)
+        expo = rng.randint(-18, 18, n)
+        a = (mant * (10.0 ** expo))
+    elif valueclass == "specials":
+        a = rng.standard_normal(n)
+        if n >= 4:
+            a[0] = np.inf
+            a[1] = -np.inf
+            a[2] = np.nan
+            a[3] = 0.0
+    else:
+        a = rng.standard_normal(n)
+    return np.ascontiguousarray(a.astype(np.dtype(dt)).reshape(shape))
+
+
+def _mp_layout(arr, kind, rng):
+    """(base, view) holding EXACTLY arr's values in the requested memory layout.
+
+    Every kind produces a genuine view into a C-contiguous base (what the corpus
+    descriptor can express), so the C# side rebuilds the same strides NumPy had —
+    which is what selects the route in both dispatchers.
+    """
+    if kind == "C" or arr.ndim == 0:
+        base = np.ascontiguousarray(arr)
+        return base, base
+    if kind == "F":
+        base = np.ascontiguousarray(arr.T)          # transposed data, C-contiguous
+        return base, base.T
+    if kind == "neg":                               # 1-D reversed
+        base = np.ascontiguousarray(arr[::-1])
+        return base, base[::-1]
+    if kind == "negrow":
+        base = np.ascontiguousarray(arr[::-1])
+        return base, base[::-1]
+    if kind == "negcol":
+        base = np.ascontiguousarray(arr[:, ::-1])
+        return base, base[:, ::-1]
+    if kind == "stride2":                           # last axis step 2 — never blasable
+        shape = arr.shape[:-1] + (arr.shape[-1] * 2,)
+        base = _mp_values(shape, arr.dtype, rng)
+        base[..., ::2] = arr
+        return base, base[..., ::2]
+    if kind == "slice":                             # row stride > ncols, offset != 0
+        m, n = arr.shape
+        base = _mp_values((m + 3, n + 7), arr.dtype, rng)
+        base[2:2 + m, 5:5 + n] = arr
+        return base, base[2:2 + m, 5:5 + n]
+    raise ValueError(kind)
+
+
+def _mp_case(cases, op, name, A, ar, B, br, rng, valueclass="normal"):
+    """Emit one parity case: apply the layout recipes, ask NumPy, record."""
+    baseA, viewA = _mp_layout(A, ar, rng)
+    baseB, viewB = _mp_layout(B, br, rng)
+    f = np.dot if op == "dot" else np.matmul
+    r = np.asarray(f(viewA, viewB))
+    cases.append({
+        "id": f"{op}/{name}/{ar}{br}/{A.dtype.name}x{B.dtype.name}/{len(cases)}",
+        "op": op,
+        "params": {},
+        "operands": [describe(baseA, viewA), describe(baseB, viewB)],
+        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+        "layout": f"{ar}{br}",
+        "valueclass": valueclass,
+    })
+
+
+def gen_matmul_parity():
+    cases = []
+    rng = np.random.RandomState(20260725)
+
+    def V(shape, dt, vc="normal"):
+        return _mp_values(shape, dt, rng, vc)
+
+    for dt in MATMUL_PARITY_DTYPES:
+        # --- k sweep: the blocking boundaries the `matmul` tier (k<=4) never crosses.
+        for k in MATMUL_PARITY_KS:
+            _mp_case(cases, "dot", f"ksweep_k{k}", V((6, k), dt), "C", V((k, 5), dt), "C", rng)
+
+        # --- the MLP sites, shrunk in M/N but at the real contraction depths.
+        _mp_case(cases, "dot", "mlp_k784", V((8, 784), dt), "C", V((784, 8), dt), "C", rng)
+        _mp_case(cases, "dot", "mlp_k128", V((16, 128), dt), "C", V((128, 10), dt), "C", rng)
+        _mp_case(cases, "dot", "mlp_k10", V((16, 10), dt), "C", V((10, 16), dt), "C", rng)
+        _mp_case(cases, "dot", "mlp_xT", V((784, 12), dt), "F", V((12, 12), dt), "C", rng)
+        _mp_case(cases, "dot", "mlp_hT", V((128, 12), dt), "F", V((12, 10), dt), "C", rng)
+        _mp_case(cases, "matmul", "mlp_k784", V((8, 784), dt), "C", V((784, 8), dt), "C", rng)
+        _mp_case(cases, "matmul", "mlp_k10", V((16, 10), dt), "C", V((10, 16), dt), "C", rng)
+
+        # --- full layout matrix. The copy-if-not-blasable rule, the F-order transpose
+        # equivalence and np.dot's own _bad_strides copy all key off these strides.
+        A = V((12, 40), dt)
+        B = V((40, 9), dt)
+        for la in ("C", "F", "negrow", "negcol", "stride2", "slice"):
+            for lb in ("C", "F", "negrow", "negcol", "stride2", "slice"):
+                _mp_case(cases, "dot", "layout", A, la, B, lb, rng)
+                _mp_case(cases, "matmul", "layout", A, la, B, lb, rng)
+
+        # --- the four special-shape routes (dm==1 / dn==1 / dp==1). np.dot and
+        # np.matmul genuinely disagree here when the matrix is not blasable, so both
+        # are recorded.
+        for op in ("dot", "matmul"):
+            _mp_case(cases, op, "vecvec", V((500,), dt), "C", V((500,), dt), "C", rng)
+            _mp_case(cases, op, "vecvec_neg", V((37,), dt), "neg", V((37,), dt), "C", rng)
+            _mp_case(cases, op, "vecvec_str", V((37,), dt), "stride2", V((37,), dt), "C", rng)
+            _mp_case(cases, op, "rowcol", V((1, 500), dt), "C", V((500, 1), dt), "C", rng)
+            for lm in ("C", "F", "negrow", "stride2", "slice"):
+                _mp_case(cases, op, "matvec", V((30, 44), dt), lm, V((44,), dt), "C", rng)
+                _mp_case(cases, op, "vecmat", V((44,), dt), "C", V((44, 30), dt), lm, rng)
+            _mp_case(cases, op, "matvec_strided_v", V((30, 44), dt), "C", V((44,), dt), "stride2", rng)
+            _mp_case(cases, op, "colrow", V((11, 1), dt), "C", V((1, 9), dt), "C", rng)
+            _mp_case(cases, op, "onerow", V((1, 1), dt), "C", V((1, 9), dt), "C", rng)
+            _mp_case(cases, op, "colone", V((11, 1), dt), "C", V((1, 1), dt), "C", rng)
+            _mp_case(cases, op, "matcol", V((13, 29), dt), "C", V((29, 1), dt), "C", rng)
+            _mp_case(cases, op, "rowmat", V((1, 29), dt), "C", V((29, 13), dt), "C", rng)
+
+        # --- syrk: `a @ a.T` shares a DATA POINTER, which both dispatchers shortcut to
+        # cblas_?syrk (upper triangle + mirror) instead of gemm. The corpus descriptor
+        # gives every operand its own buffer, so the self-product cannot be expressed as
+        # two operands — the op name carries the transpose instead and OpRegistry forms
+        # `a @ a.T` from the single stored operand, preserving the shared pointer.
+        for suffix, fn in (("aat", lambda v: (v, v.T)), ("ata", lambda v: (v.T, v))):
+            for lay in ("C", "F"):
+                S = V((16, 24), dt)
+                baseS, viewS = _mp_layout(S, lay, rng)
+                lhs, rhs = fn(viewS)
+                for op in ("dot", "matmul"):
+                    r = np.asarray((np.dot if op == "dot" else np.matmul)(lhs, rhs))
+                    cases.append({
+                        "id": f"{op}_{suffix}/syrk/{lay}/{dt}/{len(cases)}",
+                        "op": f"{op}_{suffix}",
+                        "params": {},
+                        "operands": [describe(baseS, viewS)],
+                        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                        "layout": f"syrk_{lay}",
+                        "valueclass": "normal",
+                    })
+
+        # --- stacked matmul (the gufunc's outer loop) + N-D dot (the dotfunc route,
+        # which NumPy does NOT send to gemm).
+        _mp_case(cases, "matmul", "batch3", V((3, 8, 20), dt), "C", V((3, 20, 6), dt), "C", rng)
+        _mp_case(cases, "matmul", "batch4", V((2, 3, 5, 12), dt), "C", V((2, 3, 12, 4), dt), "C", rng)
+        _mp_case(cases, "matmul", "batch_bcast", V((3, 8, 20), dt), "C", V((20, 6), dt), "C", rng)
+        _mp_case(cases, "matmul", "batch_vec", V((3, 8, 20), dt), "C", V((20,), dt), "C", rng)
+        _mp_case(cases, "dot", "nd_3d_1d", V((3, 8, 20), dt), "C", V((20,), dt), "C", rng)
+        _mp_case(cases, "dot", "nd_3d_2d", V((3, 8, 20), dt), "C", V((20, 7), dt), "C", rng)
+        _mp_case(cases, "dot", "nd_2d_3d", V((9, 20), dt), "C", V((4, 20, 5), dt), "C", rng)
+        _mp_case(cases, "dot", "nd_3d_3d", V((2, 5, 20), dt), "C", V((3, 20, 4), dt), "C", rng)
+
+        # --- degenerate extents.
+        _mp_case(cases, "dot", "k0", V((5, 0), dt), "C", V((0, 3), dt), "C", rng)
+        _mp_case(cases, "matmul", "k0", V((5, 0), dt), "C", V((0, 3), dt), "C", rng)
+        _mp_case(cases, "dot", "m0", V((0, 3), dt), "C", V((3, 4), dt), "C", rng)
+        _mp_case(cases, "dot", "n0", V((5, 3), dt), "C", V((3, 0), dt), "C", rng)
+
+        # --- value classes that punish reassociation, plus inf/NaN propagation.
+        _mp_case(cases, "dot", "wide_k300", V((6, 300), dt, "wide"), "C",
+                 V((300, 5), dt, "wide"), "C", rng, "wide")
+        _mp_case(cases, "dot", "specials", V((6, 40), dt, "specials"), "C",
+                 V((40, 5), dt, "specials"), "C", rng, "specials")
+        _mp_case(cases, "dot", "vecvec_wide", V((400,), dt, "wide"), "C",
+                 V((400,), dt, "wide"), "C", rng, "wide")
+
+    # --- blocked / multi-threaded kernel sizes (f32 only for corpus weight; f64 smaller).
+    _mp_case(cases, "dot", "big", _mp_values((64, 256), "float32", rng), "C",
+             _mp_values((256, 64), "float32", rng), "C", rng)
+    _mp_case(cases, "dot", "big", _mp_values((48, 192), "float64", rng), "C",
+             _mp_values((192, 48), "float64", rng), "C", rng)
+
+    # --- mixed dtype: NumPy casts to the common type first (a C-contiguous copy).
+    _mp_case(cases, "dot", "mixed", _mp_values((12, 40), "float32", rng), "C",
+             _mp_values((40, 9), "float64", rng), "C", rng)
+    _mp_case(cases, "dot", "mixed", _mp_values((12, 40), "float64", rng), "C",
+             _mp_values((40, 9), "float32", rng), "C", rng)
+    return cases
+
+
+def blas_identity():
+    """Identify the BLAS NumPy will call, so the replay can refuse a mismatched host.
+
+    The bits this tier records depend on the library build, the DYNAMIC_ARCH kernel it
+    picks for this CPU, and the worker-thread count — all three are read straight out of
+    the loaded binary through the same OpenBLAS entry points NumSharp's parity backend uses.
+    """
+    import ctypes
+    import glob
+    import platform
+
+    info = {"numpy": np.__version__, "platform": platform.platform(),
+            "machine": platform.machine()}
+    roots = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(np.__file__))), "numpy.libs")]
+    patterns = ["*scipy_openblas*.dll", "*scipy_openblas*.so*", "*scipy_openblas*.dylib",
+                "*openblas*.dll", "*openblas*.so*", "*openblas*.dylib"]
+    lib = None
+    for root in roots:
+        for pat in patterns:
+            hits = sorted(glob.glob(os.path.join(root, pat)))
+            if hits:
+                lib = hits[-1]
+                break
+        if lib:
+            break
+    if lib is None:
+        info["blas_library"] = ""
+        return info
+
+    info["blas_library"] = os.path.basename(lib)
+    try:
+        dll = ctypes.CDLL(lib)
+        for prefix, suffix in (("scipy_", "64_"), ("", "64_"), ("", "")):
+            try:
+                cfg = getattr(dll, f"{prefix}openblas_get_config{suffix}")
+                core = getattr(dll, f"{prefix}openblas_get_corename{suffix}")
+                thr = getattr(dll, f"{prefix}openblas_get_num_threads{suffix}")
+            except AttributeError:
+                continue
+            cfg.restype = ctypes.c_char_p
+            core.restype = ctypes.c_char_p
+            thr.restype = ctypes.c_int
+            info["blas_config"] = cfg().decode("ascii", "replace")
+            info["blas_corename"] = core().decode("ascii", "replace")
+            info["blas_threads"] = int(thr())
+            break
+    except OSError as e:
+        info["blas_error"] = str(e)
+    return info
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -2761,8 +3019,15 @@ def main():
     elif mode == "exp_f32":
         cases = gen_exp_f32()                                           # bit-exact float32 exp tier
         write_jsonl(os.path.join(corpus_dir, "exp_f32.jsonl"), cases)
+    elif mode == "matmul_parity":
+        cases = gen_matmul_parity()                                     # np.parity_matmul byte gate
+        write_jsonl(os.path.join(corpus_dir, "matmul_parity.jsonl"), cases)
+        # The host pin travels with the corpus: these bytes are only reproducible on a
+        # host whose BLAS binary + dispatched kernel + thread count match. The C# gate
+        # reports Inconclusive (never red) when they do not.
+        write_jsonl(os.path.join(corpus_dir, "matmul_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | exp_f32)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | exp_f32 | matmul_parity)")
         sys.exit(2)
 
 

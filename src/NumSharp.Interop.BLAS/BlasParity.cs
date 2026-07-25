@@ -1,9 +1,11 @@
 using System;
+using NumSharp;
+using NumSharp.Backends;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace NumSharp.Backends.Kernels.Blas
+namespace NumSharp.Interop.Blas
 {
     /// <summary>
     ///     Opt-in byte-parity backend for <c>np.dot</c> / <c>np.matmul</c>: a route-for-route port of
@@ -33,9 +35,6 @@ namespace NumSharp.Backends.Kernels.Blas
     /// </remarks>
     internal static unsafe partial class BlasParity
     {
-        /// <summary>Whether <c>np.dot</c> / <c>np.matmul</c> route through the parity backend.</summary>
-        internal static bool Enabled;
-
         /// <summary>
         ///     A 2-D operand as the dispatchers see it: base pointer plus per-axis element strides.
         ///     Mirrors the <c>(ip, is_m, is_n, dm, dn)</c> argument groups of matmul.c.src.

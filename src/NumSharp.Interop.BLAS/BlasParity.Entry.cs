@@ -1,8 +1,10 @@
 using System;
+using NumSharp;
+using NumSharp.Backends;
 using System.Numerics;
 using NumSharp.Utilities;
 
-namespace NumSharp.Backends.Kernels.Blas
+namespace NumSharp.Interop.Blas
 {
     internal static unsafe partial class BlasParity
     {
@@ -13,7 +15,7 @@ namespace NumSharp.Backends.Kernels.Blas
         /// <returns>False when the parity backend is off or cannot service this input.</returns>
         internal static bool TryMatmul2D(NDArray left, NDArray right, NDArray result)
         {
-            if (!Enabled || !CBlasNative.IsLoaded)
+            if (!CBlasNative.IsLoaded)
                 return false;
 
             var typeCode = result.GetTypeCode;
@@ -64,7 +66,7 @@ namespace NumSharp.Backends.Kernels.Blas
         internal static bool TryDot(NDArray left, NDArray right, out NDArray result)
         {
             result = null;
-            if (!Enabled || !CBlasNative.IsLoaded)
+            if (!CBlasNative.IsLoaded)
                 return false;
 
             var typeCode = np._FindCommonArrayType(left.GetTypeCode, right.GetTypeCode);

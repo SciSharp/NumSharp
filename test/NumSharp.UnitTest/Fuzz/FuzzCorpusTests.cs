@@ -63,6 +63,42 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Matmul() => RunCorpus("matmul.jsonl");
 
+        // np.dot / np.matmul BYTE parity through the opt-in NumSharp.Interop.BLAS engine.
+        // The ordinary Matmul tier above cannot see this: its operands are small integers and its
+        // deepest contraction is k=4, where every summation order agrees. This tier sweeps k over
+        // the panel boundaries with random floats, in every layout the two NumPy dispatchers route
+        // differently (gemm / both gemv directions / ?dot / syrk / the portable loop / batched /
+        // N-D dot) — where NumSharp's own GEMM diverges from NumPy on up to 94% of elements.
+        //
+        // The engine comes from the OPTIONAL NumSharp.Interop.BLAS package (a DefaultEngine
+        // subclass); NumSharp.Core itself is 100% managed and has no BLAS in it at all. Note the
+        // ORDER below: the engine must be installed BEFORE the operands are built, because an
+        // NDArray resolves its engine at construction.
+        //
+        // HOST-PINNED, like the MSVC-pinned cast kernels: the expected bytes come out of a
+        // specific BLAS binary, dispatched to a specific CPU kernel, at a specific thread count.
+        // A host that cannot load that library — or loads a different one — makes the tier
+        // INCONCLUSIVE with the reason, never red: a machine without NumPy's wheel has nothing to
+        // be wrong about. See matmul_parity.host.jsonl for the pin and docs/GEMM_PARITY.md.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void MatmulParity()
+        {
+            var pin = MatmulParityPin.Load();
+            string mismatch = pin.TryEnableParityBackend();
+            if (mismatch != null)
+                Assert.Inconclusive(mismatch);
+
+            try
+            {
+                RunCorpus("matmul_parity.jsonl");
+            }
+            finally
+            {
+                NumSharp.Interop.Blas.Blas.Disable();
+            }
+        }
+
         // T9 bitwise & shift: bitwise_and/or/xor (& | ^), invert (~), left/right_shift across
         // integer + bool dtypes, pairwise layouts, and shift-count edges that straddle the bit width.
         [TestMethod]
@@ -296,6 +332,7 @@ namespace NumSharp.UnitTest.Fuzz
             ["logic.jsonl"] = 1775,
             ["manip.jsonl"] = 6060,
             ["matmul.jsonl"] = 769,
+            ["matmul_parity.jsonl"] = 342,
             ["modf.jsonl"] = 51,
             ["nanreduce.jsonl"] = 6692,
             ["params.jsonl"] = 966,

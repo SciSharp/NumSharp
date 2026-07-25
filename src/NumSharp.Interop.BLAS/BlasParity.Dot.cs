@@ -1,8 +1,10 @@
 using System;
+using NumSharp;
+using NumSharp.Backends;
 using System.Numerics;
 using NumSharp.Utilities;
 
-namespace NumSharp.Backends.Kernels.Blas
+namespace NumSharp.Interop.Blas
 {
     internal static unsafe partial class BlasParity
     {
