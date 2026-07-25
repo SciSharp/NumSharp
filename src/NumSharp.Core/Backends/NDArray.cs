@@ -582,7 +582,7 @@ namespace NumSharp
         ///     Copy of the array, cast to a specified type.
         /// </summary>
         /// <param name="dtype">The dtype to cast this array.</param>
-        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
@@ -592,7 +592,7 @@ namespace NumSharp
         ///     Copy of the array, cast to a specified type and memory layout.
         /// </summary>
         /// <param name="dtype">The dtype to cast this array.</param>
-        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <param name="order">
         ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
         ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
@@ -621,7 +621,7 @@ namespace NumSharp
         ///     Copy of the array, cast to a specified type.
         /// </summary>
         /// <param name="typeCode">The dtype to cast this array.</param>
-        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="typeCode"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         public NDArray astype(NPTypeCode typeCode, bool copy = true) => astype(typeCode, copy, 'K');
@@ -630,7 +630,7 @@ namespace NumSharp
         ///     Copy of the array, cast to a specified type and memory layout.
         /// </summary>
         /// <param name="typeCode">The dtype to cast this array.</param>
-        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <param name="order">
         ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
         ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',

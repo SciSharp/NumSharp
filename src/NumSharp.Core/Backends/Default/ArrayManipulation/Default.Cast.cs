@@ -16,49 +16,33 @@ namespace NumSharp.Backends
 
             var engine = nd.TensorEngine;
 
+            // NumPy astype(copy=False) semantics (probed 2.4.2): copy=false only elides the
+            // copy when no conversion is needed — `a.astype(a.dtype, copy=False) is a`. A dtype
+            // change ALWAYS materializes a fresh array and NEVER touches the input. The former
+            // behavior here swapped nd.Storage in-place on conversion, which leaked out of every
+            // internal copy:false call site as operand corruption: np.allclose/np.isclose and
+            // np.where silently flipped their arguments' dtype (float32 operands came back
+            // float64). Do not reintroduce the storage swap.
+            if (nd.GetTypeCode == dtype && !copy)
+                return nd;
+
             //incase its an empty array (the uninitialized-shape sentinel)
             if (nd.Shape.IsEmpty)
-            {
-                if (copy)
-                    return new NDArray(dtype) { TensorEngine = engine };
-
-                nd.Storage = new UnmanagedStorage(dtype) { Engine = engine };
-                nd.TensorEngine = engine;
-                return nd;
-            }
+                return new NDArray(dtype) { TensorEngine = engine };
 
             //incase it has a zero-size dimension (e.g. (1,0), (2,0,2)) — a real shape
             //carrying no elements. There is nothing to cast; just retype while preserving
             //the shape. (Shape.IsEmpty above only catches the uninitialized sentinel, so
             //this guard is required or the regular CastTo path below faults on length 0.)
             if (nd.size == 0)
-            {
-                var retyped = new NDArray(dtype, nd.Shape) { TensorEngine = engine };
-                if (copy)
-                    return retyped;
-
-                nd.Storage = retyped.Storage;
-                nd.TensorEngine = engine;
-                return nd;
-            }
-
-            // same-dtype with copy=false is a no-op — NumPy's astype returns self when no cast and
-            // no copy is requested (KEEPORDER leaves the existing layout untouched).
-            if (nd.GetTypeCode == dtype && !copy)
-                return nd;
+                return new NDArray(dtype, nd.Shape) { TensorEngine = engine };
 
             // Unified allocate-and-fill copy/cast core (KEEPORDER = NumPy astype order='K'), integrated
             // with NDIter via NDIter.CopyAs: same-dtype takes the SIMD copy (a single flat pass even
             // for F-contiguous / transposed sources), cross-dtype takes the IL cast kernels, and every
             // layout (contiguous / strided / broadcast / scalar) resolves to its best path. Replaces the
             // former scalar / (1,) / same-type-Clone / F-contig-special / CastCrossType branch maze.
-            var result = NDIter.CopyAs(dtype, nd, 'K', engine);
-            if (copy)
-                return result;
-
-            nd.Storage = result.Storage;
-            nd.TensorEngine = engine;
-            return nd;
+            return NDIter.CopyAs(dtype, nd, 'K', engine);
         }
     }
 }

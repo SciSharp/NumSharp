@@ -51,52 +51,66 @@ namespace NumSharp.Backends
             //     result |= isnan(x) & isnan(y)
 
             // Convert to double for comparison (NumPy casts to inexact type). astype(copy:false)
-            // returns the input itself when no conversion is needed, so x/y are caller-owned and are
-            // NEVER disposed here. Every other local below is a FRESH allocation owned by this method
-            // (each elementwise operator/ufunc returns a new array), so each is wrapped in `using`:
-            // its unmanaged buffer is released synchronously instead of riding the finalizer queue.
-            // In a tight isclose/allclose loop the un-disposed temps (≈5 float64 + several bool
-            // arrays per call) accumulated as live allocations until GC, ballooning the process
-            // working set (the np.allclose / np.isclose leak guards). MakeGeneric<bool>() takes its
-            // own refcount on the final buffer, so disposing the backing temp leaves it alive.
+            // returns the input itself when no conversion is needed and a FRESH array otherwise —
+            // it never mutates a/b (NumPy semantics). So x/y are caller-owned when they alias a/b
+            // and method-owned temps when a conversion happened; the finally block below disposes
+            // exactly the converted case. Every other local is a FRESH allocation owned by this
+            // method (each elementwise operator/ufunc returns a new array), so each is wrapped in
+            // `using`: its unmanaged buffer is released synchronously instead of riding the
+            // finalizer queue. In a tight isclose/allclose loop the un-disposed temps (≈5 float64
+            // + several bool arrays per call) accumulated as live allocations until GC, ballooning
+            // the process working set (the np.allclose / np.isclose leak guards).
+            // MakeGeneric<bool>() takes its own refcount on the final buffer, so disposing the
+            // backing temp leaves it alive.
             var x = a.astype(NPTypeCode.Double, copy: false);
             var y = b.astype(NPTypeCode.Double, copy: false);
-
-            // Vectorized computation using existing np operations
-            using var xMinusY = x - y;
-            using var diff = np.abs(xMinusY);            // |a - b|
-            using var absY = np.abs(y);
-            using var rtolAbsY = rtol * absY;
-            using var tolerance = atol + rtolAbsY;       // atol + rtol * |b|
-
-            // Core formula: |a - b| <= tolerance AND diff is finite AND y is finite, OR exact equality
-            // Note: We explicitly check diffFinite because NumSharp's <= operator has a bug where
-            // NaN <= value returns True instead of False (IEEE 754 requires False for all NaN comparisons)
-            using var diffFinite = np.isfinite(diff);      // diff must be finite for tolerance check
-            using var withinTolerance = diff <= tolerance; // |a - b| <= (atol + rtol * |b|)
-            using var yFinite = np.isfinite(y);            // Only apply tolerance to finite values
-            using var exactEqual = x == y;                 // Handles infinities (inf == inf is true)
-
-            // Combine: (within tolerance & diff finite & y finite) | exact equality
-            using var withinAndFinite = withinTolerance & diffFinite;
-            using var toleranceMet = withinAndFinite & yFinite;
-
-            // The final combined array is captured in a `using` too: MakeGeneric<bool>() shares its
-            // storage and takes its own refcount, so disposing the backing temp on return leaves the
-            // returned array alive while keeping that last buffer off the finalizer queue as well.
-            if (!equal_nan)
+            try
             {
-                using var close = toleranceMet | exactEqual;
-                return close.MakeGeneric<bool>();
-            }
+                // Vectorized computation using existing np operations
+                using var xMinusY = x - y;
+                using var diff = np.abs(xMinusY);            // |a - b|
+                using var absY = np.abs(y);
+                using var rtolAbsY = rtol * absY;
+                using var tolerance = atol + rtolAbsY;       // atol + rtol * |b|
 
-            // Handle NaN comparison if requested: result | (isnan(x) & isnan(y))
-            using var toleranceClose = toleranceMet | exactEqual;
-            using var nanX = np.isnan(x);
-            using var nanY = np.isnan(y);
-            using var bothNan = nanX & nanY;
-            using var close2 = toleranceClose | bothNan;
-            return close2.MakeGeneric<bool>();
+                // Core formula: |a - b| <= tolerance AND diff is finite AND y is finite, OR exact equality
+                // Note: We explicitly check diffFinite because NumSharp's <= operator has a bug where
+                // NaN <= value returns True instead of False (IEEE 754 requires False for all NaN comparisons)
+                using var diffFinite = np.isfinite(diff);      // diff must be finite for tolerance check
+                using var withinTolerance = diff <= tolerance; // |a - b| <= (atol + rtol * |b|)
+                using var yFinite = np.isfinite(y);            // Only apply tolerance to finite values
+                using var exactEqual = x == y;                 // Handles infinities (inf == inf is true)
+
+                // Combine: (within tolerance & diff finite & y finite) | exact equality
+                using var withinAndFinite = withinTolerance & diffFinite;
+                using var toleranceMet = withinAndFinite & yFinite;
+
+                // The final combined array is captured in a `using` too: MakeGeneric<bool>() shares its
+                // storage and takes its own refcount, so disposing the backing temp on return leaves the
+                // returned array alive while keeping that last buffer off the finalizer queue as well.
+                if (!equal_nan)
+                {
+                    using var close = toleranceMet | exactEqual;
+                    return close.MakeGeneric<bool>();
+                }
+
+                // Handle NaN comparison if requested: result | (isnan(x) & isnan(y))
+                using var toleranceClose = toleranceMet | exactEqual;
+                using var nanX = np.isnan(x);
+                using var nanY = np.isnan(y);
+                using var bothNan = nanX & nanY;
+                using var close2 = toleranceClose | bothNan;
+                return close2.MakeGeneric<bool>();
+            }
+            finally
+            {
+                // Dispose only the astype-converted temps — when no conversion happened x/y ARE
+                // the caller's arrays and must stay alive.
+                if (!ReferenceEquals(x, a))
+                    x.Dispose();
+                if (!ReferenceEquals(y, b))
+                    y.Dispose();
+            }
         }
     }
 }

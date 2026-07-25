@@ -34,6 +34,17 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Unary() => RunCorpus("unary.jsonl");
 
+        // float32 exp, held BIT-EXACT (the MisalignedRegistry "unary ~ULP" excuse is carved out for
+        // it): NDFloatMath.Exp ports NumPy's simd_exp_FLOAT. Curated inputs — every NaN/inf/zero/
+        // subnormal special, both saturation boundaries +-1 ULP, the subnormal-output band, NumPy's
+        // own worst-error input, the exact FMA-contraction tie, and a quadrant sweep on which a
+        // correctly-rounded libm disagrees with NumPy for ~35% of elements — across contiguous,
+        // 2-D, F-order, strided, reversed, offset, broadcast, 0-d, empty and the narrow-integer
+        // inputs that share the same NumPy loop.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void ExpFloat32() => RunCorpus("exp_f32.jsonl");
+
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Reduce() => RunCorpus("reduce.jsonl");
@@ -280,6 +291,7 @@ namespace NumSharp.UnitTest.Fuzz
             ["decimal_varstd.jsonl"] = 17,
             ["decimal_where.jsonl"] = 3,
             ["errors.jsonl"] = 8,
+            ["exp_f32.jsonl"] = 22,
             ["groupa.jsonl"] = 82,
             ["logic.jsonl"] = 1775,
             ["manip.jsonl"] = 6053,
