@@ -126,6 +126,18 @@ Console.WriteLine($"shape=({string.Join(",", r.shape)}) writeable={r.Shape.IsWri
 EOF
 ```
 
+**`dotnet run <path.cs>` caches the compiled app per SCRIPT PATH.** Re-running the same file after
+editing NumSharp.Core can replay the previous build — you rebuild, the source clearly contains your
+fix, and the probe still prints the OLD behavior. That reads exactly like "my change didn't work"
+and invites you to go re-fix something that was already correct. Two ways out, both cheap:
+
+- pipe through stdin — `dotnet run -c Release - < script.cs` (what the timing rule already
+  requires, and it sidesteps the cache); or
+- write the iteration to a NEW filename (`probe2.cs`, `probe3.cs`).
+
+Rule of thumb: if a probe result doesn't move after a change you can see in the source, suspect the
+cache before you suspect your code.
+
 Bytes for bit-compare:
 
 ```csharp

@@ -65,7 +65,10 @@ optimizations are, and which of ours apply.
 
 - **Match the function's shape to a recipe first** — `references/design-recipes.md` maps the
   recurring shapes (pure composition, new ufunc, algorithm-selection param, index-consuming op,
-  data-dependent-output kernel) to their house designs. Pattern 1 (compose existing np.*) vs
+  data-dependent-output kernel, **NumPy object/protocol API**) to their house designs. Not every
+  np.* name is "array in → array out": iterators and context managers (`nditer`, `ndindex`,
+  `broadcast`, `printoptions`) are objects whose parity is protocol semantics, and they have their
+  own recipe. Pattern 1 (compose existing np.*) vs
   Pattern 2 (TensorEngine + kernels) is the coarse cut: prefer composition when it reaches
   performance; drop to kernels for hot loops. Match NumPy's *implementation structure*, not just
   behavior — if NumPy is clean and the NumSharp area is spaghetti, refactor toward NumPy's design.
@@ -123,6 +126,13 @@ optimizations are, and which of ours apply.
 - **THE gate — wire the op into the differential-fuzz oracle.** Invoke the **`oracle`** skill: add
   the `gen_oracle.py` job + the `OpRegistry.cs` case, regenerate (pinned `numpy==2.4.2`), run the
   tier. Char rides the uint16 proxy automatically; Decimal needs a `gen_decimal_oracle.cs` entry.
+- **When the op has no corpus-comparable result, say so instead of forcing a tier.** The corpus
+  compares `(dtype, shape, bytes)`, so an op that returns no array — an iteration protocol, a
+  context manager, an object exposing a cursor — cannot ride it. That is a narrow exemption, not a
+  general escape: if your op returns an NDArray in any mode, it belongs in the corpus. When it
+  genuinely doesn't, record the reason in the CLAUDE.md paragraph so a later reader sees a decision
+  rather than an oversight, and make the unit tests the gate (probed protocol transcripts:
+  order, cursor position, view/copy identity, verbatim errors).
 - **Exit DOD:** tier green. Real divergences get fixed; intended ones get documented in
   `MisalignedRegistry` — never silently excused.
 
@@ -136,6 +146,14 @@ optimizations are, and which of ours apply.
   layouts. The shipping floor: **every cell < 1.0 is understood** — either fixed (learn NumPy's
   technique first) or documented as expected (Half/Complex/Decimal scalar paths; O(1) view ops
   measure dispatch overhead, not throughput).
+- **"Understood" means located, not guessed.** Decompose the slow loop into its layers and time each
+  — the algorithm alone, then the algorithm plus whatever it allocates per element — and only then
+  micro-benchmark the construction path that dominates. Sessions have found the engine 28× FASTER
+  than NumPy while the op measured 0.17×, the entire gap being a per-element object; that diagnosis
+  changes both the fix and the honest framing, and you cannot reach it from the aggregate number.
+  When the located cost turns out to be core-wide (object construction, engine resolution,
+  refcounting), take whatever win is local and in-scope, then write the residue down with its cause
+  — quietly shipping it, or unilaterally rewriting a core constructor, are both worse.
 
 ### Phase 6 — Document + commit
 
@@ -156,7 +174,8 @@ optimizations are, and which of ours apply.
 - [ ] NEP50 promotion + edge cases + verbatim error texts match
 - [ ] View where NumPy views, copy where NumPy copies
 - [ ] Unit tests generated from real NumPy output
-- [ ] Oracle: op in `gen_oracle.py` + `OpRegistry.cs`, FuzzMatrix tier green
+- [ ] Oracle: op in `gen_oracle.py` + `OpRegistry.cs`, FuzzMatrix tier green — or the op returns no
+      array at all and the exemption is recorded in CLAUDE.md
 - [ ] Benchmark pair added; NPY/NS reported; every <1.0 cell explained
 - [ ] CLAUDE.md API list updated; extensive commit
 
@@ -181,6 +200,24 @@ optimizations are, and which of ours apply.
   (`references/design-recipes.md`).
 - **`(1)` is not a tuple** and other Python-literal traps — when the op touches headers/parsing,
   read the File I/O section of project CLAUDE.md first.
+- **`NDArray`'s `==` / `!=` are ELEMENTWISE** — they return `NDArray<bool>`, so a null check like
+  `if (op[i] == null)` is not a null check. Use `is null` / `is not null`, which are pattern matches
+  and bypass operator overloads. Symptom when you get it wrong: `CS0266 cannot convert
+  NDArray<bool> to bool`, or worse, an `&&` that compiles into an elementwise `&`.
+- **Shapes and strides are `long[]`, not `int[]`** (`nd.shape`, `Shape.Dimensions`, `Shape.Strides`)
+  — project CLAUDE.md's internals table still says int[] in places, so confirm the member's real
+  type before designing a signature around it. Two `params` overloads (`long[]` and `int[]`) also
+  make the zero-argument call ambiguous, and `int[]` does NOT widen to `long[]` by array covariance:
+  the workable pair is `params long[]` (individual int literals widen into it) plus a NON-params
+  `int[]` overload.
+- **`dotnet run <path.cs>` caches per script path** — a probe can replay a stale build and look like
+  your fix failed. `references/probing.md` has the symptom and the two one-line fixes; reach for it
+  whenever a result doesn't move after a change you can see in the source.
+- **The working tree may not be yours alone.** Another session writing into the same checkout will
+  break your build from files you never touched. Don't repair or revert someone else's in-flight
+  work: identify whose file it is (`git status`, timestamps), wait or work around it, and at commit
+  time `git add` your OWN paths explicitly — never `git add -A` — then check the staged diff is only
+  yours before committing.
 
 ## References
 
@@ -188,8 +225,10 @@ optimizations are, and which of ours apply.
   dtype-pair grids, validation-order probes, dotnet_run internals template, side-by-side parity
   diff, error-text capture, timing rules.
 - `references/design-recipes.md` — function-shape → house-design table + recipes: dependency
-  audit, index-consuming ops, data-dependent output, cast-machinery validation, algorithm-selection
-  params, non-ufunc dtype=, tuple returns, NaN-in-set-ops.
+  audit, object/protocol APIs (iterators, context managers), wrapping an engine `ref struct` in a
+  long-lived object, mirroring NumPy's wrapper-vs-core layering, index-consuming ops, data-dependent
+  output, cast-machinery validation, algorithm-selection params, non-ufunc dtype=, tuple returns,
+  NaN-in-set-ops.
 - `references/new-ufunc.md` — the ~12-touchpoint checklist for a brand-new elementwise ufunc
   (the ATan2 archetype), loop-signature policy from `ufunc.types`, the two rejection error texts.
 - `references/audit.md` — auditing an existing op: coverage inventory, signature diff,

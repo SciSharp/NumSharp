@@ -11,6 +11,7 @@ probed against NumPy 2.4.2 during the skill's gap-finding experiment.)
 | Composition + algorithm-selection param | Compose the default path from existing ops; a new kernel ONLY for the kind that needs one | `isin` (kind='sort' via argsort/searchsorted; kind='table' wants a table kernel) |
 | Index-consuming op | Fancy-index composition first (NumPy itself does); dedicated gather/scatter kernel only if the benchmark demands | `take_along_axis` (NumPy builds an index tuple) |
 | Validation-gated kernel, data-dependent output | Direct kernel + two-pass sizing + cast-machinery validation | `bincount`, `nonzero` |
+| NumPy OBJECT / protocol API (iterator, context manager) | Object-API recipe below — house class shape, own-iterator semantics, no oracle tier | `nditer`, `ndindex`, `ndenumerate`, `broadcast`, `printoptions` |
 | Reduction (axis/keepdims/accumulator) | Reduction recipe below — accumulation ORDER is parity | `sum`, `mean`, `quantile` |
 | Multi-array joiner | Sequence-input C# shape + mutual-exclusion + casting recipe below | `concatenate`, `stack` |
 | RNG distribution | Seed-exact sequence parity recipe below — no oracle tier exists | `random.normal` |
@@ -47,6 +48,79 @@ Probed semantics that generalize across the family:
   on Windows). House precedent: `Backends/Default/Indexing/Default.NonZero.cs` allocates Int64.
   Never Int32.
 - **Results own their memory** (fancy-index family) — never views, always C-contiguous.
+
+## Recipe: NumPy object / protocol APIs (nditer, ndindex, ndenumerate, broadcast, printoptions)
+
+Some np.* names are not "array in → array out" — they are **objects with a protocol** (iteration,
+context management). Parity shifts from "same bytes" to "same protocol semantics", and a handful of
+C#-vs-Python object-model gaps have to be decided deliberately, because each one compiles fine while
+being subtly wrong.
+
+- **House shape: lowercase factory → PascalCase nested class**, following `np.broadcast` →
+  `np.Broadcast` (`Creation/np.broadcast.cs`). C# forbids a nested type and a static method sharing
+  a name, and the factory is the call site users type, so the FACTORY keeps NumPy's spelling:
+  `np.ndindex(…)` → `np.NDIndex`, `np.nditer(…)` → `np.NDIterator`.
+- **Own-iterator semantics.** NumPy's iteration objects satisfy `iter(x) is x` — one live cursor, so
+  a second pass RESUMES instead of restarting. That is observable behavior, so replicate it *and*
+  say so in the XML doc: it violates what every C# reader assumes about `IEnumerable`.
+- **`GetEnumerator()` must NOT return `this` when the object owns unmanaged state.** `foreach`
+  disposes the enumerator it obtains. `np.Broadcast` can hand out `this` safely because its
+  `Dispose` is a no-op; an object holding native state cannot — returning `this` CLOSES it at the
+  end of any `foreach`/LINQ pass, and every property read afterwards throws. Return a thin wrapper
+  whose `Dispose` is a no-op and which drives the same live cursor: identical semantics, no
+  self-destruction. This one is nasty because the common case still *looks* fine — the values come
+  out correctly and only a later property read fails.
+- **Advance timing is parity.** Python's `__next__` returns the value at the current position and
+  THEN advances, so after consuming one element the cursor already reads 1 — observable through
+  `copy()`, `iterindex`, or anything else exposing position. C# requires `MoveNext()` to advance
+  before `Current` is read, so mirror Python by **publishing first, advancing after**. That is safe
+  when the published value captures an ABSOLUTE pointer; where it doesn't (a buffer the next step
+  refills) call the hazard out in the docs, exactly as NumPy does with its
+  `[x.copy() for x in it]` idiom.
+- **Python's arity-dependent returns need ONE C# shape.** `nditer` yields a bare 0-d array for one
+  operand and a tuple for several; C# has no union type. Pick the uniform form (`NDArray[]`,
+  matching `np.Broadcast`'s `object[]`) and document the single-operand `[0]`.
+- **Views into live state stay live.** If the object hands out views onto a moving pointer they are
+  valid only until the next step — the same contract as NumPy. Document it; do not silently
+  deep-copy, which would break write-through.
+- **No oracle tier, and say so.** These have no `(dtype, shape, bytes)` result for the corpus to
+  bit-compare, so they are legitimately absent from `gen_oracle.py`/`OpRegistry.cs`. Record that in
+  the CLAUDE.md paragraph so a later reader knows it was a decision, not an omission. Unit tests
+  built from probed protocol transcripts are the gate.
+
+## Recipe: giving an engine `ref struct` a long-lived managed owner
+
+NumSharp's hottest engine types are `ref struct`s (`NDIterRef`) so they can hold raw pointers without
+GC overhead. A public object API whose lifetime spans user code is a class — and a `ref struct`
+cannot be a class field. The bridge is the already-heap-allocated state:
+
+- **Detach** the state pointer to the managed owner, then **Borrow** a NON-owning copy of the ref
+  struct for the duration of each call (`Backends/Iterators/NDIter.Detach.cs`).
+- **Audit what else the ref struct was holding.** A release-the-pointer helper that leaves the
+  companion state behind is a silent correctness bug: `NDIterRef.ReleaseState` nulls the state but
+  strands `_writebackOriginals`, so a COPY_IF_OVERLAP temp would never be copied back. Detach must
+  carry operands, write-backs, and any cached delegates — the last one for speed, since re-resolving
+  it per step undoes the point of caching.
+- The owner now holds unmanaged memory, so it needs `IDisposable` + a finalizer safety net, and its
+  teardown must reproduce the ref struct's `Dispose` ORDER (flush buffers → resolve write-backs →
+  free), not just its steps.
+
+## Recipe: mirror NumPy's LAYERING, not only its behavior
+
+NumPy splits work between a Python wrapper and a C core, and the split is informative. Work the
+Python layer does is work NumSharp's `np.*` entry point should do; work the C layer does belongs in
+the engine. Getting this backwards produces a correct-but-misplaced implementation that the next
+person can't find.
+
+Concretely: `np.nditer`'s flag-string parsing, argument conversion and error texts all live in
+`nditer_pywrap.c` (the wrapper), not in the iterator itself — so they belong in `APIs/np.nditer.cs`,
+and NumSharp's `NDIterRef` correctly has none of them.
+
+The corollary is a common finding: **the wrapper often fills gaps the engine leaves.** NumPy infers
+an allocated operand's dtype by promoting the other operands; NumSharp's engine instead demands an
+explicit dtype and throws. That inference is wrapper work in NumPy, so implementing it in the
+wrapper restores parity without touching the engine. When you find the engine "missing" a behavior,
+check which NumPy layer supplies it before proposing an engine change.
 
 ## Recipe: data-dependent output size
 
