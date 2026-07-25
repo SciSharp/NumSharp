@@ -14,6 +14,10 @@
   href: compliance.md
 - name: NumPy API Coverage & Support
   href: coverage-support-dashboard.md
+  expanded: true
+  items:
+  - name: Dashboard
+    href: coverage-support-dashboard.md
 - name: Array API Standard
   href: array-api-standard.md
 - name: IL Generation
