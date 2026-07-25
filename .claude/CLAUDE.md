@@ -302,6 +302,86 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
 ### Selection
 `compress`, `extract`, `indices`, `place`, `put`, `ravel_multi_index`, `take`, `unravel_index`, `where`
 
+### Iteration
+`nditer`, `ndenumerate`, `ndindex` (plus the pre-existing `broadcast`)
+
+The three NumPy iteration objects, all following the `np.broadcast` house shape — a lowercase
+factory returning a PascalCase nested class — and all **their own iterator** (NumPy's `iter(x) is x`),
+so a second enumeration RESUMES rather than restarting. Indices are `long` (NumPy's `intp`) and every
+step yields a FRESH index array, never a recycled buffer.
+
+- **`np.ndindex(...)` → `np.NDIndex`** — C-order odometer over a shape's index space, last axis
+  fastest. `params long[]` takes both spellings NumPy allows (`np.ndindex(3, 2)` and
+  `np.ndindex(arr.shape)`); a plain `int[]` overload exists because array covariance won't widen it
+  (it is deliberately NOT `params`, or `np.ndindex()` would be ambiguous). `ndindex()` and an empty
+  shape both yield ONE empty index (Python's `product()` with no iterables); any zero-length
+  dimension yields nothing; a negative dimension raises `ArgumentException "negative dimensions are
+  not allowed"` at CONSTRUCTION, before a single index is produced. Deliberately **not** NDIter-backed
+  — NumPy itself moved `ndindex` off `nditer` onto `itertools.product`, and there are no operands to
+  walk, only a counter. `Indexing/np.ndindex.cs`.
+- **`np.ndenumerate(arr)` → `np.NDEnumerate`** — yields `(index, value)` for every element. Port of
+  NumPy's `asarray(arr).flat` + `flatiter.coords`, so the order is always LOGICAL C-order whatever the
+  layout: F-contiguous, transposed, reversed, sliced and broadcast views all read through their own
+  strides (`Shape.TransformOffset`), a 0-d array yields exactly one pair with an EMPTY index, and an
+  empty array yields nothing. NumSharp's `NDArray.flat` is a raveled `NDArray` rather than a `flatiter`
+  object (no `coords` cursor), so the coordinates come from an odometer advanced in lockstep with the
+  flat position — which is what `flatiter.coords` is. `np.ndenumerate<T>(arr)` is a NumSharp extension
+  yielding unboxed `T`. `Indexing/np.ndenumerate.cs`.
+- **`np.nditer(...)` → `np.NDIterator`** — the public managed face of `NDIterRef`, i.e. the port of
+  NumPy's `nditer_pywrap.c` (argument conversion, flag-string parsing, property surface, iteration
+  protocol) over the C iterator NumSharp already had. Full signature parity
+  (`op, flags, op_flags, op_dtypes, order='K', casting="safe", op_axes, itershape, buffersize`) with
+  all 13 global and 15 per-op flag strings (incl. NumPy's `grow_inner`/`growinner` alias) and verbatim
+  error texts — `Unexpected iterator global flag "…"`, `Unexpected per-op iterator flag "…"`,
+  `order must be one of 'C', 'F', 'A', or 'K' (got 'Q')`, `casting must be one of …`,
+  `Iterator flag EXTERNAL_LOOP cannot be used if an index or multi-index is being tracked`,
+  `Iteration of zero-sized operands is not enabled`, `Must provide at least one operand`. Property
+  surface: `nop`, `ndim`, `shape`, `itersize`, `operands`, `dtypes`, `value`, `it[i]`, `index`,
+  `multi_index`, `iterindex`, `iterrange`, `itviews`, `finished`, `has_index`, `has_multi_index`,
+  `has_delayed_bufalloc`, `iterationneedsapi`; methods `iternext`, `reset`, `close`, `copy`,
+  `remove_axis`, `remove_multi_index`, `enable_external_loop`, `debug_print`. `APIs/np.nditer.cs`.
+
+**Three traps `np.nditer` had to solve — do not re-break:**
+- **`NDIterRef` is a `ref struct` and cannot be a class field.** The bridge is
+  `NDIterRef.Detach`/`Borrow` (`Backends/Iterators/NDIter.Detach.cs`), which hands the heap
+  `NDIterState*` — plus operands AND pending COPY_IF_OVERLAP write-backs — to the managed owner and
+  re-borrows a non-owning `NDIterRef` per call. The pre-existing `ReleaseState`/`FreeState` pair is
+  NOT enough on its own: it nulls the state but strands `_writebackOriginals` on the dying ref struct,
+  so a copied-for-overlap temp would never be written back. `np.nditer` therefore MUST be disposed
+  (`close()`/`using`), exactly like NumPy's `with np.nditer(...) as it:`.
+- **`GetEnumerator()` must NOT return `this`.** `foreach` disposes the enumerator it obtains, and this
+  class's `Dispose` frees unmanaged state — so returning `this` (the `np.Broadcast` pattern, safe only
+  because Broadcast owns no unmanaged memory) CLOSES the iterator at the end of any `foreach`/LINQ
+  pass and every later property read throws. A thin wrapper with a no-op `Dispose` shares the same
+  live cursor, so the observable semantics are unchanged.
+- **`MoveNext` publishes THEN advances.** NumPy's `__next__` returns `self.value` and *then* calls
+  `iternext()`, which is why after consuming one element the cursor already reads 1 and a `copy()`
+  taken there continues from the SECOND element. Safe because `value` captures the operand's ABSOLUTE
+  data pointer — except under buffered `external_loop`, where the view aliases a buffer the next step
+  refills (NumPy has the identical hazard, hence its `[x.copy() for x in it]` idiom).
+
+`np.nditer` also fills a gap `NDIterRef` leaves: an ALLOCATE operand with no `op_dtypes` entry throws
+in the engine, while NumPy INFERS the dtype by promoting the operands that have one — so
+`np.nditer([a, null])` allocates `int64` for an `int64` input and `np.nditer([int_a, float_b, null])`
+allocates `float64`. That inference lives in the wrapper, where NumPy puts it.
+
+**Perf (NPY/NS, higher = NumSharp faster; best-of-7, Release, 100K elements):** `ndindex` **1.5×**,
+`ndenumerate` **3.0×**, `nditer` with `multi_index` **8.4×**, `external_loop` ~parity — but the
+per-element `it[0]` loop is **0.17×**. The iteration ENGINE is not the problem: a bare `iternext()`
+walk of 100K elements takes 0.59 ms against NumPy's 16.6 ms for the same loop (~28× faster). The whole
+deficit is the per-element `NDArray` view object (~0.95 µs each), which is far fatter than NumPy's 0-d
+array — `new NDArray(storage, shape)` re-aliases the storage, so the hot 0-d path takes the direct
+slice ctor instead (measured 2× cheaper) and the strided `external_loop` path (once per CHUNK, not per
+element) keeps the storage route. Closing the rest means optimizing `NDArray` construction itself
+(engine resolution + ARC refcounting), which is a core-wide change, not an `nditer` one. The
+NumSharp-idiomatic fast paths — `external_loop`, `np.evaluate`, vectorized ops — avoid the per-element
+view entirely.
+
+**Gate:** unit tests only (`Indexing/np.ndindex.Test.cs`, `Indexing/np.ndenumerate.Test.cs`,
+`APIs/np.nditer.Test.cs` — 83 tests from probed NumPy 2.4.2 output). These are iteration PROTOCOLS,
+not value-producing ops, so they have no `(dtype, shape, bytes)` result for the differential-fuzz
+corpus to bit-compare and are deliberately absent from `gen_oracle.py`/`OpRegistry.cs`.
+
 ### Fused Expressions (NumSharp extension)
 `evaluate` — `np.evaluate(expr[, operands][, out])` compiles an `NDExpr` tree to ONE NDIter pass: every elementwise node runs inside a single inner-loop kernel, so chained expressions allocate no intermediates and read each operand once (NumPy-ecosystem equivalent: `numexpr.evaluate`; measured 3.2–6.1× faster than NumPy 2.4.2 on 4M chains, 1.2–4× over NumSharp's own unfused chains — gate: the `benchmark/fusion` subsystem of `benchmark/run_benchmark.py`).
 
@@ -450,7 +530,8 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NdArray.ToString.cs` |
-| Iterators | `Backends/Iterators/NDIter.cs` |
+| Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |
+| Iteration APIs (nditer/ndindex/ndenumerate) | `APIs/np.nditer.cs`, `Indexing/np.{ndindex,ndenumerate}.cs` |
 | Expression DSL (np.evaluate) | `Backends/Iterators/NDExpr.cs` (nodes + emission), `NDExpr.Typing.cs` (per-node NumPy result_type pass), `NDExpr.Evaluate.cs` (array leaves, binding, reductions, operators), `Backends/Default/Math/DefaultEngine.Evaluate.cs` (host) |
 | ILKernelGenerator | `Backends/Kernels/ILKernelGenerator*.cs` (per-chunk, NDIter-driven) |
 | DirectILKernelGenerator | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 63 partials) |
