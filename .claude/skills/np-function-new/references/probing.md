@@ -76,6 +76,11 @@ int32 element in float64 test_elements (promotes, works); isin of int64 `-1` aga
   order (rot90's "Axes must be different." before the range check is the canonical example).
 - NaN findability in search/set ops (`isin([nan],[nan])` → `False`) — probe, never assume
   (`design-recipes.md` → NaN recipe).
+- **Threshold-crossing sizes**: algorithms change past internal thresholds (pairwise summation
+  blocks at 128; heuristic algorithm switches) — probe N = 8, 129, 1000, 100_003 and compare
+  BYTES; small-N agreement proves nothing about the blocked path (`audit.md`).
+- **Call granularity for stateful APIs** (RNG): one `normal(size=5)` vs five `normal()` calls
+  must produce the same sequence (cached-draw carry); probe both granularities from the same seed.
 
 ### View-vs-copy identity
 

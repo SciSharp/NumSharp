@@ -41,6 +41,10 @@ prove your design preserves it. Breaking NumSharp changes to reach NumPy parity 
 | 5 | Benchmark | NPY/NS measured and reported honestly |
 | 6 | Document + commit | CLAUDE.md API list updated; one extensive commit |
 
+**Audit mode** (the op already exists — "verify/modernize/why does np.foo differ"): the phases
+reorder — inventory existing coverage first, signature-diff, probe OUTSIDE the corpus envelope,
+classify findings (wins included). Playbook: `references/audit.md`.
+
 ### Phase 1 — Probe (NumPy source + live behavior)
 
 - Read the real implementation in `src/numpy/` — parameter handling, overload dispatch, edge-case
@@ -167,6 +171,10 @@ optimizations are, and which of ours apply.
   0-d) — probe both, always.
 - **Index-typed outputs are Int64** — NumPy's `intp` is int64 on 64-bit platforms (NumPy 2.x even
   on Windows); house precedent `Default.NonZero.cs`. Never Int32.
+- **Corpus-green is not full parity** — every fuzz tier has a size/layout envelope (the reduce
+  tier's operands are ≤ 24 elements, below NumPy's pairwise-summation blocking). Effects that
+  engage past a threshold — accumulation trees, buffering — need probes outside the envelope
+  (`references/audit.md`).
 - **NumPy's input gates are often the cast machinery talking**, not bespoke messages
   (`Cannot cast array data from dtype('float64') to dtype('int64') according to the rule 'safe'`) —
   route validation through the equivalent machinery so texts match for free
@@ -184,6 +192,9 @@ optimizations are, and which of ours apply.
   params, non-ufunc dtype=, tuple returns, NaN-in-set-ops.
 - `references/new-ufunc.md` — the ~12-touchpoint checklist for a brand-new elementwise ufunc
   (the ATan2 archetype), loop-signature policy from `ufunc.types`, the two rejection error texts.
+- `references/audit.md` — auditing an existing op: coverage inventory, signature diff,
+  outside-the-envelope probes, finding classification (with the evidence table from the
+  five-function audit pass).
 - `references/optimizations.md` — the house optimization catalog (specialization, loop shaping,
   SIMD primitives, memory, algorithmic, bridging, semantic compliance, caching).
 - `references/variations.md` — the 51-variation input space a parity claim covers (layouts,

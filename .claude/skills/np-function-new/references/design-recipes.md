@@ -11,6 +11,10 @@ probed against NumPy 2.4.2 during the skill's gap-finding experiment.)
 | Composition + algorithm-selection param | Compose the default path from existing ops; a new kernel ONLY for the kind that needs one | `isin` (kind='sort' via argsort/searchsorted; kind='table' wants a table kernel) |
 | Index-consuming op | Fancy-index composition first (NumPy itself does); dedicated gather/scatter kernel only if the benchmark demands | `take_along_axis` (NumPy builds an index tuple) |
 | Validation-gated kernel, data-dependent output | Direct kernel + two-pass sizing + cast-machinery validation | `bincount`, `nonzero` |
+| Reduction (axis/keepdims/accumulator) | Reduction recipe below — accumulation ORDER is parity | `sum`, `mean`, `quantile` |
+| Multi-array joiner | Sequence-input C# shape + mutual-exclusion + casting recipe below | `concatenate`, `stack` |
+| RNG distribution | Seed-exact sequence parity recipe below — no oracle tier exists | `random.normal` |
+| Tolerance/predicate | Scalar-return + tolerance recipe below | `allclose`, `isclose`, `array_equal` |
 
 ## Recipe: dependency audit (before committing to composition)
 
@@ -88,6 +92,74 @@ wrong one diverges on every inexact case.
 House precedents: `np.modf` returns `(NDArray, NDArray)`; `np.average` + `np.average_returned`
 splits NumPy's `returned=True` arity-change into a second name. Prefer the tuple for fixed pairs
 (`frexp`, `divmod`, `histogram`); the `_returned`-suffix split when a flag changes the return arity.
+
+## Recipe: reductions (axis / keepdims / dtype / out)
+
+- One NumPy-shaped overload: `(a, axis, dtype, out, keepdims, where, initial)`. Axis needs BOTH
+  `int?` (null = flatten) and `int[]` — `axis=()` is NOT `axis=None`: the empty tuple reduces
+  NOTHING (identity pass over the array; probed). `np.sum`'s 10-positional-overload pile predates
+  this convention — `quantile` is the modern in-house exemplar.
+- `dtype=` is the ACCUMULATOR/loop dtype, not a post-cast — probed: `sum([1000,1000] as i8,
+  dtype=f2)` computes in float16 (precision loss visible). NEP50 default accumulators (sum(i4)→i8
+  etc.) are tabled in project CLAUDE.md.
+- Empty reductions: identity value (sum→0, prod→1) or the verbatim no-identity error
+  (`zero-size array to reduction operation minimum which has no identity`).
+- Axis validation: `AxisError: axis 2 is out of bounds for array of dimension 2` and
+  `ValueError: duplicate value in 'axis'`.
+- **Float accumulation order is parity.** NumPy sums pairwise (block 128, unroll 8). A different
+  tree (e.g. multi-accumulator SIMD) drifts 1 ULP once N crosses the blocking threshold — probed:
+  f32 sum of 1000×0.1 is `0x42c80004` vs NumPy's `0x42c80002`, while the ≤24-element fuzz corpus
+  stays green. Either replicate NumPy's exact tree or document the divergence in
+  `MisalignedRegistry` (np.evaluate's f64 accumulation is the documented-divergence precedent).
+  See `audit.md` for the envelope lesson.
+- Plan the `nan*` sibling in the same design — they ride the Masking kernels
+  (`.Masking.NaN.cs` / `.Reduction.NaN.cs`), not separate algorithms.
+
+## Recipe: multi-array joiners (concatenate / stack / block family)
+
+- C# sequence shape (house pattern, `Creation/np.concatenate.cs`): `NDArray[]` primary overload +
+  tuple-arity conveniences (`(a,b)`, `(a,b,c)`, …) so call sites read like NumPy's tuples.
+- `axis: int?` where `axis=None` means ravel-then-join (probed).
+- `out=` and `dtype=` are mutually exclusive — verbatim:
+  `concatenate() only takes `out` or `dtype` as an argument, but both were provided.`
+- `casting=` routes through the cast machinery → the safe-cast rejection text comes out verbatim
+  for free (probed identical to NumPy).
+- Structural errors, all verbatim (probed): empty sequence (`need at least one array to
+  concatenate`), 0-d inputs (`zero-dimensional arrays cannot be concatenated`), and the
+  per-dimension mismatch text that names the dimension, indices, and sizes — reproduce its format
+  exactly.
+- Output layout is voted: F only when ALL inputs are F-contiguous and not all also C — the
+  project CLAUDE.md concatenate note.
+
+## Recipe: random distributions (np.random.*)
+
+- Parity is **byte-identical draw sequences from a seed** — the draw ORDER (including rejection
+  loops and the Marsaglia-polar gauss-cache carry) is the contract, not just the distribution.
+  Probed: seed(42) `normal(5)` bytes exactly match NumPy's, and `normal(size=5)` equals five
+  `normal()` calls because the cache persists across call granularity.
+- No oracle tier covers RNG. Verification = fixed-seed expected-bytes/values unit tests +
+  `get_state`/`set_state` round-trips (house precedent: the random tests / `OpenBugs.Random.cs`).
+- Param validation texts are terse — `ValueError: scale < 0` — capture verbatim.
+- NumPy broadcasts array-valued distribution params (`loc=[0,100]`, `scale=[[1],[2]]` — probed);
+  scalar-only C# params are a recorded restriction until extended (dependency-audit rule).
+
+## Recipe: tolerance predicates & scalar returns
+
+- Return types follow NumPy's: `allclose` → C# `bool` (NumPy returns a python bool),
+  `isclose` → `NDArray<bool>`. Don't invent an NDArray return for the scalar one.
+- The formula is asymmetric — `|a-b| <= atol + rtol*|b|` — probed:
+  `isclose(1.0, 1.1, rtol=.1)` is True, `isclose(1.1, 1.0, rtol=.1)` is False. Pin both.
+- NumPy accepts ARRAY rtol/atol (they broadcast; probed `[False, True]`); `double`-only C# params
+  are a recorded restriction.
+- `equal_nan=` gates NaN self-equality; ±inf compare by exact equality.
+
+## Note: exception-type mapping
+
+Texts are matched verbatim; TYPES map by house convention — ValueError→`ArgumentException`,
+AxisError→`AxisOutOfRangeException` (or the house `AxisError`), shape ValueError→
+`IncorrectShapeException`, cast-flavored TypeError→`InvalidCastException`. Prefer the
+**message-only** exception constructors: the paramName ctors append `(Parameter 'axis')` /
+`Actual value was 2.` noise onto otherwise-verbatim texts (visible on sum's AxisError today).
 
 ## Recipe: NaN in search/set/sort-adjacent ops
 
