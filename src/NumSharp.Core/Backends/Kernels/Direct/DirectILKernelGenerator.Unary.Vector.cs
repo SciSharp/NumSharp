@@ -44,6 +44,13 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.Negate when clrType == typeof(double) || clrType == typeof(float):
                     EmitVectorSignFlip(il, clrType);
                     return;
+                // float32 exp has no Vector{N} BCL method to bind: it is NumPy's own polynomial,
+                // ported per width in NDFloatMath.Simd.cs. CanUseUnarySimd / the NDExpr gate have
+                // already established (via ExpVectorSimdAvailable) that this overload exists and
+                // that the host can run its FMA, so the call is safe here.
+                case UnaryOp.Exp when clrType == typeof(float):
+                    il.EmitCall(OpCodes.Call, CachedMethods.SingleExpVector, null);
+                    return;
             }
 
             string methodName = op switch

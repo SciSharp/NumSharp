@@ -142,7 +142,7 @@ guard and a removal candidate once confirmed dead.
 | Excuse class | Scope | Hits |
 |---|---|---|
 | NEP50 weak-scalar: 0-D operand promoted weakly | any multi-operand op × Dtype kind, 0-D operand present | 261 |
-| unary ~ULP (transcendental/magnitude algorithm difference) | single-operand × Value, every diff ≤2 ULP | 563 |
+| unary ~ULP (transcendental/magnitude algorithm difference) | single-operand × Value, every diff ≤2 ULP — **EXCEPT `exp` at a float32 result, which is gated bit-exact** (see below) | 563 |
 | complex unary within 3 ULP (full NumPy-algorithm port) | complex unary × Value, ≤3 ULP | 11 |
 | complex cos/sin/arccos/sinh/cosh pathological edge (NaN zero-sign / subnormal / overflow boundary) | those 5 ops × complex × Value | 0 |
 | complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex) | divide × complex × Value, ≤2 ULP | 17 |
@@ -152,6 +152,23 @@ guard and a removal candidate once confirmed dead.
 | reduction summation/two-pass precision (algorithm order) | sum/mean/std/var/prod × float-family result (Half/Single/Double/Complex) × Value | 401 |
 | complex reduction/scan NaN ordering/propagation differs | reduce+cumsum/cumprod × complex × Value, diffs must contain a NaN token | 35 |
 | decimal std last digit (independent 28-digit sqrts) (ledger L7) | std × Decimal × Value, ≤1 unit in the 28th significant digit | 4 |
+
+**Narrowed: `exp` at float32 is no longer excused.** `NDFloatMath.Exp` is a port of NumPy's own
+`simd_exp_FLOAT` kernel and agrees with NumPy 2.4.2 on **all 2³² float32 inputs** (verified by a chunked-checksum
+sweep over the entire bit space, through both the SIMD and scalar paths), so the blanket unary-ULP branch now
+carries `!(c.Op == "exp" && tc == NPTypeCode.Single)` and any float32 exp divergence fails the gate. The
+`exp_f32.jsonl` tier feeds it the inputs that discriminate — every NaN spelling, both saturation boundaries ±1
+ULP, the subnormal-output band, NumPy's own documented worst-error input, the FMA-contraction tie, and a quadrant
+sweep where a correctly-rounded libm disagrees with NumPy on ~35% of elements — and `OpenBugs.FuzzGate.cs`'s B8
+tests pin the carve-out from both sides. `exp` at float16 (NumPy's separate `loops_half` kernel) and float64
+(the platform's scalar `npy_exp`) stay excused, deliberately.
+
+**Host-pinned, like the cast kernels.** The port fuses the quadrant's `mul`+`add` because MSVC 19.44 — the
+compiler of the pinned `numpy==2.4.2` win-amd64 wheel — contracted that intrinsic pair into a `vfmadd`. It is
+observable at exactly one probed input, `x = 0xc26d0e6c`, where `x·log2(e)` is the exact tie `-85.5`: fused
+rounds the quadrant to -85, unfused to -86, and the results differ by 1 ULP. A NumPy built by a toolchain that
+does not contract there would differ at such ties, so this is a NumSharp regression pin against *this* wheel
+rather than portable IEEE parity — the same status as the "Host-dependent values" cast cells below.
 
 **Known bugs (tracked for fix — remove the branch when fixed):**
 

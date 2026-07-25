@@ -304,5 +304,53 @@ namespace NumSharp.UnitTest
                 new[] { new BitDiff.Diff(0, "3278.9071286096267380354468786", "3278.9071286096267380354468787") })
                 .Should().NotBeNull("one unit in the 28th significant digit is the documented sqrt envelope");
         }
+
+        // ---- B8: the unary ~ULP excuse no longer covers float32 exp ----
+        // NDFloatMath.Exp ports NumPy's simd_exp_FLOAT and is bit-exact over all 2^32 float32
+        // inputs, so a 1-ULP exp/f32 drift is a regression rather than "a libm difference". These
+        // two tests are the ratchet: the first fails if someone re-widens the excuse, the second
+        // fails if the carve-out is widened past exp's float32 loop.
+
+        private static byte[] F32(float v) => BitConverter.GetBytes(v);
+
+        private static float UlpUpF(float v, int n = 1)
+            => BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(v) + n);
+
+        [TestMethod]
+        public void B8_ExpFloat32_OneUlp_NotExcused()
+        {
+            var c = Case("exp", ("float32", new long[] { 4 }));
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                F32(2.7182817f), F32(UlpUpF(2.7182817f)), NPTypeCode.Single, OneDiff).Should().BeNull(
+                "float32 exp is a bit-exact port of NumPy's own kernel — 1 ULP is a regression");
+        }
+
+        [TestMethod]
+        public void B8_ExpFloat32_FromInt16Input_NotExcused()
+        {
+            // int16 -> float32 exp runs NumPy's SAME 'f->f' kernel, so it is held bit-exact too.
+            var c = Case("exp", ("int16", new long[] { 4 }));
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                F32(2.7182817f), F32(UlpUpF(2.7182817f)), NPTypeCode.Single, OneDiff).Should().BeNull(
+                "the narrow-integer exp loop is the float32 kernel — same bit-exact claim");
+        }
+
+        [TestMethod]
+        public void B8_ExpFloat64_OneUlp_StillExcused()
+        {
+            var c = Case("exp", ("float64", new long[] { 4 }));
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                BitConverter.GetBytes(Math.E), BitConverter.GetBytes(UlpUp(Math.E)), NPTypeCode.Double, OneDiff)
+                .Should().NotBeNull("float64 exp is still the platform libm vs NumPy's npy_exp");
+        }
+
+        [TestMethod]
+        public void B8_OtherUnaryFloat32_OneUlp_StillExcused()
+        {
+            var c = Case("sin", ("float32", new long[] { 4 }));
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                F32(0.84147096f), F32(UlpUpF(0.84147096f)), NPTypeCode.Single, OneDiff)
+                .Should().NotBeNull("only exp was ported — the other float32 transcendentals keep the envelope");
+        }
     }
 }

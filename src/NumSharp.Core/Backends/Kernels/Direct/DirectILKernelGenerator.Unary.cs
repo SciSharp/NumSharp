@@ -258,8 +258,32 @@ namespace NumSharp.Backends.Kernels
                 return RoundingVectorSimdAvailable(key.Op, key.InputType);
             }
 
+            // exp is float32-only here and needs hardware FMA (the rounding of the fused
+            // multiply-add is part of NumPy's answer, not an optimization) — see
+            // ExpVectorSimdAvailable. Double keeps the scalar Math.Exp loop.
+            if (key.Op == UnaryOp.Exp)
+                return ExpVectorSimdAvailable(key.InputType);
+
             return key.Op == UnaryOp.Sqrt || key.Op == UnaryOp.Reciprocal ||
                    key.Op == UnaryOp.Deg2Rad || key.Op == UnaryOp.Rad2Deg;
+        }
+
+        /// <summary>
+        /// Whether the active SIMD width can lower <c>exp</c> for element type <paramref name="t"/>.
+        /// True only for float32 on a host whose <see cref="VectorBits"/> width has hardware FMA
+        /// (<see cref="NumSharp.Utilities.NDFloatMath.IsExpVectorAccelerated"/>) — NumPy gates its
+        /// own vector exp identically, compiling it only for AVX2+FMA3 / AVX-512F. Everything else
+        /// takes the scalar entry point, which computes the SAME bits, just one lane at a time; the
+        /// gate is therefore purely about speed, never about results. Shared by the direct kernel
+        /// (<see cref="CanUseUnarySimd"/>), the strided gather kernel and the fused NDExpr path, so
+        /// none of them can emit a vector call this host cannot execute.
+        /// </summary>
+        internal static bool ExpVectorSimdAvailable(NPTypeCode t)
+        {
+            if (VectorBits == 0) return false;
+            if (t != NPTypeCode.Single) return false;
+            return CachedMethods.SingleExpVector != null &&
+                   NumSharp.Utilities.NDFloatMath.IsExpVectorAccelerated(VectorBits);
         }
 
         /// <summary>

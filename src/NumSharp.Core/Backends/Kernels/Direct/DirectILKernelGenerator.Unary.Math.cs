@@ -94,7 +94,14 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Exp:
-                    EmitMathCall(il, "Exp", type);
+                    // float32 gets NumPy's own kernel (NDFloatMath.Exp = simd_exp_FLOAT), which is
+                    // bit-exact with NumPy where MathF.Exp differs by up to 2 ULP on ~39% of inputs.
+                    // Deliberately NOT folded into EmitMathCall: Expm1 below composes "Exp then -1"
+                    // and must keep tracking npy_expm1f, whose kernel is a different function.
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleExp, null);
+                    else
+                        EmitMathCall(il, "Exp", type);
                     break;
 
                 case UnaryOp.Log:

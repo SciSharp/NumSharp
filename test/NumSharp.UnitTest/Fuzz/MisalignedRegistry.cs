@@ -354,7 +354,19 @@ namespace NumSharp.UnitTest.Fuzz
 
             // (5) Unary transcendental / complex magnitude ~ULP (libm / algorithm differences).
             //     Tight: every differing element within 2 ULP — a gross error still fails.
+            //
+            //     CARVED OUT: exp at a float32 RESULT. That loop is no longer "whatever the platform
+            //     libm does" — NDFloatMath.Exp is a port of NumPy's own simd_exp_FLOAT kernel and is
+            //     bit-exact over ALL 2^32 float32 inputs (exhaustively verified, not sampled), for
+            //     float32 input and for the narrow-integer inputs (int16/uint16/char) whose NumPy
+            //     loop is that same 'f->f' kernel. So ANY float32 exp divergence is now a
+            //     regression, not an algorithm difference, and must fail the gate — which is the
+            //     whole point of narrowing an excuse rather than leaving a green blanket over a
+            //     fixed op. The other exp result dtypes stay excused on purpose: float16 exp is
+            //     NumPy's separate loops_half kernel and float64 exp is the platform's scalar
+            //     npy_exp, neither of which NumSharp reproduces bit-for-bit today.
             if (kind == DivergenceKind.Value && c.Operands.Length == 1
+                && !(c.Op == "exp" && tc == NPTypeCode.Single)
                 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "unary ~ULP (transcendental/magnitude algorithm difference)";
 

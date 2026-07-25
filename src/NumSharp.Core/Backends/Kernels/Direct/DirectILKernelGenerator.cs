@@ -554,6 +554,20 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Sqrt");
             public static readonly MethodInfo ComplexExp = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Exp");
+            // float32 exp routes through NDFloatMath.Exp (port of NumPy's simd_exp_FLOAT), NOT
+            // MathF.Exp: the platform libm is ~correctly rounded while NumPy's Remez/Cody-Waite
+            // kernel carries up to 2.52 ULP of its own error, so "more accurate" reads as a
+            // divergence. The port is bit-exact against NumPy 2.4.2 over all 2^32 inputs.
+            public static readonly MethodInfo SingleExp = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Exp");
+            // The same kernel a whole register at a time, resolved for the width detected at
+            // startup. NULLABLE by design (unlike the entries above): a host with no SIMD has no
+            // width to bind, and the eligibility gate (ExpVectorSimdAvailable) reads this field to
+            // decide, so an absent overload must be a false rather than a type-load failure.
+            public static readonly MethodInfo SingleExpVector =
+                VectorBits == 0 ? null
+                : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static,
+                    new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
             // ComplexLog routes through NDComplexMath.Log (full npy_clog port): Complex.Log drops the
             // real part to 0 near |z|=1 (it lacks clog's log1p path). Reused by the Log2 composition
             // and by NDComplexMath.Log10/Log1p.

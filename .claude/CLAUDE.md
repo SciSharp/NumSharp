@@ -282,6 +282,34 @@ the scalar (NumPy's `m[()]`), `flip(m, 0)` raises AxisError. `fliplr` requires n
 
 **Each of those ufuncs exposes ONE NumPy-shaped overload** — `f(x[, x2], NDArray out = null, NDArray where = null, NPTypeCode? dtype = null)` mirroring NumPy's `f(x1[, x2], /, out=None, *, where=True, dtype=None)`: `out` is the second/third positional slot exactly like NumPy, `where`/`dtype` are reachable by name without `out`. `dtype=` selects the LOOP (NumPy loop-signature semantics, probed): computation runs at that precision even with `out=` (`sqrt([2.], out=f64, dtype=f32)` stores the f32-rounded value; `add(0.1, 0.2, out=f64, dtype=f32)` stores `0.30000001…`), `power(2, -1, dtype: f64) = 0.5` (the negative-int-exponent ValueError applies only to integer loops), `power(10, 11, dtype: f64) = 1e11` exactly (no compute-then-cast), `add(True, True, dtype: i32) = 2` (the bool→logical-OR remap keys off the FINAL loop dtype), `negative(bool, dtype: f64)` is legal, and inputs must reach the loop via same_kind casts (verbatim `Cannot cast ufunc '<name>' input [N] from ...` errors; binary errors are indexed, unary are not). Loop-existence gates raise `No loop matching ... ufunc <name>`: float-only ufuncs (sqrt/exp/log/trig + `divide`/`true_divide`) reject int/bool dtype; bitwise rejects float/complex/decimal dtype. `positive` is a full ufunc (identity loops at every dtype EXCEPT bool: plain `positive(bool)` and `dtype: bool` raise the verbatim `did not contain a loop with signature matching types <class 'numpy.dtypes.XDType'> -> ...` texts; `positive(bool, dtype: f64)` works). `round_`/`around` follow NumPy's non-ufunc shape `round(a, int decimals = 0, NDArray out = null)` (2nd positional is decimals, NOT out). Positional-dtype overloads (`np.sqrt(x, NPTypeCode.Single)`, `(x, Type)`) also exist for source compat as non-NumPy call forms (NumPy's 2nd positional is `out`). Tests: `Math/UfuncDtypeOverloadTests.cs`.
 
+**`np.exp` at float32 is BIT-EXACT with NumPy**, not merely close: `Utilities/NDFloatMath.cs` is a port of
+`simd_exp_FLOAT` — the kernel NumPy 2.4.2 actually runs (`numpy/_core/src/umath/loops_exponent_log.dispatch.c.src`,
+the `SIMD_AVX2_FMA3` instantiation; on Windows the AVX-512 variant is `!defined(_MSC_VER)`-gated and never
+compiled). Cody-Waite range reduction `y = x - k·ln2` with `k = rint(x·log2 e)`, a 5th-over-2nd-order Remez
+minimax ratio, then scale by `2^k`. It is deliberately NOT correctly rounded — NumPy documents 2.52 ULP of its
+own error at `x = 0xc2781e37` — so `MathF.Exp` (the previous kernel, ~correctly rounded) differed from NumPy on
+**~35% of all float32 inputs** by 1-2 ULP, which the blanket `unary ~ULP` fuzz excuse was silently absorbing.
+Verified **exhaustively: all 2³² float32 bit patterns** agree with NumPy 2.4.2, through both the SIMD kernel and
+the scalar entry point (chunked-checksum sweep; the corpus tier `exp_f32.jsonl` pins the discriminating inputs in
+CI, and `MisalignedRegistry`'s unary-ULP branch now EXCLUDES exp/Single so a 1-ULP regression turns the gate red).
+Specials follow from NumPy blanking the NaN lanes before the range compares: any NaN — quiet, signalling, either
+sign, any payload — returns the canonical `0x7fc00000` (note .NET's own `float.NaN` is `0xffc00000`);
+`x ≥ 88.72283935546875` (incl. `+inf`) → `+inf`; `x ≤ -103.97208404541015625` (incl. `-inf`) → `+0`; the
+`[-104, -87.3]` band produces subnormals through NumPy's `fma_scalef_ps` split. NumPy also raises the FP
+overflow/underflow status flags (a `RuntimeWarning`); NumSharp models no FP status word — pre-existing, not
+introduced here. **Host pin:** the quadrant's `mul`+`add` is FUSED because MSVC 19.44 (the numpy==2.4.2 win-amd64
+wheel's compiler) contracted it — observable at `x = 0xc26d0e6c`, where `x·log2 e` lands on the exact tie `-85.5`
+and the two spellings round `k` to -85 vs -86, a 1-ULP difference in the result. Same pin class as the
+MSVC-pinned cast kernels (`Fuzz/README.md` → "Host-dependent values"). **Perf (NPY/NS, Release, best-of-25 warm,
+`out=`):** 10M **1.14×**, 100K **1.22×**, 1K 0.69× — i.e. NumSharp is now FASTER than NumPy on the sizes where
+throughput dominates, having been 0.33× before. The port is 2.4-3.4× faster than the `MathF.Exp` kernel it
+replaces because it vectorizes: `Utilities/NDFloatMath.Simd.cs` carries `Vector{128,256,512}<float>` overloads
+(the algorithm is purely elementwise, so lane `i` is bit-identical to the scalar call), gated by
+`DirectILKernelGenerator.ExpVectorSimdAvailable` on hardware FMA — exactly as NumPy gates its own. The 1K cell is
+fixed per-call dispatch overhead (~0.8 µs), not throughput: per element it is 1.30 ns at N=1K vs 0.50 ns at
+N=100K. NumPy's whole-vector denormal branch is KEPT rather than folded into a branchless select — measured, the
+extra `vdivps` on every vector cost ~0.17 ns/element, a fifth of the kernel.
+
 ### Math — Reductions
 `all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `average_returned`, `count_nonzero`, `cumprod`, `cumsum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `ptp`, `quantile`, `std`, `sum`, `var`
 
@@ -674,7 +702,9 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 `NDArray.ToString()` is a **byte-exact port of NumPy 2.4.2's array printing** (`numpy/_core/arrayprint.py` + `dragon4.c`): `ToString()` / `ToString(false)` → `np.array_str` (`[0 1 2]`, the `str()` form), `ToString(true)` → `np.array_repr` (`array([0, 1, 2], dtype=…)`, the `repr()` form). Covers decimal-point float alignment, the maxprec/unique/fixed floatmodes, exp-format cutoffs (per-dtype, native-precision ratio), nan/inf fields, complex, summarization at `threshold` (with `…` and edgeitems), line wrapping at `linewidth`, the 0-d `str`-vs-`repr` asymmetry (`5.0` vs `5.`), and repr dtype/shape suffixes. Float digit generation leans on .NET's shortest-round-trip `ToString("R")` (== Dragon4 unique) but routes **all rounding** through `ToString("F"|"E"+precision)` (rounds the true binary value, IEEE half-to-even) — never the shortest string (the latter diverges ~50 % on adversarial ties). NumSharp's `Char` dtype uses string rendering (no NumPy equivalent). Validated against NumPy 2.4.2 across ~18 000 fuzz cases.
 
 ### Other
-`around`, `asscalar`, `copyto`, `round_`, `size`, `multithreading` (NumSharp extension — `np.multithreading(enabled, max_threads)` opt-in threaded kernels)
+`around`, `asscalar`, `copyto`, `round_`, `size`, `multithreading` (NumSharp extension — `np.multithreading(enabled, max_threads)` opt-in threaded kernels), `parity_matmul` (NumSharp extension — opt-in **byte-identical** `np.dot`/`np.matmul`)
+
+`np.parity_matmul(enabled, library = null, threads = 0)` makes `np.dot` / `np.matmul` reproduce NumPy's float32/float64 results **BIT-FOR-BIT**, by P/Invoking the *same CBLAS binary NumPy calls* through a route-for-route port of NumPy's two matrix-product dispatchers. **Off by default; NumSharp's SIMD GEMM is untouched and stays the fast path.** It exists because no portable algorithm can match NumPy here: for f32/f64 mat@mat NumPy always calls cblas (since gh-23588 it copies non-blasable operands into a temp rather than take the portable loop), and scipy-openblas' `sgemm` uses an arch-specific **multi-accumulator** scheme matching neither a sequential mul+add chain nor a sequential FMA chain — NumSharp's own GEMM differed on **94.5 %** of a `(128,784)@(784,128)` f32 product (max ~976 K ULP) and **45 %** at K=10. Both dispatchers are mirrored because they are different C code and **disagree** when an operand is not blasable (a stride-2 matrix @ vector: `np.dot` takes gemv-on-a-copy, `np.matmul` the portable loop — 278/300 elements differ): `Dot` → `cblas_matrixproduct` + the N-D `dotfunc` tail (which is NOT gemm), `MultiplyMatrix` → `@TYPE@_matmul`'s five routes incl. the `a @ a.T` **syrk** shortcut and NumPy's copy/transpose rules. Strides are ported in ELEMENTS (NumPy's are bytes — same logic with `itemsize == 1`). Scope is Single/Double; every other dtype keeps the native path (integer products are bit-exact by construction — modular addition is associative). **Three load-bearing details:** the result bits depend on the BLAS **thread count** (1/2/4/24 threads give four different answers), a **named library is binding** (an explicit path or `NUMSHARP_PARITY_BLAS` is never silently substituted — parity is a claim about one binary), and the parity path is *faster* than the native GEMM anyway (1.7–13×; 2048³ f64 293 ms vs 3860 ms). Gate: the **host-pinned** `matmul_parity` corpus tier (342 cases — 342 bit-exact on, 294 divergent off) which goes `Inconclusive`, never red, on a host that cannot load the pinned library. See `docs/GEMM_PARITY.md`, `Backends/Kernels/Blas/`, issue #626.
 
 ### Operators
 - Arithmetic: `+`, `-`, `*`, `/`, `%`, unary `-`
@@ -716,6 +746,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | DirectILKernelGenerator | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 63 partials) |
 | Kernel shared infra | `Backends/Kernels/{VectorMethodCache,ScalarMethodCache,KernelOp,StrideDetector,SimdMatMul.*}.cs` |
 | .npy/.npz format (NEP-01) | `IO/NpyFormat.cs` (port of NumPy's `_format_impl.py`), `IO/NpzFile.cs` (lazy archive), `IO/PyLiteral.cs` (header parser ≙ `ast.literal_eval`), `APIs/np.{save,load}.cs` |
+| float32 NumPy-exact math (exp) | `Utilities/NDFloatMath.cs`, `Utilities/NDFloatMath.Simd.cs` |
 | Type info | `Utilities/InfoOf.cs` |
 | Generic NDArray | `Generics/NDArray\`1.cs` |
 
