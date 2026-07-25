@@ -16,6 +16,25 @@ namespace NumSharp
             if (a.Shape.IsEmpty)
                 return a;
 
+            // NumPy normalizes the axis against the OUTPUT ndim (a.ndim + 1) and reports the axis
+            // AS GIVEN. Shape.ExpandDimension guards only the negative side, and does it against
+            // the already-normalized value, so all three of these were wrong:
+            //   expand_dims(arange(6), 5)  -> ArgumentOutOfRangeException "... (Parameter 'index')"
+            //                                 leaking out of Arrays.Insert, three frames down
+            //   expand_dims(arange(6), -3) -> "Effective axis -1 is less than 0" (the NORMALIZED
+            //                                 axis, not the -3 the caller passed)
+            //   expand_dims(scalar, 5)     -> silently returned shape (1); the 0-d branch never
+            //                                 looked at the axis at all
+            // NumPy answers all three with: axis N is out of bounds for array of dimension {outNdim}.
+            //
+            // The guard lives here rather than in Shape.ExpandDimension because that method has
+            // internal callers (keepdims reductions, fancy-index shaping, asmatrix) that are not
+            // bound by NumPy's axis contract. The sibling int[] overload already validates this way,
+            // and this reproduces its text exactly so both overloads agree.
+            int outNdim = a.ndim + 1;
+            if (axis < -outNdim || axis >= outNdim)
+                throw new ArgumentException($"axis {axis} is out of bounds for array of dimension {outNdim}");
+
             return new NDArray(a.Storage.Alias(a.Shape.ExpandDimension(axis))) { TensorEngine = a.TensorEngine };
         }
 

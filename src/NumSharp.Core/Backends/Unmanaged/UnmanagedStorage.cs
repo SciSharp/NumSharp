@@ -1066,7 +1066,10 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
-            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(dtype ?? DType, shape.size, true));
+            var resolved = dtype ?? DType;
+            AllocationGuard.CheckDimensions(shape.dimensions, resolved.GetTypeCode());
+
+            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(resolved, shape.size, true));
         }
 
         // This overload allocates BRAND-NEW owned memory, so its result is always writeable — even when
@@ -1087,7 +1090,10 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
-            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(dtype ?? DType, shape.size, fillZeros));
+            var resolved = dtype ?? DType;
+            AllocationGuard.CheckDimensions(shape.dimensions, resolved.GetTypeCode());
+
+            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(resolved, shape.size, fillZeros));
         }
 
         /// <summary>
@@ -1102,6 +1108,8 @@ namespace NumSharp.Backends
 
             if (dtype == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(dtype));
+
+            AllocationGuard.CheckDimensions(shape.dimensions, dtype);
 
             _Allocate(FreshWriteable(shape), ArraySlice.Allocate(dtype, shape.size, fillZeros));
         }

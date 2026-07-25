@@ -32,6 +32,11 @@ namespace NumSharp
             var typeCode = (dtype ?? fill_value?.GetType() ?? a.dtype).GetTypeCode();
             char physical = OrderResolver.Resolve(order, a.Shape);
             var shape = new Shape((long[])a.shape.Clone(), physical);
+
+            // Allocates from shape.size directly (not via UnmanagedStorage.Allocate), so the
+            // dimension guard has to be explicit here — see np.full.
+            AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
+
             return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Converts.ChangeType(fill_value, typeCode)), shape));
         }
     }

@@ -115,6 +115,10 @@ namespace NumSharp
                     break;
             }
 
+            // Allocates from shape.size directly (not via UnmanagedStorage.Allocate), so the
+            // dimension guard has to be explicit here — see np.full.
+            AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
+
             return new NDArray(ArraySlice.Allocate(typeCode, shape.size, one), shape);
         }
     }

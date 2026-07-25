@@ -63,18 +63,29 @@ namespace NumSharp
             //    zero dim (so a negative dim following a zero is NOT reported) and rejects negatives
             //    otherwise, with this exact message (distinct from np.resize's wording).
             var newDims = new_shape.dimensions ?? System.Array.Empty<long>();
+            long itemsize = this.dtypesize;
             long newSize = 1;
             for (int i = 0; i < newDims.Length; i++)
             {
                 if (newDims[i] == 0) { newSize = 0; break; }
                 if (newDims[i] < 0)
                     throw new IncorrectShapeException("negative dimensions not allowed");
+
+                // NumPy guards this product with npy_mul_sizes_with_overflow and answers a wrapped
+                // one with PyErr_NoMemory — a MemoryError, NOT the ValueError that array CREATION
+                // raises for the same arithmetic (probed: a.resize((2**62,2**62)) is MemoryError,
+                // np.zeros((2**62,2**62)) is "array is too big"). Without the check the product
+                // wraps to a small (often zero) count and the array is relabelled over a buffer
+                // that was never allocated for it.
+                if (newDims[i] > long.MaxValue / newSize)
+                    throw new OutOfMemoryException();
                 newSize *= newDims[i];
             }
 
-            long itemsize = this.dtypesize;
             long oldSize = this.size;
             long oldBytes = oldSize * itemsize;
+            if (itemsize > 0 && newSize > long.MaxValue / itemsize)
+                throw new OutOfMemoryException();
             long newBytes = newSize * itemsize;
 
             // The physical memory layout to preserve: F only when strictly F-contiguous (and not C),
@@ -103,7 +114,13 @@ namespace NumSharp
                 // why an F-contiguous grow re-labels the same bytes with the new column-major
                 // strides), then zero any grown tail.
                 var freshStrides = order == 'F' ? FortranStrides(newDims) : ContiguousStrides(newDims);
-                var fresh = new NDArray(this.typecode, new Shape(newDims, freshStrides), fillZeros: false);
+
+                // Allocate by ELEMENT COUNT and relabel, rather than by the requested dimensions.
+                // The validation above is PyArray_Resize_int's, which is a DIFFERENT loop from the
+                // creation-time one AllocationGuard enforces: resize stops at the first zero dim,
+                // so `(0, -1)` is a legal resize target while `np.zeros((0, -1))` is not. NumPy has
+                // the same split — it mallocs newnbytes and only then writes the dimensions.
+                var fresh = new NDArray(this.typecode, new Shape(new[] { newSize }), fillZeros: false);
 
                 byte* src = this.Storage.Address + shape.offset * itemsize;
                 byte* dst = fresh.Storage.Address;
@@ -118,6 +135,8 @@ namespace NumSharp
                 // for any other sharer under refcheck:false), then discard the fresh wrapper so the
                 // net effect is `this` solely owning the new buffer.
                 var newStorage = fresh.Storage;
+                var freshShape = new Shape(newDims, freshStrides);
+                newStorage.SetShapeUnsafe(ref freshShape);
                 newStorage.InternalArray.TryAddRef();
                 this.Storage.InternalArray?.Release();
                 this.Storage = newStorage;

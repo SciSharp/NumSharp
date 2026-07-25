@@ -272,6 +272,70 @@ the scalar (NumPy's `m[()]`), `flip(m, 0)` raises AxisError. `fliplr` requires n
 
 `resize` ships as both `np.resize(a, new_shape)` (function — fills the enlarged output with **repeated copies** of `a` in C-order via an exact-sized doubling byte-tile; empty source / zero new-size → `zeros`; always C-contiguous; any input layout is raveled first) and `ndarray.resize(new_shape, refcheck=true)` (**in-place** — grows with **zeros**, shrinks by truncation, operates on the raw contiguous buffer so an F-contiguous resize relabels memory column-major). The method mirrors NumPy's guards verbatim (`IncorrectShapeException`): single-segment only, and when the byte size changes it must own its data (not a view) and — under `refcheck` — not be shared (`IArraySlice.IsUniquelyReferenced`, backed by the ARC block refcount); `refcheck:false` bypasses. Same-size resize is a pure in-place reshape (no ownership/reference check). See `Manipulation/np.resize.cs`, `Manipulation/NDArray.resize.cs`.
 
+### Allocation & reshape guards (error parity)
+
+The `size × itemsize` overflow class and the reshape rejection family, both ported from NumPy's own
+C rather than hand-rolled. Probed against 2.4.2; gates: `Backends/AllocationGuardTests.cs` (13),
+`Manipulation/ReshapeErrorParityTests.cs` (19), `Manipulation/ManipulationErrorParityTests.cs` (11).
+
+- **`AllocationGuard`** (`Exceptions/AllocationGuard.cs`) is the dimension-check block of
+  `PyArray_NewFromDescr_int`. **A size computed by multiplication cannot be trusted until its
+  overflow is checked, and the failure is silent by construction** — a wrapped byte count looks
+  like a small allocation, not an error. `np.zeros((2^31, 2^31))` of float64 used to *succeed*:
+  element count 2^62 is representable but 2^62×8 = 2^65 wraps to **exactly 0**, so the allocator
+  was asked for zero bytes and obliged — `[0,0]` read 0 and the last element read out of bounds;
+  `np.ones` on the same shape wrote out of bounds. Two behaviours here are load-bearing and easy
+  to get wrong: the running product starts at **itemSize** (the quantity checked is BYTES — which
+  is why `np.zeros(2^60)` f8 is rejected while the same shape of int8 is merely `OutOfMemoryException`
+  ≡ NumPy's `MemoryError`), and **a zero dimension does NOT short-circuit the scan** (NumPy keeps
+  multiplying "as if" it were 1, so `np.zeros((0, 2^62))` f8 still reports "array is too big").
+  Dims are scanned left to right so the error follows NumPy's order: `(-1, 2^62)` is
+  `negative dimensions are not allowed`, `(2^62, -1)` is `array is too big; ...`.
+  There are **two distinct wrap points** and a guard that sees only one misses the other:
+  `(2^31, 2^31)` wraps the BYTE count, `(2^62, 2^62)` wraps the ELEMENT COUNT itself to 0 — which
+  is why the guard keys off DIMENSIONS, never `shape.size`. `np.full` / `np.full_like` / `np.ones`
+  allocate from `shape.size` directly instead of via `UnmanagedStorage.Allocate`, so they carry the
+  call explicitly; `UnmanagedMemoryBlock<T>`'s two allocating ctors hold a byte-count backstop for
+  any path that reaches an allocator without passing a `Shape`.
+- **`ndarray.resize` is NOT the same loop** — `PyArray_Resize_int` differs from the creation guard
+  on all three axes, all observable: it **breaks** at the first zero dim (so `a.resize((0,-1))` is
+  legal and yields shape `(0,-1)`, while `np.zeros((0,-1))` raises), its text omits the "are"
+  (`negative dimensions not allowed`), and an overflowing product is a **MemoryError**, not a
+  ValueError. It therefore allocates by element COUNT and relabels — as NumPy does, mallocing
+  `newnbytes` and only then writing the dimensions — instead of routing the requested dims through
+  the creation guard.
+- **`Shape.Reshape`** is now `_fix_unknown_dimension` + `convert_shape_to_string`. **ANY negative
+  dim is the unknown one**, not just `-1` (probed: `np.zeros(6).reshape(-3)` is `(6,)`,
+  `reshape(3,-5)` is `(3,2)`) — matching only `-1` let a SECOND negative ride through as a literal
+  dimension, so `reshape(-1,-2)` silently produced the shape `(-3,-2)`, a negative-extent array.
+  The zero product is tested **before** the division (`s_known == 0 || size % s_known != 0`), which
+  is why `np.zeros((0,3)).reshape(-1,0)` no longer raises `DivideByZeroException`. Every rejection
+  except the multiple-unknown one carries NumPy's single verbatim text,
+  `cannot reshape array of size {n} into shape {s}`, where `{s}` follows `convert_shape_to_string`'s
+  three quirks: LEADING unknowns are dropped (`reshape(-1,0)` → `(0)`), later ones read `newaxis`
+  (`reshape(0,-1)` → `(0,newaxis)`), and a one-element shape closes with `,)` (`reshape(0)` → `(0,)`)
+  — so `(0)` and `(0,)` both occur and mean different things. Type stays the long-standing
+  `IncorrectShapeException` (house convention); the multiple-unknown case is `ValueError`
+  ("can only specify one unknown dimension"), previously a bare `ArgumentException`.
+- **`np.expand_dims(a, int)`** validates the axis against the OUTPUT ndim (`a.ndim + 1`) and reports
+  the axis **as given**. `Shape.ExpandDimension` guards only the negative side and does it against
+  the *normalized* value, so a positive overshoot fell through to `Arrays.Insert` and surfaced as
+  `ArgumentOutOfRangeException ... (Parameter 'index')` — a parameter `expand_dims` does not have —
+  a negative overshoot reported the normalized axis, and a **0-d input skipped the check entirely**
+  (`expand_dims(scalar, 5)` silently returned shape `(1)`). The guard lives at the `np.*` boundary,
+  not in `Shape.ExpandDimension`, because that method has internal callers (keepdims reductions,
+  fancy-index shaping, `asmatrix`) not bound by NumPy's axis contract.
+
+**Matched, do not re-prove:** the manipulation family's *values* are clean across the degenerate
+inputs (`split`/`array_split`/`hsplit`/`vsplit` × {0, negative, empty}, `repeat`/`tile`/`roll` ×
+{0, negative, empty axis}, `squeeze`, `moveaxis`, `swapaxes`). **Known remaining divergences**, all
+typed-and-texted on both sides (text only, no raw framework leak): `np.split(a, 0)` raises
+"number sections must be larger than 0." where NumPy leaks `ZeroDivisionError: integer modulo by
+zero` (NumSharp is stricter, deliberately); `split(..., axis=oob)` is `ArgumentOutOfRangeException`
+vs NumPy's leaked `IndexError`; `squeeze`, `repeat(-1)`, `tile(-1)` and the `AxisOutOfRangeException`
+texts differ in wording; `np.broadcast_to(a, (2^62, 6))` builds the view where NumPy refuses with
+`iterator is too large`.
+
 ### Broadcasting
 `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`
 

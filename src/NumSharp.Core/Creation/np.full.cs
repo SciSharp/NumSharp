@@ -77,6 +77,13 @@ namespace NumSharp
             if (typeCode == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(typeCode));
 
+            // This path allocates from shape.size directly instead of going through
+            // UnmanagedStorage.Allocate, so it needs the dimension guard explicitly: for
+            // (2^62, 2^62) the element count ITSELF wraps to 0, and a zero-element request is
+            // one the allocator happily satisfies. Checking dimensions rather than the wrapped
+            // product is the only way to see it.
+            AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
+
             return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Converts.ChangeType(fill_value, typeCode)), shape));
         }
     }

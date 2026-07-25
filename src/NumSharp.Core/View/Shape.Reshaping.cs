@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -37,18 +39,18 @@ namespace NumSharp
 
                 if (isScalarShape)
                 {
-                    // Scalar shapes are valid only when reshaping from size 1
+                    // Scalar shapes are valid only when reshaping from size 1.
+                    // NumPy renders the empty shape as "()" (probed: np.zeros(3).reshape(())).
                     if (size != 1)
-                        throw new IncorrectShapeException($"Cannot reshape array of size {size} into scalar shape");
+                        throw ReshapeSizeMismatch(size, Array.Empty<long>());
                 }
                 else
                 {
-                    // For non-scalar shapes, check for empty collection and size match
-                    if (newShape.size == 0 && size != 0)
-                        throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
-
+                    // A zero-size request against a non-empty array is just a size mismatch —
+                    // NumPy reports it with the same text as any other (probed:
+                    // np.zeros(6).reshape(0) -> "cannot reshape array of size 6 into shape (0,)").
                     if (size != newShape.size)
-                        throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({size})");
+                        throw ReshapeSizeMismatch(size, newShape.dimensions);
                 }
             }
 
@@ -91,18 +93,15 @@ namespace NumSharp
 
                 if (isScalarShape)
                 {
-                    // Scalar shapes are valid only when reshaping from size 1
+                    // Scalar shapes are valid only when reshaping from size 1.
+                    // NumPy renders the empty shape as "()" (probed: np.zeros(3).reshape(())).
                     if (size != 1)
-                        throw new IncorrectShapeException($"Cannot reshape array of size {size} into scalar shape");
+                        throw ReshapeSizeMismatch(size, Array.Empty<long>());
                 }
                 else
                 {
-                    // For non-scalar shapes, check for empty collection and size match
-                    if (newShape.size == 0 && size != 0)
-                        throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
-
                     if (size != newShape.size)
-                        throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({size})");
+                        throw ReshapeSizeMismatch(size, newShape.dimensions);
                 }
             }
 
@@ -122,8 +121,80 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Infers missing dimension (-1) and returns a new shape with correct dimensions/strides.
+        ///     Renders a requested shape the way NumPy renders it inside a reshape error message.
         /// </summary>
+        /// <remarks>
+        ///     Port of <c>convert_shape_to_string</c> (numpy/_core/src/multiarray/common.c). Three
+        ///     quirks are load-bearing, and all three are observable in NumPy 2.4.2's own texts:
+        ///     <list type="bullet">
+        ///     <item>LEADING unknown (negative) dims are dropped entirely — <c>reshape(-1, 0)</c>
+        ///     reports <c>(0)</c>, not <c>(newaxis,0)</c>.</item>
+        ///     <item>An unknown dim anywhere after the first printed one reads <c>newaxis</c> —
+        ///     <c>reshape(0, -1)</c> reports <c>(0,newaxis)</c>.</item>
+        ///     <item>A one-element shape closes with <c>,)</c> so it reads as a Python 1-tuple —
+        ///     <c>reshape(0)</c> reports <c>(0,)</c>. That is why <c>(0)</c> and <c>(0,)</c> both
+        ///     appear in NumPy's messages and mean different things.</item>
+        ///     </list>
+        ///     There are no spaces after the commas; NumPy builds this by concatenation, not by
+        ///     formatting a Python tuple.
+        /// </remarks>
+        internal static string ConvertShapeToString(long[] vals)
+        {
+            int n = vals?.Length ?? 0;
+
+            // Skip the leading "newaxis" run; if that consumes everything, the shape prints as ().
+            int i = 0;
+            while (i < n && vals[i] < 0)
+                i++;
+
+            if (i == n)
+                return "()";
+
+            var sb = new StringBuilder();
+            sb.Append('(').Append(vals[i++].ToString(CultureInfo.InvariantCulture));
+            for (; i < n; i++)
+            {
+                if (vals[i] < 0)
+                    sb.Append(",newaxis");
+                else
+                    sb.Append(',').Append(vals[i].ToString(CultureInfo.InvariantCulture));
+            }
+
+            return sb.Append(n == 1 ? ",)" : ")").ToString();
+        }
+
+        /// <summary>
+        ///     NumPy's single reshape failure, verbatim (<c>raise_reshape_size_mismatch</c>).
+        /// </summary>
+        /// <remarks>
+        ///     NumPy answers every reshape rejection except the multiple-unknown one with this ONE
+        ///     text. NumSharp keeps its long-standing <see cref="IncorrectShapeException"/> type
+        ///     (the house convention — NumPy's <c>ValueError</c> maps to it across the shape APIs)
+        ///     but the message is NumPy's, character for character.
+        /// </remarks>
+        private static IncorrectShapeException ReshapeSizeMismatch(long size, long[] requested)
+            => new IncorrectShapeException($"cannot reshape array of size {size} into shape {ConvertShapeToString(requested)}");
+
+        /// <summary>
+        ///     Resolves an unknown (negative) dimension and validates the requested shape's size.
+        /// </summary>
+        /// <remarks>
+        ///     Port of NumPy's <c>_fix_unknown_dimension</c> (numpy/_core/src/multiarray/shape.c).
+        ///     Two things it does that the previous hand-rolled version did not:
+        ///     <list type="bullet">
+        ///     <item><b>ANY negative dimension is the unknown one</b>, not just <c>-1</c> — probed
+        ///     on 2.4.2, <c>np.zeros(6).reshape(-3)</c> is <c>(6,)</c> and <c>reshape(3,-5)</c> is
+        ///     <c>(3,2)</c>. Matching only <c>-1</c> let a second negative through as a literal
+        ///     dimension, so <c>reshape(-1,-2)</c> silently produced the shape <c>(-3,-2)</c> —
+        ///     a negative-extent array, not an error.</item>
+        ///     <item><b>The zero product is checked BEFORE the division</b>, which is the whole
+        ///     reason <c>np.zeros((0,3)).reshape(-1,0)</c> used to raise
+        ///     <see cref="DivideByZeroException"/>: a degenerate known dimension makes the divisor
+        ///     0. NumPy folds it into the ordinary size-mismatch test
+        ///     (<c>s_known == 0 || s_original % s_known != 0</c>) and reports
+        ///     <c>cannot reshape array of size 0 into shape (0)</c>.</item>
+        ///     </list>
+        /// </remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         private readonly Shape _inferMissingDimension(Shape shape)
         {
@@ -131,39 +202,46 @@ namespace NumSharp
             if (shape.dimensions == null || shape.dimensions.Length == 0)
                 return shape;
 
-            var indexOfNegOne = -1;
+            var dims = shape.dimensions;
+            int n = dims.Length;
+            var indexOfUnknown = -1;
             long product = 1;
-            for (int i = 0; i < shape.NDim; i++)
+
+            for (int i = 0; i < n; i++)
             {
-                if (shape[i] == -1)
+                if (dims[i] < 0)
                 {
-                    if (indexOfNegOne != -1)
-                        throw new ArgumentException("Only allowed to pass one shape dimension as -1");
-                    indexOfNegOne = i;
+                    if (indexOfUnknown != -1)
+                        throw new ValueError("can only specify one unknown dimension");
+                    indexOfUnknown = i;
+                }
+                else if (product != 0 && dims[i] > long.MaxValue / product)
+                {
+                    // The known dims alone overflow the element counter. NumPy reports this as an
+                    // ordinary size mismatch rather than letting the wrapped product through as a
+                    // plausible-looking (and much smaller) size.
+                    throw ReshapeSizeMismatch(size, dims);
                 }
                 else
                 {
-                    product *= shape[i];
+                    product *= dims[i];
                 }
             }
 
-            if (indexOfNegOne == -1)
-                return shape; // No -1 to infer
+            if (indexOfUnknown == -1)
+                return shape; // Nothing to infer; the caller's size check handles the rest.
 
             if (this.IsBroadcasted)
             {
                 throw new NotSupportedException("Reshaping a broadcasted array with a -1 (unknown) dimension is not supported.");
             }
 
-            long missingValue = this.size / product;
-            if (missingValue * product != this.size)
-            {
-                throw new ArgumentException("Bad shape: missing dimension would have to be non-integer");
-            }
+            if (product == 0 || size % product != 0)
+                throw ReshapeSizeMismatch(size, dims);
 
             // Create new dimensions array with inferred value
-            var newDims = (long[])shape.dimensions.Clone();
-            newDims[indexOfNegOne] = missingValue;
+            var newDims = (long[])dims.Clone();
+            newDims[indexOfUnknown] = size / product;
 
             // Compute new strides for the corrected dimensions
             var newStrides = ComputeContiguousStrides(newDims);

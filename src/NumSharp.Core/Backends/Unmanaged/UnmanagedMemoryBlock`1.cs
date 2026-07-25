@@ -37,6 +37,9 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(Optimize)]
         public UnmanagedMemoryBlock(long count)
         {
+            // A wrapped byte count asks the allocator for a small (often zero) block and gets one,
+            // so the corruption is silent. See AllocationGuard.
+            AllocationGuard.CheckElementCount(count, InfoOf<T>.Size);
             var bytes = BytesCount = count * InfoOf<T>.Size;
             var ptr = SizeBucketedBufferPool.Take(bytes);
             _disposer = new Disposer(ptr, bytes);
@@ -160,6 +163,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(Optimize)]
         private UnmanagedMemoryBlock(long count, Zeroed _)
         {
+            AllocationGuard.CheckElementCount(count, InfoOf<T>.Size);
             var bytes = BytesCount = count * InfoOf<T>.Size;
             Count = count;
 
