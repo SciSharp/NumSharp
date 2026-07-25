@@ -338,11 +338,21 @@ works as an entry too, so `np.s_[…]` composes into `np.r_[…]`.
   that write through, built with `expand_dims` rather than `reshape` so a stride-0/read-only operand
   keeps its strides AND its non-writeable flag (reshape materializes those and would hand back a
   writeable copy, which NumPy does not do). `ValueError("Cross index must be 1 dimensional")`.
-- **`np.s_[…]` / `np.index_exp[…]`** → `Slice[]`, usable directly as `arr[…]`. **C# divergence:** the
-  two are identical here. NumPy's pair differs only in `maketuple` (`np.s_[2::2]` is a bare slice,
-  `np.index_exp[2::2]` a 1-tuple), but `NDArray`'s indexer is `this[params Slice[]]`, so a lone `Slice`
-  and a one-element `Slice[]` are literally the same call. Both are kept so NumPy code ports verbatim;
-  `maketuple` is exposed but has no observable effect.
+- **`np.s_[…]` / `np.index_exp[…]`** — capture an index expression instead of applying it. The
+  **indexer surface mirrors `NDArray`'s**, because NumPy's `s_` passes ANY index object straight
+  through (`np.s_[[1,2]]` is the list, `np.s_[..., mask]` the tuple) — so the contract is
+  **`arr[X]` ≡ `arr[np.s_[X]]` for every X**, verified across the whole vocabulary. Three overloads
+  cover what `NDArray`'s three public indexers do, each returning the array type that indexer
+  consumes: `this[string]` and `this[params Slice[]]` → **`Slice[]`** for BASIC expressions (slices,
+  slice strings, integers — `int` and `string` convert implicitly to `Slice`, so `np.s_[0]` and
+  `np.s_["1:3", "::2"]` stay here), and `this[params object[]]` → **`object[]`** the moment an entry
+  cannot be a `Slice` — an `NDArray` fancy index or boolean mask, `int[]`/`long[]`/`bool[]`, an
+  `IList` sequence, or a basic/advanced mix like `np.s_[Slice.All, np.array(new[]{0,2})]`. Both feed
+  `arr[…]` directly, including an `NDArray<T>` (its own indexers do not hide the inherited
+  `this[params object[]]`). **C# divergence:** `s_` and `index_exp` are identical here — NumPy's pair
+  differs only in `maketuple` (`np.s_[2::2]` is a bare slice, `np.index_exp[2::2]` a 1-tuple), but a
+  lone `Slice` and a one-element `Slice[]` are literally the same call in C#. Both are kept so NumPy
+  code ports verbatim; `maketuple` is exposed but has no observable effect.
 
 **NEP50 weak scalars.** NumPy distinguishes a Python literal (`5`, weak — adopts the other operand's
 dtype) from a NumPy scalar (`np.int64(5)`, strong). C# has no such split, so the mapping is by type:

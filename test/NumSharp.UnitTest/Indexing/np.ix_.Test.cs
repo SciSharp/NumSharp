@@ -199,5 +199,80 @@ namespace NumSharp.UnitTest.Indexing
         {
             new Action(() => _ = np.s_["bogus!"]).Should().Throw<ArgumentException>();
         }
+
+        // ------------------------------------------------- s_: the full arr[...] vocabulary
+
+        [TestMethod]
+        public void S_CapturesAdvancedIndices_NotJustSlices()
+        {
+            // NumPy's s_ passes ANY index object through (np.s_[[1,2]] is the list), so every form
+            // NDArray's indexer accepts must be expressible here too — fancy arrays and masks
+            // included, not only the basic slice vocabulary.
+            var a = np.arange(12).reshape(3L, 4L);
+            var v = np.arange(5);
+
+            a[np.s_[np.array(new[] { 0, 2 })]].Should()
+                .BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 8, 9, 10, 11);
+            a[np.s_[new int[] { 0, 2 }]].Should().BeShaped(2, 4);
+            a[np.s_[new long[] { 0, 2 }]].Should().BeShaped(2, 4);
+            a[np.s_[new List<int> { 0, 2 }]].Should().BeShaped(2, 4);
+            v[np.s_[new[] { true, false, true, false, true }]].Should()
+                .BeShaped(3).And.BeOfValues(0, 2, 4);
+        }
+
+        [TestMethod]
+        public void S_CapturesMixedBasicAndAdvancedIndices()
+        {
+            var a = np.arange(12).reshape(3L, 4L);
+            a[np.s_[Slice.All, new int[] { 0, 2 }]].Should()
+                .BeShaped(3, 2).And.BeOfValues(0, 2, 4, 6, 8, 10);
+            a[np.s_["1:3", np.array(new[] { 0, 2 })]].Should()
+                .BeShaped(2, 2).And.BeOfValues(4, 6, 8, 10);
+            a[np.s_[np.ix_(new long[] { 0, 2 }, new long[] { 1, 3 })]].Should()
+                .BeShaped(2, 2).And.BeOfValues(1, 3, 9, 11);
+        }
+
+        [TestMethod]
+        public void S_BasicFormsStillReturnSliceArray_AdvancedReturnObjectArray()
+        {
+            // Overload resolution must keep the basic vocabulary on the Slice[] overload: a lone
+            // Slice, an int (implicitly convertible to Slice) and a slice string all stay there.
+            // The object[] overload only takes over when an entry cannot be a Slice.
+            np.s_["1:3, ::2"].Should().BeOfType<Slice[]>();
+            np.s_[new Slice(1, 3), Slice.All].Should().BeOfType<Slice[]>();
+            np.s_[0].Should().BeOfType<Slice[]>();
+            np.s_["1:3", "::2"].Should().BeOfType<Slice[]>();
+
+            np.s_[np.array(new[] { 0, 2 })].Should().BeOfType<object[]>();
+            np.s_[new int[] { 0, 2 }].Should().BeOfType<object[]>();
+            np.s_[Slice.All, np.array(new[] { 0, 2 })].Should().BeOfType<object[]>();
+        }
+
+        [TestMethod]
+        public void S_IsEquivalentToIndexingDirectly_AcrossTheWholeVocabulary()
+        {
+            // The contract: arr[X] and arr[np.s_[X]] are the same call for every X.
+            var a = np.arange(12).reshape(3L, 4L);
+            var v = np.arange(5);
+            var fancy = np.array(new[] { 0, 2 });
+            var mask = np.array(new[] { true, false, true, false, true });
+
+            Same(a["1:3, ::2"], a[np.s_["1:3, ::2"]]);
+            Same(a[new Slice(1, 3), Slice.All], a[np.s_[new Slice(1, 3), Slice.All]]);
+            Same(a[0], a[np.s_[0]]);
+            Same(a[fancy], a[np.s_[fancy]]);
+            Same(a[new int[] { 0, 2 }], a[np.s_[new int[] { 0, 2 }]]);
+            Same(v[mask], v[np.s_[mask]]);
+            Same(a[Slice.All, new int[] { 0, 2 }], a[np.s_[Slice.All, new int[] { 0, 2 }]]);
+            Same(a[Slice.NewAxis, Slice.All, Slice.All], a[np.s_[Slice.NewAxis, Slice.All, Slice.All]]);
+            Same(a[Slice.Ellipsis, Slice.Index(0)], a[np.s_[Slice.Ellipsis, Slice.Index(0)]]);
+        }
+
+        private static void Same(NDArray direct, NDArray viaS_)
+        {
+            viaS_.typecode.Should().Be(direct.typecode);
+            viaS_.shape.Should().BeEquivalentTo(direct.shape);
+            viaS_.tobytes('C').Should().BeEquivalentTo(direct.tobytes('C'));
+        }
     }
 }
