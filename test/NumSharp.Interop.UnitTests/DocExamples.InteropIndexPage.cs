@@ -24,8 +24,8 @@ namespace NumSharp.Interop.UnitTests
         // ============================  ## The contract  ==========================================
 
         /// <summary>
-        ///     "Because a layout is four numbers, and NumSharp exposes all four" — the page's window
-        ///     block and its transcript: shared base address, element strides `[6, 2]`, offset `6`,
+        ///     "A layout is four numbers, and NumSharp exposes all four" — the page's window block
+        ///     and its transcript: shared base address, element strides `[6, 2]`, offset `6`,
         ///     dtype `Double`.
         /// </summary>
         [TestMethod]
@@ -46,7 +46,7 @@ namespace NumSharp.Interop.UnitTests
         }
 
         /// <summary>
-        ///     "Through one primitive: wrap a pointer with a release hook" — the page's block, run
+        ///     "One primitive: wrap a pointer with a release hook" — the page's block, run
         ///     verbatim, with its transcript: reads in place, kernels over it, writes land, the hook
         ///     fires on Dispose.
         /// </summary>
@@ -77,8 +77,9 @@ namespace NumSharp.Interop.UnitTests
         }
 
         /// <summary>
-        ///     "On the last reference to the memory block — original or derived view" — disposing the
-        ///     original frees nothing while a slice lives; the refcount decides, not disposal order.
+        ///     "The hook fires on the last reference to the memory block — original or derived view" —
+        ///     disposing the original frees nothing while a slice lives; the refcount decides, not
+        ///     disposal order.
         /// </summary>
         [TestMethod]
         public unsafe void Contract_ReleaseHook_FiresOnTheLastReference_IncludingDerivedViews()
