@@ -78,24 +78,35 @@ np                Static API class (like `import numpy as np`)
 ### NumSharp.Core is 100 % managed C# — optional packages are the only native path
 
 `NumSharp.Core` has **no native dependency and no P/Invoke**: every kernel is its own managed code,
-and that is the default a user gets. An out-of-box backend arrives ONLY as a separate NuGet package
-that **subclasses `DefaultEngine`**, overrides the operations it accelerates, and installs itself
-into the one seam Core exposes for it:
+and that is the default a user gets. A native backend arrives ONLY as a separate NuGet package, and
+Core's whole knowledge of it is ONE abstraction plus ONE settable property on the engine:
 
 ```csharp
-public static TensorEngine BackendFactory.Default { get; set; }   // null = the built-in managed engine
+public interface IBlasBackend                                    // Backends/IBlasBackend.cs
+{
+    string Info { get; }
+    bool TryDot(NDArray left, NDArray right, out NDArray result);
+    bool TryMatMul2D(NDArray left, NDArray right, NDArray result);
+}
+
+public abstract class TensorEngine
+{
+    public IBlasBackend Blas { get; set; }   // null (the default) = NumSharp's own managed kernels
+}
 ```
 
-`BackendFactory.GetEngine()` returns `Default ?? DefaultEngine`, so a package sets that property
-(typically from a `[ModuleInitializer]`, making the package reference itself the opt-in) and every
-`NDArray` created *afterwards* resolves to the subclass. **An `NDArray` binds its engine at
-construction** — install the backend before creating arrays, or earlier arrays keep the managed one.
-Whatever a subclass does not override stays NumSharp's own code, so an optional package can only
-change *how* an op is computed, never *whether* it can be.
+The package implements the interface and assigns the property from a `[ModuleInitializer]`, so
+**referencing the package is the whole opt-in**; assigning null takes it back out. Both members are
+`Try`-shaped: a backend answers only for the operands it implements and returns false for the rest,
+so an optional package can change *which* implementation computes a product, never *whether* one can
+be computed. The engine is **not** subclassed and not replaced — deliberately: an `NDArray` binds
+its engine at CONSTRUCTION and `np.dot(a,b)` dispatches on `a.TensorEngine`, so swapping the engine
+would only reach arrays created afterwards, while a property on the cached singleton takes effect
+for arrays that already exist.
 
-| Package | Engine | Overrides | Why |
-|---------|--------|-----------|-----|
-| `NumSharp.Interop.BLAS` (`src/NumSharp.Interop.BLAS/`) | `BlasEngine : DefaultEngine` | `Dot`, `MultiplyMatrix` | float32/float64 matrix products through an external CBLAS (OpenBLAS/MKL/…) — faster on large matrices, and **byte-identical to a NumPy that calls the same binary**. Ships no native asset: it binds whatever BLAS the consumer already has. See below and `docs/GEMM_PARITY.md`. |
+| Package | Implements | Serves | Why |
+|---------|-----------|--------|-----|
+| `NumSharp.Interop.BLAS` (`src/NumSharp.Interop.BLAS/`) | `OpenBlasBackend : IBlasBackend` | `np.dot`, `np.matmul` for float32/float64 | matrix products through an external CBLAS (OpenBLAS/MKL/…) — faster on large matrices, and **byte-identical to a NumPy that calls the same binary**. Ships no native asset: it binds whatever BLAS the consumer already has. See below and `docs/GEMM_PARITY.md`. |
 
 **`NumSharp.Interop.BLAS`** exists because no portable algorithm can match NumPy's float matrix
 products: for f32/f64 mat@mat NumPy **always** calls cblas (since gh-23588 it copies non-blasable
@@ -103,22 +114,23 @@ operands into a temp rather than take its own portable loop), and scipy-openblas
 arch-specific **multi-accumulator** scheme matching neither a sequential mul+add chain nor a
 sequential FMA chain — NumSharp's managed GEMM differed on **94.5 %** of a `(128,784)@(784,128)` f32
 product (max ~976 K ULP) and **45 %** at K=10, which compounds until 50 Adam steps spread it to 73 %
-of a weight matrix. The engine is a route-for-route port of **both** NumPy dispatchers, because they
-are different C code and **disagree** when an operand is not blasable (a stride-2 matrix @ vector:
+of a weight matrix. The backend is a route-for-route port of **both** NumPy dispatchers, because
+they are different C code and **disagree** when an operand is not blasable (a stride-2 matrix @ vector:
 `np.dot` takes gemv-on-a-copy, `np.matmul` the portable loop — 278/300 elements differ): `Dot` →
 `cblas_matrixproduct` + the N-D `dotfunc` tail (which is NOT gemm), `MultiplyMatrix` →
 `@TYPE@_matmul`'s five routes incl. the `a @ a.T` **syrk** shortcut and NumPy's copy/transpose
-rules. Strides are ported in ELEMENTS (NumPy's are bytes — same logic with `itemsize == 1`). Scope
-is Single/Double; every other dtype falls through to the managed kernel (integer products are
-bit-exact by construction — modular addition is associative). **Three load-bearing details:** the
+rules — which is why `IBlasBackend` has both `TryDot` and `TryMatMul2D` rather than one
+matrix-product method. Strides are ported in ELEMENTS (NumPy's are bytes — same logic with
+`itemsize == 1`). Scope is Single/Double; every other dtype falls through to the managed kernel
+(integer products are bit-exact by construction — modular addition is associative). **Three load-bearing details:** the
 result bits depend on the BLAS **thread count** (1/2/4/24 threads give four different answers), a
 **named library is binding** (`Blas.Enable(path)` / `NUMSHARP_PARITY_BLAS` is never silently
 substituted — parity is a claim about one binary), and the BLAS path is *faster* than the managed
 GEMM anyway (1.7–13×; 2048³ f64 293 ms vs 3860 ms). API: `Blas.Enable(library, threads)` /
 `Blas.Disable()` / `Blas.Enabled` / `Blas.Info`; `NUMSHARP_BLAS_AUTOINSTALL=0` opts out of the
 module-load install. Gate: the **host-pinned** `matmul_parity` corpus tier (342 cases — 342
-bit-exact with the engine, 294 divergent without it) which goes `Inconclusive`, never red, on a host
-that cannot load the pinned library.
+bit-exact with the backend, 294 divergent without it) which goes `Inconclusive`, never red, on a
+host that cannot load the pinned library.
 
 ## Key Design Decisions
 

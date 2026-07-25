@@ -8,6 +8,23 @@ namespace NumSharp
 {
     public abstract class TensorEngine
     {
+        /// <summary>
+        ///     An external BLAS this engine delegates its matrix products to, or null (the default)
+        ///     to compute them with NumSharp's own managed SIMD kernels.
+        /// </summary>
+        /// <remarks>
+        ///     NumSharp.Core is 100 % managed C# and never assigns this. It is set by an optional
+        ///     package — <c>NumSharp.Interop.BLAS</c> does it from a <c>[ModuleInitializer]</c>, so
+        ///     referencing that package is the whole opt-in — and can be cleared again by assigning
+        ///     null. A backend only answers for what it implements (see
+        ///     <see cref="IBlasBackend"/>); everything else falls back to the managed kernels.
+        ///     <para>
+        ///     Engines are cached singletons (<see cref="BackendFactory"/>), so assigning this
+        ///     affects every array that resolves to the engine — including ones already created.
+        ///     </para>
+        /// </remarks>
+        public IBlasBackend Blas { get; set; }
+
         #region Allocation
 
         /// <summary>

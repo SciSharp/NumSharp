@@ -1,10 +1,10 @@
 # `NumSharp.Interop.BLAS` — byte-identical `np.dot` / `np.matmul`
 
 > **✅ IMPLEMENTED (2026-07-25).** Optional package `src/NumSharp.Interop.BLAS/`
-> (`BlasEngine : DefaultEngine`, `Blas`, `CBlasNative`, `BlasParity{,.Matmul,.Dot,.Entry}`),
-> installed through the one seam Core exposes (`BackendFactory.Default`), gate
-> `FuzzCorpusTests.MatmulParity` over the 342-case `matmul_parity` corpus tier.
-> Measured: **342/342 bit-exact with the engine installed, 294/342 divergent without it.**
+> (`OpenBlasBackend : IBlasBackend`, `Blas`, `CBlasNative`, `BlasParity{,.Matmul,.Dot,.Entry}`),
+> installed through the one seam Core exposes — the engine's settable `TensorEngine.Blas`
+> property — gate `FuzzCorpusTests.MatmulParity` over the 342-case `matmul_parity` corpus tier.
+> Measured: **342/342 bit-exact with the backend installed, 294/342 divergent without it.**
 >
 > **NumSharp.Core stays 100 % managed C#** — it contains no BLAS code, no P/Invoke and no native
 > dependency. With this package absent every matrix product is NumSharp's own SIMD GEMM.
@@ -61,7 +61,7 @@ dotnet add package NumSharp.Interop.BLAS
 ```csharp
 using NumSharp.Interop.Blas;
 
-// Referencing the package IS the opt-in: a [ModuleInitializer] installs the engine if a CBLAS
+// Referencing the package IS the opt-in: a [ModuleInitializer] installs the backend if a CBLAS
 // library can be found, and silently does nothing if one cannot.
 Blas.Enable(@"…\numpy.libs\libscipy_openblas64_-74a4….dll", threads: 1);  // pin, for byte parity
 Blas.Enabled;                                            // bool
@@ -75,21 +75,46 @@ NumPy's wheels rename their symbols `scipy_cblas_sgemm64_`-style and use **64-bi
 a stock LP64 `cblas_sgemm` is also bound, with the integer width marshalled per call
 (`CBlasNative.IsIlp64`).
 
-### Nothing else changes
+### The seam: one property on the engine
 
-NumSharp's GEBP/FMA SIMD GEMM is untouched and remains the default. `BlasEngine` subclasses
-`DefaultEngine` and overrides exactly **two** members; every other op, dtype, kernel and iterator is
-the managed code it inherits, and anything the port cannot service falls straight through to `base`:
+NumSharp's GEBP/FMA SIMD GEMM is untouched and remains the default. Core gained a single
+abstraction and a single settable property — and nothing else BLAS-shaped:
 
-| Override | Mirrors |
+```csharp
+namespace NumSharp.Backends;
+
+public interface IBlasBackend                                    // the whole Core-side surface
+{
+    string Info { get; }
+    bool TryDot(NDArray left, NDArray right, out NDArray result);
+    bool TryMatMul2D(NDArray left, NDArray right, NDArray result);
+}
+
+public abstract class TensorEngine
+{
+    public IBlasBackend Blas { get; set; }   // null (default) = NumSharp's own managed kernels
+}
+```
+
+The package implements `IBlasBackend` and assigns it from a `[ModuleInitializer]`. `DefaultEngine`
+consults the property at the top of `Dot` and inside `MultiplyMatrix`, and computes the product
+itself whenever it is null or the backend returns false:
+
+| Entry point | Mirrors |
 |---|---|
-| `Dot` | `PyArray_MatrixProduct2` → `cblas_matrixproduct` (ndim ≤ 2) + the `dotfunc` iterator tail (ndim > 2) |
-| `MultiplyMatrix` | `@TYPE@_matmul`, the gufunc behind `np.matmul` and `@` — also every batch element of a stacked matmul |
+| `TryDot` | `PyArray_MatrixProduct2` → `cblas_matrixproduct` (ndim ≤ 2) + the `dotfunc` iterator tail (ndim > 2) |
+| `TryMatMul2D` | `@TYPE@_matmul`, the gufunc behind `np.matmul` and `@` — also every batch element of a stacked matmul |
 
-The only change inside Core was to open that seam: `MultiplyMatrix` and `BatchedMatmul` went from
-`protected static` to `protected virtual`, and `BackendFactory` gained the settable `Default`
-engine. **An `NDArray` binds its engine at construction**, so install the package's engine before
-creating the arrays you want it to compute with.
+Both are `Try`-shaped because a backend answers only for what it implements (an external CBLAS:
+float32/float64), so **installing one can change WHICH implementation runs, never WHETHER NumSharp
+can compute the product**.
+
+**Why a property and not an engine subclass** (which is what the first cut did): an `NDArray` binds
+its engine when it is CONSTRUCTED, and `np.dot(a, b)` dispatches on `a.TensorEngine`. Swapping the
+engine therefore only reaches arrays created afterwards — a silent footgun. Engines are cached
+singletons, so setting a property on one takes effect for arrays that already exist. The only other
+Core change is mechanical: `MultiplyMatrix` and `BatchedMatmul` went from `protected static` to
+instance methods, because a static cannot read the engine's property.
 
 ## 4. Why BOTH dispatchers had to be ported
 
@@ -136,7 +161,7 @@ cannot change the result. `Complex` (`cblas_zgemm`) and `Half` are the only real
 Acceptance harness: 110 hand-built cases (NumPy saves backing arrays + a view recipe both stacks
 apply; NumSharp replays and bit-compares) and the 342-case committed corpus tier.
 
-| Gate | Managed engine | `BlasEngine` |
+| Gate | Managed kernels | `IBlasBackend` installed |
 |---|---|---|
 | 110-case acceptance harness | 20 bit-exact | **110 bit-exact** |
 | `matmul_parity` corpus tier (342) | 294 divergent | **342 bit-exact** |
@@ -182,10 +207,10 @@ dotnet test --filter "FullyQualifiedName~FuzzCorpusTests.MatmulParity"
 ```
 
 The test assembly suppresses the package's module-load auto-install
-(`Fuzz/BlasEngineAutoInstallGuard.cs` sets `NUMSHARP_BLAS_AUTOINSTALL=0`) and enables the engine
+(`Fuzz/BlasEngineAutoInstallGuard.cs` sets `NUMSHARP_BLAS_AUTOINSTALL=0`) and installs the backend
 per-test instead: every other tier asserts NumSharp's OWN kernels, and an install triggered at
-whatever moment the first parity type is touched would silently change which engine the tests
-around it used.
+whatever moment the first parity type is touched would silently change what the tests around it
+measured.
 
 ## 8. Traps
 

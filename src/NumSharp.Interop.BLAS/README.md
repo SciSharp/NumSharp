@@ -16,7 +16,7 @@ dotnet add package NumSharp.Interop.BLAS
 using NumSharp;
 using NumSharp.Interop.Blas;
 
-// Referencing the package is the opt-in: a module initializer installs the engine if a CBLAS
+// Referencing the package is the opt-in: a module initializer installs the backend if a CBLAS
 // library can be found, and silently does nothing if one cannot.
 var c = np.dot(a, b);
 
@@ -26,17 +26,28 @@ Blas.Enable(@"…\site-packages\numpy.libs\libscipy_openblas64_-74a4….dll", th
 Console.WriteLine(Blas.Info);
 // C:\...\libscipy_openblas64_-74a4….dll [symbols scipy_*64_, ILP64, threads 1] OpenBLAS 0.3.31.dev …
 
-Blas.Disable();   // back to NumSharp's managed SIMD GEMM
+Blas.Disable();   // clears engine.Blas — back to NumSharp's managed SIMD GEMM
 ```
 
 ## What it does
 
-`BlasEngine` subclasses `DefaultEngine` and overrides exactly two members — `Dot` and
-`MultiplyMatrix`. Every other operation, dtype, kernel and iterator is the managed code it
-inherits. Anything the backend cannot service (any dtype other than float32/float64, or a shape
-outside the ported surface) falls straight through to the built-in implementation.
+`OpenBlasBackend` implements NumSharp's `IBlasBackend` — two `Try`-shaped members, `TryDot` and
+`TryMatMul2D` — and the package assigns it to the engine's `TensorEngine.Blas` property. The engine
+itself is NOT replaced or subclassed: every other operation, dtype, kernel and iterator is
+untouched, and anything the backend does not serve (any dtype other than float32/float64, or a
+shape outside the ported surface) is computed by the built-in managed kernels as before.
 
-The two overrides are a **route-for-route port of NumPy 2.4.2's two matrix-product dispatchers** —
+```csharp
+// The entire Core-side surface:
+public interface IBlasBackend {
+    string Info { get; }
+    bool TryDot(NDArray left, NDArray right, out NDArray result);
+    bool TryMatMul2D(NDArray left, NDArray right, NDArray result);
+}
+public abstract class TensorEngine { public IBlasBackend Blas { get; set; } }
+```
+
+The two entry points are a **route-for-route port of NumPy 2.4.2's two matrix-product dispatchers** —
 `cblas_matrixproduct` (behind `np.dot`) and the `@TYPE@_matmul` gufunc (behind `np.matmul` and
 `@`). They are genuinely different C code and disagree on some inputs, so both are mirrored:
 gemm (with the `a @ a.T` **syrk** shortcut and NumPy's copy-if-not-blasable rule), both gemv

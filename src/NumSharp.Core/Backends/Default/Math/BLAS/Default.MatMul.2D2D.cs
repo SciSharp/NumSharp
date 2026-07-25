@@ -27,7 +27,7 @@ namespace NumSharp.Backends
         /// </remarks>
         [SuppressMessage("ReSharper", "JoinDeclarationAndInitializer")]
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        protected virtual NDArray MultiplyMatrix(NDArray left, NDArray right, NDArray @out = null)
+        protected NDArray MultiplyMatrix(NDArray left, NDArray right, NDArray @out = null)
         {
             Debug.Assert(left.Shape.NDim == 2);
             Debug.Assert(right.Shape.NDim == 2);
@@ -50,6 +50,12 @@ namespace NumSharp.Backends
                     throw new IncorrectShapeException(
                         $"Output shape {@out.Shape} incompatible with matmul result shape ({M}, {N})");
             }
+
+            // An external BLAS, when one is installed (np is 100% managed by default — see
+            // TensorEngine.Blas). It must own the whole product to reproduce its own summation
+            // order, so it is consulted before the SIMD paths and answers only for what it serves.
+            if (Blas != null && Blas.TryMatMul2D(left, right, result))
+                return result;
 
             // Stride-aware SIMD path for same-type float / double.
             if (TryMatMulSimd(left, right, result, M, K, N))

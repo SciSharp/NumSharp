@@ -7,17 +7,13 @@ using NumSharp.Interop.Blas;
 namespace NumSharp.UnitTest.Backends
 {
     /// <summary>
-    ///     The contract around the optional <c>NumSharp.Interop.BLAS</c> engine — that installing it
-    ///     is opt-in, that it degrades to the built-in managed engine for everything it does not
-    ///     serve, and that a named library is never silently substituted. The BITS are gated
-    ///     separately by the host-pinned <c>matmul_parity</c> corpus tier
+    ///     The contract around the optional <c>NumSharp.Interop.BLAS</c> backend — that installing
+    ///     it is opt-in, that the engine falls back to its own managed kernels for everything the
+    ///     backend does not serve, and that a named library is never silently substituted. The BITS
+    ///     are gated separately by the host-pinned <c>matmul_parity</c> corpus tier
     ///     (<c>FuzzCorpusTests.MatmulParity</c>); everything here must hold on any machine, and the
     ///     tests that need a real BLAS say so and go Inconclusive without one.
     /// </summary>
-    /// <remarks>
-    ///     Order matters in every test that computes: an <see cref="NDArray"/> resolves its engine
-    ///     when it is CONSTRUCTED, so operands must be built after the engine is installed.
-    /// </remarks>
     [TestClass]
     public class MatmulParityBackendTests
     {
@@ -38,38 +34,53 @@ namespace NumSharp.UnitTest.Backends
         }
 
         [TestMethod]
-        public void NotInstalled_ByDefault_TheEngineIsTheManagedOne()
+        public void NotInstalled_ByDefault_TheEngineHasNoBlasBackend()
         {
-            // NumSharp.Core is 100% managed: nothing may swap the engine implicitly. (The test
-            // assembly suppresses the package's module-load auto-install — see
+            // NumSharp.Core is 100% managed: nothing may install a native backend implicitly. (The
+            // test assembly suppresses the package's module-load auto-install — see
             // BlasEngineAutoInstallGuard — precisely so this stays observable.)
             Blas.Disable();
             Assert.IsFalse(Blas.Enabled);
-            Assert.IsNull(BackendFactory.Default);
-            Assert.IsInstanceOfType(BackendFactory.GetEngine(), typeof(DefaultEngine));
-            Assert.IsNotInstanceOfType(BackendFactory.GetEngine(), typeof(BlasEngine));
+            Assert.IsNull(BackendFactory.GetEngine().Blas);
         }
 
         [TestMethod]
-        public void Enable_InstallsASubclassOfTheManagedEngine()
+        public void Enable_SetsTheBackendOnTheEngine_WithoutReplacingIt()
         {
             RequireBlas();
             Assert.IsTrue(Blas.Enabled);
             var engine = BackendFactory.GetEngine();
-            Assert.IsInstanceOfType(engine, typeof(BlasEngine));
-            // The point of the subclass: it IS the default engine, so every op it does not override
-            // is still NumSharp's own managed code.
+            // The engine itself is untouched — still the built-in one, now holding a backend.
             Assert.IsInstanceOfType(engine, typeof(DefaultEngine));
+            Assert.IsInstanceOfType(engine.Blas, typeof(IBlasBackend));
+            Assert.IsInstanceOfType(engine.Blas, typeof(OpenBlasBackend));
         }
 
         [TestMethod]
-        public void Disable_RestoresTheManagedEngine()
+        public void Disable_ClearsTheBackend()
         {
             RequireBlas();
             Blas.Disable();
             Assert.IsFalse(Blas.Enabled);
-            Assert.IsNull(BackendFactory.Default);
-            Assert.IsNotInstanceOfType(BackendFactory.GetEngine(), typeof(BlasEngine));
+            Assert.IsNull(BackendFactory.GetEngine().Blas);
+            Assert.IsInstanceOfType(BackendFactory.GetEngine(), typeof(DefaultEngine));
+        }
+
+        [TestMethod]
+        public void TheBackendIsAPlainSettableProperty()
+        {
+            // The seam is a property on the engine, not a type swap: Core exposes IBlasBackend and
+            // nothing more, so any implementation can be dropped in or taken out at will.
+            RequireBlas();
+            var engine = BackendFactory.GetEngine();
+            IBlasBackend backend = engine.Blas;
+            Assert.IsNotNull(backend);
+            StringAssert.Contains(backend.Info, "symbols");
+
+            engine.Blas = null;
+            Assert.IsFalse(Blas.Enabled);
+            engine.Blas = backend;
+            Assert.IsTrue(Blas.Enabled);
         }
 
         [TestMethod]
@@ -89,7 +100,7 @@ namespace NumSharp.UnitTest.Backends
             var ex = Assert.ThrowsException<DllNotFoundException>(
                 () => Blas.Enable("K:/definitely/not/a/blas/here.dll"));
             StringAssert.Contains(ex.Message, "no other one is substituted");
-            Assert.IsFalse(Blas.Enabled, "a failed load must leave the engine uninstalled");
+            Assert.IsFalse(Blas.Enabled, "a failed load must leave the backend uninstalled");
         }
 
         [TestMethod]
@@ -121,17 +132,19 @@ namespace NumSharp.UnitTest.Backends
         }
 
         [TestMethod]
-        public void ParityEngine_ProducesTheSameSHAPE_AndDTYPE_AsTheManagedOne()
+        public void Backend_ProducesTheSameSHAPE_AndDTYPE_AsTheManagedKernel()
         {
-            RequireBlas();
+            // The backend hangs off the engine, and engines are cached singletons — so the SAME
+            // arrays switch implementation when it is installed or cleared. (That is the advantage
+            // of a property over swapping the engine: an NDArray binds its engine at construction,
+            // so a swapped engine would only ever reach arrays created afterwards.)
             var a = np.arange(12).astype(NPTypeCode.Single).reshape(3, 4);
             var b = np.arange(20).astype(NPTypeCode.Single).reshape(4, 5);
-            var parity = np.dot(a, b);
 
             Blas.Disable();
-            var na = np.arange(12).astype(NPTypeCode.Single).reshape(3, 4);
-            var nb = np.arange(20).astype(NPTypeCode.Single).reshape(4, 5);
-            var native = np.dot(na, nb);
+            var native = np.dot(a, b);
+            RequireBlas();
+            var parity = np.dot(a, b);
 
             CollectionAssert.AreEqual(native.shape, parity.shape);
             Assert.AreEqual(native.typecode, parity.typecode);
@@ -141,16 +154,14 @@ namespace NumSharp.UnitTest.Backends
         public void IntegerProducts_FallThroughToTheManagedKernel()
         {
             // Integer addition is associative even when it wraps, so summation order cannot change
-            // an integer matrix product — the BLAS engine deliberately does not claim these and
-            // must hand them straight back to the base implementation.
-            Blas.Disable();
-            var na = np.arange(6).astype(NPTypeCode.Int32).reshape(2, 3);
-            var nb = np.arange(6).astype(NPTypeCode.Int32).reshape(3, 2);
-            var native = np.matmul(na, nb);
-
-            RequireBlas();
+            // an integer matrix product — the backend deliberately returns false for these and the
+            // engine computes them itself.
             var a = np.arange(6).astype(NPTypeCode.Int32).reshape(2, 3);
             var b = np.arange(6).astype(NPTypeCode.Int32).reshape(3, 2);
+
+            Blas.Disable();
+            var native = np.matmul(a, b);
+            RequireBlas();
             var parity = np.matmul(a, b);
 
             Assert.AreEqual(NPTypeCode.Int32, parity.typecode);
@@ -158,7 +169,7 @@ namespace NumSharp.UnitTest.Backends
         }
 
         [TestMethod]
-        public void EveryShapeRoute_RoundTripsThroughTheParityEngine()
+        public void EveryShapeRoute_RoundTripsThroughTheBackend()
         {
             // Values are not asserted here (that is the corpus tier's job, pinned to a host) — this
             // asserts the port never throws or mis-shapes on any of the routes it dispatches:
@@ -216,7 +227,7 @@ namespace NumSharp.UnitTest.Backends
         [TestMethod]
         public void EveryOtherOperation_StaysTheManagedImplementation()
         {
-            // The engine overrides exactly two members; installing it must not change anything else.
+            // The backend answers two entry points; installing it must not change anything else.
             RequireBlas();
             var a = np.arange(6).astype(NPTypeCode.Double).reshape(2, 3);
             Assert.AreEqual(15.0, (double)np.sum(a));

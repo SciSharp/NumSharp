@@ -6,16 +6,17 @@ using NumSharp.Backends;
 namespace NumSharp.Interop.Blas
 {
     /// <summary>
-    ///     Installs (and describes) the external-CBLAS matrix-product engine.
+    ///     Installs (and describes) the external-CBLAS matrix-product backend.
     /// </summary>
     /// <remarks>
     ///     <para>
     ///     <b>Referencing this package is the opt-in.</b> A module initializer runs
-    ///     <see cref="TryEnable"/> when the assembly loads: if a CBLAS library can be found it
-    ///     becomes <see cref="BackendFactory.Default"/> and <c>np.dot</c> / <c>np.matmul</c> compute
-    ///     float32/float64 products through it; if none can be found NOTHING changes and NumSharp
-    ///     keeps doing its own managed math. Loading never throws at module load — an app that
-    ///     merely references the package cannot be broken by a missing native library.
+    ///     <see cref="TryEnable"/> when the assembly loads: if a CBLAS library can be found, an
+    ///     <see cref="OpenBlasBackend"/> is assigned to the engine's <see cref="TensorEngine.Blas"/>
+    ///     property and <c>np.dot</c> / <c>np.matmul</c> compute float32/float64 products through
+    ///     it; if none can be found NOTHING changes and NumSharp keeps doing its own managed math.
+    ///     Loading never throws at module load — an app that merely references the package cannot
+    ///     be broken by a missing native library.
     ///     </para>
     ///     <para>
     ///     Call <see cref="Enable"/> explicitly to pin a specific library or thread count — which is
@@ -33,8 +34,8 @@ namespace NumSharp.Interop.Blas
     /// </remarks>
     public static class Blas
     {
-        /// <summary>True when a <see cref="BlasEngine"/> is currently the default engine.</summary>
-        public static bool Enabled => BackendFactory.Default is BlasEngine;
+        /// <summary>True when this package's backend is installed on the default engine.</summary>
+        public static bool Enabled => BackendFactory.GetEngine().Blas is OpenBlasBackend;
 
         /// <summary>
         ///     Path, symbol scheme, integer width, thread count and build string of the loaded
@@ -55,7 +56,7 @@ namespace NumSharp.Interop.Blas
         }
 
         /// <summary>
-        ///     Loads a CBLAS library and makes it NumSharp's matrix-product backend.
+        ///     Loads a CBLAS library and installs it as the engine's matrix-product backend.
         /// </summary>
         /// <param name="library">
         ///     Path of the CBLAS shared library (or a directory holding one), or null to
@@ -79,25 +80,26 @@ namespace NumSharp.Interop.Blas
             if (threads > 0)
                 CBlasNative.TrySetNumThreads(threads);
 
-            if (!(BackendFactory.Default is BlasEngine))
-                BackendFactory.Default = new BlasEngine();
+            if (!(BackendFactory.GetEngine().Blas is OpenBlasBackend))
+                BackendFactory.GetEngine().Blas = new OpenBlasBackend();
         }
 
         /// <summary>
-        ///     Uninstalls the engine: NumSharp goes back to its own managed SIMD GEMM. The native
+        ///     Uninstalls the backend: NumSharp goes back to its own managed SIMD GEMM. The native
         ///     library stays loaded (unloading a BLAS mid-process is not worth the risk), so a later
         ///     <see cref="Enable"/> is free.
         /// </summary>
         public static void Disable()
         {
-            if (BackendFactory.Default is BlasEngine)
-                BackendFactory.Default = null;
+            var engine = BackendFactory.GetEngine();
+            if (engine.Blas is OpenBlasBackend)
+                engine.Blas = null;
         }
 
         /// <summary>
         ///     <see cref="Enable"/> that reports failure instead of throwing — the module-load path.
         /// </summary>
-        /// <returns>True when the engine is installed.</returns>
+        /// <returns>True when the backend is installed.</returns>
         public static bool TryEnable(string library = null, int threads = 0)
         {
             try
