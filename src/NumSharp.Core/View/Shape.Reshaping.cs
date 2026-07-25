@@ -273,5 +273,48 @@ namespace NumSharp
             long bufSize = bufferSize > 0 ? bufferSize : size;
             return new Shape(newDims, newStrides, offset, bufSize);
         }
+
+        /// <summary>
+        ///     Prepends <paramref name="count"/> leading length-1 axes in ONE allocation —
+        ///     the closed form of <see cref="ExpandDimension"/><c>(0)</c> applied
+        ///     <paramref name="count"/> times.
+        /// </summary>
+        /// <remarks>
+        ///     Repeating <see cref="ExpandDimension"/> is quadratic: every step clones both
+        ///     <c>dimensions</c> and <c>strides</c> and inserts into them, so padding to
+        ///     ndim=100 000 one axis at a time copies ~10^10 longs (measured 27.6 s).
+        ///     The result has a closed form: prepending never touches an existing entry, and
+        ///     every prepended axis takes stride <c>dimensions[0] * strides[0]</c> — the first
+        ///     insert computes it from the source, and each later one recomputes
+        ///     <c>1 * that</c>. A 0-d source degenerates to stride 0 through
+        ///     <see cref="ExpandDimension"/>'s scalar branch. So this is bit-identical to the
+        ///     loop it replaces, cached flags included, at O(ndim).
+        /// </remarks>
+        internal readonly Shape PrependDimensions(int count)
+        {
+            if (count <= 0)
+                return this;
+
+            int inputNdim = dimensions?.Length ?? 0;
+            var newDims = new long[inputNdim + count];
+            var newStrides = new long[inputNdim + count];
+
+            long padStride = inputNdim == 0 ? 0L : dimensions[0] * strides[0];
+            for (int i = 0; i < count; i++)
+            {
+                newDims[i] = 1L;
+                newStrides[i] = padStride;
+            }
+
+            for (int i = 0; i < inputNdim; i++)
+            {
+                newDims[count + i] = dimensions[i];
+                newStrides[count + i] = strides[i];
+            }
+
+            // Create new shape with preserved bufferSize
+            long bufSize = bufferSize > 0 ? bufferSize : size;
+            return new Shape(newDims, newStrides, offset, bufSize);
+        }
     }
 }

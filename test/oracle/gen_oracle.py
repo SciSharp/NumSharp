@@ -1283,12 +1283,17 @@ def gen_index_tricks(dtypes):
         except Exception:
             continue
 
-    # -- 5. edge sweep: the ndmin ceiling and the uint64 weak-integer default ------------
-    # NumPy validates ndmin against NPY_MAXDIMS inside array(..., ndmin=n), so an oversized
-    # directive raises for EVERY entry kind. NumSharp had to grow the same guard: without it
-    # the per-axis expansion loop walks `ndmin` times (54 s at 100_000, unbounded at 2**31-1).
+    # -- 5. edge sweep: ndmin at NumPy's ceiling, and the uint64 weak-integer default ----
+    # `ndmin` reaches array(..., ndmin=n) from a user-typed directive, so it is swept over
+    # every entry kind. Only ndmin=64 is emitted, and deliberately so: past it NumPy raises
+    # `ndmin must be <= ndmax (64)` (NPY_MAXDIMS) while NumSharp has no 64-dimension ceiling
+    # anywhere and happily builds the array, so there is no NumPy answer to bit-compare and
+    # `expects_throw` would assert a limitation NumSharp does not have. That divergence is
+    # pinned instead by np.r_.Test.cs -> R_HighNdmin_IsSupportedAndCheap, which asserts the
+    # rank AND guards the O(ndim) expansion (the per-axis loop it replaced was quadratic:
+    # 27.6 s at ndmin=100_000, unbounded at 2**31-1). Do not re-add the >64 rows here.
     b1 = _cbase((2,), np.dtype("int64"))
-    for ndmin in (64, 65, 100000, 2 ** 31 - 1):
+    for ndmin in (64,):
         for (tag, exprs, operands, scalars) in [
             ("array", [], [describe(b1, b1)], []),
             ("slice", [("0:3", slice(0, 3))], [], []),

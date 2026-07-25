@@ -196,9 +196,13 @@ namespace NumSharp
                 return a.reshape(dims);
             }
 
-            while (a.ndim < ndim)
-                a = np.expand_dims(a, 0);
-            return a;
+            // ONE alias, not one per axis. `ndim` can be user-supplied (np.r_'s ndmin comes
+            // from a typed directive string), and expand_dims-per-axis clones dims+strides
+            // every step — quadratic, 27.6 s at ndim=100 000. PrependDimensions is the
+            // closed form of that loop, so the strides, flags and writeable bit are
+            // unchanged; only the cost is.
+            return new NDArray(a.Storage.Alias(a.Shape.PrependDimensions(ndim - a.ndim)))
+                { TensorEngine = a.TensorEngine };
         }
 
         /// <summary>

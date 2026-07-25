@@ -358,10 +358,18 @@ works as an entry too, so `np.s_[…]` composes into `np.r_[…]`.
   a silently-ignored 4th field, and `"r"`/`"c"` matrix coercion (routed through `np.asmatrix`, since
   NumSharp has no `matrix` subclass). Verbatim errors: `special directives must be the first entry.`,
   `unknown special directive` / `unknown special directive '0,q'` (the comma form quotes, the bare form
-  does not), and `ndmin must be <= ndmax (64)` — `ndmin` comes from a user-typed directive, and
-  without NumPy's `NPY_MAXDIMS` cap a typo like `"0,2147483647"` walks the per-axis expansion loop
-  two billion times (measured 54 s at `ndmin=100000`, quadratic) instead of failing instantly. A
-  non-positive `ndmin` stays a no-op, as upstream.
+  does not). **`ndmin` is deliberately UNCAPPED** — NumPy validates it against `NPY_MAXDIMS` and raises
+  `ndmin must be <= ndmax (64)`, but NumSharp has no 64-dimension ceiling anywhere, so importing one
+  here would make the DSL refuse ranks the rest of the library accepts; `np.r_["0,100000", x]` builds
+  the 100000-dim array. It has to be CHEAP rather than merely bounded, because `ndmin` comes from a
+  user-typed directive: `np.AtLeastNdView` prepends every axis in ONE `Storage.Alias` over
+  `Shape.PrependDimensions` (O(ndim), 1.4 ms at `ndmin=100000`) where the per-axis `expand_dims` loop
+  it replaced cloned dims+strides each step — quadratic, 27.6 s at 100000 and unbounded at 2³¹-1. An
+  `ndmin` too large to allocate a shape for (`"0,2147483647"`) surfaces as `OutOfMemoryException` in
+  ~1 ms, the same answer any other oversized NumSharp request gives. A non-positive `ndmin` stays a
+  no-op, as upstream. The closed form is exact, not approximate: a prepended axis takes stride
+  `dimensions[0] * strides[0]` (0 for a 0-d source), so strides, cached flags and the writeable bit
+  are bit-identical to the loop — verified across 16 layouts × 6 ranks, broadcast views included.
 - **`np.ix_(params object[])` → `NDArray[]`** — open mesh. The dtype is **PRESERVED**, not forced to
   `intp`: `ix_` does no integer validation, so a float or int8 sequence rides through and only fails at
   the later indexing call; the one exception is NumPy's own, casting an **empty non-ndarray** input to
@@ -402,7 +410,7 @@ NumSharp has a single complex width, so NumPy's `result_type(float32, 1j) → co
 
 **Edge sweep (post-ship).** Probed outside the corpus envelope along the magnitude / structural /
 resource / null / acceptance / adversarial / call-form dimensions. Three fixes came out of it — the
-`ndmin` ceiling, the uint64 weak default and `ix_(null)`, all described above. Matched and worth not
+O(1) `ndmin` expansion, the uint64 weak default and `ix_(null)`, all described above. Matched and worth not
 re-proving: `-0.0` keeps its sign bit, NaN/±inf/subnormals round-trip, the weak-integer boundaries are
 exact to ±1 (`i8+127` fine, `+128` raises), `9e18:9e18+2` collapses to empty as it does upstream,
 huge slice expressions raise an honest `OutOfMemoryException` rather than wrapping a byte count, and

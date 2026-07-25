@@ -81,27 +81,21 @@ namespace NumSharp
             public int Count => 0;
 
             /// <summary>
-            ///     NumPy's <c>NPY_MAXDIMS</c> — the ceiling <c>array(…, ndmin=n)</c> validates against.
-            /// </summary>
-            private const int MaxDims = 64;
-
-            /// <summary>
-            ///     <c>array(a, ndmin=ndmin)</c>: pad with leading length-1 axes, rejecting an ndmin past
-            ///     NumPy's dimension ceiling first.
+            ///     <c>array(a, ndmin=ndmin)</c>: pad with leading length-1 axes, as a view.
             /// </summary>
             /// <remarks>
-            ///     The guard is not cosmetic. <c>ndmin</c> arrives from a user-typed directive string, and
-            ///     without it a typo like <c>"0,2147483647"</c> walks a per-axis expand_dims loop two
-            ///     billion times — measured 54 s at ndmin=100 000 and quadratic — where NumPy rejects it
-            ///     immediately. A ndmin of 0 or less stays a no-op, as it is upstream.
+            ///     Deliberately UNCAPPED. NumPy validates <c>ndmin</c> against <c>NPY_MAXDIMS</c> (64) and
+            ///     raises <c>ndmin must be &lt;= ndmax (64)</c>; NumSharp has no 64-dimension ceiling
+            ///     anywhere, so importing one here would make the DSL refuse ranks the rest of the
+            ///     library accepts. <c>ndmin</c> does arrive from a user-typed directive string, so the
+            ///     padding must be cheap rather than merely bounded: <see cref="AtLeastNdView"/> prepends
+            ///     all the axes in one alias (O(ndim)), where the per-axis loop it replaced was quadratic
+            ///     — 27.6 s at ndmin=100 000, unbounded at 2**31-1. An ndmin genuinely too large to
+            ///     allocate a shape for surfaces as <see cref="OutOfMemoryException"/>, the same answer
+            ///     any other oversized NumSharp allocation gives. A ndmin of 0 or less stays a no-op,
+            ///     as it is upstream.
             /// </remarks>
-            private static NDArray AtLeastNdmin(NDArray a, int ndmin)
-            {
-                if (ndmin > MaxDims)
-                    throw new ValueError($"ndmin must be <= ndmax ({MaxDims})");
-
-                return AtLeastNdView(a, ndmin);
-            }
+            private static NDArray AtLeastNdmin(NDArray a, int ndmin) => AtLeastNdView(a, ndmin);
 
             private NDArray Build(object[] key)
             {

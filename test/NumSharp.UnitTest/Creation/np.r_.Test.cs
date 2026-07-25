@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
@@ -410,22 +411,32 @@ namespace NumSharp.UnitTest.Creation
         // ------------------------------------------------------------------ edge & extremes sweep
 
         [TestMethod]
-        public void R_NdminBeyondNumPysDimensionCeiling_Throws()
+        public void R_HighNdmin_IsSupportedAndCheap()
         {
-            // ndmin arrives from a user-typed directive, so an out-of-range one must be REJECTED,
-            // not walked: expanding to ndmin=100,000 one axis at a time measured 54 s (quadratic),
-            // and int.MaxValue would never return. NumPy caps at NPY_MAXDIMS and says so.
+            // DELIBERATE DIVERGENCE. NumPy validates ndmin against NPY_MAXDIMS and raises
+            // "ndmin must be <= ndmax (64)"; NumSharp has no 64-dimension ceiling anywhere, so
+            // capping the DSL would make it refuse ranks the rest of the library accepts.
             np.r_["0,64", new long[] { 1, 2 }].ndim.Should().Be(64);
+            np.r_["0,65", new long[] { 1, 2 }].ndim.Should().Be(65);
 
-            foreach (var directive in new[] { "0,65", "0,100000", "0,2147483647" })
-            {
-                new Action(() => _ = np.r_[directive, new long[] { 1, 2 }])
-                    .Should().Throw<ValueError>().WithMessage("ndmin must be <= ndmax (64)*");
-            }
+            // ndmin arrives from a user-typed directive, so the padding must be CHEAP, not merely
+            // bounded. Prepending one axis at a time clones dims+strides every step — quadratic,
+            // measured 27.6 s at ndmin=100,000 — where the bulk prepend is one alias (~1.4 ms).
+            // The bound is loose enough not to be flaky and two orders below the O(n²) cost.
+            var sw = Stopwatch.StartNew();
+            np.r_["0,100000", new long[] { 1, 2 }].ndim.Should().Be(100000);
+            sw.Stop();
+            sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5),
+                "the ndmin expansion must stay O(ndim) — the per-axis loop took 27.6 s here");
 
-            // Every entry kind goes through the same guard — array, slice and scalar alike.
-            new Action(() => _ = np.r_["0,65", "0:3"]).Should().Throw<ValueError>();
-            new Action(() => _ = np.r_["0,65", 5]).Should().Throw<ValueError>();
+            // Every entry kind takes the same route — array, slice and scalar alike.
+            np.r_["0,65", "0:3"].ndim.Should().Be(65);
+            np.r_["0,65", 5].ndim.Should().Be(65);
+
+            // An ndmin too large to allocate a shape for is an honest allocation failure — the
+            // same answer any other oversized NumSharp request gives — not a policy cap.
+            new Action(() => _ = np.r_["0,2147483647", new long[] { 1, 2 }])
+                .Should().Throw<OutOfMemoryException>();
 
             // A non-positive ndmin stays a no-op, exactly as upstream.
             np.r_["0,0", new long[] { 1, 2 }].ndim.Should().Be(1);
