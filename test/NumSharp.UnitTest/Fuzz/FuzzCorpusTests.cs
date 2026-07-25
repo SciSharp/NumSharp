@@ -34,16 +34,18 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Unary() => RunCorpus("unary.jsonl");
 
-        // float32 exp, held BIT-EXACT (the MisalignedRegistry "unary ~ULP" excuse is carved out for
-        // it): NDFloatMath.Exp ports NumPy's simd_exp_FLOAT. Curated inputs — every NaN/inf/zero/
-        // subnormal special, both saturation boundaries +-1 ULP, the subnormal-output band, NumPy's
-        // own worst-error input, the exact FMA-contraction tie, and a quadrant sweep on which a
-        // correctly-rounded libm disagrees with NumPy for ~35% of elements — across contiguous,
-        // 2-D, F-order, strided, reversed, offset, broadcast, 0-d, empty and the narrow-integer
-        // inputs that share the same NumPy loop.
+        // The float32 kernels NumSharp ports from NumPy itself — exp, log, sin, cos (and rad2deg/
+        // deg2rad, whose constant is now formed at float precision like NumPy's macro) — all held
+        // BIT-EXACT: the MisalignedRegistry "unary ~ULP" excuse is carved out for every one of them.
+        // Curated per kernel, because the generic unary tier's shared float pool barely reaches a
+        // polynomial: every NaN spelling, exp's two saturation boundaries +-1 ULP and its
+        // subnormal-output band, log's 1/sqrt(2) mantissa split and subnormal rescale, the quadrant
+        // seams and BOTH Cody-Waite libc cutoffs for the trig pair, each NumPy-documented
+        // worst-error input, and the FMA-contraction tie — across contiguous, 2-D, F-view, strided,
+        // reversed, offset, broadcast, 0-d, empty and the narrow-integer inputs that share the loop.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
-        public void ExpFloat32() => RunCorpus("exp_f32.jsonl");
+        public void NumPyFloat32Kernels() => RunCorpus("numpy_f32_kernels.jsonl");
 
         [TestMethod]
         [TestCategory("FuzzMatrix")]
@@ -329,7 +331,6 @@ namespace NumSharp.UnitTest.Fuzz
             ["dtype_text.jsonl"] = 2000,
             ["errors.jsonl"] = 8,
             ["errors_full.jsonl"] = 650,
-            ["exp_f32.jsonl"] = 22,
             ["groupa.jsonl"] = 82,
             ["iter.jsonl"] = 4400,
             ["logic.jsonl"] = 1775,
@@ -338,6 +339,7 @@ namespace NumSharp.UnitTest.Fuzz
             ["matmul_parity.jsonl"] = 342,
             ["modf.jsonl"] = 51,
             ["nanreduce.jsonl"] = 6692,
+            ["numpy_f32_kernels.jsonl"] = 120,
             ["out_where.jsonl"] = 3500,
             ["params.jsonl"] = 966,
             ["place.jsonl"] = 12,

@@ -568,6 +568,27 @@ namespace NumSharp.Backends.Kernels
                 VectorBits == 0 ? null
                 : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static,
                     new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
+            // float32 log: the sibling port (NumPy's simd_log_FLOAT), same reasoning as SingleExp.
+            public static readonly MethodInfo SingleLog = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Log");
+            public static readonly MethodInfo SingleLogVector =
+                VectorBits == 0 ? null
+                : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Log", BindingFlags.Public | BindingFlags.Static,
+                    new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
+            // float32 sin: port of NumPy's simd_sincos_f32 (loops_trigonometric).
+            public static readonly MethodInfo SingleSin = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Sin");
+            public static readonly MethodInfo SingleSinVector =
+                VectorBits == 0 ? null
+                : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static,
+                    new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
+            // float32 cos: port of NumPy's simd_sincos_f32 (loops_trigonometric).
+            public static readonly MethodInfo SingleCos = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Cos");
+            public static readonly MethodInfo SingleCosVector =
+                VectorBits == 0 ? null
+                : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static,
+                    new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
             // ComplexLog routes through NDComplexMath.Log (full npy_clog port): Complex.Log drops the
             // real part to 0 near |z|=1 (it lacks clog's log1p path). Reused by the Log2 composition
             // and by NDComplexMath.Log10/Log1p.

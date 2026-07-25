@@ -63,6 +63,17 @@ namespace NumSharp.UnitTest.Fuzz
             "maximum", "minimum", "fmax", "fmin"
         };
 
+        /// <summary>
+        ///     The unary ops whose float32 loop NumSharp ports from NumPy's own kernel rather than
+        ///     delegating to the platform libm, and which are therefore held BIT-EXACT (no ULP
+        ///     envelope). Adding an op here without a matching port would silently turn a real
+        ///     divergence into a hard failure — which is the intent, but only once the port exists.
+        /// </summary>
+        private static readonly System.Collections.Generic.HashSet<string> NumPyPortedFloat32Kernels = new()
+        {
+            "exp", "log", "sin", "cos", "rad2deg", "deg2rad"
+        };
+
         public static string Classify(
             FuzzCorpus.Case c, DivergenceKind kind,
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs)
@@ -369,18 +380,20 @@ namespace NumSharp.UnitTest.Fuzz
             // (5) Unary transcendental / complex magnitude ~ULP (libm / algorithm differences).
             //     Tight: every differing element within 2 ULP — a gross error still fails.
             //
-            //     CARVED OUT: exp at a float32 RESULT. That loop is no longer "whatever the platform
-            //     libm does" — NDFloatMath.Exp is a port of NumPy's own simd_exp_FLOAT kernel and is
-            //     bit-exact over ALL 2^32 float32 inputs (exhaustively verified, not sampled), for
-            //     float32 input and for the narrow-integer inputs (int16/uint16/char) whose NumPy
-            //     loop is that same 'f->f' kernel. So ANY float32 exp divergence is now a
-            //     regression, not an algorithm difference, and must fail the gate — which is the
-            //     whole point of narrowing an excuse rather than leaving a green blanket over a
-            //     fixed op. The other exp result dtypes stay excused on purpose: float16 exp is
-            //     NumPy's separate loops_half kernel and float64 exp is the platform's scalar
-            //     npy_exp, neither of which NumSharp reproduces bit-for-bit today.
+            //     CARVED OUT: the float32 loops NumSharp ports from NumPy itself. Those are no
+            //     longer "whatever the platform libm does" — NDFloatMath holds ports of
+            //     simd_exp_FLOAT, simd_log_FLOAT and simd_sincos_f32, each bit-exact over ALL 2^32
+            //     float32 inputs (exhaustively verified, not sampled), and rad2deg/deg2rad now form
+            //     their constant at float precision exactly as NumPy's RAD2DEG/DEG2RAD macros do.
+            //     The carve-out covers float32 input AND the narrow-integer inputs (int16/uint16/
+            //     char) whose NumPy loop is that same 'f->f' kernel. So ANY float32 divergence in
+            //     these ops is now a regression, not an algorithm difference, and must fail the gate
+            //     — which is the whole point of narrowing an excuse rather than leaving a green
+            //     blanket over a fixed op. Other result dtypes stay excused on purpose: float16 runs
+            //     NumPy's separate loops_half kernels, and float64 exp/log/sin/cos are the
+            //     platform's scalar npy_* calls, none of which NumSharp reproduces bit-for-bit.
             if (kind == DivergenceKind.Value && c.Operands.Length == 1
-                && !(c.Op == "exp" && tc == NPTypeCode.Single)
+                && !(tc == NPTypeCode.Single && NumPyPortedFloat32Kernels.Contains(c.Op))
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "unary ~ULP (transcendental/magnitude algorithm difference)";
 

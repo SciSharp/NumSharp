@@ -202,6 +202,398 @@ namespace NumSharp.Utilities
             return Vector512.ConditionalSelect(xminMask, zero, poly);
         }
 
+
+        /// <summary>NumPy 2.4.2's float32 natural logarithm, 4 lanes at a time. See <see cref="Log(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        public static Vector128<float> Log(Vector128<float> x)
+        {{
+            var zero = Vector128<float>.Zero;
+            var ones = Vector128.Create(1f);
+
+            var negMask = Vector128.LessThan(x, zero);
+            var zeroMask = Vector128.Equals(x, zero);
+            var infMask = Vector128.Equals(x, Vector128.Create(float.PositiveInfinity));
+            var nanMask = ~Vector128.Equals(x, x);
+            x = Vector128.ConditionalSelect(negMask, zero, x);
+
+            // fma_get_exponent / fma_get_mantissa. NumPy rescales subnormals by 2^100 and then
+            // subtracts 100 from the exponent — computed unconditionally in its kernel, but the
+            // whole thing is an identity for every normal lane, and a subnormal input to log is
+            // vanishingly rare. Branching it out is the same win the exp kernel's denormal split
+            // gets (~0.15 ns/element here) and is exactly equivalent lane for lane.
+            var fltMin = Vector128.Create(FloatMin);
+            var denormMask = Vector128.LessThan(x, fltMin);
+            Vector128<float> xs, exponent;
+            if (Vector128.ExtractMostSignificantBits(denormMask) != 0)
+            {
+                var normalMask = Vector128.GreaterThanOrEqual(x, fltMin);
+                var scaled = Vector128.ConditionalSelect(normalMask, zero, x)
+                           * Vector128.Create(BitConverter.UInt32BitsToSingle(TwoPower100Bits));
+                xs = Vector128.ConditionalSelect(denormMask, scaled, x);
+                var expD = Vector128.ConvertToSingle(
+                    Vector128.ShiftRightLogical(xs.AsInt32(), 23) - Vector128.Create(0x7E));
+                exponent = Vector128.ConditionalSelect(denormMask, expD - Vector128.Create(100f), expD);
+            }
+            else
+            {
+                xs = x;
+                exponent = Vector128.ConvertToSingle(
+                    Vector128.ShiftRightLogical(xs.AsInt32(), 23) - Vector128.Create(0x7E));
+            }
+            var m = ((xs.AsInt32() & Vector128.Create(0x7fffff)) | Vector128.Create(126 << 23)).AsSingle();
+
+            // if (m <= 1/sqrt 2) {{ m *= 2; exponent -= 1 }}
+            var sqrt2Mask = Vector128.LessThanOrEqual(m, Vector128.Create(Sqrt1_2));
+            m = Vector128.ConditionalSelect(sqrt2Mask, m + m, m);
+            exponent = Vector128.ConditionalSelect(sqrt2Mask, exponent - ones, exponent);
+            m = m - ones;
+
+            var num = MulAdd(Vector128.Create(LogP5), m, Vector128.Create(LogP4));
+            num = MulAdd(num, m, Vector128.Create(LogP3));
+            num = MulAdd(num, m, Vector128.Create(LogP2));
+            num = MulAdd(num, m, Vector128.Create(LogP1));
+            num = MulAdd(num, m, Vector128.Create(LogP0));
+            var den = MulAdd(Vector128.Create(LogQ5), m, Vector128.Create(LogQ4));
+            den = MulAdd(den, m, Vector128.Create(LogQ3));
+            den = MulAdd(den, m, Vector128.Create(LogQ2));
+            den = MulAdd(den, m, Vector128.Create(LogQ1));
+            den = MulAdd(den, m, Vector128.Create(LogQ0));
+
+            var poly = MulAdd(exponent, Vector128.Create(LogE2), num / den);
+
+            poly = Vector128.ConditionalSelect(nanMask, Vector128.Create(CanonicalNaN), poly);
+            poly = Vector128.ConditionalSelect(negMask, Vector128.Create(NegativeNaN), poly);
+            poly = Vector128.ConditionalSelect(zeroMask, Vector128.Create(float.NegativeInfinity), poly);
+            return Vector128.ConditionalSelect(infMask, Vector128.Create(float.PositiveInfinity), poly);
+        }}
+
+        /// <summary>NumPy 2.4.2's float32 natural logarithm, 8 lanes at a time. See <see cref="Log(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        public static Vector256<float> Log(Vector256<float> x)
+        {{
+            var zero = Vector256<float>.Zero;
+            var ones = Vector256.Create(1f);
+
+            var negMask = Vector256.LessThan(x, zero);
+            var zeroMask = Vector256.Equals(x, zero);
+            var infMask = Vector256.Equals(x, Vector256.Create(float.PositiveInfinity));
+            var nanMask = ~Vector256.Equals(x, x);
+            x = Vector256.ConditionalSelect(negMask, zero, x);
+
+            // fma_get_exponent / fma_get_mantissa. NumPy rescales subnormals by 2^100 and then
+            // subtracts 100 from the exponent — computed unconditionally in its kernel, but the
+            // whole thing is an identity for every normal lane, and a subnormal input to log is
+            // vanishingly rare. Branching it out is the same win the exp kernel's denormal split
+            // gets (~0.15 ns/element here) and is exactly equivalent lane for lane.
+            var fltMin = Vector256.Create(FloatMin);
+            var denormMask = Vector256.LessThan(x, fltMin);
+            Vector256<float> xs, exponent;
+            if (Vector256.ExtractMostSignificantBits(denormMask) != 0)
+            {
+                var normalMask = Vector256.GreaterThanOrEqual(x, fltMin);
+                var scaled = Vector256.ConditionalSelect(normalMask, zero, x)
+                           * Vector256.Create(BitConverter.UInt32BitsToSingle(TwoPower100Bits));
+                xs = Vector256.ConditionalSelect(denormMask, scaled, x);
+                var expD = Vector256.ConvertToSingle(
+                    Vector256.ShiftRightLogical(xs.AsInt32(), 23) - Vector256.Create(0x7E));
+                exponent = Vector256.ConditionalSelect(denormMask, expD - Vector256.Create(100f), expD);
+            }
+            else
+            {
+                xs = x;
+                exponent = Vector256.ConvertToSingle(
+                    Vector256.ShiftRightLogical(xs.AsInt32(), 23) - Vector256.Create(0x7E));
+            }
+            var m = ((xs.AsInt32() & Vector256.Create(0x7fffff)) | Vector256.Create(126 << 23)).AsSingle();
+
+            // if (m <= 1/sqrt 2) {{ m *= 2; exponent -= 1 }}
+            var sqrt2Mask = Vector256.LessThanOrEqual(m, Vector256.Create(Sqrt1_2));
+            m = Vector256.ConditionalSelect(sqrt2Mask, m + m, m);
+            exponent = Vector256.ConditionalSelect(sqrt2Mask, exponent - ones, exponent);
+            m = m - ones;
+
+            var num = MulAdd(Vector256.Create(LogP5), m, Vector256.Create(LogP4));
+            num = MulAdd(num, m, Vector256.Create(LogP3));
+            num = MulAdd(num, m, Vector256.Create(LogP2));
+            num = MulAdd(num, m, Vector256.Create(LogP1));
+            num = MulAdd(num, m, Vector256.Create(LogP0));
+            var den = MulAdd(Vector256.Create(LogQ5), m, Vector256.Create(LogQ4));
+            den = MulAdd(den, m, Vector256.Create(LogQ3));
+            den = MulAdd(den, m, Vector256.Create(LogQ2));
+            den = MulAdd(den, m, Vector256.Create(LogQ1));
+            den = MulAdd(den, m, Vector256.Create(LogQ0));
+
+            var poly = MulAdd(exponent, Vector256.Create(LogE2), num / den);
+
+            poly = Vector256.ConditionalSelect(nanMask, Vector256.Create(CanonicalNaN), poly);
+            poly = Vector256.ConditionalSelect(negMask, Vector256.Create(NegativeNaN), poly);
+            poly = Vector256.ConditionalSelect(zeroMask, Vector256.Create(float.NegativeInfinity), poly);
+            return Vector256.ConditionalSelect(infMask, Vector256.Create(float.PositiveInfinity), poly);
+        }}
+
+        /// <summary>NumPy 2.4.2's float32 natural logarithm, 16 lanes at a time. See <see cref="Log(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        public static Vector512<float> Log(Vector512<float> x)
+        {{
+            var zero = Vector512<float>.Zero;
+            var ones = Vector512.Create(1f);
+
+            var negMask = Vector512.LessThan(x, zero);
+            var zeroMask = Vector512.Equals(x, zero);
+            var infMask = Vector512.Equals(x, Vector512.Create(float.PositiveInfinity));
+            var nanMask = ~Vector512.Equals(x, x);
+            x = Vector512.ConditionalSelect(negMask, zero, x);
+
+            // fma_get_exponent / fma_get_mantissa. NumPy rescales subnormals by 2^100 and then
+            // subtracts 100 from the exponent — computed unconditionally in its kernel, but the
+            // whole thing is an identity for every normal lane, and a subnormal input to log is
+            // vanishingly rare. Branching it out is the same win the exp kernel's denormal split
+            // gets (~0.15 ns/element here) and is exactly equivalent lane for lane.
+            var fltMin = Vector512.Create(FloatMin);
+            var denormMask = Vector512.LessThan(x, fltMin);
+            Vector512<float> xs, exponent;
+            if (Vector512.ExtractMostSignificantBits(denormMask) != 0)
+            {
+                var normalMask = Vector512.GreaterThanOrEqual(x, fltMin);
+                var scaled = Vector512.ConditionalSelect(normalMask, zero, x)
+                           * Vector512.Create(BitConverter.UInt32BitsToSingle(TwoPower100Bits));
+                xs = Vector512.ConditionalSelect(denormMask, scaled, x);
+                var expD = Vector512.ConvertToSingle(
+                    Vector512.ShiftRightLogical(xs.AsInt32(), 23) - Vector512.Create(0x7E));
+                exponent = Vector512.ConditionalSelect(denormMask, expD - Vector512.Create(100f), expD);
+            }
+            else
+            {
+                xs = x;
+                exponent = Vector512.ConvertToSingle(
+                    Vector512.ShiftRightLogical(xs.AsInt32(), 23) - Vector512.Create(0x7E));
+            }
+            var m = ((xs.AsInt32() & Vector512.Create(0x7fffff)) | Vector512.Create(126 << 23)).AsSingle();
+
+            // if (m <= 1/sqrt 2) {{ m *= 2; exponent -= 1 }}
+            var sqrt2Mask = Vector512.LessThanOrEqual(m, Vector512.Create(Sqrt1_2));
+            m = Vector512.ConditionalSelect(sqrt2Mask, m + m, m);
+            exponent = Vector512.ConditionalSelect(sqrt2Mask, exponent - ones, exponent);
+            m = m - ones;
+
+            var num = MulAdd(Vector512.Create(LogP5), m, Vector512.Create(LogP4));
+            num = MulAdd(num, m, Vector512.Create(LogP3));
+            num = MulAdd(num, m, Vector512.Create(LogP2));
+            num = MulAdd(num, m, Vector512.Create(LogP1));
+            num = MulAdd(num, m, Vector512.Create(LogP0));
+            var den = MulAdd(Vector512.Create(LogQ5), m, Vector512.Create(LogQ4));
+            den = MulAdd(den, m, Vector512.Create(LogQ3));
+            den = MulAdd(den, m, Vector512.Create(LogQ2));
+            den = MulAdd(den, m, Vector512.Create(LogQ1));
+            den = MulAdd(den, m, Vector512.Create(LogQ0));
+
+            var poly = MulAdd(exponent, Vector512.Create(LogE2), num / den);
+
+            poly = Vector512.ConditionalSelect(nanMask, Vector512.Create(CanonicalNaN), poly);
+            poly = Vector512.ConditionalSelect(negMask, Vector512.Create(NegativeNaN), poly);
+            poly = Vector512.ConditionalSelect(zeroMask, Vector512.Create(float.NegativeInfinity), poly);
+            return Vector512.ConditionalSelect(infMask, Vector512.Create(float.PositiveInfinity), poly);
+        }}
+
+
+        /// <summary>NumPy 2.4.2's float32 sine, 4 lanes at a time. See <see cref="Sin(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        public static Vector128<float> Sin(Vector128<float> x) => SinCosV(x, 0, MaxCodySin);
+
+        /// <summary>NumPy 2.4.2's float32 cosine, 4 lanes at a time. See <see cref="Cos(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        public static Vector128<float> Cos(Vector128<float> x) => SinCosV(x, 1, MaxCodyCos);
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static Vector128<float> SinCosV(Vector128<float> xIn, int quadrantBias, float maxCody)
+        {{
+            var zero = Vector128<float>.Zero;
+
+            // NumPy blanks NaN lanes BEFORE the range test, so a NaN lane counts as "in range"
+            // (its result is overwritten with NaN at the end) and never reaches the libm fallback.
+            var nnan = Vector128.Equals(xIn, xIn);
+            var x0 = Vector128.ConditionalSelect(nnan, xIn, zero);
+            var inRange = Vector128.LessThanOrEqual(Vector128.Abs(x0), Vector128.Create(maxCody));
+            var x = Vector128.ConditionalSelect(inRange & nnan, x0, zero);
+
+            var magic = Vector128.Create(RintCvtMagic);
+            var quadrant = MulAdd(x, Vector128.Create(TwoOverPi), magic) - magic;
+
+            var r = MulAdd(quadrant, Vector128.Create(CodyWaitePio2High), x);
+            r = MulAdd(quadrant, Vector128.Create(CodyWaitePio2Med), r);
+            r = MulAdd(quadrant, Vector128.Create(CodyWaitePio2Low), r);
+            var r2 = r * r;
+
+            var cos = MulAdd(Vector128.Create(CosInv8), r2, Vector128.Create(CosInv6));
+            cos = MulAdd(cos, r2, Vector128.Create(CosInv4));
+            cos = MulAdd(cos, r2, Vector128.Create(CosInv2));
+            cos = MulAdd(cos, r2, Vector128.Create(CosInv0));
+
+            var sin = MulAdd(Vector128.Create(SinInv9), r2, Vector128.Create(SinInv7));
+            sin = MulAdd(sin, r2, Vector128.Create(SinInv5));
+            sin = MulAdd(sin, r2, Vector128.Create(SinInv3));
+            sin = MulAdd(sin, r2, zero);
+            sin = MulAdd(sin, r, r);
+
+            var iq = Vector128.ConvertToInt32(quadrant) + Vector128.Create(quadrantBias);
+            var sineMask = Vector128.Equals(iq & Vector128.Create(1), Vector128<int>.Zero).AsSingle();
+            var res = Vector128.ConditionalSelect(sineMask, sin, cos);
+            var negMask = Vector128.Equals(iq & Vector128.Create(2), Vector128.Create(2)).AsSingle();
+            res = Vector128.ConditionalSelect(negMask, zero - res, res);
+            res = Vector128.ConditionalSelect(nnan, res, Vector128.Create(CanonicalNaN));
+
+            // Lanes past NumPy's Cody-Waite limit take the platform libm, exactly as NumPy's own
+            // kernel does. Rare, so the whole-vector test keeps it off the hot path.
+            var fallback = Vector128.AndNot(nnan, inRange);   // nnan AND NOT inRange
+            if (Vector128.ExtractMostSignificantBits(fallback) != 0)
+                res = SinCosFallback(xIn, res, fallback, quadrantBias);
+            return res;
+        }}
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static Vector128<float> SinCosFallback(Vector128<float> xIn, Vector128<float> res, Vector128<float> mask, int quadrantBias)
+        {{
+            Span<float> rv = stackalloc float[Vector128<float>.Count];
+            res.CopyTo(rv);
+            uint bits = (uint)Vector128.ExtractMostSignificantBits(mask);
+            for (int i = 0; i < rv.Length; i++)
+                if ((bits & (1u << i)) != 0)
+                    rv[i] = quadrantBias == 0 ? MathF.Sin(xIn[i]) : MathF.Cos(xIn[i]);
+            return Vector128.Create<float>(rv);
+        }}
+
+        /// <summary>NumPy 2.4.2's float32 sine, 8 lanes at a time. See <see cref="Sin(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        public static Vector256<float> Sin(Vector256<float> x) => SinCosV(x, 0, MaxCodySin);
+
+        /// <summary>NumPy 2.4.2's float32 cosine, 8 lanes at a time. See <see cref="Cos(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        public static Vector256<float> Cos(Vector256<float> x) => SinCosV(x, 1, MaxCodyCos);
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static Vector256<float> SinCosV(Vector256<float> xIn, int quadrantBias, float maxCody)
+        {{
+            var zero = Vector256<float>.Zero;
+
+            // NumPy blanks NaN lanes BEFORE the range test, so a NaN lane counts as "in range"
+            // (its result is overwritten with NaN at the end) and never reaches the libm fallback.
+            var nnan = Vector256.Equals(xIn, xIn);
+            var x0 = Vector256.ConditionalSelect(nnan, xIn, zero);
+            var inRange = Vector256.LessThanOrEqual(Vector256.Abs(x0), Vector256.Create(maxCody));
+            var x = Vector256.ConditionalSelect(inRange & nnan, x0, zero);
+
+            var magic = Vector256.Create(RintCvtMagic);
+            var quadrant = MulAdd(x, Vector256.Create(TwoOverPi), magic) - magic;
+
+            var r = MulAdd(quadrant, Vector256.Create(CodyWaitePio2High), x);
+            r = MulAdd(quadrant, Vector256.Create(CodyWaitePio2Med), r);
+            r = MulAdd(quadrant, Vector256.Create(CodyWaitePio2Low), r);
+            var r2 = r * r;
+
+            var cos = MulAdd(Vector256.Create(CosInv8), r2, Vector256.Create(CosInv6));
+            cos = MulAdd(cos, r2, Vector256.Create(CosInv4));
+            cos = MulAdd(cos, r2, Vector256.Create(CosInv2));
+            cos = MulAdd(cos, r2, Vector256.Create(CosInv0));
+
+            var sin = MulAdd(Vector256.Create(SinInv9), r2, Vector256.Create(SinInv7));
+            sin = MulAdd(sin, r2, Vector256.Create(SinInv5));
+            sin = MulAdd(sin, r2, Vector256.Create(SinInv3));
+            sin = MulAdd(sin, r2, zero);
+            sin = MulAdd(sin, r, r);
+
+            var iq = Vector256.ConvertToInt32(quadrant) + Vector256.Create(quadrantBias);
+            var sineMask = Vector256.Equals(iq & Vector256.Create(1), Vector256<int>.Zero).AsSingle();
+            var res = Vector256.ConditionalSelect(sineMask, sin, cos);
+            var negMask = Vector256.Equals(iq & Vector256.Create(2), Vector256.Create(2)).AsSingle();
+            res = Vector256.ConditionalSelect(negMask, zero - res, res);
+            res = Vector256.ConditionalSelect(nnan, res, Vector256.Create(CanonicalNaN));
+
+            // Lanes past NumPy's Cody-Waite limit take the platform libm, exactly as NumPy's own
+            // kernel does. Rare, so the whole-vector test keeps it off the hot path.
+            var fallback = Vector256.AndNot(nnan, inRange);   // nnan AND NOT inRange
+            if (Vector256.ExtractMostSignificantBits(fallback) != 0)
+                res = SinCosFallback(xIn, res, fallback, quadrantBias);
+            return res;
+        }}
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static Vector256<float> SinCosFallback(Vector256<float> xIn, Vector256<float> res, Vector256<float> mask, int quadrantBias)
+        {{
+            Span<float> rv = stackalloc float[Vector256<float>.Count];
+            res.CopyTo(rv);
+            uint bits = (uint)Vector256.ExtractMostSignificantBits(mask);
+            for (int i = 0; i < rv.Length; i++)
+                if ((bits & (1u << i)) != 0)
+                    rv[i] = quadrantBias == 0 ? MathF.Sin(xIn[i]) : MathF.Cos(xIn[i]);
+            return Vector256.Create<float>(rv);
+        }}
+
+        /// <summary>NumPy 2.4.2's float32 sine, 16 lanes at a time. See <see cref="Sin(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        public static Vector512<float> Sin(Vector512<float> x) => SinCosV(x, 0, MaxCodySin);
+
+        /// <summary>NumPy 2.4.2's float32 cosine, 16 lanes at a time. See <see cref="Cos(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        public static Vector512<float> Cos(Vector512<float> x) => SinCosV(x, 1, MaxCodyCos);
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static Vector512<float> SinCosV(Vector512<float> xIn, int quadrantBias, float maxCody)
+        {{
+            var zero = Vector512<float>.Zero;
+
+            // NumPy blanks NaN lanes BEFORE the range test, so a NaN lane counts as "in range"
+            // (its result is overwritten with NaN at the end) and never reaches the libm fallback.
+            var nnan = Vector512.Equals(xIn, xIn);
+            var x0 = Vector512.ConditionalSelect(nnan, xIn, zero);
+            var inRange = Vector512.LessThanOrEqual(Vector512.Abs(x0), Vector512.Create(maxCody));
+            var x = Vector512.ConditionalSelect(inRange & nnan, x0, zero);
+
+            var magic = Vector512.Create(RintCvtMagic);
+            var quadrant = MulAdd(x, Vector512.Create(TwoOverPi), magic) - magic;
+
+            var r = MulAdd(quadrant, Vector512.Create(CodyWaitePio2High), x);
+            r = MulAdd(quadrant, Vector512.Create(CodyWaitePio2Med), r);
+            r = MulAdd(quadrant, Vector512.Create(CodyWaitePio2Low), r);
+            var r2 = r * r;
+
+            var cos = MulAdd(Vector512.Create(CosInv8), r2, Vector512.Create(CosInv6));
+            cos = MulAdd(cos, r2, Vector512.Create(CosInv4));
+            cos = MulAdd(cos, r2, Vector512.Create(CosInv2));
+            cos = MulAdd(cos, r2, Vector512.Create(CosInv0));
+
+            var sin = MulAdd(Vector512.Create(SinInv9), r2, Vector512.Create(SinInv7));
+            sin = MulAdd(sin, r2, Vector512.Create(SinInv5));
+            sin = MulAdd(sin, r2, Vector512.Create(SinInv3));
+            sin = MulAdd(sin, r2, zero);
+            sin = MulAdd(sin, r, r);
+
+            var iq = Vector512.ConvertToInt32(quadrant) + Vector512.Create(quadrantBias);
+            var sineMask = Vector512.Equals(iq & Vector512.Create(1), Vector512<int>.Zero).AsSingle();
+            var res = Vector512.ConditionalSelect(sineMask, sin, cos);
+            var negMask = Vector512.Equals(iq & Vector512.Create(2), Vector512.Create(2)).AsSingle();
+            res = Vector512.ConditionalSelect(negMask, zero - res, res);
+            res = Vector512.ConditionalSelect(nnan, res, Vector512.Create(CanonicalNaN));
+
+            // Lanes past NumPy's Cody-Waite limit take the platform libm, exactly as NumPy's own
+            // kernel does. Rare, so the whole-vector test keeps it off the hot path.
+            var fallback = Vector512.AndNot(nnan, inRange);   // nnan AND NOT inRange
+            if (Vector512.ExtractMostSignificantBits(fallback) != 0)
+                res = SinCosFallback(xIn, res, fallback, quadrantBias);
+            return res;
+        }}
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static Vector512<float> SinCosFallback(Vector512<float> xIn, Vector512<float> res, Vector512<float> mask, int quadrantBias)
+        {{
+            Span<float> rv = stackalloc float[Vector512<float>.Count];
+            res.CopyTo(rv);
+            uint bits = (uint)Vector512.ExtractMostSignificantBits(mask);
+            for (int i = 0; i < rv.Length; i++)
+                if ((bits & (1u << i)) != 0)
+                    rv[i] = quadrantBias == 0 ? MathF.Sin(xIn[i]) : MathF.Cos(xIn[i]);
+            return Vector512.Create<float>(rv);
+        }}
+
         // ---- fused multiply-add per width -------------------------------------------------
         // a*b + c with a SINGLE rounding. Vector{N}.FusedMultiplyAdd is .NET 9+, and NumSharp also
         // targets net8.0, so the hardware form goes through the x86 intrinsics that exist on both.

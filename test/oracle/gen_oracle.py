@@ -2456,33 +2456,25 @@ CHAR_COPYTO_CROSS = [(_C, "int32"), ("int32", _C), (_C, "float64"), ("float64", 
 
 
 # ---------------------------------------------------------------------------
-# exp float32 — the bit-exact tier.
+# The NumPy-ported float32 kernels - the bit-exact tier.
 #
-# np.exp at a float32 result is no longer "close enough": NDFloatMath.Exp is a port of NumPy's
-# own simd_exp_FLOAT kernel, so the MisalignedRegistry's blanket "unary ~ULP" excuse is carved
-# out for it and every case here must match BIT-for-bit. The generic unary tier cannot carry
-# that claim — its shared float pool is dominated by huge magnitudes (1e20, 3.5e38, ...) which
-# all saturate to +inf through exp, leaving barely a dozen values that reach the polynomial at
-# all. This tier feeds exp the inputs that actually discriminate:
+# exp/log/sin/cos at a float32 result are no longer "close enough": NDFloatMath ports the kernels
+# NumPy 2.4.2 actually runs (simd_exp_FLOAT, simd_log_FLOAT, simd_sincos_f32), and rad2deg now forms
+# its constant at float precision the way NumPy's RAD2DEG macro does - so the MisalignedRegistry's
+# blanket "unary ~ULP" excuse is carved out for all of them and every case here must match BIT-for-
+# BIT. The generic unary tier cannot carry that claim: its shared float pool is dominated by huge
+# magnitudes (1e20, 3.5e38, ...) that saturate or reduce to nothing, leaving barely a dozen values
+# that reach a polynomial at all. This tier feeds each kernel the inputs that discriminate.
 #
-#   * every special: quiet/signalling/negative NaN (NumPy returns the CANONICAL 0x7fc00000 for
-#     all of them, discarding sign and payload), +-inf, +-0, subnormal inputs;
-#   * both saturation boundaries to the ULP - xmax 0x42b17218 (>= is +inf) and xmin 0xc2cff1b5
-#     (<= is +0), each probed one ULP either side;
-#   * the subnormal-OUTPUT band (-87.3 .. -104), which is the only route through NumPy's
-#     fma_scalef_ps denormal split;
-#   * 0xc2781e37, the input at which NumPy documents its worst error (2.52 ULP) - a correctly
-#     rounded libm necessarily disagrees there, so this single case pins "we reproduce NumPy's
-#     error, not our own accuracy";
-#   * 0xc26d0e6c, where x*log2(e) lands on the exact tie -85.5: it separates a fused
-#     multiply-add from a multiply-then-add, which is how the wheel's compiler emitted it;
-#   * a deterministic sweep across the quadrants, where a plain libm differs from NumPy on
-#     roughly a third of inputs - the teeth that make a regression visible.
-#
-# Layouts are built by hand (rather than through LAYOUTS) precisely because the values, not the
-# shapes, are the point here; the shape/stride coverage still spans contiguous, 2-D, F-order,
-# strided, reversed, offset, broadcast, 0-d and empty.
+# Layouts are built by hand (rather than through LAYOUTS) because the VALUES, not the shapes, are
+# the point here; shape/stride coverage still spans contiguous, 2-D, F-view (transpose of a C base),
+# strided, reversed, offset, broadcast, 0-d, empty and the narrow-integer inputs that share the
+# same NumPy loop.
 # ---------------------------------------------------------------------------
+
+# exp: every special, both saturation boundaries +-1 ULP, the subnormal-output band, NumPy's own
+# worst-error input (0xc2781e37, 2.52 ULP) and the FMA-contraction tie (0xc26d0e6c, where
+# x*log2(e) is exactly -85.5 so fused and unfused rounding of the quadrant disagree).
 _EXP_F32_SPECIAL_BITS = [
     0x7fc00000, 0x7fc00001, 0xffc00000, 0x7f800001,   # NaN: canonical, payload, negative, signalling
     0x7f800000, 0xff800000,                           # +-inf
@@ -2491,77 +2483,135 @@ _EXP_F32_SPECIAL_BITS = [
     0x42b17216, 0x42b17217, 0x42b17218, 0x42b17219,   # xmax = 0x42b17218, +-1 ULP
     0xc2cff1b3, 0xc2cff1b4, 0xc2cff1b5, 0xc2cff1b6,   # xmin = 0xc2cff1b5, +-1 ULP
     0xc2aea8f6, 0xc2b00000, 0xc2c00000, 0xc2ce0000,   # subnormal-output band: -87.33, -88, -96, -103
-    0xc2781e37,                                       # NumPy's documented 2.52-ULP worst case
-    0xc26d0e6c,                                       # x*log2(e) == -85.5 exactly (FMA-contraction tie)
-    0x3f800000, 0xbf800000, 0x40000000, 0xc0000000,   # +-1, +-2
+    0xc2781e37, 0xc26d0e6c,
+    0x3f800000, 0xbf800000, 0x40000000, 0xc0000000,
+]
+
+# log: the mantissa/exponent seams. NumPy splits the mantissa at 1/sqrt(2), rescales subnormals by
+# 2^100, and returns a NEGATIVE NaN for a negative argument (but a POSITIVE one for a NaN argument).
+_LOG_F32_SPECIAL_BITS = [
+    0x7fc00000, 0xffc00000, 0x7f800001,                # NaN spellings
+    0x7f800000, 0xff800000,                            # +-inf
+    0x00000000, 0x80000000,                            # +-0 -> -inf
+    0xbf800000, 0xc2c80000,                            # negatives -> -NaN
+    0x00000001, 0x00000002, 0x007fffff, 0x00800000,    # subnormals and the smallest normal
+    0x3f800000, 0x3f3504f3, 0x3f3504f4, 0x3f3504f2,    # 1.0 and the 1/sqrt(2) split, +-1 ULP
+    0x3f000000, 0x40000000, 0x402df854, 0x7f7fffff,    # 0.5, 2, e, max finite
+    0x3f486945,                                        # NumPy's documented worst case (3.83 ULP)
+]
+
+# sin/cos: the quadrant seams and the Cody-Waite cutoffs past which NumPy hands over to libc - a
+# DIFFERENT cutoff per function (117435.992 for sine, 71476.0625 for cosine).
+_TRIG_F32_SPECIAL_BITS = [
+    0x7fc00000, 0xffc00000, 0x7f800000, 0xff800000,    # NaN, +-inf
+    0x00000000, 0x80000000,                            # +-0
+    0x3fc90fdb, 0xbfc90fdb, 0x40490fdb, 0xc0490fdb,    # +-pi/2, +-pi
+    0x40c90fdb, 0x41490fdb, 0x3f490fdb,                # 2pi, 4pi, pi/4
+    0x47e55dfe, 0x47e55dff, 0x47e55e00,                # sine's Cody-Waite limit, +-1 ULP
+    0x478b9a07, 0x478b9a08, 0x478b9a09,                # cosine's limit, +-1 ULP
+    0x4b000000, 0x50000000, 0x7f7fffff,                # far past both limits (libc fallback)
+    0x00000001, 0x3f800000, 0xbf800000,
 ]
 
 
+def _f32(bits):
+    return np.array(bits, dtype=np.uint32).view(np.float32)
+
+
 def _exp_f32_values():
-    """The curated float32 input vector: specials/boundaries first, then a quadrant sweep."""
-    specials = np.array(_EXP_F32_SPECIAL_BITS, dtype=np.uint32).view(np.float32)
-    # Deterministic sweep over the whole finite domain, plus a fine walk around 0 where the
-    # polynomial (rather than the scale-back) dominates the answer.
-    sweep = np.linspace(-104.0, 88.7, 121).astype(np.float32)
-    fine = np.linspace(-3.0, 3.0, 61).astype(np.float32)
     rng = np.random.RandomState(20260725)
-    rand = rng.uniform(-104.0, 88.7, 96).astype(np.float32)
-    return np.concatenate([specials, sweep, fine, rand])
+    return np.concatenate([
+        _f32(_EXP_F32_SPECIAL_BITS),
+        np.linspace(-104.0, 88.7, 121).astype(np.float32),
+        np.linspace(-3.0, 3.0, 61).astype(np.float32),
+        rng.uniform(-104.0, 88.7, 96).astype(np.float32),
+    ])
 
 
-def gen_exp_f32():
+def _log_f32_values():
+    rng = np.random.RandomState(20260726)
+    return np.concatenate([
+        _f32(_LOG_F32_SPECIAL_BITS),
+        np.logspace(-38, 38, 121).astype(np.float32),          # the whole exponent range
+        np.linspace(0.5, 2.0, 61).astype(np.float32),          # around the polynomial's centre
+        np.abs(rng.uniform(0, 1, 96) * 10.0 ** rng.uniform(-30, 30, 96)).astype(np.float32),
+    ])
+
+
+def _trig_f32_values():
+    rng = np.random.RandomState(20260727)
+    quads = np.concatenate([np.float32(np.pi / 2) * k + np.linspace(-1e-3, 1e-3, 5).astype(np.float32)
+                            for k in range(-6, 7)]).astype(np.float32)
+    return np.concatenate([
+        _f32(_TRIG_F32_SPECIAL_BITS),
+        quads,                                                  # every quadrant boundary
+        np.linspace(-20.0, 20.0, 121).astype(np.float32),
+        rng.uniform(-1e5, 1e5, 96).astype(np.float32),          # straddles both libc cutoffs
+        rng.uniform(-1e7, 1e7, 32).astype(np.float32),          # well past them
+    ])
+
+
+def gen_numpy_f32_kernels():
     cases = []
     n = 0
 
-    def emit(layout, base, view):
+    def emit(op, f, layout, base, view):
         nonlocal n
-        r = np.exp(view)
+        r = f(view)
         cases.append({
-            "id": f"exp/{layout}/{view.dtype.name}/{n}",
-            "op": "exp", "params": {},
+            "id": f"{op}/{layout}/{view.dtype.name}/{n}",
+            "op": op, "params": {},
             "operands": [describe(base, view)],
             "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
                          "buffer": np.ascontiguousarray(r).tobytes().hex()},
-            "layout": layout, "valueclass": "exp_edges",
+            "layout": layout, "valueclass": "kernel_edges",
         })
         n += 1
 
-    v = _exp_f32_values()
-    emit("contig1d", v, v)
-    emit("strided2", v, v[::2])
-    emit("reversed", v, v[::-1])
-    emit("offset", v, v[7:])
-    emit("offset_strided3", v, v[5::3])
+    jobs = [
+        ("exp", np.exp, _exp_f32_values()),
+        ("log", np.log, _log_f32_values()),
+        ("sin", np.sin, _trig_f32_values()),
+        ("cos", np.cos, _trig_f32_values()),
+        ("rad2deg", np.rad2deg, _trig_f32_values()),
+        ("deg2rad", np.deg2rad, _trig_f32_values()),
+    ]
 
-    rows = 4
-    cols = (v.size // rows) * rows
-    m = np.ascontiguousarray(v[:cols].reshape(rows, cols // rows))
-    emit("contig2d", m, m)
-    emit("transposed", m, m.T)                   # F-contiguous view
-    emit("row_reversed", m, m[:, ::-1])
-    emit("col_strided", m, m[:, ::2])
+    for op, f, v in jobs:
+        emit(op, f, "contig1d", v, v)
+        emit(op, f, "strided2", v, v[::2])
+        emit(op, f, "reversed", v, v[::-1])
+        emit(op, f, "offset", v, v[7:])
+        emit(op, f, "offset_strided3", v, v[5::3])
 
-    # NB: an F-CONTIGUOUS operand is spelled as the transpose of a C base (above), never as an
-    # asfortranarray base — describe() serializes base.tobytes() in C order, so an F-ordered base
-    # would record bytes that disagree with its own strides.
+        rows = 4
+        cols = (v.size // rows) * rows
+        m = np.ascontiguousarray(v[:cols].reshape(rows, cols // rows))
+        emit(op, f, "contig2d", m, m)
+        # NB: an F-CONTIGUOUS operand is spelled as the transpose of a C base, never as an
+        # asfortranarray base - describe() serializes base.tobytes() in C order, so an F-ordered
+        # base would record bytes that disagree with its own strides.
+        emit(op, f, "transposed", m, m.T)
+        emit(op, f, "row_reversed", m, m[:, ::-1])
+        emit(op, f, "col_strided", m, m[:, ::2])
 
-    one = np.ascontiguousarray(v[:16].reshape(1, 16))
-    emit("broadcast", one, np.broadcast_to(one, (3, 16)))
+        one = np.ascontiguousarray(v[:16].reshape(1, 16))
+        emit(op, f, "broadcast", one, np.broadcast_to(one, (3, 16)))
 
-    for bits in (0x7fc00000, 0x7f800000, 0xff800000, 0x80000000, 0xc2781e37, 0xc26d0e6c, 0x42b17218):
-        z = np.array([bits], dtype=np.uint32).view(np.float32).reshape(())
-        emit("zerod", z, z)
+        for bits in (0x7fc00000, 0x7f800000, 0xff800000, 0x80000000, 0x3f800000):
+            z = np.array([bits], dtype=np.uint32).view(np.float32).reshape(())
+            emit(op, f, "zerod", z, z)
 
-    e = np.zeros(0, dtype=np.float32)
-    emit("empty", e, e)
+        e = np.zeros(0, dtype=np.float32)
+        emit(op, f, "empty", e, e)
 
-    # The narrow integer dtypes whose NumPy exp loop is this SAME 'f->f' kernel, so they carry
-    # the identical bit-exact claim (int32 and wider promote to the float64 loop instead).
-    for dt in ("int16", "uint16"):
-        iv = np.array([0, 1, 2, 3, 5, 11, 87, 88, 89, 90, -1, -5, -87, -88, -103, -104],
-                      dtype=np.int64).astype(dt)
-        emit("int_contig", iv, iv)
-        emit("int_reversed", iv, iv[::-1])
+        # The narrow integer dtypes whose NumPy loop is this SAME 'f->f' kernel (int32 and wider
+        # promote to the float64 loop instead).
+        for dt in ("int16", "uint16"):
+            iv = np.array([0, 1, 2, 3, 5, 11, 87, 88, 89, 90, -1, -5, -87, -88, -103, -104],
+                          dtype=np.int64).astype(dt)
+            emit(op, f, "int_contig", iv, iv)
+            emit(op, f, "int_reversed", iv, iv[::-1])
     return cases
 
 
@@ -3709,9 +3759,9 @@ def main():
     elif mode == "groupa":
         cases = gen_groupa()                                            # Group A B4-6
         write_jsonl(os.path.join(corpus_dir, "groupa.jsonl"), cases)
-    elif mode == "exp_f32":
-        cases = gen_exp_f32()                                           # bit-exact float32 exp tier
-        write_jsonl(os.path.join(corpus_dir, "exp_f32.jsonl"), cases)
+    elif mode == "numpy_f32":
+        cases = gen_numpy_f32_kernels()                                 # bit-exact float32 kernel tier
+        write_jsonl(os.path.join(corpus_dir, "numpy_f32_kernels.jsonl"), cases)
     elif mode == "matmul_parity":
         cases = gen_matmul_parity()                                     # np.parity_matmul byte gate
         write_jsonl(os.path.join(corpus_dir, "matmul_parity.jsonl"), cases)
@@ -3720,7 +3770,7 @@ def main():
         # reports Inconclusive (never red) when they do not.
         write_jsonl(os.path.join(corpus_dir, "matmul_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | exp_f32 | matmul_parity)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity)")
         sys.exit(2)
 
 

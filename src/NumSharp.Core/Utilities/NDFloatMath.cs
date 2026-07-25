@@ -9,7 +9,7 @@ namespace NumSharp.Utilities
     /// each entry point here is a port of the kernel NumPy 2.4.2 actually runs, so the result is
     /// <b>bit-identical</b> to NumPy rather than merely within a couple of ULP.
     ///
-    /// <para><b><see cref="Exp"/> = <c>simd_exp_FLOAT</c></b>
+    /// <para><b><see cref="Exp"/> = <c>simd_exp_FLOAT</c>, <see cref="Log"/> = <c>simd_log_FLOAT</c></b>
     /// (<c>numpy/_core/src/umath/loops_exponent_log.dispatch.c.src</c>, the <c>SIMD_AVX2_FMA3</c>
     /// instantiation). NumPy's own algorithm: clamp/flag the overflow and underflow ends, Cody-Waite
     /// range reduction <c>y = x - k·ln2</c> with <c>k = rint(x·log2(e))</c>, evaluate <c>exp(y)</c> as
@@ -92,8 +92,71 @@ namespace NumSharp.Utilities
         /// this is NOT <see cref="float.NaN"/>, whose sign bit is set (<c>0xffc00000</c>).</summary>
         private const uint CanonicalNaNBits = 0x7fc00000u;
 
+        // ---- simd_log_FLOAT constants (same NumPy sources) ----
+
+        // Remez minimax numerator and denominator (both 5th order) for log(1+x) on the reduced range.
+        private const float LogP0 = 0.000000000000000000000e+00f;
+        private const float LogP1 = 9.999999999999998702752e-01f;
+        private const float LogP2 = 2.112677543073053063722e+00f;
+        private const float LogP3 = 1.480000633576506585156e+00f;
+        private const float LogP4 = 3.808837741388407920751e-01f;
+        private const float LogP5 = 2.589979117907922693523e-02f;
+        private const float LogQ0 = 1.000000000000000000000e+00f;
+        private const float LogQ1 = 2.612677543073109236779e+00f;
+        private const float LogQ2 = 2.453006071784736363091e+00f;
+        private const float LogQ3 = 9.864942958519418960339e-01f;
+        private const float LogQ4 = 1.546476374983906719538e-01f;
+        private const float LogQ5 = 5.875095403124574342950e-03f;
+
+        /// <summary>NPY_LOGE2f — ln(2).</summary>
+        private const float LogE2 = 0.693147180559945309417232121458176568f;
+
+        /// <summary>NPY_SQRT1_2f — 1/sqrt(2), the mantissa split point.</summary>
+        private const float Sqrt1_2 = 0.707106781186547524400844362104849039f;
+
+        /// <summary>FLT_MIN — the smallest NORMAL float; below it NumPy rescales by 2^100.</summary>
+        private const float FloatMin = 1.17549435082228750797e-38f;
+
+        /// <summary>2^100 as a bit pattern (NumPy's <c>0x71800000</c>), the denormal rescale factor.</summary>
+        private const uint TwoPower100Bits = 0x71800000u;
+
+        /// <summary>NumPy returns a NEGATIVE NaN for a negative argument to log (<c>-NPY_NANF</c>).</summary>
+        private const uint NegativeNaNBits = 0xffc00000u;
+
+        // ---- simd_sincos_f32 constants (numpy/_core/src/umath/loops_trigonometric.dispatch.cpp,
+        // the NPY_SIMD_FMA3 kernel). Hex-float literals in the original; the decimal spellings below
+        // are the exact round-trips, with NumPy's own form and the bit pattern in the comment.
+
+        private const float TwoOverPi = 0.6366197466850281f;            // 0x1.45f306p-1   0x3f22f983
+        private const float CodyWaitePio2High = -1.570796012878418f;    // -0x1.921fb0p+00 0xbfc90fd8
+        private const float CodyWaitePio2Med = -3.1391647326017846e-07f;// -0x1.5110b4p-22 0xb4a8885a
+        private const float CodyWaitePio2Low = -5.390302529957765e-15f; // -0x1.846988p-48 0xa7c234c4
+
+        // Cosine polynomial in x^2 (even terms).
+        private const float CosInv8 = 2.4372266125283204e-05f;          // 0x1.98e616p-16  0x37cc730b
+        private const float CosInv6 = -0.001388652017340064f;           // -0x1.6c06dcp-10 0xbab6036e
+        private const float CosInv4 = 0.04166661947965622f;             // 0x1.55553cp-05  0x3d2aaa9e
+        private const float CosInv2 = -0.5f;                            // -0x1.000000p-01 0xbf000000
+        private const float CosInv0 = 1.0f;                             // 0x1.000000p+00  0x3f800000
+
+        // Sine polynomial (T. Myklebust); NumPy documents max 0.647 ULP on [-pi/4, pi/4].
+        private const float SinInv9 = 2.8404097065504175e-06f;          // 0x1.7d3bbcp-19  0x363e9dde
+        private const float SinInv7 = -0.00019856491417158395f;         // -0x1.a06bbap-13 0xb95035dd
+        private const float SinInv5 = 0.008333397097885609f;            // 0x1.11119ap-07  0x3c0888cd
+        private const float SinInv3 = -0.1666666716337204f;             // -0x1.555556p-03 0xbe2aaaab
+
+        /// <summary>Above this |x| Cody-Waite reduction loses accuracy and NumPy calls libc sinf.</summary>
+        private const float MaxCodySin = 117435.9921875f;               // 117435.992      0x47e55dff
+
+        /// <summary>The same threshold for cosine - NumPy uses a DIFFERENT (smaller) one.</summary>
+        private const float MaxCodyCos = 71476.0625f;                   // 71476.0625      0x478b9a08
+
+
         /// <summary><see cref="CanonicalNaNBits"/> as a float, for the vector overloads' selects.</summary>
         private static readonly float CanonicalNaN = BitConverter.UInt32BitsToSingle(CanonicalNaNBits);
+
+        /// <summary><see cref="NegativeNaNBits"/> as a float, for the vector overloads' selects.</summary>
+        private static readonly float NegativeNaN = BitConverter.UInt32BitsToSingle(NegativeNaNBits);
 
         /// <summary>
         /// NumPy 2.4.2's <c>float32</c> exponential, bit-for-bit (port of <c>simd_exp_FLOAT</c>).
@@ -136,6 +199,167 @@ namespace NumSharp.Utilities
             return BitConverter.Int32BitsToSingle(
                 BitConverter.SingleToInt32Bits(poly) + (((int)quadrant) << 23));
         }
+
+        /// <summary>
+        /// NumPy 2.4.2's <c>float32</c> natural logarithm, bit-for-bit (port of <c>simd_log_FLOAT</c>,
+        /// the sibling of <see cref="Exp(float)"/> in the same NumPy source file). Splits x into
+        /// exponent and mantissa, folds the mantissa into <c>[1/sqrt 2, sqrt 2)</c>, evaluates
+        /// <c>log(1+m)</c> as a 5th-over-5th-order Remez minimax ratio, and adds <c>exponent*ln2</c>
+        /// with a final fused multiply-add. NumPy documents a max error of 3.83 ULP here (at
+        /// <c>x = 0x3f486945</c>) — reproducing NumPy means reproducing that.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float Log(float x)
+        {
+            // Ordered test: NaN, negatives, zero and +inf all fail it and take the cold path, which
+            // is exactly NumPy's four masks. Subnormals stay on the fast path (rescaled below).
+            if (!(x > 0f && x < float.PositiveInfinity))
+                return LogNonFinite(x);
+
+            float exponent = LogExponent(x);
+            float m = LogMantissa(x);
+
+            // if (m <= 1/sqrt 2) { m *= 2; exponent -= 1 } — centres the polynomial's argument.
+            if (m <= Sqrt1_2)
+            {
+                m = m + m;
+                exponent = exponent - 1f;
+            }
+            m = m - 1f;
+
+            float num = MathF.FusedMultiplyAdd(LogP5, m, LogP4);
+            num = MathF.FusedMultiplyAdd(num, m, LogP3);
+            num = MathF.FusedMultiplyAdd(num, m, LogP2);
+            num = MathF.FusedMultiplyAdd(num, m, LogP1);
+            num = MathF.FusedMultiplyAdd(num, m, LogP0);
+            float den = MathF.FusedMultiplyAdd(LogQ5, m, LogQ4);
+            den = MathF.FusedMultiplyAdd(den, m, LogQ3);
+            den = MathF.FusedMultiplyAdd(den, m, LogQ2);
+            den = MathF.FusedMultiplyAdd(den, m, LogQ1);
+            den = MathF.FusedMultiplyAdd(den, m, LogQ0);
+
+            return MathF.FusedMultiplyAdd(exponent, LogE2, num / den);
+        }
+
+        /// <summary>
+        /// <see cref="Log"/>'s four special values, in NumPy's precedence. Note the asymmetry a
+        /// correctly-rounded libm does not have: a NaN argument yields the POSITIVE canonical NaN
+        /// while a negative argument yields a NEGATIVE one (NumPy stores <c>-NPY_NANF</c> there).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static float LogNonFinite(float x)
+        {
+            if (float.IsNaN(x))
+                return BitConverter.UInt32BitsToSingle(CanonicalNaNBits);
+            if (x < 0f)
+                return BitConverter.UInt32BitsToSingle(NegativeNaNBits);
+            if (x == 0f)                       // both +0 and -0 (NumPy compares ordered-equal)
+                return float.NegativeInfinity;
+            return float.PositiveInfinity;     // +inf
+        }
+
+        /// <summary>
+        /// NumPy's <c>fma_get_exponent</c>: the unbiased exponent as a float. Subnormals are first
+        /// multiplied by 2^100 so their exponent field is meaningful, then 100 is subtracted back.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float LogExponent(float x)
+        {
+            if (x < FloatMin)
+            {
+                x = x * BitConverter.UInt32BitsToSingle(TwoPower100Bits);
+                return (float)((BitConverter.SingleToInt32Bits(x) >>> 23) - 0x7E) - 100f;
+            }
+            return (float)((BitConverter.SingleToInt32Bits(x) >>> 23) - 0x7E);
+        }
+
+        /// <summary>
+        /// NumPy's <c>fma_get_mantissa</c>: the mantissa re-exponented into <c>[0.5, 1)</c>. Same
+        /// 2^100 rescale for subnormals — which does not disturb the mantissa bits themselves.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float LogMantissa(float x)
+        {
+            if (x < FloatMin)
+                x = x * BitConverter.UInt32BitsToSingle(TwoPower100Bits);
+            return BitConverter.Int32BitsToSingle(
+                (BitConverter.SingleToInt32Bits(x) & 0x7fffff) | (126 << 23));
+        }
+
+        /// <summary>
+        /// NumPy 2.4.2's <c>float32</c> sine, bit-for-bit (port of <c>simd_sincos_f32</c> with
+        /// <c>SIMD_COMPUTE_SIN</c>). Cody-Waite reduction against pi/2 in three fused steps, then a
+        /// sine/cosine polynomial pair selected by the quadrant.
+        ///
+        /// <para><b>Large arguments deliberately fall back to the platform libm</b>, exactly as
+        /// NumPy does: beyond |x| = 117435.992 (sine) its own comment says Cody-Waite "becomes
+        /// inaccurate and we will call libc". Those inputs therefore inherit whatever difference
+        /// exists between .NET's <see cref="MathF.Sin"/> and the CRT's <c>sinf</c> - the port cannot
+        /// close that, and extending the polynomial past NumPy's own limit would move us AWAY from
+        /// NumPy rather than toward it.</para>
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float Sin(float x)
+        {
+            if (!(MathF.Abs(x) <= MaxCodySin))
+                return SinOutOfRange(x);
+            return SinCosCore(x, 0);
+        }
+
+        /// <summary>
+        /// NumPy 2.4.2's <c>float32</c> cosine, bit-for-bit (<c>simd_sincos_f32</c> with
+        /// <c>SIMD_COMPUTE_COS</c> - the same kernel, biasing the quadrant by one). See
+        /// <see cref="Sin(float)"/>; note NumPy uses a SMALLER Cody-Waite limit for cosine.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float Cos(float x)
+        {
+            if (!(MathF.Abs(x) <= MaxCodyCos))
+                return CosOutOfRange(x);
+            return SinCosCore(x, 1);
+        }
+
+        /// <summary>
+        /// The shared reduce-and-evaluate body. <paramref name="quadrantBias"/> is 0 for sine and 1
+        /// for cosine, which is how NumPy turns one kernel into both.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float SinCosCore(float x, int quadrantBias)
+        {
+            // quadrant = rint(x * 2/pi), through the magic constant. FUSED, like exp's quadrant -
+            // the wheel's compiler contracts NumPy's separate multiply and add.
+            float quadrant = MathF.FusedMultiplyAdd(x, TwoOverPi, RintCvtMagic) - RintCvtMagic;
+
+            float r = MathF.FusedMultiplyAdd(quadrant, CodyWaitePio2High, x);
+            r = MathF.FusedMultiplyAdd(quadrant, CodyWaitePio2Med, r);
+            r = MathF.FusedMultiplyAdd(quadrant, CodyWaitePio2Low, r);
+            float r2 = r * r;
+
+            float cos = MathF.FusedMultiplyAdd(CosInv8, r2, CosInv6);
+            cos = MathF.FusedMultiplyAdd(cos, r2, CosInv4);
+            cos = MathF.FusedMultiplyAdd(cos, r2, CosInv2);
+            cos = MathF.FusedMultiplyAdd(cos, r2, CosInv0);
+
+            float sin = MathF.FusedMultiplyAdd(SinInv9, r2, SinInv7);
+            sin = MathF.FusedMultiplyAdd(sin, r2, SinInv5);
+            sin = MathF.FusedMultiplyAdd(sin, r2, SinInv3);
+            sin = MathF.FusedMultiplyAdd(sin, r2, 0f);
+            sin = MathF.FusedMultiplyAdd(sin, r, r);
+
+            int iq = (int)quadrant + quadrantBias;      // quadrant is an exact integer float
+            float res = (iq & 1) == 0 ? sin : cos;
+            return (iq & 2) == 2 ? 0f - res : res;
+        }
+
+        /// <summary>NaN, infinities and the large-|x| libm fallback for <see cref="Sin(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static float SinOutOfRange(float x)
+            => float.IsNaN(x) ? BitConverter.UInt32BitsToSingle(CanonicalNaNBits) : MathF.Sin(x);
+
+        /// <summary>NaN, infinities and the large-|x| libm fallback for <see cref="Cos(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static float CosOutOfRange(float x)
+            => float.IsNaN(x) ? BitConverter.UInt32BitsToSingle(CanonicalNaNBits) : MathF.Cos(x);
 
         /// <summary>
         /// The three ends of <see cref="Exp"/>'s domain, in NumPy's own precedence: NaN wins, then

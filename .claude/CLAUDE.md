@@ -403,34 +403,52 @@ texts differ in wording; `np.broadcast_to(a, (2^62, 6))` builds the view where N
 
 **Each of those ufuncs exposes ONE NumPy-shaped overload** — `f(x[, x2], NDArray out = null, NDArray where = null, NPTypeCode? dtype = null)` mirroring NumPy's `f(x1[, x2], /, out=None, *, where=True, dtype=None)`: `out` is the second/third positional slot exactly like NumPy, `where`/`dtype` are reachable by name without `out`. `dtype=` selects the LOOP (NumPy loop-signature semantics, probed): computation runs at that precision even with `out=` (`sqrt([2.], out=f64, dtype=f32)` stores the f32-rounded value; `add(0.1, 0.2, out=f64, dtype=f32)` stores `0.30000001…`), `power(2, -1, dtype: f64) = 0.5` (the negative-int-exponent ValueError applies only to integer loops), `power(10, 11, dtype: f64) = 1e11` exactly (no compute-then-cast), `add(True, True, dtype: i32) = 2` (the bool→logical-OR remap keys off the FINAL loop dtype), `negative(bool, dtype: f64)` is legal, and inputs must reach the loop via same_kind casts (verbatim `Cannot cast ufunc '<name>' input [N] from ...` errors; binary errors are indexed, unary are not). Loop-existence gates raise `No loop matching ... ufunc <name>`: float-only ufuncs (sqrt/exp/log/trig + `divide`/`true_divide`) reject int/bool dtype; bitwise rejects float/complex/decimal dtype. `positive` is a full ufunc (identity loops at every dtype EXCEPT bool: plain `positive(bool)` and `dtype: bool` raise the verbatim `did not contain a loop with signature matching types <class 'numpy.dtypes.XDType'> -> ...` texts; `positive(bool, dtype: f64)` works). `round_`/`around` follow NumPy's non-ufunc shape `round(a, int decimals = 0, NDArray out = null)` (2nd positional is decimals, NOT out). Positional-dtype overloads (`np.sqrt(x, NPTypeCode.Single)`, `(x, Type)`) also exist for source compat as non-NumPy call forms (NumPy's 2nd positional is `out`). Tests: `Math/UfuncDtypeOverloadTests.cs`.
 
-**`np.exp` at float32 is BIT-EXACT with NumPy**, not merely close: `Utilities/NDFloatMath.cs` is a port of
-`simd_exp_FLOAT` — the kernel NumPy 2.4.2 actually runs (`numpy/_core/src/umath/loops_exponent_log.dispatch.c.src`,
-the `SIMD_AVX2_FMA3` instantiation; on Windows the AVX-512 variant is `!defined(_MSC_VER)`-gated and never
-compiled). Cody-Waite range reduction `y = x - k·ln2` with `k = rint(x·log2 e)`, a 5th-over-2nd-order Remez
-minimax ratio, then scale by `2^k`. It is deliberately NOT correctly rounded — NumPy documents 2.52 ULP of its
-own error at `x = 0xc2781e37` — so `MathF.Exp` (the previous kernel, ~correctly rounded) differed from NumPy on
-**~35% of all float32 inputs** by 1-2 ULP, which the blanket `unary ~ULP` fuzz excuse was silently absorbing.
-Verified **exhaustively: all 2³² float32 bit patterns** agree with NumPy 2.4.2, through both the SIMD kernel and
-the scalar entry point (chunked-checksum sweep; the corpus tier `exp_f32.jsonl` pins the discriminating inputs in
-CI, and `MisalignedRegistry`'s unary-ULP branch now EXCLUDES exp/Single so a 1-ULP regression turns the gate red).
-Specials follow from NumPy blanking the NaN lanes before the range compares: any NaN — quiet, signalling, either
-sign, any payload — returns the canonical `0x7fc00000` (note .NET's own `float.NaN` is `0xffc00000`);
-`x ≥ 88.72283935546875` (incl. `+inf`) → `+inf`; `x ≤ -103.97208404541015625` (incl. `-inf`) → `+0`; the
-`[-104, -87.3]` band produces subnormals through NumPy's `fma_scalef_ps` split. NumPy also raises the FP
-overflow/underflow status flags (a `RuntimeWarning`); NumSharp models no FP status word — pre-existing, not
-introduced here. **Host pin:** the quadrant's `mul`+`add` is FUSED because MSVC 19.44 (the numpy==2.4.2 win-amd64
-wheel's compiler) contracted it — observable at `x = 0xc26d0e6c`, where `x·log2 e` lands on the exact tie `-85.5`
-and the two spellings round `k` to -85 vs -86, a 1-ULP difference in the result. Same pin class as the
-MSVC-pinned cast kernels (`Fuzz/README.md` → "Host-dependent values"). **Perf (NPY/NS, Release, best-of-25 warm,
-`out=`):** 10M **1.14×**, 100K **1.22×**, 1K 0.69× — i.e. NumSharp is now FASTER than NumPy on the sizes where
-throughput dominates, having been 0.33× before. The port is 2.4-3.4× faster than the `MathF.Exp` kernel it
-replaces because it vectorizes: `Utilities/NDFloatMath.Simd.cs` carries `Vector{128,256,512}<float>` overloads
-(the algorithm is purely elementwise, so lane `i` is bit-identical to the scalar call), gated by
-`DirectILKernelGenerator.ExpVectorSimdAvailable` on hardware FMA — exactly as NumPy gates its own. The 1K cell is
-fixed per-call dispatch overhead (~0.8 µs), not throughput: per element it is 1.30 ns at N=1K vs 0.50 ns at
-N=100K. NumPy's whole-vector denormal branch is KEPT rather than folded into a branchless select — measured, the
-extra `vdivps` on every vector cost ~0.17 ns/element, a fifth of the kernel.
+**Four float32 unary loops are BIT-EXACT with NumPy**, not merely close — `exp`, `log`, `sin`, `cos` —
+because `Utilities/NDFloatMath.cs` ports the kernels NumPy 2.4.2 actually runs rather than calling the platform
+libm: `simd_exp_FLOAT` and `simd_log_FLOAT` (`numpy/_core/src/umath/loops_exponent_log.dispatch.c.src`, the
+`SIMD_AVX2_FMA3` instantiation — on Windows the AVX-512 variant is `!defined(_MSC_VER)`-gated and never compiled)
+and `simd_sincos_f32` (`loops_trigonometric.dispatch.cpp`, `NPY_SIMD_FMA3`). `rad2deg`/`deg2rad` join them by
+forming their constant at the OPERAND's precision, as NumPy's `RAD2DEG`/`DEG2RAD` macros do. None of these kernels
+is correctly rounded — NumPy documents 2.52 ULP for exp, 3.83 for log, 0.647 for the sine polynomial — so
+`MathF.Exp`/`Log`/`Sin`/`Cos` (~correctly rounded) differed from NumPy on **35% / 4.7% / 6.9% / 7.8%** of float32
+inputs, and the one-ULP-low `rad2deg` factor on **79%**; the blanket `unary ~ULP` fuzz excuse was absorbing all of
+it silently. Each is now verified **exhaustively: all 2³² float32 bit patterns**, through both the SIMD kernel and
+the scalar entry point (chunked-checksum sweep). The corpus tier `numpy_f32_kernels.jsonl` (120 cases) pins the
+discriminating inputs in CI and `MisalignedRegistry`'s unary-ULP branch EXCLUDES these ops at a float32 result, so
+a 1-ULP regression turns the gate red.
 
+Specials (probed, and mostly consequences of NumPy blanking NaN lanes before its range compares): any NaN — quiet,
+signalling, either sign, any payload — returns the canonical `0x7fc00000` (note .NET's own `float.NaN` is
+`0xffc00000`); `exp` saturates at `x ≥ 88.72283935546875` → `+inf` and `x ≤ -103.97208404541015625` → `+0`, with
+the band between producing subnormals through `fma_scalef_ps`'s exponent split; `log` returns `-inf` at ±0 and a
+**negative** NaN for a negative argument (but a positive one for a NaN argument); `sin`/`cos` hand arguments past
+their Cody-Waite limits (**different per function** — 117435.992 and 71476.0625) to the platform libm exactly as
+NumPy does, so those inputs are libm-dependent by construction. NumPy also raises FP status flags
+(`RuntimeWarning`) that NumSharp does not model — pre-existing, not introduced here.
+
+**Host pin:** each kernel's quadrant is computed with a FUSED multiply-add because MSVC 19.44 (the numpy==2.4.2
+win-amd64 wheel's compiler) contracts NumPy's separate multiply and add. It is observable at `x = 0xc26d0e6c`,
+where `x·log2 e` lands on the exact tie `-85.5` and the two spellings round `k` to -85 vs -86 — a 1-ULP
+difference. Same pin class as the MSVC-pinned cast kernels (`Fuzz/README.md` → "Host-dependent values").
+
+**Perf (NPY/NS, Release, best-of-21 warm, `out=`, 100K / 10M):** `exp` **1.11× / 1.11×**, `log` **1.28× / 1.27×**,
+`sin` **1.07× / 1.04×**, `cos` **1.05× / 1.06×**, `rad2deg` **11.7× / 2.42×** — NumSharp is now FASTER than NumPy
+on every one, having been 0.33×/0.41×/0.20×/0.21× before. The ports are 1.4–5.2× faster than the `MathF.*` calls
+they replace because they vectorize: `Utilities/NDFloatMath.Simd.cs` carries `Vector{128,256,512}<float>`
+overloads (each algorithm is purely elementwise, so lane `i` is bit-identical to the scalar call — which is why
+NumPy generates its own kernels from one template for `__m256` and `__m512`), gated by
+`DirectILKernelGenerator.NumPyFloatKernelSimdAvailable` on hardware FMA exactly as NumPy gates its own; without
+FMA the scalar entry point runs, same bits, one lane at a time. Two measured details worth keeping: the
+rarely-taken subnormal branches are kept as BRANCHES rather than folded into branchless selects (folding exp's
+denormal split cost ~0.17 ns/element and log's ~0.15 — a fifth of each kernel), and the vector overloads carry
+`AggressiveOptimization` because without it tier-0 JIT made the first ~40 calls 27× slower than steady state.
+
+**Still the platform libm at float32/float64** (measured, documented, NOT ported): `tanh` (9.7% / 8.1% of inputs
+differ, ≤2 ULP), `exp2` (0.04% / 0.02%, 1 ULP), and `expm1`/`log1p`, which NumSharp additionally computes as
+`Exp(x)-1` / `Log(1+x)` — catastrophic for small |x| (`expm1(1e-8)` returns **0** where NumPy returns 1e-8) and a
+signed-zero bug (`expm1(-0.0)` → `+0.0`). tanh IS portable (NumPy has its own LUT-based SIMD kernel); expm1/log1p
+are not (NumPy calls the CRT). float64 `exp`/`log`/`sin`/`cos` and every float16 loop already agree with NumPy
+bit-for-bit on this platform and need no port.
 ### Math — Reductions
 `all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `average_returned`, `count_nonzero`, `cumprod`, `cumsum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `ptp`, `quantile`, `std`, `sum`, `var`
 
@@ -873,7 +891,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | DirectILKernelGenerator | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 63 partials) |
 | Kernel shared infra | `Backends/Kernels/{VectorMethodCache,ScalarMethodCache,KernelOp,StrideDetector,SimdMatMul.*}.cs` |
 | .npy/.npz format (NEP-01) | `IO/NpyFormat.cs` (port of NumPy's `_format_impl.py`), `IO/NpzFile.cs` (lazy archive), `IO/PyLiteral.cs` (header parser ≙ `ast.literal_eval`), `APIs/np.{save,load}.cs` |
-| float32 NumPy-exact math (exp) | `Utilities/NDFloatMath.cs`, `Utilities/NDFloatMath.Simd.cs` |
+| float32 NumPy-exact math (exp/log/sin/cos) | `Utilities/NDFloatMath.cs`, `Utilities/NDFloatMath.Simd.cs` |
 | Type info | `Utilities/InfoOf.cs` |
 | Generic NDArray | `Generics/NDArray\`1.cs` |
 

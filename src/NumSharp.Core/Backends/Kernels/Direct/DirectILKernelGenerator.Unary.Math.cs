@@ -105,15 +105,29 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Log:
-                    EmitMathCall(il, "Log", type);
+                    // float32 log is NumPy's own simd_log_FLOAT (see the Exp case above). NOT folded
+                    // into EmitMathCall: Log1p below composes "1+x then Log" and tracks npy_log1pf,
+                    // a different function.
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleLog, null);
+                    else
+                        EmitMathCall(il, "Log", type);
                     break;
 
                 case UnaryOp.Sin:
-                    EmitMathCall(il, "Sin", type);
+                    // float32 sin is NumPy's own simd_sincos_f32 kernel (see Exp/Log above).
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleSin, null);
+                    else
+                        EmitMathCall(il, "Sin", type);
                     break;
 
                 case UnaryOp.Cos:
-                    EmitMathCall(il, "Cos", type);
+                    // float32 cos is NumPy's own simd_sincos_f32 kernel (see Exp/Log above).
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleCos, null);
+                    else
+                        EmitMathCall(il, "Cos", type);
                     break;
 
                 case UnaryOp.Tan:
@@ -924,8 +938,11 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitDeg2RadCall(ILGenerator il, NPTypeCode type)
         {
+            // NumPy's DEG2RAD, evaluated at the operand's precision — see EmitRad2DegCall. (Here the
+            // float32 quotient and the rounded double quotient agree bit-for-bit, but spelling it
+            // NumPy's way keeps the two directions consistent.)
             const double Deg2RadFactor = Math.PI / 180.0;
-            const float Deg2RadFactorF = (float)(Math.PI / 180.0);
+            const float Deg2RadFactorF = (float)Math.PI / 180.0f;
 
             if (type == NPTypeCode.Single)
             {
@@ -952,8 +969,15 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitRad2DegCall(ILGenerator il, NPTypeCode type)
         {
+            // NumPy's RAD2DEG is (180/PI) evaluated AT THE OPERAND'S PRECISION
+            // (npy_math_internal.h.src: `#define RAD2DEG (NPY__FP_SFX(180.0)/NPY__FP_SFX(NPY_PI))`,
+            // so the float32 loop divides two float32 constants). Rounding the DOUBLE quotient to
+            // float instead gives 0x42652ee1 where NumPy has 0x42652ee0 — one ULP low in the factor,
+            // which shifted 79% of all float32 rad2deg results by 1-2 ULP. Deg2Rad happens to round
+            // to the same float either way, but is written the same way here so the pair cannot
+            // drift apart again.
             const double Rad2DegFactor = 180.0 / Math.PI;
-            const float Rad2DegFactorF = (float)(180.0 / Math.PI);
+            const float Rad2DegFactorF = 180.0f / (float)Math.PI;
 
             if (type == NPTypeCode.Single)
             {

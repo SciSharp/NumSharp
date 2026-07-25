@@ -317,15 +317,6 @@ namespace NumSharp.UnitTest
             => BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(v) + n);
 
         [TestMethod]
-        public void B8_ExpFloat32_OneUlp_NotExcused()
-        {
-            var c = Case("exp", ("float32", new long[] { 4 }));
-            MisalignedRegistry.Classify(c, DivergenceKind.Value,
-                F32(2.7182817f), F32(UlpUpF(2.7182817f)), NPTypeCode.Single, OneDiff).Should().BeNull(
-                "float32 exp is a bit-exact port of NumPy's own kernel — 1 ULP is a regression");
-        }
-
-        [TestMethod]
         public void B8_ExpFloat32_FromInt16Input_NotExcused()
         {
             // int16 -> float32 exp runs NumPy's SAME 'f->f' kernel, so it is held bit-exact too.
@@ -345,12 +336,33 @@ namespace NumSharp.UnitTest
         }
 
         [TestMethod]
-        public void B8_OtherUnaryFloat32_OneUlp_StillExcused()
+        [DataRow("exp")]
+        [DataRow("log")]
+        [DataRow("sin")]
+        [DataRow("cos")]
+        [DataRow("rad2deg")]
+        [DataRow("deg2rad")]
+        public void B8_PortedFloat32Kernels_OneUlp_NotExcused(string op)
         {
-            var c = Case("sin", ("float32", new long[] { 4 }));
+            var c = Case(op, ("float32", new long[] { 4 }));
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
-                F32(0.84147096f), F32(UlpUpF(0.84147096f)), NPTypeCode.Single, OneDiff)
-                .Should().NotBeNull("only exp was ported — the other float32 transcendentals keep the envelope");
+                F32(0.84147096f), F32(UlpUpF(0.84147096f)), NPTypeCode.Single, OneDiff).Should().BeNull(
+                $"float32 {op} is a bit-exact port of NumPy's own kernel — 1 ULP is a regression");
+        }
+
+        [TestMethod]
+        public void B8_UnportedUnaryFloat32_OneUlp_StillExcused()
+        {
+            // tanh/expm1/log1p/exp2 are still the platform libm at float32, so they keep the
+            // documented envelope. If one of them is ported later, it moves into the carve-out set
+            // and this test must move with it.
+            foreach (var op in new[] { "tanh", "expm1", "log1p", "exp2", "arctan" })
+            {
+                var c = Case(op, ("float32", new long[] { 4 }));
+                MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                    F32(0.84147096f), F32(UlpUpF(0.84147096f)), NPTypeCode.Single, OneDiff)
+                    .Should().NotBeNull($"{op} is not ported — it keeps the ~ULP envelope");
+            }
         }
     }
 }

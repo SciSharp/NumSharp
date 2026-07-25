@@ -628,14 +628,15 @@ namespace NumSharp.Backends.Iteration
         // vectorize Round/Truncate on .NET 9+ while (a) staying scalar on net8.0 and (b) NOT
         // crashing on integer rounding, where the typing keeps the dtype and there is no
         // Vector{N}.Floor(int) (the gate returns false -> scalar identity emit).
-        // exp is likewise type+host-gated: NDFloatMath's vector overloads are float32-only and need
+        // exp/log/sin/cos are likewise type+host-gated: NDFloatMath's vector overloads are float32-only and need
         // hardware FMA, so the fused path must defer to the same capability gate the direct kernel
         // uses (at f8/f2 or without FMA it stays scalar — same bits, one lane at a time).
         private static bool IsSimdUnaryAt(UnaryOp op, NPTypeCode t)
             => IsRoundingOp(op)
                 ? DirectILKernelGenerator.RoundingVectorSimdAvailable(op, t)
-                : op == UnaryOp.Exp
-                    ? DirectILKernelGenerator.ExpVectorSimdAvailable(t)
+                : (op == UnaryOp.Exp || op == UnaryOp.Log ||
+                   op == UnaryOp.Sin || op == UnaryOp.Cos)
+                    ? DirectILKernelGenerator.NumPyFloatKernelSimdAvailable(op, t)
                     : IsSimdUnary(op);
 
         // Structural SIMD set used by the type-independent SupportsSimd. The rounding family

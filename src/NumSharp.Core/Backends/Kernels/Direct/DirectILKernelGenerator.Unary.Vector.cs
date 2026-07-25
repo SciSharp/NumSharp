@@ -36,8 +36,13 @@ namespace NumSharp.Backends.Kernels
             {
                 case UnaryOp.Square:     EmitVectorSquare(il, clrType);     return;
                 case UnaryOp.Reciprocal: EmitVectorReciprocal(il, clrType); return;
-                case UnaryOp.Deg2Rad:    EmitVectorScale(il, clrType, Math.PI / 180.0); return;
-                case UnaryOp.Rad2Deg:    EmitVectorScale(il, clrType, 180.0 / Math.PI); return;
+                // The float32 factor is the QUOTIENT OF FLOAT CONSTANTS, matching NumPy's
+                // RAD2DEG/DEG2RAD macros (evaluated at the operand's precision) — not the double
+                // quotient rounded to float, which is 1 ULP low for rad2deg. Must stay in step with
+                // EmitRad2DegCall / EmitDeg2RadCall on the scalar side, or a strided array and a
+                // contiguous one would disagree.
+                case UnaryOp.Deg2Rad:    EmitVectorScale(il, clrType, Math.PI / 180.0, (float)Math.PI / 180.0f); return;
+                case UnaryOp.Rad2Deg:    EmitVectorScale(il, clrType, 180.0 / Math.PI, 180.0f / (float)Math.PI); return;
                 case UnaryOp.BitwiseNot:
                     il.EmitCall(OpCodes.Call, VectorMethodCache.OnesComplement(VectorBits, clrType), null);
                     return;
@@ -50,6 +55,15 @@ namespace NumSharp.Backends.Kernels
                 // that the host can run its FMA, so the call is safe here.
                 case UnaryOp.Exp when clrType == typeof(float):
                     il.EmitCall(OpCodes.Call, CachedMethods.SingleExpVector, null);
+                    return;
+                case UnaryOp.Log when clrType == typeof(float):
+                    il.EmitCall(OpCodes.Call, CachedMethods.SingleLogVector, null);
+                    return;
+                case UnaryOp.Sin when clrType == typeof(float):
+                    il.EmitCall(OpCodes.Call, CachedMethods.SingleSinVector, null);
+                    return;
+                case UnaryOp.Cos when clrType == typeof(float):
+                    il.EmitCall(OpCodes.Call, CachedMethods.SingleCosVector, null);
                     return;
             }
 
@@ -140,13 +154,15 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Emit <c>x * factor</c> via <c>Vector.Multiply(Vector.Create(factor), x)</c> — used by
-        /// Deg2Rad and Rad2Deg with the appropriate scalar factor.
+        /// Deg2Rad and Rad2Deg with the appropriate scalar factor, given per precision.
         /// </summary>
-        private static void EmitVectorScale(ILGenerator il, Type clrType, double factor)
+        private static void EmitVectorScale(ILGenerator il, Type clrType, double factor, float factorF)
         {
-            // Stack: [x_vector] — push the scalar, broadcast, then multiply.
+            // Stack: [x_vector] — push the scalar, broadcast, then multiply. The float factor is
+            // passed in separately rather than cast from the double: for rad2deg the two differ by
+            // one ULP, and NumPy computes the constant at the operand's own precision.
             if (clrType == typeof(float))
-                il.Emit(OpCodes.Ldc_R4, (float)factor);
+                il.Emit(OpCodes.Ldc_R4, factorF);
             else
                 il.Emit(OpCodes.Ldc_R8, factor);
 
