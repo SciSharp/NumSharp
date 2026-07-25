@@ -215,13 +215,18 @@ kernels later.
 ## 4. Cross-cutting: testing & data
 
 - **A real MSTest project** (`test/NeuralNetwork.NumSharp.UnitTest`). Today the
-  smoke test is an ad-hoc stdin script. Minimum bar: finite-difference gradient
+  gates are dotnet-run scripts. Minimum bar: finite-difference gradient
   check for every layer/activation/loss `Backward` (the Softmax one already
   proved its worth), optimizer trajectory pins vs hand-computed values, and a
   seeded 2-epoch convergence pin.
-- **Oracle-style parity where a Python twin exists**: losses/metrics/optimizer
-  steps can be pinned against Keras/PyTorch outputs the same way core pins
-  against NumPy — small committed fixtures, no Python at test time.
+- ✅ **Oracle-style parity — SHIPPED** (`tests/gen_keras_oracle.py` →
+  `tests/corpus/keras_edge_oracle.json` → `tests/verify_edge_cases.cs`):
+  real Keras 3 (JAX backend) values + jax.grad gradients, Keras metric
+  classes, sklearn metrics — 93 committed edge cases (±inf/NaN/saturation/
+  kinks/clip boundaries/ties/zero denominators), replayed with no Python;
+  94 checks green, 2 excused-documented divergences (CCE renormalization).
+  First run caught 3 real bugs: relu(-inf)=NaN, LeakyReLU grad at 0,
+  SoftmaxCrossEntropy loss capped at -log(eps) for extreme logits.
 - **Dataset/DataLoader abstraction** (PyTorch semantics: `Dataset` +
   batching/shuffling iterator) so MNIST stops being a special case; CIFAR-10
   loader when P5 lands.

@@ -61,12 +61,15 @@ examples/NeuralNetwork.NumSharp/
 │       │                       softmax, tanh, leaky_relu, elu, gelu,
 │       │                       silu/swish, softplus, selu; ""/linear/none →
 │       │                       null; unknown name THROWS.
-│       ├── ReLU.cs            (NDArray > 0) * NDArray formulation (works).
+│       ├── ReLU.cs            np.maximum(x, 0) — NOT (x>0)*x, which made
+│       │                       relu(-inf) = 0*-inf = NaN (Keras: 0).
 │       ├── Sigmoid.cs         1/(1+exp(-x)); Backward uses cached Output.
 │       ├── Softmax.cs         Numerically-stable row-wise softmax;
 │       │                       Backward = Output * (grad - Σ(grad*Output, axis=1, keepdims)).
 │       ├── Tanh.cs            np.tanh; Backward = grad * (1 - y²).
-│       ├── LeakyReLU.cs       alpha=0.3 (Keras layer default; PyTorch uses 0.01).
+│       ├── LeakyReLU.cs       alpha=0.3 (Keras layer default; PyTorch uses
+│       │                       0.01); branch on x >= 0 like Keras/JAX, so the
+│       │                       gradient at exactly 0 is 1, not alpha.
 │       ├── ELU.cs             alpha=1; neg-branch grad reuses y: αeˣ = y + α.
 │       ├── GELU.cs            tanh APPROXIMATION (no np.erf in core yet);
 │       │                       caches tanh(u) for the exact-derivative backward.
@@ -166,7 +169,7 @@ cache-hit on every subsequent forward/backward pass.
 | `Program.cs` | Entry point. Loads data, builds 2-FC model, runs fusion probe, trains via MlpTrainer, reports IL-kernel cache + delegate-slot counts. |
 | `MnistLoader.cs` | IDX parser (big-endian) + learnable synthetic fallback (shared class templates across train/test, sigma=2.5 noise). |
 | `FullyConnectedFused.cs` | FC with bias + optional fused activation. Three NDIter kernels (two forward, one backward), cache keys are stable strings. |
-| `SoftmaxCrossEntropy.cs` | Combined loss — numerically stable softmax forward, cached softmax, (softmax-labels)/batch backward. Also ships `OneHot` helper. |
+| `SoftmaxCrossEntropy.cs` | Combined loss computed in LOG space (log-softmax via log-sum-exp) so extreme logits give the true loss — a clipped softmax-then-log caps at -log(eps) ≈ 16.1 where e.g. logits (-1000, 0) should give 1000 (Keras from_logits=True parity, oracle-pinned). Caches softmax; (softmax-labels)/batch backward. Also ships `OneHot` helper. |
 | `MlpTrainer.cs` | Explicit train loop (`NeuralNet.Train` replacement). Periodic test eval (`min(5, epochs)` cadence). Returns per-epoch loss/train_acc + list of (epoch, test_acc) pairs. |
 | `FusedMlp.cs`, `NaiveMlp.cs` | Side-by-side forward implementations for the correctness probe at Program startup. |
 
@@ -285,8 +288,43 @@ filing: NDIter broadcast-operand inner-loop throughput vs the Direct kernels.
 
 ## Testing
 
-No dedicated MSTest project yet (roadmap P-cross-cutting). The committed gate
-is **`tests/verify_p0_p2.cs`** — a dotnet-run file-based app with 86 checks:
+No dedicated MSTest project yet (roadmap P-cross-cutting). TWO committed
+gates, both dotnet-run file-based apps under `tests/`:
+
+### Gate 2: `tests/verify_edge_cases.cs` — the Keras edge-case oracle (94 checks)
+
+House oracle philosophy scaled to this project: `tests/gen_keras_oracle.py`
+runs **real Keras 3 (JAX backend, float32)** — values AND `jax.grad`
+gradients through the actual Keras losses — plus Keras metric classes and
+scikit-learn, and writes the committed corpus
+`tests/corpus/keras_edge_oracle.json` (93 cases). The replay runs with **no
+Python**. Coverage: activation values over ±inf/NaN/±1e30/saturation/kink
+grids + gradient grids; softmax -inf lanes and huge-logit ties; loss values
+and gradients at clip boundaries, |e|==delta Huber boundary, zero margins,
+label-conversion edges, ±300 log-cosh tails, from-logits parity for
+SoftmaxCrossEntropy at ±1000 logits; metric threshold-exact/tie/
+zero-denominator conventions; initializer std targets sampled from Keras's
+own initializers (5-seed means, conv-rank fans).
+
+Excused divergences are explicit in the corpus (`expected_ns` + reason,
+printed at replay — MisalignedRegistry spirit, never silent). Currently two:
+Keras renormalizes CCE probability rows (we document "expects post-softmax"
+and don't), and consequently Keras's CCE gradient carries a renormalization
+projection while ours is the exact gradient of OUR forward (FD-verified).
+
+```bash
+cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_edge_cases.cs
+# → RESULT: 94 passed, 0 failed, 2 excused-documented divergences
+# regenerate corpus (needs keras>=3.15 + jax + scikit-learn):
+python gen_keras_oracle.py
+```
+
+Bugs this oracle caught on first run: `relu(-inf)` returned NaN (the
+`(x>0)*x` form), LeakyReLU's gradient at exactly 0 (Keras/JAX use `x >= 0`),
+and SoftmaxCrossEntropy capping extreme-logit losses at -log(eps) ≈ 16.1
+instead of the true value (now log-sum-exp).
+
+### Gate 1: `tests/verify_p0_p2.cs` — behavior + formula checks (86 checks)
 
 - P0 behavior pins: astype(copy:false) non-mutation, allclose/where operand
   dtypes, activation resolver (softmax registered, unknown throws), fused

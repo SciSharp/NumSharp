@@ -16,8 +16,10 @@ namespace NeuralNetwork.NumSharp.Activations
         {
             base.Forward(x);
 
-            NDArray matches = x > 0;
-            Output = matches * x;
+            // max(x, 0) — NOT (x > 0) * x: the multiply form turns relu(-inf)
+            // into 0 * -inf = NaN, where Keras/JAX (maximum-based) return 0.
+            // NaN inputs still propagate through maximum, matching Keras.
+            Output = np.maximum(x, (NDArray)0f);
         }
 
         public override void Backward(NDArray grad)

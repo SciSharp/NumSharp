@@ -165,9 +165,10 @@ void ActCase(string name, Func<BaseActivation> make, float[] fwd, float[] der, i
 ActCase("tanh", () => new Tanh(),
     new[] { -0.99505475f, -0.90514825f, -0.46211716f, 0f, 0.46211716f, 0.90514825f, 0.99505475f },
     new[] { 0.0098660372f, 0.18070664f, 0.78644773f, 1f, 0.78644773f, 0.18070664f, 0.0098660372f });
+// derivative at x=0 is 1 (Keras/JAX x >= 0 convention, pinned by the edge oracle)
 ActCase("leaky_relu", () => new LeakyReLU(),
     new[] { -0.9f, -0.45f, -0.15f, 0f, 0.5f, 1.5f, 3f },
-    new[] { 0.3f, 0.3f, 0.3f, 0.3f, 1f, 1f, 1f }, kinkIndex: 3);
+    new[] { 0.3f, 0.3f, 0.3f, 1f, 1f, 1f, 1f }, kinkIndex: 3);
 ActCase("elu", () => new ELU(),
     new[] { -0.95021293f, -0.77686984f, -0.39346934f, 0f, 0.5f, 1.5f, 3f },
     new[] { 0.049787068f, 0.22313016f, 0.60653066f, 1f, 1f, 1f, 1f });
