@@ -2,9 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using NeuralNetwork.NumSharp.Callbacks;
 using NeuralNetwork.NumSharp.Cost;
 using NeuralNetwork.NumSharp.Layers;
 using NeuralNetwork.NumSharp.Optimizers;
+using NeuralNetwork.NumSharp.Serialization;
 using NumSharp;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
@@ -87,7 +90,10 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             Console.WriteLine($"  Total training time: {result.TotalMs / 1000.0:F1} s");
             Console.WriteLine();
 
-            // ---- 4. Instrumentation ----
+            // ---- 4. P1 showcase: serialization + callbacks ----
+            RunP1Showcase(layers, trainX, trainY, testX, testY, result.FinalTestAcc);
+
+            // ---- 5. Instrumentation ----
             int cacheAfter = GeneratedDelegates.InnerLoopCount;
             Console.WriteLine("Kernel / delegate instrumentation:");
             Console.WriteLine($"  IL kernel cache entries : {cacheBefore} -> {cacheAfter} (delta {cacheAfter - cacheBefore})");
@@ -96,6 +102,85 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             Console.WriteLine("   combination. Compiled once, hit on every subsequent forward/backward pass.)");
 
             return 0;
+        }
+
+        // =====================================================================
+        // P1 showcase — weight/architecture round-trip and the callback stack.
+        //
+        // Deliberately separate from the headline run above, which stays a plain
+        // 100-epoch fit so its convergence numbers remain comparable across
+        // commits. Everything here is fast (a 12-epoch fit on the same data).
+        // =====================================================================
+
+        private static void RunP1Showcase(List<BaseLayer> trained, NDArray trainX, NDArray trainY,
+                                          NDArray testX, NDArray testY, float trainedAcc)
+        {
+            Console.WriteLine("P1 — serialization round-trip:");
+
+            string dir = Path.Combine(Path.GetTempPath(), "numsharp_nn_demo");
+            Directory.CreateDirectory(dir);
+            string weightsPath = Path.Combine(dir, "mlp.npz");
+            string archPath = Path.Combine(dir, "mlp.json");
+
+            // Weights -> .npz (a genuine NumPy archive), architecture -> JSON.
+            ModelWeights.Save(trained, weightsPath);
+            ModelArchitecture.Save(trained, archPath);
+            Console.WriteLine($"  weights      : {weightsPath} ({new FileInfo(weightsPath).Length:N0} bytes)");
+            Console.WriteLine($"  architecture : {archPath} ({new FileInfo(archPath).Length:N0} bytes)");
+
+            // Rebuild from the architecture alone — freshly (and differently)
+            // initialized — then restore the trained values into it.
+            np.random.seed(4242);
+            var reloaded = ModelArchitecture.Load(archPath);
+            float untrainedAcc = MlpTrainer.Evaluate(reloaded, testX, testY, BatchSize);
+            ModelWeights.Load(reloaded, weightsPath);
+            float reloadedAcc = MlpTrainer.Evaluate(reloaded, testX, testY, BatchSize);
+
+            Console.WriteLine($"  rebuilt from JSON, random weights : test_acc={untrainedAcc * 100:F2}%");
+            Console.WriteLine($"  after loading the .npz            : test_acc={reloadedAcc * 100:F2}%  " +
+                              $"(original {trainedAcc * 100:F2}%)  ->  " +
+                              $"{(Math.Abs(reloadedAcc - trainedAcc) < 1e-6f ? "PASS" : "FAIL")}");
+            Console.WriteLine();
+
+            // ---- callbacks on a short, fresh run ----
+            Console.WriteLine("P1 — callbacks (validation split, early stopping, LR plateau, CSV log, checkpoints):");
+
+            np.random.seed(2024);
+            var fresh = new List<BaseLayer>
+            {
+                new FullyConnectedFused(InputDim,  HiddenDim, FusedActivation.ReLU),
+                new FullyConnectedFused(HiddenDim, OutputDim, FusedActivation.None),
+            };
+
+            // Gradient clipping is an optimizer property; clipnorm is Keras's
+            // PER-PARAMETER norm (see BaseOptimizer for the global variant).
+            var optimizer = new Adam(lr: 0.001f) { ClipNorm = 1.0f };
+
+            string csvPath = Path.Combine(dir, "training_log.csv");
+            var early = new EarlyStopping("val_loss", patience: 3, restoreBestWeights: true, verbose: 1);
+            var plateau = new ReduceLROnPlateau("val_loss", factor: 0.5f, patience: 2, verbose: 1);
+            var checkpoint = new ModelCheckpoint(Path.Combine(dir, "best.npz"), "val_loss",
+                                                 saveBestOnly: true, verbose: 1);
+            var csv = new CSVLogger(csvPath);
+
+            var shortRun = MlpTrainer.Train(
+                fresh, new SoftmaxCrossEntropy(), optimizer,
+                trainX, trainY, testX, testY,
+                epochs: 12, batchSize: BatchSize, numClasses: OutputDim,
+                shuffle: true,
+                validationSplit: 0.1f,
+                callbacks: new List<BaseCallback> { early, plateau, checkpoint, csv },
+                verbose: 1);
+
+            Console.WriteLine($"  epochs run       : {shortRun.EpochsRun}/12" +
+                              (shortRun.StoppedEarly ? $"  (EarlyStopping fired at epoch {early.StoppedEpoch + 1})" : "  (ran to completion)"));
+            Console.WriteLine($"  best val_loss    : {early.Best:F5} at epoch {early.BestEpoch + 1}");
+            Console.WriteLine($"  LR reductions    : {plateau.ReductionCount}  (final lr {optimizer.LearningRate})");
+            Console.WriteLine($"  checkpoints kept : {checkpoint.SaveCount} (best-only) -> {checkpoint.LastSavedPath}");
+            Console.WriteLine($"  csv log          : {csvPath}");
+            foreach (string line in File.ReadLines(csvPath).Take(4))
+                Console.WriteLine($"      {line}");
+            Console.WriteLine();
         }
 
         // =====================================================================

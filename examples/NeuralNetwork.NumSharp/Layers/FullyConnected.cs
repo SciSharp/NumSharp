@@ -28,6 +28,13 @@ namespace NeuralNetwork.NumSharp.Layers
         public bool UseBias { get; set; }
         public BaseActivation Activation { get; set; }
 
+        /// <summary>
+        /// The activation as NAMED at construction. <see cref="Activation"/> is
+        /// the resolved instance and is null for the linear case, so the name has
+        /// to be kept separately for <see cref="GetConfig"/> to round-trip.
+        /// </summary>
+        public string ActivationName { get; }
+
         public FullyConnected(int input_dim, int output_neurons, string act = "", bool useBias = true,
                               BaseInitializer kernelInitializer = null, BaseInitializer biasInitializer = null)
             : base("fc")
@@ -35,6 +42,7 @@ namespace NeuralNetwork.NumSharp.Layers
             InputDim   = input_dim;
             OutNeurons = output_neurons;
             UseBias    = useBias;
+            ActivationName = act ?? "";
             Activation = BaseActivation.Get(act);
 
             if (kernelInitializer != null)
@@ -100,5 +108,12 @@ namespace NeuralNetwork.NumSharp.Layers
 
             InputGrad = np.dot(grad, W.transpose());
         }
+
+        public override Serialization.LayerConfig GetConfig()
+            => new Serialization.LayerConfig("FullyConnected")
+                .Set("input_dim", InputDim)
+                .Set("units", OutNeurons)
+                .Set("activation", ActivationName)
+                .Set("use_bias", UseBias);
     }
 }

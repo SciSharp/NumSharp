@@ -47,7 +47,7 @@ namespace NeuralNetwork.NumSharp.Optimizers
                 string paramName = p.Key;
                 string varName   = layer.Name + "_" + paramName;
                 NDArray param    = p.Value;
-                NDArray grad     = layer.Grads[paramName];
+                NDArray grad     = ClipGradient(layer.Grads[paramName]);
 
                 if (Momentum > 0f)
                 {

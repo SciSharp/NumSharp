@@ -260,5 +260,11 @@ namespace NeuralNetwork.NumSharp.MnistMlp
                 outputType: NPTypeCode.Single,
                 cacheKey: KeyReluBackward);
         }
+
+        public override Serialization.LayerConfig GetConfig()
+            => new Serialization.LayerConfig("FullyConnectedFused")
+                .Set("input_dim", InputDim)
+                .Set("units", OutputDim)
+                .Set("activation", Activation == FusedActivation.ReLU ? "relu" : "linear");
     }
 }

@@ -81,7 +81,15 @@ namespace NeuralNetwork.NumSharp
         /// <param name="y"></param>
         /// <param name="numIterations"></param>
         /// <param name="batchSize"></param>
-        public void Train(NDArray x, NDArray y, int numIterations, int batchSize)
+        /// <param name="callbacks">
+        /// Optional Keras-style callback list. Runs ALONGSIDE the legacy
+        /// <see cref="EpochEnd"/> event, which is kept for source compatibility —
+        /// new code should prefer callbacks, and
+        /// <see cref="MnistMlp.MlpTrainer"/> for the full training loop
+        /// (shuffling, validation, early stopping).
+        /// </param>
+        public void Train(NDArray x, NDArray y, int numIterations, int batchSize,
+                          IReadOnlyList<Callbacks.BaseCallback> callbacks = null)
         {
             //Initialise batch loss and metric list for temporary holding of result
             List<float> batchLoss = new List<float>();
@@ -93,9 +101,23 @@ namespace NeuralNetwork.NumSharp
             int batchesPerEpoch = sampleCount / batchSize;
             int stepCounter = 0;
 
+            callbacks ??= Array.Empty<Callbacks.BaseCallback>();
+            var context = new Callbacks.TrainingContext(Layers, Optimizer, numIterations, batchSize,
+                                                        batchesPerEpoch, hasValidation: false);
+            foreach (var cb in callbacks)
+                cb.SetContext(context);
+
+            try
+            {
+            foreach (var cb in callbacks)
+                cb.OnTrainBegin();
+
             //Loop through till the end of specified iterations
             for (int i = 1; i <= numIterations; i++)
             {
+                foreach (var cb in callbacks)
+                    cb.OnEpochBegin(i - 1);
+
                 sw.Start();
                 batchLoss.Clear();
                 batchMetrics.Clear();
@@ -136,9 +158,20 @@ namespace NeuralNetwork.NumSharp
                     //per-epoch reset. Passing `i` (epoch) here produced stale
                     //bias-correction terms in Adam.
                     stepCounter++;
+                    Optimizer.ApplyGlobalClipNorm(Layers);
                     foreach (var layer in Layers)
                     {
                         Optimizer.Update(stepCounter, layer);
+                    }
+
+                    if (callbacks.Count > 0)
+                    {
+                        var batchLogs = new Dictionary<string, float>
+                        {
+                            ["loss"] = (float)costVal,
+                        };
+                        foreach (var cb in callbacks)
+                            cb.OnBatchEnd(b, batchLogs);
                     }
                 }
 
@@ -153,8 +186,68 @@ namespace NeuralNetwork.NumSharp
 
                 EpochEndEventArgs eventArgs = new EpochEndEventArgs(i, batchLossAvg, batchMetricAvg, sw.ElapsedMilliseconds);
                 EpochEnd?.Invoke(i, eventArgs);
+
+                if (callbacks.Count > 0)
+                {
+                    var logs = new Dictionary<string, float>
+                    {
+                        ["loss"] = batchLossAvg,
+                        ["learning_rate"] = Optimizer.LearningRate,
+                    };
+                    if (batchMetrics.Count > 0)
+                        logs["acc"] = batchMetricAvg;
+
+                    foreach (var cb in callbacks)
+                        cb.OnEpochEnd(i - 1, logs);
+                }
+
                 sw.Reset();
+
+                if (context.StopTraining)
+                    break;
             }
+            }
+            finally
+            {
+                foreach (var cb in callbacks)
+                    cb.OnTrainEnd();
+            }
+        }
+
+        // =================================================================
+        // Persistence (Keras save_weights / to_json analogs)
+        // =================================================================
+
+        /// <summary>
+        /// Writes this model's weights to a <c>.npz</c> archive. See
+        /// <see cref="Serialization.ModelWeights"/> for the key layout and why it
+        /// is positional.
+        /// </summary>
+        public void SaveWeights(string path, bool compressed = false)
+            => Serialization.ModelWeights.Save(Layers, path, compressed);
+
+        /// <summary>
+        /// Loads weights previously written by <see cref="SaveWeights"/> into this
+        /// model's layers, positionally. The architecture must match.
+        /// </summary>
+        public void LoadWeights(string path)
+            => Serialization.ModelWeights.Load(Layers, path);
+
+        /// <summary>Architecture (no weights) as JSON — Keras <c>model.to_json()</c>.</summary>
+        public string ToJson(bool indented = true)
+            => Serialization.ModelArchitecture.ToJson(Layers, indented);
+
+        /// <summary>
+        /// Rebuilds a model from <see cref="ToJson"/> output. Layers come back
+        /// freshly initialized; follow with <see cref="LoadWeights"/> to restore
+        /// trained values.
+        /// </summary>
+        public static NeuralNet FromJson(string json, BaseOptimizer optimizer, BaseCost cost, BaseMetric metric = null)
+        {
+            var net = new NeuralNet(optimizer, cost, metric);
+            foreach (var layer in Serialization.ModelArchitecture.FromJson(json))
+                net.Add(layer);
+            return net;
         }
 
         /// <summary>

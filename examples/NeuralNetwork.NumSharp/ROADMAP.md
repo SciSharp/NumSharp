@@ -28,8 +28,9 @@ present; `take_along_axis`, `sliding_window_view`, scatter-add, `einsum`,
 | Optimizers | `SGD` (momentum, decay), `Adam` | `BaseOptimizer.Get()` resolves `"sgd"`/`"adam"` |
 | Init | He-normal (ReLU), Xavier-normal (else) | Hardcoded in the Dense ctors, not a pluggable module |
 | Data | `MnistLoader` (IDX + synthetic), `OneHot` helper | No general Dataset/DataLoader abstraction |
-| Serialization | — | None. Weights cannot be saved/loaded |
-| Training loop | ordered batches, whole-batch floor | No shuffling, no validation split, no callbacks, no gradient clipping |
+| Serialization | ✅ P1 | `ModelWeights` (`.npz`, numpy-readable) + `ModelArchitecture` (JSON + factory registry) |
+| Callbacks | ✅ P1 | `EarlyStopping`, `ModelCheckpoint`, `ReduceLROnPlateau`, `CSVLogger` on a Keras-shaped `BaseCallback` |
+| Training loop | ✅ P1 | shuffle, `validationSplit`/`validationData`, callbacks, partial final batch, `verbose` 0/1/2, gradient clipping |
 
 **Known defects to fix before building on top (P0)** — ✅ ALL FIXED
 (verified by `tests/verify_p0_p2.cs`, 86 checks):
@@ -104,9 +105,55 @@ re-framed rather than re-tuned: it measures three paths at two sizes and the
 finding is that the unfused SIMD kernels win at both — recorded honestly in
 CLAUDE.md instead of chasing a size where fusion looks good.
 
-### P1 — Training-loop parity (pure C#, no new math)
+### P1 — Training-loop parity (pure C#, no new math) — ✅ DONE
 
-The gap between "demo" and "usable framework" is almost entirely here.
+Shipped in full: every row of the table below. `Callbacks/` (BaseCallback +
+TrainingContext + EarlyStopping / ModelCheckpoint / ReduceLROnPlateau /
+CSVLogger), `Serialization/` (ModelWeights `.npz`, LayerConfig,
+ModelArchitecture JSON + factory registry), gradient clipping on
+`BaseOptimizer` (`ClipNorm` / `GlobalClipNorm` / `ClipValue`), and a
+generalized `MlpTrainer.Train` (per-epoch shuffle, `validationSplit` /
+`validationData`, callback list, partial final batch, `verbose` 0/1/2).
+`NeuralNet` kept working and gained callbacks + `SaveWeights`/`LoadWeights`/
+`ToJson`/`FromJson`.
+
+Verified by `tests/verify_p1.cs` (**131 checks**, 0 failed); the P0/P2 gates
+stayed green (86 + 94). Demo convergence held exactly — final test accuracy
+99.90%, with epoch-1 loss moving 1.1247 → 1.1004 because the epoch now
+shuffles and runs 47 batches instead of 46 (the partial final batch used to be
+dropped).
+
+**Findings worth keeping:**
+
+1. **Checkpoint keys must be POSITIONAL.** `BaseLayer.Name` comes from
+   `Util.GetNext()`, a process-global counter that never resets, so a
+   name-keyed archive cannot load into a model rebuilt in the same process —
+   which is the entire point of a checkpoint. Keys are `layer{i}/param/{name}`
+   and `layer{i}/state/{name}`.
+2. **Validate everything before writing anything.** The first implementation
+   shape-checked during assignment, so a mismatch in a late layer left the model
+   with layer 0 from the checkpoint and layer 1 from the initializer — no
+   exception surfaced to the caller's data, and it trains to garbage. The gate
+   caught it; `Load`/`Restore` are now two-pass.
+3. **`BaseLayer.NonTrainable`** was added in P1 rather than P4 so the archive
+   format would not need a break when BatchNorm's running statistics arrive.
+   Optimizers demand a `Grads` entry for every `Parameters` key, so
+   gradient-less state cannot live there.
+4. **The float32 split point is the Keras-parity one.**
+   `(int)(n * (1 - split))` in float32 gives 8 for `n=10, split=0.2f`; in double
+   it gives 7. Keras (Python doubles, literal `0.2`) gives 8. The C# `float`
+   literal's rounding happens to land on Python's answer where the double
+   promotion does not.
+5. **`NDArray` overloads `==`/`!=` element-wise**, so `x != null` is not a null
+   check — it returns an `NDArray<bool>`. Use `is null` / `is not null`.
+6. **`dotnet run <script>.cs` caches on the script hash, not the referenced
+   project.** A gate re-run after a source-only change silently replays the old
+   build. Clear `%LOCALAPPDATA%\Temp\dotnet\runfile\<name>-*` first.
+
+Interop was checked rather than assumed: real `numpy.load()` opens the
+checkpoints and returns correctly-shaped float32 arrays for every key.
+
+Original planning table kept below for reference:
 
 | Feature | Ref | Semantics |
 |---|---|---|
@@ -238,7 +285,7 @@ kernels later.
 | Rank | Item | Why first |
 |---|---|---|
 | 1 | ~~P0 hygiene~~ ✅ DONE | everything else builds on it; two of the bugs silently corrupt training configs |
-| 2 | P1 shuffle + validation + checkpoint + save/load | turns the demo into a usable framework; zero new math |
+| 2 | ~~P1 shuffle + validation + checkpoint + save/load~~ ✅ DONE | turns the demo into a usable framework; zero new math |
 | 3 | ~~P2 activations/losses (esp. `Tanh`, `LeakyReLU`, `SparseCCE`)~~ ✅ DONE | hours of work each, immediate expressiveness |
 | 4 | P3 `AdamW` + schedulers + fused Adam | modern training defaults; the fusion story redeemed |
 | 5 | P4 `Dropout` + `BatchNorm` (+ the train/eval flag) | the two layers that gate real-dataset accuracy |

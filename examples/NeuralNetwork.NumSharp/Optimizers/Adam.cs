@@ -66,8 +66,9 @@ namespace NeuralNetwork.NumSharp.Optimizers
                 //Get the weight values
                 NDArray param = p.Value;
 
-                //Get the gradient/partial derivative values
-                NDArray grad = layer.Grads[paramName];
+                //Get the gradient/partial derivative values, after any
+                //per-parameter clipping configured on the optimizer.
+                NDArray grad = ClipGradient(layer.Grads[paramName]);
 
                 //If this is first time, initialise all the moving average values with 0
                 if (!ms.ContainsKey(varName))

@@ -130,6 +130,12 @@ examples/NeuralNetwork.NumSharp/
 │
 ├── Optimizers/
 │   ├── BaseOptimizer.cs       Abstract. Get("sgd") / Get("adam") resolvers.
+│   │                           Gradient clipping lives here: ClipNorm (Keras
+│   │                           PER-PARAMETER), GlobalClipNorm (whole-model,
+│   │                           = PyTorch clip_grad_norm_), ClipValue. Keras
+│   │                           precedence (clipnorm > global > value) and its
+│   │                           clip_by_norm formula v*c/max(|v|,c) verbatim;
+│   │                           clipnorm+global together throws.
 │   ├── SGD.cs                 Vanilla SGD; classical momentum. Inverse-time
 │   │                           decay lr_t = lr0/(1+decay·t) computed FRESH
 │   │                           from the base rate (never mutated).
@@ -137,11 +143,34 @@ examples/NeuralNetwork.NumSharp/
 │                               Step counter must be monotonic across run.
 │                               Same non-mutating decay as SGD.
 │
+├── Callbacks/                 Keras keras.callbacks port (P1).
+│   ├── BaseCallback.cs        Hooks OnTrain{Begin,End}, OnEpoch{Begin,End},
+│   │                           OnBatchEnd + TrainingContext (Layers, Optimizer,
+│   │                           StopTraining flag = Keras model.stop_training).
+│   │                           Epoch/batch indices are 0-BASED like Keras.
+│   ├── EarlyStopping.cs       monitor/patience/min_delta/mode/baseline/
+│   │                           restore_best_weights/start_from_epoch.
+│   ├── ModelCheckpoint.cs     save_best_only + {epoch:D3}/{val_loss:F4} path
+│   │                           placeholders ({epoch} is 1-based, as in Keras).
+│   ├── ReduceLROnPlateau.cs   factor/patience/cooldown/min_lr; writes the
+│   │                           optimizer's BASE LearningRate.
+│   └── CSVLogger.cs           columns frozen at epoch 0 (sorted keys), the
+│                               `epoch` column is 0-based (Keras writes it raw).
+│
+├── Serialization/             Weight + architecture persistence (P1).
+│   ├── ModelWeights.cs        Save/Load one .npz; Capture/Restore in-memory
+│   │                           snapshots. Keys are `layer{i}/param/{name}` and
+│   │                           `layer{i}/state/{name}` — POSITIONAL, see below.
+│   ├── LayerConfig.cs         {class_name, config} descriptor + typed getters.
+│   └── ModelArchitecture.cs   ToJson/FromJson + the layer-factory registry.
+│
 ├── MnistMlp/                  The runnable experiment. Files described below.
 │
 ├── tests/verify_p0_p2.cs      86-check verification script (dotnet-run file-
 │                               based app; excluded from the demo build via
 │                               csproj Compile Remove). See Testing below.
+├── tests/verify_p1.cs         131-check P1 gate (serialization, clipping, the
+│                               four callbacks, trainer behavior).
 ├── Open.snk                   Strong-name key shared with NumSharp.Core.
 └── NeuralNetwork.NumSharp.csproj   Exe, net8.0+net10.0, AllowUnsafeBlocks.
 ```
@@ -166,11 +195,11 @@ cache-hit on every subsequent forward/backward pass.
 
 | File | What it does |
 |---|---|
-| `Program.cs` | Entry point. Loads data, builds 2-FC model, runs fusion probe, trains via MlpTrainer, reports IL-kernel cache + delegate-slot counts. |
+| `Program.cs` | Entry point. Loads data, builds 2-FC model, runs fusion probe, trains via MlpTrainer, runs the **P1 showcase** (weights→.npz + architecture→JSON, rebuild-from-JSON and reload — random 8.9% → restored 99.90%, then a 12-epoch fit driven by EarlyStopping + ReduceLROnPlateau + ModelCheckpoint + CSVLogger with `validationSplit: 0.1` and `ClipNorm = 1.0`), reports IL-kernel cache + delegate-slot counts. The showcase is deliberately a SEPARATE short run so the headline 100-epoch numbers stay comparable across commits. |
 | `MnistLoader.cs` | IDX parser (big-endian) + learnable synthetic fallback (shared class templates across train/test, sigma=2.5 noise). |
 | `FullyConnectedFused.cs` | FC with bias + optional fused activation. Three NDIter kernels (two forward, one backward), cache keys are stable strings. |
 | `SoftmaxCrossEntropy.cs` | Combined loss computed in LOG space (log-softmax via log-sum-exp) so extreme logits give the true loss — a clipped softmax-then-log caps at -log(eps) ≈ 16.1 where e.g. logits (-1000, 0) should give 1000 (Keras from_logits=True parity, oracle-pinned). Caches softmax; (softmax-labels)/batch backward. Also ships `OneHot` helper. |
-| `MlpTrainer.cs` | Explicit train loop (`NeuralNet.Train` replacement). Periodic test eval (`min(5, epochs)` cadence). Returns per-epoch loss/train_acc + list of (epoch, test_acc) pairs. |
+| `MlpTrainer.cs` | Explicit train loop (`NeuralNet.Train` replacement). Per-epoch shuffle, `validationSplit`/`validationData`, callback list, partial final batch, verbose 0/1/2, periodic test eval (`min(5, epochs)` cadence). Returns per-epoch loss/train_acc/val_loss/val_acc, (epoch, test_acc) pairs, `EpochsRun` and `StoppedEarly`. `EvaluateFull` scores loss AND accuracy in one pass. |
 | `FusedMlp.cs`, `NaiveMlp.cs` | Side-by-side forward implementations for the correctness probe at Program startup. |
 
 ---
@@ -187,6 +216,55 @@ And on Backward:
 
 Optimizers iterate `layer.Parameters.ToList()` and expect `layer.Grads[paramKey]`
 to be populated by Backward. Param-name convention is `"w"` / `"b"`.
+
+**`BaseLayer.NonTrainable`** holds tensors that belong to the layer but must
+never reach an optimizer — BatchNorm's running mean/variance being the case it
+exists for. Anything in `Parameters` needs a matching `Grads` entry or the
+optimizer throws, so gradient-less state goes here instead. Serialization walks
+BOTH dictionaries, so a checkpoint carries running statistics.
+
+**`BaseLayer.GetConfig()`** returns the `{class_name, config}` descriptor used by
+`ModelArchitecture`. The default reports only the type name, which serializes as
+"unsupported"; a layer that wants JSON round-tripping overrides it AND registers
+a factory via `ModelArchitecture.Register`.
+
+## Training-loop contract (P1)
+
+`MlpTrainer.Train` is the full loop. Beyond the original positional arguments it
+takes `shuffle` (default **true**, Keras's default), `validationSplit`,
+`validationData`, `callbacks` and `verbose` (0 silent / 1 per-epoch / 2 per-batch).
+
+- **Log keys are Keras-named**: `loss`, `acc`, `val_loss`, `val_acc`,
+  `learning_rate`. Callbacks match these by string.
+- **`validationSplit` takes the LAST fraction and does so BEFORE shuffling**, as
+  Keras does — so the split is deterministic and data ordered by class must be
+  shuffled by the caller first. `validationData` overrides it entirely.
+  The split point is `(int)(n * (1 - split))` computed in **float32**, which is
+  what reproduces Keras's Python-float answer for the usual literals; doing it in
+  double does not (`n=10, split=0.2f` → 8 in float, 7 in double, 8 in Keras).
+- **Every sample trains, including a partial final batch**, and epoch loss and
+  accuracy are averaged over SAMPLES — so a short last batch is weighted
+  correctly rather than counting as a whole batch. (`SoftmaxCrossEntropy.Backward`
+  already divides by `preds.shape[0]`, so ragged batches were always gradient-correct.)
+- **Shuffling gathers per batch** from one `np.random.permutation(n)` per epoch
+  rather than materializing a shuffled copy of the whole set — peak memory stays
+  at one batch. All randomness flows through `np.random` (MT19937), so a seeded
+  run is reproducible end to end.
+- `TrainResult` gained `EpochValLoss`, `EpochValAcc`, `EpochsRun` and
+  `StoppedEarly`. `Epochs` remains the number REQUESTED; `EpochsRun` is what
+  actually ran.
+
+**Checkpoint keys are POSITIONAL, not by layer `Name`.** `Name` comes from
+`Util.GetNext()`, a process-global counter that never resets — build the same
+architecture twice in one process and the second copy is `fc_fused2`/`fc_fused3`.
+Name-keyed checkpoints would therefore fail to load into a freshly-built model,
+which is the entire point of a checkpoint. `ModelWeights` keys by layer INDEX
+(`layer0/param/w`), so the caller must rebuild the same architecture in the same
+order. Every mismatch is a hard error naming the slot; validation of ALL tensors
+completes before ANY is written, so a mismatch in a late layer cannot leave the
+model half-overwritten (a model with layer 0 from the checkpoint and layer 1 from
+the initializer trains to garbage without raising anything — this was a real bug
+the P1 gate caught).
 
 BaseCost contract:
 - `Forward(preds, labels)` → scalar NDArray (the loss)
@@ -232,6 +310,23 @@ correctness check, not a workaround.
 When comparing against `labels.GetByte(i)` use `predIdx.GetInt64(i)` —
 calling `GetInt32` on Int64 storage throws `Memory corruption expected`.
 
+### 5b. `NDArray` overloads `==`/`!=` ELEMENT-WISE — `x != null` is not a null check
+`np.array(...) != null` compiles and returns an `NDArray<bool>`, so
+`if (someNDArray != null)` is a type error at best and a silent wrong answer at
+worst. Use the pattern form: `x is null` / `x is not null`, which ignores
+operator overloads. Cost the P1 trainer 18 compile errors on first build.
+
+### 5c. `dotnet run <script>.cs` caches on the SCRIPT, not the referenced project
+A file-based app is cached under
+`%LOCALAPPDATA%\Temp\dotnet\runfile\<name>-<hash of the .cs>`. Edit
+`NeuralNetwork.NumSharp` source, leave the script alone, re-run the gate — and it
+replays the OLD build, reporting a failure you have already fixed (or, worse,
+green on code you just broke). Clear it before trusting a gate run after a
+source-only change:
+```bash
+rm -rf "$LOCALAPPDATA/Temp/dotnet/runfile/verify_"*
+```
+
 ### 6. Adam step counter MUST be monotonic across the full run
 Don't reset per epoch. Adam's `1 - β^t` bias correction needs `t` to increase
 monotonically across the whole training run, otherwise the first batch of
@@ -256,12 +351,20 @@ after `np.random.normal(...)` which returns float64 by default.
 Measured 2026-07-25 on core `badd9c37`, **Release**, net8.0 (Debug taints
 kernels ~2x — never quote Debug numbers).
 
-**100-epoch training on 6000 synthetic / 1000 test (batch=128, Adam, sigma=2.5):**
-- Epoch 1: loss ≈ 1.12, train_acc ≈ 73% (random init → partial fit)
-- Epoch 2: loss ≈ 0.009, train_acc ≈ 99.9%
-- Epoch 100: loss ≈ 0, test_acc ≈ 99.9%
-- Total training time: ~13–16 s (was ~70 s when this doc was first written —
+**100-epoch training on 6000 synthetic / 1000 test (batch=128, Adam, sigma=2.5,
+`np.random.seed(1337)`, shuffled):**
+- **47** batches/epoch — was 46; P1 stopped flooring `n/batchSize`, so the
+  6000th sample is no longer dropped every epoch
+- Epoch 1: loss **1.1004**, train_acc 73.03% (random init → partial fit)
+- Epoch 2: loss 0.0110, train_acc 99.83%
+- Epoch 100: loss ≈ 0, **test_acc 99.90%**
+- Total training time: ~13–15 s (was ~70 s when this doc was first written —
   core's elementwise/GEMM work since then did most of that)
+
+P1 moved the epoch-1 loss from the previously-documented 1.1247 to 1.1004: the
+epoch now shuffles and covers 47 batches instead of 46, so it is a different
+(and slightly better-conditioned) epoch. Final test accuracy is unchanged at
+99.90% — convergence is the pin that matters, and it held.
 
 **Fusion probe (bias+ReLU post-matmul; three paths × two sizes):**
 
@@ -288,8 +391,10 @@ filing: NDIter broadcast-operand inner-loop throughput vs the Direct kernels.
 
 ## Testing
 
-No dedicated MSTest project yet (roadmap P-cross-cutting). TWO committed
-gates, both dotnet-run file-based apps under `tests/`:
+No dedicated MSTest project yet (roadmap P-cross-cutting). THREE committed
+gates, all dotnet-run file-based apps under `tests/`. Run them all after any
+source change — and see sharp edge 5c: **clear the runfile cache first**, or a
+gate replays a stale build.
 
 ### Gate 2: `tests/verify_edge_cases.cs` — the Keras edge-case oracle (94 checks)
 
@@ -347,6 +452,44 @@ cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_p0_p2.cs
 (Must run from tests/ — a csproj in the CWD makes `dotnet run` pick the
 project instead of the file. The csproj excludes tests/** from compilation.)
 
+### Gate 3: `tests/verify_p1.cs` — training-loop parity (131 checks)
+
+Pins P1's behavior, in five sections:
+
+- **Serialization** — npz key layout and entry count, dtype preserved,
+  round-trip into a differently-initialized model, load-is-a-copy (not an
+  alias), snapshot Capture/Restore independence and reusability, and the three
+  failure modes (missing key / shape mismatch / wrong layer count) each naming
+  the offending slot. Includes the regression that motivated the two-pass
+  design: **a failed load must leave layer 0 untouched.**
+- **Gradient clipping** — `clipnorm` scaling `[3,4]→[1.5,2]`, under-threshold
+  clipping being EXACTLY the identity, `clipvalue` element clamps,
+  `global_clipnorm` sharing one norm across two layers (the case where the
+  Keras and PyTorch conventions visibly disagree), and the rejected pair in
+  both assignment orders.
+- **EarlyStopping** — driven against synthetic metric sequences, because the
+  point is the state machine and a real loss curve reaches these branches only
+  by luck: patience arithmetic, the `epoch > 0` guard, the SIGN of `min_delta`
+  (a matched pair — with and without — where an unsigned delta inverts the
+  test), `auto` mode resolving `val_acc` to maximize, explicit-mode override,
+  `start_from_epoch`, restore-vs-keep weights, and the baseline's documented
+  asymmetry (an improvement that misses the baseline updates `best` but does
+  NOT reset `wait` — again as a matched pair).
+- **ReduceLROnPlateau / ModelCheckpoint / CSVLogger** — cooldown blocking then
+  releasing, `min_lr` flooring the cut and then stopping further cuts,
+  save-best-only counts, 1-based `{epoch}` in filenames, frozen CSV columns and
+  the 0-based `epoch` column.
+- **Trainer** — a spy layer records which sample indices each batch contained,
+  which pins `validation_split` taking the TAIL, the partial final batch being
+  trained on rather than dropped, shuffling being a genuine permutation that is
+  seed-deterministic and seed-sensitive, sample-weighted epoch accuracy
+  (`4/5`, not the batch-mean `0.5`), hook counts and ordering, and verbose 0/2.
+
+```bash
+cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_p1.cs
+# → RESULT: 131 passed, 0 failed
+```
+
 Ad-hoc sanity checks still work as stdin scripts:
 ```bash
 cat /tmp/script.cs | dotnet_run
@@ -376,10 +519,22 @@ chain still works and is numerically fine for most cases; SCE is faster and
 slightly more stable for the MLP demo's specific pipeline.
 
 **Is `NeuralNet.Train` usable now?**
-Yes — the slicing bug is fixed (uses `$"{start}:{end}"` string-slice) and
-the optimizer step counter is monotonic. But `MnistMlp/MlpTrainer.cs` is
-still the richer path (periodic test eval, per-epoch timing output). Use
-`NeuralNet` for simple cases, `MlpTrainer` when you want instrumentation.
+Yes — the slicing bug is fixed (uses `$"{start}:{end}"` string-slice), the
+optimizer step counter is monotonic, and it accepts a callback list and applies
+global-norm clipping. But `MnistMlp/MlpTrainer.cs` is still the richer path
+(shuffling, validation split, partial final batch, verbosity, periodic test
+eval). Use `NeuralNet` for simple cases, `MlpTrainer` for real training.
+
+**Can I load a NumSharp checkpoint in Python?**
+Yes, with plain `numpy` and no .NET involved — `ModelWeights.Save` goes through
+core's byte-exact `np.savez`, so the file IS a NumPy archive. Verified:
+```python
+z = np.load("mlp.npz")
+z.files          # ['layer0/param/w', 'layer0/param/b', 'layer1/param/w', 'layer1/param/b']
+z['layer0/param/w'].shape, z['layer0/param/w'].dtype   # ((784, 128), float32)
+```
+The architecture JSON is ordinary JSON. Note this is NOT Keras's own
+`.weights.h5` format — interop is with the numpy world, not with `load_model`.
 
 **Can we train on real MNIST?**
 Yes — drop the four IDX files into `examples/NeuralNetwork.NumSharp/data/`.
@@ -390,16 +545,16 @@ with this 2-layer MLP should land ~97-98% after 10-20 epochs.
 
 ## Known limitations
 
-- **No data shuffling.** `MlpTrainer` iterates batches in order. Works fine
-  for synthetic data and MNIST (which is pre-shuffled) but would hurt
-  generalization on ordered datasets.
-- **No validation split.** Train / test is a fixed split; no held-out
-  validation for early stopping.
 - **Adam re-allocates per step.** Each Adam update allocates ~14 temp
   NDArrays per parameter. For a 2-layer FC this is ~200 ms/epoch of GC
   pressure. Fixable by fusing Adam's update into NDIter like the rest,
-  but out of scope for the current demo.
-- **No model serialization.** Parameters can't be saved / loaded yet.
+  but out of scope for the current demo (roadmap P3).
+- **Architecture JSON covers only registered layer types.** `ModelArchitecture`
+  refuses to serialize a layer with no factory rather than emitting something
+  that cannot be read back. Register user layers explicitly.
+- **`NeuralNet.Train` is the thin loop.** It gained callbacks and global-norm
+  clipping, but shuffling, validation and partial final batches live in
+  `MlpTrainer.Train`. Use `MlpTrainer` for real training.
 - **Only relu (or none) fuses.** `FullyConnectedFused` accepts the same
   string-activation surface as `FullyConnected` now, but only ReLU has a
   fused kernel — anything else throws with a pointer at `FullyConnected`.
