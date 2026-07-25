@@ -88,16 +88,17 @@ working code.
 |---|---|
 | `#` | Exactly one, first line. Form: `Subject — the promise in one clause`. |
 | `##` | Sentence case. Names a body of material, not a tier. |
-| `###` | **A question the reader would type into a search box** when the subsection describes behaviour; a **noun phrase** when it is pure reference (dtype maps, version matrices, layout tables). |
+| `###` | **A noun or verdict phrase naming the topic** ("Raw layout access", "Read-only sources", "The cost curve"), for behavioural and reference subsections alike. A question is the rare exception, kept only where it is genuinely what a reader would search ("Why not just `ToNumpy()`?") — at most one or two per page. |
 | `####` | Avoid. If a `###` needs subdivision it is two `###`s. |
 
-A behavioural `###` question is answered by its **first sentence, with the verdict in bold**:
+Whatever the heading's form, the subsection opens with the answer — **first sentence, verdict in
+bold**:
 
 ```markdown
-### Will it copy my data?
+### Copy behaviour
 
-**No — and the gap is two orders of magnitude.** `np.frombuffer` reports `OWNDATA = False`, and
-numpy itself agrees the memory is shared.
+**Nothing is copied — and the gap is two orders of magnitude.** `np.frombuffer` reports
+`OWNDATA = False`, and numpy itself agrees the memory is shared.
 ```
 
 Never open a subsection by restating the question, by "In this section we…", or by throat-clearing.
@@ -125,6 +126,14 @@ A blockquote directly under the on-this-page row, on every page:
 The version list names the stack the claims were actually measured on. It is prose — nothing fails
 if it drifts — but it is updated whenever the verification box changes. Page 4 extends the line
 with `Numpy.Bare 3.11.1.33`.
+
+### 2.6 Depth
+
+Claim blocks are the skeleton, not the whole body. Around them the page carries the explanatory
+depth of a conventional documentation site: name the API members involved, take a construction
+apart piece by piece, state what each moving part is for and why the design refuses what it
+refuses. The added detail lives in prose between claim and code — never as comment padding inside
+the code — and it obeys §10: mechanisms named, quantities stated, no filler.
 
 ---
 
@@ -475,3 +484,7 @@ was put to the user and confirmed; §2.1 stands as written. The reference-style 
 were ratified at the same time. The one deliberate deferral (page 3 naming its tests ahead of the
 class existing) was closed when the full gate landed: all four `DocExamples_*` classes exist and
 every named gate passes on net8.0 and net10.0.
+
+Amended during the section-by-section revision pass: §2.2 — behavioural `###`s are noun/verdict
+phrases, questions demoted to a rare exception; §2.6 (new) — conventional-documentation depth
+around the claim blocks. Both ratified with the user before any page was touched.

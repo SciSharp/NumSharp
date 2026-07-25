@@ -4,8 +4,10 @@ A NumSharp array is raw unmanaged memory plus four numbers that describe how to 
 address, element strides, an offset and a dtype. That is the same convention numpy, Python's buffer
 protocol, Arrow and every other strided-array system speak — so interop is not translation, it is
 introduction: hand the description across the boundary, agree on who frees the memory, and both
-sides work on the same bytes. This page states the contract that makes that safe and maps the
-bridges built on it.
+sides work on the same bytes. This page states the contract that makes the introduction safe —
+three capabilities every bridge builds on — and maps the bridges themselves. Read it once and each
+bridge page becomes a variation on a theme you already know: only the far side of the boundary
+changes.
 
 **On this page:** [The contract](#the-contract) · [The bridges](#the-bridges) ·
 [Claims](#claims-ledger)
@@ -18,13 +20,16 @@ bridges built on it.
 
 ## The contract
 
-Three NumSharp capabilities make a bridge possible. Everything the bridge pages document —
-zero-copy views, leases, locks — reduces to these.
+Three NumSharp capabilities make a bridge possible: the full layout of any array is exposed,
+foreign memory wraps into a working array with a release hook, and the hook fires on the last
+reference — wherever that reference lives. Everything the bridge pages document — zero-copy views,
+leases, locks — reduces to these three, plus one declaration a bridge must get right: who owns the
+wrapped memory.
 
-### How does a view cross without copying?
+### Raw layout access
 
-**Because a layout is four numbers, and NumSharp exposes all four.** Any strided window — a slice,
-a transpose, a reversed axis — is the same base pointer with different strides and offset:
+**A layout is four numbers, and NumSharp exposes all four.** Any strided window — a slice, a
+transpose, a reversed axis — is the same base pointer with different strides and offset:
 
 ```csharp
 var nd = np.arange(24).reshape(4, 6).astype(NPTypeCode.Double);
@@ -38,15 +43,18 @@ window.Shape.Offset      == 6
 window.typecode          == Double
 ```
 
-A bridge multiplies the element strides by the item size, adds the offset to the pointer, and any
-strided-array consumer can address the window exactly. No elements move.
+These are the same four fields numpy's `__array_interface__` and the buffer protocol's `Py_buffer`
+carry — the lingua franca of strided arrays, which is why no bridge needs a serialization format.
+The one translation left is units: NumSharp strides count elements where numpy's count bytes, so a
+bridge multiplies by the item size, adds the offset to the pointer, and any strided-array consumer
+can address the window exactly. No elements move.
 
 <sub>See here [`Contract_RawLayoutAccess_ExposesAddressStridesOffsetAndDtype`][gate]</sub>
 
-### How does foreign memory become an `NDArray`?
+### Wrapping foreign memory
 
-**Through one primitive: wrap a pointer with a release hook.** This is what every import path is
-made of — Python buffers, mmaps, memory another runtime owns:
+**One primitive: wrap a pointer with a release hook.** Every import path is made of it — Python
+buffers, mmaps, memory another runtime owns:
 
 ```csharp
 using NumSharp.Backends;
@@ -61,6 +69,12 @@ var nd = new NDArray(new UnmanagedStorage(
     new Shape(2, 3)));
 ```
 
+The construction reads inside-out, one responsibility per layer: `UnmanagedMemoryBlock<byte>` takes
+the pointer, the length in elements (not bytes), and the hook to call when the memory is released.
+`ArraySlice<byte>` is the typed window all NumSharp storage works through, `UnmanagedStorage` binds
+it to a dtype, and `Shape` gives it dimensions — no layer copies, so the finished `NDArray`
+operates directly on `ptr`.
+
 NumSharp kernels run over the foreign memory in place, writes land in it, and the hook fires when
 NumSharp is done with it:
 
@@ -72,12 +86,13 @@ nd.Dispose()          ->  released == true
 
 <sub>See here [`Contract_ExternalMemoryWrapping_TheDocumentedPrimitive`][gate]</sub>
 
-### When exactly does the release hook fire?
+### Last-reference release
 
-**On the last reference to the memory block — original or derived view, disposed or collected.**
-The block is atomically reference-counted; a slice taken from a wrapped array holds the same block,
-so disposing the original frees nothing while the slice lives. The refcount decides, not disposal
-order — and the GC finalizer is the safety net when nothing was disposed at all:
+**The hook fires on the last reference to the memory block — original or derived view, disposed or
+collected.** The block is atomically reference-counted: a derived view — a slice, a transpose —
+holds the same block, so disposing the original frees nothing while any of them lives. The refcount
+decides, not disposal order — and the GC finalizer is the safety net when nothing was disposed at
+all:
 
 ```text
 derived = nd["2:"]; nd.Dispose()   ->  hook NOT fired; derived still reads valid memory
@@ -85,19 +100,22 @@ derived.Dispose()                  ->  hook fired
 (no Dispose at all, GC runs)       ->  hook fired by the finalizer safety net
 ```
 
+The finalizer path guarantees eventual release, not timing — foreign memory whose lifetime matters
+should see a deterministic `Dispose`, with collection as the backstop.
+
 The same references feed NumSharp's resize guard: while a second view (or an export to Python)
 holds the block, `nd.resize(...)` refuses with NumPy's own wording — `cannot resize an array that
 references or is referenced by another array in this way`.
 
 <sub>See here [`Contract_ReleaseHook_FiresOnTheLastReference_IncludingDerivedViews`][gate], [`Contract_ReleaseHook_AlsoFiresByGarbageCollection`][gate], [`Contract_RefcheckGuard_SeesOtherReferencesToTheBlock`][gate]</sub>
 
-### Who owns wrapped memory?
+### Ownership of wrapped memory
 
-**Whoever you say — and the bare wrap says NumSharp does, which is usually wrong for a bridge.**
-A bare wrap claims ownership: a growing `resize` succeeds by reallocating into fresh NumSharp
-memory, silently detaching from the foreign pointer (and firing the release hook). A bridge that
-must stay attached aliases the storage instead, which gives the array numpy's `owndata == False`
-semantics — exactly what the pythonnet import path does:
+**You declare the owner at wrap time — and the bare wrap declares NumSharp, which is usually wrong
+for a bridge.** A bare wrap claims ownership: a growing `resize` succeeds by reallocating into
+fresh NumSharp memory, silently detaching from the foreign pointer (and firing the release hook).
+A bridge that must stay attached aliases the storage instead, which gives the array numpy's
+`owndata == False` semantics — exactly what the pythonnet import path does:
 
 ```csharp
 var attached = new NDArray(
@@ -105,6 +123,10 @@ var attached = new NDArray(
                          Shape.Vector(8))
         .Alias(new Shape(8)));
 ```
+
+`Alias` produces a second storage over the same memory whose base tracking points back at the
+owner — in NumSharp's own bookkeeping the aliased array is a view, so ownership-gated operations
+refuse rather than detach:
 
 ```text
 bare wrap:  resize(16) succeeds — and the address changes; the hook fires
@@ -126,7 +148,7 @@ own gates.
 | **numpy, in process** — `NDArray` ⇄ `numpy.ndarray`, every layout, both directions | `NumSharp.Interop.pythonnet` | ✅ views both ways | [Python & numpy (pythonnet)](pythonnet-numpy.md) |
 | **Any Python library** — PyTorch, Pillow, Arrow, OpenCV, stdlib — via the buffer protocol | `NumSharp.Interop.pythonnet` | ✅ `memoryview` / PEP 3118 | [Any library via np.frombuffer](np-frombuffer.md) |
 | **Numpy.NET coexistence** — drive real numpy's C# API over NumSharp buffers | + `Numpy.Bare` | ✅ `PyObject` handoff | [Numpy.NET](numpy-net.md) |
-| **`.npy` / `.npz` files** — `np.save` / `np.load`, byte-for-byte identical to NumPy's own writer | `NumSharp` (core) | — files, not memory | [NumPy compliance](../compliance.md) |
+| **`.npy` / `.npz` files** — `np.save` / `np.load`, byte-for-byte identical to NumPy's own writer | `NumSharp` (core) | — files, not memory | [NumPy compliance](../compliance.md#file-format-interoperability) |
 
 Start with the page whose *consumer* matches yours: numpy code → the pythonnet page; a library
 that wants bytes (or no numpy at all) → the frombuffer page; an existing Numpy.NET codebase → the
