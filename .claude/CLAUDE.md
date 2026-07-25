@@ -243,7 +243,7 @@ Tested against NumPy 2.x.
 The `as*` conversion family mirrors NumPy: `asarray_chkfinite(a, dtype=None, order='K')` = `asarray` then raise `ValueError("array must not contain infs or NaNs")` if a **float-family** dtype (Half/Single/Double/Complex — NumPy's `typecodes['AllFloat']`; Decimal/int/bool skip the check) holds any inf/NaN, via a **fused single-pass NaN-poison SIMD reduction** (`Backends/Kernels/FiniteScan.cs`: `acc += v - v` — +0 for finite, absorbing-NaN for non-finite; AVX2 gather + reversed-contiguous fast path for strided/negative-stride views; ~2–27× NumPy contiguous, ≥1× strided). `require(a, dtype=None, requirements=None)` parses C/F/A/W/O/E flags (+aliases; single-string requirements iterate by char like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order and copies only if a remaining ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED is always true in NumSharp, so only broadcast-non-writeable and views force a copy). `asmatrix(data, dtype=None)` returns a **2-D view** (NumSharp has no `matrix` subclass — the deprecated NumPy one; no `*`-as-matmul/`.H`/`.I`): 0-D→(1,1), 1-D→(1,N), 2-D unchanged, >2-D drops length-1 axes and must land on 2-D else `ValueError("shape too large to be a matrix.")`; also parses matrix strings (`"1 2; 3 4"`). See `Creation/np.{asarray_chkfinite,require,asmatrix}.cs`.
 
 ### Shape Manipulation
-`append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `block`, `column_stack`, `concat`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`, `hstack`, `insert`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `trim_zeros`, `unique`, `unstack`, `vsplit`, `vstack`
+`append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `block`, `c_`, `column_stack`, `concat`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`, `hstack`, `insert`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `r_`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `trim_zeros`, `unique`, `unstack`, `vsplit`, `vstack`
 
 `flip`/`fliplr`/`flipud` return **O(ndim) views** (stride negation + base-offset shift via `Storage.Alias`,
 the Transpose pattern — no slice resolution, no data movement), bit-identical to the `m[..., ::-1, ...]`
@@ -300,7 +300,75 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
 `can_cast`, `common_type`, `find_common_type`, `finfo`, `iinfo`, `issubdtype`, `min_scalar_type`, `mintypecode`, `promote_types`, `result_type`
 
 ### Selection
-`compress`, `extract`, `indices`, `place`, `put`, `ravel_multi_index`, `take`, `unravel_index`, `where`
+`compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `ravel_multi_index`, `s_`, `take`, `unravel_index`, `where`
+
+### Grid / slice-expression DSL (`r_`, `c_`, `ix_`, `s_`, `index_exp`)
+
+NumPy's `_index_tricks_impl.py` index-expression family. All probed against 2.4.2; tests in
+`Creation/np.r_.Test.cs` + `Indexing/np.ix_.Test.cs`; oracle jobs in the `manip` tier
+(`gen_oracle.gen_index_tricks` ↔ `OpRegistry` cases `r_`/`c_`/`ix_`, 2,262 cases).
+
+**How a Python slice literal is spelled in C#.** C# has no `a[1:5:2]` syntax, so a slice is written
+as a **string**: `np.r_[0:5]` → `np.r_["0:5"]`. Strings do double duty here exactly as they do in
+NumPy, and are told apart by a colon — **a string containing `':'` is a slice expression, a string
+without one is a NumPy special directive** (`"r"`, `"c"`, `"-1"`, `"0,2"`, `"1,2,0"`). The two
+grammars are disjoint upstream too (a directive never contains a colon, because Python's own syntax
+supplies the slices), so every NumPy expression transcribes verbatim. One string may hold several
+comma-separated slices (`np.r_["1:3, 5:8"]` ≙ `np.r_[1:3, 5:8]`), and a `Slice` / `Slice[]` object
+works as an entry too, so `np.s_[…]` composes into `np.r_[…]`.
+
+- **`np.r_[…]` / `np.c_[…]`** — static properties returning `RClass`/`CClass`, both `AxisConcatenator`
+  subclasses with a `this[params object[] key]` indexer (the port of NumPy's `__getitem__`). `r_`
+  concatenates along axis 0; `c_` is `r_["-1,2,0", …]`, i.e. entries are upgraded to ≥2-D with the 1s
+  POST-pended (a 1-D entry becomes a **column**) and stacked on the last axis. Slice entries become
+  `arange(start, stop, step)`, or — for an **imaginary step** (`"−1:1:6j"`) — `linspace(start, stop, N)`
+  with the stop **inclusive**. Integer-ness follows the LITERAL, not the value: `"0:5"` is int64 while
+  `"0.0:5"` is float64. A **missing stop re-reads start as stop** (NumPy's `arange(start, None, step)`
+  IS `arange(0, start, step)`), so `np.r_["2:"]` is `[0, 1]` and `np.r_["5::2"]` is `[0, 2, 4]`.
+  Directives are reproduced whole: axis, `axis,ndmin`, `axis,ndmin,trans1d` (with NumPy's two DIFFERENT
+  upgrade paths — the array branch's `defaxes` permutation vs the slice branch's `swapaxes(-1, trans1d)`),
+  a silently-ignored 4th field, and `"r"`/`"c"` matrix coercion (routed through `np.asmatrix`, since
+  NumSharp has no `matrix` subclass). Verbatim errors: `special directives must be the first entry.`,
+  `unknown special directive` / `unknown special directive '0,q'` (the comma form quotes, the bare form
+  does not).
+- **`np.ix_(params object[])` → `NDArray[]`** — open mesh. The dtype is **PRESERVED**, not forced to
+  `intp`: `ix_` does no integer validation, so a float or int8 sequence rides through and only fails at
+  the later indexing call; the one exception is NumPy's own, casting an **empty non-ndarray** input to
+  int64 so it does not default to float64. A bool sequence is a mask (`nonzero`). Results are **views**
+  that write through, built with `expand_dims` rather than `reshape` so a stride-0/read-only operand
+  keeps its strides AND its non-writeable flag (reshape materializes those and would hand back a
+  writeable copy, which NumPy does not do). `ValueError("Cross index must be 1 dimensional")`.
+- **`np.s_[…]` / `np.index_exp[…]`** → `Slice[]`, usable directly as `arr[…]`. **C# divergence:** the
+  two are identical here. NumPy's pair differs only in `maketuple` (`np.s_[2::2]` is a bare slice,
+  `np.index_exp[2::2]` a 1-tuple), but `NDArray`'s indexer is `this[params Slice[]]`, so a lone `Slice`
+  and a one-element `Slice[]` are literally the same call. Both are kept so NumPy code ports verbatim;
+  `maketuple` is exposed but has no observable effect.
+
+**NEP50 weak scalars.** NumPy distinguishes a Python literal (`5`, weak — adopts the other operand's
+dtype) from a NumPy scalar (`np.int64(5)`, strong). C# has no such split, so the mapping is by type:
+`bool`, the eight integer primitives, `float`, `double` and `Complex` are **weak** (the C# literal is
+the Python literal); `char`, `Half` and `decimal` — which have no Python literal — plus every `NDArray`
+(0-d included) are **strong**. `NDArray.Scalar(1L)` is therefore the escape hatch: `np.r_[i8, 1L]` is
+int8, `np.r_[i8, NDArray.Scalar(1L)]` is int64. A weak integer that does not fit the adopted dtype
+raises `OverflowException("Python integer 1000 out of bounds for int8")` rather than wrapping, reusing
+`NDExprTypeRules.CheckIntLiteralFits`; a weak float saturates to ±inf instead (`np.r_[f4, 1e300]`).
+NumSharp has a single complex width, so NumPy's `result_type(float32, 1j) → complex64` collapses onto
+`Complex`.
+
+**Deliberate divergence — no `bmat` branch.** NumPy routes a single bare string key into
+`matrixlib.bmat`, which resolves the words in it against the CALLER'S Python frame
+(`sys._getframe().f_back`) as variable names. C# cannot do that, and the branch raises `NameError` for
+every string literal anyway (`np.r_['1 2; 3 4']` → "name '1' is not defined"), so a lone string gets
+the same reading as any other entry — which is what makes `np.r_["0:5"]` work at all.
+
+**Perf (NPY/NS, best-of-21, Release, 100K / 10M).** Three cost classes, reported apart because a
+geomean across them would describe nothing: **O(N) concatenation** (`r_[a,b]`, `r_[a,0,0,b]`, `c_[a,b]`)
+**1.61× / 1.19×**, **O(N) generation** (the arange and imaginary-step linspace branches) **2.63× / 1.16×**,
+and the **O(1) view** `ix_` **1.29× / 3.80×**. No cell below 1.0. The 10M ratios compress toward parity
+because both sides are memory-bandwidth bound there — `r_`'s own overhead above `np.concatenate` measures
+0.94 ms on a 27 ms call (3.6%), and two extra weak-scalar entries add ~0.06 ms.
+
+See `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`.
 
 ### Iteration
 `nditer`, `ndenumerate`, `ndindex` (plus the pre-existing `broadcast`), and the NumSharp-extension
@@ -608,6 +676,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
+| Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NdArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |
 | Iteration APIs (nditer/ndindex/ndenumerate) | `APIs/np.nditer.cs`, `Indexing/np.{ndindex,ndenumerate}.cs` |

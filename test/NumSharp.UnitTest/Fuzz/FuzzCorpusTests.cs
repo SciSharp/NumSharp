@@ -105,7 +105,9 @@ namespace NumSharp.UnitTest.Fuzz
 
         // W9 manipulation (T7): ravel/transpose/expand_dims/squeeze/roll/repeat/tile/reshape/
         // swapaxes/moveaxis/delete/atleast_* (single-array, all layouts) + concatenate/stack/
-        // hstack/vstack/dstack (two-array) + pad (constant/edge/reflect/wrap).
+        // hstack/vstack/dstack (two-array) + pad (constant/edge/reflect/wrap) + the
+        // index-expression DSL r_/c_/ix_ (directives, slice expressions incl. the imaginary-step
+        // linspace branch, NEP50 weak-scalar promotion, and ix_'s bool -> nonzero branch).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Manip() => RunCorpus("manip.jsonl");
@@ -280,7 +282,7 @@ namespace NumSharp.UnitTest.Fuzz
             ["errors.jsonl"] = 8,
             ["groupa.jsonl"] = 82,
             ["logic.jsonl"] = 1775,
-            ["manip.jsonl"] = 4244,
+            ["manip.jsonl"] = 6053,
             ["matmul.jsonl"] = 769,
             ["modf.jsonl"] = 51,
             ["nanreduce.jsonl"] = 6692,

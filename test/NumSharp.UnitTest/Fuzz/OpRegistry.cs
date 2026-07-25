@@ -275,6 +275,47 @@ namespace NumSharp.UnitTest.Fuzz
                     return np.mask_indices(p["n"].GetInt32(), mask, p["k"].GetInt32())[p["which"].GetInt32()];
                 }
 
+                // ---- index-expression DSL (r_ / c_ / ix_) ---------------------------------
+                // The non-array parts of the index expression ride in params; the array parts
+                // are ordinary operands. Rebuild NumPy's key in order:
+                //   [directive?] + slice expressions + operands + weak scalars
+                // The scalars are boxed as long/double/bool ON PURPOSE — that is what makes
+                // them NEP50-weak on the NumSharp side, so the promotion matrix is gated here
+                // rather than only in the hand-written tests.
+                case "r_":
+                case "c_":
+                {
+                    var key = new List<object>();
+                    if (p["directive"].ValueKind != JsonValueKind.Null)
+                        key.Add(p["directive"].GetString());
+                    foreach (var e in p["exprs"].EnumerateArray())
+                        key.Add(e.GetString());
+                    key.AddRange(ops);
+                    foreach (var s in p["scalars"].EnumerateArray())
+                    {
+                        var kind = s[0].GetString();
+                        key.Add(kind switch
+                        {
+                            "i" => s[1].GetInt64(),
+                            "f" => s[1].GetDouble(),
+                            "b" => (object)s[1].GetBoolean(),
+                            _ => throw new NotSupportedException($"scalar kind '{kind}'")
+                        });
+                    }
+
+                    var arr = key.ToArray();
+                    return p["kind"].GetString() == "r" ? np.r_[arr] : np.c_[arr];
+                }
+
+                // ix_ returns one array per sequence; `which` selects the recorded slot.
+                case "ix_":
+                {
+                    var seqs = new object[ops.Length];
+                    for (int i = 0; i < ops.Length; i++)
+                        seqs[i] = ops[i];
+                    return np.ix_(seqs)[p["which"].GetInt32()];
+                }
+
                 // Group A: rounding + flattened diff + nan order-statistics.
                 case "round_": return np.round_(ops[0], p["decimals"].GetInt32());
                 case "ediff1d": return np.ediff1d(ops[0]);

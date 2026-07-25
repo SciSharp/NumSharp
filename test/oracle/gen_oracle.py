@@ -1002,6 +1002,290 @@ def gen_concat_stack(dtypes):
     return cases
 
 
+# ---------------------------------------------------------------------------
+# np.r_ / np.c_ / np.ix_ — the index-expression DSL (numpy/lib/_index_tricks_impl.py).
+#
+# These ops take an INDEX EXPRESSION, not a plain operand list, so the corpus carries the
+# non-array parts in `params` and the array parts as ordinary operands:
+#
+#   params.kind       "r" | "c"                     which concatenator
+#   params.directive  str | null                    NumPy's leading special directive
+#   params.exprs      [str, ...]                    slice expressions, in NumSharp spelling
+#   params.scalars    [[kind, value], ...]          weak python-scalar tail; kind i|f|b
+#   operands          the array entries, in order
+#
+# The C# side rebuilds  [directive?] + exprs + operands + scalars  and indexes np.r_/np.c_.
+# C# has no slice literal, so every expression is paired with the Python slice it must mean —
+# the pair is what keeps NumSharp's string grammar honest against NumPy's syntax.
+# ---------------------------------------------------------------------------
+
+# (NumSharp spelling, Python slice) — arange branch, then the imaginary-step linspace branch.
+R_SLICE_EXPRS = [
+    ("0:5", slice(0, 5)),
+    ("0:5:2", slice(0, 5, 2)),
+    ("5:0:-1", slice(5, 0, -1)),
+    ("5:0", slice(5, 0)),
+    ("-3:0", slice(-3, 0)),
+    ("3:-3:-1", slice(3, -3, -1)),
+    (":5", slice(None, 5)),
+    (":5:2", slice(None, 5, 2)),
+    ("2:", slice(2, None)),
+    ("5::2", slice(5, None, 2)),
+    ("::2", slice(None, None, 2)),
+    (":", slice(None, None)),
+    ("0.0:1.0:0.25", slice(0.0, 1.0, 0.25)),
+    ("0:1:0.3", slice(0, 1, 0.3)),
+    ("2.5:", slice(2.5, None)),
+    ("-1:1:6j", slice(-1, 1, 6j)),
+    ("0:1:5j", slice(0, 1, 5j)),
+    ("0:5:0j", slice(0, 5, 0j)),
+    ("0:5:1j", slice(0, 5, 1j)),
+    ("0:3:2j", slice(0, 3, 2j)),
+    ("1:2:-3j", slice(1, 2, -3j)),
+]
+
+# Weak python-scalar tails. The kind letter picks the C# boxed type (long / double / bool)
+# so the NEP50 weak-vs-strong mapping is under the gate, not just the values.
+_SCALAR_KIND = {"i": int, "f": float, "b": bool}
+
+
+def _scalar_py(entry):
+    kind, value = entry
+    return _SCALAR_KIND[kind](value)
+
+
+def gen_index_tricks(dtypes):
+    """np.r_ / np.c_ / np.ix_ — the index-expression DSL.
+
+    Four groups:
+      1. r_/c_ over ARRAY entries at 1-D and 2-D layouts x dtype, bare and with a leading
+         directive, plus weak-scalar tails (the NEP50 promotion matrix).
+      2. r_ over pure SLICE expressions — no operands at all, since the dtype comes from the
+         literals (int64 for integer literals, float64 the moment one is written as a float
+         or the step is imaginary). Also directive x slice, which exercises the slice branch's
+         swapaxes(-1, trans1d) rather than the array branch's defaxes permutation.
+      3. ix_ over 1..3 one-dimensional operands, incl. bool masks (the nonzero branch);
+         `which` selects the recorded tuple element, as gen_nonzero does.
+      4. Weak-integer OVERFLOW: NumPy raises OverflowError rather than wrapping, so these
+         carry expects_throw.
+    """
+    cases = []
+    n = 0
+
+    def emit(opname, params, operands, r, layout):
+        nonlocal n
+        r = np.asarray(r)
+        cases.append({
+            "id": f"{opname}/{layout}/{n}",
+            "op": opname,
+            "params": params,
+            "operands": operands,
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": layout,
+            "valueclass": "mixed",
+        })
+        n += 1
+
+    def emit_throw(opname, params, operands, layout):
+        nonlocal n
+        cases.append({
+            "id": f"{opname}/{layout}/{n}",
+            "op": opname,
+            "params": params,
+            "operands": operands,
+            "expects_throw": True,
+            "layout": layout,
+            "valueclass": "mixed",
+        })
+        n += 1
+
+    def build(kind, directive, exprs, arrays, scalars):
+        """The Python index expression a NumSharp `np.r_[...]` / `np.c_[...]` must equal."""
+        key = []
+        if directive is not None:
+            key.append(directive)
+        key.extend(sl for _, sl in exprs)
+        key.extend(arrays)
+        key.extend(_scalar_py(s) for s in scalars)
+        obj = np.r_ if kind == "r" else np.c_
+        return obj[tuple(key)]
+
+    def params_of(kind, directive, exprs, scalars):
+        return {"kind": kind, "directive": directive,
+                "exprs": [s for s, _ in exprs], "scalars": scalars}
+
+    # -- 1. r_ / c_ over array entries -------------------------------------------------
+    for dt in dtypes:
+        b1 = _cbase((8,), np.dtype(dt))
+        b2 = _cbase((3, 4), np.dtype(dt))
+        b2t = _cbase((4, 3), np.dtype(dt))
+        b2w = _cbase((3, 8), np.dtype(dt))
+        b2o = _cbase((5, 4), np.dtype(dt))
+
+        views1 = [
+            ("c_1d", b1, b1),
+            ("step_1d", b1, b1[::2]),
+            ("negstride_1d", b1, b1[::-1]),
+            ("offset_1d", b1, b1[2:7]),
+        ]
+        views2 = [
+            ("c_2d", b2, b2),
+            ("f_2d", b2t, b2t.T),
+            ("strided_2d", b2w, b2w[:, ::2]),
+            ("negstride_2d", b2, b2[::-1]),
+            ("offset_2d", b2o, b2o[1:4]),
+        ]
+
+        for (tag, base, view) in views1:
+            desc = describe(base, view)
+            for kind in ("r", "c"):
+                for directive in (None, "0,2", "0,2,0", "1,2,0", "0,3,1", "r", "c"):
+                    try:
+                        r = build(kind, directive, [], [view, view], [])
+                    except Exception:
+                        continue
+                    emit(f"{kind}_", params_of(kind, directive, [], []),
+                         [desc, desc], r, f"{tag}/{directive}/{dt}")
+
+            # Weak-scalar tails: the NEP50 promotion matrix (weak int / float / bool
+            # adopting an array dtype), which no other tier reaches.
+            for scalars in ([["i", 0]], [["f", 1.5]], [["i", 5], ["i", 6]], [["b", True]]):
+                for kind in ("r", "c"):
+                    try:
+                        r = build(kind, None, [], [view], scalars)
+                    except Exception:
+                        continue
+                    emit(f"{kind}_", params_of(kind, None, [], scalars),
+                         [desc], r, f"{tag}/scalars/{dt}")
+
+        for (tag, base, view) in views2:
+            desc = describe(base, view)
+            for kind in ("r", "c"):
+                for directive in (None, "-1", "0", "0,3,0", "0,3,1", "r"):
+                    try:
+                        r = build(kind, directive, [], [view, view], [])
+                    except Exception:
+                        continue
+                    emit(f"{kind}_", params_of(kind, directive, [], []),
+                         [desc, desc], r, f"{tag}/{directive}/{dt}")
+
+        # Mixed slice-expression + array entries: the two branches meet in one concatenate,
+        # so the slice's strong int64/float64 must promote against the operand dtype. The
+        # C# side builds exprs before operands, so the expression leads here too.
+        desc1 = describe(b1, b1)
+        for expr in [("0:3", slice(0, 3)), ("0:1:5j", slice(0, 1, 5j))]:
+            for kind in ("r", "c"):
+                try:
+                    r = (np.r_ if kind == "r" else np.c_)[(expr[1], b1)]
+                except Exception:
+                    continue
+                emit(f"{kind}_", params_of(kind, None, [expr], []),
+                     [desc1], r, f"mixed/{expr[0]}/{dt}")
+
+    # -- 2. r_ / c_ over pure slice expressions (no operands, dtype from the literals) ---
+    for (s, sl) in R_SLICE_EXPRS:
+        for kind in ("r", "c"):
+            try:
+                r = (np.r_ if kind == "r" else np.c_)[(sl,)]
+            except Exception:
+                continue
+            emit(f"{kind}_", params_of(kind, None, [(s, sl)], []), [], r, f"expr/{s}")
+
+    # Two expressions concatenated, and directive x expression (the slice branch's
+    # ndmin + swapaxes(-1, trans1d) path, which differs from the array branch's transpose).
+    for (s1, sl1) in R_SLICE_EXPRS[:8]:
+        for (s2, sl2) in [("0:3", slice(0, 3)), ("1:2:3j", slice(1, 2, 3j))]:
+            try:
+                r = np.r_[(sl1, sl2)]
+            except Exception:
+                continue
+            emit("r_", params_of("r", None, [(s1, sl1), (s2, sl2)], []), [], r,
+                 f"expr2/{s1}+{s2}")
+
+    for directive in ("0,2", "0,2,0", "1,2,0", "0,3,0", "0,3,1", "0,3,2", "0,4,1", "r", "c"):
+        for (s, sl) in [("0:3", slice(0, 3)), ("-1:1:4j", slice(-1, 1, 4j))]:
+            for kind in ("r", "c"):
+                try:
+                    r = (np.r_ if kind == "r" else np.c_)[(directive, sl)]
+                except Exception:
+                    continue
+                emit(f"{kind}_", params_of(kind, directive, [(s, sl)], []), [], r,
+                     f"expr_dir/{directive}/{s}")
+
+    # Slice expressions with a weak-scalar tail — arange/linspace strong dtype vs weak literal.
+    for (s, sl) in [("0:3", slice(0, 3)), ("0:1:3j", slice(0, 1, 3j))]:
+        for scalars in ([["i", 7]], [["f", 1.5]], [["b", True]]):
+            try:
+                r = np.r_[tuple([sl] + [_scalar_py(x) for x in scalars])]
+            except Exception:
+                continue
+            emit("r_", params_of("r", None, [(s, sl)], scalars), [], r, f"expr_scalar/{s}")
+
+    # All-weak keys: no array anywhere, so the NEP50 defaults decide (int64/float64/bool).
+    for scalars in ([["i", 1], ["i", 2]], [["b", True], ["b", False]],
+                    [["i", 1], ["f", 2.0]], [["b", True], ["i", 2]], [["f", 3.5]]):
+        for kind in ("r", "c"):
+            r = (np.r_ if kind == "r" else np.c_)[tuple(_scalar_py(x) for x in scalars)]
+            emit(f"{kind}_", params_of(kind, None, [], scalars), [], r,
+                 "weak_only/" + "".join(k for k, _ in scalars))
+
+    # -- 3. ix_ ------------------------------------------------------------------------
+    for dt in dtypes:
+        b = _cbase((8,), np.dtype(dt))
+        seqs = [
+            ("c_1d", b, b[:4]),
+            ("step_1d", b, b[::2]),
+            ("negstride_1d", b, b[::-1]),
+            ("offset_1d", b, b[3:7]),
+            ("empty_1d", b, b[4:4]),
+        ]
+        for (tag, base, view) in seqs:
+            # 1-seq, 2-seq and 3-seq forms: the output rank equals the number of sequences,
+            # and `which` walks every slot so each reshape target is compared.
+            other = _cbase((3,), np.dtype("int64"))
+            groups = [
+                ("n1", [describe(base, view)], [view]),
+                ("n2", [describe(base, view), describe(other, other)], [view, other]),
+                ("n3", [describe(base, view), describe(other, other), describe(base, view)],
+                 [view, other, view]),
+            ]
+            for (gtag, descs, arrays) in groups:
+                try:
+                    out = np.ix_(*arrays)
+                except Exception:
+                    continue
+                for which in range(len(out)):
+                    emit("ix_", {"which": which}, descs, out[which], f"{tag}/{gtag}/{dt}")
+
+    # bool operands take ix_'s nonzero branch (mask -> intp indices).
+    for mask in [[True, False, True, True], [False, False, False], [True], [True, True]]:
+        m = np.array(mask, dtype=bool)
+        other = np.array([1, 2], dtype=np.int64)
+        out = np.ix_(m, other)
+        for which in range(len(out)):
+            emit("ix_", {"which": which},
+                 [describe(m, m), describe(other, other)], out[which],
+                 f"boolmask/{len(mask)}")
+        out1 = np.ix_(m)
+        emit("ix_", {"which": 0}, [describe(m, m)], out1[0], f"boolmask1/{len(mask)}")
+
+    # -- 4. weak-integer overflow: NumPy raises OverflowError, it does NOT wrap ----------
+    for (dt, value) in [("int8", 1000), ("int8", -1000), ("uint8", -1), ("uint8", 300),
+                        ("int16", -40000), ("uint16", -1), ("int32", 2 ** 40),
+                        ("uint64", -1), ("bool", 2)]:
+        b = _cbase((4,), np.dtype(dt))
+        try:
+            _ = np.r_[(b, value)]
+        except OverflowError:
+            emit_throw("r_", params_of("r", None, [], [["i", value]]),
+                       [describe(b, b)], f"overflow/{dt}/{value}")
+        except Exception:
+            continue
+
+    return cases
+
+
 def gen_pad(dtypes):
     cases = []
     n = 0
@@ -2290,6 +2574,7 @@ def main():
         cases = gen_manip(MANIP_DTYPES, list(LAYOUTS.keys()))
         cases += gen_concat_stack(MANIP_DTYPES)
         cases += gen_pad(MANIP_DTYPES)
+        cases += gen_index_tricks(MANIP_DTYPES)        # r_ / c_ / ix_ index-expression DSL
         cases += char_tier("manip")
         write_jsonl(os.path.join(corpus_dir, "manip.jsonl"), cases)
     elif mode == "sort":

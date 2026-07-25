@@ -761,6 +761,45 @@ def run_manipulation_benchmarks(n: int, iterations: int) -> List[BenchmarkResult
     r.name, r.category, r.suite, r.dtype = "np.triu_indices", "TriIndices", "Manipulation", dtype_name
     results.append(r)
 
+    # The index-expression DSL (journey3): r_ / c_ / ix_. Three cost classes, kept apart —
+    # O(N) concatenation (r_/c_ over arrays, with and without a weak-scalar tail, which prices
+    # the per-entry NEP50 promotion), O(N) generation (the arange and imaginary-step linspace
+    # branches, no input array at all), and the O(1) open-mesh VIEW ix_ builds by inserting
+    # length-1 axes, whose timing is construction overhead rather than throughput.
+    arr_1d_b = np.random.random(actual_n) * 100
+    ix_rows = np.arange(rows)
+    ix_cols = np.arange(rows)
+
+    def np_r_two(): return np.r_[arr_1d, arr_1d_b]
+    r = benchmark(np_r_two, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.r_", "IndexTricks", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_r_scalars(): return np.r_[arr_1d, 0.0, 0.0, arr_1d_b]
+    r = benchmark(np_r_scalars, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.r_(a, 0, 0, b)", "IndexTricks", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_c_two(): return np.c_[arr_1d, arr_1d_b]
+    r = benchmark(np_c_two, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.c_", "IndexTricks", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_r_arange(): return np.r_[0:n]
+    r = benchmark(np_r_arange, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.r_(0:N)", "IndexTricks", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_r_linspace(): return np.r_[0:1:complex(0, n)]
+    r = benchmark(np_r_linspace, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.r_(0:1:Nj)", "IndexTricks", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_ix(): return np.ix_(ix_rows, ix_cols)
+    r = benchmark(np_ix, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.ix_", "IndexTricks", "Manipulation", dtype_name
+    results.append(r)
+
     return results
 
 # =============================================================================
