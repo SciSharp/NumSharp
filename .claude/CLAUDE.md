@@ -280,13 +280,13 @@ Shape is a `readonly struct` with cached `ArrayFlags` computed at construction:
 ```csharp
 public readonly partial struct Shape
 {
-    internal readonly int _flags;        // Cached ArrayFlags bitmask
-    internal readonly int _hashCode;     // Precomputed hash code
-    internal readonly int size;          // Total element count
-    internal readonly int[] dimensions;  // Dimension sizes
-    internal readonly int[] strides;     // Stride values (0 = broadcast dimension)
-    internal readonly int bufferSize;    // Size of underlying buffer
-    internal readonly int offset;        // Base offset into storage
+    internal readonly int _flags;         // Cached ArrayFlags bitmask
+    internal readonly int _hashCode;      // Precomputed hash code
+    internal readonly long size;          // Total element count
+    internal readonly long[] dimensions;  // Dimension sizes
+    internal readonly long[] strides;     // Stride values (0 = broadcast dimension)
+    internal readonly long bufferSize;    // Size of underlying buffer
+    internal readonly long offset;        // Base offset into storage
 }
 ```
 
@@ -1343,8 +1343,8 @@ NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks
 
 | Member | What it exposes |
 |--------|----------------|
-| `shape.dimensions` | Raw int[] of dimension sizes |
-| `shape.strides` | Raw int[] of stride values |
+| `shape.dimensions` | Raw long[] of dimension sizes |
+| `shape.strides` | Raw long[] of stride values |
 | `shape.size` | Internal field: total element count |
 | `shape.offset` | Base offset into storage (NumPy-aligned) |
 | `shape.bufferSize` | Size of underlying buffer |
