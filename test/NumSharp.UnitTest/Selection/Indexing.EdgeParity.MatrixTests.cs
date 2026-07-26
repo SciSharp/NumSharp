@@ -131,6 +131,33 @@ public class Indexing_EdgeParity_MatrixTests
         yield return WrapS(new("A_0dFalse_colon_set", () => { var a = A(); a[np.array(false), ":"] = -1L; return a; }, Enumerable.Range(0, 12).Select(x => (long)x).ToArray()));
         yield return WrapS(new("A_colon_0dTrue_set",  () => { var a = A(); a[":", np.array(true)]  = -1L; return a; }, Enumerable.Repeat(-1L, 12).ToArray()));
         yield return WrapS(new("A_int_0dTrue_set",    () => { var a = A(); a[1, np.array(true)]    = -1L; return a; }, new long[] { 0, 1, 2, 3, -1, -1, -1, -1, 8, 9, 10, 11 }));
+
+        // ── A 0-d bool whose SIBLINGS already consume every source axis (int, slice, int on a
+        //    3-D base). HAS_0D_BOOL consumes no axis, so a False still empties the selection and
+        //    the assignment is a NumPy no-op — but TrySetSliceWithSingleAdvanced mapped its one
+        //    advanced item ONTO a source axis, ran out of axes, and DROPPED the bool: the write
+        //    landed as if it were absent (B[-1,2:,-2] = -7 -> flat 22). It only looked right when
+        //    an axis was left over (B[0,2:,False]), which placed the empty nonzero() index and
+        //    emptied the grid by accident. Found by the index-oracle random tier (set/B/rand/9804)
+        //    once E30/E230 entered the pools; every value below probed from NumPy 2.4.2.
+        var B24 = Enumerable.Range(0, 24).Select(x => (long)x).ToArray();
+        long[] B24With(params (int at, long v)[] w) { var c = (long[])B24.Clone(); foreach (var (at, v) in w) c[at] = v; return c; }
+
+        yield return WrapS(new("B_int_slice_int_0dFalse_set_noop", () => { var b = B(); b[-1, new Slice(2, null), -2, np.array(false)] = -7L; return b; }, B24));
+        yield return WrapS(new("B_pos_slice_pos_0dFalse_set_noop", () => { var b = B(); b[0, new Slice(2, null), 1, np.array(false)] = -7L; return b; }, B24));
+        yield return WrapS(new("B_int_colon_int_0dFalse_set_noop", () => { var b = B(); b[0, ":", 0, np.array(false)] = -7L; return b; }, B24));
+        yield return WrapS(new("B_int_slice_0dFalse_set_noop",     () => { var b = B(); b[0, new Slice(2, null), np.array(false)] = -7L; return b; }, B24));
+        yield return WrapS(new("B_int_int_0dFalse_set_noop",       () => { var b = B(); b[0, 0, np.array(false)] = -7L; return b; }, B24));
+        yield return WrapS(new("B_colon_0dFalse_set_noop",         () => { var b = B(); b[":", np.array(false)] = -7L; return b; }, B24));
+
+        // the True twin must still WRITE (a length-1 axis, not a length-0 one) — the fix must not
+        // turn every 0-d bool into a no-op.
+        yield return WrapS(new("B_int_slice_int_0dTrue_set", () => { var b = B(); b[-1, new Slice(2, null), -2, np.array(true)] = -7L; return b; }, B24With((22, -7L))));
+        yield return WrapS(new("B_pos_slice_pos_0dTrue_set", () => { var b = B(); b[0, new Slice(2, null), 1, np.array(true)] = -7L; return b; }, B24With((9, -7L))));
+        yield return WrapS(new("B_int_colon_int_0dTrue_set", () => { var b = B(); b[0, ":", 0, np.array(true)] = -7L; return b; }, B24With((0, -7L), (4, -7L), (8, -7L))));
+
+        // and the same index WITHOUT the bool still writes (the bool is what empties it)
+        yield return WrapS(new("B_int_slice_int_set", () => { var b = B(); b[-1, new Slice(2, null), -2] = -7L; return b; }, B24With((22, -7L))));
     }
 
     [DataTestMethod]

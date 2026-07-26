@@ -1255,8 +1255,9 @@ namespace NumSharp
             //prepare indices getters
             var indexGetters = PrepareIndexGetters(srcShape, indices);
 
-            //figure out the largest possible abosulte offset
-            long largestOffset = LargestReachableOffset(srcShape, source.size);
+            //figure out the largest possible abosulte offset (disengaged for a zero-sized source,
+            //which dereferences nothing — see OffsetBackstopUpperBound)
+            long largestOffset = OffsetBackstopUpperBound(srcShape, source.size);
 
             //compute coordinates
             if (indices.Length > 1)
@@ -1473,6 +1474,36 @@ namespace NumSharp
         ///     the previous <c>GetOffset(size-1 corner)</c> was the MINIMUM corner for a negative-stride
         ///     view, so valid early-row offsets were falsely rejected as out of bounds.
         /// </summary>
+        /// <summary>
+        ///     Upper bound for the gather/scatter offset backstop — <see cref="LargestReachableOffset"/>,
+        ///     except DISENGAGED for a source that holds no element.
+        /// </summary>
+        /// <remarks>
+        ///     That flat-offset comparison is NOT what makes a fancy index valid: every index value has
+        ///     already been checked against ITS OWN axis extent (<c>-dim &lt;= idx &lt; dim</c>) — up front and
+        ///     axis-major by <c>ScanFancyBounds</c> (<c>NDArray.Indexing.PrepareIndex.cs</c>, NumPy's
+        ///     <c>mapping.c</c> order and verbatim <c>IndexError</c>), and again per value inside
+        ///     <see cref="PrepareIndexGetters"/>. That layer is what rejects <c>np.zeros((3,0))[[5]]</c> and
+        ///     <c>np.zeros((0,3))[[0]]</c>, and it keeps doing so. This bound is only the memory-safety
+        ///     backstop for the DEREFERENCE that follows.
+        ///
+        ///     A zero-sized source has no dereference to guard, so the backstop has nothing to say. The
+        ///     empty extent is either an INDEXED axis — where the per-axis layer above already rejected
+        ///     every possible index value, leaving only an empty index array whose loop body never runs —
+        ///     or a TRAILING one, which makes every gathered/scattered block <c>subShapeSize == 0</c>: zero
+        ///     bytes copied, no address read. Meanwhile <see cref="LargestReachableOffset"/> reports
+        ///     <c>size - 1 == -1</c> there, below every offset it is compared against, so leaving it engaged
+        ///     rejected every VALID empty gather — <c>np.zeros((3,0))[[0,1]]</c> threw
+        ///     <c>IndexOutOfRangeException</c> where NumPy returns <c>(2,0)</c>.
+        ///
+        ///     Only the UPPER half is disengaged. The <c>&lt; 0</c> half stays live unconditionally: a negative
+        ///     computed offset (an exotic strided / negative-stride view whose <c>GetOffset</c> underflows
+        ///     below the buffer base) would read or write BEFORE the buffer — a wild access that can land in
+        ///     the GC heap.
+        /// </remarks>
+        private static long OffsetBackstopUpperBound(Shape shape, long size)
+            => size == 0 ? long.MaxValue : LargestReachableOffset(shape, size);
+
         private static long LargestReachableOffset(Shape shape, long size)
         {
             if (shape.IsContiguous)

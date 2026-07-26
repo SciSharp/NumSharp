@@ -202,5 +202,205 @@ namespace NumSharp.UnitTest.Backends
             (sub + sub).shape.Should().BeEquivalentTo(new long[] { 3, 0 });
             sub.T.shape.Should().BeEquivalentTo(new long[] { 0, 3 });
         }
+
+        // ---------------- FANCY (advanced) indexing of an array with a zero-sized axis ----------------
+        //
+        // The sibling of the basic-indexing block above, in a DIFFERENT guard. Fancy indexing
+        // flattens each gathered coordinate to one buffer offset and compares it against
+        // LargestReachableOffset(shape, size), which for a contiguous empty source is
+        // `size - 1` == -1 — below every offset it is compared against, so every gather into a
+        // zero-sized source threw `IndexOutOfRangeException`, the valid ones included.
+        //
+        // That comparison is NOT what makes a fancy index valid: ScanFancyBounds
+        // (NDArray.Indexing.PrepareIndex.cs, NumPy's mapping.c order) and PrepareIndexGetters
+        // already check every value against ITS OWN axis extent, -dim <= idx < dim. The offset
+        // compare is only the memory-safety backstop for the dereference that follows, and a
+        // zero-sized source dereferences nothing: the empty extent is either an INDEXED axis
+        // (where the per-axis layer rejects every possible value) or a TRAILING one (making
+        // every gathered block subShapeSize == 0). So the UPPER half is disengaged when the
+        // source holds no element; the `< 0` half — which catches an offset underflowing below
+        // the buffer base — stays live unconditionally.
+        //
+        // NumPy 2.4.2 reference output is quoted per assertion.
+
+        [TestMethod]
+        public void FancyIndex_TrailingZeroAxis_ReturnsEmptyResult()
+        {
+            // NumPy: np.zeros((3,0))[np.array([0,1])] -> (2,0)
+            var a = np.zeros(new Shape(3, 0), typeof(double));
+
+            a[np.array(new long[] { 0, 1 })].shape.Should().BeEquivalentTo(new long[] { 2, 0 });
+            a[np.array(new long[] { -3 })].shape.Should().BeEquivalentTo(new long[] { 1, 0 });
+            a[np.array(new long[] { 0, 1, 2, -1, -2, -3 })].shape.Should().BeEquivalentTo(new long[] { 6, 0 });
+
+            // a 2-D index array contributes its own shape: (2,2) + trailing (0,) -> (2,2,0)
+            a[np.array(new long[] { 2, -3, 0, 0 }).reshape(2, 2)].shape
+                .Should().BeEquivalentTo(new long[] { 2, 2, 0 });
+
+            // 3-D source, 2-D index: (4,1) + trailing (3,0) -> (4,1,3,0)
+            var a3 = np.zeros(new Shape(2, 3, 0), typeof(double));
+            a3[np.array(new long[] { -1, 1, 0, 0 }).reshape(4, 1)].shape
+                .Should().BeEquivalentTo(new long[] { 4, 1, 3, 0 });
+            a3[np.array(new long[] { 0, 1 })].shape.Should().BeEquivalentTo(new long[] { 2, 3, 0 });
+
+            // multi-axis fancy stopping short of the empty axis: (1,) + trailing (0,) -> (1,0)
+            a3[np.array(new long[] { 0 }), np.array(new long[] { 1 })].shape
+                .Should().BeEquivalentTo(new long[] { 1, 0 });
+        }
+
+        [TestMethod]
+        public void FancyIndex_ZeroSizedSource_ResultIsAUsableArray()
+        {
+            // NumPy hands back a fresh, C-contiguous, zero-element array (base is None) — not a view.
+            var r = np.zeros(new Shape(3, 0), typeof(double))[np.array(new long[] { 0, 1 })];
+
+            r.size.Should().Be(0);
+            r.dtype.Should().Be(typeof(double));
+            Convert.ToDouble(np.sum(r).GetAtIndex(0)).Should().Be(0d, "NumPy: sum of empty is 0");
+            (r + r).shape.Should().BeEquivalentTo(new long[] { 2, 0 });
+            r.T.shape.Should().BeEquivalentTo(new long[] { 0, 2 });
+        }
+
+        [TestMethod]
+        public void FancyIndex_ZeroSizedSource_StillRejectsOutOfRange()
+        {
+            // The backstop was disengaged, not the validation: NumPy's per-axis IndexError survives,
+            // and it is reported against the axis the index acts on — not the flat offset.
+            var a = np.zeros(new Shape(3, 0), typeof(double));
+
+            new Action(() => { var _ = a[np.array(new long[] { 5 })]; })
+                .Should().Throw<IndexError>().WithMessage("index 5 is out of bounds for axis 0 with size 3");
+            new Action(() => { var _ = a[np.array(new long[] { 3 })]; })
+                .Should().Throw<IndexError>().WithMessage("index 3 is out of bounds for axis 0 with size 3");
+            new Action(() => { var _ = a[np.array(new long[] { -4 })]; })
+                .Should().Throw<IndexError>().WithMessage("index -4 is out of bounds for axis 0 with size 3");
+
+            // indexing INTO the zero-sized axis is invalid for every value, 0 included
+            new Action(() => { var _ = a[np.array(new long[] { 0 }), np.array(new long[] { 0 })]; })
+                .Should().Throw<IndexError>().WithMessage("index 0 is out of bounds for axis 1 with size 0");
+
+            // a zero in the LEADING (indexed) axis makes even index 0 invalid, as in NumPy
+            new Action(() => { var _ = np.zeros(new Shape(0, 3), typeof(double))[np.array(new long[] { 0 })]; })
+                .Should().Throw<IndexError>().WithMessage("index 0 is out of bounds for axis 0 with size 0");
+            new Action(() => { var _ = np.zeros(new Shape(0), typeof(double))[np.array(new long[] { 0 })]; })
+                .Should().Throw<IndexError>().WithMessage("index 0 is out of bounds for axis 0 with size 0");
+
+            var a3 = np.zeros(new Shape(2, 3, 0), typeof(double));
+            new Action(() => { var _ = a3[np.array(new long[] { 0 }), np.array(new long[] { 1 }), np.array(new long[] { 0 })]; })
+                .Should().Throw<IndexError>().WithMessage("index 0 is out of bounds for axis 2 with size 0");
+            new Action(() => { var _ = a3[np.array(new long[] { 0 }), np.array(new long[] { 3 })]; })
+                .Should().Throw<IndexError>().WithMessage("index 3 is out of bounds for axis 1 with size 3");
+        }
+
+        [TestMethod]
+        public void FancyIndex_ZeroSizedSource_EmptyIndexAndMaskStillWork()
+        {
+            // Controls: these two paths never hit the offset guard and must not move.
+            var a = np.zeros(new Shape(3, 0), typeof(double));
+
+            // NumPy: an EMPTY index array validates nothing (there are no values to check),
+            // so it is legal even where every value would be out of bounds.
+            a[np.array(new long[0])].shape.Should().BeEquivalentTo(new long[] { 0, 0 });
+            np.zeros(new Shape(0, 3), typeof(double))[np.array(new long[0])].shape
+                .Should().BeEquivalentTo(new long[] { 0, 3 });
+
+            // boolean mask path
+            a[np.array(new[] { true, false, true })].shape.Should().BeEquivalentTo(new long[] { 2, 0 });
+        }
+
+        [TestMethod]
+        public void FancyIndex_ZeroSizedStridedView_ReturnsEmptyResult()
+        {
+            // A (3,0) window carved out of a LIVE 12-element buffer: the offsets are non-zero and
+            // step across real rows, so this exercises the guard on a source whose shape is empty
+            // but whose buffer is not. NumPy: both -> (2,0).
+            var big = np.arange(12).reshape(3, 4);
+
+            big[Slice.All, new Slice(1, 1)][np.array(new long[] { 0, 2 })].shape
+                .Should().BeEquivalentTo(new long[] { 2, 0 });
+            big["::-1"][Slice.All, new Slice(2, 2)][np.array(new long[] { 0, 2 })].shape
+                .Should().BeEquivalentTo(new long[] { 2, 0 }, "negative row stride");
+
+            new Action(() => { var _ = big[Slice.All, new Slice(1, 1)][np.array(new long[] { 5 })]; })
+                .Should().Throw<IndexError>().WithMessage("index 5 is out of bounds for axis 0 with size 3");
+
+            // the live buffer behind the empty window is untouched
+            Convert.ToInt64(big[2, 3].GetAtIndex(0)).Should().Be(11L);
+        }
+
+        [TestMethod]
+        public void FancyIndex_ZeroSizedSource_AllIndexDtypes()
+        {
+            // NumPy accepts every integer dtype as a fancy index; none of them may trip the guard.
+            var a = np.zeros(new Shape(3, 0), typeof(double));
+
+            a[np.array(new[] { 0, 1 })].shape.Should().BeEquivalentTo(new long[] { 2, 0 }, "int32");
+            a[np.array(new short[] { 0, 1 })].shape.Should().BeEquivalentTo(new long[] { 2, 0 }, "int16");
+            a[np.array(new byte[] { 0, 1 })].shape.Should().BeEquivalentTo(new long[] { 2, 0 }, "uint8");
+            a[np.array(new ushort[] { 0, 1 })].shape.Should().BeEquivalentTo(new long[] { 2, 0 }, "uint16");
+            a[np.array(new uint[] { 0, 1 })].shape.Should().BeEquivalentTo(new long[] { 2, 0 }, "uint32");
+            a[np.array(new ulong[] { 0, 1 })].shape.Should().BeEquivalentTo(new long[] { 2, 0 }, "uint64");
+            a[np.array(new sbyte[] { -1 })].shape.Should().BeEquivalentTo(new long[] { 1, 0 }, "int8 negative");
+        }
+
+        [TestMethod]
+        public void FancyIndex_ZeroSizedSource_SetterAlsoWorks()
+        {
+            // The setter carries its own copy of the same guard (Selection.Setter.cs), so it had
+            // the same defect. NumPy: every one of these is a legal no-op write.
+            new Action(() => { var q = np.zeros(new Shape(3, 0), typeof(double)); q[np.array(new long[] { 0, 1 })] = (NDArray)5d; })
+                .Should().NotThrow();
+            new Action(() => { var q = np.zeros(new Shape(3, 0), typeof(double)); q[np.array(new long[] { -3 })] = (NDArray)5d; })
+                .Should().NotThrow();
+            new Action(() => { var q = np.zeros(new Shape(3, 0), typeof(double)); q[np.array(new long[] { 2, -3, 0, 0 }).reshape(2, 2)] = (NDArray)5d; })
+                .Should().NotThrow();
+            new Action(() => { var q = np.zeros(new Shape(2, 3, 0), typeof(double)); q[np.array(new long[] { 0, 1 })] = (NDArray)5d; })
+                .Should().NotThrow();
+            new Action(() => { var q = np.zeros(new Shape(3, 0), typeof(double)); q[np.array(new long[] { 0, 1 })] = np.zeros(new Shape(2, 0), typeof(double)); })
+                .Should().NotThrow("value of exactly the indexing-result shape");
+
+            // and the setter's per-axis rejections survive
+            new Action(() => { var q = np.zeros(new Shape(3, 0), typeof(double)); q[np.array(new long[] { 5 })] = (NDArray)5d; })
+                .Should().Throw<IndexError>().WithMessage("index 5 is out of bounds for axis 0 with size 3");
+            new Action(() => { var q = np.zeros(new Shape(3, 0), typeof(double)); q[np.array(new long[] { 0 }), np.array(new long[] { 0 })] = (NDArray)5d; })
+                .Should().Throw<IndexError>().WithMessage("index 0 is out of bounds for axis 1 with size 0");
+            new Action(() => { var q = np.zeros(new Shape(0, 3), typeof(double)); q[np.array(new long[] { 0 })] = (NDArray)5d; })
+                .Should().Throw<IndexError>().WithMessage("index 0 is out of bounds for axis 0 with size 0");
+        }
+
+        [TestMethod]
+        public void FancyIndex_ZeroSizedSource_SetterReachesTheValueShapeCheck()
+        {
+            // The premature offset throw MASKED NumPy's real error here: a (2,) value cannot
+            // broadcast to the (2,0) indexing result. NumPy raises ValueError with this text;
+            // NumSharp used to raise IndexOutOfRangeException about a buffer offset instead.
+            var q = np.zeros(new Shape(3, 0), typeof(double));
+
+            new Action(() => { q[np.array(new long[] { 0, 1 })] = np.array(new[] { 1d, 2d }); })
+                .Should().Throw<ValueError>()
+                .WithMessage("shape mismatch: value array of shape (2,) could not be broadcast to indexing result of shape (2,0)");
+        }
+
+        [TestMethod]
+        public void FancyIndex_NonEmptySource_IsUnaffected()
+        {
+            // The disengagement is keyed off `size == 0`, so ordinary arrays keep the full
+            // backstop AND the same values.
+            var a = np.arange(12).reshape(3, 4);
+
+            var g = a[np.array(new long[] { 0, 2 })];
+            g.shape.Should().BeEquivalentTo(new long[] { 2, 4 });
+            Convert.ToInt64(g.GetAtIndex(0)).Should().Be(0L);
+            Convert.ToInt64(g.GetAtIndex(7)).Should().Be(11L);
+
+            var m = a[np.array(new long[] { 0, 1 }), np.array(new long[] { 3, 2 })];
+            m.shape.Should().BeEquivalentTo(new long[] { 2 });
+            Convert.ToInt64(m.GetAtIndex(0)).Should().Be(3L);
+            Convert.ToInt64(m.GetAtIndex(1)).Should().Be(6L);
+
+            new Action(() => { var _ = a[np.array(new long[] { 3 })]; }).Should().Throw<IndexError>();
+            new Action(() => { var _ = a[np.array(new long[] { -4 })]; }).Should().Throw<IndexError>();
+            new Action(() => { var _ = a[np.array(new long[] { 0 }), np.array(new long[] { 4 })]; }).Should().Throw<IndexError>();
+        }
     }
 }

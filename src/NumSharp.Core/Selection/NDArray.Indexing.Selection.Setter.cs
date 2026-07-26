@@ -81,6 +81,19 @@ namespace NumSharp
             if (advCount != 1 || !sawRealSlice)
                 return false;
 
+            // A 0-D BOOLEAN is NumPy's HAS_0D_BOOL: it consumes NO source axis and contributes an
+            // axis of its own, length 1 (True) or 0 (False). This helper maps its one advanced item
+            // ONTO a source axis, so it cannot express that — and when the other items already
+            // consume every axis, the axis-mapping loop below stops at `curAxis < ndim` and the
+            // bool is silently DROPPED: `a[-1, 2:, -2, np.array(False)] = v`, a no-op in NumPy,
+            // became a real write at `a[-1, 2:, -2]`. (It only looked correct when an axis was left
+            // over, which placed the empty nonzero() index and emptied the grid by accident.)
+            // TryBuild0dBoolWithBasic deliberately hands a NON-CONSECUTIVE advanced block to
+            // TryBuildMultiAdvancedGrid, which carries MixKind.ZeroBool and models it properly —
+            // this helper runs in between and must not intercept it on the way there.
+            if (advObj is NDArray adv0dBool && adv0dBool.typecode == NPTypeCode.Boolean && adv0dBool.ndim == 0)
+                return false;
+
             // A 0-D integer array as the SOLE advanced index behaves like a scalar int
             // (broadcast shape () -> reduces its axis, no grid dimension). Mirror the getter:
             // fold it to a scalar int and re-dispatch as pure basic-indexing assignment.
@@ -728,8 +741,10 @@ namespace NumSharp
             //prepare indices getters
             var indexGetters = PrepareIndexGetters(srcShape, indices);
 
-            //figure out the largest possible abosulte offset (true max reachable, neg-stride safe)
-            long largestOffset = LargestReachableOffset(srcShape, source.size);
+            //figure out the largest possible abosulte offset (true max reachable, neg-stride safe;
+            //disengaged for a zero-sized destination, which dereferences nothing — see
+            //OffsetBackstopUpperBound)
+            long largestOffset = OffsetBackstopUpperBound(srcShape, source.size);
 
             //compute coordinates
             if (indices.Length > 1)
