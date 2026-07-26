@@ -24,7 +24,7 @@
     <Version>0.60.0.0</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
+    <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. -->
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <Platforms>AnyCPU;x64</Platforms>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -35,12 +35,10 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
     <DocumentationFile />
     <Optimize>true</Optimize>
-	<SignAssembly>true</SignAssembly>
   </PropertyGroup>
 
   <ItemGroup>
     <None Remove="NumSharp.Bitmap.csproj.DotSettings" />
-    <None Remove="Open.snk" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1063,6 +1063,37 @@ direction **everywhere** — matrices, geomeans, commit messages, and the per-su
 dotnet build -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
 ```
 
+### Strong naming (identity, NOT authenticity)
+
+Every assembly in the repo is strong-named with **`Open.snk` at the repo root**, configured once in
+**`Directory.Build.props`** — `SignAssembly` defaults to true and any project opts out with
+`<SignAssembly>false</SignAssembly>`. Public key token: **`cc7b13ffcd2ddd51`**.
+
+**The key is Microsoft's PUBLISHED open-source key** — byte-identical to
+`dotnet/arcade`'s `src/Microsoft.DotNet.Arcade.Sdk/tools/snk/Open.snk`, the same identity carried by
+`netstandard`, `System.Memory` and `System.Buffers`, and the same key **TensorFlow.NET** signs with
+(which is why we keep it: a NumSharp-owned key would break the cross-repo
+`InternalsVisibleTo("TensorFlowNET.UnitTest")`). Its private half is public by design, so this is
+assembly **identity** — version binding, telling this `NumSharp` from another — and **not** a
+security property. `InternalsVisibleTo` is therefore not an access control. Real authenticity is
+Authenticode + NuGet author signing, needs a code-signing certificate, and does not exist here yet.
+
+**Consequences to know:**
+- Every `InternalsVisibleTo` MUST carry `PublicKey=` — keyless is `CS1726`, a hard error. There are
+  7: five in `NumSharp.Core/Assembly/Properties.cs`, two in `NumSharp.Interop.BLAS/AssemblyInfo.cs`.
+  The literal is held in `NumSharpFriendKey` / `BlasFriendKey` consts so it is written once per assembly.
+- `dotnet run` scripts outside the repo root need signing properties to see internals — see
+  "Scripting with `dotnet run`".
+- Gate: `test/NumSharp.UnitTest/Assembly/StrongNameTests.cs` (6 tests) asserts the token, the full
+  public key, that friend access actually resolves, and that no friend declaration is keyless.
+
+**How it was broken before (2019 → 2026-07):** `SignAssembly` sat in a `Publish|AnyCPU`-only
+PropertyGroup while CI builds and packs `Release`, so **every published NumSharp shipped unsigned**
+(`PublicKeyToken=null`) — and the `Publish` configuration did not even compile, because all seven
+friend declarations were keyless. A `#if !SIGNING` guard was meant to cover that, but `SIGNING` was
+defined only in the *test* csproj, a different assembly, where it did nothing. Nothing asserted the
+identity, so none of it surfaced. Hence the runtime gate rather than trusting the build.
+
 ### Running Tests
 
 Tests use **MSTest v3** framework with source-generated test discovery.
@@ -1276,15 +1307,21 @@ claim is stronger: NumSharp's writer must be **byte-identical** to `np.save`, no
 
 ### Accessing Internal Members
 
-NumSharp has many key types/fields/methods marked `internal` (Shape.dimensions, Shape.strides, NDArray.Storage, np._FindCommonType, etc.). To access them from a `dotnet run` script, override the assembly name to match an existing `InternalsVisibleTo` entry:
+NumSharp has many key types/fields/methods marked `internal` (Shape.dimensions, Shape.strides, NDArray.Storage, np._FindCommonType, etc.). To access them from a `dotnet run` script, override the assembly name to match an existing `InternalsVisibleTo` entry — **and sign the script**:
 
 ```csharp
 #:project path/to/src/NumSharp.Core
 #:property AssemblyName=NumSharp.DotNetRunScript
 #:property PublishAot=false
+#:property SignAssembly=true
+#:property AssemblyOriginatorKeyFile=K:/source/NumSharp/Open.snk
 ```
 
-**How it works:** NumSharp declares `[assembly: InternalsVisibleTo("NumSharp.DotNetRunScript")]` in `src/NumSharp.Core/Assembly/Properties.cs`. The `#:property AssemblyName=NumSharp.DotNetRunScript` directive overrides the script's assembly name (which normally derives from the filename) to match, granting full access to all `internal` and `protected internal` members.
+**How it works:** NumSharp declares `[assembly: InternalsVisibleTo("NumSharp.DotNetRunScript, PublicKey=…")]` in `src/NumSharp.Core/Assembly/Properties.cs`. The `#:property AssemblyName=NumSharp.DotNetRunScript` directive overrides the script's assembly name (which normally derives from the filename) to match, granting full access to all `internal` and `protected internal` members.
+
+**Why the two signing properties.** NumSharp is strong-named (repo-root `Directory.Build.props`), so its friend declarations name a `PublicKey` — and a keyed `InternalsVisibleTo` matches ONLY an assembly signed with that key. An unsigned script with the right *name* is not a match, and the failure is a compile error on the first internal member, not a warning.
+
+A script living **under the repo root** needs neither property: `Directory.Build.props` is an implicit file for file-based apps, so it inherits signing automatically (this is why `test/oracle/*.cs` just works). A script run from **anywhere else** — the scratchpad, a temp dir — inherits nothing and must pass both properties itself. Use an absolute path for the key.
 
 ### Accessing Unsafe code
 NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks=true` in scripts.
@@ -1296,7 +1333,11 @@ NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks
 #:property AssemblyName=NumSharp.DotNetRunScript
 #:property PublishAot=false
 #:property AllowUnsafeBlocks=true
+#:property SignAssembly=true
+#:property AssemblyOriginatorKeyFile=K:/source/NumSharp/Open.snk
 ```
+
+(The last two are required only for scripts OUTSIDE the repo root — see above.)
 
 ### Key Internal Members Available
 

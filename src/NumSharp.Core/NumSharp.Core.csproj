@@ -24,11 +24,10 @@
     <Version>0.60.0</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
+    <!-- Strong-naming (key, DelaySign, SignAssembly) is set repo-wide in ../../Directory.Build.props. -->
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <Platforms>AnyCPU</Platforms>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <DelaySign>false</DelaySign>
     <Configurations>Debug;Release;Publish</Configurations>
     <AssemblyName>NumSharp</AssemblyName>
     <PackageVersion>0.60.0</PackageVersion>
@@ -37,12 +36,10 @@
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
     <Optimize>true</Optimize>
-	<SignAssembly>true</SignAssembly>
   </PropertyGroup>
 
   <ItemGroup>
     <None Remove="NumSharp.Core.csproj.DotSettings" />
-    <None Remove="Open.snk" />
     <None Include="..\..\LICENSE">
       <Pack>True</Pack>
       <PackagePath></PackagePath>

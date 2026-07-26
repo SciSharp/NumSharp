@@ -4,8 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <Platforms>AnyCPU;x64</Platforms>
-    <SignAssembly>true</SignAssembly>
-    <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
+    <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. -->
     <Configurations>Debug;Release</Configurations>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>

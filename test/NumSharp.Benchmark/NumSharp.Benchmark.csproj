@@ -7,8 +7,8 @@
     <Platforms>AnyCPU;x64</Platforms>
     <ApplicationIcon />
     <Win32Resource />
-    <SignAssembly>true</SignAssembly>
-    <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
+    <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. Signed because
+         NumSharp.Core grants it InternalsVisibleTo, which now names a PublicKey. -->
     <Configurations>Debug;Release;Publish</Configurations>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>

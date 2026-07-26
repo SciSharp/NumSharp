@@ -7,15 +7,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <Platforms>AnyCPU</Platforms>
-    <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
+    <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. Signed because
+         NumSharp.Core grants it InternalsVisibleTo, which now names a PublicKey. -->
     <Configurations>Debug;Release;Publish</Configurations>
   </PropertyGroup>
 	
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
     <DocumentationFile />
     <Optimize>true</Optimize>
-	<SignAssembly>true</SignAssembly>
-	<DefineConstants>SIGNING</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
