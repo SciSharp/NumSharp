@@ -1,0 +1,110 @@
+{
+  "_comment": "PIN. Do not edit by hand -- regenerate with `python fetch_openblas.py --refresh-manifest`. These are the exact prebuilt OpenBLAS artifacts NumPy 2.4.2 bundles (see numpy requirements/ci_requirements.txt), which is what makes NumSharp's matrix products bit-identical to that NumPy's.",
+  "numpy_version": "2.4.2",
+  "distribution_version": "0.3.31.22.0",
+  "openblas_version": "0.3.31.dev",
+  "licenses": [
+    {
+      "name": "OpenBLAS",
+      "spdx": "BSD-3-Clause-Attribution",
+      "url": "https://github.com/OpenMathLib/OpenBLAS/"
+    },
+    {
+      "name": "LAPACK",
+      "spdx": "BSD-3-Clause-Attribution",
+      "url": "https://github.com/OpenMathLib/OpenBLAS/"
+    },
+    {
+      "name": "GCC runtime library (libgfortran)",
+      "spdx": "GPL-3.0-with-GCC-exception",
+      "url": "https://gcc.gnu.org/git/?p=gcc.git;a=tree;f=libgfortran"
+    },
+    {
+      "name": "openblas-libs (packaging)",
+      "spdx": "BSD-2-Clause",
+      "url": "https://github.com/MacPython/openblas-libs"
+    }
+  ],
+  "runtimes": {
+    "win-x64": {
+      "distribution": "scipy-openblas64",
+      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/64/a0/ea0517fdace38199c619ecef33e9866c9811e01dc55be2f7be2fed573497/scipy_openblas64-0.3.31.22.0-py3-none-win_amd64.whl",
+      "wheel_sha256": "b28e788201af8f474d28cc1191fe89ce4137a2654ffbc3c47674eaa52f8b3b41",
+      "member": "scipy_openblas64/lib/libscipy_openblas64_.dll",
+      "file": "libscipy_openblas64_.dll",
+      "sha256": "74a408729250596b0973e69fdd954eea07a70ff527a1dbaccf9ae21247b80377",
+      "size": 20404736
+    },
+    "win-arm64": {
+      "distribution": "scipy-openblas32",
+      "wheel": "scipy_openblas32-0.3.31.22.0-py3-none-win_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/98/54/1f6417c5c51d9a91876e7026ac2676fb64b1f53e27ec2bc679b2c2770195/scipy_openblas32-0.3.31.22.0-py3-none-win_arm64.whl",
+      "wheel_sha256": "3fda47789866db95e07cdef98cd093de3032be426fb76fddab4799b86bc0a988",
+      "member": "scipy_openblas32/lib/scipy_openblas.dll",
+      "file": "scipy_openblas.dll",
+      "sha256": "d732e798918b18abdd4ca268b093c070e0195259203d648efce8fc9a3acae524",
+      "size": 10079232
+    },
+    "linux-x64": {
+      "distribution": "scipy-openblas64",
+      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/fd/1b/969b68113436c031233fa22b11123451ef50f3aa7993423a5eb1279a327a/scipy_openblas64-0.3.31.22.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "wheel_sha256": "0d9adb32a47f8eed2cc0b0e9ce50b3a1cd47f57c889dcbb55d50a69b81ffd8aa",
+      "member": "scipy_openblas64/lib/libscipy_openblas64_.so",
+      "file": "libscipy_openblas64_.so",
+      "sha256": "096271d38e4fe419b241ca4fdb3a12370b7d2aa3519a58c5e3cd9b01761cdf1f",
+      "size": 24639425
+    },
+    "linux-arm64": {
+      "distribution": "scipy-openblas64",
+      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl",
+      "url": "https://files.pythonhosted.org/packages/d7/89/643b88f749a20d07a68477c4d82a253b42784b92fb9a0fdfec2fe20a5f1b/scipy_openblas64-0.3.31.22.0-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl",
+      "wheel_sha256": "476a07293ce5599743b48ab3ea232d768e965a9290fd4199e1eb22ca0eabe10f",
+      "member": "scipy_openblas64/lib/libscipy_openblas64_.so",
+      "file": "libscipy_openblas64_.so",
+      "sha256": "e5a4d4144f39365556651139eb144be2181b099488571fa38c155d76ee297c9b",
+      "size": 27717217
+    },
+    "linux-musl-x64": {
+      "distribution": "scipy-openblas64",
+      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-musllinux_1_2_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/3f/bd/c1a85f711bf56a6e6136d41296330d322a4c07232b879b8a9b6c92c4dec1/scipy_openblas64-0.3.31.22.0-py3-none-musllinux_1_2_x86_64.whl",
+      "wheel_sha256": "fcbb6b0dcccc46e8afce0221ea22f56d8bb32d2939315c6e4a655821c0618eb7",
+      "member": "scipy_openblas64/lib/libscipy_openblas64_.so",
+      "file": "libscipy_openblas64_.so",
+      "sha256": "c4fda62d0a503475b58923841bc2756a578a94ff30c2c70df5185878e61f0d44",
+      "size": 24872641
+    },
+    "linux-musl-arm64": {
+      "distribution": "scipy-openblas64",
+      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-musllinux_1_2_aarch64.whl",
+      "url": "https://files.pythonhosted.org/packages/85/34/2a1c79ab0dcfeb523ab8a573b8909851509aaafbc85e3381d7d6e7d3bc04/scipy_openblas64-0.3.31.22.0-py3-none-musllinux_1_2_aarch64.whl",
+      "wheel_sha256": "1b4076bc374705c17bb00531b770fc92a75186cd7c18bab3f8fc0f247659cd71",
+      "member": "scipy_openblas64/lib/libscipy_openblas64_.so",
+      "file": "libscipy_openblas64_.so",
+      "sha256": "afe977a3e01813ab290afc8a7f1fd715362278cb4cfbde6b017f0885cf76e28c",
+      "size": 27651561
+    },
+    "osx-x64": {
+      "distribution": "scipy-openblas64",
+      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-macosx_10_9_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/c0/9c/125a3aca0f6ce06ea939bc7bff1ade01e2052eb2fe1bf5742c22bdf7df3e/scipy_openblas64-0.3.31.22.0-py3-none-macosx_10_9_x86_64.whl",
+      "wheel_sha256": "611a565225a4a3d0ad045e457ab34ea6d6f766a6d95c93c7ccadc1b58c58af98",
+      "member": "scipy_openblas64/lib/libscipy_openblas64_.dylib",
+      "file": "libscipy_openblas64_.dylib",
+      "sha256": "d9919a040a7c02961909166b9970c9a3aea39a62b1b9a73127a7fb1f23e39275",
+      "size": 25134800
+    },
+    "osx-arm64": {
+      "distribution": "scipy-openblas64",
+      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-macosx_11_0_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/92/2e/401d60c3ba10308b43f65d081ed491b890f99bd50bc46d4a6d03b7cfc127/scipy_openblas64-0.3.31.22.0-py3-none-macosx_11_0_arm64.whl",
+      "wheel_sha256": "422f0144f61b78e1a6cfe07638a79c9232abbfeb6ef2962ba517572db0649b33",
+      "member": "scipy_openblas64/lib/libscipy_openblas64_.dylib",
+      "file": "libscipy_openblas64_.dylib",
+      "sha256": "179ac9b89548f2931771960fedabd6487efcdeafc4476be3122cd391c34dc6d0",
+      "size": 25206560
+    }
+  }
+}

@@ -3,7 +3,9 @@ using NumSharp;
 using NumSharp.Backends;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.X86;
 
 namespace NumSharp.Interop.Blas
 {
@@ -99,6 +101,7 @@ namespace NumSharp.Interop.Blas
         private static delegate* unmanaged[Cdecl]<int, void> _setNumThreads;
         private static delegate* unmanaged[Cdecl]<int> _getNumThreads;
         private static delegate* unmanaged[Cdecl]<IntPtr> _getConfig;
+        private static delegate* unmanaged[Cdecl]<IntPtr> _getCoreName;
 
         /// <summary>
         ///     The BLAS integer ceiling — NumPy's <c>BLAS_MAXSIZE</c>, "-1 to be conservative, in case
@@ -119,6 +122,11 @@ namespace NumSharp.Interop.Blas
         ///     Explicit file path, a directory to search, or null to auto-discover (see
         ///     <see cref="AutoCandidates"/>).
         /// </param>
+        /// <param name="coreType">
+        ///     OpenBLAS <c>DYNAMIC_ARCH</c> kernel to force via <c>OPENBLAS_CORETYPE</c>, or null to
+        ///     let OpenBLAS choose. Applied before the loader runs, and therefore only effective
+        ///     when this call is the one that loads the library.
+        /// </param>
         /// <remarks>
         ///     <b>A failed load is a no-op.</b> Nothing here touches the currently bound library
         ///     until a replacement has resolved every required symbol, so <c>Load</c> either
@@ -130,10 +138,25 @@ namespace NumSharp.Interop.Blas
         /// </remarks>
         /// <exception cref="DllNotFoundException">No candidate library could be loaded.</exception>
         /// <exception cref="EntryPointNotFoundException">The library loaded but is not a CBLAS provider.</exception>
-        internal static void Load(string path)
+        internal static void Load(string path, string coreType = null)
         {
             lock (SyncRoot)
             {
+                // Must happen BEFORE the loader runs: OpenBLAS reads OPENBLAS_CORETYPE once, while
+                // its DYNAMIC_ARCH initialiser is picking a micro-kernel, and never looks again.
+                if (!string.IsNullOrWhiteSpace(coreType))
+                {
+                    EnsureCoreTypeRunnable(coreType);
+                    if (!TrySetNativeEnvironment("OPENBLAS_CORETYPE", coreType))
+                        throw new PlatformNotSupportedException(
+                            "Blas.Enable: could not set OPENBLAS_CORETYPE where the native library " +
+                            "can see it (the C runtime's environment is not reachable on this " +
+                            "platform). Set OPENBLAS_CORETYPE in the environment before starting " +
+                            "the process instead.");
+
+                    RequestedCoreType = coreType;
+                }
+
                 // An explicitly named library is BINDING: parity is a claim about one specific
                 // binary, so quietly falling back to whatever else is installed would produce
                 // confidently wrong bits. Only the unattended case searches.
@@ -211,7 +234,7 @@ namespace NumSharp.Interop.Blas
                 _sgemm32 = null; _dgemm32 = null; _sgemv32 = null; _dgemv32 = null;
                 _ssyrk32 = null; _dsyrk32 = null; _sdot32 = null; _ddot32 = null;
                 _saxpy32 = null; _daxpy32 = null;
-                _setNumThreads = null; _getNumThreads = null; _getConfig = null;
+                _setNumThreads = null; _getNumThreads = null; _getConfig = null; _getCoreName = null;
             }
         }
 
@@ -231,11 +254,19 @@ namespace NumSharp.Interop.Blas
         {
             // (prefix, suffix, ilp64) tuples, most specific first. numpy's wheels rename symbols so
             // an ILP64 OpenBLAS can coexist with a system LP64 one in the same process.
+            //
+            // ("scipy_", "", false) is scipy-openblas32 — the LP64 sibling distribution, which
+            // exports scipy_cblas_sgemm with a 32-bit BLAS integer. It is not an exotic case:
+            // NumPy's OWN build picks it over scipy-openblas64 on Windows/ARM64 (see
+            // tools/wheels/cibw_before_build.sh), so it is the library a win-arm64 parity run must
+            // bind. It has to be probed BEFORE the bare ("", "", false) scheme, since a plain
+            // cblas_sgemm export is what a system CBLAS provides and scipy's build has none.
             var schemes = new[]
             {
                 new ValueTuple<string, string, bool>("scipy_", "64_", true),
                 new ValueTuple<string, string, bool>("", "64_", true),
                 new ValueTuple<string, string, bool>("", "_64", true),
+                new ValueTuple<string, string, bool>("scipy_", "", false),
                 new ValueTuple<string, string, bool>("", "", false)
             };
 
@@ -300,6 +331,8 @@ namespace NumSharp.Interop.Blas
                     if (NativeLibrary.TryGetExport(handle, name, out p)) { _getNumThreads = (delegate* unmanaged[Cdecl]<int>)p; break; }
                 foreach (var name in new[] { prefix + "openblas_get_config" + suffix, "openblas_get_config" })
                     if (NativeLibrary.TryGetExport(handle, name, out p)) { _getConfig = (delegate* unmanaged[Cdecl]<IntPtr>)p; break; }
+                foreach (var name in new[] { prefix + "openblas_get_corename" + suffix, "openblas_get_corename" })
+                    if (NativeLibrary.TryGetExport(handle, name, out p)) { _getCoreName = (delegate* unmanaged[Cdecl]<IntPtr>)p; break; }
 
                 return;
             }
@@ -320,11 +353,34 @@ namespace NumSharp.Interop.Blas
         }
 
         /// <summary>
-        ///     Candidates for the unattended case (no library named): the numpy wheels reachable
-        ///     from any python on PATH, then bare loader names.
+        ///     Candidates for the unattended case (no library named), in a DELIBERATE and fixed
+        ///     order: the OpenBLAS this package bundles, then the numpy wheels reachable from any
+        ///     python on PATH, then bare loader names.
         /// </summary>
+        /// <remarks>
+        ///     <b>The bundled binary is probed FIRST, on purpose.</b> It is the prebuilt
+        ///     scipy-openblas artifact NumPy itself pins (verified byte-identical to the library in
+        ///     numpy 2.4.2's <c>numpy.libs</c>), so on a machine with that NumPy the two orders are
+        ///     indistinguishable — and on every other machine, going bundled-first is what makes the
+        ///     answer a property of the PACKAGE VERSION rather than of whichever python happens to
+        ///     be on PATH. A library's numeric output should not change because an unrelated
+        ///     <c>pip install</c> ran, and a .NET app with no python installed should not get a
+        ///     different backend from one that has it.
+        ///     <para>
+        ///     The cost is explicit: to match a numpy whose OpenBLAS differs from the bundled one,
+        ///     NAME it — <c>Blas.Enable(path)</c> or <c>NUMSHARP_PARITY_BLAS</c>, both of which are
+        ///     binding and are probed ahead of everything here. <c>NUMSHARP_BLAS_BUNDLED=0</c> drops
+        ///     the bundled entry entirely and restores discovery-first order.
+        ///     </para>
+        /// </remarks>
         private static IEnumerable<string> AutoCandidates()
         {
+            if (!string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLED"), "0",
+                    StringComparison.Ordinal))
+                foreach (var dir in BundledDirectories())
+                    foreach (var p in Expand(dir))
+                        yield return p;
+
             foreach (var dir in PythonLibDirectories())
                 foreach (var p in Expand(dir))
                     yield return p;
@@ -335,6 +391,97 @@ namespace NumSharp.Interop.Blas
             yield return "libopenblas";
             yield return "openblas";
             yield return "libblas";
+        }
+
+        /// <summary>
+        ///     Directories that hold this package's bundled OpenBLAS runtime asset.
+        /// </summary>
+        /// <remarks>
+        ///     NuGet lays native assets out as <c>runtimes/&lt;rid&gt;/native/</c>, which is what a
+        ///     plain <c>dotnet build</c> reproduces under the output directory. A RID-specific or
+        ///     self-contained publish instead FLATTENS them next to the app, so the app directory
+        ///     itself is probed too. Both the running assembly's directory and
+        ///     <see cref="AppContext.BaseDirectory"/> are used because they differ when NumSharp is
+        ///     loaded as a plugin or from a shadow-copied location.
+        /// </remarks>
+        private static IEnumerable<string> BundledDirectories()
+        {
+            var bases = new List<string>();
+            var appBase = AppContext.BaseDirectory;
+            if (!string.IsNullOrEmpty(appBase))
+                bases.Add(appBase);
+
+            try
+            {
+                var loc = typeof(CBlasNative).Assembly.Location;
+                if (!string.IsNullOrEmpty(loc))
+                {
+                    var dir = Path.GetDirectoryName(loc);
+                    if (!string.IsNullOrEmpty(dir) && !bases.Contains(dir, StringComparer.OrdinalIgnoreCase))
+                        bases.Add(dir);
+                }
+            }
+            catch (NotSupportedException)
+            {
+                // single-file publish: Location is empty/unsupported, AppContext.BaseDirectory covers it
+            }
+
+            foreach (var b in bases)
+            {
+                foreach (var rid in RuntimeIdentifierCandidates())
+                    yield return Path.Combine(b, "runtimes", rid, "native");
+
+                // publish flattens native assets into the app directory
+                yield return b;
+            }
+        }
+
+        /// <summary>RID folder names this machine could legitimately load a native asset from.</summary>
+        private static IEnumerable<string> RuntimeIdentifierCandidates()
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // The runtime's own answer first — it already knows about musl and about the exact
+            // architecture, and on .NET 8+ it is the portable form ("win-x64", "linux-musl-arm64").
+            string reported = null;
+            try
+            {
+                reported = RuntimeInformation.RuntimeIdentifier;
+            }
+            catch (PlatformNotSupportedException)
+            {
+            }
+
+            if (!string.IsNullOrEmpty(reported) && seen.Add(reported))
+                yield return reported;
+
+            string arch;
+            switch (RuntimeInformation.ProcessArchitecture)
+            {
+                case Architecture.X64: arch = "x64"; break;
+                case Architecture.Arm64: arch = "arm64"; break;
+                case Architecture.X86: arch = "x86"; break;
+                case Architecture.Arm: arch = "arm"; break;
+                default: yield break;
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                if (seen.Add("win-" + arch)) yield return "win-" + arch;
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                if (seen.Add("osx-" + arch)) yield return "osx-" + arch;
+            }
+            else
+            {
+                // A glibc host must not load the musl asset or vice versa, but the reported RID
+                // above already distinguishes them; these are only the fallbacks for a runtime that
+                // did not report one, so both spellings are offered and the loader rejects the
+                // wrong one (it simply fails to load, which is a silent decline here).
+                if (seen.Add("linux-" + arch)) yield return "linux-" + arch;
+                if (seen.Add("linux-musl-" + arch)) yield return "linux-musl-" + arch;
+            }
         }
 
         /// <summary>Expands a path that may be a file, or a directory holding a BLAS library.</summary>
@@ -460,6 +607,135 @@ namespace NumSharp.Interop.Blas
             }
         }
 
+        /// <summary>The <c>OPENBLAS_CORETYPE</c> this process asked for, or null if it never did.</summary>
+        internal static string RequestedCoreType { get; private set; }
+
+        /// <summary>
+        ///     Validates a core type requested when the library is ALREADY loaded, where it can no
+        ///     longer be applied.
+        /// </summary>
+        /// <remarks>
+        ///     OpenBLAS reads <c>OPENBLAS_CORETYPE</c> once, while its DYNAMIC_ARCH initialiser
+        ///     runs, so a request arriving after that is unenforceable — and silently dropping it is
+        ///     the worst answer available: the caller believes the kernel is pinned, every product
+        ///     still computes, and the bits are whatever the CPU happened to choose. So it either
+        ///     already holds (idempotent success) or it is reported.
+        /// </remarks>
+        internal static void VerifyCoreTypeAlreadyInEffect(string coreType)
+        {
+            // An impossible request is impossible regardless of load order — report that first,
+            // since it is the more specific and more actionable failure.
+            EnsureCoreTypeRunnable(coreType);
+
+            var current = GetCoreName();
+            if (current == null || string.Equals(current, coreType, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            throw new InvalidOperationException(
+                $"Blas.Enable: cannot pin OPENBLAS_CORETYPE to '{coreType}' — a BLAS library is " +
+                $"already loaded in this process and dispatched to '{current}'. OpenBLAS reads that " +
+                "variable once, while it is selecting a micro-kernel, and never re-reads it, so the " +
+                "choice is fixed for the lifetime of the process. Pin the core type on the FIRST " +
+                "Blas.Enable call, or set OPENBLAS_CORETYPE in the environment before the process " +
+                "starts.");
+        }
+
+        [DllImport("ucrtbase.dll", EntryPoint = "_putenv_s", CharSet = CharSet.Ansi)]
+        private static extern int WindowsPutEnv(string name, string value);
+
+        [DllImport("libc", EntryPoint = "setenv", CharSet = CharSet.Ansi)]
+        private static extern int UnixSetEnv(string name, string value, int overwrite);
+
+        /// <summary>
+        ///     Sets an environment variable somewhere a NATIVE <c>getenv()</c> can actually read it.
+        /// </summary>
+        /// <remarks>
+        ///     <b><see cref="Environment.SetEnvironmentVariable(string,string)"/> is not enough</b>,
+        ///     and fails silently, which is the worst way for this to go wrong: .NET keeps its own
+        ///     environment table, so the managed getter reads back the new value while the C runtime
+        ///     the native library links against never sees it. Measured directly — setting
+        ///     <c>OPENBLAS_CORETYPE=Nehalem</c> through the managed API and then loading OpenBLAS
+        ///     still dispatched <c>Haswell</c>, i.e. the pin appeared to be applied and was not.
+        ///     Going through the CRT (<c>ucrtbase!_putenv_s</c>) dispatched <c>Nehalem</c> as asked.
+        ///     Windows' own <c>SetEnvironmentVariableW</c> does NOT work either: it updates the
+        ///     process environment block, not the CRT copy that <c>getenv</c> reads.
+        ///     <para>The managed table is updated too, so both views agree afterwards.</para>
+        /// </remarks>
+        private static bool TrySetNativeEnvironment(string name, string value)
+        {
+            bool ok = false;
+            try
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    ok = WindowsPutEnv(name, value) == 0;
+                else
+                    ok = UnixSetEnv(name, value, 1) == 0;
+            }
+            catch (DllNotFoundException)
+            {
+            }
+            catch (EntryPointNotFoundException)
+            {
+            }
+
+            if (ok)
+                Environment.SetEnvironmentVariable(name, value);
+
+            return ok;
+        }
+
+        /// <summary>
+        ///     Refuses a core type whose instruction set this CPU cannot execute.
+        /// </summary>
+        /// <remarks>
+        ///     <c>OPENBLAS_CORETYPE</c> BYPASSES OpenBLAS' runtime capability detection — that is
+        ///     the point of it — so naming a kernel above the CPU's ISA does not degrade, it
+        ///     executes an unsupported instruction. Measured: forcing <c>SkylakeX</c> on this
+        ///     Haswell host killed the process with <c>Illegal instruction</c>. That is not a
+        ///     catchable exception, so it has to be prevented rather than handled.
+        ///     <para>
+        ///     Only the families with a clear ISA floor are checked. An unrecognised name is passed
+        ///     through — OpenBLAS' core list is build-specific and inventing a rejection here would
+        ///     block valid kernels on architectures this table knows nothing about.
+        ///     </para>
+        /// </remarks>
+        private static void EnsureCoreTypeRunnable(string coreType)
+        {
+            bool ok;
+            switch (coreType.ToUpperInvariant())
+            {
+                case "SKYLAKEX":
+                case "COOPERLAKE":
+                case "SAPPHIRERAPIDS":
+                    ok = Avx512F.IsSupported;
+                    break;
+                case "HASWELL":
+                case "ZEN":
+                    ok = Avx2.IsSupported && Fma.IsSupported;
+                    break;
+                case "SANDYBRIDGE":
+                case "BULLDOZER":
+                case "PILEDRIVER":
+                case "STEAMROLLER":
+                case "EXCAVATOR":
+                    ok = Avx.IsSupported;
+                    break;
+                case "NEHALEM":
+                    ok = Sse42.IsSupported;
+                    break;
+                default:
+                    return; // unknown to this table — trust the caller
+            }
+
+            if (!ok)
+                throw new PlatformNotSupportedException(
+                    $"Blas.Enable: this CPU cannot execute OpenBLAS' '{coreType}' kernels. " +
+                    "OPENBLAS_CORETYPE overrides OpenBLAS' own CPU detection, so loading it would " +
+                    "not fall back — it would terminate the process with an illegal instruction. " +
+                    "Leave the core type unset to let OpenBLAS choose the best kernel this machine " +
+                    "supports (which is also what NumPy does by default).");
+        }
+
         /// <summary>Pins the BLAS worker-thread count (OpenBLAS only); results depend on it.</summary>
         internal static bool TrySetNumThreads(int threads)
         {
@@ -480,6 +756,23 @@ namespace NumSharp.Interop.Blas
         internal static string GetConfig()
         {
             return _getConfig == null ? null : Marshal.PtrToStringAnsi(_getConfig());
+        }
+
+        /// <summary>
+        ///     The DYNAMIC_ARCH micro-kernel family this process actually dispatched to
+        ///     (e.g. "Haswell"), or null when the library does not report one.
+        /// </summary>
+        /// <remarks>
+        ///     This is a correctness-relevant fact, not a diagnostic: a DYNAMIC_ARCH OpenBLAS picks
+        ///     its GEMM micro-kernel from the running CPU, and different kernels accumulate in a
+        ///     different order, so the same binary gives different bits on a different machine.
+        ///     Measured on one host by forcing the choice with <c>OPENBLAS_CORETYPE</c>: Haswell,
+        ///     Nehalem, Sandybridge and Katmai each produced a different result for the same
+        ///     float32 product.
+        /// </remarks>
+        internal static string GetCoreName()
+        {
+            return _getCoreName == null ? null : Marshal.PtrToStringAnsi(_getCoreName());
         }
 
         #region call wrappers (widths marshalled per IsIlp64)

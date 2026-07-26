@@ -87,18 +87,113 @@ namespace NumSharp.Interop.Blas
         ///     a mistyped path demoted every subsequent product back to the managed kernels while
         ///     <see cref="Enabled"/> still said true.)
         /// </remarks>
+        /// <param name="coreType">
+        ///     The OpenBLAS <c>DYNAMIC_ARCH</c> micro-kernel to force (e.g. <see cref="ParityCoreType"/>),
+        ///     or null to let OpenBLAS pick the best one this CPU supports — which is what NumPy
+        ///     does, and therefore the right default for matching a NumPy on the same machine.
+        ///     Pin it only to make results reproducible across DIFFERENT machines; see
+        ///     <see cref="ParityCoreType"/> for the trade-off and the hazard.
+        /// </param>
         /// <exception cref="DllNotFoundException">No CBLAS library could be located or loaded.</exception>
         /// <exception cref="EntryPointNotFoundException">The library is not a CBLAS provider.</exception>
-        public static void Enable(string library = null, int threads = 0)
+        /// <exception cref="PlatformNotSupportedException">
+        ///     <paramref name="coreType"/> names kernels this CPU cannot execute.
+        /// </exception>
+        public static void Enable(string library = null, int threads = 0, string coreType = null)
         {
             if (!CBlasNative.IsLoaded || (library != null && library != CBlasNative.LibraryPath))
-                CBlasNative.Load(library);
+            {
+                CBlasNative.Load(library, coreType);
+            }
+            else if (!string.IsNullOrWhiteSpace(coreType))
+            {
+                // The library is already loaded, so its micro-kernel is already chosen and this
+                // request cannot be honoured. Dropping it silently would leave the caller believing
+                // the kernel is pinned while the bits are whatever this CPU picked — so it either
+                // already holds or it throws.
+                CBlasNative.VerifyCoreTypeAlreadyInEffect(coreType);
+            }
 
             if (threads > 0)
                 CBlasNative.TrySetNumThreads(threads);
 
             if (!(BackendFactory.GetEngine().Blas is OpenBlasBackend))
                 BackendFactory.GetEngine().Blas = new OpenBlasBackend();
+        }
+
+        /// <summary>
+        ///     The OpenBLAS micro-kernel the committed <c>matmul_parity</c> corpus was generated
+        ///     with, and the one to pin for results that reproduce on another machine.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     Bundling the binary fixes only two of the three things the result bits depend on.
+        ///     The library build is now pinned by the package and the worker-thread count by
+        ///     <see cref="Enable"/>'s <c>threads</c> argument — but OpenBLAS is built
+        ///     <c>DYNAMIC_ARCH</c>, so it still chooses a micro-kernel from the CPU it finds itself
+        ///     on, and different kernels accumulate in a different order. Measured on one host by
+        ///     forcing the choice: Haswell, Nehalem, Sandybridge and Katmai each produced different
+        ///     bytes for the same float32 product. So "same binary" is necessary and not sufficient.
+        ///     </para>
+        ///     <para>
+        ///     Passing this as <c>coreType</c> closes that last gap for any x86-64 CPU with AVX2 and
+        ///     FMA (Haswell 2013 and later, and every AMD Zen), which is what makes the host-pinned
+        ///     corpus replayable on a machine that would otherwise dispatch a newer kernel.
+        ///     </para>
+        ///     <para>
+        ///     <b>It is NOT the default, deliberately.</b> The package's main promise is matching the
+        ///     NumPy on the same machine, and that NumPy dispatches by CPU — so pinning here would
+        ///     CREATE a divergence on any host newer than Haswell. Pin both sides or neither: the
+        ///     same <c>OPENBLAS_CORETYPE</c> variable drives NumPy too, because it is the same
+        ///     library.
+        ///     </para>
+        ///     <para>
+        ///     <b>Hazard:</b> this overrides OpenBLAS' CPU detection rather than requesting a
+        ///     preference, so naming kernels the CPU cannot run terminates the process with an
+        ///     illegal instruction. <see cref="Enable"/> rejects the combinations it can recognise
+        ///     with a <see cref="PlatformNotSupportedException"/> first.
+        ///     </para>
+        ///     <para>
+        ///     Only effective when the call actually loads the library: OpenBLAS reads the variable
+        ///     while initialising and never re-reads it, so it cannot be changed afterwards.
+        ///     </para>
+        /// </remarks>
+        public const string ParityCoreType = "Haswell";
+
+        /// <summary>
+        ///     The <c>DYNAMIC_ARCH</c> micro-kernel family OpenBLAS actually dispatched to
+        ///     (e.g. "Haswell"), or null when no library is loaded or it does not report one.
+        /// </summary>
+        public static string CoreName => CBlasNative.IsLoaded ? CBlasNative.GetCoreName() : null;
+
+        /// <summary>
+        ///     Full path of the CBLAS library currently loaded, or null when none is.
+        /// </summary>
+        /// <remarks>
+        ///     Exposed because "which binary answered?" is a correctness question here, not a
+        ///     diagnostic one — the file this points at is what a parity claim is about, and it is
+        ///     the input to reproducing or hashing a run. <see cref="Info"/> embeds it in prose;
+        ///     this is the machine-readable form.
+        /// </remarks>
+        public static string LibraryPath => CBlasNative.IsLoaded ? CBlasNative.LibraryPath : null;
+
+        /// <summary>
+        ///     True when the loaded library is the one this package bundles (as opposed to one
+        ///     discovered on the machine or named by the caller).
+        /// </summary>
+        public static bool IsBundledLibrary
+        {
+            get
+            {
+                var path = LibraryPath;
+                if (string.IsNullOrEmpty(path))
+                    return false;
+
+                var dir = System.IO.Path.GetDirectoryName(path);
+                return !string.IsNullOrEmpty(dir) &&
+                       System.IO.Path.GetFileName(dir).Equals("native", StringComparison.OrdinalIgnoreCase) &&
+                       dir.IndexOf("runtimes", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
         }
 
         /// <summary>

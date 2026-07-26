@@ -2970,6 +2970,7 @@ def blas_identity():
     """
     import ctypes
     import glob
+    import hashlib
     import platform
 
     info = {"numpy": np.__version__, "platform": platform.platform(),
@@ -2991,6 +2992,15 @@ def blas_identity():
         return info
 
     info["blas_library"] = os.path.basename(lib)
+    # The library's CONTENT hash, which is what the claim is actually about. The file NAME is a
+    # poor proxy for it in both directions: pip's delvewheel/auditwheel mangle the name per build
+    # (numpy ships libscipy_openblas64_-<hash>.dll), while NumSharp's bundled copy of the very same
+    # bytes is plainly libscipy_openblas64_.dll. Comparing names alone therefore excuses a host that
+    # is genuinely bit-identical, and would accept a differently-built library that happened to be
+    # named the same. The C# gate prefers this field and keeps the name as a fallback for corpora
+    # generated before it existed.
+    with open(lib, "rb") as fh:
+        info["blas_library_sha256"] = hashlib.sha256(fh.read()).hexdigest()
     try:
         dll = ctypes.CDLL(lib)
         for prefix, suffix in (("scipy_", "64_"), ("", "64_"), ("", "")):

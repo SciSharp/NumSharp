@@ -376,3 +376,10 @@ benchmark/.claude_*.log
 # DocFX build OUTPUT — regenerated in CI from docs/website-src/ and deployed via the Pages artifact.
 # (docs/website-src/ is the tracked source; this is just its stale generated output.)
 docs/website/
+
+# NumSharp.Interop.BLAS bundled OpenBLAS runtime assets.
+# Downloaded on demand by src/NumSharp.Interop.BLAS/tools/fetch_openblas.py and verified against
+# the checked-in tools/openblas-manifest.json (that manifest IS the pin — the binaries themselves
+# are 186 MB and never belong in git).
+src/NumSharp.Interop.BLAS/runtimes/
+src/NumSharp.Interop.BLAS/tools/.wheel-cache/

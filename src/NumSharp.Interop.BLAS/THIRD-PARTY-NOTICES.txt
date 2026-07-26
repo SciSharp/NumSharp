@@ -1,0 +1,43 @@
+THIRD-PARTY NOTICES for NumSharp.Interop.BLAS
+============================================================================
+
+NumSharp.Interop.BLAS itself is licensed Apache-2.0, like the rest of NumSharp.
+
+This package additionally REDISTRIBUTES prebuilt OpenBLAS shared libraries as
+NuGet runtime assets (runtimes/<rid>/native/). They are the unmodified artifacts
+published on PyPI by the openblas-libs project as 0.3.31.22.0
+-- the very same binaries NumPy 2.4.2 bundles in its own wheels, which is what makes
+NumSharp's matrix products bit-identical to that NumPy's.
+
+Bundled components and their licenses:
+
+  OpenBLAS                               BSD-3-Clause-Attribution
+                                         https://github.com/OpenMathLib/OpenBLAS/
+
+  LAPACK                                 BSD-3-Clause-Attribution
+                                         https://github.com/OpenMathLib/OpenBLAS/
+
+  GCC runtime library (libgfortran)      GPL-3.0-with-GCC-exception
+                                         https://gcc.gnu.org/git/?p=gcc.git;a=tree;f=libgfortran
+
+  openblas-libs (packaging)              BSD-2-Clause
+                                         https://github.com/MacPython/openblas-libs
+
+The libgfortran runtime is covered by the GCC Runtime Library Exception, which
+permits redistribution as part of a larger work under other terms; this is the
+same basis on which NumPy and SciPy ship it in every binary wheel.
+
+Bundled artifacts (sha256 of the extracted shared library):
+
+  linux-arm64        libscipy_openblas64_.so      e5a4d4144f39365556651139eb144be2181b099488571fa38c155d76ee297c9b
+  linux-musl-arm64   libscipy_openblas64_.so      afe977a3e01813ab290afc8a7f1fd715362278cb4cfbde6b017f0885cf76e28c
+  linux-musl-x64     libscipy_openblas64_.so      c4fda62d0a503475b58923841bc2756a578a94ff30c2c70df5185878e61f0d44
+  linux-x64          libscipy_openblas64_.so      096271d38e4fe419b241ca4fdb3a12370b7d2aa3519a58c5e3cd9b01761cdf1f
+  osx-arm64          libscipy_openblas64_.dylib   179ac9b89548f2931771960fedabd6487efcdeafc4476be3122cd391c34dc6d0
+  osx-x64            libscipy_openblas64_.dylib   d9919a040a7c02961909166b9970c9a3aea39a62b1b9a73127a7fb1f23e39275
+  win-arm64          scipy_openblas.dll           d732e798918b18abdd4ca268b093c070e0195259203d648efce8fc9a3acae524
+  win-x64            libscipy_openblas64_.dll     74a408729250596b0973e69fdd954eea07a70ff527a1dbaccf9ae21247b80377
+
+Full OpenBLAS / LAPACK license text:
+  https://github.com/OpenMathLib/OpenBLAS/blob/develop/LICENSE
+  https://github.com/OpenMathLib/OpenBLAS/blob/develop/lapack-netlib/LICENSE

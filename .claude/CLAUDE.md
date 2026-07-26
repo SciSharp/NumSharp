@@ -118,7 +118,7 @@ bit-identical to the per-element route (25/25 A/B), 0.80× → **6.47×** on 200
 
 | Package | Implements | Serves | Why |
 |---------|-----------|--------|-----|
-| `NumSharp.Interop.BLAS` (`src/NumSharp.Interop.BLAS/`) | `OpenBlasBackend : IBlasBackend` | `np.dot`, `np.matmul` for float32/float64 | matrix products through an external CBLAS (OpenBLAS/MKL/…) — faster on large matrices, and **byte-identical to a NumPy that calls the same binary**. Ships no native asset: it binds whatever BLAS the consumer already has. See below and `docs/GEMM_PARITY.md`. |
+| `NumSharp.Interop.BLAS` (`src/NumSharp.Interop.BLAS/`) | `OpenBlasBackend : IBlasBackend` | `np.dot`, `np.matmul` for float32/float64 | matrix products through OpenBLAS — faster on large matrices, and **byte-identical to NumPy**. **Bundles the binaries NumPy itself pins** (scipy-openblas 0.3.31.22.0, byte-identical to numpy 2.4.2's) as per-RID runtime assets, so parity needs no Python installed. See below and `docs/GEMM_PARITY.md`. |
 
 **`NumSharp.Interop.BLAS`** exists because no portable algorithm can match NumPy's float matrix
 products: for f32/f64 mat@mat NumPy **always** calls cblas (since gh-23588 it copies non-blasable
@@ -134,15 +134,44 @@ they are different C code and **disagree** when an operand is not blasable (a st
 rules — which is why `IBlasBackend` has both `TryDot` and `TryMatMul2D` rather than one
 matrix-product method. Strides are ported in ELEMENTS (NumPy's are bytes — same logic with
 `itemsize == 1`). Scope is Single/Double; every other dtype falls through to the managed kernel
-(integer products are bit-exact by construction — modular addition is associative). **Three load-bearing details:** the
-result bits depend on the BLAS **thread count** (1/2/4/24 threads give four different answers), a
+(integer products are bit-exact by construction — modular addition is associative).
+
+**The package BUNDLES the binary** (2026-07-26). It ships the prebuilt OpenBLAS artifacts NumPy
+itself pins — `scipy-openblas64==0.3.31.22.0` from numpy's `requirements/ci_requirements.txt`,
+**verified byte-identical** to numpy 2.4.2's copy (both sha256 `74a40872…`; NumPy's mangled filename
+IS that hash) — as `runtimes/<rid>/native/` assets for 8 RIDs (62 MB packed). This is not a reversal
+of the old "ships no native binaries" rule but its resolution: the objection was to bundling *an*
+OpenBLAS, and this is *the* one. **win-arm64 is scipy-openblas32**, because NumPy's own build selects
+LP64 there — it exports `scipy_cblas_sgemm`, a symbol scheme `Bind` lacked (added; binding a
+win-arm64 numpy's BLAS would have failed outright). Binaries are gitignored;
+`tools/openblas-manifest.json` is the checked-in pin and `tools/fetch_openblas.py` verifies **two**
+hashes per RID. Discovery order is fixed: explicit path/`NUMSHARP_PARITY_BLAS` (binding) → **bundled**
+→ `numpy.libs` on PATH → bare names; `NUMSHARP_BLAS_BUNDLED=0` drops the bundled entry.
+
+**Four load-bearing details:** the result bits depend on the BLAS **thread count** (1/2/4/24 threads
+give four different answers); they ALSO depend on the **DYNAMIC_ARCH kernel** the CPU dispatches, so
+bundling pins the build but *not* the answer — `Blas.Enable(coreType: Blas.ParityCoreType)` pins that
+too (probed: Haswell/Nehalem/Sandybridge/Katmai all differ; it is opt-in because the default must
+match the local NumPy, which also dispatches by CPU; it must be set BEFORE load, and forcing an ISA
+above the CPU **kills the process with SIGILL**, so `Enable` refuses what it can recognise). A
 **named library is binding** (`Blas.Enable(path)` / `NUMSHARP_PARITY_BLAS` is never silently
-substituted — parity is a claim about one binary), and the BLAS path is *faster* than the managed
-GEMM anyway (1.7–13×; 2048³ f64 293 ms vs 3860 ms). API: `Blas.Enable(library, threads)` /
-`Blas.Disable()` / `Blas.Enabled` / `Blas.Info`; `NUMSHARP_BLAS_AUTOINSTALL=0` opts out of the
-module-load install. Gate: the **host-pinned** `matmul_parity` corpus tier (342 cases — 342
-bit-exact with the backend, 294 divergent without it) which goes `Inconclusive`, never red, on a
-host that cannot load the pinned library.
+substituted, not even by the bundled copy). And the BLAS path is *faster* than the managed GEMM
+anyway (1.7–13×; 2048³ f64 293 ms vs 3860 ms).
+
+**Trap:** `Environment.SetEnvironmentVariable` does NOT reach a native `getenv` — .NET keeps its own
+table, so setting `OPENBLAS_CORETYPE` that way reads back correctly and changes nothing. Go through
+the CRT (`ucrtbase!_putenv_s` / `libc!setenv`); Windows' `SetEnvironmentVariableW` does not work
+either.
+
+API: `Blas.Enable(library, threads, coreType)` / `Blas.Disable()` / `Blas.Enabled` / `Blas.Info` /
+`Blas.LibraryPath` / `Blas.CoreName` / `Blas.IsBundledLibrary` / `Blas.ParityCoreType`;
+`NUMSHARP_BLAS_AUTOINSTALL=0` opts out of the module-load install. Gate: the **host-pinned**
+`matmul_parity` corpus tier (342 cases — 342 bit-exact with the backend, 294 divergent without it)
+which goes `Inconclusive`, never red, on a host that cannot load the pinned library. The pin matches
+the library by **content hash**, not filename — bundling forced that and it is strictly stronger
+(a name is mangled by delvewheel on one side and plain on the other, so name-matching skipped a
+genuinely bit-identical host and would have accepted a differently-built same-named library).
+Packaging contract: `MatmulParityBackendTests` (30 tests).
 
 ## Key Design Decisions
 
@@ -415,7 +444,7 @@ texts differ in wording; `np.broadcast_to(a, (2^62, 6))` builds the view where N
 
 **Each of those ufuncs exposes ONE NumPy-shaped overload** — `f(x[, x2], NDArray out = null, NDArray where = null, NPTypeCode? dtype = null)` mirroring NumPy's `f(x1[, x2], /, out=None, *, where=True, dtype=None)`: `out` is the second/third positional slot exactly like NumPy, `where`/`dtype` are reachable by name without `out`. `dtype=` selects the LOOP (NumPy loop-signature semantics, probed): computation runs at that precision even with `out=` (`sqrt([2.], out=f64, dtype=f32)` stores the f32-rounded value; `add(0.1, 0.2, out=f64, dtype=f32)` stores `0.30000001…`), `power(2, -1, dtype: f64) = 0.5` (the negative-int-exponent ValueError applies only to integer loops), `power(10, 11, dtype: f64) = 1e11` exactly (no compute-then-cast), `add(True, True, dtype: i32) = 2` (the bool→logical-OR remap keys off the FINAL loop dtype), `negative(bool, dtype: f64)` is legal, and inputs must reach the loop via same_kind casts (verbatim `Cannot cast ufunc '<name>' input [N] from ...` errors; binary errors are indexed, unary are not). Loop-existence gates raise `No loop matching ... ufunc <name>`: float-only ufuncs (sqrt/exp/log/trig + `divide`/`true_divide`) reject int/bool dtype; bitwise rejects float/complex/decimal dtype. `positive` is a full ufunc (identity loops at every dtype EXCEPT bool: plain `positive(bool)` and `dtype: bool` raise the verbatim `did not contain a loop with signature matching types <class 'numpy.dtypes.XDType'> -> ...` texts; `positive(bool, dtype: f64)` works). `round_`/`around` follow NumPy's non-ufunc shape `round(a, int decimals = 0, NDArray out = null)` (2nd positional is decimals, NOT out). Positional-dtype overloads (`np.sqrt(x, NPTypeCode.Single)`, `(x, Type)`) also exist for source compat as non-NumPy call forms (NumPy's 2nd positional is `out`). Tests: `Math/UfuncDtypeOverloadTests.cs`.
 
-**Four float32 unary loops are BIT-EXACT with NumPy**, not merely close — `exp`, `log`, `sin`, `cos` —
+**Five float32 unary loops are BIT-EXACT with NumPy**, not merely close — `exp`, `log`, `sin`, `cos`, `tanh` —
 because `Utilities/NDFloatMath.cs` ports the kernels NumPy 2.4.2 actually runs rather than calling the platform
 libm: `simd_exp_FLOAT` and `simd_log_FLOAT` (`numpy/_core/src/umath/loops_exponent_log.dispatch.c.src`, the
 `SIMD_AVX2_FMA3` instantiation — on Windows the AVX-512 variant is `!defined(_MSC_VER)`-gated and never compiled)
@@ -425,9 +454,38 @@ is correctly rounded — NumPy documents 2.52 ULP for exp, 3.83 for log, 0.647 f
 `MathF.Exp`/`Log`/`Sin`/`Cos` (~correctly rounded) differed from NumPy on **35% / 4.7% / 6.9% / 7.8%** of float32
 inputs, and the one-ULP-low `rad2deg` factor on **79%**; the blanket `unary ~ULP` fuzz excuse was absorbing all of
 it silently. Each is now verified **exhaustively: all 2³² float32 bit patterns**, through both the SIMD kernel and
-the scalar entry point (chunked-checksum sweep). The corpus tier `numpy_f32_kernels.jsonl` (120 cases) pins the
+the scalar entry point (chunked-checksum sweep). The corpus tier `numpy_f32_kernels.jsonl` (140 cases) pins the
 discriminating inputs in CI and `MisalignedRegistry`'s unary-ULP branch EXCLUDES these ops at a float32 result, so
 a 1-ULP regression turns the gate red.
+
+**`tanh` is the only one of the five that is also a FLOAT64 port**, and the only one that needed to be: NumPy ships
+its own table-driven kernel at BOTH widths (`simd_tanh_f32`/`simd_tanh_f64` in
+`numpy/_core/src/umath/loops_hyperbolic.dispatch.cpp.src`, converted by NumPy from Intel SVML), where exp/log/sin/cos
+fall through to the platform's scalar `npy_*` at f8 and already agreed. So `MathF.Tanh`/`Math.Tanh` differed from
+NumPy on **9.7% / 8.1%** of inputs (≤2 ULP / 1 ULP). tanh is odd, so the kernel works on `|x|` and ORs the sign back:
+`[0, SATURATION_THRESHOLD)` splits into **32 subintervals at f32 / 16 at f64**, the exponent field of `|x|` indexes a
+table of per-subinterval minimax coefficients plus a recentring offset `b`, and the answer is a degree-**6 / 16**
+Horner evaluation of `P(|x| - b)`. The top subintervals hold `1 + 0·y + 0·y² …`, which is how the saturated range
+returns exactly ±1 through the same arithmetic. **Unlike exp/log/sincos the FMA here is not a host pin** — that kernel
+spells its Horner steps as `hn::MulAdd`, an *explicit* fused multiply-add, so `FusedMultiplyAdd` is a literal
+transcription rather than a bet on MSVC's contraction. Verified over **all 2³² float32 inputs** (SIMD + scalar, and a
+negative control confirms the checksums detect the pre-port kernel in 34 of 512 chunks) and, at float64, over
+**4.83 billion** values — 2³² covering every sign × exponent × 2²⁰ mantissa prefix, plus 5.4×10⁸ full-width
+splitmix64 patterns. Gate: `numpy_f32_kernels.jsonl` + the new **`numpy_f64_kernels.jsonl`** (24 cases), with tanh
+carved out of the unary-ULP excuse at BOTH widths (`NumPyPortedFloat32Kernels` / `NumPyPortedFloat64Kernels`).
+
+**One deliberate departure from NumPy's own AVX2 shape, and it is what makes tanh fast:** the coefficient fetch is a
+**transpose, not a gather**. A subinterval's 8 f32 coefficients are 8 *consecutive* floats — exactly one `Vector256` —
+so the whole table read is 8 contiguous row loads plus an 8×8 transpose, where a gather-per-coefficient issues 8
+`vgatherdps` (64 element loads for the same 8 rows). Both were implemented and measured, bit-identical against the
+same table: transpose **0.071 ms** vs gather 0.124 ms at 100K and **7.41** vs 12.87 ms at 10M — 1.7×, the difference
+between losing to NumPy and beating it. float64 stays **scalar on purpose** (its lookup would cost 18 gathers per 4
+lanes, and the scalar kernel already outruns NumPy); `Vector512` is composed from two verified `Vector256` halves
+rather than an AVX-512 gather that cannot be tested on this host.
+
+**Perf (NPY/NS, Release, best-of-21 warm, `out=`, 100K / 10M):** `tanh` **1.78× / 1.82×** at float32 and
+**1.90× / 1.92×** at float64 — up from 0.18×/0.19× and 0.70×/0.68×, i.e. **9.9×/9.7×** and **2.7×/2.8×** faster than
+the `MathF.Tanh`/`Math.Tanh` calls it replaces.
 
 Specials (probed, and mostly consequences of NumPy blanking NaN lanes before its range compares): any NaN — quiet,
 signalling, either sign, any payload — returns the canonical `0x7fc00000` (note .NET's own `float.NaN` is
@@ -455,12 +513,14 @@ rarely-taken subnormal branches are kept as BRANCHES rather than folded into bra
 denormal split cost ~0.17 ns/element and log's ~0.15 — a fifth of each kernel), and the vector overloads carry
 `AggressiveOptimization` because without it tier-0 JIT made the first ~40 calls 27× slower than steady state.
 
-**Still the platform libm at float32/float64** (measured, documented, NOT ported): `tanh` (9.7% / 8.1% of inputs
-differ, ≤2 ULP), `exp2` (0.04% / 0.02%, 1 ULP), and `expm1`/`log1p`, which NumSharp additionally computes as
+**Still the platform libm at float32/float64** (measured, documented, NOT ported): `exp2` (0.04% / 0.02% of
+inputs differ, 1 ULP), and `expm1`/`log1p` (31.1% / 30.7% and 33.6% / 15.1%), which NumSharp additionally computes as
 `Exp(x)-1` / `Log(1+x)` — catastrophic for small |x| (`expm1(1e-8)` returns **0** where NumPy returns 1e-8) and a
-signed-zero bug (`expm1(-0.0)` → `+0.0`). tanh IS portable (NumPy has its own LUT-based SIMD kernel); expm1/log1p
-are not (NumPy calls the CRT). float64 `exp`/`log`/`sin`/`cos` and every float16 loop already agree with NumPy
-bit-for-bit on this platform and need no port.
+signed-zero bug (`expm1(-0.0)` → `+0.0`). **None of these three is portable** — NumPy calls the CRT for all of them,
+so bit-parity is not reachable the way it was for exp/log/sin/cos/tanh; the expm1/log1p *accuracy* bug is a separate,
+genuine defect worth fixing on its own terms (note .NET's `float.ExpM1`/`double.ExpM1`/`LogP1` are themselves just
+`Exp(x)-1`/`Log(1+x)` and do NOT help). float16 loops (17 differing values out of all 65,536) and float64
+`exp`/`log`/`sin`/`cos` already agree with NumPy bit-for-bit on this platform and need no port.
 ### Math — Reductions
 `all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `average_returned`, `count_nonzero`, `cumprod`, `cumsum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `ptp`, `quantile`, `std`, `sum`, `var`
 

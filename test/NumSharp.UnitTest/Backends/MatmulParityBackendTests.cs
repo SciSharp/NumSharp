@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Backends;
@@ -246,6 +247,212 @@ namespace NumSharp.UnitTest.Backends
             // OpenBLAS reports the count back; a reference CBLAS has no such entry point (-1).
             Assert.IsTrue(info.Contains("threads 1") || info.Contains("threads -1"), info);
         }
+
+        #region the bundled OpenBLAS runtime asset
+
+        // The package ships the prebuilt OpenBLAS binaries NumPy itself pins (scipy-openblas
+        // 0.3.31.22.0) as runtimes/<rid>/native/ assets, so a .NET app gets NumPy's exact matrix
+        // products with no Python installed. These tests hold the packaging contract; the BITS are
+        // gated by FuzzCorpusTests.MatmulParity, whose host pin now matches the library by CONTENT
+        // HASH — which is what makes the bundled copy and NumPy's hash-mangled one the same library.
+
+        /// <summary>The RID asset must reach the build output, or nothing below can load it.</summary>
+        [TestMethod]
+        public void BundledLibrary_ForThisRid_ReachesTheBuildOutput()
+        {
+            var lib = FindBundledLibrary();
+            if (lib == null)
+                Assert.Inconclusive(
+                    "no bundled OpenBLAS asset staged for this RID — run " +
+                    "`python src/NumSharp.Interop.BLAS/tools/fetch_openblas.py`. The package builds " +
+                    "without them and falls back to discovery, so this is a staging gap, not a defect.");
+
+            Assert.IsTrue(new FileInfo(lib).Length > 1_000_000,
+                "a real OpenBLAS build is tens of MB; this looks like a placeholder: " + lib);
+        }
+
+        /// <summary>
+        ///     Auto-discovery takes the bundled library first — the whole point of bundling.
+        /// </summary>
+        /// <remarks>
+        ///     Determinism is the reason this order is fixed rather than "whatever is found first":
+        ///     a library's numeric output must not change because an unrelated `pip install` ran, and
+        ///     an app with no python must not get a different backend from one that has it. Matching
+        ///     some OTHER numpy stays possible, but only by NAMING its library — which is binding.
+        /// </remarks>
+        [TestMethod]
+        public void AutoDiscovery_PrefersTheBundledLibrary()
+        {
+            if (FindBundledLibrary() == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            RequireBlas();
+            Assert.IsTrue(Blas.IsBundledLibrary,
+                "auto-discovery should bind the bundled asset, but loaded: " + Blas.LibraryPath);
+            StringAssert.Contains(Blas.LibraryPath, "runtimes");
+        }
+
+        /// <summary>A named library still wins over the bundled one, and is never substituted.</summary>
+        [TestMethod]
+        public void NamedLibrary_OutranksTheBundledOne_AndAMissingOneDoesNotFallBackToIt()
+        {
+            if (FindBundledLibrary() == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            // Bundling must not weaken the binding guarantee: naming a library that cannot be
+            // loaded has to fail, not quietly succeed against the copy sitting in the output folder.
+            // That failure mode would be invisible — the products still compute, just with a
+            // different binary than the caller pinned.
+            Assert.ThrowsExactly<DllNotFoundException>(
+                () => Blas.Enable(Path.Combine(AppContext.BaseDirectory, "no-such-blas-library.dll")));
+            Assert.IsFalse(Blas.Enabled);
+        }
+
+        /// <summary>NUMSHARP_BLAS_BUNDLED=0 drops the bundled entry from discovery.</summary>
+        [TestMethod]
+        public void BundledLibrary_CanBeOptedOutOf()
+        {
+            if (FindBundledLibrary() == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            Blas.Disable();
+            var previous = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLED");
+            try
+            {
+                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLED", "0");
+
+                // Whether anything else is installed is host-dependent; the assertion is only that
+                // the bundled asset is no longer what auto-discovery reaches for.
+                bool loaded;
+                try
+                {
+                    Blas.Enable();
+                    loaded = true;
+                }
+                catch (DllNotFoundException)
+                {
+                    loaded = false;   // nothing else on this machine — the opt-out plainly worked
+                }
+
+                if (loaded && Blas.IsBundledLibrary && !CBlasWasAlreadyLoaded())
+                    Assert.Fail("NUMSHARP_BLAS_BUNDLED=0 was ignored: " + Blas.LibraryPath);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLED", previous);
+            }
+        }
+
+        /// <summary>
+        ///     A core type this CPU cannot execute is refused, not attempted.
+        /// </summary>
+        /// <remarks>
+        ///     OPENBLAS_CORETYPE overrides OpenBLAS' own CPU detection, so an over-reach does not
+        ///     degrade gracefully — it terminates the process with an illegal instruction (measured:
+        ///     forcing SkylakeX on a Haswell host). There is no catching that, so it has to be
+        ///     refused up front.
+        /// </remarks>
+        [TestMethod]
+        public void CoreTypeAboveThisCpu_IsRefused_RatherThanCrashingTheProcess()
+        {
+            if (System.Runtime.Intrinsics.X86.Avx512F.IsSupported)
+                Assert.Inconclusive("this CPU supports AVX-512, so SkylakeX is not an over-reach here.");
+            if (!System.Runtime.Intrinsics.X86.Sse2.IsSupported)
+                Assert.Inconclusive("not an x86 host; the core-type table does not apply.");
+
+            Blas.Disable();
+            Assert.ThrowsExactly<PlatformNotSupportedException>(() => Blas.Enable(coreType: "SkylakeX"));
+        }
+
+        /// <summary>The corpus's pinned kernel is the one the public constant names.</summary>
+        [TestMethod]
+        public void ParityCoreType_MatchesTheCorpusHostPin()
+        {
+            var pin = Fuzz.MatmulParityPin.Load();
+            if (string.IsNullOrEmpty(pin.Blas_Corename))
+                Assert.Inconclusive("the committed host pin records no core name.");
+
+            Assert.AreEqual(pin.Blas_Corename, Blas.ParityCoreType, ignoreCase: true,
+                "Blas.ParityCoreType is what callers pin to reproduce the corpus on another " +
+                "machine; it must name the kernel the corpus was actually generated with.");
+        }
+
+        /// <summary>The bundled binary is the one the checked-in pin manifest describes.</summary>
+        /// <remarks>
+        ///     This is the packaging half of the parity claim. The manifest is the version pin, and
+        ///     an asset that does not hash to it is not the binary NumPy calls — which would make
+        ///     every downstream "bit-identical" statement false while everything still ran.
+        /// </remarks>
+        [TestMethod]
+        public void BundledLibrary_HashesToThePinnedManifest()
+        {
+            var lib = FindBundledLibrary();
+            if (lib == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            var manifest = FindManifest();
+            if (manifest == null)
+                Assert.Inconclusive("openblas-manifest.json is not reachable from the test output.");
+
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifest));
+            var runtimes = doc.RootElement.GetProperty("runtimes");
+
+            string actual;
+            using (var stream = File.OpenRead(lib))
+                actual = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream))
+                                .ToLowerInvariant();
+
+            foreach (var rid in runtimes.EnumerateObject())
+            {
+                if (!string.Equals(rid.Value.GetProperty("file").GetString(),
+                        Path.GetFileName(lib), StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                Assert.AreEqual(rid.Value.GetProperty("sha256").GetString(), actual, ignoreCase: true,
+                    $"the staged {rid.Name} asset does not match the pinned manifest.");
+                return;
+            }
+
+            Assert.Inconclusive("the staged asset is not named in the manifest: " + lib);
+        }
+
+        private static bool CBlasWasAlreadyLoaded() => Blas.LibraryPath != null;
+
+        /// <summary>The bundled asset for the running RID, as laid down next to the test output.</summary>
+        private static string FindBundledLibrary()
+        {
+            var root = Path.Combine(AppContext.BaseDirectory, "runtimes");
+            if (!Directory.Exists(root))
+                return null;
+
+            foreach (var f in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+            {
+                var name = Path.GetFileName(f);
+                if (name.IndexOf("openblas", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return f;
+            }
+
+            return null;
+        }
+
+        /// <summary>The checked-in pin manifest, walked up from the test output.</summary>
+        private static string FindManifest()
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null)
+            {
+                var candidate = Path.Combine(dir.FullName,
+                    "src", "NumSharp.Interop.BLAS", "tools", "openblas-manifest.json");
+                if (File.Exists(candidate))
+                    return candidate;
+
+                dir = dir.Parent;
+            }
+
+            return null;
+        }
+
+        #endregion
 
         #region a failed Enable is a no-op
 

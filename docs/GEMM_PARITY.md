@@ -8,8 +8,14 @@
 >
 > **NumSharp.Core stays 100 % managed C#** — it contains no BLAS code, no P/Invoke and no native
 > dependency. With this package absent every matrix product is NumSharp's own SIMD GEMM.
+>
+> **UPDATE (2026-07-26): the package now BUNDLES the binary.** It ships the prebuilt OpenBLAS
+> artifacts NumPy itself pins (scipy-openblas 0.3.31.22.0 — verified byte-identical to numpy 2.4.2's)
+> as per-RID NuGet runtime assets for 8 platforms, so bit-parity no longer requires a Python
+> installation. §6 explains why this is not a reversal of the "ships no native binaries" decision it
+> replaces, and §6.1 documents the discovery order.
 
-Status date: 2026-07-25 · Branch: `journey3` · Issue:
+Status date: 2026-07-26 · Branch: `journey3` · Issue:
 [SciSharp/NumSharp#626](https://github.com/SciSharp/NumSharp/issues/626)
 
 ---
@@ -199,10 +205,101 @@ place a 50-step float32 MLP train produces byte-identical `w1`/`w2`/`b1`/`b2`.
 | 1024³ | f64 | 134.5 | **33.8** | 32.3 |
 | 2048³ | f64 | 3860 | **292.6** | 310.6 |
 
-The BLAS path is 1.7×–13× *faster* than NumSharp's own GEMM (it is OpenBLAS, after all). NumSharp
-ships no native binaries: the package binds whatever BLAS the consumer already has, because bundling
-one would make results depend on which copy won the loader race, and parity is a claim about a
-specific binary.
+The BLAS path is 1.7×–13× *faster* than NumSharp's own GEMM (it is OpenBLAS, after all).
+
+### The package now SHIPS the binary (2026-07-26) — and why that is not a reversal
+
+This document used to argue the opposite: *"NumSharp ships no native binaries: the package binds
+whatever BLAS the consumer already has, because bundling one would make results depend on which copy
+won the loader race, and parity is a claim about a specific binary."*
+
+The objection was to bundling **an arbitrary** OpenBLAS. It dissolves once the bundled one is
+**NumPy's own**, which is checkable rather than hopeful:
+
+- NumPy 2.x does not build an OpenBLAS. Its wheels bundle the prebuilt `scipy-openblas32` /
+  `scipy-openblas64` artifacts from PyPI (openblas-libs, BSD-3-Clause-Attribution), pinned in
+  `requirements/ci_requirements.txt` → `scipy-openblas64==0.3.31.22.0`, consumed by
+  `tools/wheels/cibw_before_build.sh`.
+- The DLL inside that wheel is **byte-identical** to the one in numpy 2.4.2's `numpy.libs/`:
+  both sha256 `74a408729250596b0973e69fdd954eea07a70ff527a1dbaccf9ae21247b80377`. NumPy's mangled
+  file name *is* that hash's first 32 hex chars — delvewheel names the file by its content.
+- So "bundle a binary" and "call the same binary NumPy calls" became the same act. Verified
+  end-to-end: 12/12 products bit-exact against numpy 2.4.2 through the bundled asset (the same 12
+  were 8-divergent on the managed kernels).
+
+There is no loader race, because the order is fixed and documented (§6.1). And the "specific binary"
+requirement is now *stronger* than before: the corpus host pin compares the loaded library by
+**content hash**, not by file name.
+
+#### 6.1 Discovery order
+
+| # | Source | Notes |
+|---|---|---|
+| 1 | explicit path / `NUMSHARP_PARITY_BLAS` | **binding** — never substituted, not even by the bundled copy |
+| 2 | **bundled `runtimes/<rid>/native/`** | `NUMSHARP_BLAS_BUNDLED=0` drops it |
+| 3 | `numpy.libs` of any python on `PATH` | plus `VIRTUAL_ENV` / `CONDA_PREFIX` / `PYTHONHOME` |
+| 4 | bare loader names | `libopenblas`, `libblas`, … |
+
+Bundled beats a discovered `numpy.libs` **on purpose**: a library's numeric output must not change
+because an unrelated `pip install` ran, and an app with no python must not get a different backend
+from one that has it. Matching some *other* numpy stays possible and is now an explicit act (name it).
+
+RIDs: `win-x64`, `win-arm64`, `linux-{x64,arm64,musl-x64,musl-arm64}`, `osx-{x64,arm64}` — 62 MB
+packed. Binaries are gitignored; `tools/openblas-manifest.json` is the checked-in pin and
+`tools/fetch_openblas.py` verifies **two** hashes per RID (the wheel's, then the extracted library's).
+
+**win-arm64 is `scipy-openblas32`, not 64** — because NumPy's own build selects the LP64 distribution
+there. It exports `scipy_cblas_sgemm` (prefix, no suffix, 32-bit BLAS int), a scheme `Bind` did
+**not** have: binding that library would have failed outright with "exports no recognizable
+cblas_sgemm symbol". Added.
+
+### The third variable: DYNAMIC_ARCH (probed 2026-07-26)
+
+Bundling pins the library build; it does **not** pin the answer. OpenBLAS is built `DYNAMIC_ARCH`
+and selects a micro-kernel from the running CPU. Measured by forcing the choice on one host, same
+binary, `OPENBLAS_NUM_THREADS=1`, `(512,784)@(784,512)` f32:
+
+| `OPENBLAS_CORETYPE` | dispatched | result |
+|---|---|---|
+| *(unset)* | Haswell | `b9ea5057dc59fd41…` |
+| `Haswell` | Haswell | `b9ea5057dc59fd41…` — identical to unset |
+| `Nehalem` | Nehalem | `b6bb0f5873bc4721…` |
+| `Sandybridge` | Sandybridge | `1903e357791df3c9…` |
+| `Core2` | Katmai | `0da2143835f74a56…` |
+| `SkylakeX` | — | **process killed: Illegal instruction** |
+
+Four facts fall out, all load-bearing:
+
+1. **The variable works**, and pinning it to the corpus's kernel reproduces the corpus's bits on any
+   CPU that can run that kernel — `Blas.ParityCoreType` ("Haswell") covers every x86-64 with AVX2+FMA.
+2. **It is not safe to set blindly.** It *overrides* OpenBLAS' capability detection, so naming a
+   kernel above the CPU's ISA executes an unsupported instruction. That is not catchable, so
+   `Enable` refuses the combinations it can recognise up front.
+3. **It must be set before the library loads.** OpenBLAS reads it once while initialising and never
+   again; setting it afterwards is a silent no-op (verified: corename unchanged).
+4. **Thread count is independent of it** — with the core pinned to Haswell, 1/2/4/24 threads still
+   give four different answers. Both must be pinned, or neither.
+
+It is therefore **opt-in, not the default**. The default must match the NumPy on the same machine,
+and that NumPy dispatches by CPU as well — pinning unilaterally would *create* divergence on any host
+newer than Haswell.
+
+#### `Environment.SetEnvironmentVariable` does not reach a native `getenv`
+
+The first implementation appeared to work and did nothing. .NET keeps its own environment table, so
+the managed getter reads the new value back while the C runtime the native library links against
+never sees it: setting `OPENBLAS_CORETYPE=Nehalem` that way and then loading OpenBLAS still
+dispatched **Haswell**. Going through the CRT (`ucrtbase!_putenv_s`, `libc!setenv`) dispatched
+Nehalem as asked. Windows' own `SetEnvironmentVariableW` does **not** work either — it updates the
+process environment block, not the CRT copy `getenv` reads.
+
+#### A silently-ignored pin, found by its own test
+
+`Blas.Enable` skips `CBlasNative.Load` when a library is already loaded — so a `coreType` passed on
+any call after the first was **discarded without a word**, leaving the caller believing the kernel
+was pinned while the bits were whatever the CPU chose. Now it either already holds (idempotent) or
+throws. Same failure class as the two the previous review caught: the parity feature reporting
+success while quietly not delivering parity.
 
 ### Stacked products, and why the seam is per-STACK and not per-matrix
 
@@ -232,11 +329,22 @@ bit-identical** across broadcast, transposed, sliced, negative-stride, 1-D-promo
 ## 7. The host pin
 
 This is the first corpus tier whose expected bytes are **not** reproducible everywhere. It ships
-`Fuzz/corpus/matmul_parity.host.jsonl` recording the numpy version, the BLAS file name, the
-OpenBLAS build string, the dispatched core name and the thread count; `MatmulParityPin` compares
-before judging and reports `Assert.Inconclusive` — never red — when the host differs. A machine
-without that wheel has nothing to be wrong about. Same precedent as the MSVC-pinned float→uint
-cast kernels (see `Fuzz/README.md` → "Host-dependent values").
+`Fuzz/corpus/matmul_parity.host.jsonl` recording the numpy version, the BLAS file name **and its
+SHA-256**, the OpenBLAS build string, the dispatched core name and the thread count;
+`MatmulParityPin` compares before judging and reports `Assert.Inconclusive` — never red — when the
+host differs. A machine without that wheel has nothing to be wrong about. Same precedent as the
+MSVC-pinned float→uint cast kernels (see `Fuzz/README.md` → "Host-dependent values").
+
+**The library is identified by CONTENT, not by file name** (2026-07-26). Bundling forced this and
+made it strictly better. A file name is a poor proxy for a binary in both directions: pip's
+`delvewheel` mangles it per build (`libscipy_openblas64_-74a4….dll`), while the bundled copy of the
+very same bytes is plainly `libscipy_openblas64_.dll`. Matching on the name alone therefore skipped
+the whole 342-case tier on a host that was genuinely bit-identical — observed the moment bundled
+discovery landed — and would equally have *accepted* a differently-built library that happened to
+share a name. The pin now carries `blas_library_sha256`, and the gate hashes what it actually
+loaded; the name check remains only as a fallback for corpora generated before the field existed.
+Note this is the opposite of weakening the pin to widen coverage: the excuse got narrower, the
+assertion stronger.
 
 Regenerate for your own host with:
 
