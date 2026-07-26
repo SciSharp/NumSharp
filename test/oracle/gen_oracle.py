@@ -878,6 +878,99 @@ def gen_matmul_zerodim(dtypes):
     return cases
 
 
+# G16 — float16 contraction DEPTH. The matmul tier carries float16 already, but every shape in
+# it has k <= 4, where a half accumulator and a float32 one agree exactly — so it could never see
+# that NumPy accumulates half products in FLOAT32 and narrows once (`float sum = 0; ... *(op) =
+# npy_float_to_half(sum)` in matmul_inner_noblas). Half is the ONLY float dtype NumPy does not
+# send to cblas (USEBLAS=0 in matmul.c.src), so unlike float32/float64 this loop is reproducible
+# exactly and belongs in the portable corpus rather than the host-pinned matmul_parity tier.
+#
+# Accumulating in half does not merely lose a ulp, it SATURATES: half's spacing above 2048 is 2,
+# so ones(4096).ones(4096) stalls at 2048 where NumPy returns 4096.
+MATMUL_HALF_KS = [8, 64, 256, 1024, 3000, 4096]
+
+
+def _half_vals(n, vc):
+    if vc == "ones":
+        return np.ones(n)
+    if vc == "tiny":          # 1.0 then values under half's resolution at 1.0 (2**-11)
+        return np.concatenate([[1.0], np.full(max(n - 1, 0), 2.0 ** -11)])[:n]
+    if vc == "ramp":
+        return ((np.arange(n) % 11) - 5) * 0.5
+    if vc == "alt":           # cancelling signs — the sum stays small while partials do not
+        return np.where(np.arange(n) % 2 == 0, 3.5, -3.25)
+    raise ValueError(vc)
+
+
+def gen_matmul_half_depth():
+    cases = []
+    n = 0
+    h = np.dtype("float16")
+    for K in MATMUL_HALF_KS:
+        for vc in ("ones", "tiny", "ramp", "alt"):
+            A = _half_vals(3 * K, vc).astype(h).reshape(3, K)
+            B = _half_vals(K * 2, vc).astype(h).reshape(K, 2)
+            for la, lb in (("C", "C"), ("F", "C"), ("C", "F")):
+                baseA, viewA = _mm_layout(A, la)
+                baseB, viewB = _mm_layout(B, lb)
+                for op in ("matmul", "dot"):
+                    r = np.asarray(_MATMUL_FNS[op](viewA, viewB))
+                    cases.append({
+                        "id": f"{op}/halfdepth_{la}{lb}_{vc}/float16/k{K}/{n}",
+                        "op": op, "params": {},
+                        "operands": [describe(baseA, viewA), describe(baseB, viewB)],
+                        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                        "layout": f"halfdepth_{la}{lb}", "valueclass": vc,
+                    })
+                    n += 1
+
+            # 1-D inner product (its own kernel) and the batched stack (the gufunc outer loop)
+            v1 = _half_vals(K, vc).astype(h)
+            v2 = _half_vals(K, vc).astype(h)[::-1].copy()
+            for op in ("matmul", "dot"):
+                r = np.asarray(_MATMUL_FNS[op](v1, v2))
+                cases.append({
+                    "id": f"{op}/halfdepth_vec_{vc}/float16/k{K}/{n}",
+                    "op": op, "params": {},
+                    "operands": [describe(v1, v1), describe(v2, v2)],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": "halfdepth_vec", "valueclass": vc,
+                })
+                n += 1
+
+            bA = _half_vals(2 * 3 * K, vc).astype(h).reshape(2, 3, K)
+            bB = _half_vals(2 * K * 2, vc).astype(h).reshape(2, K, 2)
+            r = np.asarray(np.matmul(bA, bB))
+            cases.append({
+                "id": f"matmul/halfdepth_batch_{vc}/float16/k{K}/{n}",
+                "op": "matmul", "params": {},
+                "operands": [describe(bA, bA), describe(bB, bB)],
+                "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                             "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                "layout": "halfdepth_batch", "valueclass": vc,
+            })
+            n += 1
+
+            # MIXED operands that still promote to float16 (bool / int8 / uint8) — a separate
+            # kernel in NumSharp, and it needs the same float32 accumulator.
+            for other in ("int8", "uint8", "bool"):
+                o = np.dtype(other)
+                Bm = (np.ones(K * 2) if o.kind == "b" else ((np.arange(K * 2) % 5) + 1)).astype(o).reshape(K, 2)
+                r = np.asarray(np.matmul(A, Bm))
+                cases.append({
+                    "id": f"matmul/halfdepth_mixed_{other}_{vc}/float16/k{K}/{n}",
+                    "op": "matmul", "params": {},
+                    "operands": [describe(A, A), describe(Bm, Bm)],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": "halfdepth_mixed", "valueclass": vc,
+                })
+                n += 1
+    return cases
+
+
 # T9 — bitwise & shift. NumPy defines bitwise_and/or/xor & invert for integer + bool; the shifts
 # for integers. Float/complex raise TypeError (gen_binary/gen_unary skip those automatically).
 BITWISE_BIN_OPS = {
@@ -3893,6 +3986,7 @@ def main():
         cases = gen_matmul(MATMUL_SHAPE_CASES, MATMUL_DTYPES, MATMUL_LAYOUTS)
         cases += gen_matmul_edges(MATMUL_EDGE_DTYPES)                  # G14: negstride + k=0
         cases += gen_matmul_zerodim(MATMUL_EDGE_DTYPES)                # G15: stacked zero extents
+        cases += gen_matmul_half_depth()                               # G16: float16 contraction depth
         cases += gen_trace_diag(TRACE_DTYPES)                          # Group A: trace/diagonal
         cases += gen_diag_tri(TRACE_DTYPES)                            # diag/tri family
         cases += char_tier("matmul")                                   # G9

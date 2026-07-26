@@ -962,7 +962,7 @@ namespace NumSharp
 
             // Use bufferSize for bounds checking (NumPy-aligned: no ViewInfo dependency)
             long boundSize = bufferSize > 0 ? bufferSize : size;
-            if (offset >= boundSize)
+            if (offset >= boundSize && AddressesAnElement(dim))
                 throw new IndexOutOfRangeException($"The offset {offset} is out of range in Shape {boundSize}");
 
             if (indicies.Length == dimensions.Length)
@@ -976,6 +976,34 @@ namespace NumSharp
             //TODO! This is not full support of sliced,
             //TODO! when sliced it usually diverts from this function but it would be better if we add support for sliced arrays too.
             return (new Shape(innerShape), offset);
+        }
+
+        /// <summary>
+        ///     Does the sub-view left after consuming <paramref name="consumed"/> leading axes
+        ///     actually address an element?
+        /// </summary>
+        /// <remarks>
+        ///     The offset bounds-check above is a BUFFER backstop — the per-axis index validation
+        ///     that matches NumPy (<c>index N is out of bounds for axis I with size D</c>) already
+        ///     ran in <see cref="InferNegativeCoordinates(long[], long[])"/> before this method was
+        ///     called. A sub-view with a zero-sized extent will never be dereferenced, so there is
+        ///     no buffer to overrun and the backstop must not fire: <c>a[0]</c> on a <c>(2,3,0)</c>
+        ///     is <c>(3,0)</c> in NumPy, and used to throw here because a zero-sized array's
+        ///     bufferSize is 0 and so EVERY offset — the valid one included — compared "out of
+        ///     range". The same holds for an empty window carved out of a live buffer, where the
+        ///     offset can legitimately land one past the last element (<c>x[:, 2:2][4]</c>).
+        ///     <para>
+        ///     Only called once the check is already about to throw, so the ordinary path pays
+        ///     nothing for it.
+        ///     </para>
+        /// </remarks>
+        [MethodImpl(OptimizeAndInline)]
+        private readonly bool AddressesAnElement(int consumed)
+        {
+            for (int i = consumed; i < dimensions.Length; i++)
+                if (dimensions[i] == 0)
+                    return false;
+            return true;
         }
 
         /// <summary>

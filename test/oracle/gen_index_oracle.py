@@ -21,7 +21,7 @@ Token encoding (portable; both sides interpret identically):
   ["arr",flat,shape] ["barr",flatbool,shape] ["b0",bool] ["a0",n]
 value (setter): ["scalar",n] | ["arr",flat,shape]
 
-Base recipes (mirrored in C#): S,V0,V1,V6,A,AT,ARS,ACS,ANR,ANC,ASO,ABC,B,BT,E03
+Base recipes (mirrored in C#): S,V0,V1,V6,A,AT,ARS,ACS,ANR,ANC,ASO,ABC,B,BT,E03,E30,E230
 (arange-filled; views built via the same slice/transpose/broadcast ops). All data int64 so
 values compare exactly as int64; the dtype sweep re-encodes per dtype (complex -> re/im pairs,
 bool -> 0/1, half -> double).
@@ -53,7 +53,9 @@ def make_base(name):
         "ABC": np.broadcast_to(np.arange(4), (3,4)),  # broadcast (3,4)
         "B":   B.copy(),
         "BT":  B.T,                                    # (4,3,2)
-        "E03": np.zeros((0,3), dtype=np.int64),        # empty 2-D
+        "E03": np.zeros((0,3), dtype=np.int64),        # empty 2-D, zero in the LEADING axis
+        "E30": np.zeros((3,0), dtype=np.int64),        # empty 2-D, zero in the TRAILING axis
+        "E230": np.zeros((2,3,0), dtype=np.int64),     # empty 3-D, zero in the TRAILING axis
     }[name]
 
 # dtype sweep bases: arange-filled (integer-valued so float/complex/half are exact)
@@ -262,6 +264,40 @@ addg("E03",[FARR["f08"]],"fancy1:f08")                        # arr []   -> (0,3
 adds("E03",[S([None,None,None])],SV["sc"],"set:colon=scalar") # no-op OK
 adds("E03",[["int",0]],SV["sc"],"set:int=scalar")             # err
 
+# 4c) E30 / E230 — the zero is in a TRAILING axis, so a leading integer index is VALID and
+# yields an empty view. E03 only ever exercised the raising direction (index into a length-0
+# axis); this is the other one, and it used to throw: Shape.GetSubshape bounds-checked the
+# offset against a buffer size of 0, so `a[0]` on a (2,3,0) raised where NumPy gives (3,0).
+addg("E30",[],"emptytuple")                                   # -> (3,0)
+addg("E30",[S([None,None,None])],"basic1")                    # [:]    -> (3,0)
+addg("E30",[["int",0]],"basic1")                              # [0]    -> (0,)
+addg("E30",[["int",2]],"basic1")                              # [2]    -> (0,)
+addg("E30",[["int",-1]],"basic1")                             # [-1]   -> (0,)
+addg("E30",[["int",3]],"basic1")                              # [3]    -> IndexError
+addg("E30",[S([None,None,None]),["int",0]],"basic2")          # [:, 0] -> IndexError
+addg("E30",[["int",0],["int",0]],"basic2")                    # [0, 0] -> IndexError
+addg("E30",[S([None,None,2])],"basic1")                       # [::2]  -> (2,0)
+addg("E30",[S([None,None,-1])],"basic1")                      # [::-1] -> (3,0)
+addg("E30",[["new"]],"newaxis")                               # [None] -> (1,3,0)
+addg("E30",[["ell"]],"ellipsis")                              # [...]  -> (3,0)
+addg("E30",[mask_for([3,0])],"bool:full")                     # mask   -> (0,)
+adds("E30",[["int",0]],SV["sc"],"set:int=scalar")             # empty target, no-op OK
+
+addg("E230",[],"emptytuple")                                  # -> (2,3,0)
+addg("E230",[["int",0]],"basic1")                             # [0]     -> (3,0)
+addg("E230",[["int",1]],"basic1")                             # [1]     -> (3,0)
+addg("E230",[["int",-1]],"basic1")                            # [-1]    -> (3,0)
+addg("E230",[["int",2]],"basic1")                             # [2]     -> IndexError
+addg("E230",[["int",0],["int",0]],"basic2")                   # [0,0]   -> (0,)
+addg("E230",[["int",1],["int",2]],"basic2")                   # [1,2]   -> (0,)
+addg("E230",[["int",0],["int",3]],"basic2")                   # [0,3]   -> IndexError
+addg("E230",[["int",0],["int",0],["int",0]],"basic3")         # [0,0,0] -> IndexError
+addg("E230",[S([None,None,None]),["int",1]],"basic2")         # [:, 1]  -> (2,0)
+addg("E230",[["int",0],S([None,None,None])],"basic2")         # [0, :]  -> (3,0)
+addg("E230",[["ell"],["int",0]],"ellipsis")                   # [..., 0]-> IndexError
+addg("E230",[["new"]],"newaxis")                              # [None]  -> (1,2,3,0)
+adds("E230",[["int",0]],SV["sc"],"set:int=scalar")            # empty target, no-op OK
+
 # 5) DTYPE sweep — a handful of forms across all 13 dtypes
 dtype_forms = {
   "int":[["int",1]], "slice":[S([1,3,None])], "negslice":[S([None,None,-1])],
@@ -314,7 +350,7 @@ for (dt, toks, val) in SETTER_DTYPE_CASES:
 
 # 6) RANDOM FUZZ — seeded, explores the space far beyond the curated forms
 ND = {"V6":1,"V1":1,"V0":1,"S":0,"A":2,"AT":2,"ARS":2,"ACS":2,"ANR":2,"ANC":2,"ASO":2,"ABC":2,
-      "B":3,"BT":3,"E03":2}
+      "B":3,"BT":3,"E03":2,"E30":2,"E230":3}
 def rand_tokens(rng, ndim):
     L = rng.randint(0, ndim+2); toks=[]; used_ell=False
     for _ in range(L):
@@ -350,6 +386,12 @@ def random_fuzz(seed, ng, ns):
     rng = random.Random(seed)
     # G6: E03 (empty 2-D) + V0 (empty 1-D) joined the getter pool, E03 the setter pool —
     # empty bases were previously absent from the whole random space.
+    # E30/E230 are deliberately CURATED-ONLY, not in the random pools: the random tokens reach
+    # FANCY indexing, and gathering through a fancy index on a zero-sized source still throws
+    # (NDArray.Indexing.Selection.Getter's LargestReachableOffset is `size - 1` == -1 for an empty
+    # array, so every offset "exceeds" it). That is a separate guard from the basic-indexing one
+    # fixed here — it would have to be replaced by per-axis validation rather than a flat-offset
+    # proxy — and it is pinned as a known gap at OpenBugsFuzzGapsTests.FancyIndex_ZeroSizedSource.
     gpool=["V6","A","B","AT","ARS","ACS","ANR","ANC","ASO","ABC","BT","V1","S","E03","V0"]
     spool=["V6","A","B","ARS","ANR","ASO","ACS","E03"]
     for _ in range(ng):

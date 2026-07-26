@@ -85,5 +85,41 @@ namespace NumSharp.UnitTest
             r.typecode.Should().Be(NPTypeCode.Char);
             ((int)(char)r.GetValue(0)).Should().Be(70, "1*5 + 2*6 + 3*7 + 4*8 = 70");
         }
+
+        // ============================================================================
+        //  BUG: FANCY (advanced) indexing on a source with a zero-sized dimension throws.
+        //
+        //      np.zeros((3,0))[np.array([0,1])]   NumPy -> (2,0)
+        //                                         NumSharp -> IndexOutOfRangeException
+        //
+        //  BASIC indexing of the same arrays was fixed (Shape.GetSubshape no longer
+        //  bounds-checks an offset that will never be dereferenced), and the curated
+        //  index-oracle bases E30 (3,0) / E230 (2,3,0) gate it. The fancy path has its
+        //  OWN, separate guard: NDArray.Indexing.Selection.Getter validates each gathered
+        //  coordinate against LargestReachableOffset(shape, size), which for a contiguous
+        //  empty source is `size - 1` == -1 — so every offset, including the valid ones,
+        //  compares out of range.
+        //
+        //  It is NOT the same one-line fix. That flat-offset comparison is doing double
+        //  duty: it is also the ONLY range check fancy indexing performs, and the guard is
+        //  load-bearing for memory safety (a negative computed offset would otherwise write
+        //  before the buffer, into the GC heap — see the comment at the throw site). Making
+        //  the empty case work means giving fancy indexing NumPy's real rule — validate each
+        //  index against its own axis extent — instead of the flat-offset proxy, so that
+        //  `zeros((3,0))[np.array([5])]` still raises. Deliberately left for that change.
+        //
+        //  E30/E230 are therefore curated-only in gen_index_oracle.py, kept out of the random
+        //  pools (carve comment at the generator site points here).
+        // ============================================================================
+        [TestMethod, OpenBugs]
+        public void FancyIndex_ZeroSizedSource()
+        {
+            var e30 = np.zeros(new Shape(3, 0), dtype: np.int64);
+            NDArray r = null;
+            Action act = () => r = e30[np.array(new long[] { 0, 1 })];
+            act.Should().NotThrow("NumPy gathers two empty rows and returns shape (2,0)");
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 0 });
+            r.size.Should().Be(0);
+        }
     }
 }

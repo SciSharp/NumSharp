@@ -94,7 +94,7 @@ namespace NumSharp.Backends
                 case NPTypeCode.UInt32:  return NDArray.Scalar(DotGeneric<uint>(left, right, sa, sb, n));
                 case NPTypeCode.Int64:   return NDArray.Scalar(DotGeneric<long>(left, right, sa, sb, n));
                 case NPTypeCode.UInt64:  return NDArray.Scalar(DotGeneric<ulong>(left, right, sa, sb, n));
-                case NPTypeCode.Half:    return NDArray.Scalar(DotGeneric<Half>(left, right, sa, sb, n));
+                case NPTypeCode.Half:    return NDArray.Scalar(DotHalf(left, right, sa, sb, n));
                 case NPTypeCode.Decimal: return NDArray.Scalar(DotGeneric<decimal>(left, right, sa, sb, n));
                 default:
                     // Char (no INumber<char>) or anything unforeseen → existing path.
@@ -193,6 +193,25 @@ namespace NumSharp.Backends
             else
                 for (long i = 0; i < n; i++) acc += a[i * sa] * b[i * sb];
             return acc;
+        }
+
+        /// <summary>
+        /// Half inner product with a FLOAT32 accumulator. NOT <see cref="DotGeneric{T}"/>: NumPy's
+        /// HALF_dot declares <c>float tmp = 0.</c>, accumulates every product there, and narrows
+        /// once with <c>npy_float_to_half(tmp)</c>. Accumulating in Half saturates instead —
+        /// <c>dot(ones(4096), ones(4096))</c> stalls at 2048, since half cannot represent 2049.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe Half DotHalf(NDArray left, NDArray right, long sa, long sb, long n)
+        {
+            Half* a = (Half*)left.Address + left.Shape.offset;
+            Half* b = (Half*)right.Address + right.Shape.offset;
+            float acc = 0f;
+            if (sa == 1 && sb == 1)
+                for (long i = 0; i < n; i++) acc += (float)a[i] * (float)b[i];
+            else
+                for (long i = 0; i < n; i++) acc += (float)a[i * sa] * (float)b[i * sb];
+            return (Half)acc;
         }
 
         /// <summary>numpy bool dot: <c>OR</c> over k of <c>(a[k] AND b[k])</c>; short-circuits on first hit.</summary>

@@ -76,7 +76,9 @@ namespace NumSharp.UnitTest.Fuzz
                 case "ABC": return np.broadcast_to(np.arange(4L), new Shape(3, 4)); // (3,4)
                 case "B":   return np.arange(24L).reshape(2, 3, 4);
                 case "BT":  return np.arange(24L).reshape(2, 3, 4).T;           // (4,3,2)
-                case "E03": return np.zeros(new Shape(0, 3), dtype: np.int64);  // empty (0,3)
+                case "E03": return np.zeros(new Shape(0, 3), dtype: np.int64);  // empty (0,3) — zero LEADING
+                case "E30": return np.zeros(new Shape(3, 0), dtype: np.int64);  // empty (3,0) — zero TRAILING
+                case "E230": return np.zeros(new Shape(2, 3, 0), dtype: np.int64); // empty (2,3,0)
                 default: throw new ArgumentException("base? " + n);
             }
         }

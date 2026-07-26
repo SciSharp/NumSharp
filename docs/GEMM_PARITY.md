@@ -440,3 +440,74 @@ that the outcome is *identical* backend-on vs backend-off — that held while bo
 now pins NumPy's shape and, for `k == 0`, that every element is bit-exact `0.0f`.
 Gate: 14 tests in `LinearAlgebra/np.matmul.ZeroSized.Test.cs` plus 280 oracle cases in the `matmul`
 tier (`gen_oracle.gen_matmul_zerodim`, 35 shape pairs × 4 dtypes × C/F).
+
+## 10. `float16` accumulates in float32 — and which dtypes NumPy actually sends to BLAS (2026-07-26)
+
+A second differential pass (301 byte-exact cases: Python records the operand bytes and NumPy's
+answer, C# replays and bit-compares) turned up **one portable wrong answer** and made the scope of
+§2's "no portable algorithm can fix it" claim precise. The dividing line is one row of
+`matmul.c.src`:
+
+```
+ * #TYPE = FLOAT, DOUBLE, LONGDOUBLE, HALF, CFLOAT, CDOUBLE, CLONGDOUBLE, …
+ * #USEBLAS =  1,      1,          0,    0,      1,       1,           0, 0*13#
+```
+
+**float32, float64, complex64 and complex128 go to cblas. `float16` does not** — so for half,
+`matmul_inner_noblas` *is* NumPy's shipping implementation, and it is reproducible exactly on any
+host with no native dependency.
+
+### Fixed: half products accumulated in half
+
+NumPy's half loop declares `float sum = 0`, accumulates every product in **float32**, and narrows
+once with `npy_float_to_half(sum)`; `HALF_dot` does the same with `float tmp = 0.`. NumSharp
+accumulated in `Half`, which does not merely lose a ulp — it **saturates**, because half's spacing
+above 2048 is 2, so `2048 + 1 == 2048`:
+
+| | NumSharp (before) | NumPy |
+|---|---|---|
+| `ones(3000)·ones(3000)` | **2048** | 3000 |
+| `ones(4096)·ones(4096)` | **2048** | 4096 |
+| `2s(3000)·2s(3000)` | **8190** | 12000 |
+| `[1, 2⁻¹¹×9] @ ones(10)` | `0x3c00` | `0x3c04` |
+
+Visible from `k = 10` with ordinary values, and unconditional — no BLAS backend serves half, so
+nothing masked it. Three kernels needed the wider accumulator: `MatMulStridedSame<Half>` (matmul
+2-D/1-D/batched and 2-D dot), `DotGeneric<Half>` (the fused 1-D inner product), and
+`MatMulStridedMixed<Half>` (half against bool/int8/uint8, which still promote to float16). The
+accumulator is a float **row** rather than NumPy's scalar, purely to keep the cache-friendly
+j-inner loop — for a given output cell the additions still run over `k` ascending, which is all
+that fixes the bits. `np.sum(float16)` was already correct and is untouched.
+
+The `matmul` tier could never have caught this: it carries float16, but every shape in it has
+`k ≤ 4`, where a half accumulator and a float32 one agree exactly. Gate: 288 new oracle cases
+(`gen_oracle.gen_matmul_half_depth` — `k ∈ {8, 64, 256, 1024, 3000, 4096}` × 4 value classes ×
+C/F layouts × matmul/dot/1-D/batched/mixed) plus 8 tests in
+`LinearAlgebra/np.matmul.HalfAccumulator.Test.cs`.
+
+### Not fixed, and not fixable here: complex64 / complex128
+
+`CFLOAT` and `CDOUBLE` are BLAS dtypes, so NumPy's complex matrix products are **zgemm's bits**,
+exactly as float32/float64 are sgemm's. Measured: **40/40** complex128 cases diverge at every
+contraction depth including `k = 4` (they agree only on small exact integers, where summation order
+cannot matter), and the inf edge differs too — `[-inf, 1] @ [[1],[1]]` is `(-inf, nan)` in NumSharp
+against NumPy's `(nan, nan)`.
+
+This is §2's class, not a defect in the managed kernel — but §3's table scopes the backend to
+float32/float64 and justifies the fall-through only for integers ("modular addition is
+associative"), which leaves complex silently in the divergent bucket. `NumSharp.Interop.BLAS`
+serves no complex dtype, so installing it does not close this. The seam already supports it: §8's
+probe wrote a third-party Complex128 backend against `IBlasBackend` untouched, batched path
+included. Closing it is a package-side job — add `cblas_zgemm`/`cblas_cgemm` routes — not a Core one.
+
+### Withdrawn: the `np.dot(0-d, …)` signed zero
+
+Recorded here because it looked like a third bug and is not. `np.dot(-2.5, B)` where `B` holds a
+`+0.0` returns `+0.0` in NumPy but `-0.0` from a plain multiply. NumPy's 0-d branch of
+`PyArray_MatrixProduct2` **is** a plain multiply — it just sits *below* the `HAVE_CBLAS` shortcut,
+so only the four cblas dtypes reach `cblas_matrixproduct` and come back `+0.0`. Probed: NumPy gives
+`-0.0` for `float16` and `longdouble`, which is exactly what NumSharp gives for every dtype. So the
+managed answer is NumPy's own non-BLAS answer, and with the package installed NumSharp already
+returns `+0.0` for float32/float64 (its `TryDot2D` ports the scalar branch). Only the complex cell
+remains, and it folds into the paragraph above. "Fixing" it by adding zero would have *broken*
+float16 parity.

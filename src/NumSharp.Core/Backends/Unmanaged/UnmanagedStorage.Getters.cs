@@ -11,6 +11,23 @@ namespace NumSharp.Backends
         #region Getters
 
         /// <summary>
+        ///     <see cref="IArraySlice.Slice(long,long)"/> for a sub-view, tolerating the EMPTY case.
+        /// </summary>
+        /// <remarks>
+        ///     A zero-length sub-view has no element to address, so its start offset is meaningless
+        ///     — and it is routinely out of range: an empty window over a live buffer
+        ///     (<c>x[:, 1:1]</c>) narrows <see cref="InternalArray"/> to Count 0 while the shape's
+        ///     strides still step across the original rows, so <c>[1]</c> asks to slice at offset 2
+        ///     of a 0-element array. NumPy hands back the empty view; <see cref="IArraySlice"/>'s
+        ///     range guard is right to reject the call, so the empty case starts at 0 instead.
+        ///     Nothing can be read or written through a length-0 slice, so where it points is
+        ///     unobservable.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private IArraySlice SliceForSubview(long offset, long count)
+            => InternalArray.Slice(count == 0 ? 0 : offset, count);
+
+        /// <summary>
         ///     Retrieves value of unspecified type (will figure using <see cref="IStorage.DType"/>).
         /// </summary>
         /// <param name="indices">The shape's indices to get.</param>
@@ -162,7 +179,7 @@ namespace NumSharp.Backends
                     : shape.size;
                 // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
                 var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
-                var view = UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), adjustedShape);
+                var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
             }
@@ -182,7 +199,7 @@ namespace NumSharp.Backends
                 // GetSubshape rebuilds the shape with fresh (writeable) flags, so carry it through.
                 if (!this_shape.IsWriteable)
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
-                var view = new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
+                var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
             }
@@ -215,7 +232,7 @@ namespace NumSharp.Backends
                     : shape.size;
                 // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
                 var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
-                var view = UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), adjustedShape);
+                var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
             }
@@ -235,7 +252,7 @@ namespace NumSharp.Backends
                 // GetSubshape rebuilds the shape with fresh (writeable) flags, so carry it through.
                 if (!this_shape.IsWriteable)
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
-                var view = new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
+                var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
             }
@@ -293,7 +310,7 @@ namespace NumSharp.Backends
                     : shape.size;
                 // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
                 var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
-                var view = UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), adjustedShape);
+                var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
             }
@@ -317,7 +334,7 @@ namespace NumSharp.Backends
                 // A sub-array view inherits writeability (see the int[] overload).
                 if (!this_shape.IsWriteable)
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
-                var view = new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
+                var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
             }
@@ -347,7 +364,7 @@ namespace NumSharp.Backends
                     : shape.size;
                 // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
                 var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
-                var view = UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), adjustedShape);
+                var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
             }
@@ -371,7 +388,7 @@ namespace NumSharp.Backends
                 // A sub-array view inherits writeability (see the int[] overload).
                 if (!this_shape.IsWriteable)
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
-                var view = new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
+                var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
             }

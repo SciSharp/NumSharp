@@ -119,5 +119,88 @@ namespace NumSharp.UnitTest.Backends
             Action act = () => { padded[new Slice(3, 5), new Slice(0, 0)] = np.ones(new Shape(2, 0), typeof(double)); };
             act.Should().NotThrow();
         }
+
+        // ---------------- basic indexing of an array with a zero-sized axis ----------------
+        //
+        // A valid integer index into an array whose SIZE is 0 used to throw
+        // `IndexOutOfRangeException: The offset 0 is out of range in Shape 0`. The offset
+        // bounds-check in Shape.GetSubshape compares against `bufferSize > 0 ? bufferSize : size`,
+        // which is 0 for an empty array — so every offset, the correct one included, was "out of
+        // range". Per-axis validation (NumPy's real rule) already happened earlier in
+        // Shape.InferNegativeCoordinates, so the offset test is only a buffer backstop, and there
+        // is no buffer to overrun when the sub-view addresses no element.
+
+        [TestMethod]
+        public void Index_TrailingZeroAxis_ReturnsEmptyView()
+        {
+            // NumPy: a[0] -> (3,0); a[0,0] -> (0,); a[1,2] -> (0,)
+            var a = np.zeros(new Shape(2, 3, 0), typeof(double));
+
+            a[0].shape.Should().BeEquivalentTo(new long[] { 3, 0 });
+            a[1].shape.Should().BeEquivalentTo(new long[] { 3, 0 });
+            a[-1].shape.Should().BeEquivalentTo(new long[] { 3, 0 });
+            a[0, 0].shape.Should().BeEquivalentTo(new long[] { 0 });
+            a[1, 2].shape.Should().BeEquivalentTo(new long[] { 0 });
+            a.GetData(new long[] { 0 }).shape.Should().BeEquivalentTo(new long[] { 3, 0 });
+
+            np.zeros(new Shape(3, 0), typeof(double))[2].shape.Should().BeEquivalentTo(new long[] { 0 });
+        }
+
+        [TestMethod]
+        public void Index_TrailingZeroAxis_StillRejectsOutOfRange()
+        {
+            // The backstop was relaxed, not removed — NumPy's per-axis IndexError must survive.
+            var a = np.zeros(new Shape(2, 3, 0), typeof(double));
+
+            new Action(() => { var _ = a[2]; }).Should().Throw<IndexError>();
+            new Action(() => { var _ = a[-3]; }).Should().Throw<IndexError>();
+            new Action(() => { var _ = a[0, 3]; }).Should().Throw<IndexError>();
+            new Action(() => { var _ = a[0, 0, 0]; }).Should().Throw<IndexError>("axis 2 has size 0");
+            // a zero in the LEADING axis makes even index 0 invalid, as in NumPy
+            new Action(() => { var _ = np.zeros(new Shape(0, 3, 4), typeof(double))[0]; }).Should().Throw<IndexError>();
+        }
+
+        [TestMethod]
+        public void Index_EmptyWindowOverALiveBuffer_ReturnsEmptyView()
+        {
+            // (5,0) carved out of a live 10-element buffer: the strides still step across the
+            // original rows, so [i] computes an offset of 2i into an InternalArray already
+            // narrowed to Count 0. NumPy returns the empty view for every valid i.
+            var big = np.arange(10).astype(NPTypeCode.Double).reshape(5, 2);
+            var window = big[":, 1:1"];
+            window.shape.Should().BeEquivalentTo(new long[] { 5, 0 });
+
+            for (int i = 0; i < 5; i++)
+                window[i].shape.Should().BeEquivalentTo(new long[] { 0 }, $"window[{i}]");
+
+            new Action(() => { var _ = window[5]; }).Should().Throw<IndexError>();
+        }
+
+        [TestMethod]
+        public void Index_NonEmptyNeighbours_AreUnaffected()
+        {
+            // The relaxed backstop must not let a real overrun through on ordinary arrays.
+            var big = np.arange(10).astype(NPTypeCode.Double).reshape(5, 2);
+
+            Convert.ToDouble(big[0].GetAtIndex(0)).Should().Be(0d);
+            Convert.ToDouble(big[3].GetAtIndex(1)).Should().Be(7d);
+            big[4].shape.Should().BeEquivalentTo(new long[] { 2 });
+            Convert.ToDouble(big[4, 1].GetAtIndex(0)).Should().Be(9d);
+
+            new Action(() => { var _ = big[5]; }).Should().Throw<IndexError>();
+            new Action(() => { var _ = big[0, 2]; }).Should().Throw<IndexError>();
+        }
+
+        [TestMethod]
+        public void Index_EmptySubView_IsAUsableArray()
+        {
+            // Not just a shape: the result has to behave like NumPy's empty view.
+            var sub = np.zeros(new Shape(2, 3, 0), typeof(double))[0];
+
+            sub.size.Should().Be(0);
+            Convert.ToDouble(np.sum(sub).GetAtIndex(0)).Should().Be(0d, "NumPy: sum of empty is 0");
+            (sub + sub).shape.Should().BeEquivalentTo(new long[] { 3, 0 });
+            sub.T.shape.Should().BeEquivalentTo(new long[] { 0, 3 });
+        }
     }
 }
