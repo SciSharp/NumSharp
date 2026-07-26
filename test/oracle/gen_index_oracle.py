@@ -386,14 +386,15 @@ def random_fuzz(seed, ng, ns):
     rng = random.Random(seed)
     # G6: E03 (empty 2-D) + V0 (empty 1-D) joined the getter pool, E03 the setter pool —
     # empty bases were previously absent from the whole random space.
-    # E30/E230 are deliberately CURATED-ONLY, not in the random pools: the random tokens reach
-    # FANCY indexing, and gathering through a fancy index on a zero-sized source still throws
-    # (NDArray.Indexing.Selection.Getter's LargestReachableOffset is `size - 1` == -1 for an empty
-    # array, so every offset "exceeds" it). That is a separate guard from the basic-indexing one
-    # fixed here — it would have to be replaced by per-axis validation rather than a flat-offset
-    # proxy — and it is pinned as a known gap at OpenBugsFuzzGapsTests.FancyIndex_ZeroSizedSource.
-    gpool=["V6","A","B","AT","ARS","ACS","ANR","ANC","ASO","ABC","BT","V1","S","E03","V0"]
-    spool=["V6","A","B","ARS","ANR","ASO","ACS","E03"]
+    # E30/E230 (the zero in a TRAILING axis) joined both pools once FANCY indexing stopped
+    # throwing on a zero-sized source. Random tokens reach fancy indexing, and the gather/scatter
+    # offset backstop used to reject every one of them: LargestReachableOffset is `size - 1` == -1
+    # for an empty array, below every offset it is compared against. It is now disengaged when the
+    # source holds no element (nothing is dereferenced there) while the per-axis validation that
+    # actually decides validity — ScanFancyBounds + PrepareIndexGetters — is untouched. E03 keeps
+    # exercising the RAISING direction: a zero in the LEADING axis makes even index 0 invalid.
+    gpool=["V6","A","B","AT","ARS","ACS","ANR","ANC","ASO","ABC","BT","V1","S","E03","V0","E30","E230"]
+    spool=["V6","A","B","ARS","ANR","ASO","ACS","E03","E30","E230"]
     for _ in range(ng):
         base=rng.choice(gpool); raddg(base, rand_tokens(rng, ND[base]), "rand")
     for _ in range(ns):
