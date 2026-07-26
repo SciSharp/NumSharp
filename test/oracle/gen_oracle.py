@@ -793,6 +793,91 @@ def gen_matmul_edges(dtypes):
     return cases
 
 
+# G15 — a zero-sized extent on a STACKED (>=3-D) operand. The gufunc signature is
+# (n?,k),(k,m?)->(n?,m?), so a zero lands in one of two places and they behave differently:
+# a zero in a stack dim (or in n / m) makes the RESULT empty, while a zero in k alone leaves it
+# NON-empty and every entry is an EMPTY SUM, i.e. exactly zero (matmul_inner_noblas stores 0
+# into the cell before its zero-trip accumulation loop). A stack `0` also broadcasts against `1`
+# to 0, never to 1 — np.broadcast_shapes((0,), (1,)) is (0,).
+# The whole family used to throw out of NumSharp's BatchedMatmul; the 2-D k=0 case above and the
+# N-D `dot` routes below were already correct and are pinned here so they stay that way.
+MATMUL_ZERODIM_CASES = [
+    # (op, shapeA, shapeB) — every position of a zero, 3-D
+    ("matmul", (0, 3, 4), (0, 4, 5)),      # zero stack dim   -> (0,3,5) empty
+    ("matmul", (2, 3, 0), (2, 0, 5)),      # zero k           -> (2,3,5) ALL ZEROS
+    ("matmul", (2, 0, 4), (2, 4, 5)),      # zero n           -> (2,0,5) empty
+    ("matmul", (2, 3, 4), (2, 4, 0)),      # zero m           -> (2,3,0) empty
+    ("matmul", (0, 0, 0), (0, 0, 0)),
+    ("matmul", (0, 3, 0), (0, 0, 5)),      # stack + k
+    ("matmul", (2, 0, 0), (2, 0, 5)),      # n + k
+    ("matmul", (2, 0, 4), (2, 4, 0)),      # n + m
+    ("matmul", (2, 3, 0), (2, 0, 0)),      # k + m
+    # a zero stack dim against a broadcast 2-D operand, both orders
+    ("matmul", (0, 3, 4), (4, 5)),
+    ("matmul", (3, 4), (0, 4, 5)),
+    ("matmul", (0, 3, 0), (0, 5)),
+    ("matmul", (3, 0), (0, 0, 5)),
+    # 0 against 1 in a stack dim stretches to 0, not 1
+    ("matmul", (0, 3, 4), (1, 4, 5)),
+    ("matmul", (1, 3, 4), (0, 4, 5)),
+    ("matmul", (1, 1, 3, 4), (0, 1, 4, 5)),
+    ("matmul", (1, 0, 3, 4), (2, 1, 4, 5)),   # a 0 and a >1 stretch in the same call
+    # 4-D
+    ("matmul", (0, 2, 3, 4), (0, 2, 4, 5)),
+    ("matmul", (2, 0, 3, 4), (2, 0, 4, 5)),
+    ("matmul", (2, 3, 4, 0), (2, 3, 0, 5)),   # zero k -> (2,3,4,5) ALL ZEROS
+    ("matmul", (2, 3, 0, 4), (2, 3, 4, 5)),
+    ("matmul", (2, 3, 4, 5), (2, 3, 5, 0)),
+    ("matmul", (0, 2, 3, 4), (4, 5)),
+    ("matmul", (2, 0, 3, 4), (4, 5)),
+    # 1-D promotion around a zero extent (the inserted axis is squeezed back out)
+    ("matmul", (0, 3, 4), (4,)),
+    ("matmul", (3,), (0, 3, 4)),
+    ("matmul", (2, 3, 0), (0,)),              # zero k -> (2,3) ALL ZEROS
+    ("matmul", (0,), (2, 0, 5)),              # zero k -> (2,5) ALL ZEROS
+    ("matmul", (2, 0, 4), (4,)),
+    ("matmul", (4,), (2, 4, 0)),
+    # np.dot's N-D route (dotfunc, NOT the gufunc) over the same degenerate shapes
+    ("dot", (0, 3, 4), (4, 5)),
+    ("dot", (2, 3, 0), (0, 5)),               # -> (2,3,5) ALL ZEROS
+    ("dot", (0, 3, 4), (0, 4, 5)),
+    ("dot", (2, 3, 0), (2, 0, 5)),            # -> (2,3,2,5) ALL ZEROS
+    ("dot", (2, 0, 4), (4, 5)),
+]
+
+# The zero-sized operand carries no bytes, so a layout sweep over it is meaningless; the F pass
+# exists for the operands that DO have data (the k=0 pair's outer dims, the broadcast 2-D side).
+MATMUL_ZERODIM_LAYOUTS = ["C", "F"]
+
+
+def gen_matmul_zerodim(dtypes):
+    cases = []
+    n = 0
+    for (op, shA, shB) in MATMUL_ZERODIM_CASES:
+        f = _MATMUL_FNS[op]
+        for dt in dtypes:
+            A = _mm_fill(shA, dt)
+            B = _mm_fill(shB, dt)
+            for lay in MATMUL_ZERODIM_LAYOUTS:
+                baseA, viewA = _mm_layout(A, lay)
+                baseB, viewB = _mm_layout(B, lay)
+                r = np.asarray(f(viewA, viewB))
+                sa = "x".join(map(str, shA))
+                sb = "x".join(map(str, shB))
+                cases.append({
+                    "id": f"{op}/zerodim_{lay}/{dt}/{sa}@{sb}/{n}",
+                    "op": op,
+                    "params": {},
+                    "operands": [describe(baseA, viewA), describe(baseB, viewB)],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": f"zerodim_{lay}",
+                    "valueclass": "degenerate",
+                })
+                n += 1
+    return cases
+
+
 # T9 — bitwise & shift. NumPy defines bitwise_and/or/xor & invert for integer + bool; the shifts
 # for integers. Float/complex raise TypeError (gen_binary/gen_unary skip those automatically).
 BITWISE_BIN_OPS = {
@@ -3674,6 +3759,7 @@ def main():
     elif mode == "matmul":
         cases = gen_matmul(MATMUL_SHAPE_CASES, MATMUL_DTYPES, MATMUL_LAYOUTS)
         cases += gen_matmul_edges(MATMUL_EDGE_DTYPES)                  # G14: negstride + k=0
+        cases += gen_matmul_zerodim(MATMUL_EDGE_DTYPES)                # G15: stacked zero extents
         cases += gen_trace_diag(TRACE_DTYPES)                          # Group A: trace/diagonal
         cases += gen_diag_tri(TRACE_DTYPES)                            # diag/tri family
         cases += char_tier("matmul")                                   # G9

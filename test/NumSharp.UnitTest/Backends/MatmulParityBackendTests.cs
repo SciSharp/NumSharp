@@ -359,10 +359,13 @@ namespace NumSharp.UnitTest.Backends
         public void BatchedEntryPoint_DeclinesZeroSizedExtents_SoBehaviourIsUnchanged()
         {
             // A backend may change WHICH implementation runs and how fast — never WHETHER the call
-            // works. NumPy excludes zero dims from its own blas routes too, and NumSharp's engine
-            // currently throws on a zero-sized stacked matmul, so the backend must not quietly
-            // start answering them (that would make np.matmul succeed or fail depending on whether
-            // this package happens to be referenced).
+            // works. NumPy excludes zero dims from its own blas routes (the `any_zero_dim` arm of
+            // @TYPE@_matmul forces matmul_inner_noblas), so the backend declines them and the engine
+            // answers from its own degenerate-stack shortcut.
+            //
+            // Asserting only that the two outcomes AGREE is too weak — it held while both sides
+            // threw. So pin the NumPy answer itself as well: a zero stack dim gives an empty
+            // (0,3,5), and k == 0 gives a NON-empty (2,3,5) of exact zeros (the empty sum).
             RequireBlas();
             var zeroBatch = (Func<NDArray>)(() => np.matmul(
                 np.zeros(new Shape(0, 3, 4), NPTypeCode.Single),
@@ -371,13 +374,23 @@ namespace NumSharp.UnitTest.Backends
                 np.zeros(new Shape(2, 3, 0), NPTypeCode.Single),
                 np.zeros(new Shape(2, 0, 5), NPTypeCode.Single)));
 
-            foreach (var call in new[] { zeroBatch, zeroK })
+            foreach (var (call, expected) in new[] { (zeroBatch, "Single(0,3,5)"), (zeroK, "Single(2,3,5)") })
             {
                 Blas.Disable();
                 var withoutBackend = Outcome(call);
+                Assert.AreEqual(expected, withoutBackend,
+                    "the managed engine does not give NumPy's answer for a zero-sized stacked matmul");
+
                 Blas.Enable();
                 Assert.AreEqual(withoutBackend, Outcome(call),
                     "installing the backend changed the outcome of a zero-sized stacked matmul");
+
+                // k == 0 is the one that produces values rather than an empty view — prove they are
+                // exactly zero on BOTH sides, not merely that the shapes line up.
+                var withBackend = call();
+                for (long i = 0; i < withBackend.size; i++)
+                    Assert.AreEqual(0, BitConverter.SingleToInt32Bits((float)withBackend.GetAtIndex(i)),
+                        $"element {i} of a zero-sized stacked matmul is not exactly 0.0f");
             }
         }
 

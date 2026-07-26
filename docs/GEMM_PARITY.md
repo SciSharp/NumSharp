@@ -110,9 +110,9 @@ consults the property at the top of `Dot`, inside `MultiplyMatrix`, and at the t
 All three are `Try`-shaped because a backend answers only for what it implements (an external CBLAS:
 float32/float64), so **installing one can change WHICH implementation runs, never WHETHER NumSharp
 can compute the product**. That invariant is load-bearing enough to cost coverage: `TryMatMulBatched`
-declines zero-sized extents, both because NumPy's own dispatcher excludes them from its blas routes
-and because NumSharp's per-element loop currently throws on them — answering would make `np.matmul`
-succeed or fail depending on whether this package happens to be referenced.
+declines zero-sized extents, because NumPy's own dispatcher excludes them from its blas routes (the
+`any_zero_dim` arm of `@TYPE@_matmul` forces `matmul_inner_noblas`) — answering would make the port
+unfaithful. The engine settles them itself, in the same place NumPy does; see §9.
 
 `TryMatMulBatched` is a **default interface method**, so a backend written against the original two
 members keeps compiling and running with no edit; the engine just falls back to per-element calls.
@@ -307,9 +307,28 @@ Each is now pinned by a test in `MatmulParityBackendTests`.
 | A backend needs `InternalsVisibleTo` | wrote a working `IBlasBackend` in an assembly that is **not** a Core friend | Refuted — it compiles, installs and computes correctly, strided views included |
 | The interface would need widening for the uncovered dtypes | added a Complex128 backend (what NumPy sends to `zgemm`), non-friend, batched path included | Zero change to `IBlasBackend`, `TensorEngine` or any hook |
 
-**Found while probing, NOT a BLAS defect and still open:** `np.matmul` throws on any ≥3-D operand
-with a zero-sized dimension — `matmul(zeros((0,3,4)), zeros((0,4,5)))` raises
-`InvalidOperationException` where NumPy gives shape `(0,3,5)`, and the zero-K/M/N variants raise
-`IndexOutOfRangeException`. `np.dot` and 2-D `np.matmul` are both correct, so it is specific to
-`BatchedMatmul` (its `ValueCoordinatesIncrementor` rejects an empty iteration shape, and
-`BroadcastStackDims` broadcasts `0` against `1` to **1** instead of `0`).
+**Found while probing, NOT a BLAS defect — since FIXED:** `np.matmul` threw on any ≥3-D operand
+with a zero-sized dimension. `np.dot` and 2-D `np.matmul` were both already correct, so it was
+specific to `BatchedMatmul`, and it took **three** independent fixes, one per failure mode:
+
+| Cause | Symptom | Fix |
+|---|---|---|
+| `BroadcastStackDims` used `Math.Max`, so a stack `0` broadcast against `1` gave **1** | `matmul((0,3,4), (4,5))` → `IncorrectShapeException`, because a `(0,3,4)` operand was then asked to broadcast to `(1,3,4)` | take the extent that **isn't 1** — `np.broadcast_shapes((0,), (1,))` is `(0,)` |
+| the batch odometer is constructed before the loop and rejects an empty iteration space | `matmul((0,3,4), (0,4,5))` → `InvalidOperationException` | short-circuit a degenerate stack before building it |
+| a sub-view of a zero-sized operand cannot be taken — `Shape.GetSubshape` bounds-checks the offset against a buffer size of **0**, so even a valid index throws | the zero-K/M/N variants → `IndexOutOfRangeException` | same short-circuit; the loop never runs for these |
+
+The shortcut is the port of NumPy's own structure: `any_zero_dim` forces `@TYPE@_matmul` off every
+blas route into `matmul_inner_noblas`, where the answer falls out of the loop bounds. Two outcomes,
+neither needing the batch loop — an **empty result** (a zero stack dim, or `n == 0` / `m == 0`)
+writes nothing, and `k == 0` leaves a **non-empty** result whose every entry is an **empty sum**.
+That sum is exactly zero because NumPy stores `0` into the output cell *before* its zero-trip
+accumulation loop, so `nan(2,3,0) @ inf(2,0,5)` is `+0.0`, not `nan` — probed, and pinned by a test
+that repeats the case 400 times against deliberately poisoned memory (nothing else writes that
+buffer, so the result is only as correct as the allocation is zeroed).
+
+`TryMatMulBatched` still **declines** zero-sized extents, and should: NumPy excludes them from its
+own blas routes, so answering would make the port unfaithful. The seam test no longer merely asserts
+that the outcome is *identical* backend-on vs backend-off — that held while both sides threw — it
+now pins NumPy's shape and, for `k == 0`, that every element is bit-exact `0.0f`.
+Gate: 14 tests in `LinearAlgebra/np.matmul.ZeroSized.Test.cs` plus 280 oracle cases in the `matmul`
+tier (`gen_oracle.gen_matmul_zerodim`, 35 shape pairs × 4 dtypes × C/F).
