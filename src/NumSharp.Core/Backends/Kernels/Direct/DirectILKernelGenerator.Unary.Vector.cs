@@ -65,6 +65,9 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.Cos when clrType == typeof(float):
                     il.EmitCall(OpCodes.Call, CachedMethods.SingleCosVector, null);
                     return;
+                case UnaryOp.Tanh when clrType == typeof(float):
+                    il.EmitCall(OpCodes.Call, CachedMethods.SingleTanhVector, null);
+                    return;
             }
 
             string methodName = op switch

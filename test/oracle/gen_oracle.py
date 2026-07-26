@@ -2599,8 +2599,69 @@ _TRIG_F32_SPECIAL_BITS = [
 ]
 
 
+# tanh: NumPy's kernel picks its polynomial from a 32-entry table indexed by the exponent of |x|,
+# so the interesting inputs are the SUBINTERVAL SEAMS - a wrong index shows up only there. Index is
+# clamp(bits & 0x7fe00000 - 0x3d400000, 0, 0x3e00000) >> 21, so seam k sits at bits
+# 0x3d400000 + k*0x200000; the saturation cut (past which the answer is exactly +-1) is 0x7f000000.
+_TANH_F32_SPECIAL_BITS = [
+    0x7fc00000, 0x7fc00001, 0xffc00000, 0x7f800001,   # NaN: canonical, payload, negative, signalling
+    0x7f800000, 0xff800000,                           # +-inf -> +-1
+    0x00000000, 0x80000000,                           # +-0   -> +-0 (the sign must survive)
+    0x00000001, 0x80000001, 0x007fffff, 0x00800000,   # subnormals / smallest normal
+    0x7f7fffff, 0xff7fffff,                           # +-FLT_MAX (saturated)
+    0x3f800000, 0xbf800000, 0x40000000, 0xc0000000,   # +-1, +-2
+]
+
+
 def _f32(bits):
     return np.array(bits, dtype=np.uint32).view(np.float32)
+
+
+def _f64(bits):
+    return np.array(bits, dtype=np.uint64).view(np.float64)
+
+
+def _tanh_f32_values():
+    rng = np.random.RandomState(20260728)
+    seams = []
+    for k in range(33):                                    # every subinterval seam, +-1 ULP
+        b = 0x3d400000 + k * 0x200000
+        if b < 0x7f800000:
+            seams += [b - 1, b, b + 1]
+    seams += [0x7effffff, 0x7f000000, 0x7f000001]          # the saturation cut, +-1 ULP
+    seams += [b | 0x80000000 for b in list(seams)]         # tanh is odd - mirror every seam
+    return np.concatenate([
+        _f32(_TANH_F32_SPECIAL_BITS),
+        _f32(seams),
+        np.linspace(-10.0, 10.0, 121).astype(np.float32),
+        rng.uniform(-20.0, 20.0, 96).astype(np.float32),
+    ])
+
+
+def _tanh_f64_values():
+    """The float64 half of the same kernel: 16 subintervals, seams every 0x0008.. in the exponent."""
+    rng = np.random.RandomState(20260729)
+    seams = []
+    for k in range(17):
+        b = 0x3fc0000000000000 + k * 0x0008000000000000
+        if b < 0x7ff0000000000000:
+            seams += [b - 1, b, b + 1]
+    seams += [0x7fdfffffffffffff, 0x7fe0000000000000, 0x7fe0000000000001]
+    seams += [b | 0x8000000000000000 for b in list(seams)]
+    specials = [
+        0x7ff8000000000000, 0xfff8000000000000, 0x7ff0000000000001,   # NaN variants
+        0x7ff0000000000000, 0xfff0000000000000,                       # +-inf
+        0x0000000000000000, 0x8000000000000000,                       # +-0
+        0x0000000000000001, 0x000fffffffffffff, 0x0010000000000000,   # subnormals / smallest normal
+        0x7fefffffffffffff, 0xffefffffffffffff,                       # +-DBL_MAX
+        0x3ff0000000000000, 0xbff0000000000000,                       # +-1
+    ]
+    return np.concatenate([
+        _f64(specials),
+        _f64(seams),
+        np.linspace(-10.0, 10.0, 121),
+        rng.uniform(-20.0, 20.0, 96),
+    ])
 
 
 def _exp_f32_values():
@@ -2660,6 +2721,7 @@ def gen_numpy_f32_kernels():
         ("cos", np.cos, _trig_f32_values()),
         ("rad2deg", np.rad2deg, _trig_f32_values()),
         ("deg2rad", np.deg2rad, _trig_f32_values()),
+        ("tanh", np.tanh, _tanh_f32_values()),
     ]
 
     for op, f, v in jobs:
@@ -2695,6 +2757,67 @@ def gen_numpy_f32_kernels():
         for dt in ("int16", "uint16"):
             iv = np.array([0, 1, 2, 3, 5, 11, 87, 88, 89, 90, -1, -5, -87, -88, -103, -104],
                           dtype=np.int64).astype(dt)
+            emit(op, f, "int_contig", iv, iv)
+            emit(op, f, "int_reversed", iv, iv[::-1])
+    return cases
+
+
+def gen_numpy_f64_kernels():
+    """
+    tanh is the only one of the ported kernels that also replaces a FLOAT64 loop: NumPy ships its
+    own table-driven tanh at both widths (loops_hyperbolic), where exp/log/sin/cos delegate to the
+    platform's scalar npy_* at f8 and already agree. Hence a tier of its own rather than more rows
+    in numpy_f32_kernels.jsonl - the layouts mirror it exactly, only the dtype axis differs.
+    """
+    cases = []
+    n = 0
+
+    def emit(op, f, layout, base, view):
+        nonlocal n
+        r = f(view)
+        cases.append({
+            "id": f"{op}/{layout}/{view.dtype.name}/{n}",
+            "op": op, "params": {},
+            "operands": [describe(base, view)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": layout, "valueclass": "kernel_edges",
+        })
+        n += 1
+
+    for op, f, v in [("tanh", np.tanh, _tanh_f64_values())]:
+        emit(op, f, "contig1d", v, v)
+        emit(op, f, "strided2", v, v[::2])
+        emit(op, f, "reversed", v, v[::-1])
+        emit(op, f, "offset", v, v[7:])
+        emit(op, f, "offset_strided3", v, v[5::3])
+
+        rows = 4
+        cols = (v.size // rows) * rows
+        m = np.ascontiguousarray(v[:cols].reshape(rows, cols // rows))
+        emit(op, f, "contig2d", m, m)
+        # NB: an F-CONTIGUOUS operand is spelled as the transpose of a C base, never as an
+        # asfortranarray base - describe() serializes base.tobytes() in C order, so an F-ordered
+        # base would record bytes that disagree with its own strides.
+        emit(op, f, "transposed", m, m.T)
+        emit(op, f, "row_reversed", m, m[:, ::-1])
+        emit(op, f, "col_strided", m, m[:, ::2])
+
+        one = np.ascontiguousarray(v[:16].reshape(1, 16))
+        emit(op, f, "broadcast", one, np.broadcast_to(one, (3, 16)))
+
+        for bits in (0x7ff8000000000000, 0x7ff0000000000000, 0xfff0000000000000,
+                     0x8000000000000000, 0x3ff0000000000000):
+            z = np.array([bits], dtype=np.uint64).view(np.float64).reshape(())
+            emit(op, f, "zerod", z, z)
+
+        e = np.zeros(0, dtype=np.float64)
+        emit(op, f, "empty", e, e)
+
+        # int32 and wider promote to THIS float64 loop (int16/uint16 take the 'f->f' one instead,
+        # which is why they live in the float32 tier).
+        for dt in ("int32", "uint32", "int64", "uint64"):
+            iv = np.array([0, 1, 2, 3, 5, 9, 10, 11, 19, 20, 21, 100, 1000], dtype=np.int64).astype(dt)
             emit(op, f, "int_contig", iv, iv)
             emit(op, f, "int_reversed", iv, iv[::-1])
     return cases
@@ -3858,6 +3981,8 @@ def main():
     elif mode == "numpy_f32":
         cases = gen_numpy_f32_kernels()                                 # bit-exact float32 kernel tier
         write_jsonl(os.path.join(corpus_dir, "numpy_f32_kernels.jsonl"), cases)
+        cases = gen_numpy_f64_kernels()                                 # bit-exact float64 kernel tier (tanh)
+        write_jsonl(os.path.join(corpus_dir, "numpy_f64_kernels.jsonl"), cases)
     elif mode == "matmul_parity":
         cases = gen_matmul_parity()                                     # np.parity_matmul byte gate
         write_jsonl(os.path.join(corpus_dir, "matmul_parity.jsonl"), cases)

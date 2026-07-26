@@ -589,6 +589,21 @@ namespace NumSharp.Backends.Kernels
                 VectorBits == 0 ? null
                 : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static,
                     new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
+            // tanh is the FIRST of these ports to cover float64 as well: NumPy ships its own
+            // kernel (loops_hyperbolic) at both widths, so unlike exp/log/sin/cos — where the
+            // platform libm already agrees with NumPy at f8 — BOTH the float and double BCL calls
+            // diverged and both are replaced. Non-nullable: the scalar entry points always exist.
+            public static readonly MethodInfo SingleTanh = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Tanh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Tanh");
+            public static readonly MethodInfo DoubleTanh = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Tanh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Tanh");
+            // Vector form is float32-only (the f64 lookup would cost 18 gathers per 4 lanes, and the
+            // scalar f64 kernel already outruns NumPy). Nullable for the usual reason — a host with
+            // no SIMD has no width to bind.
+            public static readonly MethodInfo SingleTanhVector =
+                VectorBits == 0 ? null
+                : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Tanh", BindingFlags.Public | BindingFlags.Static,
+                    new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
             // ComplexLog routes through NDComplexMath.Log (full npy_clog port): Complex.Log drops the
             // real part to 0 near |z|=1 (it lacks clog's log1p path). Reused by the Log2 composition
             // and by NDComplexMath.Log10/Log1p.

@@ -143,7 +143,15 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Tanh:
-                    EmitMathCall(il, "Tanh", type);
+                    // BOTH float widths are NumPy's own simd_tanh kernel (loops_hyperbolic), not the
+                    // platform libm — NumPy ships a table-driven tanh at f4 AND f8, so both BCL calls
+                    // diverged (9.7% / 8.1% of inputs). Half/Decimal/Complex keep EmitMathCall.
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleTanh, null);
+                    else if (type == NPTypeCode.Double)
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleTanh, null);
+                    else
+                        EmitMathCall(il, "Tanh", type);
                     break;
 
                 case UnaryOp.ASin:

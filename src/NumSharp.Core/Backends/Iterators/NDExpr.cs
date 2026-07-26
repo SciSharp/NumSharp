@@ -635,7 +635,7 @@ namespace NumSharp.Backends.Iteration
             => IsRoundingOp(op)
                 ? DirectILKernelGenerator.RoundingVectorSimdAvailable(op, t)
                 : (op == UnaryOp.Exp || op == UnaryOp.Log ||
-                   op == UnaryOp.Sin || op == UnaryOp.Cos)
+                   op == UnaryOp.Sin || op == UnaryOp.Cos || op == UnaryOp.Tanh)
                     ? DirectILKernelGenerator.NumPyFloatKernelSimdAvailable(op, t)
                     : IsSimdUnary(op);
 

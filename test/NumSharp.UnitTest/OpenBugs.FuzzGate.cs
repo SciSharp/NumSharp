@@ -342,6 +342,7 @@ namespace NumSharp.UnitTest
         [DataRow("cos")]
         [DataRow("rad2deg")]
         [DataRow("deg2rad")]
+        [DataRow("tanh")]
         public void B8_PortedFloat32Kernels_OneUlp_NotExcused(string op)
         {
             var c = Case(op, ("float32", new long[] { 4 }));
@@ -350,13 +351,41 @@ namespace NumSharp.UnitTest
                 $"float32 {op} is a bit-exact port of NumPy's own kernel — 1 ULP is a regression");
         }
 
+        /// <summary>
+        /// tanh is the only one of these ports that also replaces NumPy's FLOAT64 loop, so it is the
+        /// only op whose f8 divergences must also stop being excused. The companion test below pins
+        /// the other direction — that f8 exp/log/sin/cos, which are still the platform libm, keep it.
+        /// </summary>
+        [TestMethod]
+        public void B8_PortedFloat64Tanh_OneUlp_NotExcused()
+        {
+            var c = Case("tanh", ("float64", new long[] { 4 }));
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                BitConverter.GetBytes(0.7615941559557649), BitConverter.GetBytes(UlpUp(0.7615941559557649)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("float64 tanh is a bit-exact port of NumPy's own kernel — 1 ULP is a regression");
+        }
+
+        [TestMethod]
+        public void B8_UnportedUnaryFloat64_OneUlp_StillExcused()
+        {
+            // At float64 the platform libm already agrees with NumPy for these, so there is no port
+            // and the ~ULP envelope still applies. tanh is deliberately absent — see above.
+            foreach (var op in new[] { "exp", "log", "sin", "cos", "expm1", "log1p", "exp2" })
+            {
+                var c = Case(op, ("float64", new long[] { 4 }));
+                MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                    BitConverter.GetBytes(0.7615941559557649), BitConverter.GetBytes(UlpUp(0.7615941559557649)), NPTypeCode.Double, OneDiff)
+                    .Should().NotBeNull($"float64 {op} is not ported — it keeps the ~ULP envelope");
+            }
+        }
+
         [TestMethod]
         public void B8_UnportedUnaryFloat32_OneUlp_StillExcused()
         {
-            // tanh/expm1/log1p/exp2 are still the platform libm at float32, so they keep the
-            // documented envelope. If one of them is ported later, it moves into the carve-out set
-            // and this test must move with it.
-            foreach (var op in new[] { "tanh", "expm1", "log1p", "exp2", "arctan" })
+            // expm1/log1p/exp2 are still the platform libm at float32, so they keep the documented
+            // envelope. If one of them is ported later, it moves into the carve-out set and this
+            // test must move with it — which is exactly what tanh just did.
+            foreach (var op in new[] { "expm1", "log1p", "exp2", "arctan" })
             {
                 var c = Case(op, ("float32", new long[] { 4 }));
                 MisalignedRegistry.Classify(c, DivergenceKind.Value,

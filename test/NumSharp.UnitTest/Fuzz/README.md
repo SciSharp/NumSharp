@@ -196,25 +196,40 @@ their prior contents in every one of the 882 `where=all_false` cases.
 | complex reduction/scan NaN ordering/propagation differs | reduce+cumsum/cumprod × complex × Value, diffs must contain a NaN token | 35 |
 | decimal std last digit (independent 28-digit sqrts) (ledger L7) | std × Decimal × Value, ≤1 unit in the 28th significant digit | 4 |
 
-**Narrowed: the NumPy-ported float32 kernels are no longer excused.** `NDFloatMath` ports the kernels NumPy
-2.4.2 actually runs — `simd_exp_FLOAT`, `simd_log_FLOAT`, `simd_sincos_f32` — and `rad2deg`/`deg2rad` now form
-their constant at float precision like NumPy's macros. Each agrees with NumPy 2.4.2 on **all 2³² float32 inputs**
-(verified by a chunked-checksum sweep over the entire bit space, through both the SIMD and scalar paths), so the
-blanket unary-ULP branch now skips `exp`/`log`/`sin`/`cos`/`rad2deg`/`deg2rad` at a float32 result and any
-divergence there fails the gate. The `numpy_f32_kernels.jsonl` tier (120 cases) feeds each kernel the inputs that
+**Narrowed: the NumPy-ported float kernels are no longer excused.** `NDFloatMath` ports the kernels NumPy
+2.4.2 actually runs — `simd_exp_FLOAT`, `simd_log_FLOAT`, `simd_sincos_f32`, `simd_tanh_f32`/`simd_tanh_f64` — and
+`rad2deg`/`deg2rad` now form their constant at float precision like NumPy's macros. Each agrees with NumPy 2.4.2 on
+**all 2³² float32 inputs** (verified by a chunked-checksum sweep over the entire bit space, through both the SIMD and
+scalar paths), so the blanket unary-ULP branch now skips `exp`/`log`/`sin`/`cos`/`tanh`/`rad2deg`/`deg2rad` at a
+float32 result and any divergence there fails the gate. The `numpy_f32_kernels.jsonl` tier (140 cases) feeds each kernel the inputs that
 discriminate — every NaN spelling, exp's saturation boundaries ±1 ULP and its subnormal-output band, log's
 1/sqrt(2) mantissa split and 2^100 subnormal rescale, the quadrant seams and BOTH Cody-Waite libc cutoffs for the
-trig pair, and each NumPy-documented worst-error input — and `OpenBugs.FuzzGate.cs`'s B8 tests pin the carve-out
-from both sides (the ported ops must NOT be excused; tanh/expm1/log1p/exp2/arctan still must be). Deliberately
-still excused: every float16 loop (NumPy's separate `loops_half` kernels) and float64 exp/log/sin/cos (the
-platform's scalar `npy_*`), which already agree bit-for-bit here anyway.
+trig pair, tanh's 32 subinterval seams ±1 ULP and its saturation cut, and each NumPy-documented worst-error
+input — and `OpenBugs.FuzzGate.cs`'s B8 tests pin the carve-out from both sides (the ported ops must NOT be excused;
+expm1/log1p/exp2/arctan still must be). Deliberately still excused: every float16 loop (NumPy's separate
+`loops_half` kernels) and float64 exp/log/sin/cos (the platform's scalar `npy_*`), which already agree bit-for-bit
+here anyway.
 
-**Measured, still divergent, NOT ported** (so the envelope still covers them): `tanh` float32 9.7% / float64 8.1%
-of inputs, ≤2 ULP — portable in principle, since NumPy has its own LUT-based SIMD kernel; `exp2` 0.04% / 0.02%,
-1 ULP; and `expm1`/`log1p`, which NumSharp computes as `Exp(x)-1` / `Log(1+x)` — not merely a ULP difference but
-catastrophic for small |x| (`expm1(1e-8)` returns 0 where NumPy returns 1e-8) plus a signed-zero bug. NumPy calls
-the CRT for those two, so bit-parity is not reachable from managed code; the accuracy bug is worth fixing on its
-own terms.
+**`tanh` is carved out at float64 too — the only op that is.** NumPy ships its own table-driven tanh at BOTH widths
+(`loops_hyperbolic`), so `Math.Tanh` diverged on 8.1% of f8 inputs where the other kernels' f8 loops already agreed.
+`NumPyPortedFloat64Kernels` holds that one name, and the **`numpy_f64_kernels.jsonl`** tier (24 cases) sweeps the
+same layouts over the f8 subinterval seams, the saturation cut, ±0/±inf/NaN and the int32-and-wider dtypes that
+promote INTO this loop. float64 tanh is verified over 4.83 billion values — 2³² covering every sign × exponent ×
+2²⁰ mantissa prefix, plus 5.4×10⁸ full-width splitmix64 patterns — not exhaustively, which f8 does not admit.
+
+**Measured, still divergent, NOT ported** (so the envelope still covers them): `exp2` float32 0.04% / float64
+0.02% of inputs, 1 ULP; and `expm1`/`log1p` (31.1% / 30.7% and 33.6% / 15.1%), which NumSharp computes as
+`Exp(x)-1` / `Log(1+x)` — not merely a ULP difference but catastrophic for small |x| (`expm1(1e-8)` returns 0 where
+NumPy returns 1e-8) plus a signed-zero bug (`expm1(-0.0)` → `+0.0`). NumPy calls the CRT for all three, so bit-parity
+is NOT reachable from managed code the way it was for exp/log/sin/cos/tanh; the accuracy bug is worth fixing on its
+own terms, and note .NET's own `float.ExpM1`/`double.ExpM1`/`LogP1` are themselves just `Exp(x)-1`/`Log(1+x)` and do
+not help. Also still excused: the float16 loops, 17 differing values across all 65,536.
+
+**tanh's FMA is NOT part of the host pin below.** exp/log/sincos had to reproduce MSVC's contraction of a separate
+multiply and add; `simd_tanh_*` spells its Horner steps as `hn::MulAdd`, an explicit fused multiply-add, so the port
+transcribes it literally rather than betting on a compiler. A negative control confirms the sweep is not vacuous: the
+pre-port `MathF.Tanh` differs from NumPy in 34 of the 512 chunks (the rest of the f32 space saturates to ±1 or is
+NaN, where libm already agreed), while the ported kernel matches in all 512.
 
 **Host-pinned, like the cast kernels.** The port fuses the quadrant's `mul`+`add` because MSVC 19.44 — the
 compiler of the pinned `numpy==2.4.2` win-amd64 wheel — contracted that intrinsic pair into a `vfmadd`. It is

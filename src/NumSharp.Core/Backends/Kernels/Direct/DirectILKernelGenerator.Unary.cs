@@ -262,7 +262,8 @@ namespace NumSharp.Backends.Kernels
             // multiply-add is part of NumPy's answer, not an optimization) — see
             // ExpVectorSimdAvailable. Double keeps the scalar Math.Exp loop.
             if (key.Op == UnaryOp.Exp || key.Op == UnaryOp.Log ||
-                key.Op == UnaryOp.Sin || key.Op == UnaryOp.Cos)
+                key.Op == UnaryOp.Sin || key.Op == UnaryOp.Cos ||
+                key.Op == UnaryOp.Tanh)
                 return NumPyFloatKernelSimdAvailable(key.Op, key.InputType);
 
             return key.Op == UnaryOp.Sqrt || key.Op == UnaryOp.Reciprocal ||
@@ -288,8 +289,14 @@ namespace NumSharp.Backends.Kernels
                   : op == UnaryOp.Log ? CachedMethods.SingleLogVector
                   : op == UnaryOp.Sin ? CachedMethods.SingleSinVector
                   : op == UnaryOp.Cos ? CachedMethods.SingleCosVector
+                  : op == UnaryOp.Tanh ? CachedMethods.SingleTanhVector
                   : null;
-            return m != null && NumSharp.Utilities.NDFloatMath.IsExpVectorAccelerated(VectorBits);
+            if (m == null) return false;
+            // tanh asks for MORE than the others: its coefficients are selected per lane, so the
+            // vector form needs a gather/table read (AVX2) on top of the FMA they all need.
+            return op == UnaryOp.Tanh
+                ? NumSharp.Utilities.NDFloatMath.IsTanhVectorAccelerated(VectorBits)
+                : NumSharp.Utilities.NDFloatMath.IsExpVectorAccelerated(VectorBits);
         }
 
         /// <summary>Back-compat alias for the exp-only spelling of the shared gate.</summary>

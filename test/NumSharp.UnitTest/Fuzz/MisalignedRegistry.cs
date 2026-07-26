@@ -71,7 +71,19 @@ namespace NumSharp.UnitTest.Fuzz
         /// </summary>
         private static readonly System.Collections.Generic.HashSet<string> NumPyPortedFloat32Kernels = new()
         {
-            "exp", "log", "sin", "cos", "rad2deg", "deg2rad"
+            "exp", "log", "sin", "cos", "rad2deg", "deg2rad", "tanh"
+        };
+
+        /// <summary>
+        ///     The same claim at float64. Almost empty on purpose: at f8 the platform libm already
+        ///     agrees with NumPy bit-for-bit for exp/log/sin/cos, so there was nothing to port and
+        ///     nothing to carve out. tanh is the exception — NumPy ships its OWN table-driven kernel
+        ///     at f8 too (loops_hyperbolic), which is why the BCL's Math.Tanh diverged on 8.1% of
+        ///     inputs and why NDFloatMath now owns both widths.
+        /// </summary>
+        private static readonly System.Collections.Generic.HashSet<string> NumPyPortedFloat64Kernels = new()
+        {
+            "tanh"
         };
 
         public static string Classify(
@@ -392,8 +404,13 @@ namespace NumSharp.UnitTest.Fuzz
             //     blanket over a fixed op. Other result dtypes stay excused on purpose: float16 runs
             //     NumPy's separate loops_half kernels, and float64 exp/log/sin/cos are the
             //     platform's scalar npy_* calls, none of which NumSharp reproduces bit-for-bit.
+            //
+            //     tanh is carved out at BOTH widths (see NumPyPortedFloat64Kernels): it is the one
+            //     op here for which NumPy ships its own kernel at float64 as well, so f8 tanh is a
+            //     port too and a 1-ULP drift there is likewise a regression, not libm noise.
             if (kind == DivergenceKind.Value && c.Operands.Length == 1
                 && !(tc == NPTypeCode.Single && NumPyPortedFloat32Kernels.Contains(c.Op))
+                && !(tc == NPTypeCode.Double && NumPyPortedFloat64Kernels.Contains(c.Op))
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "unary ~ULP (transcendental/magnitude algorithm difference)";
 

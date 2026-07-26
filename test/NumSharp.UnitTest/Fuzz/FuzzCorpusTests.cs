@@ -47,6 +47,15 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void NumPyFloat32Kernels() => RunCorpus("numpy_f32_kernels.jsonl");
 
+        // The float64 half of the same claim, and the ONLY one of the ported kernels that has one:
+        // NumPy ships its own table-driven tanh at f8 as well (loops_hyperbolic), where exp/log/sin/
+        // cos fall through to the platform's scalar npy_* and already agree bit-for-bit. Same layout
+        // sweep as above, over the f8 subinterval seams, the saturation cut, +-0/+-inf/NaN and the
+        // integer dtypes that promote INTO this loop (int32 and wider).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void NumPyFloat64Kernels() => RunCorpus("numpy_f64_kernels.jsonl");
+
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Reduce() => RunCorpus("reduce.jsonl");
@@ -339,7 +348,8 @@ namespace NumSharp.UnitTest.Fuzz
             ["matmul_parity.jsonl"] = 342,
             ["modf.jsonl"] = 51,
             ["nanreduce.jsonl"] = 6692,
-            ["numpy_f32_kernels.jsonl"] = 120,
+            ["numpy_f32_kernels.jsonl"] = 140,
+            ["numpy_f64_kernels.jsonl"] = 24,
             ["out_where.jsonl"] = 3500,
             ["params.jsonl"] = 966,
             ["place.jsonl"] = 12,
