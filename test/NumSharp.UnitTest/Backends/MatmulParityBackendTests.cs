@@ -246,5 +246,260 @@ namespace NumSharp.UnitTest.Backends
             // OpenBLAS reports the count back; a reference CBLAS has no such entry point (-1).
             Assert.IsTrue(info.Contains("threads 1") || info.Contains("threads -1"), info);
         }
+
+        #region a failed Enable is a no-op
+
+        // NamedLibrary_IsBinding_NeverSilentlySubstituted and NotACBlasProvider_Throws above assert
+        // the right invariant, but only ever from a DISABLED start — which is the easy half. The
+        // hard half is a failed Enable landing on a WORKING one: that used to unload the good
+        // library first and leave the backend installed over nothing, so Blas.Enabled kept saying
+        // true while every product quietly reverted to the managed kernel and stayed plausible.
+
+        [TestMethod]
+        public void FailedEnable_OverAWorkingLibrary_ChangesNothing()
+        {
+            RequireBlas();
+            var before = Blas.Info;
+            var expected = np.dot(Ramp(48, 32), Ramp(32, 48));
+
+            Assert.ThrowsException<DllNotFoundException>(
+                () => Blas.Enable("K:/definitely/not/a/blas/here.dll"));
+
+            Assert.IsTrue(Blas.Enabled, "a failed Enable must not uninstall a working backend");
+            Assert.AreEqual(before, Blas.Info, "a failed Enable must not unload the working library");
+            AssertBitEqual(expected, np.dot(Ramp(48, 32), Ramp(32, 48)));
+        }
+
+        [TestMethod]
+        public void FailedEnable_OnANonCBlasFile_OverAWorkingLibrary_ChangesNothing()
+        {
+            RequireBlas();
+            var before = Blas.Info;
+            var self = typeof(MatmulParityBackendTests).Assembly.Location;
+
+            Assert.ThrowsException<EntryPointNotFoundException>(() => Blas.Enable(self));
+
+            Assert.IsTrue(Blas.Enabled);
+            Assert.AreEqual(before, Blas.Info);
+        }
+
+        [TestMethod]
+        public void Enabled_MeansInstalledAND_Bound_NotMerelyInstalled()
+        {
+            // The property answers "are my products going through a BLAS?", so an installed backend
+            // with nothing to call must report false — it declines every operand, and reporting
+            // true there would claim a parity it is not delivering.
+            Blas.Disable();
+            Assert.IsFalse(Blas.Enabled);
+            BackendFactory.GetEngine().Blas = new DeclineEverythingBackend();
+            Assert.IsFalse(Blas.Enabled, "a foreign backend is not this package's backend");
+            BackendFactory.GetEngine().Blas = null;
+        }
+
+        #endregion
+
+        #region the batched entry point
+
+        [TestMethod]
+        public void StackedProducts_GoThroughTheBatchedEntryPoint_Once()
+        {
+            RequireBlas();
+            var spy = new CountingBackend(BackendFactory.GetEngine().Blas);
+            BackendFactory.GetEngine().Blas = spy;
+            try
+            {
+                np.matmul(Ramp(4, 9, 11), Ramp(4, 11, 6));
+                Assert.AreEqual(1, spy.Batched, "the whole stack must be offered in one call");
+                Assert.AreEqual(0, spy.TwoD, "no per-element fallback when the stack is served");
+            }
+            finally
+            {
+                BackendFactory.GetEngine().Blas = null;
+            }
+        }
+
+        [TestMethod]
+        public void BatchedEntryPoint_IsBitIdenticalToThePerElementRoute()
+        {
+            // The hoist is a PERFORMANCE change only: the plan is a pure function of the trailing
+            // strides and dims, which do not vary across a stack, so both routes reach the same
+            // MatmulCore call with the same pointers. Prove it by declining the batched entry point
+            // through a decorator and comparing bytes.
+            RequireBlas();
+            var real = BackendFactory.GetEngine().Blas;
+            var perElement = new CountingBackend(real) { DeclineBatched = true };
+
+            var pairs = new[]
+            {
+                (Ramp(4, 9, 11), Ramp(4, 11, 6)),
+                (Ramp(64, 8, 8), Ramp(64, 8, 8)),
+                (Ramp(2, 3, 33, 17), Ramp(2, 3, 17, 29)),
+                (Ramp(4, 11, 9).transpose(new[] { 0, 2, 1 }), Ramp(4, 11, 6)),
+                (Ramp(4, 1, 11), Ramp(4, 11, 1)),
+            };
+
+            try
+            {
+                foreach (var (l, r) in pairs)
+                {
+                    BackendFactory.GetEngine().Blas = perElement;
+                    var viaElements = np.matmul(l, r);
+                    BackendFactory.GetEngine().Blas = real;
+                    var viaStack = np.matmul(l, r);
+                    AssertBitEqual(viaElements, viaStack);
+                }
+            }
+            finally
+            {
+                BackendFactory.GetEngine().Blas = null;
+            }
+        }
+
+        [TestMethod]
+        public void BatchedEntryPoint_DeclinesZeroSizedExtents_SoBehaviourIsUnchanged()
+        {
+            // A backend may change WHICH implementation runs and how fast — never WHETHER the call
+            // works. NumPy excludes zero dims from its own blas routes too, and NumSharp's engine
+            // currently throws on a zero-sized stacked matmul, so the backend must not quietly
+            // start answering them (that would make np.matmul succeed or fail depending on whether
+            // this package happens to be referenced).
+            RequireBlas();
+            var zeroBatch = (Func<NDArray>)(() => np.matmul(
+                np.zeros(new Shape(0, 3, 4), NPTypeCode.Single),
+                np.zeros(new Shape(0, 4, 5), NPTypeCode.Single)));
+            var zeroK = (Func<NDArray>)(() => np.matmul(
+                np.zeros(new Shape(2, 3, 0), NPTypeCode.Single),
+                np.zeros(new Shape(2, 0, 5), NPTypeCode.Single)));
+
+            foreach (var call in new[] { zeroBatch, zeroK })
+            {
+                Blas.Disable();
+                var withoutBackend = Outcome(call);
+                Blas.Enable();
+                Assert.AreEqual(withoutBackend, Outcome(call),
+                    "installing the backend changed the outcome of a zero-sized stacked matmul");
+            }
+        }
+
+        [TestMethod]
+        public void ABackendThatKnowsNothingOfBatching_StillWorks()
+        {
+            // TryMatMulBatched arrived as a DEFAULT interface method, so a backend written against
+            // the original two-member interface keeps compiling and running untouched — the engine
+            // simply falls back to its per-element loop. This is the extensibility claim, executed.
+            var legacy = new TwoMemberBackend();
+            BackendFactory.GetEngine().Blas = legacy;
+            try
+            {
+                var r = np.matmul(Ramp(3, 4, 5), Ramp(3, 5, 6));
+                CollectionAssert.AreEqual(new long[] { 3, 4, 6 }, r.shape);
+                Assert.AreEqual(3, legacy.TwoD, "one 2-D call per batch element");
+                AssertBitEqual(Ramp(3, 4, 5).astype(NPTypeCode.Single), Ramp(3, 4, 5));
+            }
+            finally
+            {
+                BackendFactory.GetEngine().Blas = null;
+            }
+        }
+
+        #endregion
+
+        #region helpers
+
+        private static NDArray Ramp(params long[] dims)
+        {
+            long n = 1;
+            foreach (var d in dims)
+                n *= d;
+            return (np.arange(n).astype(NPTypeCode.Single) / np.array(7.0f) - np.array(3.0f)).reshape(dims);
+        }
+
+        private static string Outcome(Func<NDArray> call)
+        {
+            try
+            {
+                var r = call();
+                return $"{r.dtype.Name}({string.Join(",", r.shape)})";
+            }
+            catch (Exception e)
+            {
+                return e.GetType().Name;
+            }
+        }
+
+        private static void AssertBitEqual(NDArray expected, NDArray actual)
+        {
+            Assert.AreEqual(expected.typecode, actual.typecode);
+            CollectionAssert.AreEqual(expected.shape, actual.shape);
+            var a = expected.ToArray<float>();
+            var b = actual.ToArray<float>();
+            for (int i = 0; i < a.Length; i++)
+                Assert.AreEqual(BitConverter.SingleToInt32Bits(a[i]), BitConverter.SingleToInt32Bits(b[i]),
+                    $"element {i}: {a[i]} vs {b[i]}");
+        }
+
+        /// <summary>Forwards to a real backend, counting calls; can decline the batched route.</summary>
+        private sealed class CountingBackend : IBlasBackend
+        {
+            private readonly IBlasBackend _inner;
+            public int TwoD, Batched;
+            public bool DeclineBatched;
+            public CountingBackend(IBlasBackend inner) => _inner = inner;
+            public string Info => _inner.Info;
+            public bool TryDot(NDArray l, NDArray r, out NDArray result) => _inner.TryDot(l, r, out result);
+            public bool TryMatMul2D(NDArray l, NDArray r, NDArray result) { TwoD++; return _inner.TryMatMul2D(l, r, result); }
+            public bool TryMatMulBatched(NDArray l, NDArray r, NDArray result)
+            {
+                Batched++;
+                return !DeclineBatched && _inner.TryMatMulBatched(l, r, result);
+            }
+        }
+
+        /// <summary>A backend written against the ORIGINAL two-member interface — nothing else.</summary>
+        private sealed unsafe class TwoMemberBackend : IBlasBackend
+        {
+            public int TwoD;
+            public string Info => "two-member backend";
+
+            public bool TryDot(NDArray left, NDArray right, out NDArray result)
+            {
+                result = null;
+                return false;
+            }
+
+            public bool TryMatMul2D(NDArray left, NDArray right, NDArray result)
+            {
+                if (result.typecode != NPTypeCode.Single) return false;
+                if (left.typecode != NPTypeCode.Single || right.typecode != NPTypeCode.Single) return false;
+                TwoD++;
+
+                long m = left.shape[0], k = left.shape[1], n = right.shape[1];
+                float* pa = (float*)left.GetData().Address + left.Shape.Offset;
+                float* pb = (float*)right.GetData().Address + right.Shape.Offset;
+                float* pc = (float*)result.GetData().Address + result.Shape.Offset;
+                long a0 = left.Shape.Strides[0], a1 = left.Shape.Strides[1];
+                long b0 = right.Shape.Strides[0], b1 = right.Shape.Strides[1];
+                long c0 = result.Shape.Strides[0], c1 = result.Shape.Strides[1];
+                for (long i = 0; i < m; i++)
+                    for (long j = 0; j < n; j++)
+                    {
+                        float sum = 0f;
+                        for (long p = 0; p < k; p++)
+                            sum += pa[i * a0 + p * a1] * pb[p * b0 + j * b1];
+                        pc[i * c0 + j * c1] = sum;
+                    }
+
+                return true;
+            }
+        }
+
+        private sealed class DeclineEverythingBackend : IBlasBackend
+        {
+            public string Info => "declines everything";
+            public bool TryDot(NDArray l, NDArray r, out NDArray result) { result = null; return false; }
+            public bool TryMatMul2D(NDArray l, NDArray r, NDArray result) => false;
+        }
+
+        #endregion
     }
 }

@@ -31,11 +31,11 @@ Blas.Disable();   // clears engine.Blas — back to NumSharp's managed SIMD GEMM
 
 ## What it does
 
-`OpenBlasBackend` implements NumSharp's `IBlasBackend` — two `Try`-shaped members, `TryDot` and
-`TryMatMul2D` — and the package assigns it to the engine's `TensorEngine.Blas` property. The engine
-itself is NOT replaced or subclassed: every other operation, dtype, kernel and iterator is
-untouched, and anything the backend does not serve (any dtype other than float32/float64, or a
-shape outside the ported surface) is computed by the built-in managed kernels as before.
+`OpenBlasBackend` implements NumSharp's `IBlasBackend` — `Try`-shaped members only — and the package
+assigns it to the engine's `TensorEngine.Blas` property. The engine itself is NOT replaced or
+subclassed: every other operation, dtype, kernel and iterator is untouched, and anything the backend
+does not serve (any dtype other than float32/float64, or a shape outside the ported surface) is
+computed by the built-in managed kernels as before.
 
 ```csharp
 // The entire Core-side surface:
@@ -43,9 +43,23 @@ public interface IBlasBackend {
     string Info { get; }
     bool TryDot(NDArray left, NDArray right, out NDArray result);
     bool TryMatMul2D(NDArray left, NDArray right, NDArray result);
+    bool TryMatMulBatched(NDArray left, NDArray right, NDArray result) => false;  // optional
 }
 public abstract class TensorEngine { public IBlasBackend Blas { get; set; } }
 ```
+
+`TryMatMulBatched` takes a whole stacked product at once. It is a **default interface method**, so a
+backend that only implements the first two members compiles and runs unchanged — the engine falls
+back to calling `TryMatMul2D` once per batch element. Implementing it lets a backend amortise
+per-product setup across the stack (the trailing strides never vary within one), which is what NumPy
+does in its matmul gufunc's outer loop; measured on 2000 stacked 8×8 float32 products, doing that
+setup per element instead made this backend **0.80×** — *slower* than NumSharp's own managed GEMM —
+against **6.5×** with the work hoisted.
+
+Writing your own backend needs no access to NumSharp's internals: read operands as
+`(T*)a.GetData().Address + a.Shape.Offset` with `a.Shape.Strides` (element units). Do **not** use
+`a.GetData<T>().Address` — it densifies a non-contiguous view, so pairing it with `Shape.Strides`
+reads outside the buffer.
 
 The two entry points are a **route-for-route port of NumPy 2.4.2's two matrix-product dispatchers** —
 `cblas_matrixproduct` (behind `np.dot`) and the `@TYPE@_matmul` gufunc (behind `np.matmul` and
@@ -67,7 +81,9 @@ Three things are load-bearing:
 
 - **The thread count is part of the answer** — 1, 2, 4 and 24 threads give four different results.
 - **A named library is binding** — an explicit path (or `NUMSHARP_PARITY_BLAS`) is used as given and
-  never silently replaced, because parity is a claim about one specific binary.
+  never silently replaced, because parity is a claim about one specific binary. A failed
+  `Blas.Enable` is a **no-op**: it throws having changed nothing, so a mistyped path cannot demote a
+  working setup back to the managed kernels behind your back.
 - **No native asset ships with this package** — the BLAS is whichever one you already have.
 
 ## Supported providers

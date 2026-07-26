@@ -34,8 +34,18 @@ namespace NumSharp.Interop.Blas
     /// </remarks>
     public static class Blas
     {
-        /// <summary>True when this package's backend is installed on the default engine.</summary>
-        public static bool Enabled => BackendFactory.GetEngine().Blas is OpenBlasBackend;
+        /// <summary>
+        ///     True when this package's backend is installed on the default engine AND has a CBLAS
+        ///     library to call.
+        /// </summary>
+        /// <remarks>
+        ///     Both halves are load-bearing. The backend declines every operand when no library is
+        ///     loaded, so an installed-but-unbound backend silently computes nothing at all — every
+        ///     product falls back to NumSharp's managed kernels and the answer stays plausible.
+        ///     Reporting true there would make this property claim parity it is not delivering.
+        /// </remarks>
+        public static bool Enabled
+            => CBlasNative.IsLoaded && BackendFactory.GetEngine().Blas is OpenBlasBackend;
 
         /// <summary>
         ///     Path, symbol scheme, integer width, thread count and build string of the loaded
@@ -70,6 +80,13 @@ namespace NumSharp.Interop.Blas
         ///     depend on this</b> — measured: 1, 2, 4 and 24 threads give four different answers —
         ///     so a parity run must pin both sides to the same count.
         /// </param>
+        /// <remarks>
+        ///     <b>A failed call is a no-op.</b> When the requested library cannot be loaded this
+        ///     throws having changed nothing — an already-working parity setup keeps working, and a
+        ///     process that had none still has none. (It used to unload the good library first, so
+        ///     a mistyped path demoted every subsequent product back to the managed kernels while
+        ///     <see cref="Enabled"/> still said true.)
+        /// </remarks>
         /// <exception cref="DllNotFoundException">No CBLAS library could be located or loaded.</exception>
         /// <exception cref="EntryPointNotFoundException">The library is not a CBLAS provider.</exception>
         public static void Enable(string library = null, int threads = 0)
@@ -100,6 +117,15 @@ namespace NumSharp.Interop.Blas
         ///     <see cref="Enable"/> that reports failure instead of throwing — the module-load path.
         /// </summary>
         /// <returns>True when the backend is installed.</returns>
+        /// <remarks>
+        ///     Catches EVERYTHING on purpose. This runs from a <c>[ModuleInitializer]</c>, where an
+        ///     escaping exception is not a failed opt-in but a <c>TypeInitializationException</c> on
+        ///     every later touch of this assembly — i.e. merely referencing the package would break
+        ///     the app, which is the one thing the design promises it cannot do. Library discovery
+        ///     walks PATH and the filesystem, so the reachable failures are not limited to the
+        ///     three loader exceptions: an unreadable directory alone raises
+        ///     <see cref="System.UnauthorizedAccessException"/>.
+        /// </remarks>
         public static bool TryEnable(string library = null, int threads = 0)
         {
             try
@@ -107,15 +133,7 @@ namespace NumSharp.Interop.Blas
                 Enable(library, threads);
                 return true;
             }
-            catch (DllNotFoundException)
-            {
-                return false;
-            }
-            catch (EntryPointNotFoundException)
-            {
-                return false;
-            }
-            catch (BadImageFormatException)
+            catch (Exception)
             {
                 return false;
             }

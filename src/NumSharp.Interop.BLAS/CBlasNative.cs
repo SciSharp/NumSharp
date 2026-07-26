@@ -31,7 +31,8 @@ namespace NumSharp.Interop.Blas
 
     /// <summary>
     ///     Binding to an external CBLAS shared library, used exclusively by the opt-in
-    ///     <see cref="np.parity_matmul(bool,string,int)">byte-parity matmul backend</see>.
+    ///     byte-parity matrix-product backend this package installs (<see cref="Blas"/> →
+    ///     <see cref="OpenBlasBackend"/>).
     /// </summary>
     /// <remarks>
     ///     NumSharp's own GEMM is never routed through here — this exists so a caller can hand
@@ -116,17 +117,23 @@ namespace NumSharp.Interop.Blas
         /// </summary>
         /// <param name="path">
         ///     Explicit file path, a directory to search, or null to auto-discover (see
-        ///     <see cref="EnumerateCandidates"/>).
+        ///     <see cref="AutoCandidates"/>).
         /// </param>
+        /// <remarks>
+        ///     <b>A failed load is a no-op.</b> Nothing here touches the currently bound library
+        ///     until a replacement has resolved every required symbol, so <c>Load</c> either
+        ///     succeeds or leaves the previous binding exactly as it was. Tearing the working
+        ///     library down first — which is what this used to do — meant a mistyped path silently
+        ///     demoted every subsequent product back to NumSharp's managed kernels while
+        ///     <c>Blas.Enabled</c> still said true: the worst outcome a parity feature has, since
+        ///     the answer stays plausible.
+        /// </remarks>
         /// <exception cref="DllNotFoundException">No candidate library could be loaded.</exception>
         /// <exception cref="EntryPointNotFoundException">The library loaded but is not a CBLAS provider.</exception>
         internal static void Load(string path)
         {
             lock (SyncRoot)
             {
-                if (IsLoaded)
-                    Unload();
-
                 // An explicitly named library is BINDING: parity is a claim about one specific
                 // binary, so quietly falling back to whatever else is installed would produce
                 // confidently wrong bits. Only the unattended case searches.
@@ -143,21 +150,27 @@ namespace NumSharp.Interop.Blas
                     if (!NativeLibrary.TryLoad(candidate, out handle))
                         continue;
 
+                    var previous = _handle;
                     try
                     {
+                        // Commits the statics only once every required symbol resolved.
                         Bind(handle, candidate);
-                        return;
                     }
                     catch
                     {
                         NativeLibrary.Free(handle);
-                        throw;
+                        throw; // previous binding untouched
                     }
+
+                    if (previous != IntPtr.Zero && previous != handle)
+                        NativeLibrary.Free(previous);
+
+                    return;
                 }
 
                 if (strict)
                     throw new DllNotFoundException(
-                        $"np.parity_matmul: '{requested}' could not be loaded as a CBLAS library" +
+                        $"Blas.Enable: '{requested}' could not be loaded as a CBLAS library" +
                         (tried.Count == 0
                             ? " (no such file, and no BLAS library in it if it is a directory)."
                             : $" (tried: {string.Join(", ", tried)}).") +
@@ -166,7 +179,7 @@ namespace NumSharp.Interop.Blas
                         "NUMSHARP_PARITY_BLAS environment variable) to auto-discover instead.");
 
                 throw new DllNotFoundException(
-                    "np.parity_matmul: no CBLAS library could be loaded. Pass the path of the very " +
+                    "Blas.Enable: no CBLAS library could be loaded. Pass the path of the very " +
                     "same BLAS binary your NumPy build uses — for a pip wheel that is " +
                     "<python>/Lib/site-packages/numpy.libs/libscipy_openblas64_-*.dll (Windows) or " +
                     "numpy.libs/libscipy_openblas64_-*.so (Linux) — or set the NUMSHARP_PARITY_BLAS " +
@@ -175,6 +188,12 @@ namespace NumSharp.Interop.Blas
         }
 
         /// <summary>Releases the loaded library and clears every bound symbol.</summary>
+        /// <remarks>
+        ///     Deliberately NOT called by <see cref="Load"/> — replacing a library must not tear the
+        ///     working one down before the replacement is bound, and <c>Blas.Disable()</c> only
+        ///     uninstalls the backend (freeing a BLAS a thread may be executing in is a fatal
+        ///     access violation, not a catchable error). Kept for an explicit teardown.
+        /// </remarks>
         internal static void Unload()
         {
             lock (SyncRoot)
@@ -200,6 +219,14 @@ namespace NumSharp.Interop.Blas
         ///     Resolves every needed entry point in <paramref name="handle"/>, trying the ILP64
         ///     (numpy-wheel) scheme first and falling back to plain LP64 CBLAS names.
         /// </summary>
+        /// <remarks>
+        ///     Every symbol is resolved into a local BEFORE a single static is written, so this
+        ///     either binds completely or not at all. A partial bind is not merely untidy: the
+        ///     caller frees the handle when this throws, so a half-written <see cref="_handle"/>
+        ///     would leave <see cref="IsLoaded"/> reporting true over freed memory — the next
+        ///     <c>Blas.Enable()</c> would skip loading and call into it, and the next
+        ///     <see cref="Load"/> would free it a second time.
+        /// </remarks>
         private static void Bind(IntPtr handle, string path)
         {
             // (prefix, suffix, ilp64) tuples, most specific first. numpy's wheels rename symbols so
@@ -221,6 +248,18 @@ namespace NumSharp.Interop.Blas
                 if (!NativeLibrary.TryGetExport(handle, prefix + "cblas_sgemm" + suffix, out probe))
                     continue;
 
+                // Resolve first, commit second. Require() throws when a symbol is missing, and at
+                // that point not one static may have been written — see the remarks above.
+                IntPtr dgemm = Require(handle, prefix + "cblas_dgemm" + suffix);
+                IntPtr sgemv = Require(handle, prefix + "cblas_sgemv" + suffix);
+                IntPtr dgemv = Require(handle, prefix + "cblas_dgemv" + suffix);
+                IntPtr ssyrk = Require(handle, prefix + "cblas_ssyrk" + suffix);
+                IntPtr dsyrk = Require(handle, prefix + "cblas_dsyrk" + suffix);
+                IntPtr sdot = Require(handle, prefix + "cblas_sdot" + suffix);
+                IntPtr ddot = Require(handle, prefix + "cblas_ddot" + suffix);
+                IntPtr saxpy = Require(handle, prefix + "cblas_saxpy" + suffix);
+                IntPtr daxpy = Require(handle, prefix + "cblas_daxpy" + suffix);
+
                 _handle = handle;
                 LibraryPath = path;
                 IsIlp64 = ilp64;
@@ -229,28 +268,28 @@ namespace NumSharp.Interop.Blas
                 if (ilp64)
                 {
                     _sgemm64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, long, float, float*, long, float*, long, float, float*, long, void>)probe;
-                    _dgemm64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, long, double, double*, long, double*, long, double, double*, long, void>)Require(handle, prefix + "cblas_dgemm" + suffix);
-                    _sgemv64 = (delegate* unmanaged[Cdecl]<int, int, long, long, float, float*, long, float*, long, float, float*, long, void>)Require(handle, prefix + "cblas_sgemv" + suffix);
-                    _dgemv64 = (delegate* unmanaged[Cdecl]<int, int, long, long, double, double*, long, double*, long, double, double*, long, void>)Require(handle, prefix + "cblas_dgemv" + suffix);
-                    _ssyrk64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, float, float*, long, float, float*, long, void>)Require(handle, prefix + "cblas_ssyrk" + suffix);
-                    _dsyrk64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, double, double*, long, double, double*, long, void>)Require(handle, prefix + "cblas_dsyrk" + suffix);
-                    _sdot64 = (delegate* unmanaged[Cdecl]<long, float*, long, float*, long, float>)Require(handle, prefix + "cblas_sdot" + suffix);
-                    _ddot64 = (delegate* unmanaged[Cdecl]<long, double*, long, double*, long, double>)Require(handle, prefix + "cblas_ddot" + suffix);
-                    _saxpy64 = (delegate* unmanaged[Cdecl]<long, float, float*, long, float*, long, void>)Require(handle, prefix + "cblas_saxpy" + suffix);
-                    _daxpy64 = (delegate* unmanaged[Cdecl]<long, double, double*, long, double*, long, void>)Require(handle, prefix + "cblas_daxpy" + suffix);
+                    _dgemm64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, long, double, double*, long, double*, long, double, double*, long, void>)dgemm;
+                    _sgemv64 = (delegate* unmanaged[Cdecl]<int, int, long, long, float, float*, long, float*, long, float, float*, long, void>)sgemv;
+                    _dgemv64 = (delegate* unmanaged[Cdecl]<int, int, long, long, double, double*, long, double*, long, double, double*, long, void>)dgemv;
+                    _ssyrk64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, float, float*, long, float, float*, long, void>)ssyrk;
+                    _dsyrk64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, double, double*, long, double, double*, long, void>)dsyrk;
+                    _sdot64 = (delegate* unmanaged[Cdecl]<long, float*, long, float*, long, float>)sdot;
+                    _ddot64 = (delegate* unmanaged[Cdecl]<long, double*, long, double*, long, double>)ddot;
+                    _saxpy64 = (delegate* unmanaged[Cdecl]<long, float, float*, long, float*, long, void>)saxpy;
+                    _daxpy64 = (delegate* unmanaged[Cdecl]<long, double, double*, long, double*, long, void>)daxpy;
                 }
                 else
                 {
                     _sgemm32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, int, float, float*, int, float*, int, float, float*, int, void>)probe;
-                    _dgemm32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, int, double, double*, int, double*, int, double, double*, int, void>)Require(handle, "cblas_dgemm");
-                    _sgemv32 = (delegate* unmanaged[Cdecl]<int, int, int, int, float, float*, int, float*, int, float, float*, int, void>)Require(handle, "cblas_sgemv");
-                    _dgemv32 = (delegate* unmanaged[Cdecl]<int, int, int, int, double, double*, int, double*, int, double, double*, int, void>)Require(handle, "cblas_dgemv");
-                    _ssyrk32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, float, float*, int, float, float*, int, void>)Require(handle, "cblas_ssyrk");
-                    _dsyrk32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, double, double*, int, double, double*, int, void>)Require(handle, "cblas_dsyrk");
-                    _sdot32 = (delegate* unmanaged[Cdecl]<int, float*, int, float*, int, float>)Require(handle, "cblas_sdot");
-                    _ddot32 = (delegate* unmanaged[Cdecl]<int, double*, int, double*, int, double>)Require(handle, "cblas_ddot");
-                    _saxpy32 = (delegate* unmanaged[Cdecl]<int, float, float*, int, float*, int, void>)Require(handle, "cblas_saxpy");
-                    _daxpy32 = (delegate* unmanaged[Cdecl]<int, double, double*, int, double*, int, void>)Require(handle, "cblas_daxpy");
+                    _dgemm32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, int, double, double*, int, double*, int, double, double*, int, void>)dgemm;
+                    _sgemv32 = (delegate* unmanaged[Cdecl]<int, int, int, int, float, float*, int, float*, int, float, float*, int, void>)sgemv;
+                    _dgemv32 = (delegate* unmanaged[Cdecl]<int, int, int, int, double, double*, int, double*, int, double, double*, int, void>)dgemv;
+                    _ssyrk32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, float, float*, int, float, float*, int, void>)ssyrk;
+                    _dsyrk32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, double, double*, int, double, double*, int, void>)dsyrk;
+                    _sdot32 = (delegate* unmanaged[Cdecl]<int, float*, int, float*, int, float>)sdot;
+                    _ddot32 = (delegate* unmanaged[Cdecl]<int, double*, int, double*, int, double>)ddot;
+                    _saxpy32 = (delegate* unmanaged[Cdecl]<int, float, float*, int, float*, int, void>)saxpy;
+                    _daxpy32 = (delegate* unmanaged[Cdecl]<int, double, double*, int, double*, int, void>)daxpy;
                 }
 
                 // Optional OpenBLAS extensions — absent on a reference CBLAS, which is fine.
@@ -266,7 +305,7 @@ namespace NumSharp.Interop.Blas
             }
 
             throw new EntryPointNotFoundException(
-                $"np.parity_matmul: '{path}' loaded but exports no recognizable cblas_sgemm symbol " +
+                $"Blas.Enable: '{path}' loaded but exports no recognizable cblas_sgemm symbol " +
                 "(tried the scipy_*64_, *64_, *_64 and plain CBLAS naming schemes). It is probably " +
                 "not a CBLAS provider.");
         }
@@ -276,7 +315,7 @@ namespace NumSharp.Interop.Blas
             IntPtr p;
             if (!NativeLibrary.TryGetExport(handle, name, out p))
                 throw new EntryPointNotFoundException(
-                    $"np.parity_matmul: the loaded BLAS library is missing the required symbol '{name}'.");
+                    $"Blas.Enable: the loaded BLAS library is missing the required symbol '{name}'.");
             return p;
         }
 
@@ -318,8 +357,24 @@ namespace NumSharp.Interop.Blas
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var pattern in patterns)
             {
+                // Discovery runs from a [ModuleInitializer]; an unreadable directory on PATH must
+                // not become a TypeInitializationException for the whole assembly.
+                string[] found;
+                try
+                {
+                    found = Directory.GetFiles(path, pattern);
+                }
+                catch (IOException)
+                {
+                    yield break;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    yield break;
+                }
+
                 var files = new List<string>();
-                foreach (var f in Directory.GetFiles(path, pattern))
+                foreach (var f in found)
                 {
                     var ext = Path.GetExtension(f);
                     if (ext.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||

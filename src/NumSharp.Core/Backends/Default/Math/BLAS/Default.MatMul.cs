@@ -86,6 +86,15 @@ namespace NumSharp.Backends
             var resultShape = new Shape(batch.Concat(new[] { n, m }).ToArray());
             var ret = new NDArray(resultType, resultShape);
 
+            // An external BLAS, when one is installed — offered the WHOLE stack first. The trailing
+            // strides are identical for every element of it, so a backend can hoist its route
+            // decision and scratch out of the loop the way NumPy's matmul gufunc does; going
+            // through TryMatMul2D per element instead costs more than the products do once the
+            // matrices are small. Read the property once (see the note in Default.Dot.cs).
+            var blas = Blas;
+            if (blas != null && blas.TryMatMulBatched(lhsB, rhsB, ret))
+                return ret;
+
             // Iterate the batch coordinates; each integer-index slice is a 2-D [n,k]·[k,m]->[n,m].
             // GetData(coords) is COORDINATE (sub-array) access — a raw long[] passed to the
             // this[...] indexer is now FANCY indexing (NumPy parity), so the batch sub-matrix

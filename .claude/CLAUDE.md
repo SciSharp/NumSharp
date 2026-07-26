@@ -87,6 +87,7 @@ public interface IBlasBackend                                    // Backends/IBl
     string Info { get; }
     bool TryDot(NDArray left, NDArray right, out NDArray result);
     bool TryMatMul2D(NDArray left, NDArray right, NDArray result);
+    bool TryMatMulBatched(NDArray left, NDArray right, NDArray result) => false;   // optional (DIM)
 }
 
 public abstract class TensorEngine
@@ -96,13 +97,24 @@ public abstract class TensorEngine
 ```
 
 The package implements the interface and assigns the property from a `[ModuleInitializer]`, so
-**referencing the package is the whole opt-in**; assigning null takes it back out. Both members are
+**referencing the package is the whole opt-in**; assigning null takes it back out. Every member is
 `Try`-shaped: a backend answers only for the operands it implements and returns false for the rest,
 so an optional package can change *which* implementation computes a product, never *whether* one can
 be computed. The engine is **not** subclassed and not replaced — deliberately: an `NDArray` binds
 its engine at CONSTRUCTION and `np.dot(a,b)` dispatches on `a.TensorEngine`, so swapping the engine
 would only reach arrays created afterwards, while a property on the cached singleton takes effect
-for arrays that already exist.
+for arrays that already exist (probed: 38/38 construction/operation/IO paths reach the one
+`EngineCache<DefaultEngine>` instance).
+
+Three rules the review pinned, all with a reproduction (`docs/GEMM_PARITY.md` §9): read `Blas` into
+a **local** before calling it (test-then-call on a settable property was ~2 % NREs under concurrent
+`Disable()`); a failed `Blas.Enable` is a **no-op** (it used to unload the working library first,
+leaving `Enabled` reporting true while products silently reverted to managed kernels); and a backend
+needs **no** `InternalsVisibleTo` — read operands as `(T*)a.GetData().Address + a.Shape.Offset` with
+`a.Shape.Strides` (all public; `a.GetData<T>().Address` densifies non-contiguous views and must not
+be paired with strides). `TryMatMulBatched` is a default interface method taking a whole stacked
+product, so per-product setup is hoisted the way NumPy hoists it out of its gufunc's outer loop —
+bit-identical to the per-element route (25/25 A/B), 0.80× → **6.47×** on 2000 stacked 8×8 f32.
 
 | Package | Implements | Serves | Why |
 |---------|-----------|--------|-----|

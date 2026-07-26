@@ -88,6 +88,7 @@ public interface IBlasBackend                                    // the whole Co
     string Info { get; }
     bool TryDot(NDArray left, NDArray right, out NDArray result);
     bool TryMatMul2D(NDArray left, NDArray right, NDArray result);
+    bool TryMatMulBatched(NDArray left, NDArray right, NDArray result) => false;   // optional
 }
 
 public abstract class TensorEngine
@@ -97,17 +98,32 @@ public abstract class TensorEngine
 ```
 
 The package implements `IBlasBackend` and assigns it from a `[ModuleInitializer]`. `DefaultEngine`
-consults the property at the top of `Dot` and inside `MultiplyMatrix`, and computes the product
-itself whenever it is null or the backend returns false:
+consults the property at the top of `Dot`, inside `MultiplyMatrix`, and at the top of
+`BatchedMatmul`, and computes the product itself whenever it is null or the backend returns false:
 
 | Entry point | Mirrors |
 |---|---|
 | `TryDot` | `PyArray_MatrixProduct2` → `cblas_matrixproduct` (ndim ≤ 2) + the `dotfunc` iterator tail (ndim > 2) |
-| `TryMatMul2D` | `@TYPE@_matmul`, the gufunc behind `np.matmul` and `@` — also every batch element of a stacked matmul |
+| `TryMatMul2D` | `@TYPE@_matmul`, the gufunc behind `np.matmul` and `@` |
+| `TryMatMulBatched` | that gufunc's OUTER loop — the whole stack in one call, so the route decision and scratch are built once, as NumPy builds them once from `steps[]` |
 
-Both are `Try`-shaped because a backend answers only for what it implements (an external CBLAS:
+All three are `Try`-shaped because a backend answers only for what it implements (an external CBLAS:
 float32/float64), so **installing one can change WHICH implementation runs, never WHETHER NumSharp
-can compute the product**.
+can compute the product**. That invariant is load-bearing enough to cost coverage: `TryMatMulBatched`
+declines zero-sized extents, both because NumPy's own dispatcher excludes them from its blas routes
+and because NumSharp's per-element loop currently throws on them — answering would make `np.matmul`
+succeed or fail depending on whether this package happens to be referenced.
+
+`TryMatMulBatched` is a **default interface method**, so a backend written against the original two
+members keeps compiling and running with no edit; the engine just falls back to per-element calls.
+Adding a whole new dtype family needs no interface change at all — a third-party Complex128 backend
+was written against this exact surface, batched path included, without touching Core.
+
+**A backend does not need access to NumSharp's internals.** Operands are read as
+`(T*)a.GetData().Address + a.Shape.Offset` with `a.Shape.Strides` — all public, all element units.
+(`a.GetData<T>().Address` is the trap: for a non-contiguous view it hands back a *densified copy*,
+so pairing it with `Shape.Strides` reads outside the buffer and quietly returns wrong numbers on
+exactly the sliced and transposed operands a matrix product sees most.)
 
 **Why a property and not an engine subclass** (which is what the first cut did): an `NDArray` binds
 its engine when it is CONSTRUCTED, and `np.dot(a, b)` dispatches on `a.TensorEngine`. Swapping the
@@ -183,11 +199,35 @@ place a 50-step float32 MLP train produces byte-identical `w1`/`w2`/`b1`/`b2`.
 | 1024³ | f64 | 134.5 | **33.8** | 32.3 |
 | 2048³ | f64 | 3860 | **292.6** | 310.6 |
 
-The BLAS path is 1.7×–13× *faster* than NumSharp's own GEMM (it is OpenBLAS, after all), so
-installing the package costs nothing but a native dependency — which is exactly why it is a separate
-package rather than part of Core. NumSharp ships no native binaries: the package binds whatever
-BLAS the consumer already has, because bundling one would make results depend on which copy won the
-loader race, and parity is a claim about a specific binary.
+The BLAS path is 1.7×–13× *faster* than NumSharp's own GEMM (it is OpenBLAS, after all). NumSharp
+ships no native binaries: the package binds whatever BLAS the consumer already has, because bundling
+one would make results depend on which copy won the loader race, and parity is a claim about a
+specific binary.
+
+### Stacked products, and why the seam is per-STACK and not per-matrix
+
+The granularity of an entry point is a performance decision, and this one was wrong at first. With
+only `TryMatMul2D`, a stacked matmul called it once per batch element and the backend rebuilt
+NumPy's `MatmulPlan` — route decision plus, when an operand is not blasable, a native scratch
+`malloc` — every time. NumPy does that work once, outside its gufunc's outer loop, because the
+trailing strides cannot vary within a stack. Measured (NPY/NS convention, higher = BLAS faster,
+Release, best-of-9):
+
+| workload | managed ms | BLAS, per element | BLAS, hoisted | ratio before → after |
+|---|---|---|---|---|
+| 2000 × (8,8) f32 | 2.34 | 2.71 | **0.361** | **0.80× → 6.47×** |
+| 500 × (32,32) f32 | 1.93 | 1.39 | **0.850** | 1.28× → **2.27×** |
+| 8 × (256,256) f32 | 4.78 | 2.29 | **2.33** | 1.58× → **2.05×** |
+| single (512,784)@(784,512) f32 | 6.50 | 2.89 | 2.89 | 2.25× (unaffected) |
+| 2000 × (8,8) **int32** (declined) | 2.51 | 2.65 | 2.65 | 0.95× — the seam itself is free |
+
+So per-element setup did not merely erode the advantage on many-small-matrix workloads, it inverted
+it: the external OpenBLAS was **20 % slower than NumSharp's own managed GEMM**. `TryMatMulBatched`
+removes that, and it is a pure performance change — the plan is a function of the trailing strides
+and dims alone, so both routes reach the same `MatmulCore` call with the same pointers. Verified by
+A/B-ing them through a decorator that declines the batched entry point: **25/25 stacked products
+bit-identical** across broadcast, transposed, sliced, negative-stride, 1-D-promoted, degenerate-core
+(`dm`/`dn`/`dp` = 1), 4-D and 5-D cases, f32 and f64.
 
 ## 7. The host pin
 
@@ -228,3 +268,48 @@ measured.
 - **`?dot` accumulates in double.** NumPy's `FLOAT_dot` sums the chunked `cblas_sdot` results into
   a `double` "for stability" before casting back to float — the row·column route is therefore
   *more* accurate than the gemm route, and a parity implementation must reproduce that too.
+
+## 9. What the design review changed (2026-07-26)
+
+The seam itself survived every attempt to break it; three defects in the plumbing around it did not.
+Each is now pinned by a test in `MatmulParityBackendTests`.
+
+- **Never test-then-call a settable property.** Both hook sites read `Blas` twice —
+  `if (Blas != null && Blas.TryDot(...))`. `Blas` is settable from any thread, so a concurrent
+  `Blas.Disable()` landing between the two reads is a `NullReferenceException` inside `np.dot`:
+  measured **31 252 of 1 562 291 products (~2 %)** under a thread flipping the property while eight
+  workers multiplied. Reading it into a local first fixes it (re-measured 0 of 1 553 695). A
+  `volatile` field would not have helped — reference reads are already atomic; the bug was the
+  *second* read, not a torn one.
+- **A failed `Enable` must change nothing.** `CBlasNative.Load` used to `Unload()` the working
+  library before it knew the new candidate was good, and `Blas.Enable` left the backend installed
+  when the load then threw. The result was the worst failure mode a parity feature has: `Blas.Enabled`
+  reporting **true** while every product had silently reverted to the managed kernel — no exception
+  at the call site, and an answer that still looks like a matrix product. Load now binds the
+  replacement fully before touching the incumbent, and `Enabled` means installed **and** bound.
+  The same commit-before-validate pattern in `Bind` was worse and is fixed the same way: it wrote
+  `_handle` before resolving the remaining nine symbols, so a library exporting `cblas_sgemm` but
+  missing, say, `cblas_dsyrk` would leave `IsLoaded` true over a handle the caller had just freed —
+  a later `Enable()` would skip loading and call into it, and a later `Load` would free it twice.
+- **`TryEnable` catches everything, deliberately.** It runs from a `[ModuleInitializer]`, where an
+  escaping exception is not a failed opt-in but a `TypeInitializationException` on every later touch
+  of the assembly — i.e. merely *referencing* the package would break the app, the one thing the
+  design promises it cannot do. Discovery walks `PATH` and the filesystem, so the reachable failures
+  were never limited to the three loader exceptions it used to catch; an unreadable directory alone
+  raises `UnauthorizedAccessException` (now also guarded at the `Directory.GetFiles` call).
+
+**Verified sound, with the probe that proves it** — do not re-derive:
+
+| Claim | How it was probed | Result |
+|---|---|---|
+| Every `NDArray` resolves to the one cached engine, so the property reaches arrays that already exist | 38 construction / operation / IO paths asserted `ReferenceEquals(arr.TensorEngine, BackendFactory.GetEngine())` | 38/38. The only escape is the explicit public `arr.TensorEngine = new DefaultEngine()`; even then `a+b` results land back on the singleton |
+| Installing a backend changes bits and speed, nothing else | 52 calls (valid shapes, every layout, mixed dtypes, and 14 invalid ones) compared shape + dtype + exception type + exception message, backend on vs off | 52/52 identical. The `Dot` hook sitting *above* Core's own validation is safe because every misaligned route returns false |
+| A backend needs `InternalsVisibleTo` | wrote a working `IBlasBackend` in an assembly that is **not** a Core friend | Refuted — it compiles, installs and computes correctly, strided views included |
+| The interface would need widening for the uncovered dtypes | added a Complex128 backend (what NumPy sends to `zgemm`), non-friend, batched path included | Zero change to `IBlasBackend`, `TensorEngine` or any hook |
+
+**Found while probing, NOT a BLAS defect and still open:** `np.matmul` throws on any ≥3-D operand
+with a zero-sized dimension — `matmul(zeros((0,3,4)), zeros((0,4,5)))` raises
+`InvalidOperationException` where NumPy gives shape `(0,3,5)`, and the zero-K/M/N variants raise
+`IndexOutOfRangeException`. `np.dot` and 2-D `np.matmul` are both correct, so it is specific to
+`BatchedMatmul` (its `ValueCoordinatesIncrementor` rejects an empty iteration shape, and
+`BroadcastStackDims` broadcasts `0` against `1` to **1** instead of `0`).

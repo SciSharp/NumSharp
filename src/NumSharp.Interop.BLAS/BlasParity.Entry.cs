@@ -36,6 +36,133 @@ namespace NumSharp.Interop.Blas
             return true;
         }
 
+        /// <summary>
+        ///     Parity entry point for a STACKED <c>np.matmul</c>: mirrors <c>@TYPE@_matmul</c>'s
+        ///     OUTER loop, which builds its route decision and scratch buffers from <c>steps[]</c>
+        ///     ONCE and reuses them for every element of the stack.
+        /// </summary>
+        /// <remarks>
+        ///     Bit-identical to running <see cref="TryMatmul2D"/> per batch element — the plan is a
+        ///     pure function of the trailing strides and dims, which do not vary across a stack, so
+        ///     the same plan and the same <see cref="MatmulCore{T,TOps}"/> call happen either way.
+        ///     What changes is that the plan (and any native scratch allocation behind it) is built
+        ///     once rather than per element.
+        /// </remarks>
+        /// <returns>False when the parity backend is off or cannot service this input.</returns>
+        internal static bool TryMatmulBatched(NDArray left, NDArray right, NDArray result)
+        {
+            if (!CBlasNative.IsLoaded)
+                return false;
+
+            var typeCode = result.GetTypeCode;
+            if (!IsSupported(typeCode))
+                return false;
+
+            // Deliberately NOT AsCommon here: an operand of a different dtype would have to be
+            // materialised for the WHOLE stack, and a broadcast one expands to the full batch while
+            // it is at it. The per-element path casts one small matrix at a time; let it.
+            if (left.GetTypeCode != typeCode || right.GetTypeCode != typeCode)
+                return false;
+
+            var ls = left.Shape;
+            var rs = right.Shape;
+            var cs = result.Shape;
+            int nd = cs.NDim;
+            if (nd < 3 || ls.NDim != nd || rs.NDim != nd)
+                return false;
+
+            // The engine broadcasts the stack dims before calling, so they must already agree.
+            for (int i = 0; i < nd - 2; i++)
+                if (ls.dimensions[i] != cs.dimensions[i] || rs.dimensions[i] != cs.dimensions[i])
+                    return false;
+
+            long dm = ls.dimensions[nd - 2], dn = ls.dimensions[nd - 1], dp = rs.dimensions[nd - 1];
+            if (rs.dimensions[nd - 2] != dn || cs.dimensions[nd - 2] != dm || cs.dimensions[nd - 1] != dp)
+                return false;
+
+            // Zero-sized extents go back to the engine. Two reasons, and both matter:
+            // NumPy's own @TYPE@_matmul excludes any zero dim from its blas routes (it is the
+            // `anyZeroDim` arm of the noblas fallback), so claiming them here would not be the
+            // faithful port; and NumSharp's per-element loop currently THROWS on them, so
+            // answering would make `np.matmul` succeed or fail depending on whether this package
+            // happens to be installed. A backend may change which implementation runs and how fast
+            // — never whether the call works. (The engine-side defect is real and separate: see
+            // OpenBugs — np.matmul(zeros((0,3,4)), zeros((0,4,5))) should be shape (0,3,5).)
+            if (dm == 0 || dn == 0 || dp == 0)
+                return false;
+
+            for (int i = 0; i < nd - 2; i++)
+                if (cs.dimensions[i] == 0)
+                    return false;
+
+            if (typeCode == NPTypeCode.Single)
+                MatmulBatched<float, SingleBlas>(left, right, result, dm, dn, dp);
+            else
+                MatmulBatched<double, DoubleBlas>(left, right, result, dm, dn, dp);
+
+            return true;
+        }
+
+        private static void MatmulBatched<T, TOps>(NDArray left, NDArray right, NDArray result,
+            long dm, long dn, long dp)
+            where T : unmanaged, INumberBase<T>
+            where TOps : struct, IBlasType<T>
+        {
+            var ls = left.Shape;
+            var rs = right.Shape;
+            var cs = result.Shape;
+            int nd = cs.NDim;
+            int nb = nd - 2;
+
+            long is1M = ls.strides[nd - 2], is1N = ls.strides[nd - 1];
+            long is2N = rs.strides[nd - 2], is2P = rs.strides[nd - 1];
+            long osM = cs.strides[nd - 2], osP = cs.strides[nd - 1];
+
+            long count = 1;
+            for (int i = 0; i < nb; i++)
+                count *= cs.dimensions[i];
+
+            if (count == 0 || cs.size == 0)
+                return;
+
+            // ONE plan for the whole stack — this is the hoist.
+            var plan = BuildMatmulPlan<T>(is1M, is1N, is2N, is2P, osM, osP, dm, dn, dp);
+            try
+            {
+                T* p1 = (T*)left.Address + ls.offset;
+                T* p2 = (T*)right.Address + rs.offset;
+                T* po = (T*)result.Address + cs.offset;
+
+                var coord = new long[nb];
+                for (long e = 0; e < count; e++)
+                {
+                    long o1 = 0, o2 = 0, oo = 0;
+                    for (int i = 0; i < nb; i++)
+                    {
+                        o1 += coord[i] * ls.strides[i];
+                        o2 += coord[i] * rs.strides[i];
+                        oo += coord[i] * cs.strides[i];
+                    }
+
+                    MatmulCore<T, TOps>(ref plan, p1 + o1, is1M, is1N, p2 + o2, is2N, is2P,
+                        po + oo, osM, osP, dm, dn, dp);
+
+                    // C-order odometer over the stack dims, last axis fastest.
+                    for (int i = nb - 1; i >= 0; i--)
+                    {
+                        if (++coord[i] < cs.dimensions[i])
+                            break;
+
+                        coord[i] = 0;
+                    }
+                }
+            }
+            finally
+            {
+                FreeMatmulPlan(ref plan);
+            }
+        }
+
         private static void Matmul2D<T, TOps>(NDArray left, NDArray right, NDArray result)
             where T : unmanaged, INumberBase<T>
             where TOps : struct, IBlasType<T>

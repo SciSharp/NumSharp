@@ -54,7 +54,10 @@ namespace NumSharp.Backends
             // An external BLAS, when one is installed (np is 100% managed by default — see
             // TensorEngine.Blas). It must own the whole product to reproduce its own summation
             // order, so it is consulted before the SIMD paths and answers only for what it serves.
-            if (Blas != null && Blas.TryMatMul2D(left, right, result))
+            // Read the property ONCE — see the note in Default.Dot.cs: test-then-call on a
+            // settable property is a null-dereference under a concurrent Blas.Disable().
+            var blas = Blas;
+            if (blas != null && blas.TryMatMul2D(left, right, result))
                 return result;
 
             // Stride-aware SIMD path for same-type float / double.

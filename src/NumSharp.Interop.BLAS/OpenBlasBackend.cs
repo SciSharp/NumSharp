@@ -52,6 +52,10 @@ namespace NumSharp.Interop.Blas
         public bool TryMatMul2D(NDArray left, NDArray right, NDArray result)
             => BlasParity.TryMatmul2D(left, right, result);
 
+        /// <inheritdoc/>
+        public bool TryMatMulBatched(NDArray left, NDArray right, NDArray result)
+            => BlasParity.TryMatmulBatched(left, right, result);
+
         /// <summary>The loaded library's own description, for diagnostics.</summary>
         public override string ToString() => "OpenBlasBackend " + Info;
     }

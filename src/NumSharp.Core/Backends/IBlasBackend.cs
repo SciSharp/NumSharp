@@ -24,6 +24,17 @@ namespace NumSharp.Backends
     ///     call that stack's own BLAS. See <c>NumSharp.Interop.BLAS</c> and
     ///     <c>docs/GEMM_PARITY.md</c>.
     ///     </para>
+    ///     <para>
+    ///     <b>Reading the operands.</b> An implementation needs raw pointers and strides, and
+    ///     NumSharp's public surface offers two spellings that are NOT interchangeable. Use
+    ///     <c>(T*)a.GetData().Address + a.Shape.Offset</c> together with <c>a.Shape.Strides</c> —
+    ///     that pair is consistent for every layout. Do NOT use <c>a.GetData&lt;T&gt;().Address</c>:
+    ///     for a non-contiguous view it returns a DENSIFIED COPY, so combining it with
+    ///     <c>Shape.Strides</c> reads outside the buffer and yields wrong numbers on exactly the
+    ///     sliced and transposed operands a matrix product is most often handed. Element strides,
+    ///     not bytes. Nothing here requires access to NumSharp's internals — a backend can live in
+    ///     any assembly.
+    ///     </para>
     /// </remarks>
     public interface IBlasBackend
     {
@@ -59,5 +70,30 @@ namespace NumSharp.Backends
         /// </param>
         /// <returns>False when this backend does not serve these operands.</returns>
         bool TryMatMul2D(NDArray left, NDArray right, NDArray result);
+
+        /// <summary>
+        ///     Computes a STACKED matrix product — the whole of <c>np.matmul</c> for operands of
+        ///     three dimensions or more — INTO <paramref name="result"/>.
+        /// </summary>
+        /// <param name="left">Already broadcast to <c>(batch…, M, K)</c>.</param>
+        /// <param name="right">Already broadcast to <c>(batch…, K, N)</c>.</param>
+        /// <param name="result">A pre-allocated <c>(batch…, M, N)</c> array of the promoted dtype.</param>
+        /// <returns>False when this backend does not serve these operands.</returns>
+        /// <remarks>
+        ///     <b>Optional.</b> The default returns false and the engine calls
+        ///     <see cref="TryMatMul2D"/> once per batch element instead, so a backend that does not
+        ///     care about stacked products need not mention this member at all — which is the point
+        ///     of it being a default implementation rather than a new required one.
+        ///     <para>
+        ///     Implement it when per-product setup can be amortised. The trailing two strides of
+        ///     each operand are the SAME for every element of a stack, so any route decision or
+        ///     scratch allocation derived from them is computed once — which is exactly why NumPy
+        ///     hoists that work out of its matmul gufunc's outer loop. Doing it per element instead
+        ///     costs more than the product itself once the matrices are small: measured on 2000
+        ///     stacked 8×8 float32 products, per-element setup made an external OpenBLAS 20 % SLOWER
+        ///     than NumSharp's own managed GEMM.
+        ///     </para>
+        /// </remarks>
+        bool TryMatMulBatched(NDArray left, NDArray right, NDArray result) => false;
     }
 }
