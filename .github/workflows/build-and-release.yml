@@ -89,6 +89,57 @@ jobs:
         path: ${{ github.workspace }}/**/TestResults/**/*.trx
         retention-days: 5
 
+  # Strong-naming gate, on EVERY push and PR.
+  #
+  # The identical check also runs in build-nuget below, but that job only exists on a tag push — and
+  # a release-only gate is how the original defect survived six years: signing was configured in a
+  # `Publish` configuration nothing built, so nothing ever evaluated it until someone looked at a
+  # shipped DLL. Packing here costs ~1 min and means a regression is caught by the PR that causes it
+  # rather than on release day, when the fix is a re-tag.
+  #
+  # This packs a THROWAWAY version into a scratch directory; it publishes nothing.
+  verify-signing:
+    name: Verify strong naming
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+        dotnet-quality: 'preview'
+
+    # The key is committed and marked `binary` in .gitattributes (without which `* text=auto eol=lf`
+    # would rewrite CRLF bytes inside it and corrupt the key). Assert both facts before building, so
+    # a checkout/attribute problem reports as itself instead of as a confusing signing failure.
+    - name: Key is present and intact
+      run: |
+        test -f Open.snk || { echo "::error::Open.snk missing from checkout — signing cannot work."; exit 1; }
+        SIZE=$(stat -c%s Open.snk)
+        SHA=$(sha256sum Open.snk | cut -d' ' -f1)
+        echo "Open.snk: $SIZE bytes, sha256 $SHA"
+        [ "$SIZE" = "596" ] || { echo "::error::Open.snk is $SIZE bytes, expected 596 — likely line-ending corruption; check the '*.snk binary' rule in .gitattributes."; exit 1; }
+        [ "$SHA" = "b897629e0b20090c9219ac80392c037fa4cfcc2bdc21d3c45d9bf74b8df0f671" ] || { echo "::error::Open.snk content changed."; exit 1; }
+
+    - name: Pack (throwaway) and verify every shipped assembly is signed
+      run: |
+        mkdir -p artifacts/signing-check
+        for proj in src/NumSharp.Core/NumSharp.Core.csproj \
+                    src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
+                    src/NumSharp.Interop.BLAS/NumSharp.Interop.BLAS.csproj; do
+          # Tolerate absence: NumSharp.Interop.BLAS does not exist on every branch.
+          [ -f "$proj" ] || { echo "skip (absent): $proj"; continue; }
+          echo "::group::pack $proj"
+          dotnet pack "$proj" --configuration Release --output artifacts/signing-check \
+            -p:NoWarn=${{ env.DOTNET_NOWARN }}
+          echo "::endgroup::"
+        done
+        dotnet run tools/verify_strong_name.cs -- artifacts/signing-check
+
   validate-release:
     needs: test
     if: startsWith(github.ref, 'refs/tags/v')
@@ -193,6 +244,13 @@ jobs:
 
         echo "Packages built:"
         ls -la artifacts/nuget/
+
+    # Last gate before the artifact leaves the machine. Asserts every managed assembly inside every
+    # packed .nupkg carries NumSharp's public key AND a real signature (not delay-signed), and fails
+    # rather than passing vacuously if pack produced nothing. This is the check whose absence let six
+    # years of releases ship with PublicKeyToken=null.
+    - name: Verify strong naming of packed assemblies
+      run: dotnet run tools/verify_strong_name.cs -- artifacts/nuget
 
     - name: Upload NuGet Packages
       uses: actions/upload-artifact@v4
