@@ -1,28 +1,23 @@
-﻿using System;
-
 namespace NumSharp
 {
     public partial class NDArray
     {
-        public NDArray matrix_power(int power)
-        {
-            if (power < 0)
-                throw new Exception("matrix_power just work with int >= 0");
-
-            NDArray product = this.copy();
-
-            for (int idx = 2; idx <= power; idx++)
-                product = TensorEngine.Dot(product, this);
-
-            // np.eye expects int; matrix dimensions typically small but check anyway
-            if (power == 0)
-            {
-                if (product.shape[0] > int.MaxValue)
-                    throw new OverflowException($"Matrix dimension {product.shape[0]} exceeds int.MaxValue for np.eye");
-                product = np.eye((int)product.shape[0]);
-            }
-
-            return product;
-        }
+        /// <summary>
+        ///     Raises this square matrix to the (integer) power <paramref name="power"/>.
+        /// </summary>
+        /// <remarks>
+        ///     The method form of <see cref="np.linalg.matrix_power"/>; see it for the full contract.
+        ///     <para>
+        ///     This used to reject a NEGATIVE power outright ("matrix_power just work with int >= 0"),
+        ///     which was never NumPy's rule — <c>a**-n</c> is <c>inv(a)**n</c>. It now takes that
+        ///     route, so a negative power computes wherever a LAPACK backend is installed and raises
+        ///     <see cref="System.NotSupportedException"/> where none is. Three other behaviours came
+        ///     with the delegation: a non-square operand now raises <see cref="LinAlgError"/> rather
+        ///     than failing inside the product, <c>power == 0</c> returns the identity in THIS array's
+        ///     dtype instead of always float64, and the chain is evaluated by binary exponentiation
+        ///     rather than one multiply per step.
+        ///     </para>
+        /// </remarks>
+        public NDArray matrix_power(int power) => np.linalg.matrix_power(this, power);
     }
 }

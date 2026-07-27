@@ -36,7 +36,7 @@ namespace NumSharp.Backends
     ///     any assembly.
     ///     </para>
     /// </remarks>
-    public interface IBlasBackend
+    public partial interface IBlasBackend
     {
         /// <summary>
         ///     A one-line description of the underlying library (path, symbols, thread count),

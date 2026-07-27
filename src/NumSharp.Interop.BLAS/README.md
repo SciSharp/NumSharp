@@ -89,13 +89,31 @@ public interface IBlasBackend {
     bool TryDot(NDArray left, NDArray right, out NDArray result);
     bool TryMatMul2D(NDArray left, NDArray right, NDArray result);
     bool TryMatMulBatched(NDArray left, NDArray right, NDArray result) => false;  // optional
+
+    // IBlasBackend.LinearAlgebra.cs — 15 more, every one optional (defaults to false):
+    //   products       TryInner TryVdot TryVecdot TryMatvec TryVecmat
+    //   factorisations TryCholesky TryDet TrySlogdet TryEig TryEigh TryInv
+    //                  TryLstsq TryQr TrySolve TrySvd
 }
-public abstract class TensorEngine { public IBlasBackend Blas { get; set; } }
+public abstract partial class TensorEngine { public IBlasBackend Blas { get; set; } }
 ```
 
 `TryMatMulBatched` takes a whole stacked product at once. It is a **default interface method**, so a
 backend that only implements the first two members compiles and runs unchanged — the engine falls
-back to calling `TryMatMul2D` once per batch element. Implementing it lets a backend amortise
+back to calling `TryMatMul2D` once per batch element.
+
+**`OpenBlasBackend` implements none of the 15 linear-algebra members**, and it compiles and behaves
+exactly as before because of that same default-implementation rule. They exist so the seam for the
+rest of what NumPy routes through this binary is fixed: `np.inner`/`np.vdot`/`np.vecdot`/
+`np.matvec`/`np.vecmat`, and the LAPACK routines — `gesv`, `getrf`, `potrf`, `geev`, `syevd`/`heevd`,
+`gesdd`, `geqrf`/`orgqr`, `gelsd` — which scipy-openblas ships **inside the very library this package
+already bundles**, so a backend that has loaded it for `sgemm` already holds the handle.
+
+The two groups differ in what happens when a backend declines. The **products** fall back to
+NumSharp's managed kernels, so the invariant above still holds. The **factorisations** have no
+managed fallback — Core carries no LU, QR, SVD or eigensolver — so `np.linalg.inv` and friends raise
+`NotSupportedException` naming the routine and the `Try*` member to implement. Their NumPy-exact
+validation runs first and is already gated, so an implementation only has to supply numerics. Implementing it lets a backend amortise
 per-product setup across the stack (the trailing strides never vary within one), which is what NumPy
 does in its matmul gufunc's outer loop; measured on 2000 stacked 8×8 float32 products, doing that
 setup per element instead made this backend **0.80×** — *slower* than NumSharp's own managed GEMM —

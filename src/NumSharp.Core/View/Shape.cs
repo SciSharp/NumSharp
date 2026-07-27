@@ -1555,6 +1555,24 @@ namespace NumSharp
         public override string ToString() =>
             "(" + string.Join(", ", dimensions) + ")";
 
+        /// <summary>
+        ///     This shape written the way a Python tuple prints — no space after the comma, and a
+        ///     TRAILING comma on a one-element shape (<c>(3,)</c>, not <c>(3)</c>).
+        /// </summary>
+        /// <remarks>
+        ///     <see cref="ToString"/> renders for humans and is used all over the library, so it is
+        ///     left alone; this is the spelling error messages need in order to read verbatim like
+        ///     NumPy's — "shapes (2,3) and (3,2) not aligned", never "shapes (2, 3) and …".
+        /// </remarks>
+        internal readonly string ToPythonTuple()
+        {
+            if (dimensions == null || dimensions.Length == 0)
+                return "()";
+            if (dimensions.Length == 1)
+                return "(" + dimensions[0] + ",)";
+            return "(" + string.Join(",", dimensions) + ")";
+        }
+
         /// <summary>Creates a new object that is a copy of the current instance.</summary>
         /// <returns>A new object that is a copy of this instance.</returns>
         readonly object ICloneable.Clone() =>

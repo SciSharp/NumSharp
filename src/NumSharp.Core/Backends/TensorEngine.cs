@@ -6,7 +6,7 @@ using NumSharp.Generic;
 
 namespace NumSharp
 {
-    public abstract class TensorEngine
+    public abstract partial class TensorEngine
     {
         /// <summary>
         ///     An external BLAS this engine delegates its matrix products to, or null (the default)

@@ -88,9 +88,14 @@ public interface IBlasBackend                                    // Backends/IBl
     bool TryDot(NDArray left, NDArray right, out NDArray result);
     bool TryMatMul2D(NDArray left, NDArray right, NDArray result);
     bool TryMatMulBatched(NDArray left, NDArray right, NDArray result) => false;   // optional (DIM)
+
+    // + 15 more DIMs in IBlasBackend.LinearAlgebra.cs, all defaulting to false:
+    //   products      TryInner TryVdot TryVecdot TryMatvec TryVecmat
+    //   factorisations TryCholesky TryDet TrySlogdet TryEig TryEigh TryInv
+    //                  TryLstsq TryQr TrySolve TrySvd
 }
 
-public abstract class TensorEngine
+public abstract partial class TensorEngine
 {
     public IBlasBackend Blas { get; set; }   // null (the default) = NumSharp's own managed kernels
 }
@@ -812,7 +817,76 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NDEvaluateTests.cs`):
 `argmax`, `argmin`, `argsort`, `argwhere`, `flatnonzero`, `nonzero`, `searchsorted`, `sort`
 
 ### Linear Algebra
-`diag`, `diagflat`, `diag_indices`, `diag_indices_from`, `diagonal`, `dot`, `fill_diagonal`, `mask_indices`, `matmul`, `outer`, `trace`, `tril`, `tril_indices`, `tril_indices_from`, `triu`, `triu_indices`, `triu_indices_from`
+`diag`, `diagflat`, `diag_indices`, `diag_indices_from`, `diagonal`, `dot`, `einsum` (signature stub), `fill_diagonal`, `inner`, `mask_indices`, `matmul`, `matvec`, `outer`, `tensordot`, `trace`, `tril`, `tril_indices`, `tril_indices_from`, `triu`, `triu_indices`, `triu_indices_from`, `vdot`, `vecdot`, `vecmat`
+
+`np.linalg.*`: `cholesky`, `cond`, `cross`, `det`, `diagonal`, `eig`, `eigh`, `eigvals`, `eigvalsh`, `inv`, `lstsq`, `matmul`, `matrix_norm`, `matrix_power`, `matrix_rank`, `matrix_transpose`, `multi_dot`, `norm`, `outer`, `pinv`, `qr`, `slogdet`, `solve`, `svd`, `svdvals`, `tensordot`, `tensorinv`, `tensorsolve`, `trace`, `vecdot`, `vector_norm` (+ `LinAlgError`)
+
+### The BLAS/LAPACK API surface — implemented vs. NSE-throwing shell
+
+Everything NumPy computes through the OpenBLAS binary the interop package bundles now has its public
+API, its NumPy-exact validation and its engine seam. Whether the NUMERICS exist splits cleanly in
+two, and the split is a property of the problem rather than a decision:
+
+| | Members | With no backend installed |
+|---|---|---|
+| **Products** (CBLAS) | `inner`, `vdot`, `vecdot`, `matvec`, `vecmat`, `tensordot`, `linalg.multi_dot`, `matrix_power` (n ≥ 0), the `linalg` Array-API forms, `linalg.norm` except matrix ord ∈ {2, -2, 'nuc'} | **They compute.** Managed kernels; the `IBlasBackend` invariant holds — a backend changes WHICH implementation runs, never WHETHER an answer exists. |
+| **Factorisations** (LAPACK) | `cholesky`, `det`, `slogdet`, `eig`, `eigvals`, `eigh`, `eigvalsh`, `inv`, `pinv`, `lstsq`, `qr`, `solve`, `svd`, `svdvals`, `matrix_rank`, `cond`, `tensorinv`, `tensorsolve`, `matrix_power` (n < 0), `norm` matrix ord ∈ {2, -2, 'nuc'} | **`NotSupportedException` from `TensorEngine`.** Core ships no managed LU/QR/SVD/eigensolver, so there is nothing to fall back to. The message names the NumPy API, the LAPACK routine and the `IBlasBackend.Try*` member to implement. |
+
+**The seam is `TensorEngine.Blas` — one property, not two.** `IBlasBackend.LinearAlgebra.cs` adds 15
+`Try*` members, ALL of them **default interface implementations returning false**, which is what let
+the file exist without touching `OpenBlasBackend`. (Default interface members are
+interface-dispatched and invisible on the implementing class — pinned by a test that types the
+variable as `IBlasBackend` precisely because it must.) LAPACK belongs on this property because it
+lives inside the very binary already bundled: scipy-openblas ships `gesv`/`getrf`/`potrf`/`geev`/
+`syevd`/`heevd`/`gesdd`/`geqrf`/`orgqr`/`gelsd` next to the BLAS symbols. `TensorEngine`'s members
+are `virtual`, and each reads `Blas` into a **local** before calling it (GEMM_PARITY §9 — a
+test-then-call on a settable property was ~2 % NREs under a concurrent `Disable()`).
+
+**Validation runs before the throw, so the error contract is gated NOW** and does not move when the
+numerics land — `_assert_stacked_2d`/`_assert_stacked_square`/`_commonType` are ported verbatim
+(`LinAlgError("{n}-dimensional array given. Array must be at least two-dimensional")`,
+`"Last 2 dimensions of the array must be square"`, `TypeError("array type float16 is unsupported in
+linalg")` — and `Decimal`/`Char`, which have no NumPy dtype, take float16's exit rather than
+inventing a new error).
+
+**Six NumPy behaviours worth not re-deriving** (all probed against 2.4.2; the whole 132-case matrix
+was replayed through both libraries — 121 bit-exact, 11 expected NSE, 0 unexplained differences):
+
+- **`np.inner` reports `b`'s shape ALREADY TRANSPOSED.** It is `matrixproduct(a, swapaxes(b,-1,-2))`,
+  so `np.inner(ones((2,3)), ones((3,2)))` raises "shapes (2,3) and **(2,3)** not aligned".
+- **`np.vdot`'s length mismatch is a RESHAPE error, and its own length check is dead code.**
+  `array_vdot` flattens both operands through ONE reused `PyArray_Dims` buffer holding `-1`;
+  `_fix_unknown_dimension` writes the resolved length back into it, so the second flatten asks for
+  `(a.size,)`. Hence `vdot(ones(3), ones(5))` → "cannot reshape array of size 5 into shape (3,)", and
+  `"vectors have different lengths"` in the C source is unreachable.
+- **`vecdot` reduces in the LOOP dtype, not NEP50's accumulator** — its loops are `'ii->i'`, so an
+  int32 pair stays int32 where `np.sum` would give int64. `vecdot`/`vecmat`/`vdot` conjugate their
+  FIRST operand; `inner`/`matvec` do not.
+- **`axis=` is legal only on `vecdot`.** `matvec`/`vecmat` have two DISTINCT core dims and NumPy
+  raises `TypeError` for both `axis` and `keepdims` — so neither parameter is offered.
+- **`tensordot`'s every disagreement is one message**, `"shape-mismatch for sum"` — mismatched
+  extents, too many axes and unequal list lengths alike. A negative count contracts NOTHING
+  (`range(-axes,0)` is empty for `axes ≤ 0`), so `axes=-1` ≡ `axes=0` ≡ the outer product.
+- **The `np.linalg` Array-API forms are NOT aliases.** `linalg.trace`/`linalg.diagonal` reduce the
+  **last** two axes where `np.trace`/`np.diagonal` take the **first** (a `(2,3,3)` stack gives `(2,)`
+  vs `(3,)`); `linalg.outer` demands 1-D where `np.outer` flattens anything; `linalg.cross` demands
+  3-vectors. Each is implemented against its own contract.
+
+**Two fixes rode along.** `NDArray.matrix_power(-1)` used to `throw new Exception("matrix_power just
+work with int >= 0")` — never NumPy's rule (`a**-n` is `inv(a)**n`); it now takes that route, plus
+binary exponentiation, a `LinAlgError` for non-square input, and an identity in the operand's own
+dtype rather than always float64. And `np.dot`/`np.matmul`'s "not aligned" messages rendered shapes
+as `(2, 3)` where NumPy writes `(2,3)` — now `Shape.ToPythonTuple()` (`ToString()` is left alone; it
+renders for humans everywhere else).
+
+**Known adjacent bug, NOT fixed here:** `np.stack` runs its operands through `atleast_1d` first, so
+stacking three 0-d arrays gives `(3,1)` where NumPy gives `(3,)`. `linalg.cross` routes around it
+with `expand_dims`+`concatenate`.
+
+Gate: `LinearAlgebra/{BlasProductApiTests, LinAlgErrorParityTests, LinAlgEngineSeamTests}.cs` (58
+tests). `LinAlgEngineSeamTests`' first region is a checklist — **delete a case as each implementation
+lands**. These are API/error contracts rather than value-producing kernels, so they are unit tests
+and deliberately absent from the differential-fuzz corpus.
 
 **The diagonal / triangular family** (NumPy's `_twodim_base_impl.py` + `_index_tricks_impl.py`; all probed against 2.4.2, tests in `Indexing/np.{diag,tri,diag_indices}.Test.cs`, oracle tiers in `manip`/`matmul`):
 
@@ -953,6 +1027,9 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
+| BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`) |
+| CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot,einsum}.cs`, `LinearAlgebra/GufuncGuard.cs` |
+| `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (class + `_assert_*`/`_commonType` ports) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs`; `Exceptions/LinAlgError.cs` |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NdArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |
@@ -1466,7 +1543,10 @@ A: Element-wise comparisons (`==`, `!=`, `>`, `<`, etc.) return `NDArray<bool>`.
 A: Integer indices, string slices (`"1:3, :"`), Slice objects, boolean masks, fancy indexing (NDArray<int> indices), and mixed combinations. All in `Selection/NDArray.Indexing*.cs`.
 
 **Q: How is linear algebra implemented?**
-A: Core ops (`dot`, `matmul`, `outer`) in `LinearAlgebra/`; `trace`/`diagonal` in `Indexing/`.
+A: Core ops (`dot`, `matmul`, `outer`) in `LinearAlgebra/`; `trace`/`diagonal` in `Indexing/`. The rest of what NumPy sends to OpenBLAS — the product family (`inner`, `vdot`, `vecdot`, `matvec`, `vecmat`, `tensordot`) and the whole `np.linalg` module — sits in `LinearAlgebra/` and `LinearAlgebra/linalg/`, dispatching through `TensorEngine.Blas`. The products compute with managed kernels; the LAPACK factorisations raise `NotSupportedException` until a backend is installed. See "The BLAS/LAPACK API surface" above.
+
+**Q: Why does `np.linalg.inv` throw `NotSupportedException` when `np.matmul` works fine without a backend?**
+A: Because there is a managed matrix product and there is no managed SVD. `IBlasBackend`'s invariant — installing a backend changes WHICH implementation runs, never WHETHER an answer exists — holds for every product NumSharp offers, since a portable GEMM is a hundred lines. It cannot hold for a factorisation: a portable `gesdd`, `geev` or `gelsd` is a library in its own right, and NumSharp.Core carries none. The API, its NumPy-exact validation and its verbatim error messages all exist and are tested; only the numerics wait. The exception names the NumPy API, the LAPACK routine and the `IBlasBackend.Try*` member to implement, so it reads as an install instruction.
 
 ---
 

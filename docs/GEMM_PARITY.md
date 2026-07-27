@@ -178,6 +178,40 @@ N-D `dot`; mixed `float32 × float64` (cast to the common type first, exactly as
 bit-exact by construction anyway — modular integer addition is associative, so summation order
 cannot change the result. `Complex` (`cblas_zgemm`) and `Half` are the only real gaps.
 
+### 5.1 The rest of the surface NumPy routes through this binary (2026-07-27)
+
+`np.dot`/`np.matmul` are not everything NumPy sends to the library this package bundles. The API
+shell for the remainder now exists, so the seam it plugs into is fixed even where the numerics are
+not — `IBlasBackend.LinearAlgebra.cs` adds fifteen `Try*` members, all of them DEFAULT
+implementations returning false so `OpenBlasBackend` (and any third-party backend) compiles
+untouched. `TensorEngine.LinearAlgebra.cs` reads `Blas` into a local, tries it, and then does one of
+two different things:
+
+| Group | Members | No backend installed |
+|---|---|---|
+| Products (CBLAS) | `TryInner`, `TryVdot`, `TryVecdot`, `TryMatvec`, `TryVecmat` | **Managed kernels compute it.** The invariant this document states elsewhere still holds: a backend changes WHICH implementation runs, never WHETHER an answer exists. |
+| Factorisations (LAPACK) | `TryCholesky`, `TryDet`, `TrySlogdet`, `TryEig`, `TryEigh`, `TryInv`, `TryLstsq`, `TryQr`, `TrySolve`, `TrySvd` | **`NotSupportedException`.** NumSharp.Core ships no managed LU, QR, SVD or eigensolver, so there is nothing to fall back to. |
+
+That second row is the one genuine exception to the fallback invariant, and it is a property of the
+problem rather than of the design: a portable GEMM is a hundred lines, a portable `gesdd` is not.
+The exception message names the NumPy API, the LAPACK routine NumPy uses and the seam member to
+implement, so it reads as an install instruction rather than a dead end.
+
+LAPACK is worth routing through `TensorEngine.Blas` rather than a second property because it lives
+**inside the very binary already bundled** — scipy-openblas ships `gesv`/`getrf`/`potrf`/`geev`/
+`syevd`/`heevd`/`gesdd`/`geqrf`/`orgqr`/`ungqr`/`gelsd` alongside the BLAS symbols, so a backend that
+has loaded the library for `sgemm` already has the handle for everything else.
+
+**Validation is NOT deferred.** Every entry point runs NumPy's own rank, squareness, dtype and
+argument checks BEFORE reaching the seam, with verbatim messages
+(`LinAlgError("Last 2 dimensions of the array must be square")`,
+`TypeError("array type float16 is unsupported in linalg")`, the two `solve` gufunc signatures, …), so
+the error contract is gated today by `LinAlgErrorParityTests` and does not move when the numerics
+land. Anything reachable without a factorisation is IMPLEMENTED rather than stubbed: `np.inner`,
+`np.vdot`, `np.vecdot`, `np.matvec`, `np.vecmat`, `np.tensordot`, `np.linalg.multi_dot`,
+`matrix_power` at a non-negative exponent, the Array-API forms, and every `np.linalg.norm` order
+except the three defined by singular values (matrix `2`, `-2`, `'nuc'`).
+
 ## 6. Results
 
 Acceptance harness: 110 hand-built cases (NumPy saves backing arrays + a view recipe both stacks

@@ -38,7 +38,7 @@ namespace NumSharp.Backends
 
             if (K != right.shape[0])
                 throw new IncorrectShapeException(
-                    $"shapes {left.Shape} and {right.Shape} not aligned: {K} (dim 1) != {right.shape[0]} (dim 0)");
+                    $"shapes {left.Shape.ToPythonTuple()} and {right.Shape.ToPythonTuple()} not aligned: {K} (dim 1) != {right.shape[0]} (dim 0)");
 
             // Determine output type and create result array
             var resultType = np._FindCommonArrayType(left.GetTypeCode, right.GetTypeCode);

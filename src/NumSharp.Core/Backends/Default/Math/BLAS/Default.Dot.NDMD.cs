@@ -26,7 +26,7 @@ namespace NumSharp.Backends
             long contractDim = lhs.Shape[-1];
             if (contractDim != rhs.Shape[-2])
                 throw new IncorrectShapeException(
-                    $"shapes {lhs.Shape} and {rhs.Shape} not aligned: {contractDim} (dim {lhs.ndim - 1}) != {rhs.Shape[-2]} (dim {rhs.ndim - 2})");
+                    $"shapes {lhs.Shape.ToPythonTuple()} and {rhs.Shape.ToPythonTuple()} not aligned: {contractDim} (dim {lhs.ndim - 1}) != {rhs.Shape[-2]} (dim {rhs.ndim - 2})");
 
             // Compute output shape:
             // lhs shape without last dim + rhs shape without second-to-last dim
