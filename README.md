@@ -12,11 +12,11 @@
 
 <p align="center">
   <a href="https://www.nuget.org/packages/NumSharp"><img alt="NuGet" src="https://img.shields.io/nuget/v/NumSharp.svg"></a>
-  <a href="https://www.nuget.org/packages/NumSharp"><img alt="NuGet downloads" src="https://img.shields.io/nuget/dt/NumSharp.svg"></a>
+  <a href="https://www.nuget.org/packages/NumSharp"><img alt="NuGet downloads" src="https://osscdn.nucs.workers.dev/numsharp-downloads-BlFBRHRBTF.svg"></a>
   <a href="https://github.com/SciSharp/NumSharp/actions/workflows/build-and-release.yml"><img alt="Build" src="https://github.com/SciSharp/NumSharp/actions/workflows/build-and-release.yml/badge.svg"></a>
   <a href="https://github.com/SciSharp/NumSharp/actions/workflows/docs.yml"><img alt="Docs" src="https://github.com/SciSharp/NumSharp/actions/workflows/docs.yml/badge.svg"></a>
   <a href="https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html"><img alt="Benchmarks" src="https://img.shields.io/badge/benchmarks-dashboard-0e7490.svg"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/SciSharp/NumSharp.svg"></a>
+  <a href="LICENSE"><img alt="License" src="https://osscdn.nucs.workers.dev/numsharp-license-CfqpnKiRfy.svg"></a>
 </p>
 
 <p align="center">
