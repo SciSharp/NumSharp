@@ -34,6 +34,16 @@ understand what it buys before replacing it — there is a reason for everything
   element size; branch into the SIMD inner body when all match, else strided.
 - **Cache-friendly loop ordering** — IKJ in MatMul so the inner SIMD walk is over sequential
   `B[k,:]` memory; `A[i,k]` is broadcast once and reused across all j.
+- **Chunk-driven cursor instead of element-driven** — When exposing iteration, let the iterator
+  hand out a whole inner loop and walk it with pointer arithmetic, touching the engine only at a
+  chunk boundary; a contiguous array becomes ONE engine call. Measured 3× over calling
+  `Iternext()` per element (`np.nditer<T>`).
+- **Hand out `ref T` / `Span<T>`, not a wrapper object** — The per-element managed view is usually
+  the whole cost of an iteration API: NumSharp's boxed `nditer` `it[0]` loop measures 59 ms on 100K
+  float64 where the same walk yielding `ref double` is 0.167 ms (~350×) and a `Span<T>` chunk fed to
+  `Vector<T>` is 0.027 ms. A `ref struct` enumerator with `ref T Current` gets this with no
+  allocation, no boxing and no interface dispatch, because C#'s `foreach` is pattern-based and needs
+  no interface. See design-recipes → "exposing an engine `ref struct` to USER code".
 
 ## C. SIMD primitives
 

@@ -421,6 +421,21 @@ Element-wise operations with broadcasting are driven by the NumPy-aligned multi-
 
 Array traversal goes through `NDIter` (`Backends/Iterators/NDIter.cs`), a NumPy-aligned multi-operand iterator modeled on NumPy's `NDIter`. It handles C/F/A/K order, broadcasting, external loops, buffering, casting, masks, reductions, and synchronized traversal for copy and elementwise kernels. Single-operand flat traversal uses `NDFlatIterator`. (The legacy `NDIterator<T>` / `MultiIterator` stack was removed and replaced wholesale by this.)
 
+### Public iteration surface
+
+`NDIterRef` itself is the kernel-author engine; application code reaches it through these (`APIs/np.nditer.cs`, `APIs/np.nditer.Typed.cs`, `Indexing/np.{ndindex,ndenumerate}.cs`):
+
+| Surface | Shape | Notes |
+|---------|-------|-------|
+| `np.nditer(a, flags: …)` | class, `IDisposable` | NumPy's `nditer` object — `multi_index`, `external_loop`, `buffered`, `op_axes`, `itviews`, `copy()`. Its own iterator (`iter(x) is x`), so a second pass RESUMES. |
+| `np.nditer<T>(a)` | `readonly struct` → `ref struct` enumerator | `foreach (ref T x in …)` — unboxed, allocation-free, writes through. |
+| `np.nditer_chunks<T>(a)` | same | `foreach (Span<T> c in …)` — one span per inner loop, for `TensorPrimitives` / `Vector<T>`. |
+| `np.ndenumerate(a)` / `<T>` | class | `(index, value)` pairs in logical C-order. |
+| `np.ndindex(shape)` | class | Index space only, no operands. |
+| `np.broadcast(a, b, …)` | class | Per-operand value tuples; `.iters[i]` gives `NDFlatIterator`. |
+
+The two typed forms are a NumSharp extension — Python has no unboxed generics, so NumPy's `it[0]` must return an array object where NumSharp can return a reference. They are the answer to the boxing cost that makes the parity `it[0]` loop slow (59 ms vs 0.167 ms on 100K float64), and they are **not** a revival of the removed `NDIterator<T>`: that was a *class* implementing `IEnumerable<T>` over its own traversal stack, so it still allocated an enumerator and dispatched through an interface, and it was retired as dead code once `NDIter` replaced the traversal. These are `ref struct` cursors over the one `NDIterRef` engine — no second traversal implementation (so every layout behaves identically by construction), no interface, no allocation. The enumerable holds no unmanaged state and builds a fresh iterator per `foreach` (so re-enumeration restarts); the `ref struct` enumerator owns the state and `foreach` disposes it through the same pattern that drives it.
+
 ### Optimization Paths
 
 `NDIter` picks a traversal strategy from each operand's layout (classified once via `ArrayFlags`):

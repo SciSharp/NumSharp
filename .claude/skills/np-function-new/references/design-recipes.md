@@ -105,6 +105,49 @@ cannot be a class field. The bridge is the already-heap-allocated state:
   teardown must reproduce the ref struct's `Dispose` ORDER (flush buffers → resolve write-backs →
   free), not just its steps.
 
+## Recipe: exposing an engine `ref struct` to USER code (typed/unboxed iteration)
+
+The mirror image of the recipe above. When the goal is not a NumPy-shaped object but *speed* — let
+callers touch the engine with no managed object per element — do NOT give it a managed owner at all.
+Ship the `ref struct` itself, in two pieces (`APIs/np.nditer.Typed.cs`).
+
+- **Split the ENUMERABLE from the ENUMERATOR, and the split is load-bearing.** The factory returns a
+  `readonly struct` holding only the operands and options — **no unmanaged state** — whose
+  `GetEnumerator()` builds a fresh engine handle. The `ref struct` enumerator owns that state and
+  disposes it. Returning `this` from `GetEnumerator()` here is a **use-after-free**: `foreach`
+  disposes what it obtains, so the first pass frees the state the second would walk. Note this is a
+  DIFFERENT answer from the protocol-object recipe above, where the fix was a no-op-`Dispose`
+  wrapper sharing one live cursor — that preserves NumPy's resume semantics, which a value-typed
+  API should not try to have. Consequence to document: re-enumeration RESTARTS.
+- **`foreach` disposes a `ref struct` enumerator through the pattern** — no `IDisposable`, no
+  `using`, nothing for the caller to remember. That is what frees the state, and it is the main
+  reason this shape beats handing out a disposable class. Hand-driven `MoveNext` loops must dispose
+  themselves; say so.
+- **Drive by CHUNK, not by element.** Turn `EXTERNAL_LOOP` on and let `MoveNext` walk the inner loop
+  with pointer arithmetic, touching the iterator only at a chunk boundary — a contiguous array is
+  then ONE engine call for the whole walk. Measured: the naive `Iternext()`-per-element form was 3×
+  slower. Micro-tuning the cursor past that did not pay (a leaner one-cursor variant measured no
+  better than the two-pointer form).
+- **Never buffered.** A `ref`/`Span` into a buffer dangles the moment the next fill lands. Unbuffered
+  pointers are absolute into the operand — which is also what makes it safe to advance the iterator
+  *before* handing out the chunk you already captured.
+- **An exact-dtype guard is mandatory, not a nicety.** A `ref T` cannot convert, so a mismatch
+  silently REINTERPRETS the bytes (probed: `nditer<double>` over int32 yields `2.1e-314, …`).
+  Throw, and name the fix in the message.
+- **`Span<T>` implies unit stride.** A stepped view cannot be expressed. Detect it at
+  `GetEnumerator` — for a single operand the inner stride is fixed for the whole iteration, so this
+  is knowable up front — and fail there rather than mid-loop. Buffering does **not** rescue it:
+  probed, NumPy's own buffered `external_loop` also yields non-contiguous chunks for `a[:, ::2]`.
+- **Idiomatic-C# divergences are allowed here, unlike on a parity surface** — this is an extension,
+  so an empty array iterates zero times instead of demanding NumPy's `zerosize_ok`. Pin each one
+  with a test and say *why* in the XML doc; the bar is "a C# caller would be surprised otherwise",
+  not "NumPy does it".
+- **Route around engine defects rather than widening the change**, and record them. Absorbing them
+  in one internal helper (`TypedIterHelpers.ReadInnerLoop`) kept the public surface honest while
+  leaving `NDIterRef` alone: `GetInnerLoopSizePtr()` access-violates on a 0-d operand (reads
+  `Shape[-1]`), and `GetInnerStrideArray()` returns ELEMENT strides where the kernel contract takes
+  BYTE strides.
+
 ## Recipe: mirror NumPy's LAYERING, not only its behavior
 
 NumPy splits work between a Python wrapper and a C core, and the split is informative. Work the
