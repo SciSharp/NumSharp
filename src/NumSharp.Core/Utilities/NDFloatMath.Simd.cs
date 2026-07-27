@@ -598,13 +598,23 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Whether <c>Tanh(Vector{<paramref name="vectorBits"/>}&lt;float&gt;)</c> can run its table
-        /// lookup in hardware on this machine. Distinct from
-        /// <see cref="IsExpVectorAccelerated"/> because tanh needs one capability the pure-arithmetic
-        /// kernels do not: a <b>gather</b>. Its coefficients are chosen per lane by the exponent of
-        /// <c>|x|</c>, so unlike exp/log/sin/cos there is no way to keep the constants in registers —
-        /// hence AVX2 (<c>vgatherdps</c>) on top of FMA. A host without it takes the scalar entry
-        /// point, which computes the SAME bits one lane at a time; the gate is about speed, never
-        /// results.
+        /// lookup in hardware on this machine. Distinct from <see cref="IsExpVectorAccelerated"/>
+        /// because tanh needs a capability the pure-arithmetic kernels do not: its coefficients are
+        /// chosen PER LANE by the exponent of <c>|x|</c>, so they cannot be held in registers and the
+        /// vector form must read the table — AVX2, on top of the FMA they all need. A host without it
+        /// takes the scalar entry point, which computes the SAME bits one lane at a time; this gate
+        /// is about speed, never results.
+        ///
+        /// <para><b>The 128 arm is NOT dead code — do not "simplify" it away.</b> It is tempting to
+        /// argue that the emitter picks 128 only when <c>Vector256.IsHardwareAccelerated</c> is
+        /// false, that this means AVX2 is absent, and therefore that <c>128 =&gt; Avx2.IsSupported</c>
+        /// can never be true. That is WRONG, and the counter-example is a supported runtime knob
+        /// rather than exotic hardware: with <c>DOTNET_PreferredVectorBitWidth=128</c> an ordinary
+        /// AVX2 host reports <c>VectorBits = 128</c> while <c>Avx2.IsSupported</c> stays true
+        /// (probed). Dropping the arm demotes tanh to the scalar loop for everyone who caps the
+        /// width — a pure perf regression, invisible to any correctness gate because the bits are
+        /// identical either way. A host that genuinely lacks AVX2 is still handled: the arm is false
+        /// there.</para>
         /// </summary>
         public static bool IsTanhVectorAccelerated(int vectorBits) => vectorBits switch
         {
@@ -623,12 +633,16 @@ namespace NumSharp.Utilities
         /// <summary>
         /// NumPy 2.4.2's float32 tanh, 4 lanes at a time. See <see cref="Tanh(float)"/>.
         ///
-        /// <para>This width keeps the straightforward gather rather than the 8x8 transpose its
-        /// 256-bit sibling uses, because it does not carry the kernel in practice: the emitter picks
-        /// a width from <c>Vector{N}.IsHardwareAccelerated</c>, and 128 wins only when 256 is NOT
-        /// accelerated — which on x86 means no AVX2, and therefore no gather either, so such a host
-        /// takes <see cref="SoftwareTanh(Vector128{float})"/> and ultimately the scalar kernel. It is
-        /// kept implemented (and verified bit-exact) so the overload stays real and testable.</para>
+        /// <para><b>This width gathers where its 256-bit sibling transposes, and that is deliberate —
+        /// the verdict flips with the lane count.</b> A subinterval is 8 consecutive floats, so the
+        /// transpose reads whole rows and is unbeatable when 8 lanes each need one (see
+        /// <see cref="Tanh(Vector256{float})"/>). At 4 lanes it is not: expressing this width as the
+        /// low half of an 8-lane call — which would give the file a single table read — computes four
+        /// lanes it throws away, and measured 0.171 ms / 17.56 ms against the gather's
+        /// <b>0.139 ms / 13.58 ms</b> at 100K / 10M under <c>DOTNET_PreferredVectorBitWidth=128</c>,
+        /// i.e. the gather is 1.23-1.29x faster and the composed form is barely ahead of the scalar
+        /// loop (1.06x) where the gather is 1.31-1.39x. Two lookup strategies is the right answer
+        /// here; both are verified bit-exact against the same table.</para>
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
         public static unsafe Vector128<float> Tanh(Vector128<float> x)
