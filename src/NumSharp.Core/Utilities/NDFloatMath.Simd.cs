@@ -711,6 +711,16 @@ namespace NumSharp.Utilities
             var row = Vector256.ShiftLeft(Vector256.ShiftRightLogical(index, 21), 3);
 
             float* lut = TanhLutF32Ptr;
+
+            // Spilling the 8 row offsets through the stack looks like the obvious thing to remove —
+            // it is the only stack traffic in the hot loop, and without [SkipLocalsInit] the JIT may
+            // zero the buffer on every call. Both alternatives were measured THROUGH THE EMITTED
+            // KERNEL (a script microbenchmark disagrees, because the JIT schedules this differently
+            // when it is inlined into a C# loop instead of the IL-emitted one), 10M f32:
+            //   this form                       7.39-7.50 ms
+            //   + [SkipLocalsInit]              7.24-7.84 ms   -> inside run-to-run variance, no gain
+            //   offsets via row.GetElement(i)   8.60 ms        -> ~16% SLOWER, clearly outside it
+            // So the spill is free here and the readable form is also the fast one. Leave it.
             int* offsets = stackalloc int[Vector256<int>.Count];
             Avx.Store(offsets, row);
 

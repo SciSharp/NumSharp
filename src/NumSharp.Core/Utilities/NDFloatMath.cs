@@ -687,6 +687,15 @@ namespace NumSharp.Utilities
         /// This port clamps that high half directly, which is the same arithmetic without the
         /// bitcast.
         ///
+        /// <para><b>That re-spelling is the one line here a reader cannot diff against NumPy's, so
+        /// it is PROVEN rather than argued</b> — and proven exhaustively, not sampled.
+        /// <c>ndnan = bits &amp; 0x7ff8000000000000</c> keeps only 11 exponent bits plus mantissa bit
+        /// 51 and clears everything else, and both formulas depend on nothing else, so the input
+        /// domain is exactly 2^12 = 4096 values. <c>TanhFloat64IndexExtraction_MatchesNumPySpelling</c>
+        /// (Math/np.Tanh.IndexExtraction.Test.cs) enumerates all 4096 and asserts NumPy's spelling and
+        /// this one agree on every single one — and separately confirms that real double bit patterns
+        /// actually reach all 4096, so the domain is exact rather than an over-approximation.</para>
+        ///
         /// <para>Verified against NumPy 2.4.2 over a 300K-value structured sweep (specials,
         /// subnormals, both tails, interior) and the committed corpus tier; float64 has no exhaustive
         /// analogue.</para>
