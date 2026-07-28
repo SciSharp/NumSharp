@@ -45,7 +45,10 @@ namespace NumSharp.UnitTest.LinearAlgebra
             ("vecdot", new[] {"x1", "x2", "out", "axes", "axis", "keepdims", "dtype"}),
             ("matvec", new[] {"x1", "x2", "out", "axes", "axis", "keepdims", "dtype"}),
             ("vecmat", new[] {"x1", "x2", "out", "axes", "axis", "keepdims", "dtype"}),
-            ("tensordot", new[] {"a", "b", "axes"})
+            ("tensordot", new[] {"a", "b", "axes"}),
+            // NumPy's printed signature is einsum(*operands, out, optimize, **kwargs); the DOCUMENTED
+            // form it expands to is einsum(subscripts, *operands, out, dtype, order, casting, optimize).
+            ("einsum", new[] {"subscripts", "operands", "out", "dtype", "order", "casting", "optimize"})
         };
 
         private static readonly (string Method, string[] Parameters)[] Linalg =

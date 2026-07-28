@@ -222,24 +222,32 @@ namespace NumSharp
         #region Einstein summation
 
         /// <summary>
-        ///     <c>np.einsum</c> — declared, not implemented.
+        ///     <c>np.einsum</c> — the contraction itself, reached only once the subscripts have
+        ///     parsed and every operand validated.
         /// </summary>
+        /// <param name="outputShape">
+        ///     The shape the contraction produces, already resolved by the parser — so an
+        ///     implementation inherits the ellipsis, diagonal and broadcast bookkeeping instead of
+        ///     redoing it.
+        /// </param>
         /// <remarks>
         ///     Deliberately NOT routed through <see cref="Blas"/>: only the pairwise contractions
-        ///     <c>optimize=</c> plans would reach a BLAS, and they reach it through
-        ///     <see cref="Dot"/>/<c>np.tensordot</c> already. The subscript parser, the diagonal and
-        ///     ellipsis rules and the path planner are NumSharp's own work, so there is no operand
-        ///     shape a backend could answer for and no <c>TryEinsum</c> on the seam.
+        ///     <c>optimize=</c> plans can reach a BLAS, and they reach it through
+        ///     <see cref="Dot"/>/<c>np.tensordot</c> already. What is missing here is a summation
+        ///     kernel over an arbitrary label set and a contraction-path planner — NumSharp's own
+        ///     work — so there is no operand shape a backend could answer for, and no
+        ///     <c>TryEinsum</c> on the seam.
         /// </remarks>
-        public virtual NDArray Einsum(string subscripts, NDArray[] operands, NDArray @out, bool optimize,
-            NPTypeCode? dtype)
+        public virtual NDArray Einsum(string subscripts, NDArray[] operands, NDArray @out,
+            NPTypeCode? dtype, char order, string casting, object optimize, long[] outputShape)
             => throw new NotSupportedException(
-                $"np.einsum is not implemented — {GetType().Name} carries its signature only, so that " +
-                "the call shape is settled while the implementation is pending. Unlike the LAPACK " +
-                "entry points this is not waiting on a backend: einsum needs a subscript parser, " +
-                "repeated-index diagonals, ellipsis broadcasting and a contraction-path planner, all " +
-                "of which are NumSharp's own work. Express the contraction with np.tensordot, np.dot, " +
-                "np.matmul or np.vecdot in the meantime.");
+                $"np.einsum cannot compute \"{subscripts}\" — {GetType().Name} implements no " +
+                "contraction kernel. The subscripts parsed cleanly and the result would have shape (" +
+                string.Join(",", outputShape) + "), so what is missing is the KERNEL, not the " +
+                "expression. Unlike the np.linalg entry points this is not waiting on a backend: " +
+                "einsum needs a summation kernel over an arbitrary label set plus a contraction-path " +
+                "planner, both NumSharp's own work. Express the contraction with np.tensordot, " +
+                "np.dot, np.matmul or np.vecdot in the meantime.");
 
         #endregion
 

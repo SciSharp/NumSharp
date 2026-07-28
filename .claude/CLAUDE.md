@@ -817,7 +817,7 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NDEvaluateTests.cs`):
 `argmax`, `argmin`, `argsort`, `argwhere`, `flatnonzero`, `nonzero`, `searchsorted`, `sort`
 
 ### Linear Algebra
-`diag`, `diagflat`, `diag_indices`, `diag_indices_from`, `diagonal`, `dot`, `einsum` (signature stub), `fill_diagonal`, `inner`, `mask_indices`, `matmul`, `matvec`, `outer`, `tensordot`, `trace`, `tril`, `tril_indices`, `tril_indices_from`, `triu`, `triu_indices`, `triu_indices_from`, `vdot`, `vecdot`, `vecmat`
+`diag`, `diagflat`, `diag_indices`, `diag_indices_from`, `diagonal`, `dot`, `einsum` (subscripts parsed; contraction pending), `fill_diagonal`, `inner`, `mask_indices`, `matmul`, `matvec`, `outer`, `tensordot`, `trace`, `tril`, `tril_indices`, `tril_indices_from`, `triu`, `triu_indices`, `triu_indices_from`, `vdot`, `vecdot`, `vecmat`
 
 `np.linalg.*`: `cholesky`, `cond`, `cross`, `det`, `diagonal`, `eig`, `eigh`, `eigvals`, `eigvalsh`, `inv`, `lstsq`, `matmul`, `matrix_norm`, `matrix_power`, `matrix_rank`, `matrix_transpose`, `multi_dot`, `norm`, `outer`, `pinv`, `qr`, `slogdet`, `solve`, `svd`, `svdvals`, `tensordot`, `tensorinv`, `tensorsolve`, `trace`, `vecdot`, `vector_norm` (+ `LinAlgError`)
 
@@ -896,6 +896,64 @@ renders for humans everywhere else).
 stacking three 0-d arrays gives `(3,1)` where NumPy gives `(3,)`. `linalg.cross` routes around it
 with `expand_dims`+`concatenate`.
 
+### `np.einsum` — the subscript language is complete, the contraction is not
+
+The parser is a port of `PyArray_EinsteinSum`'s parsing block plus `parse_operand_subscripts` and
+`parse_output_subscripts` (`numpy/_core/src/multiarray/einsum.cpp`) — `EinsumSubscripts.cs`. **Every
+expression NumPy accepts parses, every expression NumPy rejects is rejected with NumPy's own text,
+and the output SHAPE is resolved** — it is carried in the `NotSupportedException` the engine then
+raises, which is what let the whole surface be differential-tested against NumPy without a kernel
+(75 cases: 73 exact, 2 the documented divergence below). Both spellings work: the subscripts string
+and NumPy's sublist form `np.einsum(a, [0,1], b, [1,2], [0,2])`.
+
+**NumPy has TWO einsum parsers** — the C one behind the default `optimize=False` and a Python one
+(`einsumfunc.py`) behind the `optimize` path — and they word the same rejection differently.
+NumSharp reproduces the C one whatever `optimize` says, since that is what a default call hits.
+
+**The label encoding is NumPy's**, one `sbyte` per operand dimension: positive = the label's ASCII
+code at first occurrence, **negative = the offset back to that first occurrence** (a repeated label,
+i.e. a diagonal), `0` = a broadcast dimension from an ellipsis. So `"abbcbc"` over 6 dims is
+`[97,98,-1,99,-3,-2]`.
+
+**Six things that are easy to get wrong, all probed:**
+- **The two operand-count messages read BACKWARDS.** NumPy walks operand by operand checking the
+  delimiter after each chunk, so ONE operand against TWO terms raises *"more operands provided to
+  einstein sum function than specified in the subscripts string"*. Reproduced verbatim anyway.
+- **An impossible diagonal has TWO messages.** `nop == 1 && out == null &&` nothing summed takes
+  NumPy's return-a-view attempt, which says *"dimensions in **single operand** for collapsing index
+  …"*; anything else says *"dimensions in **operand {i}** for …"*. So `einsum("ii->i", a)` and
+  `einsum("ii", a)` fail differently on the same array.
+- **Every diagonal is validated BEFORE any cross-operand extent.** NumPy collapses all operands'
+  diagonals first, so `einsum("ij,jj->ij", …)` reports operand 1's diagonal even though operand 0
+  already fixed a conflicting `j`. Doing it in one pass reverses the two errors.
+- **The implicit output is ASCII-ordered**, so an upper-case label sorts BEFORE a lower-case one:
+  `einsum("zA", a)` transposes a `(2,3)` and `einsum("Az", a)` does not.
+- **The sublist alphabet is `'ABC…Zabc…z'` — UPPER case first** (NumPy 2.4.2's `einsum_symbols`).
+  Index order therefore equals ASCII order, which is what makes an inferred output come back in the
+  caller's numbering. The intuitive guess (`a-z` then `A-Z`) is SILENTLY wrong, not an error: it only
+  shows on an expression mixing the halves, where `einsum(a, [0,26])` on `(2,3)` returns `(3,2)`.
+- **Spaces are legal anywhere** and skipped; a `>` without its `-` is scanned as a label and rejected
+  as an invalid subscript, while a lone `-` gets the missing-arrow message.
+
+**One deliberate divergence** (`[Misaligned]`): when a label's extents disagree between operands,
+NumPy's C path leaks `NpyIter`'s *"operands could not be broadcast together with remapped shapes
+[original->remapped]: (2,3)->(2,newaxis,3) (4,2)->(2,4)"* — iterator axis bookkeeping rather than
+anything about the contraction. NumSharp raises the wording NumPy's OWN `einsumfunc.py` parser uses
+for the identical condition: `Size of label 'j' for operand 1 (3) does not match previous terms (4).`
+(whose two sizes also read swapped against the sentence — the first is the size already recorded).
+
+**Pass the keywords BY NAME** — `np.einsum("ij->i", ops, @out: dst)`. They are keyword-only in NumPy,
+and naming them is also what keeps them unambiguous here: NumSharp converts scalars to `NDArray`
+implicitly, so a fully positional 7-argument call matches both the `params` overload and the full one
+and the compiler rejects it.
+
+**Not implemented and deliberately out of scope:** `np.einsum_path` (NumPy's contraction planner —
+its own function, ~400 lines of optimal/greedy search), and the contraction kernel itself. Unlike
+`np.linalg`, einsum is NOT waiting on a backend — a summation kernel over an arbitrary label set and
+a path planner are NumSharp's own work — so the seam has no `TryEinsum` and the message points at
+`np.tensordot` rather than at a package to install. Gate:
+`LinearAlgebra/EinsumSubscriptParityTests.cs` (21).
+
 **Signature parity is its own gate.** `LinAlgSignatureParityTests` reflects over the whole surface
 and asserts each function has an overload whose parameter NAMES appear in NumPy's ORDER, plus the
 18 defaults NumPy states concretely — because renaming `UPLO` to `uplo` or swapping `keepdims` and
@@ -908,10 +966,10 @@ them anywhere in its ufunc surface (`signature` is what `dtype` already does; `s
 ndarray subclasses the library does not have), and accepting-then-ignoring would be worse.
 
 Gate: `LinearAlgebra/{BlasProductApiTests, LinAlgErrorParityTests, LinAlgEngineSeamTests,
-LinAlgSignatureParityTests}.cs` (71 tests), backed by a 376-case NumPy differential matrix replayed
-through both libraries (dtype sweep × 10, memory-layout sweep × 8, the `axes=` paths, every
-rejection): 362 exact, 5 expected NSE, 9 house-convention type differences with verbatim messages,
-**0 unexplained**. `LinAlgEngineSeamTests`' first region is a checklist — **delete a case as each
+LinAlgSignatureParityTests, EinsumSubscriptParityTests}.cs` (92 tests), backed by a 451-case NumPy
+differential matrix replayed through both libraries (dtype sweep × 10, memory-layout sweep × 8, the
+`axes=` paths, einsum's whole subscript grammar, every rejection): 435 exact, 5 expected NSE, 11
+documented divergences with verbatim messages, **0 unexplained**. `LinAlgEngineSeamTests`' first region is a checklist — **delete a case as each
 implementation lands**. These are API/error contracts rather than value-producing kernels, so they
 are unit tests and deliberately absent from the differential-fuzz corpus.
 
@@ -1061,7 +1119,8 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
 | BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`) |
-| CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot,einsum}.cs`, `LinearAlgebra/GufuncGuard.cs` |
+| CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot}.cs`, `LinearAlgebra/GufuncGuard.cs` |
+| einsum | `LinearAlgebra/np.einsum.cs`, `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (class + `_assert_*`/`_commonType` ports) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs`; `Exceptions/LinAlgError.cs` |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NdArray.ToString.cs` |

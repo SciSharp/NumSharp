@@ -220,6 +220,16 @@ land. Anything reachable without a factorisation is IMPLEMENTED rather than stub
 `matrix_power` at a non-negative exponent, the Array-API forms, and every `np.linalg.norm` order
 except the three defined by singular values (matrix `2`, `-2`, `'nuc'`).
 
+**`np.einsum` is the one entry here that is NOT waiting on a backend**, and its shell goes further
+than the rest because its validation IS a language. `EinsumSubscripts.cs` ports
+`PyArray_EinsteinSum`'s parsing block plus `parse_operand_subscripts`/`parse_output_subscripts` from
+`einsum.cpp`: both spellings (subscripts string and sublist), ellipsis broadcasting, repeated-label
+diagonals, implicit-output inference, and the resolved output SHAPE — which the
+`NotSupportedException` then carries, so the parser could be differential-tested against NumPy across
+75 expressions without a contraction kernel existing. What is missing is that kernel and a
+contraction-path planner, both NumSharp's own work, which is why the seam has no `TryEinsum` and the
+message points at `np.tensordot` rather than at a package to install.
+
 ## 6. Results
 
 Acceptance harness: 110 hand-built cases (NumPy saves backing arrays + a view recipe both stacks
