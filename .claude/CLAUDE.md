@@ -862,8 +862,21 @@ was replayed through both libraries — 121 bit-exact, 11 expected NSE, 0 unexpl
 - **`vecdot` reduces in the LOOP dtype, not NEP50's accumulator** — its loops are `'ii->i'`, so an
   int32 pair stays int32 where `np.sum` would give int64. `vecdot`/`vecmat`/`vdot` conjugate their
   FIRST operand; `inner`/`matvec` do not.
-- **`axis=` is legal only on `vecdot`.** `matvec`/`vecmat` have two DISTINCT core dims and NumPy
-  raises `TypeError` for both `axis` and `keepdims` — so neither parameter is offered.
+- **`axes=` names the core axes per operand, and is the general form of `axis=`.** One entry per
+  input AND output — `np.vecdot(m, v, axes: [[-1],[-1],[]])`. The output entry may be omitted ONLY
+  where the output has no core axes, which in this family is `vecdot` alone; supplying both `axes`
+  and `axis` raises `TypeError("cannot specify both 'axis' and 'axes'")`. For `matvec`/`vecmat` the
+  output entry says where the result's core axis LANDS, so
+  `np.matvec(a, b, axes: [[-2,-1],[-1],[0]])` transposes the answer.
+- **`axis=`/`keepdims=` compute only on `vecdot` — but exist on all three.** `matvec`/`vecmat` have
+  two DISTINCT core dims and NumPy raises `TypeError` for both, so they are offered rather than
+  omitted: a ported call then fails the same way with the same message instead of failing to
+  compile. The keepdims text names input 1's core rank, which differs per signature (1 for
+  `matvec`, 2 for `vecmat`).
+- **`np.linalg.matrix_rank` below rank 2 is a PREDICATE, not a count.** NumPy short-circuits with
+  `int(not all(A == 0))`, so `matrix_rank([1,2,3])` is **1**, not 3, and an empty operand is 0
+  (`all([])` is true). Easy to get wrong, because a count returns a plausible number for every
+  non-degenerate input.
 - **`tensordot`'s every disagreement is one message**, `"shape-mismatch for sum"` — mismatched
   extents, too many axes and unequal list lengths alike. A negative count contracts NOTHING
   (`range(-axes,0)` is empty for `axes ≤ 0`), so `axes=-1` ≡ `axes=0` ≡ the outer product.
@@ -883,10 +896,30 @@ renders for humans everywhere else).
 stacking three 0-d arrays gives `(3,1)` where NumPy gives `(3,)`. `linalg.cross` routes around it
 with `expand_dims`+`concatenate`.
 
-Gate: `LinearAlgebra/{BlasProductApiTests, LinAlgErrorParityTests, LinAlgEngineSeamTests}.cs` (58
-tests). `LinAlgEngineSeamTests`' first region is a checklist — **delete a case as each implementation
-lands**. These are API/error contracts rather than value-producing kernels, so they are unit tests
-and deliberately absent from the differential-fuzz corpus.
+**Signature parity is its own gate.** `LinAlgSignatureParityTests` reflects over the whole surface
+and asserts each function has an overload whose parameter NAMES appear in NumPy's ORDER, plus the
+18 defaults NumPy states concretely — because renaming `UPLO` to `uplo` or swapping `keepdims` and
+`ord` compiles, passes every value test, and silently breaks every named-argument call ported from
+Python. It also asserts no `np.linalg` member is missing. Two defaults C# cannot spell (`object`
+parameters may only default to null) are carried by a **null sentinel** and pinned behaviourally:
+`matrix_norm`'s `ord='fro'` and `vector_norm`'s `ord=2`. Four NumPy ufunc keywords are deliberately
+ABSENT from the gufuncs — `casting`, `order`, `subok`, `signature` — because NumSharp models none of
+them anywhere in its ufunc surface (`signature` is what `dtype` already does; `subok` concerns
+ndarray subclasses the library does not have), and accepting-then-ignoring would be worse.
+
+Gate: `LinearAlgebra/{BlasProductApiTests, LinAlgErrorParityTests, LinAlgEngineSeamTests,
+LinAlgSignatureParityTests}.cs` (71 tests), backed by a 376-case NumPy differential matrix replayed
+through both libraries (dtype sweep × 10, memory-layout sweep × 8, the `axes=` paths, every
+rejection): 362 exact, 5 expected NSE, 9 house-convention type differences with verbatim messages,
+**0 unexplained**. `LinAlgEngineSeamTests`' first region is a checklist — **delete a case as each
+implementation lands**. These are API/error contracts rather than value-producing kernels, so they
+are unit tests and deliberately absent from the differential-fuzz corpus.
+
+**Two known type-only divergences, messages verbatim on both sides:** the reshape/alignment errors
+raise `IncorrectShapeException` where NumPy raises `ValueError` (long-standing house convention,
+see the reshape section), and `AxisError` derives from `ArgumentOutOfRangeException` with
+`paramName: "axis"`, so .NET appends `(Parameter 'axis')` to `.Message` — which is why the whole
+library asserts axis texts with wildcards.
 
 **The diagonal / triangular family** (NumPy's `_twodim_base_impl.py` + `_index_tricks_impl.py`; all probed against 2.4.2, tests in `Indexing/np.{diag,tri,diag_indices}.Test.cs`, oracle tiers in `manip`/`matmul`):
 

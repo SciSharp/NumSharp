@@ -186,6 +186,155 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [TestMethod]
+        public void Axes_NamesTheCoreAxesPerOperand_AndIsTheGeneralFormOfAxis()
+        {
+            var m = M23;
+            int[] none = new int[0];
+
+            // vecdot's output has no core axes, so its entry may be omitted.
+            np.vecdot(m, V3, axes: new[] {new[] {-1}, new[] {-1}, none})
+                .Should().BeOfValues(5, 14).And.BeShaped(2);
+            np.vecdot(m, V3, axes: new[] {new[] {-1}, new[] {-1}})
+                .Should().BeOfValues(5, 14).And.BeShaped(2);
+            np.vecdot(m, np.arange(2.0), axes: new[] {new[] {0}, new[] {0}, none})
+                .Should().BeOfValues(3, 4, 5).And.BeShaped(3);
+
+            // matvec and vecmat DO have an output core axis, and axes says where it goes.
+            np.matvec(m, V3, axes: new[] {new[] {-2, -1}, new[] {-1}, new[] {-1}})
+                .Should().BeOfValues(5, 14).And.BeShaped(2);
+            np.matvec(m, V3, axes: new[] {new[] {0, 1}, new[] {0}, new[] {0}})
+                .Should().BeOfValues(5, 14).And.BeShaped(2);
+
+            // Moving the output core axis to the front transposes the result.
+            np.matvec(np.arange(24.0).reshape(2, 3, 4), np.ones(new Shape(4)),
+                    axes: new[] {new[] {-2, -1}, new[] {-1}, new[] {0}})
+                .Should().BeOfValues(6, 54, 22, 70, 38, 86).And.BeShaped(3, 2);
+
+            np.vecmat(np.arange(2.0), m, axes: new[] {new[] {-1}, new[] {-2, -1}, new[] {-1}})
+                .Should().BeOfValues(3, 4, 5).And.BeShaped(3);
+        }
+
+        [TestMethod]
+        public void Axes_AndAxis_AreMutuallyExclusive()
+        {
+            new Action(() => np.vecdot(M23, V3, axes: new[] {new[] {-1}, new[] {-1}, new int[0]}, axis: -1))
+                .Should().Throw<TypeError>().WithMessage("cannot specify both 'axis' and 'axes'");
+        }
+
+        [TestMethod]
+        public void Axes_WrongNumberOfEntries_ReportsNumPysVerbatimText()
+        {
+            // Only vecdot may omit the output entry, so a 2-entry list is an error for matvec.
+            new Action(() => np.matvec(M23, V3, axes: new[] {new[] {-2, -1}, new[] {-1}}))
+                .Should().Throw<ValueError>().WithMessage(
+                    "axes should be a list with an entry for all 3 inputs and outputs; " +
+                    "entries for outputs can only be omitted if none of them has core axes.");
+
+            new Action(() => np.matvec(M23, V3,
+                    axes: new[] {new[] {-2, -1}, new[] {-1}, new[] {-1}, new[] {0}}))
+                .Should().Throw<ValueError>().WithMessage(
+                    "axes should be a list with an entry for all 3 inputs and outputs; " +
+                    "entries for outputs can only be omitted if none of them has core axes.");
+        }
+
+        [TestMethod]
+        public void Axes_EntryOfTheWrongArity_ReportsTheCoreDimensionCounts()
+        {
+            new Action(() => np.vecdot(M23, V3, axes: new[] {new[] {-1, -2}, new[] {-1}, new int[0]}))
+                .Should().Throw<AxisError>().WithMessage(
+                    "*vecdot: operand 0 has 1 core dimensions, but 2 dimensions are specified by axes tuple.*");
+
+            new Action(() => np.vecdot(M23, V3, axes: new[] {new[] {-1}, new[] {-1}, new[] {0}}))
+                .Should().Throw<AxisError>().WithMessage(
+                    "*vecdot: operand 2 has 0 core dimensions, but 1 dimensions are specified by axes tuple.*");
+        }
+
+        [TestMethod]
+        public void MatvecAndVecmat_OfferAxisAndKeepdims_OnlyToRejectThem()
+        {
+            // NumPy's signature carries both, and both always raise because these signatures have
+            // two DISTINCT core dimensions. Offering them keeps a ported call failing the same way
+            // with the same message rather than failing to compile.
+            new Action(() => np.matvec(M23, V3, axis: 0)).Should().Throw<TypeError>().WithMessage(
+                "matvec: axis can only be used with a single shared core dimension, " +
+                "not with the 2 distinct ones implied by signature (m,n),(n)->(m).");
+
+            new Action(() => np.matvec(M23, V3, keepdims: true)).Should().Throw<TypeError>().WithMessage(
+                "matvec does not support keepdims: its signature (m,n),(n)->(m) requires input 1 to " +
+                "have 1 core dimensions, but keepdims can only be used when all inputs have the same " +
+                "number of core dimensions and all outputs have no core dimensions.");
+
+            new Action(() => np.vecmat(np.arange(2.0), M23, axis: 0)).Should().Throw<TypeError>().WithMessage(
+                "vecmat: axis can only be used with a single shared core dimension, " +
+                "not with the 2 distinct ones implied by signature (n),(n,m)->(m).");
+
+            // vecmat names input 1's core rank as 2 where matvec names 1 — the counts are per-signature.
+            new Action(() => np.vecmat(np.arange(2.0), M23, keepdims: true)).Should().Throw<TypeError>().WithMessage(
+                "vecmat does not support keepdims: its signature (n),(n,m)->(m) requires input 1 to " +
+                "have 2 core dimensions, but keepdims can only be used when all inputs have the same " +
+                "number of core dimensions and all outputs have no core dimensions.");
+        }
+
+        [TestMethod]
+        public void ProductFamily_AgreesWithNumPyAcrossEveryMemoryLayout()
+        {
+            // The DOD's layout axis: the SAME (2,3) values [[0,1,2],[3,4,5]] reached six different
+            // ways must give one answer. Each variant is built so its contents are identical and
+            // only its strides differ, so a stride bug in any one path shows up as a mismatch.
+            var variants = new[]
+            {
+                np.arange(6.0).reshape(2, 3),                                             // C
+                np.asfortranarray(np.arange(6.0).reshape(2, 3)),                          // F
+                np.array(new[] {0.0, 3, 1, 4, 2, 5}).reshape(3, 2).T,                     // transposed
+                np.array(new[] {0.0, 9, 1, 9, 2, 9, 3, 9, 4, 9, 5, 9}).reshape(2, 6)[":, ::2"], // stepped
+                np.array(new[] {2.0, 1, 0, 5, 4, 3}).reshape(2, 3)[":, ::-1"],            // negative stride
+                np.arange(-3.0, 6.0).reshape(3, 3)["1:"]                                  // offset view
+            };
+
+            // Guard the guard: if a variant does not actually hold [[0,1,2],[3,4,5]] then the
+            // products below would agree for the wrong reason.
+            foreach (var m in variants)
+                m.Should().BeOfValues(0, 1, 2, 3, 4, 5).And.BeShaped(2, 3);
+
+            foreach (var m in variants)
+            {
+                np.inner(m, V3).Should().BeOfValues(5, 14);
+                np.vdot(m, m).Should().BeOfValues(55);
+                np.vecdot(m, V3).Should().BeOfValues(5, 14);
+                np.matvec(m, V3).Should().BeOfValues(5, 14);
+                np.vecmat(np.arange(2.0), m).Should().BeOfValues(3, 4, 5);
+            }
+
+            // A broadcast (stride-0) operand is read-only and must still contract correctly.
+            var broadcast = np.broadcast_to(V3, new Shape(2, 3));
+            np.vecdot(broadcast, V3).Should().BeOfValues(5, 5);
+            np.matvec(broadcast, V3).Should().BeOfValues(5, 5);
+        }
+
+        [TestMethod]
+        public void ProductFamily_PreservesTheLoopDtypeAcrossTheDtypeAxis()
+        {
+            // np.vecdot's loops are 'ii->i' at every integer width, so nothing promotes.
+            foreach (var code in new[]
+                     {
+                         NPTypeCode.SByte, NPTypeCode.Byte, NPTypeCode.Int32,
+                         NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.Single, NPTypeCode.Double
+                     })
+            {
+                var m = np.arange(6).reshape(2, 3).astype(code);
+                var w = np.arange(3).astype(code);
+
+                np.vecdot(m, w).typecode.Should().Be(code, $"vecdot must keep {code}");
+                np.matvec(m, w).typecode.Should().Be(code, $"matvec must keep {code}");
+                np.vdot(np.arange(6).astype(code), np.arange(6).astype(code)).typecode.Should().Be(code);
+            }
+
+            // bool is its own loop ('??->?') and stays bool rather than counting.
+            var b = np.arange(6).reshape(2, 3).astype(NPTypeCode.Boolean);
+            np.vecdot(b, np.arange(3).astype(NPTypeCode.Boolean)).typecode.Should().Be(NPTypeCode.Boolean);
+        }
+
+        [TestMethod]
         public void Gufuncs_RejectTooFewDimensions_WithNumPysVerbatimText()
         {
             new Action(() => np.vecdot(NDArray.Scalar(1.0), V3))

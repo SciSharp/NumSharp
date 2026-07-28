@@ -202,6 +202,14 @@ LAPACK is worth routing through `TensorEngine.Blas` rather than a second propert
 `syevd`/`heevd`/`gesdd`/`geqrf`/`orgqr`/`ungqr`/`gelsd` alongside the BLAS symbols, so a backend that
 has loaded the library for `sgemm` already has the handle for everything else.
 
+**Signatures are gated by reflection, not by review.** `LinAlgSignatureParityTests` asserts every
+function has an overload whose parameter NAMES appear in NumPy's ORDER, plus the 18 defaults NumPy
+states concretely, plus that no `np.linalg` member is missing — a renamed or reordered parameter
+compiles and passes every value test while silently breaking named-argument calls ported from
+Python. The gufuncs carry NumPy's `out`/`axes`/`axis`/`keepdims`/`dtype`; `casting`, `order`,
+`subok` and `signature` are deliberately absent, since NumSharp models none of them anywhere in its
+ufunc surface.
+
 **Validation is NOT deferred.** Every entry point runs NumPy's own rank, squareness, dtype and
 argument checks BEFORE reaching the seam, with verbatim messages
 (`LinAlgError("Last 2 dimensions of the array must be square")`,

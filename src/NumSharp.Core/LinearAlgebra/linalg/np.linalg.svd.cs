@@ -65,10 +65,12 @@ namespace NumSharp
                 if (tol is not null && rtol is not null)
                     throw new ValueError("`tol` and `rtol` can't be both set.");
 
-                // NumPy short-circuits rank 0 and 1 without any decomposition at all: a 0-d operand
-                // is rank 0 or 1 by whether it is zero, and a vector is rank 1 unless it is all zero.
+                // NumPy short-circuits below rank 2 without any decomposition: `int(not all(A == 0))`.
+                // That is a PREDICATE, not a count — a 0-d operand and a vector alike are rank 1
+                // unless every element is zero, so matrix_rank([1,2,3]) is 1 and not 3. An empty
+                // operand is rank 0, because all([]) is true.
                 if (A.ndim < 2)
-                    return np.sum(np.not_equal(A, NDArray.Scalar(0)).astype(np.int64));
+                    return NDArray.Scalar(A.TensorEngine.CountNonZero(A) == 0 ? 0L : 1L);
 
                 var common = CommonType(A);
                 A.TensorEngine.Svd(ToCommon(A, common), fullMatrices: false, computeUv: false);

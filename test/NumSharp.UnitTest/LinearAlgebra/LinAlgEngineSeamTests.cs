@@ -197,6 +197,27 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [TestMethod]
+        public void MatrixRank_BelowRankTwo_IsAPredicateNotACount()
+        {
+            // NumPy short-circuits with `int(not all(A == 0))`, so a vector is rank 1 unless every
+            // element is zero — matrix_rank([1,2,3]) is 1, NOT 3. Getting this wrong returns a
+            // plausible number for every non-degenerate input, which is why it needs its own test.
+            np.linalg.matrix_rank(np.array(new[] {1.0, 2.0, 3.0})).Should().BeOfValues(1).And.BeShaped();
+            np.linalg.matrix_rank(np.array(new[] {0.0, 5.0, 0.0})).Should().BeOfValues(1);
+            np.linalg.matrix_rank(np.zeros(new Shape(3))).Should().BeOfValues(0);
+            np.linalg.matrix_rank(NDArray.Scalar(7.0)).Should().BeOfValues(1);
+            np.linalg.matrix_rank(NDArray.Scalar(0.0)).Should().BeOfValues(0);
+
+            // all([]) is true, so an empty operand is rank 0.
+            np.linalg.matrix_rank(np.zeros(new Shape(0))).Should().BeOfValues(0);
+
+            // NaN is not zero, so it counts as content.
+            np.linalg.matrix_rank(np.array(new[] {double.NaN, 0.0})).Should().BeOfValues(1);
+
+            np.linalg.matrix_rank(np.array(new[] {1.0, 2.0})).dtype.Should().Be(typeof(long));
+        }
+
+        [TestMethod]
         public void Norm_ComputesIntegerOperandsInFloatingPoint()
         {
             var result = np.linalg.norm(np.arange(3));
@@ -211,6 +232,10 @@ namespace NumSharp.UnitTest.LinearAlgebra
             np.linalg.vector_norm(m).Should().BeOfValues(7.416198487095663).And.BeShaped();
             np.linalg.vector_norm(m, null, true).Should().BeShaped(1, 1);
             np.linalg.vector_norm(m, new[] {0}).Should().BeShaped(3);
+
+            // NumPy's axis= takes an int as readily as a tuple, so both spellings exist.
+            np.linalg.vector_norm(m, 0).Should().BeOfValues(3, 4.123105625617661, 5.385164807134504);
+            np.linalg.vector_norm(m, ord: 1).Should().BeOfValues(15);
 
             // matrix_norm always takes the last two axes, so a stack gives one value per matrix.
             np.linalg.matrix_norm(m).Should().BeOfValues(7.416198487095663);

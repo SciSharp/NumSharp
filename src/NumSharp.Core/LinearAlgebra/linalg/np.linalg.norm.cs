@@ -72,8 +72,19 @@ namespace NumSharp
             }
 
             /// <summary>
+            ///     The Array-API vector norm reduced over a single axis.
+            /// </summary>
+            /// <inheritdoc cref="vector_norm(NDArray, int[], bool, object)"/>
+            public static NDArray vector_norm(NDArray x, int axis, bool keepdims = false, object ord = null)
+                => vector_norm(x, new[] {axis}, keepdims, ord);
+
+            /// <summary>
             ///     The Array-API vector norm — <c>axis</c> defaults to flattening and <c>ord</c> to 2.
             /// </summary>
+            /// <param name="ord">
+            ///     The order. <c>null</c> means NumPy's default of <b>2</b> — C# cannot spell a
+            ///     non-null default for an <c>object</c> parameter, so the sentinel carries it.
+            /// </param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.vector_norm.html</remarks>
             public static NDArray vector_norm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null)
             {
@@ -91,6 +102,10 @@ namespace NumSharp
             ///     The Array-API matrix norm — always reduces the LAST TWO axes, and defaults to
             ///     Frobenius.
             /// </summary>
+            /// <param name="ord">
+            ///     The order. <c>null</c> means NumPy's default of <c>"fro"</c> — C# cannot spell a
+            ///     non-null default for an <c>object</c> parameter, so the sentinel carries it.
+            /// </param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_norm.html</remarks>
             public static NDArray matrix_norm(NDArray x, bool keepdims = false, object ord = null)
                 => norm(x, ord ?? "fro", new[] {-2, -1}, keepdims);
