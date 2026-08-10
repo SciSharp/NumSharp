@@ -1,6 +1,8 @@
 using System;
 using System.Numerics;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Kernels;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -53,7 +55,11 @@ namespace NumSharp
         ///     result with the default, then <see cref="copyto"/> each choice onto it under its
         ///     condition mask in REVERSE order so the first matching condition takes precedence — the
         ///     same composition NumPy uses, so every masked write rides NumSharp's SIMD masked-cast
-        ///     kernel. https://numpy.org/doc/stable/reference/generated/numpy.select.html
+        ///     kernel. The contiguous, no-cast, full-size-array-choice case (the one NumPy leaves
+        ///     memory-bound, since its (n+1) masked copytos each re-read and re-write the whole result)
+        ///     is instead served by a fused single-pass IL kernel — see
+        ///     <see cref="Backends.Kernels.DirectILKernelGenerator.GetSelectKernel"/>.
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.select.html
         /// </remarks>
         public static NDArray select(NDArray[] condlist, object[] choicelist, object @default = null)
         {
@@ -154,21 +160,132 @@ namespace NumSharp
             // Result shape = broadcast(condition-shape, choice-shape). NumPy special-cases all-scalar
             // choices to skip this call, but broadcast(S, ()) == S so the general call is identical.
             var (commonLeft, _) = Shape.Broadcast(scShape, schShape);
-            var result = new NDArray(dtype, new Shape((long[])commonLeft.dimensions.Clone()), false);
+            long[] resultDims = commonLeft.dimensions;
 
-            // Burn the default across the whole result (unsafe cast, matching np.full's copyto), then
-            // overlay each choice where its condition is true — LAST choice first, so the FIRST
-            // matching condition ends up winning each position. copyto broadcasts each operand
-            // (and mask) to the result shape, preserving its own strides. This is exactly NumPy's
-            // own structure (np.full + reverse copyto); a fused single-pass kernel was prototyped
-            // and MEASURED SLOWER (SIMD bool-mask expansion has no early-out, and the scalar
-            // reverse-overwrite evaluates every condition), so the composition — at parity with
-            // NumPy at scale, overhead-bound for tiny arrays — is what ships.
+            // Fused single-pass fast path for the contiguous, no-cast, full-size-array-choice case —
+            // the one NumPy leaves memory-bound (its (n+1) masked copytos each re-read AND re-write the
+            // whole result buffer). One IL kernel reads each condition and choice once and writes the
+            // result once. Every other shape (broadcast / strided / cast / scalar-choice) declines the
+            // gate and takes the composition below, which already outruns NumPy on those.
+            if (TrySelectFused(condlist, mats, n, dtype, resultDims, out var fused))
+                return fused;
+
+            var result = new NDArray(dtype, new Shape((long[])resultDims.Clone()), false);
+
+            // Composition fallback (NumPy's own structure): burn the default across the whole result
+            // (unsafe cast, matching np.full's copyto), then overlay each choice where its condition is
+            // true — LAST choice first, so the FIRST matching condition ends up winning each position.
+            // copyto broadcasts each operand (and mask) to the result shape, preserving its own strides,
+            // so it correctly serves the broadcast/strided/cast/scalar-choice shapes the fused kernel
+            // declines; every masked write rides NumSharp's SIMD masked-cast kernel.
             copyto(result, mats[n], casting: "unsafe");
             for (int i = n - 1; i >= 0; i--)
                 copyto(result, mats[i], casting: "same_kind", @where: condlist[i]);
 
             return result;
+        }
+
+        /// <summary>
+        ///     The fused single-pass fast path for <see cref="select"/>. Fires only when every
+        ///     condition and choice is C-contiguous at the full result shape and the result dtype
+        ///     (no broadcast, no cast) — the case NumPy's copyto composition leaves memory-bound.
+        ///     Delegates the whole select to one IL kernel
+        ///     (<see cref="DirectILKernelGenerator.GetSelectKernel"/>) that seeds each element with
+        ///     the default then walks the conditions last-to-first, so the first true condition wins.
+        ///     Returns false (and leaves <paramref name="result"/> null) for any other shape, dtype,
+        ///     or layout, so the caller falls back to the composition.
+        /// </summary>
+        private static unsafe bool TrySelectFused(NDArray[] condlist, NDArray[] mats, int n, NPTypeCode dtype, long[] resultDims, out NDArray result)
+        {
+            result = null;
+
+            if (!DirectILKernelGenerator.Enabled)
+                return false;
+            if (!DirectILKernelGenerator.SelectKernelSupportsDtype(dtype))
+                return false;
+
+            long resultSize = 1;
+            for (int d = 0; d < resultDims.Length; d++)
+                resultSize *= resultDims[d];
+            if (resultSize == 0)
+                return false; // empty result — the composition handles it trivially.
+
+            // Conditions: boolean, C-contiguous, exactly the result shape (no broadcast stretch).
+            for (int i = 0; i < n; i++)
+            {
+                var c = condlist[i];
+                if (c.GetTypeCode != NPTypeCode.Boolean) return false;
+                if (!c.Shape.IsContiguous) return false;
+                if (!SelectDimsEqual(c.Shape, resultDims)) return false;
+            }
+
+            // Choices: already the result dtype (no cast), C-contiguous, exactly the result shape.
+            for (int i = 0; i < n; i++)
+            {
+                var ch = mats[i];
+                if (ch.GetTypeCode != dtype) return false;
+                if (!ch.Shape.IsContiguous) return false;
+                if (!SelectDimsEqual(ch.Shape, resultDims)) return false;
+            }
+
+            // Default: a scalar (broadcast, cast to dtype for one element) or a full-size, same-dtype,
+            // C-contiguous array. Anything else declines.
+            var def = mats[n];
+            bool defScalar = def.size == 1;
+            NDArray defArr = def;
+            if (defScalar)
+            {
+                if (def.GetTypeCode != dtype)
+                    defArr = def.astype(dtype);
+            }
+            else
+            {
+                if (def.GetTypeCode != dtype) return false;
+                if (!def.Shape.IsContiguous) return false;
+                if (!SelectDimsEqual(def.Shape, resultDims)) return false;
+            }
+
+            var kernel = DirectILKernelGenerator.GetSelectKernel(dtype, n, defScalar);
+            if (kernel == null)
+                return false;
+
+            var res = new NDArray(dtype, new Shape((long[])resultDims.Clone()), false);
+            SelectFusedInvoke(kernel, condlist, mats, defArr, defScalar, res, n, dtype);
+            result = res;
+            return true;
+        }
+
+        /// <summary>True when <paramref name="shape"/>'s dimensions equal <paramref name="dims"/> exactly.</summary>
+        private static bool SelectDimsEqual(Shape shape, long[] dims)
+        {
+            var sd = shape.dimensions;
+            if (sd.Length != dims.Length) return false;
+            for (int i = 0; i < dims.Length; i++)
+                if (sd[i] != dims[i]) return false;
+            return true;
+        }
+
+        /// <summary>
+        ///     Gather the operand base pointers (base + offset, always the logical element 0 for a
+        ///     C-contiguous operand) and run the fused kernel. The <c>stackalloc</c> pointer arrays
+        ///     stay alive for the whole synchronous kernel call.
+        /// </summary>
+        private static unsafe void SelectFusedInvoke(SelectFusedKernel kernel, NDArray[] condlist, NDArray[] mats, NDArray defArr, bool defScalar, NDArray res, int n, NPTypeCode dtype)
+        {
+            int elemSize = InfoOf.GetSize(dtype);
+
+            bool** conds = stackalloc bool*[n];
+            void** choices = stackalloc void*[n];
+            for (int i = 0; i < n; i++)
+            {
+                conds[i] = (bool*)condlist[i].Storage.Address + condlist[i].Shape.offset;
+                choices[i] = (byte*)mats[i].Storage.Address + mats[i].Shape.offset * elemSize;
+            }
+
+            void* defPtr = (byte*)defArr.Storage.Address + defArr.Shape.offset * elemSize;
+            void* resPtr = (byte*)res.Storage.Address + res.Shape.offset * elemSize;
+
+            kernel(conds, choices, defPtr, resPtr, res.size);
         }
 
         /// <summary>

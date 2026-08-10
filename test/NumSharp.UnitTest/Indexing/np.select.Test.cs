@@ -205,4 +205,96 @@ public class SelectTests
         r.ndim.Should().Be(0);
         r.GetValue(0).Should().Be(5L);
     }
+
+    // ---- fused SIMD fast path -----------------------------------------------
+    // The contiguous, no-cast, full-size-array-choice case runs through
+    // DirectILKernelGenerator's fused select kernel instead of the copyto
+    // composition. The small tests above only reach that kernel's scalar tail;
+    // these use a 1000-element array to exercise its SIMD body + 4x unroll +
+    // 1-vector remainder + tail, across every element size (1/2/4/8 bytes), n,
+    // and both default kinds (scalar-broadcast and full array). The oracle is a
+    // naive first-match reference — identical semantics to NumPy's select.
+
+    private static double[] NaiveSelect(bool[][] conds, double[][] choices, double[] def)
+    {
+        int size = def.Length;
+        var r = new double[size];
+        for (int i = 0; i < size; i++)
+        {
+            r[i] = def[i];
+            for (int k = 0; k < conds.Length; k++)
+                if (conds[k][i]) { r[i] = choices[k][i]; break; }
+        }
+        return r;
+    }
+
+    [TestMethod]
+    public void Select_Fused_SimdPath_MatchesReference()
+    {
+        // Byte(1) / Int16(2) / Int32(4) / Int64(8) / Single(4) / Double(8) cover every
+        // fused-kernel element size and both the integer and float SIMD lanes.
+        NPTypeCode[] dtypes =
+        {
+            NPTypeCode.Byte, NPTypeCode.Int16, NPTypeCode.Int32,
+            NPTypeCode.Int64, NPTypeCode.Single, NPTypeCode.Double,
+        };
+        const int size = 1000; // > 4 * V256 lanes for every dtype -> hits unroll + remainder + tail
+
+        foreach (var dt in dtypes)
+        foreach (var n in new[] { 1, 2, 4 })
+        foreach (var arrayDefault in new[] { false, true })
+        {
+            var conds = new bool[n][];
+            var choices = new double[n][];
+            var condArr = new NDArray[n];
+            var choiceObj = new object[n];
+            for (int k = 0; k < n; k++)
+            {
+                conds[k] = new bool[size];
+                choices[k] = new double[size];
+                for (int i = 0; i < size; i++)
+                {
+                    conds[k][i] = ((i + k) % (k + 2)) == 0;   // varied, overlapping masks
+                    choices[k][i] = (i * (k + 1)) % 37;       // 0..36 — exact in every dtype incl. byte
+                }
+                condArr[k] = np.array(conds[k]);
+                choiceObj[k] = np.array(choices[k]).astype(dt); // full-size contiguous choice
+            }
+
+            var def = new double[size];
+            for (int i = 0; i < size; i++) def[i] = 5;
+            // Scalar default: a size-1 strong array of dt (defScalar path, result stays dt).
+            // Array default: a full-size dt array.
+            object defObj = arrayDefault
+                ? np.array(def).astype(dt)
+                : np.array(new double[] { 5 }).astype(dt);
+
+            var expected = NaiveSelect(conds, choices, def);
+            var got = np.select(condArr, choiceObj, defObj);
+
+            got.GetTypeCode.Should().Be(dt, $"result dtype for {dt} n={n} arrDef={arrayDefault}");
+            var gd = got.astype(NPTypeCode.Double).ToArray<double>();
+            for (int i = 0; i < size; i++)
+                gd[i].Should().Be(expected[i], $"{dt} n={n} arrDef={arrayDefault} at [{i}]");
+        }
+    }
+
+    [TestMethod]
+    public void Select_Fused_ContiguousOffsetSlice_ReadsThroughOffset()
+    {
+        // A contiguous slice has its base pointer advanced and offset folded in; the fused
+        // kernel must address logical element 0 (base + Shape.offset), not the buffer base.
+        var big = np.arange(100).astype(NPTypeCode.Int64);
+        var mask = np.array(new bool[100]);
+        for (int i = 0; i < 100; i++) mask.SetValue(i % 2 == 0, i);
+
+        var choice = big["10:30"];   // contiguous, non-zero offset
+        var cond = mask["10:30"];
+        var r = np.select(new[] { cond }, new object[] { choice }, -1L);
+
+        r.GetTypeCode.Should().Be(NPTypeCode.Int64);
+        var rd = r.ToArray<long>();
+        for (int i = 0; i < 20; i++)
+            rd[i].Should().Be((10 + i) % 2 == 0 ? 10 + i : -1L, $"at [{i}]");
+    }
 }
