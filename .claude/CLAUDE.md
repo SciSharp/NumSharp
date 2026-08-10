@@ -536,7 +536,9 @@ genuine defect worth fixing on its own terms (note .NET's `float.ExpM1`/`double.
 `bitwise_and`, `bitwise_or`, `bitwise_xor` (ufunc `out=`/`where=`/`dtype=` supported; float/complex/decimal INPUTS raise NumPy's coercion TypeError while a float/complex/decimal `dtype=` raises the no-loop text — distinct messages, both probed; probed order: bad `where` → no-loop → out-cast → shape), `invert`, `left_shift`, `right_shift`
 
 ### Comparison & Logic
-`all`, `allclose`, `any`, `array_equal`, `equal`, `fmax`, `fmin`, `greater`, `greater_equal`, `isclose`, `iscomplex`, `iscomplexobj`, `isfinite`, `isinf`, `isnan`, `isreal`, `isrealobj`, `isscalar`, `less`, `less_equal`, `logical_and`, `logical_not`, `logical_or`, `logical_xor`, `maximum`, `minimum`, `not_equal`
+`all`, `allclose`, `any`, `array_equal`, `equal`, `fmax`, `fmin`, `greater`, `greater_equal`, `isclose`, `iscomplex`, `iscomplexobj`, `isfinite`, `isinf`, `isnan`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `less`, `less_equal`, `logical_and`, `logical_not`, `logical_or`, `logical_xor`, `maximum`, `minimum`, `not_equal`
+
+`np.iterable(y)` is NumPy's pure iterability predicate — `try: iter(y); return True; except TypeError: return False` (`numpy/lib/_function_base_impl.py`). It is NOT an iteration op: it never touches element data, so it uses **no kernel/NDIter/loop** (O(1) rank/type check in `Logic/np.is.cs`, mirroring `isscalar`). C# mapping, each matching NumPy 2.4.2's `iter()` outcome: `null`→false; **`NDArray`→`ndim != 0`** (the one surprise NumPy documents — a 0-d array is the *only* non-iterable array: `iter()` on it raises `TypeError`, exactly as `NDArray.GetEnumerator()` does, while every rank≥1 array incl. empties is iterable); `string`→true (Python strings are iterable); any `IEnumerable` (C# arrays/lists/dicts/sets)→true; every scalar value type (int/double/bool/char/Half/decimal/Complex/…)→false. The `NDArray` case precedes the `IEnumerable` catch because `NDArray` implements `IEnumerable`. Being a bool predicate over an arbitrary object rather than a value-producing kernel over array data, it is unit-test-only (`Logic/np.iterable.Test.cs`, 30 cases) and deliberately absent from the differential-fuzz corpus — same rationale as `isscalar`/`nditer`/`ndindex`.
 
 The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped overload each** — `f(x[, x2], NDArray out = null, NDArray where = null, NPTypeCode? dtype = null)` (no bare/out split). It returns plain `NDArray` — NumPy's `np.less(a, b, out=f64)` returns the f64 out itself; `True→1` at any numeric out dtype since bool casts same_kind to all of them. A plain call still returns an `NDArray<bool>` *instance* (TensorEngine contract), so the typed wrapper is one zero-alloc cast away and the C# comparison operators (`==`, `<`, …) keep the `NDArray<bool>` static type via `AsGeneric<bool>()`. `dtype=` is validate-only (probed 2.4.2): bool loops only — `dtype: Boolean` is a no-op, anything else raises `No loop matching the specified signature and casting was found for ufunc <name>`. Comparisons compare at `result_type(lhs, rhs)` inside the kernel (probed: `greater(i8 2^53+1, f8 2^53)` → False, `equal` → True). Engine members follow the house order `(inputs, typeCode, out, where)`.
 
@@ -557,15 +559,25 @@ rule:** only `int`/`float`/`double`/`Complex` literals are weak (adopt the other
 dtype WRAPS (`int8` choice + `1000` default → int8, 1000→−24) rather than raising; the result dtype
 is `result_type(*choices, default)` folded via `NDExprTypeRules.PromoteStrong`. Conditions and choices
 broadcast in two SEPARATE groups; a non-bool condition is `TypeError("invalid entry {i} in condlist:
-should be boolean ndarray")`, length mismatch / empty condlist are `ValueError` (verbatim). Ported as
-NumPy's OWN structure — allocate the default-filled result, then `np.copyto(where=cond)` each choice in
-REVERSE (so the first wins) — so every masked write rides NumSharp's SIMD masked-cast kernel. A fused
-single-pass kernel was prototyped and **measured slower** (the SIMD bool-mask expansion has no
-early-out; the scalar reverse-overwrite evaluates every condition), so the composition ships:
-~parity with NumPy at scale, overhead-bound (NDArray/Shape construction) for tiny arrays — NumPy's
-copyto-based select is already efficient and the op is memory-bound, so 1.5× is not reachable.
-See `Indexing/np.select.cs`; gates: `Indexing/np.select.Test.cs` (19) + the `select` op in the
-`groupa` differential-fuzz tier (11 cases, dtype × precedence × broadcast × transposed).
+should be boolean ndarray")`, length mismatch / empty condlist are `ValueError` (verbatim). Two code
+paths, both NumPy-exact in VALUE, split by layout: the **contiguous / no-cast / full-size-array-choice**
+case (the one NumPy leaves memory-bound) runs a **fused single-pass IL kernel**
+(`DirectILKernelGenerator.Select.cs`) — a reverse `Vector.ConditionalSelect` chain (seed = default;
+overlay choices n−1→0 so the first true condition wins), 4×-unrolled with four independent
+accumulators, the scalar default hoisted once via `CreateBroadcast`, reusing `np.where`'s exact
+`EmitInlineMaskCreation` bool→lane expansion — so each condition and choice is read once and the result
+is written once. Every OTHER shape (broadcast / strided / cast / **scalar-choice**) declines the fused
+gate (`TrySelectFused`) and takes NumPy's OWN structure — allocate the default-filled result, then
+`np.copyto(where=cond)` each choice in REVERSE — where each masked write rides NumSharp's SIMD
+masked-cast kernel. The composition alone was already 1.2–8.5× NumPy everywhere EXCEPT the 8-byte
+(int64/float64) all-array-choice large cases, which sat at 1.22–1.54× because its `(n+1)` masked
+copytos each re-read AND re-write the whole 80 MB result; the fused kernel cuts that redundant result
+traffic and lifts those cells to **1.6–2.4×** (min 1.60× at int64 n=1 10M with an ARRAY default — the
+irreducible 4-array-traffic memory-bound floor). **Perf (NPY/NS, Release, best-of-rounds):** array
+choices **1K 3.3–5.0× · 100K 8–18× · 10M 1.6–5.8×**; scalar choices (composition) **3.3–3.8×** — no
+measured cell below 1.5×. See `Indexing/np.select.cs`; gates: `Indexing/np.select.Test.cs` (21 — incl.
+the fused SIMD-body/unroll/remainder/offset-slice pins) + the `select` op in the `groupa`
+differential-fuzz tier (11 cases, dtype × precedence × broadcast × transposed).
 
 **`np.take` / `np.put` negative indices under `mode='raise'`** now match NumPy's
 `check_and_adjust_index`: a negative index is normalized once (`idx += n`) before the bounds test, so
@@ -1213,7 +1225,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
-| Selection family | `Indexing/np.{take,put,place,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,Put,Place}.cs` |
+| Selection family | `Indexing/np.{take,put,place,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,Put,Place,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain) |
 | BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`) |
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot}.cs`, `LinearAlgebra/GufuncGuard.cs` |
 | einsum | `LinearAlgebra/np.einsum.cs`, `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
