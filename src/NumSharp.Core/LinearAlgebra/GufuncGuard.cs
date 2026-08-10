@@ -80,7 +80,17 @@ namespace NumSharp
         ///     be omitted ONLY when the output has no core axes, which among this family is
         ///     <c>vecdot</c> alone.
         /// </remarks>
-        internal static int[][] NormalizeAxes(string name, int[][] axes, int[] coreRanks, NDArray x1, NDArray x2)
+        /// <param name="outputCoreRankOverride">
+        ///     The output's EFFECTIVE core rank when it differs from the signature's — namely under
+        ///     <c>keepdims</c>, where the reduced core dimension is kept as size 1 and a PROVIDED
+        ///     output entry must name it. It changes only the length a provided output entry is
+        ///     checked against; whether the entry may be OMITTED still keys off the signature rank
+        ///     (<c>coreRanks[2]</c>), because keepdims does not add a signature core axis. Only
+        ///     <c>vecdot</c> passes it — <c>matvec</c>/<c>vecmat</c> reject keepdims before reaching
+        ///     here — so their behaviour is unchanged (<c>null</c> ⇒ the signature rank).
+        /// </param>
+        internal static int[][] NormalizeAxes(string name, int[][] axes, int[] coreRanks, NDArray x1, NDArray x2,
+            int? outputCoreRankOverride = null)
         {
             if (axes.Length != 3 && !(axes.Length == 2 && coreRanks[2] == 0))
                 throw new ValueError(
@@ -93,9 +103,10 @@ namespace NumSharp
             for (int i = 0; i < axes.Length; i++)
             {
                 var entry = axes[i] ?? System.Array.Empty<int>();
-                if (entry.Length != coreRanks[i])
+                int expected = i == 2 ? (outputCoreRankOverride ?? coreRanks[2]) : coreRanks[i];
+                if (entry.Length != expected)
                     throw new AxisError(
-                        $"{name}: operand {i} has {coreRanks[i]} core dimensions, " +
+                        $"{name}: operand {i} has {expected} core dimensions, " +
                         $"but {entry.Length} dimensions are specified by axes tuple.");
 
                 if (i == 2)

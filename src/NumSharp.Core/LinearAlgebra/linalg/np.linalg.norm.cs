@@ -127,7 +127,13 @@ namespace NumSharp
                 if (double.IsNegativeInfinity(order))
                     return np.amin(np.abs(a), axis, keepdims: keepdims);
                 if (order == 0d)
-                    return np.sum(np.not_equal(a, NDArray.Scalar(0)).astype(a.dtype), axis, keepdims);
+                {
+                    // NumPy counts non-zeros in `x.real.dtype`, NOT `x.dtype` — so a COMPLEX operand's
+                    // zero-"norm" is float64, not complex. For every real dtype the real component's
+                    // dtype is the dtype itself, so only Complex needs the substitution.
+                    var countType = a.typecode == NPTypeCode.Complex ? NPTypeCode.Double : a.typecode;
+                    return np.sum(np.not_equal(a, NDArray.Scalar(0)).astype(countType), axis, keepdims);
+                }
                 if (order == 1d)
                     return np.sum(np.abs(a), axis, keepdims);
 

@@ -41,18 +41,30 @@ namespace NumSharp
         ///     <c>axes=(list, list)</c> spelling.
         /// </summary>
         /// <exception cref="ValueError">
-        ///     "shape-mismatch for sum" — the single message NumPy raises for every disagreement
-        ///     here: different axis-list lengths AND mismatched contracted extents alike.
+        ///     <c>"duplicate axes are not allowed in tensordot"</c> when either list repeats a raw
+        ///     axis value (checked first, ahead of everything), or <c>"shape-mismatch for sum"</c> for
+        ///     unequal list lengths and mismatched contracted extents alike.
+        /// </exception>
+        /// <exception cref="IndexError">
+        ///     <c>"tuple index out of range"</c> when a contraction axis is out of range — NumPy
+        ///     indexes the shape tuple with the raw axis, so this is an index error, not a shape
+        ///     mismatch. A mismatched extent found earlier in the list settles as the shape mismatch
+        ///     first, hiding a later out-of-range axis.
         /// </exception>
         public static NDArray tensordot(NDArray a, NDArray b, int[] axesA, int[] axesB)
         {
-            // Port of numpy/_core/numeric.py :: tensordot. The equality test walks both lists
-            // together and normalizes negatives AS IT GOES, so a rejected pairing leaves the
-            // remaining entries unnormalized — harmless, because the only exit is the raise.
+            // Port of numpy/_core/numeric.py :: tensordot.
             var shapeA = a.Shape.dimensions;
             var shapeB = b.Shape.dimensions;
             int na = axesA.Length;
             int nb = axesB.Length;
+
+            // NumPy rejects LITERAL duplicates first — `len(set(axes_a)) != len(axes_a)` — on the
+            // RAW axis values, ahead of every shape check and before negatives are normalized. So
+            // `([5,5],[0,1])` is a duplicate, not an out-of-range index, and `([0,-2],…)` (a repeat
+            // only AFTER normalization) is NOT caught here — it slips through exactly as upstream.
+            if (HasDuplicateAxis(axesA) || HasDuplicateAxis(axesB))
+                throw new ValueError("duplicate axes are not allowed in tensordot");
 
             var la = (int[])axesA.Clone();
             var lb = (int[])axesB.Clone();
@@ -62,10 +74,15 @@ namespace NumSharp
             {
                 for (int k = 0; k < na; k++)
                 {
-                    int ia = la[k] < 0 ? la[k] + a.ndim : la[k];
-                    int ib = lb[k] < 0 ? lb[k] + b.ndim : lb[k];
-                    if (ia < 0 || ia >= a.ndim || ib < 0 || ib >= b.ndim ||
-                        shapeA[ia] != shapeB[ib])
+                    // NumPy indexes the shape TUPLE with the raw axis (`as_[axes_a[k]]`), so an
+                    // out-of-range axis raises IndexError "tuple index out of range", NOT a shape
+                    // mismatch. Both operands are indexed before the extents are compared and the
+                    // comparison short-circuits the loop, so a mismatch at k hides an out-of-range
+                    // axis at k+1 — which is why `([0,1],[0,5])` settles as a shape mismatch (a[0] !=
+                    // b[0]) while `([5,0],[0,1])` is an IndexError (a[5] is reached first).
+                    int ia = ResolveContractionAxis(la[k], a.ndim);
+                    int ib = ResolveContractionAxis(lb[k], b.ndim);
+                    if (shapeA[ia] != shapeB[ib])
                     {
                         equal = false;
                         break;
@@ -115,6 +132,32 @@ namespace NumSharp
             oldA.CopyTo(resultShape, 0);
             oldB.CopyTo(resultShape, oldA.Length);
             return reshape(product, resultShape);
+        }
+
+        /// <summary>NumPy's <c>len(set(axes)) != len(axes)</c> — a literal repeat among the raw axis values.</summary>
+        private static bool HasDuplicateAxis(int[] axes)
+        {
+            for (int i = 0; i < axes.Length; i++)
+            for (int j = i + 1; j < axes.Length; j++)
+            {
+                if (axes[i] == axes[j])
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        ///     Resolves one contraction axis the way NumPy's <c>shape[axis]</c> does: a negative index
+        ///     wraps, and anything still out of range is an <see cref="IndexError"/>
+        ///     "tuple index out of range" — never a shape mismatch.
+        /// </summary>
+        private static int ResolveContractionAxis(int axis, int ndim)
+        {
+            int resolved = axis < 0 ? axis + ndim : axis;
+            if (resolved < 0 || resolved >= ndim)
+                throw new IndexError("tuple index out of range");
+            return resolved;
         }
 
         /// <summary>The axes of a rank-<paramref name="ndim"/> array not named in <paramref name="taken"/>, in order.</summary>

@@ -56,13 +56,18 @@ namespace NumSharp
 
             var a = x1;
             var b = x2;
+            int[] outputAxes = System.Array.Empty<int>();
 
             if (axes is not null)
             {
-                var resolved = GufuncGuard.NormalizeAxes("vecdot", axes, new[] {1, 1, 0}, x1, x2);
-                if (keepdims)
-                    throw new AxisError(
-                        "vecdot: operand 2 has 1 core dimensions, but 0 dimensions are specified by axes tuple.");
+                // Under keepdims the output gains a core dimension (the reduced axis, kept as size 1),
+                // so a PROVIDED output entry must have length 1 — but it may still be OMITTED. This is
+                // the whole reason vecdot passes an output-core-rank override: `axes=[[1],[1]]` with
+                // keepdims is legal and lands the kept axis at the end, `axes=[[1],[1],[]]` is not
+                // (an explicit 0-length output entry contradicts the kept dimension).
+                int outputCoreRank = keepdims ? 1 : 0;
+                var resolved = GufuncGuard.NormalizeAxes("vecdot", axes, new[] {1, 1, 0}, x1, x2, outputCoreRank);
+                outputAxes = resolved[2];
 
                 a = moveaxis(a, resolved[0][0], -1);
                 b = moveaxis(b, resolved[1][0], -1);
@@ -86,10 +91,24 @@ namespace NumSharp
 
             if (keepdims)
             {
-                // The contracted axis comes back where it was taken from, not merely at the end.
-                result = expand_dims(result, -1);
-                if (axis is not null)
-                    result = moveaxis(result, -1, axis.Value);
+                // The reduced axis is kept as size 1, at the position `axes` gave the output core dim
+                // (validated against the OUTPUT rank), at the position `axis=` named, or — when the
+                // output entry was omitted — at the END. All three collapse to one expand_dims.
+                int outNdim = result.ndim + 1;
+                int keptAxis = outNdim - 1;
+                if (axes is not null && outputAxes.Length == 1)
+                {
+                    int raw = outputAxes[0];
+                    keptAxis = raw < 0 ? raw + outNdim : raw;
+                    if (keptAxis < 0 || keptAxis >= outNdim)
+                        throw new AxisError(raw, outNdim);
+                }
+                else if (axis is not null)
+                {
+                    keptAxis = axis.Value < 0 ? axis.Value + outNdim : axis.Value;
+                }
+
+                result = expand_dims(result, keptAxis);
             }
 
             return GufuncGuard.Deliver(result, @out);

@@ -159,6 +159,42 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [TestMethod]
+        public void Vecdot_KeepdimsComposesWithAxes_JustAsNumPy()
+        {
+            var a = np.arange(6.0).reshape(2, 3);
+
+            // Under keepdims the output gains a core dim, so a PROVIDED output entry must be length 1
+            // — but it may still be OMITTED, in which case the kept axis lands at the END.
+            np.vecdot(a, a, axes: new[] {new[] {1}, new[] {1}}, keepdims: true)
+                .Should().BeOfValues(5, 50).And.BeShaped(2, 1);
+            np.vecdot(a, a, axes: new[] {new[] {1}, new[] {1}, new[] {1}}, keepdims: true)
+                .Should().BeOfValues(5, 50).And.BeShaped(2, 1);
+            np.vecdot(a, a, axes: new[] {new[] {1}, new[] {1}, new[] {0}}, keepdims: true)
+                .Should().BeOfValues(5, 50).And.BeShaped(1, 2);
+            np.vecdot(a, a, axes: new[] {new[] {0}, new[] {0}}, keepdims: true)
+                .Should().BeOfValues(9, 17, 29).And.BeShaped(3, 1);
+
+            // The output axis is placed in the OUTPUT and can be negative; the values are unchanged.
+            var a3 = np.arange(24.0).reshape(2, 4, 3);
+            np.vecdot(a3, a3, axes: new[] {new[] {2}, new[] {2}, new[] {0}}, keepdims: true).Should().BeShaped(1, 2, 4);
+            np.vecdot(a3, a3, axes: new[] {new[] {2}, new[] {2}, new[] {1}}, keepdims: true).Should().BeShaped(2, 1, 4);
+            np.vecdot(a3, a3, axes: new[] {new[] {1}, new[] {1}, new[] {2}}, keepdims: true)
+                .Should().BeOfValues(126, 166, 214, 1134, 1270, 1414).And.BeShaped(2, 3, 1);
+            np.vecdot(a3, a3, axes: new[] {new[] {2}, new[] {2}, new[] {-1}}, keepdims: true).Should().BeShaped(2, 4, 1);
+
+            // An explicit output entry of the WRONG length for the effective (keepdims-adjusted) rank
+            // is an AxisError, and an out-of-range output axis is one too.
+            new Action(() => np.vecdot(a, a, axes: new[] {new[] {1}, new[] {1}, new int[0]}, keepdims: true))
+                .Should().Throw<AxisError>().WithMessage(
+                    "*vecdot: operand 2 has 1 core dimensions, but 0 dimensions are specified by axes tuple.*");
+            new Action(() => np.vecdot(a, a, axes: new[] {new[] {1}, new[] {1}, new[] {1}}))
+                .Should().Throw<AxisError>().WithMessage(
+                    "*vecdot: operand 2 has 0 core dimensions, but 1 dimensions are specified by axes tuple.*");
+            new Action(() => np.vecdot(a, a, axes: new[] {new[] {1}, new[] {1}, new[] {2}}, keepdims: true))
+                .Should().Throw<AxisError>().WithMessage("axis 2 is out of bounds for array of dimension 2*");
+        }
+
+        [TestMethod]
         public void Vecdot_DtypeSelectsTheLoop()
         {
             np.vecdot(M23, V3, dtype: NPTypeCode.Single).dtype.Should().Be(typeof(float));
@@ -428,17 +464,43 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [TestMethod]
-        public void Tensordot_EveryDisagreementIsTheSameOneLineMessage()
+        public void Tensordot_RejectionsMatchNumPy_ShapeMismatchDuplicateAndIndexError()
         {
             var a = np.arange(24.0).reshape(2, 3, 4);
             var b = np.arange(24.0).reshape(4, 3, 2);
 
-            // Mismatched extents, too many axes and unequal list lengths all land here.
+            // Mismatched extents and unequal list lengths are "shape-mismatch for sum". `axes=3` here
+            // is IN range (both operands are 3-D), so it too is an extent mismatch, not an index error.
             new Action(() => np.tensordot(a, b)).Should().Throw<ValueError>().WithMessage("shape-mismatch for sum");
             new Action(() => np.tensordot(a, b, 3)).Should().Throw<ValueError>().WithMessage("shape-mismatch for sum");
             new Action(() => np.tensordot(a, b, new[] {0}, new[] {0}))
                 .Should().Throw<ValueError>().WithMessage("shape-mismatch for sum");
             new Action(() => np.tensordot(a, b, new[] {0, 1}, new[] {0}))
+                .Should().Throw<ValueError>().WithMessage("shape-mismatch for sum");
+
+            // A repeated RAW axis value is rejected first, ahead of any shape or range check.
+            new Action(() => np.tensordot(a, b, new[] {0, 0}, new[] {0, 1}))
+                .Should().Throw<ValueError>().WithMessage("duplicate axes are not allowed in tensordot");
+            new Action(() => np.tensordot(a, b, new[] {1, 2}, new[] {0, 0}))
+                .Should().Throw<ValueError>().WithMessage("duplicate axes are not allowed in tensordot");
+
+            var m = np.ones(new Shape(3, 4));
+            var n = np.ones(new Shape(4, 3));
+
+            // Duplicate wins even when the repeated axis is also out of range.
+            new Action(() => np.tensordot(m, n, new[] {5, 5}, new[] {0, 1}))
+                .Should().Throw<ValueError>().WithMessage("duplicate axes are not allowed in tensordot");
+
+            // An out-of-range contraction axis is an IndexError — NumPy indexes the shape TUPLE with
+            // the raw axis — whether the int count exceeds ndim or a listed axis is out of bounds.
+            new Action(() => np.tensordot(m, n, 3)).Should().Throw<IndexError>().WithMessage("tuple index out of range");
+            new Action(() => np.tensordot(m, n, new[] {5, 0}, new[] {0, 1}))
+                .Should().Throw<IndexError>().WithMessage("tuple index out of range");
+            new Action(() => np.tensordot(m, n, new[] {-3}, new[] {0}))
+                .Should().Throw<IndexError>().WithMessage("tuple index out of range");
+
+            // …but a mismatched extent found earlier in the list hides a later out-of-range axis.
+            new Action(() => np.tensordot(m, n, new[] {0, 1}, new[] {0, 5}))
                 .Should().Throw<ValueError>().WithMessage("shape-mismatch for sum");
         }
 

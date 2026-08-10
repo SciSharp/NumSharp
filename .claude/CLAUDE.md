@@ -873,13 +873,29 @@ was replayed through both libraries — 121 bit-exact, 11 expected NSE, 0 unexpl
   omitted: a ported call then fails the same way with the same message instead of failing to
   compile. The keepdims text names input 1's core rank, which differs per signature (1 for
   `matvec`, 2 for `vecmat`).
+- **`keepdims=True` COMPOSES with `axes=` on `vecdot`.** Under keepdims the output gains the reduced
+  core dimension (kept as size 1), so a PROVIDED output entry must be length 1 (`[[1],[1],[1]]`) and
+  says WHERE the kept axis lands in the output — but it may still be OMITTED (`[[1],[1]]`), in which
+  case the kept axis goes to the END. An explicit empty output entry (`[[1],[1],[]]`) then
+  CONTRADICTS the kept dimension and is the AxisError "operand 2 has 1 core dimensions, but 0
+  dimensions are specified"; the mirror-image `[[1],[1],[1]]` WITHOUT keepdims is "has 0 … but 1
+  specified". The output axis is validated against the output rank (`axis N is out of bounds for
+  array of dimension M`). The whole interaction routes through one `NormalizeAxes` override for the
+  effective output core rank — the earlier code rejected every `axes`+`keepdims` call outright.
 - **`np.linalg.matrix_rank` below rank 2 is a PREDICATE, not a count.** NumPy short-circuits with
   `int(not all(A == 0))`, so `matrix_rank([1,2,3])` is **1**, not 3, and an empty operand is 0
   (`all([])` is true). Easy to get wrong, because a count returns a plausible number for every
   non-degenerate input.
-- **`tensordot`'s every disagreement is one message**, `"shape-mismatch for sum"` — mismatched
-  extents, too many axes and unequal list lengths alike. A negative count contracts NOTHING
-  (`range(-axes,0)` is empty for `axes ≤ 0`), so `axes=-1` ≡ `axes=0` ≡ the outer product.
+- **`tensordot` has THREE distinct rejections, reproduced in NumPy's order.** A repeated RAW axis
+  value is `ValueError("duplicate axes are not allowed in tensordot")`, checked first, ahead of any
+  shape or range test (so `([5,5],[0,1])` is a duplicate, not an index error). An out-of-range
+  contraction axis is `IndexError("tuple index out of range")` — NumPy indexes the shape TUPLE with
+  the raw axis (`as_[axes_a[k]]`), so `tensordot(a2d, b2d, 3)` (the int count exceeds ndim) and
+  `([5,0],[0,1])` are index errors, NOT shape mismatches. Mismatched extents and unequal list lengths
+  are `ValueError("shape-mismatch for sum")`; because the extent comparison short-circuits the loop,
+  a mismatch found earlier HIDES a later out-of-range axis (`([0,1],[0,5])` settles as the shape
+  mismatch). A negative count contracts NOTHING (`range(-axes,0)` is empty for `axes ≤ 0`), so
+  `axes=-1` ≡ `axes=0` ≡ the outer product.
 - **`np.linalg.multi_dot` requires every non-endpoint operand to be 2-D.** NumPy promotes a 1-D
   first/last operand (row/column) and THEN runs `_assert_2d` over all of them, so a 0-D, a 3-D+, or
   a 1-D operand in a MIDDLE position raises `LinAlgError("{ndim}-dimensional array given. Array must
