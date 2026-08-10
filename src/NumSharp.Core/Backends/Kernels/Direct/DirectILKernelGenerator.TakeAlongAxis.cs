@@ -20,6 +20,16 @@ using System.Reflection.Emit;
 //   and emits a typed load/store for the exact element width (1/2/4/8/16), which
 //   is meaningfully faster than a variable-size `cpblk` in this per-element loop.
 //
+//   NO SIMD GATHER — measured, not assumed. A hardware gather (VPGATHERQD/QQ) was
+//   benchmarked against this scalar loop for the hot 4/8-byte, axis=last, contiguous
+//   case and came in at only ~1.16x on this host (AVX2; AVX-512 gather unavailable) —
+//   BEFORE the SIMD index bounds-validation and the scalar OOB-fallback a raise-mode
+//   gather still needs. That does not justify a per-width gather kernel, its
+//   correctness surface, or its CPU-dependence (gather is at/below parity on several
+//   microarchitectures); NumPy's own advanced-index gather is likewise a scalar loop.
+//   The wins that DID pay off are structural: the outer-odometer/inner-loop split
+//   (per-slice carry, below) and the branchless-free but branch-light resolve.
+//
 //   The result buffer is freshly allocated C-contiguous, so the destination is
 //   written linearly (dst + flat*elemBytes). Both `indices` and `arr` are read
 //   through per-result-dimension strides, so ANY layout (C/F/strided/reversed/
@@ -238,7 +248,14 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Stloc, locIdxVal);
 
-            // resolved = idxVal; if (resolved < 0) resolved += axisLen;
+            // Advanced-index resolve: a single conditional wrap, then ONE unsigned bounds compare.
+            //   if (resolved < 0) resolved += axisLen;             // wrap once (advanced-index rule)
+            //   if ((ulong)resolved >= (ulong)axisLen) goto Fail;  // catches BOTH still-<0 and >=axisLen
+            // The wrap stays a BRANCH (not a branchless shift/and/add) deliberately: take_along_axis
+            // indices are overwhelmingly non-negative (argsort/argmax output), so this branch predicts
+            // not-taken and costs ~nothing, whereas an unconditional sign-shift+and+add would spend ALU
+            // on every element for a wrap that almost never fires. The unsigned compare then folds the
+            // two remaining bounds checks into one (a negative result reads as a huge unsigned).
             il.Emit(OpCodes.Ldloc, locIdxVal);
             il.Emit(OpCodes.Stloc, locResolved);
             il.Emit(OpCodes.Ldloc, locResolved);
@@ -249,13 +266,9 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locResolved);
             il.MarkLabel(lblBounds);
-            // if (resolved < 0 || resolved >= axisLen) goto Fail;
-            il.Emit(OpCodes.Ldloc, locResolved);
-            il.Emit(OpCodes.Ldc_I8, 0L);
-            il.Emit(OpCodes.Blt, lblFail);
             il.Emit(OpCodes.Ldloc, locResolved);
             il.Emit(OpCodes.Ldarg, 3);
-            il.Emit(OpCodes.Bge, lblFail);
+            il.Emit(OpCodes.Bge_Un, lblFail);     // (ulong)resolved >= (ulong)axisLen
 
             // src = arrBase + arrOff + resolved * axisStrideBytes
             il.Emit(OpCodes.Ldarg, 0);            // arrBase

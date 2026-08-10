@@ -135,6 +135,14 @@ namespace NumSharp
             }
 
             if (status < totalSize)
+                // The kernel reports the FIRST out-of-bounds index in the result's C-order
+                // traversal. For a C-contiguous `indices` array (the norm — argsort/argmax output)
+                // this is byte-identical to NumPy, whose fancy-index bounds check
+                // (PyArray_MapIterCheckIndices) also visits it first. For a deliberately
+                // NON-contiguous `indices` array with MULTIPLE out-of-range values, NumPy reports
+                // whichever its NpyIter visits first (memory/axis order with negative-stride
+                // flipping — see MisalignedRegistry) which need not be the C-order-first; the
+                // error TYPE, axis and size still match, only the offending index VALUE may differ.
                 throw new IndexError(
                     $"index {badIdx} is out of bounds for axis {ax} with size {axisLen}");
 

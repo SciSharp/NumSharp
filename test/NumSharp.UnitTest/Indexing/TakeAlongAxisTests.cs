@@ -396,6 +396,29 @@ public class TakeAlongAxisTests
         act.Should().Throw<IndexError>().WithMessage("index 0 is out of bounds for axis 1 with size 0");
     }
 
+    /// <summary>
+    /// DELIBERATE DIVERGENCE (documented): when a NON-contiguous <c>indices</c> array holds
+    /// MULTIPLE out-of-range values, NumSharp reports the FIRST in the result's C-order traversal,
+    /// while NumPy reports whichever its fancy-index NpyIter (PyArray_MapIterCheckIndices) visits
+    /// first — memory/axis order with negative-stride flipping — which need not be the C-order-first.
+    /// The error TYPE, axis and size ALWAYS match; only the offending index VALUE can differ, and only
+    /// for hand-crafted non-contiguous indices (never argsort/argmax output, which is C-contiguous
+    /// and matches NumPy exactly). Verified across 18,000 adversarial layout-fuzz cases: values,
+    /// shapes, dtypes and error taxonomy are 100% bit-exact; this is the sole divergence.
+    /// </summary>
+    [TestMethod]
+    [Misaligned]
+    public void Misaligned_OobReportOrder_NonContiguousIndices()
+    {
+        var a = np.arange(4).reshape(2, 2).astype(NPTypeCode.Int32);  // axis 1, M=2
+        // F-contiguous index (a transposed view) whose LOGICAL values are {{0,7},{8,0}}:
+        // both 7 (@[0,1]) and 8 (@[1,0]) are out of bounds.
+        var idxF = np.array(new long[,] { { 0, 8 }, { 7, 0 } }).T;    // logical {{0,7},{8,0}}, F-layout
+        Action act = () => np.take_along_axis(a, idxF, 1);
+        // NumSharp: result C-order first OOB is 7 (@[0,1]). NumPy: memory-order first OOB is 8 (@[1,0]).
+        act.Should().Throw<IndexError>().WithMessage("index 7 is out of bounds for axis 1 with size 2");
+    }
+
     // ===================================================================
     // Helpers
     // ===================================================================

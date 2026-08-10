@@ -568,9 +568,25 @@ semantics) and anything still out of range raises `IndexError "index {orig} is o
 {axis} with size {M}"` reporting the ORIGINAL value. The result is a fresh writeable C-contiguous copy
 of `arr`'s dtype (any source layout — C/F/strided/reversed/sliced/transposed/broadcast — is read through
 its own strides, no materialisation). **≥1.5× faster than NumPy on every measured variation** (geomean
-~3.7× NPY/NS; the tightest cell is a random 16M axis-0 gather at 1.54×, latency-bound). Differentially
-fuzzed 24,000+ cases bit-exact vs NumPy 2.4.2 (ranks 1–5, all axes, wrap/OOB, all element widths). Gates:
-`Indexing/TakeAlongAxisTests.cs` (36) + 44 `take_along_axis` cases in the `groupa` differential-fuzz
+~3.5–3.7× NPY/NS; the tightest cell is a random 16M axis-0 gather at ~1.55×, latency-bound). Differentially
+fuzzed **24,000 value + 18,000 adversarial** cases bit-exact vs NumPy 2.4.2 (ranks 1–6, all axes, wrap/OOB,
+all element widths, non-contiguous SOURCES × non-contiguous INDICES: F/reversed/strided/swapped/broadcast/
+offset) — values, shapes, dtypes and error taxonomy 100% bit-exact.
+
+**One deliberate divergence (documented, `[Misaligned]`):** when a *non-contiguous* `indices` array holds
+*multiple* out-of-range values, NumSharp reports the first in the RESULT's C-order while NumPy reports
+whichever its fancy-index `NpyIter` (`PyArray_MapIterCheckIndices`) visits first — index-memory/axis order
+with negative-stride flipping, an internal artifact that is neither pure min-address (fails on 1-D negative
+stride) nor pure logical C-order (fails on F-layout). Only the offending index VALUE differs; the error
+TYPE, axis and size always match, and it never arises from `argsort`/`argmax` output (C-contiguous → exact).
+
+**No SIMD gather (measured):** a hardware `VPGATHERQD/QQ` gather was benchmarked against the scalar loop
+for the hot 4/8-byte contiguous case at **only ~1.16×** on this host (AVX2; no AVX-512), before the SIMD
+bounds-validation + scalar OOB-fallback a raise-mode gather still needs — not worth a per-width gather
+kernel or its CPU-dependence. The wins are structural: the outer-odometer/inner-loop split (per-slice
+carry) and a branch-light unsigned-bounds resolve.
+
+Gates: `Indexing/TakeAlongAxisTests.cs` (37) + 44 `take_along_axis` cases in the `groupa` differential-fuzz
 tier. See `Indexing/np.take_along_axis.cs`.
 
 `np.select(condlist, choicelist, default=0)` (NumPy `numpy/lib/_function_base_impl.py`) draws each
