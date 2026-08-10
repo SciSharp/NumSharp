@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -114,6 +115,48 @@ namespace NumSharp.UnitTest.Logic
         {
             Assert.IsTrue(np.iterable(np.zeros(new Shape(0))));    // empty 1-d
             Assert.IsTrue(np.iterable(np.zeros(new Shape(0, 3)))); // empty 2-d
+        }
+
+        // Mainstream "scalar" expressions must build a 0-d (NOT a rank-1) array, so np.iterable of a
+        // scalar expression is False exactly as in NumPy. This is the real robustness risk — if
+        // np.array(5) or a[0,0] produced a size-1 rank-1 array, iterable would flip to True wrongly.
+        [TestMethod]
+        public void NDArray_ScalarExpressions_AreNotIterable()
+        {
+            Assert.AreEqual(0, np.array(5).ndim);
+            Assert.IsFalse(np.iterable(np.array(5)));   // numpy: np.iterable(np.array(5)) == False
+
+            var m = np.arange(6).reshape(2, 3);
+            Assert.AreEqual(0, m[0, 0].ndim);
+            Assert.IsFalse(np.iterable(m[0, 0]));       // numpy: a[0,0] is a 0-d scalar -> False
+            Assert.IsTrue(np.iterable(m[0]));           // numpy: a[0] is a 1-d row     -> True
+        }
+
+        // Confirms C# overload resolution boxes a bare scalar to its own type rather than firing a
+        // user-defined int->NDArray implicit conversion into the object parameter (which would make a
+        // rank-1 array and return True). np.iterable(5) must be False, matching NumPy.
+        [TestMethod]
+        public void ScalarLiteral_IsNotHijackedByImplicitNDArrayConversion()
+        {
+            Assert.IsFalse(np.iterable(5));
+            Assert.IsFalse(np.iterable(2.5));
+        }
+
+        // Deliberate C# divergence: NumSharp maps Python iterability onto C# foreach-ability
+        // (IEnumerable). These four are iterable in Python but are NOT foreach-able in C# — a bare
+        // enumerator has no GetEnumerator, and ValueTuple/Tuple implement no IEnumerable — so NumSharp
+        // returns false where NumPy returns true. Real ported code passes the collection (array/List/
+        // NDArray), which is foreach-able and matches. Pinned so the divergence is explicit, not silent.
+        [TestMethod]
+        [Misaligned]
+        public void NonForeachableTypes_DivergeFromNumPy()
+        {
+            IEnumerator e = new List<int> { 1, 2 }.GetEnumerator();
+            Assert.IsFalse(np.iterable(e));                   // numpy iter([...]) -> True
+            IEnumerator<int> eg = new List<int> { 1, 2 }.GetEnumerator();
+            Assert.IsFalse(np.iterable(eg));                  // numpy -> True
+            Assert.IsFalse(np.iterable((1, 2)));              // ValueTuple; numpy tuple -> True
+            Assert.IsFalse(np.iterable(Tuple.Create(1, 2)));  // Tuple; numpy tuple -> True
         }
     }
 }

@@ -150,6 +150,16 @@ namespace NumSharp
         ///       <item><description>Any <see cref="IEnumerable"/> — C# arrays, lists, dictionaries, sets … → true.</description></item>
         ///       <item><description>Everything else — the scalar value types int/double/bool/Complex/Half/decimal/char … → false.</description></item>
         ///     </list>
+        ///     <para>
+        ///     Deliberate C# divergences (probed against NumPy 2.4.2): NumSharp maps Python's
+        ///     <c>iter()</c>-ability onto C#'s <see cref="IEnumerable"/> — i.e. "is this <c>foreach</c>-able?".
+        ///     Four inputs are iterable in Python but their C# analogs cannot be <c>foreach</c>'d, so they
+        ///     return <c>false</c> here while NumPy returns <c>true</c>: a bare <see cref="IEnumerator"/> /
+        ///     <c>IEnumerator&lt;T&gt;</c> cursor (a Python iterator is self-iterable, but a C# enumerator
+        ///     has no <c>GetEnumerator</c>), and <see cref="ValueTuple"/> / <see cref="Tuple"/> / <c>ITuple</c>
+        ///     (they implement no <see cref="IEnumerable"/>). Real ported code passes the collection itself —
+        ///     an array, <c>List</c>, or <see cref="NDArray"/>, all foreach-able — which matches NumPy exactly.
+        ///     </para>
         /// </remarks>
         public static bool iterable(object y)
         {
