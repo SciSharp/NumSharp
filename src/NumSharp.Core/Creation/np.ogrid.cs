@@ -150,99 +150,127 @@ namespace NumSharp
             ///     Slice-expression strings (a colon-bearing <c>"start:stop[:step]"</c>, or several such
             ///     comma-separated), and/or <see cref="Slice"/> objects.
             /// </param>
-            public OGridResult this[params object[] key] => new OGridResult(Build(key));
+            public OGridResult this[params object[] key] => new OGridResult(NdGridLines(key, "ogrid"));
+        }
 
-            private static NDArray[] Build(object[] key)
+        /// <summary>
+        ///     Parses the index expression shared by <see cref="ogrid"/> and <see cref="mgrid"/> into one
+        ///     <see cref="AxisConcatenator.SliceSpec"/> per slice — NumPy's
+        ///     <c>numpy.lib.index_tricks.nd_grid.__getitem__</c> argument handling. Slices are spelled as
+        ///     colon-bearing strings (one may hold several, comma-separated) or <see cref="Slice"/> objects;
+        ///     there are no directives.
+        /// </summary>
+        /// <param name="caller">The public function name, for error wording (<c>"ogrid"</c>/<c>"mgrid"</c>).</param>
+        private static List<AxisConcatenator.SliceSpec> ParseGridSpecs(object[] key, string caller)
+        {
+            if (key is null)
+                throw new ArgumentNullException(nameof(key));
+
+            var specs = new List<AxisConcatenator.SliceSpec>(key.Length);
+
+            for (int k = 0; k < key.Length; k++)
             {
-                if (key is null)
-                    throw new ArgumentNullException(nameof(key));
-
-                var specs = new List<AxisConcatenator.SliceSpec>(key.Length);
-
-                for (int k = 0; k < key.Length; k++)
+                object item = key[k];
+                switch (item)
                 {
-                    object item = key[k];
-                    switch (item)
-                    {
-                        case null:
-                            throw new ArgumentNullException($"key[{k}]",
-                                "ogrid index entries must not be null.");
+                    case null:
+                        throw new ArgumentNullException($"key[{k}]",
+                            $"{caller} index entries must not be null.");
 
-                        case string s:
-                            if (s.IndexOf(':') < 0)
-                                throw new ArgumentException(
-                                    $"ogrid indices must be slice expressions such as \"0:5\" or \"0:1:5j\"; " +
-                                    $"got \"{s}\".", nameof(key));
-
-                            foreach (var token in s.Split(','))
-                            {
-                                if (string.IsNullOrWhiteSpace(token))
-                                    continue;
-                                specs.Add(AxisConcatenator.ParseSliceToken(token));
-                            }
-
-                            break;
-
-                        case Slice slice:
-                            specs.Add(AxisConcatenator.SliceSpec.FromSlice(slice));
-                            break;
-
-                        case Slice[] slices:
-                            foreach (var one in slices)
-                                specs.Add(AxisConcatenator.SliceSpec.FromSlice(one));
-                            break;
-
-                        default:
+                    case string s:
+                        if (s.IndexOf(':') < 0)
                             throw new ArgumentException(
-                                "ogrid indices must be slice expressions (colon-bearing strings like \"0:5\", " +
-                                $"or Slice objects); got {item.GetType().Name}.", nameof(key));
-                    }
+                                $"{caller} indices must be slice expressions such as \"0:5\" or \"0:1:5j\"; " +
+                                $"got \"{s}\".", nameof(key));
+
+                        foreach (var token in s.Split(','))
+                        {
+                            if (string.IsNullOrWhiteSpace(token))
+                                continue;
+                            specs.Add(AxisConcatenator.ParseSliceToken(token));
+                        }
+
+                        break;
+
+                    case Slice slice:
+                        specs.Add(AxisConcatenator.SliceSpec.FromSlice(slice));
+                        break;
+
+                    case Slice[] slices:
+                        foreach (var one in slices)
+                            specs.Add(AxisConcatenator.SliceSpec.FromSlice(one));
+                        break;
+
+                    default:
+                        throw new ArgumentException(
+                            $"{caller} indices must be slice expressions (colon-bearing strings like \"0:5\", " +
+                            $"or Slice objects); got {item.GetType().Name}.", nameof(key));
                 }
-
-                int n = specs.Count;
-                if (n == 0)
-                    return Array.Empty<NDArray>();
-
-                // A single slice returns a bare 1-D array (NumPy's except-branch): arange, or the
-                // linspace of an imaginary step. Missing stop is fine here (arange promotes start to
-                // stop) and imaginary-without-stop raises, both inside SliceSpec.Materialize.
-                if (n == 1)
-                    return new[] { specs[0].Materialize() };
-
-                // A multi-slice mesh shares ONE dtype across all slices (NumPy's single result_type over
-                // every slice bound): int64 iff every field of every slice is an integer literal.
-                bool integral = true;
-                for (int k = 0; k < n; k++)
-                    integral &= specs[k].Integral;
-                NPTypeCode target = integral ? NPTypeCode.Int64 : NPTypeCode.Double;
-
-                var @out = new NDArray[n];
-                for (int k = 0; k < n; k++)
-                {
-                    var spec = specs[k];
-
-                    // NumPy sizes each axis from (stop - start), so a multi-slice mesh cannot omit the
-                    // stop (upstream leaks an AttributeError; NumSharp is explicit).
-                    if (!spec.HasStop)
-                        throw new ValueError(
-                            "ogrid with more than one slice requires an explicit stop for each slice: " +
-                            "'start:stop' or 'start:stop:Nj'.");
-
-                    NDArray line = spec.Materialize();
-                    if (line.typecode != target)
-                        line = line.astype(target);
-
-                    // Open mesh: shape is 1 in every axis but this one.
-                    long[] shape = new long[n];
-                    for (int d = 0; d < n; d++)
-                        shape[d] = 1L;
-                    shape[k] = line.size;
-
-                    @out[k] = line.reshape(shape);
-                }
-
-                return @out;
             }
+
+            return specs;
+        }
+
+        /// <summary>
+        ///     The ONE dtype a multi-slice mesh shares — NumPy's single <c>result_type</c> over every slice
+        ///     bound: int64 iff every field of every slice is an integer literal, else float64 (a complex step
+        ///     counts as non-integer). Also enforces that each slice carries an explicit stop, which NumPy
+        ///     requires to size the axes (upstream leaks an <c>AttributeError</c> when it is missing).
+        /// </summary>
+        private static NPTypeCode GridMeshDtype(List<AxisConcatenator.SliceSpec> specs, string caller)
+        {
+            bool integral = true;
+            foreach (var spec in specs)
+            {
+                if (!spec.HasStop)
+                    throw new ValueError(
+                        $"{caller} with more than one slice requires an explicit stop for each slice: " +
+                        "'start:stop' or 'start:stop:Nj'.");
+                integral &= spec.Integral;
+            }
+
+            return integral ? NPTypeCode.Int64 : NPTypeCode.Double;
+        }
+
+        /// <summary>
+        ///     The <see cref="ogrid"/> line builder: the 1-D data for each slice, ALREADY in the mesh's
+        ///     shared dtype. For a single slice it is the bare 1-D array (NumPy's except-branch); for several
+        ///     slices each entry is reshaped to the open-mesh shape <c>(1,…,size,…,1)</c>. <c>ogrid</c>
+        ///     returns these directly; <c>mgrid</c> fills them into a dense grid.
+        /// </summary>
+        private static NDArray[] NdGridLines(object[] key, string caller)
+        {
+            var specs = ParseGridSpecs(key, caller);
+
+            int n = specs.Count;
+            if (n == 0)
+                return Array.Empty<NDArray>();
+
+            // A single slice returns a bare 1-D array (NumPy's except-branch): arange, or the
+            // linspace of an imaginary step. Missing stop is fine here (arange promotes start to
+            // stop) and imaginary-without-stop raises, both inside SliceSpec.Materialize.
+            if (n == 1)
+                return new[] { specs[0].Materialize() };
+
+            NPTypeCode target = GridMeshDtype(specs, caller);
+
+            var @out = new NDArray[n];
+            for (int k = 0; k < n; k++)
+            {
+                NDArray line = specs[k].Materialize();
+                if (line.typecode != target)
+                    line = line.astype(target);
+
+                // Open mesh: shape is 1 in every axis but this one.
+                long[] shape = new long[n];
+                for (int d = 0; d < n; d++)
+                    shape[d] = 1L;
+                shape[k] = line.size;
+
+                @out[k] = line.reshape(shape);
+            }
+
+            return @out;
         }
 
         /// <summary>

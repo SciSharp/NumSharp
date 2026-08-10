@@ -21,7 +21,7 @@ namespace NumSharp.Examples
             var v = np.zeros(n, n) - 0.001; // velocity in y direction
 
             var eta = np.ones(n, n); // pressure deviation (like height)
-            (var x, var y) = np.mgrid(np.arange(0, n, 1), np.arange(0, n, 1));
+            (var x, var y) = np.mgrid[$"0:{n}", $"0:{n}"];
 
             double droplet_x = 50;
             double droplet_y = 50;

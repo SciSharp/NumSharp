@@ -698,9 +698,29 @@ cannot return both from one indexer): it converts implicitly to a bare `NDArray`
 to `NDArray[]` for a mesh, and `Deconstruct`s (`var (y, x) = np.ogrid["0:3", "0:5"];`) — collapsing
 NumPy's bare-array-vs-1-tuple trailing-comma distinction. Imaginary/float grids are **bit-exact** with
 NumPy (same `linspace`/`arange` code path as `r_`). Values/shapes/dtypes verified against NumPy 2.4.2;
-**≥1.5× faster on every measured variation** (geomean ~4.5×; NPY/NS). Deliberately NOT reimplementing
-the legacy 2-arg `np.mgrid(NDArray, NDArray)` (a name clash would force removing existing code). Gate:
+**≥1.5× faster on every measured variation** (geomean ~4.5×; NPY/NS). Gate:
 `Creation/np.ogrid.Test.cs` (18). See `Creation/np.ogrid.cs`.
+
+**`np.mgrid` — the dense-mesh twin of `ogrid`.** Port of NumPy 2.x `numpy.mgrid` (the `sparse=False`
+`nd_grid`). Shares `ogrid`'s parsing and grammar via the extracted `np.ParseGridSpecs` / `GridMeshDtype`
+helpers (same string-slice spelling, same shared-dtype rule, same missing-stop/imaginary `ValueError`s
+with `mgrid` wording). A **single** slice returns a bare 1-D array (identical to `ogrid` single);
+**multiple** slices return ONE dense stacked array of shape `(N, size_0, …, size_{N-1})` — `result[k]`
+is the k-th coordinate broadcast across the grid. Built NumPy's way — `np.indices(sizes, typ)` then
+each **non-trivial** axis (start≠0 / step≠1 / imaginary) is rescaled by overwriting its layer with the
+1-D line broadcast across the grid (`np.copyto`); a pure `0:n` axis needs no post-pass, so the common
+`np.mgrid[0:a, 0:b]` is a single fused `indices` fill. This is why `mgrid` gets its OWN build rather than
+reusing `ogrid`'s lines: **NumPy sizes each axis by `ceil((stop-start)/step)`, which may be negative** —
+`mgrid[5:0, 0:3]` raises `"negative dimensions are not allowed"` (via `indices`) where `ogrid[5:0, 0:3]`
+clamps to an empty axis, and a zero step is a divide-by-zero — a genuine NumPy divergence between the two
+that an arange-line-based `mgrid` would have silently papered over. **Return type** `MGridResult` is
+NumPy's single array: implicit to `NDArray` (the stack), plus `Deconstruct`
+(`var (x, y) = np.mgrid["0:5", "0:3"];`) and indexing into the per-axis grids. **This replaced the legacy
+non-NumPy `np.mgrid(NDArray, NDArray)` method** (and its `NDArray.mgrid(rhs)` twin) — a deliberate
+breaking change, since a property named `mgrid` cannot coexist with a method of the same name. 13-case
+differential matrix bit-exact vs NumPy 2.4.2; **≥1.5× faster on every measured variation** (geomean
+~6×; NPY/NS). Gate: `Creation/np.mgrid.Test.cs` (15). See `Creation/np.mgrid.cs`, `Creation/np.ogrid.cs`
+(shared helpers).
 
 ### Iteration
 `nditer`, `ndenumerate`, `ndindex` (plus the pre-existing `broadcast`), and the NumSharp-extension
@@ -1198,7 +1218,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot}.cs`, `LinearAlgebra/GufuncGuard.cs` |
 | einsum | `LinearAlgebra/np.einsum.cs`, `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (class + `_assert_*`/`_commonType` ports) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs`; `Exceptions/LinAlgError.cs` |
-| Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult`), `Indexing/np.{ix_,s_}.cs` |
+| Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NdArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |
 | Iteration APIs (nditer/ndindex/ndenumerate) | `APIs/np.nditer.cs`, `Indexing/np.{ndindex,ndenumerate}.cs` |
