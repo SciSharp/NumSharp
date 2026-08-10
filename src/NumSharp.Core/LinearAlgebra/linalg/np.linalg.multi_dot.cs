@@ -9,8 +9,20 @@ namespace NumSharp
             /// <summary>
             ///     Chained matrix product, evaluated in the cheapest association order.
             /// </summary>
-            /// <param name="arrays">Two or more arrays. The first may be 1-D, and so may the last.</param>
-            /// <param name="out">Where to deposit the answer.</param>
+            /// <param name="arrays">
+            ///     Two or more arrays. With three or more, every one must be 2-D EXCEPT the endpoints,
+            ///     which may be 1-D (a 1-D first operand is a row, a 1-D last a column); a 0-D, a
+            ///     3-D-or-higher, or a 1-D operand anywhere in the MIDDLE raises
+            ///     <see cref="LinAlgError"/> "{ndim}-dimensional array given. Array must be
+            ///     two-dimensional". With exactly two arrays this is a plain <see cref="np.dot"/> and
+            ///     imposes no such restriction.
+            /// </param>
+            /// <param name="out">
+            ///     Where to deposit the answer. NumPy hands <c>out</c> to the final <c>dot</c>, so it
+            ///     receives the TWO-DIMENSIONAL product and the returned array is a reshaped view of
+            ///     it — <c>out</c> for <c>multi_dot([v, B, C])</c> is shaped <c>(1, k)</c>, not
+            ///     <c>(k,)</c>.
+            /// </param>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.multi_dot.html
             ///     <para>
@@ -45,18 +57,36 @@ namespace NumSharp
                 if (appendedColumn)
                     work[work.Length - 1] = np.expand_dims(work[work.Length - 1], 1);
 
-                NDArray result = work.Length == 3
+                // NumPy runs `_assert_2d(*arrays)` over the PROMOTED operands, so every array other
+                // than a vector endpoint (already lifted to 2-D just above) must be exactly
+                // two-dimensional: a 0-D, a 3-D-or-higher, or a 1-D operand in a MIDDLE position is
+                // rejected here with the same LinAlgError. Without this guard the cost model reads a
+                // phantom `dimensions[1]` off a non-matrix and the chain either leaks a raw bounds
+                // error or — worse — computes a silently wrong-shaped product.
+                Assert2d(work);
+
+                NDArray product = work.Length == 3
                     ? ThreeInBestOrder(work[0], work[1], work[2])
                     : Chain(work, Order(work), 0, work.Length - 1);
 
-                if (prependedRow && appendedColumn)
-                    result = np.reshape(result, Array.Empty<long>());
-                else if (prependedRow)
-                    result = np.reshape(result, new[] {result.Shape.dimensions[1]});
-                else if (appendedColumn)
-                    result = np.reshape(result, new[] {result.Shape.dimensions[0]});
+                // NumPy threads `out` into the FINAL dot, so `out` receives the two-dimensional
+                // product even when an endpoint was a vector — which is why
+                // `multi_dot([v, B, C], out: o)` wants `o` shaped (1, k), not (k,) — and the array
+                // returned to the caller is a reshaped VIEW of it.
+                if (@out is not null)
+                {
+                    np.copyto(@out, product);
+                    product = @out;
+                }
 
-                return Deliver(result, @out);
+                if (prependedRow && appendedColumn)
+                    return np.reshape(product, Array.Empty<long>());
+                if (prependedRow)
+                    return np.reshape(product, new[] {product.Shape.dimensions[1]});
+                if (appendedColumn)
+                    return np.reshape(product, new[] {product.Shape.dimensions[0]});
+
+                return product;
             }
 
             /// <inheritdoc cref="multi_dot(NDArray[], NDArray)"/>

@@ -149,6 +149,50 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [TestMethod]
+        public void MultiDot_MatchesNumPyValues_AcrossChainLengthsAndDtypes()
+        {
+            // Both parenthesisation paths — the three-matrix shortcut and the Cormen DP (n >= 4) —
+            // replayed against NumPy 2.4.2.
+            np.linalg.multi_dot(new[]
+                    {np.arange(6.0).reshape(2, 3), np.arange(12.0).reshape(3, 4), np.arange(8.0).reshape(4, 2)})
+                .Should().BeOfValues(324, 422, 1008, 1304).And.BeShaped(2, 2);
+
+            np.linalg.multi_dot(new[]
+            {
+                np.arange(6.0).reshape(2, 3), np.arange(15.0).reshape(3, 5), np.arange(10.0).reshape(5, 2),
+                np.arange(8.0).reshape(2, 4), np.arange(12.0).reshape(4, 3)
+            }).Should().BeOfValues(123750, 146200, 168650, 384300, 454000, 523700).And.BeShaped(2, 3);
+
+            // An all-int64 chain stays integer, exactly as NumPy's dot preserves it.
+            np.linalg.multi_dot(new[]
+            {
+                np.arange(6).astype(NPTypeCode.Int64).reshape(2, 3),
+                np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4),
+                np.arange(8).astype(NPTypeCode.Int64).reshape(4, 2)
+            }).Should().BeOfValues(324, 422, 1008, 1304).And.BeShaped(2, 2);
+        }
+
+        [TestMethod]
+        public void MultiDot_OutReceivesTheTwoDimensionalProduct_AndReturnsAReshapedView()
+        {
+            var A = np.arange(6.0).reshape(2, 3);
+            var B = np.arange(12.0).reshape(3, 4);
+            var C = np.arange(8.0).reshape(4, 2);
+
+            // Plain 2-D result: out has the result shape, is filled, and is what comes back.
+            var o22 = np.empty(new Shape(2, 2));
+            np.linalg.multi_dot(new[] {A, B, C}, o22).Should().BeShaped(2, 2).And.BeOfValues(324, 422, 1008, 1304);
+            o22.Should().BeOfValues(324, 422, 1008, 1304);
+
+            // NumPy threads out into the FINAL dot, so with a 1-D first operand `out` is the 2-D
+            // (1, k) shape and the array returned is a raveled (k,) VIEW of it — not (k,) in and out.
+            var o12 = np.empty(new Shape(1, 2));
+            np.linalg.multi_dot(new[] {np.arange(3.0), B, C}, o12)
+                .Should().BeShaped(2).And.BeOfValues(324, 422);
+            o12.Should().BeOfValues(324, 422);
+        }
+
+        [TestMethod]
         public void ArrayApiForms_ReduceTheLASTTwoAxes_WhereTheirMainNamespaceTwinsTakeTheFirst()
         {
             var stack = np.arange(18.0).reshape(2, 3, 3);

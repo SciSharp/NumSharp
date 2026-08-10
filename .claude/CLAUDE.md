@@ -880,6 +880,15 @@ was replayed through both libraries — 121 bit-exact, 11 expected NSE, 0 unexpl
 - **`tensordot`'s every disagreement is one message**, `"shape-mismatch for sum"` — mismatched
   extents, too many axes and unequal list lengths alike. A negative count contracts NOTHING
   (`range(-axes,0)` is empty for `axes ≤ 0`), so `axes=-1` ≡ `axes=0` ≡ the outer product.
+- **`np.linalg.multi_dot` requires every non-endpoint operand to be 2-D.** NumPy promotes a 1-D
+  first/last operand (row/column) and THEN runs `_assert_2d` over all of them, so a 0-D, a 3-D+, or
+  a 1-D operand in a MIDDLE position raises `LinAlgError("{ndim}-dimensional array given. Array must
+  be two-dimensional")`. The guard is load-bearing, not cosmetic: without it the Cormen cost model
+  reads a phantom `dimensions[1]` off a non-matrix and the chain either leaks a raw bounds error or —
+  worse — returns a silently wrong-shaped product (a 3-D middle used to give `(2,4,2)` where NumPy
+  refuses). `out=` is threaded into the FINAL dot, so it takes the TWO-dimensional product shape even
+  for a vector endpoint (`multi_dot([v, B, C], out)` wants `(1,k)` and returns a raveled `(k,)` view,
+  not `(k,)` in and out). Exactly two operands is a plain `np.dot` and skips the 2-D check entirely.
 - **The `np.linalg` Array-API forms are NOT aliases.** `linalg.trace`/`linalg.diagonal` reduce the
   **last** two axes where `np.trace`/`np.diagonal` take the **first** (a `(2,3,3)` stack gives `(2,)`
   vs `(3,)`); `linalg.outer` demands 1-D where `np.outer` flattens anything; `linalg.cross` demands

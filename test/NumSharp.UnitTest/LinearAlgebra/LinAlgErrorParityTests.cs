@@ -140,6 +140,33 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [TestMethod]
+        public void MultiDot_RequiresEveryNonEndpointOperandToBeTwoDimensional()
+        {
+            // With three or more arrays NumPy runs _assert_2d over the operands AFTER promoting 1-D
+            // endpoints, so a 0-D, a 3-D-or-higher, or a 1-D operand in a MIDDLE position is rejected
+            // with the rank-naming LinAlgError — never the raw bounds error or the silently
+            // wrong-shaped product an unchecked cost model would produce.
+            var A = np.arange(6.0).reshape(2, 3);
+            var B = np.arange(12.0).reshape(3, 4);
+            var C = np.arange(8.0).reshape(4, 2);
+
+            new Action(() => np.linalg.multi_dot(new[] {np.ones(new Shape(2, 3, 4)), B, C}))
+                .Should().Throw<LinAlgError>().WithMessage("3-dimensional array given. Array must be two-dimensional");
+            new Action(() => np.linalg.multi_dot(new[] {A, np.ones(new Shape(3, 4, 5)), np.ones(new Shape(5, 2))}))
+                .Should().Throw<LinAlgError>().WithMessage("3-dimensional array given. Array must be two-dimensional");
+            new Action(() => np.linalg.multi_dot(new[] {A, B, np.ones(new Shape(4, 2, 2))}))
+                .Should().Throw<LinAlgError>().WithMessage("3-dimensional array given. Array must be two-dimensional");
+            new Action(() => np.linalg.multi_dot(new[] {A, NDArray.Scalar(5.0), C}))
+                .Should().Throw<LinAlgError>().WithMessage("0-dimensional array given. Array must be two-dimensional");
+            new Action(() => np.linalg.multi_dot(new[] {np.ones(new Shape(2, 3)), np.ones(new Shape(3)), np.ones(new Shape(1, 2))}))
+                .Should().Throw<LinAlgError>().WithMessage("1-dimensional array given. Array must be two-dimensional");
+
+            // Exactly two arrays is a plain np.dot and imposes NO 2-D restriction — a 1-D endpoint is
+            // fine and no _assert_2d runs (matches NumPy, which returns dot(a, b) directly).
+            np.linalg.multi_dot(new[] {A, np.ones(new Shape(3))}).Should().BeShaped(2);
+        }
+
+        [TestMethod]
         public void Solve_ReportsTheGufuncItSelectedByBsRank()
         {
             // A 1-D right-hand side picks solve1's (m,m),(m)->(m); anything else picks solve's
