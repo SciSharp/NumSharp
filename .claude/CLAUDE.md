@@ -341,7 +341,7 @@ nd["..., -1"]     // Ellipsis fills dimensions
 Tested against NumPy 2.x.
 
 ### Array Creation
-`arange`, `array`, `asanyarray`, `asarray`, `asarray_chkfinite`, `ascontiguousarray`, `asfortranarray`, `asmatrix`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `identity`, `linspace`, `meshgrid`, `mgrid`, `ones`, `ones_like`, `require`, `tri`, `zeros`, `zeros_like`
+`arange`, `array`, `asanyarray`, `asarray`, `asarray_chkfinite`, `ascontiguousarray`, `asfortranarray`, `asmatrix`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `identity`, `linspace`, `meshgrid`, `mgrid`, `ogrid`, `ones`, `ones_like`, `require`, `tri`, `zeros`, `zeros_like`
 
 The `as*` conversion family mirrors NumPy: `asarray_chkfinite(a, dtype=None, order='K')` = `asarray` then raise `ValueError("array must not contain infs or NaNs")` if a **float-family** dtype (Half/Single/Double/Complex — NumPy's `typecodes['AllFloat']`; Decimal/int/bool skip the check) holds any inf/NaN, via a **fused single-pass NaN-poison SIMD reduction** (`Backends/Kernels/FiniteScan.cs`: `acc += v - v` — +0 for finite, absorbing-NaN for non-finite; AVX2 gather + reversed-contiguous fast path for strided/negative-stride views; ~2–27× NumPy contiguous, ≥1× strided). `require(a, dtype=None, requirements=None)` parses C/F/A/W/O/E flags (+aliases; single-string requirements iterate by char like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order and copies only if a remaining ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED is always true in NumSharp, so only broadcast-non-writeable and views force a copy). `asmatrix(data, dtype=None)` returns a **2-D view** (NumSharp has no `matrix` subclass — the deprecated NumPy one; no `*`-as-matmul/`.H`/`.I`): 0-D→(1,1), 1-D→(1,N), 2-D unchanged, >2-D drops length-1 axes and must land on 2-D else `ValueError("shape too large to be a matrix.")`; also parses matrix strings (`"1 2; 3 4"`). See `Creation/np.{asarray_chkfinite,require,asmatrix}.cs`.
 
@@ -651,6 +651,27 @@ because both sides are memory-bandwidth bound there — `r_`'s own overhead abov
 0.94 ms on a 27 ms call (3.6%), and two extra weak-scalar entries add ~0.06 ms.
 
 See `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`.
+
+**`np.ogrid` — the open-mesh grid.** Port of NumPy 2.x `numpy.ogrid` (the `sparse=True` instance of
+`nd_grid`). It is NOT an `AxisConcatenator` — it is its own class — but it borrows the SAME slice
+grammar via `AxisConcatenator.ParseSliceToken`/`SliceSpec`, so slices are spelled as strings
+(`np.ogrid["0:3", "0:5"]` ≙ `np.ogrid[0:3, 0:5]`; one string may carry comma-separated slices;
+`Slice` objects work too) with NO directives. A **single** slice returns a bare 1-D array (arange, or
+linspace for an imaginary `Nj` step — stop inclusive); **multiple** slices return an open mesh — N
+arrays each shape 1 in every axis but its own, built by `arange`→(astype)→`reshape`-to-`(1,…,size,…,1)`.
+The whole mesh shares ONE dtype (NumPy's single `result_type` over every slice bound): int64 iff every
+field of every slice is an integer literal, else float64 — so `np.ogrid["0:2", "0.0:2"]` yields TWO
+float64 arrays, and an imaginary step floats the whole mesh. A single slice may omit its stop
+(`np.ogrid["5:"]` = `arange(0, 5)`); a **multi** slice may NOT (NumPy sizes each axis from `stop-start`
+and leaks an `AttributeError` — NumSharp raises a clear `ValueError`), and an imaginary step always
+needs a stop. **Return type** `OGridResult` stands in for NumPy's array-or-tuple polymorphism (C#
+cannot return both from one indexer): it converts implicitly to a bare `NDArray` for a single slice,
+to `NDArray[]` for a mesh, and `Deconstruct`s (`var (y, x) = np.ogrid["0:3", "0:5"];`) — collapsing
+NumPy's bare-array-vs-1-tuple trailing-comma distinction. Imaginary/float grids are **bit-exact** with
+NumPy (same `linspace`/`arange` code path as `r_`). Values/shapes/dtypes verified against NumPy 2.4.2;
+**≥1.5× faster on every measured variation** (geomean ~4.5×; NPY/NS). Deliberately NOT reimplementing
+the legacy 2-arg `np.mgrid(NDArray, NDArray)` (a name clash would force removing existing code). Gate:
+`Creation/np.ogrid.Test.cs` (18). See `Creation/np.ogrid.cs`.
 
 ### Iteration
 `nditer`, `ndenumerate`, `ndindex` (plus the pre-existing `broadcast`), and the NumSharp-extension
@@ -1147,7 +1168,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot}.cs`, `LinearAlgebra/GufuncGuard.cs` |
 | einsum | `LinearAlgebra/np.einsum.cs`, `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (class + `_assert_*`/`_commonType` ports) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs`; `Exceptions/LinAlgError.cs` |
-| Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Indexing/np.{ix_,s_}.cs` |
+| Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NdArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |
 | Iteration APIs (nditer/ndindex/ndenumerate) | `APIs/np.nditer.cs`, `Indexing/np.{ndindex,ndenumerate}.cs` |
