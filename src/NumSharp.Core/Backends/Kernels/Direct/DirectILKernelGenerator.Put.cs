@@ -216,7 +216,18 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldc_I4_2);
             il.Emit(OpCodes.Beq, lblClip);
 
-            // RAISE
+            // RAISE — NumPy check_and_adjust_index: normalize a negative index once (idx += maxItem),
+            // then bounds-check. put([-1], v) writes the last element; an index still out of range
+            // after the shift fails, with the ORIGINAL value left in indices[] for the diagnostic.
+            var lblRaiseBounds = il.DefineLabel();
+            il.Emit(OpCodes.Ldloc, locIdx);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Bge, lblRaiseBounds);
+            il.Emit(OpCodes.Ldloc, locIdx);
+            il.Emit(OpCodes.Ldarg, 5);               // maxItem
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locIdx);
+            il.MarkLabel(lblRaiseBounds);
             il.Emit(OpCodes.Ldloc, locIdx);
             il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Blt, lblFail);

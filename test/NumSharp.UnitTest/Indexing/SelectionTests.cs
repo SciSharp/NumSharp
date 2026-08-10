@@ -265,6 +265,28 @@ public class SelectionTests
     }
 
     [TestMethod]
+    public void Take_Raise_NegativeIndices_Normalize()
+    {
+        // NumPy raise mode normalizes a negative index (idx += n) before the bounds test:
+        // np.take(a, [-1,-12]) on a size-12 flat array → [11, 0]. Regression: the IL kernel
+        // used to reject every negative index outright.
+        var a = np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4);
+        np.take(a, np.array(new long[] { -1, -12 })).ToArray<long>().Should().Equal(11, 0);
+        // Along an axis: rows -1, -2 of a (3,4).
+        np.take(a, np.array(new long[] { -1, -2 }), axis: 0).ToArray<long>()
+            .Should().Equal(8, 9, 10, 11, 4, 5, 6, 7);
+    }
+
+    [TestMethod]
+    public void Take_Raise_TooNegative_Throws()
+    {
+        // -13 on size 12 stays < 0 after the += n shift → out of bounds.
+        var a = np.arange(12).astype(NPTypeCode.Int64);
+        var act = () => np.take(a, np.array(new long[] { -13 }));
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [TestMethod]
     public void Take_NonContig_Source_MaterializesAndWorks()
     {
         // Reverse view via [::-1] is non-contig.
@@ -390,6 +412,24 @@ public class SelectionTests
     {
         var a = np.array(new int[] { 10, 20, 30 });
         var act = () => np.put(a, np.array(new int[] { 5 }), np.array(new int[] { 99 }));
+        act.Should().Throw<IndexOutOfRangeException>();
+    }
+
+    [TestMethod]
+    public void Put_Raise_NegativeIndices_Normalize()
+    {
+        // np.put(a, [-1,-6], [99,88]) on size 6 → writes indices 5 and 0. Regression: the IL
+        // kernel used to reject every negative index in raise mode.
+        var a = np.arange(6).astype(NPTypeCode.Int64);
+        np.put(a, np.array(new long[] { -1, -6 }), np.array(new long[] { 99, 88 }));
+        a.ToArray<long>().Should().Equal(88, 1, 2, 3, 4, 99);
+    }
+
+    [TestMethod]
+    public void Put_Raise_TooNegative_Throws()
+    {
+        var a = np.arange(6).astype(NPTypeCode.Int64);
+        var act = () => np.put(a, np.array(new long[] { -7 }), np.array(new long[] { 1 }));
         act.Should().Throw<IndexOutOfRangeException>();
     }
 

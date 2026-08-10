@@ -544,7 +544,36 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
 `can_cast`, `common_type`, `find_common_type`, `finfo`, `iinfo`, `issubdtype`, `min_scalar_type`, `mintypecode`, `promote_types`, `result_type`
 
 ### Selection
-`compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `ravel_multi_index`, `s_`, `take`, `unravel_index`, `where`
+`compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `ravel_multi_index`, `s_`, `select`, `take`, `unravel_index`, `where`
+
+`np.select(condlist, choicelist, default=0)` (NumPy `numpy/lib/_function_base_impl.py`) draws each
+output element from the choice whose condition is true, FIRST matching condition winning; positions
+where every condition is false take `default`. C# shapes: `condlist` is `NDArray[]` (boolean arrays),
+`choicelist` is `object[]` (an `NDArray[]` binds via array covariance; scalar choices need
+`new object[]{…}`), `default` is `object` (`null` ≙ NumPy's `0`). **NEP50 weak scalars, select's own
+rule:** only `int`/`float`/`double`/`Complex` literals are weak (adopt the other operands' dtype) —
+`bool`, `char`, `Half`, `decimal`, arrays and every `NDArray` are strong (NumPy's
+`type(x) in (int,float,complex) else asarray(x)`), so a weak-int default that overflows the resolved
+dtype WRAPS (`int8` choice + `1000` default → int8, 1000→−24) rather than raising; the result dtype
+is `result_type(*choices, default)` folded via `NDExprTypeRules.PromoteStrong`. Conditions and choices
+broadcast in two SEPARATE groups; a non-bool condition is `TypeError("invalid entry {i} in condlist:
+should be boolean ndarray")`, length mismatch / empty condlist are `ValueError` (verbatim). Ported as
+NumPy's OWN structure — allocate the default-filled result, then `np.copyto(where=cond)` each choice in
+REVERSE (so the first wins) — so every masked write rides NumSharp's SIMD masked-cast kernel. A fused
+single-pass kernel was prototyped and **measured slower** (the SIMD bool-mask expansion has no
+early-out; the scalar reverse-overwrite evaluates every condition), so the composition ships:
+~parity with NumPy at scale, overhead-bound (NDArray/Shape construction) for tiny arrays — NumPy's
+copyto-based select is already efficient and the op is memory-bound, so 1.5× is not reachable.
+See `Indexing/np.select.cs`; gates: `Indexing/np.select.Test.cs` (19) + the `select` op in the
+`groupa` differential-fuzz tier (11 cases, dtype × precedence × broadcast × transposed).
+
+**`np.take` / `np.put` negative indices under `mode='raise'`** now match NumPy's
+`check_and_adjust_index`: a negative index is normalized once (`idx += n`) before the bounds test, so
+`take(a, [-1])` / `put(a, -1, v)` address the last element and an index still out of range after the
+shift raises (the original value survives for the diagnostic). The IL kernels
+(`DirectILKernelGenerator.{Take,Put}.cs`) previously rejected EVERY negative index in raise mode — a
+real bug, pinned now by `SelectionTests` (`Take/Put_Raise_NegativeIndices_Normalize`) and negative
+`take`/`put` + `wrap`/`clip` cases in the `groupa` fuzz tier.
 
 ### Grid / slice-expression DSL (`r_`, `c_`, `ix_`, `s_`, `index_exp`)
 
@@ -1164,6 +1193,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
+| Selection family | `Indexing/np.{take,put,place,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,Put,Place}.cs` |
 | BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`) |
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot}.cs`, `LinearAlgebra/GufuncGuard.cs` |
 | einsum | `LinearAlgebra/np.einsum.cs`, `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |

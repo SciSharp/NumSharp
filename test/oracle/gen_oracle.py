@@ -2579,6 +2579,60 @@ def gen_groupa():
         np.put(pc, pidx, pvals)
         emit("put", {}, [describe(pa, pa), describe(pidx, pidx), describe(pvals, pvals)], pc)
 
+        # take — NEGATIVE indices under RAISE (NumPy's check_and_adjust_index normalizes
+        # idx += n before the bounds test). Regression pin: the IL kernel used to reject every
+        # negative index. axis 0 (== flat on a 1-D operand) and axis 1.
+        nidx1 = np.array([-1, -6, 0, -3], dtype=np.int64)
+        emit("take", {"axis": 0}, [describe(base1, base1), describe(nidx1, nidx1)], np.take(base1, nidx1, 0))
+        nidx2 = np.array([-1, -4, 1], dtype=np.int64)
+        emit("take", {"axis": 1}, [describe(a2, a2), describe(nidx2, nidx2)], np.take(a2, nidx2, 1))
+
+        # take — wrap / clip modes over a positive-OOB + negative index mix.
+        midx = np.array([7, -8, 2], dtype=np.int64)
+        emit("take", {"axis": 0, "mode": "wrap"}, [describe(base1, base1), describe(midx, midx)],
+             np.take(base1, midx, 0, mode="wrap"))
+        emit("take", {"axis": 0, "mode": "clip"}, [describe(base1, base1), describe(midx, midx)],
+             np.take(base1, midx, 0, mode="clip"))
+
+        # put — NEGATIVE indices under RAISE (same normalization as take).
+        npa = _cbase((6,), d)
+        npidx = np.array([-1, -6], dtype=np.int64)
+        npvals = _cbase((2,), d)
+        npc = npa.copy()
+        np.put(npc, npidx, npvals)
+        emit("put", {}, [describe(npa, npa), describe(npidx, npidx), describe(npvals, npvals)], npc)
+
+        # select — bool conds + choices (dt) + 0-d default (dt). NumPy is the oracle for
+        # first-match precedence, result dtype and broadcast. Conds are standalone bool arrays
+        # (dtype-independent) so complex choices work too.
+        selA = np.array([True, True, False, False, True, False])
+        selB = np.array([False, True, True, True, False, False])
+        chA = _cbase((6,), d)
+        chB = _cbase((6,), d) + 10   # NEP50 weak-int add keeps dtype d; distinct from chA
+        seldef = _cbase((), d)       # 0-d strong default
+        emit("select", {"nc": 1}, [describe(selA, selA), describe(chA, chA), describe(seldef, seldef)],
+             np.select([selA], [chA], seldef))
+        emit("select", {"nc": 2},
+             [describe(selA, selA), describe(selB, selB), describe(chA, chA), describe(chB, chB), describe(seldef, seldef)],
+             np.select([selA, selB], [chA, chB], seldef))
+
+    # select — layout coverage: a TRANSPOSED cond+choice, a BROADCAST cond over a 2-D choice,
+    # and an all-false fall-through to the default. int32 payload; the kernel is dtype-agnostic
+    # (per-dtype value coverage is in the loop above).
+    sd = np.dtype("int32")
+    sm = _cbase((3, 4), sd)
+    smask = (np.arange(12).reshape(3, 4) % 3 == 0)          # standalone bool cond
+    sdef = _cbase((), sd)
+    emit("select", {"nc": 1}, [describe(smask, smask.T), describe(sm, sm.T), describe(sdef, sdef)],
+         np.select([smask.T], [sm.T], sdef))
+    svec = np.array([True, False, True, False])              # (4,) cond broadcast over (3,4) choice
+    emit("select", {"nc": 1}, [describe(svec, svec), describe(sm, sm), describe(sdef, sdef)],
+         np.select([svec], [sm], sdef))
+    sfalse = np.zeros((6,), dtype=bool)                     # all-false -> default everywhere
+    sch = _cbase((6,), sd)
+    emit("select", {"nc": 1}, [describe(sfalse, sfalse), describe(sch, sch), describe(sdef, sdef)],
+         np.select([sfalse], [sch], sdef))
+
     # ravel_multi_index / unravel_index — index<->coord transforms (int64, dtype-independent).
     row = np.array([0, 1, 2, 0], dtype=np.int64)
     col = np.array([1, 3, 0, 2], dtype=np.int64)

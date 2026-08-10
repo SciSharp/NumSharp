@@ -175,6 +175,18 @@ namespace NumSharp.UnitTest.Fuzz
                 case "where": return np.where(ops[0], ops[1], ops[2]);
                 case "place": np.place(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr
 
+                // select — operands are [cond0..cond_{nc-1}, choice0..choice_{nc-1}, default];
+                // params "nc" gives the condition count. Choices are strong NDArrays here
+                // (weak-scalar dtype resolution is covered by unit tests, not the corpus).
+                case "select":
+                {
+                    int nc = p["nc"].GetInt32();
+                    var conds = new NDArray[nc];
+                    var choices = new object[nc];
+                    for (int i = 0; i < nc; i++) { conds[i] = ops[i]; choices[i] = ops[nc + i]; }
+                    return np.select(conds, choices, ops[2 * nc]);
+                }
+
                 // W15 copyto: cross-dtype / strided-dst / scalar-broadcast-src. dst (ops[0]) is mutated
                 // in place and IS the result; casting rule comes from params (default same_kind).
                 case "copyto":
@@ -205,7 +217,8 @@ namespace NumSharp.UnitTest.Fuzz
                 // Group A Batches 4-6: shape / selection / convolve / split.
                 case "flatten": return ops[0].flatten();
                 case "rollaxis": return np.rollaxis(ops[0], p["axis"].GetInt32(), p["start"].GetInt32());
-                case "take": return np.take(ops[0], ops[1], p["axis"].GetInt32());
+                case "take": return np.take(ops[0], ops[1], p["axis"].GetInt32(),
+                    mode: p.TryGetValue("mode", out var takeMode) ? takeMode.GetString() : "raise");
                 case "compress": return np.compress(ops[0], ops[1], p["axis"].GetInt32());
                 case "extract": return np.extract(ops[0], ops[1]);
                 case "convolve": return np.convolve(ops[0], ops[1], p["mode"].GetString());
@@ -217,7 +230,9 @@ namespace NumSharp.UnitTest.Fuzz
                 case "hsplit": return np.hsplit(ops[0], p["sections"].GetInt32())[p["piece"].GetInt32()];
                 case "vsplit": return np.vsplit(ops[0], p["sections"].GetInt32())[p["piece"].GetInt32()];
                 case "dsplit": return np.dsplit(ops[0], p["sections"].GetInt32())[p["piece"].GetInt32()];
-                case "put": np.put(ops[0], ops[1], ops[2]); return ops[0]; // mutates ops[0], IS the result
+                case "put": np.put(ops[0], ops[1], ops[2],
+                    mode: p.TryGetValue("mode", out var putMode) ? putMode.GetString() : "raise");
+                    return ops[0]; // mutates ops[0], IS the result
                 case "ravel_multi_index": return np.ravel_multi_index(new[] { ops[0], ops[1] }, ParseIntArray(p["dims"]));
                 case "unravel_index": return np.unravel_index(ops[0], ParseIntArray(p["shape"]))[p["piece"].GetInt32()];
 
