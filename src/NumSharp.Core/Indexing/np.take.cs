@@ -116,7 +116,7 @@ namespace NumSharp
             }
 
             // Cast indices to contig int64.
-            var idx64 = CastIndicesToInt64(indices, out bool ownIdx);
+            var idx64 = CastIndicesToInt64(indices, "same_kind", out bool ownIdx);
 
             // Output shape = indices.shape, dtype = a.dtype, C-contig allocated.
             var outShape = new Shape((long[])indices.Shape.dimensions.Clone());
@@ -161,7 +161,7 @@ namespace NumSharp
                 source = sourceOwned;
             }
 
-            var idx64 = CastIndicesToInt64(indices, out bool ownIdx);
+            var idx64 = CastIndicesToInt64(indices, "same_kind", out bool ownIdx);
 
             // Compute outer × inner factorisation around `axis`.
             long outerSize = 1;
@@ -208,11 +208,23 @@ namespace NumSharp
             return result;
         }
 
+        /// <summary>
+        ///     Gathered-region footprint above which the take kernel emits software prefetch. Sized just
+        ///     over typical per-core L2 (a 400 KB / 100 K-element source stays cache-resident and must
+        ///     take the lean, prefetch-free kernel); a 40 MB / 10 M source clears it and gets prefetch.
+        /// </summary>
+        private const long IndexPrefetchThresholdBytes = 2L * 1024 * 1024;
+
         private static unsafe void ExecuteTakeKernel(
             NDArray source, NDArray idx64, NDArray result,
             long outerSize, long indicesCount, long maxItem, long innerSize, int mode)
         {
-            var kernel = DirectILKernelGenerator.GetTakeKernel();
+            int copyKind = DirectILKernelGenerator.CopyKindFor(innerSize);
+            // Software prefetch pays off only when the randomly-gathered region misses cache; below that
+            // threshold it is pure per-element overhead (measured ~1.6x slower at 100K). Gate on the
+            // gathered footprint = maxItem slabs of innerSize bytes.
+            bool prefetch = maxItem * innerSize > IndexPrefetchThresholdBytes;
+            var kernel = DirectILKernelGenerator.GetTakeKernel(copyKind, prefetch);
             if (kernel == null)
                 throw new NotSupportedException("np.take: IL kernel unavailable");
 
@@ -239,21 +251,35 @@ namespace NumSharp
         ///     <paramref name="owned"/> to true when the returned array is a fresh
         ///     allocation that the caller must Dispose. The result shape matches
         ///     the input shape but always has contig strides.
+        ///     <para>
+        ///     NumPy converts an index array to <c>intp</c> under a fixed casting rule and raises
+        ///     <see cref="TypeError"/> when it cannot — an integer or boolean index array is fine, but a
+        ///     float/complex one is rejected rather than silently truncated. The rule differs by caller:
+        ///     <c>take</c> uses <c>"same_kind"</c> (which also permits <c>uint64</c>) while <c>put</c>
+        ///     uses <c>"safe"</c> (which rejects <c>uint64</c> too), and each leaks its own rule name in
+        ///     the message — so <paramref name="castingRule"/> is threaded through verbatim.
+        ///     </para>
         /// </summary>
-        private static NDArray CastIndicesToInt64(NDArray indices, out bool owned)
+        private static NDArray CastIndicesToInt64(NDArray indices, string castingRule, out bool owned)
         {
-            if (indices.GetTypeCode == NPTypeCode.Int64 && indices.Shape.IsContiguous)
+            var tc = indices.GetTypeCode;
+
+            if (tc == NPTypeCode.Int64 && indices.Shape.IsContiguous)
             {
                 owned = false;
                 return indices;
             }
 
-            if (indices.GetTypeCode == NPTypeCode.Int64)
+            if (tc == NPTypeCode.Int64)
             {
                 var c = np.ascontiguousarray(indices);
                 owned = !ReferenceEquals(c, indices);
                 return c;
             }
+
+            if (!np.can_cast(tc, NPTypeCode.Int64, castingRule))
+                throw new TypeError(
+                    $"Cannot cast array data from dtype('{tc.AsNumpyDtypeName()}') to dtype('int64') according to the rule '{castingRule}'");
 
             owned = true;
             return indices.astype(NPTypeCode.Int64);

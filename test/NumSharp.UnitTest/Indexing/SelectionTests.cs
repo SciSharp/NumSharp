@@ -8,9 +8,10 @@ namespace NumSharp.UnitTest.Indexing;
 
 /// <summary>
 /// Tests for the np.* selection family: <c>take</c>, <c>put</c>, <c>place</c>,
-/// <c>extract</c>, <c>compress</c>. The first three are IL-kernel-backed and
-/// dtype-agnostic via byte-level <c>cpblk</c>; <c>extract</c> and
-/// <c>compress</c> compose <c>flatnonzero</c> + <c>take</c>. Test buckets:
+/// <c>extract</c>, <c>compress</c>. The first three are IL-kernel-backed with the
+/// per-element copy specialized to the dtype width (a typed MOV; two for 16-byte
+/// Complex/Decimal; <c>cpblk</c> only for multi-element take slabs); <c>extract</c>
+/// and <c>compress</c> compose <c>flatnonzero</c> + <c>take</c>. Test buckets:
 /// <list type="bullet">
 ///   <item>Per-dtype coverage on all 15 supported types (one round-trip).</item>
 ///   <item>Axis variations for <c>take</c> (None / 0 / 1 / -1 / -2).</item>
@@ -1246,5 +1247,74 @@ public class SelectionTests
             .Shape.Should().Be(new Shape(2, 2));
         np.compress(cond, np.array(new Complex[,] { { new(1, 2), new(3, 4) }, { new(5, 6), new(7, 8) }, { new(9, 10), new(11, 12) } }), axis: 0)
             .Shape.Should().Be(new Shape(2, 2));
+    }
+
+    // ---- index dtype validation (NumPy parity: integer/bool only) -----------
+    // take converts indices to intp under 'same_kind' (permits uint64); put uses 'safe'
+    // (rejects uint64). Both reject float/complex indices — NumSharp used to silently
+    // truncate them, which this pins against.
+
+    [TestMethod]
+    public void Take_FloatIndices_Throws_SameKind()
+    {
+        var a = np.arange(10).astype(NPTypeCode.Int64);
+        Action act = () => np.take(a, np.array(new[] { 1.0, 2.0 }));
+        act.Should().Throw<TypeError>().WithMessage("*float64*int64*same_kind*");
+    }
+
+    [TestMethod]
+    public void Put_FloatIndices_Throws_Safe()
+    {
+        var a = np.arange(10).astype(NPTypeCode.Int64);
+        Action act = () => np.put(a, np.array(new[] { 1.0, 2.0 }), np.array(new long[] { 9, 9 }));
+        act.Should().Throw<TypeError>().WithMessage("*float64*int64*safe*");
+    }
+
+    [TestMethod]
+    public void Take_UInt64Indices_Allowed_But_Put_Rejects()
+    {
+        // The take/put casting-rule divergence: uint64 -> int64 is 'same_kind' (take ok) but
+        // not 'safe' (put rejects), matching NumPy 2.4.2.
+        var a = np.arange(10).astype(NPTypeCode.Int64);
+        np.take(a, np.array(new ulong[] { 1, 2 })).ToArray<long>().Should().Equal(1, 2);
+
+        Action put = () => np.put(a.copy(), np.array(new ulong[] { 1, 2 }), np.array(new long[] { 9, 9 }));
+        put.Should().Throw<TypeError>().WithMessage("*uint64*int64*safe*");
+    }
+
+    // ---- 16-byte element fidelity (copyKind=16: both 8-byte halves must be copied) ----
+
+    [TestMethod]
+    public void Take_Complex_PreservesBothHalves()
+    {
+        var a = np.array(new Complex[] { new(1, 2), new(3, 4), new(5, 6) });
+        np.take(a, np.array(new long[] { 2, 0 })).ToArray<Complex>()
+            .Should().Equal(new Complex(5, 6), new Complex(1, 2));
+    }
+
+    [TestMethod]
+    public void Put_Complex_PreservesBothHalves()
+    {
+        var a = np.zeros(new Shape(3)).astype(NPTypeCode.Complex);
+        np.put(a, np.array(new long[] { 1 }), np.array(new Complex[] { new(7, 8) }));
+        a.ToArray<Complex>()[1].Should().Be(new Complex(7, 8));
+    }
+
+    // ---- cyclic values via the wrapping counter (replaced a per-element modulo) ----
+
+    [TestMethod]
+    public void Put_ValuesCycle_WrapCounter()
+    {
+        var a = np.zeros(new Shape(6)).astype(NPTypeCode.Int32);
+        np.put(a, np.array(new long[] { 0, 1, 2, 3, 4 }), np.array(new[] { 7, 8 }));
+        a.ToArray<int>().Should().Equal(7, 8, 7, 8, 7, 0);   // vals [7,8] cycle over 5 indices
+    }
+
+    [TestMethod]
+    public void Place_ValuesCycle_WrapCounter()
+    {
+        var a = np.zeros(new Shape(7)).astype(NPTypeCode.Int32);
+        np.place(a, np.array(new[] { true, true, true, true, true, false, false }), np.array(new[] { 1, 2 }));
+        a.ToArray<int>().Should().Equal(1, 2, 1, 2, 1, 0, 0);   // vals [1,2] cycle over 5 trues
     }
 }

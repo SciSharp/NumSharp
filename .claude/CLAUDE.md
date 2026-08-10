@@ -612,6 +612,34 @@ shift raises (the original value survives for the diagnostic). The IL kernels
 real bug, pinned now by `SelectionTests` (`Take/Put_Raise_NegativeIndices_Normalize`) and negative
 `take`/`put` + `wrap`/`clip` cases in the `groupa` fuzz tier.
 
+**`take`/`put`/`place` kernel performance (three levers, all in `DirectILKernelGenerator.{Take,Put,Place}.cs`).**
+The gather/scatter/masked-copy kernels moved off the **per-element `cpblk`-of-a-runtime-tiny-size**
+pathology (a memcpy call where a `mov` belongs — measured ~2× slower; it made `take` *lose* to NumPy at
+0.68×). The per-element copy is now specialized to the dtype width via `CopyKindFor`/`EmitElementCopy` —
+a typed `Ldind`/`Stind` MOV (two 8-byte MOVs for 16-byte Complex/Decimal), keyed into the kernel cache;
+`cpblk` survives only for multi-element `take` axis slabs. Two more levers on top: (1) **software
+prefetch** in the `take` gather (`Sse.Prefetch0` of the slab `PrefetchDistance=32` indices ahead, gated
+at emit-time on SSE **and** at the call site on the gathered footprint exceeding
+`IndexPrefetchThresholdBytes = 2 MiB` — below that it is pure overhead, ~1.6× slower at 100K, so a
+separate `(copyKind, prefetch)` kernel is cached and the small path stays lean); NumPy does not prefetch
+in take, so this is a clean win at scale. (2) **A wrapping values cursor** in `put`/`place` replacing the
+per-element **`i % valuesCount` integer division** (NumPy's iterator model) — the dominant cost for
+cyclic values, and the reason `place` was stuck at ~1.0× (it idiv'd once per True). **Perf (NPY/NS,
+Release, best-of-rounds):** `take` flat **100K 1.0–1.3× / 10M 1.7–2.5×** (prefetch), axis-slab
+**4-byte 2.4–2.6× / 8-byte ~1.1×** (memcpy-bandwidth-bound); `put` **100K 2.0–3.1× / 10M 1.2–1.4×**
+(random scatter, memory-latency-bound); `place` **100K 2.0–4.5× / 10M 4-byte 2.5× / 8-byte ~1.3×**
+(bandwidth-bound). The sub-1.5× cells are all memory-latency / bandwidth / allocation-overhead bound —
+the same walls NumPy hits — not algorithmic.
+
+**Index dtype validation (correctness fix).** `take`/`put` used to `astype(int64)` any index array,
+**silently truncating a float index** where NumPy raises. `CastIndicesToInt64` now rejects a
+non-castable index dtype with NumPy's verbatim `TypeError("Cannot cast array data from dtype('…') to
+dtype('int64') according to the rule '…'")` — and reproduces NumPy's SUBTLE rule split: `take` converts
+under **`same_kind`** (so a `uint64` index is allowed) while `put` uses **`safe`** (which rejects
+`uint64` too); each leaks its own rule name in the message. Integer/bool indices pass; float/complex are
+refused. Pinned by `SelectionTests` (`Take_FloatIndices_Throws_SameKind`, `Put_FloatIndices_Throws_Safe`,
+`Take_UInt64Indices_Allowed_But_Put_Rejects`) + the 16-byte-fidelity and cyclic-wrap tests.
+
 ### Grid / slice-expression DSL (`r_`, `c_`, `ix_`, `s_`, `index_exp`)
 
 NumPy's `_index_tricks_impl.py` index-expression family. All probed against 2.4.2; tests in

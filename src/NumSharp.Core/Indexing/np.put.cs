@@ -72,7 +72,7 @@ namespace NumSharp
         private static unsafe void PutImpl(NDArray a, NDArray indices, NDArray values, int mode)
         {
             // Cast indices to contig int64; cast values to contig a.dtype.
-            var idx64 = CastIndicesToInt64(indices, out bool ownIdx);
+            var idx64 = CastIndicesToInt64(indices, "safe", out bool ownIdx);
 
             NDArray valsCast;
             bool ownVals;
@@ -95,7 +95,8 @@ namespace NumSharp
 
             try
             {
-                var kernel = DirectILKernelGenerator.GetPutKernel();
+                int copyKind = DirectILKernelGenerator.CopyKindFor(a.dtypesize);
+                var kernel = DirectILKernelGenerator.GetPutKernel(copyKind);
                 if (kernel == null)
                     throw new NotSupportedException("np.put: IL kernel unavailable");
 

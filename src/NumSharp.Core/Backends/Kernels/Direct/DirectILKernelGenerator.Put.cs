@@ -1,6 +1,6 @@
 using System;
+using System.Collections.Concurrent;
 using System.Reflection.Emit;
-using System.Threading;
 
 // =============================================================================
 // DirectILKernelGenerator.Put.cs — IL kernel for np.put
@@ -46,31 +46,30 @@ namespace NumSharp.Backends.Kernels
 
     public static partial class DirectILKernelGenerator
     {
-        private static PutKernel _putKernel;
+        private static readonly ConcurrentDictionary<int, PutKernel> _putKernels = new();
 
         /// <summary>
-        /// IL-emitted put kernel (singleton — same kernel handles any dtype
-        /// via the <c>elemBytes</c> runtime argument and any mode).
+        /// IL-emitted put kernel, generated once per copy-width (<paramref name="copyKind"/> — the
+        /// <see cref="CopyKindFor"/> of the dtype itemsize; always 1/2/4/8/16 for real dtypes, so the
+        /// scatter copy is a typed MOV rather than a per-element cpblk). Handles any mode.
         /// Returns <c>null</c> only when <see cref="Enabled"/> is false.
         /// </summary>
-        public static PutKernel GetPutKernel()
+        public static PutKernel GetPutKernel(int copyKind)
         {
             if (!Enabled)
                 return null;
 
-            var cached = _putKernel;
-            if (cached != null)
+            if (_putKernels.TryGetValue(copyKind, out var cached))
                 return cached;
 
             try
             {
-                var k = GeneratePutKernelIL();
-                Interlocked.CompareExchange(ref _putKernel, k, null);
-                return _putKernel;
+                var k = GeneratePutKernelIL(copyKind);
+                return _putKernels.GetOrAdd(copyKind, k);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetPutKernel: {ex.GetType().Name}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetPutKernel({copyKind}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -96,10 +95,10 @@ namespace NumSharp.Backends.Kernels
         /// }
         /// </code>
         /// </summary>
-        private static PutKernel GeneratePutKernelIL()
+        private static PutKernel GeneratePutKernelIL(int copyKind)
         {
             var dm = new DynamicMethod(
-                name: "IL_Put",
+                name: $"IL_Put_c{copyKind}",
                 returnType: typeof(long),
                 parameterTypes: new[]
                 {
@@ -118,6 +117,7 @@ namespace NumSharp.Backends.Kernels
             var il = dm.GetILGenerator();
 
             var locI = il.DeclareLocal(typeof(long));
+            var locVi = il.DeclareLocal(typeof(long));   // wrapping cursor into values
             var locIdx = il.DeclareLocal(typeof(long));
             var locSrcPtr = il.DeclareLocal(typeof(byte*));
             var locDstPtr = il.DeclareLocal(typeof(byte*));
@@ -126,6 +126,11 @@ namespace NumSharp.Backends.Kernels
             var lblEnd = il.DefineLabel();
             var lblFail = il.DefineLabel();
             var lblIdxResolved = il.DefineLabel();
+
+            // vi = 0 — a wrapping cursor into `values`, replacing a per-element `i % valuesCount`
+            // integer division (which dominated the scatter when values cycle).
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locVi);
 
             // i = 0
             il.Emit(OpCodes.Ldc_I8, 0L);
@@ -154,11 +159,9 @@ namespace NumSharp.Backends.Kernels
 
             il.MarkLabel(lblIdxResolved);
 
-            // srcPtr = values + (i % valuesCount) * elemBytes
+            // srcPtr = values + vi * elemBytes   (vi is the wrapping cursor — no per-element modulo)
             il.Emit(OpCodes.Ldarg_3);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldarg, 4);          // valuesCount
-            il.Emit(OpCodes.Rem);
+            il.Emit(OpCodes.Ldloc, locVi);
             il.Emit(OpCodes.Ldarg, 6);          // elemBytes
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Conv_I);
@@ -174,12 +177,21 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locDstPtr);
 
-            // cpblk(dstPtr, srcPtr, elemBytes)
-            il.Emit(OpCodes.Ldloc, locDstPtr);
-            il.Emit(OpCodes.Ldloc, locSrcPtr);
-            il.Emit(OpCodes.Ldarg, 6);
-            il.Emit(OpCodes.Conv_U4);
-            il.Emit(OpCodes.Cpblk);
+            // Element copy: typed MOV(s) for the dtype width (copyKind), else cpblk with elemBytes (arg 6).
+            EmitElementCopy(il, copyKind, locDstPtr, locSrcPtr, () => il.Emit(OpCodes.Ldarg, 6));
+
+            // vi++; if (vi == valuesCount) vi = 0;   (wrap the values cursor — the NumPy iterator model)
+            var lblViOk = il.DefineLabel();
+            il.Emit(OpCodes.Ldloc, locVi);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locVi);
+            il.Emit(OpCodes.Ldloc, locVi);
+            il.Emit(OpCodes.Ldarg, 4);           // valuesCount
+            il.Emit(OpCodes.Blt, lblViOk);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locVi);
+            il.MarkLabel(lblViOk);
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
