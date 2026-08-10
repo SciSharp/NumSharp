@@ -560,14 +560,14 @@ namespace NumSharp.UnitTest.NewDtypes
             var x = np.array(new Half[] { (Half)1, (Half)2, (Half)3 });
             var y = np.array(new Half[] { (Half)10, (Half)20 });
             var tup = np.meshgrid(x, y);
-            tup.Item1.typecode.Should().Be(NPTypeCode.Half);
-            tup.Item1.shape.Should().Equal(new long[] { 2, 3 });
-            tup.Item2.shape.Should().Equal(new long[] { 2, 3 });
+            tup[0].typecode.Should().Be(NPTypeCode.Half);
+            tup[0].shape.Should().Equal(new long[] { 2, 3 });
+            tup[1].shape.Should().Equal(new long[] { 2, 3 });
             // Row 0: x values; Col 0: y values (xy indexing default)
-            ((double)tup.Item1.GetAtIndex<Half>(0)).Should().Be(1);
-            ((double)tup.Item1.GetAtIndex<Half>(5)).Should().Be(3);
-            ((double)tup.Item2.GetAtIndex<Half>(0)).Should().Be(10);
-            ((double)tup.Item2.GetAtIndex<Half>(5)).Should().Be(20);
+            ((double)tup[0].GetAtIndex<Half>(0)).Should().Be(1);
+            ((double)tup[0].GetAtIndex<Half>(5)).Should().Be(3);
+            ((double)tup[1].GetAtIndex<Half>(0)).Should().Be(10);
+            ((double)tup[1].GetAtIndex<Half>(5)).Should().Be(20);
         }
 
         [TestMethod]
@@ -576,9 +576,9 @@ namespace NumSharp.UnitTest.NewDtypes
             var x = np.array(new Complex[] { C(1, 0), C(2, 0) });
             var y = np.array(new Complex[] { C(0, 1), C(0, 2) });
             var tup = np.meshgrid(x, y);
-            tup.Item1.typecode.Should().Be(NPTypeCode.Complex);
-            tup.Item1.GetAtIndex<Complex>(0).Should().Be(C(1, 0));
-            tup.Item2.GetAtIndex<Complex>(0).Should().Be(C(0, 1));
+            tup[0].typecode.Should().Be(NPTypeCode.Complex);
+            tup[0].GetAtIndex<Complex>(0).Should().Be(C(1, 0));
+            tup[1].GetAtIndex<Complex>(0).Should().Be(C(0, 1));
         }
 
         [TestMethod]
@@ -587,9 +587,9 @@ namespace NumSharp.UnitTest.NewDtypes
             var x = np.array(new sbyte[] { 1, 2, 3 });
             var y = np.array(new sbyte[] { 10, 20 });
             var tup = np.meshgrid(x, y);
-            tup.Item1.typecode.Should().Be(NPTypeCode.SByte);
-            tup.Item1.GetAtIndex<sbyte>(0).Should().Be((sbyte)1);
-            tup.Item2.GetAtIndex<sbyte>(5).Should().Be((sbyte)20);
+            tup[0].typecode.Should().Be(NPTypeCode.SByte);
+            tup[0].GetAtIndex<sbyte>(0).Should().Be((sbyte)1);
+            tup[1].GetAtIndex<sbyte>(5).Should().Be((sbyte)20);
         }
 
         #endregion
@@ -1013,10 +1013,9 @@ namespace NumSharp.UnitTest.NewDtypes
         {
             var x = np.array(new Half[] { (Half)1, (Half)2, (Half)3 });
             var y = np.array(new Half[] { (Half)10, (Half)20 });
-            var kw = new Kwargs { indexing = "xy", sparse = true, copy = true };
-            var tup = np.meshgrid(x, y, kw);
-            tup.Item1.shape.Should().Equal(new long[] { 1, 3 });
-            tup.Item2.shape.Should().Equal(new long[] { 2, 1 });
+            var tup = np.meshgrid(x, y, sparse: true);
+            tup[0].shape.Should().Equal(new long[] { 1, 3 });
+            tup[1].shape.Should().Equal(new long[] { 2, 1 });
         }
 
         [TestMethod]
@@ -1024,11 +1023,10 @@ namespace NumSharp.UnitTest.NewDtypes
         {
             var x = np.array(new Complex[] { C(1, 0), C(2, 0), C(3, 0) });
             var y = np.array(new Complex[] { C(0, 1), C(0, 2) });
-            var kw = new Kwargs { indexing = "ij", sparse = false, copy = true };
-            var tup = np.meshgrid(x, y, kw);
+            var tup = np.meshgrid(x, y, indexing: "ij");
             // ij indexing: item1 shape (len(x), len(y)) = (3,2), item2 shape (3,2) too.
-            tup.Item1.shape.Should().Equal(new long[] { 3, 2 });
-            tup.Item2.shape.Should().Equal(new long[] { 3, 2 });
+            tup[0].shape.Should().Equal(new long[] { 3, 2 });
+            tup[1].shape.Should().Equal(new long[] { 3, 2 });
         }
 
         [TestMethod]

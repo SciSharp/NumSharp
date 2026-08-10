@@ -538,7 +538,7 @@ genuine defect worth fixing on its own terms (note .NET's `float.ExpM1`/`double.
 ### Comparison & Logic
 `all`, `allclose`, `any`, `array_equal`, `equal`, `fmax`, `fmin`, `greater`, `greater_equal`, `isclose`, `iscomplex`, `iscomplexobj`, `isfinite`, `isinf`, `isnan`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `less`, `less_equal`, `logical_and`, `logical_not`, `logical_or`, `logical_xor`, `maximum`, `minimum`, `not_equal`
 
-`np.iterable(y)` is NumPy's pure iterability predicate — `try: iter(y); return True; except TypeError: return False` (`numpy/lib/_function_base_impl.py`). It is NOT an iteration op: it never touches element data, so it uses **no kernel/NDIter/loop** (O(1) rank/type check in `Logic/np.is.cs`, mirroring `isscalar`). C# mapping, each matching NumPy 2.4.2's `iter()` outcome: `null`→false; **`NDArray`→`ndim != 0`** (the one surprise NumPy documents — a 0-d array is the *only* non-iterable array: `iter()` on it raises `TypeError`, exactly as `NDArray.GetEnumerator()` does, while every rank≥1 array incl. empties is iterable); `string`→true (Python strings are iterable); any `IEnumerable` (C# arrays/lists/dicts/sets)→true; every scalar value type (int/double/bool/char/Half/decimal/Complex/…)→false. The `NDArray` case precedes the `IEnumerable` catch because `NDArray` implements `IEnumerable`. Being a bool predicate over an arbitrary object rather than a value-producing kernel over array data, it is unit-test-only (`Logic/np.iterable.Test.cs`, 30 cases) and deliberately absent from the differential-fuzz corpus — same rationale as `isscalar`/`nditer`/`ndindex`.
+`np.iterable(y)` is NumPy's pure iterability predicate — `try: iter(y); return True; except TypeError: return False` (`numpy/lib/_function_base_impl.py`). It is NOT an iteration op: it never touches element data, so it uses **no kernel/NDIter/loop** (O(1) rank/type check in `Logic/np.is.cs`, mirroring `isscalar`). C# mapping, each matching NumPy 2.4.2's `iter()` outcome: `null`→false; **`NDArray`→`ndim != 0`** (the one surprise NumPy documents — a 0-d array is the *only* non-iterable array: `iter()` on it raises `TypeError`, exactly as `NDArray.GetEnumerator()` does, while every rank≥1 array incl. empties is iterable); `string`→true (Python strings are iterable); any `IEnumerable` (C# arrays/lists/dicts/sets)→true; every scalar value type (int/double/bool/char/Half/decimal/Complex/…)→false. The `NDArray` case precedes the `IEnumerable` catch because `NDArray` implements `IEnumerable`. Being a bool predicate over an arbitrary object rather than a value-producing kernel over array data, it is unit-test-only (`Logic/np.iterable.Test.cs`, 33 cases) and deliberately absent from the differential-fuzz corpus — same rationale as `isscalar`/`nditer`/`ndindex`. **Deliberate C# divergences** (adversarially probed, pinned `[Misaligned]`): NumSharp maps Python `iter()`-ability onto C# `foreach`-ability (`IEnumerable`), so four inputs iterable in Python but NOT `foreach`-able in C# return false where NumPy returns true — a bare `IEnumerator`/`IEnumerator<T>` cursor (no `GetEnumerator`) and `ValueTuple`/`Tuple`/`ITuple` (no `IEnumerable`). Real ported code passes the collection (array/`List`/`NDArray`), which is foreach-able and matches. Construction traps are clean: NumSharp's `np.array(5)`, `NDArray x = 5`, and `a[0,0]` all build genuine 0-d arrays (→false), and a bare scalar literal boxes to its own type rather than firing an `int→NDArray` implicit conversion into the `object` overload.
 
 The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped overload each** — `f(x[, x2], NDArray out = null, NDArray where = null, NPTypeCode? dtype = null)` (no bare/out split). It returns plain `NDArray` — NumPy's `np.less(a, b, out=f64)` returns the f64 out itself; `True→1` at any numeric out dtype since bool casts same_kind to all of them. A plain call still returns an `NDArray<bool>` *instance* (TensorEngine contract), so the typed wrapper is one zero-alloc cast away and the C# comparison operators (`==`, `<`, …) keep the `NDArray<bool>` static type via `AsGeneric<bool>()`. `dtype=` is validate-only (probed 2.4.2): bool loops only — `dtype: Boolean` is a no-op, anything else raises `No loop matching the specified signature and casting was found for ufunc <name>`. Comparisons compare at `result_type(lhs, rhs)` inside the kernel (probed: `greater(i8 2^53+1, f8 2^53)` → False, `equal` → True). Engine members follow the house order `(inputs, typeCode, out, where)`.
 
@@ -733,6 +733,31 @@ breaking change, since a property named `mgrid` cannot coexist with a method of 
 differential matrix bit-exact vs NumPy 2.4.2; **≥1.5× faster on every measured variation** (geomean
 ~6×; NPY/NS). Gate: `Creation/np.mgrid.Test.cs` (15). See `Creation/np.mgrid.cs`, `Creation/np.ogrid.cs`
 (shared helpers).
+
+**`np.meshgrid` — coordinate matrices from coordinate vectors (completed to full NumPy).** Port of NumPy
+2.x `numpy.meshgrid` (`numpy/lib/_function_base_impl.py`). Replaced the old **2-input `Kwargs` stub** (which
+was 2-D only and whose `copy` flag was a no-op) with the full variadic API: `meshgrid(x1, x2[, x3], string
+indexing="xy", bool sparse=false, bool copy=true)` plus a `meshgrid(NDArray[] xi, …)` core for 4+ inputs.
+Each input is flattened to its own open-mesh axis; **`"xy"`** (Cartesian, default) swaps the first two axes
+vs **`"ij"`** (matrix) — 2-D outputs are `(N, M)` under xy and `(M, N)` under ij; **`sparse`** keeps the
+open-mesh `(1,…,Ni,…,1)` shapes; **`copy`** materializes contiguous grids (false → non-contiguous broadcast
+views, NumPy-verbatim). Each grid **PRESERVES its input's dtype** (not promoted). Bad `indexing` →
+`ValueError "Valid values for `indexing` are 'xy' and 'ij'."`. **Return type** `MeshgridResult` — NumPy's
+tuple: implicit to `NDArray[]`, `Deconstruct` (`var (xx, yy) = np.meshgrid(x, y);`), indexer. The old
+`Kwargs` class and the `(NDArray, NDArray)` return are gone; in-repo callers migrated (the `NewDtypes`
+sweep, the fuzz `OpRegistry` meshgrid case). Differential-verified bit-exact vs NumPy 2.4.2 (shape + dtype
++ values) across xy/ij × sparse × 1/2/3/4-D × dtype-preservation × copy-view. **Perf (NPY/NS):** dense grids
+at scale are **4.7×–5.2×** (1000², 3-D 50³) and `copy=false` views **2.3×** — NumSharp's bulk broadcast-copy
+beats NumPy's there; SMALL dense/sparse grids are **0.5×–1.2×**, bound by NumSharp's per-`NDArray`
+construction/`.copy()` floor (~1.6 µs), the same ceiling documented for `fill_diagonal` — not the meshgrid
+algorithm (it cannot use `mgrid`'s fused `indices` kernel because its values are arbitrary input vectors, not
+coordinates). Gate: `Creation/np.meshgrid.Test.cs` (12). See `Creation/np.meshgrid.cs`.
+
+**`np.ix_` — audited, no change.** The open-mesh index builder (`Indexing/np.ix_.cs`, documented above) was
+re-verified against NumPy 2.4.2 across 1–3 operands incl. bool masks, empty (→intp), float-preserve, single,
+and the 2-D `ValueError` — all matching, and it is already the differential-fuzz `ix_` tier (green). The only
+"difference" is C# `int` literals being int32 where Python's are int64, which is language-wide, not an `ix_`
+behaviour.
 
 ### Iteration
 `nditer`, `ndenumerate`, `ndindex` (plus the pre-existing `broadcast`), and the NumSharp-extension
@@ -1230,7 +1255,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot}.cs`, `LinearAlgebra/GufuncGuard.cs` |
 | einsum | `LinearAlgebra/np.einsum.cs`, `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (class + `_assert_*`/`_commonType` ports) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs`; `Exceptions/LinAlgError.cs` |
-| Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Indexing/np.{ix_,s_}.cs` |
+| Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NdArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |
 | Iteration APIs (nditer/ndindex/ndenumerate) | `APIs/np.nditer.cs`, `Indexing/np.{ndindex,ndenumerate}.cs` |
