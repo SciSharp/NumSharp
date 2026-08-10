@@ -102,8 +102,9 @@ namespace NumSharp
         ///     integers with <see cref="Slice.Ellipsis"/> where NumPy writes <c>Ellipsis</c>.
         /// </param>
         /// <remarks>
-        ///     Labels are indices into NumPy's alphabet: 0-25 are <c>a-z</c> and 26-51 are
-        ///     <c>A-Z</c>, so <c>[0,1]</c> means <c>"ab"</c>. Anything outside that range raises
+        ///     Labels are indices into NumPy's <c>einsum_symbols</c>, UPPER case first: 0-25 are
+        ///     <c>A-Z</c> and 26-51 are <c>a-z</c>, so <c>[0,1]</c> means <c>"AB"</c> (see the
+        ///     encoding note on <see cref="EinsumSubscripts.FromSublists"/>). Anything outside that range raises
         ///     <c>ValueError("subscript is not within the valid range [0, 52)")</c>, and a non-integer
         ///     entry raises <c>TypeError("each subscript must be either an integer or an ellipsis")</c>
         ///     — both NumPy's, verbatim.
