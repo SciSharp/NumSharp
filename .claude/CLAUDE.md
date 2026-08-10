@@ -546,7 +546,32 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
 `can_cast`, `common_type`, `find_common_type`, `finfo`, `iinfo`, `issubdtype`, `min_scalar_type`, `mintypecode`, `promote_types`, `result_type`
 
 ### Selection
-`compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `ravel_multi_index`, `s_`, `select`, `take`, `unravel_index`, `where`
+`compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`
+
+`np.take_along_axis(arr, indices, axis=-1)` (NumPy `numpy/lib/_shape_base_impl.py`) is the per-slice
+gather: it matches 1-D index and data slices oriented along `axis` and looks each output element up
+in `arr` — the inverse operation to `argsort`/`argmax(keepdims=True)` (`take_along_axis(a, a.argsort(axis),
+axis)` ≡ `sort(a, axis)`). NumPy implements it as advanced indexing (`arr[_make_along_axis_idx(...)]`);
+NumSharp reproduces the identical semantics as ONE whole-array strided-odometer IL gather kernel
+(`DirectILKernelGenerator.TakeAlongAxis.cs`, an outer odometer wrapped around a tight inner loop over
+the innermost axis so the multi-level carry runs per-slice, not per-element), dtype-agnostic via a
+byte-width-keyed (1/2/4/8/16) element copy. `indices` must be an INTEGER array (NumPy's
+`issubdtype(dtype, integer)` — bool/float/complex raise `IndexError "\`indices\` must be an integer
+array"`) whose ndim equals `arr`'s (else `ValueError "\`indices\` and \`arr\` must have the same number
+of dimensions"`); the axis dimension of `indices` supplies `J` (need NOT equal `M = arr.shape[axis]`)
+while every OTHER dimension broadcasts BOTH `arr` and `indices` (a stride-0 broadcast source view is
+read fine; a non-axis conflict raises NumPy's fancy-index `IndexError "shape mismatch: indexing arrays
+could not be broadcast together with shapes …"` listing each `arange`-grid shape). `axis=None` flattens
+`arr` in C (logical) order and requires 1-D `indices` (else `ValueError "when axis=None, \`indices\`
+must have a single dimension."`); a negative index normalizes ONCE (`idx += M`, advanced-indexing
+semantics) and anything still out of range raises `IndexError "index {orig} is out of bounds for axis
+{axis} with size {M}"` reporting the ORIGINAL value. The result is a fresh writeable C-contiguous copy
+of `arr`'s dtype (any source layout — C/F/strided/reversed/sliced/transposed/broadcast — is read through
+its own strides, no materialisation). **≥1.5× faster than NumPy on every measured variation** (geomean
+~3.7× NPY/NS; the tightest cell is a random 16M axis-0 gather at 1.54×, latency-bound). Differentially
+fuzzed 24,000+ cases bit-exact vs NumPy 2.4.2 (ranks 1–5, all axes, wrap/OOB, all element widths). Gates:
+`Indexing/TakeAlongAxisTests.cs` (36) + 44 `take_along_axis` cases in the `groupa` differential-fuzz
+tier. See `Indexing/np.take_along_axis.cs`.
 
 `np.select(condlist, choicelist, default=0)` (NumPy `numpy/lib/_function_base_impl.py`) draws each
 output element from the choice whose condition is true, FIRST matching condition winning; positions
@@ -1250,7 +1275,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
-| Selection family | `Indexing/np.{take,put,place,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,Put,Place,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain) |
+| Selection family | `Indexing/np.{take,take_along_axis,put,place,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,Place,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed) |
 | BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`) |
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot}.cs`, `LinearAlgebra/GufuncGuard.cs` |
 | einsum | `LinearAlgebra/np.einsum.cs`, `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |

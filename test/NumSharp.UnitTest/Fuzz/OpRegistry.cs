@@ -219,6 +219,12 @@ namespace NumSharp.UnitTest.Fuzz
                 case "rollaxis": return np.rollaxis(ops[0], p["axis"].GetInt32(), p["start"].GetInt32());
                 case "take": return np.take(ops[0], ops[1], p["axis"].GetInt32(),
                     mode: p.TryGetValue("mode", out var takeMode) ? takeMode.GetString() : "raise");
+                case "take_along_axis":
+                {
+                    var axEl = p["axis"];
+                    int? tlaAx = axEl.ValueKind == JsonValueKind.Null ? (int?)null : axEl.GetInt32();
+                    return np.take_along_axis(ops[0], ops[1], tlaAx);
+                }
                 case "compress": return np.compress(ops[0], ops[1], p["axis"].GetInt32());
                 case "extract": return np.extract(ops[0], ops[1]);
                 case "convolve": return np.convolve(ops[0], ops[1], p["mode"].GetString());

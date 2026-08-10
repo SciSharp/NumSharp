@@ -2594,6 +2594,46 @@ def gen_groupa():
         emit("take", {"axis": 0, "mode": "clip"}, [describe(base1, base1), describe(midx, midx)],
              np.take(base1, midx, 0, mode="clip"))
 
+        # take_along_axis — per-slice gather (indices match arr ndim; non-axis dims broadcast).
+        # argsort-produced indices reproduce a sort; plus axis=None-flatten, negative-wrap,
+        # J != M along the axis, broadcast indices on a non-axis dim, and a transposed (non-contig)
+        # source. Result dtype == arr dtype; a negative index normalizes once (idx += n) as in
+        # advanced indexing.
+        tla1 = np.argsort(base1)                                        # (6,)
+        emit("take_along_axis", {"axis": 0}, [describe(base1, base1), describe(tla1, tla1)],
+             np.take_along_axis(base1, tla1, axis=0))
+        flatidx = np.array([5, 0, 3, 3, 1, 2, 0], dtype=np.int64)       # axis=None -> flatten a2
+        emit("take_along_axis", {"axis": None}, [describe(a2, a2), describe(flatidx, flatidx)],
+             np.take_along_axis(a2, flatidx, axis=None))
+        ai1 = np.argsort(a2, axis=1)                                    # (3,4)
+        emit("take_along_axis", {"axis": 1}, [describe(a2, a2), describe(ai1, ai1)],
+             np.take_along_axis(a2, ai1, axis=1))
+        ai0 = np.argsort(a2, axis=0)                                    # (3,4)
+        emit("take_along_axis", {"axis": 0}, [describe(a2, a2), describe(ai0, ai0)],
+             np.take_along_axis(a2, ai0, axis=0))
+        jidx = np.array([[0, 3, 1, 2, 0], [3, 3, 2, 1, 0], [1, 0, 2, 3, 3]], dtype=np.int64)  # (3,5), M=4
+        emit("take_along_axis", {"axis": -1}, [describe(a2, a2), describe(jidx, jidx)],
+             np.take_along_axis(a2, jidx, axis=-1))
+        nidxt = np.array([[-1, -2, -3, -4], [-4, -3, -2, -1], [0, -1, 0, -1]], dtype=np.int64)  # neg-wrap
+        emit("take_along_axis", {"axis": 1}, [describe(a2, a2), describe(nidxt, nidxt)],
+             np.take_along_axis(a2, nidxt, axis=1))
+        bidx0 = np.array([[0, 1, 2, 0]], dtype=np.int64)               # (1,4) broadcast over axis 0
+        emit("take_along_axis", {"axis": 0}, [describe(a2, a2), describe(bidx0, bidx0)],
+             np.take_along_axis(a2, bidx0, axis=0))
+        bidx1 = np.array([[2], [0], [1]], dtype=np.int64)              # (3,1) keepdims-argmax style
+        emit("take_along_axis", {"axis": 1}, [describe(a2, a2), describe(bidx1, bidx1)],
+             np.take_along_axis(a2, bidx1, axis=1))
+        ci2 = np.argsort(a3, axis=2)
+        emit("take_along_axis", {"axis": 2}, [describe(a3, a3), describe(ci2, ci2)],
+             np.take_along_axis(a3, ci2, axis=2))
+        ci0 = np.argsort(a3, axis=0)
+        emit("take_along_axis", {"axis": 0}, [describe(a3, a3), describe(ci0, ci0)],
+             np.take_along_axis(a3, ci0, axis=0))
+        t3b = a3.transpose(1, 0, 2)                                    # (3,2,4) non-contig source
+        ti = np.argsort(t3b, axis=2)
+        emit("take_along_axis", {"axis": 2}, [describe(a3, t3b), describe(ti, ti)],
+             np.take_along_axis(t3b, ti, axis=2))
+
         # put — NEGATIVE indices under RAISE (same normalization as take).
         npa = _cbase((6,), d)
         npidx = np.array([-1, -6], dtype=np.int64)
