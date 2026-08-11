@@ -9,8 +9,9 @@ namespace NumSharp.UnitTest.APIs
     /// <summary>
     /// np.nested_iters parity gate. The multi_index path (the documented primary use) is bit-exact
     /// with NumPy 2.4.2; every expectation was probed against it. The value-stream ORDER without
-    /// multi_index is a documented [Misaligned] divergence (a pre-existing NDIter op_axes+order
-    /// limitation, not a property of the nesting).
+    /// multi_index now ALSO matches NumPy — the op_axes contiguity check judges the iterator's
+    /// remapped layout instead of the full operand, so a non-contiguous axis subset no longer
+    /// coalesces into F-order (verified across the 2- and 3-level axes partitions of a (2,3,2) array).
     /// </summary>
     [TestClass]
     public class np_nested_iters_tests
@@ -113,13 +114,14 @@ namespace NumSharp.UnitTest.APIs
         }
 
         [TestMethod]
-        [Misaligned]
-        public void ValueStreamOrder_WithoutMultiIndex_DivergesFromNumPy()
+        public void ValueStreamOrder_WithoutMultiIndex_MatchesNumPy()
         {
-            // NumPy follows `order` for the value stream (C -> 0,1,6,7,...). NumSharp's NDIter reorders
-            // op_axes iteration by memory (F-like) regardless of `order`, so without multi_index the pure
-            // value order is NumPy's F-order. Pinned to make the divergence explicit; the multi_index
-            // path above is the bit-exact, recommended surface.
+            // The bare value stream (no multi_index) now matches NumPy's memory-order traversal for an
+            // op_axes subset. The inner iterator spans axes [0,2] of a C-contiguous (2,3,2) — strides
+            // (6,1), NON-contiguous — so it must NOT coalesce; previously the contiguity check read the
+            // full operand (C-contiguous) and coalesced it into F-order (0,6,1,7,...). Now it judges the
+            // iterator's op_axes layout, canCoalesce stays false, and the descending K-sort yields NumPy's
+            // order. This is exactly the value+coord order the multi_index test above already proved.
             var a = np.arange(12).reshape(2, 3, 2);
             var p = np.nested_iters(a, new[] { new[] { 1 }, new[] { 0, 2 } });   // no multi_index
             try
@@ -128,8 +130,26 @@ namespace NumSharp.UnitTest.APIs
                 foreach (var _ in p[0])
                     foreach (var __ in p[1])
                         vals.Add(V(p[1]));
-                // NumSharp (current): F-order. NumPy order='K'/'C' on this C-array: 0,1,6,7,2,3,8,9,4,5,10,11.
-                CollectionAssert.AreEqual(new long[] { 0, 6, 1, 7, 2, 8, 3, 9, 4, 10, 5, 11 }, vals.ToArray());
+                CollectionAssert.AreEqual(new long[] { 0, 1, 6, 7, 2, 3, 8, 9, 4, 5, 10, 11 }, vals.ToArray());
+            }
+            finally { foreach (var it in p) it.Dispose(); }
+        }
+
+        [TestMethod]
+        public void ValueStreamOrder_OuterOpAxesSubset_MatchesNumPy()
+        {
+            // The OUTER iterator carries the non-contiguous subset here (axes [0,2], strides (6,1)); the
+            // same coalescing bug drove it F-order without multi_index. NumPy's value stream is memory
+            // order: outer (i,k) with k fastest, inner j -> 0,2,4, 1,3,5, 6,8,10, 7,9,11.
+            var a = np.arange(12).reshape(2, 3, 2);
+            var p = np.nested_iters(a, new[] { new[] { 0, 2 }, new[] { 1 } });   // no multi_index
+            try
+            {
+                var vals = new List<long>();
+                foreach (var _ in p[0])
+                    foreach (var __ in p[1])
+                        vals.Add(V(p[1]));
+                CollectionAssert.AreEqual(new long[] { 0, 2, 4, 1, 3, 5, 6, 8, 10, 7, 9, 11 }, vals.ToArray());
             }
             finally { foreach (var it in p) it.Dispose(); }
         }

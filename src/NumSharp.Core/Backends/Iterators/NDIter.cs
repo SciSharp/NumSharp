@@ -1576,39 +1576,45 @@ namespace NumSharp.Backends.Iteration
         /// orders), requires actual positive strides for contiguity.</param>
         private bool CheckAllOperandsContiguous(bool cOrder, bool allowFlip = true)
         {
-            if (_operands is null)
-                return false;
+            // Contiguity must be judged on the ITERATOR's effective layout, not the raw operand's.
+            // With op_axes the iterator spans a SUBSET of the operand's axes: axes [0,2] of a
+            // C-contiguous (2,3,2) give iterator strides (6,1) over shape (2,2), which is NOT
+            // contiguous — yet the full operand still IS C-contiguous. Reading arr.shape/arr.strides
+            // reported that operand contiguity and wrongly enabled coalescing for the op_axes subset,
+            // so the ascending for-coalescing sort ran, CoalesceAxes could not merge (1*2 != 6), and
+            // the iterator was left in F-order (np.nested_iters' bare value stream diverged from
+            // NumPy's memory order). NumPy itself judges contiguity from the axisdata (the iterator's
+            // own strides), never the base operand. The iterator state already carries the op_axes
+            // remapping plus any broadcast fill / negative-stride flip that ran just above, so for a
+            // PLAIN operand this is exactly equivalent to the old operand-based check (iterator strides
+            // == operand strides there); it only changes the op_axes and other virtual-layout cases.
+            if (_state->NDim <= 1)
+                return true;  // 0-D / 1-D iteration is trivially contiguous
+
+            int stridesNDim = _state->StridesNDim;
+            var shape = _state->Shape;
+            var strides = _state->Strides;
 
             for (int op = 0; op < _state->NOp; op++)
             {
-                var arr = _operands[op];
-                if (arr is null)
-                    continue;
+                int baseIdx = op * stridesNDim;
 
-                // Check if operand is contiguous in the requested order
-                var arrShape = arr.shape;
-                if (arr.ndim == 0 || arr.size <= 1)
-                    continue;  // Trivially contiguous
-
-                // Get strides from the original array
-                var strides = arr.strides;
-
-                // Check contiguity using actual strides.
+                // Check contiguity using the iterator's per-operand strides.
                 // Negative strides are only treated as "contiguous" when FlipNegativeStrides
-                // will run (K-order / A-order without FORCEDORDER). For forced C/F order,
-                // negative strides break contiguity because the iterator will traverse
-                // logical order, not memory order.
+                // will run (K-order / A-order without FORCEDORDER); it has already run by this
+                // point, so the state strides are positive there — Math.Abs keeps a plain
+                // reversed operand contiguous. For forced C/F order, negative strides break
+                // contiguity because the iterator traverses logical order, not memory order.
                 long expected = 1;
                 if (cOrder)
                 {
                     // C-order: last axis fastest, check from end to start
-                    for (int axis = arr.ndim - 1; axis >= 0; axis--)
+                    for (int axis = _state->NDim - 1; axis >= 0; axis--)
                     {
-                        long dim = arrShape[axis];
+                        long dim = shape[axis];
                         if (dim == 1)
                             continue;  // Size-1 dimensions are always contiguous
-                        // Check stride (abs if flipping, actual if not)
-                        long stride = allowFlip ? Math.Abs(strides[axis]) : strides[axis];
+                        long stride = allowFlip ? Math.Abs(strides[baseIdx + axis]) : strides[baseIdx + axis];
                         if (stride != expected)
                             return false;
                         expected *= dim;
@@ -1617,13 +1623,12 @@ namespace NumSharp.Backends.Iteration
                 else
                 {
                     // F-order: first axis fastest, check from start to end
-                    for (int axis = 0; axis < arr.ndim; axis++)
+                    for (int axis = 0; axis < _state->NDim; axis++)
                     {
-                        long dim = arrShape[axis];
+                        long dim = shape[axis];
                         if (dim == 1)
                             continue;  // Size-1 dimensions are always contiguous
-                        // Check stride (abs if flipping, actual if not)
-                        long stride = allowFlip ? Math.Abs(strides[axis]) : strides[axis];
+                        long stride = allowFlip ? Math.Abs(strides[baseIdx + axis]) : strides[baseIdx + axis];
                         if (stride != expected)
                             return false;
                         expected *= dim;
