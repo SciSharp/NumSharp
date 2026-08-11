@@ -30,6 +30,12 @@ namespace NumSharp
             if (indices is null) throw new ArgumentNullException(nameof(indices));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
+            // Writeability is checked FIRST — before the empty-indices no-op and the bounds/mode
+            // checks (probed 2.4.2: put(ro, [], []) and put(ro, [oob], v) both report read-only).
+            // The contiguous fast path (PutImpl) writes a.Address directly; the non-contiguous path
+            // is already guarded (it routes through np.copyto).
+            NumSharpException.ThrowIfNotWriteable(a.Shape, "put: output array");
+
             int modeInt = ParseMode(mode, nameof(mode));
 
             long indicesCount = indices.size;

@@ -29,6 +29,12 @@ namespace NumSharp
             if (mask is null) throw new ArgumentNullException(nameof(mask));
             if (vals is null) throw new ArgumentNullException(nameof(vals));
 
+            // Read-only target reported first (NumPy uses WRITEBACKIFCOPY; probed 2.4.2:
+            // place(ro, all-false-mask, v) still raises read-only). The contiguous kernel
+            // (ExecutePlace) writes arr.Storage.Address directly; the non-contiguous path is
+            // already guarded via np.copyto.
+            NumSharpException.ThrowIfNotWriteable(arr.Shape, "WRITEBACKIFCOPY base");
+
             if (mask.size != arr.size)
                 throw new ArgumentException(
                     $"place: mask and data must be the same size (mask.size={mask.size}, arr.size={arr.size}).",

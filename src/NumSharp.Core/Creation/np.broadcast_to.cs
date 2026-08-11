@@ -54,7 +54,7 @@ namespace NumSharp
         public static NDArray broadcast_to(UnmanagedStorage from, Shape against)
         {
             ValidateBroadcastTo(from.Shape, against);
-            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from, Shape.Broadcast(from.Shape, against).LeftShape));
+            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from, Shape.Broadcast(from.Shape, against).LeftShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)));
         }
 
         /// <summary>
@@ -67,7 +67,7 @@ namespace NumSharp
         public static NDArray broadcast_to(NDArray from, Shape against)
         {
             ValidateBroadcastTo(from.Shape, against);
-            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from.Storage, Shape.Broadcast(from.Shape, against).LeftShape));
+            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from.Storage, Shape.Broadcast(from.Shape, against).LeftShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)));
         }
 
         /// <summary>
@@ -93,7 +93,7 @@ namespace NumSharp
         public static NDArray broadcast_to(UnmanagedStorage from, NDArray against)
         {
             ValidateBroadcastTo(from.Shape, against.Shape);
-            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from, Shape.Broadcast(from.Shape, against.Shape).LeftShape));
+            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from, Shape.Broadcast(from.Shape, against.Shape).LeftShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)));
         }
 
         /// <summary>
@@ -106,7 +106,7 @@ namespace NumSharp
         public static NDArray broadcast_to(NDArray from, NDArray against)
         {
             ValidateBroadcastTo(from.Shape, against.Shape);
-            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from.Storage, Shape.Broadcast(from.Shape, against.Shape).LeftShape));
+            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from.Storage, Shape.Broadcast(from.Shape, against.Shape).LeftShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)));
         }
 
 
@@ -133,7 +133,7 @@ namespace NumSharp
         public static NDArray broadcast_to(UnmanagedStorage from, UnmanagedStorage against)
         {
             ValidateBroadcastTo(from.Shape, against.Shape);
-            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from, Shape.Broadcast(from.Shape, against.Shape).LeftShape));
+            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from, Shape.Broadcast(from.Shape, against.Shape).LeftShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)));
         }
 
         /// <summary>
@@ -146,7 +146,7 @@ namespace NumSharp
         public static NDArray broadcast_to(NDArray from, UnmanagedStorage against)
         {
             ValidateBroadcastTo(from.Shape, against.Shape);
-            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from.Storage, Shape.Broadcast(from.Shape, against.Shape).LeftShape));
+            return new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(from.Storage, Shape.Broadcast(from.Shape, against.Shape).LeftShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)));
         }
     }
 }
