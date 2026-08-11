@@ -118,37 +118,40 @@ namespace NumSharp.UnitTest.APIs
         [TestMethod]
         public void CrossDtype_Set_UsesNumPyCasting()
         {
-            // Casting to an integer dtype must truncate toward zero and wrap on overflow (NumPy),
-            // NOT round (Convert). Casting to a float dtype is exact.
+            // Assigning an IN-RANGE float to an integer dtype truncates toward zero (NumPy), NOT round
+            // (Convert). Casting to a float dtype is exact.
             var ai = np.zeros(new Shape(3), NPTypeCode.Int32);
             ai.flatiter[0] = 3.7;    // -> 3
             ai.flatiter[1] = -3.7;   // -> -3
             Assert.AreEqual(3L, S(ai.flatiter[0]));
             Assert.AreEqual(-3L, S(ai.flatiter[1]));
 
+            // An OUT-OF-RANGE weak scalar (a C# primitive — NumSharp's NEP50 analog of a Python
+            // int/float) into an integer dtype RAISES, matching NumPy 2.4.2's a.flat[i]=v bounds
+            // check; it does NOT wrap to 44. NumSharp reuses its NEP50 OverflowException wording.
             var u8 = np.zeros(new Shape(1), NPTypeCode.Byte);
-            u8.flatiter[0] = 300;    // wrap -> 44
-            Assert.AreEqual(44L, S(u8.flatiter[0]));
+            var ex = Assert.ThrowsException<OverflowException>(() => { u8.flatiter[0] = 300; });
+            StringAssert.Contains(ex.Message, "out of bounds for uint8");
+
+            // A float whose TRUNCATED value is out of range also raises (128.0 -> 128, OOB for int8),
+            // but an in-range boundary float truncates and stores (127.9 -> 127).
+            var i1 = np.zeros(new Shape(1), NPTypeCode.SByte);
+            Assert.ThrowsException<OverflowException>(() => { i1.flatiter[0] = 128.0; });
+            i1.flatiter[0] = 127.9;
+            Assert.AreEqual(127L, S(i1.flatiter[0]));
 
             var ad = np.zeros(new Shape(1), NPTypeCode.Double);
             ad.flatiter[0] = 5;      // int -> double exact
             Assert.AreEqual(5.0, Convert.ToDouble(ad.flatiter[0]), 1e-12);
         }
 
-        // Two documented divergences (differential probe: 237/251 cases bit-exact). Pinned so they are
-        // explicit, not silent.
+        // One documented divergence remains (the OOB-wrap divergence was resolved — scalar assignment
+        // now RAISES like NumPy, see CrossDtype_Set_UsesNumPyCasting). Pinned so it is explicit, not silent.
         [TestMethod]
         [Misaligned]
-        public void KnownDivergences_OobWrap_And_SpentCoords()
+        public void KnownDivergence_SpentCoords()
         {
-            // (1) Out-of-range INTEGER scalar assignment WRAPS — NumSharp's library-wide convention
-            // (a plain a[0]=300 on int8 also wraps to 44); NumPy raises ValueError. FlatIterator is
-            // consistent with NumSharp's own setter.
-            var i8 = np.zeros(new Shape(1), NPTypeCode.SByte);
-            i8.flatiter[0] = 300;
-            Assert.AreEqual(44L, S(i8.flatiter[0]));
-
-            // (2) coords at the EXHAUSTED position (index==size) on a truly non-contiguous array is
+            // coords at the EXHAUSTED position (index==size) on a truly non-contiguous array is
             // implementation-defined; NumSharp returns the arithmetic continuation (4,0,0), NumPy an
             // internal artifact (0,0,0). Every in-range coord is bit-exact (proven elsewhere).
             var t = np.arange(24).reshape(2, 3, 4).astype(NPTypeCode.Int64).T; // (4,3,2), non-contig

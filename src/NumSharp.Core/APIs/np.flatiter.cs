@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
@@ -44,14 +45,19 @@ namespace NumSharp
         ///     <see cref="copy"/> (a fresh 1-D C-order array), and C-order iteration that shares the
         ///     cursor (so a second pass RESUMES, as NumPy's <c>iter(f) is f</c>).
         ///     <para>
-        ///     Two documented divergences from NumPy (differential-verified: 237/251 cases bit-exact):
-        ///     (1) an out-of-range INTEGER scalar assignment WRAPS rather than raising — this is
-        ///     NumSharp's library-wide convention (a plain <c>a[0] = 300</c> on an int8 array also wraps
-        ///     to 44), so the iterator is consistent with the rest of NumSharp; NumPy raises
-        ///     <c>ValueError</c>. (2) <see cref="coords"/> read at the EXHAUSTED position (index == size,
-        ///     after a full pass) on a truly non-contiguous array is implementation-defined — NumSharp
-        ///     returns the arithmetic continuation, NumPy an internal odometer artifact; every IN-RANGE
-        ///     coord (the values read during iteration) is bit-exact.
+        ///     Scalar assignment matches NumPy's weak-scalar bounds check: an OUT-OF-RANGE C# primitive
+        ///     (NumSharp's NEP50 analog of a Python int/float) written to an integer element RAISES
+        ///     (<c>OverflowException</c>, "Python integer 300 out of bounds for int8") rather than
+        ///     wrapping, the truncate-then-check rule for floats included (<c>127.9</c> stores 127,
+        ///     <c>128.0</c> raises, NaN/inf raise). A STRONG scalar — an <see cref="NDArray"/>, reached
+        ///     through the fancy/slice setters or <c>a.astype</c> — still wraps, exactly as in NumPy
+        ///     (which range-checks a Python int but wraps an <c>np.int64</c> scalar).
+        ///     </para>
+        ///     <para>
+        ///     One documented divergence remains (<c>[Misaligned]</c>): <see cref="coords"/> read at the
+        ///     EXHAUSTED position (index == size, after a full pass) on a truly non-contiguous array is
+        ///     implementation-defined — NumSharp returns the arithmetic continuation, NumPy an internal
+        ///     odometer artifact; every IN-RANGE coord (the values read during iteration) is bit-exact.
         ///     </para>
         /// </summary>
         public sealed class FlatIterator : IEnumerable<object>
@@ -143,6 +149,16 @@ namespace NumSharp
                 // are exact under Convert, so they take the fast, allocation-free path.
                 if (IsIntegerLike(tc))
                 {
+                    // NumPy bounds-checks a WEAK scalar assigned to an integer element: `a.flat[i] = 300`
+                    // on an int8 base RAISES, it does NOT wrap to 44. Every value reaching ConvertToBase
+                    // is a C# primitive — NumSharp's NEP50 analog of a Python int/float, i.e. a weak
+                    // scalar (a strong scalar is an NDArray, and the fancy/slice setters that take one
+                    // never route here) — so the check applies unconditionally, except to a bool target,
+                    // which NumPy truthiness-tests and can never overflow. The astype below still WRAPS,
+                    // as a strong `a.astype(...)` cast must; only this weak scalar-assignment path checks.
+                    if (tc != NPTypeCode.Boolean)
+                        CheckWeakScalarFitsInteger(value, tc);
+
                     var src = new NDArray(value.GetType(), 1);
                     src.SetAtIndex(value, 0);
                     return src.astype(_base.dtype).GetAtIndex(0);
@@ -159,6 +175,53 @@ namespace NumSharp
                 => tc is NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.SByte
                     or NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32
                     or NPTypeCode.Int64 or NPTypeCode.UInt64 or NPTypeCode.Char;
+
+            // NumPy scalar-assignment bounds check for a WEAK scalar (a C# primitive) written into a
+            // NON-bool integer dtype. An integer source must fit the target's inclusive range; a float
+            // source is truncated toward zero and the TRUNCATED value must fit (NumPy 2.4.2, probed:
+            // 127.9 -> 127 stores, 128.0 -> 128 raises, -128.9 -> -128 stores, -129.0 raises, NaN/inf
+            // raise). Out of range throws OverflowException with NumPy's regular-assignment wording
+            // ("Python integer 300 out of bounds for int8"), reusing the same NEP50 machinery
+            // (NDExprTypeRules.CheckIntLiteralFits) NumSharp uses for weak-scalar overflow elsewhere;
+            // NumPy's flat path itself raises a terser ValueError("Error setting single item of array.").
+            private void CheckWeakScalarFitsInteger(object value, NPTypeCode target)
+            {
+                switch (value)
+                {
+                    case bool:
+                        return; // a bool source is 0/1 — always in range for an integer dtype
+                    case sbyte or byte or short or ushort or int or uint or long or char:
+                        NDExprTypeRules.CheckIntLiteralFits(Convert.ToInt64(value), target);
+                        return;
+                    case ulong u:
+                        if (target == NPTypeCode.UInt64) return;                 // any ulong fits uint64
+                        if (u <= long.MaxValue) { NDExprTypeRules.CheckIntLiteralFits((long)u, target); return; }
+                        throw ScalarOutOfBounds(u.ToString(), target);           // >= 2^63 fits only uint64
+                    case Half or float or double:
+                    {
+                        double d = value is Half h ? (double)h : Convert.ToDouble(value);
+                        if (double.IsNaN(d) || double.IsInfinity(d))
+                            throw new OverflowException(
+                                $"cannot assign non-finite float {d} to integer dtype {target.AsNumpyDtypeName()}");
+                        double t = Math.Truncate(d);
+                        // Only [-2^63, 2^63) casts safely to long; hand those to CheckIntLiteralFits so
+                        // the message names the truncated integer exactly as NumPy's regular path does.
+                        if (t >= -9223372036854775808.0 && t < 9223372036854775808.0)
+                        {
+                            NDExprTypeRules.CheckIntLiteralFits((long)t, target);
+                            return;
+                        }
+                        if (target == NPTypeCode.UInt64 && t >= 0.0 && t <= 18446744073709551615.0)
+                            return;                                              // a large positive still fits uint64
+                        throw ScalarOutOfBounds(t.ToString("F0"), target);
+                    }
+                    default:
+                        return; // Decimal/Complex source into an integer target: governed by astype/Convert
+                }
+            }
+
+            private static OverflowException ScalarOutOfBounds(string shown, NPTypeCode target)
+                => new OverflowException($"Python integer {shown} out of bounds for {target.AsNumpyDtypeName()}");
 
             /// <summary>
             ///     Single-element access at flat C-order index <paramref name="i"/> (NumPy's <c>f[i]</c>).
