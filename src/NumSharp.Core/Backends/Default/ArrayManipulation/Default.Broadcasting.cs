@@ -48,9 +48,35 @@ namespace NumSharp.Backends
         /// <summary>
         /// Broadcasts two shapes and returns the broadcasted shapes with computed strides.
         /// </summary>
-        /// <remarks>Delegates to Shape.Broadcast</remarks>
+        /// <remarks>
+        ///     Delegates to <see cref="Shape.Broadcast(Shape, Shape)"/>, but on failure raises
+        ///     NumPy's ELEMENTWISE-ufunc broadcast error verbatim:
+        ///     <c>operands could not be broadcast together with shapes (2,3) (2,) </c>
+        ///     — note the trailing space and Python-tuple shape repr (<see cref="Shape.ToPythonTuple"/>).
+        ///     <para>
+        ///     Every elementwise binary path in the engine (add/sub/mul/div/mod/power/floor_divide/
+        ///     bitwise, the comparisons, arctan2, the shifts, and np.evaluate) resolves its broadcast
+        ///     through THIS wrapper — an unqualified <c>Broadcast(...)</c> inside <c>DefaultEngine</c>
+        ///     binds here, not to <c>Shape.Broadcast</c>. NumPy decides this message at the ufunc layer,
+        ///     not in the shared shape math, so the message lives here at the caller boundary — exactly
+        ///     as the out=/where= path does in <c>DefaultEngine.UfuncOut.cs</c>. <c>np.broadcast_arrays</c>,
+        ///     <c>np.broadcast</c> and <c>np.select</c> call <c>Shape.Broadcast</c> DIRECTLY and so keep
+        ///     NumPy's DIFFERENT "shape mismatch: … Mismatch is between arg i …" wording. The try/catch
+        ///     costs nothing on the success path (it only unwinds when the broadcast genuinely fails).
+        ///     </para>
+        /// </remarks>
         public static (Shape LeftShape, Shape RightShape) Broadcast(Shape leftShape, Shape rightShape)
-            => Shape.Broadcast(leftShape, rightShape);
+        {
+            try
+            {
+                return Shape.Broadcast(leftShape, rightShape);
+            }
+            catch (IncorrectShapeException)
+            {
+                throw new IncorrectShapeException(
+                    $"operands could not be broadcast together with shapes {leftShape.ToPythonTuple()} {rightShape.ToPythonTuple()} ");
+            }
+        }
 
         /// <summary>
         /// Broadcasts multiple arrays and returns new NDArrays with broadcasted shapes.
