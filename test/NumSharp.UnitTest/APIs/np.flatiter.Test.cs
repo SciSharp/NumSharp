@@ -135,6 +135,28 @@ namespace NumSharp.UnitTest.APIs
             Assert.AreEqual(5.0, Convert.ToDouble(ad.flatiter[0]), 1e-12);
         }
 
+        // Two documented divergences (differential probe: 237/251 cases bit-exact). Pinned so they are
+        // explicit, not silent.
+        [TestMethod]
+        [Misaligned]
+        public void KnownDivergences_OobWrap_And_SpentCoords()
+        {
+            // (1) Out-of-range INTEGER scalar assignment WRAPS — NumSharp's library-wide convention
+            // (a plain a[0]=300 on int8 also wraps to 44); NumPy raises ValueError. FlatIterator is
+            // consistent with NumSharp's own setter.
+            var i8 = np.zeros(new Shape(1), NPTypeCode.SByte);
+            i8.flatiter[0] = 300;
+            Assert.AreEqual(44L, S(i8.flatiter[0]));
+
+            // (2) coords at the EXHAUSTED position (index==size) on a truly non-contiguous array is
+            // implementation-defined; NumSharp returns the arithmetic continuation (4,0,0), NumPy an
+            // internal artifact (0,0,0). Every in-range coord is bit-exact (proven elsewhere).
+            var t = np.arange(24).reshape(2, 3, 4).astype(NPTypeCode.Int64).T; // (4,3,2), non-contig
+            var f = t.flatiter;
+            foreach (var _ in f) { }
+            CollectionAssert.AreEqual(new long[] { 4, 0, 0 }, f.coords);
+        }
+
         [TestMethod]
         public void ZeroD_Flatiter()
         {

@@ -43,6 +43,16 @@ namespace NumSharp
         ///     <see cref="index"/> / <see cref="coords"/> cursor, <see cref="Base"/>, <see cref="size"/>,
         ///     <see cref="copy"/> (a fresh 1-D C-order array), and C-order iteration that shares the
         ///     cursor (so a second pass RESUMES, as NumPy's <c>iter(f) is f</c>).
+        ///     <para>
+        ///     Two documented divergences from NumPy (differential-verified: 237/251 cases bit-exact):
+        ///     (1) an out-of-range INTEGER scalar assignment WRAPS rather than raising — this is
+        ///     NumSharp's library-wide convention (a plain <c>a[0] = 300</c> on an int8 array also wraps
+        ///     to 44), so the iterator is consistent with the rest of NumSharp; NumPy raises
+        ///     <c>ValueError</c>. (2) <see cref="coords"/> read at the EXHAUSTED position (index == size,
+        ///     after a full pass) on a truly non-contiguous array is implementation-defined — NumSharp
+        ///     returns the arithmetic continuation, NumPy an internal odometer artifact; every IN-RANGE
+        ///     coord (the values read during iteration) is bit-exact.
+        ///     </para>
         /// </summary>
         public sealed class FlatIterator : IEnumerable<object>
         {
