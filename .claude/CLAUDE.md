@@ -847,13 +847,15 @@ iteration"), no axis reused ("An axis is used more than once"), negative axis ("
 bounds"); an axis past the operand's ndim is rejected at construction as `IncorrectShapeException` (house
 convention) where NumPy raises `ValueError`. **The `multi_index` path — the documented primary use — is
 bit-exact** with NumPy 2.4.2 across single/multiple operands, any axis order, any depth (coords AND values
-pair identically). **Known divergence, pinned `[Misaligned]`:** WITHOUT `multi_index`, the pure value-stream
-TRAVERSAL ORDER can differ, because NumSharp's `NDIterator` reorders `op_axes` iteration by memory (F-like)
-regardless of `order`, where NumPy follows `order` (C/F/K) — a pre-existing NDIter `op_axes`+order
-limitation, not a property of the nesting; track `multi_index` for order parity. Value-read perf is bound
-by the same per-element `it[0]` NDArray-view cost documented below (~4.6× on a 1M walk); the iteration
-ENGINE is fast. See `APIs/np.nested_iters.cs` + the nested support in `APIs/np.nditer.cs`; gate:
-`APIs/np.nested_iters.Test.cs` (6).
+pair identically). **The bare value stream (no `multi_index`) now matches NumPy's memory order too:** the
+op_axes contiguity check (`NDIter.CheckAllOperandsContiguous`) judges the ITERATOR's remapped layout, not
+the full operand, so a non-contiguous axis SUBSET — e.g. inner axes `[0,2]` of a C-contiguous `(2,3,2)`,
+strides `(6,1)` — no longer coalesces into F-order (`0,6,1,7,…` → NumPy's `0,1,6,7,…`); verified bit-exact
+over all 2- and 3-level axes partitions × value-stream/`multi_index` (a plain non-contiguous nditer was
+always correct — the bug was specific to op_axes subsets). Value-read perf is bound by the same per-element
+`it[0]` NDArray-view cost documented below (~4.6× on a 1M walk); the iteration ENGINE is fast. See
+`APIs/np.nested_iters.cs` + the nested support in `APIs/np.nditer.cs` (the contiguity fix is in
+`Backends/Iterators/NDIter.cs`); gate: `APIs/np.nested_iters.Test.cs` (7).
 
 **`NDArray.flatiter` / `np.flat(a)` → `np.FlatIterator`** — a WRITE-THROUGH, C-order flat iterator, the
 analog of NumPy's `flatiter` (the type of `a.flat`). NumSharp's `NDArray.flat` returns a raveled `NDArray`
@@ -867,13 +869,17 @@ strides (`Shape.TransformOffset`, via `GetAtIndex`/`SetAtIndex`) with **no per-e
 bounds for size M"); fancy (`int[]`/`long[]`/`NDArray`) and slice-string (`"1:4"`, `"::2"`) get/set; the
 `index`/`coords` cursor (past-end `coords` leaves the slowest axis UNwrapped, matching NumPy: index==size on
 `(2,3)` → `(2,0)`); `Base`, `size`, `copy()` (a fresh 1-D C-order array); and C-order iteration that shares
-the cursor (NumPy's `iter(f) is f`, so a second pass RESUMES). Cross-dtype assignment casts with NumPy
-semantics: to an integer dtype it truncates toward zero / wraps on overflow (routed through `astype`); to a
-float/complex/decimal dtype it uses `Convert` (exact). **Perf (NPY/NS, Release, 100K, non-contiguous):**
+the cursor (NumPy's `iter(f) is f`, so a second pass RESUMES). Cross-dtype scalar assignment casts with NumPy
+semantics: to an integer dtype an in-range value truncates toward zero, but an OUT-OF-RANGE **weak** scalar (a
+C# primitive — NumSharp's NEP50 analog of a Python int/float) RAISES `OverflowException` ("Python integer 300
+out of bounds for int8") rather than wrapping, matching NumPy's `a.flat[i]=v` bounds check (floats truncate
+first, then the truncated value is range-checked; NaN/inf raise; a bool target never does). A **strong** scalar
+— an `NDArray`, i.e. the fancy/slice setters or `a.astype` — still wraps, as NumPy wraps an `np.int64` scalar.
+To a float/complex/decimal dtype it uses `Convert` (exact). **Perf (NPY/NS, Release, 100K, non-contiguous):**
 same-dtype set **1.8×**, cross-dtype→float set **2.4×**, get **6.3×** — all FASTER than NumPy (the
 allocation-free `GetAtIndex`/`SetAtIndex` hot path); cross-dtype→integer set is correctness-first (`astype`,
 slower, rarer). `x.flat` is UNCHANGED (still the raveled `NDArray`). See `APIs/np.flatiter.cs`; gate:
-`APIs/np.flatiter.Test.cs` (12).
+`APIs/np.flatiter.Test.cs` (13).
 
 The three NumPy iteration objects, all following the `np.broadcast` house shape — a lowercase
 factory returning a PascalCase nested class — and all **their own iterator** (NumPy's `iter(x) is x`),
