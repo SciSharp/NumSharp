@@ -2682,6 +2682,52 @@ def gen_groupa():
     for pi, part in enumerate(np.unravel_index(flat, (3, 4))):
         emit("unravel_index", {"shape": [3, 4], "piece": pi}, [describe(flat, flat)], part)
 
+    # ---- isin + set operations (arraysetops; NumPy _arraysetops_impl.py). --------------------
+    # Value-dependent 2-operand ops: element/test (and ar1/ar2) must SHARE values for membership
+    # to bite, so the fixtures are explicit overlapping arrays (not the arange-like pools). NaN in
+    # the float set exercises "NaN is never a member". intersect1d(return_indices) returns a tuple
+    # and is unit-tested; here only the single-array forms ride the corpus.
+    def _setop_pair(dt):
+        d = np.dtype(dt)
+        if d.kind in "iu":
+            a = np.array([0, 1, 2, 3, 4, 5, 2, 4], dtype=d)          # has duplicates
+            b = np.array([1, 3, 5, 7], dtype=d)
+        elif d.kind == "c":
+            a = np.array([1 + 1j, 2 + 0j, 3 + 1j, 0 + 0j, 2 + 0j, 5 + 5j], dtype=d)
+            b = np.array([2 + 0j, 3 + 1j, 9 + 9j], dtype=d)
+        else:                                                        # float: include NaN
+            a = np.array([0.0, 1.5, 2.0, np.nan, 4.0, 5.0, 2.0], dtype=d)
+            b = np.array([1.5, np.nan, 5.0, 7.0], dtype=d)
+        return a, b
+
+    for dt in ["int32", "float64", "uint8", "complex128"]:
+        a, b = _setop_pair(dt)
+        empty = np.array([], dtype=np.dtype(dt))
+        au_a, au_b = np.unique(a), np.unique(b)                      # unique => valid assume_unique contract
+        emit("isin", {}, [describe(a, a), describe(b, b)], np.isin(a, b))
+        emit("isin", {"invert": True}, [describe(a, a), describe(b, b)], np.isin(a, b, invert=True))
+        emit("isin", {"assume_unique": True}, [describe(au_a, au_a), describe(au_b, au_b)],
+             np.isin(au_a, au_b, assume_unique=True))
+        emit("isin", {}, [describe(a, a), describe(empty, empty)], np.isin(a, empty))          # empty test
+        emit("union1d", {}, [describe(a, a), describe(b, b)], np.union1d(a, b))
+        emit("intersect1d", {}, [describe(a, a), describe(b, b)], np.intersect1d(a, b))
+        emit("setxor1d", {}, [describe(a, a), describe(b, b)], np.setxor1d(a, b))
+        emit("setdiff1d", {}, [describe(a, a), describe(b, b)], np.setdiff1d(a, b))
+
+    # isin — kind selection (int-only for 'table') and non-contiguous element layouts (transposed,
+    # negative-stride) so the reshape-to-C-order path is gated, not just contiguous elements.
+    di = np.dtype("int32")
+    e2 = np.array([[0, 2, 4], [6, 1, 3]], dtype=di)                  # (2,3)
+    t2 = np.array([1, 2, 3, 4], dtype=di)
+    emit("isin", {"kind": "sort"}, [describe(e2, e2), describe(t2, t2)], np.isin(e2, t2, kind="sort"))
+    emit("isin", {"kind": "table"}, [describe(e2, e2), describe(t2, t2)], np.isin(e2, t2, kind="table"))
+    emit("isin", {}, [describe(e2, e2.T), describe(t2, t2)], np.isin(e2.T, t2))            # transposed element
+    emit("isin", {"invert": True}, [describe(e2, e2.T), describe(t2, t2)], np.isin(e2.T, t2, invert=True))
+    e1 = np.arange(6, dtype=di)
+    emit("isin", {}, [describe(e1, e1[::-1]), describe(t2, t2)], np.isin(e1[::-1], t2))     # negative-stride
+    e1s = np.arange(12, dtype=di)
+    emit("isin", {}, [describe(e1s, e1s[::2]), describe(t2, t2)], np.isin(e1s[::2], t2))    # strided
+
     return cases
 
 

@@ -242,6 +242,21 @@ namespace NumSharp.UnitTest.Fuzz
                 case "ravel_multi_index": return np.ravel_multi_index(new[] { ops[0], ops[1] }, ParseIntArray(p["dims"]));
                 case "unravel_index": return np.unravel_index(ops[0], ParseIntArray(p["shape"]))[p["piece"].GetInt32()];
 
+                // ---- isin / set operations (arraysetops). ops[0]=element/ar1, ops[1]=test/ar2.
+                // Value-dependent membership: fixtures overlap so each op bites. intersect1d's
+                // return_indices (a tuple) is unit-tested, not corpus-gated (single-array here).
+                case "isin": return np.isin(ops[0], ops[1],
+                    assume_unique: p.ContainsKey("assume_unique") && p["assume_unique"].GetBoolean(),
+                    invert: p.ContainsKey("invert") && p["invert"].GetBoolean(),
+                    kind: p.TryGetValue("kind", out var isinKind) ? isinKind.GetString() : null);
+                case "union1d": return np.union1d(ops[0], ops[1]);
+                case "intersect1d": return np.intersect1d(ops[0], ops[1],
+                    p.ContainsKey("assume_unique") && p["assume_unique"].GetBoolean());
+                case "setxor1d": return np.setxor1d(ops[0], ops[1],
+                    p.ContainsKey("assume_unique") && p["assume_unique"].GetBoolean());
+                case "setdiff1d": return np.setdiff1d(ops[0], ops[1],
+                    p.ContainsKey("assume_unique") && p["assume_unique"].GetBoolean());
+
                 // Linear algebra (T8). NumPy is the oracle for value, result dtype, and broadcast shape.
                 case "matmul": return np.matmul(ops[0], ops[1]);
                 case "dot": return np.dot(ops[0], ops[1]);

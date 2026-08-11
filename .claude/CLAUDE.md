@@ -346,7 +346,23 @@ Tested against NumPy 2.x.
 The `as*` conversion family mirrors NumPy: `asarray_chkfinite(a, dtype=None, order='K')` = `asarray` then raise `ValueError("array must not contain infs or NaNs")` if a **float-family** dtype (Half/Single/Double/Complex — NumPy's `typecodes['AllFloat']`; Decimal/int/bool skip the check) holds any inf/NaN, via a **fused single-pass NaN-poison SIMD reduction** (`Backends/Kernels/FiniteScan.cs`: `acc += v - v` — +0 for finite, absorbing-NaN for non-finite; AVX2 gather + reversed-contiguous fast path for strided/negative-stride views; ~2–27× NumPy contiguous, ≥1× strided). `require(a, dtype=None, requirements=None)` parses C/F/A/W/O/E flags (+aliases; single-string requirements iterate by char like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order and copies only if a remaining ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED is always true in NumSharp, so only broadcast-non-writeable and views force a copy). `asmatrix(data, dtype=None)` returns a **2-D view** (NumSharp has no `matrix` subclass — the deprecated NumPy one; no `*`-as-matmul/`.H`/`.I`): 0-D→(1,1), 1-D→(1,N), 2-D unchanged, >2-D drops length-1 axes and must land on 2-D else `ValueError("shape too large to be a matrix.")`; also parses matrix strings (`"1 2; 3 4"`). See `Creation/np.{asarray_chkfinite,require,asmatrix}.cs`.
 
 ### Shape Manipulation
-`append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `block`, `c_`, `column_stack`, `concat`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`, `hstack`, `insert`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `r_`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `trim_zeros`, `unique`, `unstack`, `vsplit`, `vstack`
+`append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `block`, `c_`, `column_stack`, `concat`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`, `hstack`, `insert`, `intersect1d`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `r_`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `setdiff1d`, `setxor1d`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `trim_zeros`, `union1d`, `unique`, `unstack`, `vsplit`, `vstack`
+
+**Set routines** `intersect1d`, `union1d`, `setxor1d`, `setdiff1d` (NumPy `_arraysetops_impl.py`, sorted/unique set
+operations over flattened inputs; all probed against 2.4.2; gate `Manipulation/np.setops.Test.cs` (20) + the
+`groupa` fuzz tier) are pure compositions of the existing `unique`/`sort`/`argsort`/`concatenate` machinery, ported
+line-for-line from NumPy so their promotion, NaN handling and edge cases match by construction. `union1d(ar1, ar2)`
+= `unique(concatenate(ravel(ar1), ravel(ar2)))` — unique sorted union in the promoted dtype. `intersect1d(ar1, ar2,
+assume_unique=false, return_indices=false)` returns the sorted common values; the `return_indices` overload
+(`intersect1d(ar1, ar2, assume_unique, return_indices)` → `NDArray[]{values, comm1, comm2}`) uses a **stable**
+argsort so the first occurrence in each input wins (NumSharp's argsort is stable, verified). `setxor1d` returns
+values in exactly one input; `setdiff1d(ar1, ar2, assume_unique=false)` returns `ar1`'s values absent from `ar2`
+(built on `isin(..., invert=true)`), preserving `ar1`'s dtype and — under `assume_unique` — its duplicates. Empty
+inputs collapse to NumPy's float64 empty (from the empty concatenate). NaN never matches itself, so a shared NaN is
+excluded from `intersect1d` but each NaN survives `setxor1d`/`union1d`/`setdiff1d` as distinct (matching NumPy).
+**Perf (NPY/NS, Release, best-of-21, warm):** **2.2–13.5×** — NumSharp's `unique`/`sort` outrun NumPy's at every
+measured size (the wins widen at 1M, where NumPy's set-ops cost 60–400 ms). See `Manipulation/np.{union1d,
+intersect1d,setxor1d,setdiff1d}.cs`.
 
 `flip`/`fliplr`/`flipud` return **O(ndim) views** (stride negation + base-offset shift via `Storage.Alias`,
 the Transpose pattern — no slice resolution, no data movement), bit-identical to the `m[..., ::-1, ...]`
@@ -536,7 +552,32 @@ genuine defect worth fixing on its own terms (note .NET's `float.ExpM1`/`double.
 `bitwise_and`, `bitwise_or`, `bitwise_xor` (ufunc `out=`/`where=`/`dtype=` supported; float/complex/decimal INPUTS raise NumPy's coercion TypeError while a float/complex/decimal `dtype=` raises the no-loop text — distinct messages, both probed; probed order: bad `where` → no-loop → out-cast → shape), `invert`, `left_shift`, `right_shift`
 
 ### Comparison & Logic
-`all`, `allclose`, `any`, `array_equal`, `equal`, `fmax`, `fmin`, `greater`, `greater_equal`, `isclose`, `iscomplex`, `iscomplexobj`, `isfinite`, `isinf`, `isnan`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `less`, `less_equal`, `logical_and`, `logical_not`, `logical_or`, `logical_xor`, `maximum`, `minimum`, `not_equal`
+`all`, `allclose`, `any`, `array_equal`, `equal`, `fmax`, `fmin`, `greater`, `greater_equal`, `isclose`, `iscomplex`, `iscomplexobj`, `isfinite`, `isin`, `isinf`, `isnan`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `less`, `less_equal`, `logical_and`, `logical_not`, `logical_or`, `logical_xor`, `maximum`, `minimum`, `not_equal`
+
+`np.isin(element, test_elements, assume_unique=false, invert=false, kind=null)` is the element-wise membership
+test — a bool array of `element`'s shape, True where `element[i]` is a value in the (flattened) `test_elements`
+set (NumPy `_arraysetops_impl.py`). Comparison happens in `result_type(element, test)`, matching NumPy's
+brute/sort/table methods (which all agree on the RESULT — `kind` only trades speed for memory). The engine picks
+its own method by the test set's value range, always returning the correct membership: an integer/bool pair with a
+range ≤ `6·(|element|+|test|)` takes a **counting-table gather** (build a bool lookup over `[min,max]`, then one
+`take(mode='clip')` per element with a range mask — no widening of the element array, staying in its own dtype),
+otherwise a **sort + `searchsorted` + equality probe** (which also covers float/complex/decimal/char — complex
+sorts lexicographically like NumPy). NaN is never a member (NaN ≠ NaN falls out of the equality probe). The one
+exact-integer trap is handled explicitly: **uint64 paired with a signed integer** promotes to float64 under NEP50,
+which would call two distinct integers equal past 2^53, so that pair is routed through the uint64 domain with a
+sign filter (`isin(uint64[2^63+1], int64[2^63-1])` is correctly `False`, matching NumPy's table method — pinned).
+`kind` is validated verbatim: `Invalid kind: '…'. Please use None, 'sort' or 'table'.` (ValueError), and for
+`kind='table'` a non-integer input raises `The 'table' method is only supported for boolean or integer arrays…`
+(ValueError) and a signed range exceeding the dtype max raises NumPy's RuntimeError text (as
+`InvalidOperationException`). Non-contiguous `element` (transposed/strided/negative-stride/broadcast) is read in
+logical C-order and the bool result is reshaped to a C-contiguous copy of `element`'s dimensions. **Perf (NPY/NS,
+Release, best-of-21, warm):** integer isin **1.9–3.0×**, float64 **2.4–3.4×**, large-range int **3.3×** — faster
+than NumPy at every measured cell. **Two deliberate divergences** (`[Misaligned]`): with `assume_unique=true` on
+NON-unique inputs NumPy documents "incorrect results" and its output depends on the internal method it picks;
+NumSharp always returns the correct membership. And `kind='table'` with a large-but-range-safe integer range
+computes via `searchsorted` (no table allocation), so it does not raise `MemoryError` where NumPy's literal table
+allocation would. See `Manipulation/np.isin.cs`; gate: `Manipulation/np.isin.Test.cs` (37) + the `isin` cases in the
+`groupa` differential-fuzz tier (22, across int32/float64/uint8/complex128 × invert/assume_unique/kind/layouts).
 
 `np.iterable(y)` is NumPy's pure iterability predicate — `try: iter(y); return True; except TypeError: return False` (`numpy/lib/_function_base_impl.py`). It is NOT an iteration op: it never touches element data, so it uses **no kernel/NDIter/loop** (O(1) rank/type check in `Logic/np.is.cs`, mirroring `isscalar`). C# mapping, each matching NumPy 2.4.2's `iter()` outcome: `null`→false; **`NDArray`→`ndim != 0`** (the one surprise NumPy documents — a 0-d array is the *only* non-iterable array: `iter()` on it raises `TypeError`, exactly as `NDArray.GetEnumerator()` does, while every rank≥1 array incl. empties is iterable); `string`→true (Python strings are iterable); any `IEnumerable` (C# arrays/lists/dicts/sets)→true; every scalar value type (int/double/bool/char/Half/decimal/Complex/…)→false. The `NDArray` case precedes the `IEnumerable` catch because `NDArray` implements `IEnumerable`. Being a bool predicate over an arbitrary object rather than a value-producing kernel over array data, it is unit-test-only (`Logic/np.iterable.Test.cs`, 33 cases) and deliberately absent from the differential-fuzz corpus — same rationale as `isscalar`/`nditer`/`ndindex`. **Deliberate C# divergences** (adversarially probed, pinned `[Misaligned]`): NumSharp maps Python `iter()`-ability onto C# `foreach`-ability (`IEnumerable`), so four inputs iterable in Python but NOT `foreach`-able in C# return false where NumPy returns true — a bare `IEnumerator`/`IEnumerator<T>` cursor (no `GetEnumerator`) and `ValueTuple`/`Tuple`/`ITuple` (no `IEnumerable`). Real ported code passes the collection (array/`List`/`NDArray`), which is foreach-able and matches. Construction traps are clean: NumSharp's `np.array(5)`, `NDArray x = 5`, and `a[0,0]` all build genuine 0-d arrays (→false), and a bare scalar literal boxes to its own type rather than firing an `int→NDArray` implicit conversion into the `object` overload.
 
