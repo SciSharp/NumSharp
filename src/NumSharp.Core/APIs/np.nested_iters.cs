@@ -102,12 +102,10 @@ namespace NumSharp
                     sharedOps = iters[0].operands;
             }
 
-            // Link the chain, switch all levels to advance-on-entry, then run the initial re-base
+            // Switch all levels to advance-on-entry, link the chain, then run the initial re-base
             // cascade (NumPy's construction-time npyiter_resetbasepointers).
             for (int inest = 0; inest < nnest; inest++)
-                iters[inest].MakeNested();
-            for (int inest = 0; inest < nnest - 1; inest++)
-                iters[inest].LinkNestedChild(iters[inest + 1]);
+                iters[inest].SetupNested(inest < nnest - 1 ? iters[inest + 1] : null);
             iters[0].RebaseChildren();
 
             return iters;
