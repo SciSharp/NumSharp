@@ -29,7 +29,7 @@
   - name: Dashboard
     href: benchmarks-dashboard.md
   - name: Raw Reports
-    expanded: true
+    expanded: false
     items:
     - name: Snapshot Manifest
       href: ../../../benchmark/history/latest/MANIFEST.md

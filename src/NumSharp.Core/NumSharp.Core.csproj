@@ -50,8 +50,6 @@
     <Message Text="Building for $(TargetFramework) on $(OS)" Importance="High" />
   </Target>
 
-  <!-- System.Memory and System.Runtime.CompilerServices.Unsafe are built into net8.0+ -->
-
   <ItemGroup>
     <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
   </ItemGroup>

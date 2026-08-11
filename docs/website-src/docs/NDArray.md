@@ -426,6 +426,37 @@ To iterate all elements flat, use `.flat` or index into `.ravel()`:
 foreach (var x in m.flat) { ... }
 ```
 
+### Fast element iteration — `np.nditer<T>` (unboxed)
+
+Everything above hands you a **boxed** `object` or an `NDArray` view per step, which dominates the cost of a hot loop. When you know the dtype, `np.nditer<T>` yields each element **by reference** instead — no allocation, no boxing:
+
+```csharp
+double total = 0;
+foreach (ref double x in np.nditer<double>(a))
+    total += x;
+
+// writes go straight through to the array
+foreach (ref double x in np.nditer<double>(a, writeable: true))
+    x *= 2;
+```
+
+For anything vectorizable, `np.nditer_chunks<T>` hands out a `Span<T>` per inner loop — a contiguous array arrives as a single chunk:
+
+```csharp
+foreach (Span<double> chunk in np.nditer_chunks<double>(a, writeable: true))
+    TensorPrimitives.Multiply(chunk, 2.0, chunk);
+```
+
+Measured on 100K `float64` (Release, best-of-9): `np.nditer<T>` **0.167 ms**, `np.nditer_chunks<T>` **0.162 ms**, chunks + `Vector<T>` **0.027 ms** — against **59 ms** for the boxed `np.nditer` `it[0]` loop and a 0.047 ms raw-pointer floor.
+
+Both work on every layout (contiguous, F-order, transposed, reversed, sliced, broadcast, 0-d, empty) and all 15 dtypes. Three things to know:
+
+- **`T` must be the array's exact dtype** — a `ref` cannot convert, so `np.nditer<double>` on an `int32` array throws rather than reinterpreting the bytes. `astype` first.
+- **Order is `'K'` (memory order)**, matching `np.nditer`. On a reversed view that is not the logical order — pass `order: 'C'` if you need the order `np.ndenumerate` uses.
+- **`np.nditer_chunks<T>` needs a unit-stride inner loop**, since a `Span<T>` is contiguous by definition. A stepped view like `a[":, ::2"]` is rejected up front; use `np.nditer<T>`, which handles any stride.
+
+Full reference: [NDIter → Typed iteration](NDIter.md#typed-iteration--unboxed-elements-and-span-chunks).
+
 ---
 
 ## Common Patterns
