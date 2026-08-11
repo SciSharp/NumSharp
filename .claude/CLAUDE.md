@@ -829,8 +829,51 @@ and the 2-D `ValueError` — all matching, and it is already the differential-fu
 behaviour.
 
 ### Iteration
-`nditer`, `ndenumerate`, `ndindex` (plus the pre-existing `broadcast`), and the NumSharp-extension
-typed forms `nditer<T>` / `nditer_chunks<T>`
+`nditer`, `ndenumerate`, `ndindex`, `nested_iters`, `flatiter` (plus the pre-existing `broadcast`), and
+the NumSharp-extension typed forms `nditer<T>` / `nditer_chunks<T>`
+
+**`np.nested_iters(op, axes, flags=null, op_flags=null, op_dtypes=null, order='K', casting="safe",
+buffersize=0)` → `NDIterator[]`** — the port of NumPy's `NpyIter_NestedIters` (`nditer_pywrap.c`).
+Returns one `np.NDIterator` per entry in `axes` (outermost first), all iterating the SAME operand buffer
+over disjoint axis subsets; advancing an outer iterator re-bases every inner one to its new position, so
+`foreach (var _ in i) foreach (var _ in j) …` walks nested loops. Built on the EXISTING primitives —
+each level is an ordinary `NDIterator` with `op_axes = [axes[level]]` sharing iter0's operands, linked
+parent→child, and re-based via `NDIterRef.ResetBasePointers` (which already existed). The nested levels
+switch from the default publish-then-advance `MoveNext` to **NumPy's advance-on-entry protocol**
+(`npyiter_next`'s `started` flag) so the child re-base and the in-body `multi_index`/`value` stay aligned
+(guarded by `_nestedMode`, so plain `nditer` is untouched — 662 nditer tests green). Validation is
+verbatim NumPy (`ValueError`): `axes` ≥ 2 entries ("axes must have at least 2 entries for nested
+iteration"), no axis reused ("An axis is used more than once"), negative axis ("An axis is out of
+bounds"); an axis past the operand's ndim is rejected at construction as `IncorrectShapeException` (house
+convention) where NumPy raises `ValueError`. **The `multi_index` path — the documented primary use — is
+bit-exact** with NumPy 2.4.2 across single/multiple operands, any axis order, any depth (coords AND values
+pair identically). **Known divergence, pinned `[Misaligned]`:** WITHOUT `multi_index`, the pure value-stream
+TRAVERSAL ORDER can differ, because NumSharp's `NDIterator` reorders `op_axes` iteration by memory (F-like)
+regardless of `order`, where NumPy follows `order` (C/F/K) — a pre-existing NDIter `op_axes`+order
+limitation, not a property of the nesting; track `multi_index` for order parity. Value-read perf is bound
+by the same per-element `it[0]` NDArray-view cost documented below (~4.6× on a 1M walk); the iteration
+ENGINE is fast. See `APIs/np.nested_iters.cs` + the nested support in `APIs/np.nditer.cs`; gate:
+`APIs/np.nested_iters.Test.cs` (6).
+
+**`NDArray.flatiter` / `np.flat(a)` → `np.FlatIterator`** — a WRITE-THROUGH, C-order flat iterator, the
+analog of NumPy's `flatiter` (the type of `a.flat`). NumSharp's `NDArray.flat` returns a raveled `NDArray`
+and is deeply embedded (~15 core call sites), so its return type is IMMOVABLE and NumPy's `a.flat → flatiter`
+surface cannot be reclaimed; the iterator lives on the NEW `flatiter` accessor instead. It fixes a genuine
+`flat` defect: `flat` COPIES for a non-contiguous layout (via `reshape`), so `a.T.flat[i] = v` is silently
+lost — `FlatIterator` reads AND writes THROUGH to the base in logical C-order for every layout (transposed,
+sliced, strided, negative-stride, broadcast), because every element maps a flat index through the base's
+strides (`Shape.TransformOffset`, via `GetAtIndex`/`SetAtIndex`) with **no per-element allocation**. Surface
+(probed against 2.4.2): `this[long]` scalar get/set (negative wraps; OOB → `IndexError` "index N is out of
+bounds for size M"); fancy (`int[]`/`long[]`/`NDArray`) and slice-string (`"1:4"`, `"::2"`) get/set; the
+`index`/`coords` cursor (past-end `coords` leaves the slowest axis UNwrapped, matching NumPy: index==size on
+`(2,3)` → `(2,0)`); `Base`, `size`, `copy()` (a fresh 1-D C-order array); and C-order iteration that shares
+the cursor (NumPy's `iter(f) is f`, so a second pass RESUMES). Cross-dtype assignment casts with NumPy
+semantics: to an integer dtype it truncates toward zero / wraps on overflow (routed through `astype`); to a
+float/complex/decimal dtype it uses `Convert` (exact). **Perf (NPY/NS, Release, 100K, non-contiguous):**
+same-dtype set **1.8×**, cross-dtype→float set **2.4×**, get **6.3×** — all FASTER than NumPy (the
+allocation-free `GetAtIndex`/`SetAtIndex` hot path); cross-dtype→integer set is correctness-first (`astype`,
+slower, rarer). `x.flat` is UNCHANGED (still the raveled `NDArray`). See `APIs/np.flatiter.cs`; gate:
+`APIs/np.flatiter.Test.cs` (12).
 
 The three NumPy iteration objects, all following the `np.broadcast` house shape — a lowercase
 factory returning a PascalCase nested class — and all **their own iterator** (NumPy's `iter(x) is x`),

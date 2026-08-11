@@ -129,6 +129,15 @@ namespace NumSharp
             private NDIterNextFunc _cachedNext;
             private bool _exhausted;
 
+            // --- np.nested_iters support (NumPy's nested_child chain) ---
+            // When part of a nested group, iteration switches from the default publish-then-advance
+            // model to NumPy's advance-on-entry protocol (npyiter_next's `started` flag), because a
+            // nested child must be re-based to its parent's CURRENT position while the parent's body
+            // runs — publish-then-advance would advance (and re-base) one step too early.
+            private NDIterator _nestedChild;   // next inner level, or null (the innermost / non-nested)
+            private bool _nestedMode;          // advance-on-entry iteration + child re-base cascade
+            private bool _started;             // NumPy's `started` flag (advance only after the first pull)
+
             // ---------------------------------------------------------------
             // Construction — the port of NumPy's nditer_init argument handling
             // ---------------------------------------------------------------
@@ -575,8 +584,91 @@ namespace NumSharp
                 _cachedNext = it.PeekCachedIterNext();
                 if (!more)
                     _exhausted = true;
+                else if (_nestedChild != null)
+                    RebaseChildren();       // NumPy: npyiter_iternext re-bases the nested chain after each advance
 
                 return more;
+            }
+
+            // ---------------------------------------------------------------
+            // Nested iteration (np.nested_iters) — the port of NumPy's nested_child machinery
+            // ---------------------------------------------------------------
+
+            /// <summary>Enroll this iterator in a nested group (advance-on-entry iteration).</summary>
+            internal void MakeNested()
+            {
+                _nestedMode = true;
+                _started = false;
+            }
+
+            /// <summary>Link the inner level whose base pointers this level re-bases on each advance.</summary>
+            internal void LinkNestedChild(NDIterator child) => _nestedChild = child;
+
+            /// <summary>
+            ///     Re-base the whole child chain to the current position — NumPy's
+            ///     <c>npyiter_resetbasepointers</c> (nditer_pywrap.c): for each level, reset the child's
+            ///     operand base pointers to this level's CURRENT data pointers and rewind it to its start.
+            /// </summary>
+            internal void RebaseChildren()
+            {
+                var parent = this;
+                while (parent._nestedChild != null)
+                {
+                    var child = parent._nestedChild;
+                    var pit = parent.Borrow();
+                    int nop = pit.NOp;
+                    Span<IntPtr> baseptrs = stackalloc IntPtr[nop];
+                    for (int op = 0; op < nop; op++)
+                        baseptrs[op] = (IntPtr)parent._state->GetDataPtr(op);
+
+                    var cit = child.Borrow();
+                    cit.ResetBasePointers(baseptrs);
+                    child._cachedNext = cit.PeekCachedIterNext();
+                    child._started = false;
+                    child._exhausted = cit.IterSize == 0;
+
+                    parent = child;
+                }
+            }
+
+            /// <summary>
+            ///     Advance-on-entry MoveNext (NumPy's <c>npyiter_next</c>): the first pull publishes the
+            ///     start position without advancing; every later pull advances THEN re-bases the child
+            ///     chain. This keeps <see cref="multi_index"/>/<see cref="value"/> aligned to the body and
+            ///     re-bases children at the right moment (see the <c>_nestedMode</c> note above).
+            /// </summary>
+            private bool MoveNextNested()
+            {
+                if (_state == null || _exhausted)
+                {
+                    Current = null;
+                    return false;
+                }
+
+                var it = Borrow();
+                if (_started)
+                {
+                    if (!it.Iternext())
+                    {
+                        _exhausted = true;
+                        Current = null;
+                        return false;
+                    }
+
+                    _cachedNext = it.PeekCachedIterNext();
+                    if (_nestedChild != null)
+                        RebaseChildren();
+                }
+                else if (it.IterSize == 0)   // empty from the start
+                {
+                    _exhausted = true;
+                    Current = null;
+                    return false;
+                }
+
+                _started = true;
+                Current = value;
+                return true;
             }
 
             /// <summary>Rewind to the start (NumPy's <c>reset()</c>); also allocates delayed buffers.</summary>
@@ -586,6 +678,9 @@ namespace NumSharp
                 it.Reset();
                 _cachedNext = it.PeekCachedIterNext();
                 _exhausted = false;
+                _started = false;
+                if (_nestedChild != null)
+                    RebaseChildren();       // NumPy: npyiter_reset re-bases the nested chain
             }
 
             /// <summary>
@@ -741,6 +836,9 @@ namespace NumSharp
             /// </remarks>
             public bool MoveNext()
             {
+                if (_nestedMode)
+                    return MoveNextNested();
+
                 if (_state == null || _exhausted || Borrow().Finished)
                 {
                     _exhausted = true;

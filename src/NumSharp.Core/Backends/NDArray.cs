@@ -495,6 +495,16 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     A write-through, C-order flat iterator over the array — the NumSharp analog of NumPy's
+        ///     <c>flatiter</c> (the type of NumPy's <c>ndarray.flat</c>). Unlike <see cref="flat"/> (a
+        ///     raveled <see cref="NDArray"/> that COPIES for a non-contiguous layout, dropping writes),
+        ///     this reads and writes through to the base in logical C-order for every memory layout.
+        ///     A fresh iterator is returned on each access (its cursor starts at 0).
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.flatiter.html</remarks>
+        public np.FlatIterator flatiter => new np.FlatIterator(this);
+
+        /// <summary>
         ///     The transposed array. <br></br>
         ///     Same as self.transpose().
         /// </summary>
