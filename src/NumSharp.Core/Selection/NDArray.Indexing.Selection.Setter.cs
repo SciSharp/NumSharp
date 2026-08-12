@@ -845,8 +845,16 @@ namespace NumSharp
                     }
                 }
 
-                //non linear is handled before calculating computedOffsets
-                SetIndicesND(source, computedOffsets, indices, ndsCount, retShape: retShape, subShape: subShape, typedValues);
+                // A non-contiguous destination (transposed / row- or col-strided / negative-stride /
+                // F-contig) has non-contiguous sub-arrays, so the block-copy fast path (SetIndicesND)
+                // would scatter each subShape as if it were contiguous — landing rows at the wrong
+                // physical offsets and corrupting the view (e.g. an F-contig a[[0,2]] = v wrote row 2
+                // as three consecutive buffer slots instead of the strided column). Route it through
+                // the strided element-scatter, mirroring the getter's FetchIndicesNDNonLinear.
+                if (!source.Shape.IsContiguous)
+                    SetIndicesNDNonLinear(source, indices, ndsCount, retShape: retShape, subShape: subShape, typedValues);
+                else
+                    SetIndicesND(source, computedOffsets, indices, ndsCount, retShape: retShape, subShape: subShape, typedValues);
             }
 
             //return default;
@@ -922,52 +930,92 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Accepts collapsed 
+        ///     Subshaped fancy scatter (<paramref name="ndsCount"/> &lt; <c>dst.ndim</c>) into a NON-contiguous
+        ///     destination (transposed / row- or col-strided / negative-stride / F-contig). The contiguous
+        ///     fast path (<see cref="SetIndicesND{T}"/>) block-copies one CONTIGUOUS <paramref name="subShape"/>
+        ///     per selected offset, but a strided destination's sub-arrays are not contiguous in the buffer,
+        ///     so scatter element-by-element through the destination strides from the C-contiguous (already
+        ///     broadcast to <paramref name="retShape"/>) value buffer. Exact scatter mirror of the getter's
+        ///     <c>FetchIndicesNDNonLinear</c>: same odometer over the trailing <paramref name="subShape"/>
+        ///     axes, only the copy direction is reversed. NumPy likewise assigns a scalar / lower-rank /
+        ///     broadcast value into a strided destination through the view's own strides.
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="source"></param>
-        /// <param name="offsets"></param>
-        /// <param name="retShape"></param>
-        /// <param name="absolute">Is the given <paramref name="offsets"/> already point to the offset of <paramref name="source"/>.</param>
-        /// <returns></returns>
+        /// <param name="dst">Destination array (a non-contiguous view aliasing the base buffer).</param>
+        /// <param name="indices">One flat integer index array per consumed leading axis (broadcast together).</param>
+        /// <param name="ndsCount">Number of leading axes the indices consume (&lt; <c>dst.ndim</c>).</param>
+        /// <param name="retShape">Indexing-result shape <c>(num_offsets,) + subShape</c>; the value's shape.</param>
+        /// <param name="subShape">The trailing (untouched) axes each selected offset writes across.</param>
+        /// <param name="values">Value buffer, C-contiguous and exactly <paramref name="retShape"/>.</param>
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
-        protected static unsafe void SetIndicesNDNonLinear<T>(NDArray<T> source, NDArray[] indices, int ndsCount, long[] retShape, long[] subShape, NDArray<T> values) where T : unmanaged
+        protected static unsafe void SetIndicesNDNonLinear<T>(NDArray<T> dst, NDArray[] indices, int ndsCount, long[] retShape, long[] subShape, NDArray<T> values) where T : unmanaged
         {
-            throw new NotImplementedException("SetIndicesNDNonLinear is yet to be implemented.");
-//            //facts:
-//            //indices are always offsetted to 
-//            //handle pointers pointing to subshape
-//            var subShapeNDim = subShape.Length;
+            long subShapeSize = 1;
+            for (int s = 0; s < subShape.Length; s++)
+                subShapeSize *= subShape[s];
 
-//            var size = indices[0].size; //first is ok because they are broadcasted t oeac
-//            T* srcAddr = source.Address;
+            long size = indices[0].size; // number of selected (broadcast) fancy multi-indices
+            if (subShapeSize == 0 || size == 0)                // empty trailing axis / empty index: nothing to scatter
+                return;
 
-//            T* dstAddr = (T*)dst.Address;
+            var dstShape = dst.Shape;
+            int subNdim = subShape.Length;
+            var indexGetters = PrepareIndexGetters(dstShape, indices);
 
-//            var srcDims = indices.Length;
-//            var indexGetters = PrepareIndexGetters(source.Shape, indices);
+            T* dstAddr = dst.Address;          // buffer base; offsets are relative to it (offset folded in)
+            T* valuesAddr = values.Address;    // C-contiguous value block, exactly retShape (C-order)
+            long dstBuf = dst.Shape.BufferSize;     // element capacity of the destination buffer
+            long valBuf = values.Shape.BufferSize;  // element capacity of the value buffer
 
-//            //compute coordinates
-//            Parallel.For(0, size, i => //TODO: make parallel.for
-//            {
-//                int* index = stackalloc int[srcDims];
+            // Snapshot the leading (consumed) and trailing (sub-array) strides once. The per-element
+            // walk then advances the destination offset INCREMENTALLY (section D "Incremental coord
+            // advance") — one add per step in the common single-sub-axis case — instead of paying a
+            // full GetOffset (a loop over every axis) for each of the size*subShapeSize elements.
+            var strides = dstShape.strides;
+            long baseOffset = dstShape.offset;
+            long* leadStride = stackalloc long[ndsCount == 0 ? 1 : ndsCount];
+            for (int k = 0; k < ndsCount; k++) leadStride[k] = strides[k];
+            long* subStride = stackalloc long[subNdim == 0 ? 1 : subNdim];
+            long* subCoord = stackalloc long[subNdim == 0 ? 1 : subNdim];
+            for (int s = 0; s < subNdim; s++) subStride[s] = strides[ndsCount + s];
 
-//                //load indices
-//                //index[0] = i;
-//                for (int k = 0; k < srcDims; k++)
-//                    index[k] = indexGetters[k](i); //replace with memory access or iterators
-//#if DEBUG
-//                var from = source[index, srcDims];
-//                var to = dst[i];
+            // The scatter is memory-latency bound (a strided destination write is a cache miss per
+            // sub-array element — NumPy hits the same wall and is only ~1.3x faster on the dense
+            // case), so this stays a single straightforward loop; the incremental offset advance
+            // above is what keeps the per-element cost off the critical path.
+            long vpos = 0;                     // value cursor: contiguous over retShape (C-order)
+            for (long i = 0; i < size; i++)
+            {
+                // Sub-array base offset from the leading fancy indices (each validated/wrapped to
+                // [0, dim-1] by PrepareIndexGetters).
+                long baseOff = baseOffset;
+                for (int k = 0; k < ndsCount; k++)
+                    baseOff += indexGetters[k](i) * leadStride[k];
 
-//                //assign
-//                dst[i] = from;
-//#else
-//                dst[i] = source[index, srcDims];
-//#endif
-//            });
+                long off = baseOff;
+                for (int s = 0; s < subNdim; s++)
+                    subCoord[s] = 0;
 
-//            return dst.MakeGeneric<T>();
+                for (long j = 0; j < subShapeSize; j++)
+                {
+                    // Memory-safety guard (see SetIndicesND): a miscomputed retShape/subShape would
+                    // write past the pinned destination buffer or read past the value buffer.
+                    if (off < 0 || off >= dstBuf || vpos >= valBuf)
+                        throw new IndexOutOfRangeException(IndexingOobMessage("SetIndicesNDNonLinear", vpos, off, 1, valBuf, dstBuf, retShape, subShape));
+                    dstAddr[off] = valuesAddr[vpos++];
+
+                    // Odometer over the trailing subShape axes (last axis fastest), carrying the
+                    // offset by +stride on advance and -stride*extent on each axis rollover.
+                    for (int s = subNdim - 1; s >= 0; s--)
+                    {
+                        off += subStride[s];
+                        if (++subCoord[s] < subShape[s])
+                            break;
+                        subCoord[s] = 0;
+                        off -= subStride[s] * subShape[s];
+                    }
+                }
+            }
         }
     }
 }

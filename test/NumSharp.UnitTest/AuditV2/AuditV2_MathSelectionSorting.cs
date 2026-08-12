@@ -25,100 +25,104 @@ namespace NumSharp.UnitTest.AuditV2;
 public class AuditV2_MathSelectionSorting
 {
     // ---------------------------------------------------------------------------
-    // T1.15 — SetIndicesNDNonLinear<T> throws NotImplementedException
+    // T1.15 — Subshaped fancy assignment into a NON-contiguous destination (FIXED)
     // ---------------------------------------------------------------------------
     //
-    // File: src/NumSharp.Core/Selection/NDArray.Indexing.Selection.Setter.cs:617
+    // File: src/NumSharp.Core/Selection/NDArray.Indexing.Selection.Setter.cs
     //
-    // VERIFIED STATUS: The body of SetIndicesNDNonLinear<T> is `throw new
-    // NotImplementedException(...)`. However the only call site (lines 471-472)
-    // is COMMENTED OUT as a TODO:
+    // SetIndicesNDNonLinear<T> is now implemented (the scatter counterpart of the
+    // getter's FetchIndicesNDNonLinear), and the dispatch is live:
     //
-    //     //TODO: if (isSubshaped && !source.Shape.IsContiguous)
-    //     //TODO:     return SetIndicesNDNonLinear(source, indices, ndsCount, ...);
+    //     if (!source.Shape.IsContiguous)
+    //         SetIndicesNDNonLinear(source, indices, ndsCount, retShape, subShape, typedValues);
+    //     else
+    //         SetIndicesND(source, computedOffsets, indices, ndsCount, retShape, subShape, typedValues);
     //
-    // Because of that, the user-facing fancy-indexed setter on a transposed/
-    // sliced multi-dim source DOES NOT currently reach the NotImpl throw.
-    // Instead it falls through to SetIndicesND<T> (line 553), where a
-    // Debug.Assert(dstOffsets.size == values.size) fires (in DEBUG builds)
-    // because the path was never designed to handle the subshaped non-contig
-    // case. In Release the same path silently writes to the wrong offsets
-    // (because the values shape no longer aligns with offsets).
+    // A subshaped fancy set (ndsCount < ndim) into a transposed / strided /
+    // negative-stride / F-contig destination previously fell through to the
+    // block-copy SetIndicesND<T>, which assumes each sub-array is contiguous in
+    // the buffer and so scattered rows at the wrong physical offsets (silent
+    // corruption in Release). It now scatters each sub-array element through the
+    // destination strides — bit-exact with NumPy 2.4.2 across all 15 dtypes.
     //
-    // Two tests below — one ensures the dedicated path eventually exists and
-    // doesn't throw NotImpl when called; the other reproduces the broken
-    // setter path for fancy-indexing into a transposed N-D view.
+    // Two tests below — one drives SetIndicesNDNonLinear directly, the other the
+    // user-facing fancy-index setter on a transposed N-D view.
 
     /// <summary>
-    /// T1.15a — Direct invocation of SetIndicesNDNonLinear&lt;T&gt; via reflection.
-    ///
-    /// The method exists but its body unconditionally throws NotImplementedException.
-    /// When implemented, calling it should succeed (any valid input).
+    /// T1.15a — Direct invocation of SetIndicesNDNonLinear&lt;T&gt; via reflection, with the
+    /// contract the dispatch feeds it (values already broadcast to retShape). The method scatters
+    /// a subshaped fancy assignment into a NON-contiguous destination through the destination
+    /// strides; it does not throw, and each selected sub-array lands at its strided offsets.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.15")]
-    public void T1_15a_SetIndicesNDNonLinear_ThrowsNotImplemented()
+    [TestMethod]
+    public void T1_15a_SetIndicesNDNonLinear_ScattersThroughStrides()
     {
         // Locate via reflection (the method is protected static)
         var method = typeof(NDArray)
             .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
             .FirstOrDefault(m => m.Name == "SetIndicesNDNonLinear");
 
-        method.Should().NotBeNull("the method exists in the source even if dead-code");
+        method.Should().NotBeNull("the method exists in the source");
 
-        // Construct minimal args. Body throws on entry regardless of inputs.
         var generic = method!.MakeGenericMethod(typeof(double));
 
-        // We're only verifying the throw — supply nulls/empties; the throw fires
-        // before any dereference.
-        var source = np.arange(8).astype(NPTypeCode.Double).reshape(2, 4).MakeGeneric<double>();
-        var indices = new NDArray[] { np.array(new int[] { 0, 1 }) };
-        var values = np.array(new double[] { 99.0, 100.0 }).MakeGeneric<double>();
+        // (4,3) F-contiguous destination (non-contig): each logical row is strided in the buffer,
+        // so the block-copy fast path would corrupt it — this exercises the strided scatter.
+        var dst = np.arange(12).reshape(3, 4).T.astype(NPTypeCode.Double);   // (4,3), F-contig
+        dst.Shape.IsContiguous.Should().BeFalse();
+        var indices = new NDArray[] { np.array(new int[] { 0, 2 }) };
+        // Values already broadcast to retShape (2,3), C-contiguous — the dispatch's contract.
+        var values = np.array(new double[,] { { 100, 200, 300 }, { 400, 500, 600 } }).MakeGeneric<double>();
 
         Action act = () => generic.Invoke(null, new object[]
         {
-            source, indices, /* ndsCount */ 1,
-            /* retShape */ new long[] { 2L, 4L },
-            /* subShape */ new long[] { 4L },
+            dst.MakeGeneric<double>(), indices, /* ndsCount */ 1,
+            /* retShape */ new long[] { 2L, 3L },
+            /* subShape */ new long[] { 3L },
             values
         });
 
-        // The reflection wrapper rewraps NotImplementedException in TargetInvocationException;
-        // assert the underlying type:
-        act.Should().NotThrow("SetIndicesNDNonLinear should be implemented (currently throws NotImplementedException)");
+        act.Should().NotThrow("SetIndicesNDNonLinear is implemented");
+
+        // Rows 0 and 2 receive the strided scatter (NumPy-exact); rows 1 and 3 keep their
+        // F-contig originals (dst row1 = [1,5,9], row3 = [3,7,11]).
+        dst.GetDouble(0, 0).Should().Be(100); dst.GetDouble(0, 1).Should().Be(200); dst.GetDouble(0, 2).Should().Be(300);
+        dst.GetDouble(2, 0).Should().Be(400); dst.GetDouble(2, 1).Should().Be(500); dst.GetDouble(2, 2).Should().Be(600);
+        dst.GetDouble(1, 0).Should().Be(1); dst.GetDouble(1, 2).Should().Be(9);
+        dst.GetDouble(3, 0).Should().Be(3); dst.GetDouble(3, 2).Should().Be(11);
     }
 
     /// <summary>
-    /// T1.15b — User-facing fancy index setter on a transposed (non-contig) source
-    /// fails. NumPy supports this; NumSharp's setter routes to SetIndicesND which
-    /// asserts on shape mismatch (Debug) or writes wrong offsets (Release).
+    /// T1.15b — User-facing fancy index setter on a transposed (non-contig) N-D array now matches
+    /// NumPy. Uses a DISTINCT non-uniform value so a wrong-offset scatter (the old block-copy bug,
+    /// which an all-zeros value would have masked) is caught.
     ///
     /// NumPy:
-    ///   a = np.arange(24).reshape(2,3,4).transpose(2,1,0).astype(float)
-    ///   a[[0, 2]] = np.zeros((2, 3, 2))
-    ///   # Succeeds, writes (2,3,2) zeros into a[[0]] and a[[2]] (each (3,2) slice).
+    ///   a = np.arange(24).reshape(2,3,4).transpose(2,1,0).astype(float)   # (4,3,2), non-contig
+    ///   a[[0, 2]] = np.arange(1,13).reshape(2,3,2)
+    ///   # a[0] == [[1,2],[3,4],[5,6]], a[2] == [[7,8],[9,10],[11,12]]; a[1],a[3] unchanged.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.15")]
-    public void T1_15b_FancySet_TransposedNonContig_FailsOrCorrupts()
+    [TestMethod]
+    public void T1_15b_FancySet_TransposedNonContig_MatchesNumPy()
     {
         var arr = np.arange(24).reshape(2, 3, 4).astype(NPTypeCode.Double);
         var transposed = arr.transpose(new int[] { 2, 1, 0 });   // shape (4,3,2), non-contig
         transposed.Shape.IsContiguous.Should().BeFalse();
 
         var idx = np.array(new int[] { 0, 2 });
-        // values shape matches the subshape (3,2) for each of the 2 indices = (2,3,2)
-        var vals = np.zeros(new Shape(2, 3, 2), NPTypeCode.Double);
+        // Distinct values per selected sub-array (2,3,2); a wrong scatter would misplace them.
+        var vals = np.arange(1, 13).reshape(2, 3, 2).astype(NPTypeCode.Double);
 
         Action act = () => transposed[idx] = vals;
-
-        // Currently fails — either Debug.Assert fires (DEBUG) or silently produces
-        // wrong offsets (RELEASE). When fixed, this should succeed and zero the
-        // selected slices.
         act.Should().NotThrow("fancy-index setter on transposed N-D arrays should match NumPy");
 
-        // After fix, zeros should be written at indices 0 and 2 along axis 0
-        // (and unchanged at index 1 and 3).
-        transposed.GetDouble(0, 0, 0).Should().Be(0.0);
-        transposed.GetDouble(2, 0, 0).Should().Be(0.0);
+        // Selected sub-arrays (rows 0 and 2 along axis 0) receive the values, in place.
+        transposed.GetDouble(0, 0, 0).Should().Be(1);  transposed.GetDouble(0, 0, 1).Should().Be(2);
+        transposed.GetDouble(0, 2, 1).Should().Be(6);
+        transposed.GetDouble(2, 0, 0).Should().Be(7);  transposed.GetDouble(2, 2, 1).Should().Be(12);
+        // Untouched sub-arrays (rows 1 and 3) keep their originals: transposed[i,j,k] = k*12+j*4+i.
+        transposed.GetDouble(1, 1, 1).Should().Be(17);
+        transposed.GetDouble(3, 2, 1).Should().Be(23);
     }
 
     // ---------------------------------------------------------------------------

@@ -101,9 +101,13 @@ def eval_get(base_name, tokens):
     except Exception as e:
         return {"ok":False, "err":type(e).__name__}
 
-def eval_set(base_name, tokens, value):
+def eval_set(base_name, tokens, value, order='C'):
     try:
-        b = make_base(base_name).copy()
+        # order='K' preserves a view base's memory layout (F-contig / strided) so the SET runs
+        # into a genuinely non-contiguous destination; the compared `vals` are ravel(order='C')
+        # (logical), so the expected answer is layout-independent — this only makes the C# side
+        # exercise the strided scatter path.
+        b = make_base(base_name).copy(order=order)
         b[np_index(tokens)] = val_to_np(value)
         return {"ok":True, "shape":list(b.shape), "vals":ravel_i64(b)}
     except Exception as e:
@@ -134,8 +138,11 @@ BASIC2 = [["int",0],["int",1],["int",-1]] + [S(s) for s in SLICES[:6]] + [["new"
 curated=[]
 def addg(base, tokens, tag):
     curated.append({"op":"get","base":base,"tokens":tokens,"tag":tag,"np":eval_get(base,tokens)})
-def adds(base, tokens, value, tag):
-    curated.append({"op":"set","base":base,"tokens":tokens,"value":value,"tag":tag,"np":eval_set(base,tokens,value)})
+def adds(base, tokens, value, tag, order='C'):
+    row = {"op":"set","base":base,"tokens":tokens,"value":value,"tag":tag,"np":eval_set(base,tokens,value,order)}
+    if order != 'C':                       # keep pre-existing case lines byte-identical
+        row["order"] = order
+    curated.append(row)
 
 # 1) BASIC indexing — exhaustive small tuples on V/A/B and every layout
 for base in ["V6","V1","V0","S"]:
@@ -297,6 +304,22 @@ addg("E230",[["int",0],S([None,None,None])],"basic2")         # [0, :]  -> (3,0)
 addg("E230",[["ell"],["int",0]],"ellipsis")                   # [..., 0]-> IndexError
 addg("E230",[["new"]],"newaxis")                              # [None]  -> (1,2,3,0)
 adds("E230",[["int",0]],SV["sc"],"set:int=scalar")            # empty target, no-op OK
+
+# 4d) Subshaped fancy SET into a NON-contiguous destination (order='K' copy keeps the view's
+# F-contig / strided layout). This is the exact trigger for SetIndicesNDNonLinear<T>: a fancy
+# index consuming FEWER axes than ndim selects strided sub-arrays, which the block-copy fast
+# path (SetIndicesND) would scatter as if contiguous — corrupting an F-contig / transposed
+# destination (an F-contig a[[0,2]]=v landed row 2 at consecutive buffer slots, not its column).
+# Appended after the whole curated block so every pre-existing ordinal / case id stays stable.
+# AT=(4,3) F-contig, BT=(4,3,2) F-contig are the layouts whose sub-arrays are genuinely strided.
+for base in ["AT","BT","ANR","ANC","ACS"]:
+    adds(base,[FARR["f01"]],SV["sc"],"set:fancy1=scalar",order='K')    # [0,1] valid for axis0>=2
+adds("AT",[FARR["f02"]],SV["sc"],"set:fancy=scalar",order='K')          # (4,3): rows 0,2 -> -1
+adds("AT",[FARR["f02"]],["arr",list(range(100,106)),[2,3]],"set:fancy=matched",order='K')  # (2,3)
+adds("AT",[FARR["f02"]],["arr",[10,20,30],[3]],"set:fancy=bcastrow",order='K')              # (3,)->(2,3)
+adds("AT",[FARR["f04"]],SV["sc"],"set:fancyNeg=scalar",order='K')       # [-1,-2] negative fancy
+adds("BT",[FARR["f02"]],["arr",list(range(1,13)),[2,3,2]],"set:fancy=grid",order='K')       # subShape (3,2)
+adds("BT",[FARR["f01"],FARR["f02"]],SV["sc"],"set:multifancy=scalar",order='K')             # 2 idx -> subShape (2,)
 
 # 5) DTYPE sweep — a handful of forms across all 13 dtypes
 dtype_forms = {

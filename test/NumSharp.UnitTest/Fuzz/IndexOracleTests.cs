@@ -190,7 +190,11 @@ namespace NumSharp.UnitTest.Fuzz
                     }
                     else
                     {
-                        b = b.copy();                          // setter writes an independent copy
+                        // order='K' (from the case) preserves a view base's F-contig / strided
+                        // memory layout, so the SET runs into a genuinely non-contiguous
+                        // destination (the SetIndicesNDNonLinear scatter path); default 'C'.
+                        char ord = c.TryGetProperty("order", out var oe) ? oe.GetString()[0] : 'C';
+                        b = b.copy(ord);                       // setter writes an independent copy
                         b[idx] = BuildValue(c.GetProperty("value"));
                         nsShape = b.shape.Select(x => (long)x).ToArray();
                         nsVals = Ravel(b);

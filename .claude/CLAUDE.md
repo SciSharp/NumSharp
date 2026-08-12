@@ -800,6 +800,29 @@ under **`same_kind`** (so a `uint64` index is allowed) while `put` uses **`safe`
 refused. Pinned by `SelectionTests` (`Take_FloatIndices_Throws_SameKind`, `Put_FloatIndices_Throws_Safe`,
 `Take_UInt64Indices_Allowed_But_Put_Rejects`) + the 16-byte-fidelity and cyclic-wrap tests.
 
+**Subshaped fancy-SET into a NON-contiguous destination (correctness fix — silent corruption).** A
+fancy assignment consuming FEWER axes than `ndim` (`arr[[0,2]] = v` on a 2-D+ array — each selected
+index writes a whole trailing SUB-array) used to route unconditionally through `SetIndicesND<T>`, whose
+block-`MemoryCopy` copies one CONTIGUOUS `subShape` per selected offset. That assumption holds ONLY for a
+C-contiguous destination; into a **transposed / F-contig / row- or col-strided / negative-stride** view
+the sub-arrays are strided in the buffer, so the copy landed each row at the wrong physical offsets —
+silently corrupting the view in Release (`f = arr.reshape(3,4).T; f[[0,2]] = 99` set `f[2,0..2]`'s buffer
+neighbours instead of `f`'s column-strided row 2). The dedicated `SetIndicesNDNonLinear<T>` — long a
+`throw new NotImplementedException` stub behind a commented-out `//TODO:` dispatch — is now implemented
+as the scatter mirror of the getter's `FetchIndicesNDNonLinear`: it walks each sub-array as an odometer
+over the trailing `subShape` axes, advancing the destination offset **incrementally** through the view's
+strides (section D "Incremental coord advance") from the C-contiguous (already broadcast to `retShape`)
+value buffer, and the setter dispatches to it whenever `!source.Shape.IsContiguous`. The C-contiguous
+block-copy fast path is untouched. Bit-exact with NumPy 2.4.2 across all 15 dtypes × {F-contig,
+transposed 3-D, row/col-strided, negative-stride} × {scalar, sub-row broadcast, full grid} values
+(264-case differential + Char/Decimal self-consistency). The scatter is memory-latency bound (a strided
+write is a cache miss per element; NumPy is ~1.3× faster on the dense case and up to ~3× on the
+cache-friendly col-strided one — 1.5× is not reachable on a memory-bound scatter, and the previously
+"fast" path was returning WRONG data). Gate: the index oracle's new `order='K'` setter cases
+(`gen_index_oracle` copies view bases with `order='K'` so the SET runs into a genuinely non-contiguous
+destination — 11 appended `set:fancy*` cases over `AT`/`BT`/strided layouts, 7 of which diverge on the
+pre-fix code) + `AuditV2` `T1_15a`/`T1_15b`. See `Selection/NDArray.Indexing.Selection.Setter.cs`.
+
 ### Grid / slice-expression DSL (`r_`, `c_`, `ix_`, `s_`, `index_exp`)
 
 NumPy's `_index_tricks_impl.py` index-expression family. All probed against 2.4.2; tests in
