@@ -423,15 +423,23 @@ consistent with the `values` field of the other three). **Plain float32/64 are N
 fall to NumPy's own sort path and are already sorted — NumSharp's float `unique_values` is thus bit-exact with NumPy,
 not divergent. **Hash fast path** (`NDArray.unique.Hash.cs`): the 10 integer-family dtypes (bool/byte/sbyte/int16/
 uint16/int32/uint32/int64/uint64/char) take a purpose-built open-addressing table (byte-size-keyed generic hash,
-load-factor-0.5 growth) then a sort of the small unique set — mirroring NumPy's own integer-hash structure and beating
-it, since it skips the O(n log n) sort of the whole array; float/half/complex/decimal keep the sort path.
-**Perf (NPY/NS, Release, best-of-rounds, warm):** `unique_all` **2.3–7.6×** at every measured dtype/size/cardinality
-(the flagship "give me everything" call, where NumPy pays for a mergesort argsort + cumsum + nonzero + diff);
-integer `unique_values` **1.3–5.4×**; integer `unique_counts` **1.0–1.5×** at ≤1% cardinality; `unique_inverse`
+load-factor-0.5 growth, **splitmix64 finalizer**) then a sort of the small unique set — mirroring NumPy's own
+algorithm SELECTION (NumPy hashes int + complex, both in its `_unique_hash` map, and sorts floats). **Complex** joins
+the hash path (NumPy's scalar lexicographic complex sort is slow, so it is a clean win, no all-unique regression);
+**float/half/double/decimal keep the sort path**. Float hashing was measured end-to-end and REJECTED: it helps
+duplicated data but regresses ~2× on all-unique input (insert N + scalar-sort N), and a cheap cardinality sample
+provably cannot distinguish "100K-unique-in-1M" (hash helps) from all-unique (hash hurts). The **splitmix64
+finalizer is load-bearing** — a single Fibonacci multiply then a low-bits table index clustered integer-valued
+double bit patterns (`1.0/2.0/4.0…`, discriminating bits high, low bits zero) into one bucket at ~500 probes/element;
+splitmix avalanches every bit down and is unchanged for integers. **Perf (NPY/NS, Release, best-of-rounds, warm):**
+`unique_all` **2.3–7.6×** at every measured dtype/size/cardinality (the flagship "give me everything" call, where
+NumPy pays for a mergesort argsort + cumsum + nonzero + diff); integer `unique_values` **1.3–5.4×**, integer
+`unique_counts` **1.0–1.5×** at ≤1% cardinality; **complex `unique_values`/`unique_counts` 3.0–6.7×**; `unique_inverse`
 **0.7–1.4×**. The remaining sub-1.5× cells — high-cardinality `unique_counts`, `unique_inverse`, and ALL float
-`unique_values`/`unique_counts` (0.1–0.2×) — are bounded by NumPy's SIMD `vqsort` (`x86-simd-sort`), which NumSharp's
-scalar sort core lacks; closing them is a shared-sort-core change, not a property of these wrappers. See
-`Manipulation/np.unique_values.cs` + `Manipulation/NDArray.unique.Hash.cs`.
+`unique_values`/`unique_counts` (0.1–0.3×) — are bounded by NumPy's SIMD `vqsort` (`x86-simd-sort`), which NumSharp's
+scalar sort core lacks; closing them is a shared-sort-core change, not a property of these wrappers. Full design +
+the measured "why the axis comparator stays scalar / why floats stay sorted / why splitmix" decisions:
+**`docs/UNIQUE_DESIGN.md`**. See `Manipulation/np.unique_values.cs` + `Manipulation/NDArray.unique.Hash.cs`.
 
 **`np.unique` full parameter parity** — `unique(ar, return_index=false, return_inverse=false,
 return_counts=false, axis=null, equal_nan=true, sorted=true)`, all six probed against 2.4.2 (gates
@@ -1501,7 +1509,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
-| unique family | `Manipulation/NDArray.unique.cs` + `NDArray.unique.Kwargs.cs` (sort+mask core), `Manipulation/np.unique.cs` (`np.unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.Hash.cs` (integer hash fast path) |
+| unique family | `Manipulation/NDArray.unique.cs` + `NDArray.unique.Kwargs.cs` (sort+mask core + axis path), `Manipulation/np.unique.cs` (`np.unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.Hash.cs` (int + complex hash fast path, splitmix64). Design + measured perf decisions: `docs/UNIQUE_DESIGN.md` |
 | Selection family | `Indexing/np.{take,take_along_axis,put,place,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,Place,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed) |
 | BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`) |
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot}.cs`, `LinearAlgebra/GufuncGuard.cs` |
