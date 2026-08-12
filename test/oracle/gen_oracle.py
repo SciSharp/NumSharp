@@ -259,6 +259,12 @@ NAN_REDUCE_OPS = {
     "nanstd": lambda a, ax, kd: np.nanstd(a, axis=ax, keepdims=kd),
     "nanvar": lambda a, ax, kd: np.nanvar(a, axis=ax, keepdims=kd),
     "nanmedian": lambda a, ax, kd: np.nanmedian(a, axis=ax, keepdims=kd),
+    # issue #623: NaN-ignoring arg-reductions. All-NaN slices raise ValueError -> the gen's
+    # try/except skips those cells (the error text is unit-test-pinned). Result is int64 indices,
+    # deterministic (first-occurrence argmax/argmin contract) -> full bit-compare. Unlike
+    # argmax/argmin these DO take axis=None here: np.nanarg* has the int?-axis NDArray overload.
+    "nanargmax": lambda a, ax, kd: np.nanargmax(a, axis=ax, keepdims=kd),
+    "nanargmin": lambda a, ax, kd: np.nanargmin(a, axis=ax, keepdims=kd),
 }
 NAN_REDUCE_DTYPES = list(ALL_DTYPES)   # widened: every dtype (NaN-erroring combos skipped by the gen)
 
@@ -2069,6 +2075,184 @@ def gen_sort(dtypes):
     return cases
 
 
+# G12 (issue #623) — partition/argpartition via the DERIVED kth-values compare: the arrangement
+# BETWEEN kth anchors is introselect-implementation-specific on both sides (NumPy's median-of-3 vs
+# NumSharp's QuickSelect pick different pivots), so whole-output bytes are NOT contractual. What IS
+# contractual — and deterministic for any input multiset, ties included — is the VALUE at every kth
+# position (== sorted[kth]): the corpus pins take(partition(a, ks), ks) and the take_along_axis
+# gather of argpartition at ks. The two-sided <=/>= invariant is unit-test-pinned
+# (Sorting/np.partition.Test.cs).
+def gen_partition_family(dtypes):
+    cases = []
+    n = 0
+
+    def emit(op, params, a, r, tag, dt):
+        nonlocal n
+        cases.append({
+            "id": f"{op}/{tag}/{dt}/{n}",
+            "op": op,
+            "params": params,
+            "operands": [describe(a, a)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "distinct",
+        })
+        n += 1
+
+    def part_take(a, ks, axis):
+        p = np.partition(a, ks, axis=axis)
+        return np.take(p, ks, axis=axis) if axis is not None else np.take(p, ks)
+
+    def argpart_take(a, ks, axis):
+        g = np.argpartition(a, ks, axis=axis)
+        if axis is None:
+            return np.take(np.take(np.asarray(a).ravel(), g), ks)
+        return np.take(np.take_along_axis(np.asarray(a), g, axis=axis), ks, axis=axis)
+
+    for dt in dtypes:
+        a1 = _distinct(8, dt)
+        a2 = _distinct(12, dt).reshape(3, 4)
+        for ks in ([3], [-2], [1, 5]):
+            try:
+                emit("partition", {"kth": ks, "axis": -1}, a1, part_take(a1, ks, -1), "1d", dt)
+                emit("argpartition", {"kth": ks, "axis": -1}, a1, argpart_take(a1, ks, -1), "1d", dt)
+            except Exception:
+                continue
+        for ax in (0, 1, -1):
+            try:
+                emit("partition", {"kth": [1], "axis": ax}, a2, part_take(a2, [1], ax), "2d", dt)
+                emit("argpartition", {"kth": [1], "axis": ax}, a2, argpart_take(a2, [1], ax), "2d", dt)
+            except Exception:
+                continue
+        try:
+            emit("partition", {"kth": [5], "axis": None}, a2, part_take(a2, [5], None), "flat", dt)
+            emit("argpartition", {"kth": [5], "axis": None}, a2, argpart_take(a2, [5], None), "flat", dt)
+        except Exception:
+            continue
+    return cases
+
+
+def gen_partition_nan():
+    """Float/complex NaN partition (main tier only — not re-run by char_tier): kth in the non-NaN
+    region AND in the NaN tail (NaN bytes are tokenized by BitDiff, so payload policy differences
+    — NumSharp preserves original bits, unit-test-pinned — do not enter the compare)."""
+    cases = []
+    n = 0
+
+    def emit(op, params, a, r, tag, dt):
+        nonlocal n
+        cases.append({
+            "id": f"{op}/{tag}/{dt}/{n}",
+            "op": op,
+            "params": params,
+            "operands": [describe(a, a)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "nan",
+        })
+        n += 1
+
+    nan = float("nan")
+    for dt in ("float16", "float32", "float64"):
+        a = np.array([nan, 4.0, -1.0, nan, 2.5, 0.5, -3.0, 6.0], dtype=np.dtype(dt))
+        for ks in ([2], [7], [1, 6]):
+            try:
+                p = np.partition(a, ks)
+                emit("partition", {"kth": ks, "axis": -1}, a, np.take(p, ks), "nan_1d", dt)
+                g = np.argpartition(a, ks)
+                emit("argpartition", {"kth": ks, "axis": -1}, a, np.take(np.take(a, g), ks), "nan_1d", dt)
+            except Exception:
+                continue
+    c = np.array([complex(nan, 1), 2 + 3j, complex(1, nan), 0 + 1j, -1 + 0j])
+    for ks in ([1], [3]):
+        p = np.partition(c, ks)
+        emit("partition", {"kth": ks, "axis": -1}, c, np.take(p, ks), "nan_1d", "complex128")
+        g = np.argpartition(c, ks)
+        emit("argpartition", {"kth": ks, "axis": -1}, c, np.take(np.take(c, g), ks), "nan_1d", "complex128")
+    return cases
+
+
+# G12 (issue #623) — lexsort IS stable on both sides (NumPy: successive mergesort passes;
+# NumSharp: successive stable-radix argsorts), so the raw int64 index output is fully
+# deterministic EVEN WITH TIES — which is exactly what the primary keys here carry, making the
+# secondary key + the stability guarantee the thing each case pins.
+def gen_lexsort(dtypes):
+    cases = []
+    n = 0
+
+    def emit(keys, axis, tag, dt):
+        nonlocal n
+        try:
+            r = np.lexsort(tuple(keys), axis=axis)
+        except Exception:
+            return
+        cases.append({
+            "id": f"lexsort/{tag}/{dt}/axis={axis}/{n}",
+            "op": "lexsort",
+            "params": {"axis": axis},
+            "operands": [describe(k, k) for k in keys],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "ties",
+        })
+        n += 1
+
+    sec = _distinct(8, "int64")
+    for dt in dtypes:
+        prim = np.array([1, 0, 1, 0, 1, 1, 0, 0]).astype(np.dtype(dt))   # deliberate ties
+        emit([sec, prim], -1, "1d_2key", dt)                              # LAST key is primary
+        emit([prim], -1, "1d_1key", dt)                                   # single key == stable argsort
+    k0 = _distinct(12, "int64").reshape(3, 4)
+    k1 = np.array([1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1]).astype("float64").reshape(3, 4)
+    for ax in (0, 1, -1):
+        emit([k0, k1], ax, "2d_2key", "int64+float64")
+    return cases
+
+
+# G12 (issue #623) — sort_complex: copy + sort along the LAST axis in the input's own dtype, then
+# up-cast to complex. int8/uint8/int16/uint16 are EXCLUDED from the tier: NumPy up-casts those to
+# complex64, a WIDTH NumSharp's single Complex (complex128) does not have — the values are
+# identical (probed 2.4.2), so those four cells are unit-test-pinned instead
+# (Sorting/np.sort_complex.Test.cs). Excluding uint16 also keeps char_tier from weaving a
+# width-mismatched char case.
+SORT_COMPLEX_DTYPES = [d for d in ALL_DTYPES if d not in ("int8", "uint8", "int16", "uint16")]
+
+
+def gen_sort_complex(dtypes):
+    cases = []
+    n = 0
+
+    def emit(a, tag, dt):
+        nonlocal n
+        try:
+            r = np.sort_complex(a)
+        except Exception:
+            return
+        cases.append({
+            "id": f"sort_complex/{tag}/{dt}/{n}",
+            "op": "sort_complex",
+            "params": {},
+            "operands": [describe(a, a)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "nan" if "nan" in tag else "distinct",
+        })
+        n += 1
+
+    for dt in dtypes:
+        emit(_distinct(8, dt), "1d", dt)
+        emit(_distinct(12, dt).reshape(3, 4), "2d", dt)
+    nan = float("nan")
+    for dt in ("float16", "float32", "float64"):
+        emit(np.array([nan, 2.0, -1.0, np.inf, -np.inf, 0.5], dtype=np.dtype(dt)), "nan_1d", dt)
+    emit(np.array([complex(nan, 1), 2 + 3j, complex(1, nan), 0 + 1j]), "nan_1d", "complex128")
+    return cases
+
+
 # G11 (F20) — NaN sorting IS contractual in NumPy (NaN to the end; complex extended order
 # [R+Rj, R+nanj, nan+Rj, nan+nanj] — probed 2.4.2 and matching in NumSharp) + strided/negstride
 # operands (the NumPy-oracle sort tier was contiguous-only; only the decimal tier covered strided).
@@ -3087,6 +3271,7 @@ def char_tier(mode):
         raw = gen_manip([_C], L) + gen_concat_stack([_C]) + gen_pad([_C])
     elif mode == "sort":
         raw = gen_argsort([_C]) + gen_searchsorted([_C]) + gen_nonzero([_C])
+        raw += gen_partition_family([_C]) + gen_lexsort([_C])          # G12 (sort_complex carved: u16->c64 width)
     elif mode == "tail":
         raw = gen_tail([_C])
     elif mode == "astype_full":
@@ -4190,6 +4375,10 @@ def main():
         cases += gen_unary(NZ_OPS, NZ_DTYPES, list(LAYOUTS.keys()))     # Group A B3: flatnonzero/argwhere
         cases += gen_unique(["bool", "int32", "uint8", "int64", "float64", "float32", "complex128"])  # B3: unique
         cases += gen_sort_special()                                     # G11: NaN + strided/negstride
+        cases += gen_partition_family(SORT_DTYPES)                      # G12: issue #623 kth-values compare
+        cases += gen_partition_nan()                                    # G12: float/complex NaN partition
+        cases += gen_lexsort(SORT_DTYPES)                               # G12: stable multi-key indices
+        cases += gen_sort_complex(SORT_COMPLEX_DTYPES)                  # G12: sort in own dtype -> Complex
         cases += char_tier("sort")
         write_jsonl(os.path.join(corpus_dir, "sort.jsonl"), cases)
     elif mode == "tail":

@@ -1183,7 +1183,52 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NDEvaluateTests.cs`):
 - Repeated NDArray references deduplicate to one iterator operand; `out=` follows the ufunc rules above; `ExecuteExpression` (Tier 3C) throws without `EXTERNAL_LOOP` (the ~40× per-element foot-gun) — `np.evaluate` configures the iterator itself.
 
 ### Sorting & Searching
-`argmax`, `argmin`, `argsort`, `argwhere`, `flatnonzero`, `nonzero`, `searchsorted`, `sort`
+`argmax`, `argmin`, `argpartition`, `argsort`, `argwhere`, `flatnonzero`, `lexsort`, `nanargmax`, `nanargmin`, `nonzero`, `partition`, `searchsorted`, `sort`, `sort_complex`
+
+**The issue-#623 six** — `partition`/`argpartition`/`lexsort`/`nanargmax`/`nanargmin`/`sort_complex` (all probed
+against 2.4.2; gates `Sorting/np.{partition,lexsort,nanargmax,sort_complex}.Test.cs` (108) + ~2,170 differential
+cases in the `sort`/`nanreduce` fuzz tiers) — are compositions/wrappers over the kernels that already shipped:
+introselect (`Utilities/QuickSelect.cs`, the median/percentile primitive), the stable radix argsort
+(`AxisSort`), and the `ArgMax`/`ArgMin` engine reductions. No third sort/select core was added.
+- `partition(a, kth, axis=-1, kind='introselect', order=null)` + in-place `ndarray.partition` — the kth element(s)
+  land in final sorted position, sides unordered. `Backends/Default/Sorting/AxisPartition.cs` drives one introselect
+  line kernel per 1-D lane through **`AxisSort.DriveAllButAxis`** (the same NDIter IterAllButAxis loop the sorts
+  use). Validation is NumPy's probed ORDER with verbatim texts: kind (`select kind must be 'introselect' (got '…')`)
+  → order (`Cannot specify order when the array has no fields.`) → axis → writeable (`partition array is read-only`)
+  → kth (`kth(=N) out of bounds (M)` reporting the POST-wrap value; bounds SKIPPED for size-0 arrays; the kth list
+  is sorted so partitions compose, and multi-kth segments confine each introselect). Floats NaN-compact (NaN sorts
+  last, ORIGINAL bit patterns preserved in the tail — unlike np.sort's canonicalizing radix); Complex uses NumPy's
+  CDOUBLE_LT comparator, whose NaN order is positional ((1,NaN) BEFORE (NaN,1)) and deliberately NOT compacted.
+  C# reads an empty `int[]` kth as NumPy's `np.array([], intp)` — a valid no-op copy (Python's bare `[]` is float64
+  → TypeError; a typed array carries no such ambiguity). Result is a fresh C-contiguous copy (house np.sort
+  convention; NumPy's `copy(order='K')` keeps F-order for F-inputs — values identical).
+- `argpartition` — same driver returning int64 indices; the source is only read (broadcast views legal). Built on
+  the **index-tracking QuickSelect overloads** (`PartitionAtMany(T*, long*, …)` — values and their original indices
+  swap in lockstep, the `RadixSort.ArgSortU32/U64` pattern). A 0-d input ravels to `(1,)` FIRST — NumPy's arg-side
+  `PyArray_CheckAxis` quirk (axis/kth errors then report dimension/size 1, result `[0]`) while `np.partition(0-d)`
+  raises AxisError; float NaN indices tail in encounter order (argsort's exact policy). **The fuzz tier pins the
+  DERIVED kth-values** (`take(partition(a,ks),ks)` / the take_along_axis gather at ks): the arrangement BETWEEN kth
+  anchors is introselect-implementation-specific on BOTH sides, so whole-output bytes are not contractual — the
+  two-sided ≤/≥ invariant is unit-test-pinned instead.
+- `lexsort(keys, axis=-1)` — indirect stable sort, LAST key primary. Pure composition reproducing `PyArray_LexSort`
+  pass for pass: successive **stable** argsorts first→last key, each re-sorting the running permutation via
+  `take_along_axis` — bit-identical indices to NumPy's mergesort passes because NumSharp's radix argsort is stable,
+  ties included. Verbatim errors: `need sequence of keys with len > 0 in lexsort` (TypeError), `all keys need to be
+  the same shape` (ValueError); 0-d keys let axis 0/-1 slip (NumPy's back-compat quirk) and size ≤ 1 early-returns
+  a 0-filled int64 array. The single-NDArray overload reads the first axis as the key list (a 1-D input degenerates
+  to N scalar keys → the 0-d `0`, NumPy's probed quirk).
+- `nanargmax`/`nanargmin(a, axis=null, keepdims=false)` — NumPy's `_replace_nan(∓inf)` + all-NaN-slice guard
+  (`ValueError("All-NaN slice encountered")`) then `argmax`/`argmin`; int/bool/char/decimal pass through untouched
+  (NumPy's `mask=None` branch). The flat form returns `long`; the `int?`-axis overload returns the int64 NDArray and
+  handles `keepdims` with `axis=null` (shape `(1,)*ndim`). Axis validation runs UP FRONT for every dtype path —
+  the engine's argmax silently wraps out-of-range negative axes (`np.argmax(a2d, -3)` → `[1 1]`, a pre-existing
+  argmax bug this family refuses to inherit) — with NumPy's rule that a 0-d array accepts axis 0/-1. The documented
+  NaN+Inf untrusted-tie caveats fall out of the composition identically (probed cases pinned).
+- `sort_complex(a)` — copy + sort along the LAST axis **in the input's own dtype** (an int64 past 2^53 orders by
+  its exact value), then up-cast. NumSharp's single `Complex` absorbs NumPy's complex64 cells (int8/16, uint8/16 —
+  values identical, width documented; those four dtypes are excluded from the fuzz tier and unit-test-pinned).
+  0-d leaks `ndarray.sort()`'s own `axis -1 is out of bounds for array of dimension 0`, exactly as NumPy leaks it.
+  See `Sorting_Searching_Counting/np.{partition,argpartition,lexsort,nanargmax,sort_complex}.cs`.
 
 ### Linear Algebra
 `diag`, `diagflat`, `diag_indices`, `diag_indices_from`, `diagonal`, `dot`, `einsum` (subscripts parsed; contraction pending), `fill_diagonal`, `inner`, `mask_indices`, `matmul`, `matvec`, `outer`, `tensordot`, `trace`, `tril`, `tril_indices`, `tril_indices_from`, `triu`, `triu_indices`, `triu_indices_from`, `vdot`, `vecdot`, `vecmat`

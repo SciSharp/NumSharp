@@ -81,7 +81,7 @@ namespace NumSharp.Backends.Sorting
             return ret;
         }
 
-        private static int NormalizeAxis(int axis, int ndim)
+        internal static int NormalizeAxis(int axis, int ndim)
         {
             int ax = axis < 0 ? axis + ndim : axis;
             if (ax < 0 || ax >= ndim)
@@ -176,8 +176,10 @@ namespace NumSharp.Backends.Sorting
         }
 
         /// <summary>NumPy IterAllButAxis: iterate every axis EXCEPT <paramref name="axis"/> (dropped via
-        /// op_axes so it can't coalesce); the kernel receives each operand's line start per call.</summary>
-        private static void DriveAllButAxis(NDArray[] ops, NDIterPerOpFlags[] flags, int axis, NDInnerLoopFunc kern, void* aux)
+        /// op_axes so it can't coalesce); the kernel receives each operand's line start per call.
+        /// Internal: <see cref="AxisPartition"/> drives its partition/argpartition line kernels through
+        /// the same loop (NumPy routes _new_sortlike AND _new_partitionlike through one drive too).</summary>
+        internal static void DriveAllButAxis(NDArray[] ops, NDIterPerOpFlags[] flags, int axis, NDInnerLoopFunc kern, void* aux)
         {
             int ndim = ops[0].ndim;
 
@@ -329,9 +331,10 @@ namespace NumSharp.Backends.Sorting
             }
         }
         private readonly struct DecimalCmp : IComparer<decimal> { public int Compare(decimal a, decimal b) => a.CompareTo(b); }
-        private readonly struct ComplexCmp : IComparer<Complex>
+        internal readonly struct ComplexCmp : IComparer<Complex>
         {
             // NumPy CDOUBLE_LT (npysort_common.h): lexicographic real-then-imag, any-NaN-part sorts last.
+            // Internal: AxisPartition's Complex introselect comparator is this same ordering.
             public int Compare(Complex a, Complex b) { if (Lt(a, b)) return -1; if (Lt(b, a)) return 1; return 0; }
             private static bool Lt(Complex a, Complex b)
             {

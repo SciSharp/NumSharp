@@ -214,6 +214,34 @@ namespace NumSharp.UnitTest.Fuzz
                 case "argwhere": return np.argwhere(ops[0]);                        // Group A B3
                 case "unique": return np.unique(ops[0]);                            // Group A B3
 
+                // G12 (issue #623): partition/argpartition ride the DERIVED kth-values compare —
+                // the corpus stores take(partition(a, ks), ks) because the arrangement between kth
+                // anchors is introselect-implementation-specific on BOTH sides (only the kth values
+                // and the two-sided invariant are contractual; the invariant is unit-test-pinned).
+                case "partition":
+                {
+                    var ks = ParseIntArray(p["kth"]);
+                    int? ax = ParseAxis(p);
+                    var part = np.partition(ops[0], ks, ax);
+                    if (ax is null)
+                        return np.take(part, np.array(ks));
+                    int axv = ax.Value < 0 ? ax.Value + part.ndim : ax.Value;
+                    return np.take(part, np.array(ks), axv);
+                }
+                case "argpartition":
+                {
+                    var ks = ParseIntArray(p["kth"]);
+                    int? ax = ParseAxis(p);
+                    if (ax is null)
+                        return np.take(np.take(ops[0].ravel(), np.argpartition(ops[0], ks, null)), np.array(ks));
+                    var g = np.argpartition(ops[0], ks, ax.Value);
+                    var vals = np.take_along_axis(ops[0], g, ax.Value);
+                    int axv = ax.Value < 0 ? ax.Value + vals.ndim : ax.Value;
+                    return np.take(vals, np.array(ks), axv);
+                }
+                case "lexsort": return np.lexsort(ops, p["axis"].GetInt32());       // all operands are keys
+                case "sort_complex": return np.sort_complex(ops[0]);
+
                 // Group A Batches 4-6: shape / selection / convolve / split.
                 case "flatten": return ops[0].flatten();
                 case "rollaxis": return np.rollaxis(ops[0], p["axis"].GetInt32(), p["start"].GetInt32());
@@ -374,9 +402,10 @@ namespace NumSharp.UnitTest.Fuzz
                 // Reductions (axis/keepdims params).
                 case "sum": case "prod": case "min": case "max": case "mean":
                 case "std": case "var": case "argmax": case "argmin": case "all": case "any":
-                // NaN-aware reductions (T10).
+                // NaN-aware reductions (T10; nanargmax/nanargmin are G12 / issue #623).
                 case "nansum": case "nanprod": case "nanmax": case "nanmin": case "nanmean":
                 case "nanstd": case "nanvar": case "nanmedian":
+                case "nanargmax": case "nanargmin":
                     return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), ops[0]);
 
                 // Array/scalar-result ops added with the result-kind upgrade (iterator traces,
@@ -461,6 +490,8 @@ namespace NumSharp.UnitTest.Fuzz
                 case "nanprod": return np.nanprod(a, axis, keepdims);
                 case "nanmax": return np.nanmax(a, axis, keepdims);
                 case "nanmin": return np.nanmin(a, axis, keepdims);
+                case "nanargmax": return np.nanargmax(a, axis, keepdims);
+                case "nanargmin": return np.nanargmin(a, axis, keepdims);
                 case "nanmean": return np.nanmean(a, axis, keepdims);
                 case "nanstd": return np.nanstd(a, axis, keepdims);
                 case "nanvar": return np.nanvar(a, axis, keepdims);
