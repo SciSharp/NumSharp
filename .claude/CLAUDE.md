@@ -402,6 +402,29 @@ integer `unique_values` **1.3–5.4×**; integer `unique_counts` **1.0–1.5×**
 scalar sort core lacks; closing them is a shared-sort-core change, not a property of these wrappers. See
 `Manipulation/np.unique_values.cs` + `Manipulation/NDArray.unique.Hash.cs`.
 
+**`np.unique` full parameter parity** — `unique(ar, return_index=false, return_inverse=false,
+return_counts=false, axis=null, equal_nan=true, sorted=true)`, all six probed against 2.4.2 (gates
+`Manipulation/np.unique.AxisEdgeCases.Test.cs` (9) + `NDArray.unique.Test.cs`, backed by a 450-case
+in-process axis differential — 13 dtypes × axis{None,0,1,2,-1} × every return-flag combo × layouts
+{C,F,transposed,reversed,sliced} × NaN/-0.0/complex/empty, 448 bit-exact + 2 excused f16). The **`sorted`**
+parameter (NumPy 2.3) is accepted for API parity but is a **no-op — NumSharp always returns sorted output**:
+NumPy's `sorted=False` hash-iteration order (integer/complex, values-only) is platform-specific and not
+reproducible in C# (same divergence class as `unique_values`; identical as a set). An out-of-range axis raises
+the house **`AxisError`** ("axis {a} is out of bounds for array of dimension {n}", NumPy-verbatim), reporting
+the ORIGINAL axis. **The axis path compares each sub-array as a NumPy structured scalar** (`_arraysetops_impl`
+consolidates the axis into a `('f0',…)` void dtype), which has two consequences ported exactly and easy to get
+wrong: **`equal_nan` has NO EFFECT on the axis path** (the void dtype's kind isn't in `_unique1d`'s `"cfmM"`
+guard, so its NaN-collapsing branch is skipped) — every NaN sub-array is DISTINCT (`nan != nan`), and a
+**signed-zero sub-array collapses** (`-0.0 == +0.0`, the surviving zero's sign following input order). The slab
+equality therefore uses IEEE `==` (not `.Equals`, which had `nan.Equals(nan)==true` — collapsing NaN rows — and
+`(-0.0).Equals(0.0)==false` — splitting signed zeros, both wrong); the slab ORDER uses IEEE `<`/`>` (not
+`CompareTo`, so `-0.0`/`+0.0` compare equal) with a stable tie-break by original index (reproducing NumPy's
+mergesort argsort, so identical NaN slabs keep input order). **One deliberate divergence (`[Misaligned]`):** for
+**float16 + axis + NaN**, NumPy 2.4.2's structured/void sort mis-orders NaN to the FRONT — inconsistent with its
+OWN 1-D float16 sort and its float32/64 structured sorts (all NaN-last); NumSharp keeps the consistent, correct
+NaN-to-end ordering across every float width (the unique-row set and counts are identical, only NaN position
+differs). See `Manipulation/NDArray.unique.{cs,Kwargs.cs}`.
+
 `flip`/`fliplr`/`flipud` return **O(ndim) views** (stride negation + base-offset shift via `Storage.Alias`,
 the Transpose pattern — no slice resolution, no data movement), bit-identical to the `m[..., ::-1, ...]`
 slice path for every layout incl. F-contiguous/transposed/stepped/broadcast (flip of a read-only broadcast

@@ -113,6 +113,10 @@ namespace NumSharp
         /// <param name="axis">Axis to operate on. If <c>null</c> (default), the array is flattened.</param>
         /// <param name="equal_nan">If <c>true</c> (default), all NaN values are treated as equal
         ///   so only one appears in the output. If <c>false</c>, each NaN is treated as unique.</param>
+        /// <param name="sorted">If <c>true</c> (default), the unique elements are sorted (NumPy 2.3).
+        ///   NumSharp always returns sorted output — NumPy's <c>sorted=False</c> hash order for
+        ///   integer/complex values is platform-specific and not reproducible in C# — so this
+        ///   parameter is accepted for API parity but does not change the result (spec-compliant).</param>
         /// <returns>An array of NDArrays in order: [values, index?, inverse?, counts?].</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
         public NDArray[] unique(
@@ -120,8 +124,14 @@ namespace NumSharp
             bool return_inverse = false,
             bool return_counts = false,
             int? axis = null,
-            bool equal_nan = true)
+            bool equal_nan = true,
+            bool sorted = true)
         {
+            // sorted is a no-op: NumSharp cannot reproduce NumPy's non-portable sorted=False hash
+            // order (integer/complex, values-only), so it always returns the deterministic sorted
+            // result — identical AS A SET, and consistent with the unique_values family.
+            _ = sorted;
+
             if (axis == null)
             {
                 return uniqueFlatKwargs(return_index, return_inverse, return_counts, equal_nan);
@@ -130,8 +140,7 @@ namespace NumSharp
             int resolved = axis.Value;
             if (resolved < 0) resolved += ndim;
             if (resolved < 0 || resolved >= ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis.Value} is out of bounds for array of dimension {ndim}");
+                throw new AxisError(axis.Value, ndim);
 
             return uniqueAxisKwargs(resolved, return_index, return_inverse, return_counts, equal_nan);
         }

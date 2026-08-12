@@ -682,6 +682,11 @@ namespace NumSharp
 
         private NDArray[] uniqueAxisKwargs(int axis, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
+            // equal_nan has NO EFFECT on the axis path — NumPy consolidates each slab into a
+            // structured scalar whose dtype.kind is 'V', so _unique1d's equal_nan branch (guarded by
+            // kind in "cfmM") is skipped and the mask is a plain structured `!=`, under which every
+            // NaN slab is DISTINCT (nan != nan) regardless of equal_nan. Accepted for API symmetry.
+            _ = equal_nan;
             var moved = axis == 0 ? this : np.moveaxis(this, axis, 0);
             long n = moved.Shape.Dimensions[0];
 
@@ -692,7 +697,14 @@ namespace NumSharp
             for (int i = 0; i < n; i++) orig[i] = i;
 
             var movedCopy = moved.Shape.IsContiguous ? moved : moved.copy();
-            System.Array.Sort(orig, (a, b) => CompareSlabs(movedCopy, a, b, slabSize));
+            // Stable tie-break by original index: identical slabs (in particular NaN slabs, which
+            // compare EQUAL for ordering but are kept DISTINCT by the != mask below) keep input
+            // order — reproducing NumPy's mergesort argsort in the axis path.
+            System.Array.Sort(orig, (a, b) =>
+            {
+                int c = CompareSlabs(movedCopy, a, b, slabSize);
+                return c != 0 ? c : a.CompareTo(b);
+            });
 
             var sortedKeepIdx = new List<int>();
             var sortedFirstOrig = new List<long>();
@@ -701,7 +713,7 @@ namespace NumSharp
             for (int i = 0; i < n; i++)
             {
                 int cur = orig[i];
-                if (prev == -1 || !SlabsEqual(movedCopy, prev, cur, slabSize, equal_nan))
+                if (prev == -1 || !SlabsEqual(movedCopy, prev, cur, slabSize))
                 {
                     sortedKeepIdx.Add(cur);
                     sortedFirstOrig.Add(cur);
@@ -756,7 +768,7 @@ namespace NumSharp
                     for (int i = 0; i < n; i++)
                     {
                         int cur = orig[i];
-                        if (prevSorted == -1 || !SlabsEqual(movedCopy, prevSorted, cur, slabSize, equal_nan))
+                        if (prevSorted == -1 || !SlabsEqual(movedCopy, prevSorted, cur, slabSize))
                             keptSlot++;
                         p[cur] = keptSlot;
                         prevSorted = cur;
@@ -818,16 +830,22 @@ namespace NumSharp
             return 0;
         }
 
+        // The CompareSlabs* float/complex orderings use IEEE compares (`<`/`>`), NOT CompareTo, so
+        // that -0.0 and +0.0 compare EQUAL (CompareTo would order -0.0 < +0.0) — matching NumPy's
+        // structured sort, where the surviving zero's sign follows input order. NaN sorts to the end
+        // (all NaN equivalent); the stable tie-break then keeps identical NaN slabs in input order.
+
         private static unsafe int CompareSlabsDouble(NDArray src, int a, int b, long slabSize)
         {
             double* ptr = (double*)src.Address;
-            long aBase = a * slabSize;
-            long bBase = b * slabSize;
-            var cmp = NaNAwareDoubleComparer.Instance;
+            long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
-                int c = cmp.Compare(ptr[aBase + k], ptr[bBase + k]);
-                if (c != 0) return c;
+                double x = ptr[aBase + k], y = ptr[bBase + k];
+                bool xn = double.IsNaN(x), yn = double.IsNaN(y);
+                if (xn || yn) { if (xn && yn) continue; return xn ? 1 : -1; }
+                if (x < y) return -1;
+                if (x > y) return 1;
             }
             return 0;
         }
@@ -835,13 +853,14 @@ namespace NumSharp
         private static unsafe int CompareSlabsFloat(NDArray src, int a, int b, long slabSize)
         {
             float* ptr = (float*)src.Address;
-            long aBase = a * slabSize;
-            long bBase = b * slabSize;
-            var cmp = NaNAwareSingleComparer.Instance;
+            long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
-                int c = cmp.Compare(ptr[aBase + k], ptr[bBase + k]);
-                if (c != 0) return c;
+                float x = ptr[aBase + k], y = ptr[bBase + k];
+                bool xn = float.IsNaN(x), yn = float.IsNaN(y);
+                if (xn || yn) { if (xn && yn) continue; return xn ? 1 : -1; }
+                if (x < y) return -1;
+                if (x > y) return 1;
             }
             return 0;
         }
@@ -849,17 +868,14 @@ namespace NumSharp
         private static unsafe int CompareSlabsHalf(NDArray src, int a, int b, long slabSize)
         {
             Half* ptr = (Half*)src.Address;
-            long aBase = a * slabSize;
-            long bBase = b * slabSize;
+            long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
                 Half x = ptr[aBase + k], y = ptr[bBase + k];
-                int c;
-                if (Half.IsNaN(x) && Half.IsNaN(y)) c = 0;
-                else if (Half.IsNaN(x)) c = 1;
-                else if (Half.IsNaN(y)) c = -1;
-                else c = x.CompareTo(y);
-                if (c != 0) return c;
+                bool xn = Half.IsNaN(x), yn = Half.IsNaN(y);
+                if (xn || yn) { if (xn && yn) continue; return xn ? 1 : -1; }
+                if (x < y) return -1;
+                if (x > y) return 1;
             }
             return 0;
         }
@@ -867,18 +883,26 @@ namespace NumSharp
         private static unsafe int CompareSlabsComplex(NDArray src, int a, int b, long slabSize)
         {
             Complex* ptr = (Complex*)src.Address;
-            long aBase = a * slabSize;
-            long bBase = b * slabSize;
-            var cmp = NaNAwareComplexComparer.Instance;
+            long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
-                int c = cmp.Compare(ptr[aBase + k], ptr[bBase + k]);
-                if (c != 0) return c;
+                Complex x = ptr[aBase + k], y = ptr[bBase + k];
+                bool xn = double.IsNaN(x.Real) || double.IsNaN(x.Imaginary);
+                bool yn = double.IsNaN(y.Real) || double.IsNaN(y.Imaginary);
+                if (xn || yn) { if (xn && yn) continue; return xn ? 1 : -1; }
+                if (x.Real < y.Real) return -1;
+                if (x.Real > y.Real) return 1;
+                if (x.Imaginary < y.Imaginary) return -1;
+                if (x.Imaginary > y.Imaginary) return 1;
             }
             return 0;
         }
 
-        private static unsafe bool SlabsEqual(NDArray src, int a, int b, long slabSize, bool equal_nan)
+        // Slab EQUALITY uses IEEE `==` (via `!=`), matching NumPy's structured `!=` mask: NaN != NaN,
+        // so every NaN slab is DISTINCT (independent of equal_nan — see uniqueAxisKwargs), while
+        // -0.0 == +0.0 collapses signed-zero slabs. Integer/decimal/char have no NaN/-0 so the
+        // generic .Equals path (SlabsEqualT) is exact for them.
+        private static unsafe bool SlabsEqual(NDArray src, int a, int b, long slabSize)
         {
             switch (src.typecode)
             {
@@ -898,11 +922,7 @@ namespace NumSharp
                     Half* ptr = (Half*)src.Address;
                     long aBase = a * slabSize, bBase = b * slabSize;
                     for (long k = 0; k < slabSize; k++)
-                    {
-                        Half x = ptr[aBase + k], y = ptr[bBase + k];
-                        if (equal_nan && Half.IsNaN(x) && Half.IsNaN(y)) continue;
-                        if (!x.Equals(y)) return false;
-                    }
+                        if (ptr[aBase + k] != ptr[bBase + k]) return false;
                     return true;
                 }
                 case NPTypeCode.Single:
@@ -910,11 +930,7 @@ namespace NumSharp
                     float* ptr = (float*)src.Address;
                     long aBase = a * slabSize, bBase = b * slabSize;
                     for (long k = 0; k < slabSize; k++)
-                    {
-                        float x = ptr[aBase + k], y = ptr[bBase + k];
-                        if (equal_nan && float.IsNaN(x) && float.IsNaN(y)) continue;
-                        if (!x.Equals(y)) return false;
-                    }
+                        if (ptr[aBase + k] != ptr[bBase + k]) return false;
                     return true;
                 }
                 case NPTypeCode.Double:
@@ -922,11 +938,7 @@ namespace NumSharp
                     double* ptr = (double*)src.Address;
                     long aBase = a * slabSize, bBase = b * slabSize;
                     for (long k = 0; k < slabSize; k++)
-                    {
-                        double x = ptr[aBase + k], y = ptr[bBase + k];
-                        if (equal_nan && double.IsNaN(x) && double.IsNaN(y)) continue;
-                        if (!x.Equals(y)) return false;
-                    }
+                        if (ptr[aBase + k] != ptr[bBase + k]) return false;
                     return true;
                 }
                 case NPTypeCode.Complex:
@@ -936,10 +948,7 @@ namespace NumSharp
                     for (long k = 0; k < slabSize; k++)
                     {
                         Complex x = ptr[aBase + k], y = ptr[bBase + k];
-                        bool xNan = double.IsNaN(x.Real) || double.IsNaN(x.Imaginary);
-                        bool yNan = double.IsNaN(y.Real) || double.IsNaN(y.Imaginary);
-                        if (equal_nan && xNan && yNan) continue;
-                        if (!x.Equals(y)) return false;
+                        if (x.Real != y.Real || x.Imaginary != y.Imaginary) return false;
                     }
                     return true;
                 }

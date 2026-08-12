@@ -31,6 +31,11 @@ namespace NumSharp
         /// <param name="axis">The axis to operate on. If <c>null</c>, the array is flattened first.</param>
         /// <param name="equal_nan">If True (default), all NaN values are considered equal so
         ///   only one appears in the output. If False, each NaN is treated as unique.</param>
+        /// <param name="sorted">If True (default), the unique elements are sorted (NumPy 2.3).
+        ///   NumSharp always returns sorted output: NumPy's <c>sorted=False</c> hash-iteration order
+        ///   for integer/complex values is platform-specific and not reproducible in C#, so this
+        ///   parameter exists for API parity but does not change the result (spec-compliant — the
+        ///   Array API leaves the <c>sorted=False</c> order unspecified). See <see cref="unique_values"/>.</param>
         /// <returns>An array of NDArrays in order: [values, index?, inverse?, counts?].
         ///   The first element is always the sorted unique values; remaining elements are
         ///   present only when the corresponding flag is True.</returns>
@@ -40,7 +45,8 @@ namespace NumSharp
             bool return_inverse = false,
             bool return_counts = false,
             int? axis = null,
-            bool equal_nan = true)
-            => ar.unique(return_index, return_inverse, return_counts, axis, equal_nan);
+            bool equal_nan = true,
+            bool sorted = true)
+            => ar.unique(return_index, return_inverse, return_counts, axis, equal_nan, sorted);
     }
 }

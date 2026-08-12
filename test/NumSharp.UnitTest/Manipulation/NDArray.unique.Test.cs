@@ -307,9 +307,12 @@ namespace NumSharp.UnitTest.Manipulation
         [TestMethod]
         public void Unique_AxisOutOfRange_Throws()
         {
+            // NumPy raises AxisError "axis 1 is out of bounds for array of dimension 1".
+            // AxisError derives from ArgumentOutOfRangeException (house convention).
             var arr = np.array(new int[] { 1, 2, 3 });
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            var ex = Assert.ThrowsExactly<AxisError>(() =>
                 np.unique(arr, return_index: false, axis: 1));
+            StringAssert.Contains(ex.Message, "axis 1 is out of bounds for array of dimension 1");
         }
 
         [TestMethod]
