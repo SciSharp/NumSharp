@@ -34,7 +34,8 @@ namespace NumSharp
 
             // return aux[flag[1:] & flag[:-1]]  — values appearing exactly once survive
             NDArray sel = flag["1:"] & flag[":-1"];
-            return aux[sel];
+            // aux came from np.sort; NumPy's sort canonicalises a surviving float32/float64 NaN (see np.setops.cs).
+            return CanonicalizeSetOpNaN(aux[sel]);
         }
     }
 }

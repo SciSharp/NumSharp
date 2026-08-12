@@ -188,5 +188,88 @@ namespace NumSharp.UnitTest.Manipulation
             AssertDoubleEqual(np.setdiff1d(np.array(new[] { 1.0, double.NaN, 2.0 }), np.array(new[] { 2.0 })),
                 new[] { 1.0, double.NaN });
         }
+
+        // ---- NaN canonicalization (NumPy's float sort rewrites EVERY surviving NaN to the positive
+        //      canonical quiet NaN for float32/float64; float16/complex128 preserve). See np.setops.cs.
+        //      NumSharp's sort yields .NET's negative NaN and unique preserves payloads, so these ops
+        //      apply a NaN-canonicalization pass to stay bit-identical to NumPy 2.4.2. -----------------
+        private const ulong CanonNanF64 = 0x7FF8000000000000UL;   // bits np.sort produces for any f64 NaN
+        private const uint  CanonNanF32 = 0x7FC00000U;            // bits np.sort produces for any f32 NaN
+
+        private static readonly double NegNanF64 = BitConverter.UInt64BitsToDouble(0xFFF8000000000000UL);
+        private static readonly double PayloadNanF64 = BitConverter.UInt64BitsToDouble(0x7FF8000000ABCDEFUL);
+        private static readonly float  NegNanF32 = BitConverter.UInt32BitsToSingle(0xFFC00000U);
+
+        [TestMethod]
+        public void Union_Float64_NegativeNan_CanonicalizedToPositive()
+        {
+            // .NET's double.NaN is 0xFFF8... (sign bit set); NumPy's union1d yields the positive canonical.
+            var r = np.union1d(np.array(new[] { 1.0, NegNanF64 }), np.array(new[] { 2.0 }));
+            var got = r.ToArray<double>();
+            double.IsNaN(got[2]).Should().BeTrue();
+            BitConverter.DoubleToUInt64Bits(got[2]).Should().Be(CanonNanF64);
+        }
+
+        [TestMethod]
+        public void Union_Float64_PayloadNan_StrippedToCanonical()
+        {
+            var r = np.union1d(np.array(new[] { 1.0, PayloadNanF64 }), np.array(new[] { 2.0 }));
+            BitConverter.DoubleToUInt64Bits(r.ToArray<double>()[2]).Should().Be(CanonNanF64);
+        }
+
+        [TestMethod]
+        public void Setxor_Float64_NegativeNan_AllCanonicalizedToPositive()
+        {
+            // Two distinct NaNs survive; both must become the positive canonical.
+            var r = np.setxor1d(np.array(new[] { 1.0, NegNanF64 }), np.array(new[] { PayloadNanF64, 2.0 }));
+            var got = r.ToArray<double>();
+            got.Length.Should().Be(4);
+            BitConverter.DoubleToUInt64Bits(got[2]).Should().Be(CanonNanF64);
+            BitConverter.DoubleToUInt64Bits(got[3]).Should().Be(CanonNanF64);
+        }
+
+        [TestMethod]
+        public void Setdiff_Float64_NegativeNan_CanonicalizedToPositive()
+        {
+            var r = np.setdiff1d(np.array(new[] { 1.0, NegNanF64, 2.0 }), np.array(new[] { 2.0 }));
+            BitConverter.DoubleToUInt64Bits(r.ToArray<double>()[1]).Should().Be(CanonNanF64);
+        }
+
+        [TestMethod]
+        public void Union_Float32_NegativeNan_CanonicalizedToPositive()
+        {
+            var r = np.union1d(np.array(new[] { 1.0f, NegNanF32 }), np.array(new[] { 2.0f }));
+            r.typecode.Should().Be(NPTypeCode.Single);
+            BitConverter.SingleToUInt32Bits(r.ToArray<float>()[2]).Should().Be(CanonNanF32);
+        }
+
+        [TestMethod]
+        public void Setxor_Float32_NegativeNan_CanonicalizedToPositive()
+        {
+            var r = np.setxor1d(np.array(new[] { 1.0f, NegNanF32 }), np.array(new[] { NegNanF32, 2.0f }));
+            var got = r.ToArray<float>();
+            BitConverter.SingleToUInt32Bits(got[2]).Should().Be(CanonNanF32);
+            BitConverter.SingleToUInt32Bits(got[3]).Should().Be(CanonNanF32);
+        }
+
+        [TestMethod]
+        public void Union_Float16_Nan_Preserved()
+        {
+            // NumPy does NOT canonicalize float16 NaN (no SIMD sort path); NumSharp must preserve it too.
+            Half negNan16 = BitConverter.UInt16BitsToHalf(0xFE00);
+            var r = np.union1d(np.array(new[] { (Half)1.0, negNan16 }), np.array(new[] { (Half)2.0 }));
+            r.typecode.Should().Be(NPTypeCode.Half);
+            var got = r.ToArray<Half>();
+            BitConverter.HalfToUInt16Bits(got[2]).Should().Be((ushort)0xFE00);
+        }
+
+        [TestMethod]
+        public void Union_Float64_NoNan_NegativeZeroPreserved()
+        {
+            // The canonicalization pass must not touch non-NaN lanes: -0.0 keeps its sign bit.
+            var r = np.union1d(np.array(new[] { -0.0, 1.5 }), np.array(new[] { 2.5 }));
+            var got = r.ToArray<double>();
+            BitConverter.DoubleToUInt64Bits(got[0]).Should().Be(0x8000000000000000UL);   // -0.0
+        }
     }
 }

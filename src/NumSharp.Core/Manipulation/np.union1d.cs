@@ -13,7 +13,8 @@ namespace NumSharp
         public static NDArray union1d(NDArray ar1, NDArray ar2)
         {
             // NumPy: unique(concatenate((ar1, ar2), axis=None)) — axis=None flattens both operands.
-            return np.unique(np.concatenate((np.ravel(ar1), np.ravel(ar2)), 0));
+            // NumPy's unique-sort canonicalises a surviving float32/float64 NaN; match it (see np.setops.cs).
+            return CanonicalizeSetOpNaN(np.unique(np.concatenate((np.ravel(ar1), np.ravel(ar2)), 0)));
         }
     }
 }

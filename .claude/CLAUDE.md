@@ -349,7 +349,7 @@ The `as*` conversion family mirrors NumPy: `asarray_chkfinite(a, dtype=None, ord
 `append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `block`, `c_`, `column_stack`, `concat`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`, `hstack`, `insert`, `intersect1d`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `r_`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `setdiff1d`, `setxor1d`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `trim_zeros`, `union1d`, `unique`, `unstack`, `vsplit`, `vstack`
 
 **Set routines** `intersect1d`, `union1d`, `setxor1d`, `setdiff1d` (NumPy `_arraysetops_impl.py`, sorted/unique set
-operations over flattened inputs; all probed against 2.4.2; gate `Manipulation/np.setops.Test.cs` (20) + the
+operations over flattened inputs; all probed against 2.4.2; gate `Manipulation/np.setops.Test.cs` (28) + the
 `groupa` fuzz tier) are pure compositions of the existing `unique`/`sort`/`argsort`/`concatenate` machinery, ported
 line-for-line from NumPy so their promotion, NaN handling and edge cases match by construction. `union1d(ar1, ar2)`
 = `unique(concatenate(ravel(ar1), ravel(ar2)))` — unique sorted union in the promoted dtype. `intersect1d(ar1, ar2,
@@ -359,10 +359,18 @@ argsort so the first occurrence in each input wins (NumSharp's argsort is stable
 values in exactly one input; `setdiff1d(ar1, ar2, assume_unique=false)` returns `ar1`'s values absent from `ar2`
 (built on `isin(..., invert=true)`), preserving `ar1`'s dtype and — under `assume_unique` — its duplicates. Empty
 inputs collapse to NumPy's float64 empty (from the empty concatenate). NaN never matches itself, so a shared NaN is
-excluded from `intersect1d` but each NaN survives `setxor1d`/`union1d`/`setdiff1d` as distinct (matching NumPy).
+excluded from `intersect1d` but each NaN survives `setxor1d`/`union1d`/`setdiff1d` as distinct (matching NumPy). A
+surviving **float32/float64** NaN is **canonicalized to NumPy's positive quiet NaN** (`0x7ff8000000000000` /
+`0x7fc00000`): NumPy's SIMD float sort (which `unique`/`sort` drive) rewrites EVERY NaN — negative-signed,
+signalling, or payload-bearing — to that single value, while **float16 and complex128 NaNs are left exactly as-is**
+(probed 2.4.2). NumSharp's own `sort` yields .NET's negative NaN and `unique` preserves payloads, so
+`union1d`/`setxor1d`/`setdiff1d` run a guarded NaN-rewrite pass on a float32/float64 result — `np.where(np.isnan(r),
+canonical, r)`, entered only when `np.any(np.isnan(r))` (≈0.3 ms on a 490 K result, skipped when no NaN survives) —
+to stay bit-identical (`CanonicalizeSetOpNaN` in `np.setops.cs`; verified across neg/payload/multi-NaN × f16/f32/f64
++ complex against NumPy 2.4.2). `isin` (bool result) and `intersect1d` (NaN never shared) need no pass.
 **Perf (NPY/NS, Release, best-of-21, warm):** **2.2–13.5×** — NumSharp's `unique`/`sort` outrun NumPy's at every
-measured size (the wins widen at 1M, where NumPy's set-ops cost 60–400 ms). See `Manipulation/np.{union1d,
-intersect1d,setxor1d,setdiff1d}.cs`.
+measured size (the wins widen at 1M, where NumPy's set-ops cost 60–400 ms); the NaN pass is O(result) and does not
+move these numbers. See `Manipulation/np.{setops,union1d,intersect1d,setxor1d,setdiff1d}.cs`.
 
 `flip`/`fliplr`/`flipud` return **O(ndim) views** (stride negation + base-offset shift via `Storage.Alias`,
 the Transpose pattern — no slice resolution, no data movement), bit-identical to the `m[..., ::-1, ...]`

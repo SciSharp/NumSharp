@@ -27,7 +27,8 @@ namespace NumSharp
 
             // ar1[isin(ar1, ar2, assume_unique=True, invert=True)] — keep only the values absent from ar2.
             NDArray mask = np.isin(ar1, ar2, assume_unique: true, invert: true);
-            return ar1[mask];
+            // ar1 came from np.unique; NumPy canonicalises a surviving float32/float64 NaN (see np.setops.cs).
+            return CanonicalizeSetOpNaN(ar1[mask]);
         }
     }
 }
