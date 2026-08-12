@@ -346,7 +346,7 @@ Tested against NumPy 2.x.
 The `as*` conversion family mirrors NumPy: `asarray_chkfinite(a, dtype=None, order='K')` = `asarray` then raise `ValueError("array must not contain infs or NaNs")` if a **float-family** dtype (Half/Single/Double/Complex — NumPy's `typecodes['AllFloat']`; Decimal/int/bool skip the check) holds any inf/NaN, via a **fused single-pass NaN-poison SIMD reduction** (`Backends/Kernels/FiniteScan.cs`: `acc += v - v` — +0 for finite, absorbing-NaN for non-finite; AVX2 gather + reversed-contiguous fast path for strided/negative-stride views; ~2–27× NumPy contiguous, ≥1× strided). `require(a, dtype=None, requirements=None)` parses C/F/A/W/O/E flags (+aliases; single-string requirements iterate by char like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order and copies only if a remaining ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED is always true in NumSharp, so only broadcast-non-writeable and views force a copy). `asmatrix(data, dtype=None)` returns a **2-D view** (NumSharp has no `matrix` subclass — the deprecated NumPy one; no `*`-as-matmul/`.H`/`.I`): 0-D→(1,1), 1-D→(1,N), 2-D unchanged, >2-D drops length-1 axes and must land on 2-D else `ValueError("shape too large to be a matrix.")`; also parses matrix strings (`"1 2; 3 4"`). See `Creation/np.{asarray_chkfinite,require,asmatrix}.cs`.
 
 ### Shape Manipulation
-`append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `block`, `c_`, `column_stack`, `concat`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`, `hstack`, `insert`, `intersect1d`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `r_`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `setdiff1d`, `setxor1d`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `trim_zeros`, `union1d`, `unique`, `unstack`, `vsplit`, `vstack`
+`append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `block`, `c_`, `column_stack`, `concat`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`, `hstack`, `insert`, `intersect1d`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `r_`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `setdiff1d`, `setxor1d`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `trim_zeros`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`, `unique_values`, `unstack`, `vsplit`, `vstack`
 
 **Set routines** `intersect1d`, `union1d`, `setxor1d`, `setdiff1d` (NumPy `_arraysetops_impl.py`, sorted/unique set
 operations over flattened inputs; all probed against 2.4.2; gate `Manipulation/np.setops.Test.cs` (28) + the
@@ -371,6 +371,36 @@ to stay bit-identical (`CanonicalizeSetOpNaN` in `np.setops.cs`; verified across
 **Perf (NPY/NS, Release, best-of-21, warm):** **2.2–13.5×** — NumSharp's `unique`/`sort` outrun NumPy's at every
 measured size (the wins widen at 1M, where NumPy's set-ops cost 60–400 ms); the NaN pass is O(result) and does not
 move these numbers. See `Manipulation/np.{setops,union1d,intersect1d,setxor1d,setdiff1d}.cs`.
+
+**Array-API unique family** `unique_values`, `unique_counts`, `unique_inverse`, `unique_all` (NumPy 2.x
+`_arraysetops_impl.py`; probed against 2.4.2; gate `Manipulation/np.unique_values.Test.cs` (19) + a 102-case
+in-process differential across all 13 NumPy dtypes × layouts × NaN/empty/0-d — 102/102 bit-exact). All four are thin
+wrappers over the existing `unique` machinery with **`equal_nan=False`** (each NaN is a DISTINCT value — the whole
+point of these variants vs `np.unique`'s `equal_nan=True` default) and `axis=None` (flattened). NumPy returns
+namedtuples; C# stands in with named-field `readonly struct`s (`UniqueAllResult{Values,Indices,InverseIndices,Counts}`,
+`UniqueCountsResult{Values,Counts}`, `UniqueInverseResult{Values,InverseIndices}`), each with implicit `NDArray[]`
+conversion + `Deconstruct` + indexer (the `np.meshgrid` house shape). `unique_values` returns a bare `NDArray`.
+`values` preserves the input dtype; `indices`/`inverse_indices`/`counts` are int64 (NumPy intp). `inverse_indices` is
+reshaped to the ORIGINAL input shape (NumPy 2.0: reconstruct via `np.take(values, inverse_indices)`) — the sort path
+already yields that for ndim ≥ 1, and `ReshapeInverseToInput` restores the `()` scalar shape a **0-d** input needs
+(the flat path returns `(1,)` there — a latent `np.unique` 0-d bug the wrappers route around). **ONE deliberate
+divergence, `unique_values` only (`[Misaligned]`):** NumPy's `_unique_hash` (`unique.cpp`) dedups **integer and
+complex** dtypes through a `std::unordered_set` under `sorted=False`, returning them in platform/compiler-specific
+hash-bucket order (neither sorted nor first-occurrence — e.g. `[0,8,16,24,1,9,17]` → `[24,16,8,0,17,9,1]` on
+win-amd64, not reproducible in C#); NumSharp returns them SORTED (identical AS A SET, deterministic, portable, and
+consistent with the `values` field of the other three). **Plain float32/64 are NOT in NumPy's hash map**, so they
+fall to NumPy's own sort path and are already sorted — NumSharp's float `unique_values` is thus bit-exact with NumPy,
+not divergent. **Hash fast path** (`NDArray.unique.Hash.cs`): the 10 integer-family dtypes (bool/byte/sbyte/int16/
+uint16/int32/uint32/int64/uint64/char) take a purpose-built open-addressing table (byte-size-keyed generic hash,
+load-factor-0.5 growth) then a sort of the small unique set — mirroring NumPy's own integer-hash structure and beating
+it, since it skips the O(n log n) sort of the whole array; float/half/complex/decimal keep the sort path.
+**Perf (NPY/NS, Release, best-of-rounds, warm):** `unique_all` **2.3–7.6×** at every measured dtype/size/cardinality
+(the flagship "give me everything" call, where NumPy pays for a mergesort argsort + cumsum + nonzero + diff);
+integer `unique_values` **1.3–5.4×**; integer `unique_counts` **1.0–1.5×** at ≤1% cardinality; `unique_inverse`
+**0.7–1.4×**. The remaining sub-1.5× cells — high-cardinality `unique_counts`, `unique_inverse`, and ALL float
+`unique_values`/`unique_counts` (0.1–0.2×) — are bounded by NumPy's SIMD `vqsort` (`x86-simd-sort`), which NumSharp's
+scalar sort core lacks; closing them is a shared-sort-core change, not a property of these wrappers. See
+`Manipulation/np.unique_values.cs` + `Manipulation/NDArray.unique.Hash.cs`.
 
 `flip`/`fliplr`/`flipud` return **O(ndim) views** (stride negation + base-offset shift via `Storage.Alias`,
 the Transpose pattern — no slice resolution, no data movement), bit-identical to the `m[..., ::-1, ...]`
@@ -1417,6 +1447,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
+| unique family | `Manipulation/NDArray.unique.cs` + `NDArray.unique.Kwargs.cs` (sort+mask core), `Manipulation/np.unique.cs` (`np.unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.Hash.cs` (integer hash fast path) |
 | Selection family | `Indexing/np.{take,take_along_axis,put,place,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,Place,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed) |
 | BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`) |
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot}.cs`, `LinearAlgebra/GufuncGuard.cs` |
