@@ -377,20 +377,31 @@ to stay bit-identical (`CanonicalizeSetOpNaN` in `np.setops.cs`; verified across
 measured size (the wins widen at 1M, where NumPy's set-ops cost 60–400 ms); the NaN pass is O(result) and does not
 move these numbers. See `Manipulation/np.{setops,union1d,intersect1d,setxor1d,setdiff1d}.cs`.
 
-**`np.unique` overload shape** (the shared core the set routines reuse) mirrors NumPy's bare-array-vs-tuple return
-across **two** overloads, since C# cannot pick a return type from a runtime flag: `unique(ar, int? axis=null, bool
-equal_nan=true, bool sorted=true)`→`NDArray` is the **bare-return** form (all `return_*` False), so `np.unique(ar)`,
-`np.unique(ar, axis: 0)`, `np.unique(ar, equal_nan: false)` and `np.unique(ar, sorted: false)` all port verbatim; and
-`unique(ar, bool return_index, bool return_inverse=false, bool return_counts=false, int? axis=null, bool
-equal_nan=true, bool sorted=true)`→`NDArray[]{values, index?, inverse?, counts?}` is the **tuple** form. `return_index`
-is **required** on the tuple overload — that is the discriminator: defaulting it makes `np.unique(ar)` ambiguous with
-the bare overload (empirically `CS0121`, since neither `int? axis` nor `bool return_index` wins C# betterness with no
-argument). **Inherent consequence (`[Misaligned]`, C#-only):** a SOLE keyword return flag —
-`np.unique(ar, return_counts=True)` / `return_inverse=True` — cannot bind (it reaches neither overload: the bare form
-has no such parameter, the tuple form still needs `return_index`), so the NumSharp idiom is
-`np.unique(ar, false, return_counts: true)` — one explicit `false`, identical result. Closing this verbatim would take
-a result-struct return over ~230 `unique(` call-sites (many chaining `NDArray` methods), a breaking change deliberately
-not taken. Gate: `Manipulation/np.unique.AxisEdgeCases.Test.cs` (bare-return overload pins). See `Manipulation/np.unique.cs`.
+**`np.static unique` returns `np.UniqueResult`** (the shared core the set routines reuse) — NumPy's bare-array-OR-tuple
+return expressed as ONE type, because C# cannot pick a return type from a runtime flag. **ONE** static overload
+`unique(ar, bool return_index=false, bool return_inverse=false, bool return_counts=false, int? axis=null, bool
+equal_nan=true, bool sorted=true)`→`UniqueResult` makes **every** NumPy call shape port verbatim — including the two
+that used to need a C# idiom: `np.unique(ar, return_counts: true)` and `np.unique(ar, return_inverse: true)`
+(**sole keyword, no `return_index`**), plus `np.unique(ar)`, `np.unique(ar, axis: 0)`, `np.unique(ar, equal_nan:
+false)`. `UniqueResult` is a `readonly struct` (nested `np.UniqueResult`) that stands in for both NumPy shapes: it
+converts **implicitly to `NDArray`** (the bare form — yields `Values`, so `NDArray u = np.unique(ar)` and every
+argument-passing/assignment site is unchanged) and **implicitly to `NDArray[]`** (the tuple form — the present
+outputs in NumPy field order `[values, index?, inverse?, counts?]`); it indexes (`[k]` = k-th present output, matching
+the old `NDArray[]` return), `Deconstruct`s (`var (values, counts) = np.unique(ar, return_counts: true)`), and exposes
+named `Values`/`Index`/`Inverse`/`Counts` (the last three `null` when not requested). **BREAKING (accepted):**
+`np.unique(ar)` now returns `UniqueResult`, not a bare `NDArray` — so `np.unique(ar)[k]` selects the k-th OUTPUT (not
+the k-th unique value → use `.Values[k]`). To keep the ~230 existing call-sites working unchanged, the struct
+**forwards the common `NDArray` surface to `Values`** (`size`/`shape`/`Shape`/`ndim`/`dtype`/`typecode`/`array_equal`/
+`GetAtIndex`/`GetAtIndex<T>`/`GetDouble`/`GetSingle`/`GetBoolean`/`GetInt32`) — the value the caller means in the
+no-flags case — and the test `Should()` extension gained a `UniqueResult` overload (`FluentExtension.cs`). The
+**instance** `NDArray.unique(int? axis=null, …)`→`NDArray` and `NDArray.unique(bool return_index, …)`→`NDArray[]`
+are UNCHANGED (all internal consumers — `NDArray.unique.Hash.cs`, `np.unique_values.cs` — stay on them); only the
+static `np.unique` was lifted to `UniqueResult`, which wraps the instance `NDArray[]`. The other three sibling
+result structs (`UniqueAllResult`/`UniqueCountsResult`/`UniqueInverseResult`) are always tuples, so they carry no
+`Values`-forwarding surface — the asymmetry is deliberate (only `np.unique` has a bare-array case). Gate:
+`Manipulation/np.unique.AxisEdgeCases.Test.cs` (`UniqueResult_*` + `BareReturn_*` pins); the whole test suite compiles
+and passes against the new return type (differential-verified: `np.unique(x, return_counts=True)` bit-identical to
+NumPy 2.4.2). See `Manipulation/np.unique.cs`.
 
 **Array-API unique family** `unique_values`, `unique_counts`, `unique_inverse`, `unique_all` (NumPy 2.x
 `_arraysetops_impl.py`; probed against 2.4.2; gate `Manipulation/np.unique_values.Test.cs` (19) + a 102-case

@@ -50,6 +50,14 @@ namespace NumSharp.UnitTest.Lifetime
                             n.Dispose();
                     }
                     break;
+                case np.UniqueResult ur:
+                    // np.unique now returns a UniqueResult struct; boxed to object here it is neither
+                    // NDArray nor NDArray[], so dispose its present outputs (values + requested extras)
+                    // explicitly, else the values buffer strands on the finalizer queue.
+                    foreach (var n in (NDArray[])ur)
+                        if (n is not null)
+                            n.Dispose();
+                    break;
             }
         }
     }

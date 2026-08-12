@@ -191,5 +191,59 @@ namespace NumSharp.UnitTest.Manipulation
             // equal_nan defaults to true -> a single NaN survives (still bare-return)
             np.unique(np.array(new[] { 1.0, double.NaN, double.NaN, 2.0 })).size.Should().Be(3);
         }
+
+        // ---- UniqueResult: NumPy's bare-array-OR-tuple return as one type. The whole point of the
+        //      redesign — np.unique(x, return_counts=True) / return_inverse=True port from Python VERBATIM
+        //      (no forced `false` for return_index), plus Deconstruct / implicit NDArray[] / indexer / named fields.
+        [TestMethod]
+        public void UniqueResult_ReturnCounts_Verbatim_Deconstruct()
+        {
+            var x = np.array(new[] { 3, 1, 2, 1, 3, 3, 5 });
+            // >>> values, counts = np.unique(x, return_counts=True)  — assume_unique/return_index NOT needed
+            var (values, counts) = np.unique(x, return_counts: true);
+            values.array_equal(np.array(new[] { 1, 2, 3, 5 })).Should().BeTrue();
+            counts.array_equal(np.array(new long[] { 2, 1, 3, 1 })).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void UniqueResult_ReturnInverse_Verbatim_Reconstructs()
+        {
+            var x = np.array(new[] { 3, 1, 2, 1, 3, 3, 5 });
+            // >>> values, inv = np.unique(x, return_inverse=True); np.take(values, inv) == x
+            var (values, inv) = np.unique(x, return_inverse: true);
+            inv.array_equal(np.array(new long[] { 2, 0, 1, 0, 2, 2, 3 })).Should().BeTrue();
+            np.take(values, inv).array_equal(x).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void UniqueResult_NamedFields_And_Nulls()
+        {
+            var x = np.array(new[] { 5, 1, 5, 3 });
+            var r = np.unique(x, return_counts: true);
+            r.Values.array_equal(np.array(new[] { 1, 3, 5 })).Should().BeTrue();
+            r.Counts.array_equal(np.array(new long[] { 1, 1, 2 })).Should().BeTrue();
+            r.Index.Should().BeNull("return_index was False");
+            r.Inverse.Should().BeNull("return_inverse was False");
+            r.Length.Should().Be(2);       // [values, counts]
+        }
+
+        [TestMethod]
+        public void UniqueResult_ImplicitConversions_And_Indexer()
+        {
+            var x = np.array(new[] { 5, 1, 5, 3 });
+            // implicit NDArray (bare) yields Values
+            NDArray bare = np.unique(x);
+            bare.array_equal(np.array(new[] { 1, 3, 5 })).Should().BeTrue();
+            // implicit NDArray[] (tuple) yields the present outputs, NumPy field order
+            NDArray[] tup = np.unique(x, return_index: true, return_counts: true);
+            tup.Length.Should().Be(3);                                          // [values, index, counts]
+            tup[0].array_equal(np.array(new[] { 1, 3, 5 })).Should().BeTrue();
+            tup[1].array_equal(np.array(new long[] { 1, 3, 0 })).Should().BeTrue();
+            tup[2].array_equal(np.array(new long[] { 1, 1, 2 })).Should().BeTrue();
+            // indexer selects the k-th present output (matches the old NDArray[] return)
+            var r = np.unique(x, return_counts: true);
+            r[0].array_equal(np.array(new[] { 1, 3, 5 })).Should().BeTrue();
+            r[1].array_equal(np.array(new long[] { 1, 1, 2 })).Should().BeTrue();
+        }
     }
 }
