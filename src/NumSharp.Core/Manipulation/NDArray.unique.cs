@@ -80,23 +80,26 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        ///     Find the unique elements of an array.<br></br>
+        ///     Find the unique elements of an array (bare-return form).<br></br>
         ///
-        ///     Returns the sorted unique elements of an array.There are three optional outputs in addition to the unique elements:<br></br>
-        ///     * the indices of the input array that give the unique values<br></br>
-        ///     * the indices of the unique array that reconstruct the input array<br></br>
-        ///     * the number of times each unique value comes up in the input array<br></br>
+        ///     Returns the sorted unique elements. Mirrors NumPy's single-array return (no
+        ///     <c>return_*</c> flag): supports <c>axis</c>-aware uniqueness and the <c>equal_nan</c>/
+        ///     <c>sorted</c> keywords. For first-occurrence indices / reconstruction indices / counts,
+        ///     use <see cref="unique(bool, bool, bool, int?, bool, bool)"/>.
         /// </summary>
+        /// <param name="axis">Axis to operate on. If <c>null</c> (default), the array is flattened.</param>
+        /// <param name="equal_nan">If <c>true</c> (default), all NaNs collapse to one output value.</param>
+        /// <param name="sorted">Accepted for API parity; NumSharp always returns sorted output.</param>
         /// <returns>The sorted unique values.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html
-        public NDArray unique()
+        public NDArray unique(int? axis = null, bool equal_nan = true, bool sorted = true)
         {
-            // Route through the kwargs path with all return flags false. The kwargs path uses
-            // the optimized sort+mask algorithm (NaN-partition for floats, plain Array.Sort for
-            // integers, IL-vectorizable mask scan) — substantially faster than the legacy
-            // Hashset+LongIntroSort path for arrays larger than ~1K elements.
-            return uniqueFlatKwargs(return_index: false, return_inverse: false,
-                                     return_counts: false, equal_nan: true)[0];
+            // Delegate to the tuple path with all return flags false, then take the values. The
+            // kwargs path uses the optimized sort+mask algorithm (NaN-partition for floats, plain
+            // Array.Sort for integers, IL-vectorizable mask scan) and carries the axis handling —
+            // substantially faster than the legacy Hashset+LongIntroSort path above ~1K elements.
+            return unique(return_index: false, return_inverse: false, return_counts: false,
+                          axis: axis, equal_nan: equal_nan, sorted: sorted)[0];
         }
 
         /// <summary>

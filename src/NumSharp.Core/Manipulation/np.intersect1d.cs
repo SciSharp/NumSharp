@@ -3,7 +3,18 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Find the intersection of two arrays.<br></br>
+        ///     Find the intersection of two arrays (the bare-return form of <c>np.intersect1d</c>).<br></br>
+        ///     Return the sorted, unique values that are in both of the input arrays.
+        /// </summary>
+        /// <param name="ar1">Input array (flattened if not already 1-D).</param>
+        /// <param name="ar2">Input array (flattened if not already 1-D).</param>
+        /// <returns>Sorted 1-D array of common, unique elements.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.intersect1d.html</remarks>
+        public static NDArray intersect1d(NDArray ar1, NDArray ar2)
+            => IntersectCore(ar1, ar2, false, false)[0];
+
+        /// <summary>
+        ///     Find the intersection of two arrays (bare-return, with the <c>assume_unique</c> speed hint).<br></br>
         ///     Return the sorted, unique values that are in both of the input arrays.
         /// </summary>
         /// <param name="ar1">Input array (flattened if not already 1-D).</param>
@@ -12,11 +23,15 @@ namespace NumSharp
         ///     the calculation. Default is False.</param>
         /// <returns>Sorted 1-D array of common, unique elements.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.intersect1d.html</remarks>
-        public static NDArray intersect1d(NDArray ar1, NDArray ar2, bool assume_unique = false)
+        public static NDArray intersect1d(NDArray ar1, NDArray ar2, bool assume_unique)
             => IntersectCore(ar1, ar2, assume_unique, false)[0];
 
         /// <summary>
-        ///     Find the intersection of two arrays, optionally returning the indices of the common values.
+        ///     Find the intersection of two arrays, returning the indices of the common values.<br></br>
+        ///     Mirrors NumPy's tuple return: <c>np.intersect1d(a, b, return_indices=True)</c> — both
+        ///     <paramref name="assume_unique"/> and <paramref name="return_indices"/> are optional so the
+        ///     keyword-only <c>return_indices</c> call binds here (the bare overloads above have no
+        ///     <c>return_indices</c> parameter, so they cannot capture it — no ambiguity with this one).
         /// </summary>
         /// <param name="ar1">Input array (flattened if not already 1-D).</param>
         /// <param name="ar2">Input array (flattened if not already 1-D).</param>
@@ -26,7 +41,7 @@ namespace NumSharp
         /// <returns><c>[values]</c> when <paramref name="return_indices"/> is False, otherwise
         ///     <c>[values, comm1, comm2]</c>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.intersect1d.html</remarks>
-        public static NDArray[] intersect1d(NDArray ar1, NDArray ar2, bool assume_unique, bool return_indices)
+        public static NDArray[] intersect1d(NDArray ar1, NDArray ar2, bool assume_unique = false, bool return_indices = false)
             => IntersectCore(ar1, ar2, assume_unique, return_indices);
 
         private static NDArray[] IntersectCore(NDArray ar1, NDArray ar2, bool assume_unique, bool return_indices)

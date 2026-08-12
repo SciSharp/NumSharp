@@ -3,17 +3,24 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Find the unique elements of an array.<br></br>
+        ///     Find the unique elements of an array (the bare-return form of <c>np.unique</c>).<br></br>
         ///
-        ///     Returns the sorted unique elements of an array.There are three optional outputs in addition to the unique elements:<br></br>
-        ///     * the indices of the input array that give the unique values<br></br>
-        ///     * the indices of the unique array that reconstruct the input array<br></br>
-        ///     * the number of times each unique value comes up in the input array<br></br>
+        ///     Returns the sorted unique elements. This overload mirrors NumPy's single-array return
+        ///     (all three <c>return_*</c> flags False): <c>np.unique(ar)</c>, <c>np.unique(ar, axis=0)</c>,
+        ///     <c>np.unique(ar, equal_nan=False)</c> and <c>np.unique(ar, sorted=False)</c> all land here.
+        ///     Pass any <c>return_index</c>/<c>return_inverse</c>/<c>return_counts</c> to reach the
+        ///     <see cref="unique(NDArray, bool, bool, bool, int?, bool, bool)"/> tuple overload.
         /// </summary>
+        /// <param name="ar">Input array. Unless <paramref name="axis"/> is given, it is flattened first.</param>
+        /// <param name="axis">Axis to operate on. If <c>null</c> (default), the array is flattened.</param>
+        /// <param name="equal_nan">If <c>true</c> (default), all NaNs collapse to a single output value;
+        ///   if <c>false</c>, each NaN is distinct.</param>
+        /// <param name="sorted">Accepted for NumPy 2.3 parity; NumSharp always returns sorted output
+        ///   (see the tuple overload's remarks).</param>
         /// <returns>The sorted unique values.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
-        public static NDArray unique(NDArray ar)
-            => ar.unique();
+        public static NDArray unique(NDArray ar, int? axis = null, bool equal_nan = true, bool sorted = true)
+            => ar.unique(axis, equal_nan, sorted);
 
         /// <summary>
         ///     Find the unique elements of an array with full NumPy keyword argument support.

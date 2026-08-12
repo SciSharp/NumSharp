@@ -119,6 +119,33 @@ namespace NumSharp.UnitTest.Manipulation
                 .array_equal(np.array(new[] { 1.0 })).Should().BeTrue();
         }
 
+        [TestMethod]
+        public void Intersect_ReturnIndices_KeywordOnly()
+        {
+            // NumPy: np.intersect1d(a, b, return_indices=True) — assume_unique omitted (defaults False).
+            // The 3-overload split lets the keyword-only return_indices bind to the NDArray[] overload.
+            var r = np.intersect1d(np.array(new long[] { 1, 1, 2, 3, 4 }), np.array(new long[] { 2, 1, 4, 6 }),
+                return_indices: true);
+            r.Length.Should().Be(3);
+            r[0].array_equal(np.array(new long[] { 1, 2, 4 })).Should().BeTrue();   // values
+            r[1].array_equal(np.array(new long[] { 0, 2, 4 })).Should().BeTrue();   // first idx in ar1
+            r[2].array_equal(np.array(new long[] { 1, 0, 2 })).Should().BeTrue();   // first idx in ar2
+        }
+
+        [TestMethod]
+        public void Intersect_Overloads_ReturnTypes()
+        {
+            var a = np.array(new long[] { 1, 3, 4, 3 });
+            var b = np.array(new long[] { 3, 1, 2, 1 });
+            // (ar1, ar2) and (ar1, ar2, assume_unique) are the bare-return overloads -> NDArray.
+            np.intersect1d(a, b).array_equal(np.array(new long[] { 1, 3 })).Should().BeTrue();
+            np.intersect1d(a, b, false).array_equal(np.array(new long[] { 1, 3 })).Should().BeTrue();
+            // return_indices=false still selects the NDArray[] overload and yields exactly one slot.
+            var one = np.intersect1d(a, b, assume_unique: false, return_indices: false);
+            one.Length.Should().Be(1);
+            one[0].array_equal(np.array(new long[] { 1, 3 })).Should().BeTrue();
+        }
+
         // ---- setxor1d -------------------------------------------------------------------
         [TestMethod]
         public void Setxor_Basic()

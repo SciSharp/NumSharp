@@ -145,5 +145,51 @@ namespace NumSharp.UnitTest.Manipulation
             AssertInt64(r[1], 0, 1, 3);
             AssertInt64(r[2], 2, 1, 1);
         }
+
+        // ---- Bare single-return overload: np.unique(ar, axis=/equal_nan=/sorted=) -> NDArray
+        //      (NumPy returns a bare array when no return_* flag is set; this overload matches that,
+        //      so `np.unique(m, axis=0)` ports verbatim instead of forcing `np.unique(m, false, axis:0)[0]`).
+        [TestMethod]
+        public void BareReturn_Axis0_ReturnsSingleNDArray()
+        {
+            var m = np.array(new[,] { { 1, 0, 1 }, { 2, 3, 2 }, { 1, 0, 1 }, { 0, 0, 0 } });
+            // >>> np.unique(m, axis=0) -> [[0,0,0],[1,0,1],[2,3,2]]
+            NDArray u = np.unique(m, axis: 0);                 // binds to the bare NDArray overload
+            u.shape.Should().Equal(3, 3);
+            u.array_equal(np.unique(m, false, false, false, axis: 0)[0]).Should().BeTrue();
+            u.array_equal(np.array(new[,] { { 0, 0, 0 }, { 1, 0, 1 }, { 2, 3, 2 } })).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void BareReturn_NegativeAxis()
+        {
+            var m = np.array(new[,] { { 1, 0, 1 }, { 2, 3, 2 }, { 5, 4, 5 } });
+            // >>> np.unique(m, axis=-1) collapses the duplicate columns
+            NDArray u = np.unique(m, axis: -1);
+            u.array_equal(np.unique(m, false, false, false, axis: -1)[0]).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void BareReturn_Flat_Plain_And_Keywords()
+        {
+            var x = np.array(new[] { 3, 1, 2, 1, 3, 2, 5, 4 });
+            // plain bare-return still works and stays sorted
+            np.unique(x).array_equal(np.array(new[] { 1, 2, 3, 4, 5 })).Should().BeTrue();
+            // sorted=false keyword reaches the bare overload (still sorted in NumSharp)
+            np.unique(x, sorted: false).array_equal(np.array(new[] { 1, 2, 3, 4, 5 })).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void BareReturn_EqualNanFalse_KeepsEveryNaN()
+        {
+            // >>> np.unique([1., nan, nan, 2.], equal_nan=False) -> [1., 2., nan, nan]  (bare array)
+            NDArray u = np.unique(np.array(new[] { 1.0, double.NaN, double.NaN, 2.0 }), equal_nan: false);
+            u.size.Should().Be(4);
+            var v = u.ToArray<double>();
+            v[0].Should().Be(1.0); v[1].Should().Be(2.0);
+            double.IsNaN(v[2]).Should().BeTrue(); double.IsNaN(v[3]).Should().BeTrue();
+            // equal_nan defaults to true -> a single NaN survives (still bare-return)
+            np.unique(np.array(new[] { 1.0, double.NaN, double.NaN, 2.0 })).size.Should().Be(3);
+        }
     }
 }
