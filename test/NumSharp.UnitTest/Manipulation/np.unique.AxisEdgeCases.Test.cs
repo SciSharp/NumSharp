@@ -220,10 +220,10 @@ namespace NumSharp.UnitTest.Manipulation
         {
             var x = np.array(new[] { 5, 1, 5, 3 });
             var r = np.unique(x, return_counts: true);
-            r.Values.array_equal(np.array(new[] { 1, 3, 5 })).Should().BeTrue();
-            r.Counts.array_equal(np.array(new long[] { 1, 1, 2 })).Should().BeTrue();
-            r.Index.Should().BeNull("return_index was False");
-            r.Inverse.Should().BeNull("return_inverse was False");
+            r.values.array_equal(np.array(new[] { 1, 3, 5 })).Should().BeTrue();
+            r.counts.array_equal(np.array(new long[] { 1, 1, 2 })).Should().BeTrue();
+            r.indices.Should().BeNull("return_index was False");
+            r.inverse_indices.Should().BeNull("return_inverse was False");
             r.Length.Should().Be(2);       // [values, counts]
         }
 

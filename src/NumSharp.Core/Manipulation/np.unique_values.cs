@@ -47,23 +47,23 @@ namespace NumSharp
         public readonly struct UniqueAllResult
         {
             /// <summary>The sorted unique values of the input.</summary>
-            public NDArray Values { get; }
+            public NDArray values { get; }
 
             /// <summary>The index of the first occurrence (in the flattened input) of each unique value.</summary>
-            public NDArray Indices { get; }
+            public NDArray indices { get; }
 
-            /// <summary>The indices into <see cref="Values"/> that reconstruct the input, shaped like the input.</summary>
-            public NDArray InverseIndices { get; }
+            /// <summary>The indices into <see cref="values"/> that reconstruct the input, shaped like the input.</summary>
+            public NDArray inverse_indices { get; }
 
             /// <summary>The number of times each unique value appears in the input.</summary>
-            public NDArray Counts { get; }
+            public NDArray counts { get; }
 
             internal UniqueAllResult(NDArray values, NDArray indices, NDArray inverseIndices, NDArray counts)
             {
-                Values = values;
-                Indices = indices;
-                InverseIndices = inverseIndices;
-                Counts = counts;
+                this.values = values;
+                this.indices = indices;
+                this.inverse_indices = inverseIndices;
+                this.counts = counts;
             }
 
             /// <summary>Number of outputs (always 4).</summary>
@@ -72,15 +72,15 @@ namespace NumSharp
             /// <summary>The k-th output in NumPy field order: values, indices, inverse_indices, counts.</summary>
             public NDArray this[int index] => index switch
             {
-                0 => Values,
-                1 => Indices,
-                2 => InverseIndices,
-                3 => Counts,
+                0 => values,
+                1 => indices,
+                2 => inverse_indices,
+                3 => counts,
                 _ => throw new IndexOutOfRangeException($"UniqueAllResult has 4 outputs; index {index} is out of range.")
             };
 
             /// <summary>Returns the outputs as an <see cref="NDArray"/><c>[]</c> in NumPy field order.</summary>
-            public NDArray[] ToArray() => new[] { Values, Indices, InverseIndices, Counts };
+            public NDArray[] ToArray() => new[] { values, indices, inverse_indices, counts };
 
             /// <summary>Exposes the outputs — the tuple NumPy's <c>unique_all</c> returns.</summary>
             public static implicit operator NDArray[](UniqueAllResult result) => result.ToArray();
@@ -88,10 +88,10 @@ namespace NumSharp
             /// <summary>Deconstructs into <c>(values, indices, inverse_indices, counts)</c>.</summary>
             public void Deconstruct(out NDArray values, out NDArray indices, out NDArray inverseIndices, out NDArray counts)
             {
-                values = Values;
-                indices = Indices;
-                inverseIndices = InverseIndices;
-                counts = Counts;
+                values = this.values;
+                indices = this.indices;
+                inverseIndices = this.inverse_indices;
+                counts = this.counts;
             }
         }
 
@@ -103,15 +103,15 @@ namespace NumSharp
         public readonly struct UniqueCountsResult
         {
             /// <summary>The sorted unique values of the input.</summary>
-            public NDArray Values { get; }
+            public NDArray values { get; }
 
             /// <summary>The number of times each unique value appears in the input.</summary>
-            public NDArray Counts { get; }
+            public NDArray counts { get; }
 
             internal UniqueCountsResult(NDArray values, NDArray counts)
             {
-                Values = values;
-                Counts = counts;
+                this.values = values;
+                this.counts = counts;
             }
 
             /// <summary>Number of outputs (always 2).</summary>
@@ -120,13 +120,13 @@ namespace NumSharp
             /// <summary>The k-th output in NumPy field order: values, counts.</summary>
             public NDArray this[int index] => index switch
             {
-                0 => Values,
-                1 => Counts,
+                0 => values,
+                1 => counts,
                 _ => throw new IndexOutOfRangeException($"UniqueCountsResult has 2 outputs; index {index} is out of range.")
             };
 
             /// <summary>Returns the outputs as an <see cref="NDArray"/><c>[]</c> in NumPy field order.</summary>
-            public NDArray[] ToArray() => new[] { Values, Counts };
+            public NDArray[] ToArray() => new[] { values, counts };
 
             /// <summary>Exposes the outputs — the tuple NumPy's <c>unique_counts</c> returns.</summary>
             public static implicit operator NDArray[](UniqueCountsResult result) => result.ToArray();
@@ -134,8 +134,8 @@ namespace NumSharp
             /// <summary>Deconstructs into <c>(values, counts)</c>.</summary>
             public void Deconstruct(out NDArray values, out NDArray counts)
             {
-                values = Values;
-                counts = Counts;
+                values = this.values;
+                counts = this.counts;
             }
         }
 
@@ -147,15 +147,15 @@ namespace NumSharp
         public readonly struct UniqueInverseResult
         {
             /// <summary>The sorted unique values of the input.</summary>
-            public NDArray Values { get; }
+            public NDArray values { get; }
 
-            /// <summary>The indices into <see cref="Values"/> that reconstruct the input, shaped like the input.</summary>
-            public NDArray InverseIndices { get; }
+            /// <summary>The indices into <see cref="values"/> that reconstruct the input, shaped like the input.</summary>
+            public NDArray inverse_indices { get; }
 
             internal UniqueInverseResult(NDArray values, NDArray inverseIndices)
             {
-                Values = values;
-                InverseIndices = inverseIndices;
+                this.values = values;
+                this.inverse_indices = inverseIndices;
             }
 
             /// <summary>Number of outputs (always 2).</summary>
@@ -164,13 +164,13 @@ namespace NumSharp
             /// <summary>The k-th output in NumPy field order: values, inverse_indices.</summary>
             public NDArray this[int index] => index switch
             {
-                0 => Values,
-                1 => InverseIndices,
+                0 => values,
+                1 => inverse_indices,
                 _ => throw new IndexOutOfRangeException($"UniqueInverseResult has 2 outputs; index {index} is out of range.")
             };
 
             /// <summary>Returns the outputs as an <see cref="NDArray"/><c>[]</c> in NumPy field order.</summary>
-            public NDArray[] ToArray() => new[] { Values, InverseIndices };
+            public NDArray[] ToArray() => new[] { values, inverse_indices };
 
             /// <summary>Exposes the outputs — the tuple NumPy's <c>unique_inverse</c> returns.</summary>
             public static implicit operator NDArray[](UniqueInverseResult result) => result.ToArray();
@@ -178,8 +178,8 @@ namespace NumSharp
             /// <summary>Deconstructs into <c>(values, inverse_indices)</c>.</summary>
             public void Deconstruct(out NDArray values, out NDArray inverseIndices)
             {
-                values = Values;
-                inverseIndices = InverseIndices;
+                values = this.values;
+                inverseIndices = this.inverse_indices;
             }
         }
 

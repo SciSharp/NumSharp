@@ -27,7 +27,7 @@ namespace NumSharp.UnitTest.Utilities
         // case it IS the values array, so asserting against it means asserting against Values.
         public static NDArrayAssertions Should(this np.UniqueResult result)
         {
-            return new NDArrayAssertions(result.Values);
+            return new NDArrayAssertions(result.values);
         }
 
         public static UnmanagedStorageAssertions Should(this UnmanagedStorage arr)

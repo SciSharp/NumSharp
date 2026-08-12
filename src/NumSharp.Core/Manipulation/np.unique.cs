@@ -8,12 +8,12 @@ namespace NumSharp
         /// <summary>
         ///     The result of <see cref="unique(NDArray, bool, bool, bool, int?, bool, bool)"/> — NumPy's
         ///     bare-array-OR-tuple return expressed as one type. It carries the sorted unique
-        ///     <see cref="Values"/> plus whichever of <see cref="Index"/>/<see cref="Inverse"/>/
-        ///     <see cref="Counts"/> were requested (the others are <c>null</c>), so
+        ///     <see cref="values"/> plus whichever of <see cref="indices"/>/<see cref="inverse_indices"/>/
+        ///     <see cref="counts"/> were requested (the others are <c>null</c>), so
         ///     <c>np.unique(ar, return_counts=True)</c> ports from Python verbatim.
         /// <para>
         ///     It stands in for both NumPy return shapes: it converts <b>implicitly to
-        ///     <see cref="NDArray"/></b> (the bare form — yields <see cref="Values"/>, so
+        ///     <see cref="NDArray"/></b> (the bare form — yields <see cref="values"/>, so
         ///     <c>NDArray u = np.unique(ar);</c> works) and <b>implicitly to <see cref="NDArray"/><c>[]</c></b>
         ///     (the tuple form — the present outputs in NumPy field order). It also indexes
         ///     (<c>[k]</c> = the k-th present output, matching the old <c>NDArray[]</c> return) and
@@ -24,9 +24,9 @@ namespace NumSharp
         ///     BREAKING vs the pre-2.4.2-parity API: <c>np.unique(ar)</c> now returns this struct rather
         ///     than a bare <see cref="NDArray"/>. Assignment and argument passing are unaffected (implicit
         ///     conversion), but chaining an <see cref="NDArray"/> member directly on the result
-        ///     (<c>np.unique(ar).array_equal(...)</c>) needs <c>.Values</c>, and <c>np.unique(ar)[k]</c>
+        ///     (<c>np.unique(ar).array_equal(...)</c>) needs <c>.values</c>, and <c>np.unique(ar)[k]</c>
         ///     now selects the k-th OUTPUT (values, index, …), not the k-th unique value — use
-        ///     <c>np.unique(ar).Values[k]</c> for the latter. The instance
+        ///     <c>np.unique(ar).values[k]</c> for the latter. The instance
         ///     <see cref="NDArray.unique(int?, bool, bool)"/> / <see cref="NDArray.unique(bool, bool, bool, int?, bool, bool)"/>
         ///     still return <see cref="NDArray"/>/<see cref="NDArray"/><c>[]</c> unchanged.
         /// </remarks>
@@ -35,80 +35,80 @@ namespace NumSharp
             private readonly NDArray[] _outputs;   // present outputs, NumPy field order: [values, index?, inverse?, counts?]
 
             /// <summary>The sorted unique values (dtype preserved). Always present.</summary>
-            public NDArray Values { get; }
+            public NDArray values { get; }
 
             /// <summary>First-occurrence indices, or <c>null</c> when <c>return_index</c> was False.</summary>
-            public NDArray Index { get; }
+            public NDArray indices { get; }
 
             /// <summary>Reconstruction indices (shaped like the input), or <c>null</c> when <c>return_inverse</c> was False.</summary>
-            public NDArray Inverse { get; }
+            public NDArray inverse_indices { get; }
 
             /// <summary>Per-value occurrence counts, or <c>null</c> when <c>return_counts</c> was False.</summary>
-            public NDArray Counts { get; }
+            public NDArray counts { get; }
 
             internal UniqueResult(NDArray[] outputs, bool hasIndex, bool hasInverse, bool hasCounts)
             {
                 _outputs = outputs;
-                Values = outputs[0];
+                values = outputs[0];
                 int p = 1;
-                Index = hasIndex ? outputs[p++] : null;
-                Inverse = hasInverse ? outputs[p++] : null;
-                Counts = hasCounts ? outputs[p++] : null;
+                indices = hasIndex ? outputs[p++] : null;
+                inverse_indices = hasInverse ? outputs[p++] : null;
+                counts = hasCounts ? outputs[p++] : null;
             }
 
-            // ---- Bare-return NDArray surface (delegates to Values) ----
+            // ---- Bare-return NDArray surface (delegates to values) ----
             // In the no-flags case np.unique(ar) IS the values array, so the common NDArray members
-            // forward to Values. This keeps np.unique(ar).size / .dtype / .GetDouble(i) / .array_equal(...)
-            // compiling now that the return type is UniqueResult — they mean Values, the bare result.
-            // For the full NDArray surface or unambiguous access, use .Values explicitly.
+            // forward to values. This keeps np.unique(ar).size / .dtype / .GetDouble(i) / .array_equal(...)
+            // compiling now that the return type is UniqueResult — they mean values, the bare result.
+            // For the full NDArray surface or unambiguous access, use .values explicitly.
 
-            /// <summary>Element count of <see cref="Values"/>.</summary>
-            public long size => Values.size;
+            /// <summary>Element count of <see cref="values"/>.</summary>
+            public long size => values.size;
 
-            /// <summary>Shape of <see cref="Values"/> as a <c>long[]</c>.</summary>
-            public long[] shape => Values.shape;
+            /// <summary>Shape of <see cref="values"/> as a <c>long[]</c>.</summary>
+            public long[] shape => values.shape;
 
-            /// <summary>The <see cref="NumSharp.Shape"/> of <see cref="Values"/>.</summary>
-            public Shape Shape => Values.Shape;
+            /// <summary>The <see cref="NumSharp.Shape"/> of <see cref="values"/>.</summary>
+            public Shape Shape => values.Shape;
 
-            /// <summary>Rank of <see cref="Values"/>.</summary>
-            public int ndim => Values.ndim;
+            /// <summary>Rank of <see cref="values"/>.</summary>
+            public int ndim => values.ndim;
 
-            /// <summary>Element <see cref="Type"/> of <see cref="Values"/>.</summary>
-            public Type dtype => Values.dtype;
+            /// <summary>Element <see cref="Type"/> of <see cref="values"/>.</summary>
+            public Type dtype => values.dtype;
 
-            /// <summary>Element <see cref="NPTypeCode"/> of <see cref="Values"/>.</summary>
-            public NPTypeCode typecode => Values.typecode;
+            /// <summary>Element <see cref="NPTypeCode"/> of <see cref="values"/>.</summary>
+            public NPTypeCode typecode => values.typecode;
 
-            /// <summary>True if <see cref="Values"/> equals <paramref name="rhs"/> element-wise (same shape).</summary>
-            public bool array_equal(NDArray rhs) => Values.array_equal(rhs);
+            /// <summary>True if <see cref="values"/> equals <paramref name="rhs"/> element-wise (same shape).</summary>
+            public bool array_equal(NDArray rhs) => values.array_equal(rhs);
 
-            /// <summary>The element of <see cref="Values"/> at a flat index.</summary>
-            public object GetAtIndex(long index) => Values.GetAtIndex(index);
+            /// <summary>The element of <see cref="values"/> at a flat index.</summary>
+            public object GetAtIndex(long index) => values.GetAtIndex(index);
 
-            /// <summary>The <typeparamref name="T"/> element of <see cref="Values"/> at a flat index.</summary>
-            public T GetAtIndex<T>(long index) where T : unmanaged => Values.GetAtIndex<T>(index);
+            /// <summary>The <typeparamref name="T"/> element of <see cref="values"/> at a flat index.</summary>
+            public T GetAtIndex<T>(long index) where T : unmanaged => values.GetAtIndex<T>(index);
 
-            /// <summary>The <see cref="double"/> value of <see cref="Values"/> at the given coordinates.</summary>
-            public double GetDouble(params long[] indices) => Values.GetDouble(indices);
+            /// <summary>The <see cref="double"/> value of <see cref="values"/> at the given coordinates.</summary>
+            public double GetDouble(params long[] indices) => values.GetDouble(indices);
 
-            /// <summary>The <see cref="double"/> value of <see cref="Values"/> at the given coordinates.</summary>
-            public double GetDouble(int[] indices) => Values.GetDouble(indices);
+            /// <summary>The <see cref="double"/> value of <see cref="values"/> at the given coordinates.</summary>
+            public double GetDouble(int[] indices) => values.GetDouble(indices);
 
-            /// <summary>The <see cref="float"/> value of <see cref="Values"/> at the given coordinates.</summary>
-            public float GetSingle(params long[] indices) => Values.GetSingle(indices);
+            /// <summary>The <see cref="float"/> value of <see cref="values"/> at the given coordinates.</summary>
+            public float GetSingle(params long[] indices) => values.GetSingle(indices);
 
-            /// <summary>The <see cref="float"/> value of <see cref="Values"/> at the given coordinates.</summary>
-            public float GetSingle(int[] indices) => Values.GetSingle(indices);
+            /// <summary>The <see cref="float"/> value of <see cref="values"/> at the given coordinates.</summary>
+            public float GetSingle(int[] indices) => values.GetSingle(indices);
 
-            /// <summary>The <see cref="bool"/> value of <see cref="Values"/> at the given coordinates.</summary>
-            public bool GetBoolean(params long[] indices) => Values.GetBoolean(indices);
+            /// <summary>The <see cref="bool"/> value of <see cref="values"/> at the given coordinates.</summary>
+            public bool GetBoolean(params long[] indices) => values.GetBoolean(indices);
 
-            /// <summary>The <see cref="bool"/> value of <see cref="Values"/> at the given coordinates.</summary>
-            public bool GetBoolean(int[] indices) => Values.GetBoolean(indices);
+            /// <summary>The <see cref="bool"/> value of <see cref="values"/> at the given coordinates.</summary>
+            public bool GetBoolean(int[] indices) => values.GetBoolean(indices);
 
-            /// <summary>The <see cref="int"/> value of <see cref="Values"/> at the given coordinates.</summary>
-            public int GetInt32(params long[] indices) => Values.GetInt32(indices);
+            /// <summary>The <see cref="int"/> value of <see cref="values"/> at the given coordinates.</summary>
+            public int GetInt32(params long[] indices) => values.GetInt32(indices);
 
             /// <summary>Number of present outputs (1 + one per requested return flag).</summary>
             public int Length => _outputs.Length;
@@ -119,8 +119,8 @@ namespace NumSharp
             /// <summary>The present outputs as an <see cref="NDArray"/><c>[]</c> in NumPy field order.</summary>
             public NDArray[] ToArray() => _outputs;
 
-            /// <summary>Bare-return conversion: yields <see cref="Values"/> (NumPy's single-array return).</summary>
-            public static implicit operator NDArray(UniqueResult result) => result.Values;
+            /// <summary>Bare-return conversion: yields <see cref="values"/> (NumPy's single-array return).</summary>
+            public static implicit operator NDArray(UniqueResult result) => result.values;
 
             /// <summary>Tuple-return conversion: the present outputs, NumPy field order.</summary>
             public static implicit operator NDArray[](UniqueResult result) => result._outputs;
@@ -173,7 +173,7 @@ namespace NumSharp
         ///   (NumPy's <c>sorted=False</c> hash-iteration order for integer/complex values is
         ///   platform-specific and not reproducible in C# — spec-compliant, the Array API leaves it
         ///   unspecified). See <see cref="unique_values"/>.</param>
-        /// <returns>A <see cref="UniqueResult"/> carrying <c>Values</c> and the requested outputs.</returns>
+        /// <returns>A <see cref="UniqueResult"/> carrying <c>values</c> and the requested outputs.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
         public static UniqueResult unique(NDArray ar,
             bool return_index = false,

@@ -66,10 +66,10 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // >>> np.unique_all(np.array([3,1,2,1,3,2,5,4]))
             var r = np.unique_all(np.array(new[] { 3, 1, 2, 1, 3, 2, 5, 4 }));
-            AssertInts(r.Values, 1, 2, 3, 4, 5);
-            AssertInt64(r.Indices, 1, 2, 0, 7, 6);
-            AssertInt64(r.InverseIndices, 2, 0, 1, 0, 2, 1, 4, 3);
-            AssertInt64(r.Counts, 2, 2, 2, 1, 1);
+            AssertInts(r.values, 1, 2, 3, 4, 5);
+            AssertInt64(r.indices, 1, 2, 0, 7, 6);
+            AssertInt64(r.inverse_indices, 2, 0, 1, 0, 2, 1, 4, 3);
+            AssertInt64(r.counts, 2, 2, 2, 1, 1);
         }
 
         [TestMethod]
@@ -77,11 +77,11 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // >>> np.unique_all(np.array([True, False, True, True]))
             var r = np.unique_all(np.array(new[] { true, false, true, true }));
-            r.Values.typecode.Should().Be(NPTypeCode.Boolean);
-            r.Values.ToArray<bool>().Should().Equal(false, true);
-            AssertInt64(r.Indices, 1, 0);
-            AssertInt64(r.InverseIndices, 1, 0, 1, 1);
-            AssertInt64(r.Counts, 1, 3);
+            r.values.typecode.Should().Be(NPTypeCode.Boolean);
+            r.values.ToArray<bool>().Should().Equal(false, true);
+            AssertInt64(r.indices, 1, 0);
+            AssertInt64(r.inverse_indices, 1, 0, 1, 1);
+            AssertInt64(r.counts, 1, 3);
         }
 
         [TestMethod]
@@ -89,11 +89,11 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // >>> np.unique_all(np.array([2**63+5, 3, 2**63+5, 1], dtype=np.uint64))
             var r = np.unique_all(np.array(new ulong[] { (ulong)long.MaxValue + 6, 3, (ulong)long.MaxValue + 6, 1 }));
-            r.Values.typecode.Should().Be(NPTypeCode.UInt64);
-            r.Values.ToArray<ulong>().Should().Equal(1, 3, (ulong)long.MaxValue + 6);
-            AssertInt64(r.Indices, 3, 1, 0);
-            AssertInt64(r.InverseIndices, 2, 1, 2, 0);
-            AssertInt64(r.Counts, 1, 1, 2);
+            r.values.typecode.Should().Be(NPTypeCode.UInt64);
+            r.values.ToArray<ulong>().Should().Equal(1, 3, (ulong)long.MaxValue + 6);
+            AssertInt64(r.indices, 3, 1, 0);
+            AssertInt64(r.inverse_indices, 2, 1, 2, 0);
+            AssertInt64(r.counts, 1, 1, 2);
         }
 
         [TestMethod]
@@ -105,16 +105,16 @@ namespace NumSharp.UnitTest.Manipulation
                 new Complex(1, 2), new Complex(3, 0), new Complex(1, 2),
                 new Complex(double.NaN, 1), new Complex(2, 2)
             }));
-            r.Values.typecode.Should().Be(NPTypeCode.Complex);
-            var v = r.Values.ToArray<Complex>();
+            r.values.typecode.Should().Be(NPTypeCode.Complex);
+            var v = r.values.ToArray<Complex>();
             v.Length.Should().Be(4);
             v[0].Should().Be(new Complex(1, 2));
             v[1].Should().Be(new Complex(2, 2));
             v[2].Should().Be(new Complex(3, 0));
             (double.IsNaN(v[3].Real) && v[3].Imaginary == 1).Should().BeTrue();
-            AssertInt64(r.Indices, 0, 4, 1, 3);
-            AssertInt64(r.InverseIndices, 0, 2, 0, 3, 1);
-            AssertInt64(r.Counts, 2, 1, 1, 1);
+            AssertInt64(r.indices, 0, 4, 1, 3);
+            AssertInt64(r.inverse_indices, 0, 2, 0, 3, 1);
+            AssertInt64(r.counts, 2, 1, 1, 1);
         }
 
         // ---- NaN semantics (equal_nan=False — the whole point of the Array API variants) ---
@@ -124,10 +124,10 @@ namespace NumSharp.UnitTest.Manipulation
             // >>> np.unique_all(np.array([1.0, nan, 2.0, nan, 1.0, nan]))
             // values=[1 2 nan nan nan] indices=[0 2 1 3 5] inverse=[0 2 1 3 0 4] counts=[2 1 1 1 1]
             var r = np.unique_all(np.array(new[] { 1.0, double.NaN, 2.0, double.NaN, 1.0, double.NaN }));
-            AssertDoubles(r.Values, 1.0, 2.0, double.NaN, double.NaN, double.NaN);
-            AssertInt64(r.Indices, 0, 2, 1, 3, 5);
-            AssertInt64(r.InverseIndices, 0, 2, 1, 3, 0, 4);
-            AssertInt64(r.Counts, 2, 1, 1, 1, 1);
+            AssertDoubles(r.values, 1.0, 2.0, double.NaN, double.NaN, double.NaN);
+            AssertInt64(r.indices, 0, 2, 1, 3, 5);
+            AssertInt64(r.inverse_indices, 0, 2, 1, 3, 0, 4);
+            AssertInt64(r.counts, 2, 1, 1, 1, 1);
         }
 
         // ---- unique_counts ----------------------------------------------------------------
@@ -168,10 +168,10 @@ namespace NumSharp.UnitTest.Manipulation
             // inverse_indices shape (2,3) = [[0,1,4],[3,1,2]]
             var x = np.array(new[,] { { 1, 2, 6 }, { 4, 2, 3 } });
             var r = np.unique_inverse(x);
-            AssertInts(r.Values, 1, 2, 3, 4, 6);
-            AssertShape(r.InverseIndices, 2, 3);
-            r.InverseIndices.ToArray<long>().Should().Equal(0, 1, 4, 3, 1, 2);
-            np.take(r.Values, r.InverseIndices).array_equal(x).Should().BeTrue();
+            AssertInts(r.values, 1, 2, 3, 4, 6);
+            AssertShape(r.inverse_indices, 2, 3);
+            r.inverse_indices.ToArray<long>().Should().Equal(0, 1, 4, 3, 1, 2);
+            np.take(r.values, r.inverse_indices).array_equal(x).Should().BeTrue();
         }
 
         [TestMethod]
@@ -179,9 +179,9 @@ namespace NumSharp.UnitTest.Manipulation
         {
             var x = (np.arange(24).reshape(2, 3, 4) % 5);
             var r = np.unique_inverse(x);
-            AssertInt64(r.Values.astype(NPTypeCode.Int64), 0, 1, 2, 3, 4);
-            AssertShape(r.InverseIndices, 2, 3, 4);
-            np.take(r.Values, r.InverseIndices).array_equal(x).Should().BeTrue();
+            AssertInt64(r.values.astype(NPTypeCode.Int64), 0, 1, 2, 3, 4);
+            AssertShape(r.inverse_indices, 2, 3, 4);
+            np.take(r.values, r.inverse_indices).array_equal(x).Should().BeTrue();
         }
 
         [TestMethod]
@@ -191,11 +191,11 @@ namespace NumSharp.UnitTest.Manipulation
             // >>> np.unique_all(a.T): indices=[0 2 5 1 4] inverse (3,2)=[[0,3],[1,1],[4,2]]
             var at = np.array(new[,] { { 1, 2, 6 }, { 4, 2, 3 } }).T;
             var r = np.unique_all(at);
-            AssertInts(r.Values, 1, 2, 3, 4, 6);
-            AssertInt64(r.Indices, 0, 2, 5, 1, 4);
-            AssertShape(r.InverseIndices, 3, 2);
-            r.InverseIndices.ToArray<long>().Should().Equal(0, 3, 1, 1, 4, 2);
-            AssertInt64(r.Counts, 1, 2, 1, 1, 1);
+            AssertInts(r.values, 1, 2, 3, 4, 6);
+            AssertInt64(r.indices, 0, 2, 5, 1, 4);
+            AssertShape(r.inverse_indices, 3, 2);
+            r.inverse_indices.ToArray<long>().Should().Equal(0, 3, 1, 1, 4, 2);
+            AssertInt64(r.counts, 1, 2, 1, 1, 1);
         }
 
         // ---- 0-d input: inverse is a 0-d () scalar (NumPy 2.0) -----------------------------
@@ -204,12 +204,12 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // >>> np.unique_all(np.array(5)): values=[5] indices=[0] inverse=0 (shape ()) counts=[1]
             var r = np.unique_all(np.array(5));
-            AssertInt64(r.Values.astype(NPTypeCode.Int64), 5);
-            AssertShape(r.Values, 1);
-            AssertInt64(r.Indices, 0);
-            r.InverseIndices.ndim.Should().Be(0);   // () scalar
-            r.InverseIndices.astype(NPTypeCode.Int64).ToArray<long>()[0].Should().Be(0);
-            AssertInt64(r.Counts, 1);
+            AssertInt64(r.values.astype(NPTypeCode.Int64), 5);
+            AssertShape(r.values, 1);
+            AssertInt64(r.indices, 0);
+            r.inverse_indices.ndim.Should().Be(0);   // () scalar
+            r.inverse_indices.astype(NPTypeCode.Int64).ToArray<long>()[0].Should().Be(0);
+            AssertInt64(r.counts, 1);
         }
 
         // ---- empty ------------------------------------------------------------------------
@@ -217,14 +217,14 @@ namespace NumSharp.UnitTest.Manipulation
         public void Unique_Empty_AllOutputsEmpty()
         {
             var r = np.unique_all(np.array(Array.Empty<double>()));
-            r.Values.size.Should().Be(0);
-            r.Values.typecode.Should().Be(NPTypeCode.Double);   // dtype preserved
-            r.Indices.size.Should().Be(0);
-            r.Indices.typecode.Should().Be(NPTypeCode.Int64);
-            r.InverseIndices.size.Should().Be(0);
-            r.InverseIndices.typecode.Should().Be(NPTypeCode.Int64);
-            r.Counts.size.Should().Be(0);
-            r.Counts.typecode.Should().Be(NPTypeCode.Int64);
+            r.values.size.Should().Be(0);
+            r.values.typecode.Should().Be(NPTypeCode.Double);   // dtype preserved
+            r.indices.size.Should().Be(0);
+            r.indices.typecode.Should().Be(NPTypeCode.Int64);
+            r.inverse_indices.size.Should().Be(0);
+            r.inverse_indices.typecode.Should().Be(NPTypeCode.Int64);
+            r.counts.size.Should().Be(0);
+            r.counts.typecode.Should().Be(NPTypeCode.Int64);
         }
 
         // ---- unique_values ----------------------------------------------------------------
@@ -276,19 +276,19 @@ namespace NumSharp.UnitTest.Manipulation
 
             var all = np.unique_all(x);
             all.Length.Should().Be(4);
-            all[0].array_equal(all.Values).Should().BeTrue();
-            all[3].array_equal(all.Counts).Should().BeTrue();
+            all[0].array_equal(all.values).Should().BeTrue();
+            all[3].array_equal(all.counts).Should().BeTrue();
             NDArray[] asArray = all;   // implicit conversion, NumPy field order
             asArray.Length.Should().Be(4);
-            asArray[2].array_equal(all.InverseIndices).Should().BeTrue();
+            asArray[2].array_equal(all.inverse_indices).Should().BeTrue();
 
             var counts = np.unique_counts(x);
             counts.Length.Should().Be(2);
-            counts[1].array_equal(counts.Counts).Should().BeTrue();
+            counts[1].array_equal(counts.counts).Should().BeTrue();
 
             var inv = np.unique_inverse(x);
             inv.Length.Should().Be(2);
-            inv[1].array_equal(inv.InverseIndices).Should().BeTrue();
+            inv[1].array_equal(inv.inverse_indices).Should().BeTrue();
         }
     }
 }

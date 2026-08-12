@@ -384,21 +384,23 @@ equal_nan=true, bool sorted=true)`→`UniqueResult` makes **every** NumPy call s
 that used to need a C# idiom: `np.unique(ar, return_counts: true)` and `np.unique(ar, return_inverse: true)`
 (**sole keyword, no `return_index`**), plus `np.unique(ar)`, `np.unique(ar, axis: 0)`, `np.unique(ar, equal_nan:
 false)`. `UniqueResult` is a `readonly struct` (nested `np.UniqueResult`) that stands in for both NumPy shapes: it
-converts **implicitly to `NDArray`** (the bare form — yields `Values`, so `NDArray u = np.unique(ar)` and every
+converts **implicitly to `NDArray`** (the bare form — yields `values`, so `NDArray u = np.unique(ar)` and every
 argument-passing/assignment site is unchanged) and **implicitly to `NDArray[]`** (the tuple form — the present
 outputs in NumPy field order `[values, index?, inverse?, counts?]`); it indexes (`[k]` = k-th present output, matching
 the old `NDArray[]` return), `Deconstruct`s (`var (values, counts) = np.unique(ar, return_counts: true)`), and exposes
-named `Values`/`Index`/`Inverse`/`Counts` (the last three `null` when not requested). **BREAKING (accepted):**
+named `values`/`indices`/`inverse_indices`/`counts` (**case-identical with NumPy's namedtuple fields** —
+NumSharp's whole NumPy surface is lowercase, e.g. `nd.shape`/`nd.size`/`nd.dtype`; the last three are `null`
+when not requested). **BREAKING (accepted):**
 `np.unique(ar)` now returns `UniqueResult`, not a bare `NDArray` — so `np.unique(ar)[k]` selects the k-th OUTPUT (not
-the k-th unique value → use `.Values[k]`). To keep the ~230 existing call-sites working unchanged, the struct
-**forwards the common `NDArray` surface to `Values`** (`size`/`shape`/`Shape`/`ndim`/`dtype`/`typecode`/`array_equal`/
+the k-th unique value → use `.values[k]`). To keep the ~230 existing call-sites working unchanged, the struct
+**forwards the common `NDArray` surface to `values`** (`size`/`shape`/`Shape`/`ndim`/`dtype`/`typecode`/`array_equal`/
 `GetAtIndex`/`GetAtIndex<T>`/`GetDouble`/`GetSingle`/`GetBoolean`/`GetInt32`) — the value the caller means in the
 no-flags case — and the test `Should()` extension gained a `UniqueResult` overload (`FluentExtension.cs`). The
 **instance** `NDArray.unique(int? axis=null, …)`→`NDArray` and `NDArray.unique(bool return_index, …)`→`NDArray[]`
 are UNCHANGED (all internal consumers — `NDArray.unique.Hash.cs`, `np.unique_values.cs` — stay on them); only the
 static `np.unique` was lifted to `UniqueResult`, which wraps the instance `NDArray[]`. The other three sibling
 result structs (`UniqueAllResult`/`UniqueCountsResult`/`UniqueInverseResult`) are always tuples, so they carry no
-`Values`-forwarding surface — the asymmetry is deliberate (only `np.unique` has a bare-array case). Gate:
+`values`-forwarding surface — the asymmetry is deliberate (only `np.unique` has a bare-array case). Gate:
 `Manipulation/np.unique.AxisEdgeCases.Test.cs` (`UniqueResult_*` + `BareReturn_*` pins); the whole test suite compiles
 and passes against the new return type (differential-verified: `np.unique(x, return_counts=True)` bit-identical to
 NumPy 2.4.2). See `Manipulation/np.unique.cs`.
@@ -408,8 +410,9 @@ NumPy 2.4.2). See `Manipulation/np.unique.cs`.
 in-process differential across all 13 NumPy dtypes × layouts × NaN/empty/0-d — 102/102 bit-exact). All four are thin
 wrappers over the existing `unique` machinery with **`equal_nan=False`** (each NaN is a DISTINCT value — the whole
 point of these variants vs `np.unique`'s `equal_nan=True` default) and `axis=None` (flattened). NumPy returns
-namedtuples; C# stands in with named-field `readonly struct`s (`UniqueAllResult{Values,Indices,InverseIndices,Counts}`,
-`UniqueCountsResult{Values,Counts}`, `UniqueInverseResult{Values,InverseIndices}`), each with implicit `NDArray[]`
+namedtuples; C# stands in with named-field `readonly struct`s whose fields are **case-identical with NumPy's**
+(`UniqueAllResult{values,indices,inverse_indices,counts}`, `UniqueCountsResult{values,counts}`,
+`UniqueInverseResult{values,inverse_indices}` — lowercase/snake_case, matching NumPy 2.4.2's `_fields`), each with implicit `NDArray[]`
 conversion + `Deconstruct` + indexer (the `np.meshgrid` house shape). `unique_values` returns a bare `NDArray`.
 `values` preserves the input dtype; `indices`/`inverse_indices`/`counts` are int64 (NumPy intp). `inverse_indices` is
 reshaped to the ORIGINAL input shape (NumPy 2.0: reconstruct via `np.take(values, inverse_indices)`) — the sort path
