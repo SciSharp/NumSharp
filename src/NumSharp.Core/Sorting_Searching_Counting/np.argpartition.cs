@@ -33,6 +33,16 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argpartition.html</remarks>
         public static NDArray argpartition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
             => AxisPartition.ArgPartition(a, kth, axis, kind, order);
+
+        /// <summary>
+        ///     Indirect partition with the kth indices given as an ARRAY — NumPy's array-kth form
+        ///     (bool kth "Booleans unacceptable as partition index"; non-integer "Partition index must
+        ///     be integer"; &gt;1-D "object too deep for desired array" BEFORE the axis check; uint64
+        ///     values wrap modulo 2^64 exactly like NumPy's intp cast).
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argpartition.html</remarks>
+        public static NDArray argpartition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
+            => AxisPartition.ArgPartition(a, kth, axis, kind, order);
     }
 
     public partial class NDArray
@@ -49,6 +59,13 @@ namespace NumSharp
         ///     <paramref name="kth"/> at once (NumPy <c>ndarray.argpartition</c>).
         /// </summary>
         public NDArray argpartition(int[] kth, int? axis = -1, string kind = "introselect", string order = null)
+            => AxisPartition.ArgPartition(this, kth, axis, kind, order);
+
+        /// <summary>
+        ///     Returns the int64 indices that would partition this array, with the kth indices given
+        ///     as an ARRAY (NumPy's array-kth form — see the <c>np.argpartition</c> overload).
+        /// </summary>
+        public NDArray argpartition(NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
             => AxisPartition.ArgPartition(this, kth, axis, kind, order);
     }
 }

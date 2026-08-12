@@ -26,17 +26,22 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input data.</param>
         /// <param name="axis">Axis along which to operate. If <c>null</c>, the flattened input is used.</param>
+        /// <param name="out">If provided, the result is inserted into this array and the SAME instance is
+        ///     returned (NumPy semantics): the shape must equal the result's exactly, and the dtype must be
+        ///     an integer family safe-castable to int64 (bool through uint32 — uint64/floats raise NumPy's
+        ///     verbatim cast TypeError); the int64 indices then cast UNSAFELY into it (wrap/truncate).</param>
         /// <param name="keepdims">If true, the reduced axes are left in the result as dimensions with size one
         ///     (with <paramref name="axis"/> <c>null</c> the result has shape <c>(1,) * a.ndim</c>, like NumPy).</param>
-        /// <returns>Array of int64 indices (or a 0-d scalar for the flattened form).</returns>
+        /// <returns>Array of int64 indices (or a 0-d scalar for the flattened form); <paramref name="out"/> when given.</returns>
         /// <exception cref="ValueError">All-NaN slice encountered.</exception>
         /// <exception cref="AxisError">Axis out of bounds (reports the original axis, like NumPy).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html</remarks>
-        public static NDArray nanargmax(NDArray a, int? axis, bool keepdims = false)
+        public static NDArray nanargmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             ValidateNanArgAxis(a, axis);
             var prepared = NanArgReplace(a, double.NegativeInfinity, axis);
-            return prepared.TensorEngine.ReduceArgMax(prepared, axis, keepdims);
+            var res = prepared.TensorEngine.ReduceArgMax(prepared, axis, keepdims);
+            return NanArgWriteOut(res, @out, "argmax");
         }
 
         /// <summary>
@@ -61,17 +66,62 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input data.</param>
         /// <param name="axis">Axis along which to operate. If <c>null</c>, the flattened input is used.</param>
+        /// <param name="out">If provided, the result is inserted into this array and the SAME instance is
+        ///     returned (NumPy semantics — see <see cref="nanargmax(NDArray, int?, NDArray, bool)"/>).</param>
         /// <param name="keepdims">If true, the reduced axes are left in the result as dimensions with size one
         ///     (with <paramref name="axis"/> <c>null</c> the result has shape <c>(1,) * a.ndim</c>, like NumPy).</param>
-        /// <returns>Array of int64 indices (or a 0-d scalar for the flattened form).</returns>
+        /// <returns>Array of int64 indices (or a 0-d scalar for the flattened form); <paramref name="out"/> when given.</returns>
         /// <exception cref="ValueError">All-NaN slice encountered.</exception>
         /// <exception cref="AxisError">Axis out of bounds (reports the original axis, like NumPy).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html</remarks>
-        public static NDArray nanargmin(NDArray a, int? axis, bool keepdims = false)
+        public static NDArray nanargmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             ValidateNanArgAxis(a, axis);
             var prepared = NanArgReplace(a, double.PositiveInfinity, axis);
-            return prepared.TensorEngine.ReduceArgMin(prepared, axis, keepdims);
+            var res = prepared.TensorEngine.ReduceArgMin(prepared, axis, keepdims);
+            return NanArgWriteOut(res, @out, "argmin");
+        }
+
+        /// <summary>
+        ///     NumPy's argmax/argmin <c>out=</c> contract (probed 2.4.2): the out array's dtype must be
+        ///     safe-castable TO intp — every bool/int dtype through uint32 (uint64 is not: verbatim
+        ///     <c>Cannot cast array data from dtype('uint64') to dtype('int64') according to the rule
+        ///     'safe'</c>, a TypeError) — its shape must EQUAL the (keepdims-adjusted) result shape
+        ///     (<c>output array does not match result of np.argmax.</c> — nanargmax leaks "argmax",
+        ///     nanargmin "argmin"), and the int64 indices then cast UNSAFELY into it (an int8 out wraps
+        ///     index 200 to -56; a bool out reads index != 0 — probed). Returns the SAME instance.
+        ///     Char (no NumPy dtype) is integer-family and safe to int64, so it is allowed (house call).
+        /// </summary>
+        private static NDArray NanArgWriteOut(NDArray result, NDArray @out, string name)
+        {
+            if (@out is null)
+                return result;
+
+            switch (@out.typecode)
+            {
+                case NPTypeCode.Boolean:
+                case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                    break;
+                default:
+                    throw new TypeError(
+                        $"Cannot cast array data from dtype('{@out.typecode.AsNumpyDtypeName()}') to dtype('int64') according to the rule 'safe'");
+            }
+
+            if (@out.ndim != result.ndim)
+                throw new ValueError($"output array does not match result of np.{name}.");
+            for (int d = 0; d < result.ndim; d++)
+                if (@out.shape[d] != result.shape[d])
+                    throw new ValueError($"output array does not match result of np.{name}.");
+
+            np.copyto(@out, result, casting: "unsafe");
+            return @out;
         }
 
         /// <summary>

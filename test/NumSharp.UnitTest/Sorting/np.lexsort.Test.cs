@@ -196,6 +196,13 @@ namespace NumSharp.UnitTest.Sorting
         }
 
         [TestMethod]
+        public void Lexsort_DecimalKey()
+        {
+            // decimal (no NumPy analog) rides the same stable argsort route as every other dtype
+            AssertIdx(np.lexsort(new[] { np.array(new decimal[] { 1.5m, 0.5m, 1.5m }), np.array(new[] { 2, 1, 0 }) }), 2, 1, 0);
+        }
+
+        [TestMethod]
         public void Lexsort_KeysNotMutated()
         {
             var x = np.array(new[] { 3, 1, 2 });

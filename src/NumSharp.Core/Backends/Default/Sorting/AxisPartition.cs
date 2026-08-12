@@ -35,12 +35,32 @@ namespace NumSharp.Backends.Sorting
             if (axis == null)
             {
                 var flat = a.ravel().copy('C');
-                PartitionInPlaceCore(flat, 0, kth);
+                PartitionInPlaceCore(flat, 0, WidenKth(kth));
                 return flat;
             }
             int ax = AxisSort.NormalizeAxis(axis.Value, a.ndim);
             var res = a.copy('C');
-            PartitionInPlaceCore(res, ax, kth);
+            PartitionInPlaceCore(res, ax, WidenKth(kth));
+            return res;
+        }
+
+        /// <summary>np.partition with an NDArray kth — NumPy's array form, which is what makes its
+        /// kth-dtype rejections REACHABLE (a typed C# int[] cannot be bool/float/2-D). Validation is
+        /// NumPy's probed STAGING: kind → order → too-deep (before axis!) → axis → bool/integer dtype
+        /// → wrap/bounds — a bool kth with a bad axis reports the AXIS, a 2-D kth reports too-deep.</summary>
+        public static NDArray Partition(NDArray a, NDArray kth, int? axis, string kind, string order)
+        {
+            ValidateKindOrder(kind, order);
+            KthTooDeepCheck(kth);
+            if (axis == null)
+            {
+                var flat = a.ravel().copy('C');
+                PartitionInPlaceCore(flat, 0, ExtractKthValues(kth));
+                return flat;
+            }
+            int ax = AxisSort.NormalizeAxis(axis.Value, a.ndim);
+            var res = a.copy('C');
+            PartitionInPlaceCore(res, ax, ExtractKthValues(kth));
             return res;
         }
 
@@ -54,13 +74,31 @@ namespace NumSharp.Backends.Sorting
                 // In-place flatten-partition only well-defined for contiguous (ndarray.sort house rule).
                 if (!a.Shape.IsWriteable)
                     throw new ValueError("partition array is read-only");
-                PartitionInPlaceCore(a.reshape(a.size), 0, kth);
+                PartitionInPlaceCore(a.reshape(a.size), 0, WidenKth(kth));
                 return;
             }
             int ax = AxisSort.NormalizeAxis(axis.Value, a.ndim);
             if (!a.Shape.IsWriteable)
                 throw new ValueError("partition array is read-only");
-            PartitionInPlaceCore(a, ax, kth);
+            PartitionInPlaceCore(a, ax, WidenKth(kth));
+        }
+
+        /// <summary>ndarray.partition with an NDArray kth (staged validation — see the np.partition form).</summary>
+        public static void PartitionInPlace(NDArray a, NDArray kth, int? axis, string kind, string order)
+        {
+            ValidateKindOrder(kind, order);
+            KthTooDeepCheck(kth);
+            if (axis == null)
+            {
+                if (!a.Shape.IsWriteable)
+                    throw new ValueError("partition array is read-only");
+                PartitionInPlaceCore(a.reshape(a.size), 0, ExtractKthValues(kth));
+                return;
+            }
+            int ax = AxisSort.NormalizeAxis(axis.Value, a.ndim);
+            if (!a.Shape.IsWriteable)
+                throw new ValueError("partition array is read-only");
+            PartitionInPlaceCore(a, ax, ExtractKthValues(kth));
         }
 
         /// <summary>np.argpartition: int64 indices that would partition <paramref name="a"/>
@@ -75,13 +113,34 @@ namespace NumSharp.Backends.Sorting
             {
                 var flat = a.Shape.IsContiguous ? a.reshape(a.size) : a.ravel().copy('C');
                 var outFlat = new NDArray(NPTypeCode.Int64, new Shape((int)a.size), false);
-                ArgPartitionInto(flat, outFlat, 0, kth);
+                ArgPartitionInto(flat, outFlat, 0, WidenKth(kth));
                 return outFlat;
             }
             int ax = AxisSort.NormalizeAxis(axis.Value, a.ndim);
             var src = a.Shape.IsContiguous ? a : a.copy('C');
             var ret = new NDArray(NPTypeCode.Int64, new Shape((long[])a.Shape.dimensions.Clone()), false);
-            ArgPartitionInto(src, ret, ax, kth);
+            ArgPartitionInto(src, ret, ax, WidenKth(kth));
+            return ret;
+        }
+
+        /// <summary>np.argpartition with an NDArray kth (staged validation — see the np.partition form).</summary>
+        public static NDArray ArgPartition(NDArray a, NDArray kth, int? axis, string kind, string order)
+        {
+            ValidateKindOrder(kind, order);
+            KthTooDeepCheck(kth);
+            if (a.ndim == 0)
+                a = a.reshape(1);
+            if (axis == null)
+            {
+                var flat = a.Shape.IsContiguous ? a.reshape(a.size) : a.ravel().copy('C');
+                var outFlat = new NDArray(NPTypeCode.Int64, new Shape((int)a.size), false);
+                ArgPartitionInto(flat, outFlat, 0, ExtractKthValues(kth));
+                return outFlat;
+            }
+            int ax = AxisSort.NormalizeAxis(axis.Value, a.ndim);
+            var src = a.Shape.IsContiguous ? a : a.copy('C');
+            var ret = new NDArray(NPTypeCode.Int64, new Shape((long[])a.Shape.dimensions.Clone()), false);
+            ArgPartitionInto(src, ret, ax, ExtractKthValues(kth));
             return ret;
         }
 
@@ -97,6 +156,64 @@ namespace NumSharp.Backends.Sorting
                 throw new ValueError("Cannot specify order when the array has no fields.");
         }
 
+        /// <summary>Widen an int[] kth to the long[] the cores take (NumPy's kth is intp).
+        /// Null rides through so the ArgumentNullException still fires at the kth-validation stage.</summary>
+        private static long[] WidenKth(int[] kth)
+        {
+            if (kth is null)
+                return null;
+            var k64 = new long[kth.Length];
+            for (int i = 0; i < kth.Length; i++)
+                k64[i] = kth[i];
+            return k64;
+        }
+
+        /// <summary>The pre-axis stage of NumPy's array-kth conversion: a &gt;1-D kth is rejected
+        /// with the verbatim conversion error BEFORE the axis is even looked at (probed:
+        /// <c>np.partition(a, [[1]], axis=9)</c> reports too-deep, not the axis).</summary>
+        private static void KthTooDeepCheck(NDArray kth)
+        {
+            if (kth is null)
+                throw new ArgumentNullException(nameof(kth));
+            if (kth.ndim > 1)
+                throw new ValueError("object too deep for desired array");
+        }
+
+        /// <summary>The kth-stage of NumPy's <c>partition_prep_kth_array</c> for an array kth:
+        /// bool rejects first ("Booleans unacceptable as partition index"), any non-integer dtype
+        /// next ("Partition index must be integer" — TypeError), then the values cast to intp with
+        /// NumPy's MODULAR wrap (a uint64 2^63 becomes a negative kth and its bounds error reports
+        /// the wrapped value — probed: <c>kth(=-9223372036854775804) out of bounds (4)</c>, while
+        /// uint64 2^64-1 wraps to -1 and is a LEGAL last-element kth). Char (no NumPy dtype) is
+        /// integer-family, so it rides the same route (house call). Any layout/0-d is normalized
+        /// by the astype+ravel.</summary>
+        private static long[] ExtractKthValues(NDArray kth)
+        {
+            if (kth.typecode == NPTypeCode.Boolean)
+                throw new ValueError("Booleans unacceptable as partition index");
+            switch (kth.typecode)
+            {
+                case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                case NPTypeCode.UInt64:
+                    break;
+                default:
+                    throw new TypeError("Partition index must be integer");
+            }
+
+            var k64 = (kth.typecode == NPTypeCode.Int64 ? kth : kth.astype(NPTypeCode.Int64)).ravel();
+            var result = new long[k64.size];
+            for (int i = 0; i < result.Length; i++)
+                result[i] = k64.GetValue<long>(i);
+            return result;
+        }
+
         /// <summary>
         ///     Port of <c>partition_prep_kth_array</c>: wrap negatives once, bounds-check against
         ///     the axis length UNLESS the array is empty (NumPy's <c>PyArray_SIZE(op) != 0</c> guard),
@@ -104,7 +221,7 @@ namespace NumSharp.Backends.Sorting
         ///     An empty kth is NumPy's <c>np.array([], dtype=intp)</c> — a valid no-op (Python's
         ///     bare <c>[]</c> is float64 and raises; a typed C# int[] carries no such ambiguity).
         /// </summary>
-        private static int[] PrepKth(int[] kth, long axisLength, long size)
+        private static int[] PrepKth(long[] kth, long axisLength, long size)
         {
             // NumPy's np.partition(a, None) is a TypeError; a null C# array is the same caller bug
             // (house ArgumentNullException precedent: fill_diagonal/lexsort). Guarded HERE so it
@@ -128,7 +245,7 @@ namespace NumSharp.Backends.Sorting
 
         // ============================ drive ============================
 
-        private static void PartitionInPlaceCore(NDArray target, int axis, int[] kth)
+        private static void PartitionInPlaceCore(NDArray target, int axis, long[] kth)
         {
             long N = target.shape[axis];
             var ks = PrepKth(kth, N, target.size);
@@ -160,7 +277,7 @@ namespace NumSharp.Backends.Sorting
             }
         }
 
-        private static void ArgPartitionInto(NDArray src, NDArray dst, int axis, int[] kth)
+        private static void ArgPartitionInto(NDArray src, NDArray dst, int axis, long[] kth)
         {
             long N = src.shape[axis];
             var ks = PrepKth(kth, N, src.size);

@@ -423,6 +423,62 @@ namespace NumSharp.Backends.Iteration
         }
     }
 
+    /// <summary>
+    /// ArgMin/ArgMax accumulator for Decimal — same running-index bookkeeping as
+    /// <see cref="HalfArgAccumulator"/>, minus the NaN slot (decimal has no NaN).
+    /// Decimal is on this fallback route for the same reason Half/Complex are: the IL arg
+    /// kernels compare via OpCodes.Bgt/Blt, which do not apply to a 16-byte struct — the
+    /// emitted kernel silently mis-compared (argmax([3,9,1,5]) returned 0).
+    /// </summary>
+    public struct DecimalArgAccumulator
+    {
+        public decimal Best;
+        public long BestIdx;
+        public long Cur;
+    }
+
+    public readonly struct DecimalArgMaxKernel : INDReducingInnerLoop<DecimalArgAccumulator>
+    {
+        public unsafe bool Execute(void** dataptrs, long* strides, long count, ref DecimalArgAccumulator a)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            decimal best = a.Best;
+            long bi = a.BestIdx;
+            long cur = a.Cur;
+            for (long i = 0; i < count; i++)
+            {
+                decimal v = *(decimal*)(p + i * stride);
+                if (bi < 0 || v > best) { best = v; bi = cur + i; }
+            }
+            a.Best = best;
+            a.BestIdx = bi;
+            a.Cur = cur + count;
+            return true;
+        }
+    }
+
+    public readonly struct DecimalArgMinKernel : INDReducingInnerLoop<DecimalArgAccumulator>
+    {
+        public unsafe bool Execute(void** dataptrs, long* strides, long count, ref DecimalArgAccumulator a)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            decimal best = a.Best;
+            long bi = a.BestIdx;
+            long cur = a.Cur;
+            for (long i = 0; i < count; i++)
+            {
+                decimal v = *(decimal*)(p + i * stride);
+                if (bi < 0 || v < best) { best = v; bi = cur + i; }
+            }
+            a.Best = best;
+            a.BestIdx = bi;
+            a.Cur = cur + count;
+            return true;
+        }
+    }
+
     public readonly struct ComplexArgMaxKernel : INDReducingInnerLoop<ComplexArgAccumulator>
     {
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref ComplexArgAccumulator a)

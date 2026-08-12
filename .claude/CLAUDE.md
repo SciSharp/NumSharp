@@ -1201,7 +1201,14 @@ introselect (`Utilities/QuickSelect.cs`, the median/percentile primitive), the s
   CDOUBLE_LT comparator, whose NaN order is positional ((1,NaN) BEFORE (NaN,1)) and deliberately NOT compacted.
   C# reads an empty `int[]` kth as NumPy's `np.array([], intp)` — a valid no-op copy (Python's bare `[]` is float64
   → TypeError; a typed array carries no such ambiguity). Result is a fresh C-contiguous copy (house np.sort
-  convention; NumPy's `copy(order='K')` keeps F-order for F-inputs — values identical).
+  convention; NumPy's `copy(order='K')` keeps F-order for F-inputs — values identical). **The NDArray-kth overload**
+  (NumPy's array form, on np.partition/np.argpartition AND the ndarray methods) is what makes NumPy's kth-dtype
+  rejections REACHABLE — bool kth `Booleans unacceptable as partition index`, non-integer (incl. Decimal)
+  `Partition index must be integer` (TypeError), >1-D `object too deep for desired array` — with NumPy's probed
+  STAGING: kind → order → too-deep (BEFORE axis: `partition(a, [[1]], axis=9)` reports too-deep) → axis →
+  bool/integer dtype → wrap/bounds. Integer kth values cast to intp MODULARLY like NumPy (uint64 2^63 wraps
+  negative and its bounds error reports the wrapped value; 2^64−1 wraps to a LEGAL −1); Char rides the integer
+  route (house call); 0-d and any layout accepted.
 - `argpartition` — same driver returning int64 indices; the source is only read (broadcast views legal). Built on
   the **index-tracking QuickSelect overloads** (`PartitionAtMany(T*, long*, …)` — values and their original indices
   swap in lockstep, the `RadixSort.ArgSortU32/U64` pattern). A 0-d input ravels to `(1,)` FIRST — NumPy's arg-side
@@ -1217,13 +1224,31 @@ introselect (`Utilities/QuickSelect.cs`, the median/percentile primitive), the s
   the same shape` (ValueError); 0-d keys let axis 0/-1 slip (NumPy's back-compat quirk) and size ≤ 1 early-returns
   a 0-filled int64 array. The single-NDArray overload reads the first axis as the key list (a 1-D input degenerates
   to N scalar keys → the 0-d `0`, NumPy's probed quirk).
-- `nanargmax`/`nanargmin(a, axis=null, keepdims=false)` — NumPy's `_replace_nan(∓inf)` + all-NaN-slice guard
+- `nanargmax`/`nanargmin(a, axis=null, out=null, keepdims=false)` — NumPy's `_replace_nan(∓inf)` + all-NaN-slice guard
   (`ValueError("All-NaN slice encountered")`) then `argmax`/`argmin`; int/bool/char/decimal pass through untouched
   (NumPy's `mask=None` branch). The flat form returns `long`; the `int?`-axis overload returns the int64 NDArray and
-  handles `keepdims` with `axis=null` (shape `(1,)*ndim`). Axis validation runs UP FRONT for every dtype path —
-  the engine's argmax silently wraps out-of-range negative axes (`np.argmax(a2d, -3)` → `[1 1]`, a pre-existing
-  argmax bug this family refuses to inherit) — with NumPy's rule that a 0-d array accepts axis 0/-1. The documented
-  NaN+Inf untrusted-tie caveats fall out of the composition identically (probed cases pinned).
+  handles `keepdims` with `axis=null` (shape `(1,)*ndim`). **`out=` follows NumPy's probed argmax contract:** any
+  bool/int dtype safe-castable to intp is accepted (bool through uint32 — uint64/floats raise the verbatim
+  `Cannot cast array data from dtype('…') to dtype('int64') according to the rule 'safe'` TypeError), the shape must
+  EQUAL the keepdims-adjusted result (`output array does not match result of np.argmax.` — nanargmin leaks
+  "argmin"), the int64 indices cast UNSAFELY into it (an int8 out wraps index 200 → −56, a bool out reads
+  index ≠ 0 — probed), the SAME instance returns, a strided out writes through its base, and the all-NaN guard
+  fires BEFORE out is touched. Positional slot 3 is `out` (NumPy's order) — pass `keepdims:` by name; the implicit
+  bool→NDArray conversion would otherwise bind a positional bool to `out`. Axis validation runs UP FRONT for every
+  dtype path — the engine's argmax silently wraps out-of-range negative axes (`np.argmax(a2d, -3)` → `[1 1]`, a
+  pre-existing argmax bug this family refuses to inherit) — with NumPy's rule that a 0-d array accepts axis 0/-1.
+  The documented NaN+Inf untrusted-tie caveats fall out of the composition identically (probed cases pinned).
+  **Auditing this family's dtype cells exposed and fixed three ENGINE argmax/argmin bugs** (all pre-existing, all
+  now oracle-gated): flat `argmax(Decimal)` rode the IL arg kernel whose Bgt/Blt cannot compare a 16-byte struct
+  and SILENTLY mis-answered (`argmax([3,9,1,5])` → 0) — Decimal now takes the same `ExecuteReducing` fallback
+  family as Half/Complex (`DecimalArg{Max,Min}Kernel`); flat `argmax(Char)` threw NotSupportedException while the
+  axis path supported char all along — it now rides the zero-copy uint16 reinterpret its amax already uses; and
+  the strided/scalar IL step compared floats with `Bgt_Un`/`Blt_Un`, whose UNORDERED branch also fires when the
+  ACCUM holds NaN, so every later finite value stole the index (`argmax` of a transposed `[nan,2,3,nan]` walked to
+  3 instead of NumPy's first-NaN-wins 0; contiguous inputs were immune via the C# NaN helpers) — fixed to ordered
+  `Bgt`/`Blt`. The reduce fuzz tier now generates the flat `axis=None` argmax/argmin cells whose absence hid all
+  three (the old skip excluded flat argmax entirely; keepdims=False flat cells replay via
+  `NDArray.Scalar(np.argmax(a))`, and the decimal oracle gained flat argmax cases).
 - `sort_complex(a)` — copy + sort along the LAST axis **in the input's own dtype** (an int64 past 2^53 orders by
   its exact value), then up-cast. NumSharp's single `Complex` absorbs NumPy's complex64 cells (int8/16, uint8/16 —
   values identical, width documented; those four dtypes are excluded from the fuzz tier and unit-test-pinned).

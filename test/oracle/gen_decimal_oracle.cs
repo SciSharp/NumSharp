@@ -332,6 +332,14 @@ static class Gen
                 "int64", new int[0], HexOf(Bytes(new[] { (long)iMax }))));
             reduce.Add(Case($"argmin/decimal/{ln}/{n++}", "argmin", pj0, new[] { o.Describe() },
                 "int64", new int[0], HexOf(Bytes(new[] { (long)iMin }))));
+            // G13: the FLAT (axis=None) form takes argmax_elementwise_il — a DIFFERENT code path
+            // from the axis kernel above, and the one whose Decimal IL compare was silently wrong
+            // (argmax([3,9,1,5]) returned 0 while this tier stayed green through the axis path).
+            string pjFlat = "{\"axis\":null,\"keepdims\":false}";
+            reduce.Add(Case($"argmax_flat/decimal/{ln}/{n++}", "argmax", pjFlat, new[] { o.Describe() },
+                "int64", new int[0], HexOf(Bytes(new[] { (long)iMax }))));
+            reduce.Add(Case($"argmin_flat/decimal/{ln}/{n++}", "argmin", pjFlat, new[] { o.Describe() },
+                "int64", new int[0], HexOf(Bytes(new[] { (long)iMin }))));
             reduce.Add(Case($"count_nonzero/decimal/{ln}/{n++}", "count_nonzero", pj0, new[] { o.Describe() },
                 "int64", new int[0], HexOf(Bytes(new[] { nz }))));
             reduce.Add(Case($"all/decimal/{ln}/{n++}", "all", "{}", new[] { o.Describe() },

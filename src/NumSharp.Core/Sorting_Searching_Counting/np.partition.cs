@@ -43,6 +43,18 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.partition.html</remarks>
         public static NDArray partition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
             => AxisPartition.Partition(a, kth, axis, kind, order);
+
+        /// <summary>
+        ///     Return a partitioned copy with the kth indices given as an ARRAY — NumPy's array-kth
+        ///     form, which is what makes its kth-dtype rejections reachable: a bool kth raises
+        ///     "Booleans unacceptable as partition index", a non-integer kth "Partition index must be
+        ///     integer" (TypeError), a &gt;1-D kth "object too deep for desired array" (checked BEFORE
+        ///     the axis, like NumPy). Integer kth values cast to intp with NumPy's modular wrap
+        ///     (uint64 past 2^63 goes negative; 2^64-1 is a legal -1). 0-d and any layout accepted.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.partition.html</remarks>
+        public static NDArray partition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
+            => AxisPartition.Partition(a, kth, axis, kind, order);
     }
 
     public partial class NDArray
@@ -60,6 +72,14 @@ namespace NumSharp
         ///     (NumPy <c>ndarray.partition</c> with a kth sequence).
         /// </summary>
         public void partition(int[] kth, int? axis = -1, string kind = "introselect", string order = null)
+            => AxisPartition.PartitionInPlace(this, kth, axis, kind, order);
+
+        /// <summary>
+        ///     Partition this array in place with the kth indices given as an ARRAY (NumPy's array-kth
+        ///     form — see <see cref="np.partition(NDArray, NDArray, int?, string, string)"/> for its
+        ///     dtype/too-deep rejections and wrap semantics).
+        /// </summary>
+        public void partition(NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
             => AxisPartition.PartitionInPlace(this, kth, axis, kind, order);
     }
 }

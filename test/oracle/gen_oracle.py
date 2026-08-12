@@ -223,9 +223,12 @@ def gen_reduce(ops, dtypes, layout_names):
             operand = describe(base, view)
             for opname, f in ops.items():
                 for axis in _axes(view.ndim):
-                    if opname in ("argmax", "argmin") and axis is None:
-                        continue  # NumSharp has no flatten-argmax overload
                     for keepdims in (False, True):
+                        if opname in ("argmax", "argmin") and axis is None and keepdims:
+                            continue  # NumSharp's flat argmax/argmin form (long) has no keepdims;
+                                      # the keepdims=False flat cells replay via
+                                      # NDArray.Scalar(np.argmax(a)) — the exact path whose Decimal
+                                      # IL compare was silently wrong (G13)
                         try:
                             r = np.asarray(f(view, axis, keepdims))
                         except Exception:

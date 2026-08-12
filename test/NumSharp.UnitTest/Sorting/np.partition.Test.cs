@@ -335,6 +335,68 @@ namespace NumSharp.UnitTest.Sorting
             r.GetValue<long>(0, 1).Should().Be(s.GetValue<long>(0, 1));
         }
 
+        // -------------------- NDArray kth (NumPy's array-kth form; probed verbatim) --------------------
+        [TestMethod]
+        public void Partition_NDArrayKth_Basic()
+        {
+            // np.partition([3,4,2,1], np.array([1,3])) — kth values, 0-d kth, empty kth all legal
+            var b = np.array(new double[] { 3, 4, 2, 1 });
+            var r = np.partition(b, np.array(new[] { 1, 3 }));
+            r.GetValue<double>(1).Should().Be(2.0);
+            r.GetValue<double>(3).Should().Be(4.0);
+            np.partition(b, NDArray.Scalar(2)).GetValue<double>(2).Should().Be(3.0);
+            np.partition(b, np.array(new long[0])).ToArray<double>()
+                .Should().BeEquivalentTo(new[] { 3.0, 4.0, 2.0, 1.0 }, o => o.WithStrictOrdering());
+        }
+
+        [TestMethod]
+        public void Partition_NDArrayKth_DtypeRejections_Verbatim()
+        {
+            // the array form is what makes NumPy's kth-dtype errors REACHABLE:
+            var b = np.array(new double[] { 3, 4, 2, 1 });
+            ((Action)(() => np.partition(b, np.array(new[] { true }))))
+                .Should().Throw<ValueError>().WithMessage("Booleans unacceptable as partition index*");
+            ((Action)(() => np.partition(b, np.array(new[] { 1.0 }))))
+                .Should().Throw<TypeError>().WithMessage("Partition index must be integer*");
+            ((Action)(() => np.partition(b, np.array(new[,] { { 1 } }))))
+                .Should().Throw<ValueError>().WithMessage("object too deep for desired array*");
+            // decimal has no NumPy analog — not integer-family, takes the non-integer exit (house)
+            ((Action)(() => np.partition(b, np.array(new decimal[] { 1m }))))
+                .Should().Throw<TypeError>().WithMessage("Partition index must be integer*");
+            // argpartition shares the route
+            ((Action)(() => np.argpartition(b, np.array(new[] { true, false }))))
+                .Should().Throw<ValueError>().WithMessage("Booleans unacceptable as partition index*");
+            ((Action)(() => np.argpartition(b, np.array(new[] { 2.5 }))))
+                .Should().Throw<TypeError>().WithMessage("Partition index must be integer*");
+        }
+
+        [TestMethod]
+        public void Partition_NDArrayKth_ValidationStaging()
+        {
+            // probed NumPy staging: kind → order → too-deep (BEFORE axis) → axis → bool/float dtype
+            var b = np.array(new double[] { 3, 4, 2, 1 });
+            ((Action)(() => np.partition(b, np.array(new[,] { { 1 } }), kind: "bad")))
+                .Should().Throw<ValueError>().WithMessage("select kind must be*");
+            ((Action)(() => np.partition(b, np.array(new[,] { { 1 } }), order: "f")))
+                .Should().Throw<ValueError>().WithMessage("Cannot specify order*");
+            ((Action)(() => np.partition(b, np.array(new[,] { { 1 } }), axis: 9)))
+                .Should().Throw<ValueError>().WithMessage("object too deep for desired array*");
+            ((Action)(() => np.partition(b, np.array(new[] { true }), axis: 9)))
+                .Should().Throw<ArgumentException>().WithMessage("axis 9 is out of bounds for array of dimension 1*");
+        }
+
+        [TestMethod]
+        public void Partition_NDArrayKth_UInt64_ModularWrap()
+        {
+            // NumPy casts kth to intp MODULARLY: 2^63 wraps negative (its bounds error reports the
+            // wrapped value), 2^64-1 wraps to -1 — a LEGAL last-element kth (probed verbatim)
+            var b = np.array(new double[] { 3, 4, 2, 1 });
+            ((Action)(() => np.partition(b, np.array(new ulong[] { 9223372036854775808UL }))))
+                .Should().Throw<ValueError>().WithMessage("kth(=-9223372036854775804) out of bounds (4)*");
+            var r = np.partition(b, np.array(new ulong[] { 18446744073709551615UL }));
+            r.GetValue<double>(3).Should().Be(4.0);
+        }
+
         [TestMethod]
         public void Partition_StridedDecimalAndComplex_GatherPath()
         {

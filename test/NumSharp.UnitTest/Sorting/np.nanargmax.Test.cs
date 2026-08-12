@@ -328,5 +328,190 @@ namespace NumSharp.UnitTest.Sorting
             np.nanargmax(a).Should().Be(2L);
             np.nanargmin(a).Should().Be(1L);
         }
+
+        [TestMethod]
+        public void NanArgMax_DecimalAndChar_Passthrough()
+        {
+            // no NumPy analog dtypes take the integer passthrough route (mask=None): plain argmax/argmin
+            var d = np.array(new decimal[] { 3, 9, 1, 5 });
+            np.nanargmax(d).Should().Be(1L);
+            np.nanargmin(d).Should().Be(2L);
+            var c = np.array(new[] { 'c', 'z', 'a' });
+            np.nanargmax(c).Should().Be(1L);
+            np.nanargmin(c).Should().Be(2L);
+        }
+
+        // -------------------- out= (probed NumPy 2.4.2 semantics) --------------------
+        [TestMethod]
+        public void NanArgMax_Out_SameInstance_WrittenThrough()
+        {
+            // np.nanargmax(a, axis=0, out=o) writes o and returns o ITSELF (r is out → True)
+            var a = np.array(new double[,] { { double.NaN, 4.0 }, { 2.0, 3.0 } });
+            var o = np.zeros(new Shape(2), NPTypeCode.Int64);
+            var r = np.nanargmax(a, 0, o);
+            ReferenceEquals(r, o).Should().BeTrue();
+            o.ToArray<long>().Should().BeEquivalentTo(new long[] { 1, 0 }, x => x.WithStrictOrdering());
+        }
+
+        [TestMethod]
+        public void NanArgMax_Out_IntegerDtypes_CastUnsafely()
+        {
+            // out may be ANY integer dtype safe-castable to intp; values cast UNSAFELY into it:
+            // int32 out keeps int32 (probed), bool out reads index != 0, int8 out WRAPS (200 → -56)
+            var a = np.array(new double[,] { { double.NaN, 4.0 }, { 2.0, 3.0 } });
+            var o32 = np.zeros(new Shape(2), NPTypeCode.Int32);
+            np.nanargmax(a, 0, o32).typecode.Should().Be(NPTypeCode.Int32);
+            o32.ToArray<int>().Should().BeEquivalentTo(new[] { 1, 0 }, x => x.WithStrictOrdering());
+
+            var ob = np.zeros(new Shape(2), NPTypeCode.Boolean);
+            np.nanargmax(a, 0, ob);
+            ob.GetValue<bool>(0).Should().BeTrue();
+            ob.GetValue<bool>(1).Should().BeFalse();
+
+            var big = np.zeros(new Shape(300));
+            big.SetValue(5.0, 200);
+            var o8 = np.zeros(new Shape(), NPTypeCode.SByte);
+            np.nanargmax(big, null, o8);
+            o8.GetValue<sbyte>(0).Should().Be(-56, "index 200 wraps into int8 exactly like NumPy");
+        }
+
+        [TestMethod]
+        public void NanArgMax_Out_BadDtypes_VerbatimTypeError()
+        {
+            // uint64/floats/complex are NOT safe-castable to intp — NumPy's verbatim cast TypeError
+            var a = np.array(new double[,] { { double.NaN, 4.0 }, { 2.0, 3.0 } });
+            ((Action)(() => np.nanargmax(a, 0, np.zeros(new Shape(2), NPTypeCode.UInt64))))
+                .Should().Throw<TypeError>().WithMessage("Cannot cast array data from dtype('uint64') to dtype('int64') according to the rule 'safe'*");
+            ((Action)(() => np.nanargmax(a, 0, np.zeros(new Shape(2), NPTypeCode.Half))))
+                .Should().Throw<TypeError>().WithMessage("Cannot cast array data from dtype('float16')*");
+            ((Action)(() => np.nanargmax(a, 0, np.zeros(new Shape(2), NPTypeCode.Complex))))
+                .Should().Throw<TypeError>().WithMessage("Cannot cast array data from dtype('complex128')*");
+        }
+
+        [TestMethod]
+        public void NanArgMax_Out_ShapeMismatch_LeaksArgmaxArgminNames()
+        {
+            // "output array does not match result of np.argmax." — nanargmax leaks argmax,
+            // nanargmin leaks argmin (probed verbatim, trailing period included)
+            var a = np.array(new double[,] { { double.NaN, 4.0 }, { 2.0, 3.0 } });
+            ((Action)(() => np.nanargmax(a, 0, np.zeros(new Shape(3), NPTypeCode.Int64))))
+                .Should().Throw<ValueError>().WithMessage("output array does not match result of np.argmax.*");
+            ((Action)(() => np.nanargmin(a, 0, np.zeros(new Shape(3), NPTypeCode.Int64))))
+                .Should().Throw<ValueError>().WithMessage("output array does not match result of np.argmin.*");
+            // keepdims changes the required out shape: (2,) out with keepdims=True (needs (1,2)) rejects
+            ((Action)(() => np.nanargmax(a, 0, np.zeros(new Shape(2), NPTypeCode.Int64), keepdims: true)))
+                .Should().Throw<ValueError>().WithMessage("output array does not match result of np.argmax.*");
+            var okd = np.zeros(new Shape(1, 2), NPTypeCode.Int64);
+            np.nanargmax(a, 0, okd, keepdims: true);
+            okd.GetValue<long>(0, 0).Should().Be(1L);
+        }
+
+        [TestMethod]
+        public void NanArgMax_Out_StridedView_WritesThroughBase()
+        {
+            // a strided out view is legal and writes through to its base (probed: base [1 0 0 0])
+            var a = np.array(new double[,] { { double.NaN, 4.0 }, { 2.0, 3.0 } });
+            var baseArr = np.zeros(new Shape(4), NPTypeCode.Int64);
+            var vo = baseArr["::2"];
+            var r = np.nanargmax(a, 0, vo);
+            ReferenceEquals(r, vo).Should().BeTrue();
+            baseArr.ToArray<long>().Should().BeEquivalentTo(new long[] { 1, 0, 0, 0 }, x => x.WithStrictOrdering());
+        }
+
+        [TestMethod]
+        public void NanArgMax_Out_AllNaN_RaisesBeforeWriting()
+        {
+            // the all-NaN guard fires BEFORE out is touched (probed: out keeps its prior contents)
+            var allnan = np.array(new double[,] { { double.NaN, double.NaN }, { double.NaN, double.NaN } });
+            var ox = np.full(new Shape(2), 77L);
+            ((Action)(() => np.nanargmax(allnan, 0, ox)))
+                .Should().Throw<ValueError>().WithMessage("All-NaN slice encountered*");
+            ox.ToArray<long>().Should().BeEquivalentTo(new long[] { 77, 77 }, x => x.WithStrictOrdering());
+        }
+
+        [TestMethod]
+        public void NanArgMax_Out_Flat0d()
+        {
+            // axis=None with a 0-d out: np.nanargmax(a, out=o0) == array(1)
+            var a = np.array(new double[,] { { double.NaN, 4.0 }, { 2.0, 3.0 } });
+            var o0 = np.zeros(new Shape(), NPTypeCode.Int64);
+            var r = np.nanargmax(a, null, o0);
+            ((long)r).Should().Be(1L);
+        }
+    }
+
+    /// <summary>
+    /// Pins the two engine bugs the nanargmax dtype sweep exposed in np.argmax/np.argmin itself:
+    /// the FLAT Decimal path rode the IL arg kernel whose Bgt/Blt cannot compare a 16-byte struct
+    /// (argmax([3,9,1,5]) silently returned 0 — the worst finding class), and the FLAT Char path
+    /// threw NotSupportedException while the AXIS path supported char all along. Decimal now takes
+    /// the same ExecuteReducing fallback family as Half/Complex; Char rides the zero-copy uint16
+    /// reinterpret its amax/amin already use. The AXIS paths were always correct (plain C# generic
+    /// compares in AxisArgReductionHelper) and stay on the typed kernels.
+    /// </summary>
+    [TestClass]
+    public class ArgMaxArgMinDecimalCharFixTests
+    {
+        [TestMethod]
+        public void ArgMax_Decimal_Flat()
+        {
+            np.argmax(np.array(new decimal[] { 3, 9, 1, 5 })).Should().Be(1L);
+            np.argmin(np.array(new decimal[] { 3, 9, 1, 5 })).Should().Be(2L);
+            // first-occurrence tiebreak (NumPy contract)
+            np.argmax(np.array(new decimal[] { 5, 9, 9, 1 })).Should().Be(1L);
+        }
+
+        [TestMethod]
+        public void ArgMax_Decimal_Axis_TypedKernelStaysCorrect()
+        {
+            var m = np.array(new decimal[,] { { 3, 9 }, { 7, 5 } });
+            np.argmax(m, 0).ToArray<long>().Should().BeEquivalentTo(new long[] { 1, 0 }, o => o.WithStrictOrdering());
+            np.argmin(m, 1).ToArray<long>().Should().BeEquivalentTo(new long[] { 0, 1 }, o => o.WithStrictOrdering());
+        }
+
+        [TestMethod]
+        public void ArgMax_Decimal_StridedView()
+        {
+            var v = np.array(new decimal[] { 9, 1, 8, 2, 7, 3 })["::2"];   // [9, 8, 7]
+            np.argmax(v).Should().Be(0L);
+            np.argmin(v).Should().Be(2L);
+        }
+
+        [TestMethod]
+        public void ArgMax_Char_Flat_NoLongerThrows()
+        {
+            var c = np.array(new[] { 'c', 'z', 'a' });
+            np.argmax(c).Should().Be(1L);
+            np.argmin(c).Should().Be(2L);
+        }
+
+        [TestMethod]
+        public void ArgMax_Char_Axis()
+        {
+            var m = np.array(new[,] { { 'c', 'z' }, { 'd', 'a' } });
+            np.argmax(m, 0).ToArray<long>().Should().BeEquivalentTo(new long[] { 1, 0 }, o => o.WithStrictOrdering());
+        }
+
+        [TestMethod]
+        public void ArgMax_NonContiguous_FirstNaNWins()
+        {
+            // The strided/scalar IL step compared with Bgt_Un/Blt_Un — the UNORDERED branch also
+            // fires when the ACCUM holds NaN, so every later finite value stole the index and
+            // argmax(strided [nan,2,3,nan]) walked to 3 instead of NumPy's 0 (first NaN wins).
+            // Contiguous inputs were immune (they ride the C# NaN helpers). Fixed to ordered
+            // Bgt/Blt; caught by the reduce tier's new flat argmax cells over NaN pools (G13).
+            var b = np.array(new double[,] { { double.NaN, 3 }, { 2, double.NaN } });
+            np.argmax(b.T).Should().Be(0L);   // b.T C-order = [nan, 2, 3, nan]
+            np.argmin(b.T).Should().Be(0L);
+            var f = np.array(new float[,] { { float.NaN, 3f }, { 2f, float.NaN } });
+            np.argmax(f.T).Should().Be(0L);
+            // reversed stride: view [3, nan, 1, 7, nan, 5] → first NaN at 1
+            var c = np.array(new double[] { 5, double.NaN, 7, 1, double.NaN, 3 });
+            np.argmax(c["::-1"]).Should().Be(1L);
+            // finite non-contiguous unchanged
+            var a = np.array(new double[,] { { 1, 9 }, { 2, 4 } });
+            np.argmax(a.T).Should().Be(2L);
+            np.argmin(a.T).Should().Be(0L);
+        }
     }
 }

@@ -141,6 +141,9 @@ namespace NumSharp.Backends
             // Half and Complex have no IL kernel (Bgt/Blt opcodes don't apply to those types
             // and Complex needs lexicographic compare). Route through a stride-aware loop
             // that avoids per-slice NDArray view allocation (R23).
+            // (Decimal/Char stay on the typed axis kernel below: AxisArgReductionHelper<T> compares
+            // in plain C# generics, so both are correct there — it was only the FLAT
+            // argmax_elementwise_il IL path that mis-compared decimal and rejected char.)
             if (inputType == NPTypeCode.Half)
                 return ArgReductionAxisHalf(arr, axis, keepdims, outputShape, axisedShape, op);
             if (inputType == NPTypeCode.Complex)

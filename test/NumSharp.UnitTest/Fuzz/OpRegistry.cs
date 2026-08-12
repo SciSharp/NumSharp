@@ -482,16 +482,21 @@ namespace NumSharp.UnitTest.Fuzz
                 case "mean": return axis.HasValue ? np.mean(a, axis.Value, keepdims) : np.mean(a, keepdims);
                 case "std": return axis.HasValue ? np.std(a, axis.Value, keepdims) : np.std(a, keepdims);
                 case "var": return axis.HasValue ? np.var(a, axis.Value, keepdims) : np.var(a, keepdims);
-                case "argmax": return np.argmax(a, axis.Value, keepdims);
-                case "argmin": return np.argmin(a, axis.Value, keepdims);
+                // axis=None (keepdims=False only — the flat long form has no keepdims): wraps the
+                // scalar back to the 0-d int64 NumPy returns. G13: this is the path whose Decimal
+                // IL compare was silently wrong and whose Char case threw — now oracle-gated.
+                case "argmax": return axis.HasValue ? np.argmax(a, axis.Value, keepdims) : NDArray.Scalar(np.argmax(a));
+                case "argmin": return axis.HasValue ? np.argmin(a, axis.Value, keepdims) : NDArray.Scalar(np.argmin(a));
                 case "all": return np.all(a, axis, null, keepdims);
                 case "any": return np.any(a, axis, null, keepdims);
                 case "nansum": return np.nansum(a, axis, keepdims);
                 case "nanprod": return np.nanprod(a, axis, keepdims);
                 case "nanmax": return np.nanmax(a, axis, keepdims);
                 case "nanmin": return np.nanmin(a, axis, keepdims);
-                case "nanargmax": return np.nanargmax(a, axis, keepdims);
-                case "nanargmin": return np.nanargmin(a, axis, keepdims);
+                // keepdims by NAME: positional slot 3 is now `out=` (an implicit bool->NDArray
+                // conversion exists, so a positional bool would silently bind the out parameter).
+                case "nanargmax": return np.nanargmax(a, axis, keepdims: keepdims);
+                case "nanargmin": return np.nanargmin(a, axis, keepdims: keepdims);
                 case "nanmean": return np.nanmean(a, axis, keepdims);
                 case "nanstd": return np.nanstd(a, axis, keepdims);
                 case "nanvar": return np.nanvar(a, axis, keepdims);

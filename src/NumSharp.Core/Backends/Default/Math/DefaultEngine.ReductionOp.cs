@@ -673,11 +673,42 @@ namespace NumSharp.Backends
                 NPTypeCode.Half => ArgMaxHalfFallback(arr),
                 NPTypeCode.Single => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Single),
                 NPTypeCode.Double => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Double),
-                NPTypeCode.Decimal => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Decimal),
+                // IL Bgt doesn't apply to the 16-byte decimal struct either — the emitted kernel
+                // silently mis-compared (argmax([3,9,1,5]) returned 0). Same fallback family as Half.
+                NPTypeCode.Decimal => ArgMaxDecimalFallback(arr),
+                // Char: unsigned 16-bit with a total order bit-identical to uint16 — the same
+                // zero-copy reinterpret MaxElementwiseCharFallback rides (indices are unchanged
+                // by a view over the same layout). This case used to throw NotSupportedException.
+                NPTypeCode.Char => ExecuteElementReduction<long>(arr.view(typeof(ushort)), ReductionOp.ArgMax, NPTypeCode.UInt16),
                 // B12: Complex IL kernel tiebreak is wrong; fallback uses lexicographic compare.
                 NPTypeCode.Complex => ArgMaxComplexFallback(arr),
                 _ => throw new NotSupportedException($"ArgMax not supported for type {inputType}")
             };
+        }
+
+        /// <summary>
+        /// Fallback argmax/argmin for Decimal (the IL arg kernels compare via OpCodes.Bgt/Blt,
+        /// which do not apply to the 16-byte decimal struct — the emitted kernel silently
+        /// mis-compared). Same NPY_CORDER ExecuteReducing route as the Half/Complex fallbacks:
+        /// the returned index must be the C-order flat position even on strided/transposed views.
+        /// Decimal has no NaN, so there is no NaN short-circuit. First occurrence wins (NumPy tiebreak).
+        /// </summary>
+        private unsafe long ArgMaxDecimalFallback(NDArray arr)
+        {
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
+            var a = iter.ExecuteReducing<DecimalArgMaxKernel, DecimalArgAccumulator>(
+                default, new DecimalArgAccumulator { BestIdx = -1, Cur = 0 });
+            return a.BestIdx;
+        }
+
+        private unsafe long ArgMinDecimalFallback(NDArray arr)
+        {
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
+            var a = iter.ExecuteReducing<DecimalArgMinKernel, DecimalArgAccumulator>(
+                default, new DecimalArgAccumulator { BestIdx = -1, Cur = 0 });
+            return a.BestIdx;
         }
 
         /// <summary>
@@ -768,7 +799,10 @@ namespace NumSharp.Backends
                 NPTypeCode.Half => ArgMinHalfFallback(arr),
                 NPTypeCode.Single => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Single),
                 NPTypeCode.Double => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Double),
-                NPTypeCode.Decimal => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Decimal),
+                // IL Blt doesn't apply to the 16-byte decimal struct — same fallback family as Half.
+                NPTypeCode.Decimal => ArgMinDecimalFallback(arr),
+                // Char via the zero-copy uint16 reinterpret (total order is bit-identical).
+                NPTypeCode.Char => ExecuteElementReduction<long>(arr.view(typeof(ushort)), ReductionOp.ArgMin, NPTypeCode.UInt16),
                 // B12: Complex IL kernel tiebreak is wrong; fallback uses lexicographic compare.
                 NPTypeCode.Complex => ArgMinComplexFallback(arr),
                 _ => throw new NotSupportedException($"ArgMin not supported for type {inputType}")
