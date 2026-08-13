@@ -20,7 +20,7 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
-            public static (NDArray Eigenvalues, NDArray Eigenvectors) eig(NDArray a)
+            public static (NDArray eigenvalues, NDArray eigenvectors) eig(NDArray a)
             {
                 AssertStackedSquare(a);
                 var common = CommonType(a);
@@ -36,7 +36,7 @@ namespace NumSharp
             {
                 AssertStackedSquare(a);
                 var common = CommonType(a);
-                return a.TensorEngine.Eig(ToCommon(a, common), computeVectors: false).Eigenvalues;
+                return a.TensorEngine.Eig(ToCommon(a, common), computeVectors: false).eigenvalues;
             }
 
             /// <summary>
@@ -54,7 +54,7 @@ namespace NumSharp
             /// </returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigh.html</remarks>
             /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
-            public static (NDArray Eigenvalues, NDArray Eigenvectors) eigh(NDArray a, char UPLO = 'L')
+            public static (NDArray eigenvalues, NDArray eigenvectors) eigh(NDArray a, char UPLO = 'L')
             {
                 char uplo = RequireUplo(UPLO);
                 AssertStackedSquare(a);
@@ -71,7 +71,7 @@ namespace NumSharp
                 char uplo = RequireUplo(UPLO);
                 AssertStackedSquare(a);
                 var common = CommonType(a);
-                return a.TensorEngine.Eigh(ToCommon(a, common), uplo, computeVectors: false).Eigenvalues;
+                return a.TensorEngine.Eigh(ToCommon(a, common), uplo, computeVectors: false).eigenvalues;
             }
 
             /// <summary>

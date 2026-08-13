@@ -135,7 +135,7 @@ namespace NumSharp
         }
 
         /// <summary><c>np.linalg.slogdet</c> — LAPACK <c>getrf</c>.</summary>
-        public virtual (NDArray Sign, NDArray LogAbsDet) Slogdet(NDArray a)
+        public virtual (NDArray sign, NDArray logabsdet) Slogdet(NDArray a)
         {
             var blas = Blas;
             if (blas != null && blas.TrySlogdet(a, out var sign, out var logabsdet))
@@ -144,7 +144,7 @@ namespace NumSharp
         }
 
         /// <summary><c>np.linalg.eig</c> / <c>np.linalg.eigvals</c> — LAPACK <c>geev</c>.</summary>
-        public virtual (NDArray Eigenvalues, NDArray Eigenvectors) Eig(NDArray a, bool computeVectors)
+        public virtual (NDArray eigenvalues, NDArray eigenvectors) Eig(NDArray a, bool computeVectors)
         {
             var blas = Blas;
             if (blas != null && blas.TryEig(a, computeVectors, out var w, out var v))
@@ -157,7 +157,7 @@ namespace NumSharp
         ///     <c>np.linalg.eigh</c> / <c>np.linalg.eigvalsh</c> — LAPACK <c>syevd</c> (real
         ///     symmetric) or <c>heevd</c> (complex Hermitian).
         /// </summary>
-        public virtual (NDArray Eigenvalues, NDArray Eigenvectors) Eigh(NDArray a, char uplo, bool computeVectors)
+        public virtual (NDArray eigenvalues, NDArray eigenvectors) Eigh(NDArray a, char uplo, bool computeVectors)
         {
             var blas = Blas;
             if (blas != null && blas.TryEigh(a, uplo, computeVectors, out var w, out var v))

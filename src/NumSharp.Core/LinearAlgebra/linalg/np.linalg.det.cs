@@ -36,7 +36,7 @@ namespace NumSharp
             /// </returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.slogdet.html</remarks>
             /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
-            public static (NDArray Sign, NDArray LogAbsDet) slogdet(NDArray a)
+            public static (NDArray sign, NDArray logabsdet) slogdet(NDArray a)
             {
                 AssertStackedSquare(a);
                 var common = CommonType(a);
