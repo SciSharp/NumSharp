@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using NumSharp.Interop.OpenBLAS;
 
 // Same friend pattern as NumSharp.Core/Assembly/Properties.cs: the fuzz gate replays the
 // host-pinned matmul_parity corpus through this engine, and NumSharp.DotNetRunScript lets ad-hoc
@@ -12,6 +13,8 @@ using System.Runtime.CompilerServices;
 // declaring. StrongNameTests pins both against the compiled output.
 [assembly: InternalsVisibleTo("NumSharp.UnitTest, PublicKey=" + BlasFriendKey.PublicKey)]
 [assembly: InternalsVisibleTo("NumSharp.DotNetRunScript, PublicKey=" + BlasFriendKey.PublicKey)]
+
+namespace NumSharp.Interop.OpenBLAS;
 
 internal static class BlasFriendKey
 {

@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 namespace NumSharp.UnitTest.Fuzz
 {
     /// <summary>
-    ///     Keeps <c>NumSharp.Interop.BLAS</c> from installing itself for the whole test run.
+    ///     Keeps <c>NumSharp.Interop.OpenBLAS</c> from installing itself for the whole test run.
     /// </summary>
     /// <remarks>
     ///     The package is referenced so its gate can run, and its whole design is that referencing

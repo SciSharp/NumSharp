@@ -130,8 +130,8 @@ jobs:
         mkdir -p artifacts/signing-check
         for proj in src/NumSharp.Core/NumSharp.Core.csproj \
                     src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
-                    src/NumSharp.Interop.BLAS/NumSharp.Interop.BLAS.csproj; do
-          # Tolerate absence: NumSharp.Interop.BLAS does not exist on every branch.
+                    src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj; do
+          # Tolerate absence: NumSharp.Interop.OpenBLAS does not exist on every branch.
           [ -f "$proj" ] || { echo "skip (absent): $proj"; continue; }
           echo "::group::pack $proj"
           dotnet pack "$proj" --configuration Release --output artifacts/signing-check \

@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 using NumSharp;
 using NumSharp.Backends;
 
-namespace NumSharp.Interop.Blas
+namespace NumSharp.Interop.OpenBLAS
 {
     /// <summary>
     ///     Installs (and describes) the external-CBLAS matrix-product backend.

@@ -17,7 +17,7 @@ namespace NumSharp.UnitTest.Assembly
     ///         <c>PublicKeyToken=null</c> while the repository looked, to a reader, like it signed its
     ///         output. Nothing asserted otherwise. Worse, the <c>Publish</c> configuration did not even
     ///         compile — strong-naming turns a keyless <c>InternalsVisibleTo</c> into <c>CS1726</c>, and
-    ///         all seven of ours were keyless (five in NumSharp.Core, two in NumSharp.Interop.BLAS) — so
+    ///         all seven of ours were keyless (five in NumSharp.Core, two in NumSharp.Interop.OpenBLAS) — so
     ///         the one configuration that would have revealed the problem was never built by anything.
     ///     </para>
     ///     <para>
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.Assembly
         /// <summary>
         ///     The full public key, as written in <c>Directory.Build.props</c>
         ///     (<c>NumSharpPublicKey</c>), <c>NumSharp.Core/Assembly/Properties.cs</c> and
-        ///     <c>NumSharp.Interop.BLAS/AssemblyInfo.cs</c>. Held here a fourth time ON PURPOSE: this
+        ///     <c>NumSharp.Interop.OpenBLAS/AssemblyInfo.cs</c>. Held here a fourth time ON PURPOSE: this
         ///     copy is what proves the other three still describe the key the compiler actually used.
         /// </summary>
         private const string ExpectedPublicKey =

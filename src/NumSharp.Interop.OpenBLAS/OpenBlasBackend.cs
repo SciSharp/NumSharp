@@ -2,7 +2,7 @@ using System;
 using NumSharp;
 using NumSharp.Backends;
 
-namespace NumSharp.Interop.Blas
+namespace NumSharp.Interop.OpenBLAS
 {
     /// <summary>
     ///     The <see cref="IBlasBackend"/> this package installs: NumSharp's matrix products computed

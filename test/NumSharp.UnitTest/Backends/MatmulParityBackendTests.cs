@@ -3,12 +3,12 @@ using System.IO;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Backends;
-using NumSharp.Interop.Blas;
+using NumSharp.Interop.OpenBLAS;
 
 namespace NumSharp.UnitTest.Backends
 {
     /// <summary>
-    ///     The contract around the optional <c>NumSharp.Interop.BLAS</c> backend — that installing
+    ///     The contract around the optional <c>NumSharp.Interop.OpenBLAS</c> backend — that installing
     ///     it is opt-in, that the engine falls back to its own managed kernels for everything the
     ///     backend does not serve, and that a named library is never silently substituted. The BITS
     ///     are gated separately by the host-pinned <c>matmul_parity</c> corpus tier
@@ -264,7 +264,7 @@ namespace NumSharp.UnitTest.Backends
             if (lib == null)
                 Assert.Inconclusive(
                     "no bundled OpenBLAS asset staged for this RID — run " +
-                    "`python src/NumSharp.Interop.BLAS/tools/fetch_openblas.py`. The package builds " +
+                    "`python src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py`. The package builds " +
                     "without them and falls back to discovery, so this is a staging gap, not a defect.");
 
             Assert.IsTrue(new FileInfo(lib).Length > 1_000_000,
@@ -442,7 +442,7 @@ namespace NumSharp.UnitTest.Backends
             while (dir != null)
             {
                 var candidate = Path.Combine(dir.FullName,
-                    "src", "NumSharp.Interop.BLAS", "tools", "openblas-manifest.json");
+                    "src", "NumSharp.Interop.OpenBLAS", "tools", "openblas-manifest.json");
                 if (File.Exists(candidate))
                     return candidate;
 

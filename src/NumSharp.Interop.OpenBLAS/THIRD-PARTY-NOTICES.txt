@@ -1,7 +1,7 @@
-THIRD-PARTY NOTICES for NumSharp.Interop.BLAS
+THIRD-PARTY NOTICES for NumSharp.Interop.OpenBLAS
 ============================================================================
 
-NumSharp.Interop.BLAS itself is licensed Apache-2.0, like the rest of NumSharp.
+NumSharp.Interop.OpenBLAS itself is licensed Apache-2.0, like the rest of NumSharp.
 
 This package additionally REDISTRIBUTES prebuilt OpenBLAS shared libraries as
 NuGet runtime assets (runtimes/<rid>/native/). They are the unmodified artifacts

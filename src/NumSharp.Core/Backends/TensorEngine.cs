@@ -14,7 +14,7 @@ namespace NumSharp
         /// </summary>
         /// <remarks>
         ///     NumSharp.Core is 100 % managed C# and never assigns this. It is set by an optional
-        ///     package — <c>NumSharp.Interop.BLAS</c> does it from a <c>[ModuleInitializer]</c>, so
+        ///     package — <c>NumSharp.Interop.OpenBLAS</c> does it from a <c>[ModuleInitializer]</c>, so
         ///     referencing that package is the whole opt-in — and can be cleared again by assigning
         ///     null. A backend only answers for what it implements (see
         ///     <see cref="IBlasBackend"/>); everything else falls back to the managed kernels.

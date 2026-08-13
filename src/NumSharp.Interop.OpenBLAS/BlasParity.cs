@@ -5,7 +5,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace NumSharp.Interop.Blas
+namespace NumSharp.Interop.OpenBLAS
 {
     /// <summary>
     ///     Opt-in byte-parity backend for <c>np.dot</c> / <c>np.matmul</c>: a route-for-route port of

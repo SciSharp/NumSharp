@@ -123,9 +123,9 @@ bit-identical to the per-element route (25/25 A/B), 0.80× → **6.47×** on 200
 
 | Package | Implements | Serves | Why |
 |---------|-----------|--------|-----|
-| `NumSharp.Interop.BLAS` (`src/NumSharp.Interop.BLAS/`) | `OpenBlasBackend : IBlasBackend` | `np.dot`, `np.matmul` for float32/float64 | matrix products through OpenBLAS — faster on large matrices, and **byte-identical to NumPy**. **Bundles the binaries NumPy itself pins** (scipy-openblas 0.3.31.22.0, byte-identical to numpy 2.4.2's) as per-RID runtime assets, so parity needs no Python installed. See below and `docs/GEMM_PARITY.md`. |
+| `NumSharp.Interop.OpenBLAS` (`src/NumSharp.Interop.OpenBLAS/`) | `OpenBlasBackend : IBlasBackend` | `np.dot`, `np.matmul` for float32/float64 | matrix products through OpenBLAS — faster on large matrices, and **byte-identical to NumPy**. **Bundles the binaries NumPy itself pins** (scipy-openblas 0.3.31.22.0, byte-identical to numpy 2.4.2's) as per-RID runtime assets, so parity needs no Python installed. See below and `docs/GEMM_PARITY.md`. |
 
-**`NumSharp.Interop.BLAS`** exists because no portable algorithm can match NumPy's float matrix
+**`NumSharp.Interop.OpenBLAS`** exists because no portable algorithm can match NumPy's float matrix
 products: for f32/f64 mat@mat NumPy **always** calls cblas (since gh-23588 it copies non-blasable
 operands into a temp rather than take its own portable loop), and scipy-openblas' `sgemm` uses an
 arch-specific **multi-accumulator** scheme matching neither a sequential mul+add chain nor a
@@ -1738,7 +1738,7 @@ Authenticode + NuGet author signing, needs a code-signing certificate, and does 
 
 **Consequences to know:**
 - Every `InternalsVisibleTo` MUST carry `PublicKey=` — keyless is `CS1726`, a hard error. There are
-  7: five in `NumSharp.Core/Assembly/Properties.cs`, two in `NumSharp.Interop.BLAS/AssemblyInfo.cs`.
+  7: five in `NumSharp.Core/Assembly/Properties.cs`, two in `NumSharp.Interop.OpenBLAS/AssemblyInfo.cs`.
   The literal is held in `NumSharpFriendKey` / `BlasFriendKey` consts so it is written once per assembly.
 - `dotnet run` scripts outside the repo root need signing properties to see internals — see
   "Scripting with `dotnet run`".

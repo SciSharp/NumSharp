@@ -7,7 +7,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics.X86;
 
-namespace NumSharp.Interop.Blas
+namespace NumSharp.Interop.OpenBLAS
 {
     /// <summary>Row/column storage order — mirrors <c>enum CBLAS_ORDER</c> in npy_cblas.h.</summary>
     internal enum CBlasOrder

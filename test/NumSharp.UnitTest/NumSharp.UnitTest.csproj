@@ -40,7 +40,7 @@
          install the engine for the whole test run, which must NOT happen (every other tier asserts
          NumSharp's own kernels), so the test assembly opts out via NUMSHARP_BLAS_AUTOINSTALL=0 in
          BlasEngineAutoInstallGuard and enables it per-test instead. -->
-    <ProjectReference Include="..\..\src\NumSharp.Interop.BLAS\NumSharp.Interop.BLAS.csproj" />
+    <ProjectReference Include="..\..\src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj" />
   </ItemGroup>
 
   <ItemGroup>

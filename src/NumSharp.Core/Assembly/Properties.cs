@@ -17,7 +17,7 @@ using System.Runtime.CompilerServices;
 
 // Optional out-of-box backends: they subclass DefaultEngine and so need the same internal view of
 // Shape (strides/offset) and the promotion helpers that the built-in kernels have.
-[assembly: InternalsVisibleTo("NumSharp.Interop.BLAS, PublicKey=" + NumSharpFriendKey.PublicKey)]
+[assembly: InternalsVisibleTo("NumSharp.Interop.OpenBLAS, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
 [assembly: InternalsVisibleTo("NumSharp.Benchmark, PublicKey=" + NumSharpFriendKey.PublicKey)]
 

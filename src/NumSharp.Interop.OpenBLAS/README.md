@@ -1,4 +1,4 @@
-# NumSharp.Interop.BLAS
+# NumSharp.Interop.OpenBLAS
 
 Optional external-CBLAS matrix-product backend for [NumSharp](https://github.com/SciSharp/NumSharp).
 
@@ -8,12 +8,12 @@ matrix product out of the box. This package is the *alternative*: reference it a
 matrices** and **bit-identical to NumPy**.
 
 ```powershell
-dotnet add package NumSharp.Interop.BLAS
+dotnet add package NumSharp.Interop.OpenBLAS
 ```
 
 ```csharp
 using NumSharp;
-using NumSharp.Interop.Blas;
+using NumSharp.Interop.OpenBLAS;
 
 // Referencing the package is the whole opt-in. A module initializer loads the bundled OpenBLAS
 // for this machine's RID and installs the backend; if that fails, NOTHING changes and NumSharp
@@ -199,8 +199,8 @@ fine.
 The binaries are not in git. Stage them before packing:
 
 ```bash
-python src/NumSharp.Interop.BLAS/tools/fetch_openblas.py          # download + verify + extract
-python src/NumSharp.Interop.BLAS/tools/fetch_openblas.py --check  # verify only
+python src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py          # download + verify + extract
+python src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py --check  # verify only
 ```
 
 Every artifact is checked **twice** against the committed `tools/openblas-manifest.json` — the

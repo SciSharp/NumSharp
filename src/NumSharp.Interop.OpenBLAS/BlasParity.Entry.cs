@@ -4,7 +4,7 @@ using NumSharp.Backends;
 using System.Numerics;
 using NumSharp.Utilities;
 
-namespace NumSharp.Interop.Blas
+namespace NumSharp.Interop.OpenBLAS
 {
     internal static unsafe partial class BlasParity
     {

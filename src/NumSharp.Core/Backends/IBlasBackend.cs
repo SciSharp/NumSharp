@@ -21,7 +21,7 @@ namespace NumSharp.Backends
     ///     The reason to want one is not only speed. Two correct matrix products that sum in
     ///     different orders give different bits, so a workload that must agree with another stack
     ///     to the last bit — e.g. training a network twice and byte-comparing the weights — has to
-    ///     call that stack's own BLAS. See <c>NumSharp.Interop.BLAS</c> and
+    ///     call that stack's own BLAS. See <c>NumSharp.Interop.OpenBLAS</c> and
     ///     <c>docs/GEMM_PARITY.md</c>.
     ///     </para>
     ///     <para>

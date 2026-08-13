@@ -8,7 +8,7 @@ namespace NumSharp.Backends
     ///     <para>
     ///     <b>Every member here is a DEFAULT implementation returning false.</b> That is what lets
     ///     this file exist at all without breaking the one backend that ships today
-    ///     (<c>NumSharp.Interop.BLAS</c>'s <c>OpenBlasBackend</c>, which answers only for
+    ///     (<c>NumSharp.Interop.OpenBLAS</c>'s <c>OpenBlasBackend</c>, which answers only for
     ///     <c>dot</c>/<c>matmul</c> at float32/float64) and any third-party implementation — a
     ///     backend mentions only the members it serves, exactly as with
     ///     <see cref="IBlasBackend.TryMatMulBatched"/>.

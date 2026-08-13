@@ -17,7 +17,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Bitmap", "src\NumS
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Interop.BLAS", "src\NumSharp.Interop.BLAS\NumSharp.Interop.BLAS.csproj", "{3DF52F3C-1B78-46CF-9B82-BA2B876CCA33}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Interop.OpenBLAS", "src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj", "{3DF52F3C-1B78-46CF-9B82-BA2B876CCA33}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

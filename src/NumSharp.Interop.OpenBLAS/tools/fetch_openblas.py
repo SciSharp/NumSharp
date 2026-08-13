@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fetch the OpenBLAS binaries that `NumSharp.Interop.BLAS` bundles as NuGet runtime assets.
+Fetch the OpenBLAS binaries that `NumSharp.Interop.OpenBLAS` bundles as NuGet runtime assets.
 
 WHY THIS EXISTS
 ---------------
@@ -188,10 +188,10 @@ def refresh_manifest(distribution_version, numpy_version):
 def write_notices(manifest):
     """Emit the third-party notices that must travel with the redistributed binaries."""
     lines = []
-    lines.append("THIRD-PARTY NOTICES for NumSharp.Interop.BLAS")
+    lines.append("THIRD-PARTY NOTICES for NumSharp.Interop.OpenBLAS")
     lines.append("=" * 76)
     lines.append("")
-    lines.append("NumSharp.Interop.BLAS itself is licensed Apache-2.0, like the rest of NumSharp.")
+    lines.append("NumSharp.Interop.OpenBLAS itself is licensed Apache-2.0, like the rest of NumSharp.")
     lines.append("")
     lines.append("This package additionally REDISTRIBUTES prebuilt OpenBLAS shared libraries as")
     lines.append("NuGet runtime assets (runtimes/<rid>/native/). They are the unmodified artifacts")

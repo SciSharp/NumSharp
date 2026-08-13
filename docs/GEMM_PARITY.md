@@ -1,6 +1,6 @@
-# `NumSharp.Interop.BLAS` — byte-identical `np.dot` / `np.matmul`
+# `NumSharp.Interop.OpenBLAS` — byte-identical `np.dot` / `np.matmul`
 
-> **✅ IMPLEMENTED (2026-07-25).** Optional package `src/NumSharp.Interop.BLAS/`
+> **✅ IMPLEMENTED (2026-07-25).** Optional package `src/NumSharp.Interop.OpenBLAS/`
 > (`OpenBlasBackend : IBlasBackend`, `Blas`, `CBlasNative`, `BlasParity{,.Matmul,.Dot,.Entry}`),
 > installed through the one seam Core exposes — the engine's settable `TensorEngine.Blas`
 > property — gate `FuzzCorpusTests.MatmulParity` over the 342-case `matmul_parity` corpus tier.
@@ -61,11 +61,11 @@ a **route-for-route port of NumPy's two matrix-product dispatchers**. Same binar
 same flags ⇒ same bits by construction.
 
 ```powershell
-dotnet add package NumSharp.Interop.BLAS
+dotnet add package NumSharp.Interop.OpenBLAS
 ```
 
 ```csharp
-using NumSharp.Interop.Blas;
+using NumSharp.Interop.OpenBLAS;
 
 // Referencing the package IS the opt-in: a [ModuleInitializer] installs the backend if a CBLAS
 // library can be found, and silently does nothing if one cannot.
@@ -547,7 +547,7 @@ against NumPy's `(nan, nan)`.
 
 This is §2's class, not a defect in the managed kernel — but §3's table scopes the backend to
 float32/float64 and justifies the fall-through only for integers ("modular addition is
-associative"), which leaves complex silently in the divergent bucket. `NumSharp.Interop.BLAS`
+associative"), which leaves complex silently in the divergent bucket. `NumSharp.Interop.OpenBLAS`
 serves no complex dtype, so installing it does not close this. The seam already supports it: §8's
 probe wrote a third-party Complex128 backend against `IBlasBackend` untouched, batched path
 included. Closing it is a package-side job — add `cblas_zgemm`/`cblas_cgemm` routes — not a Core one.

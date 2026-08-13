@@ -21,8 +21,8 @@ it does.
   correct from any working directory. Opt out per project with `<SignAssembly>false</SignAssembly>`.
 - **`Open.snk`** — consolidated from 5 byte-identical copies to 1 at the repo root.
 - **All 7 `InternalsVisibleTo` now carry `PublicKey=`** — 5 in
-  `src/NumSharp.Core/Assembly/Properties.cs`, 2 in `src/NumSharp.Interop.BLAS/AssemblyInfo.cs`.
-- **`NumSharp.Interop.BLAS` is signed** (it consumes Core's internals).
+  `src/NumSharp.Core/Assembly/Properties.cs`, 2 in `src/NumSharp.Interop.OpenBLAS/AssemblyInfo.cs`.
+- **`NumSharp.Interop.OpenBLAS` is signed** (it consumes Core's internals).
 - Removed the dead `#if !SIGNING` guard and the misplaced `SIGNING` define.
 - **Gates:** `test/NumSharp.UnitTest/Assembly/StrongNameTests.cs` (6 tests) and
   `tools/verify_strong_name.cs` (package-level, run by CI).
@@ -102,7 +102,7 @@ dotnet run tools/verify_strong_name.cs -- <dir-or-nupkg>     # default: artifact
 |---|---|
 | Solution builds clean, Debug **and** Release | 0 errors; no `CS8002`; all 553/1199 warnings pre-existing (CA1416, nullable, vulnerable transitives) |
 | Every built assembly signed | **24/24** carry `cc7b13ffcd2ddd51` |
-| Every **packed** assembly signed | **6/6** across `NumSharp` / `NumSharp.Bitmap` / `NumSharp.Interop.BLAS` |
+| Every **packed** assembly signed | **6/6** across `NumSharp` / `NumSharp.Bitmap` / `NumSharp.Interop.OpenBLAS` |
 | Release path unaffected by version overrides | Simulated `build-nuget` with `Version=0.61.0-rc.1 AssemblyVersion=0.61.0`, incl. `pack --no-build` → verify green |
 | No test regressions | 12158 passed / 2 failed; **both attributed elsewhere** by rebuilding pristine `HEAD` in a throwaway worktree — `ErrorsFull` fails on `HEAD` too, `Index_Random` passes on `HEAD` and fails only against uncommitted in-flight indexing edits |
 | In-repo `dotnet run` scripts inherit signing | Ran one with no signing properties → token `cc7b13ffcd2ddd51`, internal access worked |
@@ -126,7 +126,7 @@ Everything above is local or PR-level. These only exercise on a real `v*` tag pu
 
 **Pre-flight (before tagging)**
 
-- [ ] Resolve the open decisions in §6 — especially the `NumSharp.Interop.BLAS` packaging gap.
+- [ ] Resolve the open decisions in §6 — especially the `NumSharp.Interop.OpenBLAS` packaging gap.
 - [ ] Confirm `verify-signing` is green on the release commit.
 - [ ] Version is **0.61.0** or **1.0.0** — *not* a patch bump. See §6.2.
 - [ ] Release notes at `docs/releases/RELEASE_<version>.md` state the breaking identity change.
@@ -161,10 +161,10 @@ Everything above is local or PR-level. These only exercise on a real `v*` tag pu
 
 ## 6. Open decisions — settle these BEFORE tagging
 
-### 6.1 `NumSharp.Interop.BLAS` is not in the release pipeline ⚠ **biggest gap**
+### 6.1 `NumSharp.Interop.OpenBLAS` is not in the release pipeline ⚠ **biggest gap**
 
 `build-nuget` builds and packs **only** Core and Bitmap. The release-notes generator likewise lists
-only those two packages. `NumSharp.Interop.BLAS` is a fully configured shipping package
+only those two packages. `NumSharp.Interop.OpenBLAS` is a fully configured shipping package
 (`PackageId`, `GeneratePackageOnBuild`, description, license expression) that exists **only on
 `journey3`** — the release workflow predates it.
 
@@ -250,7 +250,7 @@ identity. Prefer fixing forward.
 |---|---|
 | Signing configuration | `Directory.Build.props` (repo root) |
 | The key | `Open.snk` (repo root), `*.snk binary` in `.gitattributes:30` |
-| Friend declarations | `src/NumSharp.Core/Assembly/Properties.cs`, `src/NumSharp.Interop.BLAS/AssemblyInfo.cs` |
+| Friend declarations | `src/NumSharp.Core/Assembly/Properties.cs`, `src/NumSharp.Interop.OpenBLAS/AssemblyInfo.cs` |
 | Unit gate | `test/NumSharp.UnitTest/Assembly/StrongNameTests.cs` |
 | Package gate | `tools/verify_strong_name.cs` |
 | CI | `.github/workflows/build-and-release.yml` → jobs `verify-signing`, `build-nuget` |

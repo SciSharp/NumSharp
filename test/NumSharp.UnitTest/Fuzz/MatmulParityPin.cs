@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using NumSharp;
-using NumSharp.Interop.Blas;
+using NumSharp.Interop.OpenBLAS;
 
 namespace NumSharp.UnitTest.Fuzz
 {

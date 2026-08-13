@@ -62,7 +62,7 @@ foreach (var pkg in packages)
     Console.WriteLine($"{Path.GetFileName(pkg)}");
     using var zip = ZipFile.OpenRead(pkg);
 
-    // Only lib/ — a package may also carry runtimes/<rid>/native/*.dll (NumSharp.Interop.BLAS ships
+    // Only lib/ — a package may also carry runtimes/<rid>/native/*.dll (NumSharp.Interop.OpenBLAS ships
     // OpenBLAS), which are unmanaged and have no assembly identity to check.
     var libDlls = zip.Entries
         .Where(e => e.FullName.StartsWith("lib/", StringComparison.OrdinalIgnoreCase)

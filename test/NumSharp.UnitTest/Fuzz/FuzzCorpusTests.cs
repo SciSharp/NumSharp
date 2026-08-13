@@ -74,14 +74,14 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Matmul() => RunCorpus("matmul.jsonl");
 
-        // np.dot / np.matmul BYTE parity through the opt-in NumSharp.Interop.BLAS engine.
+        // np.dot / np.matmul BYTE parity through the opt-in NumSharp.Interop.OpenBLAS engine.
         // The ordinary Matmul tier above cannot see this: its operands are small integers and its
         // deepest contraction is k=4, where every summation order agrees. This tier sweeps k over
         // the panel boundaries with random floats, in every layout the two NumPy dispatchers route
         // differently (gemm / both gemv directions / ?dot / syrk / the portable loop / batched /
         // N-D dot) — where NumSharp's own GEMM diverges from NumPy on up to 94% of elements.
         //
-        // The engine comes from the OPTIONAL NumSharp.Interop.BLAS package (a DefaultEngine
+        // The engine comes from the OPTIONAL NumSharp.Interop.OpenBLAS package (a DefaultEngine
         // subclass); NumSharp.Core itself is 100% managed and has no BLAS in it at all. Note the
         // ORDER below: the engine must be installed BEFORE the operands are built, because an
         // NDArray resolves its engine at construction.
@@ -106,7 +106,7 @@ namespace NumSharp.UnitTest.Fuzz
             }
             finally
             {
-                NumSharp.Interop.Blas.Blas.Disable();
+                NumSharp.Interop.OpenBLAS.Blas.Disable();
             }
         }
 

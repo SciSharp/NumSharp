@@ -2,14 +2,13 @@
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <AssemblyName>NumSharp.Interop.BLAS</AssemblyName>
-    <RootNamespace>NumSharp.Interop.Blas</RootNamespace>
+    <RootNamespace>NumSharp.Interop.OpenBLAS</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
 
     <!-- NuGet package (co-versioned with NumSharp) -->
-    <PackageId>NumSharp.Interop.BLAS</PackageId>
+    <PackageId>NumSharp.Interop.OpenBLAS</PackageId>
     <Version>0.60.0</Version>
     <Authors>SciSharp STACK</Authors>
     <Product>NumSharp</Product>
@@ -110,9 +109,9 @@
     <Error Condition="'$(RequireOpenBlasAssets)' == 'true' and '@(_BundledOpenBlasAsset)' == ''"
            Text="No bundled OpenBLAS runtime assets found under $(OpenBlasRuntimesDir). Run: python tools/fetch_openblas.py" />
     <Warning Condition="'$(RequireOpenBlasAssets)' != 'true' and '@(_BundledOpenBlasAsset)' == ''"
-             Text="Packing NumSharp.Interop.BLAS WITHOUT bundled OpenBLAS binaries (none staged under $(OpenBlasRuntimesDir)). The package will fall back to discovering a CBLAS on the consumer's machine. Run `python tools/fetch_openblas.py` to bundle them." />
+             Text="Packing NumSharp.Interop.OpenBLAS WITHOUT bundled OpenBLAS binaries (none staged under $(OpenBlasRuntimesDir)). The package will fall back to discovering a CBLAS on the consumer's machine. Run `python tools/fetch_openblas.py` to bundle them." />
     <Message Importance="high" Condition="'@(_BundledOpenBlasAsset)' != ''"
-             Text="NumSharp.Interop.BLAS: bundling @(_BundledOpenBlasAsset->Count()) OpenBLAS runtime asset(s)." />
+             Text="NumSharp.Interop.OpenBLAS: bundling @(_BundledOpenBlasAsset->Count()) OpenBLAS runtime asset(s)." />
   </Target>
 
 </Project>
