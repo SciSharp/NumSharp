@@ -30,6 +30,13 @@ namespace NumSharp
             if (indices is null) throw new ArgumentNullException(nameof(indices));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
+            // NumPy checks writeability FIRST — before the empty-indices no-op and the
+            // bounds/mode checks (probed 2.4.2: put(ro, [], []) and put(ro, [oob], v) both
+            // report read-only). Without this the contiguous fast path (PutImpl) writes
+            // straight through a non-writeable target's raw Address. (The non-contiguous
+            // path below is already guarded — it routes through np.copyto.)
+            NumSharpException.ThrowIfNotWriteable(a.Shape, "put: output array");
+
             int modeInt = ParseMode(mode, nameof(mode));
 
             long indicesCount = indices.size;

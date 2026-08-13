@@ -34,7 +34,14 @@ namespace NumSharp
         ///     return a 0-d scalar array.
         /// </returns>
         public static NDArray evaluate(NDExpr expr, NDArray @out = null)
-            => BackendFactory.GetEngine().Evaluate(expr, @out);
+        {
+            // The fused inner loop writes to @out through the iterator, bypassing the
+            // guarded setters (same class of gap as the ufunc out= path) — reject a
+            // non-writeable target up front, as the ufuncs this fuses do.
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+            return BackendFactory.GetEngine().Evaluate(expr, @out);
+        }
 
         /// <summary>
         ///     Evaluate an expression built over positional
@@ -42,6 +49,10 @@ namespace NumSharp
         ///     list: <c>np.evaluate(NDExpr.Input(0) * NDExpr.Input(1), new[] { a, b })</c>.
         /// </summary>
         public static NDArray evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null)
-            => BackendFactory.GetEngine().Evaluate(expr, operands, @out);
+        {
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+            return BackendFactory.GetEngine().Evaluate(expr, operands, @out);
+        }
     }
 }

@@ -312,6 +312,16 @@ namespace NumSharp.Backends
             NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode resultType,
             NDArray? @out, NDArray? where)
         {
+            // NumPy checks output writeability FIRST: a read-only out reports
+            // "output array is read-only" ahead of any where/cast/shape error
+            // (probed 2.4.2 — the message wins even when the cast or shape is
+            // ALSO invalid). Without this an in-place ufunc writes straight
+            // through a non-writeable view — e.g. the read-only views the
+            // pythonnet interop hands out over numpy writeable=False arrays,
+            // read-only mmaps and immutable bytes.
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+
             ValidateWhereMask(where);
 
             string name = UfuncName(op);
@@ -435,6 +445,10 @@ namespace NumSharp.Backends
             NPTypeCode lhsType, NPTypeCode rhsType,
             NDArray? @out, NDArray? where)
         {
+            // Read-only out is rejected before where/cast/shape (see the binary path).
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+
             ValidateWhereMask(where);
 
             string name = UfuncName(op);
@@ -549,6 +563,10 @@ namespace NumSharp.Backends
             NPTypeCode inputType, NPTypeCode outputType,
             NDArray? @out, NDArray? where)
         {
+            // Read-only out is rejected before where/cast/shape (see the binary path).
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+
             ValidateWhereMask(where);
 
             string name = UfuncName(op);
