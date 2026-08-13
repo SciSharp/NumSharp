@@ -75,12 +75,15 @@ Blas.Info;                                               // path + symbol scheme
 Blas.Disable();                                          // back to NumSharp's managed SIMD GEMM
 ```
 
-Discovery order (this is the initial cut; the current full order — the bundled asset,
-`NUMSHARP_OPENBLAS_PATH` and the system scan — is in §6.1): explicit path/directory →
-`NUMSHARP_PARITY_BLAS` → the `numpy.libs` folder of any python on `PATH`
-(plus `VIRTUAL_ENV` / `CONDA_PREFIX` / `PYTHONHOME`) → bare loader names.
-NumPy's wheels rename their symbols `scipy_cblas_sgemm64_`-style and use **64-bit BLAS integers**;
-a stock LP64 `cblas_sgemm` is also bound, with the integer width marshalled per call
+Discovery order (summary; the authoritative table is §6.1, and the full delivery/discovery model is
+`docs/OPENBLAS_DELIVERY_DESIGN.md`): explicit path / `NUMSHARP_PARITY_BLAS` (binding) → override
+paths (`NUMSHARP_OPENBLAS_PATH`, then a build-recorded `OpenBlasPath` marker) → a build-staged
+**version override** (`openblas.source.json`, hard-required) → the **bundled asset** (the parity
+default) → machine-wide OpenBLAS (system installs, bare loader names, a PATH sweep). A pip-installed
+numpy's `numpy.libs/` is **not** an auto-scanned tier (removed 2026-08-13 — the bundle already IS
+that binary at the pin); to match a *different* numpy, name its library explicitly, which is
+binding. NumPy's wheels rename their symbols `scipy_cblas_sgemm64_`-style and use **64-bit BLAS
+integers**; a stock LP64 `cblas_sgemm` is also bound, with the integer width marshalled per call
 (`CBlasNative.IsIlp64`).
 
 ### The seam: one property on the engine

@@ -304,9 +304,9 @@ pinned version. MyPackage's consumers then get it from MyPackage's nupkg with no
 
 ## 8. Runtime discovery & version enforcement **[NEW mechanism]**
 
-`BundleAutoinstall` runs the tier-1→4 scan (§3). Tiers 2 and 4 both look at
-`runtimes/<rid>/native/` (or `OpenBlasPath`); a **source marker** written by the build tells them
-apart and carries the enforcement flag.
+`BundleAutoinstall` runs the tier-1→4 scan (§3). The **override** tier (2b) and the **bundle** tier
+(3) both look at `runtimes/<rid>/native/` (or `OpenBlasPath`); a **source marker** written by the
+build tells them apart and carries the enforcement flag.
 
 **Source marker** (recommended: a small sidecar, `openblas.source.json`, next to the app / the staged
 binary — a pure "file placement" handoff, no `runtimeconfig` needed; alternative: a
@@ -333,9 +333,10 @@ Runtime rules (implemented in `CBlasNative.Load` + `OpenBlasSourceMarker`):
   false` even though the folder layout (and possibly the bytes) match the bundle — the marker is
   the only thing that can tell them apart.
 
-This is the one subtle bit: the *same folder* is high-priority when it is a required override and
-last-resort when it is the bundle, and the marker is what flips it. It exists precisely because Goal 6
-makes the two binaries indistinguishable by content.
+This is the one subtle bit: the *same folder* is high-priority (tier 2b, ahead of everything but an
+explicit binding) when it is a required override, and the parity default (tier 3, above machine
+tooling but below any override) when it is the bundle — and the marker is what flips it. It exists
+precisely because Goal 6 makes the two binaries indistinguishable by content.
 
 The **binding** path (`NUMSHARP_PARITY_BLAS` / explicit `Blas.Enable(path)`) is unchanged and still
 short-circuits everything (tier 1, exclusive, fatal on miss). Symbol-scheme probing inside a bound
