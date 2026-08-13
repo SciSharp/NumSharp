@@ -173,8 +173,12 @@ read-in-place dir (also the download-to dir when combined with a version);
 nupkg. Two MSBuild traps encoded there: a target's `Condition` evaluates BEFORE `DependsOnTargets`
 run (the has-override gate must sit on the TASK, not the target), and `dotnet pack` defaults to
 Release on .NET 8+ while this repo's incremental build can declare stale Release outputs up-to-date
-— always `-t:Rebuild` before packing. Gate: `tools/verify_build_override.sh` (9-step scripted
-nupkg-flow run; network once, then cache).
+— always `-t:Rebuild` before packing. The cache is SELF-HEALING: every hit re-verifies the entry's
+content hash (the dir name IS the claim) and a truncated/tampered entry is discarded and
+re-downloaded; writes are temp+rename so killed/racing builds can't strand garbage under the hash
+name. Gate: `tools/verify_build_override.sh` (15-step scripted nupkg-flow run incl. tamper,
+mirror-needs-sha, invalid-knob, delivery=none, two-ref-conflict and poisoned-cache steps; network
+once, then cache) + `OpenBlasDeliveryTests` (20 — priority pins and hostile markers).
 
 **Four load-bearing details:** the result bits depend on the BLAS **thread count** (1/2/4/24 threads
 give four different answers); they ALSO depend on the **DYNAMIC_ARCH kernel** the CPU dispatches, so
@@ -196,7 +200,8 @@ API: `Blas.Enable(library, threads, coreType)` / `Blas.Disable()` / `Blas.Enable
 the same folder layout reports false) / `Blas.ParityCoreType`; `NUMSHARP_OPENBLAS_PATH` adds
 highest-priority (non-binding) discovery locations tried before bundled;
 `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0` opts out of the module-load install (`Blas.BundleAutoinstall`;
-the pre-rename `NUMSHARP_BLAS_AUTOINSTALL=0` is a deprecated alias for one release, and a
+the pre-rename `NUMSHARP_BLAS_AUTOINSTALL` spelling is RETIRED and ignored — removed before any
+release shipped it, pinned by `RetiredAutoinstallAlias_NoLongerSuppresses` — and a
 required-override miss at module load is reported to stderr, backend left uninstalled — never
 substituted). Gate: the **host-pinned**
 `matmul_parity` corpus tier (342 cases — 342 bit-exact with the backend, 294 divergent without it)

@@ -22,11 +22,6 @@ namespace NumSharp.UnitTest.Fuzz
     {
         [ModuleInitializer]
         internal static void SuppressAutoInstall()
-        {
-            // The supported name plus the deprecated alias it replaced — this guard is what keeps
-            // the whole run deterministic, so it must survive either spelling being retired.
-            Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", "0");
-            Environment.SetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL", "0");
-        }
+            => Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", "0");
     }
 }

@@ -1,14 +1,16 @@
 # OpenBLAS Dependency — Delivery & Discovery Design
 
-> **Status:** IMPLEMENTED · 2026-08-13 · branch `journey3`
+> **Status:** IMPLEMENTED & FINALIZED · 2026-08-13 · branch `journey3`
 > Supersedes the discovery/precedence model documented in `docs/GEMM_PARITY.md` §6.1.
 > §10.1 is RESOLVED (bundle stays above machine tooling — parity-by-default preserved). Both halves
-> are implemented: the runtime side (renames, numpy.libs removal, tier order, source marker +
-> hard-required enforcement — gate `OpenBlasDeliveryTests`, 10 tests) and the build side
-> (`buildTransitive/` props+targets, the inline download/stage task, caching, transitive metadata,
-> `OpenBlasDelivery=package` — gate `tools/verify_build_override.sh`, a 9-step scripted nupkg-flow
-> integration run). Each section marks **[EXISTS]**, **[CHANGE]**, **[NEW]** or **[DONE]**; §5.3
-> records the two implementation deviations (MiniJson, host-RID default).
+> are implemented: the runtime side (renames — the old spelling retired outright, no alias —
+> numpy.libs removal, tier order, source marker + hard-required enforcement — gate
+> `OpenBlasDeliveryTests`, 20 tests incl. the adversarial priority/hostile-marker pins) and the
+> build side (`buildTransitive/` props+targets, the inline download/stage task, self-healing
+> verified caching, transitive metadata, `OpenBlasDelivery=package` — gate
+> `tools/verify_build_override.sh`, a 15-step scripted nupkg-flow run incl. the adversarial half).
+> Each section marks **[EXISTS]**, **[CHANGE]**, **[NEW]** or **[DONE]**; §5.3 records the two
+> implementation deviations (MiniJson, host-RID default).
 
 This document defines how `NumSharp.Interop.OpenBLAS` obtains, delivers and binds an OpenBLAS/CBLAS
 shared library, and how a *dependent* package can reuse the same delivery. It is the single source of
@@ -118,8 +120,8 @@ NumPy pins (`openblas-manifest.json`). This is unchanged as the packaging mechan
 | Today | New | Why |
 |---|---|---|
 | `Blas.AutoInstall()` (`[ModuleInitializer]`) | **`Blas.BundleAutoinstall()`** | it exists to make the *bundle* work with zero config; the name should say so |
-| `NUMSHARP_BLAS_AUTOINSTALL=0` | **`NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0`** | matches the method | 
-| — | old env kept as a **deprecated alias** for one release | migration |
+| `NUMSHARP_BLAS_AUTOINSTALL=0` | **`NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0`** | matches the method |
+| — | old env **RETIRED, ignored** (finalized 2026-08-13 — the rename never shipped in a release, so there is no installed base; pinned by `RetiredAutoinstallAlias_NoLongerSuppresses`) | no legacy carried |
 
 `BundleAutoinstall` is still the single runtime entry point that runs the whole tier-1→4 discovery and
 wires `OpenBlasBackend` onto `TensorEngine.Blas`; it is *named* for its defining default job (the
@@ -280,7 +282,7 @@ pinned version. MyPackage's consumers then get it from MyPackage's nupkg with no
 
 ---
 
-## 7. Caching & cleanup **[NEW]**
+## 7. Caching & cleanup **[DONE]**
 
 - **Global temp cache** (per user), keyed by `(distribution, version, rid, sha256)`. Shared across
   projects and repeated builds. Holds **extracted native libraries only**.
@@ -288,6 +290,15 @@ pinned version. MyPackage's consumers then get it from MyPackage's nupkg with no
   Nothing wheel-shaped survives a build.
 - **Output staging** is a copy from the cache into `runtimes/<rid>/native/` (or `OpenBlasPath`),
   overwritable and idempotent (skipped when the destination already matches the keyed sha).
+- **Cache integrity (hardening, 2026-08-13):** the directory NAME is the content hash the entry
+  claims, and a hit is only a hit if the FILE still hashes to it — a truncated write (killed build)
+  or a tampered entry is logged (`DISCARDING poisoned cache entry`), deleted, and re-downloaded;
+  the cache **self-heals** rather than staging garbage or hard-failing forever (§10.6: never
+  silently substitute). Writes go through a unique temp file INSIDE the entry directory plus a
+  rename, so a killed build cannot leave a half-written file under the content-hash name and two
+  concurrent builds racing the same entry cannot clobber each other — the loser keeps the winner's
+  identical, verified content. Gated by `verify_build_override.sh` step 10 (poison → discard →
+  re-download → staging completes).
 
 ---
 
@@ -337,7 +348,7 @@ library (`scipy_*64_` ILP64 → … → plain `cblas_*` LP64) is unchanged.
 | Kind | Today | New |
 |---|---|---|
 | Method | `Blas.AutoInstall()` | `Blas.BundleAutoinstall()` |
-| Env (opt-out) | `NUMSHARP_BLAS_AUTOINSTALL=0` | `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0` (old kept as deprecated alias 1 release) |
+| Env (opt-out) | `NUMSHARP_BLAS_AUTOINSTALL=0` | `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0` (old spelling RETIRED and ignored — never released) |
 | Env (drop bundle) | `NUMSHARP_BLAS_BUNDLED=0` | unchanged |
 | Env (binding) | `NUMSHARP_PARITY_BLAS` | unchanged |
 | Env (override path) | `NUMSHARP_OPENBLAS_PATH` (runtime additive) | **override path** (runtime tier 2a **and** build read/download dir) |
@@ -401,18 +412,21 @@ Downloading + later loading native code selected by build metadata is a supply-c
 |---|---|
 | Bundle: per-RID nupkg runtime assets, `fetch_openblas.py`, manifest, double-hash verify | **EXISTS** |
 | Runtime discovery scan incl. system + PATH tiers, 32/64 names (now `AmbientCandidates`) | **EXISTS** |
-| Rename `AutoInstall` → `BundleAutoinstall` (+ env, deprecated alias) | **DONE** |
+| Rename `AutoInstall` → `BundleAutoinstall` (+ env; old spelling retired outright, no alias) | **DONE** |
 | Tier order per §10.1 resolution (overrides → bundle → machine tooling) | **DONE** |
 | Remove `PythonLibDirectories` (numpy.libs) | **DONE** |
 | Source marker + runtime tier-2b enforcement (`OpenBlasSourceMarker`, `BlasRequiredOverrideException`) | **DONE** |
-| Gates: runtime priority unit tests (`OpenBlasDeliveryTests`, 10); `MatmulParityBackendTests` 30/30 unaffected | **DONE** |
+| Gates: runtime priority unit tests (`OpenBlasDeliveryTests`); `MatmulParityBackendTests` 30/30 unaffected | **DONE** |
 | `buildTransitive` props/targets + inline download/extract task (netstandard2.0-surface, MiniJson) | **DONE** |
 | Override resolution (env > metadata), path & version modes, hard-fail | **DONE** |
 | Global temp cache (extracted libs only) + wheel cleanup | **DONE** |
 | Transitive metadata scan over all `PackageReference`s (+ §10.2 conflict rules) | **DONE** |
 | `OpenBlasDelivery=package` pack hook — all manifest RIDs baked into the dependent's nupkg | **DONE** |
 | Stale-marker cleanup across override add/remove/mode-switch | **DONE** |
-| Gate: `tools/verify_build_override.sh` (9-step scripted nupkg-flow integration run) | **DONE** |
+| Cache integrity: verify-on-hit + poisoned-entry self-heal + atomic race-safe writes | **DONE** |
+| Retire the pre-rename `NUMSHARP_BLAS_AUTOINSTALL` spelling outright (no alias carried) | **DONE** |
+| Gate: `tools/verify_build_override.sh` (15-step scripted nupkg-flow run incl. the adversarial half: tamper, mirror-needs-sha, invalid knob, `delivery=none`, two-reference conflict, poisoned cache) | **DONE** |
+| Gate: `OpenBlasDeliveryTests` grown to 20 (priority pins: binding > path-env > version marker; hostile markers: corrupt JSON, unknown mode, `required:false`, relative path, rid-dir layout, case-insensitive sha, file-valued path) | **DONE** |
 
 ---
 

@@ -447,9 +447,9 @@ dotnet test --filter "FullyQualifiedName~FuzzCorpusTests.MatmulParity"
 ```
 
 The test assembly suppresses the package's module-load auto-install
-(`Fuzz/BlasEngineAutoInstallGuard.cs` sets `NUMSHARP_BLAS_AUTOINSTALL=0`) and installs the backend
-per-test instead: every other tier asserts NumSharp's OWN kernels, and an install triggered at
-whatever moment the first parity type is touched would silently change what the tests around it
+(`Fuzz/BlasEngineAutoInstallGuard.cs` sets `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0`) and installs the
+backend per-test instead: every other tier asserts NumSharp's OWN kernels, and an install triggered
+at whatever moment the first parity type is touched would silently change what the tests around it
 measured.
 
 ## 8. Traps

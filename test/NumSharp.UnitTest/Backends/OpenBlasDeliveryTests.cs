@@ -64,30 +64,50 @@ namespace NumSharp.UnitTest.Backends
         }
 
         [TestMethod]
-        public void BundleAutoinstall_HonorsTheNewOptOut_AndTheDeprecatedAlias()
+        public void BundleAutoinstall_HonorsTheOptOut()
         {
-            // The guard sets both to "0" for the whole run; exercise each spelling alone.
+            // The guard sets it to "0" for the whole run; exercise the spelling in isolation.
+            var prev = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL");
+            try
+            {
+                Blas.Disable();
+                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", "0");
+                Blas.BundleAutoinstall();
+                Assert.IsFalse(Blas.Enabled, "NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0 must suppress the install");
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", prev);
+            }
+        }
+
+        [TestMethod]
+        public void RetiredAutoinstallAlias_NoLongerSuppresses()
+        {
+            if (FindBundledLibrary() == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            // The pre-rename NUMSHARP_BLAS_AUTOINSTALL spelling was retired (never released),
+            // so setting it must be a no-op: autoinstall proceeds regardless. This pins the
+            // REMOVAL — a reintroduced alias would turn this test red.
             var prevNew = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL");
             var prevOld = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL");
             try
             {
                 Blas.Disable();
-
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", "0");
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL", null);
-                Blas.BundleAutoinstall();
-                Assert.IsFalse(Blas.Enabled, "NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0 must suppress the install");
-
                 Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", null);
                 Environment.SetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL", "0");
+
                 Blas.BundleAutoinstall();
-                Assert.IsFalse(Blas.Enabled,
-                    "the deprecated NUMSHARP_BLAS_AUTOINSTALL=0 alias must keep suppressing for one release");
+                Assert.IsTrue(Blas.Enabled,
+                    "the retired NUMSHARP_BLAS_AUTOINSTALL spelling must be ignored — only " +
+                    "NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0 suppresses the install");
             }
             finally
             {
                 Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", prevNew);
                 Environment.SetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL", prevOld);
+                Blas.Disable();
             }
         }
 
@@ -97,21 +117,18 @@ namespace NumSharp.UnitTest.Backends
             if (FindBundledLibrary() == null)
                 Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
 
-            var prevNew = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL");
-            var prevOld = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL");
+            var prev = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL");
             try
             {
                 Blas.Disable();
                 Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", null);
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL", null);
 
                 Blas.BundleAutoinstall();
                 Assert.IsTrue(Blas.Enabled, "with no opt-out and a loadable bundle, autoinstall must wire the backend");
             }
             finally
             {
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", prevNew);
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL", prevOld);
+                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", prev);
                 Blas.Disable();
             }
         }
@@ -212,8 +229,7 @@ namespace NumSharp.UnitTest.Backends
         public void BundleAutoinstall_OnARequiredOverrideMiss_IsLoudButDoesNotThrow()
         {
             var emptyDir = MakeEmptyDir();
-            var prevNew = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL");
-            var prevOld = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL");
+            var prev = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL");
             try
             {
                 WriteMarker(new { mode = "version", version = "9.9.9.9", path = emptyDir });
@@ -224,7 +240,6 @@ namespace NumSharp.UnitTest.Backends
                 // safe here: tests run sequentially and nothing is executing in the BLAS.
                 CBlasNative.Unload();
                 Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", null);
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL", null);
 
                 // Referencing the package must never break the app — the module-load path reports
                 // the broken pin to stderr and leaves the backend UNINSTALLED (never substituted).
@@ -234,8 +249,7 @@ namespace NumSharp.UnitTest.Backends
             }
             finally
             {
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", prevNew);
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL", prevOld);
+                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", prev);
                 File.Delete(MarkerPath);
                 Directory.Delete(emptyDir);
             }
@@ -285,6 +299,239 @@ namespace NumSharp.UnitTest.Backends
                 Assert.IsNotNull(Blas.LibraryPath);
                 Assert.IsFalse(Blas.IsBundledLibrary,
                     "a library read from a marker-declared path is an override read-in-place, not the bundle");
+            }
+            finally
+            {
+                File.Delete(MarkerPath);
+            }
+        }
+
+        #endregion
+
+        #region adversarial — priority pins and hostile markers
+
+        [TestMethod]
+        public void Binding_OutranksABrokenVersionMarker()
+        {
+            var lib = FindBundledLibrary();
+            if (lib == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            var emptyDir = MakeEmptyDir();
+            try
+            {
+                // Tier 1 over tier 2b: an explicit binding must bypass the marker tiers
+                // entirely — a broken pin cannot take down a caller who NAMED their binary.
+                WriteMarker(new { mode = "version", version = "9.9.9.9", path = emptyDir });
+                Environment.SetEnvironmentVariable("NUMSHARP_PARITY_BLAS", lib);
+
+                CBlasNative.Load(null);
+                Assert.IsNotNull(Blas.LibraryPath);
+                Assert.AreEqual(Path.GetFullPath(lib), Path.GetFullPath(Blas.LibraryPath));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("NUMSHARP_PARITY_BLAS", null);
+                File.Delete(MarkerPath);
+                Directory.Delete(emptyDir);
+            }
+        }
+
+        [TestMethod]
+        public void OverridePathEnv_OutranksTheVersionMarker()
+        {
+            var lib = FindBundledLibrary();
+            if (lib == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            var emptyDir = MakeEmptyDir();
+            try
+            {
+                // Tier 2a over tier 2b (env wins over build metadata, design §3): when the env
+                // path holds a loadable BLAS, a version marker with a dead staged dir must not
+                // throw — the caller's environment already answered.
+                WriteMarker(new { mode = "version", version = "9.9.9.9", path = emptyDir });
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PATH", Path.GetDirectoryName(lib));
+
+                CBlasNative.Load(null);
+                Assert.IsNotNull(Blas.LibraryPath);
+                StringAssert.Contains(Path.GetFullPath(Blas.LibraryPath),
+                    Path.GetFullPath(Path.GetDirectoryName(lib)));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PATH", null);
+                File.Delete(MarkerPath);
+                Directory.Delete(emptyDir);
+            }
+        }
+
+        [TestMethod]
+        public void VersionMarker_RequiredFalse_FallsThroughToTheBundle()
+        {
+            if (FindBundledLibrary() == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            var emptyDir = MakeEmptyDir();
+            try
+            {
+                // The schema's escape hatch: a build may stage a preferred-but-optional binary.
+                WriteMarker(new { mode = "version", version = "9.9.9.9", required = false, path = emptyDir });
+
+                CBlasNative.Load(null);
+                Assert.IsTrue(Blas.IsBundledLibrary,
+                    "required:false downgrades a version-marker miss to fall-through, but bound: " + Blas.LibraryPath);
+            }
+            finally
+            {
+                File.Delete(MarkerPath);
+                Directory.Delete(emptyDir);
+            }
+        }
+
+        [TestMethod]
+        public void Marker_UnknownMode_IsIgnored()
+        {
+            if (FindBundledLibrary() == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            try
+            {
+                // Forward compatibility: a mode this runtime does not know is neither an
+                // override nor an error — the folder reads as the ordinary bundle.
+                WriteMarker(new { mode = "banana", version = "1.2.3" });
+
+                CBlasNative.Load(null);
+                Assert.IsTrue(Blas.IsBundledLibrary,
+                    "an unknown marker mode must not turn the bundle into an override");
+            }
+            finally
+            {
+                File.Delete(MarkerPath);
+            }
+        }
+
+        [TestMethod]
+        public void Marker_CorruptJson_IsIgnored_AndDiscoveryProceeds()
+        {
+            if (FindBundledLibrary() == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            try
+            {
+                // A half-written or vandalized marker must not brick discovery (TryFind runs on
+                // the module-initializer path): one stderr line, then the bundle serves.
+                File.WriteAllText(MarkerPath, "{ this is not json");
+
+                CBlasNative.Load(null);
+                Assert.IsTrue(Blas.IsBundledLibrary,
+                    "a corrupt marker must be ignored, not treated as an override or an error");
+            }
+            finally
+            {
+                File.Delete(MarkerPath);
+            }
+        }
+
+        [TestMethod]
+        public void VersionMarker_RelativePath_ResolvesAgainstTheMarkersDirectory()
+        {
+            var lib = FindBundledLibrary();
+            if (lib == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            try
+            {
+                // The build writes marker and binary together; a relative path must survive the
+                // pair being xcopy-deployed anywhere (it resolves against the MARKER, not CWD).
+                var relative = Path.GetRelativePath(AppContext.BaseDirectory, Path.GetDirectoryName(lib));
+                WriteMarker(new { mode = "version", version = "0.3.31.22.0", path = relative });
+
+                CBlasNative.Load(null);
+                Assert.IsNotNull(Blas.LibraryPath);
+                Assert.IsFalse(Blas.IsBundledLibrary, "a marker-declared override is not the bundle");
+            }
+            finally
+            {
+                File.Delete(MarkerPath);
+            }
+        }
+
+        [TestMethod]
+        public void RidDirMarker_WithoutARootMarker_IsFound()
+        {
+            var lib = FindBundledLibrary();
+            if (lib == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            // The packed-dependent layout (§6.2): OpenBlasDelivery=package bakes the marker NEXT
+            // TO the binary inside runtimes/<rid>/native/ — no root marker exists in the consumer.
+            var ridMarker = Path.Combine(Path.GetDirectoryName(lib), "openblas.source.json");
+            try
+            {
+                File.WriteAllText(ridMarker, JsonSerializer.Serialize(
+                    new { mode = "version", version = "0.3.31.22.0" }));
+
+                CBlasNative.Load(null);
+                Assert.IsNotNull(Blas.LibraryPath);
+                Assert.IsFalse(Blas.IsBundledLibrary,
+                    "a rid-dir marker (the packed-dependent layout) must flip the folder to an override");
+            }
+            finally
+            {
+                File.Delete(ridMarker);
+            }
+        }
+
+        [TestMethod]
+        public void VersionMarker_ShaComparison_IsCaseInsensitive()
+        {
+            var lib = FindBundledLibrary();
+            if (lib == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            string shaUpper;
+            using (var stream = File.OpenRead(lib))
+                shaUpper = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+
+            try
+            {
+                WriteMarker(new
+                {
+                    mode = "version",
+                    version = "0.3.31.22.0",
+                    path = Path.GetDirectoryName(lib),
+                    sha256 = shaUpper, // Convert.ToHexString yields UPPERCASE
+                });
+
+                CBlasNative.Load(null);
+                Assert.IsNotNull(Blas.LibraryPath);
+                StringAssert.Contains(Path.GetFullPath(Blas.LibraryPath), Path.GetFullPath(Path.GetDirectoryName(lib)));
+            }
+            finally
+            {
+                File.Delete(MarkerPath);
+            }
+        }
+
+        [TestMethod]
+        public void PathMarker_MayNameTheLibraryFile_AndStillReadsAsAnOverride()
+        {
+            var lib = FindBundledLibrary();
+            if (lib == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            try
+            {
+                // Expand accepts a file as well as a directory, so a marker may name the library
+                // itself — and the loaded result must still be recognized as the declared
+                // override, not misread as the bundle.
+                WriteMarker(new { mode = "path", path = lib });
+
+                CBlasNative.Load(null);
+                Assert.AreEqual(Path.GetFullPath(lib), Path.GetFullPath(Blas.LibraryPath));
+                Assert.IsFalse(Blas.IsBundledLibrary,
+                    "a library bound through a file-valued path marker is an override, not the bundle");
             }
             finally
             {

@@ -113,9 +113,10 @@ The override is configured **on the `PackageReference`** — no second package:
 At build, the pinned scipy-openblas wheel is fetched from PyPI, verified twice (the wheel's sha256
 from the index, then the extracted library's), the one native library is extracted into a global
 per-user cache (`%LOCALAPPDATA%\NumSharp\openblas` / `~/.cache/NumSharp/openblas` — the wheel is
-deleted; repeated builds and offline builds serve from the cache), staged over the bundle in the
-output, and an `openblas.source.json` **source marker** is written so the runtime treats the folder
-as a *required* override (discovery tier 3 above). **A version override is a hard requirement**: a
+deleted; repeated builds and offline builds serve from the cache, and every cache hit re-verifies
+the entry's content hash: a truncated or tampered entry is discarded and re-downloaded), staged
+over the bundle in the output, and an `openblas.source.json` **source marker** is written so the
+runtime treats the folder as a *required* override (discovery tier 3 above). **A version override is a hard requirement**: a
 build that cannot download/verify it FAILS, and a runtime that cannot load it THROWS
 (`BlasRequiredOverrideException`) rather than quietly substituting the bundle or a system BLAS.
 `OpenBlasPath` alone (no version) is the soft form — "read tooling from here", non-binding.
@@ -254,7 +255,7 @@ fine.
 | `NUMSHARP_PARITY_BLAS` | Path (or directory) of the CBLAS library to load. **Binding**, like an explicit argument — used as given, never substituted. |
 | `NUMSHARP_OPENBLAS_PATH` | File(s)/dir(s) to scan for a CBLAS, path-separator delimited. Tried **first** (priority over the bundled asset), non-binding — falls through to the rest if it holds no BLAS. |
 | `NUMSHARP_BLAS_BUNDLED=0` | Skip the bundled asset; machine tooling becomes the discovery default. |
-| `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0` | Skip the module-load auto-install; `Blas.Enable(...)` still works. (The pre-rename `NUMSHARP_BLAS_AUTOINSTALL=0` is honoured as a deprecated alias for one release.) |
+| `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0` | Skip the module-load auto-install; `Blas.Enable(...)` still works. |
 | `NUMSHARP_OPENBLAS_VERSION` | **Build-time**: scipy-openblas version to download from PyPI and stage over the bundle — a hard requirement; beats `<OpenBlasVersion>` metadata. |
 | `NUMSHARP_OPENBLAS_DISTRIBUTION` / `NUMSHARP_OPENBLAS_FEED` / `NUMSHARP_OPENBLAS_SHA256` / `NUMSHARP_OPENBLAS_DELIVERY` | **Build-time**: distribution pick (`64`/`32`), PyPI mirror base (needs the sha), expected extracted-lib sha256, delivery mode (`none`/`build`/`package`); each beats its `OpenBlas*` metadata twin. |
 | `OPENBLAS_HOME` / `OPENBLAS_ROOT` / `VCPKG_ROOT` / `CONDA_PREFIX` | Roots consulted when scanning for a machine-wide OpenBLAS (discovery tier 5). |

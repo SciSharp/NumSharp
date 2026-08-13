@@ -7,11 +7,14 @@
 # proves the whole chain: buildTransitive import → PackageReference-metadata /
 # env knobs → PyPI download + double-hash verify → global cache (wheel deleted) →
 # staging over the bundle → source marker → runtime binds it as a REQUIRED
-# override (Blas.IsBundledLibrary == false). Also: the wrong-version hard fail,
-# marker lifecycle across mode switches, and both publish layouts.
+# override (Blas.IsBundledLibrary == false). Plus the adversarial half: the
+# wrong-version and tampered-artifact hard fails, the mirror-needs-sha and
+# invalid-knob rejections, the delivery=none opt-out, the two-reference conflict,
+# poisoned-cache self-healing, marker lifecycle across mode switches, and both
+# publish layouts.
 #
-# Needs: network (PyPI, first run only — the cache serves afterwards), the .NET SDK.
-# Cost:  ~1 min warm, plus one ~20 MB wheel download cold.
+# Needs: network (PyPI; the happy path caches after the first run — the tamper
+# steps re-download one ~20 MB wheel per run by design), the .NET SDK.
 #
 #   bash src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
 # =============================================================================
@@ -37,11 +40,31 @@ CONS="$WORK/consumer"; mkdir -p "$CONS"
 # The knobs must come from THIS script, not the ambient environment.
 unset NUMSHARP_OPENBLAS_VERSION NUMSHARP_OPENBLAS_PATH NUMSHARP_OPENBLAS_DISTRIBUTION \
       NUMSHARP_OPENBLAS_FEED NUMSHARP_OPENBLAS_SHA256 NUMSHARP_OPENBLAS_DELIVERY \
-      NUMSHARP_PARITY_BLAS NUMSHARP_BLAS_BUNDLED NUMSHARP_BLAS_BUNDLE_AUTOINSTALL \
-      NUMSHARP_BLAS_AUTOINSTALL 2>/dev/null || true
+      NUMSHARP_PARITY_BLAS NUMSHARP_BLAS_BUNDLED NUMSHARP_BLAS_BUNDLE_AUTOINSTALL 2>/dev/null || true
 
 step() { printf '\n== %s ==\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+
+# The consumer csproj is REWRITTEN per scenario (not sed-mutated): each step states its
+# whole reference block, so no step depends on the previous one's edits.
+write_csproj() {
+cat > "$CONS/consumer.csproj" <<EOF
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+$1
+  </ItemGroup>
+</Project>
+EOF
+}
+REF_BARE="    <PackageReference Include=\"NumSharp.Interop.OpenBLAS\" Version=\"$VERSION\" />"
+REF_VERSION="    <PackageReference Include=\"NumSharp.Interop.OpenBLAS\" Version=\"$VERSION\">
+      <OpenBlasVersion>$PINNED</OpenBlasVersion>
+    </PackageReference>"
 
 step "pack NumSharp $VERSION + NumSharp.Interop.OpenBLAS $VERSION into a local feed"
 # -t:Rebuild first: this repo's incremental build is known to declare stale outputs
@@ -73,18 +96,7 @@ cat > "$CONS/nuget.config" <<EOF
   </packageSources>
 </configuration>
 EOF
-cat > "$CONS/consumer.csproj" <<EOF
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>disable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="NumSharp.Interop.OpenBLAS" Version="$VERSION" />
-  </ItemGroup>
-</Project>
-EOF
+write_csproj "$REF_BARE"
 cat > "$CONS/Program.cs" <<'EOF'
 using System;
 using NumSharp;
@@ -102,6 +114,7 @@ OUT="$CONS/bin/Debug/net10.0"
 RID="$(cd "$CONS" && dotnet msbuild consumer.csproj -getProperty:NETCoreSdkPortableRuntimeIdentifier | tr -d '\r')"
 RID_MARKER="$OUT/runtimes/$RID/native/openblas.source.json"
 ROOT_MARKER="$OUT/openblas.source.json"
+CACHE="${LOCALAPPDATA:-$HOME/.cache}/NumSharp/openblas"
 
 step "1. default build: bundle ships, NO marker, no task"
 ( cd "$CONS" && run dotnet build -v q --nologo "-clp:ErrorsOnly" )
@@ -110,7 +123,7 @@ ls "$OUT"/runtimes/"$RID"/native/*openblas* > /dev/null 2>&1 || fail "bundled as
 echo "ok"
 
 step "2. version override via PackageReference metadata ($PINNED): stage + marker + runtime override"
-sed -i "s#<PackageReference Include=\"NumSharp.Interop.OpenBLAS\" Version=\"$VERSION\" />#<PackageReference Include=\"NumSharp.Interop.OpenBLAS\" Version=\"$VERSION\"><OpenBlasVersion>$PINNED</OpenBlasVersion></PackageReference>#" "$CONS/consumer.csproj"
+write_csproj "$REF_VERSION"
 ( cd "$CONS" && run dotnet build -v q --nologo "-clp:ErrorsOnly" )
 grep -q '"mode": "version"' "$RID_MARKER" || fail "version marker missing/wrong at $RID_MARKER"
 grep -q '"required": true' "$RID_MARKER" || fail "version marker must be required"
@@ -131,7 +144,59 @@ step "4. a wrong version is a HARD build failure"
 grep -q "hard requirement" "$WORK/wrong.log" || fail "the failure must state the contract; got: $(cat "$WORK/wrong.log")"
 echo "ok"
 
-step "5. version + path combined (metadata version, env path): download INTO the dir, marker points there"
+step "5. a tampered artifact (wrong expected sha) is a HARD build failure"
+# The wrong sha misses the cache, forcing a real download whose extracted library then
+# fails verification — the tamper-detection proof (§10.6). Costs one wheel per run.
+( cd "$CONS" && NUMSHARP_OPENBLAS_SHA256="$(printf '0%.0s' {1..64})" dotnet build -v q --nologo "-clp:ErrorsOnly" > "$WORK/sha.log" 2>&1 ) \
+    && fail "a sha mismatch must fail the build"
+grep -q "CHECKSUM MISMATCH" "$WORK/sha.log" || fail "the failure must name the mismatch; got: $(cat "$WORK/sha.log")"
+echo "ok"
+
+step "6. a non-pypi.org feed without an explicit sha is refused (before any network)"
+( cd "$CONS" && NUMSHARP_OPENBLAS_FEED=https://mirror.example.invalid dotnet build -v q --nologo "-clp:ErrorsOnly" > "$WORK/feedx.log" 2>&1 ) \
+    && fail "a mirror without OpenBlasSha256 must fail the build"
+grep -q "requires an explicit" "$WORK/feedx.log" || fail "the failure must demand the sha; got: $(cat "$WORK/feedx.log")"
+echo "ok"
+
+step "7. an invalid OpenBlasDelivery value is refused"
+( cd "$CONS" && NUMSHARP_OPENBLAS_DELIVERY=banana dotnet build -v q --nologo "-clp:ErrorsOnly" > "$WORK/deliv.log" 2>&1 ) \
+    && fail "an invalid delivery value must fail the build"
+grep -q "none|build|package" "$WORK/deliv.log" || fail "the failure must list the valid values; got: $(cat "$WORK/deliv.log")"
+echo "ok"
+
+step "8. OpenBlasDelivery=none opts the reference out entirely"
+write_csproj "    <PackageReference Include=\"NumSharp.Interop.OpenBLAS\" Version=\"$VERSION\">
+      <OpenBlasVersion>$PINNED</OpenBlasVersion>
+      <OpenBlasDelivery>none</OpenBlasDelivery>
+    </PackageReference>"
+( cd "$CONS" && run dotnet build -v q --nologo "-clp:ErrorsOnly" )
+[ ! -f "$RID_MARKER" ] && [ ! -f "$ROOT_MARKER" ] || fail "delivery=none must ignore the reference's OpenBLAS metadata"
+echo "ok"
+
+step "9. a version on one reference vs a bare path on another is a HARD conflict (§10.2)"
+write_csproj "    <PackageReference Include=\"NumSharp\" Version=\"$VERSION\">
+      <OpenBlasVersion>$PINNED</OpenBlasVersion>
+    </PackageReference>
+    <PackageReference Include=\"NumSharp.Interop.OpenBLAS\" Version=\"$VERSION\">
+      <OpenBlasPath>$WORK/somewhere</OpenBlasPath>
+    </PackageReference>"
+( cd "$CONS" && dotnet build -v q --nologo "-clp:ErrorsOnly" > "$WORK/conflict.log" 2>&1 ) \
+    && fail "an enforced download and a read-in-place directory on different references cannot both win"
+grep -q "cannot both" "$WORK/conflict.log" || fail "the failure must explain the conflict; got: $(cat "$WORK/conflict.log")"
+echo "ok"
+
+step "10. a poisoned cache entry is discarded and re-downloaded, never staged"
+write_csproj "$REF_VERSION"
+CACHED="$(find "$CACHE/scipy-openblas64/$PINNED/$RID" -type f ! -name '*.tmp' 2>/dev/null | head -1)"
+[ -n "$CACHED" ] || fail "expected a cache entry from step 2 under $CACHE/scipy-openblas64/$PINNED/$RID"
+printf 'garbage' > "$CACHED"
+POISON="$(cd "$CONS" && dotnet build -t:Rebuild -v n --nologo 2>&1)"
+echo "$POISON" | grep -q "DISCARDING poisoned cache entry" || fail "the tampered entry must be detected and discarded"
+echo "$POISON" | grep -q "NumSharp.Interop.OpenBLAS: downloading" || fail "the discarded entry must be re-downloaded"
+grep -q '"mode": "version"' "$RID_MARKER" || fail "staging must complete after the self-heal"
+echo "ok"
+
+step "11. version + path combined (metadata version, env path): download INTO the dir, marker points there"
 PATH_DIR="$WORK/pathdir"; mkdir -p "$PATH_DIR"
 ( cd "$CONS" && NUMSHARP_OPENBLAS_PATH="$PATH_DIR" run dotnet build -v q --nologo "-clp:ErrorsOnly" )
 ls "$PATH_DIR"/*openblas* > /dev/null 2>&1 || fail "the version must be staged INTO OpenBlasPath (§5 table row 3)"
@@ -143,13 +208,13 @@ echo "$COMBRUN" | grep -qi "library=.*pathdir" || fail "runtime must bind from t
 echo "$COMBRUN" | grep -q "bundled=False" || fail "a custom-dir override is not the bundle: $COMBRUN"
 echo "ok"
 
-step "6. override removed: all markers cleared"
-sed -i "s#<PackageReference Include=\"NumSharp.Interop.OpenBLAS\" Version=\"$VERSION\">.*</PackageReference>#<PackageReference Include=\"NumSharp.Interop.OpenBLAS\" Version=\"$VERSION\" />#" "$CONS/consumer.csproj"
+step "12. override removed: all markers cleared"
+write_csproj "$REF_BARE"
 ( cd "$CONS" && run dotnet build -v q --nologo "-clp:ErrorsOnly" )
 [ ! -f "$RID_MARKER" ] && [ ! -f "$ROOT_MARKER" ] || fail "markers must be cleaned when the override is removed"
 echo "ok"
 
-step "7. path-only mode (env, empty dir): non-binding marker, runtime falls through to the bundle"
+step "13. path-only mode (env, empty dir): non-binding marker, runtime falls through to the bundle"
 EMPTY_DIR="$WORK/emptydir"; mkdir -p "$EMPTY_DIR"
 ( cd "$CONS" && NUMSHARP_OPENBLAS_PATH="$EMPTY_DIR" run dotnet build -v q --nologo "-clp:ErrorsOnly" )
 grep -q '"mode": "path"' "$ROOT_MARKER" || fail "path marker missing at $ROOT_MARKER"
@@ -159,7 +224,7 @@ echo "$PATHRUN" | grep -q "bundled=True" || fail "an empty path override must fa
 [ ! -f "$ROOT_MARKER" ] || fail "the path marker must clear once the env override is gone"
 echo "ok"
 
-step "8. publish layouts (version override via env)"
+step "14. publish layouts (version override via env)"
 ( cd "$CONS" && NUMSHARP_OPENBLAS_VERSION="$PINNED" run dotnet publish -o "$WORK/pub-portable" -v q --nologo "-clp:ErrorsOnly" )
 grep -q '"mode": "version"' "$WORK/pub-portable/runtimes/$RID/native/openblas.source.json" \
     || fail "portable publish must carry the rid-dir marker"
@@ -170,8 +235,7 @@ PUBRUN="$(dotnet "$WORK/pub-rid/consumer.dll" 2>/dev/null)"
 echo "$PUBRUN" | grep -q "bundled=False" || fail "published app must bind the override: $PUBRUN"
 echo "ok"
 
-step "9. the cache holds extracted libraries only (Goal 7: no wheels survive)"
-CACHE="${LOCALAPPDATA:-$HOME/.cache}/NumSharp/openblas"
+step "15. the cache holds extracted libraries only (Goal 7: no wheels survive)"
 if [ -d "$CACHE" ]; then
     WHEELS="$(find "$CACHE" -name '*.whl' | wc -l)"
     [ "$WHEELS" = "0" ] || fail "$WHEELS wheel(s) found under $CACHE"

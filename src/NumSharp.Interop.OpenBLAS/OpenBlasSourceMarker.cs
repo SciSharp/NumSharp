@@ -187,8 +187,29 @@ namespace NumSharp.Interop.OpenBLAS
                 return false;
 
             foreach (var dir in marker.ReadDirectories())
+            {
                 if (PathsEqual(dir, directory))
                     return true;
+
+                // A marker's path may legally name the library FILE rather than its folder
+                // (Expand accepts both) — a library loaded from that file's directory is still
+                // the declared override.
+                if (File.Exists(dir))
+                {
+                    string parent;
+                    try
+                    {
+                        parent = System.IO.Path.GetDirectoryName(dir);
+                    }
+                    catch (Exception e) when (e is ArgumentException or PathTooLongException)
+                    {
+                        continue;
+                    }
+
+                    if (!string.IsNullOrEmpty(parent) && PathsEqual(parent, directory))
+                        return true;
+                }
+            }
 
             return false;
         }

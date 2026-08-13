@@ -547,31 +547,48 @@ public class NumSharpOpenBlasFetchTask : Task
         return dot < 0 ? tags : tags.Substring(0, dot);
     }
 
-    private static string FindInCache(string cacheRoot, string expectedSha)
+    private string FindInCache(string cacheRoot, string expectedSha)
     {
         if (!Directory.Exists(cacheRoot))
             return null;
 
-        if (expectedSha != null)
-        {
-            string dir = Path.Combine(cacheRoot, expectedSha.ToLowerInvariant());
-            if (Directory.Exists(dir))
-            {
-                string f = Directory.GetFiles(dir).FirstOrDefault();
-                if (f != null)
-                    return f;
-            }
+        // With a pinned sha only that entry qualifies; without one, any entry for this
+        // (distribution, version, rid) was wheel-hash verified when it was downloaded.
+        string[] dirs = expectedSha != null
+            ? new[] { Path.Combine(cacheRoot, expectedSha.ToLowerInvariant()) }
+            : Directory.GetDirectories(cacheRoot);
 
-            return null;
-        }
-
-        // No pinned lib hash: any cached entry for this (distribution, version, rid) was
-        // wheel-hash verified when it was downloaded, so the first one serves.
-        foreach (string dir in Directory.GetDirectories(cacheRoot))
+        foreach (string dir in dirs)
         {
-            string f = Directory.GetFiles(dir).FirstOrDefault();
-            if (f != null)
+            if (!Directory.Exists(dir))
+                continue;
+            string f = Directory.GetFiles(dir).Where(p => !p.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
+                                              .FirstOrDefault();
+            if (f == null)
+                continue;
+
+            // The directory NAME is the content hash the entry claims — a hit is only a hit
+            // if the FILE still hashes to it. A truncated write (killed build) or a tampered
+            // entry must not be staged and must not be trusted forever: discard it and let
+            // the caller re-download (§10.6 — never silently substitute; fetch_openblas.py
+            // treats its poisoned cache entries the same way).
+            string actual = HashFile(f);
+            if (actual.Equals(Path.GetFileName(dir), StringComparison.OrdinalIgnoreCase))
                 return f;
+
+            Log.LogMessage(MessageImportance.High,
+                "NumSharp.Interop.OpenBLAS: DISCARDING poisoned cache entry {0} (file hashes {1}, entry claims {2})",
+                f, actual, Path.GetFileName(dir));
+            try
+            {
+                Directory.Delete(dir, true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
         }
 
         return null;
@@ -699,7 +716,25 @@ public class NumSharpOpenBlasFetchTask : Task
                 string cacheDir = Path.Combine(cacheRoot, libSha.ToLowerInvariant());
                 Directory.CreateDirectory(cacheDir);
                 cached = Path.Combine(cacheDir, Path.GetFileName(memberName.Replace('\\', '/')));
-                File.Copy(libTemp, cached, true);
+
+                // Unique temp INSIDE the final directory + rename, never a direct copy: a killed
+                // build cannot leave a half-written file under the content-hash name (which a
+                // later hit would otherwise have to detect and discard), and two builds racing
+                // the same entry cannot clobber each other mid-write — the loser keeps the
+                // winner's file, which carries the identical verified content by construction.
+                string tmp = cached + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                File.Copy(libTemp, tmp);
+                try
+                {
+                    File.Move(tmp, cached);
+                }
+                catch (IOException)
+                {
+                    TryDelete(tmp);
+                    if (!File.Exists(cached))
+                        throw; // a genuine IO failure, not a lost race
+                }
+
                 Log.LogMessage(MessageImportance.High,
                     "NumSharp.Interop.OpenBLAS: cached {0} (sha256 {1})", cached, libSha);
                 return true;

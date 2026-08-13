@@ -260,15 +260,14 @@ namespace NumSharp.Interop.OpenBLAS
         ///     <see cref="BlasRequiredOverrideException"/> with the same message).
         /// </summary>
         /// <remarks>
-        ///     Opt out with <c>NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0</c>. The pre-rename spelling
-        ///     <c>NUMSHARP_BLAS_AUTOINSTALL=0</c> is honoured as a deprecated alias for one release.
+        ///     Opt out with <c>NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0</c>. (The pre-rename
+        ///     <c>NUMSHARP_BLAS_AUTOINSTALL</c> spelling is RETIRED and deliberately ignored —
+        ///     the rename shipped unreleased, so there is no installed base to migrate.)
         /// </remarks>
         [ModuleInitializer]
         internal static void BundleAutoinstall()
         {
             if (string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL"), "0",
-                    StringComparison.Ordinal) ||
-                string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL"), "0",
                     StringComparison.Ordinal))
                 return;
 
