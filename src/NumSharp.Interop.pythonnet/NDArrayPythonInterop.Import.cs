@@ -420,17 +420,41 @@ namespace NumSharp.Interop.PythonNet
             long[] dims;
             using (PyObject s = ai[PythonRuntimeInterop.NameShape]) dims = TupleToLongs(s);
 
+            // A hostile/buggy __array_interface__ producer can name a negative dimension; numpy
+            // rejects it ("negative dimensions are not allowed") rather than build a view with a
+            // negative extent (which downstream flows to a negative buffer count). Match numpy.
+            for (int i = 0; i < dims.Length; i++)
+                if (dims[i] < 0)
+                    throw new NotSupportedException(
+                        $"__array_interface__ 'shape' entry {i} is negative ({dims[i]}); negative dimensions are not allowed.");
+
             long sizeFromDims = 1;
             for (int i = 0; i < dims.Length; i++)
                 sizeFromDims *= dims[i];
             if (sizeFromDims == 0)
                 return new NDArray(tc, new Shape(dims), fillZeros: false);
 
+            // A non-empty array must name a real address to share. numpy rejects a NULL data pointer
+            // here ("data is NULL but array contains data"); without this guard a null (or otherwise
+            // absent) pointer yields a NumSharp view over address 0 whose first read faults deep in
+            // UnmanagedStorage — the memory-unsafe opposite of this package's zero-copy-safety contract.
+            if (dataPtr == 0)
+                throw new NotSupportedException(
+                    "__array_interface__ 'data' pointer is NULL but the array is non-empty; there is no memory to share for a zero-copy view. Use ToNDArray (copy), or np.asarray(obj) first.");
+
             long[] byteStrides = null;
             if (ai.HasKey(PythonRuntimeInterop.NameStrides))
                 using (PyObject s = ai[PythonRuntimeInterop.NameStrides])
                     if (!s.IsNone())
                         byteStrides = TupleToLongs(s);
+
+            // numpy rejects a strides tuple whose length differs from the shape ("mismatch in length
+            // of strides and shape"). Without this a too-long tuple builds a Shape whose Strides.Length
+            // != ndim (corrupt view over a mis-normalized window), and a too-short one throws a raw
+            // IndexOutOfRangeException from the stride-normalization loop below.
+            if (byteStrides != null && byteStrides.Length != dims.Length)
+                throw new NotSupportedException(
+                    $"__array_interface__ 'strides' has {byteStrides.Length} entr{(byteStrides.Length == 1 ? "y" : "ies")} but 'shape' has {dims.Length}; mismatch in length of strides and shape.");
 
             Shape shape;
             long spanElements, basePtr;

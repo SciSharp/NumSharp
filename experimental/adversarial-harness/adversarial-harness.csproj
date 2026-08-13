@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>break_harness</AssemblyName>
+    <!-- keep it self-contained; do not inherit any Directory.Build.props from parents -->
+    <ImportDirectoryBuildProps>false</ImportDirectoryBuildProps>
+    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="K:\source\NumSharp-experimental\src\NumSharp.Interop.pythonnet\NumSharp.Interop.pythonnet.csproj" />
+    <PackageReference Include="pythonnet" Version="3.0.5" />
+  </ItemGroup>
+</Project>

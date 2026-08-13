@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- Consume the interop STRICTLY as a NuGet package (from the local feed); Core + pythonnet
+         must flow transitively. This is the real packaging contract. -->
+    <RestoreSources>K:\source\NumSharp-experimental\_localfeed;https://api.nuget.org/v3/index.json</RestoreSources>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NumSharp.Interop.pythonnet" Version="0.60.0" />
+  </ItemGroup>
+</Project>
