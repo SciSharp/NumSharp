@@ -1,10 +1,12 @@
 # OpenBLAS Dependency — Delivery & Discovery Design
 
-> **Status:** DESIGN (proposed) · 2026-08-13 · branch `journey3`
+> **Status:** DESIGN — runtime side IMPLEMENTED · 2026-08-13 · branch `journey3`
 > Supersedes the discovery/precedence model documented in `docs/GEMM_PARITY.md` §6.1.
-> Some pieces exist today (the bundle, the runtime discovery scan); the override system, the
-> transitive delivery and the renames are NEW. Each section marks **[EXISTS]**, **[CHANGE]** or
-> **[NEW]**.
+> §10.1 is RESOLVED (bundle stays above machine tooling — parity-by-default preserved). The runtime
+> half (renames, numpy.libs removal, tier order, source marker + hard-required enforcement) is
+> implemented and gated by `OpenBlasDeliveryTests`; the BUILD half (§5/§6/§7 override download and
+> transitive delivery) is still to come. Each section marks **[EXISTS]**, **[CHANGE]**, **[NEW]**
+> or **[DONE]**.
 
 This document defines how `NumSharp.Interop.OpenBLAS` obtains, delivers and binds an OpenBLAS/CBLAS
 shared library, and how a *dependent* package can reuse the same delivery. It is the single source of
@@ -22,9 +24,11 @@ one wins?"**
 2. **A consumer override, on the `PackageReference`** — pick a *version* (downloaded at build) or a
    *directory* (read in place), without a second package reference. **[NEW]**
 3. **The override takes priority over the bundle**, and a version override is a **hard requirement**
-   (fail if it cannot be satisfied). **[NEW]**
-4. **Bundle is the last resort** — used only when no other tooling is found. **[CHANGE]**
-5. **Never grab OpenBLAS out of a numpy installation** — remove the `numpy.libs` discovery tier. **[CHANGE]**
+   (fail if it cannot be satisfied). **[DONE — runtime]**
+4. **Bundle above ambient machine tooling, below explicit overrides** — §10.1 resolved 2026-08-13:
+   parity-by-default is preserved; machine tooling is the fallback when the bundle is absent or
+   opted out (`NUMSHARP_BLAS_BUNDLED=0`). *(Amended from the original "last resort" wording.)* **[DONE]**
+5. **Never grab OpenBLAS out of a numpy installation** — remove the `numpy.libs` discovery tier. **[DONE]**
 6. **The bundled binary and the build-downloaded binary are byte-for-byte the same artifact**, dropped
    into the same layout, so one transparently replaces the other. **[NEW/INVARIANT]**
 7. **Keep no stray artifacts** — the downloaded `.whl` is extracted and discarded; only the extracted
@@ -70,27 +74,28 @@ library wins.**
 │ RUNTIME priority (BundleAutoinstall)                                           │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ 1. BINDING     NUMSHARP_PARITY_BLAS / Blas.Enable(path)   exclusive, fatal miss│  [EXISTS]
-│ 2. OVERRIDE    a) path   OpenBlasPath / NUMSHARP_OPENBLAS_PATH   read in place  │  [NEW]
-│                b) version staged binary + REQUIRED marker → hard-required      │  [NEW]
-│ 3. MACHINE     system installs (apt/brew/MacPorts/conda/vcpkg/source) + bare   │  [CHANGE]
+│ 2. OVERRIDE    a) path   OpenBlasPath / NUMSHARP_OPENBLAS_PATH   read in place  │  [DONE]
+│                b) version staged binary + REQUIRED marker → hard-required      │  [DONE]
+│ 3. BUNDLE      the nupkg's runtimes/<rid>/native default — parity by default   │  [DONE]
+│ 4. MACHINE     system installs (apt/brew/MacPorts/conda/vcpkg/source) + bare   │  [DONE]
 │    TOOLING     loader names + PATH sweep     (NO numpy.libs)                    │
-│ 4. BUNDLE      the nupkg's runtimes/<rid>/native default   ← LAST RESORT       │  [CHANGE]
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Two things changed from the current implementation:
+Two things changed from the pre-design implementation:
 
-- **The bundle moved from #2 to #4.** Any tooling found on the machine now beats it. The bundle is a
-  safety net, not the preferred answer. *(See §10.1 — this changes the parity-by-default story and
-  needs your explicit sign-off.)*
+- **The overrides (tier 2) sit between the binding and the bundle.** §10.1 was resolved AGAINST
+  moving the bundle below machine tooling: the bundle stays ahead of everything ambient, so
+  referencing the package keeps giving NumPy-identical bits by default. Machine tooling is reached
+  only when no override matched and the bundle is absent or opted out.
 - **numpy.libs is gone.** We do not read a pip-installed numpy's `numpy.libs/`. A conda/system
-  *OpenBLAS* package is still machine tooling (tier 3); a *numpy* is not.
+  *OpenBLAS* package is still machine tooling (tier 4); a *numpy* is not.
 
-Build-time resolution decides what actually sits in tiers 2 and 4:
+Build-time resolution decides what actually sits in tiers 2 and 3:
 
 | `OpenBlasVersion` | `OpenBlasPath` | Build does | Runtime mode | Enforced? |
 |---|---|---|---|---|
-| — | — | nothing (ships bundle) | bundle (tier 4) | no |
+| — | — | nothing (ships bundle) | bundle (tier 3) | no |
 | set | — | download → temp cache → copy to output `runtimes/<rid>/native`; write marker | version override (tier 2b) | **yes** |
 | set | set | download → into `OpenBlasPath` (cache + read dir); write marker | version override (tier 2b) at `OpenBlasPath` | **yes** |
 | — | set | record `OpenBlasPath` as the read dir; write marker | path override (tier 2a) | no |
@@ -119,14 +124,22 @@ wires `OpenBlasBackend` onto `TensorEngine.Blas`; it is *named* for its defining
 bundle), not limited to it. Referencing the package remains the entire opt-in, and a total failure
 remains silent (fall back to NumSharp's managed SIMD GEMM).
 
-**Behavioural changes:**
+**Behavioural changes (all implemented):**
 
-- **Bundle is tier 4** (§3): `BundleAutoinstall` only reaches the shipped `runtimes/<rid>/native`
-  asset after an override and all machine tooling have declined.
+- **Bundle is tier 3** (§3, per the §10.1 resolution): `BundleAutoinstall` reaches the shipped
+  `runtimes/<rid>/native` asset after the overrides have declined and BEFORE any machine tooling —
+  parity by default is preserved.
 - **`PythonLibDirectories()` is deleted** (numpy.libs), along with its use of `VIRTUAL_ENV`/`PYTHONHOME`
   for that purpose. `CONDA_PREFIX` survives only as a machine-tooling root (a conda-installed *openblas*,
   not numpy's).
-- `NUMSHARP_BLAS_BUNDLED=0` continues to drop the bundle entirely.
+- `NUMSHARP_BLAS_BUNDLED=0` continues to drop the bundle entirely (machine tooling then becomes the
+  discovery default).
+- **A required-override miss at module load is loud but not fatal:** `BundleAutoinstall` catches
+  `BlasRequiredOverrideException`, reports it on stderr and leaves the backend UNINSTALLED (never
+  substituted); throwing out of a `[ModuleInitializer]` would surface as a
+  `TypeInitializationException` at some unrelated first touch of the assembly, breaking the "merely
+  referencing the package cannot break the app" promise. An explicit `Blas.Enable()` throws the full
+  exception.
 
 ---
 
@@ -275,14 +288,21 @@ binary — a pure "file placement" handoff, no `runtimeconfig` needed; alternati
   "version": "0.3.34.106.0", "sha256": "…", "required": true, "path": "…" }
 ```
 
-Runtime rules:
+Runtime rules (implemented in `CBlasNative.Load` + `OpenBlasSourceMarker`):
 
 - `mode = version` → the folder holds a **required override** → check it at **tier 2b**, ahead of
-  machine tooling. If it fails to load, **throw** (do not fall back) — the version was a contract.
-  Optionally assert the loaded library's sha against the marker.
-- `mode = path` → read from `path` at **tier 2a**; **not required** → fall through on miss.
-- `mode = none` / no marker → the `runtimes/<rid>/native` folder is the **bundle** → it is reached
-  only at **tier 4**, after machine tooling.
+  the bundle and all machine tooling. If it fails to load, **throw**
+  (`BlasRequiredOverrideException`, do not fall back) — the version was a contract. When the marker
+  carries a `sha256`, each candidate file is hash-verified BEFORE loading; a same-named file with
+  different bytes is not the pinned binary and is skipped (so an all-mismatch folder throws too).
+  An explicit `"required": false` downgrades a miss to fall-through.
+- `mode = path` → read from `path` at **tier 2a** (after the env `NUMSHARP_OPENBLAS_PATH` — env wins
+  over metadata); **not required** → fall through on miss.
+- `mode = none` / no marker → the `runtimes/<rid>/native` folder is the **bundle** → tier 3 (the
+  parity default, per the §10.1 resolution), ahead of machine tooling.
+- A library loaded from a marker-declared override directory reports `Blas.IsBundledLibrary =
+  false` even though the folder layout (and possibly the bytes) match the bundle — the marker is
+  the only thing that can tell them apart.
 
 This is the one subtle bit: the *same folder* is high-priority when it is a required override and
 last-resort when it is the bundle, and the marker is what flips it. It exists precisely because Goal 6
@@ -313,18 +333,17 @@ library (`scipy_*64_` ILP64 → … → plain `cblas_*` LP64) is unchanged.
 
 These are the calls that need your sign-off before implementation. Each has a recommendation.
 
-### 10.1 Bundle-last changes the parity-by-default story ⚠ **biggest**
+### 10.1 Bundle vs machine tooling — **RESOLVED 2026-08-13: bundle ABOVE tooling**
 
-Moving the bundle to tier 4 means: on a machine with *any* system OpenBLAS (apt/brew/conda/vcpkg, or
-one on `PATH`), the package now binds **that**, not the pinned bundle — and a distro OpenBLAS is **not**
-byte-identical to NumPy 2.4.2. The current design's headline promise ("reference the package → parity
-by default") no longer holds unconditionally. Parity is recovered explicitly by **pinning a version**
-(`OpenBlasVersion` — a hard requirement, so it always wins over machine tooling) or by
-`NUMSHARP_PARITY_BLAS`.
-**Recommendation:** accept it as stated (this is a "use available tooling, bundle as fallback" model),
-and add a one-line doc/log note that byte-parity now requires a pinned version. *Alternative to
-consider:* keep the bundle **above** ambient machine tooling but **below** an explicit override (i.e.
-"tooling" = override only), which preserves parity-by-default. **Confirm which you want.**
+The alternative was chosen: the bundle stays **above** ambient machine tooling and **below** the
+explicit overrides (tier 3 of §3). This preserves the parity-by-default headline — referencing the
+package keeps giving NumPy-identical bits on every machine, including one with an apt/brew/conda/
+vcpkg OpenBLAS installed — while machine tooling remains the fallback when no bundle is present
+(asset-free build, unsupported RID) or the consumer opts out (`NUMSHARP_BLAS_BUNDLED=0`, which makes
+machine tooling the discovery default). The originally-stated "bundle as last resort" model was
+rejected because it silently traded the package's core promise for ambient-tooling convenience: a
+distro OpenBLAS is not byte-identical to NumPy 2.4.2, and binding it by default would have made
+every "bit-identical" claim conditional on the machine's package manager history.
 
 ### 10.2 Multiple `PackageReference`s carrying conflicting `OpenBlasVersion`
 
@@ -363,27 +382,30 @@ Downloading + later loading native code selected by build metadata is a supply-c
 | Piece | State |
 |---|---|
 | Bundle: per-RID nupkg runtime assets, `fetch_openblas.py`, manifest, double-hash verify | **EXISTS** |
-| Runtime discovery scan (`AutoCandidates`) incl. system + PATH tiers, 32/64 names | **EXISTS** |
-| Rename `AutoInstall` → `BundleAutoinstall` (+ env, deprecated alias) | new |
-| Move bundle to tier 4 (last resort) | new |
-| Remove `PythonLibDirectories` (numpy.libs) | new |
+| Runtime discovery scan incl. system + PATH tiers, 32/64 names (now `AmbientCandidates`) | **EXISTS** |
+| Rename `AutoInstall` → `BundleAutoinstall` (+ env, deprecated alias) | **DONE** |
+| Tier order per §10.1 resolution (overrides → bundle → machine tooling) | **DONE** |
+| Remove `PythonLibDirectories` (numpy.libs) | **DONE** |
+| Source marker + runtime tier-2b enforcement (`OpenBlasSourceMarker`, `BlasRequiredOverrideException`) | **DONE** |
+| Gates: runtime priority unit tests (`OpenBlasDeliveryTests`, 10); `MatmulParityBackendTests` 30/30 unaffected | **DONE** |
 | `buildTransitive` props/targets + inline download/extract task | new |
 | Override resolution (env > metadata), path & version modes, hard-fail | new |
 | Global temp cache (extracted libs only) + wheel cleanup | new |
-| Source marker + runtime tier-2b enforcement | new |
 | Transitive metadata scan over all `PackageReference`s | new |
 | `OpenBlasDelivery=package` pack hook (dependent's own nupkg) | new |
-| Gates: build-override integration test; runtime priority unit tests; `MatmulParityBackendTests` unaffected | new |
+| Gates: build-override integration test | new |
 
 ---
 
 ## 12. References
 
-- Current runtime discovery & binding: `src/NumSharp.Interop.OpenBLAS/CBlasNative.cs`
-  (`AutoCandidates`, `BundledDirectories`, `SystemBlasDirectories`, `PathEnvDirectories`,
-  `PythonLibDirectories` ← to be removed).
-- Current autoinstall & backend wiring: `src/NumSharp.Interop.OpenBLAS/Blas.cs`
-  (`AutoInstall` ← to be renamed, `Enable`, `Disable`).
+- Runtime discovery & binding: `src/NumSharp.Interop.OpenBLAS/CBlasNative.cs`
+  (`Load` tier orchestration, `OverridePathCandidates`, `VersionOverrideCandidates`,
+  `AmbientCandidates`, `BundledDirectories`, `SystemBlasDirectories`, `PathEnvDirectories`).
+- Source marker & required-override contract: `src/NumSharp.Interop.OpenBLAS/OpenBlasSourceMarker.cs`,
+  `BlasRequiredOverrideException.cs`; runtime gate `test/NumSharp.UnitTest/Backends/OpenBlasDeliveryTests.cs`.
+- Autoinstall & backend wiring: `src/NumSharp.Interop.OpenBLAS/Blas.cs`
+  (`BundleAutoinstall`, `Enable`, `Disable`).
 - Bundle pack rules: `src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj`.
 - Pack-time fetch & the shared extraction contract: `tools/fetch_openblas.py`,
   `tools/openblas-manifest.json`.

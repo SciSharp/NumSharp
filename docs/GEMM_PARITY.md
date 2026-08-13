@@ -287,26 +287,33 @@ requirement is now *stronger* than before: the corpus host pin compares the load
 
 #### 6.1 Discovery order
 
+(Superseded in detail by `docs/OPENBLAS_DELIVERY_DESIGN.md`, whose runtime side is implemented;
+this table is the current order.)
+
 | # | Source | Notes |
 |---|---|---|
 | 1 | explicit path / `NUMSHARP_PARITY_BLAS` | **binding** — never substituted, not even by the bundled copy |
-| 2 | `NUMSHARP_OPENBLAS_PATH` | **highest-priority** file(s)/dir(s) — tried first, ahead of the bundled asset; non-binding (falls through when it holds no BLAS) |
-| 3 | **bundled `runtimes/<rid>/native/`** | `NUMSHARP_BLAS_BUNDLED=0` drops it |
-| 4 | `numpy.libs` of any python on `PATH` | plus `VIRTUAL_ENV` / `CONDA_PREFIX` / `PYTHONHOME` |
+| 2 | `NUMSHARP_OPENBLAS_PATH`, then a build-recorded `OpenBlasPath` marker | override path(s) — tried first, ahead of the bundled asset; non-binding (fall through when they hold no BLAS) |
+| 3 | build-staged **version override** (`openblas.source.json`, `mode: "version"`) | **hard-required** — a miss throws `BlasRequiredOverrideException`, never falls through; sha-verified when the marker pins one |
+| 4 | **bundled `runtimes/<rid>/native/`** | the zero-config parity default; `NUMSHARP_BLAS_BUNDLED=0` drops it |
 | 5 | machine-wide OpenBLAS (apt / brew / MacPorts / conda / vcpkg / source) | **not** byte-parity with NumPy — a different build — so it ranks below the parity sources; honours `OPENBLAS_HOME` / `VCPKG_ROOT` / `CONDA_PREFIX` |
 | 6 | bare loader names | `libscipy_openblas64_`, `libscipy_openblas`, `scipy_openblas`, `libopenblas`, `libblas`, … |
 | 7 | every directory on `PATH` | **last resort** — sweeps for a BLAS under a non-standard name; broadest scan, reached only if nothing above binds |
 
-Bundled beats a discovered `numpy.libs` **on purpose**: a library's numeric output must not change
-because an unrelated `pip install` ran, and an app with no python must not get a different backend
-from one that has it. Matching some *other* numpy stays possible and is now an explicit act (name it).
+A pip-installed numpy's `numpy.libs/` is **never scanned** (tier removed 2026-08-13, delivery
+design Goal 5): the bundled asset already *is* that binary at the pinned version, so a library's
+numeric output must not change because an unrelated `pip install` ran, and an app with no python
+must not get a different backend from one that has it. Matching some *other* numpy stays possible
+and is an explicit act (name it, or point `NUMSHARP_OPENBLAS_PATH` at it).
 
 ##### Discovery widened: priority path, system scan, PATH sweep (2026-08-13)
 
-Three tiers were added around the original bundled / `numpy.libs` / bare-names chain (rows 2, 5 and 7
-above). None can disturb parity: the binding row 1 still bypasses discovery entirely, the bundled
-asset stays ahead of `numpy.libs`, and the two ambient scans rank last. Confirmed by 30/30
-`MatmulParityBackendTests` green after the change.
+Three tiers were added around the original bundled / bare-names chain (rows 2, 5 and 7 above). None
+can disturb parity: the binding row 1 still bypasses discovery entirely, the bundled asset stays
+ahead of all ambient tooling, and the two ambient scans rank last. Confirmed by 30/30
+`MatmulParityBackendTests` green after the change. (The `numpy.libs` tier that then sat between the
+bundle and the system scan was removed the same day by the delivery redesign — see
+`docs/OPENBLAS_DELIVERY_DESIGN.md`, which also added the source-marker override tiers of rows 2–3.)
 
 - **`NUMSHARP_OPENBLAS_PATH` (row 2)** — the non-binding sibling of `NUMSHARP_PARITY_BLAS`, tried
   FIRST (ahead of the bundled asset) so a caller who sets it wins, yet falling through to the rest

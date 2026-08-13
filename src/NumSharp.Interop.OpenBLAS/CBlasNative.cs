@@ -119,8 +119,11 @@ namespace NumSharp.Interop.OpenBLAS
         ///     Loads a CBLAS shared library and binds every symbol the parity backend needs.
         /// </summary>
         /// <param name="path">
-        ///     Explicit file path, a directory to search, or null to auto-discover (see
-        ///     <see cref="AutoCandidates"/>).
+        ///     Explicit file path, a directory to search, or null to auto-discover. Discovery runs
+        ///     the delivery design's tier order (<c>docs/OPENBLAS_DELIVERY_DESIGN.md</c> §3):
+        ///     override path(s) (<c>NUMSHARP_OPENBLAS_PATH</c>, then a build-recorded path marker) →
+        ///     a build-staged version override (REQUIRED — a miss throws, never falls through) →
+        ///     the bundled runtime asset → machine tooling (see <see cref="AmbientCandidates"/>).
         /// </param>
         /// <param name="coreType">
         ///     OpenBLAS <c>DYNAMIC_ARCH</c> kernel to force via <c>OPENBLAS_CORETYPE</c>, or null to
@@ -157,41 +160,20 @@ namespace NumSharp.Interop.OpenBLAS
                     RequestedCoreType = coreType;
                 }
 
-                // An explicitly named library is BINDING: parity is a claim about one specific
-                // binary, so quietly falling back to whatever else is installed would produce
-                // confidently wrong bits. Only the unattended case searches.
+                // TIER 1 — an explicitly named library is BINDING: parity is a claim about one
+                // specific binary, so quietly falling back to whatever else is installed would
+                // produce confidently wrong bits. Only the unattended case searches.
                 string requested = !string.IsNullOrWhiteSpace(path)
                     ? path
                     : Environment.GetEnvironmentVariable("NUMSHARP_PARITY_BLAS");
                 bool strict = !string.IsNullOrWhiteSpace(requested);
 
                 var tried = new List<string>();
-                foreach (var candidate in strict ? Expand(requested) : AutoCandidates())
-                {
-                    tried.Add(candidate);
-                    IntPtr handle;
-                    if (!NativeLibrary.TryLoad(candidate, out handle))
-                        continue;
-
-                    var previous = _handle;
-                    try
-                    {
-                        // Commits the statics only once every required symbol resolved.
-                        Bind(handle, candidate);
-                    }
-                    catch
-                    {
-                        NativeLibrary.Free(handle);
-                        throw; // previous binding untouched
-                    }
-
-                    if (previous != IntPtr.Zero && previous != handle)
-                        NativeLibrary.Free(previous);
-
-                    return;
-                }
-
                 if (strict)
+                {
+                    if (TryLoadCandidates(Expand(requested), tried))
+                        return;
+
                     throw new DllNotFoundException(
                         $"Blas.Enable: '{requested}' could not be loaded as a CBLAS library" +
                         (tried.Count == 0
@@ -200,14 +182,97 @@ namespace NumSharp.Interop.OpenBLAS
                         " The named library is used as given — parity is a claim about one specific " +
                         "binary, so no other one is substituted. Clear the path (or the " +
                         "NUMSHARP_PARITY_BLAS environment variable) to auto-discover instead.");
+                }
+
+                // Unattended discovery — the delivery design's tier order (§3). The marker is what a
+                // BUILD-phase override left behind; without one this reduces to override-path env →
+                // bundle → machine tooling.
+                var marker = OpenBlasSourceMarker.TryFind();
+
+                // TIER 2a — override path(s): NUMSHARP_OPENBLAS_PATH (env wins over metadata, so it
+                // goes first), then a path-mode marker recorded by the build. Non-binding: a miss
+                // falls through.
+                if (TryLoadCandidates(OverridePathCandidates(marker), tried))
+                    return;
+
+                // TIER 2b — a version override staged by the build. The consumer pinned ONE specific
+                // scipy-openblas build (<OpenBlasVersion> / NUMSHARP_OPENBLAS_VERSION), so this is a
+                // contract: a miss THROWS rather than falling through to the bundle or machine
+                // tooling — every product would still compute there, with different bits than the
+                // ones the caller pinned, which is the worst outcome a pin can have.
+                if (marker != null && marker.IsVersionMode)
+                {
+                    if (TryLoadCandidates(VersionOverrideCandidates(marker), tried))
+                        return;
+
+                    if (marker.Required)
+                        throw new BlasRequiredOverrideException(
+                            "Blas.Enable: the build staged a REQUIRED OpenBLAS version override " +
+                            $"({marker.Distribution ?? "scipy-openblas"} {marker.Version ?? "?"}, " +
+                            $"marker '{marker.MarkerPath}') but no loadable CBLAS matched it in: " +
+                            string.Join(", ", marker.ReadDirectories()) +
+                            (marker.Sha256 == null
+                                ? "."
+                                : $" (candidates must hash to the pinned sha256 {marker.Sha256}).") +
+                            " A version override is a hard requirement — discovery does not fall " +
+                            "back to the bundled asset or a machine-wide OpenBLAS. Rebuild the " +
+                            "project to re-stage the binary, remove the override (clear " +
+                            "OpenBlasVersion / NUMSHARP_OPENBLAS_VERSION and rebuild), or bind an " +
+                            "explicit library via NUMSHARP_PARITY_BLAS.");
+                }
+
+                // TIERS 3–4 — the bundled runtime asset (the zero-config parity default), then
+                // ambient machine tooling.
+                if (TryLoadCandidates(AmbientCandidates(), tried))
+                    return;
 
                 throw new DllNotFoundException(
-                    "Blas.Enable: no CBLAS library could be loaded. Pass the path of the very " +
-                    "same BLAS binary your NumPy build uses — for a pip wheel that is " +
-                    "<python>/Lib/site-packages/numpy.libs/libscipy_openblas64_-*.dll (Windows) or " +
-                    "numpy.libs/libscipy_openblas64_-*.so (Linux) — or set the NUMSHARP_PARITY_BLAS " +
-                    "environment variable. Tried: " + string.Join(", ", tried));
+                    "Blas.Enable: no CBLAS library could be loaded. This package normally serves " +
+                    "its bundled scipy-openblas runtime asset (runtimes/<rid>/native/); none was " +
+                    "found for this platform and no other CBLAS was discovered. Point " +
+                    "NUMSHARP_OPENBLAS_PATH at a directory holding one (non-binding, highest " +
+                    "priority), or set NUMSHARP_PARITY_BLAS to bind one specific binary. Tried: " +
+                    string.Join(", ", tried));
             }
+        }
+
+        /// <summary>
+        ///     Tries each candidate in order; true when one loaded AND bound completely.
+        /// </summary>
+        /// <remarks>
+        ///     A candidate that fails to LOAD is silently skipped (that is how tiers decline); a
+        ///     candidate that loads but fails to BIND throws (see <see cref="Bind"/> — the handle is
+        ///     freed and the previous binding is untouched). The previous library is freed only
+        ///     after its replacement has fully bound, so this either advances or changes nothing.
+        /// </remarks>
+        private static bool TryLoadCandidates(IEnumerable<string> candidates, List<string> tried)
+        {
+            foreach (var candidate in candidates)
+            {
+                tried.Add(candidate);
+                IntPtr handle;
+                if (!NativeLibrary.TryLoad(candidate, out handle))
+                    continue;
+
+                var previous = _handle;
+                try
+                {
+                    // Commits the statics only once every required symbol resolved.
+                    Bind(handle, candidate);
+                }
+                catch
+                {
+                    NativeLibrary.Free(handle);
+                    throw; // previous binding untouched
+                }
+
+                if (previous != IntPtr.Zero && previous != handle)
+                    NativeLibrary.Free(previous);
+
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>Releases the loaded library and clears every bound symbol.</summary>
@@ -353,48 +418,88 @@ namespace NumSharp.Interop.OpenBLAS
         }
 
         /// <summary>
-        ///     Candidates for the unattended case (no library named), in a DELIBERATE and fixed
-        ///     order: the OpenBLAS this package bundles, then the numpy wheels reachable from any
-        ///     python on PATH, then bare loader names.
+        ///     TIER 2a — the non-binding override locations: <c>NUMSHARP_OPENBLAS_PATH</c> (env),
+        ///     then a path-mode source marker the build recorded (<c>&lt;OpenBlasPath&gt;</c> on the
+        ///     <c>PackageReference</c>). Env before metadata, per the delivery design.
         /// </summary>
-        /// <remarks>
-        ///     <b>The bundled binary is probed FIRST, on purpose.</b> It is the prebuilt
-        ///     scipy-openblas artifact NumPy itself pins (verified byte-identical to the library in
-        ///     numpy 2.4.2's <c>numpy.libs</c>), so on a machine with that NumPy the two orders are
-        ///     indistinguishable — and on every other machine, going bundled-first is what makes the
-        ///     answer a property of the PACKAGE VERSION rather than of whichever python happens to
-        ///     be on PATH. A library's numeric output should not change because an unrelated
-        ///     <c>pip install</c> ran, and a .NET app with no python installed should not get a
-        ///     different backend from one that has it.
-        ///     <para>
-        ///     The cost is explicit: to match a numpy whose OpenBLAS differs from the bundled one,
-        ///     NAME it — <c>Blas.Enable(path)</c> or <c>NUMSHARP_PARITY_BLAS</c>, both of which are
-        ///     binding and are probed ahead of everything here. <c>NUMSHARP_BLAS_BUNDLED=0</c> drops
-        ///     the bundled entry entirely and restores discovery-first order.
-        ///     </para>
-        /// </remarks>
-        private static IEnumerable<string> AutoCandidates()
+        private static IEnumerable<string> OverridePathCandidates(OpenBlasSourceMarker marker)
         {
-            // Highest-priority discovery: the caller's own location(s) from NUMSHARP_OPENBLAS_PATH,
-            // tried FIRST — ahead of the bundled asset and everything else — so setting it wins.
-            // Still NON-binding (falls through if it holds no loadable BLAS); the BINDING override is
-            // NUMSHARP_PARITY_BLAS, handled in Load() before this method is ever reached.
             foreach (var p in UserPathCandidates())
                 yield return p;
 
+            if (marker != null && marker.IsPathMode)
+                foreach (var dir in marker.ReadDirectories())
+                    foreach (var p in Expand(dir))
+                        yield return p;
+        }
+
+        /// <summary>
+        ///     TIER 2b — the staged version override's candidates. When the marker pins a sha256,
+        ///     only a file hashing to it qualifies: a same-named file with different bytes is not
+        ///     the pinned binary, and loading it anyway would be a silent substitution.
+        /// </summary>
+        private static IEnumerable<string> VersionOverrideCandidates(OpenBlasSourceMarker marker)
+        {
+            foreach (var dir in marker.ReadDirectories())
+                foreach (var p in Expand(dir))
+                {
+                    if (marker.Sha256 != null && !FileHashEquals(p, marker.Sha256))
+                        continue;
+                    yield return p;
+                }
+        }
+
+        private static bool FileHashEquals(string file, string expectedSha256Hex)
+        {
+            try
+            {
+                using var stream = File.OpenRead(file);
+                var actual = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+                return string.Equals(actual, expectedSha256Hex, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                return false; // unreadable ⇒ unverifiable ⇒ not the pinned binary
+            }
+        }
+
+        /// <summary>
+        ///     TIERS 3–4: candidates for the unattended case once the overrides above have declined,
+        ///     in a DELIBERATE and fixed order — the OpenBLAS this package bundles, then ambient
+        ///     machine tooling (system install directories, bare loader names, a PATH sweep).
+        /// </summary>
+        /// <remarks>
+        ///     <b>The bundled binary is probed ahead of all machine tooling, on purpose</b>
+        ///     (delivery design §10.1, resolved 2026-08-13: parity-by-default preserved). It is the
+        ///     prebuilt scipy-openblas artifact NumPy itself pins (verified byte-identical to the
+        ///     library in numpy 2.4.2's wheels), so referencing the package keeps giving
+        ///     NumPy-identical bits by default — the answer stays a property of the PACKAGE VERSION
+        ///     rather than of whatever OpenBLAS an OS package manager happened to install. A
+        ///     library's numeric output should not change because an unrelated <c>apt install</c> or
+        ///     <c>pip install</c> ran, and a .NET app on a bare machine should not get a different
+        ///     backend from one on a developer box.
+        ///     <para>
+        ///     A pip-installed numpy's own <c>numpy.libs/</c> is deliberately NOT scanned (removed
+        ///     2026-08-13): we never grab OpenBLAS out of a numpy installation. A conda/system
+        ///     <i>OpenBLAS</i> package is still machine tooling below; a <i>numpy</i> is not. To
+        ///     match a numpy whose OpenBLAS differs from the bundled one, NAME it —
+        ///     <c>Blas.Enable(path)</c> or <c>NUMSHARP_PARITY_BLAS</c> (binding), or point
+        ///     <c>NUMSHARP_OPENBLAS_PATH</c> at it (non-binding priority).
+        ///     <c>NUMSHARP_BLAS_BUNDLED=0</c> drops the bundled entry entirely, making machine
+        ///     tooling the discovery default.
+        ///     </para>
+        /// </remarks>
+        private static IEnumerable<string> AmbientCandidates()
+        {
             if (!string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLED"), "0",
                     StringComparison.Ordinal))
                 foreach (var dir in BundledDirectories())
                     foreach (var p in Expand(dir))
                         yield return p;
 
-            foreach (var dir in PythonLibDirectories())
-                foreach (var p in Expand(dir))
-                    yield return p;
-
             // Machine-wide OpenBLAS placed by an OS package manager or a source build. These builds
-            // are NOT byte-parity with NumPy, so they sit BELOW the bundled asset and the numpy.libs
-            // wheels: a correct, fast BLAS, not a bit-identical one.
+            // are NOT byte-parity with NumPy, so they sit BELOW the bundled asset: a correct, fast
+            // BLAS, not a bit-identical one.
             foreach (var dir in SystemBlasDirectories())
                 foreach (var p in Expand(dir))
                     yield return p;
@@ -435,6 +540,23 @@ namespace NumSharp.Interop.OpenBLAS
         /// </remarks>
         private static IEnumerable<string> BundledDirectories()
         {
+            foreach (var b in ProbeBases())
+            {
+                foreach (var rid in RuntimeIdentifierCandidates())
+                    yield return Path.Combine(b, "runtimes", rid, "native");
+
+                // publish flattens native assets into the app directory
+                yield return b;
+            }
+        }
+
+        /// <summary>
+        ///     Base directories the app's file assets can sit under — shared by the bundled-asset
+        ///     probe and the source-marker probe (<see cref="OpenBlasSourceMarker"/>), which must
+        ///     agree on where "next to the app" is.
+        /// </summary>
+        internal static IEnumerable<string> ProbeBases()
+        {
             var bases = new List<string>();
             var appBase = AppContext.BaseDirectory;
             if (!string.IsNullOrEmpty(appBase))
@@ -455,18 +577,11 @@ namespace NumSharp.Interop.OpenBLAS
                 // single-file publish: Location is empty/unsupported, AppContext.BaseDirectory covers it
             }
 
-            foreach (var b in bases)
-            {
-                foreach (var rid in RuntimeIdentifierCandidates())
-                    yield return Path.Combine(b, "runtimes", rid, "native");
-
-                // publish flattens native assets into the app directory
-                yield return b;
-            }
+            return bases;
         }
 
         /// <summary>RID folder names this machine could legitimately load a native asset from.</summary>
-        private static IEnumerable<string> RuntimeIdentifierCandidates()
+        internal static IEnumerable<string> RuntimeIdentifierCandidates()
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -568,75 +683,6 @@ namespace NumSharp.Interop.OpenBLAS
         }
 
         /// <summary>
-        ///     Directories that plausibly hold a numpy wheel's bundled BLAS, derived from every
-        ///     python interpreter reachable through PATH (plus PYTHONHOME / VIRTUAL_ENV).
-        /// </summary>
-        private static IEnumerable<string> PythonLibDirectories()
-        {
-            var roots = new List<string>();
-            foreach (var key in new[] { "VIRTUAL_ENV", "CONDA_PREFIX", "PYTHONHOME" })
-            {
-                var v = Environment.GetEnvironmentVariable(key);
-                if (!string.IsNullOrWhiteSpace(v))
-                    roots.Add(v);
-            }
-
-            var pathVar = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-            bool windows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-            string exe = windows ? "python.exe" : "python3";
-            foreach (var entry in pathVar.Split(Path.PathSeparator))
-            {
-                if (string.IsNullOrWhiteSpace(entry))
-                    continue;
-
-                string candidate;
-                try
-                {
-                    candidate = Path.Combine(entry, exe);
-                }
-                catch (ArgumentException)
-                {
-                    continue; // malformed PATH entry
-                }
-
-                if (File.Exists(candidate))
-                {
-                    roots.Add(entry);
-                    var parent = Path.GetDirectoryName(entry.TrimEnd(Path.DirectorySeparatorChar));
-                    if (!string.IsNullOrEmpty(parent))
-                        roots.Add(parent); // <venv>/Scripts/python.exe or <prefix>/bin/python3
-                }
-            }
-
-            foreach (var root in roots)
-            {
-                // Windows layout.
-                yield return Path.Combine(root, "Lib", "site-packages", "numpy.libs");
-                // POSIX layout — the python3.X component is unknown, so probe lib/*/site-packages.
-                var lib = Path.Combine(root, "lib");
-                if (!Directory.Exists(lib))
-                    continue;
-
-                string[] pyDirs;
-                try
-                {
-                    pyDirs = Directory.GetDirectories(lib, "python3.*");
-                }
-                catch (IOException)
-                {
-                    continue;
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    continue;
-                }
-
-                foreach (var pyDir in pyDirs)
-                    yield return Path.Combine(pyDir, "site-packages", "numpy.libs");
-            }
-        }
-
-        /// <summary>
         ///     Explicit, HIGHEST-PRIORITY discovery location(s) from <c>NUMSHARP_OPENBLAS_PATH</c> —
         ///     one or more files or directories (separated by the platform path separator), tried
         ///     FIRST, ahead of the bundled asset and every other candidate.
@@ -672,9 +718,11 @@ namespace NumSharp.Interop.OpenBLAS
         ///     <c>brew install openblas</c>, …) is found even when it is not on the loader's default
         ///     search path or carries a versioned soname (<c>libopenblas.so.0</c>) the bare names
         ///     below do not match. <b>None of these is byte-parity with NumPy</b> — a different
-        ///     compiler and configuration — so this tier is LAST before the bare names, below the
-        ///     bundled asset and the numpy.libs wheels: it yields a correct, fast BLAS, not a
-        ///     bit-identical one. The install page gives package-manager names but no literal paths,
+        ///     compiler and configuration — so this tier ranks below the overrides and the bundled
+        ///     asset: it yields a correct, fast BLAS, not a bit-identical one. (A conda-installed
+        ///     <i>openblas</i> counts as machine tooling via <c>CONDA_PREFIX</c>; a pip-installed
+        ///     <i>numpy's</i> own <c>numpy.libs/</c> is deliberately never scanned.)
+        ///     The install page gives package-manager names but no literal paths,
         ///     so these are each manager's conventional prefix; the env markers (<c>OPENBLAS_HOME</c>,
         ///     <c>VCPKG_ROOT</c>, <c>CONDA_PREFIX</c>) are honoured because that is where those
         ///     managers place their trees.

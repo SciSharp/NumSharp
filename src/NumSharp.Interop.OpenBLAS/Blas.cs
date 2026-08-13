@@ -70,8 +70,11 @@ namespace NumSharp.Interop.OpenBLAS
         /// </summary>
         /// <param name="library">
         ///     Path of the CBLAS shared library (or a directory holding one), or null to
-        ///     auto-discover: the <c>NUMSHARP_PARITY_BLAS</c> environment variable, then the
-        ///     <c>numpy.libs</c> folder of any python on PATH, then bare loader names.
+        ///     auto-discover: the <c>NUMSHARP_PARITY_BLAS</c> environment variable (binding), then
+        ///     the override path(s) (<c>NUMSHARP_OPENBLAS_PATH</c> / a build-recorded
+        ///     <c>OpenBlasPath</c>), then a build-staged version override (required — a miss
+        ///     throws), then the bundled runtime asset, then machine tooling (system install
+        ///     directories, bare loader names, a PATH sweep).
         ///     <b>A named library is binding</b> — it is used as given and never silently replaced
         ///     with another, because parity is a claim about one specific binary.
         /// </param>
@@ -179,8 +182,16 @@ namespace NumSharp.Interop.OpenBLAS
 
         /// <summary>
         ///     True when the loaded library is the one this package bundles (as opposed to one
-        ///     discovered on the machine or named by the caller).
+        ///     discovered on the machine, staged by a build-time override, or named by the caller).
         /// </summary>
+        /// <remarks>
+        ///     A build-staged version/path override lands in the same
+        ///     <c>runtimes/&lt;rid&gt;/native/</c> layout as the bundle — and the delivery design's
+        ///     "same binary" invariant can make the two content-identical — so the folder heuristic
+        ///     alone cannot tell them apart. The source marker the build writes
+        ///     (<c>openblas.source.json</c>) is what does: a folder it declares an override
+        ///     read-location is an override, not the bundle.
+        /// </remarks>
         public static bool IsBundledLibrary
         {
             get
@@ -190,9 +201,12 @@ namespace NumSharp.Interop.OpenBLAS
                     return false;
 
                 var dir = System.IO.Path.GetDirectoryName(path);
-                return !string.IsNullOrEmpty(dir) &&
-                       System.IO.Path.GetFileName(dir).Equals("native", StringComparison.OrdinalIgnoreCase) &&
-                       dir.IndexOf("runtimes", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (string.IsNullOrEmpty(dir) ||
+                    !System.IO.Path.GetFileName(dir).Equals("native", StringComparison.OrdinalIgnoreCase) ||
+                    dir.IndexOf("runtimes", StringComparison.OrdinalIgnoreCase) < 0)
+                    return false;
+
+                return !OpenBlasSourceMarker.DeclaresOverrideFor(dir);
             }
         }
 
@@ -235,18 +249,47 @@ namespace NumSharp.Interop.OpenBLAS
         }
 
         /// <summary>
-        ///     Runs when this assembly is loaded: referencing the package is all the wiring there is.
-        ///     Deliberately silent on failure — a missing native library leaves NumSharp exactly as
-        ///     it was, computing everything itself.
+        ///     Runs when this assembly is loaded: referencing the package is all the wiring there
+        ///     is. Named for its defining default job — making the BUNDLED runtime asset work with
+        ///     zero configuration — though it runs the whole discovery (override path → staged
+        ///     version override → bundle → machine tooling). Deliberately silent on failure — a
+        ///     missing native library leaves NumSharp exactly as it was, computing everything
+        ///     itself — with ONE exception: a version override the build staged as a hard
+        ///     requirement that fails to load is reported to stderr (the backend still stays
+        ///     uninstalled rather than substituted, and an explicit <see cref="Enable"/> throws
+        ///     <see cref="BlasRequiredOverrideException"/> with the same message).
         /// </summary>
+        /// <remarks>
+        ///     Opt out with <c>NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0</c>. The pre-rename spelling
+        ///     <c>NUMSHARP_BLAS_AUTOINSTALL=0</c> is honoured as a deprecated alias for one release.
+        /// </remarks>
         [ModuleInitializer]
-        internal static void AutoInstall()
+        internal static void BundleAutoinstall()
         {
-            if (string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL"), "0",
+            if (string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL"), "0",
+                    StringComparison.Ordinal) ||
+                string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL"), "0",
                     StringComparison.Ordinal))
                 return;
 
-            TryEnable();
+            try
+            {
+                Enable();
+            }
+            catch (BlasRequiredOverrideException e)
+            {
+                // The consumer PINNED a version at build time; silently running with different bits
+                // is the one failure a pin exists to prevent. Throwing here would surface as a
+                // TypeInitializationException at some unrelated first touch of this assembly, so:
+                // loud on stderr, backend left uninstalled (never substituted), and any explicit
+                // Blas.Enable() raises the full exception.
+                Console.Error.WriteLine("NumSharp.Interop.OpenBLAS: " + e.Message);
+            }
+            catch (Exception)
+            {
+                // Everything else is the ordinary no-BLAS-anywhere case: an app that merely
+                // references the package cannot be broken by a missing native library.
+            }
         }
     }
 }

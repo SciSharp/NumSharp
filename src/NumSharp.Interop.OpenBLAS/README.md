@@ -60,12 +60,19 @@ Exception, the same basis on which NumPy and SciPy ship it in every wheel).
 
 ### Discovery order
 
+(The delivery/discovery model is specified in `docs/OPENBLAS_DELIVERY_DESIGN.md`.)
+
 1. An explicit path, or `NUMSHARP_PARITY_BLAS` — **binding**, never substituted.
-2. `NUMSHARP_OPENBLAS_PATH` — one or more files/directories (path-separator delimited), tried
-   **first**, ahead of the bundled asset. Non-binding: it takes priority when it holds a loadable
-   BLAS, and is silently skipped (falls through to the rest) when it does not.
-3. **The bundled asset.**
-4. The `numpy.libs` folder of any python on `PATH` (plus `VIRTUAL_ENV` / `CONDA_PREFIX` / `PYTHONHOME`).
+2. Override path(s): `NUMSHARP_OPENBLAS_PATH` — one or more files/directories (path-separator
+   delimited) — then a build-recorded `OpenBlasPath` (a `mode: "path"` entry in the
+   `openblas.source.json` source marker). Non-binding: they take priority when they hold a loadable
+   BLAS, and are silently skipped (fall through to the rest) when they do not.
+3. A build-staged **version override** (an `openblas.source.json` marker with `mode: "version"`,
+   written when the build pinned `OpenBlasVersion` / `NUMSHARP_OPENBLAS_VERSION`) —
+   **hard-required**: a miss throws `BlasRequiredOverrideException` rather than falling through
+   (the pin is a contract, and quietly substituting the bundle or a system BLAS would break it
+   invisibly). When the marker pins a sha256, only a file hashing to it is loaded.
+4. **The bundled asset** — the zero-config parity default.
 5. A machine-wide OpenBLAS from an OS package manager or a source build — apt multiarch, a Homebrew
    keg, MacPorts, a conda tree, a vcpkg triplet, `/opt/OpenBLAS`, `/usr/lib64` … honouring
    `OPENBLAS_HOME` / `VCPKG_ROOT` / `CONDA_PREFIX`. **Not** byte-parity with NumPy (a different
@@ -75,19 +82,21 @@ Exception, the same basis on which NumPy and SciPy ship it in every wheel).
 7. Every directory on `PATH`, swept for a BLAS under a non-standard name — the broadest, **last-resort**
    scan, reached only if nothing above binds.
 
-The bundled asset is deliberately probed *before* a discovered `numpy.libs`, so results are a
+A pip-installed numpy's own `numpy.libs/` is deliberately **never scanned** (tier removed
+2026-08-13): the bundled asset already *is* that binary at the pinned version, so results stay a
 property of the package version rather than of whichever python happens to be installed — a
-library's numeric output should not change because an unrelated `pip install` ran. Parity-by-default
-is unaffected by `NUMSHARP_OPENBLAS_PATH`, since it is unset in the common case (the bundled asset is
-then first). **To match a NumPy whose OpenBLAS differs from the bundled one, name it** (binding,
-all-or-nothing) — **or point `NUMSHARP_OPENBLAS_PATH` at it** to take priority over the bundled
-default while still falling back to it if the path holds no BLAS:
+library's numeric output should not change because an unrelated `pip install` ran. (A conda/system
+*OpenBLAS* is still machine tooling, tier 5; a *numpy* is not.) **To match a NumPy whose OpenBLAS
+differs from the bundled one, name it** (binding, all-or-nothing) — **or point
+`NUMSHARP_OPENBLAS_PATH` at it** to take priority over the bundled default while still falling back
+to it if the path holds no BLAS:
 
 ```csharp
 Blas.Enable(@"…\site-packages\numpy.libs\libscipy_openblas64_-<hash>.dll");
 ```
 
-Set `NUMSHARP_BLAS_BUNDLED=0` to drop the bundled entry and restore discovery-first order.
+Set `NUMSHARP_BLAS_BUNDLED=0` to drop the bundled entry and make machine tooling the discovery
+default.
 
 ## What it does
 
@@ -206,8 +215,8 @@ fine.
 |---|---|
 | `NUMSHARP_PARITY_BLAS` | Path (or directory) of the CBLAS library to load. **Binding**, like an explicit argument — used as given, never substituted. |
 | `NUMSHARP_OPENBLAS_PATH` | File(s)/dir(s) to scan for a CBLAS, path-separator delimited. Tried **first** (priority over the bundled asset), non-binding — falls through to the rest if it holds no BLAS. |
-| `NUMSHARP_BLAS_BUNDLED=0` | Skip the bundled asset; fall through to discovery. |
-| `NUMSHARP_BLAS_AUTOINSTALL=0` | Skip the module-load auto-install; `Blas.Enable(...)` still works. |
+| `NUMSHARP_BLAS_BUNDLED=0` | Skip the bundled asset; machine tooling becomes the discovery default. |
+| `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0` | Skip the module-load auto-install; `Blas.Enable(...)` still works. (The pre-rename `NUMSHARP_BLAS_AUTOINSTALL=0` is honoured as a deprecated alias for one release.) |
 | `OPENBLAS_HOME` / `OPENBLAS_ROOT` / `VCPKG_ROOT` / `CONDA_PREFIX` | Roots consulted when scanning for a machine-wide OpenBLAS (discovery tier 5). |
 | `OPENBLAS_CORETYPE` | Read by OpenBLAS itself at load. Set it in the environment to pin both NumPy and NumSharp at once. |
 
