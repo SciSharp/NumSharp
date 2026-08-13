@@ -375,16 +375,18 @@ namespace NumSharp.Interop.OpenBLAS
         /// </remarks>
         private static IEnumerable<string> AutoCandidates()
         {
+            // Highest-priority discovery: the caller's own location(s) from NUMSHARP_OPENBLAS_PATH,
+            // tried FIRST — ahead of the bundled asset and everything else — so setting it wins.
+            // Still NON-binding (falls through if it holds no loadable BLAS); the BINDING override is
+            // NUMSHARP_PARITY_BLAS, handled in Load() before this method is ever reached.
+            foreach (var p in UserPathCandidates())
+                yield return p;
+
             if (!string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLED"), "0",
                     StringComparison.Ordinal))
                 foreach (var dir in BundledDirectories())
                     foreach (var p in Expand(dir))
                         yield return p;
-
-            // Additive user location(s) from NUMSHARP_OPENBLAS_PATH — tried after the bundled
-            // parity asset and before the ambient scan. NON-binding, unlike NUMSHARP_PARITY_BLAS.
-            foreach (var p in UserPathCandidates())
-                yield return p;
 
             foreach (var dir in PythonLibDirectories())
                 foreach (var p in Expand(dir))
@@ -409,6 +411,15 @@ namespace NumSharp.Interop.OpenBLAS
             yield return "libopenblas";
             yield return "openblas";
             yield return "libblas";
+
+            // Last resort: sweep every directory on PATH for a BLAS whose file name none of the bare
+            // names above match (a renamed OpenBLAS, a vendor CBLAS). Broadest and most expensive
+            // scan, and the likeliest to bind something unintended, so it runs only after every
+            // more-specific source has declined — lazy iteration means it never runs when an earlier
+            // tier binds.
+            foreach (var dir in PathEnvDirectories())
+                foreach (var p in Expand(dir))
+                    yield return p;
         }
 
         /// <summary>
@@ -626,17 +637,18 @@ namespace NumSharp.Interop.OpenBLAS
         }
 
         /// <summary>
-        ///     Explicit, ADDITIVE discovery location(s) from <c>NUMSHARP_OPENBLAS_PATH</c> — one or
-        ///     more files or directories (separated by the platform path separator) scanned IN
-        ///     ADDITION to the other candidates, not instead of them.
+        ///     Explicit, HIGHEST-PRIORITY discovery location(s) from <c>NUMSHARP_OPENBLAS_PATH</c> —
+        ///     one or more files or directories (separated by the platform path separator), tried
+        ///     FIRST, ahead of the bundled asset and every other candidate.
         /// </summary>
         /// <remarks>
         ///     The non-binding sibling of <c>NUMSHARP_PARITY_BLAS</c>. That one is BINDING — when set,
         ///     ONLY it is tried and a failure is fatal, because it is how a caller pins the ONE
-        ///     specific binary a parity claim is about. This one is the opposite contract: "also look
-        ///     here", tried after the bundled parity asset and before the ambient system scan, and
-        ///     silently skipped when it holds no BLAS. Use it to point discovery at a local build or
-        ///     an unpacked release without suppressing the bundled default.
+        ///     specific binary a parity claim is about. This one is softer: it takes PRIORITY over the
+        ///     bundled default and the ambient scan when it holds a loadable BLAS, but is silently
+        ///     skipped (falling through to the rest) when it does not. Use it to make a local build or
+        ///     an unpacked release win over the bundled binary without the all-or-nothing failure of
+        ///     the binding variable.
         /// </remarks>
         private static IEnumerable<string> UserPathCandidates()
         {
@@ -712,6 +724,35 @@ namespace NumSharp.Interop.OpenBLAS
                 yield return "/usr/local/lib";                  // source install / freebsd
                 yield return "/usr/local/lib64";
                 yield return "/opt/OpenBLAS/lib";               // OpenBLAS `make PREFIX=/opt/OpenBLAS`
+            }
+        }
+
+        /// <summary>
+        ///     Every directory on the process <c>PATH</c>, swept as the LAST resort for a BLAS whose
+        ///     file name is not one of the bare loader names.
+        /// </summary>
+        /// <remarks>
+        ///     The bare names cover the common case — the OS loader already searches <c>PATH</c> on
+        ///     Windows and the ld cache elsewhere — but only for a library actually NAMED
+        ///     <c>libopenblas</c>/…. A CBLAS dropped on <c>PATH</c> under a different name (a vendor
+        ///     MKL, a renamed OpenBLAS) is invisible to them; globbing each entry for
+        ///     <c>*openblas*</c>/<c>*blas*</c> (via <see cref="Expand"/>) finds it. It is dead last
+        ///     because it is the broadest, most expensive scan and the likeliest to bind something
+        ///     unintended — and because iteration is lazy, it never runs when any earlier tier binds.
+        /// </remarks>
+        private static IEnumerable<string> PathEnvDirectories()
+        {
+            var pathVar = Environment.GetEnvironmentVariable("PATH");
+            if (string.IsNullOrEmpty(pathVar))
+                yield break;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in pathVar.Split(Path.PathSeparator))
+            {
+                if (string.IsNullOrWhiteSpace(entry))
+                    continue;
+                if (seen.Add(entry))
+                    yield return entry;
             }
         }
 

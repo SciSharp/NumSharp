@@ -290,32 +290,39 @@ requirement is now *stronger* than before: the corpus host pin compares the load
 | # | Source | Notes |
 |---|---|---|
 | 1 | explicit path / `NUMSHARP_PARITY_BLAS` | **binding** — never substituted, not even by the bundled copy |
-| 2 | **bundled `runtimes/<rid>/native/`** | `NUMSHARP_BLAS_BUNDLED=0` drops it |
-| 3 | `NUMSHARP_OPENBLAS_PATH` | **additive** file(s)/dir(s) — "also look here", non-binding (the opposite of row 1) |
+| 2 | `NUMSHARP_OPENBLAS_PATH` | **highest-priority** file(s)/dir(s) — tried first, ahead of the bundled asset; non-binding (falls through when it holds no BLAS) |
+| 3 | **bundled `runtimes/<rid>/native/`** | `NUMSHARP_BLAS_BUNDLED=0` drops it |
 | 4 | `numpy.libs` of any python on `PATH` | plus `VIRTUAL_ENV` / `CONDA_PREFIX` / `PYTHONHOME` |
 | 5 | machine-wide OpenBLAS (apt / brew / MacPorts / conda / vcpkg / source) | **not** byte-parity with NumPy — a different build — so it ranks below the parity sources; honours `OPENBLAS_HOME` / `VCPKG_ROOT` / `CONDA_PREFIX` |
 | 6 | bare loader names | `libscipy_openblas64_`, `libscipy_openblas`, `scipy_openblas`, `libopenblas`, `libblas`, … |
+| 7 | every directory on `PATH` | **last resort** — sweeps for a BLAS under a non-standard name; broadest scan, reached only if nothing above binds |
 
 Bundled beats a discovered `numpy.libs` **on purpose**: a library's numeric output must not change
 because an unrelated `pip install` ran, and an app with no python must not get a different backend
 from one that has it. Matching some *other* numpy stays possible and is now an explicit act (name it).
 
-##### Discovery widened: additive path + system scan (2026-08-13)
+##### Discovery widened: priority path, system scan, PATH sweep (2026-08-13)
 
-Two tiers were inserted between "bundled" and "bare names" (rows 3 and 5 above), and neither can
-disturb parity: both rank *below* the bundled asset and `numpy.libs`, and the binding row 1 still
-bypasses discovery entirely. Confirmed by 30/30 `MatmulParityBackendTests` green after the change.
+Three tiers were added around the original bundled / `numpy.libs` / bare-names chain (rows 2, 5 and 7
+above). None can disturb parity: the binding row 1 still bypasses discovery entirely, the bundled
+asset stays ahead of `numpy.libs`, and the two ambient scans rank last. Confirmed by 30/30
+`MatmulParityBackendTests` green after the change.
 
-- **`NUMSHARP_OPENBLAS_PATH` (row 3)** — the additive, non-binding sibling of `NUMSHARP_PARITY_BLAS`.
-  Point it at a local build or an unpacked release to *add* a search location without displacing the
-  bundled default; to *force* one specific binary, `NUMSHARP_PARITY_BLAS` remains the binding knob.
+- **`NUMSHARP_OPENBLAS_PATH` (row 2)** — the non-binding sibling of `NUMSHARP_PARITY_BLAS`, tried
+  FIRST (ahead of the bundled asset) so a caller who sets it wins, yet falling through to the rest
+  when it holds no loadable BLAS. Use it to make a local build or an unpacked release take priority
+  over the bundled binary; `NUMSHARP_PARITY_BLAS` remains the all-or-nothing binding knob. Parity by
+  default is unaffected: the variable is unset in the common case, leaving the bundled asset first.
 - **System scan (row 5)** — the conventional install prefixes of the package managers OpenBLAS's own
   install docs list: apt multiarch (`/usr/lib/<triplet>`), a Homebrew keg
   (`/opt/homebrew/opt/openblas/lib`), MacPorts, a conda tree's `lib` / `Library\bin`, a vcpkg
   triplet's `bin`, the `make PREFIX=/opt/OpenBLAS` default, `/usr/lib64` — plus the `OPENBLAS_HOME` /
-  `OPENBLAS_ROOT` / `VCPKG_ROOT` / `CONDA_PREFIX` roots. It finds a machine-wide OpenBLAS the bare
-  names miss (a versioned soname like `libopenblas.so.0`, or a lib off the default loader path), but
-  it is **not** NumPy-parity, so it is the last resort before bare names.
+  `OPENBLAS_ROOT` / `VCPKG_ROOT` / `CONDA_PREFIX` roots. Finds a machine-wide OpenBLAS the bare names
+  miss (a versioned soname like `libopenblas.so.0`, or a lib off the default loader path); **not**
+  NumPy-parity, so below the parity sources.
+- **PATH sweep (row 7)** — dead last: globs every directory on `PATH` for a BLAS under a non-standard
+  name (a renamed OpenBLAS, a vendor CBLAS) that the bare loader names would not catch. Broadest and
+  most expensive, and lazy iteration means it never runs when an earlier tier binds.
 
 Both scipy distributions bind: **scipy-openblas64** (ILP64, `scipy_cblas_*64_`) and
 **scipy-openblas32** (LP64, plain `scipy_cblas_*`). The bare-name list gained the 32-bit spellings

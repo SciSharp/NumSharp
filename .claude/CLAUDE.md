@@ -150,11 +150,12 @@ OpenBLAS, and this is *the* one. **win-arm64 is scipy-openblas32**, because NumP
 LP64 there — it exports `scipy_cblas_sgemm`, a symbol scheme `Bind` lacked (added; binding a
 win-arm64 numpy's BLAS would have failed outright). Binaries are gitignored;
 `tools/openblas-manifest.json` is the checked-in pin and `tools/fetch_openblas.py` verifies **two**
-hashes per RID. Discovery order is fixed: explicit path/`NUMSHARP_PARITY_BLAS` (binding) → **bundled**
-→ `NUMSHARP_OPENBLAS_PATH` (additive, non-binding) → `numpy.libs` on PATH → machine-wide OpenBLAS
-(apt/brew/MacPorts/conda/vcpkg/source install dirs; honours `OPENBLAS_HOME`/`VCPKG_ROOT`/`CONDA_PREFIX`;
-**not** parity) → bare names (64-bit **and** 32-bit spellings — both scipy-openblas64/ILP64 and
-scipy-openblas32/LP64 bind, and 32 is the only build for 32-bit x86); `NUMSHARP_BLAS_BUNDLED=0` drops
+hashes per RID. Discovery order is fixed: explicit path/`NUMSHARP_PARITY_BLAS` (binding) →
+`NUMSHARP_OPENBLAS_PATH` (non-binding, tried FIRST — priority over bundled) → **bundled** →
+`numpy.libs` on PATH → machine-wide OpenBLAS (apt/brew/MacPorts/conda/vcpkg/source install dirs;
+honours `OPENBLAS_HOME`/`VCPKG_ROOT`/`CONDA_PREFIX`; **not** parity) → bare names (64-bit **and**
+32-bit spellings — both scipy-openblas64/ILP64 and scipy-openblas32/LP64 bind, and 32 is the only
+build for 32-bit x86) → PATH sweep (last resort, non-standard names); `NUMSHARP_BLAS_BUNDLED=0` drops
 the bundled entry.
 
 **Four load-bearing details:** the result bits depend on the BLAS **thread count** (1/2/4/24 threads
@@ -174,7 +175,7 @@ either.
 
 API: `Blas.Enable(library, threads, coreType)` / `Blas.Disable()` / `Blas.Enabled` / `Blas.Info` /
 `Blas.LibraryPath` / `Blas.CoreName` / `Blas.IsBundledLibrary` / `Blas.ParityCoreType`;
-`NUMSHARP_OPENBLAS_PATH` adds additive (non-binding) discovery locations;
+`NUMSHARP_OPENBLAS_PATH` adds highest-priority (non-binding) discovery locations tried before bundled;
 `NUMSHARP_BLAS_AUTOINSTALL=0` opts out of the module-load install. Gate: the **host-pinned**
 `matmul_parity` corpus tier (342 cases — 342 bit-exact with the backend, 294 divergent without it)
 which goes `Inconclusive`, never red, on a host that cannot load the pinned library. The pin matches
