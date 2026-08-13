@@ -161,7 +161,20 @@ machine-wide OpenBLAS (apt/brew/MacPorts/conda/vcpkg/source install dirs; honour
 32-bit spellings — both scipy-openblas64/ILP64 and scipy-openblas32/LP64 bind, and 32 is the only
 build for 32-bit x86) → PATH sweep (last resort, non-standard names); `NUMSHARP_BLAS_BUNDLED=0` drops
 the bundled entry. `numpy.libs` is NEVER scanned (tier deleted — we never grab OpenBLAS out of a
-numpy installation; the bundle already IS that binary at the pin).
+numpy installation; the bundle already IS that binary at the pin). **Build-time override** (design
+§5–§7, shipped in `buildTransitive/{props,targets}` + an inline `RoslynCodeTaskFactory` task —
+netstandard2.0 surface only, own `MiniJson`, since the factory can't resolve simple-name References):
+`<OpenBlasVersion>` on ANY `PackageReference` (or `NUMSHARP_OPENBLAS_VERSION` — env wins) downloads
+that scipy-openblas from PyPI at build, double-hash-verifies, caches the EXTRACTED lib per-user
+(`%LOCALAPPDATA%/NumSharp/openblas`, wheel deleted, offline-capable once primed), stages it over the
+bundle and writes the marker; failure = BUILD ERROR (hard requirement). `<OpenBlasPath>` = soft
+read-in-place dir (also the download-to dir when combined with a version);
+`<OpenBlasDelivery>package</OpenBlasDelivery>` bakes ALL 8 RIDs + markers into a dependent's own
+nupkg. Two MSBuild traps encoded there: a target's `Condition` evaluates BEFORE `DependsOnTargets`
+run (the has-override gate must sit on the TASK, not the target), and `dotnet pack` defaults to
+Release on .NET 8+ while this repo's incremental build can declare stale Release outputs up-to-date
+— always `-t:Rebuild` before packing. Gate: `tools/verify_build_override.sh` (9-step scripted
+nupkg-flow run; network once, then cache).
 
 **Four load-bearing details:** the result bits depend on the BLAS **thread count** (1/2/4/24 threads
 give four different answers); they ALSO depend on the **DYNAMIC_ARCH kernel** the CPU dispatches, so

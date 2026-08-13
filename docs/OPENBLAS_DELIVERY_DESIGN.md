@@ -1,12 +1,14 @@
 # OpenBLAS Dependency — Delivery & Discovery Design
 
-> **Status:** DESIGN — runtime side IMPLEMENTED · 2026-08-13 · branch `journey3`
+> **Status:** IMPLEMENTED · 2026-08-13 · branch `journey3`
 > Supersedes the discovery/precedence model documented in `docs/GEMM_PARITY.md` §6.1.
-> §10.1 is RESOLVED (bundle stays above machine tooling — parity-by-default preserved). The runtime
-> half (renames, numpy.libs removal, tier order, source marker + hard-required enforcement) is
-> implemented and gated by `OpenBlasDeliveryTests`; the BUILD half (§5/§6/§7 override download and
-> transitive delivery) is still to come. Each section marks **[EXISTS]**, **[CHANGE]**, **[NEW]**
-> or **[DONE]**.
+> §10.1 is RESOLVED (bundle stays above machine tooling — parity-by-default preserved). Both halves
+> are implemented: the runtime side (renames, numpy.libs removal, tier order, source marker +
+> hard-required enforcement — gate `OpenBlasDeliveryTests`, 10 tests) and the build side
+> (`buildTransitive/` props+targets, the inline download/stage task, caching, transitive metadata,
+> `OpenBlasDelivery=package` — gate `tools/verify_build_override.sh`, a 9-step scripted nupkg-flow
+> integration run). Each section marks **[EXISTS]**, **[CHANGE]**, **[NEW]** or **[DONE]**; §5.3
+> records the two implementation deviations (MiniJson, host-RID default).
 
 This document defines how `NumSharp.Interop.OpenBLAS` obtains, delivers and binds an OpenBLAS/CBLAS
 shared library, and how a *dependent* package can reuse the same delivery. It is the single source of
@@ -194,13 +196,29 @@ resolve (env > metadata) → (distribution, version, rid)
 ```
 
 - Implemented as an inline `RoslynCodeTaskFactory` C# task shipped in the package's
-  `buildTransitive` targets — **no Python, no extra dependency** (`System.IO.Compression` +
-  `System.Text.Json` from the SDK).
+  `buildTransitive` targets — **no Python, no extra dependency**. *(Implementation deviation from
+  the original "System.Text.Json from the SDK" wording: the factory compiles against
+  netstandard2.0's DEFAULT references and simple-name `<Reference>` items do not resolve on the
+  dotnet-sdk MSBuild (MSB3755), so the task uses only netstandard-2.0 surface — `HttpClient`,
+  `ZipArchive`, `SHA256` — plus a small self-contained JSON reader/writer (`MiniJson`) in place of
+  System.Text.Json. That also keeps it working under Visual Studio's .NET Framework MSBuild.)*
 - The **default path stages nothing and hits no network**: when no version/path is set, the bundle
-  already ships. Only an actual override downloads.
+  already ships, the resolve gate is a cheap item scan, and the task is never even compiled. Only
+  an actual override downloads.
+- **The staged RID** defaults to the HOST (`$(NETCoreSdkPortableRuntimeIdentifier)`), or
+  `$(RuntimeIdentifier)` when the build sets one; `OpenBlasDelivery=package` stages **all manifest
+  RIDs** (that is what a package author bakes for their consumers).
 - **Caching:** the global temp cache (`%LOCALAPPDATA%/NumSharp/openblas/` or `$XDG_CACHE_HOME`)
-  makes repeated builds and multiple projects reuse one download. The cache holds **extracted libs
-  only**, never wheels.
+  makes repeated builds and multiple projects reuse one download — and serves offline once primed.
+  The cache holds **extracted libs only**, never wheels, keyed
+  `<distribution>/<version>/<rid>/<sha256>/<file>`.
+- **Marker placement & hygiene (implemented):** the marker is written NEXT TO the staged binary
+  (its own directory is the read location; no `path` field), plus a root-level marker carrying
+  `path` when staging went to a custom `OpenBlasPath` the runtime's app-relative probe could not
+  otherwise find (a flattened RID-specific publish stages into the output root, so its marker IS
+  the root one). Stale markers are cleaned on every transition: override removed → both locations
+  deleted (an MSBuild `<Delete>` in the stage targets), mode switched (version↔path, default↔custom
+  dir) → the superseded location deleted by the task.
 
 ### 5.4 The "same binary" invariant (Goal 6)
 
@@ -388,12 +406,13 @@ Downloading + later loading native code selected by build metadata is a supply-c
 | Remove `PythonLibDirectories` (numpy.libs) | **DONE** |
 | Source marker + runtime tier-2b enforcement (`OpenBlasSourceMarker`, `BlasRequiredOverrideException`) | **DONE** |
 | Gates: runtime priority unit tests (`OpenBlasDeliveryTests`, 10); `MatmulParityBackendTests` 30/30 unaffected | **DONE** |
-| `buildTransitive` props/targets + inline download/extract task | new |
-| Override resolution (env > metadata), path & version modes, hard-fail | new |
-| Global temp cache (extracted libs only) + wheel cleanup | new |
-| Transitive metadata scan over all `PackageReference`s | new |
-| `OpenBlasDelivery=package` pack hook (dependent's own nupkg) | new |
-| Gates: build-override integration test | new |
+| `buildTransitive` props/targets + inline download/extract task (netstandard2.0-surface, MiniJson) | **DONE** |
+| Override resolution (env > metadata), path & version modes, hard-fail | **DONE** |
+| Global temp cache (extracted libs only) + wheel cleanup | **DONE** |
+| Transitive metadata scan over all `PackageReference`s (+ §10.2 conflict rules) | **DONE** |
+| `OpenBlasDelivery=package` pack hook — all manifest RIDs baked into the dependent's nupkg | **DONE** |
+| Stale-marker cleanup across override add/remove/mode-switch | **DONE** |
+| Gate: `tools/verify_build_override.sh` (9-step scripted nupkg-flow integration run) | **DONE** |
 
 ---
 
@@ -406,7 +425,11 @@ Downloading + later loading native code selected by build metadata is a supply-c
   `BlasRequiredOverrideException.cs`; runtime gate `test/NumSharp.UnitTest/Backends/OpenBlasDeliveryTests.cs`.
 - Autoinstall & backend wiring: `src/NumSharp.Interop.OpenBLAS/Blas.cs`
   (`BundleAutoinstall`, `Enable`, `Disable`).
-- Bundle pack rules: `src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj`.
+- Build-phase override delivery: `src/NumSharp.Interop.OpenBLAS/buildTransitive/NumSharp.Interop.OpenBLAS.{props,targets}`
+  (the resolve gate, the stage/publish/pack targets, the inline `NumSharpOpenBlasFetchTask`);
+  integration gate `tools/verify_build_override.sh`.
+- Bundle pack rules + `buildTransitive` packing (incl. the manifest copy): 
+  `src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj`.
 - Pack-time fetch & the shared extraction contract: `tools/fetch_openblas.py`,
-  `tools/openblas-manifest.json`.
+  `tools/openblas-manifest.json` (packed to `buildTransitive/openblas-manifest.json`).
 - Parity rationale (why the binary must match, three-knob determinism): `docs/GEMM_PARITY.md`.

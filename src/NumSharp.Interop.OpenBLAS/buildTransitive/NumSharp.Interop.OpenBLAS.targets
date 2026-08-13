@@ -1,0 +1,968 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ==================================================================================
+     NumSharp.Interop.OpenBLAS — BUILD-phase override delivery (delivery design §5–§7).
+
+     Imported (via buildTransitive/) into every project referencing the package directly
+     or transitively. Decides which OpenBLAS binary lands in the consumer's output:
+
+       no override            -> nothing runs; the bundled runtime assets ship as-is
+       OpenBlasPath           -> a source marker records the read-in-place directory
+       OpenBlasVersion        -> the pinned scipy-openblas wheel is downloaded from PyPI,
+                                 double-hash verified, the ONE native library extracted
+                                 into a global temp cache (the wheel is then DELETED),
+                                 staged over the bundle in the output, and a source
+                                 marker flags the folder as a REQUIRED override
+
+     Knobs are metadata on ANY PackageReference (so a package that depends on this one
+     exposes the identical experience to its consumers — design §6.1) or environment
+     variables, which win. A version override that cannot be satisfied FAILS THE BUILD:
+     the pin is a contract, and silently shipping a different binary is the one failure
+     a pin exists to prevent (design Goal 3, §10.5).
+
+     The wheel→library extraction reproduces tools/fetch_openblas.py exactly (same RID →
+     distribution/platform-tag map read from the same manifest, same /lib/ member pick,
+     same file name, same runtimes/<rid>/native/ layout) — that is the design's "same
+     binary" invariant (§5.4), and it is what lets an override transparently overwrite
+     the bundle in the same folder.
+     ================================================================================== -->
+<Project>
+
+  <!-- ============================ the resolve gate ================================
+       Cheap detection of whether ANY override is configured. This is the only thing a
+       default build evaluates: an item scan and a few property reads. The inline task
+       below is not even COMPILED unless a stage target finds work to do. -->
+  <Target Name="_NumSharpOpenBlasResolve" Condition="'$(NumSharpOpenBlasEnabled)' == 'true'">
+    <ItemGroup>
+      <!-- Every reference carrying OpenBLAS metadata, unless that reference opted out. -->
+      <_NumSharpOpenBlasRef Include="@(PackageReference)"
+                            Condition="('%(PackageReference.OpenBlasVersion)' != '' or
+                                        '%(PackageReference.OpenBlasPath)' != '' or
+                                        '%(PackageReference.OpenBlasDistribution)' != '' or
+                                        '%(PackageReference.OpenBlasFeed)' != '' or
+                                        '%(PackageReference.OpenBlasSha256)' != '' or
+                                        '%(PackageReference.OpenBlasDelivery)' != '') and
+                                       '%(PackageReference.OpenBlasDelivery)' != 'none'" />
+    </ItemGroup>
+
+    <PropertyGroup>
+      <_NumSharpOpenBlasHasOverride>false</_NumSharpOpenBlasHasOverride>
+      <_NumSharpOpenBlasHasOverride Condition="'@(_NumSharpOpenBlasRef)' != '' or
+                                               '$(NUMSHARP_OPENBLAS_VERSION)' != '' or
+                                               '$(NUMSHARP_OPENBLAS_PATH)' != ''">true</_NumSharpOpenBlasHasOverride>
+
+      <!-- The RID whose asset is staged: an explicit RuntimeIdentifier, else the host. -->
+      <_NumSharpOpenBlasRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_NumSharpOpenBlasRid>
+      <_NumSharpOpenBlasRid Condition="'$(_NumSharpOpenBlasRid)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</_NumSharpOpenBlasRid>
+      <_NumSharpOpenBlasRid Condition="'$(_NumSharpOpenBlasRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_NumSharpOpenBlasRid>
+    </PropertyGroup>
+  </Target>
+
+  <!-- ============================ build staging ===================================
+       Runs AFTER the ordinary output copy so a staged override lands ON TOP of the
+       bundled runtime asset already copied there.
+
+       The has-override gate sits on the TASK, not the target: a target's Condition is
+       evaluated BEFORE its DependsOnTargets run (the classic MSBuild gotcha), so a
+       condition reading $(_NumSharpOpenBlasHasOverride) up there would test the property
+       before _NumSharpOpenBlasResolve had a chance to set it — and the override would
+       silently never stage. At the task level the condition evaluates at execution time,
+       after the dependency ran; a default build still does nothing but the (cheap) item
+       scan, and the task is never even compiled. -->
+  <Target Name="_NumSharpOpenBlasStageBuild"
+          AfterTargets="CopyFilesToOutputDirectory"
+          DependsOnTargets="_NumSharpOpenBlasResolve"
+          Condition="'$(NumSharpOpenBlasEnabled)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <!-- An override REMOVED between builds must not leave last build's marker behind: a
+         stale mode=version marker would keep declaring the folder a hard-required
+         override the consumer no longer asked for. -->
+    <Delete Files="$(OutDir)openblas.source.json;$(OutDir)runtimes/$(_NumSharpOpenBlasRid)/native/openblas.source.json"
+            Condition="'$(_NumSharpOpenBlasHasOverride)' != 'true'"
+            TreatErrorsAsWarnings="true" />
+    <NumSharpOpenBlasFetchTask
+        Condition="'$(_NumSharpOpenBlasHasOverride)' == 'true'"
+        References="@(_NumSharpOpenBlasRef)"
+        EnvVersion="$(NUMSHARP_OPENBLAS_VERSION)"
+        EnvPath="$(NUMSHARP_OPENBLAS_PATH)"
+        EnvDistribution="$(NUMSHARP_OPENBLAS_DISTRIBUTION)"
+        EnvFeed="$(NUMSHARP_OPENBLAS_FEED)"
+        EnvSha256="$(NUMSHARP_OPENBLAS_SHA256)"
+        EnvDelivery="$(NUMSHARP_OPENBLAS_DELIVERY)"
+        ManifestPath="$(NumSharpOpenBlasManifest)"
+        ProjectDirectory="$(MSBuildProjectDirectory)"
+        OutputDirectory="$(OutDir)"
+        Rid="$(_NumSharpOpenBlasRid)"
+        FlattenNative="false"
+        CacheDirectory="$(NumSharpOpenBlasCacheDir)">
+      <Output TaskParameter="ResolvedMode" PropertyName="_NumSharpOpenBlasMode" />
+      <Output TaskParameter="ResolvedDelivery" PropertyName="_NumSharpOpenBlasDelivery" />
+      <Output TaskParameter="StagedPackageFiles" ItemName="_NumSharpOpenBlasPackFile" />
+    </NumSharpOpenBlasFetchTask>
+  </Target>
+
+  <!-- ============================ publish staging =================================
+       The publish layout differs: a RID-specific publish FLATTENS native assets next to
+       the app, a portable publish keeps the runtimes/ tree. Stage accordingly, after
+       publish has copied its file set. -->
+  <Target Name="_NumSharpOpenBlasStagePublish"
+          AfterTargets="CopyFilesToPublishDirectory"
+          DependsOnTargets="_NumSharpOpenBlasResolve"
+          Condition="'$(NumSharpOpenBlasEnabled)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <_NumSharpOpenBlasFlatten>false</_NumSharpOpenBlasFlatten>
+      <_NumSharpOpenBlasFlatten Condition="'$(RuntimeIdentifier)' != ''">true</_NumSharpOpenBlasFlatten>
+    </PropertyGroup>
+    <Delete Files="$(PublishDir)openblas.source.json;$(PublishDir)runtimes/$(_NumSharpOpenBlasRid)/native/openblas.source.json"
+            Condition="'$(_NumSharpOpenBlasHasOverride)' != 'true'"
+            TreatErrorsAsWarnings="true" />
+    <NumSharpOpenBlasFetchTask
+        Condition="'$(_NumSharpOpenBlasHasOverride)' == 'true'"
+        References="@(_NumSharpOpenBlasRef)"
+        EnvVersion="$(NUMSHARP_OPENBLAS_VERSION)"
+        EnvPath="$(NUMSHARP_OPENBLAS_PATH)"
+        EnvDistribution="$(NUMSHARP_OPENBLAS_DISTRIBUTION)"
+        EnvFeed="$(NUMSHARP_OPENBLAS_FEED)"
+        EnvSha256="$(NUMSHARP_OPENBLAS_SHA256)"
+        EnvDelivery="$(NUMSHARP_OPENBLAS_DELIVERY)"
+        ManifestPath="$(NumSharpOpenBlasManifest)"
+        ProjectDirectory="$(MSBuildProjectDirectory)"
+        OutputDirectory="$(PublishDir)"
+        Rid="$(_NumSharpOpenBlasRid)"
+        FlattenNative="$(_NumSharpOpenBlasFlatten)"
+        CacheDirectory="$(NumSharpOpenBlasCacheDir)" />
+  </Target>
+
+  <!-- ============================ pack hook (§6.2) ================================
+       A dependent package author setting OpenBlasVersion + OpenBlasDelivery=package gets
+       the staged binaries (ALL manifest RIDs) and their markers included in THEIR OWN
+       nupkg as runtimes/<rid>/native/ assets — their consumers then get the pinned
+       version with no build-time download, and the marker keeps it a required override
+       at runtime. NuGet's nearest-wins asset resolution makes the dependent's copy beat
+       this package's transitive bundle. -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_NumSharpOpenBlasPackContent</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <Target Name="_NumSharpOpenBlasPackContent"
+          DependsOnTargets="_NumSharpOpenBlasResolve;_NumSharpOpenBlasStageBuild"
+          Condition="'$(NumSharpOpenBlasEnabled)' == 'true'">
+    <!-- Same dependency-before-condition rule as above: the has-override / delivery gate
+         must sit below the target level. -->
+    <ItemGroup Condition="'$(_NumSharpOpenBlasHasOverride)' == 'true' and '$(_NumSharpOpenBlasDelivery)' == 'package'">
+      <TfmSpecificPackageFile Include="@(_NumSharpOpenBlasPackFile)" PackagePath="%(_NumSharpOpenBlasPackFile.PackagePath)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- ============================ the inline task =================================
+       Compiled by RoslynCodeTaskFactory ONLY when a stage target actually runs with an
+       override configured. The factory compiles against netstandard2.0's DEFAULT
+       references (simple-name <Reference> items do not resolve on the dotnet-sdk MSBuild
+       — MSB3755), which is why the task uses only netstandard-2.0 surface: HttpClient,
+       ZipArchive, SHA256 — and a small self-contained JSON reader/writer instead of
+       System.Text.Json (which netstandard2.0 lacks). That also keeps the task working
+       under Visual Studio's .NET Framework MSBuild. No Python, no extra dependency. -->
+  <UsingTask TaskName="NumSharpOpenBlasFetchTask"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <Task>
+      <Code Type="Class" Language="cs">
+        <![CDATA[
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.Build.Framework;
+using Microsoft.Build.Utilities;
+
+/// <summary>
+/// Resolves the OpenBLAS override knobs (env beats PackageReference metadata), downloads and
+/// verifies the pinned scipy-openblas wheel when a version is set, extracts the one native
+/// library into the global cache (deleting the wheel), stages it into the output, and writes
+/// the openblas.source.json marker the runtime uses to tell an override from the bundle.
+/// Reproduces tools/fetch_openblas.py's extraction exactly (the "same binary" invariant).
+/// </summary>
+public class NumSharpOpenBlasFetchTask : Task
+{
+    public ITaskItem[] References { get; set; }
+
+    public string EnvVersion { get; set; }
+    public string EnvPath { get; set; }
+    public string EnvDistribution { get; set; }
+    public string EnvFeed { get; set; }
+    public string EnvSha256 { get; set; }
+    public string EnvDelivery { get; set; }
+
+    [Required] public string ManifestPath { get; set; }
+    [Required] public string ProjectDirectory { get; set; }
+    [Required] public string OutputDirectory { get; set; }
+    [Required] public string Rid { get; set; }
+    public bool FlattenNative { get; set; }
+    [Required] public string CacheDirectory { get; set; }
+
+    [Output] public string ResolvedMode { get; set; }
+    [Output] public string ResolvedDelivery { get; set; }
+    [Output] public ITaskItem[] StagedPackageFiles { get; set; }
+
+    private const string MarkerFileName = "openblas.source.json";
+    private const string DefaultFeed = "https://pypi.org";
+
+    public override bool Execute()
+    {
+        try
+        {
+            StagedPackageFiles = new ITaskItem[0];
+
+            string version, path, distribution, feed, sha256, delivery;
+            if (!ResolveKnobs(out version, out path, out distribution, out feed, out sha256, out delivery))
+                return false;
+
+            ResolvedDelivery = delivery;
+
+            if (string.IsNullOrEmpty(version) && string.IsNullOrEmpty(path))
+            {
+                ResolvedMode = "none";
+                return true;
+            }
+
+            // ---- path-only mode: record the read-in-place directory, nothing downloaded ----
+            if (string.IsNullOrEmpty(version))
+            {
+                ResolvedMode = "path";
+                string absPath = ResolvePath(path);
+                WriteMarker(Path.Combine(OutputDirectory, MarkerFileName),
+                            "path", null, null, null, false, absPath);
+                // A mode SWITCH (version -> path between builds) must not leave the old
+                // version marker declaring the staged folder a hard-required override.
+                TryDelete(Path.Combine(OutputDirectory, "runtimes", Rid, "native", MarkerFileName));
+                Log.LogMessage(MessageImportance.High,
+                    "NumSharp.Interop.OpenBLAS: recorded OpenBlasPath override -> {0} (read in place, non-binding)",
+                    absPath);
+                return true;
+            }
+
+            // ---- version mode: a hard requirement ----
+            ResolvedMode = "version";
+
+            Dictionary<string, object> manifest = LoadManifest();
+            Dictionary<string, object> runtimes = (Dictionary<string, object>)manifest["runtimes"];
+
+            if (delivery == "package" && !string.IsNullOrEmpty(path))
+            {
+                Log.LogError(
+                    "NumSharp.Interop.OpenBLAS: OpenBlasDelivery=package stages every RID into the " +
+                    "build output for packing and cannot combine with OpenBlasPath (which names one " +
+                    "read/download directory). Drop one of the two.");
+                return false;
+            }
+
+            string[] rids = delivery == "package" ? runtimes.Keys.ToArray() : new[] { Rid };
+
+            var packFiles = new List<ITaskItem>();
+            foreach (string rid in rids)
+            {
+                string staged;
+                if (!StageRid(manifest, runtimes, rid, version, path, distribution, feed, sha256,
+                              out staged))
+                    return false;
+
+                if (delivery == "package")
+                {
+                    var lib = new TaskItem(staged);
+                    lib.SetMetadata("PackagePath", "runtimes/" + rid + "/native/" + Path.GetFileName(staged));
+                    packFiles.Add(lib);
+                    var marker = new TaskItem(Path.Combine(Path.GetDirectoryName(staged), MarkerFileName));
+                    marker.SetMetadata("PackagePath", "runtimes/" + rid + "/native/" + MarkerFileName);
+                    packFiles.Add(marker);
+                }
+            }
+
+            StagedPackageFiles = packFiles.ToArray();
+            return true;
+        }
+        catch (Exception e)
+        {
+            // A version override is a contract (design Goal 3): any failure to satisfy it is a
+            // BUILD error, never a silent fallback to a different binary.
+            Log.LogError("NumSharp.Interop.OpenBLAS: the OpenBLAS override could not be satisfied: {0}",
+                e.Message);
+            Log.LogMessage(MessageImportance.Low, e.ToString());
+            return false;
+        }
+    }
+
+    // ---------------------------------------------------------------- knob resolution
+
+    /// <summary>
+    /// Env beats metadata; among references, the highest OpenBlasVersion wins (design §10.2,
+    /// logged); a version on one reference conflicting with a path-only override on another is
+    /// a hard error (the two name different contracts and neither can silently lose).
+    /// </summary>
+    private bool ResolveKnobs(out string version, out string path, out string distribution,
+                              out string feed, out string sha256, out string delivery)
+    {
+        version = path = distribution = feed = sha256 = null;
+        delivery = "build";
+
+        var refs = References ?? new ITaskItem[0];
+        var versions = new List<KeyValuePair<string, string>>(); // (refName, version)
+        string pathRef = null, versionRef = null;
+
+        foreach (var r in refs)
+        {
+            string v = r.GetMetadata("OpenBlasVersion");
+            string p = r.GetMetadata("OpenBlasPath");
+            if (!string.IsNullOrEmpty(v)) { versions.Add(new KeyValuePair<string, string>(r.ItemSpec, v)); versionRef = r.ItemSpec; }
+            if (!string.IsNullOrEmpty(p))
+            {
+                if (path != null && path != p)
+                {
+                    Log.LogError(
+                        "NumSharp.Interop.OpenBLAS: two PackageReferences disagree on OpenBlasPath " +
+                        "('{0}' vs '{1}'). Resolve the conflict explicitly.", path, p);
+                    return false;
+                }
+                path = p;
+                if (string.IsNullOrEmpty(v))
+                    pathRef = r.ItemSpec;
+            }
+
+            if (distribution == null) distribution = NullIfEmpty(r.GetMetadata("OpenBlasDistribution"));
+            if (feed == null) feed = NullIfEmpty(r.GetMetadata("OpenBlasFeed"));
+            if (sha256 == null) sha256 = NullIfEmpty(r.GetMetadata("OpenBlasSha256"));
+            string d = r.GetMetadata("OpenBlasDelivery");
+            if (!string.IsNullOrEmpty(d) && d != "build") delivery = d;
+        }
+
+        if (versions.Count > 0)
+        {
+            versions.Sort((a, b) => CompareVersions(b.Value, a.Value));
+            version = versions[0].Value;
+            if (versions.Select(kv => kv.Value).Distinct().Count() > 1)
+                Log.LogMessage(MessageImportance.High,
+                    "NumSharp.Interop.OpenBLAS: multiple OpenBlasVersion values ({0}); the highest, {1} (from '{2}'), wins.",
+                    string.Join(", ", versions.Select(kv => kv.Key + "=" + kv.Value)), version, versions[0].Key);
+        }
+
+        // A reference that pins a VERSION and a different reference that pins a bare PATH name
+        // different contracts (enforced download vs read-in-place) — hard error (§10.2).
+        if (version != null && pathRef != null && versionRef != null && pathRef != versionRef)
+        {
+            Log.LogError(
+                "NumSharp.Interop.OpenBLAS: reference '{0}' pins OpenBlasVersion={1} while reference '{2}' " +
+                "sets a bare OpenBlasPath — an enforced download and a read-in-place directory cannot both " +
+                "win. Put both knobs on one reference (download INTO the path) or drop one.",
+                versionRef, version, pathRef);
+            return false;
+        }
+
+        // Environment wins over everything the references said.
+        if (!string.IsNullOrEmpty(EnvVersion)) version = EnvVersion;
+        if (!string.IsNullOrEmpty(EnvPath)) path = EnvPath;
+        if (!string.IsNullOrEmpty(EnvDistribution)) distribution = EnvDistribution;
+        if (!string.IsNullOrEmpty(EnvFeed)) feed = EnvFeed;
+        if (!string.IsNullOrEmpty(EnvSha256)) sha256 = EnvSha256;
+        if (!string.IsNullOrEmpty(EnvDelivery)) delivery = EnvDelivery;
+
+        if (delivery != "build" && delivery != "package" && delivery != "none")
+        {
+            Log.LogError("NumSharp.Interop.OpenBLAS: OpenBlasDelivery must be none|build|package, got '{0}'.", delivery);
+            return false;
+        }
+
+        if (distribution != null)
+        {
+            if (distribution == "64") distribution = "scipy-openblas64";
+            else if (distribution == "32") distribution = "scipy-openblas32";
+            if (distribution != "scipy-openblas64" && distribution != "scipy-openblas32")
+            {
+                Log.LogError(
+                    "NumSharp.Interop.OpenBLAS: OpenBlasDistribution must be scipy-openblas64|scipy-openblas32 " +
+                    "(or the 64|32 aliases), got '{0}'.", distribution);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static string NullIfEmpty(string s)
+    {
+        return string.IsNullOrEmpty(s) ? null : s;
+    }
+
+    /// <summary>
+    /// scipy-openblas versions have five numeric parts; System.Version stops at four. Missing
+    /// parts compare as 0; a non-numeric PRESENT part drops the whole comparison to ordinal.
+    /// </summary>
+    private static int CompareVersions(string a, string b)
+    {
+        string[] pa = a.Split('.'), pb = b.Split('.');
+        for (int i = 0; i < Math.Max(pa.Length, pb.Length); i++)
+        {
+            int na = 0, nb = 0;
+            if (i < pa.Length && !int.TryParse(pa[i], out na))
+                return string.CompareOrdinal(a, b);
+            if (i < pb.Length && !int.TryParse(pb[i], out nb))
+                return string.CompareOrdinal(a, b);
+            if (na != nb)
+                return na.CompareTo(nb);
+        }
+
+        return 0;
+    }
+
+    private string ResolvePath(string p)
+    {
+        return Path.GetFullPath(Path.IsPathRooted(p) ? p : Path.Combine(ProjectDirectory, p));
+    }
+
+    // ---------------------------------------------------------------- staging one RID
+
+    private bool StageRid(Dictionary<string, object> manifest, Dictionary<string, object> runtimes,
+                          string rid, string version, string customPath,
+                          string distributionOverride, string feed, string expectedSha,
+                          out string stagedFile)
+    {
+        stagedFile = null;
+
+        object entryObj;
+        if (string.IsNullOrEmpty(rid) || !runtimes.TryGetValue(rid, out entryObj))
+        {
+            Log.LogError(
+                "NumSharp.Interop.OpenBLAS: no manifest entry for RID '{0}'. Supported RIDs: {1}. " +
+                "(The manifest is the shared RID -> wheel map; an unsupported RID cannot be staged.)",
+                rid, string.Join(", ", runtimes.Keys));
+            return false;
+        }
+
+        var entry = (Dictionary<string, object>)entryObj;
+        string manifestDistribution = (string)entry["distribution"];
+        string distribution = distributionOverride ?? manifestDistribution;
+        string tag = PlatformTagAnchor((string)entry["wheel"]);
+        string pinnedVersion = (string)manifest["distribution_version"];
+
+        // The manifest hash pins only the DEFAULT version+distribution; any other override must
+        // bring its own OpenBlasSha256 (or none, in which case the wheel hash from the index is
+        // the verification).
+        string sha = expectedSha;
+        if (sha == null && version == pinnedVersion && distribution == manifestDistribution)
+            sha = (string)entry["sha256"];
+
+        string feedBase = string.IsNullOrEmpty(feed) ? DefaultFeed : feed.TrimEnd('/');
+        if (feedBase != DefaultFeed && expectedSha == null)
+        {
+            Log.LogError(
+                "NumSharp.Interop.OpenBLAS: a non-pypi.org OpenBlasFeed ({0}) requires an explicit " +
+                "OpenBlasSha256 — a mirror's own index cannot attest its own artifacts (design §10.6).",
+                feedBase);
+            return false;
+        }
+
+        // ---- the global cache: extracted libraries only, keyed (distribution, version, rid, sha) ----
+        string cacheRoot = Path.Combine(CacheDirectory, distribution, version, rid);
+        string cached = FindInCache(cacheRoot, sha);
+        if (cached == null)
+        {
+            if (!DownloadIntoCache(feedBase, distribution, version, rid, tag, sha, cacheRoot, out cached))
+                return false;
+        }
+        else
+        {
+            Log.LogMessage(MessageImportance.Normal,
+                "NumSharp.Interop.OpenBLAS: cache hit {0}", cached);
+        }
+
+        string stagedSha = Path.GetFileName(Path.GetDirectoryName(cached));
+
+        // ---- stage into the destination (over the bundle) ----
+        string destDir = !string.IsNullOrEmpty(customPath)
+            ? ResolvePath(customPath)
+            : FlattenNative
+                ? Path.GetFullPath(OutputDirectory)
+                : Path.GetFullPath(Path.Combine(OutputDirectory, "runtimes", rid, "native"));
+        Directory.CreateDirectory(destDir);
+
+        string dest = Path.Combine(destDir, Path.GetFileName(cached));
+        if (!File.Exists(dest) || new FileInfo(dest).Length != new FileInfo(cached).Length ||
+            !HashFile(dest).Equals(stagedSha, StringComparison.OrdinalIgnoreCase))
+        {
+            File.Copy(cached, dest, true);
+            Log.LogMessage(MessageImportance.High,
+                "NumSharp.Interop.OpenBLAS: staged {0} {1} ({2}) -> {3}",
+                distribution, version, rid, dest);
+        }
+        else
+        {
+            Log.LogMessage(MessageImportance.Normal,
+                "NumSharp.Interop.OpenBLAS: {0} already staged and verified", dest);
+        }
+
+        // ---- the source marker: next to the staged binary (its own directory is the read
+        // location), plus a root-level marker pointing at a custom directory the runtime's
+        // app-relative probe could not otherwise find. The unused location is CLEARED so a
+        // mode switch between builds cannot leave a stale marker shadowing the current one —
+        // but ONLY when it is a distinct file: in the flattened publish layout destDir IS the
+        // output root, and the cleanup would delete the marker just written. ----
+        WriteMarker(Path.Combine(destDir, MarkerFileName),
+                    "version", distribution, version, stagedSha, true, null);
+        if (!string.IsNullOrEmpty(customPath))
+        {
+            WriteMarker(Path.Combine(OutputDirectory, MarkerFileName),
+                        "version", distribution, version, stagedSha, true, destDir);
+            // Staging went to the custom directory — a rid-dir marker from an earlier
+            // default-staged build would still declare the OLD location an override.
+            // (Guarded: a custom path pointed AT the rid dir must not lose its fresh marker.)
+            string ridNative = Path.Combine(OutputDirectory, "runtimes", Rid, "native");
+            if (!SamePath(destDir, ridNative))
+                TryDelete(Path.Combine(ridNative, MarkerFileName));
+        }
+        else if (!SamePath(destDir, OutputDirectory))
+        {
+            TryDelete(Path.Combine(OutputDirectory, MarkerFileName));
+        }
+
+        stagedFile = dest;
+        return true;
+    }
+
+    /// <summary>
+    /// The anchor component of the wheel's platform tag, reproduced from the manifest's wheel
+    /// FILE NAME the way fetch_openblas.py's RID_MAP spells it: the piece after "py3-none-",
+    /// first dot-separated component (compound manylinux tags list the anchor first, e.g.
+    /// "manylinux2014_x86_64.manylinux_2_17_x86_64").
+    /// </summary>
+    private static string PlatformTagAnchor(string wheelFileName)
+    {
+        const string sep = "-py3-none-";
+        int i = wheelFileName.IndexOf(sep, StringComparison.Ordinal);
+        if (i < 0)
+            throw new InvalidDataException("unexpected wheel name in manifest: " + wheelFileName);
+        string tags = wheelFileName.Substring(i + sep.Length);
+        if (tags.EndsWith(".whl", StringComparison.Ordinal))
+            tags = tags.Substring(0, tags.Length - 4);
+        int dot = tags.IndexOf('.');
+        return dot < 0 ? tags : tags.Substring(0, dot);
+    }
+
+    private static string FindInCache(string cacheRoot, string expectedSha)
+    {
+        if (!Directory.Exists(cacheRoot))
+            return null;
+
+        if (expectedSha != null)
+        {
+            string dir = Path.Combine(cacheRoot, expectedSha.ToLowerInvariant());
+            if (Directory.Exists(dir))
+            {
+                string f = Directory.GetFiles(dir).FirstOrDefault();
+                if (f != null)
+                    return f;
+            }
+
+            return null;
+        }
+
+        // No pinned lib hash: any cached entry for this (distribution, version, rid) was
+        // wheel-hash verified when it was downloaded, so the first one serves.
+        foreach (string dir in Directory.GetDirectories(cacheRoot))
+        {
+            string f = Directory.GetFiles(dir).FirstOrDefault();
+            if (f != null)
+                return f;
+        }
+
+        return null;
+    }
+
+    // ---------------------------------------------------------------- download & extract
+
+    private bool DownloadIntoCache(string feedBase, string distribution, string version, string rid,
+                                   string tag, string expectedSha, string cacheRoot, out string cached)
+    {
+        cached = null;
+
+        string indexUrl = feedBase + "/pypi/" + distribution + "/" + version + "/json";
+        Log.LogMessage(MessageImportance.High,
+            "NumSharp.Interop.OpenBLAS: resolving {0} {1} for {2} from {3}",
+            distribution, version, rid, indexUrl);
+
+        using (var http = new HttpClient())
+        {
+            http.Timeout = TimeSpan.FromMinutes(5);
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("NumSharp.Interop.OpenBLAS-build");
+
+            string indexJson;
+            try
+            {
+                indexJson = http.GetStringAsync(indexUrl).GetAwaiter().GetResult();
+            }
+            catch (Exception e)
+            {
+                Log.LogError(
+                    "NumSharp.Interop.OpenBLAS: could not resolve {0}=={1} from {2}: {3}. A version " +
+                    "override is a hard requirement — the build fails rather than shipping a different " +
+                    "binary. (Offline? Prime the cache once, or point OpenBlasFeed at a mirror; see " +
+                    "docs/OPENBLAS_DELIVERY_DESIGN.md §10.5.)",
+                    distribution, version, indexUrl, FirstLine(e));
+                return false;
+            }
+
+            string wheelUrl = null, wheelSha = null, wheelName = null;
+            object indexRoot = MiniJson.Parse(indexJson);
+            var urls = (List<object>)((Dictionary<string, object>)indexRoot)["urls"];
+            var matches = new List<Dictionary<string, object>>();
+            foreach (object u in urls)
+            {
+                var file = (Dictionary<string, object>)u;
+                string name = (string)file["filename"];
+                // Compound platform tags ("…-manylinux2014_x86_64.manylinux_2_17_x86_64.whl")
+                // anchor on "-<tag>." exactly like fetch_openblas.py.
+                if (name.Contains("-" + tag + "."))
+                    matches.Add(file);
+            }
+
+            if (matches.Count != 1)
+            {
+                Log.LogError(
+                    "NumSharp.Interop.OpenBLAS: expected exactly one {0} {1} wheel for platform tag " +
+                    "'{2}', found {3}.", distribution, version, tag, matches.Count);
+                return false;
+            }
+
+            wheelUrl = (string)matches[0]["url"];
+            wheelSha = (string)((Dictionary<string, object>)matches[0]["digests"])["sha256"];
+            wheelName = (string)matches[0]["filename"];
+
+            // The wheel is TRANSIENT (design Goal 7): downloaded to a temp file, verified,
+            // extracted, deleted. Nothing wheel-shaped survives the build.
+            string wheelTemp = Path.GetTempFileName();
+            string libTemp = null;
+            try
+            {
+                Log.LogMessage(MessageImportance.High,
+                    "NumSharp.Interop.OpenBLAS: downloading {0}", wheelName);
+                using (var response = http.GetAsync(wheelUrl, HttpCompletionOption.ResponseHeadersRead)
+                                          .GetAwaiter().GetResult())
+                {
+                    response.EnsureSuccessStatusCode();
+                    using (var src = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult())
+                    using (var dst = File.Create(wheelTemp))
+                        src.CopyTo(dst);
+                }
+
+                string actualWheelSha = HashFile(wheelTemp);
+                if (!actualWheelSha.Equals(wheelSha, StringComparison.OrdinalIgnoreCase))
+                {
+                    Log.LogError(
+                        "NumSharp.Interop.OpenBLAS: CHECKSUM MISMATCH for {0}: expected {1}, got {2}. " +
+                        "The artifact changed under its URL — hard failure, never a warning.",
+                        wheelName, wheelSha, actualWheelSha);
+                    return false;
+                }
+
+                // The one shared library in a scipy-openblas wheel: prefer members under /lib/,
+                // take the LARGEST native file (the real library, not a stub) — exactly
+                // fetch_openblas.py's pick_native_member.
+                libTemp = Path.GetTempFileName();
+                string memberName;
+                // ZipArchive over a FileStream, NOT ZipFile.OpenRead: ZipFile lives in a different
+                // assembly per runtime and is not part of the factory's default references.
+                using (var wheelStream = File.OpenRead(wheelTemp))
+                using (var zip = new ZipArchive(wheelStream, ZipArchiveMode.Read))
+                {
+                    ZipArchiveEntry member = PickNativeMember(zip);
+                    if (member == null)
+                    {
+                        Log.LogError("NumSharp.Interop.OpenBLAS: no shared library found in {0}.", wheelName);
+                        return false;
+                    }
+
+                    memberName = member.FullName;
+                    using (var src = member.Open())
+                    using (var dst = File.Create(libTemp))
+                        src.CopyTo(dst);
+                }
+
+                string libSha = HashFile(libTemp);
+                if (expectedSha != null && !libSha.Equals(expectedSha, StringComparison.OrdinalIgnoreCase))
+                {
+                    Log.LogError(
+                        "NumSharp.Interop.OpenBLAS: CHECKSUM MISMATCH for the library extracted from {0} " +
+                        "(member {1}): expected {2}, got {3}.",
+                        wheelName, memberName, expectedSha, libSha);
+                    return false;
+                }
+
+                string cacheDir = Path.Combine(cacheRoot, libSha.ToLowerInvariant());
+                Directory.CreateDirectory(cacheDir);
+                cached = Path.Combine(cacheDir, Path.GetFileName(memberName.Replace('\\', '/')));
+                File.Copy(libTemp, cached, true);
+                Log.LogMessage(MessageImportance.High,
+                    "NumSharp.Interop.OpenBLAS: cached {0} (sha256 {1})", cached, libSha);
+                return true;
+            }
+            finally
+            {
+                TryDelete(wheelTemp);
+                if (libTemp != null)
+                    TryDelete(libTemp);
+            }
+        }
+    }
+
+    private static ZipArchiveEntry PickNativeMember(ZipArchive zip)
+    {
+        Func<ZipArchiveEntry, bool> isNative = e =>
+        {
+            string baseName = Path.GetFileName(e.FullName.Replace('\\', '/'));
+            if (string.IsNullOrEmpty(baseName) || baseName.StartsWith("."))
+                return false;
+            return baseName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+                   baseName.EndsWith(".so", StringComparison.OrdinalIgnoreCase) ||
+                   baseName.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase) ||
+                   baseName.Contains(".so.");
+        };
+
+        List<ZipArchiveEntry> candidates = zip.Entries
+            .Where(e => isNative(e) && e.FullName.Replace('\\', '/').Contains("/lib/"))
+            .ToList();
+        if (candidates.Count == 0)
+            candidates = zip.Entries.Where(isNative).ToList();
+
+        return candidates.OrderByDescending(e => e.Length).FirstOrDefault();
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    private void WriteMarker(string file, string mode, string distribution, string version,
+                             string sha256, bool required, string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(file));
+        var sb = new StringBuilder();
+        sb.Append("{\n");
+        sb.Append("  \"mode\": ").Append(MiniJson.Quote(mode));
+        if (distribution != null) sb.Append(",\n  \"distribution\": ").Append(MiniJson.Quote(distribution));
+        if (version != null) sb.Append(",\n  \"version\": ").Append(MiniJson.Quote(version));
+        if (sha256 != null) sb.Append(",\n  \"sha256\": ").Append(MiniJson.Quote(sha256.ToLowerInvariant()));
+        sb.Append(",\n  \"required\": ").Append(required ? "true" : "false");
+        if (path != null) sb.Append(",\n  \"path\": ").Append(MiniJson.Quote(path));
+        sb.Append("\n}\n");
+        File.WriteAllText(file, sb.ToString());
+
+        Log.LogMessage(MessageImportance.Normal,
+            "NumSharp.Interop.OpenBLAS: wrote source marker {0} (mode={1})", file, mode);
+    }
+
+    private Dictionary<string, object> LoadManifest()
+    {
+        if (string.IsNullOrEmpty(ManifestPath) || !File.Exists(ManifestPath))
+            throw new FileNotFoundException(
+                "openblas-manifest.json not found (looked at '" + ManifestPath + "') — it ships in the " +
+                "package's buildTransitive/ folder and is the shared RID -> wheel map.");
+        return (Dictionary<string, object>)MiniJson.Parse(File.ReadAllText(ManifestPath));
+    }
+
+    private static bool SamePath(string a, string b)
+    {
+        char[] seps = { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+        return string.Equals(Path.GetFullPath(a).TrimEnd(seps), Path.GetFullPath(b).TrimEnd(seps),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string HashFile(string file)
+    {
+        using (var sha = SHA256.Create())
+        using (var stream = File.OpenRead(file))
+            return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+    }
+
+    private static string FirstLine(Exception e)
+    {
+        string m = e.GetBaseException().Message;
+        int i = m.IndexOfAny(new[] { '\r', '\n' });
+        return i < 0 ? m : m.Substring(0, i);
+    }
+
+    private static void TryDelete(string file)
+    {
+        try
+        {
+            File.Delete(file);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    /// <summary>
+    /// A minimal JSON reader/writer covering exactly what this task consumes (the checked-in
+    /// manifest and PyPI's version JSON: objects, arrays, strings with escapes, numbers, bools,
+    /// null) — System.Text.Json is not part of RoslynCodeTaskFactory's netstandard2.0 reference
+    /// set, and a fixed simple-name Reference does not resolve on the dotnet-sdk MSBuild.
+    /// Objects parse to Dictionary&lt;string,object&gt;, arrays to List&lt;object&gt;, numbers to
+    /// double, and unknown escapes fail loudly (this parses PINS — leniency here would be a
+    /// verification hole).
+    /// </summary>
+    private static class MiniJson
+    {
+        public static object Parse(string s)
+        {
+            int i = 0;
+            object v = ParseValue(s, ref i);
+            SkipWs(s, ref i);
+            if (i != s.Length)
+                throw new InvalidDataException("trailing characters in JSON at position " + i);
+            return v;
+        }
+
+        public static string Quote(string s)
+        {
+            var sb = new StringBuilder(s.Length + 2);
+            sb.Append('"');
+            foreach (char c in s)
+            {
+                if (c == '"' || c == '\\') sb.Append('\\').Append(c);
+                else if (c == '\n') sb.Append("\\n");
+                else if (c == '\r') sb.Append("\\r");
+                else if (c == '\t') sb.Append("\\t");
+                else if (c < ' ') sb.Append("\\u").Append(((int)c).ToString("x4"));
+                else sb.Append(c);
+            }
+            sb.Append('"');
+            return sb.ToString();
+        }
+
+        private static void SkipWs(string s, ref int i)
+        {
+            while (i < s.Length && (s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n'))
+                i++;
+        }
+
+        private static object ParseValue(string s, ref int i)
+        {
+            SkipWs(s, ref i);
+            if (i >= s.Length)
+                throw new InvalidDataException("unexpected end of JSON");
+            char c = s[i];
+            if (c == '{') return ParseObject(s, ref i);
+            if (c == '[') return ParseArray(s, ref i);
+            if (c == '"') return ParseString(s, ref i);
+            if (c == 't') { Expect(s, ref i, "true"); return true; }
+            if (c == 'f') { Expect(s, ref i, "false"); return false; }
+            if (c == 'n') { Expect(s, ref i, "null"); return null; }
+            return ParseNumber(s, ref i);
+        }
+
+        private static Dictionary<string, object> ParseObject(string s, ref int i)
+        {
+            var d = new Dictionary<string, object>();
+            i++; // '{'
+            SkipWs(s, ref i);
+            if (i < s.Length && s[i] == '}') { i++; return d; }
+            while (true)
+            {
+                SkipWs(s, ref i);
+                string key = ParseString(s, ref i);
+                SkipWs(s, ref i);
+                if (i >= s.Length || s[i] != ':')
+                    throw new InvalidDataException("expected ':' in JSON object at position " + i);
+                i++;
+                d[key] = ParseValue(s, ref i);
+                SkipWs(s, ref i);
+                if (i >= s.Length)
+                    throw new InvalidDataException("unterminated JSON object");
+                if (s[i] == ',') { i++; continue; }
+                if (s[i] == '}') { i++; return d; }
+                throw new InvalidDataException("expected ',' or '}' in JSON object at position " + i);
+            }
+        }
+
+        private static List<object> ParseArray(string s, ref int i)
+        {
+            var l = new List<object>();
+            i++; // '['
+            SkipWs(s, ref i);
+            if (i < s.Length && s[i] == ']') { i++; return l; }
+            while (true)
+            {
+                l.Add(ParseValue(s, ref i));
+                SkipWs(s, ref i);
+                if (i >= s.Length)
+                    throw new InvalidDataException("unterminated JSON array");
+                if (s[i] == ',') { i++; continue; }
+                if (s[i] == ']') { i++; return l; }
+                throw new InvalidDataException("expected ',' or ']' in JSON array at position " + i);
+            }
+        }
+
+        private static string ParseString(string s, ref int i)
+        {
+            if (s[i] != '"')
+                throw new InvalidDataException("expected string in JSON at position " + i);
+            i++;
+            var sb = new StringBuilder();
+            while (true)
+            {
+                if (i >= s.Length)
+                    throw new InvalidDataException("unterminated JSON string");
+                char c = s[i++];
+                if (c == '"')
+                    return sb.ToString();
+                if (c != '\\') { sb.Append(c); continue; }
+                if (i >= s.Length)
+                    throw new InvalidDataException("unterminated JSON escape");
+                char e = s[i++];
+                switch (e)
+                {
+                    case '"': sb.Append('"'); break;
+                    case '\\': sb.Append('\\'); break;
+                    case '/': sb.Append('/'); break;
+                    case 'b': sb.Append('\b'); break;
+                    case 'f': sb.Append('\f'); break;
+                    case 'n': sb.Append('\n'); break;
+                    case 'r': sb.Append('\r'); break;
+                    case 't': sb.Append('\t'); break;
+                    case 'u':
+                        if (i + 4 > s.Length)
+                            throw new InvalidDataException("truncated \\u escape");
+                        sb.Append((char)Convert.ToInt32(s.Substring(i, 4), 16));
+                        i += 4;
+                        break;
+                    default:
+                        throw new InvalidDataException("unknown JSON escape '\\" + e + "'");
+                }
+            }
+        }
+
+        private static object ParseNumber(string s, ref int i)
+        {
+            int start = i;
+            while (i < s.Length && (char.IsDigit(s[i]) || s[i] == '-' || s[i] == '+' ||
+                                    s[i] == '.' || s[i] == 'e' || s[i] == 'E'))
+                i++;
+            if (i == start)
+                throw new InvalidDataException("invalid JSON value at position " + i);
+            return double.Parse(s.Substring(start, i - start),
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static void Expect(string s, ref int i, string token)
+        {
+            if (i + token.Length > s.Length || s.Substring(i, token.Length) != token)
+                throw new InvalidDataException("invalid JSON literal at position " + i);
+            i += token.Length;
+        }
+    }
+}
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+</Project>

@@ -39,6 +39,27 @@
     <None Include="THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" Condition="Exists('THIRD-PARTY-NOTICES.txt')" />
   </ItemGroup>
 
+  <!-- ==================================================================================
+       BUILD-phase override delivery (docs/OPENBLAS_DELIVERY_DESIGN.md §5–§7).
+
+       buildTransitive/ flows to every consumer, direct OR transitive — that is what lets a
+       package that merely depends on this one offer the identical <OpenBlasVersion> /
+       <OpenBlasPath> override experience to ITS consumers (§6). The manifest is packed
+       BESIDE the targets because it is the shared extraction contract (§5.4): the inline
+       build task must read the exact same RID → distribution/wheel map the maintainer's
+       fetch_openblas.py used, or the "same binary" invariant is a coincidence.
+       tools/openblas-manifest.json stays the single checked-in source; this is a pack-time
+       copy, not a second pin.
+       ================================================================================== -->
+  <ItemGroup>
+    <None Include="buildTransitive/NumSharp.Interop.OpenBLAS.props" Pack="true"
+          PackagePath="buildTransitive/NumSharp.Interop.OpenBLAS.props" />
+    <None Include="buildTransitive/NumSharp.Interop.OpenBLAS.targets" Pack="true"
+          PackagePath="buildTransitive/NumSharp.Interop.OpenBLAS.targets" />
+    <None Include="tools/openblas-manifest.json" Pack="true"
+          PackagePath="buildTransitive/openblas-manifest.json" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- In-repo: ProjectReference (packs as a NuGet dependency on "NumSharp" $(Version)). -->
     <ProjectReference Include="../NumSharp.Core/NumSharp.Core.csproj" />
