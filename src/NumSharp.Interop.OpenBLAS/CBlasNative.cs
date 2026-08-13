@@ -381,12 +381,30 @@ namespace NumSharp.Interop.OpenBLAS
                     foreach (var p in Expand(dir))
                         yield return p;
 
+            // Additive user location(s) from NUMSHARP_OPENBLAS_PATH — tried after the bundled
+            // parity asset and before the ambient scan. NON-binding, unlike NUMSHARP_PARITY_BLAS.
+            foreach (var p in UserPathCandidates())
+                yield return p;
+
             foreach (var dir in PythonLibDirectories())
                 foreach (var p in Expand(dir))
                     yield return p;
 
-            // Bare names — resolved by the platform loader search path.
+            // Machine-wide OpenBLAS placed by an OS package manager or a source build. These builds
+            // are NOT byte-parity with NumPy, so they sit BELOW the bundled asset and the numpy.libs
+            // wheels: a correct, fast BLAS, not a bit-identical one.
+            foreach (var dir in SystemBlasDirectories())
+                foreach (var p in Expand(dir))
+                    yield return p;
+
+            // Bare names — resolved by the platform loader search path. Both scipy distributions
+            // are covered: the ILP64 build (scipy-openblas64, "…64_") and its LP64 sibling
+            // (scipy-openblas32, plain "scipy_openblas" / "libscipy_openblas" — the only build for
+            // 32-bit x86, and the one NumPy itself ships on win-arm64). 64 first so a parity host
+            // that has both prefers the ILP64 build NumPy uses.
             yield return "libscipy_openblas64_";
+            yield return "libscipy_openblas";
+            yield return "scipy_openblas";
             yield return "libopenblas64_";
             yield return "libopenblas";
             yield return "openblas";
@@ -604,6 +622,96 @@ namespace NumSharp.Interop.OpenBLAS
 
                 foreach (var pyDir in pyDirs)
                     yield return Path.Combine(pyDir, "site-packages", "numpy.libs");
+            }
+        }
+
+        /// <summary>
+        ///     Explicit, ADDITIVE discovery location(s) from <c>NUMSHARP_OPENBLAS_PATH</c> — one or
+        ///     more files or directories (separated by the platform path separator) scanned IN
+        ///     ADDITION to the other candidates, not instead of them.
+        /// </summary>
+        /// <remarks>
+        ///     The non-binding sibling of <c>NUMSHARP_PARITY_BLAS</c>. That one is BINDING — when set,
+        ///     ONLY it is tried and a failure is fatal, because it is how a caller pins the ONE
+        ///     specific binary a parity claim is about. This one is the opposite contract: "also look
+        ///     here", tried after the bundled parity asset and before the ambient system scan, and
+        ///     silently skipped when it holds no BLAS. Use it to point discovery at a local build or
+        ///     an unpacked release without suppressing the bundled default.
+        /// </remarks>
+        private static IEnumerable<string> UserPathCandidates()
+        {
+            var v = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_PATH");
+            if (string.IsNullOrWhiteSpace(v))
+                yield break;
+
+            foreach (var entry in v.Split(Path.PathSeparator))
+                foreach (var p in Expand(entry))
+                    yield return p;
+        }
+
+        /// <summary>
+        ///     Conventional install directories of the OpenBLAS builds documented at
+        ///     openmathlib.org/OpenBLAS/docs/install — the OS package managers (apt/dnf/pacman/zypper,
+        ///     Homebrew/MacPorts, conda-forge, vcpkg, FreeBSD ports) and the source-build default
+        ///     prefix.
+        /// </summary>
+        /// <remarks>
+        ///     Scanned so a machine-wide OpenBLAS (<c>apt install libopenblas0</c>,
+        ///     <c>brew install openblas</c>, …) is found even when it is not on the loader's default
+        ///     search path or carries a versioned soname (<c>libopenblas.so.0</c>) the bare names
+        ///     below do not match. <b>None of these is byte-parity with NumPy</b> — a different
+        ///     compiler and configuration — so this tier is LAST before the bare names, below the
+        ///     bundled asset and the numpy.libs wheels: it yields a correct, fast BLAS, not a
+        ///     bit-identical one. The install page gives package-manager names but no literal paths,
+        ///     so these are each manager's conventional prefix; the env markers (<c>OPENBLAS_HOME</c>,
+        ///     <c>VCPKG_ROOT</c>, <c>CONDA_PREFIX</c>) are honoured because that is where those
+        ///     managers place their trees.
+        /// </remarks>
+        private static IEnumerable<string> SystemBlasDirectories()
+        {
+            // Explicit roots first — set by a source build's PREFIX or by a caller who means them.
+            foreach (var key in new[] { "OPENBLAS_HOME", "OPENBLAS_ROOT", "OpenBLAS_HOME", "OpenBLAS_ROOT" })
+            {
+                var v = Environment.GetEnvironmentVariable(key);
+                if (string.IsNullOrWhiteSpace(v))
+                    continue;
+                yield return v;
+                yield return Path.Combine(v, "lib");
+                yield return Path.Combine(v, "bin");
+            }
+
+            var conda = Environment.GetEnvironmentVariable("CONDA_PREFIX");
+            if (!string.IsNullOrWhiteSpace(conda))
+            {
+                yield return Path.Combine(conda, "lib");              // posix conda
+                yield return Path.Combine(conda, "Library", "bin");   // windows conda
+                yield return Path.Combine(conda, "Library", "lib");
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                var vcpkg = Environment.GetEnvironmentVariable("VCPKG_ROOT");
+                if (!string.IsNullOrWhiteSpace(vcpkg))
+                    foreach (var triplet in new[] { "x64-windows", "arm64-windows", "x86-windows" })
+                        yield return Path.Combine(vcpkg, "installed", triplet, "bin");
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                yield return "/opt/homebrew/opt/openblas/lib";  // apple-silicon brew keg
+                yield return "/usr/local/opt/openblas/lib";     // intel brew keg
+                yield return "/opt/homebrew/lib";
+                yield return "/usr/local/lib";
+                yield return "/opt/local/lib";                  // macports
+            }
+            else
+            {
+                yield return "/usr/lib/x86_64-linux-gnu";       // debian/ubuntu multiarch
+                yield return "/usr/lib/aarch64-linux-gnu";
+                yield return "/usr/lib64";                      // fedora/rhel/suse
+                yield return "/usr/lib";
+                yield return "/usr/local/lib";                  // source install / freebsd
+                yield return "/usr/local/lib64";
+                yield return "/opt/OpenBLAS/lib";               // OpenBLAS `make PREFIX=/opt/OpenBLAS`
             }
         }
 

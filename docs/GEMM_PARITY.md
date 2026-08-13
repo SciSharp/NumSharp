@@ -75,8 +75,10 @@ Blas.Info;                                               // path + symbol scheme
 Blas.Disable();                                          // back to NumSharp's managed SIMD GEMM
 ```
 
-Discovery order: explicit path/directory → `NUMSHARP_PARITY_BLAS` → the `numpy.libs` folder of any
-python on `PATH` (plus `VIRTUAL_ENV` / `CONDA_PREFIX` / `PYTHONHOME`) → bare loader names.
+Discovery order (this is the initial cut; the current full order — the bundled asset,
+`NUMSHARP_OPENBLAS_PATH` and the system scan — is in §6.1): explicit path/directory →
+`NUMSHARP_PARITY_BLAS` → the `numpy.libs` folder of any python on `PATH`
+(plus `VIRTUAL_ENV` / `CONDA_PREFIX` / `PYTHONHOME`) → bare loader names.
 NumPy's wheels rename their symbols `scipy_cblas_sgemm64_`-style and use **64-bit BLAS integers**;
 a stock LP64 `cblas_sgemm` is also bound, with the integer width marshalled per call
 (`CBlasNative.IsIlp64`).
@@ -289,12 +291,36 @@ requirement is now *stronger* than before: the corpus host pin compares the load
 |---|---|---|
 | 1 | explicit path / `NUMSHARP_PARITY_BLAS` | **binding** — never substituted, not even by the bundled copy |
 | 2 | **bundled `runtimes/<rid>/native/`** | `NUMSHARP_BLAS_BUNDLED=0` drops it |
-| 3 | `numpy.libs` of any python on `PATH` | plus `VIRTUAL_ENV` / `CONDA_PREFIX` / `PYTHONHOME` |
-| 4 | bare loader names | `libopenblas`, `libblas`, … |
+| 3 | `NUMSHARP_OPENBLAS_PATH` | **additive** file(s)/dir(s) — "also look here", non-binding (the opposite of row 1) |
+| 4 | `numpy.libs` of any python on `PATH` | plus `VIRTUAL_ENV` / `CONDA_PREFIX` / `PYTHONHOME` |
+| 5 | machine-wide OpenBLAS (apt / brew / MacPorts / conda / vcpkg / source) | **not** byte-parity with NumPy — a different build — so it ranks below the parity sources; honours `OPENBLAS_HOME` / `VCPKG_ROOT` / `CONDA_PREFIX` |
+| 6 | bare loader names | `libscipy_openblas64_`, `libscipy_openblas`, `scipy_openblas`, `libopenblas`, `libblas`, … |
 
 Bundled beats a discovered `numpy.libs` **on purpose**: a library's numeric output must not change
 because an unrelated `pip install` ran, and an app with no python must not get a different backend
 from one that has it. Matching some *other* numpy stays possible and is now an explicit act (name it).
+
+##### Discovery widened: additive path + system scan (2026-08-13)
+
+Two tiers were inserted between "bundled" and "bare names" (rows 3 and 5 above), and neither can
+disturb parity: both rank *below* the bundled asset and `numpy.libs`, and the binding row 1 still
+bypasses discovery entirely. Confirmed by 30/30 `MatmulParityBackendTests` green after the change.
+
+- **`NUMSHARP_OPENBLAS_PATH` (row 3)** — the additive, non-binding sibling of `NUMSHARP_PARITY_BLAS`.
+  Point it at a local build or an unpacked release to *add* a search location without displacing the
+  bundled default; to *force* one specific binary, `NUMSHARP_PARITY_BLAS` remains the binding knob.
+- **System scan (row 5)** — the conventional install prefixes of the package managers OpenBLAS's own
+  install docs list: apt multiarch (`/usr/lib/<triplet>`), a Homebrew keg
+  (`/opt/homebrew/opt/openblas/lib`), MacPorts, a conda tree's `lib` / `Library\bin`, a vcpkg
+  triplet's `bin`, the `make PREFIX=/opt/OpenBLAS` default, `/usr/lib64` — plus the `OPENBLAS_HOME` /
+  `OPENBLAS_ROOT` / `VCPKG_ROOT` / `CONDA_PREFIX` roots. It finds a machine-wide OpenBLAS the bare
+  names miss (a versioned soname like `libopenblas.so.0`, or a lib off the default loader path), but
+  it is **not** NumPy-parity, so it is the last resort before bare names.
+
+Both scipy distributions bind: **scipy-openblas64** (ILP64, `scipy_cblas_*64_`) and
+**scipy-openblas32** (LP64, plain `scipy_cblas_*`). The bare-name list gained the 32-bit spellings
+(`libscipy_openblas`, `scipy_openblas`) alongside the 64-bit ones — and since scipy-openblas32 is the
+only build PyPI publishes for 32-bit x86 (`win32` / `i686`), a 32-bit target can only be served by it.
 
 RIDs: `win-x64`, `win-arm64`, `linux-{x64,arm64,musl-x64,musl-arm64}`, `osx-{x64,arm64}` — 62 MB
 packed. Binaries are gitignored; `tools/openblas-manifest.json` is the checked-in pin and
