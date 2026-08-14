@@ -15,8 +15,8 @@ what is ported, extending the seam, performance and troubleshooting.
 [From zero to identical bits](#from-zero-to-identical-bits) ·
 [The bundled binary](#the-bundled-binary) ·
 [Three knobs decide the bits](#three-knobs-decide-the-bits) · [The API](#the-api) ·
-[Where the library comes from](#where-the-library-comes-from) ·
-[Build-time override](#overriding-the-version-at-build-time) · [How it computes](#how-it-computes) ·
+[Delivering the binary](#delivering-the-binary) ·
+[Where the library comes from](#where-the-library-comes-from) · [How it computes](#how-it-computes) ·
 [Writing your own backend](#writing-your-own-backend) · [Performance](#performance) ·
 [Environment](#environment) · [Troubleshooting](#troubleshooting) · [Claims](#claims-ledger)
 
@@ -222,10 +222,225 @@ fully functional — it only skips the module-load call.
 
 ---
 
+## Delivering the binary
+
+Getting a binary onto disk and choosing which one to bind are two separate phases, and keeping
+them apart is the whole delivery design (specified in [`OPENBLAS_DELIVERY_DESIGN.md`][delivery]):
+
+| Phase | Runs in | Decides | Network |
+|---|---|---|---|
+| **Build** (MSBuild targets shipped in the nupkg) | the consumer's `dotnet build` / `publish` / `pack` | which native library lands in the output's `runtimes/<rid>/native/` (or in a nupkg) — plus a **source marker** recording where it came from | only for a version override |
+| **Runtime** (the module initializer) | the app process, at assembly load | which on-disk library to load and wire as the backend | **never** |
+
+So every delivery method is a way of arranging what the runtime will find. There are five,
+quickest first — then a subsection each.
+
+**1 · The bundle — reference the package, done.** The NumPy-pinned binary ships inside the nupkg
+and auto-installs at load. Nothing to configure:
+
+```bash
+dotnet add package NumSharp.Interop.OpenBLAS
+```
+
+**2 · Pin a different version — build-time, enforced.** The build downloads that scipy-openblas
+release from PyPI, verifies it twice and stages it over the bundle. The pin is a contract — a
+build that cannot satisfy it fails, a runtime that cannot load it throws:
+
+```xml
+<PackageReference Include="NumSharp.Interop.OpenBLAS" Version="0.60.0">
+  <OpenBlasVersion>0.3.34.106.0</OpenBlasVersion>
+</PackageReference>
+```
+
+```bash
+NUMSHARP_OPENBLAS_VERSION=0.3.34.106.0 dotnet build   # same thing — env beats metadata
+```
+
+**3 · Read from a directory you manage — build-time, soft.** No download, no enforcement: "look
+here first", fall through when it holds no BLAS:
+
+```xml
+<PackageReference Include="NumSharp.Interop.OpenBLAS" Version="0.60.0">
+  <OpenBlasPath>native/openblas</OpenBlasPath>   <!-- relative resolves against the project -->
+</PackageReference>
+```
+
+**4 · Deliver through your own package.** A package that merely *depends* on this one passes the
+whole experience through — its consumers put the same metadata on *their* reference to *your*
+package — and it can bake a pinned version into its own nupkg so they download nothing:
+
+```xml
+<!-- a consumer of MyPackage (which depends on NumSharp.Interop.OpenBLAS): -->
+<PackageReference Include="MyPackage" Version="1.0.0">
+  <OpenBlasVersion>0.3.34.106.0</OpenBlasVersion>       <!-- honoured as if direct -->
+</PackageReference>
+
+<!-- or in MyPackage.csproj itself — bakes all 8 RIDs into MyPackage.nupkg: -->
+<PackageReference Include="NumSharp.Interop.OpenBLAS" Version="0.60.0">
+  <OpenBlasVersion>0.3.34.106.0</OpenBlasVersion>
+  <OpenBlasDelivery>package</OpenBlasDelivery>
+</PackageReference>
+```
+
+**5 · Name or point at a library at runtime.** No build involvement at all — an explicit path is
+**binding** (used as given or the call throws, never substituted), the env path is **priority
+but non-binding**:
+
+```csharp
+Blas.Enable(@"…\site-packages\numpy.libs\libscipy_openblas64_-<hash>.dll");  // binding
+```
+
+```bash
+NUMSHARP_PARITY_BLAS=/opt/blas/libopenblas.so ./app   # binding — the env spelling of the same
+NUMSHARP_OPENBLAS_PATH=/opt/myblas ./app              # tried before the bundle, falls through
+```
+
+Which one you want:
+
+| You want | Use | Guarantee |
+|---|---|---|
+| NumPy-identical bits, zero config | the bundle (1) | parity with numpy 2.4.2 by default |
+| a newer / different scipy-openblas, guaranteed | version override (2) | **hard-required** — build fails / runtime throws rather than substituting |
+| your own build or a vendored copy | path override (3), or `NUMSHARP_OPENBLAS_PATH` (5) | soft — wins when present, falls through when not |
+| the same knobs for consumers of *your* package | transitive metadata (4) | identical to a direct reference |
+| a self-contained nupkg, no downloads for consumers | `OpenBlasDelivery=package` (4) | NuGet nearest-wins beats the transitive bundle |
+| exactly this one file, or fail | `Blas.Enable(path)` / `NUMSHARP_PARITY_BLAS` (5) | **binding** — never silently replaced |
+
+When several are present at once, [the discovery order](#where-the-library-comes-from) decides;
+`NumSharpOpenBlasEnabled=false` (MSBuild property) switches the entire build-side machinery off.
+
+### 1 · The bundle
+
+What the binary *is* — provenance, RIDs, symbol schemes, licensing — is
+[The bundled binary](#the-bundled-binary) above; this is how it travels. The nupkg carries all
+8 RIDs as `runtimes/<rid>/native/` assets and NuGet resolves them per machine: a plain
+`dotnet build` gets the host RID's library copied beside the output, a portable publish carries
+the full `runtimes/` tree, and a RID-specific publish flattens the one matching binary next to
+the app. At load, the module initializer finds it (discovery tier 4) and installs the backend.
+If the asset is absent — an unsupported RID, `NUMSHARP_BLAS_BUNDLED=0`, an asset-free source
+build — discovery simply continues to machine tooling and, failing that, NumSharp's managed
+kernels. `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0` skips the automatic install while leaving
+`Blas.Enable()` fully functional.
+
+<sub>See here [`BundledLibrary_ForThisRid_ReachesTheBuildOutput`][gate-backend], [`AutoDiscovery_PrefersTheBundledLibrary`][gate-backend], [`BundledLibrary_CanBeOptedOutOf`][gate-backend]</sub>
+
+### 2 · Version override (build-time, enforced)
+
+The full knob surface — metadata on the `PackageReference`, each with an environment twin that
+**beats** it:
+
+| Metadata | Env (wins) | Meaning | Default |
+|---|---|---|---|
+| `OpenBlasVersion` | `NUMSHARP_OPENBLAS_VERSION` | scipy-openblas version to fetch from PyPI — **enforced** | — (the bundle) |
+| `OpenBlasPath` | `NUMSHARP_OPENBLAS_PATH` | directory to **read from** — and **download to** when a version is also set | — |
+| `OpenBlasDistribution` | `NUMSHARP_OPENBLAS_DISTRIBUTION` | `scipy-openblas64` \| `scipy-openblas32` (`64`/`32` aliases) | per-RID from the manifest |
+| `OpenBlasFeed` | `NUMSHARP_OPENBLAS_FEED` | PyPI JSON base (mirror hook); a non-pypi.org feed **requires** an explicit sha | `pypi.org` |
+| `OpenBlasSha256` | `NUMSHARP_OPENBLAS_SHA256` | expected extracted-library hash | the manifest pin, for the default version |
+| `OpenBlasDelivery` | `NUMSHARP_OPENBLAS_DELIVERY` | `none` \| `build` \| `package` — see subsection 4 below | `build` |
+
+What a version-mode build does, step by step: resolve the knobs (env > metadata) → query the
+PyPI JSON index (`<feed>/pypi/<distribution>/<version>/json`) → pick the wheel by this RID's
+platform tag, read from the packed manifest so the RID map is *literally* the maintainer
+script's (the "same binary" invariant) → download the wheel to a temp file → verify the wheel's
+sha256 against the index → extract the one native library member → verify the extracted
+library's sha256 (an explicit `OpenBlasSha256`, or the manifest pin when version and
+distribution equal the default) → store it in the per-user cache → **delete the wheel** → copy
+it over the bundle in the output → write the `openblas.source.json` marker that makes the
+folder a *required* override (discovery tier 3).
+
+Enforcement runs in both phases. At build, any failure — network, hash mismatch, no wheel for
+the RID — **fails the build**; at runtime, a marker-declared override that cannot load
+**throws** `BlasRequiredOverrideException` rather than falling back (at module load: one stderr
+line, backend left uninstalled — never substituted). Silently running with different bits is
+the one failure a pin exists to prevent.
+
+The cache (`%LOCALAPPDATA%\NumSharp\openblas` on Windows, `$XDG_CACHE_HOME/NumSharp/openblas`
+or `~/.cache/NumSharp/openblas` elsewhere) holds **extracted libraries only**, keyed
+`(distribution, version, rid, sha256)`. Repeated and offline builds serve from it once primed,
+and it **self-heals**: every hit re-verifies the entry's content hash, a truncated or tampered
+entry is discarded and re-downloaded, and writes go through temp-file + rename so a killed or
+racing build cannot strand garbage under the hash's name. Offline with an unprimed cache, a
+version override fails loudly by design — prime it with one online build, or point
+`OpenBlasFeed` at a mirror (which then requires an explicit `OpenBlasSha256`).
+
+Three edge rules: among multiple references carrying a version the **highest wins** (logged); a
+version on one reference against a bare path on another is a **hard error**; and the default
+path costs nothing — with no override set, the resolve step is a cheap item scan, the download
+task is never even compiled, and no network is touched.
+
+The whole build side is exercised end-to-end against the real packed nupkg by
+[`verify_build_override.sh`][gate-build] — 15 scripted steps including the adversarial half: a
+tampered artifact fails the build with a checksum mismatch, a mirror without an explicit sha is
+refused before any network, an invalid `OpenBlasDelivery` value names the valid set, a poisoned
+cache entry is discarded and re-downloaded, and a two-reference version-vs-path conflict is a
+hard error.
+
+<sub>See here [`VersionMarker_IsHardRequired_NeverFallsThroughToTheBundle`][gate-delivery], [`VersionMarker_WithMismatchedSha_RefusesTheFile`][gate-delivery], [`BundleAutoinstall_OnARequiredOverrideMiss_IsLoudButDoesNotThrow`][gate-delivery], [`verify_build_override.sh`][gate-build]</sub>
+
+### 3 · Path override (build-time, soft)
+
+`OpenBlasPath` alone is "read tooling from here": the build records the directory in a
+`mode: "path"` source marker, and at runtime it is probed ahead of the bundle (tier 2) and
+silently skipped when it holds no loadable BLAS. A path is a *location*, not a contract — no
+version enforcement, no hard failure. A relative path resolves against the project directory.
+Combined with a version (`OpenBlasVersion` **and** `OpenBlasPath`), the pin is downloaded
+*into* that directory instead of the default output folder — the directory then doubles as
+cache and read location, and the hard-required semantics of method 2 apply.
+
+<sub>See here [`PathMarker_BindsItsDirectory_WhenItHoldsALibrary`][gate-delivery], [`PathMarker_IsNonBinding_FallsThroughToTheBundle`][gate-delivery]</sub>
+
+### 4 · Transitive and package-author delivery
+
+The machinery ships in the nupkg's `buildTransitive/` folder, which NuGet flows to **direct and
+transitive** consumers alike — the targets run in the final app's build even when the reference
+chain is `App → MyPackage → NumSharp.Interop.OpenBLAS`, and they scan **every**
+`PackageReference` for the `OpenBlas*` metadata, not just this package's. That is the whole
+trick behind method 4's first form: metadata on the intermediate reference delivers exactly as
+a direct one would.
+
+`OpenBlasDelivery` tunes what a reference's metadata does:
+
+| `OpenBlasDelivery` | Effect |
+|---|---|
+| `none` | ignore the OpenBLAS metadata on this reference entirely |
+| `build` (default) | stage into the consuming app's output only |
+| `package` | ALSO pack the staged assets into **this project's** nupkg — for package authors |
+
+`package` stages **all** manifest RIDs plus their source markers as `runtimes/<rid>/native/`
+pack content, and NuGet's nearest-wins rule makes the dependent's copy beat this package's
+transitive bundle. Two boundaries: it contradicts a bare `OpenBlasPath` (the combination is
+rejected), and it is **not** needed merely to expose the *default* version — the bundle already
+flows transitively for free. `package` is for a dependent that wants a *different, pinned*
+version baked into its own nupkg — which is also what keeps every dependent nupkg from gaining
+62 MB by default.
+
+<sub>See here [`verify_build_override.sh`][gate-build] — the transitive, two-reference-conflict and `delivery=package` steps</sub>
+
+### 5 · Runtime-only: naming and pointing
+
+The two runtime knobs need no build participation, and they differ in exactly one property:
+
+- **Binding** — `Blas.Enable(path)` or `NUMSHARP_PARITY_BLAS`. The named file (or directory) is
+  used as given and **never substituted**, not even by the bundled copy sitting in the output;
+  a file that cannot load or is not a CBLAS throws, having changed nothing. This is the parity
+  tool: matching a *specific* NumPy means naming *its* library.
+- **Priority, non-binding** — `NUMSHARP_OPENBLAS_PATH`, one or more files/directories
+  (path-separator delimited). Probed ahead of the bundle, skipped without a word when it holds
+  no BLAS — the right knob for "prefer my local build where present".
+
+Below both sits ambient machine tooling (discovery tiers 5–7: system install prefixes, bare
+loader names, a PATH sweep) — less a delivery method you choose than what discovery finds when
+you chose none and the bundle is absent or opted out. It is a correct, fast BLAS; it is **not**
+byte-parity with NumPy.
+
+<sub>See here [`NamedLibrary_IsBinding_NeverSilentlySubstituted`][gate-backend], [`NamedLibrary_OutranksTheBundledOne_AndAMissingOneDoesNotFallBackToIt`][gate-backend], [`OverridePathEnv_OutranksTheVersionMarker`][gate-delivery]</sub>
+
+---
+
 ## Where the library comes from
 
-Discovery is a fixed, documented order — the first tier that yields a loadable library wins
-(specified in [`OPENBLAS_DELIVERY_DESIGN.md`][delivery]):
+Whatever combination of methods delivered binaries, runtime discovery resolves them in one
+fixed, documented order — the first tier that yields a loadable library wins:
 
 | # | Source | Notes |
 |---|---|---|
@@ -244,11 +459,8 @@ binary at the pinned version, so results stay a property of the package version 
 whichever python happens to be installed — a library's numeric output must not change because an
 unrelated `pip install` ran. (A conda or system *OpenBLAS* is still machine tooling, tier 5; a
 *numpy* is not.) To match a NumPy whose OpenBLAS differs from the bundle, name it — binding — or
-point `NUMSHARP_OPENBLAS_PATH` at it to take priority while keeping the fallback:
-
-```csharp
-Blas.Enable(@"…\site-packages\numpy.libs\libscipy_openblas64_-<hash>.dll");
-```
+point `NUMSHARP_OPENBLAS_PATH` at it to take priority while keeping the fallback
+([method 5](#delivering-the-binary) above).
 
 **The source marker is what tells an override from the bundle.** A build-staged version override
 lands in the *same* `runtimes/<rid>/native/` layout as the bundle — and the delivery model's
@@ -259,71 +471,7 @@ required override that cannot load **throws rather than substituting** — at mo
 goes to stderr and the backend stays uninstalled (never silently replaced); an explicit
 `Blas.Enable()` raises the full `BlasRequiredOverrideException`.
 
-<sub>See here [`AutoDiscovery_PrefersTheBundledLibrary`][gate-delivery], [`VersionMarker_IsHardRequired_NeverFallsThroughToTheBundle`][gate-delivery], [`NumpyLibs_DiscoveryTier_IsDeleted`][gate-delivery]</sub>
-
----
-
-## Overriding the version at build time
-
-The override is configured **on the `PackageReference`** — no second package:
-
-```xml
-<PackageReference Include="NumSharp.Interop.OpenBLAS" Version="0.60.0">
-  <OpenBlasVersion>0.3.31.22.0</OpenBlasVersion>            <!-- scipy-openblas version, enforced -->
-  <!-- optional: read-from / download-to directory (relative resolves against the project) -->
-  <!-- <OpenBlasPath>native/openblas</OpenBlasPath> -->
-</PackageReference>
-```
-
-At build, the pinned scipy-openblas wheel is fetched from PyPI, verified twice (the wheel's sha256
-from the index, then the extracted library's), the one native library is extracted into a global
-per-user cache, staged over the bundle in the output, and the `openblas.source.json` marker is
-written so the runtime treats the folder as a *required* override (discovery tier 3). **A version
-override is a hard requirement**: a build that cannot download or verify it **fails**, and a
-runtime that cannot load it **throws** — never a silent fallback to different bits, because
-silently running with different bits is the one failure a pin exists to prevent.
-
-| Metadata | Env (wins) | Meaning | Default |
-|---|---|---|---|
-| `OpenBlasVersion` | `NUMSHARP_OPENBLAS_VERSION` | scipy-openblas version to fetch from PyPI — **enforced** | — (the bundle) |
-| `OpenBlasPath` | `NUMSHARP_OPENBLAS_PATH` | directory to **read from** — and **download to** when a version is also set; alone (no version) it is the soft "look here" form, non-binding | — |
-| `OpenBlasDistribution` | `NUMSHARP_OPENBLAS_DISTRIBUTION` | `scipy-openblas64` \| `scipy-openblas32` (`64`/`32` aliases) | per-RID from the manifest |
-| `OpenBlasFeed` | `NUMSHARP_OPENBLAS_FEED` | PyPI JSON base (mirror hook); a non-pypi.org feed **requires** an explicit sha | `pypi.org` |
-| `OpenBlasSha256` | `NUMSHARP_OPENBLAS_SHA256` | expected extracted-library hash | the manifest pin, for the default version |
-| `OpenBlasDelivery` | `NUMSHARP_OPENBLAS_DELIVERY` | `none` \| `build` \| `package` | `build` |
-
-The moving parts, briefly:
-
-- **Environment beats metadata** for every knob; among multiple references carrying a version, the
-  highest wins (logged), and a version-vs-bare-path conflict across references is a hard error.
-- **The cache** (`%LOCALAPPDATA%\NumSharp\openblas` on Windows, `$XDG_CACHE_HOME/NumSharp/openblas`
-  or `~/.cache/NumSharp/openblas` elsewhere) holds **extracted libraries only** — the wheel is deleted after extraction — keyed by
-  `(distribution, version, rid, sha256)`. Repeated and offline builds serve from it, and it
-  **self-heals**: every hit re-verifies the entry's content hash, and a truncated or tampered entry
-  is discarded and re-downloaded; writes are temp-file + rename, so a killed or racing build cannot
-  strand garbage under the hash's name.
-- **The default path costs nothing**: with no version/path set, the resolve step is a cheap item
-  scan, the download task is never even compiled, and no network is touched. Runtime never touches
-  the network at all — all fetching is a build concern.
-- **Transitive by design**: the machinery ships in `buildTransitive/`, which NuGet flows to direct
-  *and* transitive consumers — so a package that merely *depends* on this one gives its consumers
-  the identical override experience; the targets read the `OpenBlas*` metadata off **any**
-  `PackageReference`, including one pointing at the intermediate package.
-- **`OpenBlasDelivery=package`** lets a package author bake a pinned version into *their own*
-  nupkg: it stages **all** supported RIDs plus their markers as `runtimes/<rid>/native/` pack
-  content, and NuGet's nearest-wins rule makes that copy beat this package's transitive bundle.
-  `none` opts a reference out; `build` (the default) stages into the consuming app's output only.
-- **`NumSharpOpenBlasEnabled=false`** (MSBuild property) switches the entire build-side machinery
-  off.
-
-The whole flow is exercised end-to-end against the real packed nupkg by
-[`verify_build_override.sh`][gate-build] — 15 scripted steps including the adversarial half:
-a tampered artifact fails the build with a checksum mismatch, a mirror without an explicit sha is
-refused before any network, an invalid `OpenBlasDelivery` value names the valid set, a poisoned
-cache entry is discarded and re-downloaded, and a two-reference version-vs-path conflict is a hard
-error.
-
-<sub>See here [`verify_build_override.sh`][gate-build], [`VersionMarker_WithMismatchedSha_RefusesTheFile`][gate-delivery], [`BundleAutoinstall_OnARequiredOverrideMiss_IsLoudButDoesNotThrow`][gate-delivery]</sub>
+<sub>See here [`AutoDiscovery_PrefersTheBundledLibrary`][gate-backend], [`VersionMarker_IsHardRequired_NeverFallsThroughToTheBundle`][gate-delivery], [`NumpyLibs_DiscoveryTier_IsDeleted`][gate-delivery]</sub>
 
 ---
 
