@@ -85,7 +85,15 @@ namespace NumSharp.Backends.Kernels
         /// <summary>Test element-wise for NaN</summary>
         IsNan,
         /// <summary>Test element-wise for positive or negative infinity</summary>
-        IsInf
+        IsInf,
+
+        /// <summary>
+        /// Complex conjugate (np.conjugate / np.conj). Identity at every real dtype
+        /// (bool/int/char/half/single/double/decimal) — the loaded value IS the result — and
+        /// flips the sign of the imaginary part for Complex (via <c>System.Numerics.Complex.Conjugate</c>).
+        /// Dtype is preserved (never promoted), matching NumPy's per-dtype conjugate loops.
+        /// </summary>
+        Conjugate
     }
 
     /// <summary>

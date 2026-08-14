@@ -547,6 +547,9 @@ namespace NumSharp.Backends.Kernels
             // Complex unary operator methods
             public static readonly MethodInfo ComplexNegate = typeof(System.Numerics.Complex).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_UnaryNegation");
+            // np.conjugate: Complex.Conjugate(z) flips the sign of the imaginary part (re - i*im).
+            public static readonly MethodInfo ComplexConjugate = typeof(System.Numerics.Complex).GetMethod("Conjugate", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Conjugate");
             // Sqrt/Exp/Sin/Cos/Tan route through NDComplexMath (not Complex.* directly): the BCL
             // matches NumPy on finite interiors but diverges at the C99 edges (non-finite, branch-cut
             // signs, signed zeros). NDComplexMath delegates the interior to the BCL and adds the fixups.

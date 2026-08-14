@@ -53,10 +53,11 @@ namespace NumSharp.Backends
             {
                 outputType = typeCode.Value;
             }
-            else if (op == UnaryOp.Negate || op == UnaryOp.Abs || op == UnaryOp.LogicalNot)
+            else if (op == UnaryOp.Negate || op == UnaryOp.Abs || op == UnaryOp.LogicalNot || op == UnaryOp.Conjugate)
             {
                 // Arithmetic/logical operations preserve type
                 // LogicalNot on boolean returns boolean
+                // Conjugate preserves dtype (identity on reals, imag-flip on Complex) — NumPy parity
                 outputType = inputType;
             }
             else

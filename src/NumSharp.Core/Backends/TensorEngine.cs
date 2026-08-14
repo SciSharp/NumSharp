@@ -92,6 +92,13 @@ namespace NumSharp
         /// </summary>
         public abstract NDArray Positive(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
+        /// <summary>
+        ///     NumPy 'conjugate' / 'conj' — the complex conjugate, element-wise. Identity at every
+        ///     real dtype (values unchanged, dtype preserved); for Complex it flips the sign of the
+        ///     imaginary part. typeCode selects the loop; out=/where= follow the ufunc contract.
+        /// </summary>
+        public abstract NDArray Conjugate(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+
         public abstract NDArray Dot(NDArray x, NDArray y);
         public abstract NDArray Matmul(NDArray lhs, NDArray rhs);
 

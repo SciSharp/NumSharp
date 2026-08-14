@@ -37,6 +37,12 @@ namespace NumSharp.Backends.Kernels
             // copy). The loaded value already IS the result: emit nothing.
             if (op == UnaryOp.Positive)
                 return;
+            // np.conjugate is IDENTITY for every real dtype (bool/int/char/half/single/double/decimal):
+            // the loaded value already IS the result, so emit nothing. Only the Complex loop does work
+            // (routed to EmitUnaryComplexOperation below). Placed before the Decimal/Complex/Half
+            // redirects so Decimal/Half take the identity here rather than their op-switch default throw.
+            if (op == UnaryOp.Conjugate && type != NPTypeCode.Complex)
+                return;
             if ((op == UnaryOp.Floor || op == UnaryOp.Ceil || op == UnaryOp.Truncate || op == UnaryOp.Round) &&
                 (type == NPTypeCode.Boolean || type.IsInteger()))
                 return;

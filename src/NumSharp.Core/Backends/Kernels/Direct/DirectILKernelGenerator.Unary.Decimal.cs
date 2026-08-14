@@ -221,6 +221,11 @@ namespace NumSharp.Backends.Kernels
                     il.EmitCall(OpCodes.Call, CachedMethods.ComplexNegate, null);
                     break;
 
+                case UnaryOp.Conjugate:
+                    // np.conjugate(complex128): flip the sign of the imaginary part.
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexConjugate, null);
+                    break;
+
                 case UnaryOp.Sqrt:
                     il.EmitCall(OpCodes.Call, CachedMethods.ComplexSqrt, null);
                     break;
