@@ -667,10 +667,10 @@ namespace NumSharp.Interop.UnitTests
 
         /// <summary>
         ///     The modes table: `Auto` falls back to a copy, `View` declines, `Copy` detaches and
-        ///     never locks — and `Decimal` encode falls through to CLR wrapping in every mode.
+        ///     never locks — and `Decimal` encode converts to a float64 numpy array in every mode.
         /// </summary>
         [TestMethod]
-        public void Codec_Modes_AutoViewCopy_AndTheDecimalFallback()
+        public void Codec_Modes_AutoViewCopy_AndTheDecimalConversion()
         {
             var auto = new NumpyCodec(new NumpyCodecOptions { DecodeMode = NumpyCodecMode.Auto });
             var viewOnly = new NumpyCodec(new NumpyCodecOptions { DecodeMode = NumpyCodecMode.View });
@@ -703,18 +703,21 @@ namespace NumSharp.Interop.UnitTests
             PyExec("cb.append(1)");   // never locked at all
             snap.Dispose();
 
-            // Decimal encode: CLR wrapping instead of failure — in the instance codec and end to end.
+            // Decimal encode: converts to a float64 numpy array — in the instance codec and end to end.
             using (Gil())
             {
-                auto.TryEncode(np.arange(3).astype(NPTypeCode.Decimal))
-                    .Should().BeNull("no numpy dtype exists — pythonnet's CLR wrapping takes over");
+                using PyObject enc = auto.TryEncode(np.arange(3).astype(NPTypeCode.Decimal));
+                enc.Should().NotBeNull("Decimal encodes as float64 — no numpy decimal dtype exists");
+                Scope.Set("dcm", enc);
             }
+            PyStr("dcm.dtype").Should().Be("float64");
 
             NDArrayPythonInterop.RegisterCodec();
             var dec = np.arange(3).astype(NPTypeCode.Decimal);
             using (Gil())
                 Scope.Set("dput", dec);
-            PyStr("type(dput).__name__").Should().Be("NDArray", "the object still crosses, as a wrapped CLR NDArray");
+            PyStr("type(dput).__name__").Should().Be("ndarray", "the codec crosses Decimal as a float64 numpy array");
+            PyStr("dput.dtype").Should().Be("float64");
         }
 
         // ============================  ## The GIL  ===============================================

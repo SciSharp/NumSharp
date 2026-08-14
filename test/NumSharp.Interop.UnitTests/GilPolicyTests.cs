@@ -404,13 +404,19 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
-        public void DtypeGate_FiresBeforeAnyGilDecision()
+        public void NullSourceGate_FiresBeforeAnyGilDecision()
         {
-            // The Decimal gate throws before AcquireGil runs, so it must behave identically on a
-            // GIL-free thread with management off — no Python work, no GIL requirement.
+            // An argument gate that fires BEFORE AcquireGil must behave identically on a GIL-free thread
+            // with management off — no Python work, no GIL requirement. A null source is such a gate.
+            // (Decimal is no longer one: ToNumpy converts it to float64, which needs the GIL like any
+            // export — so the raw-bytes ToMemoryView, whose dtype gate DOES still refuse Decimal before
+            // its GIL, is the Decimal-specific early gate instead.)
+            Action nullExport = () => NDArrayPythonInterop.ToNumpy(null, requireGIL: false);
+            nullExport.Should().Throw<ArgumentNullException>();
+
             var dec = np.arange(3).astype(NPTypeCode.Decimal);
-            Action export = () => dec.ToNumpy(requireGIL: false);
-            export.Should().Throw<NotSupportedException>().WithMessage("*decimal has no numpy dtype*");
+            Action decimalMemoryView = () => NDArrayPythonInterop.ToMemoryView(dec, requireGIL: false);
+            decimalMemoryView.Should().Throw<NotSupportedException>().WithMessage("*no PEP 3118 format*");
         }
 
         [TestMethod]

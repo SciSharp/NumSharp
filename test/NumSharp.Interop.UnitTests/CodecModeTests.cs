@@ -196,11 +196,13 @@ namespace NumSharp.Interop.UnitTests
                 using var ct = Scope.Eval("__import__('ctypes').c_int * 4");   // the TYPE itself
                 Auto.CanDecode(new PyType(ct), typeof(NDArray)).Should().BeTrue("any buffer exporter must decode");
 
-                foreach (string nonBuffer in new[] { "dict", "int", "str", "list", "float" })
+                // Non-buffer objects that are ALSO not array-like builtins never decode. (int/list/float
+                // ARE array-like, so they decode by default now — see ArrayLike_CanDecode_OnByDefault_*.)
+                foreach (string nonBuffer in new[] { "dict", "str", "range" })
                 {
                     using var t = Scope.Eval(nonBuffer);
                     Auto.CanDecode(new PyType(t), typeof(NDArray)).Should().BeFalse(
-                        $"{nonBuffer} exports no buffer — acceptance must not widen past real exporters");
+                        $"{nonBuffer} is neither a buffer exporter nor an array-like builtin");
                 }
             }
         }
@@ -222,27 +224,28 @@ namespace NumSharp.Interop.UnitTests
             nd.Dispose();
         }
 
-        // ---- decode: array-like opt-in (DecodeArrayLike) -------------------------------------------
+        // ---- decode: array-like (DecodeArrayLike, ON by default) -----------------------------------
 
         private static readonly NumpyCodec ArrayLike = new(new NumpyCodecOptions { DecodeArrayLike = true });
+        private static readonly NumpyCodec NoArrayLike = new(new NumpyCodecOptions { DecodeArrayLike = false });
 
         [TestMethod]
-        public void ArrayLike_CanDecode_GatesArrayLikeBuiltins_OnlyWhenOptedIn()
+        public void ArrayLike_CanDecode_OnByDefault_ExplicitOffDeclines()
         {
             using (Gil())
             {
                 foreach (string t in new[] { "list", "tuple", "int", "float", "bool", "complex" })
                 {
                     using var ty = Scope.Eval(t);
-                    ArrayLike.CanDecode(new PyType(ty), typeof(NDArray)).Should().BeTrue($"{t} is array-like");
-                    Auto.CanDecode(new PyType(ty), typeof(NDArray)).Should().BeFalse(
-                        $"{t} is refused by the default codec — array-like decode is opt-in");
+                    Auto.CanDecode(new PyType(ty), typeof(NDArray)).Should().BeTrue($"{t} is array-like and decodes by default");
+                    NoArrayLike.CanDecode(new PyType(ty), typeof(NDArray)).Should().BeFalse(
+                        $"{t} is declined when DecodeArrayLike is turned off");
                 }
 
                 foreach (string t in new[] { "dict", "str", "range" })
                 {
                     using var ty = Scope.Eval(t);
-                    ArrayLike.CanDecode(new PyType(ty), typeof(NDArray)).Should().BeFalse(
+                    Auto.CanDecode(new PyType(ty), typeof(NDArray)).Should().BeFalse(
                         $"{t} is deliberately not treated as array-like");
                 }
             }
@@ -272,14 +275,20 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
-        public void ArrayLike_Decode_Default_Declines_NonBuffer_NonArrayLike()
+        public void ArrayLike_Decode_DefaultOn_OffDeclines_DictAlwaysDeclines()
         {
-            // The DEFAULT codec (DecodeArrayLike off) never touches a non-buffer object — a list is declined.
-            Decode(Auto, "[1, 2, 3]", out bool okAuto).Should().BeNull();
-            okAuto.Should().BeFalse("the default codec does not decode array-likes");
+            // The DEFAULT codec now decodes a list...
+            NDArray def = Decode(Auto, "[1, 2, 3]", out bool okAuto);
+            okAuto.Should().BeTrue("array-like decode is on by default");
+            def.ToString().Should().Be("[1 2 3]");
+            def.Dispose();
 
-            // Even opted in, a dict has no NumSharp dtype and is declined (never throws into the pipeline).
-            Decode(ArrayLike, "{'a': 1}", out bool okDict).Should().BeNull();
+            // ...while an explicitly-OFF codec declines it (no buffer, and array-like decode disabled).
+            Decode(NoArrayLike, "[1, 2, 3]", out bool okOff).Should().BeNull();
+            okOff.Should().BeFalse("a list is declined when DecodeArrayLike is off");
+
+            // A dict has no NumSharp dtype and is declined in any codec (never throws into the pipeline).
+            Decode(Auto, "{'a': 1}", out bool okDict).Should().BeNull();
             okDict.Should().BeFalse("a dict is not materializable into a numeric NDArray");
         }
 
@@ -316,15 +325,20 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
-        public void Auto_Encode_Decimal_FallsBackToClrWrap()
+        public void Auto_Encode_Decimal_ConvertsToFloat64()
         {
-            // Decimal has no numpy dtype — neither a view NOR a copy can express it, so even Auto
-            // returns null (pythonnet then CLR-wraps the NDArray).
+            // Decimal has no numpy dtype, so the array-producing verbs convert it to float64 — the astype
+            // guidance, automated — rather than CLR-wrapping. TryEncode therefore returns a real numpy array.
             var dec = np.arange(3).astype(NPTypeCode.Decimal);
             using (Gil())
             {
-                Auto.TryEncode(dec).Should().BeNull("no numpy dtype exists for decimal in any mode");
+                using PyObject p = Auto.TryEncode(dec);
+                p.Should().NotBeNull("Decimal now encodes as a float64 numpy array");
+                Scope.Set("dec_enc", p);
             }
+
+            PyStr("dec_enc.dtype").Should().Be("float64");
+            PyBool("np.array_equal(dec_enc, [0.0, 1.0, 2.0])").Should().BeTrue("values preserved through the float64 conversion");
         }
     }
 }

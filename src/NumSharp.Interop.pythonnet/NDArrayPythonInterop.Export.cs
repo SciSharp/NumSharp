@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using Python.Runtime;
 
@@ -43,7 +44,16 @@ namespace NumSharp.Interop.PythonNet
             PythonRuntimeInterop.EnsureEngine();
             PythonRuntimeInterop.DrainPending();
 
-            _ = ToNumpyDtypeStr(source.typecode);   // dtype gate — throws for Decimal before any Python work
+            // Decimal has no numpy dtype (16-byte, non-IEEE) so no zero-copy view is possible; convert it
+            // to float64 — a real numeric numpy array, the exact conversion this interop's own guidance
+            // recommends (astype(NPTypeCode.Double)) and that Python's float(Decimal(...)) performs (lossy
+            // beyond ~16 significant digits). The low-level maps (ToNumpyDtypeStr / ToBufferFormat /
+            // ToMemoryView) stay honest and still refuse Decimal — there is no decimal dtype; only these
+            // array-producing verbs convert.
+            if (source.typecode == NPTypeCode.Decimal)
+                source = source.astype(NPTypeCode.Double);
+
+            _ = ToNumpyDtypeStr(source.typecode);   // dtype gate (Decimal already converted above)
 
             using (AcquireGil(requireGIL))
             {
@@ -121,7 +131,16 @@ namespace NumSharp.Interop.PythonNet
             PythonRuntimeInterop.EnsureEngine();
             PythonRuntimeInterop.DrainPending();
 
-            _ = ToNumpyDtypeStr(source.typecode);   // dtype gate — throws for Decimal before any Python work
+            // Decimal has no numpy dtype (16-byte, non-IEEE) so no zero-copy view is possible; convert it
+            // to float64 — a real numeric numpy array, the exact conversion this interop's own guidance
+            // recommends (astype(NPTypeCode.Double)) and that Python's float(Decimal(...)) performs (lossy
+            // beyond ~16 significant digits). The low-level maps (ToNumpyDtypeStr / ToBufferFormat /
+            // ToMemoryView) stay honest and still refuse Decimal — there is no decimal dtype; only these
+            // array-producing verbs convert.
+            if (source.typecode == NPTypeCode.Decimal)
+                source = source.astype(NPTypeCode.Double);
+
+            _ = ToNumpyDtypeStr(source.typecode);   // dtype gate (Decimal already converted above)
 
             using (AcquireGil(requireGIL))
             {

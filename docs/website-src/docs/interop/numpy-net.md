@@ -170,8 +170,9 @@ NumSharp b["1:3, ::2"] -> their shape (2, 3), sum() = 66
 **Yes — the numpy dtype is the NumSharp dtype's exact mapping, both ways.** Outbound, a wrapped
 array reports the numpy name (`Double` → `float64`, `Single` → `float32`, `Int32` → `int32`,
 `Int64` → `int64`, `Byte` → `uint8`, `Boolean` → `bool`); inbound, `their.astype(np2.int32)`
-arrives as `NPTypeCode.Int32` with values intact. `Decimal` is the one dtype with no numpy
-representation — it cannot be wrapped (see [the dtype table](pythonnet-numpy.md#dtypes)).
+arrives as `NPTypeCode.Int32` with values intact. `Decimal` is the one dtype with no numpy dtype, so
+`ToNumpy` converts it to `float64` (lossy beyond ~16 digits) rather than refusing — it still wraps,
+just as a `float64` array (see [the dtype table](pythonnet-numpy.md#dtypes)).
 
 <sub>See here [`Dtypes_ArriveExact_BothWays`][gate]</sub>
 

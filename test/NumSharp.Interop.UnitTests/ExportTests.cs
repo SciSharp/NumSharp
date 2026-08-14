@@ -67,11 +67,19 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
-        public void Decimal_HasNoNumpyDtype_Throws()
+        public void Decimal_ConvertsToFloat64_OnExport()
         {
+            // Decimal has no numpy dtype, so the array-producing verbs (ToNumpy / ToNumpyCopy) convert it
+            // to float64 — the astype(Double) guidance, automated — rather than refusing. The low-level
+            // maps still refuse it honestly (ToNumpyDtypeStr / ToBufferFormat / ToMemoryView throw).
             var dec = np.arange(3).astype(NPTypeCode.Decimal);
-            ((Action)(() => NDArrayPythonInterop.ToNumpy(dec)))
-                .Should().Throw<NotSupportedException>().WithMessage("*decimal*astype*");
+            ExportTo("dd", dec);
+            PyStr("dd.dtype").Should().Be("float64", "Decimal exports as a float64 numpy array");
+            PyBool("np.array_equal(dd, [0.0, 1.0, 2.0])").Should().BeTrue();
+
+            // the raw-bytes memoryview still refuses Decimal — there is no PEP 3118 format for it.
+            ((Action)(() => { using (Gil()) { using var _ = NDArrayPythonInterop.ToMemoryView(dec); } }))
+                .Should().Throw<NotSupportedException>().WithMessage("*no PEP 3118 format*");
         }
 
         [TestMethod]

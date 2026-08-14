@@ -412,16 +412,16 @@ impossible.** `NumpyCodecOptions` sets one of three modes per direction:
 | `View` | view or **decline** — never a silent copy | view |
 | `Copy` | always an independent snapshot; never locks the source | always a copy |
 
-Read-only sources decode as non-writeable views under `Auto`/`View`. `Decimal` has no numpy dtype
-in any mode: encoding falls back to pythonnet's CLR-object wrapping instead of failing, so the
-object still crosses — as a wrapped `NDArray`, not a numpy array:
+Read-only sources decode as non-writeable views under `Auto`/`View`. `Decimal` has no numpy dtype,
+so encoding **converts it to a float64 numpy array** (the `astype(NPTypeCode.Double)` guidance,
+automated — lossy beyond ~16 significant digits) rather than refusing, in every mode:
 
 ```text
-scope.Set("d", decimalArray)  ->  type(d).__name__ == 'NDArray'
+scope.Set("d", decimalArray)  ->  d.dtype == float64
 View-mode TryDecode: complex64 -> False (declined), float64 -> True (view)
 ```
 
-<sub>See here [`Codec_Modes_AutoViewCopy_AndTheDecimalFallback`][gate]</sub>
+<sub>See here [`Codec_Modes_AutoViewCopy_AndTheDecimalConversion`][gate]</sub>
 
 ---
 
@@ -472,7 +472,7 @@ Fourteen of NumSharp's fifteen dtypes cross, and the maps are public
 | `Half` / `Single` / `Double` | `<f2` / `<f4` / `<f8` | `e` / `f` / `d` | `float16` / `float32` / `float64` |
 | `Complex` | `<c16` | `Zd` | `complex128` |
 | `Char` | `<u2` | `H` | `uint16` — a C# `char` is a UTF-16 code unit; numpy has no char dtype |
-| `Decimal` | *throws* | *throws* | — 16 bytes, non-IEEE; `astype(NPTypeCode.Double)` first |
+| `Decimal` | *throws* | *throws* | 16 bytes, non-IEEE; the maps refuse honestly, but `ToNumpy`/`ToNumpyCopy` auto-convert it to `float64` |
 
 Four element types deserve their fine print, all four handled by conversion rather than
 misrepresentation:
@@ -575,7 +575,7 @@ import route works uniformly across pythonnet 3.0.x.
 | 17 | Shutdown drains imports and sweeps orphaned exports | post-shutdown counters at zero, no crash | [`OrphanExport_HeldOnlyByPython_AwaitsTheShutdownSweep`][gate-shutdown], [`OrphanImport_StillReferencedByCSharp_AwaitsTheShutdownDrain`][gate-shutdown] |
 | 18 | The registered codec converts at every boundary, as views | `type(c) == ndarray`; writes cross both ways | [`Codec_RegisterOnce_ThenSetAndAsJustWork`][gate] |
 | 19 | A pre-registration decode poisons that type pair for the session | verbatim `InvalidCastException`; fresh pairs still work | [`Codec_RegisterBeforeFirstConversion_OrThePairIsPoisoned`][gate] |
-| 20 | Modes: `Auto` falls back, `View` declines, `Copy` detaches; `Decimal` CLR-wraps | `TryDecode` outcomes; `type(d) == 'NDArray'` | [`Codec_Modes_AutoViewCopy_AndTheDecimalFallback`][gate] |
+| 20 | Modes: `Auto` falls back, `View` declines, `Copy` detaches; `Decimal` → float64 | `TryDecode` outcomes; `d.dtype == float64` | [`Codec_Modes_AutoViewCopy_AndTheDecimalConversion`][gate] |
 | 21 | One GIL acquisition can host many conversions | hot loop under a single `Py.GIL()` | [`Gil_OneAcquisitionManyConversions`][gate] |
 | 22 | Python → .NET callback bodies do not hold the GIL | `PyGILState_Check() == 0` inside the body | [`PythonToNetCallbackBody_DoesNotHoldTheGil_SoTheOptOutIsWrongThere`][gate-gil] |
 | 23 | Every dtype row maps as printed; the four specials convert or refuse | round-trips + verbatim errors | [`Dtypes_EveryRowRoundTrips`][gate] |

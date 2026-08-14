@@ -198,7 +198,9 @@ namespace NumSharp.Interop.UnitTests
         {
             int e0 = NDArrayPythonInterop.LiveExports, i0 = NDArrayPythonInterop.LiveImports;
 
-            ((Action)(() => NDArrayPythonInterop.ToNumpy(np.arange(3).astype(NPTypeCode.Decimal))))
+            // Decimal has no PEP 3118 format, so the raw-bytes memoryview export refuses it (ToNumpy no
+            // longer does — it converts Decimal to float64; ToMemoryView stays honest about the missing format).
+            ((Action)(() => { using (Gil()) { using var _ = NDArrayPythonInterop.ToMemoryView(np.arange(3).astype(NPTypeCode.Decimal)); } }))
                 .Should().Throw<NotSupportedException>();
             ((Action)(() => ViewOf("b'abcd'")))
                 .Should().Throw<InvalidOperationException>();

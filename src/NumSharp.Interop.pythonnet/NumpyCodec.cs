@@ -93,20 +93,22 @@ namespace NumSharp.Interop.PythonNet
         public bool DecodeAnyBuffer { get; init; } = true;
 
         /// <summary>
-        ///     <c>false</c> (default): only PEP 3118 buffer exporters decode to <see cref="NDArray"/>.
-        ///     <c>true</c>: additionally decode everyday array-like Python objects that export NO buffer —
-        ///     a <c>list</c>, <c>tuple</c>, nested sequence, or a Python scalar
-        ///     (<c>int</c>/<c>float</c>/<c>bool</c>/<c>complex</c>) — by materializing them through
-        ///     <c>numpy.asarray</c> (<see cref="NDArrayPythonInterop.FromArrayLike"/>).
+        ///     <c>true</c> (default): besides PEP 3118 buffer exporters, everyday array-like Python objects
+        ///     that export NO buffer — a <c>list</c>, <c>tuple</c>, nested sequence, or a Python scalar
+        ///     (<c>int</c>/<c>float</c>/<c>bool</c>/<c>complex</c>) — also decode to <see cref="NDArray"/>,
+        ///     materialized through <c>numpy.asarray</c> (<see cref="NDArrayPythonInterop.FromArrayLike"/>),
+        ///     so a numpy call or plain Python code that hands back a list crosses without a manual
+        ///     conversion. <c>false</c>: only buffer exporters decode.
         /// </summary>
         /// <remarks>
-        ///     Off by default because it changes two contracts: the decode path becomes numpy-DEPENDENT
-        ///     (the buffer path is numpy-agnostic), and an array-like decode is ALWAYS an independent copy
-        ///     regardless of <see cref="DecodeMode"/> — a <c>list</c> has no shared memory to view. It
-        ///     deliberately covers only the array-like builtins numpy can express as a numeric ndarray;
-        ///     <c>str</c> (a char sequence), <c>dict</c>, and <c>range</c> are not accepted.
+        ///     Two consequences worth knowing (both benign, neither a reason to turn it off in practice):
+        ///     an array-like decode makes that ONE conversion numpy-dependent (the buffer path stays
+        ///     numpy-agnostic — and numpy is already required for every encode), and it is ALWAYS an
+        ///     independent copy regardless of <see cref="DecodeMode"/> (a <c>list</c> has no shared memory
+        ///     to view). It deliberately covers only the array-like builtins numpy can express as a numeric
+        ///     ndarray; <c>str</c> (a char sequence), <c>dict</c>, and <c>range</c> are not accepted.
         /// </remarks>
-        public bool DecodeArrayLike { get; init; } = false;
+        public bool DecodeArrayLike { get; init; } = true;
     }
 
     /// <summary>
@@ -150,16 +152,17 @@ namespace NumSharp.Interop.PythonNet
                     case NumpyCodecMode.View:
                         return NDArrayPythonInterop.ToNumpy(nd);
                     default: // Auto: view-first, copy-fallback. On encode both need a numpy dtype, so the
-                             // fallback is a no-op today (Decimal fails both); kept for a uniform contract
-                             // and any future dtype-coverage divergence between the two paths.
+                             // fallback is a no-op today (every dtype encodes — Decimal converts to
+                             // float64); kept for a uniform contract and any future dtype divergence.
                         try { return NDArrayPythonInterop.ToNumpy(nd); }
                         catch (NotSupportedException) { return NDArrayPythonInterop.ToNumpyCopy(nd); }
                 }
             }
             catch (NotSupportedException)
             {
-                // No numpy dtype (Decimal) in ANY mode: let pythonnet wrap the NDArray as a plain CLR
-                // object, which is still fully usable from Python through the CLR binding.
+                // Defensive: every NumSharp dtype now encodes (Decimal converts to float64 in ToNumpy),
+                // so this is unreachable today. Should a future dtype have no numpy expression at all, we
+                // let pythonnet wrap the NDArray as a plain CLR object, still usable from Python.
                 return null;
             }
         }
@@ -219,10 +222,13 @@ namespace NumSharp.Interop.PythonNet
                 _                    => TryDecodeView(pyObj) ?? TryDecodeCopy(pyObj),   // Auto
             };
 
-            // Array-like fallback (opt-in): a non-buffer list/tuple/scalar reaches here with nd == null
-            // because the buffer routes above all decline it. It always materializes as a copy — there is
-            // no shared memory to view — so it runs after, and independent of, the view/copy mode above.
-            if (nd is null && _options.DecodeArrayLike)
+            // Array-like fallback: a non-buffer list/tuple/scalar reaches here with nd == null because the
+            // buffer routes above all decline it. It always materializes as a copy — there is no shared
+            // memory to view — so it runs after, and independent of, the view/copy mode above. It is gated
+            // on the object being a genuine array-like BUILTIN (IsArrayLikeObject): a numpy array is NEVER
+            // rescued here, so a complex64/big-endian source that the view path declines still declines in
+            // View mode instead of being silently copied through numpy.asarray.
+            if (nd is null && _options.DecodeArrayLike && IsArrayLikeObject(pyObj))
                 nd = TryDecodeArrayLike(pyObj);
 
             if (nd is null)
@@ -270,6 +276,19 @@ namespace NumSharp.Interop.PythonNet
         /// </summary>
         private static bool IsArrayLikeBuiltin(string name)
             => name == "list" || name == "tuple" || name == "int" || name == "float" || name == "bool" || name == "complex";
+
+        /// <summary>
+        ///     True when <paramref name="obj"/>'s Python type is one of the array-like builtins
+        ///     (<see cref="IsArrayLikeBuiltin"/>). Gates the array-like decode fallback in
+        ///     <see cref="TryDecode{T}"/> so it fires ONLY for genuine non-buffer containers — a numpy
+        ///     array (or any buffer exporter) the view/copy paths declined is never rescued by
+        ///     <c>numpy.asarray</c>. Call under the GIL.
+        /// </summary>
+        private static bool IsArrayLikeObject(PyObject obj)
+        {
+            using PyObject type = obj.GetPythonType();
+            return IsArrayLikeBuiltin(new PyType(type).Name);
+        }
 
         /// <summary>Walks <c>__mro__</c> so numpy.matrix / numpy.memmap / user ndarray subclasses decode too.</summary>
         private static bool IsNdarraySubclass(PyType objectType)

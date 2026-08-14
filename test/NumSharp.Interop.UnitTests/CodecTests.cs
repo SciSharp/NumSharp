@@ -119,7 +119,7 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
-        public void Encode_Decimal_FallsBackToClrWrapping_InsteadOfFailing()
+        public void Encode_Decimal_ConvertsToFloat64()
         {
             EnsureCodec();
             var dec = np.arange(3).astype(NPTypeCode.Decimal);
@@ -127,8 +127,10 @@ namespace NumSharp.Interop.UnitTests
             using (Gil())
                 Scope.Set("dauto", dec);
 
-            PyStr("type(dauto).__name__").Should().Be("NDArray",
-                "no numpy dtype exists for decimal, so pythonnet's CLR-object wrapping must take over");
+            PyStr("type(dauto).__name__").Should().Be("ndarray",
+                "Decimal has no numpy dtype, so the codec encodes it as a float64 numpy array (astype guidance, automated)");
+            PyStr("dauto.dtype").Should().Be("float64");
+            PyBool("np.array_equal(dauto, [0.0, 1.0, 2.0])").Should().BeTrue();
         }
     }
 }
