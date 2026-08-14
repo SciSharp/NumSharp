@@ -62,7 +62,7 @@ Exception, the same basis on which NumPy and SciPy ship it in every wheel).
 
 (The delivery/discovery model is specified in `docs/OPENBLAS_DELIVERY_DESIGN.md`.)
 
-1. An explicit path, or `NUMSHARP_PARITY_BLAS` — **binding**, never substituted.
+1. An explicit path, or `NUMSHARP_OPENBLAS_PARITY` — **binding**, never substituted.
 2. Override path(s): `NUMSHARP_OPENBLAS_PATH` — one or more files/directories (path-separator
    delimited) — then a build-recorded `OpenBlasPath` (a `mode: "path"` entry in the
    `openblas.source.json` source marker). Non-binding: they take priority when they hold a loadable
@@ -72,21 +72,24 @@ Exception, the same basis on which NumPy and SciPy ship it in every wheel).
    **hard-required**: a miss throws `BlasRequiredOverrideException` rather than falling through
    (the pin is a contract, and quietly substituting the bundle or a system BLAS would break it
    invisibly). When the marker pins a sha256, only a file hashing to it is loaded.
-4. **The bundled asset** — the zero-config parity default.
-5. A machine-wide OpenBLAS from an OS package manager or a source build — apt multiarch, a Homebrew
-   keg, MacPorts, a conda tree, a vcpkg triplet, `/opt/OpenBLAS`, `/usr/lib64` … honouring
-   `OPENBLAS_HOME` / `VCPKG_ROOT` / `CONDA_PREFIX`. **Not** byte-parity with NumPy (a different
+4. An explicit OpenBLAS root — `OPENBLAS_HOME` / `OPENBLAS_ROOT` (OpenBLAS' own convention). A
+   deliberate "use the OpenBLAS installed here" signal, so it **outranks the bundle**. **Not**
+   byte-parity with NumPy, so setting it trades parity-by-default for the named build.
+5. **The bundled asset** — the zero-config parity default.
+6. A machine-wide OpenBLAS from an OS package manager or a source build — apt multiarch, a Homebrew
+   keg, MacPorts, a conda tree, a vcpkg triplet, `/opt/OpenBLAS`, `/usr/lib64` … honouring the
+   *ambient* `VCPKG_ROOT` / `CONDA_PREFIX`. **Not** byte-parity with NumPy (a different
    compiler and build), so it ranks below the parity sources: a correct, fast BLAS, not a bit-identical one.
-6. Bare loader names (`libscipy_openblas64_`, `libscipy_openblas`, `scipy_openblas`, `libopenblas`,
+7. Bare loader names (`libscipy_openblas64_`, `libscipy_openblas`, `scipy_openblas`, `libopenblas`,
    `libblas`, …).
-7. Every directory on `PATH`, swept for a BLAS under a non-standard name — the broadest, **last-resort**
+8. Every directory on `PATH`, swept for a BLAS under a non-standard name — the broadest, **last-resort**
    scan, reached only if nothing above binds.
 
 A pip-installed numpy's own `numpy.libs/` is deliberately **never scanned** (tier removed
 2026-08-13): the bundled asset already *is* that binary at the pinned version, so results stay a
 property of the package version rather than of whichever python happens to be installed — a
 library's numeric output should not change because an unrelated `pip install` ran. (A conda/system
-*OpenBLAS* is still machine tooling, tier 5; a *numpy* is not.) **To match a NumPy whose OpenBLAS
+*OpenBLAS* is still machine tooling, tier 6; a *numpy* is not.) **To match a NumPy whose OpenBLAS
 differs from the bundled one, name it** (binding, all-or-nothing) — **or point
 `NUMSHARP_OPENBLAS_PATH` at it** to take priority over the bundled default while still falling back
 to it if the path holds no BLAS:
@@ -95,7 +98,7 @@ to it if the path holds no BLAS:
 Blas.Enable(@"…\site-packages\numpy.libs\libscipy_openblas64_-<hash>.dll");
 ```
 
-Set `NUMSHARP_BLAS_BUNDLED=0` to drop the bundled entry and make machine tooling the discovery
+Set `NUMSHARP_OPENBLAS_BUNDLED=0` to drop the bundled entry and make machine tooling the discovery
 default.
 
 ## Overriding the OpenBLAS version (build-time)
@@ -234,7 +237,7 @@ NumPy, because it is the same library).
 
 And unchanged from before:
 
-- **A named library is binding** — an explicit path (or `NUMSHARP_PARITY_BLAS`) is used as given and
+- **A named library is binding** — an explicit path (or `NUMSHARP_OPENBLAS_PARITY`) is used as given and
   never silently replaced, not even by the bundled copy sitting in the output folder. A failed
   `Blas.Enable` is a **no-op**: it throws having changed nothing, so a mistyped path cannot demote a
   working setup back to the managed kernels behind your back.
@@ -252,13 +255,14 @@ fine.
 
 | Variable | Effect |
 |---|---|
-| `NUMSHARP_PARITY_BLAS` | Path (or directory) of the CBLAS library to load. **Binding**, like an explicit argument — used as given, never substituted. |
+| `NUMSHARP_OPENBLAS_PARITY` | Path (or directory) of the CBLAS library to load. **Binding**, like an explicit argument — used as given, never substituted. |
 | `NUMSHARP_OPENBLAS_PATH` | File(s)/dir(s) to scan for a CBLAS, path-separator delimited. Tried **first** (priority over the bundled asset), non-binding — falls through to the rest if it holds no BLAS. |
-| `NUMSHARP_BLAS_BUNDLED=0` | Skip the bundled asset; machine tooling becomes the discovery default. |
-| `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0` | Skip the module-load auto-install; `Blas.Enable(...)` still works. |
+| `NUMSHARP_OPENBLAS_BUNDLED=0` | Skip the bundled asset; machine tooling becomes the discovery default. |
+| `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` | Skip the module-load auto-install; `Blas.Enable(...)` still works. (The pre-rename `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` and `NUMSHARP_BLAS_AUTOINSTALL` spellings are retired and ignored.) |
 | `NUMSHARP_OPENBLAS_VERSION` | **Build-time**: scipy-openblas version to download from PyPI and stage over the bundle — a hard requirement; beats `<OpenBlasVersion>` metadata. |
 | `NUMSHARP_OPENBLAS_DISTRIBUTION` / `NUMSHARP_OPENBLAS_FEED` / `NUMSHARP_OPENBLAS_SHA256` / `NUMSHARP_OPENBLAS_DELIVERY` | **Build-time**: distribution pick (`64`/`32`), PyPI mirror base (needs the sha), expected extracted-lib sha256, delivery mode (`none`/`build`/`package`); each beats its `OpenBlas*` metadata twin. |
-| `OPENBLAS_HOME` / `OPENBLAS_ROOT` / `VCPKG_ROOT` / `CONDA_PREFIX` | Roots consulted when scanning for a machine-wide OpenBLAS (discovery tier 5). |
+| `OPENBLAS_HOME` / `OPENBLAS_ROOT` | Explicit OpenBLAS install root (OpenBLAS' own convention). A deliberate signal, so it ranks **above the bundle** (discovery tier 4) — not byte-parity with NumPy. |
+| `VCPKG_ROOT` / `CONDA_PREFIX` | Ambient roots consulted when scanning for a machine-wide OpenBLAS (discovery tier 6, below the bundle). |
 | `OPENBLAS_CORETYPE` | Read by OpenBLAS itself at load. Set it in the environment to pin both NumPy and NumSharp at once. |
 
 ## Maintainers

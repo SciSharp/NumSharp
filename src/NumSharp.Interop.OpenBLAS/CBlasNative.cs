@@ -123,7 +123,8 @@ namespace NumSharp.Interop.OpenBLAS
         ///     the delivery design's tier order (<c>docs/OPENBLAS_DELIVERY_DESIGN.md</c> §3):
         ///     override path(s) (<c>NUMSHARP_OPENBLAS_PATH</c>, then a build-recorded path marker) →
         ///     a build-staged version override (REQUIRED — a miss throws, never falls through) →
-        ///     the bundled runtime asset → machine tooling (see <see cref="AmbientCandidates"/>).
+        ///     explicit OpenBLAS roots (<c>OPENBLAS_HOME</c>/<c>OPENBLAS_ROOT</c>) → the bundled
+        ///     runtime asset → machine tooling (see <see cref="AmbientCandidates"/>).
         /// </param>
         /// <param name="coreType">
         ///     OpenBLAS <c>DYNAMIC_ARCH</c> kernel to force via <c>OPENBLAS_CORETYPE</c>, or null to
@@ -165,7 +166,7 @@ namespace NumSharp.Interop.OpenBLAS
                 // produce confidently wrong bits. Only the unattended case searches.
                 string requested = !string.IsNullOrWhiteSpace(path)
                     ? path
-                    : Environment.GetEnvironmentVariable("NUMSHARP_PARITY_BLAS");
+                    : Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_PARITY");
                 bool strict = !string.IsNullOrWhiteSpace(requested);
 
                 var tried = new List<string>();
@@ -181,7 +182,7 @@ namespace NumSharp.Interop.OpenBLAS
                             : $" (tried: {string.Join(", ", tried)}).") +
                         " The named library is used as given — parity is a claim about one specific " +
                         "binary, so no other one is substituted. Clear the path (or the " +
-                        "NUMSHARP_PARITY_BLAS environment variable) to auto-discover instead.");
+                        "NUMSHARP_OPENBLAS_PARITY environment variable) to auto-discover instead.");
                 }
 
                 // Unattended discovery — the delivery design's tier order (§3). The marker is what a
@@ -218,7 +219,7 @@ namespace NumSharp.Interop.OpenBLAS
                             "back to the bundled asset or a machine-wide OpenBLAS. Rebuild the " +
                             "project to re-stage the binary, remove the override (clear " +
                             "OpenBlasVersion / NUMSHARP_OPENBLAS_VERSION and rebuild), or bind an " +
-                            "explicit library via NUMSHARP_PARITY_BLAS.");
+                            "explicit library via NUMSHARP_OPENBLAS_PARITY.");
                 }
 
                 // TIERS 3–4 — the bundled runtime asset (the zero-config parity default), then
@@ -231,7 +232,7 @@ namespace NumSharp.Interop.OpenBLAS
                     "its bundled scipy-openblas runtime asset (runtimes/<rid>/native/); none was " +
                     "found for this platform and no other CBLAS was discovered. Point " +
                     "NUMSHARP_OPENBLAS_PATH at a directory holding one (non-binding, highest " +
-                    "priority), or set NUMSHARP_PARITY_BLAS to bind one specific binary. Tried: " +
+                    "priority), or set NUMSHARP_OPENBLAS_PARITY to bind one specific binary. Tried: " +
                     string.Join(", ", tried));
             }
         }
@@ -465,12 +466,17 @@ namespace NumSharp.Interop.OpenBLAS
 
         /// <summary>
         ///     TIERS 3–4: candidates for the unattended case once the overrides above have declined,
-        ///     in a DELIBERATE and fixed order — the OpenBLAS this package bundles, then ambient
-        ///     machine tooling (system install directories, bare loader names, a PATH sweep).
+        ///     in a DELIBERATE and fixed order — first any explicit OpenBLAS root
+        ///     (<c>OPENBLAS_HOME</c>/<c>OPENBLAS_ROOT</c>, which a caller sets deliberately and so
+        ///     outranks the bundle), then the OpenBLAS this package bundles, then ambient machine
+        ///     tooling (system install directories, bare loader names, a PATH sweep).
         /// </summary>
         /// <remarks>
-        ///     <b>The bundled binary is probed ahead of all machine tooling, on purpose</b>
-        ///     (delivery design §10.1, resolved 2026-08-13: parity-by-default preserved). It is the
+        ///     <b>The bundled binary is probed ahead of all AMBIENT machine tooling, on purpose</b>
+        ///     (delivery design §10.1, resolved 2026-08-13: parity-by-default preserved) — the sole
+        ///     thing that outranks it is an explicitly-set <c>OPENBLAS_HOME</c>/<c>OPENBLAS_ROOT</c>
+        ///     (a deliberate caller opt-in, not ambient, so setting it trades parity-by-default for
+        ///     the named build). It is the
         ///     prebuilt scipy-openblas artifact NumPy itself pins (verified byte-identical to the
         ///     library in numpy 2.4.2's wheels), so referencing the package keeps giving
         ///     NumPy-identical bits by default — the answer stays a property of the PACKAGE VERSION
@@ -483,15 +489,24 @@ namespace NumSharp.Interop.OpenBLAS
         ///     2026-08-13): we never grab OpenBLAS out of a numpy installation. A conda/system
         ///     <i>OpenBLAS</i> package is still machine tooling below; a <i>numpy</i> is not. To
         ///     match a numpy whose OpenBLAS differs from the bundled one, NAME it —
-        ///     <c>Blas.Enable(path)</c> or <c>NUMSHARP_PARITY_BLAS</c> (binding), or point
+        ///     <c>Blas.Enable(path)</c> or <c>NUMSHARP_OPENBLAS_PARITY</c> (binding), or point
         ///     <c>NUMSHARP_OPENBLAS_PATH</c> at it (non-binding priority).
-        ///     <c>NUMSHARP_BLAS_BUNDLED=0</c> drops the bundled entry entirely, making machine
+        ///     <c>NUMSHARP_OPENBLAS_BUNDLED=0</c> drops the bundled entry entirely, making machine
         ///     tooling the discovery default.
         ///     </para>
         /// </remarks>
         private static IEnumerable<string> AmbientCandidates()
         {
-            if (!string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLED"), "0",
+            // Explicit OpenBLAS roots (OPENBLAS_HOME / OPENBLAS_ROOT) are a deliberate "use the
+            // OpenBLAS installed here" signal, so they outrank the bundled parity default — placed
+            // directly below the NUMSHARP_OPENBLAS_* env-var tiers and above the bundle, the ambient
+            // machine directories and the PATH sweep. (CONDA_PREFIX / VCPKG_ROOT are ambient rather
+            // than this explicit, and stay in the machine-tooling tier below the bundle.)
+            foreach (var dir in ExplicitOpenBlasRootDirectories())
+                foreach (var p in Expand(dir))
+                    yield return p;
+
+            if (!string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLED"), "0",
                     StringComparison.Ordinal))
                 foreach (var dir in BundledDirectories())
                     foreach (var p in Expand(dir))
@@ -688,7 +703,7 @@ namespace NumSharp.Interop.OpenBLAS
         ///     FIRST, ahead of the bundled asset and every other candidate.
         /// </summary>
         /// <remarks>
-        ///     The non-binding sibling of <c>NUMSHARP_PARITY_BLAS</c>. That one is BINDING — when set,
+        ///     The non-binding sibling of <c>NUMSHARP_OPENBLAS_PARITY</c>. That one is BINDING — when set,
         ///     ONLY it is tried and a failure is fatal, because it is how a caller pins the ONE
         ///     specific binary a parity claim is about. This one is softer: it takes PRIORITY over the
         ///     bundled default and the ambient scan when it holds a loadable BLAS, but is silently
@@ -708,6 +723,32 @@ namespace NumSharp.Interop.OpenBLAS
         }
 
         /// <summary>
+        ///     Explicit OpenBLAS install roots named by <c>OPENBLAS_HOME</c> / <c>OPENBLAS_ROOT</c>
+        ///     (and the mixed-case <c>OpenBLAS_HOME</c> / <c>OpenBLAS_ROOT</c> some builds export).
+        /// </summary>
+        /// <remarks>
+        ///     Setting one is a deliberate "use the OpenBLAS installed here" instruction, so — unlike
+        ///     the AMBIENT <c>CONDA_PREFIX</c>/<c>VCPKG_ROOT</c> trees in
+        ///     <see cref="SystemBlasDirectories"/> — it outranks the bundled parity asset: this tier
+        ///     sits directly beneath the <c>NUMSHARP_OPENBLAS_*</c> env-var tiers and ABOVE the
+        ///     bundle, the machine directories and the PATH sweep. A machine OpenBLAS is NOT
+        ///     byte-parity with NumPy, so setting <c>OPENBLAS_HOME</c> deliberately trades
+        ///     parity-by-default for the named build.
+        /// </remarks>
+        private static IEnumerable<string> ExplicitOpenBlasRootDirectories()
+        {
+            foreach (var key in new[] { "OPENBLAS_HOME", "OPENBLAS_ROOT", "OpenBLAS_HOME", "OpenBLAS_ROOT" })
+            {
+                var v = Environment.GetEnvironmentVariable(key);
+                if (string.IsNullOrWhiteSpace(v))
+                    continue;
+                yield return v;
+                yield return Path.Combine(v, "lib");
+                yield return Path.Combine(v, "bin");
+            }
+        }
+
+        /// <summary>
         ///     Conventional install directories of the OpenBLAS builds documented at
         ///     openmathlib.org/OpenBLAS/docs/install — the OS package managers (apt/dnf/pacman/zypper,
         ///     Homebrew/MacPorts, conda-forge, vcpkg, FreeBSD ports) and the source-build default
@@ -723,23 +764,17 @@ namespace NumSharp.Interop.OpenBLAS
         ///     <i>openblas</i> counts as machine tooling via <c>CONDA_PREFIX</c>; a pip-installed
         ///     <i>numpy's</i> own <c>numpy.libs/</c> is deliberately never scanned.)
         ///     The install page gives package-manager names but no literal paths,
-        ///     so these are each manager's conventional prefix; the env markers (<c>OPENBLAS_HOME</c>,
-        ///     <c>VCPKG_ROOT</c>, <c>CONDA_PREFIX</c>) are honoured because that is where those
-        ///     managers place their trees.
+        ///     so these are each manager's conventional prefix; the ambient env markers
+        ///     (<c>VCPKG_ROOT</c>, <c>CONDA_PREFIX</c>) are honoured because that is where those
+        ///     managers place their trees. (<c>OPENBLAS_HOME</c>/<c>OPENBLAS_ROOT</c> are handled one
+        ///     tier up, ABOVE the bundle — see <see cref="ExplicitOpenBlasRootDirectories"/>.)
         /// </remarks>
         private static IEnumerable<string> SystemBlasDirectories()
         {
-            // Explicit roots first — set by a source build's PREFIX or by a caller who means them.
-            foreach (var key in new[] { "OPENBLAS_HOME", "OPENBLAS_ROOT", "OpenBLAS_HOME", "OpenBLAS_ROOT" })
-            {
-                var v = Environment.GetEnvironmentVariable(key);
-                if (string.IsNullOrWhiteSpace(v))
-                    continue;
-                yield return v;
-                yield return Path.Combine(v, "lib");
-                yield return Path.Combine(v, "bin");
-            }
-
+            // NOTE: the explicit OPENBLAS_HOME / OPENBLAS_ROOT roots are handled ONE tier up (see
+            // ExplicitOpenBlasRootDirectories), above the bundle — a caller sets those deliberately.
+            // What remains here is AMBIENT tooling: a conda/vcpkg activation or a distro package,
+            // which sits BELOW the bundled parity default.
             var conda = Environment.GetEnvironmentVariable("CONDA_PREFIX");
             if (!string.IsNullOrWhiteSpace(conda))
             {

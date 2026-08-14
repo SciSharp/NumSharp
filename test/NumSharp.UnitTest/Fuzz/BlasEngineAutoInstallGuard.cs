@@ -22,6 +22,6 @@ namespace NumSharp.UnitTest.Fuzz
     {
         [ModuleInitializer]
         internal static void SuppressAutoInstall()
-            => Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", "0");
+            => Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL", "0");
     }
 }

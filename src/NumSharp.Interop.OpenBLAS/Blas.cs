@@ -70,10 +70,11 @@ namespace NumSharp.Interop.OpenBLAS
         /// </summary>
         /// <param name="library">
         ///     Path of the CBLAS shared library (or a directory holding one), or null to
-        ///     auto-discover: the <c>NUMSHARP_PARITY_BLAS</c> environment variable (binding), then
+        ///     auto-discover: the <c>NUMSHARP_OPENBLAS_PARITY</c> environment variable (binding), then
         ///     the override path(s) (<c>NUMSHARP_OPENBLAS_PATH</c> / a build-recorded
         ///     <c>OpenBlasPath</c>), then a build-staged version override (required — a miss
-        ///     throws), then the bundled runtime asset, then machine tooling (system install
+        ///     throws), then an explicit OpenBLAS root (<c>OPENBLAS_HOME</c>/<c>OPENBLAS_ROOT</c>),
+        ///     then the bundled runtime asset, then ambient machine tooling (system install
         ///     directories, bare loader names, a PATH sweep).
         ///     <b>A named library is binding</b> — it is used as given and never silently replaced
         ///     with another, because parity is a claim about one specific binary.
@@ -260,14 +261,15 @@ namespace NumSharp.Interop.OpenBLAS
         ///     <see cref="BlasRequiredOverrideException"/> with the same message).
         /// </summary>
         /// <remarks>
-        ///     Opt out with <c>NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0</c>. (The pre-rename
-        ///     <c>NUMSHARP_BLAS_AUTOINSTALL</c> spelling is RETIRED and deliberately ignored —
-        ///     the rename shipped unreleased, so there is no installed base to migrate.)
+        ///     Opt out with <c>NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0</c>. (The pre-rename
+        ///     <c>NUMSHARP_BLAS_BUNDLE_AUTOINSTALL</c> and the earlier <c>NUMSHARP_BLAS_AUTOINSTALL</c>
+        ///     spellings are RETIRED and deliberately ignored — each rename shipped unreleased, so
+        ///     there is no installed base to migrate.)
         /// </remarks>
         [ModuleInitializer]
         internal static void BundleAutoinstall()
         {
-            if (string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL"), "0",
+            if (string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL"), "0",
                     StringComparison.Ordinal))
                 return;
 

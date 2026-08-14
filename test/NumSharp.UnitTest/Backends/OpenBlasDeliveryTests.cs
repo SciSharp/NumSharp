@@ -27,16 +27,29 @@ namespace NumSharp.UnitTest.Backends
         private string _previousOpenBlasPath;
         private string _previousParityBlas;
 
+        // OPENBLAS_HOME/OPENBLAS_ROOT (+ the mixed-case spellings) are now promoted ABOVE the bundle,
+        // so a machine-level value would bind before the marker/bundle tiers these tests exercise —
+        // park them too.
+        private static readonly string[] ExplicitRootEnvVars =
+            { "OPENBLAS_HOME", "OPENBLAS_ROOT", "OpenBLAS_HOME", "OpenBLAS_ROOT" };
+        private readonly System.Collections.Generic.Dictionary<string, string> _previousRoots = new();
+
         [TestInitialize]
         public void Init()
         {
             // A machine-level NUMSHARP_OPENBLAS_PATH is tier 2a and would bind BEFORE the marker
-            // tiers these tests exercise, and NUMSHARP_PARITY_BLAS makes discovery strict and
-            // bypasses them entirely — park both for the duration.
+            // tiers these tests exercise, and NUMSHARP_OPENBLAS_PARITY makes discovery strict and
+            // bypasses them entirely — park both for the duration. The explicit OPENBLAS_HOME/
+            // OPENBLAS_ROOT roots are now promoted above the bundle, so park those too.
             _previousOpenBlasPath = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_PATH");
-            _previousParityBlas = Environment.GetEnvironmentVariable("NUMSHARP_PARITY_BLAS");
+            _previousParityBlas = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_PARITY");
             Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PATH", null);
-            Environment.SetEnvironmentVariable("NUMSHARP_PARITY_BLAS", null);
+            Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PARITY", null);
+            foreach (var name in ExplicitRootEnvVars)
+            {
+                _previousRoots[name] = Environment.GetEnvironmentVariable(name);
+                Environment.SetEnvironmentVariable(name, null);
+            }
             File.Delete(MarkerPath);
         }
 
@@ -45,7 +58,9 @@ namespace NumSharp.UnitTest.Backends
         {
             File.Delete(MarkerPath);
             Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PATH", _previousOpenBlasPath);
-            Environment.SetEnvironmentVariable("NUMSHARP_PARITY_BLAS", _previousParityBlas);
+            Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PARITY", _previousParityBlas);
+            foreach (var kv in _previousRoots)
+                Environment.SetEnvironmentVariable(kv.Key, kv.Value);
             Blas.Disable();
         }
 
@@ -67,17 +82,17 @@ namespace NumSharp.UnitTest.Backends
         public void BundleAutoinstall_HonorsTheOptOut()
         {
             // The guard sets it to "0" for the whole run; exercise the spelling in isolation.
-            var prev = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL");
+            var prev = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL");
             try
             {
                 Blas.Disable();
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", "0");
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL", "0");
                 Blas.BundleAutoinstall();
-                Assert.IsFalse(Blas.Enabled, "NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0 must suppress the install");
+                Assert.IsFalse(Blas.Enabled, "NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0 must suppress the install");
             }
             finally
             {
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", prev);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL", prev);
             }
         }
 
@@ -87,25 +102,31 @@ namespace NumSharp.UnitTest.Backends
             if (FindBundledLibrary() == null)
                 Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
 
-            // The pre-rename NUMSHARP_BLAS_AUTOINSTALL spelling was retired (never released),
-            // so setting it must be a no-op: autoinstall proceeds regardless. This pins the
-            // REMOVAL — a reintroduced alias would turn this test red.
-            var prevNew = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL");
+            // Two pre-rename spellings are retired (each rename shipped unreleased): the original
+            // NUMSHARP_BLAS_AUTOINSTALL and the interim NUMSHARP_BLAS_BUNDLE_AUTOINSTALL. Setting
+            // either must be a no-op: autoinstall proceeds regardless — only the current
+            // NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0 suppresses it. This pins the REMOVAL — a
+            // reintroduced alias would turn this test red.
+            var prevNew = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL");
+            var prevInterim = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL");
             var prevOld = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL");
             try
             {
                 Blas.Disable();
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", null);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL", null);
+                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", "0");
                 Environment.SetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL", "0");
 
                 Blas.BundleAutoinstall();
                 Assert.IsTrue(Blas.Enabled,
-                    "the retired NUMSHARP_BLAS_AUTOINSTALL spelling must be ignored — only " +
-                    "NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0 suppresses the install");
+                    "the retired NUMSHARP_BLAS_AUTOINSTALL and NUMSHARP_BLAS_BUNDLE_AUTOINSTALL " +
+                    "spellings must be ignored — only NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0 " +
+                    "suppresses the install");
             }
             finally
             {
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", prevNew);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL", prevNew);
+                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", prevInterim);
                 Environment.SetEnvironmentVariable("NUMSHARP_BLAS_AUTOINSTALL", prevOld);
                 Blas.Disable();
             }
@@ -117,18 +138,18 @@ namespace NumSharp.UnitTest.Backends
             if (FindBundledLibrary() == null)
                 Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
 
-            var prev = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL");
+            var prev = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL");
             try
             {
                 Blas.Disable();
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", null);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL", null);
 
                 Blas.BundleAutoinstall();
                 Assert.IsTrue(Blas.Enabled, "with no opt-out and a loadable bundle, autoinstall must wire the backend");
             }
             finally
             {
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", prev);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL", prev);
                 Blas.Disable();
             }
         }
@@ -229,7 +250,7 @@ namespace NumSharp.UnitTest.Backends
         public void BundleAutoinstall_OnARequiredOverrideMiss_IsLoudButDoesNotThrow()
         {
             var emptyDir = MakeEmptyDir();
-            var prev = Environment.GetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL");
+            var prev = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL");
             try
             {
                 WriteMarker(new { mode = "version", version = "9.9.9.9", path = emptyDir });
@@ -239,7 +260,7 @@ namespace NumSharp.UnitTest.Backends
                 // loaded short-circuit). Unload to reproduce the state autoinstall actually sees —
                 // safe here: tests run sequentially and nothing is executing in the BLAS.
                 CBlasNative.Unload();
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", null);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL", null);
 
                 // Referencing the package must never break the app — the module-load path reports
                 // the broken pin to stderr and leaves the backend UNINSTALLED (never substituted).
@@ -249,7 +270,7 @@ namespace NumSharp.UnitTest.Backends
             }
             finally
             {
-                Environment.SetEnvironmentVariable("NUMSHARP_BLAS_BUNDLE_AUTOINSTALL", prev);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL", prev);
                 File.Delete(MarkerPath);
                 Directory.Delete(emptyDir);
             }
@@ -323,7 +344,7 @@ namespace NumSharp.UnitTest.Backends
                 // Tier 1 over tier 2b: an explicit binding must bypass the marker tiers
                 // entirely — a broken pin cannot take down a caller who NAMED their binary.
                 WriteMarker(new { mode = "version", version = "9.9.9.9", path = emptyDir });
-                Environment.SetEnvironmentVariable("NUMSHARP_PARITY_BLAS", lib);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PARITY", lib);
 
                 CBlasNative.Load(null);
                 Assert.IsNotNull(Blas.LibraryPath);
@@ -331,7 +352,7 @@ namespace NumSharp.UnitTest.Backends
             }
             finally
             {
-                Environment.SetEnvironmentVariable("NUMSHARP_PARITY_BLAS", null);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PARITY", null);
                 File.Delete(MarkerPath);
                 Directory.Delete(emptyDir);
             }

@@ -38,8 +38,8 @@
     <!-- The optional external-CBLAS engine. Referenced ONLY so its gate can run: the host-pinned
          matmul_parity corpus tier and the BlasEngine contract tests. Its module initializer would
          install the engine for the whole test run, which must NOT happen (every other tier asserts
-         NumSharp's own kernels), so the test assembly opts out via NUMSHARP_BLAS_AUTOINSTALL=0 in
-         BlasEngineAutoInstallGuard and enables it per-test instead. -->
+         NumSharp's own kernels), so the test assembly opts out via NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0
+         in BlasEngineAutoInstallGuard and enables it per-test instead. -->
     <ProjectReference Include="..\..\src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj" />
   </ItemGroup>
 
