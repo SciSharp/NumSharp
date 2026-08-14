@@ -5,7 +5,6 @@ on:
     branches: ["master", "main"]
     paths:
       - 'src/**'
-      - 'tools/NumSharp.ApiInventory/**'
       - 'coverage/**'
       - 'docs/website-src/**'
       - '.github/workflows/docs.yml'
@@ -13,7 +12,6 @@ on:
     branches: ["master", "main"]
     paths:
       - 'src/**'
-      - 'tools/NumSharp.ApiInventory/**'
       - 'coverage/**'
       - 'docs/website-src/**'
       - '.github/workflows/docs.yml'

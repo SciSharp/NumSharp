@@ -15,7 +15,7 @@
 // Cross-platform and dependency-free: reads the PE metadata directly out of the zip, so it needs
 // no `sn.exe` (Windows-only) and no temp files. CI runs it on ubuntu-latest.
 //
-//   dotnet run tools/verify_strong_name.cs -- <dir-or-nupkg> [more...]     (default: artifacts/nuget)
+//   dotnet run .github/scripts/verify_strong_name.cs -- <dir-or-nupkg> [more...]     (default: artifacts/nuget)
 //
 // Exit 0 = every assembly signed with the expected key. Exit 1 = anything else, INCLUDING finding
 // nothing to check: a verifier that passes vacuously is worse than no verifier, because it reads as

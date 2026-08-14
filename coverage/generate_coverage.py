@@ -125,7 +125,7 @@ def load_numpy() -> Any:
 
 
 def load_numsharp_inventory() -> dict[str, Any]:
-    project = ROOT / "tools" / "NumSharp.ApiInventory" / "NumSharp.ApiInventory.csproj"
+    project = ROOT / "coverage" / "NumSharp.ApiInventory" / "NumSharp.ApiInventory.csproj"
     build_command = [
         "dotnet", "build", str(project), "--configuration", "Release", "--framework", "net8.0",
         "--nologo", "--verbosity", "quiet",

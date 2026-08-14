@@ -136,7 +136,7 @@ jobs:
             -p:NoWarn=${{ env.DOTNET_NOWARN }}
           echo "::endgroup::"
         done
-        dotnet run tools/verify_strong_name.cs -- artifacts/signing-check
+        dotnet run .github/scripts/verify_strong_name.cs -- artifacts/signing-check
 
   # Python.NET interop. Kept as its OWN job rather than extra steps on `test`:
   # the embedded-CPython setup must not slow down or destabilise the main gate,
@@ -360,7 +360,7 @@ jobs:
     # rather than passing vacuously if pack produced nothing. This is the check whose absence let six
     # years of releases ship with PublicKeyToken=null.
     - name: Verify strong naming of packed assemblies
-      run: dotnet run tools/verify_strong_name.cs -- artifacts/nuget
+      run: dotnet run .github/scripts/verify_strong_name.cs -- artifacts/nuget
 
     - name: Upload NuGet Packages
       uses: actions/upload-artifact@v4
