@@ -1,50 +1,45 @@
 # OpenBLAS — a native BLAS backend for `np.dot` / `np.matmul`
 
 `NumSharp.Interop.OpenBLAS` is the optional native matrix-product backend. Reference it and
-`np.dot` / `np.matmul` compute `float32` / `float64` products through OpenBLAS instead of NumSharp's
-own managed SIMD GEMM — **1.7–13× faster on large matrices**. It bundles the prebuilt OpenBLAS
-binaries NumPy and SciPy themselves ship, per-RID, so you get a proven, tuned BLAS with nothing to
-install and no Python on the machine. NumSharp.Core stays 100 % managed C# with no native
-dependency: with this package absent, every kernel — matrix products included — is NumSharp's own
-code, and (as everywhere in NumSharp) 1-to-1 with NumPy. This page is the package's reference: what
-it buys, the quick start, the bundled binary, how the binary is delivered, reproducibility, the API,
-how it computes, extending the seam, performance and troubleshooting.
+`np.dot` / `np.matmul` compute `float32` / `float64` products through OpenBLAS — the same proven,
+tuned library NumPy computes *its* matrix products with — instead of NumSharp's own managed SIMD
+GEMM. It bundles the prebuilt OpenBLAS binaries NumPy and SciPy themselves ship, per-RID, so you get
+that battle-tested BLAS with nothing to install and no Python on the machine, and it runs faster on
+large matrices. NumSharp.Core stays 100 % managed C# with no native dependency: with this package
+absent, every kernel — matrix products included — is NumSharp's own code, and (as everywhere in
+NumSharp) 1-to-1 with NumPy. This page is the package's reference: why it exists, the quick start,
+the bundled binary, how the binary is delivered, reproducibility, the API, how it computes,
+extending the seam and troubleshooting.
 
-**On this page:** [What it buys](#what-it-buys) · [Quick start](#quick-start) ·
+**On this page:** [Why it exists](#why-this-package-exists) · [Quick start](#quick-start) ·
 [The bundled binary](#the-bundled-binary) · [Delivering the binary](#delivering-the-binary) ·
 [Where the library comes from](#where-the-library-comes-from) ·
 [Reproducible results](#reproducible-results) · [The API](#the-api) ·
 [How it computes](#how-it-computes) · [Writing your own backend](#writing-your-own-backend) ·
-[Performance](#performance) · [Environment](#environment) · [Troubleshooting](#troubleshooting) ·
-[Claims](#claims-ledger)
+[Environment](#environment) · [Troubleshooting](#troubleshooting)
 
 > Bundles scipy-openblas 0.3.31.22.0 (OpenBLAS 0.3.31.dev — the build numpy 2.4.2 ships) · net8.0/net10.0.
-> The behavioural claims below are pinned by gates: [`MatmulParityBackendTests`][gate-backend] (30
-> tests), [`OpenBlasDeliveryTests`][gate-delivery] (20), and the 15-step scripted build gate
+> Behaviour is covered by gates: [`MatmulParityBackendTests`][gate-backend] (30 tests),
+> [`OpenBlasDeliveryTests`][gate-delivery] (20), and the 15-step scripted build gate
 > [`verify_build_override.sh`][gate-build].
 
----
+## Why this package exists
 
-## What it buys
+NumPy computes its `float32` / `float64` matrix products with OpenBLAS — every `np.dot` / `np.matmul`
+in a stock NumPy wheel runs through the scipy-openblas binary those wheels bundle. NumSharp targets
+NumPy, so OpenBLAS is the numerical reference it aims at: the source of truth for what a float matrix
+product *should* return.
 
-NumSharp computes every matrix product itself, in managed SIMD code, out of the box — correct and
-portable, with no native dependency. What a hand-written managed GEMM cannot do is keep up with a
-decades-tuned native BLAS on large matrices: OpenBLAS' arch-specific, blocked, multi-threaded
-micro-kernels are simply faster once the matrices grow. This package routes `float32` / `float64`
-products through OpenBLAS — the same library NumPy and SciPy use — and leaves everything else exactly
-as it was.
+This package hands you that reference directly. Rather than NumSharp's own managed GEMM — correct and
+portable, but its own code — `np.dot` / `np.matmul` compute through the exact OpenBLAS build NumPy
+ships: a decades-tuned, widely-deployed, **proven-reliable-and-stable** library, bundled per-RID so
+there is nothing to install and no Python needed. On large matrices it is also markedly faster than
+the managed kernel.
 
-The speedup is real and grows with size: **1.7–13×** over the managed GEMM across the measured
-range, up to a `2048³` float64 product dropping from 3860 ms to 293 ms
-(see [Performance](#performance)).
-
-A native BLAS is a *performance* choice, and — as with swapping any BLAS — a correct floating-point
-product can differ in its last bits from another implementation, or from the same one at a different
-thread count or on a different CPU, because summation order changes. That is ordinary IEEE behaviour,
-not a defect; if you need results that reproduce exactly, [pin the two variables that move
+Being a native, threaded, arch-tuned BLAS, its results are correct floating-point products whose
+last bits depend on the thread count and the CPU — ordinary IEEE behaviour, shared by NumPy and every
+BLAS consumer. If you need results that reproduce exactly, [pin the two variables that move
 them](#reproducible-results).
-
----
 
 ## Quick start
 
@@ -71,9 +66,7 @@ Console.WriteLine(Blas.Info);
 Blas.Disable();                  // back to NumSharp's own managed SIMD GEMM
 ```
 
-<sub>See here [`BundleAutoinstall_WithNoOptOut_InstallsTheBackend`][gate-delivery], [`Enable_SetsTheBackendOnTheEngine_WithoutReplacingIt`][gate-backend]</sub>
-
----
+<!-- Tests: BundleAutoinstall_WithNoOptOut_InstallsTheBackend (OpenBlasDeliveryTests); Enable_SetsTheBackendOnTheEngine_WithoutReplacingIt (MatmulParityBackendTests) -->
 
 ## The bundled binary
 
@@ -115,9 +108,7 @@ BSD-2-Clause AND (GPL-3.0-or-later WITH GCC-exception-3.1)`, full text in
 `THIRD-PARTY-NOTICES.txt`): the statically linked libgfortran's GCC Runtime Library Exception is
 what permits redistribution — the same basis on which NumPy and SciPy ship it in every wheel.
 
-<sub>See here [`BundledLibrary_HashesToThePinnedManifest`][gate-backend], [`BundledLibrary_ForThisRid_ReachesTheBuildOutput`][gate-backend]</sub>
-
----
+<!-- Tests: BundledLibrary_HashesToThePinnedManifest, BundledLibrary_ForThisRid_ReachesTheBuildOutput (MatmulParityBackendTests) -->
 
 ## Delivering the binary
 
@@ -219,7 +210,7 @@ build — discovery simply continues to machine tooling and, failing that, NumSh
 kernels. `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0` skips the automatic install while leaving
 `Blas.Enable()` fully functional.
 
-<sub>See here [`BundledLibrary_ForThisRid_ReachesTheBuildOutput`][gate-backend], [`AutoDiscovery_PrefersTheBundledLibrary`][gate-backend], [`BundledLibrary_CanBeOptedOutOf`][gate-backend]</sub>
+<!-- Tests: BundledLibrary_ForThisRid_ReachesTheBuildOutput, AutoDiscovery_PrefersTheBundledLibrary, BundledLibrary_CanBeOptedOutOf (MatmulParityBackendTests) -->
 
 ### 2 · Version override (build-time, enforced)
 
@@ -272,7 +263,7 @@ refused before any network, an invalid `OpenBlasDelivery` value names the valid 
 cache entry is discarded and re-downloaded, and a two-reference version-vs-path conflict is a
 hard error.
 
-<sub>See here [`VersionMarker_IsHardRequired_NeverFallsThroughToTheBundle`][gate-delivery], [`VersionMarker_WithMismatchedSha_RefusesTheFile`][gate-delivery], [`BundleAutoinstall_OnARequiredOverrideMiss_IsLoudButDoesNotThrow`][gate-delivery], [`verify_build_override.sh`][gate-build]</sub>
+<!-- Tests: VersionMarker_IsHardRequired_NeverFallsThroughToTheBundle, VersionMarker_WithMismatchedSha_RefusesTheFile, BundleAutoinstall_OnARequiredOverrideMiss_IsLoudButDoesNotThrow (OpenBlasDeliveryTests); verify_build_override.sh -->
 
 ### 3 · Path override (build-time, soft)
 
@@ -284,7 +275,7 @@ Combined with a version (`OpenBlasVersion` **and** `OpenBlasPath`), the pin is d
 *into* that directory instead of the default output folder — the directory then doubles as
 cache and read location, and the hard-required semantics of method 2 apply.
 
-<sub>See here [`PathMarker_BindsItsDirectory_WhenItHoldsALibrary`][gate-delivery], [`PathMarker_IsNonBinding_FallsThroughToTheBundle`][gate-delivery]</sub>
+<!-- Tests: PathMarker_BindsItsDirectory_WhenItHoldsALibrary, PathMarker_IsNonBinding_FallsThroughToTheBundle (OpenBlasDeliveryTests) -->
 
 ### 4 · Transitive and package-author delivery
 
@@ -311,7 +302,7 @@ flows transitively for free. `package` is for a dependent that wants a *differen
 version baked into its own nupkg — which is also what keeps every dependent nupkg from gaining
 62 MB by default.
 
-<sub>See here [`verify_build_override.sh`][gate-build] — the transitive, two-reference-conflict and `delivery=package` steps</sub>
+<!-- Tests: verify_build_override.sh — the transitive, two-reference-conflict and delivery=package steps -->
 
 ### 5 · Runtime-only: naming and pointing
 
@@ -330,9 +321,7 @@ loader names, a PATH sweep) — less a delivery method you choose than what disc
 you chose none and the bundle is absent or opted out. It is a correct, fast BLAS, though a
 different build than the bundle (see [Where the library comes from](#where-the-library-comes-from)).
 
-<sub>See here [`NamedLibrary_IsBinding_NeverSilentlySubstituted`][gate-backend], [`NamedLibrary_OutranksTheBundledOne_AndAMissingOneDoesNotFallBackToIt`][gate-backend], [`OverridePathEnv_OutranksTheVersionMarker`][gate-delivery]</sub>
-
----
+<!-- Tests: NamedLibrary_IsBinding_NeverSilentlySubstituted, NamedLibrary_OutranksTheBundledOne_AndAMissingOneDoesNotFallBackToIt (MatmulParityBackendTests); OverridePathEnv_OutranksTheVersionMarker (OpenBlasDeliveryTests) -->
 
 ## Where the library comes from
 
@@ -368,9 +357,7 @@ required override that cannot load **throws rather than substituting** — at mo
 goes to stderr and the backend stays uninstalled (never silently replaced); an explicit
 `Blas.Enable()` raises the full `BlasRequiredOverrideException`.
 
-<sub>See here [`AutoDiscovery_PrefersTheBundledLibrary`][gate-backend], [`VersionMarker_IsHardRequired_NeverFallsThroughToTheBundle`][gate-delivery], [`NumpyLibs_DiscoveryTier_IsDeleted`][gate-delivery]</sub>
-
----
+<!-- Tests: AutoDiscovery_PrefersTheBundledLibrary (MatmulParityBackendTests); VersionMarker_IsHardRequired_NeverFallsThroughToTheBundle, NumpyLibs_DiscoveryTier_IsDeleted (OpenBlasDeliveryTests) -->
 
 ## Reproducible results
 
@@ -414,9 +401,7 @@ is the same library.
 > **loads** the library: OpenBLAS reads the variable once while initialising and never re-reads it,
 > so a later request that cannot be honoured throws instead of being silently dropped.
 
-<sub>See here [`ThreadPin_IsReportedBack`][gate-backend], [`CoreTypeAboveThisCpu_IsRefused_RatherThanCrashingTheProcess`][gate-backend]</sub>
-
----
+<!-- Tests: ThreadPin_IsReportedBack, CoreTypeAboveThisCpu_IsRefused_RatherThanCrashingTheProcess (MatmulParityBackendTests) -->
 
 ## The API
 
@@ -450,9 +435,7 @@ Three semantics are load-bearing, each pinned by a test:
 Opting out of the automatic install (`NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0`) leaves `Blas.Enable()`
 fully functional — it only skips the module-load call.
 
-<sub>See here [`NamedLibrary_IsBinding_NeverSilentlySubstituted`][gate-backend], [`FailedEnable_OverAWorkingLibrary_ChangesNothing`][gate-backend], [`Enabled_MeansInstalledAND_Bound_NotMerelyInstalled`][gate-backend]</sub>
-
----
+<!-- Tests: NamedLibrary_IsBinding_NeverSilentlySubstituted, FailedEnable_OverAWorkingLibrary_ChangesNothing, Enabled_MeansInstalledAND_Bound_NotMerelyInstalled (MatmulParityBackendTests) -->
 
 ## How it computes
 
@@ -508,11 +491,9 @@ the special routes it does (a `(1,500)` vector with stride 2 changes gemv's `inc
 
 `TryMatMulBatched` exists because the seam's granularity is a performance decision: it takes a
 whole stacked product at once, so the route decision and any scratch allocation are built once per
-stack — the way NumPy hoists them out of its gufunc's outer loop — instead of once per element.
-Measured on 2000 stacked 8×8 float32 products, per-element setup made the backend **0.80×** —
-*slower* than NumSharp's own managed GEMM — against **6.47×** with the work hoisted; the batched and
-per-element routes produce identical results (25/25 A/B'd through a decorator that declines the
-batched path).
+stack — the way NumPy hoists them out of its gufunc's outer loop — instead of once per element. The
+batched and per-element routes produce identical results (25/25 A/B'd through a decorator that
+declines the batched path).
 
 ### What is *not* served
 
@@ -522,9 +503,7 @@ batched path).
 | `Half` | managed kernels | NumPy does **not** route float16 through BLAS, so there is no native path to gain from; NumSharp's managed half kernel already handles it (accumulating in float32) |
 | `Complex` | managed kernels — **the one real gap** | complex64/128 *are* BLAS dtypes (`cgemm`/`zgemm`), so a native backend could accelerate them; the routes are simply not written yet. The seam already supports it (probed with a third-party Complex128 backend) |
 
-<sub>See here [`EveryShapeRoute_RoundTripsThroughTheBackend`][gate-backend], [`StackedProducts_GoThroughTheBatchedEntryPoint_Once`][gate-backend], [`IntegerProducts_FallThroughToTheManagedKernel`][gate-backend]</sub>
-
----
+<!-- Tests: EveryShapeRoute_RoundTripsThroughTheBackend, StackedProducts_GoThroughTheBatchedEntryPoint_Once, IntegerProducts_FallThroughToTheManagedKernel (MatmulParityBackendTests) -->
 
 ## Writing your own backend
 
@@ -574,36 +553,7 @@ scipy-openblas ships `gesv` / `getrf` / `potrf` / `geev` / `syevd` / `heevd` / `
 already holds the handle for everything else. The validation for all of `np.linalg` runs *before*
 the seam and is gated today — an implementation only has to supply numerics.
 
-<sub>See here [`ABackendThatKnowsNothingOfBatching_StillWorks`][gate-backend], [`TheBackendIsAPlainSettableProperty`][gate-backend]</sub>
-
----
-
-## Performance
-
-The native route is the fast route — OpenBLAS, after all. Single products (Release,
-best-of-rounds, milliseconds):
-
-| shape | dtype | managed (Core) | OpenBLAS backend | backend, 1 thread |
-|---|---|---|---|---|
-| 128×784×128 | f32 | 0.436 | **0.233** | 0.227 |
-| 256³ | f32 | 0.604 | **0.296** | 0.291 |
-| 1024³ | f32 | 38.77 | **15.97** | 16.79 |
-| 2048³ | f32 | 282.2 | **118.3** | 124.3 |
-| 128×784×128 | f64 | 0.966 | **0.435** | 0.426 |
-| 1024³ | f64 | 134.5 | **33.8** | 32.3 |
-| 2048³ | f64 | 3860 | **292.6** | 310.6 |
-
-Stacked products go through the batched entry point (route decision and scratch hoisted per
-stack, not per element):
-
-| workload | managed ms | backend ms | ratio |
-|---|---|---|---|
-| 2000 × (8,8) f32 | 2.34 | **0.361** | 6.47× |
-| 500 × (32,32) f32 | 1.93 | **0.850** | 2.27× |
-| 8 × (256,256) f32 | 4.78 | **2.33** | 2.05× |
-| 2000 × (8,8) int32 (declined) | 2.51 | 2.65 | 0.95× — the seam itself is free |
-
----
+<!-- Tests: ABackendThatKnowsNothingOfBatching_StillWorks, TheBackendIsAPlainSettableProperty (MatmulParityBackendTests) -->
 
 ## Environment
 
@@ -618,8 +568,6 @@ stack, not per element):
 | `OPENBLAS_HOME` / `OPENBLAS_ROOT` / `VCPKG_ROOT` / `CONDA_PREFIX` | Roots consulted when scanning for a machine-wide OpenBLAS (discovery tier 5). |
 | `OPENBLAS_CORETYPE` | Read by OpenBLAS itself at load — pins the `DYNAMIC_ARCH` micro-kernel (see [Reproducible results](#reproducible-results)). Set it in the *real* environment, before process start. |
 | `OPENBLAS_NUM_THREADS` | OpenBLAS' own worker-thread count. Affects the low bits of a result; set it to reproduce a run at a fixed thread count. |
-
----
 
 ## Troubleshooting
 
@@ -637,34 +585,6 @@ stack, not per element):
 | A build with a version override fails offline | A version override is a hard requirement by design. Prime the cache with one online build, point `OpenBlasFeed` at a mirror (with an explicit `OpenBlasSha256`), or drop the pin. |
 | `NUMSHARP_BLAS_AUTOINSTALL=0` no longer suppresses the install | That spelling is retired outright (it never shipped in a release) and deliberately ignored. Use `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0`. |
 
----
-
-## Claims ledger
-
-| # | Claim | Evidence | Gate |
-|---|---|---|---|
-| 1 | Referencing the package installs the backend at assembly load; the env opt-out suppresses it | backend present with no explicit call; absent under `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0` | [`BundleAutoinstall_WithNoOptOut_InstallsTheBackend`][gate-delivery], [`BundleAutoinstall_HonorsTheOptOut`][gate-delivery] |
-| 2 | Installing the backend sets a property on the engine; it does not replace or subclass the engine | same engine instance, `Blas` non-null after `Enable` | [`Enable_SetsTheBackendOnTheEngine_WithoutReplacingIt`][gate-backend], [`TheBackendIsAPlainSettableProperty`][gate-backend] |
-| 3 | Without the package the engine has no BLAS backend and every product is managed | `engine.Blas == null` by default | [`NotInstalled_ByDefault_TheEngineHasNoBlasBackend`][gate-backend] |
-| 4 | The bundled binary hashes to the committed manifest pin | per-RID sha256 equals `openblas-manifest.json` | [`BundledLibrary_HashesToThePinnedManifest`][gate-backend] |
-| 5 | Auto-discovery prefers the bundle over machine tooling; the bundle can be opted out | bundled path wins; `NUMSHARP_BLAS_BUNDLED=0` drops it | [`AutoDiscovery_PrefersTheBundledLibrary`][gate-backend], [`BundledLibrary_CanBeOptedOutOf`][gate-backend] |
-| 6 | A named library is binding — a missing one does not fall back to the bundle | throw, no substitution | [`NamedLibrary_OutranksTheBundledOne_AndAMissingOneDoesNotFallBackToIt`][gate-backend] |
-| 7 | A failed `Enable` changes nothing, even over a working setup | working library and backend intact after a failed call | [`FailedEnable_OverAWorkingLibrary_ChangesNothing`][gate-backend], [`FailedEnable_OnANonCBlasFile_OverAWorkingLibrary_ChangesNothing`][gate-backend] |
-| 8 | `Enabled` means installed **and** bound | `false` when a backend is installed with no library | [`Enabled_MeansInstalledAND_Bound_NotMerelyInstalled`][gate-backend] |
-| 9 | The thread pin takes effect and is reported back | `Info` reflects `Enable(threads:)` | [`ThreadPin_IsReportedBack`][gate-backend] |
-| 10 | A `coreType` this CPU cannot run is refused instead of crashing the process | `PlatformNotSupportedException`, process alive | [`CoreTypeAboveThisCpu_IsRefused_RatherThanCrashingTheProcess`][gate-backend] |
-| 11 | Only float32/float64 products change; integers fall through; every other operation is untouched | identical results backend on vs off | [`IntegerProducts_FallThroughToTheManagedKernel`][gate-backend], [`EveryOtherOperation_StaysTheManagedImplementation`][gate-backend] |
-| 12 | Every shape route round-trips through the backend | strided/transposed views accepted, not silently wrong | [`EveryShapeRoute_RoundTripsThroughTheBackend`][gate-backend], [`StridedAndTransposedViews_AreAccepted_NotSilentlyWrong`][gate-backend] |
-| 13 | Stacked products take the batched entry once per stack; batched and per-element routes agree | call counting + 25/25 A/B | [`StackedProducts_GoThroughTheBatchedEntryPoint_Once`][gate-backend], [`BatchedEntryPoint_IsBitIdenticalToThePerElementRoute`][gate-backend] |
-| 14 | A backend implementing only the two core members still works | decorator declining the batched path | [`ABackendThatKnowsNothingOfBatching_StillWorks`][gate-backend] |
-| 15 | A version override is hard-required and sha-verified — never silently substituted | throws with the bundle sitting loadable beside it; a mismatched sha is refused | [`VersionMarker_IsHardRequired_NeverFallsThroughToTheBundle`][gate-delivery], [`VersionMarker_WithMismatchedSha_RefusesTheFile`][gate-delivery] |
-| 16 | A required-override miss at module load is loud on stderr, not fatal | one stderr line; backend left uninstalled | [`BundleAutoinstall_OnARequiredOverrideMiss_IsLoudButDoesNotThrow`][gate-delivery] |
-| 17 | A path override is non-binding: it binds when it holds a library, falls through when it does not | both directions | [`PathMarker_BindsItsDirectory_WhenItHoldsALibrary`][gate-delivery], [`PathMarker_IsNonBinding_FallsThroughToTheBundle`][gate-delivery] |
-| 18 | A pip-installed numpy's `numpy.libs/` is never scanned | the tier stays deleted | [`NumpyLibs_DiscoveryTier_IsDeleted`][gate-delivery] |
-| 19 | The build pipeline — download, double verify, self-healing cache, staging, packing — works end-to-end against the real nupkg | 15 scripted steps incl. tamper, mirror-needs-sha, poisoned cache, conflicting references | [`verify_build_override.sh`][gate-build] |
-
----
-
 ## See also
 
 - [Interoperability](index.md) — the memory-bridge contract behind the other `NumSharp.Interop.*`
@@ -673,7 +593,6 @@ stack, not per element):
   the delivery model, the probe results and traps
 - [`docs/OPENBLAS_DELIVERY_DESIGN.md`][delivery] — the delivery/discovery model: the two phases,
   the source marker, the transitive story, every resolved decision
-- [Benchmarks](../benchmarks-dashboard.md) — NumSharp performance across the whole API
 
 [gate-backend]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.UnitTest/Backends/MatmulParityBackendTests.cs
 [gate-delivery]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.UnitTest/Backends/OpenBlasDeliveryTests.cs
