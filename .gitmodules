@@ -4,3 +4,6 @@
 [submodule "src/pocketfft"]
 	path = src/pocketfft
 	url = https://github.com/mreineck/pocketfft.git
+[submodule "src/OpenBLAS"]
+	path = src/OpenBLAS
+	url = https://github.com/OpenMathLib/OpenBLAS.git
