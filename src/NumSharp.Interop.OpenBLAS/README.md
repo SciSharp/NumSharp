@@ -20,11 +20,11 @@ using NumSharp.Interop.OpenBLAS;
 // keeps doing its own managed math.
 var c = np.dot(a, b);
 
-Console.WriteLine(Blas.Info);
+Console.WriteLine(OpenBlasEngine.Info);
 // …\runtimes\win-x64\native\libscipy_openblas64_.dll [symbols scipy_*64_, ILP64, threads 24]
 // OpenBLAS 0.3.31.dev  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24
 
-Blas.Disable();   // clears engine.Blas — back to NumSharp's managed SIMD GEMM
+OpenBlasEngine.Disable();   // clears engine.Blas — back to NumSharp's managed SIMD GEMM
 ```
 
 ## The bundled binary
@@ -69,7 +69,7 @@ Exception, the same basis on which NumPy and SciPy ship it in every wheel).
    BLAS, and are silently skipped (fall through to the rest) when they do not.
 3. A build-staged **version override** (an `openblas.source.json` marker with `mode: "version"`,
    written when the build pinned `OpenBlasVersion` / `NUMSHARP_OPENBLAS_VERSION`) —
-   **hard-required**: a miss throws `BlasRequiredOverrideException` rather than falling through
+   **hard-required**: a miss throws `OpenBlasRequiredOverrideException` rather than falling through
    (the pin is a contract, and quietly substituting the bundle or a system BLAS would break it
    invisibly). When the marker pins a sha256, only a file hashing to it is loaded.
 4. An explicit OpenBLAS root — `OPENBLAS_HOME` / `OPENBLAS_ROOT` (OpenBLAS' own convention). A
@@ -95,7 +95,7 @@ differs from the bundled one, name it** (binding, all-or-nothing) — **or point
 to it if the path holds no BLAS:
 
 ```csharp
-Blas.Enable(@"…\site-packages\numpy.libs\libscipy_openblas64_-<hash>.dll");
+OpenBlasEngine.Enable(@"…\site-packages\numpy.libs\libscipy_openblas64_-<hash>.dll");
 ```
 
 Set `NUMSHARP_OPENBLAS_BUNDLED=0` to drop the bundled entry and make machine tooling the discovery
@@ -121,7 +121,7 @@ the entry's content hash: a truncated or tampered entry is discarded and re-down
 over the bundle in the output, and an `openblas.source.json` **source marker** is written so the
 runtime treats the folder as a *required* override (discovery tier 3 above). **A version override is a hard requirement**: a
 build that cannot download/verify it FAILS, and a runtime that cannot load it THROWS
-(`BlasRequiredOverrideException`) rather than quietly substituting the bundle or a system BLAS.
+(`OpenBlasRequiredOverrideException`) rather than quietly substituting the bundle or a system BLAS.
 `OpenBlasPath` alone (no version) is the soft form — "read tooling from here", non-binding.
 
 Environment variables win over the metadata: `NUMSHARP_OPENBLAS_VERSION`, `NUMSHARP_OPENBLAS_PATH`,
@@ -212,7 +212,7 @@ Bundling fixes the library build. Two variables remain, and a parity claim that 
 wrong:
 
 - **The worker-thread count is part of the answer.** 1, 2, 4 and 24 threads give four *different*
-  results. `Blas.Enable(threads: n)` pins it; it is a correctness knob, not a performance one.
+  results. `OpenBlasEngine.Enable(threads: n)` pins it; it is a correctness knob, not a performance one.
 - **The CPU is part of the answer.** OpenBLAS is built `DYNAMIC_ARCH` and picks a micro-kernel from
   the machine it finds itself on, and different kernels accumulate in a different order. Measured by
   forcing the choice on one host: Haswell, Nehalem, Sandybridge and Katmai each produced different
@@ -220,7 +220,7 @@ wrong:
 
 ```csharp
 // Reproducible on ANY x86-64 with AVX2+FMA — pins the last free variable.
-Blas.Enable(threads: 1, coreType: Blas.ParityCoreType);   // "Haswell"
+OpenBlasEngine.Enable(threads: 1, coreType: OpenBlasEngine.CoreType);   // "Haswell"
 ```
 
 `coreType` is **not** the default, deliberately: the package's main promise is matching the NumPy on
@@ -230,7 +230,7 @@ NumPy, because it is the same library).
 
 > **Hazard.** `coreType` *overrides* OpenBLAS' CPU detection rather than expressing a preference, so
 > naming kernels the CPU cannot run terminates the process with an illegal instruction — measured.
-> `Blas.Enable` refuses the combinations it recognises with a `PlatformNotSupportedException` first.
+> `OpenBlasEngine.Enable` refuses the combinations it recognises with a `PlatformNotSupportedException` first.
 > It also only takes effect on the call that actually **loads** the library: OpenBLAS reads the
 > variable while initialising and never re-reads it, so a later request that cannot be honoured
 > throws rather than being silently dropped.
@@ -239,7 +239,7 @@ And unchanged from before:
 
 - **A named library is binding** — an explicit path (or `NUMSHARP_OPENBLAS_PARITY`) is used as given and
   never silently replaced, not even by the bundled copy sitting in the output folder. A failed
-  `Blas.Enable` is a **no-op**: it throws having changed nothing, so a mistyped path cannot demote a
+  `OpenBlasEngine.Enable` is a **no-op**: it throws having changed nothing, so a mistyped path cannot demote a
   working setup back to the managed kernels behind your back.
 
 ## Supported providers
@@ -258,7 +258,7 @@ fine.
 | `NUMSHARP_OPENBLAS_PARITY` | Path (or directory) of the CBLAS library to load. **Binding**, like an explicit argument — used as given, never substituted. |
 | `NUMSHARP_OPENBLAS_PATH` | File(s)/dir(s) to scan for a CBLAS, path-separator delimited. Tried **first** (priority over the bundled asset), non-binding — falls through to the rest if it holds no BLAS. |
 | `NUMSHARP_OPENBLAS_BUNDLED=0` | Skip the bundled asset; machine tooling becomes the discovery default. |
-| `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` | Skip the module-load auto-install; `Blas.Enable(...)` still works. (The pre-rename `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` and `NUMSHARP_BLAS_AUTOINSTALL` spellings are retired and ignored.) |
+| `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` | Skip the module-load auto-install; `OpenBlasEngine.Enable(...)` still works. (The pre-rename `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` and `NUMSHARP_BLAS_AUTOINSTALL` spellings are retired and ignored.) |
 | `NUMSHARP_OPENBLAS_VERSION` | **Build-time**: scipy-openblas version to download from PyPI and stage over the bundle — a hard requirement; beats `<OpenBlasVersion>` metadata. |
 | `NUMSHARP_OPENBLAS_DISTRIBUTION` / `NUMSHARP_OPENBLAS_FEED` / `NUMSHARP_OPENBLAS_SHA256` / `NUMSHARP_OPENBLAS_DELIVERY` | **Build-time**: distribution pick (`64`/`32`), PyPI mirror base (needs the sha), expected extracted-lib sha256, delivery mode (`none`/`build`/`package`); each beats its `OpenBlas*` metadata twin. |
 | `OPENBLAS_HOME` / `OPENBLAS_ROOT` | Explicit OpenBLAS install root (OpenBLAS' own convention). A deliberate signal, so it ranks **above the bundle** (discovery tier 4) — not byte-parity with NumPy. |

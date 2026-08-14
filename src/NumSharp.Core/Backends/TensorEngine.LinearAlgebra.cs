@@ -11,7 +11,7 @@ namespace NumSharp
     /// <remarks>
     ///     <para>
     ///     Every member reads <see cref="Blas"/> into a LOCAL before using it. That is not style —
-    ///     the property is settable and a concurrent <c>Blas.Disable()</c> turns a test-then-call
+    ///     the property is settable and a concurrent <c>OpenBlasEngine.Disable()</c> turns a test-then-call
     ///     into a null dereference (measured at ~2 % of calls; see <c>docs/GEMM_PARITY.md</c> §9).
     ///     </para>
     ///     <para>

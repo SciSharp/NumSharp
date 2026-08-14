@@ -25,7 +25,7 @@ namespace NumSharp.Backends
             // matmul's dispatcher — the two disagree on e.g. a strided matrix times a vector — so
             // a backend gets its own entry point here, ahead of every shape branch below.
             // Read the property ONCE: it is settable at any time from any thread, and testing it
-            // then calling it would be a null-dereference every time a concurrent Blas.Disable()
+            // then calling it would be a null-dereference every time a concurrent OpenBlasEngine.Disable()
             // landed between the two reads (measured: ~2% of products under a hostile flipper).
             var blas = Blas;
             NDArray blasResult;

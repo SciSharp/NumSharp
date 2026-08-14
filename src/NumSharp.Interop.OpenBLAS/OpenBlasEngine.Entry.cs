@@ -6,7 +6,7 @@ using NumSharp.Utilities;
 
 namespace NumSharp.Interop.OpenBLAS
 {
-    internal static unsafe partial class BlasParity
+    public static unsafe partial class OpenBlasEngine
     {
         /// <summary>
         ///     Parity entry point for the 2-D core of <c>np.matmul</c> (and of every batch element of
@@ -15,7 +15,7 @@ namespace NumSharp.Interop.OpenBLAS
         /// <returns>False when the parity backend is off or cannot service this input.</returns>
         internal static bool TryMatmul2D(NDArray left, NDArray right, NDArray result)
         {
-            if (!CBlasNative.IsLoaded)
+            if (!OpenBlasNative.IsLoaded)
                 return false;
 
             var typeCode = result.GetTypeCode;
@@ -51,7 +51,7 @@ namespace NumSharp.Interop.OpenBLAS
         /// <returns>False when the parity backend is off or cannot service this input.</returns>
         internal static bool TryMatmulBatched(NDArray left, NDArray right, NDArray result)
         {
-            if (!CBlasNative.IsLoaded)
+            if (!OpenBlasNative.IsLoaded)
                 return false;
 
             var typeCode = result.GetTypeCode;
@@ -193,7 +193,7 @@ namespace NumSharp.Interop.OpenBLAS
         internal static bool TryDot(NDArray left, NDArray right, out NDArray result)
         {
             result = null;
-            if (!CBlasNative.IsLoaded)
+            if (!OpenBlasNative.IsLoaded)
                 return false;
 
             var typeCode = np._FindCommonArrayType(left.GetTypeCode, right.GetTypeCode);

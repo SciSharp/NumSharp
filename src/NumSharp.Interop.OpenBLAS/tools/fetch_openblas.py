@@ -52,7 +52,7 @@ NOTICES_PATH = os.path.join(PKG_ROOT, "THIRD-PARTY-NOTICES.txt")
 #
 # Mirrors NumPy's own selection in tools/wheels/cibw_before_build.sh: scipy-openblas64 everywhere
 # except Windows on ARM64, which NumPy builds against scipy-openblas32.  Matching that matters --
-# the two have different symbol schemes AND different BLAS integer widths (see CBlasNative.Bind).
+# the two have different symbol schemes AND different BLAS integer widths (see OpenBlasNative.Bind).
 RID_MAP = {
     "win-x64":          ("scipy-openblas64", "win_amd64"),
     "win-arm64":        ("scipy-openblas32", "win_arm64"),

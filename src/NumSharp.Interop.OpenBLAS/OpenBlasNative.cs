@@ -33,7 +33,7 @@ namespace NumSharp.Interop.OpenBLAS
 
     /// <summary>
     ///     Binding to an external CBLAS shared library, used exclusively by the opt-in
-    ///     byte-parity matrix-product backend this package installs (<see cref="Blas"/> →
+    ///     byte-parity matrix-product backend this package installs (<see cref="OpenBlasEngine"/> →
     ///     <see cref="OpenBlasBackend"/>).
     /// </summary>
     /// <remarks>
@@ -50,7 +50,7 @@ namespace NumSharp.Interop.OpenBLAS
     ///     are marshalled accordingly — see <see cref="IsIlp64"/>.
     ///     </para>
     /// </remarks>
-    internal static unsafe class CBlasNative
+    internal static unsafe class OpenBlasNative
     {
         private static readonly object SyncRoot = new object();
 
@@ -137,7 +137,7 @@ namespace NumSharp.Interop.OpenBLAS
         ///     succeeds or leaves the previous binding exactly as it was. Tearing the working
         ///     library down first — which is what this used to do — meant a mistyped path silently
         ///     demoted every subsequent product back to NumSharp's managed kernels while
-        ///     <c>Blas.Enabled</c> still said true: the worst outcome a parity feature has, since
+        ///     <c>OpenBlasEngine.Enabled</c> still said true: the worst outcome a parity feature has, since
         ///     the answer stays plausible.
         /// </remarks>
         /// <exception cref="DllNotFoundException">No candidate library could be loaded.</exception>
@@ -153,7 +153,7 @@ namespace NumSharp.Interop.OpenBLAS
                     EnsureCoreTypeRunnable(coreType);
                     if (!TrySetNativeEnvironment("OPENBLAS_CORETYPE", coreType))
                         throw new PlatformNotSupportedException(
-                            "Blas.Enable: could not set OPENBLAS_CORETYPE where the native library " +
+                            "OpenBlasEngine.Enable: could not set OPENBLAS_CORETYPE where the native library " +
                             "can see it (the C runtime's environment is not reachable on this " +
                             "platform). Set OPENBLAS_CORETYPE in the environment before starting " +
                             "the process instead.");
@@ -176,7 +176,7 @@ namespace NumSharp.Interop.OpenBLAS
                         return;
 
                     throw new DllNotFoundException(
-                        $"Blas.Enable: '{requested}' could not be loaded as a CBLAS library" +
+                        $"OpenBlasEngine.Enable: '{requested}' could not be loaded as a CBLAS library" +
                         (tried.Count == 0
                             ? " (no such file, and no BLAS library in it if it is a directory)."
                             : $" (tried: {string.Join(", ", tried)}).") +
@@ -207,8 +207,8 @@ namespace NumSharp.Interop.OpenBLAS
                         return;
 
                     if (marker.Required)
-                        throw new BlasRequiredOverrideException(
-                            "Blas.Enable: the build staged a REQUIRED OpenBLAS version override " +
+                        throw new OpenBlasRequiredOverrideException(
+                            "OpenBlasEngine.Enable: the build staged a REQUIRED OpenBLAS version override " +
                             $"({marker.Distribution ?? "scipy-openblas"} {marker.Version ?? "?"}, " +
                             $"marker '{marker.MarkerPath}') but no loadable CBLAS matched it in: " +
                             string.Join(", ", marker.ReadDirectories()) +
@@ -228,7 +228,7 @@ namespace NumSharp.Interop.OpenBLAS
                     return;
 
                 throw new DllNotFoundException(
-                    "Blas.Enable: no CBLAS library could be loaded. This package normally serves " +
+                    "OpenBlasEngine.Enable: no CBLAS library could be loaded. This package normally serves " +
                     "its bundled scipy-openblas runtime asset (runtimes/<rid>/native/); none was " +
                     "found for this platform and no other CBLAS was discovered. Point " +
                     "NUMSHARP_OPENBLAS_PATH at a directory holding one (non-binding, highest " +
@@ -279,7 +279,7 @@ namespace NumSharp.Interop.OpenBLAS
         /// <summary>Releases the loaded library and clears every bound symbol.</summary>
         /// <remarks>
         ///     Deliberately NOT called by <see cref="Load"/> — replacing a library must not tear the
-        ///     working one down before the replacement is bound, and <c>Blas.Disable()</c> only
+        ///     working one down before the replacement is bound, and <c>OpenBlasEngine.Disable()</c> only
         ///     uninstalls the backend (freeing a BLAS a thread may be executing in is a fatal
         ///     access violation, not a catchable error). Kept for an explicit teardown.
         /// </remarks>
@@ -313,7 +313,7 @@ namespace NumSharp.Interop.OpenBLAS
         ///     either binds completely or not at all. A partial bind is not merely untidy: the
         ///     caller frees the handle when this throws, so a half-written <see cref="_handle"/>
         ///     would leave <see cref="IsLoaded"/> reporting true over freed memory — the next
-        ///     <c>Blas.Enable()</c> would skip loading and call into it, and the next
+        ///     <c>OpenBlasEngine.Enable()</c> would skip loading and call into it, and the next
         ///     <see cref="Load"/> would free it a second time.
         /// </remarks>
         private static void Bind(IntPtr handle, string path)
@@ -404,7 +404,7 @@ namespace NumSharp.Interop.OpenBLAS
             }
 
             throw new EntryPointNotFoundException(
-                $"Blas.Enable: '{path}' loaded but exports no recognizable cblas_sgemm symbol " +
+                $"OpenBlasEngine.Enable: '{path}' loaded but exports no recognizable cblas_sgemm symbol " +
                 "(tried the scipy_*64_, *64_, *_64 and plain CBLAS naming schemes). It is probably " +
                 "not a CBLAS provider.");
         }
@@ -414,7 +414,7 @@ namespace NumSharp.Interop.OpenBLAS
             IntPtr p;
             if (!NativeLibrary.TryGetExport(handle, name, out p))
                 throw new EntryPointNotFoundException(
-                    $"Blas.Enable: the loaded BLAS library is missing the required symbol '{name}'.");
+                    $"OpenBlasEngine.Enable: the loaded BLAS library is missing the required symbol '{name}'.");
             return p;
         }
 
@@ -489,7 +489,7 @@ namespace NumSharp.Interop.OpenBLAS
         ///     2026-08-13): we never grab OpenBLAS out of a numpy installation. A conda/system
         ///     <i>OpenBLAS</i> package is still machine tooling below; a <i>numpy</i> is not. To
         ///     match a numpy whose OpenBLAS differs from the bundled one, NAME it —
-        ///     <c>Blas.Enable(path)</c> or <c>NUMSHARP_OPENBLAS_PARITY</c> (binding), or point
+        ///     <c>OpenBlasEngine.Enable(path)</c> or <c>NUMSHARP_OPENBLAS_PARITY</c> (binding), or point
         ///     <c>NUMSHARP_OPENBLAS_PATH</c> at it (non-binding priority).
         ///     <c>NUMSHARP_OPENBLAS_BUNDLED=0</c> drops the bundled entry entirely, making machine
         ///     tooling the discovery default.
@@ -579,7 +579,7 @@ namespace NumSharp.Interop.OpenBLAS
 
             try
             {
-                var loc = typeof(CBlasNative).Assembly.Location;
+                var loc = typeof(OpenBlasNative).Assembly.Location;
                 if (!string.IsNullOrEmpty(loc))
                 {
                     var dir = Path.GetDirectoryName(loc);
@@ -864,11 +864,11 @@ namespace NumSharp.Interop.OpenBLAS
                 return;
 
             throw new InvalidOperationException(
-                $"Blas.Enable: cannot pin OPENBLAS_CORETYPE to '{coreType}' — a BLAS library is " +
+                $"OpenBlasEngine.Enable: cannot pin OPENBLAS_CORETYPE to '{coreType}' — a BLAS library is " +
                 $"already loaded in this process and dispatched to '{current}'. OpenBLAS reads that " +
                 "variable once, while it is selecting a micro-kernel, and never re-reads it, so the " +
                 "choice is fixed for the lifetime of the process. Pin the core type on the FIRST " +
-                "Blas.Enable call, or set OPENBLAS_CORETYPE in the environment before the process " +
+                "OpenBlasEngine.Enable call, or set OPENBLAS_CORETYPE in the environment before the process " +
                 "starts.");
         }
 
@@ -961,7 +961,7 @@ namespace NumSharp.Interop.OpenBLAS
 
             if (!ok)
                 throw new PlatformNotSupportedException(
-                    $"Blas.Enable: this CPU cannot execute OpenBLAS' '{coreType}' kernels. " +
+                    $"OpenBlasEngine.Enable: this CPU cannot execute OpenBLAS' '{coreType}' kernels. " +
                     "OPENBLAS_CORETYPE overrides OpenBLAS' own CPU detection, so loading it would " +
                     "not fall back — it would terminate the process with an illegal instruction. " +
                     "Leave the core type unset to let OpenBLAS choose the best kernel this machine " +

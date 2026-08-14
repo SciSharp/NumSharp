@@ -68,7 +68,7 @@ namespace NumSharp.UnitTest.Fuzz
         {
             try
             {
-                Blas.Enable(threads: Blas_Threads > 0 ? Blas_Threads : 0);
+                OpenBlasEngine.Enable(threads: Blas_Threads > 0 ? Blas_Threads : 0);
             }
             catch (Exception e)
             {
@@ -78,7 +78,7 @@ namespace NumSharp.UnitTest.Fuzz
                        "point NUMSHARP_OPENBLAS_PARITY at its BLAS to run this gate.";
             }
 
-            var info = Blas.Info ?? string.Empty;
+            var info = OpenBlasEngine.Info ?? string.Empty;
 
             // Identity by CONTENT when the corpus records it: the same bytes under a different file
             // name are the same library, and that is not a corner case — it is the normal outcome
@@ -89,7 +89,7 @@ namespace NumSharp.UnitTest.Fuzz
             {
                 if (!string.Equals(loadedHash, Blas_Library_Sha256, StringComparison.OrdinalIgnoreCase))
                 {
-                    Blas.Disable();
+                    OpenBlasEngine.Disable();
                     return $"matmul_parity is host-pinned to the BLAS binary sha256 " +
                            $"{Blas_Library_Sha256} ('{Blas_Library}', numpy {Numpy}); this host " +
                            $"loaded {loadedHash} — {info}. Different builds round differently — " +
@@ -100,7 +100,7 @@ namespace NumSharp.UnitTest.Fuzz
             else if (!string.IsNullOrEmpty(Blas_Library) &&
                      !info.Contains(Blas_Library, StringComparison.OrdinalIgnoreCase))
             {
-                Blas.Disable();
+                OpenBlasEngine.Disable();
                 return $"matmul_parity is host-pinned to '{Blas_Library}' (numpy {Numpy}); this host " +
                        $"loaded a different BLAS: {info}. Different binaries round differently — " +
                        "regenerate the corpus here (python test/oracle/gen_oracle.py matmul_parity) " +
@@ -109,7 +109,7 @@ namespace NumSharp.UnitTest.Fuzz
 
             if (!string.IsNullOrEmpty(Blas_Corename) && !info.Contains(Blas_Corename, StringComparison.OrdinalIgnoreCase))
             {
-                Blas.Disable();
+                OpenBlasEngine.Disable();
                 return $"matmul_parity is host-pinned to the '{Blas_Corename}' OpenBLAS kernel " +
                        $"({Blas_Config}); this CPU dispatched to a different one: {info}. " +
                        "DYNAMIC_ARCH picks a different accumulator layout per micro-architecture.";
@@ -123,7 +123,7 @@ namespace NumSharp.UnitTest.Fuzz
         {
             try
             {
-                var path = Blas.LibraryPath;
+                var path = OpenBlasEngine.LibraryPath;
                 if (string.IsNullOrEmpty(path) || !File.Exists(path))
                     return null;   // a bare loader name resolved by the OS — no path to hash
 

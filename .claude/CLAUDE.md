@@ -113,7 +113,7 @@ for arrays that already exist (probed: 38/38 construction/operation/IO paths rea
 
 Three rules the review pinned, all with a reproduction (`docs/GEMM_PARITY.md` §9): read `Blas` into
 a **local** before calling it (test-then-call on a settable property was ~2 % NREs under concurrent
-`Disable()`); a failed `Blas.Enable` is a **no-op** (it used to unload the working library first,
+`Disable()`); a failed `OpenBlasEngine.Enable` is a **no-op** (it used to unload the working library first,
 leaving `Enabled` reporting true while products silently reverted to managed kernels); and a backend
 needs **no** `InternalsVisibleTo` — read operands as `(T*)a.GetData().Address + a.Shape.Offset` with
 `a.Shape.Strides` (all public; `a.GetData<T>().Address` densifies non-contiguous views and must not
@@ -154,7 +154,7 @@ hashes per RID. Discovery order is fixed (`docs/OPENBLAS_DELIVERY_DESIGN.md` §3
 implemented, gate `OpenBlasDeliveryTests`): explicit path/`NUMSHARP_OPENBLAS_PARITY` (binding) →
 override path(s) (`NUMSHARP_OPENBLAS_PATH` env, then a build-recorded `OpenBlasPath` marker;
 non-binding) → build-staged **version override** (`openblas.source.json` marker, `mode:"version"` —
-**hard-required**: a miss throws `BlasRequiredOverrideException`, never falls through; sha-verified
+**hard-required**: a miss throws `OpenBlasRequiredOverrideException`, never falls through; sha-verified
 when pinned) → explicit OpenBLAS root (`OPENBLAS_HOME`/`OPENBLAS_ROOT`, promoted ABOVE the bundle
 2026-08-14 — a deliberate opt-in that trades parity-by-default for the named build) → **bundled**
 (the parity default; §10.1 resolved: it stays ABOVE *ambient* machine tooling) →
@@ -184,11 +184,11 @@ once, then cache) + `OpenBlasDeliveryTests` (20 — priority pins and hostile ma
 
 **Four load-bearing details:** the result bits depend on the BLAS **thread count** (1/2/4/24 threads
 give four different answers); they ALSO depend on the **DYNAMIC_ARCH kernel** the CPU dispatches, so
-bundling pins the build but *not* the answer — `Blas.Enable(coreType: Blas.ParityCoreType)` pins that
+bundling pins the build but *not* the answer — `OpenBlasEngine.Enable(coreType: OpenBlasEngine.CoreType)` pins that
 too (probed: Haswell/Nehalem/Sandybridge/Katmai all differ; it is opt-in because the default must
 match the local NumPy, which also dispatches by CPU; it must be set BEFORE load, and forcing an ISA
 above the CPU **kills the process with SIGILL**, so `Enable` refuses what it can recognise). A
-**named library is binding** (`Blas.Enable(path)` / `NUMSHARP_OPENBLAS_PARITY` is never silently
+**named library is binding** (`OpenBlasEngine.Enable(path)` / `NUMSHARP_OPENBLAS_PARITY` is never silently
 substituted, not even by the bundled copy). And the BLAS path is *faster* than the managed GEMM
 anyway (1.7–13×; 2048³ f64 293 ms vs 3860 ms).
 
@@ -197,11 +197,11 @@ table, so setting `OPENBLAS_CORETYPE` that way reads back correctly and changes 
 the CRT (`ucrtbase!_putenv_s` / `libc!setenv`); Windows' `SetEnvironmentVariableW` does not work
 either.
 
-API: `Blas.Enable(library, threads, coreType)` / `Blas.Disable()` / `Blas.Enabled` / `Blas.Info` /
-`Blas.LibraryPath` / `Blas.CoreName` / `Blas.IsBundledLibrary` (marker-aware: a staged override in
-the same folder layout reports false) / `Blas.ParityCoreType`; `NUMSHARP_OPENBLAS_PATH` adds
+API: `OpenBlasEngine.Enable(library, threads, coreType)` / `OpenBlasEngine.Disable()` / `OpenBlasEngine.Enabled` / `OpenBlasEngine.Info` /
+`OpenBlasEngine.LibraryPath` / `OpenBlasEngine.CoreName` / `OpenBlasEngine.IsBundledLibrary` (marker-aware: a staged override in
+the same folder layout reports false) / `OpenBlasEngine.CoreType`; `NUMSHARP_OPENBLAS_PATH` adds
 highest-priority (non-binding) discovery locations tried before bundled;
-`NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` opts out of the module-load install (`Blas.BundleAutoinstall`;
+`NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` opts out of the module-load install (`OpenBlasEngine.BundleAutoinstall`;
 the pre-rename `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` and `NUMSHARP_BLAS_AUTOINSTALL` spellings are RETIRED
 and ignored — removed before any
 release shipped them, pinned by `RetiredAutoinstallAlias_NoLongerSuppresses` — and a

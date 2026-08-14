@@ -1,7 +1,7 @@
 # `NumSharp.Interop.OpenBLAS` — byte-identical `np.dot` / `np.matmul`
 
 > **✅ IMPLEMENTED (2026-07-25).** Optional package `src/NumSharp.Interop.OpenBLAS/`
-> (`OpenBlasBackend : IBlasBackend`, `Blas`, `CBlasNative`, `BlasParity{,.Matmul,.Dot,.Entry}`),
+> (`OpenBlasBackend : IBlasBackend`, `OpenBlasEngine{,.Binding,.Matmul,.Dot,.Entry}`, `OpenBlasNative`),
 > installed through the one seam Core exposes — the engine's settable `TensorEngine.Blas`
 > property — gate `FuzzCorpusTests.MatmulParity` over the 342-case `matmul_parity` corpus tier.
 > Measured: **342/342 bit-exact with the backend installed, 294/342 divergent without it.**
@@ -69,10 +69,10 @@ using NumSharp.Interop.OpenBLAS;
 
 // Referencing the package IS the opt-in: a [ModuleInitializer] installs the backend if a CBLAS
 // library can be found, and silently does nothing if one cannot.
-Blas.Enable(@"…\numpy.libs\libscipy_openblas64_-74a4….dll", threads: 1);  // pin, for byte parity
-Blas.Enabled;                                            // bool
-Blas.Info;                                               // path + symbol scheme + int width + threads + build string
-Blas.Disable();                                          // back to NumSharp's managed SIMD GEMM
+OpenBlasEngine.Enable(@"…\numpy.libs\libscipy_openblas64_-74a4….dll", threads: 1);  // pin, for byte parity
+OpenBlasEngine.Enabled;                                            // bool
+OpenBlasEngine.Info;                                               // path + symbol scheme + int width + threads + build string
+OpenBlasEngine.Disable();                                          // back to NumSharp's managed SIMD GEMM
 ```
 
 Discovery order (summary; the authoritative table is §6.1, and the full delivery/discovery model is
@@ -85,7 +85,7 @@ numpy's `numpy.libs/` is **not** an auto-scanned tier (removed 2026-08-13 — th
 that binary at the pin); to match a *different* numpy, name its library explicitly, which is
 binding. NumPy's wheels rename their symbols `scipy_cblas_sgemm64_`-style and use **64-bit BLAS
 integers**; a stock LP64 `cblas_sgemm` is also bound, with the integer width marshalled per call
-(`CBlasNative.IsIlp64`).
+(`OpenBlasNative.IsIlp64`).
 
 ### The seam: one property on the engine
 
@@ -298,7 +298,7 @@ this table is the current order.)
 |---|---|---|
 | 1 | explicit path / `NUMSHARP_OPENBLAS_PARITY` | **binding** — never substituted, not even by the bundled copy |
 | 2 | `NUMSHARP_OPENBLAS_PATH`, then a build-recorded `OpenBlasPath` marker | override path(s) — tried first, ahead of the bundled asset; non-binding (fall through when they hold no BLAS) |
-| 3 | build-staged **version override** (`openblas.source.json`, `mode: "version"`) | **hard-required** — a miss throws `BlasRequiredOverrideException`, never falls through; sha-verified when the marker pins one |
+| 3 | build-staged **version override** (`openblas.source.json`, `mode: "version"`) | **hard-required** — a miss throws `OpenBlasRequiredOverrideException`, never falls through; sha-verified when the marker pins one |
 | 4 | explicit OpenBLAS root (`OPENBLAS_HOME` / `OPENBLAS_ROOT`) | a deliberate "use the OpenBLAS here" signal, so it **outranks the bundle**; **not** byte-parity with NumPy — trades parity-by-default for the named build |
 | 5 | **bundled `runtimes/<rid>/native/`** | the zero-config parity default; `NUMSHARP_OPENBLAS_BUNDLED=0` drops it |
 | 6 | machine-wide OpenBLAS (apt / brew / MacPorts / conda / vcpkg / source) | **not** byte-parity with NumPy — a different build — so it ranks below the parity sources; honours the ambient `VCPKG_ROOT` / `CONDA_PREFIX` |
@@ -375,7 +375,7 @@ binary, `OPENBLAS_NUM_THREADS=1`, `(512,784)@(784,512)` f32:
 Four facts fall out, all load-bearing:
 
 1. **The variable works**, and pinning it to the corpus's kernel reproduces the corpus's bits on any
-   CPU that can run that kernel — `Blas.ParityCoreType` ("Haswell") covers every x86-64 with AVX2+FMA.
+   CPU that can run that kernel — `OpenBlasEngine.CoreType` ("Haswell") covers every x86-64 with AVX2+FMA.
 2. **It is not safe to set blindly.** It *overrides* OpenBLAS' capability detection, so naming a
    kernel above the CPU's ISA executes an unsupported instruction. That is not catchable, so
    `Enable` refuses the combinations it can recognise up front.
@@ -399,7 +399,7 @@ process environment block, not the CRT copy `getenv` reads.
 
 #### A silently-ignored pin, found by its own test
 
-`Blas.Enable` skips `CBlasNative.Load` when a library is already loaded — so a `coreType` passed on
+`OpenBlasEngine.Enable` skips `OpenBlasNative.Load` when a library is already loaded — so a `coreType` passed on
 any call after the first was **discarded without a word**, leaving the caller believing the kernel
 was pinned while the bits were whatever the CPU chose. Now it either already holds (idempotent) or
 throws. Same failure class as the two the previous review caught: the parity feature reporting
@@ -466,7 +466,7 @@ measured.
 
 ## 8. Traps
 
-- **The thread count is part of the answer.** `Blas.Enable(..., threads: n)` is not a
+- **The thread count is part of the answer.** `OpenBlasEngine.Enable(..., threads: n)` is not a
   performance knob, it is a correctness knob. The gate pins it to the value recorded at generation
   time so a host whose default differs still matches.
 - **`a @ a.T` is not a gemm.** Both dispatchers detect the shared data pointer and call `?syrk`,
@@ -488,14 +488,14 @@ Each is now pinned by a test in `MatmulParityBackendTests`.
 
 - **Never test-then-call a settable property.** Both hook sites read `Blas` twice —
   `if (Blas != null && Blas.TryDot(...))`. `Blas` is settable from any thread, so a concurrent
-  `Blas.Disable()` landing between the two reads is a `NullReferenceException` inside `np.dot`:
+  `OpenBlasEngine.Disable()` landing between the two reads is a `NullReferenceException` inside `np.dot`:
   measured **31 252 of 1 562 291 products (~2 %)** under a thread flipping the property while eight
   workers multiplied. Reading it into a local first fixes it (re-measured 0 of 1 553 695). A
   `volatile` field would not have helped — reference reads are already atomic; the bug was the
   *second* read, not a torn one.
-- **A failed `Enable` must change nothing.** `CBlasNative.Load` used to `Unload()` the working
-  library before it knew the new candidate was good, and `Blas.Enable` left the backend installed
-  when the load then threw. The result was the worst failure mode a parity feature has: `Blas.Enabled`
+- **A failed `Enable` must change nothing.** `OpenBlasNative.Load` used to `Unload()` the working
+  library before it knew the new candidate was good, and `OpenBlasEngine.Enable` left the backend installed
+  when the load then threw. The result was the worst failure mode a parity feature has: `OpenBlasEngine.Enabled`
   reporting **true** while every product had silently reverted to the managed kernel — no exception
   at the call site, and an answer that still looks like a matrix product. Load now binds the
   replacement fully before touching the incumbent, and `Enabled` means installed **and** bound.

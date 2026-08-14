@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 
 namespace NumSharp.Interop.OpenBLAS
 {
-    internal static unsafe partial class BlasParity
+    public static unsafe partial class OpenBlasEngine
     {
         /// <summary>
         ///     The route decision plus scratch buffers of <c>@TYPE@_matmul</c> (matmul.c.src). NumPy
@@ -48,7 +48,7 @@ namespace NumSharp.Interop.OpenBLAS
             bool anyZeroDim = dm == 0 || dn == 0 || dp == 0;
             plan.ScalarOut = dm == 1 && dp == 1;
             plan.ScalarVec = dn == 1 && (dp == 1 || dm == 1);
-            long maxSize = CBlasNative.BlasMaxSize;
+            long maxSize = OpenBlasNative.BlasMaxSize;
             bool tooBigForBlas = dm > maxSize || dn > maxSize || dp > maxSize;
 
             bool i1CBlasable = IsBlasable2d(is1M, is1N, dm, dn);

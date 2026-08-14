@@ -33,7 +33,7 @@ namespace NumSharp.Interop.OpenBLAS
     ///     element stride is aligned by construction).
     ///     </para>
     /// </remarks>
-    internal static unsafe partial class BlasParity
+    public static unsafe partial class OpenBlasEngine
     {
         /// <summary>
         ///     A 2-D operand as the dispatchers see it: base pointer plus per-axis element strides.
@@ -79,18 +79,18 @@ namespace NumSharp.Interop.OpenBLAS
         {
             public void Gemm(CBlasOrder order, CBlasTranspose transA, CBlasTranspose transB,
                 long m, long n, long k, float* a, long lda, float* b, long ldb, float* c, long ldc)
-                => CBlasNative.Sgemm(order, transA, transB, m, n, k, 1.0f, a, lda, b, ldb, 0.0f, c, ldc);
+                => OpenBlasNative.Sgemm(order, transA, transB, m, n, k, 1.0f, a, lda, b, ldb, 0.0f, c, ldc);
 
             public void Gemv(CBlasOrder order, CBlasTranspose trans, long m, long n,
                 float* a, long lda, float* x, long incX, float* y, long incY)
-                => CBlasNative.Sgemv(order, trans, m, n, 1.0f, a, lda, x, incX, 0.0f, y, incY);
+                => OpenBlasNative.Sgemv(order, trans, m, n, 1.0f, a, lda, x, incX, 0.0f, y, incY);
 
             public void Syrk(CBlasOrder order, CBlasUpLo uplo, CBlasTranspose trans,
                 long n, long k, float* a, long lda, float* c, long ldc)
-                => CBlasNative.Ssyrk(order, uplo, trans, n, k, 1.0f, a, lda, 0.0f, c, ldc);
+                => OpenBlasNative.Ssyrk(order, uplo, trans, n, k, 1.0f, a, lda, 0.0f, c, ldc);
 
             public void Axpy(long n, float alpha, float* x, long incX, float* y, long incY)
-                => CBlasNative.Saxpy(n, alpha, x, incX, y, incY);
+                => OpenBlasNative.Saxpy(n, alpha, x, incX, y, incY);
 
             public void Dot(float* ip1, long is1, float* ip2, long is2, float* op, long n)
             {
@@ -98,11 +98,11 @@ namespace NumSharp.Interop.OpenBLAS
                 if (is1b != 0 && is2b != 0)
                 {
                     double sum = 0.0; // double for stability
-                    long chunkMax = CBlasNative.CBlasChunk;
+                    long chunkMax = OpenBlasNative.CBlasChunk;
                     while (n > 0)
                     {
                         long chunk = n < chunkMax ? n : chunkMax;
-                        sum += CBlasNative.Sdot(chunk, ip1, is1b, ip2, is2b);
+                        sum += OpenBlasNative.Sdot(chunk, ip1, is1b, ip2, is2b);
                         ip1 += chunk * is1;
                         ip2 += chunk * is2;
                         n -= chunk;
@@ -125,18 +125,18 @@ namespace NumSharp.Interop.OpenBLAS
         {
             public void Gemm(CBlasOrder order, CBlasTranspose transA, CBlasTranspose transB,
                 long m, long n, long k, double* a, long lda, double* b, long ldb, double* c, long ldc)
-                => CBlasNative.Dgemm(order, transA, transB, m, n, k, 1.0, a, lda, b, ldb, 0.0, c, ldc);
+                => OpenBlasNative.Dgemm(order, transA, transB, m, n, k, 1.0, a, lda, b, ldb, 0.0, c, ldc);
 
             public void Gemv(CBlasOrder order, CBlasTranspose trans, long m, long n,
                 double* a, long lda, double* x, long incX, double* y, long incY)
-                => CBlasNative.Dgemv(order, trans, m, n, 1.0, a, lda, x, incX, 0.0, y, incY);
+                => OpenBlasNative.Dgemv(order, trans, m, n, 1.0, a, lda, x, incX, 0.0, y, incY);
 
             public void Syrk(CBlasOrder order, CBlasUpLo uplo, CBlasTranspose trans,
                 long n, long k, double* a, long lda, double* c, long ldc)
-                => CBlasNative.Dsyrk(order, uplo, trans, n, k, 1.0, a, lda, 0.0, c, ldc);
+                => OpenBlasNative.Dsyrk(order, uplo, trans, n, k, 1.0, a, lda, 0.0, c, ldc);
 
             public void Axpy(long n, double alpha, double* x, long incX, double* y, long incY)
-                => CBlasNative.Daxpy(n, alpha, x, incX, y, incY);
+                => OpenBlasNative.Daxpy(n, alpha, x, incX, y, incY);
 
             public void Dot(double* ip1, long is1, double* ip2, long is2, double* op, long n)
             {
@@ -144,11 +144,11 @@ namespace NumSharp.Interop.OpenBLAS
                 if (is1b != 0 && is2b != 0)
                 {
                     double sum = 0.0;
-                    long chunkMax = CBlasNative.CBlasChunk;
+                    long chunkMax = OpenBlasNative.CBlasChunk;
                     while (n > 0)
                     {
                         long chunk = n < chunkMax ? n : chunkMax;
-                        sum += CBlasNative.Ddot(chunk, ip1, is1b, ip2, is2b);
+                        sum += OpenBlasNative.Ddot(chunk, ip1, is1b, ip2, is2b);
                         ip1 += chunk * is1;
                         ip2 += chunk * is2;
                         n -= chunk;
@@ -173,7 +173,7 @@ namespace NumSharp.Interop.OpenBLAS
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static long BlasStride(long elementStride)
-            => elementStride > 0 && elementStride <= CBlasNative.BlasMaxSize ? elementStride : 0;
+            => elementStride > 0 && elementStride <= OpenBlasNative.BlasMaxSize ? elementStride : 0;
 
         /// <summary>
         ///     NumPy's <c>is_blasable2d</c> (matmul.c.src), in element units:
@@ -187,7 +187,7 @@ namespace NumSharp.Interop.OpenBLAS
             if (stride2 != 1)
                 return false;
 
-            return stride1 >= d2 && stride1 <= CBlasNative.BlasMaxSize;
+            return stride1 >= d2 && stride1 <= OpenBlasNative.BlasMaxSize;
         }
 
         /// <summary>

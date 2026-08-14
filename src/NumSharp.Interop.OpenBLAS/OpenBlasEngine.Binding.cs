@@ -26,13 +26,13 @@ namespace NumSharp.Interop.OpenBLAS
     ///     <example>
     ///     <code>
     ///     // Byte-identical with a pip-installed numpy: name that wheel's own BLAS.
-    ///     Blas.Enable(@"…\site-packages\numpy.libs\libscipy_openblas64_-74a4….dll", threads: 1);
-    ///     Console.WriteLine(Blas.Info);
-    ///     Blas.Disable();                  // back to the built-in managed engine
+    ///     OpenBlasEngine.Enable(@"…\site-packages\numpy.libs\libscipy_openblas64_-74a4….dll", threads: 1);
+    ///     Console.WriteLine(OpenBlasEngine.Info);
+    ///     OpenBlasEngine.Disable();                  // back to the built-in managed engine
     ///     </code>
     ///     </example>
     /// </remarks>
-    public static class Blas
+    public static partial class OpenBlasEngine
     {
         /// <summary>
         ///     True when this package's backend is installed on the default engine AND has a CBLAS
@@ -45,7 +45,7 @@ namespace NumSharp.Interop.OpenBLAS
         ///     Reporting true there would make this property claim parity it is not delivering.
         /// </remarks>
         public static bool Enabled
-            => CBlasNative.IsLoaded && BackendFactory.GetEngine().Blas is OpenBlasBackend;
+            => OpenBlasNative.IsLoaded && BackendFactory.GetEngine().Blas is OpenBlasBackend;
 
         /// <summary>
         ///     Path, symbol scheme, integer width, thread count and build string of the loaded
@@ -55,12 +55,12 @@ namespace NumSharp.Interop.OpenBLAS
         {
             get
             {
-                if (!CBlasNative.IsLoaded)
+                if (!OpenBlasNative.IsLoaded)
                     return null;
 
-                var config = CBlasNative.GetConfig();
-                return $"{CBlasNative.LibraryPath} [symbols {CBlasNative.SymbolScheme}, " +
-                       $"{(CBlasNative.IsIlp64 ? "ILP64" : "LP64")}, threads {CBlasNative.GetNumThreads()}]" +
+                var config = OpenBlasNative.GetConfig();
+                return $"{OpenBlasNative.LibraryPath} [symbols {OpenBlasNative.SymbolScheme}, " +
+                       $"{(OpenBlasNative.IsIlp64 ? "ILP64" : "LP64")}, threads {OpenBlasNative.GetNumThreads()}]" +
                        (config == null ? string.Empty : " " + config);
             }
         }
@@ -92,11 +92,11 @@ namespace NumSharp.Interop.OpenBLAS
         ///     <see cref="Enabled"/> still said true.)
         /// </remarks>
         /// <param name="coreType">
-        ///     The OpenBLAS <c>DYNAMIC_ARCH</c> micro-kernel to force (e.g. <see cref="ParityCoreType"/>),
+        ///     The OpenBLAS <c>DYNAMIC_ARCH</c> micro-kernel to force (e.g. <see cref="CoreType"/>),
         ///     or null to let OpenBLAS pick the best one this CPU supports — which is what NumPy
         ///     does, and therefore the right default for matching a NumPy on the same machine.
         ///     Pin it only to make results reproducible across DIFFERENT machines; see
-        ///     <see cref="ParityCoreType"/> for the trade-off and the hazard.
+        ///     <see cref="CoreType"/> for the trade-off and the hazard.
         /// </param>
         /// <exception cref="DllNotFoundException">No CBLAS library could be located or loaded.</exception>
         /// <exception cref="EntryPointNotFoundException">The library is not a CBLAS provider.</exception>
@@ -105,9 +105,9 @@ namespace NumSharp.Interop.OpenBLAS
         /// </exception>
         public static void Enable(string library = null, int threads = 0, string coreType = null)
         {
-            if (!CBlasNative.IsLoaded || (library != null && library != CBlasNative.LibraryPath))
+            if (!OpenBlasNative.IsLoaded || (library != null && library != OpenBlasNative.LibraryPath))
             {
-                CBlasNative.Load(library, coreType);
+                OpenBlasNative.Load(library, coreType);
             }
             else if (!string.IsNullOrWhiteSpace(coreType))
             {
@@ -115,11 +115,11 @@ namespace NumSharp.Interop.OpenBLAS
                 // request cannot be honoured. Dropping it silently would leave the caller believing
                 // the kernel is pinned while the bits are whatever this CPU picked — so it either
                 // already holds or it throws.
-                CBlasNative.VerifyCoreTypeAlreadyInEffect(coreType);
+                OpenBlasNative.VerifyCoreTypeAlreadyInEffect(coreType);
             }
 
             if (threads > 0)
-                CBlasNative.TrySetNumThreads(threads);
+                OpenBlasNative.TrySetNumThreads(threads);
 
             if (!(BackendFactory.GetEngine().Blas is OpenBlasBackend))
                 BackendFactory.GetEngine().Blas = new OpenBlasBackend();
@@ -162,13 +162,13 @@ namespace NumSharp.Interop.OpenBLAS
         ///     while initialising and never re-reads it, so it cannot be changed afterwards.
         ///     </para>
         /// </remarks>
-        public const string ParityCoreType = "Haswell";
+        public const string CoreType = "Haswell";
 
         /// <summary>
         ///     The <c>DYNAMIC_ARCH</c> micro-kernel family OpenBLAS actually dispatched to
         ///     (e.g. "Haswell"), or null when no library is loaded or it does not report one.
         /// </summary>
-        public static string CoreName => CBlasNative.IsLoaded ? CBlasNative.GetCoreName() : null;
+        public static string CoreName => OpenBlasNative.IsLoaded ? OpenBlasNative.GetCoreName() : null;
 
         /// <summary>
         ///     Full path of the CBLAS library currently loaded, or null when none is.
@@ -179,7 +179,7 @@ namespace NumSharp.Interop.OpenBLAS
         ///     the input to reproducing or hashing a run. <see cref="Info"/> embeds it in prose;
         ///     this is the machine-readable form.
         /// </remarks>
-        public static string LibraryPath => CBlasNative.IsLoaded ? CBlasNative.LibraryPath : null;
+        public static string LibraryPath => OpenBlasNative.IsLoaded ? OpenBlasNative.LibraryPath : null;
 
         /// <summary>
         ///     True when the loaded library is the one this package bundles (as opposed to one
@@ -258,7 +258,7 @@ namespace NumSharp.Interop.OpenBLAS
         ///     itself — with ONE exception: a version override the build staged as a hard
         ///     requirement that fails to load is reported to stderr (the backend still stays
         ///     uninstalled rather than substituted, and an explicit <see cref="Enable"/> throws
-        ///     <see cref="BlasRequiredOverrideException"/> with the same message).
+        ///     <see cref="OpenBlasRequiredOverrideException"/> with the same message).
         /// </summary>
         /// <remarks>
         ///     Opt out with <c>NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0</c>. (The pre-rename
@@ -277,13 +277,13 @@ namespace NumSharp.Interop.OpenBLAS
             {
                 Enable();
             }
-            catch (BlasRequiredOverrideException e)
+            catch (OpenBlasRequiredOverrideException e)
             {
                 // The consumer PINNED a version at build time; silently running with different bits
                 // is the one failure a pin exists to prevent. Throwing here would surface as a
                 // TypeInitializationException at some unrelated first touch of this assembly, so:
                 // loud on stderr, backend left uninstalled (never substituted), and any explicit
-                // Blas.Enable() raises the full exception.
+                // OpenBlasEngine.Enable() raises the full exception.
                 Console.Error.WriteLine("NumSharp.Interop.OpenBLAS: " + e.Message);
             }
             catch (Exception)

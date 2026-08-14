@@ -55,7 +55,7 @@ namespace NumSharp.Backends
             // TensorEngine.Blas). It must own the whole product to reproduce its own summation
             // order, so it is consulted before the SIMD paths and answers only for what it serves.
             // Read the property ONCE — see the note in Default.Dot.cs: test-then-call on a
-            // settable property is a null-dereference under a concurrent Blas.Disable().
+            // settable property is a null-dereference under a concurrent OpenBlasEngine.Disable().
             var blas = Blas;
             if (blas != null && blas.TryMatMul2D(left, right, result))
                 return result;

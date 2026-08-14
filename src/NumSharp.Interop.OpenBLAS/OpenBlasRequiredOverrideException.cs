@@ -19,9 +19,9 @@ namespace NumSharp.Interop.OpenBLAS
     ///     loudly) from the ordinary no-BLAS-anywhere case (silent by design).
     ///     </para>
     /// </remarks>
-    public sealed class BlasRequiredOverrideException : DllNotFoundException
+    public sealed class OpenBlasRequiredOverrideException : DllNotFoundException
     {
-        public BlasRequiredOverrideException(string message) : base(message)
+        public OpenBlasRequiredOverrideException(string message) : base(message)
         {
         }
     }

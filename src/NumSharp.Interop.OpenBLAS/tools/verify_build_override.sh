@@ -7,7 +7,7 @@
 # proves the whole chain: buildTransitive import → PackageReference-metadata /
 # env knobs → PyPI download + double-hash verify → global cache (wheel deleted) →
 # staging over the bundle → source marker → runtime binds it as a REQUIRED
-# override (Blas.IsBundledLibrary == false). Plus the adversarial half: the
+# override (OpenBlasEngine.IsBundledLibrary == false). Plus the adversarial half: the
 # wrong-version and tampered-artifact hard fails, the mirror-needs-sha and
 # invalid-knob rejections, the delivery=none opt-out, the two-reference conflict,
 # poisoned-cache self-healing, marker lifecycle across mode switches, and both
@@ -102,9 +102,9 @@ using System;
 using NumSharp;
 using NumSharp.Interop.OpenBLAS;
 
-Console.WriteLine("enabled=" + Blas.Enabled);
-Console.WriteLine("library=" + Blas.LibraryPath);
-Console.WriteLine("bundled=" + Blas.IsBundledLibrary);
+Console.WriteLine("enabled=" + OpenBlasEngine.Enabled);
+Console.WriteLine("library=" + OpenBlasEngine.LibraryPath);
+Console.WriteLine("bundled=" + OpenBlasEngine.IsBundledLibrary);
 Console.WriteLine("dot00=" + (float)np.dot(
     np.arange(6).astype(NPTypeCode.Single).reshape(2, 3),
     np.arange(6).astype(NPTypeCode.Single).reshape(3, 2))[0, 0]);

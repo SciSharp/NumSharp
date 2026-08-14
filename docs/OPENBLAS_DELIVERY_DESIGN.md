@@ -77,7 +77,7 @@ library wins.**
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │ RUNTIME priority (BundleAutoinstall)                                                │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
-│ 1. BINDING    NUMSHARP_OPENBLAS_PARITY / Blas.Enable(path) — exclusive, fatal miss  │  [EXISTS]
+│ 1. BINDING    NUMSHARP_OPENBLAS_PARITY / OpenBlasEngine.Enable(path) — exclusive, fatal miss  │  [EXISTS]
 │ 2. OVERRIDE   a) path    OpenBlasPath / NUMSHARP_OPENBLAS_PATH — read in place      │  [DONE]
 │               b) version  staged binary + REQUIRED marker — hard-required           │  [DONE]
 │               c) root     OPENBLAS_HOME / OPENBLAS_ROOT — explicit, above bundle    │  [DONE]
@@ -124,7 +124,7 @@ NumPy pins (`openblas-manifest.json`). This is unchanged as the packaging mechan
 
 | Today | New | Why |
 |---|---|---|
-| `Blas.AutoInstall()` (`[ModuleInitializer]`) | **`Blas.BundleAutoinstall()`** | it exists to make the *bundle* work with zero config; the name should say so |
+| `Blas.AutoInstall()` (`[ModuleInitializer]`) | **`OpenBlasEngine.BundleAutoinstall()`** | it exists to make the *bundle* work with zero config; the name should say so |
 | `NUMSHARP_BLAS_AUTOINSTALL=0` | **`NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0`** | matches the method |
 | — | both pre-final spellings **RETIRED, ignored** — `NUMSHARP_BLAS_AUTOINSTALL` and the interim `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` (neither shipped in a release, so there is no installed base; pinned by `RetiredAutoinstallAlias_NoLongerSuppresses`) | no legacy carried |
 
@@ -144,10 +144,10 @@ remains silent (fall back to NumSharp's managed SIMD GEMM).
 - `NUMSHARP_OPENBLAS_BUNDLED=0` continues to drop the bundle entirely (machine tooling then becomes the
   discovery default).
 - **A required-override miss at module load is loud but not fatal:** `BundleAutoinstall` catches
-  `BlasRequiredOverrideException`, reports it on stderr and leaves the backend UNINSTALLED (never
+  `OpenBlasRequiredOverrideException`, reports it on stderr and leaves the backend UNINSTALLED (never
   substituted); throwing out of a `[ModuleInitializer]` would surface as a
   `TypeInitializationException` at some unrelated first touch of the assembly, breaking the "merely
-  referencing the package cannot break the app" promise. An explicit `Blas.Enable()` throws the full
+  referencing the package cannot break the app" promise. An explicit `OpenBlasEngine.Enable()` throws the full
   exception.
 
 ---
@@ -322,11 +322,11 @@ binary — a pure "file placement" handoff, no `runtimeconfig` needed; alternati
   "version": "0.3.34.106.0", "sha256": "…", "required": true, "path": "…" }
 ```
 
-Runtime rules (implemented in `CBlasNative.Load` + `OpenBlasSourceMarker`):
+Runtime rules (implemented in `OpenBlasNative.Load` + `OpenBlasSourceMarker`):
 
 - `mode = version` → the folder holds a **required override** → check it at **tier 2b**, ahead of
   the bundle and all machine tooling. If it fails to load, **throw**
-  (`BlasRequiredOverrideException`, do not fall back) — the version was a contract. When the marker
+  (`OpenBlasRequiredOverrideException`, do not fall back) — the version was a contract. When the marker
   carries a `sha256`, each candidate file is hash-verified BEFORE loading; a same-named file with
   different bytes is not the pinned binary and is skipped (so an all-mismatch folder throws too).
   An explicit `"required": false` downgrades a miss to fall-through.
@@ -334,7 +334,7 @@ Runtime rules (implemented in `CBlasNative.Load` + `OpenBlasSourceMarker`):
   over metadata); **not required** → fall through on miss.
 - `mode = none` / no marker → the `runtimes/<rid>/native` folder is the **bundle** → tier 3 (the
   parity default, per the §10.1 resolution), ahead of machine tooling.
-- A library loaded from a marker-declared override directory reports `Blas.IsBundledLibrary =
+- A library loaded from a marker-declared override directory reports `OpenBlasEngine.IsBundledLibrary =
   false` even though the folder layout (and possibly the bytes) match the bundle — the marker is
   the only thing that can tell them apart.
 
@@ -343,7 +343,7 @@ explicit binding) when it is a required override, and the parity default (tier 3
 tooling but below any override) when it is the bundle — and the marker is what flips it. It exists
 precisely because Goal 6 makes the two binaries indistinguishable by content.
 
-The **binding** path (`NUMSHARP_OPENBLAS_PARITY` / explicit `Blas.Enable(path)`) is unchanged and still
+The **binding** path (`NUMSHARP_OPENBLAS_PARITY` / explicit `OpenBlasEngine.Enable(path)`) is unchanged and still
 short-circuits everything (tier 1, exclusive, fatal on miss). Symbol-scheme probing inside a bound
 library (`scipy_*64_` ILP64 → … → plain `cblas_*` LP64) is unchanged.
 
@@ -353,7 +353,7 @@ library (`scipy_*64_` ILP64 → … → plain `cblas_*` LP64) is unchanged.
 
 | Kind | Today | New |
 |---|---|---|
-| Method | `Blas.AutoInstall()` | `Blas.BundleAutoinstall()` |
+| Method | `Blas.AutoInstall()` | `OpenBlasEngine.BundleAutoinstall()` |
 | Env (opt-out) | `NUMSHARP_BLAS_AUTOINSTALL=0` | `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` (old spellings `NUMSHARP_BLAS_AUTOINSTALL` and `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` RETIRED and ignored — neither released) |
 | Env (drop bundle) | `NUMSHARP_OPENBLAS_BUNDLED=0` | unchanged |
 | Env (binding) | `NUMSHARP_OPENBLAS_PARITY` | unchanged |
@@ -421,7 +421,7 @@ Downloading + later loading native code selected by build metadata is a supply-c
 | Rename `AutoInstall` → `BundleAutoinstall` (+ env; old spelling retired outright, no alias) | **DONE** |
 | Tier order per §10.1 resolution (overrides → bundle → machine tooling) | **DONE** |
 | Remove `PythonLibDirectories` (numpy.libs) | **DONE** |
-| Source marker + runtime tier-2b enforcement (`OpenBlasSourceMarker`, `BlasRequiredOverrideException`) | **DONE** |
+| Source marker + runtime tier-2b enforcement (`OpenBlasSourceMarker`, `OpenBlasRequiredOverrideException`) | **DONE** |
 | Gates: runtime priority unit tests (`OpenBlasDeliveryTests`); `MatmulParityBackendTests` 30/30 unaffected | **DONE** |
 | `buildTransitive` props/targets + inline download/extract task (netstandard2.0-surface, MiniJson) | **DONE** |
 | Override resolution (env > metadata), path & version modes, hard-fail | **DONE** |
@@ -438,12 +438,12 @@ Downloading + later loading native code selected by build metadata is a supply-c
 
 ## 12. References
 
-- Runtime discovery & binding: `src/NumSharp.Interop.OpenBLAS/CBlasNative.cs`
+- Runtime discovery & binding: `src/NumSharp.Interop.OpenBLAS/OpenBlasNative.cs`
   (`Load` tier orchestration, `OverridePathCandidates`, `VersionOverrideCandidates`,
   `AmbientCandidates`, `BundledDirectories`, `SystemBlasDirectories`, `PathEnvDirectories`).
 - Source marker & required-override contract: `src/NumSharp.Interop.OpenBLAS/OpenBlasSourceMarker.cs`,
-  `BlasRequiredOverrideException.cs`; runtime gate `test/NumSharp.UnitTest/Backends/OpenBlasDeliveryTests.cs`.
-- Autoinstall & backend wiring: `src/NumSharp.Interop.OpenBLAS/Blas.cs`
+  `OpenBlasRequiredOverrideException.cs`; runtime gate `test/NumSharp.UnitTest/Backends/OpenBlasDeliveryTests.cs`.
+- Autoinstall & backend wiring: `src/NumSharp.Interop.OpenBLAS/OpenBlasEngine.Binding.cs`
   (`BundleAutoinstall`, `Enable`, `Disable`).
 - Build-phase override delivery: `src/NumSharp.Interop.OpenBLAS/buildTransitive/NumSharp.Interop.OpenBLAS.{props,targets}`
   (the resolve gate, the stage/publish/pack targets, the inline `NumSharpOpenBlasFetchTask`);

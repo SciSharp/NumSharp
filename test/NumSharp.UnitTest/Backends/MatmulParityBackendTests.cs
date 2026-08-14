@@ -19,14 +19,14 @@ namespace NumSharp.UnitTest.Backends
     public class MatmulParityBackendTests
     {
         [TestCleanup]
-        public void Cleanup() => Blas.Disable();
+        public void Cleanup() => OpenBlasEngine.Disable();
 
         /// <summary>A BLAS-less machine must still be able to run these; skip loudly if so.</summary>
         private static void RequireBlas()
         {
             try
             {
-                Blas.Enable();
+                OpenBlasEngine.Enable();
             }
             catch (Exception e)
             {
@@ -40,8 +40,8 @@ namespace NumSharp.UnitTest.Backends
             // NumSharp.Core is 100% managed: nothing may install a native backend implicitly. (The
             // test assembly suppresses the package's module-load auto-install — see
             // BlasEngineAutoInstallGuard — precisely so this stays observable.)
-            Blas.Disable();
-            Assert.IsFalse(Blas.Enabled);
+            OpenBlasEngine.Disable();
+            Assert.IsFalse(OpenBlasEngine.Enabled);
             Assert.IsNull(BackendFactory.GetEngine().Blas);
         }
 
@@ -49,7 +49,7 @@ namespace NumSharp.UnitTest.Backends
         public void Enable_SetsTheBackendOnTheEngine_WithoutReplacingIt()
         {
             RequireBlas();
-            Assert.IsTrue(Blas.Enabled);
+            Assert.IsTrue(OpenBlasEngine.Enabled);
             var engine = BackendFactory.GetEngine();
             // The engine itself is untouched — still the built-in one, now holding a backend.
             Assert.IsInstanceOfType(engine, typeof(DefaultEngine));
@@ -61,8 +61,8 @@ namespace NumSharp.UnitTest.Backends
         public void Disable_ClearsTheBackend()
         {
             RequireBlas();
-            Blas.Disable();
-            Assert.IsFalse(Blas.Enabled);
+            OpenBlasEngine.Disable();
+            Assert.IsFalse(OpenBlasEngine.Enabled);
             Assert.IsNull(BackendFactory.GetEngine().Blas);
             Assert.IsInstanceOfType(BackendFactory.GetEngine(), typeof(DefaultEngine));
         }
@@ -79,17 +79,17 @@ namespace NumSharp.UnitTest.Backends
             StringAssert.Contains(backend.Info, "symbols");
 
             engine.Blas = null;
-            Assert.IsFalse(Blas.Enabled);
+            Assert.IsFalse(OpenBlasEngine.Enabled);
             engine.Blas = backend;
-            Assert.IsTrue(Blas.Enabled);
+            Assert.IsTrue(OpenBlasEngine.Enabled);
         }
 
         [TestMethod]
         public void Disable_IsAlwaysSafe_EvenWithNothingInstalled()
         {
-            Blas.Disable();
-            Blas.Disable();
-            Assert.IsFalse(Blas.Enabled);
+            OpenBlasEngine.Disable();
+            OpenBlasEngine.Disable();
+            Assert.IsFalse(OpenBlasEngine.Enabled);
         }
 
         [TestMethod]
@@ -99,9 +99,9 @@ namespace NumSharp.UnitTest.Backends
             // loaded must fail — even on a machine where auto-discovery would happily find NumPy's
             // OpenBLAS and produce confidently wrong bits.
             var ex = Assert.ThrowsException<DllNotFoundException>(
-                () => Blas.Enable("K:/definitely/not/a/blas/here.dll"));
+                () => OpenBlasEngine.Enable("K:/definitely/not/a/blas/here.dll"));
             StringAssert.Contains(ex.Message, "no other one is substituted");
-            Assert.IsFalse(Blas.Enabled, "a failed load must leave the backend uninstalled");
+            Assert.IsFalse(OpenBlasEngine.Enabled, "a failed load must leave the backend uninstalled");
         }
 
         [TestMethod]
@@ -109,8 +109,8 @@ namespace NumSharp.UnitTest.Backends
         {
             // The running test assembly is a perfectly loadable PE that exports no cblas_sgemm.
             var self = typeof(MatmulParityBackendTests).Assembly.Location;
-            Assert.ThrowsException<EntryPointNotFoundException>(() => Blas.Enable(self));
-            Assert.IsFalse(Blas.Enabled);
+            Assert.ThrowsException<EntryPointNotFoundException>(() => OpenBlasEngine.Enable(self));
+            Assert.IsFalse(OpenBlasEngine.Enabled);
         }
 
         [TestMethod]
@@ -118,15 +118,15 @@ namespace NumSharp.UnitTest.Backends
         {
             // The module-load path: referencing the package must never break an app that has no
             // native BLAS anywhere.
-            Assert.IsFalse(Blas.TryEnable("K:/definitely/not/a/blas/here.dll"));
-            Assert.IsFalse(Blas.Enabled);
+            Assert.IsFalse(OpenBlasEngine.TryEnable("K:/definitely/not/a/blas/here.dll"));
+            Assert.IsFalse(OpenBlasEngine.Enabled);
         }
 
         [TestMethod]
         public void Info_DescribesTheLoadedLibrary_OrIsNull()
         {
             RequireBlas();
-            var info = Blas.Info;
+            var info = OpenBlasEngine.Info;
             Assert.IsNotNull(info);
             StringAssert.Contains(info, "symbols");
             StringAssert.Contains(info, "threads");
@@ -142,7 +142,7 @@ namespace NumSharp.UnitTest.Backends
             var a = np.arange(12).astype(NPTypeCode.Single).reshape(3, 4);
             var b = np.arange(20).astype(NPTypeCode.Single).reshape(4, 5);
 
-            Blas.Disable();
+            OpenBlasEngine.Disable();
             var native = np.dot(a, b);
             RequireBlas();
             var parity = np.dot(a, b);
@@ -160,7 +160,7 @@ namespace NumSharp.UnitTest.Backends
             var a = np.arange(6).astype(NPTypeCode.Int32).reshape(2, 3);
             var b = np.arange(6).astype(NPTypeCode.Int32).reshape(3, 2);
 
-            Blas.Disable();
+            OpenBlasEngine.Disable();
             var native = np.matmul(a, b);
             RequireBlas();
             var parity = np.matmul(a, b);
@@ -242,8 +242,8 @@ namespace NumSharp.UnitTest.Backends
         public void ThreadPin_IsReportedBack()
         {
             RequireBlas();
-            Blas.Enable(threads: 1);
-            var info = Blas.Info;
+            OpenBlasEngine.Enable(threads: 1);
+            var info = OpenBlasEngine.Info;
             // OpenBLAS reports the count back; a reference CBLAS has no such entry point (-1).
             Assert.IsTrue(info.Contains("threads 1") || info.Contains("threads -1"), info);
         }
@@ -287,9 +287,9 @@ namespace NumSharp.UnitTest.Backends
                 Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
 
             RequireBlas();
-            Assert.IsTrue(Blas.IsBundledLibrary,
-                "auto-discovery should bind the bundled asset, but loaded: " + Blas.LibraryPath);
-            StringAssert.Contains(Blas.LibraryPath, "runtimes");
+            Assert.IsTrue(OpenBlasEngine.IsBundledLibrary,
+                "auto-discovery should bind the bundled asset, but loaded: " + OpenBlasEngine.LibraryPath);
+            StringAssert.Contains(OpenBlasEngine.LibraryPath, "runtimes");
         }
 
         /// <summary>A named library still wins over the bundled one, and is never substituted.</summary>
@@ -304,8 +304,8 @@ namespace NumSharp.UnitTest.Backends
             // That failure mode would be invisible — the products still compute, just with a
             // different binary than the caller pinned.
             Assert.ThrowsExactly<DllNotFoundException>(
-                () => Blas.Enable(Path.Combine(AppContext.BaseDirectory, "no-such-blas-library.dll")));
-            Assert.IsFalse(Blas.Enabled);
+                () => OpenBlasEngine.Enable(Path.Combine(AppContext.BaseDirectory, "no-such-blas-library.dll")));
+            Assert.IsFalse(OpenBlasEngine.Enabled);
         }
 
         /// <summary>NUMSHARP_OPENBLAS_BUNDLED=0 drops the bundled entry from discovery.</summary>
@@ -315,7 +315,7 @@ namespace NumSharp.UnitTest.Backends
             if (FindBundledLibrary() == null)
                 Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
 
-            Blas.Disable();
+            OpenBlasEngine.Disable();
             var previous = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLED");
             try
             {
@@ -326,7 +326,7 @@ namespace NumSharp.UnitTest.Backends
                 bool loaded;
                 try
                 {
-                    Blas.Enable();
+                    OpenBlasEngine.Enable();
                     loaded = true;
                 }
                 catch (DllNotFoundException)
@@ -334,8 +334,8 @@ namespace NumSharp.UnitTest.Backends
                     loaded = false;   // nothing else on this machine — the opt-out plainly worked
                 }
 
-                if (loaded && Blas.IsBundledLibrary && !CBlasWasAlreadyLoaded())
-                    Assert.Fail("NUMSHARP_OPENBLAS_BUNDLED=0 was ignored: " + Blas.LibraryPath);
+                if (loaded && OpenBlasEngine.IsBundledLibrary && !CBlasWasAlreadyLoaded())
+                    Assert.Fail("NUMSHARP_OPENBLAS_BUNDLED=0 was ignored: " + OpenBlasEngine.LibraryPath);
             }
             finally
             {
@@ -360,20 +360,20 @@ namespace NumSharp.UnitTest.Backends
             if (!System.Runtime.Intrinsics.X86.Sse2.IsSupported)
                 Assert.Inconclusive("not an x86 host; the core-type table does not apply.");
 
-            Blas.Disable();
-            Assert.ThrowsExactly<PlatformNotSupportedException>(() => Blas.Enable(coreType: "SkylakeX"));
+            OpenBlasEngine.Disable();
+            Assert.ThrowsExactly<PlatformNotSupportedException>(() => OpenBlasEngine.Enable(coreType: "SkylakeX"));
         }
 
         /// <summary>The corpus's pinned kernel is the one the public constant names.</summary>
         [TestMethod]
-        public void ParityCoreType_MatchesTheCorpusHostPin()
+        public void CoreType_MatchesTheCorpusHostPin()
         {
             var pin = Fuzz.MatmulParityPin.Load();
             if (string.IsNullOrEmpty(pin.Blas_Corename))
                 Assert.Inconclusive("the committed host pin records no core name.");
 
-            Assert.AreEqual(pin.Blas_Corename, Blas.ParityCoreType, ignoreCase: true,
-                "Blas.ParityCoreType is what callers pin to reproduce the corpus on another " +
+            Assert.AreEqual(pin.Blas_Corename, OpenBlasEngine.CoreType, ignoreCase: true,
+                "OpenBlasEngine.CoreType is what callers pin to reproduce the corpus on another " +
                 "machine; it must name the kernel the corpus was actually generated with.");
         }
 
@@ -416,7 +416,7 @@ namespace NumSharp.UnitTest.Backends
             Assert.Inconclusive("the staged asset is not named in the manifest: " + lib);
         }
 
-        private static bool CBlasWasAlreadyLoaded() => Blas.LibraryPath != null;
+        private static bool CBlasWasAlreadyLoaded() => OpenBlasEngine.LibraryPath != null;
 
         /// <summary>The bundled asset for the running RID, as laid down next to the test output.</summary>
         private static string FindBundledLibrary()
@@ -459,21 +459,21 @@ namespace NumSharp.UnitTest.Backends
         // NamedLibrary_IsBinding_NeverSilentlySubstituted and NotACBlasProvider_Throws above assert
         // the right invariant, but only ever from a DISABLED start — which is the easy half. The
         // hard half is a failed Enable landing on a WORKING one: that used to unload the good
-        // library first and leave the backend installed over nothing, so Blas.Enabled kept saying
+        // library first and leave the backend installed over nothing, so OpenBlasEngine.Enabled kept saying
         // true while every product quietly reverted to the managed kernel and stayed plausible.
 
         [TestMethod]
         public void FailedEnable_OverAWorkingLibrary_ChangesNothing()
         {
             RequireBlas();
-            var before = Blas.Info;
+            var before = OpenBlasEngine.Info;
             var expected = np.dot(Ramp(48, 32), Ramp(32, 48));
 
             Assert.ThrowsException<DllNotFoundException>(
-                () => Blas.Enable("K:/definitely/not/a/blas/here.dll"));
+                () => OpenBlasEngine.Enable("K:/definitely/not/a/blas/here.dll"));
 
-            Assert.IsTrue(Blas.Enabled, "a failed Enable must not uninstall a working backend");
-            Assert.AreEqual(before, Blas.Info, "a failed Enable must not unload the working library");
+            Assert.IsTrue(OpenBlasEngine.Enabled, "a failed Enable must not uninstall a working backend");
+            Assert.AreEqual(before, OpenBlasEngine.Info, "a failed Enable must not unload the working library");
             AssertBitEqual(expected, np.dot(Ramp(48, 32), Ramp(32, 48)));
         }
 
@@ -481,13 +481,13 @@ namespace NumSharp.UnitTest.Backends
         public void FailedEnable_OnANonCBlasFile_OverAWorkingLibrary_ChangesNothing()
         {
             RequireBlas();
-            var before = Blas.Info;
+            var before = OpenBlasEngine.Info;
             var self = typeof(MatmulParityBackendTests).Assembly.Location;
 
-            Assert.ThrowsException<EntryPointNotFoundException>(() => Blas.Enable(self));
+            Assert.ThrowsException<EntryPointNotFoundException>(() => OpenBlasEngine.Enable(self));
 
-            Assert.IsTrue(Blas.Enabled);
-            Assert.AreEqual(before, Blas.Info);
+            Assert.IsTrue(OpenBlasEngine.Enabled);
+            Assert.AreEqual(before, OpenBlasEngine.Info);
         }
 
         [TestMethod]
@@ -496,10 +496,10 @@ namespace NumSharp.UnitTest.Backends
             // The property answers "are my products going through a BLAS?", so an installed backend
             // with nothing to call must report false — it declines every operand, and reporting
             // true there would claim a parity it is not delivering.
-            Blas.Disable();
-            Assert.IsFalse(Blas.Enabled);
+            OpenBlasEngine.Disable();
+            Assert.IsFalse(OpenBlasEngine.Enabled);
             BackendFactory.GetEngine().Blas = new DeclineEverythingBackend();
-            Assert.IsFalse(Blas.Enabled, "a foreign backend is not this package's backend");
+            Assert.IsFalse(OpenBlasEngine.Enabled, "a foreign backend is not this package's backend");
             BackendFactory.GetEngine().Blas = null;
         }
 
@@ -583,12 +583,12 @@ namespace NumSharp.UnitTest.Backends
 
             foreach (var (call, expected) in new[] { (zeroBatch, "Single(0,3,5)"), (zeroK, "Single(2,3,5)") })
             {
-                Blas.Disable();
+                OpenBlasEngine.Disable();
                 var withoutBackend = Outcome(call);
                 Assert.AreEqual(expected, withoutBackend,
                     "the managed engine does not give NumPy's answer for a zero-sized stacked matmul");
 
-                Blas.Enable();
+                OpenBlasEngine.Enable();
                 Assert.AreEqual(withoutBackend, Outcome(call),
                     "installing the backend changed the outcome of a zero-sized stacked matmul");
 

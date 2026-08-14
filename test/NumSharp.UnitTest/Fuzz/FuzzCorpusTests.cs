@@ -106,7 +106,7 @@ namespace NumSharp.UnitTest.Fuzz
             }
             finally
             {
-                NumSharp.Interop.OpenBLAS.Blas.Disable();
+                NumSharp.Interop.OpenBLAS.OpenBlasEngine.Disable();
             }
         }
 

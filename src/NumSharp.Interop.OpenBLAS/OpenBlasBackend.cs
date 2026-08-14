@@ -34,27 +34,27 @@ namespace NumSharp.Interop.OpenBLAS
         {
             get
             {
-                if (!CBlasNative.IsLoaded)
+                if (!OpenBlasNative.IsLoaded)
                     return "<no CBLAS library loaded>";
 
-                var config = CBlasNative.GetConfig();
-                return $"{CBlasNative.LibraryPath} [symbols {CBlasNative.SymbolScheme}, " +
-                       $"{(CBlasNative.IsIlp64 ? "ILP64" : "LP64")}, threads {CBlasNative.GetNumThreads()}]" +
+                var config = OpenBlasNative.GetConfig();
+                return $"{OpenBlasNative.LibraryPath} [symbols {OpenBlasNative.SymbolScheme}, " +
+                       $"{(OpenBlasNative.IsIlp64 ? "ILP64" : "LP64")}, threads {OpenBlasNative.GetNumThreads()}]" +
                        (config == null ? string.Empty : " " + config);
             }
         }
 
         /// <inheritdoc/>
         public bool TryDot(NDArray left, NDArray right, out NDArray result)
-            => BlasParity.TryDot(left, right, out result);
+            => OpenBlasEngine.TryDot(left, right, out result);
 
         /// <inheritdoc/>
         public bool TryMatMul2D(NDArray left, NDArray right, NDArray result)
-            => BlasParity.TryMatmul2D(left, right, result);
+            => OpenBlasEngine.TryMatmul2D(left, right, result);
 
         /// <inheritdoc/>
         public bool TryMatMulBatched(NDArray left, NDArray right, NDArray result)
-            => BlasParity.TryMatmulBatched(left, right, result);
+            => OpenBlasEngine.TryMatmulBatched(left, right, result);
 
         /// <summary>The loaded library's own description, for diagnostics.</summary>
         public override string ToString() => "OpenBlasBackend " + Info;

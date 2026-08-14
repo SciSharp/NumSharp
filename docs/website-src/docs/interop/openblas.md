@@ -59,11 +59,11 @@ using NumSharp.Interop.OpenBLAS;
 
 var c = np.dot(a, b);            // float32/float64 products now go through OpenBLAS
 
-Console.WriteLine(Blas.Info);
+Console.WriteLine(OpenBlasEngine.Info);
 // …\runtimes\win-x64\native\libscipy_openblas64_.dll [symbols scipy_*64_, ILP64, threads 24]
 // OpenBLAS 0.3.31.dev  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24
 
-Blas.Disable();                  // back to NumSharp's own managed SIMD GEMM
+OpenBlasEngine.Disable();                  // back to NumSharp's own managed SIMD GEMM
 ```
 
 <!-- Tests: BundleAutoinstall_WithNoOptOut_InstallsTheBackend (OpenBlasDeliveryTests); Enable_SetsTheBackendOnTheEngine_WithoutReplacingIt (MatmulParityBackendTests) -->
@@ -175,7 +175,7 @@ package — and it can bake a pinned version into its own nupkg so they download
 but non-binding**:
 
 ```csharp
-Blas.Enable(@"C:\opt\openblas\libopenblas.dll");   // binding — exactly this file, or throw
+OpenBlasEngine.Enable(@"C:\opt\openblas\libopenblas.dll");   // binding — exactly this file, or throw
 ```
 
 ```bash
@@ -192,7 +192,7 @@ Which one you want:
 | your own build or a vendored copy | path override (3), or `NUMSHARP_OPENBLAS_PATH` (5) | soft — wins when present, falls through when not |
 | the same knobs for consumers of *your* package | transitive metadata (4) | identical to a direct reference |
 | a self-contained nupkg, no downloads for consumers | `OpenBlasDelivery=package` (4) | NuGet nearest-wins beats the transitive bundle |
-| exactly this one file, or fail | `Blas.Enable(path)` / `NUMSHARP_OPENBLAS_PARITY` (5) | **binding** — never silently replaced |
+| exactly this one file, or fail | `OpenBlasEngine.Enable(path)` / `NUMSHARP_OPENBLAS_PARITY` (5) | **binding** — never silently replaced |
 
 When several are present at once, [the discovery order](#where-the-library-comes-from) decides;
 `NumSharpOpenBlasEnabled=false` (MSBuild property) switches the entire build-side machinery off.
@@ -208,7 +208,7 @@ the app. At load, the module initializer finds it (discovery tier 5) and install
 If the asset is absent — an unsupported RID, `NUMSHARP_OPENBLAS_BUNDLED=0`, an asset-free source
 build — discovery simply continues to machine tooling and, failing that, NumSharp's managed
 kernels. `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` skips the automatic install while leaving
-`Blas.Enable()` fully functional.
+`OpenBlasEngine.Enable()` fully functional.
 
 <!-- Tests: BundledLibrary_ForThisRid_ReachesTheBuildOutput, AutoDiscovery_PrefersTheBundledLibrary, BundledLibrary_CanBeOptedOutOf (MatmulParityBackendTests) -->
 
@@ -238,7 +238,7 @@ folder a *required* override (discovery tier 3).
 
 Enforcement runs in both phases. At build, any failure — network, hash mismatch, no wheel for
 the RID — **fails the build**; at runtime, a marker-declared override that cannot load
-**throws** `BlasRequiredOverrideException` rather than falling back (at module load: one stderr
+**throws** `OpenBlasRequiredOverrideException` rather than falling back (at module load: one stderr
 line, backend left uninstalled — never substituted). Silently loading a *different* build than
 the one pinned is the failure a pin exists to prevent.
 
@@ -308,7 +308,7 @@ version baked into its own nupkg — which is also what keeps every dependent nu
 
 The two runtime knobs need no build participation, and they differ in exactly one property:
 
-- **Binding** — `Blas.Enable(path)` or `NUMSHARP_OPENBLAS_PARITY`. The named file (or directory) is
+- **Binding** — `OpenBlasEngine.Enable(path)` or `NUMSHARP_OPENBLAS_PARITY`. The named file (or directory) is
   used as given and **never substituted**, not even by the bundled copy sitting in the output;
   a file that cannot load or is not a CBLAS throws, having changed nothing. Use it to pin one
   exact build — a vendored copy, a specific MKL, a library another environment already uses.
@@ -338,7 +338,7 @@ fixed, documented order — the first tier that yields a loadable library wins:
 |---|---|---|
 | 1 | explicit path / `NUMSHARP_OPENBLAS_PARITY` | **binding** — never substituted, a miss is fatal |
 | 2 | `NUMSHARP_OPENBLAS_PATH`, then a build-recorded `OpenBlasPath` marker | override path(s), ahead of the bundle; **non-binding** — fall through when they hold no BLAS |
-| 3 | build-staged **version override** (`openblas.source.json`, `mode: "version"`) | **hard-required** — a miss throws `BlasRequiredOverrideException`, never falls through; sha-verified when the marker pins one |
+| 3 | build-staged **version override** (`openblas.source.json`, `mode: "version"`) | **hard-required** — a miss throws `OpenBlasRequiredOverrideException`, never falls through; sha-verified when the marker pins one |
 | 4 | explicit OpenBLAS root (`OPENBLAS_HOME` / `OPENBLAS_ROOT`) | a deliberate "use the OpenBLAS installed here" signal, so it **outranks the bundle**; **not** byte-parity with NumPy — setting it trades parity-by-default for the named build |
 | 5 | the **bundled** `runtimes/<rid>/native/` asset | the zero-config default; `NUMSHARP_OPENBLAS_BUNDLED=0` drops it |
 | 6 | machine-wide OpenBLAS (apt / brew / MacPorts / conda / vcpkg / source installs) | honours `VCPKG_ROOT` / `CONDA_PREFIX`; a different compiler and build, so it ranks below the bundle — a correct, fast BLAS, not the pinned one |
@@ -362,7 +362,7 @@ sidecar the build writes can tell them apart. The same folder is tier 3 (hard-re
 marker declares a version override, and tier 5 (the soft default) when there is no marker. A
 required override that cannot load **throws rather than substituting** — at module load the error
 goes to stderr and the backend stays uninstalled (never silently replaced); an explicit
-`Blas.Enable()` raises the full `BlasRequiredOverrideException`.
+`OpenBlasEngine.Enable()` raises the full `OpenBlasRequiredOverrideException`.
 
 <!-- Tests: AutoDiscovery_PrefersTheBundledLibrary (MatmulParityBackendTests); VersionMarker_IsHardRequired_NeverFallsThroughToTheBundle, NumpyLibs_DiscoveryTier_IsDeleted (OpenBlasDeliveryTests) -->
 
@@ -376,7 +376,7 @@ determinism — pin the two variables that move them (the third, the library bui
 pinned by choosing a specific binary):
 
 1. **The worker-thread count.** 1, 2, 4 and 24 threads give different low bits for the same
-   product, because the reduction is split differently. `Blas.Enable(threads: n)` pins it. For a
+   product, because the reduction is split differently. `OpenBlasEngine.Enable(threads: n)` pins it. For a
    run you want to reproduce against a NumPy process, set `OPENBLAS_NUM_THREADS=n` there too
    (before `import numpy`) — NumPy runs larger products multi-threaded by default while small ones
    stay single-threaded, so pinning is what makes small and large agree.
@@ -393,7 +393,7 @@ pinned by choosing a specific binary):
 | `Core2` | Katmai | `0da21438…` |
 | `SkylakeX` | — | **process killed: illegal instruction** |
 
-`Blas.Enable(coreType: Blas.ParityCoreType)` pins the kernel to `"Haswell"` — a fixed choice that
+`OpenBlasEngine.Enable(coreType: OpenBlasEngine.CoreType)` pins the kernel to `"Haswell"` — a fixed choice that
 runs on any x86-64 with AVX2+FMA (Haswell 2013 and later, and every AMD Zen), so a result computed
 on one such machine reproduces on another. It is **not the default, deliberately**: the default
 lets OpenBLAS pick the fastest kernel the CPU supports (exactly as NumPy does), which is what you
@@ -403,7 +403,7 @@ is the same library.
 
 > **Hazard.** `coreType` *overrides* OpenBLAS' CPU detection rather than expressing a preference,
 > so naming kernels the CPU cannot run terminates the process with an illegal instruction —
-> measured, not theoretical. `Blas.Enable` refuses the combinations it can recognise with a
+> measured, not theoretical. `OpenBlasEngine.Enable` refuses the combinations it can recognise with a
 > `PlatformNotSupportedException` first. It also only takes effect on the call that actually
 > **loads** the library: OpenBLAS reads the variable once while initialising and never re-reads it,
 > so a later request that cannot be honoured throws instead of being silently dropped.
@@ -412,23 +412,23 @@ is the same library.
 
 ## The API
 
-The whole public surface is the static `Blas` class (namespace `NumSharp.Interop.OpenBLAS`):
+The whole public surface is the static `OpenBlasEngine` class (namespace `NumSharp.Interop.OpenBLAS`):
 
 | Member | Meaning |
 |---|---|
-| `Blas.Enable(library = null, threads = 0, coreType = null)` | Load a CBLAS library (or auto-discover one) and install the backend. Idempotent when the same library is already loaded. |
-| `Blas.TryEnable(library = null, threads = 0)` | `Enable` that reports `false` instead of throwing — the module-load path. |
-| `Blas.Disable()` | Uninstall the backend; the native library stays loaded (unloading a BLAS mid-process is not worth the risk), so a later `Enable` is free. |
-| `Blas.Enabled` | `true` when the backend is installed **and** a library is bound — both halves, see below. |
-| `Blas.Info` | Path, symbol scheme, integer width, thread count and build string of the loaded library, or `null`. |
-| `Blas.LibraryPath` | Full path of the loaded library — the machine-readable form of "which binary answered?". |
-| `Blas.CoreName` | The `DYNAMIC_ARCH` micro-kernel OpenBLAS actually dispatched (e.g. `"Haswell"`). |
-| `Blas.IsBundledLibrary` | `true` when the loaded library is the package's bundled asset — marker-aware: a build-staged override in the same folder layout reports `false`. |
-| `Blas.ParityCoreType` | `"Haswell"` — a fixed micro-kernel to pin for cross-machine reproducibility (see [Reproducible results](#reproducible-results)). |
+| `OpenBlasEngine.Enable(library = null, threads = 0, coreType = null)` | Load a CBLAS library (or auto-discover one) and install the backend. Idempotent when the same library is already loaded. |
+| `OpenBlasEngine.TryEnable(library = null, threads = 0)` | `Enable` that reports `false` instead of throwing — the module-load path. |
+| `OpenBlasEngine.Disable()` | Uninstall the backend; the native library stays loaded (unloading a BLAS mid-process is not worth the risk), so a later `Enable` is free. |
+| `OpenBlasEngine.Enabled` | `true` when the backend is installed **and** a library is bound — both halves, see below. |
+| `OpenBlasEngine.Info` | Path, symbol scheme, integer width, thread count and build string of the loaded library, or `null`. |
+| `OpenBlasEngine.LibraryPath` | Full path of the loaded library — the machine-readable form of "which binary answered?". |
+| `OpenBlasEngine.CoreName` | The `DYNAMIC_ARCH` micro-kernel OpenBLAS actually dispatched (e.g. `"Haswell"`). |
+| `OpenBlasEngine.IsBundledLibrary` | `true` when the loaded library is the package's bundled asset — marker-aware: a build-staged override in the same folder layout reports `false`. |
+| `OpenBlasEngine.CoreType` | `"Haswell"` — a fixed micro-kernel to pin for cross-machine reproducibility (see [Reproducible results](#reproducible-results)). |
 
 Three semantics are load-bearing, each pinned by a test:
 
-- **A named library is binding.** An explicit `Blas.Enable(path)` (or `NUMSHARP_OPENBLAS_PARITY`) is
+- **A named library is binding.** An explicit `OpenBlasEngine.Enable(path)` (or `NUMSHARP_OPENBLAS_PARITY`) is
   used as given and never silently replaced — not even by the bundled copy sitting in the output
   folder — so "pin exactly this build" means exactly that.
 - **A failed `Enable` is a no-op.** It throws having changed nothing, so a mistyped path cannot
@@ -439,7 +439,7 @@ Three semantics are load-bearing, each pinned by a test:
   operand, so every product would quietly fall back to the managed kernels; reporting `true` there
   would claim a native backend that is not actually computing anything.
 
-Opting out of the automatic install (`NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0`) leaves `Blas.Enable()`
+Opting out of the automatic install (`NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0`) leaves `OpenBlasEngine.Enable()`
 fully functional — it only skips the module-load call.
 
 <!-- Tests: NamedLibrary_IsBinding_NeverSilentlySubstituted, FailedEnable_OverAWorkingLibrary_ChangesNothing, Enabled_MeansInstalledAND_Bound_NotMerelyInstalled (MatmulParityBackendTests) -->
@@ -569,7 +569,7 @@ the seam and is gated today — an implementation only has to supply numerics.
 | `NUMSHARP_OPENBLAS_PARITY` | Path (or directory) of the CBLAS library to load. **Binding**, like an explicit argument — used as given, never substituted. |
 | `NUMSHARP_OPENBLAS_PATH` | File(s)/dir(s) to scan for a CBLAS, path-separator delimited. Tried **first** (ahead of the bundled asset), non-binding — falls through when it holds no BLAS. Also the build-time read/download directory. |
 | `NUMSHARP_OPENBLAS_BUNDLED=0` | Drop the bundled asset from discovery; machine tooling becomes the default. |
-| `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` | Skip the module-load auto-install; `Blas.Enable(...)` still works. (The pre-rename `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` and `NUMSHARP_BLAS_AUTOINSTALL` spellings are retired and ignored.) |
+| `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` | Skip the module-load auto-install; `OpenBlasEngine.Enable(...)` still works. (The pre-rename `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` and `NUMSHARP_BLAS_AUTOINSTALL` spellings are retired and ignored.) |
 | `NUMSHARP_OPENBLAS_VERSION` | **Build-time**: scipy-openblas version to download from PyPI and stage over the bundle — a hard requirement; beats `<OpenBlasVersion>` metadata. |
 | `NUMSHARP_OPENBLAS_{DISTRIBUTION, FEED, SHA256, DELIVERY}` | **Build-time**: distribution pick (`64`/`32`), PyPI mirror base (needs the sha), expected extracted-lib sha256, delivery mode (`none`/`build`/`package`); each beats its `OpenBlas*` metadata twin. |
 | `OPENBLAS_HOME` / `OPENBLAS_ROOT` | Explicit OpenBLAS install root (OpenBLAS' own convention). A deliberate "use the OpenBLAS here" signal, so it ranks **above the bundle** (discovery tier 4) — not byte-parity with NumPy. |
@@ -581,13 +581,13 @@ the seam and is gated today — an implementation only has to supply numerics.
 
 | Symptom | Cause & fix |
 |---|---|
-| `Blas.Enabled` is `false` after referencing the package | No CBLAS could be found or loaded — an asset-free package build, an unsupported RID, or the opt-out variables. `Blas.Enable()` throws the actual reason; `Blas.Info` / `Blas.LibraryPath` say what, if anything, is loaded. |
-| `BlasRequiredOverrideException` | The build pinned an `OpenBlasVersion` and the staged override cannot be loaded (or nothing matches its pinned sha). The pin is a contract — rebuild so the staging runs, or remove the pin. At module load this is one stderr line and an uninstalled backend, never a silent substitution. |
+| `OpenBlasEngine.Enabled` is `false` after referencing the package | No CBLAS could be found or loaded — an asset-free package build, an unsupported RID, or the opt-out variables. `OpenBlasEngine.Enable()` throws the actual reason; `OpenBlasEngine.Info` / `OpenBlasEngine.LibraryPath` say what, if anything, is loaded. |
+| `OpenBlasRequiredOverrideException` | The build pinned an `OpenBlasVersion` and the staged override cannot be loaded (or nothing matches its pinned sha). The pin is a contract — rebuild so the staging runs, or remove the pin. At module load this is one stderr line and an uninstalled backend, never a silent substitution. |
 | `PlatformNotSupportedException` from `Enable(coreType:)` | The named kernel needs an ISA this CPU lacks; running it would kill the process, so it is refused up front. |
 | Process dies with *illegal instruction* | An `OPENBLAS_CORETYPE` above this CPU was set in the raw environment, bypassing `Enable`'s check. Unset it or name a kernel the CPU can run. |
 | `EntryPointNotFoundException: … exports no recognizable cblas_sgemm symbol` | The named file is not a CBLAS provider (a plain BLAS without the `cblas_` interface, or an unrelated library). The working setup, if any, is untouched. |
 | `Enable(coreType:)` throws although the library is already loaded | The kernel is chosen once, at load. If the request already holds it is a no-op; if not, it throws rather than silently leaving the kernel un-pinned. Changing kernels needs a fresh process — a loaded BLAS cannot be safely unloaded. |
-| Results are not reproducible run-to-run or machine-to-machine | Expected of any threaded, arch-tuned BLAS — the low bits move with the thread count and CPU kernel. Pin both (`Blas.Enable(threads: n, coreType: Blas.ParityCoreType)`), and the matching `OPENBLAS_NUM_THREADS` / `OPENBLAS_CORETYPE` on any NumPy process you compare against. See [Reproducible results](#reproducible-results). |
+| Results are not reproducible run-to-run or machine-to-machine | Expected of any threaded, arch-tuned BLAS — the low bits move with the thread count and CPU kernel. Pin both (`OpenBlasEngine.Enable(threads: n, coreType: OpenBlasEngine.CoreType)`), and the matching `OPENBLAS_NUM_THREADS` / `OPENBLAS_CORETYPE` on any NumPy process you compare against. See [Reproducible results](#reproducible-results). |
 | A complex-dtype product is slow | Complex is not served by the backend yet — it stays on the managed kernel. See [How it computes](#how-it-computes). |
 | Setting `OPENBLAS_CORETYPE` via `Environment.SetEnvironmentVariable` does nothing | .NET keeps its own environment table; a native `getenv` never sees it. Set it in the real environment before the process starts, or pass `coreType:` to `Enable` — which goes through the C runtime. |
 | A build with a version override fails offline | A version override is a hard requirement by design. Prime the cache with one online build, point `OpenBlasFeed` at a mirror (with an explicit `OpenBlasSha256`), or drop the pin. |

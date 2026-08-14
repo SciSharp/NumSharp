@@ -6,7 +6,7 @@ using NumSharp.Utilities;
 
 namespace NumSharp.Interop.OpenBLAS
 {
-    internal static unsafe partial class BlasParity
+    public static unsafe partial class OpenBlasEngine
     {
         /// <summary>NumPy's <c>MatrixShape</c> (cblasfuncs.c) — how <c>np.dot</c> classifies an operand.</summary>
         private enum MatrixShape

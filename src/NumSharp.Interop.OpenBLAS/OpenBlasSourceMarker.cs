@@ -80,13 +80,13 @@ namespace NumSharp.Interop.OpenBLAS
         /// </remarks>
         internal static OpenBlasSourceMarker TryFind()
         {
-            foreach (var baseDir in CBlasNative.ProbeBases())
+            foreach (var baseDir in OpenBlasNative.ProbeBases())
             {
                 var m = TryRead(System.IO.Path.Combine(baseDir, FileName));
                 if (m != null)
                     return m;
 
-                foreach (var rid in CBlasNative.RuntimeIdentifierCandidates())
+                foreach (var rid in OpenBlasNative.RuntimeIdentifierCandidates())
                 {
                     m = TryRead(System.IO.Path.Combine(baseDir, "runtimes", rid, "native", FileName));
                     if (m != null)
