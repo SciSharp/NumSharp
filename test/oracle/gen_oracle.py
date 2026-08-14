@@ -4518,6 +4518,174 @@ def gen_specials():
     return cases
 
 
+# =====================================================================================
+# Truthful-vs-precise ("precision" tier). The vision is BYTE-IDENTICAL parity to NumPy,
+# so the gate hierarchy is: bit-exact to NumPy ("precise") PASSES, always, without ever
+# consulting mathematical truth — matching NumPy's documented 2.52-ulp-wrong f32 exp IS
+# the contract. But when a case DIVERGES from NumPy, the parity bytes alone cannot say
+# which side lost precision. Each case here therefore carries a THIRD buffer,
+# expected.truth: the correctly-rounded mathematical reference (exact Fraction
+# arithmetic for sum/mean/var/cumsum/prod; mpmath at 200-bit precision for std's sqrt
+# and for expm1/log1p) — generator-side only, so the no-Python-in-CI rule holds. The
+# harness adjudicates a divergence by ULP distance to truth (MisalignedRegistry P1/P2):
+# NOT-LESS-truthful than NumPy -> excused as "prefer-precise" PARITY DEBT (the fix is
+# to port NumPy's algorithm, exactly as exp/log/sin/cos/tanh were ported — being MORE
+# accurate than NumPy is still a divergence, never a win); LESS truthful than NumPy
+# (beyond slack) -> genuine precision LOSS, which falls through to the scoped known-bug
+# branches or FAILS.
+#
+# The inputs are precision-ADVERSARIAL, because the ordinary pools cannot stress
+# accumulation: at the corpus' 8-36 element sizes a f32 sum can sit at most ~1 ulp from
+# exact, while the same values at N=2049 put a naive f32 loop 512 ulp off truth and
+# NumPy's pairwise ~2 (measured). Closed-form deterministic arrays, no RNG: wide-
+# magnitude sums whose unit elements straddle ulp/2 of the big element, cancellation
+# triples, mixed-magnitude pseudo-noise, large-mean variance (the naive E[x^2]-E[x]^2
+# killer — NumSharp's two-pass var measured EXACT on it), near-1 products, and the
+# expm1/log1p small-|x| band (the S1 defect's home, quantified at ~6.7e7 ulp vs truth).
+def _prec_hash01(i):
+    """Deterministic pseudo-noise in [0,1) — Knuth multiplicative hash, no RNG state."""
+    return ((i * 2654435761) % (2 ** 32)) / (2 ** 32)
+
+
+def _prec_arrays():
+    """(name, 1-D ndarray) adversarial operands. Values are what the dtype actually
+    STORES (astype applied), so the exact-rational truth taken from them is the truth of
+    the array the ops see, construction rounding excluded."""
+    out = []
+    out.append(("wide", np.concatenate([np.array([1e8], np.float32),
+                                        np.ones(2048, np.float32)])))          # ones < ulp(1e8)/2
+    out.append(("cancel", np.tile(np.array([2.0 ** 24, 1.0, -2.0 ** 24], np.float32), 342)))
+    out.append(("wide", np.concatenate([np.array([2.0 ** 53]),
+                                        np.ones(2047)]).astype(np.float64)))   # ones == ulp/2 ties
+    out.append(("mixed", np.array([(_prec_hash01(i) - 0.5) * 2.0 ** ((i * 7) % 30)
+                                   for i in range(1024)], np.float64)))
+    out.append(("largemean", (np.float64(1e8) + (np.arange(1024) % 2)).astype(np.float64)))
+    out.append(("largemean", np.array([1000.0 + _prec_hash01(i) for i in range(512)], np.float32)))
+    return out
+
+
+def _prec_prod_array(dt):
+    """Near-1 factors: every multiply rounds, so the accumulation order is observable
+    while the product stays in range. Exact rational product is the truth."""
+    return np.array([1.0 + (((i * 37) % 61) - 30) * 2.0 ** -20 for i in range(64)], np.dtype(dt))
+
+
+def _prec_band_array(dt):
+    """The expm1/log1p small-|x| band plus anchors — finite only (non-finite semantics
+    live in the specials tier; this tier is about ACCURACY on defined inputs)."""
+    fi = np.finfo(np.dtype(dt))
+    vals = [1e-30, -1e-30, 1e-25, 1e-20, -1e-20, 1e-15, 1e-12, -1e-12, 1e-10, 1e-8,
+            -1e-8, 3e-8, 1e-6, -1e-6, 1e-4, 1e-3, -1e-3, 0.03125, -0.03125, 0.5, -0.5,
+            1.0, 2.0, -0.9999, 0.0, -0.0, float(fi.tiny), -float(fi.tiny),
+            float(fi.smallest_subnormal), -float(fi.smallest_subnormal)]
+    return np.array(vals, np.float64).astype(dt)
+
+
+def _prec_layouts(v):
+    """contig + negstride views — the two traversal orders the reduce kernels take; the
+    exact-rational truth is order-independent, NumPy's expected is computed per view."""
+    neg = v.copy()
+    return [("contig_1d", v, v), ("negstride_1d", neg, neg[::-1])]
+
+
+def gen_precision():
+    try:
+        import mpmath as mp
+    except ImportError:
+        print("gen_precision needs mpmath (pip install mpmath) — generator-time only, never CI")
+        sys.exit(2)
+    mp.mp.prec = 200
+    from fractions import Fraction
+
+    def fr(view):
+        return [Fraction(float(x)) for x in view.tolist()]   # exact rational of each stored value
+
+    def round1(x, dt):
+        """ONE float64 rounding of an exact value, then the dtype cast. For float32 this
+        double-rounds (<=1 ulp off correctly-rounded) — inside the harness' +8 slack."""
+        return np.array([float(x)], dtype=np.float64).astype(dt)
+
+    def t_scalar(x, dt):
+        return round1(x, dt).reshape(())
+
+    def t_cumsum(view, dt):
+        run, out = Fraction(0), []
+        for f in fr(view):
+            run += f
+            out.append(float(run))
+        return np.array(out, np.float64).astype(dt)
+
+    def t_std(view, dt):
+        fs = fr(view)
+        m = sum(fs) / len(fs)
+        var = sum((f - m) ** 2 for f in fs) / len(fs)
+        s = mp.sqrt(mp.mpf(var.numerator) / mp.mpf(var.denominator))
+        return t_scalar(float(s), dt)
+
+    def t_unary(view, dt, f):
+        return np.array([float(f(mp.mpf(float(x)))) for x in view.tolist()],
+                        np.float64).astype(dt)
+
+    cases = []
+    n = 0
+
+    def emit(op, params, operands, r, truth, tag, dt, arrname):
+        nonlocal n
+        truth = np.asarray(truth).astype(r.dtype)
+        assert truth.shape == r.shape, f"truth shape {truth.shape} != result {r.shape} ({op}/{arrname})"
+        cases.append({
+            "id": f"{op}/{tag}/{dt}/{arrname}/{n}",
+            "op": op,
+            "params": params,
+            "operands": operands,
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex(),
+                         "truth": np.ascontiguousarray(truth).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "precision",
+        })
+        n += 1
+
+    # --- accumulation: sum / mean / var / std / cumsum over the adversarial arrays -----
+    for arrname, arr in _prec_arrays():
+        dt = arr.dtype
+        for tag, base, view in _prec_layouts(arr):
+            od = [describe(base, view)]
+            fs = fr(view)
+            m = sum(fs) / len(fs)
+            rk = {"axis": None, "keepdims": False}
+            emit("sum", rk, od, np.asarray(np.sum(view)), t_scalar(sum(fs), dt), tag, dt.name, arrname)
+            emit("mean", rk, od, np.asarray(np.mean(view)), t_scalar(m, dt), tag, dt.name, arrname)
+            emit("var", rk, od, np.asarray(np.var(view)),
+                 t_scalar(sum((f - m) ** 2 for f in fs) / len(fs), dt), tag, dt.name, arrname)
+            emit("std", rk, od, np.asarray(np.std(view)), t_std(view, dt), tag, dt.name, arrname)
+            emit("cumsum", {"axis": None}, od, np.asarray(np.cumsum(view)),
+                 t_cumsum(view, dt), tag, dt.name, arrname)
+
+    # --- near-1 products ---------------------------------------------------------------
+    for dt in ("float32", "float64"):
+        arr = _prec_prod_array(dt)
+        for tag, base, view in _prec_layouts(arr):
+            od = [describe(base, view)]
+            p = Fraction(1)
+            for f in fr(view):
+                p *= f
+            emit("prod", {"axis": None, "keepdims": False}, od,
+                 np.asarray(np.prod(view)), t_scalar(p, np.dtype(dt)), tag, dt, "near1")
+
+    # --- expm1 / log1p over the small-|x| band -----------------------------------------
+    for dt in ("float32", "float64"):
+        arr = _prec_band_array(dt)
+        for tag, base, view in _prec_layouts(arr):
+            od = [describe(base, view)]
+            emit("expm1", {}, od, np.expm1(view), t_unary(view, np.dtype(dt), mp.expm1),
+                 tag, dt, "band")
+            emit("log1p", {}, od, np.log1p(view), t_unary(view, np.dtype(dt), mp.log1p),
+                 tag, dt, "band")
+
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -4687,8 +4855,11 @@ def main():
     elif mode == "specials":
         cases = gen_specials()                                          # IEEE special-value parity tier
         write_jsonl(os.path.join(corpus_dir, "specials.jsonl"), cases)
+    elif mode == "precision":
+        cases = gen_precision()                                         # truthful-vs-precise tier (needs mpmath)
+        write_jsonl(os.path.join(corpus_dir, "precision.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | specials)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | specials | precision)")
         sys.exit(2)
 
 

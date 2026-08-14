@@ -88,7 +88,8 @@ namespace NumSharp.UnitTest.Fuzz
 
         public static string Classify(
             FuzzCorpus.Case c, DivergenceKind kind,
-            byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs)
+            byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs,
+            byte[] truth = null)
         {
             // (1) NEP50 weak-scalar promotion. Any multi-operand op with a 0-D operand: NumSharp
             //     promotes it weakly (the array operand's dtype drives the result), where NumPy makes
@@ -320,6 +321,67 @@ namespace NumSharp.UnitTest.Fuzz
                     return "nan-reduction value: NaN masking / count / summation-order divergence [known bug]";
             }
 
+            // =================================================================================
+            // (P1/P2) Truthful-vs-precise adjudication — cases carrying expected.truth (the
+            // precision tier's correctly-rounded mathematical reference). POLICY, per the
+            // project vision (byte-identical parity to NumPy): "precise" (bit-exact to NumPy)
+            // passes WITHOUT ever reaching this code — truth is consulted only on an existing
+            // divergence, so it can never turn a NumPy-matching result red. On a divergence it
+            // answers the one question the parity bytes cannot: WHICH side lost precision.
+            //   * NOT-LESS-truthful than NumPy (every diff within TruthSlack of NumPy's own
+            //     distance to truth) -> excused as prefer-precise PARITY DEBT. Being MORE
+            //     accurate than NumPy is still a divergence to close by porting NumPy's
+            //     algorithm (the exp/log/sin/cos/tanh route), never a win — hence the label.
+            //     Two labels so the triage differentiates toward-truth from within-noise.
+            //   * LESS truthful (beyond slack) -> genuine precision LOSS: fall through, where
+            //     only a tightly-scoped known-bug branch (e.g. S1 expm1/log1p) may still excuse
+            //     it; otherwise the gate is red. The unbounded reduction blanket below is gated
+            //     on truth==null precisely so a truth-bearing loss cannot hide in it.
+            // The slack (4x relative, +8 absolute ULP) absorbs SIMD lane-count variation across
+            // hosts (V128/V256/V512 pick different accumulation orders) while still failing the
+            // losses that matter — measured 512 ULP for a naive f32 wide-sum, ~6.7e7 ULP for
+            // Exp(x)-1 expm1 — by orders of magnitude.
+            if (kind == DivergenceKind.Value && truth != null && expected != null
+                && truth.Length == expected.Length && diffs.Count > 0
+                && (tc == NPTypeCode.Half || tc == NPTypeCode.Single
+                    || tc == NPTypeCode.Double || tc == NPTypeCode.Complex))
+            {
+                bool notLessTruthful = true, anyTowardTruth = false;
+                foreach (var d in diffs)
+                {
+                    long dNS = BitDiff.UlpDistance(actual, truth, d.Index, tc);
+                    long dNPY = BitDiff.UlpDistance(expected, truth, d.Index, tc);
+                    if (dNS > TruthSlack(dNPY)) { notLessTruthful = false; break; }
+                    if (dNS < dNPY) anyTowardTruth = true;
+                }
+                if (notLessTruthful && anyTowardTruth)
+                    return "prefer-precise: diverges from NumPy TOWARD the correctly-rounded truth "
+                         + "— parity debt (port NumPy's algorithm), not precision loss [documented]";
+                if (notLessTruthful)
+                    return "prefer-precise: diverges from NumPy within truth-equivalence slack "
+                         + "(neither side less accurate) [documented]";
+                // less truthful than NumPy: fall through — known-bug branches or a red gate.
+            }
+
+            // (P3) The precision losses the tier DISCOVERED on arrival (2026-08-14), excused as
+            //      tracked known bugs with a measured bound — kept in the corpus so a kernel fix
+            //      flips them bit-exact automatically and a WORSE regression still fails:
+            //        * float32 var/std accumulation: 55/26 ULP from truth where NumPy's two-pass
+            //          pairwise sits at 3/2 (contiguous wide-magnitude input);
+            //        * the NEGATIVE-STRIDE reduce path (sum/mean/var/std): 11-32 ULP from truth
+            //          where NumPy is EXACT on the same reversed view — the backward traversal
+            //          accumulates in a worse order than the contiguous kernel.
+            //      Bounded at 256 ULP-vs-truth (≈5x the measured worst, room for cross-host SIMD
+            //      lane variation); a loss beyond that — or in any other cell — is red.
+            if (kind == DivergenceKind.Value && truth != null && expected != null
+                && truth.Length == expected.Length && diffs.Count > 0
+                && ((c.Layout == "negstride_1d"
+                     && (c.Op == "sum" || c.Op == "mean" || c.Op == "var" || c.Op == "std"))
+                    || (tc == NPTypeCode.Single && (c.Op == "var" || c.Op == "std")))
+                && diffs.All(d => BitDiff.UlpDistance(actual, truth, d.Index, tc) <= 256))
+                return "precision-loss (known): f32 var/std accumulation + negative-stride reduction "
+                     + "accumulation lose ULP vs truth where NumPy stays near-exact (bounded ≤256) [known bug]";
+
             // --- Reductions (single-operand, but classified before the unary rules) ---
             if (ReduceOps.Contains(c.Op))
             {
@@ -349,8 +411,11 @@ namespace NumSharp.UnitTest.Fuzz
                 // Floating accumulation: NumPy pairwise summation / two-pass var vs NumSharp order.
                 // Scoped to FLOAT-FAMILY result dtypes (B1/F9): integer/bool accumulation is exact
                 // (modular) on both sides — an integer-result sum/prod value divergence is a REAL
-                // bug, not "precision", and fails the gate.
-                if (kind == DivergenceKind.Value
+                // bug, not "precision", and fails the gate. Gated on truth==null: this blanket is
+                // UNBOUNDED, so a truth-bearing case (precision tier) must be adjudicated by the
+                // P1/P2 truthful branch above instead — a divergence that is LESS truthful than
+                // NumPy would otherwise hide in here.
+                if (kind == DivergenceKind.Value && truth == null
                     && (tc == NPTypeCode.Half || tc == NPTypeCode.Single
                         || tc == NPTypeCode.Double || tc == NPTypeCode.Complex)
                     && (c.Op == "sum" || c.Op == "mean" || c.Op == "std" || c.Op == "var" || c.Op == "prod"))
@@ -666,6 +731,15 @@ namespace NumSharp.UnitTest.Fuzz
                 n *= d;
             return n;
         }
+
+        /// <summary>
+        ///     The prefer-precise threshold: NumSharp's ULP distance to truth may exceed NumPy's by
+        ///     at most 4x relative or +8 absolute (whichever is larger) to count as
+        ///     not-less-truthful. Saturating — a NumPy distance of long.MaxValue (opposite-sign vs
+        ///     truth) admits anything, since NumPy itself is maximally far.
+        /// </summary>
+        private static long TruthSlack(long dNPY)
+            => dNPY >= (long.MaxValue - 8) / 4 ? long.MaxValue : Math.Max(4 * dNPY, dNPY + 8);
 
         /// <summary>
         ///     The absolute-error envelope for the expm1/log1p Exp(x)-1 / Log(1+x) signature — a few

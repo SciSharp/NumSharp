@@ -149,6 +149,20 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Specials() => RunCorpus("specials.jsonl");
 
+        // Truthful-vs-precise: precision-adversarial inputs (wide-magnitude/cancellation/mixed
+        // sums at N up to 2049, large-mean variance, near-1 products, the expm1/log1p small-|x|
+        // band) where each case ALSO carries expected.truth — the correctly-rounded mathematical
+        // reference (exact Fraction / 200-bit mpmath, generator-side). Policy per the project
+        // vision (byte-identical NumPy parity): bit-exact to NumPy passes WITHOUT consulting
+        // truth — precise never fails. Truth only adjudicates divergences: not-less-truthful
+        // than NumPy => excused as "prefer-precise" parity debt (port NumPy's algorithm; being
+        // MORE accurate is still a divergence, never a win); less truthful (beyond 4x/+8 ULP
+        // slack) => genuine precision LOSS — falls to scoped known-bug branches (S1) or fails
+        // with the loss quantified in the failure line (truth-ulp NS=... NPY=...).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Precision() => RunCorpus("precision.jsonl");
+
         // W5 cumulative (T11): cumsum/cumprod (axis None + per-axis, NEP50 accumulator) and diff
         // (n=1,2; axis 0/last; output shrinks by n) across int/uint/float/complex dtypes.
         [TestMethod]
@@ -365,6 +379,7 @@ namespace NumSharp.UnitTest.Fuzz
             ["out_where.jsonl"] = 3500,
             ["params.jsonl"] = 966,
             ["place.jsonl"] = 12,
+            ["precision.jsonl"] = 57,
             ["random_smoke.jsonl"] = 1600,
             ["reduce.jsonl"] = 9004,
             ["rounding.jsonl"] = 665,

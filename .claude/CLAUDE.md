@@ -151,15 +151,17 @@ LP64 there — it exports `scipy_cblas_sgemm`, a symbol scheme `Bind` lacked (ad
 win-arm64 numpy's BLAS would have failed outright). Binaries are gitignored;
 `tools/openblas-manifest.json` is the checked-in pin and `tools/fetch_openblas.py` verifies **two**
 hashes per RID. Discovery order is fixed (`docs/OPENBLAS_DELIVERY_DESIGN.md` §3; runtime side
-implemented, gate `OpenBlasDeliveryTests`): explicit path/`NUMSHARP_PARITY_BLAS` (binding) →
+implemented, gate `OpenBlasDeliveryTests`): explicit path/`NUMSHARP_OPENBLAS_PARITY` (binding) →
 override path(s) (`NUMSHARP_OPENBLAS_PATH` env, then a build-recorded `OpenBlasPath` marker;
 non-binding) → build-staged **version override** (`openblas.source.json` marker, `mode:"version"` —
 **hard-required**: a miss throws `BlasRequiredOverrideException`, never falls through; sha-verified
-when pinned) → **bundled** (the parity default; §10.1 resolved: it stays ABOVE machine tooling) →
-machine-wide OpenBLAS (apt/brew/MacPorts/conda/vcpkg/source install dirs; honours
-`OPENBLAS_HOME`/`VCPKG_ROOT`/`CONDA_PREFIX`; **not** parity) → bare names (64-bit **and**
+when pinned) → explicit OpenBLAS root (`OPENBLAS_HOME`/`OPENBLAS_ROOT`, promoted ABOVE the bundle
+2026-08-14 — a deliberate opt-in that trades parity-by-default for the named build) → **bundled**
+(the parity default; §10.1 resolved: it stays ABOVE *ambient* machine tooling) →
+machine-wide OpenBLAS (apt/brew/MacPorts/conda/vcpkg/source install dirs; honours the ambient
+`VCPKG_ROOT`/`CONDA_PREFIX`; **not** parity) → bare names (64-bit **and**
 32-bit spellings — both scipy-openblas64/ILP64 and scipy-openblas32/LP64 bind, and 32 is the only
-build for 32-bit x86) → PATH sweep (last resort, non-standard names); `NUMSHARP_BLAS_BUNDLED=0` drops
+build for 32-bit x86) → PATH sweep (last resort, non-standard names); `NUMSHARP_OPENBLAS_BUNDLED=0` drops
 the bundled entry. `numpy.libs` is NEVER scanned (tier deleted — we never grab OpenBLAS out of a
 numpy installation; the bundle already IS that binary at the pin). **Build-time override** (design
 §5–§7, shipped in `buildTransitive/{props,targets}` + an inline `RoslynCodeTaskFactory` task —
@@ -186,7 +188,7 @@ bundling pins the build but *not* the answer — `Blas.Enable(coreType: Blas.Par
 too (probed: Haswell/Nehalem/Sandybridge/Katmai all differ; it is opt-in because the default must
 match the local NumPy, which also dispatches by CPU; it must be set BEFORE load, and forcing an ISA
 above the CPU **kills the process with SIGILL**, so `Enable` refuses what it can recognise). A
-**named library is binding** (`Blas.Enable(path)` / `NUMSHARP_PARITY_BLAS` is never silently
+**named library is binding** (`Blas.Enable(path)` / `NUMSHARP_OPENBLAS_PARITY` is never silently
 substituted, not even by the bundled copy). And the BLAS path is *faster* than the managed GEMM
 anyway (1.7–13×; 2048³ f64 293 ms vs 3860 ms).
 
@@ -199,9 +201,10 @@ API: `Blas.Enable(library, threads, coreType)` / `Blas.Disable()` / `Blas.Enable
 `Blas.LibraryPath` / `Blas.CoreName` / `Blas.IsBundledLibrary` (marker-aware: a staged override in
 the same folder layout reports false) / `Blas.ParityCoreType`; `NUMSHARP_OPENBLAS_PATH` adds
 highest-priority (non-binding) discovery locations tried before bundled;
-`NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0` opts out of the module-load install (`Blas.BundleAutoinstall`;
-the pre-rename `NUMSHARP_BLAS_AUTOINSTALL` spelling is RETIRED and ignored — removed before any
-release shipped it, pinned by `RetiredAutoinstallAlias_NoLongerSuppresses` — and a
+`NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` opts out of the module-load install (`Blas.BundleAutoinstall`;
+the pre-rename `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` and `NUMSHARP_BLAS_AUTOINSTALL` spellings are RETIRED
+and ignored — removed before any
+release shipped them, pinned by `RetiredAutoinstallAlias_NoLongerSuppresses` — and a
 required-override miss at module load is reported to stderr, backend left uninstalled — never
 substituted). Gate: the **host-pinned**
 `matmul_parity` corpus tier (342 cases — 342 bit-exact with the backend, 294 divergent without it)
@@ -1918,7 +1921,7 @@ test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
   IndexOracleTests.cs                 index get/set differential gate (curated + dtype + seeded-random tiers)
   MetamorphicTests.cs                 oracle-free invariants (round-trips / involutions / identities — no NumPy)
   HarnessSelfTests.cs                 proves the harness has teeth (BitDiff detects value/NaN/-0 diffs; non-vacuous)
-  corpus/*.jsonl                      committed corpus (~78K cases / 44 tiers; op corpus ~65K incl. 4.4K Char woven + 695 Decimal + 2.3K specials), copied to test output via the csproj glob
+  corpus/*.jsonl                      committed corpus (~78K cases / 45 tiers; op corpus ~65K incl. 4.4K Char woven + 695 Decimal + 2.3K specials + 72 precision/truth-bearing), copied to test output via the csproj glob
 test/NumSharp.UnitTest/IO/            .npy/.npz format gate (no Python)
   NpyOracleCorpus.cs                  opens npy_oracle.zip, rebuilds arrays from the manifest
   NpyOracleTests.cs                   one [NpyOracle] test per claim: read / byte-exact write / header-only
@@ -1962,7 +1965,8 @@ test/NumSharp.UnitTest/IO/            .npy/.npz format gate (no Python)
   → Table 0.
 - **Three `FuzzMatrix` gates**: `FuzzCorpusTests` (the op corpus — ~65K cases across the tiers, checking dtype + shape + bytes + error parity + per-file minimum-count floors; Char woven into 18 tier files, 12 `Decimal*` tiers: unary/binary/reduce/scan/power/varstd/matmul/astype/stat/where/sort/manip), `IndexOracleTests` (the index oracle — `index_curated` 2,273 + `index_dtype` 104 + `index_setter_dtype` 10 (cross-dtype cast-on-set) + `index_random` 10,000; the advanced-indexing parity gate), and `MetamorphicTests` (12 NumPy-free invariants incl. Half/Complex/Decimal/bool/char + strided views). A failing op case auto-shrinks to a 1-element repro.
 - **Dtype coverage**: per-mode dtype axes widened toward `ALL_DTYPES`. **Char** (no NumPy dtype) is woven into 18 tier files via the uint16 proxy (`gen_oracle.char_tier`, relabelled uint16→char). **Decimal** (no NumPy analog) rides an independent C# oracle (`gen_decimal_oracle.cs`, naive scalar `System.Decimal`; incl. axis reductions, empty, negative int powers). Verified Char/clip-bool/round/dot bugs are carved from the green corpus and reproduced under `[OpenBugs]` (`OpenBugs.Char.cs`, `OpenBugs.DtypeCoverage.cs`, `OpenBugs.FuzzGaps.cs`) — NOT excused in `MisalignedRegistry`.
-- **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul rounding bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors groupa specials`) + `python test/oracle/gen_index_oracle.py` (the `index_*` tiers) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl` + `dotnet run test/oracle/gen_decimal_oracle.cs` (the `decimal_*` tiers), then `dotnet build` (copies the corpus to test output).
+- **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul rounding bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors groupa specials precision`; `precision` additionally needs `mpmath`) + `python test/oracle/gen_index_oracle.py` (the `index_*` tiers) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl` + `dotnet run test/oracle/gen_decimal_oracle.cs` (the `decimal_*` tiers), then `dotnet build` (copies the corpus to test output).
+- **Truthful vs precise** (`precision.jsonl`, 72 truth-bearing cases): each case carries `expected.truth` — the correctly-rounded mathematical reference (exact `Fraction` / 200-bit mpmath, generator-side only) — over precision-ADVERSARIAL inputs (wide-magnitude/cancellation sums at N≤2049, large-mean variance, near-1 products, expm1/log1p small-|x|) the ordinary 8–36-element pools cannot express. Policy (the vision is byte-identical NumPy parity): **bit-exact to NumPy passes without truth ever being read — precise never fails**; truth only adjudicates divergences. Not-less-truthful than NumPy → excused "prefer-precise" parity debt (being MORE accurate than NumPy is still a divergence to close by porting NumPy's algorithm, never a win); less truthful beyond 4×/+8 ULP slack → precision LOSS, red unless a bounded known-bug branch covers it (`MisalignedRegistry` P1–P3; the unbounded summation blanket is gated on truth-absence so losses can't hide in it). Findings on arrival, excused bounded ≤256 ULP (P3): f32 var/std accumulation 55/26 ULP vs truth (NumPy 3/2), negative-stride reduce path 11–32 ULP (NumPy exact).
 - **Run the gate**: `dotnet test --filter "TestCategory=FuzzMatrix"`. Each case is bit-exact (pass), a documented difference in `MisalignedRegistry` (excused, never silent), or a failure (red). Full divergence ledger: `test/NumSharp.UnitTest/Fuzz/README.md`.
 
 ### The `.npy`/`.npz` format oracle (same philosophy, separate corpus)

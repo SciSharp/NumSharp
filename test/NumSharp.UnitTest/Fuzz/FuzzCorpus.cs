@@ -91,6 +91,16 @@ namespace NumSharp.UnitTest.Fuzz
             public long[] Shape { get; set; }
             public string Buffer { get; set; }
 
+            /// <summary>
+            ///     OPTIONAL correctly-rounded mathematical reference (same dtype/shape/length as
+            ///     <see cref="Buffer"/>), carried by the precision tier. Truth is a DIAGNOSTIC
+            ///     axis, never a competing pass criterion: a bit-exact-to-NumPy result passes
+            ///     without this ever being read ("precise doesn't fail" — byte-parity to NumPy is
+            ///     the vision). It is consulted only AFTER a divergence from NumPy is found, to
+            ///     adjudicate which side lost precision (MisalignedRegistry branches P1/P2).
+            /// </summary>
+            public string Truth { get; set; }
+
             /// <summary>Expected dtype name (kind=dtype) or expected string (kind=text).</summary>
             public string Value { get; set; }
 

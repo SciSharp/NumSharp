@@ -393,5 +393,75 @@ namespace NumSharp.UnitTest
                     .Should().NotBeNull($"{op} is not ported — it keeps the ~ULP envelope");
             }
         }
+
+        // ---- P: truthful-vs-precise (the precision tier's truth-bearing adjudication) ----
+        // Precise-doesn't-fail is STRUCTURAL (Classify is only reached after a NumPy byte
+        // mismatch), so these pin the divergent side: not-less-truthful is excused, a gross
+        // loss is not, and the P3 known-loss scope is bounded and layout/op-scoped.
+
+        [TestMethod]
+        public void P_TowardTruth_Excused()
+        {
+            // NumSharp lands ON truth, NumPy 2 ULP off -> excused as parity debt (toward truth).
+            var c = Case("sum", ("float64", new long[] { 8 }));
+            var truth = BitConverter.GetBytes(0.3);
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                BitConverter.GetBytes(UlpUp(0.3, 2)), BitConverter.GetBytes(0.3), NPTypeCode.Double,
+                OneDiff, truth).Should().NotBeNull(
+                "diverging from NumPy toward the correctly-rounded truth is prefer-precise parity debt");
+        }
+
+        [TestMethod]
+        public void P_EquallyTruthful_Excused()
+        {
+            // Both sides 2 ULP from truth, opposite directions -> within truth-equivalence slack.
+            var c = Case("sum", ("float64", new long[] { 8 }));
+            var truth = BitConverter.GetBytes(0.3);
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                BitConverter.GetBytes(UlpUp(0.3, 2)), BitConverter.GetBytes(UlpUp(0.3, -2)), NPTypeCode.Double,
+                OneDiff, truth).Should().NotBeNull("neither side is less accurate — excused, logged");
+        }
+
+        [TestMethod]
+        public void P_GrossLoss_NotExcused()
+        {
+            // NumPy exact, NumSharp 100000 ULP off truth, outside every known-loss scope ->
+            // a genuine precision loss must be RED (the truth==null gate on the unbounded
+            // reduction blanket is what keeps it from hiding there).
+            var c = Case("sum", ("float64", new long[] { 8 }));
+            var truth = BitConverter.GetBytes(0.3);
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3, 100000)), NPTypeCode.Double,
+                OneDiff, truth).Should().BeNull(
+                "less truthful than NumPy beyond slack is precision loss, not summation-order noise");
+        }
+
+        [TestMethod]
+        public void P_KnownLoss_NegstrideSum_Excused_ButBounded()
+        {
+            // The documented negstride accumulation loss (measured 32 ULP) is excused ≤256...
+            var c = Case("sum", ("float64", new long[] { 8 }));
+            c.Layout = "negstride_1d";
+            var truth = BitConverter.GetBytes(0.3);
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3, 32)), NPTypeCode.Double,
+                OneDiff, truth).Should().NotBeNull("the measured negstride loss is a tracked known bug");
+
+            // ...and STAYS bounded: 1000 ULP on the same cell is a worse regression -> red.
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3, 1000)), NPTypeCode.Double,
+                OneDiff, truth).Should().BeNull("the known-loss excuse is bounded at 256 ULP-vs-truth");
+        }
+
+        [TestMethod]
+        public void P_TruthlessCase_KeepsBlanketExcuse()
+        {
+            // Without truth (every pre-existing tier) the float summation blanket still applies —
+            // the truth==null gate narrows it only where adjudication is possible.
+            var c = Case("sum", ("float64", new long[] { 8 }));
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3)), NPTypeCode.Double,
+                OneDiff).Should().NotBeNull("truthless tiers keep the documented summation excuse");
+        }
     }
 }

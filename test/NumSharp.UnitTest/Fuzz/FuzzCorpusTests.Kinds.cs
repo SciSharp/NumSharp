@@ -109,11 +109,14 @@ namespace NumSharp.UnitTest.Fuzz
             var actual = FuzzCorpus.ResultBytes(result);
             var expected = FuzzCorpus.FromHex(exp.Buffer);
 
+            // Bit-exact to NumPy ("precise") passes HERE, before truth is ever read — matching
+            // NumPy's bytes is the contract, and truth can never turn a precise result red.
             var diffs = BitDiff.Compare(expected, actual, tc);
             if (diffs.Count == 0)
                 return;
 
-            var vreason = MisalignedRegistry.Classify(c, DivergenceKind.Value, expected, actual, tc, diffs);
+            var truth = exp.Truth == null ? null : FuzzCorpus.FromHex(exp.Truth);
+            var vreason = MisalignedRegistry.Classify(c, DivergenceKind.Value, expected, actual, tc, diffs, truth);
             if (vreason != null)
             {
                 Bump(documented, vreason);
@@ -124,9 +127,26 @@ namespace NumSharp.UnitTest.Fuzz
             // elementwise single-array shape — skip it for tuple slots.
             var shrunk = slot == null ? Shrinker.ShrinkElementwise(c, diffs[0].Index) : null;
             failures.Add($"{c.Id} [{c.Layout}]{at}: " +
-                string.Join(", ", diffs.Take(3).Select(d => $"@{d.Index} exp {d.Expected} act {d.Actual}")) +
+                string.Join(", ", diffs.Take(3).Select(d => $"@{d.Index} exp {d.Expected} act {d.Actual}" +
+                    TruthNote(expected, actual, truth, d.Index, tc))) +
                 (diffs.Count > 3 ? $" (+{diffs.Count - 3} more)" : "") +
                 (shrunk != null ? $"\n      minimal repro: {shrunk}" : ""));
+        }
+
+        /// <summary>
+        ///     For a truth-bearing failure, say WHO lost precision right in the failure line:
+        ///     NumSharp's and NumPy's ULP distances to the correctly-rounded reference. An
+        ///     untruthful divergence then reads e.g. "(truth-ulp NS=512 NPY=2)" — the precision
+        ///     loss quantified — instead of two opaque hex tokens.
+        /// </summary>
+        private static string TruthNote(byte[] expected, byte[] actual, byte[] truth, int index, NPTypeCode tc)
+        {
+            if (truth == null || truth.Length != expected.Length)
+                return "";
+            long dNS = BitDiff.UlpDistance(actual, truth, index, tc);
+            long dNPY = BitDiff.UlpDistance(expected, truth, index, tc);
+            static string F(long d) => d == long.MaxValue ? "max" : d.ToString();
+            return $" (truth-ulp NS={F(dNS)} NPY={F(dNPY)})";
         }
 
         /// <summary>

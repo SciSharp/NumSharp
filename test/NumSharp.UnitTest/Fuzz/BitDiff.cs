@@ -117,6 +117,44 @@ namespace NumSharp.UnitTest.Fuzz
         }
 
         /// <summary>
+        ///     Raw ULP distance between the values at element <paramref name="index"/> of two
+        ///     same-dtype buffers — the truthful-vs-precise adjudication primitive: the harness
+        ///     compares UlpDistance(actual, truth) against UlpDistance(expected, truth) to decide
+        ///     which side of a NumPy divergence lost precision. Semantics inherited from the
+        ///     private Ulp* helpers: NaN-vs-NaN is 0, equal values (incl. +0 vs -0) are 0,
+        ///     opposite signs are long.MaxValue (never "close"); Complex takes the max over its
+        ///     two components; non-float dtypes report 0 for byte-equal else long.MaxValue
+        ///     (integer math is exact — any divergence is total).
+        /// </summary>
+        public static long UlpDistance(byte[] a, byte[] b, int index, NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Double:
+                    return UlpDouble(BitConverter.ToDouble(a, index * 8), BitConverter.ToDouble(b, index * 8));
+                case NPTypeCode.Single:
+                    return UlpSingle(BitConverter.ToSingle(a, index * 4), BitConverter.ToSingle(b, index * 4));
+                case NPTypeCode.Half:
+                    return UlpHalf(BitConverter.ToHalf(a, index * 2), BitConverter.ToHalf(b, index * 2));
+                case NPTypeCode.Complex:
+                {
+                    int o = index * 16;
+                    return Math.Max(
+                        UlpDouble(BitConverter.ToDouble(a, o), BitConverter.ToDouble(b, o)),
+                        UlpDouble(BitConverter.ToDouble(a, o + 8), BitConverter.ToDouble(b, o + 8)));
+                }
+                default:
+                {
+                    int isz = tc.SizeOf();
+                    for (int i = 0; i < isz; i++)
+                        if (a[index * isz + i] != b[index * isz + i])
+                            return long.MaxValue;
+                    return 0;
+                }
+            }
+        }
+
+        /// <summary>
         ///     Absolute distance |expected - actual| at <paramref name="index"/> is within
         ///     <paramref name="absTol"/>. Used only to classify the DOCUMENTED expm1/log1p
         ///     small-|x| accuracy loss (NumSharp computes Exp(x)-1 / Log(1+x), whose absolute

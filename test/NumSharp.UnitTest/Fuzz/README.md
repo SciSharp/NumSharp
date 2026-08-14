@@ -115,6 +115,7 @@ python test/oracle/gen_oracle.py out_where        # ufunc out=/where= x out layo
 python test/oracle/gen_oracle.py place            # np.place(arr,mask,vals)
 python test/oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer (gufunc shapes, C/F layouts)
 python test/oracle/gen_oracle.py specials         # IEEE special-value parity (nan/±inf/±0/subnormal/max)
+python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversarial accumulation; needs mpmath)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
 dotnet run test/oracle/gen_decimal_oracle.cs      # Decimal tiers (independent C# System.Decimal oracle)
@@ -199,6 +200,14 @@ their prior contents in every one of the 882 `where=all_false` cases.
 | **S1** expm1/log1p small-\|x\| precision loss / -0 / subnormal flush (`Exp(x)-1`, `Log(1+x)`; NumPy calls the CRT, non-portable) | expm1/log1p × Value, every diff ≤2 ULP **or** ≤~ulp(1) abs | 20 |
 | **S2** fmax/fmin ±0-tie sign on a reversed float32 view (NumPy's OWN fmax ±0 sign is SIMD-path-dependent — array returns operand 2, scalar returns +0) | fmax/fmin × Single × Value, both tokens a signed zero | 2 |
 | **S3** complex matmul/dot/outer infinite-operand product: C99-unspecified complex-inf (zgemm `(nan,nan)` inf-recovery vs managed `(inf,nan)`) | matmul/dot/outer × complex × Value, every diff non-finite | 9 |
+| **P1** prefer-precise: diverges from NumPy TOWARD the correctly-rounded truth — parity debt (port NumPy's algorithm), never a win | truth-bearing × Value, all diffs not-less-truthful, some strictly closer | 4 |
+| **P2** prefer-precise: diverges within truth-equivalence slack (neither side less accurate) | truth-bearing × Value, all diffs ≤ max(4×dNPY, dNPY+8) ULP-vs-truth | 18 |
+
+**Known bugs (tracked for fix — remove the branch when fixed), truth-adjudicated:**
+
+| Excuse class | Scope | Hits |
+|---|---|---|
+| **P3** precision-loss (known): f32 var/std accumulation (55/26 ULP vs truth where NumPy sits at 3/2) + negative-stride reduction accumulation (11–32 ULP where NumPy is EXACT on the same reversed view) | truth-bearing × Value × (negstride sum/mean/var/std, or Single var/std), every diff ≤256 ULP-vs-truth | 5 |
 
 **Narrowed: the NumPy-ported float kernels are no longer excused.** `NDFloatMath` ports the kernels NumPy
 2.4.2 actually runs — `simd_exp_FLOAT`, `simd_log_FLOAT`, `simd_sincos_f32`, `simd_tanh_f32`/`simd_tanh_f64` — and
@@ -326,6 +335,43 @@ divergences) PLUS the three the tier discovered — `S1`/`S2`/`S3` in Table 1. *
 real-dtype (f16/f32/f64) matmul/dot/outer specials case is bit-exact** — the managed float GEMM
 propagates NaN/inf exactly like NumPy's BLAS on these operands; only C99-unspecified complex-infinity
 arithmetic (`S3`) diverges.
+
+### Truthful vs precise (`precision` tier)
+
+The vision is **byte-identical parity to NumPy**, which fixes the gate hierarchy: **"precise"
+(bit-exact to NumPy) always passes, without ever consulting mathematical truth** — matching NumPy's
+documented 2.52-ulp-wrong f32 exp IS the contract, and truth structurally cannot turn a
+NumPy-matching result red (the comparator returns before truth is read). But when a case DIVERGES
+from NumPy, the parity bytes alone cannot say which side lost precision — and the summation-order
+excuses were UNBOUNDED, so any magnitude of loss was excused with the same label as a 1-ULP
+reassociation.
+
+`precision.jsonl` (72 cases, `gen_oracle.py precision`, needs `mpmath` at generation time only)
+closes that. Each case carries a THIRD buffer, `expected.truth`: the correctly-rounded mathematical
+reference (exact `Fraction` arithmetic for sum/mean/var/cumsum/prod; 200-bit mpmath for std's sqrt
+and expm1/log1p). The inputs are precision-ADVERSARIAL — the ordinary pools cannot stress
+accumulation (at 8–36 elements a f32 sum sits ≤1 ULP from exact; at N=2049 a naive loop is 512 ULP
+off while NumPy's pairwise is ~2): wide-magnitude sums whose unit elements straddle ulp/2 of the
+big element, cancellation triples, mixed-magnitude pseudo-noise, large-mean variance, near-1
+products, the expm1/log1p small-|x| band — × contig/negstride × f32/f64.
+
+On a divergence the registry adjudicates by ULP distance to truth (branches P1–P3):
+
+- **not-less-truthful** than NumPy (within 4×/+8 ULP slack of NumPy's own distance) → excused as
+  **prefer-precise parity debt**, in two logged flavors: *toward truth* (NumSharp strictly closer —
+  still a divergence to close by porting NumPy's algorithm, exactly as exp/log/sin/cos/tanh were
+  ported; being more accurate than NumPy is never a win) and *equally truthful* (reassociation
+  noise). The slack absorbs cross-host SIMD lane-count variation.
+- **less truthful** (beyond slack) → genuine precision LOSS: falls through to the tightly-scoped
+  known-bug branches (S1, P3) or FAILS, with the loss quantified in the failure line
+  (`truth-ulp NS=… NPY=…`).
+
+The unbounded reduction blanket is gated on `truth == null` so a truth-bearing loss cannot hide in
+it; truthless tiers keep it unchanged. **Findings on arrival** (now P3, bounded ≤256): f32 var/std
+accumulation loses 55/26 ULP where NumPy's two-pass pairwise sits at 3/2, and the negative-stride
+reduce path loses 11–32 ULP where NumPy is EXACT on the same reversed view. 42/72 cases are
+bit-exact; scope pins in `MisalignedRegistryTightnessTests` (`P_*`) hold the branch tight from both
+sides.
 
 ### Decimal (independent oracle — no NumPy analog)
 
