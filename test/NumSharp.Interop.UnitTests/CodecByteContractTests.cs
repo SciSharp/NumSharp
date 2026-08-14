@@ -14,7 +14,7 @@ namespace NumSharp.Interop.UnitTests
     ///     NumSharp via its own <c>ascontiguousarray</c> + a raw buffer copy — independent of the interop's
     ///     <c>ToNumpy</c>) and asserts they are identical. That is the strongest equality there is: it
     ///     catches dtype width, endianness, and layout linearization that a value compare accepts.
-    ///     numpy is spoken in the clean Pythonic style (<c>Numpy.*</c> + the PyObject extensions in
+    ///     numpy is spoken in the clean Pythonic style (<c>Python.np.*</c> + the PyObject extensions in
     ///     <c>Pythonic.cs</c>); <c>np</c> stays NumSharp.
     /// </summary>
     [TestClass]
@@ -47,7 +47,7 @@ namespace NumSharp.Interop.UnitTests
         {
             using (Py.GIL())
             {
-                using PyObject a = Numpy.eval(npExpr);
+                using PyObject a = Python.np.eval(npExpr);
                 using NDArray nd = a.ToNDArray();
                 nd.typecode.Should().Be(tc, npExpr);
                 if (expectedExpr is null)
@@ -56,7 +56,7 @@ namespace NumSharp.Interop.UnitTests
                 }
                 else
                 {
-                    using PyObject expected = Numpy.eval(expectedExpr);
+                    using PyObject expected = Python.np.eval(expectedExpr);
                     ByteContract.AssertSameBytes(nd, expected, $"{npExpr} decodes byte-equal to {expectedExpr}");
                 }
             }
@@ -67,7 +67,7 @@ namespace NumSharp.Interop.UnitTests
         {
             using (Py.GIL())
             {
-                using PyObject a = Numpy.eval(npExpr);
+                using PyObject a = Python.np.eval(npExpr);
                 using NDArray nd = NDArrayPythonInterop.ToNDArrayView(a, allowReadonly: true);
                 nd.typecode.Should().Be(tc, npExpr);
                 ByteContract.AssertSameBytes(nd, a, npExpr);
@@ -80,7 +80,7 @@ namespace NumSharp.Interop.UnitTests
         {
             using (Py.GIL())
             {
-                using PyObject expected = Numpy.eval(expectedExpr);
+                using PyObject expected = Python.np.eval(expectedExpr);
                 using PyObject view = ns.ToNumpy();
                 view.dtype_str().Should().Be(expectedDtypeStr, expectedExpr);
                 ByteContract.AssertSameBytes(view, expected, $"ToNumpy(view) of {expectedExpr}");
@@ -100,24 +100,24 @@ namespace NumSharp.Interop.UnitTests
         {
             using (Gil())
             {
-                using PyObject a = Numpy.array("[1, 2, 3]", "<i4");
+                using PyObject a = Python.np.array("[1, 2, 3]", "<i4");
 
                 // a genuine numpy↔NumSharp match passes (sanity — the comparison is not always-throwing).
                 using NDArray nd = a.ToNDArray();
                 ByteContract.AssertSameBytes(nd, a);
 
                 // differing VALUES differ in bytes.
-                using PyObject differentValue = Numpy.array("[1, 2, 4]", "<i4");
+                using PyObject differentValue = Python.np.array("[1, 2, 4]", "<i4");
                 ((Action)(() => ByteContract.AssertSameBytes(a, differentValue)))
                     .Should().Throw<Exception>("differing values must differ in bytes — else the whole suite is vacuous");
 
                 // same values, different WIDTH (i4 vs i8) differ in bytes.
-                using PyObject differentWidth = Numpy.array("[1, 2, 3]", "<i8");
+                using PyObject differentWidth = Python.np.array("[1, 2, 3]", "<i8");
                 ((Action)(() => ByteContract.AssertSameBytes(a, differentWidth)))
                     .Should().Throw<Exception>("different dtype widths must differ in bytes");
 
                 // same values, different ENDIANNESS differ in bytes (proving the big-endian tests are real).
-                using PyObject bigEndian = Numpy.array("[1, 2, 3]", ">i4");
+                using PyObject bigEndian = Python.np.array("[1, 2, 3]", ">i4");
                 ((Action)(() => ByteContract.AssertSameBytes(a, bigEndian)))
                     .Should().Throw<Exception>("opposite byte order must differ in bytes");
             }
@@ -196,7 +196,7 @@ namespace NumSharp.Interop.UnitTests
             // No native-endian zero-copy view of big-endian memory is possible.
             using (Gil())
             {
-                using PyObject be = Numpy.array("[1, 2, 3]", ">i4");
+                using PyObject be = Python.np.array("[1, 2, 3]", ">i4");
                 ((Action)(() => NDArrayPythonInterop.ToNDArrayView(be, allowReadonly: true)))
                     .Should().Throw<NotSupportedException>().WithMessage("*big-endian*");
             }
@@ -228,24 +228,24 @@ namespace NumSharp.Interop.UnitTests
             using (Gil())
             {
                 // bytes -> Byte
-                using (PyObject b = Numpy.eval("b'\\x01\\x02\\xfe\\xff'"))
+                using (PyObject b = Python.np.eval("b'\\x01\\x02\\xfe\\xff'"))
                 using (NDArray nd = b.ToNDArray())
                     ByteContract.AssertSameBytes(nd, b, "bytes decode byte-exact");
 
                 // array.array('i') -> Int32, both copy and view
-                using (PyObject arr = Numpy.eval("__import__('array').array('i', [1, -2, 3, -4])"))
+                using (PyObject arr = Python.np.eval("__import__('array').array('i', [1, -2, 3, -4])"))
                 {
                     using (NDArray c = arr.ToNDArray()) ByteContract.AssertSameBytes(c, arr, "array.array copy");
                     using (NDArray v = arr.AsNDArray()) ByteContract.AssertSameBytes(v, arr, "array.array view");
                 }
 
                 // a strided memoryview of a bytearray -> Byte view, byte-exact over its own strided bytes
-                using (PyObject mv = Numpy.eval("memoryview(bytearray(range(16)))[::2]"))
+                using (PyObject mv = Python.np.eval("memoryview(bytearray(range(16)))[::2]"))
                 using (NDArray v = mv.AsNDArray())
                     ByteContract.AssertSameBytes(v, mv, "strided memoryview view");
 
                 // a ctypes array -> Int32 view
-                using (PyObject ct = Numpy.eval("(__import__('ctypes').c_int32 * 4)(10, 20, 30, 40)"))
+                using (PyObject ct = Python.np.eval("(__import__('ctypes').c_int32 * 4)(10, 20, 30, 40)"))
                 using (NDArray v = ct.AsNDArray())
                     ByteContract.AssertSameBytes(v, ct, "ctypes array view");
             }
@@ -285,14 +285,14 @@ namespace NumSharp.Interop.UnitTests
                 foreach (var (ns, expr) in cases)
                 {
                     using PyObject exported = ns.ToNumpy();
-                    using PyObject expected = Numpy.eval(expr);
+                    using PyObject expected = Python.np.eval(expr);
                     exported.strides_bytes().Should().Equal(expected.strides_bytes(), expr);
                     ByteContract.AssertSameBytes(exported, expected, expr);
                 }
 
                 // a broadcast view is read-only on both sides, and byte-identical.
                 using (PyObject bc = np.broadcast_to(np.arange(3), new Shape(2, 3)).ToNumpy())
-                using (PyObject exp = Numpy.eval("np.broadcast_to(np.arange(3), (2,3))"))
+                using (PyObject exp = Python.np.eval("np.broadcast_to(np.arange(3), (2,3))"))
                 {
                     bc.writeable().Should().BeFalse("a broadcast export is read-only, like NumSharp");
                     ByteContract.AssertSameBytes(bc, exp, "broadcast export");
@@ -321,7 +321,7 @@ namespace NumSharp.Interop.UnitTests
             using (Gil())
             {
                 // A contiguous numpy array: all three modes yield byte-identical data (Auto/View share, Copy detaches).
-                using PyObject a = Numpy.array("[10, 20, 30, 40]", "<i8");
+                using PyObject a = Python.np.array("[10, 20, 30, 40]", "<i8");
                 foreach (var (codec, name) in new[] { (auto, "Auto"), (view, "View"), (copy, "Copy") })
                 {
                     codec.TryDecode(a, out NDArray nd).Should().BeTrue(name);
@@ -330,7 +330,7 @@ namespace NumSharp.Interop.UnitTests
                 }
 
                 // A complex64 source: Auto/Copy widen (byte-exact vs c16), View declines.
-                using PyObject c8 = Numpy.array("[1+2j, 3+4j]", "<c8");
+                using PyObject c8 = Python.np.array("[1+2j, 3+4j]", "<c8");
                 using PyObject c16 = c8.astype("<c16");
                 auto.TryDecode(c8, out NDArray aWide).Should().BeTrue("Auto copies when a view is impossible");
                 ByteContract.AssertSameBytes(aWide, c16, "Auto widens complex64 byte-exact");
@@ -351,9 +351,9 @@ namespace NumSharp.Interop.UnitTests
             {
                 foreach (string literal in new[] { "[1, 2, 3]", "(1.0, 2.5, -3.0)", "[[1, 2], [3, 4]]", "7" })
                 {
-                    using PyObject lit = Numpy.eval(literal);
+                    using PyObject lit = Python.np.eval(literal);
                     codec.TryDecode(lit, out NDArray nd).Should().BeTrue(literal);
-                    using PyObject expected = Numpy.asarray(lit);
+                    using PyObject expected = Python.np.asarray(lit);
                     ByteContract.AssertSameBytes(nd, expected, $"{literal} decodes byte-equal to np.asarray");
                     nd.Dispose();
                 }
@@ -375,7 +375,7 @@ namespace NumSharp.Interop.UnitTests
                     "np.array([True, False, True], dtype='|b1')",
                 })
                 {
-                    using PyObject src = Numpy.eval(expr);
+                    using PyObject src = Python.np.eval(expr);
                     using NDArray nd = src.ToNDArray();       // numpy -> NumSharp (copy)
                     using PyObject back = nd.ToNumpy();       // NumSharp -> numpy (view)
                     ByteContract.AssertSameBytes(back, src, $"round-trip byte identity: {expr}");
@@ -389,10 +389,10 @@ namespace NumSharp.Interop.UnitTests
             // The zero-copy import view shares memory: a write on the numpy side changes the NumSharp bytes.
             using (Gil())
             {
-                using PyObject src = Numpy.array("[0, 0, 0, 0]", "<i4");
+                using PyObject src = Python.np.array("[0, 0, 0, 0]", "<i4");
                 using NDArray nd = src.AsNDArray();
                 using (PyObject _ = src.InvokeMethod("__setitem__", 1L.ToPython(), 12345L.ToPython())) { }
-                using PyObject expected = Numpy.array("[0, 12345, 0, 0]", "<i4");
+                using PyObject expected = Python.np.array("[0, 12345, 0, 0]", "<i4");
                 ByteContract.AssertSameBytes(nd, expected, "a numpy write reaches the shared NumSharp view");
             }
         }
@@ -406,7 +406,7 @@ namespace NumSharp.Interop.UnitTests
             {
                 using PyObject exported = ns.ToNumpy();
                 WriteAt(ns, 999, 2);                              // NumSharp write
-                using PyObject expected = Numpy.array("[0, 1, 999, 3]", "<i4");
+                using PyObject expected = Python.np.array("[0, 1, 999, 3]", "<i4");
                 ByteContract.AssertSameBytes(exported, expected, "a NumSharp write reaches the shared numpy export");
             }
         }
@@ -426,7 +426,7 @@ namespace NumSharp.Interop.UnitTests
                     ("np.uint8(200)", NPTypeCode.Byte),
                 })
                 {
-                    using PyObject s = Numpy.eval(expr);
+                    using PyObject s = Python.np.eval(expr);
                     using NDArray nd = s.ToNDArray();
                     nd.ndim.Should().Be(0, expr);
                     nd.typecode.Should().Be(tc, expr);
@@ -441,7 +441,7 @@ namespace NumSharp.Interop.UnitTests
             using (Gil())
             {
                 // read-only numpy array: a view needs allowReadonly and comes back non-writeable, byte-exact.
-                using PyObject ro = Numpy.evalStmts("r = np.arange(5, dtype='<f8'); r.flags.writeable = False", "r");
+                using PyObject ro = Python.np.evalStmts("r = np.arange(5, dtype='<f8'); r.flags.writeable = False", "r");
                 ((Action)(() => NDArrayPythonInterop.ToNDArrayView(ro)))
                     .Should().Throw<InvalidOperationException>("a writable view of a read-only source is refused by default");
                 using NDArray v = NDArrayPythonInterop.ToNDArrayView(ro, allowReadonly: true);
@@ -449,7 +449,7 @@ namespace NumSharp.Interop.UnitTests
                 ByteContract.AssertSameBytes(v, ro, "read-only numpy view is byte-exact");
 
                 // bytes is inherently read-only: same contract.
-                using PyObject b = Numpy.eval("b'\\x01\\x02\\x03\\x04'");
+                using PyObject b = Python.np.eval("b'\\x01\\x02\\x03\\x04'");
                 using NDArray vb = b.AsNDArray(allowReadonly: true);
                 vb.Shape.IsWriteable.Should().BeFalse();
                 ByteContract.AssertSameBytes(vb, b, "read-only bytes view is byte-exact");
@@ -461,11 +461,11 @@ namespace NumSharp.Interop.UnitTests
         {
             using (Gil())
             {
-                using PyObject ba = Numpy.eval("bytearray(b'\\x00\\x00\\x00\\x00')");
+                using PyObject ba = Python.np.eval("bytearray(b'\\x00\\x00\\x00\\x00')");
                 using NDArray v = ba.AsNDArray();               // bytearray is writable -> writable view
                 v.Shape.IsWriteable.Should().BeTrue();
                 WriteAt(v, (byte)0xAB, 1);                       // NumSharp write reaches the bytearray
-                using PyObject expected = Numpy.eval("bytearray(b'\\x00\\xab\\x00\\x00')");
+                using PyObject expected = Python.np.eval("bytearray(b'\\x00\\xab\\x00\\x00')");
                 ByteContract.AssertSameBytes(v, expected, "the write-through view is byte-exact after a NumSharp write");
             }
         }
@@ -482,7 +482,7 @@ namespace NumSharp.Interop.UnitTests
 
             using (Gil())
             {
-                using PyObject expected = Numpy.eval("np.arange(6, dtype='<f8').reshape(2,3)");
+                using PyObject expected = Python.np.eval("np.arange(6, dtype='<f8').reshape(2,3)");
                 foreach (var (codec, name) in new[] { (auto, "Auto"), (view, "View"), (copy, "Copy") })
                 {
                     using PyObject p = codec.TryEncode(ns);
@@ -493,18 +493,41 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
+        public void ExportedBuffers_RealNumpyComputesOverThem_ByteExact()
+        {
+            // The end-to-end proof: hand REAL numpy the buffers this interop exported and let numpy's OWN
+            // kernels compute over them — the result must be byte-identical to NumSharp's own (element-wise
+            // ops over small integers are exact in float64, so byte-exactness is legitimate here).
+            NDArray a = np.arange(12).reshape(3, 4).astype(NPTypeCode.Double);
+            NDArray b = np.arange(1, 13).reshape(3, 4).astype(NPTypeCode.Double);
+            NDArray nsSum = a + b;   // NumSharp's own add
+
+            using (Gil())
+            {
+                using PyObject va = a.ToNumpy();
+                using PyObject vb = b.ToNumpy();
+                using PyObject npSum = Python.np.with("np.add(a, b)", ("a", va), ("b", vb));
+                ByteContract.AssertSameBytes(nsSum, npSum, "numpy.add over the exported buffers equals NumSharp's add");
+
+                // and a semantic probe over the same exported buffers.
+                Python.np.truthy("a.flags['C_CONTIGUOUS'] and np.array_equal(a, (b - b) + a)", ("a", va), ("b", vb))
+                    .Should().BeTrue("numpy sees the export as a real, contiguous, value-correct array");
+            }
+        }
+
+        [TestMethod]
         public void Decode_TwoByteWchar_ViewsAsChar_ByteExact()
         {
             using (Gil())
             {
-                long unit = Numpy.eval("__import__('array').array('u').itemsize").As<long>();
+                long unit = Python.np.eval("__import__('array').array('u').itemsize").As<long>();
                 if (unit != 2)
                     Assert.Inconclusive("wchar_t is 4 bytes on this platform (linux/macOS) — no zero-copy Char view");
 
-                using PyObject ua = Numpy.eval("__import__('array').array('u', 'hi!')");
+                using PyObject ua = Python.np.eval("__import__('array').array('u', 'hi!')");
                 using NDArray v = ua.AsNDArray();
                 v.typecode.Should().Be(NPTypeCode.Char, "a 2-byte wchar buffer IS a UTF-16 Char buffer");
-                using PyObject expected = Numpy.array("[ord('h'), ord('i'), ord('!')]", "<u2");
+                using PyObject expected = Python.np.array("[ord('h'), ord('i'), ord('!')]", "<u2");
                 ByteContract.AssertSameBytes(v, expected, "2-byte wchar views as Char, byte-exact vs its uint16 code units");
             }
         }

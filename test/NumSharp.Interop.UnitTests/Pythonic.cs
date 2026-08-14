@@ -5,33 +5,35 @@ using NumSharp;
 using NumSharp.Backends;
 using Python.Runtime;
 
-namespace NumSharp.Interop.UnitTests
-{
-    // =====================================================================================
-    //  Test-side pythonic numpy — the interop's Pythonic.cs style, extended to what the codec
-    //  byte-contract tests need: build REAL numpy arrays in clean C#, read their dtype / shape /
-    //  strides / bytes, and compare both sides BYTE-FOR-BYTE.
-    //
-    //  Alias it to `np` at the top of a test file so the numpy side reads like numpy:
-    //
-    //      using np = NumSharp.Interop.UnitTests.Numpy;   // the alias wins over NumSharp.np
-    //
-    //      using (Gil())
-    //      {
-    //          using PyObject a = np.eval("np.arange(12, dtype='<i4').reshape(3,4).T");  // a real numpy array
-    //          using NDArray nd = a.ToNDArray();                                         // crossed by the interop
-    //          ByteContract.AssertSameBytes(nd, a);                                      // byte-for-byte
-    //      }
-    //
-    //  GIL: every member here calls the C-API, so it must run under the GIL — exactly like the
-    //  interop's Pythonic.cs. The high-level ByteContract.Assert* helpers acquire it themselves.
-    // =====================================================================================
+// =========================================================================================
+//  Test-side pythonic numpy — the interop's Pythonic.cs style, extended to what the codec
+//  byte-contract tests need: build REAL numpy arrays in clean C#, read their dtype / shape /
+//  strides / bytes, and compare both sides BYTE-FOR-BYTE.
+//
+//  The numpy module lives at `Python.np` (deliberately beside `Python.Runtime`) so the two
+//  sides read for what they are — `Python.np.array(...)` is Python's numpy, while `np.*` stays
+//  NumSharp:
+//
+//      using (Gil())
+//      {
+//          using PyObject a = Python.np.eval("np.arange(12, dtype='<i4').reshape(3,4).T");  // numpy
+//          using NDArray nd = a.ToNDArray();                                                // crossed
+//          ByteContract.AssertSameBytes(nd, a);                                             // byte-for-byte
+//      }
+//
+//  GIL: every member here calls the C-API, so it must run under the GIL — exactly like the
+//  interop's Pythonic.cs. The high-level ByteContract.Assert* helpers acquire it themselves.
+// =========================================================================================
 
-    /// <summary><c>import numpy as np</c>, the test flavour: clean builders returning real numpy arrays.</summary>
-    internal static class Numpy
+namespace Python
+{
+    /// <summary><c>import numpy as np</c>, the test flavour: clean builders returning real numpy arrays.
+    /// Sits in the <c>Python</c> namespace (beside <c>Python.Runtime</c>) so test code reads
+    /// <c>Python.np.array(...)</c>. Call under the GIL.</summary>
+    internal static class np
     {
         /// <summary>The <c>numpy</c> module (CPython caches it; the wrapper is short-lived — dispose after use).</summary>
-        private static PyObject Module => Py.Import("numpy");
+        private static PyObject Module => Runtime.Py.Import("numpy");
 
         /// <summary>
         ///     Evaluate a numpy expression with <c>np</c> bound — the escape hatch for the layouts C#
@@ -39,9 +41,33 @@ namespace NumSharp.Interop.UnitTests
         /// </summary>
         internal static PyObject eval(string npExpr)
         {
-            using var scope = Py.CreateScope();
+            using var scope = Runtime.Py.CreateScope();
             scope.Exec("import numpy as np");
             return scope.Eval(npExpr);
+        }
+
+        /// <summary>
+        ///     Evaluate a numpy expression with named operands pre-bound — the multi-operand form of
+        ///     <see cref="eval"/>. Lets a test hand REAL numpy the arrays this interop exported and let
+        ///     numpy's own kernels compute over them: <c>with("np.matmul(a, b)", ("a", va), ("b", vb))</c>.
+        ///     The bound operands stay owned by the caller (the throwaway scope only increfs them); the
+        ///     result outlives the scope.
+        /// </summary>
+        internal static PyObject with(string npExpr, params (string name, PyObject val)[] vars)
+        {
+            using var scope = Runtime.Py.CreateScope();
+            scope.Exec("import numpy as np");
+            foreach (var (name, val) in vars)
+                scope.Set(name, val);
+            return scope.Eval(npExpr);
+        }
+
+        /// <summary>True iff the numpy expression (evaluated with <c>np</c> bound) is truthy — for
+        /// semantic probes like <c>truthy("np.isnan(a).all()", ("a", exported))</c>.</summary>
+        internal static bool truthy(string npExpr, params (string name, PyObject val)[] vars)
+        {
+            using PyObject r = with($"bool({npExpr})", vars);
+            return r.As<bool>();
         }
 
         /// <summary>
@@ -50,7 +76,7 @@ namespace NumSharp.Interop.UnitTests
         /// </summary>
         internal static PyObject evalStmts(string setup, string resultVar)
         {
-            using var scope = Py.CreateScope();
+            using var scope = Runtime.Py.CreateScope();
             scope.Exec("import numpy as np");
             scope.Exec(setup);
             return scope.Eval(resultVar);
@@ -69,7 +95,10 @@ namespace NumSharp.Interop.UnitTests
         internal static bool shares_memory(PyObject a, PyObject b)
         { using var m = Module; using var r = m.InvokeMethod("shares_memory", a, b); return r.As<bool>(); }
     }
+}
 
+namespace NumSharp.Interop.UnitTests
+{
     /// <summary>The array-instance side: <c>arr.dtype.str</c>, <c>arr.shape</c>, <c>arr.astype(...)</c>,
     /// <c>arr.tobytes('C')</c>, spelled as clean C# extension calls. Call under the GIL.</summary>
     internal static class NumpyExtensions
