@@ -286,6 +286,68 @@ namespace NumSharp.Backends
             }
         }
 
+        /// <summary>
+        ///     Creates a <see cref="double"/> (float64) VIEW onto one lane — real or imaginary — of a
+        ///     <see cref="System.Numerics.Complex"/> storage, reproducing NumPy's <c>a.real</c> / <c>a.imag</c>:
+        ///     a strided float64 view that SHARES memory (and writeability) with the Complex base.
+        /// </summary>
+        /// <param name="imaginary"><c>false</c> selects the real lane, <c>true</c> the imaginary lane.</param>
+        /// <returns>
+        ///     A float64 <see cref="UnmanagedStorage"/> aliasing this storage's chosen lane. Writes through
+        ///     to the Complex base; the base is kept alive via <c>_baseStorage</c>.
+        /// </returns>
+        /// <remarks>
+        ///     <para>
+        ///     A <see cref="System.Numerics.Complex"/> is two consecutive float64s (real, then imaginary),
+        ///     laid out exactly like NumPy's <c>complex128</c>. A lane is therefore a plain strided float64
+        ///     view: every Complex element stride is doubled (a Complex spans two float64s) and the base
+        ///     offset is doubled, plus one for the imaginary lane. This works for EVERY layout
+        ///     (contiguous / F-contiguous / transposed / strided / negative-stride / sliced-offset /
+        ///     broadcast), because it operates on the raw contiguous backing buffer and mirrors whatever
+        ///     strides/offset the Complex shape carries — the same strided-lane read the FFT driver uses.
+        ///     </para>
+        ///     <para>
+        ///     A lane of a read-only Complex (a broadcast view, or an <c>'r'</c> memmap) stays read-only.
+        ///     </para>
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">If this storage is not a Complex storage.</exception>
+        public unsafe UnmanagedStorage AliasComplexLane(bool imaginary)
+        {
+            if (_typecode != NPTypeCode.Complex)
+                throw new InvalidOperationException(
+                    $"AliasComplexLane requires a Complex storage but got {_typecode}.");
+
+            // The backing buffer holds `bufferSize` Complex values == 2*bufferSize float64 lanes.
+            long doubleCount = _shape.bufferSize * 2;
+
+            // float64 element strides = Complex element strides * 2 (a Complex is two float64s wide).
+            long[] cstr = _shape.strides;
+            long[] dstr = new long[cstr.Length];
+            for (int i = 0; i < cstr.Length; i++)
+                dstr[i] = cstr[i] * 2;
+
+            long laneOffset = _shape.offset * 2 + (imaginary ? 1 : 0);
+            var laneShape = new Shape((long[])_shape.dimensions.Clone(), dstr, laneOffset, doubleCount);
+
+            // Inherit read-only-ness: a lane of a non-writeable Complex must not become writeable
+            // (the internal Shape ctor defaults WRITEABLE on). Same guard as Alias(Shape).
+            if (!_shape.IsWriteable && laneShape.IsWriteable)
+                laneShape = laneShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+
+            // Non-owning float64 slice over the SAME memory; lifetime handed to the Complex owner.
+            var slice = ArraySlice.Wrap<double>((double*)InternalArray.Address, doubleCount);
+
+            var r = new UnmanagedStorage();
+            r._shape = laneShape;
+            r._typecode = NPTypeCode.Double;
+            r._dtype = typeof(double);
+            r.SetInternalArray(slice);
+            r.Count = laneShape.size; // logical element count (bufferSize may be larger for a sliced/broadcast view)
+            r._baseStorage = _baseStorage ?? this;
+            r.Engine = Engine;
+            return r;
+        }
+
         #endregion
 
         #region Casting
