@@ -1513,6 +1513,63 @@ library asserts axis texts with wildcards.
 
 **Perf (NPY/NS, best-of-rounds, Release):** geomean **1.83× at N=10M** (no cell below 1.0; min 1.13×) and **1.40× at N=100K**. `tril_indices`/`triu_indices` lead at 4.40×/4.55× (10M). The single sub-1.0 cell is `fill_diagonal` at 100K (0.62×, 3.7 µs vs 2.3 µs) — it touches only `min(rows, cols)` elements, so the call is dominated by NDArray/Shape construction rather than work; at 10M it is 1.23×. The triangular fills pick their allocation strategy by size: below **64 MiB** the buffer comes back dirty so they allocate uninitialised and write every byte exactly once, above it `np.zeros` rides free OS zero-pages and only the retained run is touched (measured cliff — 64 MB: 6.0 ms vs 11.0 ms write-once; 72 MB: 18.9 ms vs 13.5 ms the other way; see `np.tri.cs` → `WriteOnceMaxBytes`).
 
+### Fourier / FFT (`np.fft.*`)
+`fft`, `ifft`, `fft2`, `ifft2`, `fftn`, `ifftn`, `rfft`, `irfft`, `rfft2`, `irfft2`, `rfftn`, `irfftn`, `hfft`, `ihfft`, `fftfreq`, `rfftfreq`, `fftshift`, `ifftshift` — plus the companion complex accessors `conjugate`/`conj`, `real`, `imag`, `angle`.
+
+The whole `numpy.fft` module (18 functions) is a **pure-managed C# port of pocketfft** — NumPy's own
+vendored FFT engine — in `src/NumSharp.Core/Fourier/` (no native dependency, no P/Invoke). The
+double/complex128 path is **bit-for-bit identical to NumPy 2.4.2**, not merely close, because the
+port is a faithful **scalar** transcription and NumPy's win-amd64 wheel is itself scalar
+(`POCKETFFT_NO_VECTORS` under MSVC) with twiddles from the same CRT (`Math.Cos`/`Sin` == MSVC
+`ucrtbase`); **no explicit FMA is needed** (unlike the GEMM port), which is why `fft.jsonl` is a
+PORTABLE fuzz tier rather than a host-pinned one. Full design + parity ledger:
+**`docs/FFT_PARITY.md`**.
+
+The facade is the `np.random` house shape — a lowercase property `np.fft` returning `FourierModule`,
+so `np.fft.fft(x)` ports Python verbatim. Only **three 1-D kernels** do real work (`c2c`/`r2c`/`c2r`
+in `PocketFFTDriver.Execute`); every N-D/2-D form composes 1-D transforms over `_raw_fftnd`, and
+`hfft`/`ihfft` are compositions of `irfft`/`rfft` + `np.conjugate` + the norm swap (as NumPy defines
+them). The **strided all-but-axis driver** (`PocketFFTDriver.cs`, port of `_pocketfft_umath.cpp`)
+does `copy_input` (gather `min(nin,n)` strided elements, zero-pad) → `plan.Exec(buf, fct, dir)` →
+`copy_output` per lane, reading each operand's own strides/offset so **every layout works** (C / F /
+strided / transposed / reversed / broadcast-read / sliced-offset), and applies the **FFTPACK
+half-complex packing** (`R0,R1,I1,…`, I0=0, even-`n` Nyquist term) exactly where NumPy's
+`rfft_impl`/`irfft_loop` do. Engine files: `PocketFFT.Twiddle.cs` (`sincos_2pibyn` + `cmplx` +
+prime/cost/good_size util), `.Complex.cs` (`cfftp` mixed-radix, codelets radix 2/3/4/5/7/8/11 +
+generic), `.Real.cs` (`rfftp` radf/radb 2/3/4/5 + generic), `.Bluestein.cs` (`fftblue` chirp-z for
+large-prime lengths), `.Plan.cs` (dispatch: mixed-radix when `largest_prime_factor(n)² ≤ n` else
+cost-compare vs Bluestein, + a bounded 64-entry plan cache that is **bit-neutral** — NumPy's build
+has `POCKETFFT_CACHE_SIZE==0`, so caching only saves twiddle setup).
+
+**Layer-3 semantics are ported verbatim** (`np.fft.RawFft.cs`, port of `_pocketfft.py`; all probed
+against 2.4.2): the norm factor `fct` (forward `None/backward→1`, `ortho→1/√n`, `forward→1/n`; the
+inverse swaps direction FIRST, so `ifft` divides by `n`); `n<1` → `ValueError("Invalid number of FFT
+data points ({n}) specified.")`; `n` truncates/zero-pads; `rfft` output `n//2+1`; `irfft`/`hfft`
+default `n=2*(m-1)`; the N-D `s`/`axes` cook (`s`-without-`axes` → last `len(s)` axes, `s[i]==-1`
+sentinel, `len(s)!=len(axes)` → `ValueError("Shape and axes have different lengths.")`). **Error
+taxonomy matches NumPy's line-order exactly** — the bad-`norm` message has NO space after the first
+comma on a FORWARD transform but a space on the inverse/`hfft`/`ihfft` (`_swap_direction`'s KeyError
+path); an out-of-range axis is `IndexError("tuple index out of range")` when `n` is omitted (the
+`a.shape[axis]` subscript fires first) but `AxisError` when `n` is given; `rfft`/`ihfft` of a COMPLEX
+input is `TypeError("ufunc 'rfft_n_even'/'rfft_n_odd' not supported …")` (ufunc chosen by input
+parity, fired only after n/norm/axis/out validate); a bad `out` is `ValueError("output array has
+wrong shape.")`. `out=` accepts a **same_kind** cast from the loop dtype (irfft's float64 into a
+complex128/float32 out; N-D wrappers accept `out` for signature parity but don't thread it, as NumPy
+passes `out=None`). Helpers: `fftfreq`/`rfftfreq` are float64 generators with NumPy's probed check
+order (divide-by-zero first, then `device`, then — `fftfreq` only — negative-length; a non-integer
+`n` → `ValueError("n should be an integer")`); `fftshift`/`ifftshift` are dtype-preserving cyclic
+rolls by `±(dim//2)` (0-d → no-op copy, `[Misaligned]`).
+
+**ONE deliberate divergence (`[Misaligned]` F1):** NumSharp has a single complex type (complex128)
+and **no complex64**, so a **float32/float16** input computes in double and returns complex128/float64
+where NumPy 2.x returns complex64/float32/float16. A **dtype-only** difference — the VALUES are the
+correctly-rounded double result (bit-verified: `np.fft.fft(x_f32) == np.fft.fft(x_f32.astype(f8))`
+byte-for-byte). float64/complex128/int/bool inputs are **contractual (bit-exact)**; the helpers never
+diverge. Closing it needs a complex64 dtype (issue #569), not FFT work. Gate:
+`Fuzz/corpus/fft.jsonl` (1,796 cases, floor 1,700; `OpRegistry` all 16 transforms + 4 helpers,
+`gen_oracle.gen_fft`, `MisalignedRegistry` F1) + **330** `Fourier`-namespace unit tests
+(`test/NumSharp.UnitTest/Fourier/np.fft.*.Test.cs`). See `Fourier/np.fft.{cs,Standard,Real,Hermitian,Helper,RawFft}.cs` + `Fourier/PocketFFT*.cs`; issue **#114**.
+
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
@@ -1647,6 +1704,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot}.cs`, `LinearAlgebra/GufuncGuard.cs` |
 | einsum | `LinearAlgebra/np.einsum.cs`, `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (class + `_assert_*`/`_commonType` ports) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs`; `Exceptions/LinAlgError.cs` |
+| Fourier / FFT (`np.fft.*`) | `Fourier/np.fft.cs` (`FourierModule` facade), `Fourier/np.fft.{Standard,Real,Hermitian,Helper}.cs` (the 18 funcs), `Fourier/np.fft.RawFft.cs` (layer-3 port: `_raw_fft`/`_raw_fftnd`/`_cook_nd_args`/`_swap_direction`), `Fourier/PocketFFTDriver.cs` (strided 1-D driver + FFTPACK packing), `Fourier/PocketFFT.{Twiddle,Complex,Real,Bluestein,Plan}.cs` (managed pocketfft engine); companion accessors `Math/np.{conjugate,real,imag,angle}.cs`. Design + parity ledger: `docs/FFT_PARITY.md` |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NdArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |

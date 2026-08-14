@@ -37,6 +37,7 @@
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" Condition="Exists('THIRD-PARTY-NOTICES.txt')" />
+    <None Remove="runtimes\**" />
   </ItemGroup>
 
   <!-- ==================================================================================
@@ -52,12 +53,9 @@
        copy, not a second pin.
        ================================================================================== -->
   <ItemGroup>
-    <None Include="buildTransitive/NumSharp.Interop.OpenBLAS.props" Pack="true"
-          PackagePath="buildTransitive/NumSharp.Interop.OpenBLAS.props" />
-    <None Include="buildTransitive/NumSharp.Interop.OpenBLAS.targets" Pack="true"
-          PackagePath="buildTransitive/NumSharp.Interop.OpenBLAS.targets" />
-    <None Include="tools/openblas-manifest.json" Pack="true"
-          PackagePath="buildTransitive/openblas-manifest.json" />
+    <None Include="buildTransitive/NumSharp.Interop.OpenBLAS.props" Pack="true" PackagePath="buildTransitive/NumSharp.Interop.OpenBLAS.props" />
+    <None Include="buildTransitive/NumSharp.Interop.OpenBLAS.targets" Pack="true" PackagePath="buildTransitive/NumSharp.Interop.OpenBLAS.targets" />
+    <None Include="tools/openblas-manifest.json" Pack="true" PackagePath="buildTransitive/openblas-manifest.json" />
   </ItemGroup>
 
   <ItemGroup>
@@ -105,22 +103,20 @@
          The current RID is excluded here and packed by the Content item below instead: a file
          carried by two item types gets one set of pack metadata, and Pack="false" won — which
          dropped the host's own RID (the one most likely to be tested) out of the package. -->
-    <None Include="$(OpenBlasRuntimesDir)/**/*"
-          Exclude="$(OpenBlasRuntimesDir)/$(BundledOpenBlasRid)/**/*"
-          Pack="true"
-          PackagePath="runtimes/%(RecursiveDir)%(Filename)%(Extension)"
-          Visible="false"
-          CopyToOutputDirectory="Never" />
+    <None Include="$(OpenBlasRuntimesDir)/**/*" Exclude="$(OpenBlasRuntimesDir)/$(BundledOpenBlasRid)/**/*" Pack="true" PackagePath="runtimes/%(RecursiveDir)%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="Never" />
 
     <!-- The CURRENT RID's asset is packed the same way AND copied to bin/. Content (not None) so
          it flows to projects that ProjectReference this one — the unit tests need it on disk to
          prove the bundled library actually loads. -->
-    <Content Include="$(OpenBlasRuntimesDir)/$(BundledOpenBlasRid)/native/*"
-             Pack="true"
-             PackagePath="runtimes/$(BundledOpenBlasRid)/native/%(Filename)%(Extension)"
-             Visible="false"
-             Link="runtimes/$(BundledOpenBlasRid)/native/%(Filename)%(Extension)"
-             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(OpenBlasRuntimesDir)/$(BundledOpenBlasRid)/native/*" Pack="true" PackagePath="runtimes/$(BundledOpenBlasRid)/native/%(Filename)%(Extension)" Visible="false" Link="runtimes/$(BundledOpenBlasRid)/native/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="runtimes\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Remove="runtimes\**" />
   </ItemGroup>
 
   <Target Name="_ReportBundledOpenBlas" BeforeTargets="Pack" Condition="'$(BundleOpenBlas)' == 'true'">
