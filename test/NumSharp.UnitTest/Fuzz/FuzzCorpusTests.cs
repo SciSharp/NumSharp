@@ -137,6 +137,18 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void NanReduce() => RunCorpus("nanreduce.jsonl");
 
+        // IEEE special-value parity: nan / ±inf / ±0 / smallest-subnormal / ±max FORCED through
+        // the elementwise-math, reduction, scan and matmul/dot/outer ops across float16/float32/
+        // float64/complex128 and every memory layout (contiguous/2-D/F/strided/negative-stride).
+        // Closes three gaps the incidental front-loading in the ordinary pools leaves: the
+        // cross-operand INTERACTIONS the pair layouts never pair (inf+(-inf), 0*inf, 0/0, 1**inf,
+        // max*max->inf), NaN/inf PROPAGATION through the managed GEMM (the _mm_fill ramps carry no
+        // specials), and the per-dtype extremes/subnormals. BitDiff tokenizes NaN (any payload ->
+        // "NaN") and bit-compares ±0.0 / ±inf, so this asserts the CONTRACTUAL part of IEEE parity.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Specials() => RunCorpus("specials.jsonl");
+
         // W5 cumulative (T11): cumsum/cumprod (axis None + per-axis, NEP50 accumulator) and diff
         // (n=1,2; axis 0/last; output shrinks by n) across int/uint/float/complex dtypes.
         [TestMethod]
@@ -358,6 +370,7 @@ namespace NumSharp.UnitTest.Fuzz
             ["rounding.jsonl"] = 665,
             ["scan.jsonl"] = 907,
             ["sort.jsonl"] = 401,
+            ["specials.jsonl"] = 1866,
             ["stat.jsonl"] = 3412,
             ["tail.jsonl"] = 1872,
             ["unary.jsonl"] = 4222,

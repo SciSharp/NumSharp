@@ -116,6 +116,42 @@ namespace NumSharp.UnitTest.Fuzz
             }
         }
 
+        /// <summary>
+        ///     Absolute distance |expected - actual| at <paramref name="index"/> is within
+        ///     <paramref name="absTol"/>. Used only to classify the DOCUMENTED expm1/log1p
+        ///     small-|x| accuracy loss (NumSharp computes Exp(x)-1 / Log(1+x), whose absolute
+        ///     error near zero is bounded by ~ulp(1) — a subnormal result flushes to 0, a moderate
+        ///     one drifts a ULP) as an intended divergence, never to relax the bit-exact gate. Two
+        ///     NaNs count as within tolerance (BitDiff already tokenizes NaN, so a NaN reaches here
+        ///     only opposite a number — abs is NaN — and is correctly NOT excused).
+        /// </summary>
+        public static bool WithinAbs(byte[] exp, byte[] act, int index, NPTypeCode tc, double absTol)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Double:
+                {
+                    double e = BitConverter.ToDouble(exp, index * 8), a = BitConverter.ToDouble(act, index * 8);
+                    if (double.IsNaN(e) && double.IsNaN(a)) return true;
+                    return Math.Abs(e - a) <= absTol;
+                }
+                case NPTypeCode.Single:
+                {
+                    float e = BitConverter.ToSingle(exp, index * 4), a = BitConverter.ToSingle(act, index * 4);
+                    if (float.IsNaN(e) && float.IsNaN(a)) return true;
+                    return Math.Abs(e - a) <= absTol;
+                }
+                case NPTypeCode.Half:
+                {
+                    Half e = BitConverter.ToHalf(exp, index * 2), a = BitConverter.ToHalf(act, index * 2);
+                    if (Half.IsNaN(e) && Half.IsNaN(a)) return true;
+                    return Math.Abs((double)e - (double)a) <= absTol;
+                }
+                default:
+                    return false;
+            }
+        }
+
         private static long UlpDouble(double a, double b)
         {
             if (double.IsNaN(a) && double.IsNaN(b)) return 0;

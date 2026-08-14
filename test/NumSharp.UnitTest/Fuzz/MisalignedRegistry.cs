@@ -247,6 +247,19 @@ namespace NumSharp.UnitTest.Fuzz
                 && c.Operands.Any(o => o.Dtype == "complex128"))
                 return "isclose: F-contiguous/complex strided pairing divergence [known bug]";
 
+            // (S2) fmax/fmin ±0-tie sign on a negative-stride float32 view. NumPy's OWN fmax/fmin
+            //      pick which zero to return on a (+0,-0) tie by SIMD path: its array loop returns
+            //      the second operand (so array fmax(+0,-0) = -0, unlike the +0 its scalar path
+            //      gives). NumSharp matches that array behaviour on contiguous/strided operands but
+            //      diverges on the REVERSED f32 lane order, so the sign of the tied zero differs.
+            //      Non-contractual — NumPy is itself path-inconsistent here. Scoped razor-tight:
+            //      float32, and BOTH the expected and actual token are a signed zero — a wrong
+            //      NON-zero fmax/fmin result still fails.
+            if ((c.Op == "fmax" || c.Op == "fmin") && kind == DivergenceKind.Value
+                && tc == NPTypeCode.Single && diffs.Count > 0 && diffs.All(IsSignedZeroPairSingle))
+                return "fmax/fmin ±0-tie sign on a reversed float32 view (NumPy's own fmax ±0 sign is "
+                     + "SIMD-path-dependent) [documented non-contractual]";
+
             // (W11-A / clip_out FIXED) maximum/minimum/clip now PROPAGATE NaN on the out= path
             // (NumPy: maximum(NaN,x)=NaN, clip(NaN,lo,hi)=NaN). Root cause: the clip SIMD kernel used
             // the hardware MAXPS/MINPD intrinsics (Avx.Max/Min), which return the SECOND operand on an
@@ -414,6 +427,24 @@ namespace NumSharp.UnitTest.Fuzz
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "unary ~ULP (transcendental/magnitude algorithm difference)";
 
+            // (S1) expm1 / log1p are computed by NumSharp as Exp(x)-1 / Log(1+x) rather than a
+            //      dedicated small-|x| kernel, so near zero they lose precision: a subnormal result
+            //      flushes to 0, expm1(-0.0) gives +0.0, and a moderate result can drift a ULP.
+            //      NumPy calls the CRT (npy_expm1 / npy_log1p), which is not reproducible here, so
+            //      this is a DOCUMENTED non-portable accuracy defect (see the CLAUDE.md math
+            //      section: "expm1(1e-8) returns 0 where NumPy returns 1e-8"). Bounded: every diff
+            //      is within 2 ULP OR within an absolute ~ulp(1) envelope of the dtype, so a gross
+            //      error (wrong magnitude/sign at a non-tiny result) exceeds it and still fails.
+            //      Surfaced by the specials tier's subnormal / tiny / -0 inputs — the ordinary pools
+            //      never reach the catastrophic small-|x| band. Placed AFTER the ~ULP branch so a
+            //      large-|x| expm1 (all diffs within 2 ULP) keeps the generic label.
+            if (kind == DivergenceKind.Value && (c.Op == "expm1" || c.Op == "log1p")
+                && c.Operands.Length == 1 && diffs.Count > 0
+                && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)
+                                  || BitDiff.WithinAbs(expected, actual, d.Index, tc, Expm1Log1pAbsTol(tc))))
+                return "expm1/log1p computed as Exp(x)-1 / Log(1+x): small-|x| precision loss / -0 / "
+                     + "subnormal flush, bounded abs error [documented non-portable defect]";
+
             // (6) np.negative on unsigned integers was FIXED in Phase 1 F4: np.negative now routes
             //     through the engine kernel (two's-complement wrap, e.g. -1u -> 255), matching NumPy.
             //     Classifier branch removed so the unary matrix verifies it bit-exact.
@@ -460,6 +491,22 @@ namespace NumSharp.UnitTest.Fuzz
                 && (ReduceOps.Contains(c.Op) || c.Op == "cumsum" || c.Op == "cumprod")
                 && diffs.Any(d => d.Expected.Contains("NaN") || d.Actual.Contains("NaN")))
                 return "complex reduction/scan NaN ordering/propagation differs [documented]";
+
+            // (S3) complex matmul / dot / outer with an INFINITE operand. A complex product
+            //      (inf+0j)*(x+0j) is inf + (inf*0)j = inf + nan·j, and accumulating it, NumPy's
+            //      zgemm / npy_cmul carry the C99 Annex-G "recover-infinities" fixup and collapse the
+            //      cell to (nan,nan), while NumSharp's managed complex product leaves (inf,nan).
+            //      Complex arithmetic with infinities is C99-UNSPECIFIED, so this is non-contractual
+            //      — and it is confined to the infinite cells: the NaN-propagation cells (a NaN
+            //      anywhere -> (nan,nan)) match bit-for-bit, and EVERY real-dtype matmul/dot/outer
+            //      specials case is bit-exact (the managed float GEMM propagates NaN/inf like NumPy's
+            //      BLAS on these order-independent operands). Scoped to a non-finite complex diff so a
+            //      finite-value complex product divergence still fails.
+            if (kind == DivergenceKind.Value && tc == NPTypeCode.Complex
+                && (c.Op == "matmul" || c.Op == "dot" || c.Op == "outer")
+                && diffs.Count > 0 && diffs.All(d => NonFiniteInvolved(expected, actual, d.Index)))
+                return "complex matmul/dot/outer infinite-operand product: C99-unspecified complex-"
+                     + "infinity arithmetic (zgemm inf-recovery vs managed product) [documented]";
 
             // Complex np.where was resolved in committed code (no longer throws "Zero-push
             // unsupported for Complex"); it now selects complex operands bit-exact. Classifier
@@ -619,6 +666,27 @@ namespace NumSharp.UnitTest.Fuzz
                 n *= d;
             return n;
         }
+
+        /// <summary>
+        ///     The absolute-error envelope for the expm1/log1p Exp(x)-1 / Log(1+x) signature — a few
+        ///     ULP of 1.0 for the dtype (its worst absolute error near zero), well below any gross
+        ///     wrong-magnitude bug at a non-tiny result.
+        /// </summary>
+        private static double Expm1Log1pAbsTol(NPTypeCode tc) => tc switch
+        {
+            NPTypeCode.Double => 1e-13,
+            NPTypeCode.Single => 1e-6,
+            NPTypeCode.Half => 1e-2,
+            _ => 0.0,
+        };
+
+        /// <summary>
+        ///     Both the expected and actual Single tokens are a signed zero. BitDiff prints Single
+        ///     bytes low-to-high, so +0.0 is "00000000" and -0.0 (0x80000000) is "00000080".
+        /// </summary>
+        private static bool IsSignedZeroPairSingle(BitDiff.Diff d) =>
+            (d.Expected == "00000000" || d.Expected == "00000080")
+            && (d.Actual == "00000000" || d.Actual == "00000080");
 
         /// <summary>
         ///     True when both differing complex components at <paramref name="index"/> lie within

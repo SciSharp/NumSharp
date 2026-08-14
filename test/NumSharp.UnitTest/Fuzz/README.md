@@ -114,6 +114,7 @@ python test/oracle/gen_oracle.py errors_full      # the raising cells every valu
 python test/oracle/gen_oracle.py out_where        # ufunc out=/where= x out layout x mask layout
 python test/oracle/gen_oracle.py place            # np.place(arr,mask,vals)
 python test/oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer (gufunc shapes, C/F layouts)
+python test/oracle/gen_oracle.py specials         # IEEE special-value parity (nan/±inf/±0/subnormal/max)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
 dotnet run test/oracle/gen_decimal_oracle.cs      # Decimal tiers (independent C# System.Decimal oracle)
@@ -195,6 +196,9 @@ their prior contents in every one of the 882 `where=all_false` cases.
 | reduction summation/two-pass precision (algorithm order) | sum/mean/std/var/prod × float-family result (Half/Single/Double/Complex) × Value | 401 |
 | complex reduction/scan NaN ordering/propagation differs | reduce+cumsum/cumprod × complex × Value, diffs must contain a NaN token | 35 |
 | decimal std last digit (independent 28-digit sqrts) (ledger L7) | std × Decimal × Value, ≤1 unit in the 28th significant digit | 4 |
+| **S1** expm1/log1p small-\|x\| precision loss / -0 / subnormal flush (`Exp(x)-1`, `Log(1+x)`; NumPy calls the CRT, non-portable) | expm1/log1p × Value, every diff ≤2 ULP **or** ≤~ulp(1) abs | 20 |
+| **S2** fmax/fmin ±0-tie sign on a reversed float32 view (NumPy's OWN fmax ±0 sign is SIMD-path-dependent — array returns operand 2, scalar returns +0) | fmax/fmin × Single × Value, both tokens a signed zero | 2 |
+| **S3** complex matmul/dot/outer infinite-operand product: C99-unspecified complex-inf (zgemm `(nan,nan)` inf-recovery vs managed `(inf,nan)`) | matmul/dot/outer × complex × Value, every diff non-finite | 9 |
 
 **Narrowed: the NumPy-ported float kernels are no longer excused.** `NDFloatMath` ports the kernels NumPy
 2.4.2 actually runs — `simd_exp_FLOAT`, `simd_log_FLOAT`, `simd_sincos_f32`, `simd_tanh_f32`/`simd_tanh_f64` — and
@@ -223,7 +227,11 @@ promote INTO this loop. float64 tanh is verified over 4.83 billion values — 2�
 NumPy returns 1e-8) plus a signed-zero bug (`expm1(-0.0)` → `+0.0`). NumPy calls the CRT for all three, so bit-parity
 is NOT reachable from managed code the way it was for exp/log/sin/cos/tanh; the accuracy bug is worth fixing on its
 own terms, and note .NET's own `float.ExpM1`/`double.ExpM1`/`LogP1` are themselves just `Exp(x)-1`/`Log(1+x)` and do
-not help. Also still excused: the float16 loops, 17 differing values across all 65,536.
+not help. Also still excused: the float16 loops, 17 differing values across all 65,536. The **`specials` tier**
+now DRIVES expm1/log1p into the catastrophic small-|x| band the ordinary pools never reach (subnormal / tiny / -0
+inputs) and gates the divergence with the `S1` branch — bounded to ≤2 ULP **or** a ~ulp(1) absolute envelope, so a
+gross regression (wrong magnitude/sign at a non-tiny result) still fails while the documented precision loss is
+excused, and a future dedicated small-|x| kernel flips those 20 cells straight to bit-exact.
 
 **tanh's FMA is NOT part of the host pin below.** exp/log/sincos had to reproduce MSVC's contraction of a separate
 multiply and add; `simd_tanh_*` spells its Horner steps as `hn::MulAdd`, an explicit fused multiply-add, so the port
@@ -290,6 +298,34 @@ exp2 malformed-IL crash (W3-C) · power(float16) scalar-broadcast crash (W1-B) �
 5 always-run tests in `FuzzGateRegressionTests`) · **convolve(complex) discarded the imaginary
 dimension** + int64/decimal/bool convolve accumulator (ledger L5, @737c59d6) · **all/any Half+Complex
 ignored `Shape.offset`** (ledger L4, @7804b2ad) · **round_(char)→Double** (ledger L8, @1a9cfa9f).
+
+### IEEE special-value parity (`specials` tier)
+
+`specials.jsonl` (2,333 cases, `gen_oracle.py specials`) FORCES nan / ±inf / ±0 / smallest-subnormal /
+±max / ±tiny through the elementwise-math (unary + binary), reduction (incl. the `nan*` family), scan
+and matmul/dot/outer ops across float16/float32/float64/complex128 and every layout (contiguous /
+2-D / F-contiguous / step-2 strided / negative-stride). It closes three gaps the *incidental*
+front-loading of specials in `layout_catalog._FLOAT_POOL` leaves:
+
+1. **Cross-operand interactions.** The ordinary pair layouts align `A[i]` with `B[i]` from the SAME
+   pool in the SAME order, so the interactions that ARE IEEE arithmetic never occur. The tier builds
+   explicit aligned pairs that force `inf+(-inf)=nan`, `0*inf=nan`, `0/0=nan`, `inf/inf=nan`,
+   `1**inf`, `max*max→inf`, and the signed-zero / subnormal / tiny boundaries.
+2. **NaN/inf propagation through the managed GEMM.** `matmul`/`dot`/`outer` draw from `_mm_fill`
+   (clean integer/half ramps), so propagation through the ONE product path a plain test run takes —
+   NumSharp.Core ships no BLAS — was never gated. The operands are built so every output cell is
+   order-independent (a NaN anywhere → NaN; an inf against all-positive-finite → +inf; no inf−inf
+   cancellation inside a dot), isolating propagation from summation reassociation.
+3. **Per-dtype extremes and the smallest subnormal**, absent from the pools entirely.
+
+`BitDiff` tokenizes NaN (any payload → `"NaN"`) and bit-compares ±0.0 / ±inf, so the tier asserts the
+CONTRACTUAL part of IEEE parity — is-NaN, the sign of a zero, the sign of an infinity.
+**2,073 / 2,333 cases are bit-exact with NumPy 2.4.2**; the 260 excused are all pre-existing registry
+branches surfaced anew by the denser inputs (chiefly the known `nan*`-family and complex-reduction
+divergences) PLUS the three the tier discovered — `S1`/`S2`/`S3` in Table 1. **Headline result: every
+real-dtype (f16/f32/f64) matmul/dot/outer specials case is bit-exact** — the managed float GEMM
+propagates NaN/inf exactly like NumPy's BLAS on these operands; only C99-unspecified complex-infinity
+arithmetic (`S3`) diverges.
 
 ### Decimal (independent oracle — no NumPy analog)
 

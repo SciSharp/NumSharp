@@ -4250,6 +4250,274 @@ def gen_errors_full():
     return cases
 
 
+# =====================================================================================
+# IEEE special-value parity ("specials" tier). The float/complex value pools already
+# front-load nan/±inf/-0.0 (layout_catalog._FLOAT_POOL), so the elementwise/reduce tiers
+# INCIDENTALLY exercise them — but three gaps motivated a DEDICATED, auditable tier:
+#   (a) matmul/dot/outer draw from _mm_fill (clean integer/half ramps, NO specials), so
+#       NaN/±inf PROPAGATION through the managed GEMM — the one product path a plain test
+#       run takes, since NumSharp.Core ships no BLAS — was never gated against NumPy.
+#   (b) the binary PAIR layouts align A[i] with B[i] drawn from the SAME pool in the SAME
+#       order, so the cross-operand INTERACTIONS that are the whole point of IEEE arithmetic
+#       (inf+(-inf), 0*inf, 0/0, inf/inf, 1**inf, max*max->inf) never occur.
+#   (c) per-dtype max/tiny(min-normal) and the smallest SUBNORMAL were absent entirely.
+# This tier arranges operands to FORCE those interactions, across float16/float32/float64/
+# complex128 and the contiguous/2-D/F-contiguous/strided/negative-stride paths where a
+# NaN-dropping SIMD kernel (cf. the clip MAXPS/MINPD bug, W11-A) would hide. It reuses the
+# existing OpRegistry op names, so it needs no new harness wiring.
+#
+# What this proves and what it does NOT: BitDiff tokenizes NaN (any payload -> "NaN") and
+# bit-compares ±0.0 / ±inf, so a green tier asserts exactly the CONTRACTUAL part of IEEE
+# parity — is-NaN, the sign of a zero, the sign of an infinity — not the (non-contractual)
+# NaN payload bits. The matmul operands are deliberately built so every output cell is
+# order-independent (a NaN anywhere -> NaN; an inf against all-positive-finite -> +inf; no
+# inf-inf cancellation inside a dot), so a divergence there is a real propagation bug, not a
+# summation-reassociation artefact of managed-vs-BLAS.
+SPECIAL_DTYPES = ["float16", "float32", "float64", "complex128"]
+
+
+def _float_special_pool(dt):
+    """Per-dtype special-value vector: nan, ±inf, ±0, and — sized to the dtype — ±max,
+    ±tiny (smallest normal) and ±smallest subnormal, plus a spread of ordinary magnitudes
+    that drive the transcendental edges (sqrt(-1), log(0), log(-1), reciprocal(0),
+    arcsin(2), (-1)**0.5, tan(pi/2)). Built as float64 then narrowed: nan/±inf/-0 survive
+    astype, and the extremes come from np.finfo(dt) so nothing overflows to inf by accident
+    (verified: exactly two infinities for every dtype)."""
+    dt = np.dtype(dt)
+    fi = np.finfo(dt)
+    base = [np.nan, np.inf, -np.inf, 0.0, -0.0, 1.0, -1.0, 2.0, -2.0, 0.5, -0.5, 3.0, -8.0, 27.0,
+            0.25, -0.25, float(np.pi), float(-np.pi), 100.0, -100.0]
+    ext = [float(fi.max), -float(fi.max), float(fi.tiny), -float(fi.tiny),
+           float(fi.smallest_subnormal), -float(fi.smallest_subnormal)]
+    return np.array(base + ext, dtype=np.float64).astype(dt)
+
+
+def _complex_special_pool():
+    """Complex specials: the float pool paired component-wise with a rolled copy (so a NaN
+    real meets an inf imag, etc.), plus the pure combos a component-paired build cannot reach
+    (nan+0j, 0+nanj, inf-infj, -inf+nanj, nan+infj) — the cases where npy_c* and
+    System.Numerics.Complex most often disagree."""
+    f = _float_special_pool("float64")
+    z = (f + 1j * np.roll(f, 3)).astype("complex128")
+    combos = np.array([complex(np.nan, 0.0), complex(0.0, np.nan), complex(np.nan, np.nan),
+                       complex(np.inf, np.inf), complex(np.inf, -np.inf), complex(-np.inf, np.nan),
+                       complex(np.nan, np.inf), complex(0.0, -0.0), complex(1.0, np.inf)], dtype="complex128")
+    return np.concatenate([z, combos])
+
+
+def _special_pool(dt):
+    return _complex_special_pool() if np.dtype(dt).kind == "c" else _float_special_pool(dt)
+
+
+def _binary_special_pairs(dt):
+    """Aligned (A, B) float vectors whose element-wise pairing FORCES the IEEE interactions
+    the ordinary pair layouts never produce: inf+(-inf)=nan, 0*inf=nan, 0/0=nan, inf/inf=nan,
+    1**inf, max*max->inf, and the signed-zero / subnormal / tiny boundaries."""
+    dt = np.dtype(dt)
+    fi = np.finfo(dt)
+    mx = float(fi.max); ti = float(fi.tiny); sub = float(fi.smallest_subnormal)
+    inf = np.inf; nan = np.nan
+    pairs = [(inf, inf), (inf, -inf), (-inf, inf), (-inf, -inf), (0.0, inf), (inf, 0.0), (-0.0, inf), (0.0, -inf),
+             (0.0, 0.0), (-0.0, 0.0), (0.0, -0.0), (-0.0, -0.0), (nan, 1.0), (1.0, nan), (nan, nan), (nan, inf), (inf, nan),
+             (1.0, inf), (1.0, -inf), (inf, 1.0), (-1.0, 0.5), (0.5, -0.5), (2.0, 3.0), (-2.0, 3.0), (2.0, -3.0), (-8.0, 3.0),
+             (mx, mx), (mx, 2.0), (2.0, mx), (mx, -mx), (ti, ti), (sub, sub), (ti, 2.0), (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0)]
+    A = np.array([a for a, _ in pairs], dtype=np.float64).astype(dt)
+    B = np.array([b for _, b in pairs], dtype=np.float64).astype(dt)
+    return A, B
+
+
+def _binary_special_operands(dt):
+    if np.dtype(dt).kind == "c":
+        z = _complex_special_pool()
+        return z, np.roll(z, 5)   # misalign so a nan/inf real meets a different component
+    return _binary_special_pairs(dt)
+
+
+def _special_1d_layouts(v):
+    """(tag, base, view) memory-layout variants of the 1-D special vector v, each a genuine
+    VIEW sharing base's bytes (describe() validates that). Covers contiguous 1-D/2-D, an
+    F-contiguous 2-D, a step-2 strided view and a negative-stride view — the SIMD-full /
+    scalar-tail / strided / reversed kernel paths a NaN-dropping SIMD min/max would split on."""
+    out = [("contig_1d", v, v)]
+    n = len(v); m = n - (n % 2)
+    if m >= 4:
+        c2 = np.ascontiguousarray(v[:m].reshape(2, m // 2)); out.append(("contig_2d", c2, c2))
+        fb = np.ascontiguousarray(v[:m].reshape(m // 2, 2)); out.append(("f_contig_2d", fb, fb.T))
+        inter = np.empty(2 * m, dtype=v.dtype); inter[0::2] = v[:m]; inter[1::2] = v[:m][::-1]
+        out.append(("strided_1d", inter, inter[0::2]))
+    neg = v.copy(); out.append(("negstride_1d", neg, neg[::-1]))
+    return out
+
+
+def _special_pair_layouts(A, B):
+    """(tag, baseA, viewA, baseB, viewB) for the binary specials — contiguous, both-strided
+    and both-negative-stride. base/view MUST share a buffer, so the negative-stride variant
+    reverses ONE copy (an early bug reversed a second copy -> a non-view operand)."""
+    out = [("pp_contig", A, A, B, B)]
+    nA = len(A) - (len(A) % 2)
+    iA = np.empty(2 * nA, dtype=A.dtype); iA[0::2] = A[:nA]; iA[1::2] = A[:nA][::-1]
+    iB = np.empty(2 * nA, dtype=B.dtype); iB[0::2] = B[:nA]; iB[1::2] = B[:nA][::-1]
+    out.append(("pp_strided", iA, iA[0::2], iB, iB[0::2]))
+    na = A.copy(); nb = B.copy()
+    out.append(("pp_negstride", na, na[::-1], nb, nb[::-1]))
+    return out
+
+
+def _mm_special_layout(arr, layout):
+    """(base, view) for a matmul operand — like _mm_layout, but WITHOUT its
+    `assert np.array_equal(view, arr)` self-check, which is vacuously False whenever arr
+    holds a NaN. Same construction: an F-contiguous view is the C-contiguous transpose
+    viewed back through .T, so base.tobytes() is its raw memory."""
+    if layout == "F" and arr.ndim >= 2:
+        base = np.ascontiguousarray(arr.T)
+        return base, base.T
+    base = np.ascontiguousarray(arr)
+    return base, base
+
+
+# The op sets: exactly the elementwise-math / reduction / scan / product ops whose dtype
+# family (float + complex) carries IEEE special values. Integer/bool-only ops (bitwise,
+# shift) have no NaN and are deliberately absent; NumPy-raising cells (complex floor/ceil/
+# trunc/cbrt/floor_divide/mod, complex ORDER comparisons, complex arctan2) are skipped by the
+# try/except, exactly as the other gen_* tiers do.
+SPECIAL_UNARY_OPS = {
+    "negative": np.negative, "positive": np.positive, "abs": np.abs, "sign": np.sign, "sqrt": np.sqrt,
+    "cbrt": np.cbrt, "square": np.square, "reciprocal": np.reciprocal, "floor": np.floor, "ceil": np.ceil,
+    "trunc": np.trunc, "rint": np.rint, "sin": np.sin, "cos": np.cos, "tan": np.tan, "exp": np.exp, "log": np.log,
+    "exp2": np.exp2, "expm1": np.expm1, "log2": np.log2, "log10": np.log10, "log1p": np.log1p, "sinh": np.sinh,
+    "cosh": np.cosh, "tanh": np.tanh, "arcsin": np.arcsin, "arccos": np.arccos, "arctan": np.arctan,
+    "deg2rad": np.deg2rad, "rad2deg": np.rad2deg, "isnan": np.isnan, "isinf": np.isinf, "isfinite": np.isfinite,
+}
+SPECIAL_BINARY_OPS = {
+    "add": lambda a, b: a + b, "subtract": lambda a, b: a - b, "multiply": lambda a, b: a * b, "divide": lambda a, b: a / b,
+    "floor_divide": lambda a, b: a // b, "mod": lambda a, b: a % b, "power": lambda a, b: a ** b, "arctan2": np.arctan2,
+    "maximum": np.maximum, "minimum": np.minimum, "fmax": np.fmax, "fmin": np.fmin,
+    "equal": lambda a, b: a == b, "not_equal": lambda a, b: a != b, "less": lambda a, b: a < b, "greater": lambda a, b: a > b,
+    "less_equal": lambda a, b: a <= b, "greater_equal": lambda a, b: a >= b, "isclose": np.isclose,
+    "logical_and": np.logical_and, "logical_or": np.logical_or, "logical_xor": np.logical_xor,
+}
+SPECIAL_REDUCE_OPS = {
+    "sum": lambda a, ax, kd: np.sum(a, axis=ax, keepdims=kd), "prod": lambda a, ax, kd: np.prod(a, axis=ax, keepdims=kd),
+    "min": lambda a, ax, kd: np.min(a, axis=ax, keepdims=kd), "max": lambda a, ax, kd: np.max(a, axis=ax, keepdims=kd),
+    "mean": lambda a, ax, kd: np.mean(a, axis=ax, keepdims=kd), "all": lambda a, ax, kd: np.all(a, axis=ax, keepdims=kd),
+    "any": lambda a, ax, kd: np.any(a, axis=ax, keepdims=kd), "argmax": lambda a, ax, kd: np.argmax(a, axis=ax, keepdims=kd),
+    "argmin": lambda a, ax, kd: np.argmin(a, axis=ax, keepdims=kd), "nansum": lambda a, ax, kd: np.nansum(a, axis=ax, keepdims=kd),
+    "nanprod": lambda a, ax, kd: np.nanprod(a, axis=ax, keepdims=kd), "nanmax": lambda a, ax, kd: np.nanmax(a, axis=ax, keepdims=kd),
+    "nanmin": lambda a, ax, kd: np.nanmin(a, axis=ax, keepdims=kd), "nanmean": lambda a, ax, kd: np.nanmean(a, axis=ax, keepdims=kd),
+}
+SPECIAL_SCAN_OPS = {
+    "cumsum": lambda a, ax: np.cumsum(a, axis=ax), "cumprod": lambda a, ax: np.cumprod(a, axis=ax),
+}
+
+
+def gen_specials():
+    cases = []
+    n = 0
+    skipped = 0
+
+    def emit(op, params, operands, r, tag, dt):
+        nonlocal n
+        # Read the shape BEFORE ascontiguousarray (which forces ndim>=1, corrupting 0-D results).
+        exp_shape = [int(d) for d in r.shape]
+        exp_buf = np.ascontiguousarray(r).tobytes().hex()
+        cases.append({
+            "id": f"{op}/{tag}/{dt}/{n}",
+            "op": op,
+            "params": params,
+            "operands": operands,
+            "expected": {"dtype": r.dtype.name, "shape": exp_shape, "buffer": exp_buf},
+            "layout": tag,
+            "valueclass": "specials",
+        })
+        n += 1
+
+    # --- unary elementwise math over the special pool, every layout -----------------------
+    for dt in SPECIAL_DTYPES:
+        v = _special_pool(dt)
+        for tag, base, view in _special_1d_layouts(v):
+            od = describe(base, view)
+            for opname, f in SPECIAL_UNARY_OPS.items():
+                try:
+                    r = np.asarray(f(view))
+                except Exception:
+                    skipped += 1
+                    continue
+                emit(opname, {}, [od], r, f"un_{tag}", dt)
+
+    # --- binary elementwise math over the FORCED interaction pairs ------------------------
+    for dt in SPECIAL_DTYPES:
+        A, B = _binary_special_operands(dt)
+        for tag, ba, va, bb, vb in _special_pair_layouts(A, B):
+            oa = describe(ba, va); ob = describe(bb, vb)
+            for opname, f in SPECIAL_BINARY_OPS.items():
+                try:
+                    r = np.asarray(f(va, vb))
+                except Exception:
+                    skipped += 1
+                    continue
+                emit(opname, {}, [oa, ob], r, f"bin_{tag}", dt)
+
+    # --- reductions (incl. the nan* family) over special slices, axis + keepdims ----------
+    for dt in SPECIAL_DTYPES:
+        v = _special_pool(dt)
+        for tag, base, view in _special_1d_layouts(v):
+            od = describe(base, view)
+            for opname, f in SPECIAL_REDUCE_OPS.items():
+                for axis in _axes(view.ndim):
+                    for keepdims in (False, True):
+                        if opname in ("argmax", "argmin") and axis is None and keepdims:
+                            continue  # flat argmax/argmin (long) has no keepdims — mirror gen_reduce
+                        try:
+                            r = np.asarray(f(view, axis, keepdims))
+                        except Exception:
+                            skipped += 1
+                            continue
+                        emit(opname, {"axis": axis, "keepdims": keepdims}, [od], r, f"red_{tag}", dt)
+
+    # --- cumulative scans over special slices ---------------------------------------------
+    for dt in SPECIAL_DTYPES:
+        v = _special_pool(dt)
+        for tag, base, view in _special_1d_layouts(v):
+            od = describe(base, view)
+            for opname, f in SPECIAL_SCAN_OPS.items():
+                for axis in _axes(view.ndim):
+                    try:
+                        r = np.asarray(f(view, axis))
+                    except Exception:
+                        skipped += 1
+                        continue
+                    emit(opname, {"axis": axis}, [od], r, f"scan_{tag}", dt)
+
+    # --- matmul / dot / outer: NaN/inf PROPAGATION through the managed GEMM (the gap) ------
+    # A carries a finite row, a NaN row and an inf row; B is all-positive-finite with no
+    # zeros, so every output cell is order-independent: finite, NaN (from the NaN row) or
+    # +inf (from the inf row). This isolates propagation from summation reassociation.
+    for dt in SPECIAL_DTYPES:
+        A = np.array([[1, 2, 3], [np.nan, 1, 1], [np.inf, 2, 1]], dtype=np.dtype(dt))
+        B = np.array([[1, 2], [2, 1], [1, 1]], dtype=np.dtype(dt))
+        for la in ("C", "F"):
+            for lb in ("C", "F"):
+                bA, vA = _mm_special_layout(A, la); bB, vB = _mm_special_layout(B, lb)
+                for op, f in (("matmul", np.matmul), ("dot", np.dot)):
+                    r = np.asarray(f(vA, vB))
+                    emit(op, {}, [describe(bA, vA), describe(bB, vB)], r, f"mm_{la}{lb}", dt)
+        # 1-D inner product (its own kernel) — a NaN, an inf and a finite vector.
+        for name, a1, b1 in (("nan", [np.nan, 1, 1], [1, 2, 3]),
+                             ("inf", [np.inf, 1, 1], [1, 2, 3]),
+                             ("fin", [1, 2, 3], [1, 2, 3])):
+            a = np.array(a1, dtype=np.dtype(dt)); b = np.array(b1, dtype=np.dtype(dt))
+            r = np.asarray(np.dot(a, b))
+            emit("dot", {}, [describe(a, a), describe(b, b)], r, f"mm_vec_{name}", dt)
+        # outer product — every cell is one product, so specials map straight through.
+        a = np.array([1, np.inf, np.nan, 2], dtype=np.dtype(dt)); b = np.array([1, 2, -1], dtype=np.dtype(dt))
+        r = np.asarray(np.outer(a, b))
+        emit("outer", {}, [describe(a, a), describe(b, b)], r, "mm_outer", dt)
+
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -4416,8 +4684,11 @@ def main():
         # host whose BLAS binary + dispatched kernel + thread count match. The C# gate
         # reports Inconclusive (never red) when they do not.
         write_jsonl(os.path.join(corpus_dir, "matmul_parity.host.jsonl"), [blas_identity()])
+    elif mode == "specials":
+        cases = gen_specials()                                          # IEEE special-value parity tier
+        write_jsonl(os.path.join(corpus_dir, "specials.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | specials)")
         sys.exit(2)
 
 
