@@ -63,3 +63,5 @@
     href: interop/np-frombuffer.md
   - name: Numpy.NET
     href: interop/numpy-net.md
+  - name: OpenBLAS (bit-exact BLAS)
+    href: interop/openblas.md
