@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using NumSharp.Fourier;
+using NumSharp.Backends.Iteration;
 
 // =============================================================================
 // The umath driver (port of numpy fft/_pocketfft_umath.cpp's fft_loop /
@@ -65,6 +66,7 @@ namespace NumSharp
             var outShape = new Shape(outDims);
 
             NDArray result;
+            NDArray castTarget = null;   // set when out's dtype is a same_kind cast OF the loop dtype
             if (!(@out is null))
             {
                 if (@out.ndim != ndim)
@@ -72,9 +74,31 @@ namespace NumSharp
                 for (int d = 0; d < ndim; d++)
                     if (@out.shape[d] != outDims[d])
                         throw new ArgumentException("output array has wrong shape.");
-                if (@out.GetTypeCode != outDtype)
-                    throw new ArgumentException($"output array has wrong dtype (expected {outDtype}).");
-                result = @out;
+
+                NPTypeCode outTc = @out.GetTypeCode;
+                if (outTc == outDtype)
+                {
+                    // Exact loop dtype: the engine writes straight into out (in place, any layout).
+                    result = @out;
+                }
+                else if (NDIterCasting.CanCast(outDtype, outTc, NPY_CASTING.NPY_SAME_KIND_CASTING))
+                {
+                    // NumPy's ufunc out= accepts any same_kind cast FROM the loop output dtype — e.g.
+                    // irfft's float64 into a complex128 (imag=0) or float32 out. Compute in the loop
+                    // dtype, then cast into out at the end. (fft/rfft's loop is complex128, whose only
+                    // same_kind target here is complex128, so those still require a complex out.)
+                    result = new NDArray(outDtype, outShape, false);
+                    castTarget = @out;
+                }
+                else
+                {
+                    // Verbatim NumPy ufunc-cast rejection (house ArgumentException, exactly as
+                    // DefaultEngine.UfuncOut.ValidateOutCast renders it — no trailing period).
+                    throw new ArgumentException(
+                        $"Cannot cast ufunc '{UfuncName(isReal, isForward, n)}' output from " +
+                        $"dtype('{outDtype.AsNumpyDtypeName()}') to " +
+                        $"dtype('{outTc.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+                }
             }
             else
             {
@@ -92,7 +116,7 @@ namespace NumSharp
             // Number of independent 1-D transforms (product of all-but-axis dims).
             long lanes = 1;
             for (int d = 0; d < ndim; d++) if (d != ax) lanes *= src.shape[d];
-            if (lanes == 0) return result; // an empty non-axis dimension: nothing to do
+            if (lanes == 0) return castTarget ?? result; // an empty non-axis dimension: nothing to do
 
             if (!isReal)
                 RunC2C(src, result, ax, ndim, n, nin, inAxisStride, outAxisStride, inStrides, outStrides, inBase0, outBase0, lanes, isForward, fct);
@@ -101,7 +125,23 @@ namespace NumSharp
             else
                 RunC2R(src, result, ax, ndim, n, nin, inAxisStride, outAxisStride, inStrides, outStrides, inBase0, outBase0, lanes, fct);
 
+            if (castTarget is not null)   // NB: NDArray overloads != element-wise; use `is not null`.
+            {
+                // Cast the loop-dtype result into the requested out (float64->complex128 sets imag=0;
+                // float64->float32/float16 narrows), writing through out's own strides. Returns out.
+                np.copyto(castTarget, result);
+                return castTarget;
+            }
             return result;
+        }
+
+        // NumPy's ufunc name for the out= cast-error message (matches the fft ufunc registration:
+        // fft/ifft, rfft_n_even/rfft_n_odd by input parity, irfft).
+        private static string UfuncName(bool isReal, bool isForward, long n)
+        {
+            if (!isReal) return isForward ? "fft" : "ifft";
+            if (isForward) return (n % 2 == 0) ? "rfft_n_even" : "rfft_n_odd";
+            return "irfft";
         }
 
         // Advance the all-but-axis odometer (rightmost non-axis dim fastest), updating both bases.
