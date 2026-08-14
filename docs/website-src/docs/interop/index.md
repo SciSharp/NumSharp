@@ -158,10 +158,10 @@ itself.
 <sub>See here [`Bridges_ThePythonnetPackage_ShipsTheFourVerbs`][gate], [`NpyOracleTests`][gate-npy]</sub>
 
 **One `NumSharp.Interop.*` package is deliberately absent from this table.**
-[`NumSharp.Interop.OpenBLAS`](openblas.md) shares a *binary*, not a buffer: it computes
-`np.dot` / `np.matmul` through the very OpenBLAS library NumPy ships, so float32/float64 products
-come out bit-identical to NumPy's — and faster. No memory crosses any boundary, so none of the
-contract above applies to it; it has [its own page](openblas.md).
+[`NumSharp.Interop.OpenBLAS`](openblas.md) shares a *binary*, not a buffer: it routes
+`np.dot` / `np.matmul` through the OpenBLAS library NumPy and SciPy ship, making float32/float64
+matrix products faster on large matrices. No memory crosses any boundary, so none of the contract
+above applies to it; it has [its own page](openblas.md).
 
 ---
 
@@ -187,8 +187,8 @@ contract above applies to it; it has [its own page](openblas.md).
 - [Any library via np.frombuffer](np-frombuffer.md) — the buffer protocol route to libraries that
   never touch numpy
 - [Numpy.NET](numpy-net.md) — running SciSharp's numpy binding over NumSharp memory
-- [OpenBLAS](openblas.md) — the compute-side sibling: NumPy's own BLAS binary behind
-  `np.dot` / `np.matmul`, bit-identical float32/float64 products
+- [OpenBLAS](openblas.md) — the compute-side sibling: a native BLAS binary behind
+  `np.dot` / `np.matmul`, faster float32/float64 matrix products
 - [Buffering & Memory](../buffering.md) — how NumSharp's own storage, slices and reference
   counting work underneath all of this
 

@@ -1,58 +1,52 @@
-# OpenBLAS — NumPy's bits from NumPy's own binary
+# OpenBLAS — a native BLAS backend for `np.dot` / `np.matmul`
 
 `NumSharp.Interop.OpenBLAS` is the optional native matrix-product backend. Reference it and
-`np.dot` / `np.matmul` compute `float32` / `float64` products through OpenBLAS — **faster on large
-matrices** (1.7–13× over NumSharp's own managed GEMM) and **bit-identical to NumPy**, because the
-package bundles the very OpenBLAS
-binaries NumPy itself ships and drives them through a route-for-route port of NumPy's own two
-matrix-product dispatchers. NumSharp.Core stays 100 % managed C# with no native dependency: with
-this package absent, every kernel — matrix products included — is NumSharp's own SIMD code. This
-page is the package's reference: why it exists, the quick start, the bundled binary, the three
-knobs the bits depend on, the API, where the library comes from, the build-time version override,
-what is ported, extending the seam, performance and troubleshooting.
+`np.dot` / `np.matmul` compute `float32` / `float64` products through OpenBLAS instead of NumSharp's
+own managed SIMD GEMM — **1.7–13× faster on large matrices**. It bundles the prebuilt OpenBLAS
+binaries NumPy and SciPy themselves ship, per-RID, so you get a proven, tuned BLAS with nothing to
+install and no Python on the machine. NumSharp.Core stays 100 % managed C# with no native
+dependency: with this package absent, every kernel — matrix products included — is NumSharp's own
+code, and (as everywhere in NumSharp) 1-to-1 with NumPy. This page is the package's reference: what
+it buys, the quick start, the bundled binary, how the binary is delivered, reproducibility, the API,
+how it computes, extending the seam, performance and troubleshooting.
 
-**On this page:** [Why it exists](#why-this-package-exists) ·
-[From zero to identical bits](#from-zero-to-identical-bits) ·
-[The bundled binary](#the-bundled-binary) ·
-[Three knobs decide the bits](#three-knobs-decide-the-bits) · [The API](#the-api) ·
-[Delivering the binary](#delivering-the-binary) ·
-[Where the library comes from](#where-the-library-comes-from) · [How it computes](#how-it-computes) ·
-[Writing your own backend](#writing-your-own-backend) · [Performance](#performance) ·
-[Environment](#environment) · [Troubleshooting](#troubleshooting) · [Claims](#claims-ledger)
+**On this page:** [What it buys](#what-it-buys) · [Quick start](#quick-start) ·
+[The bundled binary](#the-bundled-binary) · [Delivering the binary](#delivering-the-binary) ·
+[Where the library comes from](#where-the-library-comes-from) ·
+[Reproducible results](#reproducible-results) · [The API](#the-api) ·
+[How it computes](#how-it-computes) · [Writing your own backend](#writing-your-own-backend) ·
+[Performance](#performance) · [Environment](#environment) · [Troubleshooting](#troubleshooting) ·
+[Claims](#claims-ledger)
 
-> Verified against numpy 2.4.2 · scipy-openblas 0.3.31.22.0 (OpenBLAS 0.3.31.dev) · net8.0/net10.0.
-> Every claim below is pinned by a gate: [`MatmulParityBackendTests`][gate-backend] (30 tests),
-> [`OpenBlasDeliveryTests`][gate-delivery] (20), the 342-case host-pinned
-> [`matmul_parity` corpus tier][gate-corpus], and the 15-step scripted build gate
+> Bundles scipy-openblas 0.3.31.22.0 (OpenBLAS 0.3.31.dev — the build numpy 2.4.2 ships) · net8.0/net10.0.
+> The behavioural claims below are pinned by gates: [`MatmulParityBackendTests`][gate-backend] (30
+> tests), [`OpenBlasDeliveryTests`][gate-delivery] (20), and the 15-step scripted build gate
 > [`verify_build_override.sh`][gate-build].
 
 ---
 
-## Why this package exists
+## What it buys
 
-NumSharp's own GEMM and NumPy's disagree — not because either is wrong, but because floating-point
-addition is not associative and the two sum in different orders. Measured on a
-`(128,784) @ (784,128)` float32 product, **94.5 % of the elements differ** (max ~976 000 ULP), and
-45 % differ even at contraction depth k = 10. Each answer is a correct matrix product; for anything
-that *compounds* — training a network, iterating a solver — the gap grows: 50 Adam steps spread it
-to 73 % of a weight matrix's bytes.
+NumSharp computes every matrix product itself, in managed SIMD code, out of the box — correct and
+portable, with no native dependency. What a hand-written managed GEMM cannot do is keep up with a
+decades-tuned native BLAS on large matrices: OpenBLAS' arch-specific, blocked, multi-threaded
+micro-kernels are simply faster once the matrices grow. This package routes `float32` / `float64`
+products through OpenBLAS — the same library NumPy and SciPy use — and leaves everything else exactly
+as it was.
 
-No portable algorithm can close that, because NumPy's float32/float64 matrix products are not a
-portable algorithm. NumPy **always** calls cblas for them (since gh-23588 it copies a non-blasable
-operand into a contiguous temp rather than take its own C loop), and OpenBLAS' `sgemm` uses an
-arch-specific multi-accumulator register scheme that matches neither a sequential `mul + add` chain
-nor a sequential FMA chain. NumPy's bits *are* its BLAS's bits. Reproducing them means calling the
-same binary, through the same route, with the same flags — which is what this package does.
+The speedup is real and grows with size: **1.7–13×** over the managed GEMM across the measured
+range, up to a `2048³` float64 product dropping from 3860 ms to 293 ms
+(see [Performance](#performance)).
 
-The end-to-end result: 342/342 committed corpus cases replay bit-exact with the backend installed
-(294 of them diverge without it), and a 50-step float32 MLP trained in both stacks produces
-**byte-identical weights**.
-
-<sub>See here [`FuzzCorpusTests.MatmulParity`][gate-corpus], [`MatmulParityPin`][gate-pin]</sub>
+A native BLAS is a *performance* choice, and — as with swapping any BLAS — a correct floating-point
+product can differ in its last bits from another implementation, or from the same one at a different
+thread count or on a different CPU, because summation order changes. That is ordinary IEEE behaviour,
+not a defect; if you need results that reproduce exactly, [pin the two variables that move
+them](#reproducible-results).
 
 ---
 
-## From zero to identical bits
+## Quick start
 
 ```bash
 dotnet add package NumSharp.Interop.OpenBLAS
@@ -77,27 +71,7 @@ Console.WriteLine(Blas.Info);
 Blas.Disable();                  // back to NumSharp's own managed SIMD GEMM
 ```
 
-### The byte-parity recipe
-
-The zero-config default matches the NumPy *on the same machine*, run at the same thread count. For
-a run you can byte-compare, pin the thread count on **both** sides — OpenBLAS' accumulation order
-depends on it, and NumPy runs larger products multi-threaded by default while small ones stay
-single-threaded:
-
-```csharp
-Blas.Enable(threads: 1);                 // the C# side
-```
-
-```bash
-OPENBLAS_NUM_THREADS=1 python train.py   # the NumPy side — set before `import numpy`
-```
-
-With that, small and large products alike come out byte-identical (verified through the hardest
-k = 784 case: 0 of 16 384 result elements differ). Add `coreType: Blas.ParityCoreType` on both
-sides only when the two runs happen on *different machines* — see
-[Three knobs](#three-knobs-decide-the-bits) for why, and for the hazard.
-
-<sub>See here [`ThreadPin_IsReportedBack`][gate-backend], [`BundleAutoinstall_WithNoOptOut_InstallsTheBackend`][gate-delivery]</sub>
+<sub>See here [`BundleAutoinstall_WithNoOptOut_InstallsTheBackend`][gate-delivery], [`Enable_SetsTheBackendOnTheEngine_WithoutReplacingIt`][gate-backend]</sub>
 
 ---
 
@@ -106,15 +80,13 @@ sides only when the two runs happen on *different machines* — see
 **The package ships the OpenBLAS binaries NumPy itself ships** — not "an" OpenBLAS. NumPy 2.x does
 not build its own: its wheels bundle the prebuilt `scipy-openblas32` / `scipy-openblas64` artifacts
 published on PyPI by the openblas-libs project, pinned in numpy's `requirements/ci_requirements.txt`.
-This package bundles those same artifacts at the same pinned version, **verified byte-for-byte**:
-the DLL here and the one in numpy 2.4.2's `numpy.libs/` have the identical SHA-256 (`74a40872…` —
-which is also where NumPy's mangled file name comes from, since `delvewheel` names the file by its
-content hash).
+This package bundles those same artifacts at the same pinned version — the identical PyPI wheel,
+its SHA-256 checked against the manifest at pack time — so what you load is a widely-deployed,
+battle-tested build, with no Python installed and no loader-race guesswork about which BLAS won.
 
-So bit-parity does not depend on having Python installed, or on which copy of a BLAS won a loader
-race. Bundled version: **scipy-openblas 0.3.31.22.0** (OpenBLAS 0.3.31.dev), matching
-**numpy 2.4.2** — as `runtimes/<rid>/native/` NuGet assets for 8 RIDs (62 MB packed), which NuGet
-resolves per machine so a RID-specific publish carries only the one binary:
+Bundled version: **scipy-openblas 0.3.31.22.0** (OpenBLAS 0.3.31.dev), as `runtimes/<rid>/native/`
+NuGet assets for 8 RIDs (62 MB packed), which NuGet resolves per machine so a RID-specific publish
+carries only the one binary:
 
 | RID | distribution | RID | distribution |
 |---|---|---|---|
@@ -123,10 +95,10 @@ resolves per machine so a RID-specific publish carries only the one binary:
 | `linux-x64` | scipy-openblas64 | `osx-x64` | scipy-openblas64 |
 | `linux-arm64` | scipy-openblas64 | `osx-arm64` | scipy-openblas64 |
 
-† not an inconsistency — NumPy's own build selects the LP64 distribution on win-arm64, so matching
-it is what parity requires. Both scipy distributions are first-class here: **scipy-openblas64**
-(ILP64, 64-bit BLAS integers, symbols `scipy_cblas_sgemm64_`) and **scipy-openblas32** (LP64,
-`scipy_cblas_sgemm`), and the 32-bit distribution is the *only* build PyPI publishes for 32-bit x86.
+† not an inconsistency — NumPy's own build selects the LP64 distribution on win-arm64, so this
+follows suit. Both scipy distributions are first-class here: **scipy-openblas64** (ILP64, 64-bit
+BLAS integers, symbols `scipy_cblas_sgemm64_`) and **scipy-openblas32** (LP64, `scipy_cblas_sgemm`),
+and the 32-bit distribution is the *only* build PyPI publishes for 32-bit x86.
 
 The bundled OpenBLAS is not privileged, either: any CBLAS export set binds, probed in this order —
 numpy's renamed ILP64 wheels (`scipy_cblas_*64_`), plain ILP64 (`cblas_*64_` / `cblas_*_64`),
@@ -147,81 +119,6 @@ what permits redistribution — the same basis on which NumPy and SciPy ship it 
 
 ---
 
-## Three knobs decide the bits
-
-Bundling the binary fixes only one of the three things the result bits depend on. A parity claim
-that ignores either of the other two is wrong:
-
-1. **The library build** — pinned by the package (the bundle) or by you (a named library).
-2. **The worker-thread count** — 1, 2, 4 and 24 threads give **four different answers** for the
-   same product. `Blas.Enable(threads: n)` pins it; it is a correctness knob, not a performance one.
-3. **The CPU** — OpenBLAS is built `DYNAMIC_ARCH` and picks a micro-kernel from the machine it
-   finds itself on, and different kernels accumulate in different orders. Measured by forcing the
-   choice on one host (same binary, 1 thread, `(512,784) @ (784,512)` float32):
-
-| `OPENBLAS_CORETYPE` | dispatched | result hash |
-|---|---|---|
-| *(unset)* | Haswell | `b9ea5057…` |
-| `Haswell` | Haswell | `b9ea5057…` — identical to unset |
-| `Nehalem` | Nehalem | `b6bb0f58…` |
-| `Sandybridge` | Sandybridge | `1903e357…` |
-| `Core2` | Katmai | `0da21438…` |
-| `SkylakeX` | — | **process killed: illegal instruction** |
-
-`Blas.Enable(threads: 1, coreType: Blas.ParityCoreType)` pins that last variable to `"Haswell"` —
-the kernel the committed corpus was generated with, runnable on any x86-64 with AVX2+FMA (Haswell
-2013 and later, and every AMD Zen). It is **not the default, deliberately**: the package's main
-promise is matching the NumPy on *this* machine, and that NumPy dispatches by CPU too — pinning
-unilaterally would *create* a divergence on any host newer than Haswell. Pin both sides or neither;
-the same `OPENBLAS_CORETYPE` environment variable drives NumPy, because it is the same library.
-
-> **Hazard.** `coreType` *overrides* OpenBLAS' CPU detection rather than expressing a preference,
-> so naming kernels the CPU cannot run terminates the process with an illegal instruction —
-> measured, not theoretical. `Blas.Enable` refuses the combinations it can recognise with a
-> `PlatformNotSupportedException` first. It also only takes effect on the call that actually
-> **loads** the library: OpenBLAS reads the variable once while initialising and never re-reads it,
-> so a later request that cannot be honoured throws instead of being silently dropped.
-
-<sub>See here [`CoreTypeAboveThisCpu_IsRefused_RatherThanCrashingTheProcess`][gate-backend], [`ParityCoreType_MatchesTheCorpusHostPin`][gate-backend]</sub>
-
----
-
-## The API
-
-The whole public surface is the static `Blas` class (namespace `NumSharp.Interop.OpenBLAS`):
-
-| Member | Meaning |
-|---|---|
-| `Blas.Enable(library = null, threads = 0, coreType = null)` | Load a CBLAS library (or auto-discover one) and install the backend. Idempotent when the same library is already loaded. |
-| `Blas.TryEnable(library = null, threads = 0)` | `Enable` that reports `false` instead of throwing — the module-load path. |
-| `Blas.Disable()` | Uninstall the backend; the native library stays loaded (unloading a BLAS mid-process is not worth the risk), so a later `Enable` is free. |
-| `Blas.Enabled` | `true` when the backend is installed **and** a library is bound — both halves, see below. |
-| `Blas.Info` | Path, symbol scheme, integer width, thread count and build string of the loaded library, or `null`. |
-| `Blas.LibraryPath` | Full path of the loaded library — the machine-readable form, because "which binary answered?" is a correctness question here, not a diagnostic one. |
-| `Blas.CoreName` | The `DYNAMIC_ARCH` micro-kernel OpenBLAS actually dispatched (e.g. `"Haswell"`). |
-| `Blas.IsBundledLibrary` | `true` when the loaded library is the package's bundled asset — marker-aware: a build-staged override in the same folder layout reports `false`. |
-| `Blas.ParityCoreType` | `"Haswell"` — the kernel the committed corpus was generated with. |
-
-Three semantics are load-bearing, each pinned by a test:
-
-- **A named library is binding.** An explicit `Blas.Enable(path)` (or `NUMSHARP_PARITY_BLAS`) is
-  used as given and never silently replaced — not even by the bundled copy sitting in the output
-  folder — because parity is a claim about one specific binary.
-- **A failed `Enable` is a no-op.** It throws having changed nothing, so a mistyped path cannot
-  demote a working parity setup back to the managed kernels behind your back. (An earlier design
-  unloaded the working library first — the worst failure mode a parity feature can have:
-  `Enabled` reporting `true` while every product silently reverted to managed kernels.)
-- **`Enabled` means installed *and* bound.** An installed-but-unbound backend declines every
-  operand, so every product would quietly fall back to the managed kernels while the answer still
-  looks like a matrix product; reporting `true` there would claim a parity it is not delivering.
-
-Opting out of the automatic install (`NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0`) leaves `Blas.Enable()`
-fully functional — it only skips the module-load call.
-
-<sub>See here [`NamedLibrary_IsBinding_NeverSilentlySubstituted`][gate-backend], [`FailedEnable_OverAWorkingLibrary_ChangesNothing`][gate-backend], [`Enabled_MeansInstalledAND_Bound_NotMerelyInstalled`][gate-backend]</sub>
-
----
-
 ## Delivering the binary
 
 Getting a binary onto disk and choosing which one to bind are two separate phases, and keeping
@@ -235,8 +132,8 @@ them apart is the whole delivery design (specified in [`OPENBLAS_DELIVERY_DESIGN
 So every delivery method is a way of arranging what the runtime will find. There are five,
 quickest first — then a subsection each.
 
-**1 · The bundle — reference the package, done.** The NumPy-pinned binary ships inside the nupkg
-and auto-installs at load. Nothing to configure:
+**1 · The bundle — reference the package, done.** The pinned binary ships inside the nupkg and
+auto-installs at load. Nothing to configure:
 
 ```bash
 dotnet add package NumSharp.Interop.OpenBLAS
@@ -287,7 +184,7 @@ package — and it can bake a pinned version into its own nupkg so they download
 but non-binding**:
 
 ```csharp
-Blas.Enable(@"…\site-packages\numpy.libs\libscipy_openblas64_-<hash>.dll");  // binding
+Blas.Enable(@"C:\opt\openblas\libopenblas.dll");   // binding — exactly this file, or throw
 ```
 
 ```bash
@@ -299,7 +196,7 @@ Which one you want:
 
 | You want | Use | Guarantee |
 |---|---|---|
-| NumPy-identical bits, zero config | the bundle (1) | parity with numpy 2.4.2 by default |
+| a proven, tuned BLAS with zero config | the bundle (1) | the pinned scipy-openblas (what NumPy ships), by default |
 | a newer / different scipy-openblas, guaranteed | version override (2) | **hard-required** — build fails / runtime throws rather than substituting |
 | your own build or a vendored copy | path override (3), or `NUMSHARP_OPENBLAS_PATH` (5) | soft — wins when present, falls through when not |
 | the same knobs for consumers of *your* package | transitive metadata (4) | identical to a direct reference |
@@ -351,8 +248,8 @@ folder a *required* override (discovery tier 3).
 Enforcement runs in both phases. At build, any failure — network, hash mismatch, no wheel for
 the RID — **fails the build**; at runtime, a marker-declared override that cannot load
 **throws** `BlasRequiredOverrideException` rather than falling back (at module load: one stderr
-line, backend left uninstalled — never substituted). Silently running with different bits is
-the one failure a pin exists to prevent.
+line, backend left uninstalled — never substituted). Silently loading a *different* build than
+the one pinned is the failure a pin exists to prevent.
 
 The cache (`%LOCALAPPDATA%\NumSharp\openblas` on Windows, `$XDG_CACHE_HOME/NumSharp/openblas`
 or `~/.cache/NumSharp/openblas` elsewhere) holds **extracted libraries only**, keyed
@@ -422,16 +319,16 @@ The two runtime knobs need no build participation, and they differ in exactly on
 
 - **Binding** — `Blas.Enable(path)` or `NUMSHARP_PARITY_BLAS`. The named file (or directory) is
   used as given and **never substituted**, not even by the bundled copy sitting in the output;
-  a file that cannot load or is not a CBLAS throws, having changed nothing. This is the parity
-  tool: matching a *specific* NumPy means naming *its* library.
+  a file that cannot load or is not a CBLAS throws, having changed nothing. Use it to pin one
+  exact build — a vendored copy, a specific MKL, a library another environment already uses.
 - **Priority, non-binding** — `NUMSHARP_OPENBLAS_PATH`, one or more files/directories
   (path-separator delimited). Probed ahead of the bundle, skipped without a word when it holds
   no BLAS — the right knob for "prefer my local build where present".
 
 Below both sits ambient machine tooling (discovery tiers 5–7: system install prefixes, bare
 loader names, a PATH sweep) — less a delivery method you choose than what discovery finds when
-you chose none and the bundle is absent or opted out. It is a correct, fast BLAS; it is **not**
-byte-parity with NumPy.
+you chose none and the bundle is absent or opted out. It is a correct, fast BLAS, though a
+different build than the bundle (see [Where the library comes from](#where-the-library-comes-from)).
 
 <sub>See here [`NamedLibrary_IsBinding_NeverSilentlySubstituted`][gate-backend], [`NamedLibrary_OutranksTheBundledOne_AndAMissingOneDoesNotFallBackToIt`][gate-backend], [`OverridePathEnv_OutranksTheVersionMarker`][gate-delivery]</sub>
 
@@ -447,20 +344,20 @@ fixed, documented order — the first tier that yields a loadable library wins:
 | 1 | explicit path / `NUMSHARP_PARITY_BLAS` | **binding** — never substituted, a miss is fatal |
 | 2 | `NUMSHARP_OPENBLAS_PATH`, then a build-recorded `OpenBlasPath` marker | override path(s), ahead of the bundle; **non-binding** — fall through when they hold no BLAS |
 | 3 | build-staged **version override** (`openblas.source.json`, `mode: "version"`) | **hard-required** — a miss throws `BlasRequiredOverrideException`, never falls through; sha-verified when the marker pins one |
-| 4 | the **bundled** `runtimes/<rid>/native/` asset | the zero-config parity default; `NUMSHARP_BLAS_BUNDLED=0` drops it |
-| 5 | machine-wide OpenBLAS (apt / brew / MacPorts / conda / vcpkg / source installs) | honours `OPENBLAS_HOME` / `VCPKG_ROOT` / `CONDA_PREFIX`; a different compiler and build, so **not** byte-parity — a correct, fast BLAS, not a bit-identical one |
+| 4 | the **bundled** `runtimes/<rid>/native/` asset | the zero-config default; `NUMSHARP_BLAS_BUNDLED=0` drops it |
+| 5 | machine-wide OpenBLAS (apt / brew / MacPorts / conda / vcpkg / source installs) | honours `OPENBLAS_HOME` / `VCPKG_ROOT` / `CONDA_PREFIX`; a different compiler and build, so it ranks below the bundle — a correct, fast BLAS, not the pinned one |
 | 6 | bare loader names | `libscipy_openblas64_`, `libscipy_openblas`, `scipy_openblas`, `libopenblas`, `libblas`, … |
 | 7 | every directory on `PATH` | **last resort** — sweeps for a BLAS under a non-standard name; never runs when an earlier tier binds |
 
 Two design decisions worth understanding:
 
 **A pip-installed numpy's `numpy.libs/` is never scanned.** The bundled asset already *is* that
-binary at the pinned version, so results stay a property of the package version rather than of
-whichever python happens to be installed — a library's numeric output must not change because an
-unrelated `pip install` ran. (A conda or system *OpenBLAS* is still machine tooling, tier 5; a
-*numpy* is not.) To match a NumPy whose OpenBLAS differs from the bundle, name it — binding — or
-point `NUMSHARP_OPENBLAS_PATH` at it to take priority while keeping the fallback
-([method 5](#delivering-the-binary) above).
+same prebuilt artifact at the pinned version, so which library binds stays a property of the
+package version rather than of whichever python happens to be installed — an app's chosen BLAS
+should not change because an unrelated `pip install` ran. (A conda or system *OpenBLAS* is still
+machine tooling, tier 5; a *numpy* is not.) To bind a NumPy install's own OpenBLAS instead of the
+bundle, name it — binding — or point `NUMSHARP_OPENBLAS_PATH` at it to take priority while keeping
+the fallback ([method 5](#delivering-the-binary) above).
 
 **The source marker is what tells an override from the bundle.** A build-staged version override
 lands in the *same* `runtimes/<rid>/native/` layout as the bundle — and the delivery model's
@@ -472,6 +369,88 @@ goes to stderr and the backend stays uninstalled (never silently replaced); an e
 `Blas.Enable()` raises the full `BlasRequiredOverrideException`.
 
 <sub>See here [`AutoDiscovery_PrefersTheBundledLibrary`][gate-backend], [`VersionMarker_IsHardRequired_NeverFallsThroughToTheBundle`][gate-delivery], [`NumpyLibs_DiscoveryTier_IsDeleted`][gate-delivery]</sub>
+
+---
+
+## Reproducible results
+
+A tuned, threaded, arch-dispatched BLAS sums in an order that depends on the machine and the
+settings, so the same correct product can come back with slightly different low bits from one run
+to the next. That is normal IEEE floating-point behaviour, shared by NumPy, SciPy and every BLAS
+consumer. If you need results that reproduce **exactly** — a golden test, cross-machine
+determinism — pin the two variables that move them (the third, the library build, you already
+pinned by choosing a specific binary):
+
+1. **The worker-thread count.** 1, 2, 4 and 24 threads give different low bits for the same
+   product, because the reduction is split differently. `Blas.Enable(threads: n)` pins it. For a
+   run you want to reproduce against a NumPy process, set `OPENBLAS_NUM_THREADS=n` there too
+   (before `import numpy`) — NumPy runs larger products multi-threaded by default while small ones
+   stay single-threaded, so pinning is what makes small and large agree.
+2. **The CPU micro-kernel.** OpenBLAS is built `DYNAMIC_ARCH` and picks a kernel from the CPU it
+   runs on; different kernels accumulate differently. Measured by forcing the choice on one host
+   (same binary, 1 thread, `(512,784) @ (784,512)` float32):
+
+| `OPENBLAS_CORETYPE` | dispatched | result hash |
+|---|---|---|
+| *(unset)* | Haswell | `b9ea5057…` |
+| `Haswell` | Haswell | `b9ea5057…` — identical to unset |
+| `Nehalem` | Nehalem | `b6bb0f58…` |
+| `Sandybridge` | Sandybridge | `1903e357…` |
+| `Core2` | Katmai | `0da21438…` |
+| `SkylakeX` | — | **process killed: illegal instruction** |
+
+`Blas.Enable(coreType: Blas.ParityCoreType)` pins the kernel to `"Haswell"` — a fixed choice that
+runs on any x86-64 with AVX2+FMA (Haswell 2013 and later, and every AMD Zen), so a result computed
+on one such machine reproduces on another. It is **not the default, deliberately**: the default
+lets OpenBLAS pick the fastest kernel the CPU supports (exactly as NumPy does), which is what you
+want unless you are specifically chasing cross-machine reproducibility. Pin it on every machine
+that must agree, or none; the same `OPENBLAS_CORETYPE` environment variable drives NumPy, since it
+is the same library.
+
+> **Hazard.** `coreType` *overrides* OpenBLAS' CPU detection rather than expressing a preference,
+> so naming kernels the CPU cannot run terminates the process with an illegal instruction —
+> measured, not theoretical. `Blas.Enable` refuses the combinations it can recognise with a
+> `PlatformNotSupportedException` first. It also only takes effect on the call that actually
+> **loads** the library: OpenBLAS reads the variable once while initialising and never re-reads it,
+> so a later request that cannot be honoured throws instead of being silently dropped.
+
+<sub>See here [`ThreadPin_IsReportedBack`][gate-backend], [`CoreTypeAboveThisCpu_IsRefused_RatherThanCrashingTheProcess`][gate-backend]</sub>
+
+---
+
+## The API
+
+The whole public surface is the static `Blas` class (namespace `NumSharp.Interop.OpenBLAS`):
+
+| Member | Meaning |
+|---|---|
+| `Blas.Enable(library = null, threads = 0, coreType = null)` | Load a CBLAS library (or auto-discover one) and install the backend. Idempotent when the same library is already loaded. |
+| `Blas.TryEnable(library = null, threads = 0)` | `Enable` that reports `false` instead of throwing — the module-load path. |
+| `Blas.Disable()` | Uninstall the backend; the native library stays loaded (unloading a BLAS mid-process is not worth the risk), so a later `Enable` is free. |
+| `Blas.Enabled` | `true` when the backend is installed **and** a library is bound — both halves, see below. |
+| `Blas.Info` | Path, symbol scheme, integer width, thread count and build string of the loaded library, or `null`. |
+| `Blas.LibraryPath` | Full path of the loaded library — the machine-readable form of "which binary answered?". |
+| `Blas.CoreName` | The `DYNAMIC_ARCH` micro-kernel OpenBLAS actually dispatched (e.g. `"Haswell"`). |
+| `Blas.IsBundledLibrary` | `true` when the loaded library is the package's bundled asset — marker-aware: a build-staged override in the same folder layout reports `false`. |
+| `Blas.ParityCoreType` | `"Haswell"` — a fixed micro-kernel to pin for cross-machine reproducibility (see [Reproducible results](#reproducible-results)). |
+
+Three semantics are load-bearing, each pinned by a test:
+
+- **A named library is binding.** An explicit `Blas.Enable(path)` (or `NUMSHARP_PARITY_BLAS`) is
+  used as given and never silently replaced — not even by the bundled copy sitting in the output
+  folder — so "pin exactly this build" means exactly that.
+- **A failed `Enable` is a no-op.** It throws having changed nothing, so a mistyped path cannot
+  demote a working setup back to the managed kernels behind your back. (An earlier design unloaded
+  the working library first, leaving `Enabled` reporting `true` while every product had silently
+  reverted to the managed kernel — the worst kind of failure, since the answer still looks fine.)
+- **`Enabled` means installed *and* bound.** An installed-but-unbound backend declines every
+  operand, so every product would quietly fall back to the managed kernels; reporting `true` there
+  would claim a native backend that is not actually computing anything.
+
+Opting out of the automatic install (`NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0`) leaves `Blas.Enable()`
+fully functional — it only skips the module-load call.
+
+<sub>See here [`NamedLibrary_IsBinding_NeverSilentlySubstituted`][gate-backend], [`FailedEnable_OverAWorkingLibrary_ChangesNothing`][gate-backend], [`Enabled_MeansInstalledAND_Bound_NotMerelyInstalled`][gate-backend]</sub>
 
 ---
 
@@ -502,48 +481,46 @@ Every member is `Try`-shaped: the backend answers only for the operands it imple
 `false` for the rest, which the engine then computes itself. **Installing a backend can change
 WHICH implementation runs, never WHETHER NumSharp can compute the product** — that invariant is
 what makes referencing the package safe. It answers for float32/float64 only; integer and bool
-products fall through and are bit-exact by construction anyway (modular integer addition is
-associative, so summation order cannot change the result).
+products fall through to the managed kernel, which a native BLAS could not improve on anyway
+(integer addition is associative, so summation order does not move the result).
 
-### Both NumPy dispatchers, route for route
+### Both `np.dot` and `np.matmul`, route for route
 
-`np.dot` and `np.matmul` are **not the same C code** in NumPy — `cblas_matrixproduct` (plus the
-N-D `dotfunc` tail) versus the `@TYPE@_matmul` gufunc — and they disagree when an operand is not
-blasable: a stride-2 matrix times a vector gets gemv-on-a-copy from one and the portable loop from
-the other, and 278/300 elements differ. A backend claiming bit-parity must reproduce that split,
-which is why the interface has both `TryDot` and `TryMatMul2D` rather than one matrix-product
-method. The ported routes:
+`np.dot` and `np.matmul` are **not the same operation** in NumPy — `cblas_matrixproduct` (plus the
+N-D `dotfunc` tail) versus the `@TYPE@_matmul` gufunc — and they handle a non-blasable operand
+differently (a stride-2 matrix times a vector: one takes gemv-on-a-copy, the other a portable
+loop). NumSharp funnels both APIs through this one seam, so the backend implements **both** routes
+to keep `np.dot` and `np.matmul` behaving exactly as they do without it. The ported routes:
 
 | Route | When |
 |---|---|
 | `cblas_?gemm` | matrix @ matrix — with NumPy's copy-into-a-temp rule for non-blasable operands and its transpose choices |
-| `cblas_?syrk` | `a @ a.T` — both dispatchers detect the shared data pointer and compute one triangle, mirrored |
+| `cblas_?syrk` | `a @ a.T` — the shared data pointer is detected and one triangle computed, mirrored |
 | `cblas_?gemv` | matrix @ vector, both directions (operands swapped for vector · matrix) |
-| chunked `cblas_?dot` | row · column — summed in a **double** accumulator, exactly as NumPy's `FLOAT_dot` does "for stability" (this route is *more* accurate than gemm, and parity must reproduce that too) |
+| chunked `cblas_?dot` | row · column — summed in a **double** accumulator for stability, so this route is *more* accurate than plain gemm |
 | `cblas_?axpy` | the scalar-multiply branch of `cblas_matrixproduct` |
-| portable loop | zero-sized extents and dimensions above `BLAS_MAXSIZE` — NumPy excludes these from its blas routes, so the backend declines them and the engine settles them in the same place NumPy does |
-| the N-D `dotfunc` tail | `np.dot` above 2-D — **not** gemm at all: a `?dot` per (row, column-plane) pair, as NumPy walks it |
+| portable loop | zero-sized extents and dimensions above `BLAS_MAXSIZE` — the backend declines these and the engine settles them itself, matching NumPy, which excludes them from its own blas routes |
+| the N-D `dotfunc` tail | `np.dot` above 2-D — **not** gemm at all: a `?dot` per (row, column-plane) pair |
 
 Strides are ported in **elements** (NumPy's are bytes — the same logic with `itemsize == 1`), and
-real strides pass through to the BLAS: for mat @ mat the layout does not change the bits, but for
-the special routes it does (a `(1,500)` vector with stride 2 changes gemv's `incX` and the result
-with it).
+real strides pass through to the BLAS: for mat @ mat the layout does not change the result, but for
+the special routes it does (a `(1,500)` vector with stride 2 changes gemv's `incX`).
 
 `TryMatMulBatched` exists because the seam's granularity is a performance decision: it takes a
 whole stacked product at once, so the route decision and any scratch allocation are built once per
 stack — the way NumPy hoists them out of its gufunc's outer loop — instead of once per element.
 Measured on 2000 stacked 8×8 float32 products, per-element setup made the backend **0.80×** —
-*slower* than NumSharp's own managed GEMM — against **6.47×** with the work hoisted; the two routes
-are bit-identical (25/25 stacked products A/B'd through a decorator that declines the batched
-path).
+*slower* than NumSharp's own managed GEMM — against **6.47×** with the work hoisted; the batched and
+per-element routes produce identical results (25/25 A/B'd through a decorator that declines the
+batched path).
 
-### What is *not* served, and why that is correct
+### What is *not* served
 
 | Dtype | What happens | Why |
 |---|---|---|
-| int / uint / bool | managed kernels | bit-exact by construction — summation order cannot change modular addition |
-| `Half` | managed kernels | NumPy does **not** send float16 to BLAS — its portable C loop *is* the shipping implementation, which NumSharp mirrors (accumulating in float32, as NumPy does) — so the managed answer is already NumPy's |
-| `Complex` | managed kernels — **the one real gap** | complex64/128 *are* cblas dtypes (`cgemm`/`zgemm`), so NumPy's complex products are zgemm's bits and the managed kernel diverges the same way float32 did. The seam already supports a complex backend (probed with a third-party one); the routes are simply not written yet |
+| int / uint / bool | managed kernels | a native BLAS buys nothing — integer addition is associative, so order does not move the result |
+| `Half` | managed kernels | NumPy does **not** route float16 through BLAS, so there is no native path to gain from; NumSharp's managed half kernel already handles it (accumulating in float32) |
+| `Complex` | managed kernels — **the one real gap** | complex64/128 *are* BLAS dtypes (`cgemm`/`zgemm`), so a native backend could accelerate them; the routes are simply not written yet. The seam already supports it (probed with a third-party Complex128 backend) |
 
 <sub>See here [`EveryShapeRoute_RoundTripsThroughTheBackend`][gate-backend], [`StackedProducts_GoThroughTheBatchedEntryPoint_Once`][gate-backend], [`IntegerProducts_FallThroughToTheManagedKernel`][gate-backend]</sub>
 
@@ -594,8 +571,8 @@ by a test. The fifteen cover the rest of what NumPy routes through this same bin
 LAPACK sits on the *same* property because it lives inside the very binary already bundled:
 scipy-openblas ships `gesv` / `getrf` / `potrf` / `geev` / `syevd` / `heevd` / `gesdd` / `geqrf` /
 `orgqr` / `gelsd` next to the BLAS symbols, so a backend that loaded the library for `sgemm`
-already holds the handle for everything else. The NumPy-exact validation for all of `np.linalg`
-runs *before* the seam and is gated today — an implementation only has to supply numerics.
+already holds the handle for everything else. The validation for all of `np.linalg` runs *before*
+the seam and is gated today — an implementation only has to supply numerics.
 
 <sub>See here [`ABackendThatKnowsNothingOfBatching_StillWorks`][gate-backend], [`TheBackendIsAPlainSettableProperty`][gate-backend]</sub>
 
@@ -603,7 +580,7 @@ runs *before* the seam and is gated today — an implementation only has to supp
 
 ## Performance
 
-The parity route is also the fast route — OpenBLAS, after all. Single products (Release,
+The native route is the fast route — OpenBLAS, after all. Single products (Release,
 best-of-rounds, milliseconds):
 
 | shape | dtype | managed (Core) | OpenBLAS backend | backend, 1 thread |
@@ -639,8 +616,8 @@ stack, not per element):
 | `NUMSHARP_OPENBLAS_VERSION` | **Build-time**: scipy-openblas version to download from PyPI and stage over the bundle — a hard requirement; beats `<OpenBlasVersion>` metadata. |
 | `NUMSHARP_OPENBLAS_{DISTRIBUTION, FEED, SHA256, DELIVERY}` | **Build-time**: distribution pick (`64`/`32`), PyPI mirror base (needs the sha), expected extracted-lib sha256, delivery mode (`none`/`build`/`package`); each beats its `OpenBlas*` metadata twin. |
 | `OPENBLAS_HOME` / `OPENBLAS_ROOT` / `VCPKG_ROOT` / `CONDA_PREFIX` | Roots consulted when scanning for a machine-wide OpenBLAS (discovery tier 5). |
-| `OPENBLAS_CORETYPE` | Read by OpenBLAS itself at load. Set it in the *real* environment (before process start) to pin NumPy and NumSharp at once. |
-| `OPENBLAS_NUM_THREADS` | OpenBLAS' own thread-count variable — the way to pin the NumPy side of a parity run. |
+| `OPENBLAS_CORETYPE` | Read by OpenBLAS itself at load — pins the `DYNAMIC_ARCH` micro-kernel (see [Reproducible results](#reproducible-results)). Set it in the *real* environment, before process start. |
+| `OPENBLAS_NUM_THREADS` | OpenBLAS' own worker-thread count. Affects the low bits of a result; set it to reproduce a run at a fixed thread count. |
 
 ---
 
@@ -653,9 +630,9 @@ stack, not per element):
 | `PlatformNotSupportedException` from `Enable(coreType:)` | The named kernel needs an ISA this CPU lacks; running it would kill the process, so it is refused up front. |
 | Process dies with *illegal instruction* | An `OPENBLAS_CORETYPE` above this CPU was set in the raw environment, bypassing `Enable`'s check. Unset it or name a kernel the CPU can run. |
 | `EntryPointNotFoundException: … exports no recognizable cblas_sgemm symbol` | The named file is not a CBLAS provider (a plain BLAS without the `cblas_` interface, or an unrelated library). The working setup, if any, is untouched. |
-| `Enable(coreType:)` throws although the library is already loaded | The kernel is chosen once, at load. If the request already holds it is a no-op; if not, it throws rather than silently leaving the bits un-pinned. Changing kernels needs a fresh process — a loaded BLAS cannot be safely unloaded. |
-| Results differ from NumPy on the same machine | Thread counts differ — pin both sides (`Blas.Enable(threads: n)` and `OPENBLAS_NUM_THREADS=n` before `import numpy`). Or the local numpy's OpenBLAS is a different version than the bundle — name its library (binding) or point `NUMSHARP_OPENBLAS_PATH` at it. Or the dtype is complex — not served yet, see [How it computes](#how-it-computes). |
-| Results differ across machines | `DYNAMIC_ARCH` dispatched different micro-kernels. Pin `coreType: Blas.ParityCoreType` (and `OPENBLAS_CORETYPE` for NumPy) on **both** sides. |
+| `Enable(coreType:)` throws although the library is already loaded | The kernel is chosen once, at load. If the request already holds it is a no-op; if not, it throws rather than silently leaving the kernel un-pinned. Changing kernels needs a fresh process — a loaded BLAS cannot be safely unloaded. |
+| Results are not reproducible run-to-run or machine-to-machine | Expected of any threaded, arch-tuned BLAS — the low bits move with the thread count and CPU kernel. Pin both (`Blas.Enable(threads: n, coreType: Blas.ParityCoreType)`), and the matching `OPENBLAS_NUM_THREADS` / `OPENBLAS_CORETYPE` on any NumPy process you compare against. See [Reproducible results](#reproducible-results). |
+| A complex-dtype product is slow | Complex is not served by the backend yet — it stays on the managed kernel. See [How it computes](#how-it-computes). |
 | Setting `OPENBLAS_CORETYPE` via `Environment.SetEnvironmentVariable` does nothing | .NET keeps its own environment table; a native `getenv` never sees it. Set it in the real environment before the process starts, or pass `coreType:` to `Enable` — which goes through the C runtime. |
 | A build with a version override fails offline | A version override is a hard requirement by design. Prime the cache with one online build, point `OpenBlasFeed` at a mirror (with an explicit `OpenBlasSha256`), or drop the pin. |
 | `NUMSHARP_BLAS_AUTOINSTALL=0` no longer suppresses the install | That spelling is retired outright (it never shipped in a release) and deliberately ignored. Use `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0`. |
@@ -667,25 +644,24 @@ stack, not per element):
 | # | Claim | Evidence | Gate |
 |---|---|---|---|
 | 1 | Referencing the package installs the backend at assembly load; the env opt-out suppresses it | backend present with no explicit call; absent under `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL=0` | [`BundleAutoinstall_WithNoOptOut_InstallsTheBackend`][gate-delivery], [`BundleAutoinstall_HonorsTheOptOut`][gate-delivery] |
-| 2 | Without the package the engine has no BLAS backend and every product is managed | `engine.Blas == null` by default | [`NotInstalled_ByDefault_TheEngineHasNoBlasBackend`][gate-backend] |
-| 3 | Products through the backend are bit-identical to numpy 2.4.2 | 342/342 corpus cases bit-exact; 294 divergent without the backend | [`FuzzCorpusTests.MatmulParity`][gate-corpus] |
-| 4 | The corpus pin identifies the library by content hash and goes Inconclusive — never red — on a foreign host | `blas_library_sha256` compared against the loaded file | [`MatmulParityPin`][gate-pin] |
-| 5 | The bundled binary hashes to the committed manifest pin | per-RID sha256 equals `openblas-manifest.json` | [`BundledLibrary_HashesToThePinnedManifest`][gate-backend] |
-| 6 | Auto-discovery prefers the bundle over machine tooling; the bundle can be opted out | bundled path wins; `NUMSHARP_BLAS_BUNDLED=0` drops it | [`AutoDiscovery_PrefersTheBundledLibrary`][gate-backend], [`BundledLibrary_CanBeOptedOutOf`][gate-backend] |
-| 7 | A named library is binding — a missing one does not fall back to the bundle | throw, no substitution | [`NamedLibrary_OutranksTheBundledOne_AndAMissingOneDoesNotFallBackToIt`][gate-backend] |
-| 8 | A failed `Enable` changes nothing, even over a working setup | working library and backend intact after a failed call | [`FailedEnable_OverAWorkingLibrary_ChangesNothing`][gate-backend], [`FailedEnable_OnANonCBlasFile_OverAWorkingLibrary_ChangesNothing`][gate-backend] |
-| 9 | `Enabled` means installed **and** bound | `false` when a backend is installed with no library | [`Enabled_MeansInstalledAND_Bound_NotMerelyInstalled`][gate-backend] |
-| 10 | The thread pin takes effect and is reported back | `Info` reflects `Enable(threads:)` | [`ThreadPin_IsReportedBack`][gate-backend] |
-| 11 | A `coreType` this CPU cannot run is refused instead of crashing the process | `PlatformNotSupportedException`, process alive | [`CoreTypeAboveThisCpu_IsRefused_RatherThanCrashingTheProcess`][gate-backend] |
-| 12 | `ParityCoreType` is the kernel the committed corpus was generated with | equals the host pin's recorded core | [`ParityCoreType_MatchesTheCorpusHostPin`][gate-backend] |
-| 13 | Only float32/float64 products change; integers fall through; every other operation is untouched | identical bytes backend on vs off | [`IntegerProducts_FallThroughToTheManagedKernel`][gate-backend], [`EveryOtherOperation_StaysTheManagedImplementation`][gate-backend] |
-| 14 | Stacked products take the batched entry once per stack, bit-identical to the per-element route | call counting + 25/25 A/B | [`StackedProducts_GoThroughTheBatchedEntryPoint_Once`][gate-backend], [`BatchedEntryPoint_IsBitIdenticalToThePerElementRoute`][gate-backend] |
-| 15 | A backend implementing only the two core members still works | decorator declining the batched path | [`ABackendThatKnowsNothingOfBatching_StillWorks`][gate-backend] |
-| 16 | A version override is hard-required and sha-verified — never silently substituted | throws with the bundle sitting loadable beside it; a mismatched sha is refused | [`VersionMarker_IsHardRequired_NeverFallsThroughToTheBundle`][gate-delivery], [`VersionMarker_WithMismatchedSha_RefusesTheFile`][gate-delivery] |
-| 17 | A required-override miss at module load is loud on stderr, not fatal | one stderr line; backend left uninstalled | [`BundleAutoinstall_OnARequiredOverrideMiss_IsLoudButDoesNotThrow`][gate-delivery] |
-| 18 | A path override is non-binding: it binds when it holds a library, falls through when it does not | both directions | [`PathMarker_BindsItsDirectory_WhenItHoldsALibrary`][gate-delivery], [`PathMarker_IsNonBinding_FallsThroughToTheBundle`][gate-delivery] |
-| 19 | A pip-installed numpy's `numpy.libs/` is never scanned | the tier stays deleted | [`NumpyLibs_DiscoveryTier_IsDeleted`][gate-delivery] |
-| 20 | The build pipeline — download, double verify, self-healing cache, staging, packing — works end-to-end against the real nupkg | 15 scripted steps incl. tamper, mirror-needs-sha, poisoned cache, conflicting references | [`verify_build_override.sh`][gate-build] |
+| 2 | Installing the backend sets a property on the engine; it does not replace or subclass the engine | same engine instance, `Blas` non-null after `Enable` | [`Enable_SetsTheBackendOnTheEngine_WithoutReplacingIt`][gate-backend], [`TheBackendIsAPlainSettableProperty`][gate-backend] |
+| 3 | Without the package the engine has no BLAS backend and every product is managed | `engine.Blas == null` by default | [`NotInstalled_ByDefault_TheEngineHasNoBlasBackend`][gate-backend] |
+| 4 | The bundled binary hashes to the committed manifest pin | per-RID sha256 equals `openblas-manifest.json` | [`BundledLibrary_HashesToThePinnedManifest`][gate-backend] |
+| 5 | Auto-discovery prefers the bundle over machine tooling; the bundle can be opted out | bundled path wins; `NUMSHARP_BLAS_BUNDLED=0` drops it | [`AutoDiscovery_PrefersTheBundledLibrary`][gate-backend], [`BundledLibrary_CanBeOptedOutOf`][gate-backend] |
+| 6 | A named library is binding — a missing one does not fall back to the bundle | throw, no substitution | [`NamedLibrary_OutranksTheBundledOne_AndAMissingOneDoesNotFallBackToIt`][gate-backend] |
+| 7 | A failed `Enable` changes nothing, even over a working setup | working library and backend intact after a failed call | [`FailedEnable_OverAWorkingLibrary_ChangesNothing`][gate-backend], [`FailedEnable_OnANonCBlasFile_OverAWorkingLibrary_ChangesNothing`][gate-backend] |
+| 8 | `Enabled` means installed **and** bound | `false` when a backend is installed with no library | [`Enabled_MeansInstalledAND_Bound_NotMerelyInstalled`][gate-backend] |
+| 9 | The thread pin takes effect and is reported back | `Info` reflects `Enable(threads:)` | [`ThreadPin_IsReportedBack`][gate-backend] |
+| 10 | A `coreType` this CPU cannot run is refused instead of crashing the process | `PlatformNotSupportedException`, process alive | [`CoreTypeAboveThisCpu_IsRefused_RatherThanCrashingTheProcess`][gate-backend] |
+| 11 | Only float32/float64 products change; integers fall through; every other operation is untouched | identical results backend on vs off | [`IntegerProducts_FallThroughToTheManagedKernel`][gate-backend], [`EveryOtherOperation_StaysTheManagedImplementation`][gate-backend] |
+| 12 | Every shape route round-trips through the backend | strided/transposed views accepted, not silently wrong | [`EveryShapeRoute_RoundTripsThroughTheBackend`][gate-backend], [`StridedAndTransposedViews_AreAccepted_NotSilentlyWrong`][gate-backend] |
+| 13 | Stacked products take the batched entry once per stack; batched and per-element routes agree | call counting + 25/25 A/B | [`StackedProducts_GoThroughTheBatchedEntryPoint_Once`][gate-backend], [`BatchedEntryPoint_IsBitIdenticalToThePerElementRoute`][gate-backend] |
+| 14 | A backend implementing only the two core members still works | decorator declining the batched path | [`ABackendThatKnowsNothingOfBatching_StillWorks`][gate-backend] |
+| 15 | A version override is hard-required and sha-verified — never silently substituted | throws with the bundle sitting loadable beside it; a mismatched sha is refused | [`VersionMarker_IsHardRequired_NeverFallsThroughToTheBundle`][gate-delivery], [`VersionMarker_WithMismatchedSha_RefusesTheFile`][gate-delivery] |
+| 16 | A required-override miss at module load is loud on stderr, not fatal | one stderr line; backend left uninstalled | [`BundleAutoinstall_OnARequiredOverrideMiss_IsLoudButDoesNotThrow`][gate-delivery] |
+| 17 | A path override is non-binding: it binds when it holds a library, falls through when it does not | both directions | [`PathMarker_BindsItsDirectory_WhenItHoldsALibrary`][gate-delivery], [`PathMarker_IsNonBinding_FallsThroughToTheBundle`][gate-delivery] |
+| 18 | A pip-installed numpy's `numpy.libs/` is never scanned | the tier stays deleted | [`NumpyLibs_DiscoveryTier_IsDeleted`][gate-delivery] |
+| 19 | The build pipeline — download, double verify, self-healing cache, staging, packing — works end-to-end against the real nupkg | 15 scripted steps incl. tamper, mirror-needs-sha, poisoned cache, conflicting references | [`verify_build_override.sh`][gate-build] |
 
 ---
 
@@ -693,16 +669,14 @@ stack, not per element):
 
 - [Interoperability](index.md) — the memory-bridge contract behind the other `NumSharp.Interop.*`
   packages (this one shares a *binary*, not a buffer)
-- [`docs/GEMM_PARITY.md`][gemm] — the full parity record: probe results, the ported routes, the
-  design review, the host pin, the traps
+- [`docs/GEMM_PARITY.md`][gemm] — the engineering deep-dive: the ported routes, the design review,
+  the delivery model, the probe results and traps
 - [`docs/OPENBLAS_DELIVERY_DESIGN.md`][delivery] — the delivery/discovery model: the two phases,
   the source marker, the transitive story, every resolved decision
-- [Benchmarks](../benchmarks-dashboard.md) — NumSharp-vs-NumPy performance across the whole API
+- [Benchmarks](../benchmarks-dashboard.md) — NumSharp performance across the whole API
 
 [gate-backend]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.UnitTest/Backends/MatmulParityBackendTests.cs
 [gate-delivery]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.UnitTest/Backends/OpenBlasDeliveryTests.cs
-[gate-corpus]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.UnitTest/Fuzz/FuzzCorpusTests.cs
-[gate-pin]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.UnitTest/Fuzz/MatmulParityPin.cs
 [gate-build]: https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
 [gemm]: https://github.com/SciSharp/NumSharp/blob/master/docs/GEMM_PARITY.md
 [delivery]: https://github.com/SciSharp/NumSharp/blob/master/docs/OPENBLAS_DELIVERY_DESIGN.md
