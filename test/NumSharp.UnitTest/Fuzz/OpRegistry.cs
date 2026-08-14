@@ -290,6 +290,29 @@ namespace NumSharp.UnitTest.Fuzz
                 case "dot": return np.dot(ops[0], ops[1]);
                 case "outer": return np.outer(ops[0], ops[1]);
 
+                // CBLAS product family (products tier): first VALUE gate for these — previously
+                // only their error contracts were tested. vecdot's axis/keepdims params select
+                // the overload; tensordot's "axes" (int) vs "axesA"/"axesB" (lists) mirror
+                // NumPy's two call forms; multi_dot consumes ALL operands as the chain.
+                case "inner": return np.inner(ops[0], ops[1]);
+                case "vdot": return np.vdot(ops[0], ops[1]);
+                // vecdot MUST pass axis BY NAME: np.vecdot is the ufunc kwargs form (out, axes,
+                // axis?, keepdims) — a positional int would implicitly convert to NDArray and
+                // bind `out` (the tier caught exactly that). The int-axis positional form is
+                // np.linalg.vecdot (Array-API), not this one.
+                case "vecdot":
+                    return p.ContainsKey("keepdims")
+                        ? np.vecdot(ops[0], ops[1], keepdims: p["keepdims"].GetBoolean())
+                        : np.vecdot(ops[0], ops[1], axis: p.TryGetValue("axis", out var vdax) ? vdax.GetInt32() : -1);
+                case "matvec": return np.matvec(ops[0], ops[1]);
+                case "vecmat": return np.vecmat(ops[0], ops[1]);
+                case "tensordot":
+                    return p.ContainsKey("axesA")
+                        ? np.tensordot(ops[0], ops[1], ParseIntArray(p["axesA"]), ParseIntArray(p["axesB"]))
+                        : np.tensordot(ops[0], ops[1], p["axes"].GetInt32());
+                case "multi_dot": return np.linalg.multi_dot(ops);
+                case "matrix_power": return np.linalg.matrix_power(ops[0], p["n"].GetInt32());
+
                 // A matrix times its OWN transpose — the syrk shortcut both of NumPy's matrix
                 // -product dispatchers take when the two operands share a data pointer. The
                 // corpus gives every operand its own buffer, so the self-product cannot be
@@ -408,6 +431,21 @@ namespace NumSharp.UnitTest.Fuzz
                 case "nanargmax": case "nanargmin":
                     return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), ops[0]);
 
+                // np.random byte-parity (random_parity tiers): seed -> draw -> compare the raw
+                // stream bytes against NumPy's recorded sequence. "draws" > 1 pins stream
+                // ADVANCEMENT (the recorded block is the LAST of N identical draws). The global
+                // np.random instance is safe here because the corpus runner is sequential and
+                // the tier's test method is [DoNotParallelize].
+                case "rnd":
+                {
+                    np.random.seed(p["seed"].GetInt32());
+                    int draws = p.TryGetValue("draws", out var dr) ? dr.GetInt32() : 1;
+                    NDArray r = null;
+                    for (int k = 0; k < draws; k++)
+                        r = RndDraw(p);
+                    return r;
+                }
+
                 // Array/scalar-result ops added with the result-kind upgrade (iterator traces,
                 // scalar-returning predicates) live in OpRegistry.Kinds.cs.
                 default:
@@ -441,6 +479,98 @@ namespace NumSharp.UnitTest.Fuzz
             foreach (var e in arr.EnumerateArray())
                 list.Add(e.GetInt32());
             return list.ToArray();
+        }
+
+        private static double[] ParseDoubleArray(JsonElement arr)
+        {
+            var list = new List<double>();
+            foreach (var e in arr.EnumerateArray())
+                list.Add(e.GetDouble());
+            return list.ToArray();
+        }
+
+        /// <summary>One distribution draw for the "rnd" op — dist name + positional args in
+        /// params (arrays like pvals/alpha/cov ride named keys). Pairs 1:1 with
+        /// gen_oracle.gen_random_parity's `run` dispatcher.</summary>
+        private static NDArray RndDraw(IReadOnlyDictionary<string, JsonElement> p)
+        {
+            string dist = p["dist"].GetString();
+            double A(int i) => p["args"][i].GetDouble();
+            Shape S() => new Shape(ParseIntArray(p["size"]));
+            long[] SL()
+            {
+                var ints = ParseIntArray(p["size"]);
+                var longs = new long[ints.Length];
+                for (int i = 0; i < ints.Length; i++) longs[i] = ints[i];
+                return longs;
+            }
+            switch (dist)
+            {
+                // ---- portable: pure MT19937 bits + exactly-rounded arithmetic ----
+                case "uniform": return np.random.uniform(A(0), A(1), S());
+                case "rand": return np.random.rand(S());
+                case "random_sample": return np.random.random_sample(SL());
+                case "randint": return np.random.randint((long)A(0), (long)A(1), S());
+                case "permutation": return np.random.permutation((int)A(0));
+                case "shuffle":
+                {
+                    var arr = np.arange((int)A(0));
+                    np.random.shuffle(arr);
+                    return arr;
+                }
+                case "choice":
+                    return np.random.choice((int)A(0), S(), true,
+                        p.TryGetValue("p", out var pw) ? ParseDoubleArray(pw) : null);
+
+                // ---- host-libm: transform / rejection samplers ----
+                case "normal": return np.random.normal(A(0), A(1), S());
+                case "randn": return np.random.randn(SL());
+                case "standard_normal": return np.random.standard_normal(S());
+                case "standard_exponential": return np.random.standard_exponential(S());
+                case "standard_cauchy": return np.random.standard_cauchy(S());
+                case "standard_t": return np.random.standard_t(A(0), S());
+                case "standard_gamma": return np.random.standard_gamma(A(0), S());
+                case "lognormal": return np.random.lognormal(A(0), A(1), S());
+                case "exponential": return np.random.exponential(A(0), S());
+                case "gamma": return np.random.gamma(A(0), A(1), S());
+                case "beta": return np.random.beta(A(0), A(1), S());
+                case "chisquare": return np.random.chisquare(A(0), S());
+                case "f": return np.random.f(A(0), A(1), S());
+                case "gumbel": return np.random.gumbel(A(0), A(1), S());
+                case "laplace": return np.random.laplace(A(0), A(1), S());
+                case "logistic": return np.random.logistic(A(0), A(1), S());
+                case "pareto": return np.random.pareto(A(0), S());
+                case "power": return np.random.power(A(0), S());
+                case "rayleigh": return np.random.rayleigh(A(0), S());
+                case "triangular": return np.random.triangular(A(0), A(1), A(2), S());
+                case "vonmises": return np.random.vonmises(A(0), A(1), S());
+                case "wald": return np.random.wald(A(0), A(1), S());
+                case "weibull": return np.random.weibull(A(0), S());
+                case "poisson": return np.random.poisson(A(0), S());
+                case "binomial": return np.random.binomial((int)A(0), A(1), S());
+                case "negative_binomial": return np.random.negative_binomial(A(0), A(1), S());
+                case "geometric": return np.random.geometric(A(0), S());
+                case "zipf": return np.random.zipf(A(0), S());
+                case "logseries": return np.random.logseries(A(0), S());
+                case "noncentral_chisquare": return np.random.noncentral_chisquare(A(0), A(1), S());
+                case "noncentral_f": return np.random.noncentral_f(A(0), A(1), A(2), S());
+                case "hypergeometric": return np.random.hypergeometric((long)A(0), (long)A(1), (long)A(2), S());
+                case "multinomial": return np.random.multinomial((int)A(0), ParseDoubleArray(p["pvals"]), S());
+                case "dirichlet": return np.random.dirichlet(ParseDoubleArray(p["alpha"]), S());
+                case "multivariate_normal":
+                {
+                    var mean = ParseDoubleArray(p["mean"]);
+                    var flat = ParseDoubleArray(p["cov"]);
+                    int d = mean.Length;
+                    var cov = new double[d, d];
+                    for (int i = 0; i < d; i++)
+                        for (int j = 0; j < d; j++)
+                            cov[i, j] = flat[i * d + j];
+                    return np.random.multivariate_normal(mean, cov, ParseIntArray(p["size"]));
+                }
+                default:
+                    throw new NotSupportedException($"rnd dist '{dist}' not wired in OpRegistry");
+            }
         }
 
         private static long[] ParseLongArray(JsonElement arr)

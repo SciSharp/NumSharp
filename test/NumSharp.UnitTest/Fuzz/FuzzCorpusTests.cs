@@ -163,6 +163,49 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Precision() => RunCorpus("precision.jsonl");
 
+        // np.random byte-parity, PORTABLE half: distributions whose math is pure MT19937 bit
+        // manipulation + exactly-rounded IEEE arithmetic (uniform/rand/random_sample/randint/
+        // permutation/shuffle/choice) — bit-exact on every host. The documented 1-to-1 seed
+        // claim was previously guarded only by STATISTICAL tests (mean within 0.01), which
+        // would pass with a completely different generator. [DoNotParallelize]: the cases
+        // seed and draw from the GLOBAL np.random instance.
+        // CBLAS product family: inner/vdot/vecdot/matvec/vecmat/tensordot/multi_dot/
+        // matrix_power — the FIRST value gate for these ops (previously only their error
+        // contracts were tested). Small-exact operands across all 13 dtypes (contraction
+        // depth <=4: float sums exact, so bit-parity holds even against NumPy's BLAS) incl.
+        // the vdot/vecdot complex conjugation and vecdot's loop-dtype (int32 stays int32)
+        // rules; plus deep-K (2049) f32/f64 cases carrying expected.truth, adjudicated by
+        // the prefer-precise branches exactly like the precision tier (NumPy routes
+        // inner/vdot through BLAS there, so bit-parity is not the portable contract).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Products() => RunCorpus("products.jsonl");
+
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [DoNotParallelize]
+        public void RandomParity() => RunCorpus("random_parity.jsonl");
+
+        // np.random byte-parity, HOST-LIBM half: every distribution whose transform consumes
+        // libm (gauss polar log/sqrt, exponential inversion, gamma/poisson/binomial rejection
+        // loops — where a 1-ulp libm difference flips an accept/reject decision and shifts
+        // the whole stream). NumPy calls the CRT and NumSharp calls Math.* — the SAME CRT on
+        // Windows, glibc elsewhere — so the corpus is win-amd64-authored: hard-gated on
+        // Windows, Inconclusive elsewhere (the matmul_parity pattern; on Linux/macOS both
+        // sides shift together against their local NumPy, so a red here would be meaningless).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [DoNotParallelize]
+        public void RandomParityHostLibm()
+        {
+            if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows))
+                Assert.Inconclusive(
+                    "random_parity_host.jsonl is authored against the win-amd64 CRT libm; " +
+                    "transform/rejection sampler streams are libm-dependent by construction.");
+            RunCorpus("random_parity_host.jsonl");
+        }
+
         // W5 cumulative (T11): cumsum/cumprod (axis None + per-axis, NEP50 accumulator) and diff
         // (n=1,2; axis 0/last; output shrinks by n) across int/uint/float/complex dtypes.
         [TestMethod]
@@ -379,7 +422,10 @@ namespace NumSharp.UnitTest.Fuzz
             ["out_where.jsonl"] = 3500,
             ["params.jsonl"] = 966,
             ["place.jsonl"] = 12,
-            ["precision.jsonl"] = 57,
+            ["products.jsonl"] = 150,
+            ["precision.jsonl"] = 80,
+            ["random_parity.jsonl"] = 30,
+            ["random_parity_host.jsonl"] = 86,
             ["random_smoke.jsonl"] = 1600,
             ["reduce.jsonl"] = 9004,
             ["rounding.jsonl"] = 665,

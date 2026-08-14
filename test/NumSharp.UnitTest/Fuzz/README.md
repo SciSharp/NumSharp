@@ -116,6 +116,8 @@ python test/oracle/gen_oracle.py place            # np.place(arr,mask,vals)
 python test/oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer (gufunc shapes, C/F layouts)
 python test/oracle/gen_oracle.py specials         # IEEE special-value parity (nan/±inf/±0/subnormal/max)
 python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversarial accumulation; needs mpmath)
+python test/oracle/gen_oracle.py products         # CBLAS product family values (inner/vdot/vecdot/matvec/...)
+python test/oracle/gen_oracle.py random_parity    # seeded np.random stream bytes (portable + host-libm files)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
 dotnet run test/oracle/gen_decimal_oracle.cs      # Decimal tiers (independent C# System.Decimal oracle)
@@ -200,14 +202,15 @@ their prior contents in every one of the 882 `where=all_false` cases.
 | **S1** expm1/log1p small-\|x\| precision loss / -0 / subnormal flush (`Exp(x)-1`, `Log(1+x)`; NumPy calls the CRT, non-portable) | expm1/log1p × Value, every diff ≤2 ULP **or** ≤~ulp(1) abs | 20 |
 | **S2** fmax/fmin ±0-tie sign on a reversed float32 view (NumPy's OWN fmax ±0 sign is SIMD-path-dependent — array returns operand 2, scalar returns +0) | fmax/fmin × Single × Value, both tokens a signed zero | 2 |
 | **S3** complex matmul/dot/outer infinite-operand product: C99-unspecified complex-inf (zgemm `(nan,nan)` inf-recovery vs managed `(inf,nan)`) | matmul/dot/outer × complex × Value, every diff non-finite | 9 |
-| **P1** prefer-precise: diverges from NumPy TOWARD the correctly-rounded truth — parity debt (port NumPy's algorithm), never a win | truth-bearing × Value, all diffs not-less-truthful, some strictly closer | 4 |
-| **P2** prefer-precise: diverges within truth-equivalence slack (neither side less accurate) | truth-bearing × Value, all diffs ≤ max(4×dNPY, dNPY+8) ULP-vs-truth | 18 |
+| **P1** prefer-precise: diverges from NumPy TOWARD the correctly-rounded truth — parity debt (port NumPy's algorithm), never a win | truth-bearing × Value, all diffs not-less-truthful, some strictly closer | 15 |
+| **P2** prefer-precise: diverges within truth-equivalence slack (neither side less accurate) | truth-bearing × Value, all diffs ≤ max(4×dNPY, dNPY+8) ULP-vs-truth | 19 |
+| **R1** rnd transform ~ULP: chisquare/wald/noncentral_f/dirichlet compose their draws with a slightly different arithmetic ordering than NumPy's C (stream bit-identical — a stream slip is gross and still fails) | rnd × those 4 dists × Value, ≤8 ULP (32 for wald) | 12 |
 
 **Known bugs (tracked for fix — remove the branch when fixed), truth-adjudicated:**
 
 | Excuse class | Scope | Hits |
 |---|---|---|
-| **P3** precision-loss (known): f32 var/std accumulation (55/26 ULP vs truth where NumPy sits at 3/2) + negative-stride reduction accumulation (11–32 ULP where NumPy is EXACT on the same reversed view) | truth-bearing × Value × (negstride sum/mean/var/std, or Single var/std), every diff ≤256 ULP-vs-truth | 5 |
+| **P3** precision-loss (known): f32 var/std accumulation (55/26 ULP vs truth where NumPy sits at 3/2) + negative-stride reduction accumulation (11–32 ULP where NumPy is EXACT on the same reversed view) + f32 deep product contraction (inner/tensordot K=2049, 1–2 ULP past the prefer-precise slack vs BLAS sgemm) | truth-bearing × Value × (negstride sum/mean/var/std, or Single var/std, or Single product family), every diff ≤256 ULP-vs-truth | 9 |
 
 **Narrowed: the NumPy-ported float kernels are no longer excused.** `NDFloatMath` ports the kernels NumPy
 2.4.2 actually runs — `simd_exp_FLOAT`, `simd_log_FLOAT`, `simd_sincos_f32`, `simd_tanh_f32`/`simd_tanh_f64` — and
@@ -296,6 +299,7 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_unique` contiguous+finite | unique on raw-offset views (#11) + inf/NaN complex ordering | documented at carve site (no pin — unreachable via API) |
 | `ALIAS_DTYPES` excludes complex128 | a·a self-multiply catastrophic cancellation (NumSharp matches NumPy *scalar*; NumPy's array ufunc disagrees with itself) | documented non-bug |
 | `gen_nanquantile` finite+NaN (no inf) | percentile interpolation across ±inf is ill-defined (inf−inf) | documented out-of-scope |
+| `gen_random_parity` carve list | 8 samplers whose STREAM diverges (different algorithm / accept-reject boundary): gamma(shape<1 via 2-arg), f, pareto, standard_cauchy, binomial (both branches), negative_binomial, multinomial, multivariate_normal | `OpenBugsRandom.RandomParity_*` (8 pins) |
 
 **FIXED on this branch or before it** (classifier branch/carve removed — the matrix now verifies
 these bit-exact): complex→bool imaginary drop · floor_divide/mod integer ÷0/±inf/signed-floor (F1)
@@ -369,9 +373,63 @@ On a divergence the registry adjudicates by ULP distance to truth (branches P1�
 The unbounded reduction blanket is gated on `truth == null` so a truth-bearing loss cannot hide in
 it; truthless tiers keep it unchanged. **Findings on arrival** (now P3, bounded ≤256): f32 var/std
 accumulation loses 55/26 ULP where NumPy's two-pass pairwise sits at 3/2, and the negative-stride
-reduce path loses 11–32 ULP where NumPy is EXACT on the same reversed view. 42/72 cases are
+reduce path loses 11–32 ULP where NumPy is EXACT on the same reversed view. 59/100 cases are
 bit-exact; scope pins in `MisalignedRegistryTightnessTests` (`P_*`) hold the branch tight from both
 sides.
+
+**The AXIS dimension** (28 cases): the flat cases never touch the axis kernels
+(`Reduction.Axis.*`), which are different code AND different NumPy behavior — NumPy's axis-0
+(outer-axis) reduction is a NAIVE sequential accumulation per column (it loses ALL 2048 unit
+elements of the wide-magnitude input, 1024 ULP from truth) while axis-1 runs pairwise (~8 ULP).
+Probed and now pinned: **NumSharp bit-matches both**, including reproducing the naive axis-0
+order, across sum/mean/var/std × axis 0/1 × keepdims, a transposed (strided-source) view, and
+cumsum along each axis. This is the prefer-precise policy protecting itself: a future "improved"
+axis accumulation would diverge from NumPy and surface as P1 parity debt instead of passing
+silently.
+
+### CBLAS product family (`products` tier)
+
+`products.jsonl` (287 cases, `gen_oracle.py products`) is the FIRST value gate for `inner`,
+`vdot`, `vecdot`, `matvec`, `vecmat`, `tensordot`, `linalg.multi_dot` and `linalg.matrix_power` —
+previously only their error contracts were tested, yet they carry the cells that regress silently:
+vdot/vecdot conjugate the FIRST operand (complex), vecdot reduces in the LOOP dtype (int32 stays
+int32, not NEP50's int64), tensordot's int/pair axes forms, matrix_power's binary exponentiation.
+Two value classes: the SMALL-EXACT bulk (contraction depth ≤4 over `_mm_fill` values — float sums
+exact, hence order-independent and bit-comparable even against NumPy's BLAS-backed dot/inner/vdot)
+across all 13 dtypes × the call-form matrix, and DEEP-TRUTH f32/f64 cases (K=2049 mixed-magnitude)
+carrying `expected.truth`, adjudicated by the prefer-precise branches since NumPy routes those
+through BLAS. **277/287 bit-exact**; 8 deep cases prefer-precise-excused (NumSharp CLOSER to truth
+than BLAS), 2 f32 deep contractions in P3's bounded known-loss scope. The tier also caught its own
+harness trap on arrival: a positional `axis` int to `np.vecdot` silently binds `out=` via the
+int→NDArray implicit conversion — the registry passes it BY NAME (documented at the call).
+
+### np.random byte-parity (`random_parity` tiers)
+
+The documented claim — MT19937 with 1-to-1 seed/state parity, "byte-identical sequences" — was
+guarded only by STATISTICAL tests (`normal` asserts the mean within 0.01, which a completely
+different generator would pass). These tiers pin the actual seeded streams: seed → draw → compare
+raw bytes, including `draws: 2` cases that pin stream ADVANCEMENT. Two files because CI replays on
+three OSes:
+
+- **`random_parity.jsonl`** (38) — the PORTABLE subset: pure MT19937 bit manipulation +
+  exactly-rounded arithmetic (uniform/rand/random_sample/randint/permutation/shuffle/choice incl.
+  weighted `p`). Hard-gated everywhere. **All bit-exact.**
+- **`random_parity_host.jsonl`** (108) — every transform/rejection sampler consuming libm (gauss
+  polar log/sqrt, exponential inversion, gamma/poisson rejection loops, where a 1-ulp libm
+  difference flips an accept/reject decision and shifts the whole stream). NumPy calls the CRT and
+  NumSharp calls `Math.*` — the same CRT on Windows, glibc elsewhere — so the corpus is
+  win-amd64-authored: hard on Windows, Inconclusive elsewhere (the matmul_parity pattern).
+  96 bit-exact + 12 under the R1 ≤8-ULP envelope (chisquare/wald/noncentral_f/dirichlet —
+  arithmetic-ordering noise on an IDENTICAL stream).
+
+**Findings on arrival — the 1-to-1 claim does NOT hold for 8 samplers** (carved + pinned under
+`OpenBugsRandom.RandomParity_*`): gamma(shape<1 via the two-arg API — while `standard_gamma`(any
+shape) and gamma(shape≥1, any scale) match byte-for-byte), f, pareto, standard_cauchy, binomial
+(both internal algorithms), negative_binomial, multinomial, multivariate_normal. Also documented:
+legacy RandomState's int outputs are C-long (int32 on win-amd64, int64 on Linux) while NumSharp
+fixes int64 — the corpus records those streams WIDENED to int64 so the VALUES stay hard-gated
+(randint and plain `choice` are the exceptions: NumSharp returns int32 there, matching win-amd64;
+`choice` WITH `p` returns int64 — an internal inconsistency noted in the generator).
 
 ### Decimal (independent oracle — no NumPy analog)
 

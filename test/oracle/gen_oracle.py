@@ -4683,6 +4683,425 @@ def gen_precision():
             emit("log1p", {}, od, np.log1p(view), t_unary(view, np.dtype(dt), mp.log1p),
                  tag, dt, "band")
 
+    # --- AXIS reductions over 2-D adversarial arrays -----------------------------------
+    # The flat cases above never touch the axis kernels (Reduction.Axis.*), which are
+    # different code AND different NumPy behavior: NumPy's axis-0 (outer-axis) reduction
+    # is a NAIVE sequential accumulation per column — on the wide-magnitude input it
+    # loses ALL the unit elements (1024 ULP from truth) — while axis-1 runs pairwise
+    # (~8 ULP). Probed: NumSharp bit-matches BOTH, including reproducing the naive
+    # axis-0 order. These cases pin that parity and protect the prefer-precise policy:
+    # a future "improved" axis accumulation would diverge from NumPy and must surface
+    # as P1 parity debt, not pass silently. The transposed view routes the SAME logical
+    # reduction through the strided source path.
+    def t_axis_slices(view, axis, dt, stat):
+        outs = []
+        m = view.shape[1] if axis == 0 else view.shape[0]
+        for j in range(m):
+            sl = view[:, j] if axis == 0 else view[j, :]
+            fs = fr(sl)
+            mean = sum(fs) / len(fs)
+            if stat == "sum":
+                outs.append(float(sum(fs)))
+            elif stat == "mean":
+                outs.append(float(mean))
+            elif stat == "var":
+                outs.append(float(sum((f - mean) ** 2 for f in fs) / len(fs)))
+            else:  # std
+                var = sum((f - mean) ** 2 for f in fs) / len(fs)
+                outs.append(float(mp.sqrt(mp.mpf(var.numerator) / mp.mpf(var.denominator))))
+        return np.array(outs, np.float64).astype(dt)
+
+    def axis_cases(arr, axis, tag, arrname):
+        dt = arr.dtype
+        base = np.ascontiguousarray(arr)
+        od = [describe(base, base)]
+        for stat, f in (("sum", np.sum), ("mean", np.mean), ("var", np.var), ("std", np.std)):
+            for kd in ((False, True) if stat == "sum" else (False,)):
+                r = np.asarray(f(base, axis=axis, keepdims=kd))
+                truth = t_axis_slices(base, axis, dt, stat).reshape(r.shape)
+                emit(stat, {"axis": axis, "keepdims": kd}, od, r, truth, tag, dt.name, arrname)
+
+    for dtn, big in (("float64", 2.0 ** 53), ("float32", 1e8)):
+        ndt = np.dtype(dtn)
+        colwise = np.ones((2049, 4), ndt); colwise[0, :] = big     # each COLUMN adversarial
+        rowwise = np.ones((4, 2049), ndt); rowwise[:, 0] = big     # each ROW adversarial
+        axis_cases(colwise, 0, "axis0_2d", "wide")
+        axis_cases(rowwise, 1, "axis1_2d", "wide")
+        # transposed view: logical == rowwise, memory == colwise (strided reduce source)
+        baseT = np.ascontiguousarray(colwise)
+        odT = [describe(baseT, baseT.T)]
+        for stat, f in (("sum", np.sum), ("var", np.var)):
+            r = np.asarray(f(baseT.T, axis=1))
+            truth = t_axis_slices(baseT.T, 1, ndt, stat).reshape(r.shape)
+            emit(stat, {"axis": 1, "keepdims": False}, odT, r, truth, "transposed_2d", dtn, "wide")
+        # cumsum along each axis (smaller N so the full-array expected/truth stay lean)
+        cw = np.ones((257, 4), ndt); cw[0, :] = big
+        rw = np.ones((4, 257), ndt); rw[:, 0] = big
+        for arr2, ax, tag in ((cw, 0, "axis0_2d"), (rw, 1, "axis1_2d")):
+            b2 = np.ascontiguousarray(arr2)
+            r = np.asarray(np.cumsum(b2, axis=ax))
+            m = b2.shape[1] if ax == 0 else b2.shape[0]
+            cols = []
+            for j in range(m):
+                sl = b2[:, j] if ax == 0 else b2[j, :]
+                run, outs = Fraction(0), []
+                for fv in fr(sl):
+                    run += fv
+                    outs.append(float(run))
+                cols.append(outs)
+            t = np.empty_like(r, dtype=np.float64)
+            for j in range(m):
+                if ax == 0:
+                    t[:, j] = cols[j]
+                else:
+                    t[j, :] = cols[j]
+            emit("cumsum", {"axis": ax}, [describe(b2, b2)], r, t.astype(ndt), tag, dtn, "wide")
+
+    return cases
+
+
+# =====================================================================================
+# np.random byte-parity ("random_parity" tiers). The documented claim — MT19937 with
+# 1-to-1 seed/state parity, "byte-identical sequences to NumPy 2.4.2" — was guarded only
+# by STATISTICAL tests (mean within 0.01), which would pass with a completely different
+# generator. These tiers pin the actual seeded streams: seed -> draw -> record bytes.
+#
+# TWO FILES, split by libm dependence, because CI replays on three OSes:
+#   * random_parity.jsonl — the PORTABLE subset: distributions whose math is pure
+#     MT19937 bit manipulation + exactly-rounded IEEE arithmetic (uniform, rand,
+#     random_sample, randint, permutation, shuffle, choice). Bit-exact on every host;
+#     hard-gated everywhere.
+#   * random_parity_host.jsonl — every distribution whose transform consumes libm
+#     (log/exp/pow/cos in the gauss polar method, exponential inversion, gamma/zipf/
+#     poisson/binomial REJECTION loops — where a 1-ulp libm difference can flip an
+#     accept/reject decision and shift the whole stream). NumPy calls the CRT and
+#     NumSharp calls Math.* (the same CRT on Windows, glibc elsewhere), so these bytes
+#     are win-amd64-authored: the C# gate runs them hard on Windows and reports
+#     Inconclusive elsewhere (the matmul_parity pattern; same class as the MSVC cast
+#     pins in "Host-dependent values").
+#
+# int-output distributions (randint/permutation/poisson/binomial/...) are ALSO
+# host-dtype-pinned by NumPy itself: legacy RandomState uses C long, so this corpus
+# (authored on win-amd64) records int32 — regenerating on Linux would record int64.
+# NumSharp's int32 matches the Windows authoring host. Sequential-draw cases
+# ("draws": 2) pin stream ADVANCEMENT, not just the first block.
+_RND_SEEDS = [42, 987654321]
+_RND_SIZES = [[7], [2, 3]]
+
+# (dist, args) — generic dists callable as np.random.<dist>(*args, size=...).
+_RND_PORTABLE_GENERIC = [
+    ("uniform", [0.0, 1.0]), ("uniform", [-3.0, 7.0]),
+]
+_RND_HOST_GENERIC = [
+    ("normal", [0.0, 1.0]), ("normal", [5.0, 2.5]),
+    ("lognormal", [0.0, 1.0]),
+    ("exponential", [1.0]), ("exponential", [2.5]),
+    ("standard_t", [3.5]),
+    ("standard_gamma", [2.0]), ("standard_gamma", [0.5]),   # shape<1: different sampler branch
+    ("gamma", [2.0, 3.0]), ("gamma", [2.0, 1.0]),   # shape>=1 matches (scale path included);
+                                                    # shape<1 via gamma() is CARVED, see below
+    ("beta", [2.0, 3.0]), ("beta", [0.5, 0.5]),
+    ("chisquare", [3.0]),
+    ("gumbel", [0.5, 2.0]),
+    ("laplace", [0.0, 1.0]),
+    ("logistic", [0.0, 1.0]),
+    ("power", [2.5]),
+    ("rayleigh", [1.5]),
+    ("triangular", [0.0, 3.0, 10.0]),
+    ("vonmises", [0.5, 2.0]),
+    ("wald", [3.0, 2.0]),
+    ("weibull", [1.79]),
+    ("poisson", [5.0]), ("poisson", [0.3]),
+    ("geometric", [0.35]),
+    ("zipf", [3.0]),
+    ("logseries", [0.6]),
+    ("noncentral_chisquare", [3.0, 1.5]),
+    ("noncentral_f", [5.0, 7.0, 1.5]),
+]
+# Stream-advancement pins: draw the same spec twice, record the SECOND block.
+_RND_DRAWS2 = {"uniform", "randint", "normal", "standard_gamma", "poisson"}
+
+# CARVED — the tier's findings on arrival (2026-08-14): eight samplers where NumSharp's
+# STREAM diverges from NumPy's (a different algorithm / draw order / accept-reject
+# boundary, not mere rounding), so the documented 1-to-1 claim does not hold for them
+# today. Each is carved from the green corpus and pinned under [OpenBugs]
+# (OpenBugs.Random.cs, RandomParity_* — remove the pin and re-add the spec when fixed):
+#   * gamma(shape<1, scale)    — gross divergence while standard_gamma(shape<1) AND
+#     gamma(shape>=1, any scale) match byte-for-byte: the two-arg gamma routes shape<1
+#     differently than NumSharp's own (correct) standard_gamma.
+#   * f(dfnum, dfden)          — not NumPy's (chisq/df)/(chisq/df) composition.
+#   * pareto(a)                — not NumPy's expm1(standard_exponential/a).
+#   * standard_cauchy()        — not NumPy's gauss/gauss ratio.
+#   * binomial(n, p)           — counts drift on BOTH internal algorithms (inversion at
+#     small n*p and BTPE at large): accept/reject boundaries land differently.
+#   * negative_binomial(n, p)  — poisson(gamma(n, (1-p)/p)) chain: occasional count
+#     flips downstream of ~ULP lambda differences (incl. one gross 21-vs-29).
+#   * multinomial(n, pvals)    — the internal per-category binomial loop consumes the
+#                                stream differently (values gross-diverge; dtype int32 matches).
+#   * multivariate_normal      — different factorization/transform (sign flips + values).
+# The small-ULP samplers (chisquare/wald/noncentral_f/dirichlet — arithmetic-ordering
+# noise on an IDENTICAL stream, measured ≤5/≤24/≤3/≤3 ULP) stay IN the tier under the
+# scoped R1 registry envelope (8 ULP; 32 for wald).
+#
+# int-output samplers: legacy RandomState returns C long — int32 on win-amd64, int64 on
+# Linux — while NumSharp fixes int64 (the Linux-NumPy shape). The corpus records these
+# WIDENED to int64 so the VALUE stream stays hard-gated and the dtype policy is
+# documented here rather than silently failing per-host. Two exceptions, both matching
+# win-amd64 NumPy unwidened: randint (NumSharp defaults int32) and PLAIN choice —
+# NumSharp's choice returns int32 without `p` but int64 WITH `p` (an internal
+# inconsistency worth its own fix; the with-p cases are widened so their values gate).
+_RND_INT64_CAST = {"permutation", "poisson", "zipf", "logseries", "hypergeometric", "geometric"}
+
+
+def gen_random_parity():
+    portable = []
+    host = []
+    n = 0
+
+    def emit(into, dist, params, r):
+        nonlocal n
+        r = np.asarray(r)
+        if dist in _RND_INT64_CAST or (dist == "choice" and "p" in params):
+            r = r.astype(np.int64)   # widen C-long (int32 here) to NumSharp's fixed int64 — see above
+        into.append({
+            "id": f"rnd/{dist}/seed{params['seed']}/{n}",
+            "op": "rnd",
+            "params": params,
+            "operands": [],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "rnd",
+            "valueclass": "stream",
+        })
+        n += 1
+
+    def run(dist, args, seed, size, draws=1, extra=None):
+        np.random.seed(seed)
+        r = None
+        for _ in range(draws):
+            if dist == "rand":
+                r = np.random.rand(*size)
+            elif dist == "randn":
+                r = np.random.randn(*size)
+            elif dist == "random_sample":
+                r = np.random.random_sample(tuple(size))
+            elif dist == "randint":
+                r = np.random.randint(int(args[0]), int(args[1]), tuple(size))
+            elif dist == "permutation":
+                r = np.random.permutation(int(args[0]))
+            elif dist == "shuffle":
+                # arange default dtype (int64 in NumPy 2.x, matching NumSharp's np.arange);
+                # the STREAM consumption is dtype-independent.
+                r = np.arange(int(args[0]))
+                np.random.shuffle(r)
+            elif dist == "choice":
+                r = np.random.choice(int(args[0]), tuple(size),
+                                     p=extra.get("p") if extra else None)
+            elif dist == "multinomial":
+                r = np.random.multinomial(int(args[0]), extra["pvals"], tuple(size))
+            elif dist == "dirichlet":
+                r = np.random.dirichlet(extra["alpha"], tuple(size))
+            elif dist == "multivariate_normal":
+                d = len(extra["mean"])
+                cov = np.array(extra["cov"]).reshape(d, d)
+                r = np.random.multivariate_normal(extra["mean"], cov, tuple(size))
+            else:
+                r = getattr(np.random, dist)(*args, tuple(size))
+        return r
+
+    def cases_for(into, dist, args, sized=True, extra=None):
+        specs = []
+        if sized:
+            specs.append((_RND_SEEDS[0], _RND_SIZES[0]))
+            specs.append((_RND_SEEDS[0], _RND_SIZES[1]))
+            specs.append((_RND_SEEDS[1], _RND_SIZES[0]))
+        else:
+            specs.append((_RND_SEEDS[0], None))
+            specs.append((_RND_SEEDS[1], None))
+        for seed, size in specs:
+            params = {"dist": dist, "seed": seed, "size": size, "args": args}
+            if extra:
+                params.update(extra)
+            emit(into, dist, params, run(dist, args, seed, size or [], extra=extra))
+        if dist in _RND_DRAWS2:
+            seed, size = _RND_SEEDS[0], _RND_SIZES[0]
+            params = {"dist": dist, "seed": seed, "size": size, "args": args, "draws": 2}
+            if extra:
+                params.update(extra)
+            emit(into, dist, params, run(dist, args, seed, size, draws=2, extra=extra))
+
+    # --- portable: pure MT19937 bits + exactly-rounded arithmetic ---------------------
+    for dist, args in _RND_PORTABLE_GENERIC:
+        cases_for(portable, dist, args)
+    cases_for(portable, "rand", [])
+    cases_for(portable, "random_sample", [])
+    for lo, hi in ((0, 100), (-50, 50), (0, 2)):
+        cases_for(portable, "randint", [lo, hi])
+    for nperm in (10, 1):
+        cases_for(portable, "permutation", [nperm], sized=False)
+    cases_for(portable, "shuffle", [10], sized=False)
+    cases_for(portable, "choice", [10])
+    cases_for(portable, "choice", [4], extra={"p": [0.1, 0.2, 0.3, 0.4]})
+
+    # --- host-libm: transform / rejection samplers ------------------------------------
+    # standard_cauchy / multinomial / multivariate_normal are CARVED (see _RND_INT64_CAST
+    # comment block) — gross stream divergence, pinned in OpenBugs.Random.cs.
+    for dist, args in _RND_HOST_GENERIC:
+        cases_for(host, dist, args)
+    cases_for(host, "randn", [])
+    cases_for(host, "standard_normal", [])
+    cases_for(host, "standard_exponential", [])
+    cases_for(host, "hypergeometric", [10, 7, 8])
+    cases_for(host, "dirichlet", [], extra={"alpha": [2.0, 3.0, 5.0]})
+    return portable, host
+
+
+# =====================================================================================
+# CBLAS product family ("products" tier). inner / vdot / vecdot / matvec / vecmat /
+# tensordot / linalg.multi_dot / linalg.matrix_power had NO value gate at all — only
+# their ERROR contracts were unit-tested — yet they carry exactly the cells that regress
+# silently: vdot/vecdot conjugate the FIRST operand (complex), vecdot reduces in the
+# LOOP dtype (int32 stays int32, not NEP50's int64), tensordot's axes forms, and
+# matrix_power's binary-exponentiation dtype rules.
+#
+# Two value classes:
+#   * SMALL-EXACT (the bulk): _mm_fill operands (small ints / halves / tiny complex) at
+#     contraction depth <= 4, where every float sum is exact and therefore
+#     order-independent — bit-equal is expected even against NumPy's BLAS-backed
+#     dot/inner/vdot. Integer dtypes are modular and exact by construction.
+#   * DEEP-TRUTH (f32/f64, K=2049): mixed-magnitude pseudo-noise where summation order
+#     shows. NumPy routes inner/vdot through BLAS while NumSharp runs managed kernels,
+#     so bit-parity is not the contract there — each case carries expected.truth (exact
+#     Fraction dot products) and the P1/P2 prefer-precise branches adjudicate exactly as
+#     in the precision tier.
+PRODUCT_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32",
+                  "int64", "uint64", "float16", "float32", "float64", "complex128"]
+
+
+def _prod_noise(k):
+    """Deterministic mixed-magnitude values (2^0..2^9 spread) — enough for summation
+    order to show at K=2049 without overflowing a float32 dot."""
+    return np.array([(_prec_hash01(i) - 0.5) * 2.0 ** ((i * 5) % 10) for i in range(k)],
+                    np.float64)
+
+
+def gen_products():
+    from fractions import Fraction
+    cases = []
+    n = 0
+    skipped = 0
+
+    def emit(op, params, pairs, r, tag, dt, truth=None):
+        nonlocal n
+        exp = {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+               "buffer": np.ascontiguousarray(r).tobytes().hex()}
+        if truth is not None:
+            truth = np.asarray(truth).astype(r.dtype)
+            assert truth.shape == r.shape
+            exp["truth"] = np.ascontiguousarray(truth).tobytes().hex()
+        cases.append({
+            "id": f"{op}/{tag}/{dt}/{n}",
+            "op": op,
+            "params": params,
+            "operands": [describe(b, v) for (b, v) in pairs],
+            "expected": exp,
+            "layout": tag,
+            "valueclass": "products",
+        })
+        n += 1
+
+    def try_emit(op, params, pairs, f, tag, dt, truth=None):
+        nonlocal skipped
+        try:
+            r = np.asarray(f())
+        except Exception:
+            skipped += 1   # NumPy raises (e.g. matrix_power on bool) — error parity is elsewhere
+            return
+        emit(op, params, pairs, r, tag, dt, truth)
+
+    # --- small-exact family across every dtype ----------------------------------------
+    for dt in PRODUCT_DTYPES:
+        A34 = _mm_fill((3, 4), dt)
+        B24 = _mm_fill((2, 4), dt)
+        M43 = _mm_fill((4, 3), dt)
+        v4 = _mm_fill((4,), dt)
+        w4 = v4[::-1].copy()
+        C = lambda a: (np.ascontiguousarray(a), np.ascontiguousarray(a))
+
+        try_emit("inner", {}, [C(A34), C(B24)], lambda: np.inner(A34, B24), "2d", dt)
+        try_emit("inner", {}, [C(v4), C(w4)], lambda: np.inner(v4, w4), "1d", dt)
+        try_emit("vdot", {}, [C(v4), C(w4)], lambda: np.vdot(v4, w4), "1d", dt)
+        try_emit("vdot", {}, [C(A34), C(np.ascontiguousarray(_mm_fill((3, 4), dt)[::-1]))],
+                 lambda: np.vdot(A34, _mm_fill((3, 4), dt)[::-1]), "2d_flat", dt)
+        try_emit("vecdot", {"axis": -1}, [C(B24), C(np.ascontiguousarray(B24[::-1]))],
+                 lambda: np.vecdot(B24, B24[::-1], axis=-1), "ax-1", dt)
+        try_emit("vecdot", {"axis": 0}, [C(M43), C(np.ascontiguousarray(M43[::-1]))],
+                 lambda: np.vecdot(M43, M43[::-1], axis=0), "ax0", dt)
+        try_emit("vecdot", {"keepdims": True}, [C(B24), C(np.ascontiguousarray(B24[::-1]))],
+                 lambda: np.vecdot(B24, B24[::-1], keepdims=True), "kd", dt)
+        try_emit("matvec", {}, [C(A34), C(v4)], lambda: np.matvec(A34, v4), "2d", dt)
+        bA = _mm_fill((2, 3, 4), dt); bv = _mm_fill((2, 4), dt)
+        try_emit("matvec", {}, [C(bA), C(bv)], lambda: np.matvec(bA, bv), "batched", dt)
+        try_emit("vecmat", {}, [C(v4), C(M43)], lambda: np.vecmat(v4, M43), "2d", dt)
+        bM = _mm_fill((2, 4, 3), dt)
+        try_emit("vecmat", {}, [C(bv), C(bM)], lambda: np.vecmat(bv, bM), "batched", dt)
+        T23 = _mm_fill((2, 3), dt); T34 = _mm_fill((3, 4), dt); T23b = _mm_fill((2, 3), dt)[::-1].copy()
+        try_emit("tensordot", {"axes": 1}, [C(T23), C(T34)], lambda: np.tensordot(T23, T34, 1), "int1", dt)
+        try_emit("tensordot", {"axes": 2}, [C(T23), C(T23b)], lambda: np.tensordot(T23, T23b, 2), "int2", dt)
+        try_emit("tensordot", {"axes": 0}, [C(v4), C(_mm_fill((3,), dt))],
+                 lambda: np.tensordot(v4, _mm_fill((3,), dt), 0), "int0", dt)
+        try_emit("tensordot", {"axesA": [1], "axesB": [0]}, [C(T23), C(T34)],
+                 lambda: np.tensordot(T23, T34, ([1], [0])), "pair", dt)
+        try_emit("tensordot", {"axesA": [0, 1], "axesB": [0, 1]}, [C(T23), C(T23b)],
+                 lambda: np.tensordot(T23, T23b, ([0, 1], [0, 1])), "pair2", dt)
+        D1 = _mm_fill((2, 3), dt); D2 = _mm_fill((3, 4), dt); D3 = _mm_fill((4, 2), dt)
+        try_emit("multi_dot", {}, [C(D1), C(D2), C(D3)],
+                 lambda: np.linalg.multi_dot([D1, D2, D3]), "chain3", dt)
+        vfirst = _mm_fill((3,), dt)
+        try_emit("multi_dot", {}, [C(vfirst), C(D2), C(D3)],
+                 lambda: np.linalg.multi_dot([vfirst, D2, D3]), "vec_first", dt)
+        S33 = _mm_fill((3, 3), dt)
+        for pw in (0, 2, 3):
+            try_emit("matrix_power", {"n": pw}, [C(S33)],
+                     lambda: np.linalg.matrix_power(S33, pw), f"n{pw}", dt)
+
+    # --- F-layout spot checks (the stride-aware read path) ----------------------------
+    for dt in ("int32", "float64"):
+        A = _mm_fill((3, 4), dt); B = _mm_fill((2, 4), dt)
+        baseA, viewA = _mm_layout(A, "F")
+        try_emit("inner", {}, [(baseA, viewA), (np.ascontiguousarray(B), B)],
+                 lambda: np.inner(viewA, B), "F", dt)
+
+    # --- deep-truth (f32/f64, K=2049): Fraction-exact references ----------------------
+    K = 2049
+    for dt in ("float32", "float64"):
+        ndt = np.dtype(dt)
+        a2 = _prod_noise(2 * K).reshape(2, K).astype(ndt)
+        b3 = _prod_noise(3 * K)[::-1].reshape(3, K).astype(ndt)
+        v = _prod_noise(K).astype(ndt)
+        w = _prod_noise(K)[::-1].copy().astype(ndt)
+        mk = np.ascontiguousarray(b3.T)      # (K,3)
+
+        def frdot(x, y):
+            return sum(Fraction(float(a)) * Fraction(float(b)) for a, b in zip(x.tolist(), y.tolist()))
+
+        t = np.array([[float(frdot(a2[i], b3[j])) for j in range(3)] for i in range(2)])
+        try_emit("inner", {}, [C(a2), C(b3)], lambda: np.inner(a2, b3), "deep", dt, truth=t)
+        t = np.array(float(frdot(v, w)))
+        try_emit("vdot", {}, [C(v), C(w)], lambda: np.vdot(v, w), "deep", dt, truth=t)
+        t = np.array([float(frdot(a2[i], a2[1 - i])) for i in range(2)])
+        try_emit("vecdot", {"axis": -1}, [C(a2), C(np.ascontiguousarray(a2[::-1]))],
+                 lambda: np.vecdot(a2, a2[::-1], axis=-1), "deep", dt, truth=t)
+        t = np.array([float(frdot(b3[i], v)) for i in range(3)])
+        try_emit("matvec", {}, [C(b3), C(v)], lambda: np.matvec(b3, v), "deep", dt, truth=t)
+        t = np.array([float(frdot(v, mk[:, j])) for j in range(3)])
+        try_emit("vecmat", {}, [C(v), C(mk)], lambda: np.vecmat(v, mk), "deep", dt, truth=t)
+        t = np.array([[float(frdot(a2[i], mk[:, j])) for j in range(3)] for i in range(2)])
+        try_emit("tensordot", {"axes": 1}, [C(a2), C(mk)],
+                 lambda: np.tensordot(a2, mk, 1), "deep", dt, truth=t)
+
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
     return cases
 
 
@@ -4858,8 +5277,15 @@ def main():
     elif mode == "precision":
         cases = gen_precision()                                         # truthful-vs-precise tier (needs mpmath)
         write_jsonl(os.path.join(corpus_dir, "precision.jsonl"), cases)
+    elif mode == "products":
+        cases = gen_products()                                          # CBLAS product family values
+        write_jsonl(os.path.join(corpus_dir, "products.jsonl"), cases)
+    elif mode == "random_parity":
+        portable, host = gen_random_parity()                            # seeded MT19937 stream bytes
+        write_jsonl(os.path.join(corpus_dir, "random_parity.jsonl"), portable)
+        write_jsonl(os.path.join(corpus_dir, "random_parity_host.jsonl"), host)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | specials | precision)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | specials | precision | random_parity | products)")
         sys.exit(2)
 
 

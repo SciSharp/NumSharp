@@ -333,5 +333,109 @@ namespace NumSharp.UnitTest
             actual.Should().BeApproximately(expected, 1e-10,
                 "gamma(2,1) with seed=42 should match NumPy");
         }
+
+        // ===== random_parity tier carve-outs (2026-08-14) ==================================
+        // Six samplers whose whole STREAM diverges from NumPy 2.4.2 (different algorithm /
+        // draw order, not rounding) — found by the random_parity differential tiers and
+        // CARVED from the green corpus (gen_oracle.gen_random_parity documents each). The
+        // underlying MT19937 stream and most transforms are byte-identical (uniform/randint/
+        // normal/standard_gamma/... all match), so these are per-sampler composition bugs.
+        // Expected values are real NumPy 2.4.2 output. Remove a pin AND re-add the spec to
+        // gen_random_parity when its sampler is fixed.
+
+        /// <summary>gamma(shape&lt;1) via the two-arg API gross-diverges while NumSharp's own
+        /// standard_gamma(shape&lt;1) and gamma(shape&gt;=1, any scale) match byte-for-byte —
+        /// the two-arg route handles shape&lt;1 with a different sampler than standard_gamma.</summary>
+        [TestMethod]
+        [OpenBugs]
+        public void RandomParity_GammaShapeBelowOne_Seed42_ShouldMatchNumPy()
+        {
+            np.random.seed(42);
+            var r = np.random.gamma(0.5, 1.0, new Shape(3));
+            r.GetDouble(0).Should().Be(0.14028030062619642, "np.random.gamma(0.5, 1) first draw, seed 42");
+        }
+
+        /// <summary>binomial counts drift on BOTH internal algorithms (inversion at small n*p,
+        /// BTPE at large) — accept/reject boundaries land differently from NumPy's.</summary>
+        [TestMethod]
+        [OpenBugs]
+        public void RandomParity_Binomial_Seed42_ShouldMatchNumPy()
+        {
+            np.random.seed(42);
+            var r = np.random.binomial(10, 0.35, new Shape(7));
+            var expected = new long[] { 3, 6, 4, 4, 2, 2, 1 };
+            for (int i = 0; i < expected.Length; i++)
+                Convert.ToInt64(r.GetAtIndex(i)).Should().Be(expected[i],
+                    $"np.random.binomial(10, 0.35)[{i}], seed 42");
+        }
+
+        /// <summary>negative_binomial = poisson(gamma(n, (1-p)/p)): occasional count flips
+        /// downstream of ~ULP lambda differences, incl. a gross 21-vs-29 at index 6.</summary>
+        [TestMethod]
+        [OpenBugs]
+        public void RandomParity_NegativeBinomial_Seed42_ShouldMatchNumPy()
+        {
+            np.random.seed(42);
+            var r = np.random.negative_binomial(5.0, 0.4, new Shape(7));
+            var expected = new long[] { 7, 5, 1, 5, 5, 6, 29 };
+            for (int i = 0; i < expected.Length; i++)
+                Convert.ToInt64(r.GetAtIndex(i)).Should().Be(expected[i],
+                    $"np.random.negative_binomial(5, 0.4)[{i}], seed 42");
+        }
+
+        /// <summary>f() is not NumPy's (chisquare(dfnum)/dfnum)/(chisquare(dfden)/dfden) composition.</summary>
+        [TestMethod]
+        [OpenBugs]
+        public void RandomParity_F_Seed42_ShouldMatchNumPy()
+        {
+            np.random.seed(42);
+            var r = np.random.f(5.0, 7.0, new Shape(2));
+            r.GetDouble(0).Should().Be(1.426878677609774, "np.random.f(5, 7) first draw, seed 42");
+        }
+
+        /// <summary>pareto() is not NumPy's expm1(standard_exponential()/a).</summary>
+        [TestMethod]
+        [OpenBugs]
+        public void RandomParity_Pareto_Seed42_ShouldMatchNumPy()
+        {
+            np.random.seed(42);
+            var r = np.random.pareto(3.0, new Shape(2));
+            r.GetDouble(0).Should().Be(0.16932036645405568, "np.random.pareto(3) first draw, seed 42");
+        }
+
+        /// <summary>standard_cauchy() is not NumPy's gauss/gauss ratio.</summary>
+        [TestMethod]
+        [OpenBugs]
+        public void RandomParity_StandardCauchy_Seed42_ShouldMatchNumPy()
+        {
+            np.random.seed(42);
+            var r = np.random.standard_cauchy(new Shape(2));
+            r.GetDouble(0).Should().Be(-3.5924974762375737, "np.random.standard_cauchy() first draw, seed 42");
+        }
+
+        /// <summary>multinomial's per-category binomial loop consumes the stream differently
+        /// (dtype matches; the COUNTS diverge).</summary>
+        [TestMethod]
+        [OpenBugs]
+        public void RandomParity_Multinomial_Seed42_ShouldMatchNumPy()
+        {
+            np.random.seed(42);
+            var r = np.random.multinomial(20, new[] { 0.2, 0.3, 0.5 });
+            Convert.ToInt64(r.GetAtIndex(0)).Should().Be(3, "np.random.multinomial(20, [.2,.3,.5]) counts, seed 42");
+            Convert.ToInt64(r.GetAtIndex(1)).Should().Be(10);
+            Convert.ToInt64(r.GetAtIndex(2)).Should().Be(7);
+        }
+
+        /// <summary>multivariate_normal uses a different factorization/transform (sign flips + values).</summary>
+        [TestMethod]
+        [OpenBugs]
+        public void RandomParity_MultivariateNormal_Seed42_ShouldMatchNumPy()
+        {
+            np.random.seed(42);
+            var cov = new double[2, 2] { { 1.0, 0.5 }, { 0.5, 2.0 } };
+            var r = np.random.multivariate_normal(new[] { 0.0, 1.0 }, cov, new[] { 2 });
+            r.GetDouble(0, 0).Should().Be(0.16865044563071147, "mvn([0,1], [[1,.5],[.5,2]]) first row, seed 42");
+            r.GetDouble(0, 1).Should().Be(1.728877966541595);
+        }
     }
 }

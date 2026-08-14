@@ -63,6 +63,12 @@ namespace NumSharp.UnitTest.Fuzz
             "maximum", "minimum", "fmax", "fmin"
         };
 
+        /// <summary>The CBLAS product family gated by the products tier (P3's f32 deep scope).</summary>
+        private static readonly System.Collections.Generic.HashSet<string> ProductOps = new()
+        {
+            "inner", "vdot", "vecdot", "matvec", "vecmat", "tensordot"
+        };
+
         /// <summary>
         ///     The unary ops whose float32 loop NumSharp ports from NumPy's own kernel rather than
         ///     delegating to the platform libm, and which are therefore held BIT-EXACT (no ULP
@@ -363,24 +369,47 @@ namespace NumSharp.UnitTest.Fuzz
                 // less truthful than NumPy: fall through — known-bug branches or a red gate.
             }
 
-            // (P3) The precision losses the tier DISCOVERED on arrival (2026-08-14), excused as
-            //      tracked known bugs with a measured bound — kept in the corpus so a kernel fix
-            //      flips them bit-exact automatically and a WORSE regression still fails:
+            // (P3) The precision losses the truth-bearing tiers DISCOVERED on arrival
+            //      (2026-08-14), excused as tracked known bugs with a measured bound — kept in
+            //      the corpus so a kernel fix flips them bit-exact automatically and a WORSE
+            //      regression still fails:
             //        * float32 var/std accumulation: 55/26 ULP from truth where NumPy's two-pass
             //          pairwise sits at 3/2 (contiguous wide-magnitude input);
             //        * the NEGATIVE-STRIDE reduce path (sum/mean/var/std): 11-32 ULP from truth
             //          where NumPy is EXACT on the same reversed view — the backward traversal
-            //          accumulates in a worse order than the contiguous kernel.
+            //          accumulates in a worse order than the contiguous kernel;
+            //        * float32 DEEP product contractions (inner/tensordot at K=2049, products
+            //          tier): a few elements land 1-2 ULP past the prefer-precise slack while
+            //          NumPy's BLAS sgemm multi-accumulator stays ≤1 ULP from exact (f64 deep
+            //          products are prefer-precise-excused or bit-exact; vdot/vecdot/matvec/
+            //          vecmat f32 sit WITHIN the slack).
             //      Bounded at 256 ULP-vs-truth (≈5x the measured worst, room for cross-host SIMD
             //      lane variation); a loss beyond that — or in any other cell — is red.
             if (kind == DivergenceKind.Value && truth != null && expected != null
                 && truth.Length == expected.Length && diffs.Count > 0
                 && ((c.Layout == "negstride_1d"
                      && (c.Op == "sum" || c.Op == "mean" || c.Op == "var" || c.Op == "std"))
-                    || (tc == NPTypeCode.Single && (c.Op == "var" || c.Op == "std")))
+                    || (tc == NPTypeCode.Single && (c.Op == "var" || c.Op == "std"))
+                    || (tc == NPTypeCode.Single && ProductOps.Contains(c.Op)))
                 && diffs.All(d => BitDiff.UlpDistance(actual, truth, d.Index, tc) <= 256))
                 return "precision-loss (known): f32 var/std accumulation + negative-stride reduction "
-                     + "accumulation lose ULP vs truth where NumPy stays near-exact (bounded ≤256) [known bug]";
+                     + "accumulation + f32 deep product contraction lose ULP vs truth where NumPy "
+                     + "stays near-exact (bounded ≤256) [known bug]";
+
+            // (R1) np.random transform samplers within a few ULP of NumPy on the SAME CRT:
+            //      chisquare / wald / noncentral_f / dirichlet compose their draws with a
+            //      slightly different arithmetic ordering than NumPy's C (measured ≤5/≤24/≤3/≤3
+            //      ULP on the corpus; the underlying uniform/gauss STREAM is bit-identical — a
+            //      stream slip produces gross divergence and still fails, as the eight carved
+            //      samplers in gen_random_parity did). Per-dist caps: 32 for wald (its
+            //      inverse-Gaussian composition drifts the most), 8 for the rest.
+            if (c.Op == "rnd" && kind == DivergenceKind.Value && diffs.Count > 0
+                && c.Params != null && c.Params.TryGetValue("dist", out var rndDist)
+                && rndDist.GetString() is "chisquare" or "wald" or "noncentral_f" or "dirichlet"
+                && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc,
+                                                    rndDist.GetString() == "wald" ? 32 : 8)))
+                return "rnd transform ~ULP: chisquare/wald/noncentral_f/dirichlet arithmetic "
+                     + "ordering differs from NumPy's C composition (stream identical) [documented]";
 
             // --- Reductions (single-operand, but classified before the unary rules) ---
             if (ReduceOps.Contains(c.Op))
