@@ -57,6 +57,8 @@ static class Harness
                 case "torture": Torture(); break;
                 case "memviewfuzz": MemViewFuzz(); break;
                 case "soak": Soak(); break;
+                case "byteident": ByteIdent(); break;
+                case "nansweep": NanSweep(); break;
                 default: Console.WriteLine("unknown scenario"); rc = 2; break;
             }
         }
@@ -1461,6 +1463,188 @@ static class Harness
         Console.WriteLine($"  soak done: net WS growth {grow/1024/1024}MB, E={NDArrayPythonInterop.LiveExports} I={NDArrayPythonInterop.LiveImports}");
         if (grow > 300L * 1024 * 1024) FIND($"soak WS grew {grow/1024/1024}MB over {N} iters (possible slow leak)");
         else OK($"soak WS growth bounded ({grow/1024/1024}MB over {N} iters)");
+    }
+
+    // ============================================================
+    //  BYTEIDENT: same np.* op in numpy vs NumSharp, compare RAW BYTES
+    //   - identical INPUT bytes (finite literals, or numpy specials imported byte-exact)
+    //   - identical op in each engine
+    //   - compare output dtype + tobytes() (hex on mismatch)
+    // ============================================================
+    static int _biSame, _biDiff, _biConv;
+    static void ByteIdent()
+    {
+        _biSame = _biDiff = _biConv = 0;
+        var scope = Scope();
+
+        Console.WriteLine("\n== FAMILY A: produce specials from FINITE inputs (inputs trivially byte-identical) ==");
+        // float64
+        Cmp("f8 0/0", () => np.array(new[] { 0.0 }) / np.array(new[] { 0.0 }), "np.array([0.0])/np.array([0.0])");
+        Cmp("f8 1/0", () => np.array(new[] { 1.0 }) / np.array(new[] { 0.0 }), "np.array([1.0])/np.array([0.0])");
+        Cmp("f8 -1/0", () => np.array(new[] { -1.0 }) / np.array(new[] { 0.0 }), "np.array([-1.0])/np.array([0.0])");
+        Cmp("f8 sqrt(-1)", () => np.sqrt(np.array(new[] { -1.0 })), "np.sqrt(np.array([-1.0]))");
+        Cmp("f8 log(-1)", () => np.log(np.array(new[] { -1.0 })), "np.log(np.array([-1.0]))");
+        Cmp("f8 log(0)", () => np.log(np.array(new[] { 0.0 })), "np.log(np.array([0.0]))");
+        Cmp("f8 inf-inf", () => (np.array(new[] { 1.0 }) / np.array(new[] { 0.0 })) - (np.array(new[] { 1.0 }) / np.array(new[] { 0.0 })), "np.array([np.inf])-np.array([np.inf])");
+        Cmp("f8 0*inf", () => np.array(new[] { 0.0 }) * (np.array(new[] { 1.0 }) / np.array(new[] { 0.0 })), "np.array([0.0])*np.array([np.inf])");
+        Cmp("f8 exp(1000)", () => np.exp(np.array(new[] { 1000.0 })), "np.exp(np.array([1000.0]))");
+        Cmp("f8 exp(-1000)", () => np.exp(np.array(new[] { -1000.0 })), "np.exp(np.array([-1000.0]))");
+        // float32
+        Cmp("f4 0/0", () => np.array(new[] { 0f }) / np.array(new[] { 0f }), "np.array([0.0],dtype='f4')/np.array([0.0],dtype='f4')");
+        Cmp("f4 sqrt(-1)", () => np.sqrt(np.array(new[] { -1f })), "np.sqrt(np.array([-1.0],dtype='f4'))");
+        Cmp("f4 log(-1)", () => np.log(np.array(new[] { -1f })), "np.log(np.array([-1.0],dtype='f4'))");
+        Cmp("f4 exp(1000)", () => np.exp(np.array(new[] { 1000f })), "np.exp(np.array([1000.0],dtype='f4'))");
+        // float16
+        Cmp("f2 sqrt(-1)", () => np.sqrt(np.array(new[] { (Half)(-1.0) })), "np.sqrt(np.array([-1.0],dtype='f2'))");
+        Cmp("f2 0/0", () => np.array(new[] { (Half)0.0 }) / np.array(new[] { (Half)0.0 }), "np.array([0.0],dtype='f2')/np.array([0.0],dtype='f2')");
+
+        Console.WriteLine("\n== FAMILY B: transform GIVEN specials (input bytes imported from numpy => identical) ==");
+        // f8/f4/f2 specials vector: [1,-1,0,-0,inf,-inf,nan,2.5,-0.5,subnormal,max]
+        foreach (var (dt, npdt) in new[] { ("f8", "float64"), ("f4", "float32"), ("f2", "float16") })
+        {
+            string subnormal = dt == "f8" ? "5e-324" : dt == "f4" ? "1e-45" : "6e-8";
+            string maxv = dt == "f8" ? "1.7976931348623157e308" : dt == "f4" ? "3.4e38" : "65504";
+            string vec(string ns) => $"{ns}.array([1.0,-1.0,0.0,-0.0,{ns}.inf,-{ns}.inf,{ns}.nan,2.5,-0.5,{subnormal},{maxv}], dtype='{dt}')";
+            string npVec = vec("np"), importVec = vec("_np");
+
+            CmpB($"{dt} sqrt(x)", importVec, n => np.sqrt(n), $"np.sqrt({npVec})");
+            CmpB($"{dt} log(x)", importVec, n => np.log(n), $"np.log({npVec})");
+            CmpB($"{dt} exp(x)", importVec, n => np.exp(n), $"np.exp({npVec})");
+            CmpB($"{dt} sin(x)", importVec, n => np.sin(n), $"np.sin({npVec})");
+            CmpB($"{dt} cos(x)", importVec, n => np.cos(n), $"np.cos({npVec})");
+            CmpB($"{dt} abs(x)", importVec, n => np.abs(n), $"np.abs({npVec})");
+            CmpB($"{dt} negative(x)", importVec, n => np.negative(n), $"np.negative({npVec})");
+            CmpB($"{dt} square(x)", importVec, n => np.square(n), $"np.square({npVec})");
+            CmpB($"{dt} sign(x)", importVec, n => np.sign(n), $"np.sign({npVec})");
+            CmpB($"{dt} reciprocal(x)", importVec, n => np.reciprocal(n), $"np.reciprocal({npVec})");
+            CmpB($"{dt} x+x", importVec, n => n + n, $"({npVec})+({npVec})");
+            CmpB($"{dt} x-x", importVec, n => n - n, $"({npVec})-({npVec})");
+            CmpB($"{dt} x*x", importVec, n => n * n, $"({npVec})*({npVec})");
+            CmpB($"{dt} x/x", importVec, n => n / n, $"({npVec})/({npVec})");
+            // reductions
+            CmpB($"{dt} sum(x)", importVec, n => np.sum(n), $"np.sum({npVec})");
+            CmpB($"{dt} min(x)", importVec, n => np.min(n), $"np.min({npVec})");
+            CmpB($"{dt} max(x)", importVec, n => np.max(n), $"np.max({npVec})");
+        }
+
+        Console.WriteLine("\n== complex128 specials ==");
+        {
+            string cvec(string ns) => $"{ns}.array([1+2j, complex({ns}.nan,1.0), complex(1.0,{ns}.nan), complex({ns}.inf,-{ns}.inf), 0+0j, complex(-0.0,0.0)], dtype='complex128')";
+            CmpB("c16 x+x", cvec("_np"), n => n + n, $"({cvec("np")})+({cvec("np")})");
+            CmpB("c16 x*x", cvec("_np"), n => n * n, $"({cvec("np")})*({cvec("np")})");
+            CmpB("c16 abs(x)", cvec("_np"), n => np.abs(n), $"np.abs({cvec("np")})");
+            CmpB("c16 sqrt(x)", cvec("_np"), n => np.sqrt(n), $"np.sqrt({cvec("np")})");
+        }
+
+        Console.WriteLine("\n== CONSTRUCTION convention (C# double.NaN vs numpy np.nan) ==");
+        Cmp("f8 full(NaN) construct", () => np.full(new Shape(3), double.NaN, NPTypeCode.Double), "np.full(3, np.nan)");
+        Cmp("f8 array([NaN]) construct", () => np.array(new[] { double.NaN }), "np.array([np.nan])");
+
+        Console.WriteLine($"\n  byteident: identical={_biSame}  divergent={_biDiff}  (conversion-mismatch={_biConv})");
+        if (_biDiff == 0) OK($"all {_biSame} op comparisons byte-identical to numpy");
+        else FIND($"{_biDiff} op comparisons DIVERGE from numpy in raw bytes on supported dtypes");
+        WaitCounters(0, 0, 8000);
+    }
+
+    // ============================================================
+    //  NANSWEEP: map the full NaN-bit divergence surface (minimal inputs)
+    // ============================================================
+    static void NanSweep()
+    {
+        _biSame = _biDiff = _biConv = 0;
+        var scope = Scope();
+        foreach (var dt in new[] { "f8", "f4", "f2" })
+        {
+            Console.WriteLine($"\n== {dt} ==");
+            string pos = $"{{0}}.array([{{0}}.nan], dtype='{dt}')";
+            string infpair = $"{{0}}.array([{{0}}.inf, -{{0}}.inf], dtype='{dt}')";
+            string mix = $"{{0}}.array([1.0, {{0}}.nan, 2.0], dtype='{dt}')";
+            string zero = $"{{0}}.array([0.0], dtype='{dt}')";
+            string I(string t) => string.Format(t, "_np");
+            string N(string t) => string.Format(t, "np");
+
+            CmpB($"{dt} sign(nan)", I(pos), n => np.sign(n), $"np.sign({N(pos)})");
+            CmpB($"{dt} negative(nan)", I(pos), n => np.negative(n), $"np.negative({N(pos)})");
+            CmpB($"{dt} abs(nan)", I(pos), n => np.abs(n), $"np.abs({N(pos)})");
+            CmpB($"{dt} sqrt(nan)", I(pos), n => np.sqrt(n), $"np.sqrt({N(pos)})");
+            CmpB($"{dt} square(nan)", I(pos), n => np.square(n), $"np.square({N(pos)})");
+            CmpB($"{dt} reciprocal(nan)", I(pos), n => np.reciprocal(n), $"np.reciprocal({N(pos)})");
+            CmpB($"{dt} nan+1", I(pos), n => n + np.array(new[] { 1.0 }).astype(n.typecode), $"({N(pos)})+np.array([1.0],dtype='{dt}')");
+            CmpB($"{dt} sum(inf,-inf)", I(infpair), n => np.sum(n), $"np.sum({N(infpair)})");
+            CmpB($"{dt} sum([1,nan,2])", I(mix), n => np.sum(n), $"np.sum({N(mix)})");
+            CmpB($"{dt} mean([1,nan,2])", I(mix), n => np.mean(n), $"np.mean({N(mix)})");
+            CmpB($"{dt} prod([1,nan,2])", I(mix), n => np.prod(n), $"np.prod({N(mix)})");
+            CmpB($"{dt} std([1,nan,2])", I(mix), n => np.std(n), $"np.std({N(mix)})");
+            CmpB($"{dt} var([1,nan,2])", I(mix), n => np.var(n), $"np.var({N(mix)})");
+            CmpB($"{dt} min([1,nan,2])", I(mix), n => np.amin(n), $"np.amin({N(mix)})");
+            CmpB($"{dt} max([1,nan,2])", I(mix), n => np.amax(n), $"np.amax({N(mix)})");
+            CmpB($"{dt} maximum(nan,1)", I(pos), n => np.maximum(n, np.array(new[] { 1.0 }).astype(n.typecode)), $"np.maximum({N(pos)}, np.array([1.0],dtype='{dt}'))");
+            CmpB($"{dt} 0/0", I(zero), n => n / n, $"({N(zero)})/({N(zero)})");
+        }
+        Console.WriteLine("\n== complex128 ==");
+        string cnan1 = "{0}.array([complex(1.0,{0}.nan)], dtype='complex128')";
+        string cnan2 = "{0}.array([complex({0}.nan,1.0)], dtype='complex128')";
+        CmpB("c16 sqrt(1+nanj)", string.Format(cnan1, "_np"), n => np.sqrt(n), $"np.sqrt({string.Format(cnan1, "np")})");
+        CmpB("c16 sqrt(nan+1j)", string.Format(cnan2, "_np"), n => np.sqrt(n), $"np.sqrt({string.Format(cnan2, "np")})");
+        CmpB("c16 log(1+nanj)", string.Format(cnan1, "_np"), n => np.log(n), $"np.log({string.Format(cnan1, "np")})");
+        CmpB("c16 exp(1+nanj)", string.Format(cnan1, "_np"), n => np.exp(n), $"np.exp({string.Format(cnan1, "np")})");
+        CmpB("c16 reciprocal(1+nanj)", string.Format(cnan1, "_np"), n => np.reciprocal(n), $"np.reciprocal({string.Format(cnan1, "np")})");
+
+        Console.WriteLine($"\n  nansweep: identical={_biSame}  divergent={_biDiff}");
+        if (_biDiff == 0) OK($"all {_biSame} nan comparisons byte-identical");
+        else FIND($"{_biDiff} nan-producing ops diverge in raw bytes");
+        WaitCounters(0, 0, 8000);
+    }
+
+    // Family A: independent finite inputs -> compare result bytes
+    static void Cmp(string label, Func<NDArray> ns, string npExpr)
+    {
+        try
+        {
+            NDArray r = ns();
+            using (Py.GIL()) { using var a = r.ToNumpy(); Scope().Set("nsr", a); }
+            PyExec($"npr = np.asarray({npExpr})");
+            bool dtEq = PyB("nsr.dtype == npr.dtype");
+            bool byteEq = PyB("nsr.tobytes() == npr.tobytes()");
+            if (dtEq && byteEq) { _biSame++; OK($"{label}: byte-identical [{PyS("nsr.dtype")}]"); }
+            else
+            {
+                if (!dtEq) _biConv++;
+                _biDiff++;
+                FIND($"{label}: NS={PyS("nsr.dtype")}:{PyS("nsr.tobytes().hex()")} NP={PyS("npr.dtype")}:{PyS("npr.tobytes().hex()")}");
+            }
+        }
+        catch (Exception e) { _biDiff++; FIND($"{label} threw {e.GetType().Name}: {e.Message}"); }
+    }
+
+    // Family B: import numpy-built input (byte-exact), run op in NumSharp, compare to numpy-native
+    static void CmpB(string label, string importExpr, Func<NDArray, NDArray> nsOp, string npExpr)
+    {
+        try
+        {
+            NDArray xns;
+            using (Py.GIL())
+            {
+                PythonEngine.RunSimpleString($"import numpy as _np\n_bx = {importExpr}");
+                using var main = Py.Import("__main__"); using var bx = main.GetAttr("_bx");
+                xns = NDArrayPythonInterop.ToNDArray(bx);   // byte-exact copy of the input
+            }
+            NDArray r = nsOp(xns);
+            using (Py.GIL()) { using var a = r.ToNumpy(); Scope().Set("nsr", a); }
+            PyExec($"npr = np.asarray({npExpr})");
+            bool dtEq = PyB("nsr.dtype == npr.dtype");
+            bool byteEq = PyB("nsr.shape==npr.shape and nsr.tobytes() == npr.tobytes()");
+            if (dtEq && byteEq) { _biSame++; OK($"{label}: byte-identical [{PyS("nsr.dtype")}]"); }
+            else
+            {
+                if (!dtEq) _biConv++;
+                _biDiff++;
+                // show only first differing element index for readability
+                FIND($"{label}: NS[{PyS("nsr.dtype")}]={PyS("nsr.tobytes().hex()")} | NP[{PyS("npr.dtype")}]={PyS("npr.tobytes().hex()")}");
+            }
+            xns.Dispose();
+        }
+        catch (Exception e) { _biDiff++; FIND($"{label} threw {e.GetType().Name}: {e.Message}"); }
     }
 
     // ---------------- misc helpers ----------------

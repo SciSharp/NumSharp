@@ -152,6 +152,30 @@ memviewfuzz soak getset`).
    interop defect; noted because it is an easy trap when poking imported views by hand (use the
    dtype-correct accessor).
 
+## Pass 3 — byte-identity vs numpy (2026-08-14)
+
+Deep-dived the two pass-2 observations (NaN convention; `Get/SetDouble`) against a strict byte-identity
+standard, running the **same `np.*` op in pure numpy and in NumSharp and comparing raw bytes**
+(scenarios `byteident`, `nansweep`). Full analysis: `docs/bugs/nan-byte-identity-vs-numpy.md`.
+
+**Correct design (not bugs):** (1) construction from a C# `double.NaN`/`Half.NaN` *literal* stores
+`0xFFF8…` vs numpy's `np.nan` `0x7FF8…` — a language default; both engines faithfully store whatever
+NaN they are handed. (2) `Get/SetDouble` are **typed double-only accessors** by design (the general
+ones are `GetValue<T>`/`SetValue<T>`); `GetDouble` NREs on the wrong dtype per its XML contract. Minor
+core nit: `SetDouble` lacks that guard and silently corrupts on misuse — a follow-up, not byte-identity.
+(3) float64 is byte-identical across all 34 tested ops; float32/float16 NaN-producing arithmetic on
+minimal inputs matches.
+
+**Real byte-identity problems (NumSharp-core, value-correct / bit-divergent):** NumSharp emits .NET's
+negative-signed NaN where numpy emits the positive quiet NaN, in — **float16 `sign(nan)`**, **float16
+`maximum(nan,x)`** (`0xfe00` vs `0x7e00`); **complex128 `sqrt`/`log`/`reciprocal`** with a NaN component
+(`0xfff8…` vs `0x7ff8…`, root-caused to `NDComplexMath`'s `double.NaN` returns, e.g. `Hypot` line 540);
+and **float32 `sum`** of long mixed-special vectors (`0xffc00000` vs `0x7fc00000`, an order-dependent
+NaN-propagation difference). These are gaps in NumSharp's otherwise byte-exact numpy ports; a correct
+fix is **per-path** (not a blanket canonicalization — some complex-NaN cases already agree) and must be
+regenerated against the differential-fuzz oracle, so it is documented as a recommended follow-up rather
+than applied here.
+
 ## Net assessment
 
 The integration is high-quality: correctness is numpy-exact across dtypes/layouts (confirmed in pass 2
