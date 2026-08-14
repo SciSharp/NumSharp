@@ -19,11 +19,11 @@ namespace NumSharp
     ///     <c>fftfreq/rfftfreq/fftshift/ifftshift</c>).
     ///
     ///     <para>The helpers (<c>fftfreq</c>/<c>rfftfreq</c>/<c>fftshift</c>/<c>ifftshift</c>) are pure
-    ///     compositions of existing <c>np.*</c> functions and compute fully. The transforms validate
-    ///     and resolve everything NumPy's Python layer does — n/axis/norm/shape/dtype and the N-D→1-D
-    ///     decomposition — then throw <see cref="System.NotImplementedException"/> at the engine seam
-    ///     (<c>PocketFFTDriver.Execute</c>), which a separate agent implements. Once the 1-D leaves are
-    ///     wired the N-D wrappers compute for free (they are pure compositions of the 1-D transforms).</para>
+    ///     compositions of existing <c>np.*</c> functions. The transforms validate and resolve
+    ///     everything NumPy's Python layer does — n/axis/norm/shape/dtype and the N-D→1-D decomposition
+    ///     — then compute through <c>PocketFFTDriver.Execute</c>, the managed port of pocketfft's 1-D
+    ///     engine (bit-identical to NumPy 2.4.2 on the double/complex128 path). The N-D wrappers are
+    ///     pure compositions of the 1-D transforms.</para>
     /// </summary>
     /// <remarks>https://numpy.org/doc/stable/reference/routines.fft.html</remarks>
     public partial class FourierModule

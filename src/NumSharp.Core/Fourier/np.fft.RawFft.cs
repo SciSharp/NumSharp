@@ -74,6 +74,10 @@ namespace NumSharp
         internal static int TakeShape(NDArray a, int axis)
         {
             int nd = a.ndim;
+            if (nd == 0)
+                // np.take from a 0-d shape (fft2/rfft2 of a scalar): NumPy's take raises this, distinct
+                // from the per-axis out-of-bounds message below (which presumes a non-empty shape).
+                throw new IndexError("cannot do a non-empty take from an empty axes.");
             int ax = axis;
             if (ax < 0) ax += nd;
             if (ax < 0 || ax >= nd)
@@ -133,6 +137,15 @@ namespace NumSharp
                 if (@out.ndim != a.ndim || @out.shape[axis] != nOut)
                     throw new ValueError("output array has wrong shape.");
             }
+
+            // rfft (real-forward) has NO complex loop: NumPy's rfft_n_even/rfft_n_odd ufunc refuses a
+            // complex input rather than silently drop its imaginary part. Fire here — after n<1, norm,
+            // axis and out have all been validated — matching NumPy's ordering (the type error is raised
+            // at the ufunc call). The message names the parity-selected ufunc exactly as NumPy does.
+            if (isReal && isForward && a.typecode == NPTypeCode.Complex)
+                throw new TypeError(
+                    $"ufunc '{(n % 2 == 0 ? "rfft_n_even" : "rfft_n_odd")}' not supported for the input types, " +
+                    "and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''");
 
             // Wired to the ported pocketfft engine (PocketFFTDriver.cs). The driver resolves the
             // output (a.shape with axis replaced by nOut, dtype per the policy above — complex128 for
@@ -196,7 +209,14 @@ namespace NumSharp
                 throw new ValueError("Shape and axes have different lengths.");
 
             if (invreal && shapeless)
+            {
+                // irfftn/irfft2 of a 0-d input (or explicit empty axes): NumPy indexes s[-1]/axes[-1] on
+                // an empty list and leaks a plain IndexError. Reproduce it before the subscript below
+                // throws a raw IndexOutOfRangeException.
+                if (axesList.Length == 0)
+                    throw new IndexError("list index out of range");
                 sList[sList.Length - 1] = (ShapeAt(a, axesList[axesList.Length - 1]) - 1) * 2;
+            }
 
             // Resolve the -1 sentinel to the full input length along that axis (a.shape[axes[i]]).
             for (int i = 0; i < sList.Length; i++)
