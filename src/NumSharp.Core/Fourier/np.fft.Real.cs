@@ -66,6 +66,11 @@ namespace NumSharp
         public NDArray rfftn(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
         {
             var (ss, aa) = CookNdArgs(a, s, axes, invreal: false);
+            // NumPy indexes s[-1]/axes[-1] with no axes to transform (0-d input, or an explicit
+            // empty `axes`), leaking a bare IndexError("list index out of range"). Reproduce it here
+            // rather than let C# surface an IndexOutOfRangeException.
+            if (aa.Length == 0)
+                throw new IndexError("list index out of range");
             a = rfft(a, ss[aa.Length - 1], aa[aa.Length - 1], norm, @out);
             for (int ii = aa.Length - 2; ii >= 0; ii--)
                 a = fft(a, ss[ii], aa[ii], norm, @out);
@@ -100,6 +105,11 @@ namespace NumSharp
         public NDArray irfftn(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
         {
             var (ss, aa) = CookNdArgs(a, s, axes, invreal: true);
+            // As in rfftn: no axes to transform leaks NumPy's IndexError("list index out of range")
+            // at the s[-1]/axes[-1] access. (For a shapeless `s`, the invreal defaulting inside
+            // CookNdArgs reaches that access first — see the report's shared-core escalation.)
+            if (aa.Length == 0)
+                throw new IndexError("list index out of range");
             for (int ii = 0; ii < aa.Length - 1; ii++)
                 a = ifft(a, ss[ii], aa[ii], norm, @out: null);
             a = irfft(a, ss[aa.Length - 1], aa[aa.Length - 1], norm, @out);
