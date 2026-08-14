@@ -1,3 +1,6 @@
 [submodule "src/numpy"]
 	path = src/numpy
 	url = https://github.com/numpy/numpy.git
+[submodule "src/pocketfft"]
+	path = src/pocketfft
+	url = https://github.com/mreineck/pocketfft.git
