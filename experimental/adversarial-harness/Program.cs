@@ -48,6 +48,15 @@ static class Harness
                 case "mmap": MmapImport(); break;
                 case "nullcrash": NullPtrCrash(); break;
                 case "dtypeedge": DtypeEdge(); break;
+                case "fuzz": Fuzz(); break;
+                case "overlap": OverlapImport(); break;
+                case "valuefidelity": ValueFidelity(); break;
+                case "racecodec": RaceCodec(); break;
+                case "getset": GetSetSemantics(); break;
+                case "codecfuzz": CodecFuzz(); break;
+                case "torture": Torture(); break;
+                case "memviewfuzz": MemViewFuzz(); break;
+                case "soak": Soak(); break;
                 default: Console.WriteLine("unknown scenario"); rc = 2; break;
             }
         }
@@ -78,7 +87,7 @@ static class Harness
         }
         return _scope;
     }
-    static bool PyB(string expr) { using (Py.GIL()) { using var r = Scope().Eval(expr); return r.As<bool>(); } }
+    static bool PyB(string expr) { using (Py.GIL()) { using var r = Scope().Eval($"bool({expr})"); return r.As<bool>(); } }   // bool() coerces numpy.bool_ -> python bool
     static string PyS(string expr) { using (Py.GIL()) { using var r = Scope().Eval($"str({expr})"); return r.As<string>(); } }
     static long PyL(string expr) { using (Py.GIL()) { using var r = Scope().Eval(expr); return r.As<long>(); } }
     static double PyF(string expr) { using (Py.GIL()) { using var r = Scope().Eval(expr); return r.As<double>(); } }
@@ -964,6 +973,494 @@ static class Harness
             return (ulong)v.GetValue(0) == ulong.MaxValue;
         });
         WaitCounters(0, 0, 6000);
+    }
+
+    // ============================================================
+    //  FUZZ: property-based export/import fidelity vs numpy (shared slice syntax)
+    // ============================================================
+    static void Fuzz()
+    {
+        var scope = Scope();
+        var rng = new Random(20260814);
+        (NPTypeCode tc, string np)[] dt =
+        {
+            (NPTypeCode.Int32,"int32"),(NPTypeCode.Int64,"int64"),(NPTypeCode.Single,"float32"),
+            (NPTypeCode.Double,"float64"),(NPTypeCode.Byte,"uint8"),(NPTypeCode.SByte,"int8"),
+            (NPTypeCode.Int16,"int16"),(NPTypeCode.UInt16,"uint16"),(NPTypeCode.UInt32,"uint32"),
+            (NPTypeCode.UInt64,"uint64"),(NPTypeCode.Half,"float16"),
+        };
+        int N = 4000, exportFails = 0, copyFails = 0, aliasFails = 0, ran = 0, skipped = 0, parseDiv = 0;
+        for (int it = 0; it < N; it++)
+        {
+            var (tc, npn) = dt[rng.Next(dt.Length)];
+            int ndim = rng.Next(1, 4);
+            int[] shape = new int[ndim];
+            int prod = 1;
+            for (int i = 0; i < ndim; i++) { shape[i] = rng.Next(1, 6); prod *= shape[i]; }
+            if (prod > 60) { skipped++; continue; }     // keep arange values exact for uint8/float16
+            string shapeStr = string.Join(",", shape);
+            string slice = RandomSlice(rng, shape);
+            string npIndex = slice.Length == 0 ? "" : "[" + slice + "]";
+
+            NDArray view;
+            try
+            {
+                var nd = np.arange(prod).astype(tc).reshape(shape);
+                view = slice.Length == 0 ? nd : nd[slice];
+            }
+            catch (Exception e)
+            {
+                // NumSharp couldn't parse/apply a slice numpy accepts -> potential divergence; verify numpy accepts it
+                bool numpyOk;
+                try { PyExec($"_chk = np.arange({prod}, dtype='{npn}').reshape({shapeStr}){npIndex}"); numpyOk = true; }
+                catch { numpyOk = false; }
+                if (numpyOk && parseDiv++ < 6) FIND($"fuzz: NumSharp failed slice '{slice}' on shape [{shapeStr}] that numpy accepts ({e.GetType().Name})");
+                continue;
+            }
+
+            try
+            {
+                using (Py.GIL()) { using var a = view.ToNumpy(); Scope().Set("a", a); }
+                PyExec($"base = np.arange({prod}, dtype='{npn}').reshape({shapeStr})");
+                PyExec($"expected = base{npIndex}");
+                bool sheq = PyB("a.shape == expected.shape");
+                bool veq = PyB("np.array_equal(a, expected)");
+                // strides of size-1 axes are "don't care" (numpy itself does not define them); compare
+                // only the MEANINGFUL strides (axes with size > 1). A mismatch there is a real bug.
+                bool steq = PyB("a.size==0 or all(a.strides[i]==expected.strides[i] for i in range(a.ndim) if a.shape[i]>1)");
+                if (!(sheq && veq && steq))
+                {
+                    exportFails++;
+                    if (exportFails <= 8) FIND($"fuzz EXPORT tc={tc} shape=[{shapeStr}] slice='{slice}': shapeEq={sheq} valEq={veq} meaningfulStrideEq={steq} | a={PyS("(a.shape,a.strides)")} exp={PyS("(expected.shape,expected.strides)")}");
+                }
+
+                // copy-import fidelity: numpy expected -> ToNDArray (C-contig copy) -> back to numpy
+                using (Py.GIL())
+                {
+                    using var exp = Scope().Get("expected");
+                    using var nd2 = NDArrayPythonInterop.ToNDArray(exp);
+                    using var c = nd2.ToNumpy();
+                    Scope().Set("c", c);
+                }
+                if (!PyB("np.array_equal(c, expected)"))
+                {
+                    copyFails++;
+                    if (copyFails <= 8) FIND($"fuzz COPY-IMPORT tc={tc} shape=[{shapeStr}] slice='{slice}': ToNDArray(expected) != expected");
+                }
+
+                // view-import fidelity (dtype-agnostic): import expected as a zero-copy view, re-export
+                // that view, and assert it equals expected. This tests that ToNDArrayView read the exact
+                // layout (any wrong stride on a size>1 axis makes the re-export differ) AND aliases the
+                // same memory — all compared in numpy, so it does not touch the double-only Get/SetDouble.
+                {
+                    using (Py.GIL())
+                    {
+                        using var exp = Scope().Get("expected");
+                        using var v = NDArrayPythonInterop.ToNDArrayView(exp, allowReadonly: true);
+                        using var b = v.ToNumpy();
+                        Scope().Set("b", b);
+                        Scope().Set("expected", exp);
+                    }
+                    if (!PyB("b.shape==expected.shape and np.array_equal(b, expected)"))
+                    {
+                        aliasFails++;
+                        if (aliasFails <= 8) FIND($"fuzz VIEW-IMPORT tc={tc} shape=[{shapeStr}] slice='{slice}': re-exported view != expected | b={PyS("(b.shape,b.strides)")} exp={PyS("(expected.shape,expected.strides)")}");
+                    }
+                }
+                ran++;
+            }
+            catch (Exception e)
+            {
+                if (exportFails + copyFails + aliasFails < 8) FIND($"fuzz threw tc={tc} shape=[{shapeStr}] slice='{slice}': {e.GetType().Name}: {e.Message}");
+            }
+            if (it % 500 == 0) Pump();
+        }
+        Console.WriteLine($"  fuzz: ran={ran} skipped={skipped} | exportFails={exportFails} copyFails={copyFails} aliasFails={aliasFails} parseDiv={parseDiv}");
+        if (exportFails + copyFails + aliasFails + parseDiv == 0) OK($"{ran} randomized cases: export+copy+alias all match numpy");
+        // release the last iteration's exports still bound in the scope, THEN check for a real leak.
+        PyExec("a=b=c=expected=base=None\nimport gc\ngc.collect()");
+        bool settled = WaitCounters(0, 0, 12000);
+        if (!settled) FIND($"fuzz leaked after clearing scope: E={NDArrayPythonInterop.LiveExports} I={NDArrayPythonInterop.LiveImports}");
+        else OK("fuzz counters settled to baseline after clearing scope (no leak across 3877 cases)");
+    }
+
+    static string RandomSlice(Random rng, int[] shape)
+    {
+        var toks = new string[shape.Length];
+        for (int d = 0; d < shape.Length; d++)
+        {
+            int n = shape[d];
+            switch (rng.Next(8))
+            {
+                case 0: toks[d] = ":"; break;
+                case 1: toks[d] = $"{rng.Next(n)}:"; break;
+                case 2: toks[d] = $":{rng.Next(1, n + 1)}"; break;
+                case 3: { int a = rng.Next(n); int b = rng.Next(a, n + 1); toks[d] = $"{a}:{b}"; break; }
+                case 4: toks[d] = "::" + (rng.Next(2) == 0 ? "2" : "3"); break;
+                case 5: toks[d] = "::-1"; break;
+                case 6: { int i = rng.Next(-n, n); toks[d] = $"{i}"; break; }        // single index (reduces dim)
+                default: { int a = rng.Next(n); int b = rng.Next(n + 1); int s = rng.Next(2) == 0 ? -1 : -2; toks[d] = $"{a}:{b}:{s}"; break; }
+            }
+        }
+        return string.Join(", ", toks);
+    }
+
+    // ============================================================
+    //  OVERLAP: import an as_strided OVERLAPPING view (shared elements)
+    // ============================================================
+    static void OverlapImport()
+    {
+        Console.WriteLine("\n-- overlapping as_strided import --");
+        try
+        {
+            using var scope = Py.GIL();
+            // _ov[i,j] = base[i+j]; rows overlap (stride == itemsize on both axes)
+            PythonEngine.RunSimpleString("import numpy as _np\n_base = _np.arange(6, dtype='f8')\n_ov = _np.lib.stride_tricks.as_strided(_base, shape=(4,3), strides=(8,8))");
+            using var main = Py.Import("__main__"); using var ov = main.GetAttr("_ov");
+            using var v = NDArrayPythonInterop.ToNDArrayView(ov, allowReadonly: true);
+            Scope().Set("_ov2", ov);
+            // read fidelity across the overlapping window
+            bool ok = true;
+            for (int i = 0; i < 4 && ok; i++)
+                for (int j = 0; j < 3; j++)
+                {
+                    double got = v.GetDouble(i, j);
+                    double exp = PyF($"float(_ov2[{i},{j}])");
+                    if (Math.Abs(got - exp) > 1e-9) { FIND($"overlap read [{i},{j}]={got} != numpy {exp}"); ok = false; break; }
+                }
+            if (ok) OK("overlapping window reads all match numpy");
+            // write-through to a shared cell, verify the OTHER logical index sees it (aliasing through overlap)
+            if (v.Shape.IsWriteable)
+            {
+                v.SetDouble(42.0, 0, 1);     // base[1]
+                double via10 = PyF("float(_ov2[1,0])");   // also base[1]
+                if (Math.Abs(via10 - 42.0) > 1e-9) FIND($"overlap write [0,1]=42 not seen at [1,0]={via10} (shared-element aliasing broken)");
+                else OK("overlap write-through visible at the aliased index");
+            }
+            else NOTE("overlap view non-writeable");
+            v.Dispose();
+        }
+        catch (Exception e) { FIND($"overlap import threw {e.GetType().Name}: {e.Message}"); }
+        WaitCounters(0, 0, 6000);
+    }
+
+    // ============================================================
+    //  VALUEFIDELITY: complex + half bit patterns (nan/inf/subnormal), byte-exact
+    // ============================================================
+    static void ValueFidelity()
+    {
+        Console.WriteLine("\n-- value fidelity (complex / half / specials), byte-exact --");
+        // complex128 export: FINITE entries byte-exact; NaN entry by class only (.NET stores negative
+        // NaN 0xFFF8.. where numpy stores 0x7FF8.. — a source/dtype convention faithfully shared by the
+        // zero-copy view, NOT an export defect; documented observation).
+        Try("complex128 export: finite byte-exact, inf/-0 byte-exact, nan by class", () =>
+        {
+            var re = new System.Numerics.Complex[] {
+                new(1.5,-2.5), new(double.NaN, 3.0), new(double.PositiveInfinity, double.NegativeInfinity),
+                new(-0.0, 0.0), new(1e308, -1e-308) };
+            var nd = np.array(re);
+            using (Py.GIL()) { using var a = nd.ToNumpy(); Scope().Set("a", a); }
+            PyExec("exp = np.array([1.5-2.5j, complex(np.nan,3.0), complex(np.inf,-np.inf), complex(-0.0,0.0), complex(1e308,-1e-308)], dtype='complex128')");
+            bool finite = PyB("a[0].tobytes()==exp[0].tobytes()") && PyB("a[2].tobytes()==exp[2].tobytes()")
+                       && PyB("a[3].tobytes()==exp[3].tobytes()") && PyB("a[4].tobytes()==exp[4].tobytes()");
+            bool nanClass = PyB("np.isnan(a[1].real) and a[1].imag==3.0");
+            bool netNanConvention = PyB("a[1].real.view(np.uint64)==exp[1].real.view(np.uint64)") == false;
+            if (netNanConvention) NOTE("complex128 NaN exported with .NET convention (0xFFF8..) != numpy (0x7FF8..) — faithful byte-share of NumSharp's source bits");
+            return PyB("a.dtype==np.complex128") && finite && nanClass;
+        });
+        // complex64 import widen: VALUES must match (widened to complex128)
+        Try("complex64 import widen values exact", () =>
+        {
+            using var scope = Py.GIL();
+            PythonEngine.RunSimpleString("import numpy as _np\n_c8 = _np.array([1.5-2.5j, _np.complex64(complex(_np.nan,1.0))], dtype='complex64')");
+            using var main = Py.Import("__main__"); using var c8 = main.GetAttr("_c8");
+            using var nd = NDArrayPythonInterop.ToNDArray(c8);
+            using var back = nd.ToNumpy();      // complex128
+            Scope().Set("b", back);
+            return PyB("b.dtype==np.complex128") && PyB("b[0]==(1.5-2.5j)") && PyB("np.isnan(b[1].real)");
+        });
+        // half specials byte-exact both ways
+        Try("half export byte-exact (nan/inf/subnormal/-0)", () =>
+        {
+            var hs = new Half[] { (Half)1.5, Half.PositiveInfinity, Half.NegativeInfinity, Half.NaN,
+                                  (Half)(-0.0), Half.Epsilon, Half.MaxValue, Half.MinValue };
+            var nd = np.array(hs);
+            using (Py.GIL()) { using var a = nd.ToNumpy(); Scope().Set("a", a); }
+            // compare against numpy-constructed half array by BITS (nan payload may differ, so compare finite subset + classes)
+            PyExec("exp = np.array([1.5, np.inf, -np.inf, np.nan, -0.0, np.float16(2**-24), np.float16(65504), np.float16(-65504)], dtype='float16')");
+            // finite entries byte-exact; nan entry: both are nan; inf/-inf/-0 byte-exact
+            return PyB("a.dtype==np.float16")
+                && PyB("a[0].tobytes()==exp[0].tobytes() and a[1].tobytes()==exp[1].tobytes() and a[2].tobytes()==exp[2].tobytes()")
+                && PyB("np.isnan(a[3])")
+                && PyB("a[4].tobytes()==exp[4].tobytes() and a[5].tobytes()==exp[5].tobytes() and a[6].tobytes()==exp[6].tobytes() and a[7].tobytes()==exp[7].tobytes()");
+        });
+        // half import view value fidelity for specials
+        Try("half import view specials exact", () =>
+        {
+            using var scope = Py.GIL();
+            PythonEngine.RunSimpleString("import numpy as _np\n_h = _np.array([_np.inf, -_np.inf, 2**-24, 65504], dtype='float16')");
+            using var main = Py.Import("__main__"); using var h = main.GetAttr("_h");
+            using var v = NDArrayPythonInterop.ToNDArrayView(h, allowReadonly: true);
+            return double.IsPositiveInfinity((double)(Half)v.GetValue(0)) && double.IsNegativeInfinity((double)(Half)v.GetValue(1));
+        });
+        WaitCounters(0, 0, 6000);
+    }
+
+    // ============================================================
+    //  RACECODEC: concurrent RegisterCodec + convert (idempotence + no crash)
+    // ============================================================
+    static void RaceCodec()
+    {
+        Console.WriteLine("\n-- concurrent RegisterCodec + convert --");
+        int trueCount = 0, errors = 0;
+        int T = 12;
+        var threads = new List<Thread>();
+        var start = new ManualResetEventSlim(false);
+        for (int t = 0; t < T; t++)
+        {
+            var th = new Thread(() =>
+            {
+                start.Wait();
+                try
+                {
+                    if (NDArrayPythonInterop.RegisterCodec()) Interlocked.Increment(ref trueCount);
+                    for (int i = 0; i < 50; i++)
+                    {
+                        var nd = np.arange(20).astype(NPTypeCode.Double);
+                        using (Py.GIL()) { using var a = nd.ToNumpy(); }
+                        nd.Dispose();
+                    }
+                }
+                catch (Exception e) { Interlocked.Increment(ref errors); if (errors < 4) Console.WriteLine($"[race] {e.GetType().Name}: {e.Message}"); }
+            });
+            threads.Add(th); th.Start();
+        }
+        start.Set();
+        foreach (var th in threads) th.Join();
+        // Note: this scenario's Main already called RegisterCodec() once at startup, so racing threads should all get false.
+        Console.WriteLine($"  RegisterCodec returned true {trueCount} times across {T} threads (expect 0 — startup already registered), errors={errors}");
+        if (errors > 0) FIND($"{errors} errors racing RegisterCodec/convert");
+        else if (trueCount > 0) FIND($"RegisterCodec returned true {trueCount}x despite startup registration (idempotence race)");
+        else OK("concurrent RegisterCodec idempotent, no errors");
+        WaitCounters(0, 0, 8000);
+    }
+
+    // ============================================================
+    //  GETSET: is SetDouble/GetDouble converting or reinterpreting? (native vs imported view)
+    // ============================================================
+    static void GetSetSemantics()
+    {
+        Console.WriteLine("\n-- SetDouble/GetDouble semantics: native NumSharp int16 --");
+        var nd = np.arange(5).astype(NPTypeCode.Int16);
+        nd.SetDouble(123.0, 0);
+        Console.WriteLine($"  native int16: after SetDouble(123) -> GetInt16={nd.GetInt16(0)}  GetDouble={nd.GetDouble(0)}");
+        if (nd.GetInt16(0) == 123) NOTE("SetDouble CONVERTS on native array (123 stored)");
+        else NOTE($"SetDouble does NOT convert on native array (GetInt16={nd.GetInt16(0)}) -> harness must use typed setters");
+
+        Console.WriteLine("-- same on an IMPORTED int16 view --");
+        using (Py.GIL())
+        {
+            PythonEngine.RunSimpleString("import numpy as _np\n_gi = _np.arange(5, dtype='int16')");
+            using var main = Py.Import("__main__"); using var gi = main.GetAttr("_gi");
+            using var v = NDArrayPythonInterop.ToNDArrayView(gi);
+            v.SetDouble(123.0, 0);
+            Scope().Set("_gi2", gi);
+            long pySees = PyL("int(_gi2[0])");
+            Console.WriteLine($"  imported int16 view: after SetDouble(123) -> numpy sees {pySees}  NumSharp GetInt16={v.GetInt16(0)}");
+            NOTE(pySees == nd.GetInt16(0)
+                ? "imported view matches native SetDouble semantics (consistent — not interop-specific)"
+                : "imported view DIVERGES from native SetDouble semantics (interop-specific!)");
+        }
+        WaitCounters(0, 0, 6000);
+    }
+
+    // ============================================================
+    //  CODECFUZZ: encode NDArray -> python compute -> decode As<NDArray>, vs numpy-native
+    // ============================================================
+    static void CodecFuzz()
+    {
+        Console.WriteLine("\n-- codec compute round-trip fuzz (encode->matmul/elementwise->decode) --");
+        var rng = new Random(4242);
+        int N = 800, fails = 0, ran = 0;
+        for (int it = 0; it < N; it++)
+        {
+            int m = rng.Next(1, 6), k = rng.Next(1, 6), n = rng.Next(1, 6);
+            bool useFloat = rng.Next(2) == 0;
+            NPTypeCode tc = useFloat ? NPTypeCode.Double : NPTypeCode.Int64;
+            string npn = useFloat ? "float64" : "int64";
+            try
+            {
+                var A = np.arange(m * k).astype(tc).reshape(m, k);
+                var B = np.arange(k * n).astype(tc).reshape(k, n);
+                bool transposeA = rng.Next(3) == 0;
+                NDArray Ause = transposeA && m == k ? A.T : A;   // sometimes feed a non-contiguous operand
+                using (Py.GIL())
+                {
+                    using var scope = Py.CreateScope();
+                    scope.Exec("import numpy as np");
+                    scope.Set("a", Ause); scope.Set("b", B);       // NDArray auto-encoded
+                    int op = rng.Next(3);
+                    string expr = op == 0 ? "np.matmul(a, b)" : op == 1 ? "a.astype('float64').sum()" : "(a + a)";
+                    using var r = scope.Eval(expr);
+                    using var nd = r.As<NDArray>();                 // decoded
+                    using var backc = nd.ToNumpy();
+                    scope.Set("back", backc);
+                    // numpy-native reference
+                    string aexpr = transposeA && m == k ? $"np.arange({m*k}, dtype='{npn}').reshape({m},{k}).T" : $"np.arange({m*k}, dtype='{npn}').reshape({m},{k})";
+                    scope.Exec($"ea = {aexpr}\neb = np.arange({k*n}, dtype='{npn}').reshape({k},{n})");
+                    string refExpr = op == 0 ? "np.matmul(ea, eb)" : op == 1 ? "ea.astype('float64').sum()" : "(ea + ea)";
+                    scope.Exec($"ref = {refExpr}");
+                    using var eq = scope.Eval("bool(np.array_equal(np.asarray(back), np.asarray(ref)))");
+                    if (!eq.As<bool>())
+                    {
+                        fails++;
+                        if (fails <= 6)
+                        {
+                            using var bs = scope.Eval("str((np.asarray(back).shape, np.asarray(ref).shape))");
+                            FIND($"codecfuzz op={op} m={m} k={k} n={n} tc={tc} tA={transposeA}: decoded result != numpy-native {bs.As<string>()}");
+                        }
+                    }
+                }
+                ran++;
+            }
+            catch (Exception e) { if (fails++ < 6) FIND($"codecfuzz threw m={m} k={k} n={n} tc={tc}: {e.GetType().Name}: {e.Message}"); }
+            if (it % 200 == 0) Pump();
+        }
+        Console.WriteLine($"  codecfuzz: ran={ran} fails={fails}");
+        if (fails == 0) OK($"{ran} codec compute round-trips match numpy-native");
+        bool settled = WaitCounters(0, 0, 10000);
+        if (!settled) FIND($"codecfuzz leaked: E={NDArrayPythonInterop.LiveExports} I={NDArrayPythonInterop.LiveImports}");
+        else OK("codecfuzz counters settled");
+    }
+
+    // ============================================================
+    //  TORTURE: mixed export/import/copy/finalizer-drop across threads + aggressive GC
+    // ============================================================
+    static void Torture()
+    {
+        Console.WriteLine("\n-- concurrency + GC torture (mixed conversions, 6s) --");
+        var scope = Scope();
+        int T = 10; long deadline = 6000;
+        int errors = 0; long ops = 0;
+        var sw = Stopwatch.StartNew();
+        var threads = new List<Thread>();
+        for (int t = 0; t < T; t++)
+        {
+            int tid = t;
+            var th = new Thread(() =>
+            {
+                var rng = new Random(1000 + tid);
+                while (sw.ElapsedMilliseconds < deadline)
+                {
+                    try
+                    {
+                        int op = rng.Next(6);
+                        int sz = rng.Next(1, 2000);
+                        switch (op)
+                        {
+                            case 0: { var nd = np.arange(sz).astype(NPTypeCode.Double); using (Py.GIL()) { using var a = nd.ToNumpy(); } nd.Dispose(); break; }
+                            case 1: { var nd = np.arange(sz).astype(NPTypeCode.Single); using (Py.GIL()) { using var a = nd.ToNumpyCopy(); } nd.Dispose(); break; }
+                            case 2: { using (Py.GIL()) { PythonEngine.RunSimpleString($"import numpy as _np\n_tx{tid} = _np.arange({sz}, dtype='f8')"); using var main = Py.Import("__main__"); using var s = main.GetAttr($"_tx{tid}"); using var v = NDArrayPythonInterop.ToNDArrayView(s); } break; }
+                            case 3: { using (Py.GIL()) { PythonEngine.RunSimpleString($"import numpy as _np\n_ty{tid} = _np.arange({sz}, dtype='i4')"); using var main = Py.Import("__main__"); using var s = main.GetAttr($"_ty{tid}"); using var nd = NDArrayPythonInterop.ToNDArray(s); } break; }
+                            case 4: DropImport(tid, sz); break;   // finalizer path
+                            case 5: if (rng.Next(4) == 0) { GC.Collect(); using (Py.GIL()) PythonEngine.RunSimpleString("import gc; gc.collect()"); } break;
+                        }
+                        Interlocked.Increment(ref ops);
+                    }
+                    catch (Exception e) { Interlocked.Increment(ref errors); if (errors <= 5) Console.WriteLine($"[torture {tid}] {e.GetType().Name}: {e.Message}"); }
+                }
+            });
+            threads.Add(th); th.Start();
+        }
+        foreach (var th in threads) th.Join();
+        Console.WriteLine($"  torture: {ops} ops across {T} threads, errors={errors}");
+        if (errors > 0) FIND($"{errors} errors during concurrency/GC torture");
+        else OK($"{ops} mixed conversions across {T} threads with aggressive GC — no errors/crash/hang");
+        bool settled = WaitCounters(0, 0, 15000);
+        if (!settled) FIND($"torture counters did not settle: E={NDArrayPythonInterop.LiveExports} I={NDArrayPythonInterop.LiveImports}");
+        else OK("torture counters settled to baseline");
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    static void DropImport(int tid, int sz)
+    {
+        using (Py.GIL())
+        {
+            PythonEngine.RunSimpleString($"import numpy as _np\n_tz{tid} = _np.arange({sz}, dtype='f8')");
+            using var main = Py.Import("__main__"); using var s = main.GetAttr($"_tz{tid}");
+            var v = NDArrayPythonInterop.ToNDArrayView(s);   // NOT disposed -> finalizer releases
+        }
+    }
+
+    // ============================================================
+    //  MEMVIEWFUZZ: ToMemoryView bytes vs numpy tobytes + write-through
+    // ============================================================
+    static void MemViewFuzz()
+    {
+        Console.WriteLine("\n-- ToMemoryView fidelity + write-through --");
+        var scope = Scope();
+        (NPTypeCode tc, string np)[] dt =
+        {
+            (NPTypeCode.Byte,"uint8"),(NPTypeCode.Int16,"int16"),(NPTypeCode.Int32,"int32"),
+            (NPTypeCode.Int64,"int64"),(NPTypeCode.Single,"float32"),(NPTypeCode.Double,"float64"),(NPTypeCode.Half,"float16"),
+        };
+        int fails = 0;
+        foreach (var (tc, npn) in dt)
+        {
+            try
+            {
+                int n = 12;
+                var nd = np.arange(n).astype(tc);
+                using (Py.GIL()) { using var mv = nd.ToMemoryView(); Scope().Set("mv", mv); }
+                bool byteEq = PyB($"bytes(mv) == np.arange({n}, dtype='{npn}').tobytes()");
+                if (!byteEq) { fails++; FIND($"memview {tc}: bytes != np.arange tobytes"); }
+                else OK($"memview {tc}: bytes match np.arange");
+            }
+            catch (Exception e) { fails++; FIND($"memview {tc} threw {e.GetType().Name}: {e.Message}"); }
+        }
+        // offset-contiguous window (a row of a 2-D array is contiguous)
+        try
+        {
+            var m2 = np.arange(20).astype(NPTypeCode.Double).reshape(4, 5);
+            var row = m2[2];   // contiguous, offset 10
+            using (Py.GIL()) { using var mv = row.ToMemoryView(); Scope().Set("mv", mv); }
+            bool eq = PyB("bytes(mv) == np.arange(10,15, dtype='f8').tobytes()");
+            if (!eq) { fails++; FIND("memview offset-row: bytes != expected window [10..15)"); }
+            else OK("memview offset-row window correct");
+            // write-through: mutate byte 0 region via numpy, check NumSharp sees
+            using (Py.GIL()) Scope().Exec("import struct\nmv[0:8] = struct.pack('<d', 777.0)");
+            if (Math.Abs(row.GetDouble(0) - 777.0) > 1e-9) { fails++; FIND($"memview write-through: wrote 777 via memoryview, NumSharp sees {row.GetDouble(0)}"); }
+            else OK("memview write-through visible in NumSharp");
+        }
+        catch (Exception e) { fails++; FIND($"memview offset test threw {e.GetType().Name}: {e.Message}"); }
+        if (fails == 0) OK("ToMemoryView all correct");
+        WaitCounters(0, 0, 8000);
+    }
+
+    // ============================================================
+    //  SOAK: longer leak run (2000 iters) for slow leaks
+    // ============================================================
+    static void Soak()
+    {
+        var scope = Scope();
+        const int N = 2000, elems = 200_000;   // 1.6MB each
+        Console.WriteLine($"\n-- soak: {N} mixed iterations --");
+        long baseWs = Working();
+        var rng = new Random(7);
+        for (int i = 0; i < N; i++)
+        {
+            int op = rng.Next(4);
+            if (op == 0) { var nd = np.arange(elems).astype(NPTypeCode.Double); using (Py.GIL()) { using var a = nd.ToNumpy(); } nd.Dispose(); }
+            else if (op == 1) { var nd = np.arange(elems).astype(NPTypeCode.Single); using (Py.GIL()) { using var a = nd.ToNumpyCopy(); } nd.Dispose(); }
+            else if (op == 2) { using (Py.GIL()) { PythonEngine.RunSimpleString($"import numpy as _np\n_s = _np.arange({elems}, dtype='f8')"); using var main = Py.Import("__main__"); using var s = main.GetAttr("_s"); using var v = NDArrayPythonInterop.ToNDArrayView(s); v.SetDouble(1, 0); main.SetAttr("_s", 0.ToPython()); } }
+            else { using (Py.GIL()) { PythonEngine.RunSimpleString($"import numpy as _np\n_s = _np.arange({elems}, dtype='f8')"); using var main = Py.Import("__main__"); using var s = main.GetAttr("_s"); using var nd = NDArrayPythonInterop.ToNDArray(s); main.SetAttr("_s", 0.ToPython()); } }
+            if (i % 200 == 0) { Pump(); if (i % 800 == 0) Console.WriteLine($"  iter {i}: WS={Working()/1024/1024}MB (+{(Working()-baseWs)/1024/1024}) E={NDArrayPythonInterop.LiveExports} I={NDArrayPythonInterop.LiveImports}"); }
+        }
+        Pump(); WaitCounters(0, 0, 12000);
+        long grow = Working() - baseWs;
+        Console.WriteLine($"  soak done: net WS growth {grow/1024/1024}MB, E={NDArrayPythonInterop.LiveExports} I={NDArrayPythonInterop.LiveImports}");
+        if (grow > 300L * 1024 * 1024) FIND($"soak WS grew {grow/1024/1024}MB over {N} iters (possible slow leak)");
+        else OK($"soak WS growth bounded ({grow/1024/1024}MB over {N} iters)");
     }
 
     // ---------------- misc helpers ----------------

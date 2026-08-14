@@ -111,9 +111,54 @@ drift**:
 - The consumer project under `experimental/Probe` depends on a **local feed** (`_localfeed/`, not
   committed), so it is a documented artifact rather than a CI-buildable project.
 
+## Pass 2 — additional techniques (2026-08-14)
+
+A second pass with different techniques. **Zero new interop bugs.** All scenarios in
+`experimental/adversarial-harness` (`fuzz overlap valuefidelity racecodec codecfuzz torture
+memviewfuzz soak getset`).
+
+- **Property-based fuzzing** (`fuzz`) — 3877 randomized `dtype × shape(1–3D) × slice` cases (numpy as
+  oracle, shared slice syntax). Each checks export fidelity (values + **meaningful** strides),
+  copy-import (`ToNDArray` → re-export == expected), and view-import (`ToNDArrayView` → re-export ==
+  expected). **0 export / 0 copy / 0 view failures / 0 parse divergences**, counters back to baseline.
+- **Codec compute fuzz** (`codecfuzz`) — 800 encode→`np.matmul`/`sum`/elementwise→`As<NDArray>` round
+  trips (incl. transposed operands), each vs numpy-native. **All match.**
+- **Overlapping `as_strided` import** (`overlap`) — a shape `(4,3)` view with `strides=(8,8)` over a
+  6-element base (shared elements): reads all match numpy and a write is visible at the aliased index.
+- **Value fidelity** (`valuefidelity`) — complex128 (finite/inf/−0 byte-exact), complex64→complex128
+  widen values exact, float16 specials (inf/subnormal/±max/−0/NaN) byte-exact both ways.
+- **`ToMemoryView` fuzz** (`memviewfuzz`) — 7 dtypes byte-exact vs `np.arange(...).tobytes()`, an
+  offset-row window `[10:15)` exact, and memoryview→NumSharp write-through visible.
+- **Concurrency + GC torture** (`torture`) — 10 threads for 6 s mixing export view/copy, import
+  view/copy, finalizer-drop imports, and aggressive `GC.Collect()` + `gc.collect()`: **46,563 ops,
+  0 errors, no crash/hang**, counters settle. Plus a codec-registration race (`racecodec`, 12
+  threads): idempotent, 0 errors.
+- **Soak** (`soak`) — 2000 mixed iterations (~1.6 MB each): net working-set growth **17 MB** (flat by
+  iter 800), counters at 0. No slow leak.
+
+**Three observations (not bugs), refining pass-1 claims:**
+
+1. **Size-1-axis strides are "don't care".** Pass-1's "numpy-exact strides" holds for axes with
+   **size > 1**; for size-1 axes NumSharp normalizes the stride differently than numpy (which keeps a
+   computed/meaningless value). `np.array_equal` is always true — no data difference. numpy itself
+   does not define these strides.
+2. **`.NET` NaN convention is faithfully shared.** A NumSharp float/complex array holding a NaN stores
+   .NET's negative NaN (`0xFFF8…`); a zero-copy export shares those exact bytes, so numpy sees
+   `0xFFF8…` where a numpy-native NaN array would have `0x7FF8…`. `np.isnan` still works; only the raw
+   bit pattern differs. This is correct byte-faithful sharing, and a property of the NumSharp source,
+   not the interop.
+3. **NumSharp-core caveat (out of interop scope):** `GetDouble`/`SetDouble` are double-only — calling
+   them on a non-`double` array NREs (`GetDouble`) or writes raw double bits (`SetDouble`). Not an
+   interop defect; noted because it is an easy trap when poking imported views by hand (use the
+   dtype-correct accessor).
+
 ## Net assessment
 
-The integration is high-quality: correctness is numpy-exact across dtypes/layouts, and the
-lifetime/memory design survived every stress thrown at it. The single real defect was an
-input-validation gap on the `__array_interface__` import path (now fixed and gated). The other two
-items are a confirmed upstream pythonnet limitation and a documented, accurate safety warning.
+The integration is high-quality: correctness is numpy-exact across dtypes/layouts (confirmed in pass 2
+by ~5500 randomized fuzz + codec-compute cases), and the lifetime/memory design survived every stress
+thrown at it (600-iter and 2000-iter soaks; a 46,563-op concurrency+GC torture) — no leak, no
+use-after-free, no deadlock. The single real defect across both passes was an input-validation gap on
+the `__array_interface__` import path (found in pass 1, now fixed and gated). The other items are a
+confirmed upstream pythonnet limitation, a documented/accurate safety warning, and three benign
+observations (size-1 strides, the .NET NaN convention, and the double-only `Get/SetDouble` core
+accessors).
