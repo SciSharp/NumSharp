@@ -41,7 +41,7 @@ namespace NumSharp.Interop.PythonNet
 
                 string format = mv.format;
                 long itemsize = mv.itemsize;
-                DtypeCompatibilityKind kind = ResolveDtypeCompatibility(format, itemsize, out NPTypeCode tc);
+                DtypeCompatibilityKind kind = ResolveDtypeCompatibility(format, itemsize, out NPTypeCode tc, out int swapUnit);
 
                 long[] dims = mv.shape;
                 Shape shape = dims.Length == 0 ? new Shape() : new Shape(dims);
@@ -59,7 +59,7 @@ namespace NumSharp.Interop.PythonNet
                     // uniformly safe. Only a read-only SIMPLE lock is needed here; it is released as
                     // soon as the bytes are blitted.
                     using PyBuffer buf = mv.GetBuffer(PyBUF.SIMPLE);
-                    CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, kind);
+                    CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, kind, swapUnit);
                 }
                 else
                 {
@@ -67,10 +67,41 @@ namespace NumSharp.Interop.PythonNet
                     // then blit the C-ordered bytes. The bytes object is a plain contiguous exporter.
                     using PyObject bytesObj = mv.tobytes("C");
                     using PyBuffer buf = bytesObj.GetBuffer(PyBUF.SIMPLE);
-                    CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, kind);
+                    CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, kind, swapUnit);
                 }
 
                 return dest;
+            }
+        }
+
+        /// <summary>
+        ///     Materialize ANY array-like Python object — a <c>list</c>, <c>tuple</c>, nested sequence, a
+        ///     Python scalar (<c>int</c> / <c>float</c> / <c>bool</c> / <c>complex</c>), or a buffer
+        ///     exporter — into a fresh, independent NumSharp array by routing it through
+        ///     <c>numpy.asarray</c> first.
+        ///
+        ///     <para>This is the numpy-dependent companion of <see cref="ToNDArray(PyObject, bool?)"/>:
+        ///     <see cref="ToNDArray"/> accepts only PEP 3118 buffer exporters and stays numpy-agnostic,
+        ///     whereas this also accepts the everyday Python containers a numpy call or plain Python code
+        ///     hands back — at the cost of requiring numpy and one extra materialization (<c>numpy.asarray</c>
+        ///     builds the ndarray, then <see cref="ToNDArray"/> copies it into NumSharp). The result owns
+        ///     its memory — no lifetime coupling to the source. dtype follows numpy's own inference
+        ///     (<c>[1, 2, 3]</c> → int64, <c>[1.0, 2.0]</c> → float64); anything numpy can only express as
+        ///     an object array (a ragged list, a bignum outside int64 range, a <c>dict</c>) has no NumSharp
+        ///     dtype and throws.</para>
+        /// </summary>
+        /// <param name="obj">The array-like object to materialize.</param>
+        /// <param name="requireGIL">GIL policy, exactly as on <see cref="ToNDArray(PyObject, bool?)"/>.</param>
+        public static NDArray FromArrayLike(this PyObject obj, bool? requireGIL = null)
+        {
+            if (obj is null) throw new ArgumentNullException(nameof(obj));
+            PythonRuntimeInterop.EnsureEngine();
+            PythonRuntimeInterop.DrainPending();
+
+            using (AcquireGil(requireGIL))
+            {
+                using PyObject arr = np.asarray(obj);       // list/tuple/nested/scalar -> ndarray (an exporter passes through)
+                return ToNDArray(arr, requireGIL: false);   // GIL already held; copy into a fresh, owning NumSharp array
             }
         }
 
@@ -554,30 +585,101 @@ namespace NumSharp.Interop.PythonNet
 
         /// <summary>
         ///     Classify a PEP 3118 element type by the <see cref="DtypeCompatibilityKind"/> path
-        ///     <see cref="ToNDArray"/> must take, and hand back the destination <paramref name="tc"/>
-        ///     the path implies. The two conversion kinds pick their widened/narrowed dtype directly;
-        ///     the blit kind defers to <see cref="FromBufferFormat"/> (which also raises the verbatim
-        ///     errors for the unsupported/big-endian/UCS-4-view cases).
+        ///     <see cref="ToNDArray"/> must take, hand back the destination <paramref name="tc"/> the
+        ///     path implies, and report the sub-element byte width <paramref name="swapUnit"/> that
+        ///     <see cref="CopyBuffer"/> must byte-reverse (0 = no swap — native-endian source).
+        ///
+        ///     <para><b>Big-endian is the copy path's alone.</b> A zero-copy VIEW over big-endian memory
+        ///     is impossible on a native-endian NumSharp buffer, so <see cref="FromBufferFormat"/> — the
+        ///     view path's dtype gate — refuses every big-endian multi-byte format. The COPY path,
+        ///     however, can byte-reverse each element as it blits, exactly as it widens complex64 and
+        ///     narrows UCS-4; so a big-endian source decodes to a byteswapped copy here rather than
+        ///     failing outright. Single-byte big-endian formats ('&gt;b', '&gt;B', '&gt;?') are
+        ///     byte-order-irrelevant and fall through to <see cref="FromBufferFormat"/> unchanged.</para>
         /// </summary>
-        private static DtypeCompatibilityKind ResolveDtypeCompatibility(string format, long itemsize, out NPTypeCode tc)
+        private static DtypeCompatibilityKind ResolveDtypeCompatibility(string format, long itemsize, out NPTypeCode tc, out int swapUnit)
         {
+            swapUnit = 0;
+            bool bigEndian = IsBigEndianFormat(format);
+
             if (IsComplex64Format(format))
             {
+                // The endianness check must live HERE, not in FromBufferFormat: complex64 short-circuits
+                // to WidenComplex64 before the format ever reaches the endian-aware FromBufferFormat, so
+                // a big-endian '>Zf' was previously widened by reading its float32 halves as native —
+                // silent data corruption. Byte-reverse each 4-byte half first when the source is BE.
                 tc = NPTypeCode.Complex;
+                if (bigEndian) swapUnit = 4;
                 return DtypeCompatibilityKind.WidenComplex64;
             }
 
-            if (IsUcs4TextFormat(format, itemsize))
+            if (IsUcs4TextFormat(format, itemsize))   // little-endian UCS-4 only (IsUcs4TextFormat rejects '>'/'!')
             {
                 tc = NPTypeCode.Char;
                 return DtypeCompatibilityKind.NarrowUcs4;
+            }
+
+            if (bigEndian && itemsize > 1)
+            {
+                tc = ResolveBigEndianBlitDtype(format, itemsize, out swapUnit);
+                return DtypeCompatibilityKind.Blit;
             }
 
             tc = FromBufferFormat(format, itemsize);
             return DtypeCompatibilityKind.Blit;
         }
 
-        private static unsafe void CopyBuffer(void* src, long srcBytes, NDArray dest, long expectedSourceBytes, DtypeCompatibilityKind kind)
+        /// <summary>
+        ///     True for the PEP 3118 big-endian / network byte-order markers ('&gt;' and '!'). Native
+        ///     order ('&lt;', '=', '@', or no marker) is false. Byte order only matters for multi-byte
+        ///     elements, so callers that decide on a byteswap additionally gate on <c>itemsize &gt; 1</c>.
+        /// </summary>
+        private static bool IsBigEndianFormat(string format)
+        {
+            if (string.IsNullOrEmpty(format))
+                return false;
+            char c0 = format[0];
+            return c0 == '>' || c0 == '!';
+        }
+
+        /// <summary>
+        ///     Map a BIG-ENDIAN, multi-byte PEP 3118 numeric format to its native NumSharp dtype and the
+        ///     sub-element byte width <see cref="ByteSwapCopy"/> must reverse. Reached ONLY by
+        ///     <see cref="ToNDArray"/> (the copy path): the view path's <see cref="FromBufferFormat"/>
+        ///     refuses big-endian because a native-endian zero-copy view is impossible. complex128 ('Zd')
+        ///     reverses each 8-byte half independently (real, then imag) — never the 16-byte element as
+        ///     one unit. Formats with no NumSharp dtype at ANY byte order (UCS-4 text, extended-precision
+        ///     long double, structured) throw, matching <see cref="FromBufferFormat"/>'s refusals.
+        /// </summary>
+        private static NPTypeCode ResolveBigEndianBlitDtype(string format, long itemSize, out int swapUnit)
+        {
+            string code = format.Substring(1);   // starts with '>' or '!' — guaranteed by IsBigEndianFormat
+            switch (code)
+            {
+                case "h": swapUnit = 2; return NPTypeCode.Int16;
+                case "H": swapUnit = 2; return NPTypeCode.UInt16;
+                case "i": case "l": swapUnit = (int)itemSize; return itemSize == 8 ? NPTypeCode.Int64 : NPTypeCode.Int32;
+                case "I": case "L": swapUnit = (int)itemSize; return itemSize == 8 ? NPTypeCode.UInt64 : NPTypeCode.UInt32;
+                case "n": case "q": swapUnit = 8; return NPTypeCode.Int64;
+                case "N": case "Q": swapUnit = 8; return NPTypeCode.UInt64;
+                case "e": swapUnit = 2; return NPTypeCode.Half;
+                case "f": swapUnit = 4; return NPTypeCode.Single;
+                case "d": swapUnit = 8; return NPTypeCode.Double;
+                case "g":                                      // C long double: IEEE double only at width 8 (MSVC)
+                    if (itemSize == 8) { swapUnit = 8; return NPTypeCode.Double; }
+                    break;
+                case "u":                                      // wchar_t text unit: a 2-byte BE unit is a UTF-16 code unit
+                    if (itemSize == 2) { swapUnit = 2; return NPTypeCode.Char; }
+                    break;                                     // 4-byte 'u' is UCS-4 (no BE view/copy); 1-byte never reaches here
+                case "Zd": swapUnit = 8; return NPTypeCode.Complex;   // complex128 — each 8-byte half reversed
+            }
+
+            swapUnit = 0;
+            throw new NotSupportedException(
+                $"big-endian buffer format '{format}' (itemsize {itemSize}) has no NumSharp dtype.");
+        }
+
+        private static unsafe void CopyBuffer(void* src, long srcBytes, NDArray dest, long expectedSourceBytes, DtypeCompatibilityKind kind, int swapUnit)
         {
             if (srcBytes != expectedSourceBytes)
                 throw new InvalidOperationException($"exporter produced {srcBytes} bytes, expected {expectedSourceBytes}.");
@@ -586,11 +688,25 @@ namespace NumSharp.Interop.PythonNet
             {
                 case DtypeCompatibilityKind.WidenComplex64:
                 {
-                    var s = (float*)src;
                     var d = (Complex*)dest.Storage.Address;
                     long n = dest.size;
-                    for (long i = 0; i < n; i++)
-                        d[i] = new Complex(s[2 * i], s[2 * i + 1]);
+                    if (swapUnit == 4)
+                    {
+                        // Big-endian complex64: byte-reverse each 4-byte float32 half before widening.
+                        var sb = (byte*)src;
+                        for (long i = 0; i < n; i++)
+                        {
+                            float re = ReadBigEndianSingle(sb + (2 * i) * 4);
+                            float im = ReadBigEndianSingle(sb + (2 * i + 1) * 4);
+                            d[i] = new Complex(re, im);
+                        }
+                    }
+                    else
+                    {
+                        var s = (float*)src;
+                        for (long i = 0; i < n; i++)
+                            d[i] = new Complex(s[2 * i], s[2 * i + 1]);
+                    }
                     break;
                 }
 
@@ -610,13 +726,38 @@ namespace NumSharp.Interop.PythonNet
                     break;
                 }
 
-                default:   // Blit — bit-identical element type
+                default:   // Blit — bit-identical (native) or byte-reversed-per-element (big-endian)
                 {
                     long destBytes = (long)dest.size * dest.dtypesize;
-                    Buffer.MemoryCopy(src, dest.Storage.Address, destBytes, srcBytes);
+                    if (swapUnit > 1)
+                        ByteSwapCopy((byte*)src, (byte*)dest.Storage.Address, srcBytes, swapUnit);
+                    else
+                        Buffer.MemoryCopy(src, dest.Storage.Address, destBytes, srcBytes);
                     break;
                 }
             }
+        }
+
+        /// <summary>
+        ///     Copy <paramref name="srcBytes"/> bytes from <paramref name="src"/> to <paramref name="dest"/>,
+        ///     reversing every consecutive <paramref name="unit"/>-byte group — the big-endian → native
+        ///     blit. <paramref name="srcBytes"/> is always a whole multiple of <paramref name="unit"/> (a
+        ///     buffer holds an integral number of elements, and <paramref name="unit"/> divides the element
+        ///     size: it IS the element size for real types, and half of it for complex128, whose two IEEE
+        ///     halves are byte-reversed independently).
+        /// </summary>
+        private static unsafe void ByteSwapCopy(byte* src, byte* dest, long srcBytes, int unit)
+        {
+            for (long b = 0; b < srcBytes; b += unit)
+                for (int k = 0; k < unit; k++)
+                    dest[b + k] = src[b + (unit - 1 - k)];
+        }
+
+        /// <summary>Read a big-endian IEEE-754 float32 from <paramref name="p"/> (4 bytes) into a native float.</summary>
+        private static unsafe float ReadBigEndianSingle(byte* p)
+        {
+            uint bits = ((uint)p[0] << 24) | ((uint)p[1] << 16) | ((uint)p[2] << 8) | p[3];
+            return BitConverter.UInt32BitsToSingle(bits);
         }
 
         private static bool IsComplex64Format(string format)

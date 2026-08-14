@@ -237,8 +237,9 @@ namespace NumSharp.Interop.UnitTests
         // ============================  ## Reading Python's memory  ===============================
 
         /// <summary>
-        ///     The import census table: 8 of the 11 probes view (one of them read-only), complex64
-        ///     and UCS-4 fall to copies, big-endian is refused outright.
+        ///     The import census table: 8 of the 12 probes view (one of them read-only); complex64,
+        ///     UCS-4 and big-endian fall to copies (widen / narrow / byteswap); datetime64 — which has
+        ///     no NumSharp dtype at any byte order — is refused outright.
         /// </summary>
         [TestMethod]
         public void Import_ViewsEveryExporterVariety()
@@ -266,8 +267,8 @@ namespace NumSharp.Interop.UnitTests
                 v.Dispose();
             }
 
-            // the 2 copy rows — the view path declines, the copy path converts
-            foreach (string expr in new[] { "np.array([1+2j], dtype='c8')", "np.array(['a', 'b'], dtype='U1')" })
+            // the 3 copy rows — the view path declines, the copy path converts (widen / narrow / byteswap)
+            foreach (string expr in new[] { "np.array([1+2j], dtype='c8')", "np.array(['a', 'b'], dtype='U1')", "np.arange(4, dtype='>i4')" })
             {
                 ((Action)(() => ViewOf(expr, allowReadonly: true).Dispose()))
                     .Should().Throw<NotSupportedException>($"{expr} has no zero-copy representation");
@@ -276,10 +277,10 @@ namespace NumSharp.Interop.UnitTests
                 c.Dispose();
             }
 
-            // the 1 rejected row — both paths refuse
-            ((Action)(() => ViewOf("np.arange(4, dtype='>i4')", allowReadonly: true).Dispose()))
-                .Should().Throw<NotSupportedException>();
-            ((Action)(() => ImportOf("np.arange(4, dtype='>i4')").Dispose()))
+            // the 1 rejected row — no NumSharp dtype at any byte order, so both paths refuse
+            ((Action)(() => ViewOf("np.array(['2021-01-01'], dtype='M8[D]')", allowReadonly: true).Dispose()))
+                .Should().Throw<NotSupportedException>("datetime64 has no NumSharp dtype");
+            ((Action)(() => ImportOf("np.array(['2021-01-01'], dtype='M8[D]')").Dispose()))
                 .Should().Throw<NotSupportedException>();
         }
 
@@ -305,17 +306,25 @@ namespace NumSharp.Interop.UnitTests
             narrowed.Dispose();
         }
 
-        /// <summary>"big-endian is refused by both paths, with the fix in the message."</summary>
+        /// <summary>
+        ///     "big-endian: the VIEW path refuses (a native-endian view is impossible — the byte-swap fix
+        ///     is in the message), the COPY path byte-reverses each element and crosses value-correct."
+        /// </summary>
         [TestMethod]
-        public void Import_RefusesBigEndian()
+        public void Import_ViewRefusesBigEndian_CopyByteSwaps()
         {
+            // view path: still refused, with the actionable byte-swap guidance in the message.
             ((Action)(() => ViewOf("np.arange(4, dtype='>i4')", allowReadonly: true).Dispose()))
                 .Should().Throw<NotSupportedException>()
                 .WithMessage("*big-endian*").WithMessage("*newbyteorder('<')*");
 
-            ((Action)(() => ImportOf("np.arange(4, dtype='>i4')").Dispose()))
-                .Should().Throw<NotSupportedException>()
-                .WithMessage("*big-endian*").WithMessage("*newbyteorder('<')*");
+            // copy path: byte-reversed to a value-correct native array (proved against the source values).
+            PyExec("be = np.arange(4, dtype='>i4')");
+            NDArray nd = ImportOf("be");
+            nd.typecode.Should().Be(NPTypeCode.Int32);
+            ExportTo("rt", nd);
+            PyBool("np.array_equal(rt, be)").Should().BeTrue("big-endian values round-trip exactly through the byteswap copy");
+            nd.Dispose();
         }
 
         /// <summary>

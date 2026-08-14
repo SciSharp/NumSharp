@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Backends;
+using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 namespace NumSharp.Interop.UnitTests
@@ -84,11 +85,88 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
-        public void Copy_BigEndianSource_IsRejectedNotByteSwapped()
+        public void Copy_BigEndianSource_ByteSwapsToNative()
         {
-            PyExec("be = np.arange(3).astype('>i4')");
-            ((Action)(() => ImportOf("be")))
-                .Should().Throw<NotSupportedException>().WithMessage("*big-endian*");
+            // The COPY path byte-reverses every element as it blits — exactly as it widens complex64 and
+            // narrows UCS-4 — so a big-endian source materializes to a value-correct native NumSharp array.
+            // (The VIEW path still refuses big-endian: a native-endian zero-copy view is impossible.)
+            AssertCopyRoundTrip("big-endian i2", "np.arange(3).astype('>i2')", NPTypeCode.Int16);
+            AssertCopyRoundTrip("big-endian i4", "np.arange(3).astype('>i4')", NPTypeCode.Int32);
+            AssertCopyRoundTrip("big-endian i8", "np.arange(3).astype('>i8')", NPTypeCode.Int64);
+            AssertCopyRoundTrip("big-endian u4", "np.array([1, 2, 4000000000], dtype='>u4')", NPTypeCode.UInt32);
+            AssertCopyRoundTrip("big-endian f4", "np.array([1.5, -2.5, 3.25], dtype='>f4')", NPTypeCode.Single);
+            AssertCopyRoundTrip("big-endian f8", "np.array([1.5, -2.5, 3.25], dtype='>f8')", NPTypeCode.Double);
+            AssertCopyRoundTrip("big-endian c16", "np.array([1+2j, -3-4j], dtype='>c16')", NPTypeCode.Complex);
+            // '>c8' was the SILENT-CORRUPTION case: complex64 short-circuited to the widen path before the
+            // endianness check, so its float32 halves were read as native. Now widen byte-reverses each half.
+            AssertCopyRoundTrip("big-endian c8 (widen+swap)", "np.array([1+2j, -3-4j], dtype='>c8')", NPTypeCode.Complex,
+                "np.array_equal(rt, srcobj.astype('c16'))");
+
+            // Strided / transposed / reversed big-endian sources linearize through memoryview.tobytes('C')
+            // — which preserves the raw big-endian bytes — and the same per-element byteswap runs on the copy.
+            AssertCopyRoundTrip("big-endian strided", "np.arange(12, dtype='>i4').reshape(3, 4)[:, ::2]", NPTypeCode.Int32);
+            AssertCopyRoundTrip("big-endian transposed+reversed",
+                "np.arange(24, dtype='>i4').reshape(2, 3, 4).transpose(1, 0, 2)[::-1]", NPTypeCode.Int32);
+        }
+
+        [TestMethod]
+        public void Copy_BigEndian_WithNoNumSharpDtype_StillRefused()
+        {
+            // Byteswap only rescues element types that HAVE a NumSharp dtype. A big-endian type with no
+            // NumSharp counterpart at any byte order (UCS-4 text, structured) is still refused by the copy.
+            ((Action)(() => ImportOf("np.array(['a', 'b'], dtype='>U1')")))
+                .Should().Throw<NotSupportedException>("big-endian UCS-4 has no NumSharp dtype");
+            ((Action)(() => ImportOf("np.zeros(2, dtype=[('x', '>i4'), ('y', '>f8')])")))
+                .Should().Throw<NotSupportedException>("a structured dtype has no NumSharp dtype");
+        }
+
+        /// <summary>Copy-materialize an array-like python expression via numpy.asarray.</summary>
+        private NDArray ArrayLikeOf(string expr)
+        {
+            using (Gil()) { using PyObject p = Scope.Eval(expr); return NDArrayPythonInterop.FromArrayLike(p); }
+        }
+
+        [TestMethod]
+        public void FromArrayLike_MaterializesSequencesScalarsAndNested()
+        {
+            NDArray list = ArrayLikeOf("[1, 2, 3]");
+            list.typecode.Should().Be(NPTypeCode.Int64, "numpy.asarray infers int64 for python ints");
+            ReadAt<long>(list, 2).Should().Be(3);
+
+            NDArray tuple = ArrayLikeOf("(1.5, 2.5)");
+            tuple.typecode.Should().Be(NPTypeCode.Double);
+            ReadAt<double>(tuple, 1).Should().BeApproximately(2.5, 1e-12);
+
+            NDArray nested = ArrayLikeOf("[[1, 2], [3, 4]]");
+            nested.ndim.Should().Be(2);
+            ReadAt<long>(nested, 1, 1).Should().Be(4);
+
+            NDArray scalar = ArrayLikeOf("5");
+            scalar.ndim.Should().Be(0);
+            ReadAt<long>(scalar).Should().Be(5);
+
+            NDArray cx = ArrayLikeOf("[1+2j, 3+4j]");
+            cx.typecode.Should().Be(NPTypeCode.Complex);
+            ReadAt<System.Numerics.Complex>(cx, 1).Should().Be(new System.Numerics.Complex(3, 4));
+        }
+
+        [TestMethod]
+        public void FromArrayLike_IsAnIndependentCopy_NoLeaseOnTheList()
+        {
+            PyExec("src_list = [10, 20, 30]");
+            NDArray nd = ArrayLikeOf("src_list");
+            nd.Shape.IsWriteable.Should().BeTrue("a materialized array owns writable memory");
+
+            // FromArrayLike is a copy — a python list has no shared buffer, and no import lease is taken.
+            WriteAt(nd, 99L, 0);
+            PyLong("src_list[0]").Should().Be(10, "writing the NumSharp copy must not touch the list");
+        }
+
+        [TestMethod]
+        public void FromArrayLike_NonArrayLike_Throws()
+        {
+            ((Action)(() => ArrayLikeOf("{'a': 1}")))
+                .Should().Throw<NotSupportedException>("a dict has no NumSharp dtype");
         }
 
         [TestMethod]

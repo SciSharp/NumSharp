@@ -240,8 +240,10 @@ using (Py.GIL())
 The census, re-measured on every test run — 50 exporter varieties across builtins, `array.array`'s
 twelve typecodes, ctypes element types, numpy dtypes, numpy layouts and memoryview forms:
 **47 view, 2 copy, 1 rejected.** The two copies are complex64 (widened to `Complex`) and a
-sub-element-stride `as_strided` window (linearized); the one rejection is big-endian multi-byte
-data, refused by both paths rather than silently byte-swapped.
+sub-element-stride `as_strided` window (linearized); the one rejection is `datetime64`, whose element
+type has no NumSharp dtype at any byte order. **Big-endian multi-byte data is a third copy** — the
+view path refuses it (a native-endian shared view is impossible), but `ToNDArray` byte-reverses each
+element into a value-correct native array, exactly as it widens complex64.
 
 <sub>See here [`Import_ThreeRoutes_EachYieldsAView`][gate], [`Import_Census_47Of50VarietiesView`][gate]</sub>
 
@@ -481,10 +483,11 @@ misrepresentation:
   unit. `ToNDArray` narrows on copy; non-BMP code points throw (they need a surrogate pair). A
   **2-byte** `wchar_t` buffer (`array.array('u')` on Windows) *is* UTF-16 and views zero-copy as
   `Char`.
-- **big-endian** (`>i4`, `!H`, …) — refused by both paths for multi-byte types; a native read would
-  byte-swap every value. Single-byte dtypes (`>i1`, `\|u1`, `\|b1`) still view — byte order is
-  meaningless at one byte. The fix travels in the message:
-  `arr.astype(arr.dtype.newbyteorder('<'))`.
+- **big-endian** (`>i4`, `!H`, …) — no zero-copy *view* for multi-byte types (a native read would
+  byte-swap every value), so the view path refuses it with the byte-swap fix in the message. But
+  `ToNDArray` **byte-reverses each element during the copy** — complex128 reverses each 8-byte half,
+  complex64 reverses then widens — so big-endian data crosses value-correct as a copy. Single-byte
+  dtypes (`>i1`, `\|u1`, `\|b1`) view zero-copy regardless — byte order is meaningless at one byte.
 - **long double** (`g`) — MSVC's 8-byte long double is IEEE double and views as `Double`; the
   extended-precision widths have no NumSharp dtype and throw with `astype(np.float64)` guidance.
 
@@ -540,7 +543,7 @@ import route works uniformly across pythonnet 3.0.x.
 | `Existing exports of data: object cannot be re-sized` | A live NumSharp view leases that object. `Dispose()` the view to release the lock |
 | `cannot resize an array that references or is referenced by another array in this way` | A live Python export (or another NumSharp view) pins the buffer. Release it, or copy first |
 | `cannot resize this array: it does not own its data` | Import views never own their memory. `np.require(view, null, "O")` for an owning copy |
-| `big-endian dtype '>f8' cannot be shared with a native-endian NumSharp buffer` | Byte-swap on the Python side: `arr.astype(arr.dtype.newbyteorder('<'))` |
+| `big-endian dtype '>f8' cannot be shared with a native-endian NumSharp buffer` | Only the zero-copy *view* refuses big-endian. `ToNDArray()` copies it and byte-reverses each value; or byte-swap on the Python side first: `arr.astype(arr.dtype.newbyteorder('<'))` |
 | `decimal has no numpy dtype (16-byte, non-IEEE)` | Nothing in numpy describes it. `nd.astype(NPTypeCode.Double)` first |
 | `the object does not export a PEP 3118 buffer` | Not every object is an exporter — a `dict`, a PIL `Image`. `np.asarray(obj)` first if numpy understands it |
 | A Python write did not show up in NumSharp | You copied. `ToNumpy`/`AsNDArray` share; `ToNumpyCopy`/`ToNDArray` do not |

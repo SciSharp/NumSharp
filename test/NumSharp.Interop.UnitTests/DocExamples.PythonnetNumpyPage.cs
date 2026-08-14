@@ -379,7 +379,10 @@ namespace NumSharp.Interop.UnitTests
             Add("unviewable", "numpy complex64", "np.array([1+2j, 3+4j], dtype='c8')");
             Add("unviewable", "sub-item stride (as_strided)",
                 "np.lib.stride_tricks.as_strided(np.arange(4, dtype='i4'), shape=(2,), strides=(2,))");
-            Add("unviewable", "big-endian multi-byte", "np.arange(4, dtype='>i4')");
+            // big-endian multi-byte is no longer a census REJECT — the copy path byteswaps it (covered by
+            // ImportTests.Copy_BigEndianSource_ByteSwapsToNative + the viewability matrix). The census's one
+            // rejection is now datetime64, whose element type has no NumSharp dtype at ANY byte order.
+            Add("unviewable", "datetime64 (no NumSharp dtype)", "np.array(['2021-01-01'], dtype='M8[D]')");
 
             PyExec("ro_src = np.arange(4, dtype='f8')\nro_src.flags.writeable = False");
 
@@ -398,11 +401,11 @@ namespace NumSharp.Interop.UnitTests
             results.Count.Should().Be(50, "the page describes a census of 50 exporter varieties");
             views.Should().Be(47, "the page claims 47 of the 50 varieties share memory");
             copies.Should().Be(2, "the page claims exactly 2 varieties fall back to a copy");
-            rejected.Should().Be(1, "big-endian multi-byte is refused by both paths");
+            rejected.Should().Be(1, "datetime64 has no NumSharp dtype at any byte order");
 
             results.Single(r => r.Name == "numpy complex64").Outcome.Should().Be("copy", "widened");
             results.Single(r => r.Name == "sub-item stride (as_strided)").Outcome.Should().Be("copy", "linearized");
-            results.Single(r => r.Name == "big-endian multi-byte").Outcome.Should().Be("rejected", "byte-swap first");
+            results.Single(r => r.Name == "datetime64 (no NumSharp dtype)").Outcome.Should().Be("rejected", "no NumSharp dtype");
         }
 
         /// <summary>Runs one exporter through the decision order and reports which path took it.</summary>

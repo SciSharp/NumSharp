@@ -200,21 +200,23 @@ convention, and both accept **any** exporter, not just numpy arrays:
 | `np.broadcast_to(np.arange(3), (2,3))` | view · `Int64[2,3]` · **read-only** |
 | `np.array([1+2j], dtype='c8')` | **copy** — complex64 widens to `Complex` |
 | `np.array(['a','b'], dtype='U1')` | **copy** — UCS-4 text narrows to `Char` |
-| `np.arange(4, dtype='>i4')` | **refused** — big-endian |
+| `np.arange(4, dtype='>i4')` | **copy** — big-endian byte-reversed to native |
 
 Strided sources view too, including transposes and negative strides: NumSharp reconstructs the
-layout rather than flattening it. Only three things stop a view, and each is a width or byte-order
-mismatch that no reinterpretation can fix — complex64 is two 4-byte floats where NumSharp's
-`Complex` is two 8-byte doubles, `<U1` is a 4-byte code point where `Char` is a 2-byte UTF-16 unit,
-and big-endian data would byte-swap every value if read natively. The first two widen or narrow on
-copy; big-endian is refused by both paths, with the fix in the message:
+layout rather than flattening it. Only three things stop a zero-copy *view*, and each is a width or
+byte-order mismatch that no reinterpretation can fix — complex64 is two 4-byte floats where
+NumSharp's `Complex` is two 8-byte doubles, `<U1` is a 4-byte code point where `Char` is a 2-byte
+UTF-16 unit, and big-endian data would byte-swap every value if read natively. But the **copy**
+path (`ToNDArray`) handles all three: complex64 widens, UCS-4 narrows, and big-endian byte-reverses
+each element to a value-correct native array. Only the *view* path still refuses big-endian — a
+native-endian shared view is impossible — with the fix in the message:
 
 ```text
 NotSupportedException: big-endian buffer format '>l' cannot be mapped onto a native-endian
 NumSharp buffer. Byte-swap first: arr.astype(arr.dtype.newbyteorder('<')).
 ```
 
-<sub>See here [`Import_ViewsEveryExporterVariety`][gate], [`Import_WidensComplex64AndNarrowsUcs4OnCopy`][gate], [`Import_RefusesBigEndian`][gate]</sub>
+<sub>See here [`Import_ViewsEveryExporterVariety`][gate], [`Import_WidensComplex64AndNarrowsUcs4OnCopy`][gate], [`Import_ViewRefusesBigEndian_CopyByteSwaps`][gate]</sub>
 
 ### Can I view a read-only object?
 
@@ -476,7 +478,7 @@ you want one.
 | `the exporter's buffer is read-only` | You asked for a writable view of `bytes` or a `writeable=False` array. Pass `allowReadonly: true`, or `ToNDArray()` to copy |
 | `assignment destination is read-only` | You wrote through a non-writeable view — a read-only or broadcast source. Copy it first if you need to mutate |
 | `BufferError: Existing exports of data: object cannot be re-sized` | A live NumSharp view leases that object. `Dispose()` the view to release the lock |
-| `big-endian buffer format '>l' cannot be mapped` | Byte-swap on the Python side: `arr.astype(arr.dtype.newbyteorder('<'))` |
+| `big-endian buffer format '>l' cannot be mapped` | Only the zero-copy *view* refuses big-endian. `ToNDArray()` copies it, byte-reversing each value automatically; or byte-swap on the Python side first: `arr.astype(arr.dtype.newbyteorder('<'))` |
 | `the object does not export a PEP 3118 buffer` | Not every object is an exporter — a `dict`, a PIL `Image`. `np.asarray(obj)` first if numpy understands it |
 | `Python engine is not initialized` | `Runtime.PythonDLL` and `PythonEngine.Initialize()` before any conversion |
 | A Python write did not show up in NumSharp | You copied. `ToMemoryView`/`ToNumpy`/`AsNDArray` share; `ToNumpyCopy`/`ToNDArray` do not |
@@ -494,9 +496,9 @@ you want one.
 | 4 | `ToMemoryView` refuses non-contiguous layouts | `InvalidOperationException`, verbatim text | [`MemoryView_RefusesNonContiguousLayouts`][gate] |
 | 5 | Contiguous windows, scalars and empties export | 192 / 96 / 8 / 0 bytes | [`MemoryView_AcceptsContiguousWindowsScalarsAndEmpty`][gate] |
 | 6 | `Decimal` is refused with conversion guidance | verbatim `NotSupportedException` | [`Decimal_ThrowsWithConversionGuidance`][gate] |
-| 7 | Every buffer-exporter variety imports as a view | 8 of 11 probes view, incl. strided and transposed | [`Import_ViewsEveryExporterVariety`][gate] |
+| 7 | Every buffer-exporter variety imports as a view | 8 of 12 probes view, incl. strided and transposed | [`Import_ViewsEveryExporterVariety`][gate] |
 | 8 | complex64 widens, UCS-4 narrows — on copy, never as a view | `c8` → `Complex`, `<U1` → `Char` | [`Import_WidensComplex64AndNarrowsUcs4OnCopy`][gate] |
-| 9 | Big-endian is refused by both paths | verbatim `NotSupportedException` | [`Import_RefusesBigEndian`][gate] |
+| 9 | Big-endian: the view refuses, the copy byte-reverses to native | view throws; copy round-trips value-exact | [`Import_ViewRefusesBigEndian_CopyByteSwaps`][gate] |
 | 10 | Read-only sources are refused by default, viewable on opt-in | throws; then `IsWriteable == false` | [`ReadonlySource_RefusedByDefault_ViewableOnOptIn`][gate] |
 | 11 | Writing a read-only view throws instead of corrupting | `assignment destination is read-only` | [`ReadonlyView_ThrowsOnGuardedWrite`][gate] |
 | 12 | An export outlives every managed reference to it | `Dispose()` + GC, then Python reads and writes | [`Export_SurvivesEveryManagedReferenceDying`][gate] |

@@ -47,6 +47,11 @@ namespace NumSharp.Interop.PythonNet
         internal static PyObject array(PyObject obj)
             => PythonRuntimeInterop.NpArray.Invoke(obj);
 
+        /// <summary><c>np.asarray(obj)</c> — materialize an array-like (list/tuple/nested/scalar) into a
+        /// numpy ndarray; a buffer-exporter passes through without a copy.</summary>
+        internal static PyObject asarray(PyObject obj)
+            => PythonRuntimeInterop.NpAsarray.Invoke(obj);
+
         /// <summary><c>np.lib</c> submodule namespace.</summary>
         internal static class lib
         {

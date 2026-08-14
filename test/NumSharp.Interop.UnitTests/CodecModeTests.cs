@@ -222,6 +222,67 @@ namespace NumSharp.Interop.UnitTests
             nd.Dispose();
         }
 
+        // ---- decode: array-like opt-in (DecodeArrayLike) -------------------------------------------
+
+        private static readonly NumpyCodec ArrayLike = new(new NumpyCodecOptions { DecodeArrayLike = true });
+
+        [TestMethod]
+        public void ArrayLike_CanDecode_GatesArrayLikeBuiltins_OnlyWhenOptedIn()
+        {
+            using (Gil())
+            {
+                foreach (string t in new[] { "list", "tuple", "int", "float", "bool", "complex" })
+                {
+                    using var ty = Scope.Eval(t);
+                    ArrayLike.CanDecode(new PyType(ty), typeof(NDArray)).Should().BeTrue($"{t} is array-like");
+                    Auto.CanDecode(new PyType(ty), typeof(NDArray)).Should().BeFalse(
+                        $"{t} is refused by the default codec — array-like decode is opt-in");
+                }
+
+                foreach (string t in new[] { "dict", "str", "range" })
+                {
+                    using var ty = Scope.Eval(t);
+                    ArrayLike.CanDecode(new PyType(ty), typeof(NDArray)).Should().BeFalse(
+                        $"{t} is deliberately not treated as array-like");
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ArrayLike_Decode_ListsTuplesScalars_Materialize()
+        {
+            NDArray list = Decode(ArrayLike, "[1, 2, 3]", out bool okList);
+            okList.Should().BeTrue("a list decodes when DecodeArrayLike is on");
+            list.typecode.Should().Be(NPTypeCode.Int64, "numpy.asarray infers int64");
+            ReadAt<long>(list, 2).Should().Be(3);
+            list.Dispose();
+
+            NDArray nested = Decode(ArrayLike, "[[1.0, 2.0], [3.0, 4.0]]", out bool okNested);
+            okNested.Should().BeTrue();
+            nested.ndim.Should().Be(2);
+            nested.typecode.Should().Be(NPTypeCode.Double);
+            ReadAt<double>(nested, 1, 1).Should().Be(4.0);
+            nested.Dispose();
+
+            NDArray scalar = Decode(ArrayLike, "7", out bool okScalar);
+            okScalar.Should().BeTrue("a python int decodes to a 0-d array");
+            scalar.ndim.Should().Be(0);
+            ReadAt<long>(scalar).Should().Be(7);
+            scalar.Dispose();
+        }
+
+        [TestMethod]
+        public void ArrayLike_Decode_Default_Declines_NonBuffer_NonArrayLike()
+        {
+            // The DEFAULT codec (DecodeArrayLike off) never touches a non-buffer object — a list is declined.
+            Decode(Auto, "[1, 2, 3]", out bool okAuto).Should().BeNull();
+            okAuto.Should().BeFalse("the default codec does not decode array-likes");
+
+            // Even opted in, a dict has no NumSharp dtype and is declined (never throws into the pipeline).
+            Decode(ArrayLike, "{'a': 1}", out bool okDict).Should().BeNull();
+            okDict.Should().BeFalse("a dict is not materializable into a numeric NDArray");
+        }
+
         // ---- encode: Auto/View share, Copy detaches ------------------------------------------------
 
         [TestMethod]

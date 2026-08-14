@@ -173,8 +173,13 @@ namespace NumSharp.Interop.UnitTests
             Add("unviewable", "complex64 array", "np.array([1+2j, 3+4j], dtype='c8')", "copy");
             Add("unviewable", "complex64 strided", "np.zeros(8, dtype='c8')[::2]", "copy");
             Add("unviewable", "sub-item stride", "np.lib.stride_tricks.as_strided(np.arange(4, dtype='i4'), shape=(2,), strides=(2,))", "copy");
-            Add("rejected", "big-endian '>i4'", "np.arange(4, dtype='>i4')", "rejected");
-            Add("rejected", "big-endian '>f8'", "np.arange(4, dtype='>f8')", "rejected");
+            // big-endian multi-byte: the view path declines (no native-endian view), the copy byte-reverses.
+            Add("byteswap-copy", "big-endian '>i4'", "np.arange(4, dtype='>i4')", "copy");
+            Add("byteswap-copy", "big-endian '>f8'", "np.arange(4, dtype='>f8')", "copy");
+            Add("byteswap-copy", "big-endian '>c16'", "np.arange(4, dtype='>c16')", "copy");
+            Add("byteswap-copy", "big-endian '>c8' (widen+swap)", "np.array([1+2j, 3+4j], dtype='>c8')", "copy");
+            Add("byteswap-copy", "big-endian strided '>i4'[::2]", "np.arange(8, dtype='>i4')[::2]", "copy");
+            Add("rejected", "big-endian UCS-4 '>U1'", "np.array(['a', 'b'], dtype='>U1')", "rejected");
             Add("rejected", "datetime64", "np.array(['2021-01-01'], dtype='M8[D]')", "rejected");
             Add("rejected", "timedelta64", "np.array([1,2], dtype='m8[s]')", "rejected");
             Add("rejected", "object dtype", "np.array([{}, {}], dtype=object)", "rejected");

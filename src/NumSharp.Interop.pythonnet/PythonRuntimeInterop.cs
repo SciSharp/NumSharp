@@ -183,7 +183,7 @@ namespace NumSharp.Interop.PythonNet
         // handler touch them). Losing racers dispose their instance immediately (safe under the
         // GIL); winners are owned by the session and swept by OnEngineShutdown.
 
-        private static PyObject _npEmpty, _npFrombuffer, _npArray, _npAsStrided;
+        private static PyObject _npEmpty, _npFrombuffer, _npArray, _npAsarray, _npAsStrided;
         private static PyObject _ctypesCCharMul, _weakrefFinalize, _builtinsMemoryview;
         private static PyObject _trueLiteral, _falseLiteral, _strC, _strB;
         private static PyObject _nameFromAddress, _nameReshape, _nameSetflags, _nameCast, _nameTobytes,
@@ -199,6 +199,10 @@ namespace NumSharp.Interop.PythonNet
 
         /// <summary>Cached <c>numpy.array</c>. Call under the GIL.</summary>
         internal static PyObject NpArray => GetCached(ref _npArray, static () => Numpy.GetAttr("array"));
+
+        /// <summary>Cached <c>numpy.asarray</c> — the array-like materializer (list/tuple/nested/scalar
+        /// → ndarray). Call under the GIL.</summary>
+        internal static PyObject NpAsarray => GetCached(ref _npAsarray, static () => Numpy.GetAttr("asarray"));
 
         /// <summary>Cached <c>numpy.lib.stride_tricks.as_strided</c>. Call under the GIL.</summary>
         internal static PyObject NpAsStrided => GetCached(ref _npAsStrided, static () =>
@@ -289,6 +293,7 @@ namespace NumSharp.Interop.PythonNet
             DisposeModule(ref _npEmpty);
             DisposeModule(ref _npFrombuffer);
             DisposeModule(ref _npArray);
+            DisposeModule(ref _npAsarray);
             DisposeModule(ref _npAsStrided);
             DisposeModule(ref _ctypesCCharMul);
             DisposeModule(ref _weakrefFinalize);

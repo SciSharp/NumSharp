@@ -91,6 +91,22 @@ namespace NumSharp.Interop.PythonNet
         ///     back to the four built-in names above.
         /// </remarks>
         public bool DecodeAnyBuffer { get; init; } = true;
+
+        /// <summary>
+        ///     <c>false</c> (default): only PEP 3118 buffer exporters decode to <see cref="NDArray"/>.
+        ///     <c>true</c>: additionally decode everyday array-like Python objects that export NO buffer —
+        ///     a <c>list</c>, <c>tuple</c>, nested sequence, or a Python scalar
+        ///     (<c>int</c>/<c>float</c>/<c>bool</c>/<c>complex</c>) — by materializing them through
+        ///     <c>numpy.asarray</c> (<see cref="NDArrayPythonInterop.FromArrayLike"/>).
+        /// </summary>
+        /// <remarks>
+        ///     Off by default because it changes two contracts: the decode path becomes numpy-DEPENDENT
+        ///     (the buffer path is numpy-agnostic), and an array-like decode is ALWAYS an independent copy
+        ///     regardless of <see cref="DecodeMode"/> — a <c>list</c> has no shared memory to view. It
+        ///     deliberately covers only the array-like builtins numpy can express as a numeric ndarray;
+        ///     <c>str</c> (a char sequence), <c>dict</c>, and <c>range</c> are not accepted.
+        /// </remarks>
+        public bool DecodeArrayLike { get; init; } = false;
     }
 
     /// <summary>
@@ -176,6 +192,11 @@ namespace NumSharp.Interop.PythonNet
                         return true;
                 }
 
+                // Array-like builtins export NO buffer, so they are keyed off tp_name (never HasAttr):
+                // numpy.asarray materializes them (FromArrayLike). Opt-in — it makes decode numpy-dependent.
+                if (_options.DecodeArrayLike && IsArrayLikeBuiltin(name))
+                    return true;
+
                 return IsNdarraySubclass(objectType);
             }
             catch
@@ -197,6 +218,12 @@ namespace NumSharp.Interop.PythonNet
                 NumpyCodecMode.View => TryDecodeView(pyObj),
                 _                    => TryDecodeView(pyObj) ?? TryDecodeCopy(pyObj),   // Auto
             };
+
+            // Array-like fallback (opt-in): a non-buffer list/tuple/scalar reaches here with nd == null
+            // because the buffer routes above all decline it. It always materializes as a copy — there is
+            // no shared memory to view — so it runs after, and independent of, the view/copy mode above.
+            if (nd is null && _options.DecodeArrayLike)
+                nd = TryDecodeArrayLike(pyObj);
 
             if (nd is null)
                 return false;   // no view was possible in View mode, or an unsupported dtype/layout in any mode
@@ -222,6 +249,27 @@ namespace NumSharp.Interop.PythonNet
             try { return NDArrayPythonInterop.ToNDArray(pyObj); }
             catch { return null; }
         }
+
+        /// <summary>
+        ///     Materialize an array-like Python object (list / tuple / nested / scalar) through
+        ///     <c>numpy.asarray</c>, or <c>null</c> when it is not array-like or has no NumSharp dtype
+        ///     (a ragged list, an out-of-range bignum, a <c>dict</c>).
+        /// </summary>
+        private static NDArray TryDecodeArrayLike(PyObject pyObj)
+        {
+            try { return NDArrayPythonInterop.FromArrayLike(pyObj); }
+            catch { return null; }
+        }
+
+        /// <summary>
+        ///     The buffer-less Python builtins that <c>numpy.asarray</c> materializes into a numeric
+        ///     ndarray — accepted for decode only when <see cref="NumpyCodecOptions.DecodeArrayLike"/> is
+        ///     set. Keyed off the bare tp_name (<c>list</c>/<c>tuple</c>/<c>int</c>/<c>float</c>/<c>bool</c>/
+        ///     <c>complex</c>). Deliberately excludes <c>str</c> (a char sequence → an unsupported string
+        ///     dtype), <c>dict</c>, and <c>range</c>.
+        /// </summary>
+        private static bool IsArrayLikeBuiltin(string name)
+            => name == "list" || name == "tuple" || name == "int" || name == "float" || name == "bool" || name == "complex";
 
         /// <summary>Walks <c>__mro__</c> so numpy.matrix / numpy.memmap / user ndarray subclasses decode too.</summary>
         private static bool IsNdarraySubclass(PyType objectType)

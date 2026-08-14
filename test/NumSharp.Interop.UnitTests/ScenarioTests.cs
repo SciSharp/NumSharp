@@ -204,7 +204,9 @@ namespace NumSharp.Interop.UnitTests
                 .Should().Throw<InvalidOperationException>();
             ((Action)(() => ImportOf("{'a': 1}")))
                 .Should().Throw<NotSupportedException>();
-            ((Action)(() => ImportOf("np.arange(3).astype('>i4')")))
+            // A structured dtype has no NumSharp counterpart at any byte order — the copy path refuses it
+            // (big-endian numeric data no longer belongs here: the copy now byteswaps it, see ImportTests).
+            ((Action)(() => ImportOf("np.zeros(2, dtype=[('x', 'i4'), ('y', 'f8')])")))
                 .Should().Throw<NotSupportedException>();
 
             Pump();
