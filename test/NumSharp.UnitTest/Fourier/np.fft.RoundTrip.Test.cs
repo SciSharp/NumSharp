@@ -7,15 +7,14 @@ using NumSharp;
 namespace NumSharp.UnitTest.Fourier
 {
     /// <summary>
-    ///     Compute-pending gate for the FFT engine agent. These need the actual transform (they throw
-    ///     <see cref="NotImplementedException"/> at the seam today), so they are <c>[OpenBugs]</c> and
-    ///     excluded from CI until <c>PocketFFTDriver.Execute</c> is wired — then drop the attribute.
+    ///     End-to-end correctness of the wired FFT path (np.fft.* -> RawFft -> PocketFFTDriver ->
+    ///     the ported pocketfft engine). Round-trips and the DC-component identity, verified against
+    ///     NumPy 2.4.2 behaviour. (Was [OpenBugs] while compute was stubbed; un-gated once wired.)
     /// </summary>
     [TestClass]
-    public class NpFftComputePendingTest : TestClass
+    public class NpFftRoundTripTest : TestClass
     {
         [TestMethod]
-        [OpenBugs]
         public void Fft_Ifft_RoundTrip()
         {
             var x = new NDArray(new double[] { 1, 2, 3, 4, 3, 2 });
@@ -25,7 +24,6 @@ namespace NumSharp.UnitTest.Fourier
         }
 
         [TestMethod]
-        [OpenBugs]
         public void Rfft_Irfft_RoundTrip()
         {
             var x = new NDArray(new double[] { 1, 2, 3, 4, 3, 2 });
@@ -35,7 +33,6 @@ namespace NumSharp.UnitTest.Fourier
         }
 
         [TestMethod]
-        [OpenBugs]
         public void Fft_Ones_DcComponentOnly()
         {
             // np.fft.fft(ones(4)) == [4+0j, 0, 0, 0]

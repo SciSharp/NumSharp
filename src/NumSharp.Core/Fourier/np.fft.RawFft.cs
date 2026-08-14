@@ -134,13 +134,11 @@ namespace NumSharp
                     throw new ValueError("output array has wrong shape.");
             }
 
-            // SEAM -> PocketFFTDriver.Execute(a, n, axis, isReal, isForward, fct, out)
-            //   (isReal/isForward are the args above; fct is the normalization factor; when out is
-            //    null the driver allocates the output = a.shape with axis replaced by nOut, dtype per
-            //    the DTYPE POLICY note above — complex128 for the complex/forward outputs, float64 for
-            //    irfft.) The engine agent owns PocketFFTDriver.cs.
-            throw new NotImplementedException(
-                $"np.fft.{name}: FFT compute pending (engine seam) -> PocketFFTDriver.Execute");
+            // Wired to the ported pocketfft engine (PocketFFTDriver.cs). The driver resolves the
+            // output (a.shape with axis replaced by nOut, dtype per the policy above — complex128 for
+            // the complex/forward outputs, float64 for irfft), runs the strided all-but-axis 1-D
+            // transform, and scales by fct. `name` is retained for callers' diagnostics.
+            return PocketFFTDriver.Execute(a, n, axis, isReal, isForward, fct, @out);
         }
 
         /// <summary>
