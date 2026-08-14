@@ -422,6 +422,36 @@ namespace NumSharp.UnitTest.Fuzz
                 case "nanpercentile": return np.nanpercentile(ops[0], p["q"].GetDouble(), ParseAxis(p), keepdims: ParseKeepdims(p));
                 case "nanquantile": return np.nanquantile(ops[0], p["q"].GetDouble(), ParseAxis(p), keepdims: ParseKeepdims(p));
 
+                // ---- np.fft.* (Fourier transforms + helpers) -----------------------------
+                // Pairs 1:1 with gen_oracle.gen_fft. The transforms take (a, n|s, axis|axes, norm);
+                // float32/float16 inputs return complex128/float64 where NumPy returns complex64/
+                // float32 (NumSharp has no complex64) — the dtype-only divergence excused in
+                // MisalignedRegistry. fftfreq/rfftfreq are operand-less pure generators.
+                case "fft": return np.fft.fft(ops[0], ParseNullableInt(p, "n"), p["axis"].GetInt32(), ParseNorm(p));
+                case "ifft": return np.fft.ifft(ops[0], ParseNullableInt(p, "n"), p["axis"].GetInt32(), ParseNorm(p));
+                case "rfft": return np.fft.rfft(ops[0], ParseNullableInt(p, "n"), p["axis"].GetInt32(), ParseNorm(p));
+                case "irfft": return np.fft.irfft(ops[0], ParseNullableInt(p, "n"), p["axis"].GetInt32(), ParseNorm(p));
+                case "hfft": return np.fft.hfft(ops[0], ParseNullableInt(p, "n"), p["axis"].GetInt32(), ParseNorm(p));
+                case "ihfft": return np.fft.ihfft(ops[0], ParseNullableInt(p, "n"), p["axis"].GetInt32(), ParseNorm(p));
+                case "fft2": return np.fft.fft2(ops[0], ParseNullableIntArray(p, "s"), ParseNullableIntArray(p, "axes"), ParseNorm(p));
+                case "ifft2": return np.fft.ifft2(ops[0], ParseNullableIntArray(p, "s"), ParseNullableIntArray(p, "axes"), ParseNorm(p));
+                case "fftn": return np.fft.fftn(ops[0], ParseNullableIntArray(p, "s"), ParseNullableIntArray(p, "axes"), ParseNorm(p));
+                case "ifftn": return np.fft.ifftn(ops[0], ParseNullableIntArray(p, "s"), ParseNullableIntArray(p, "axes"), ParseNorm(p));
+                case "rfft2": return np.fft.rfft2(ops[0], ParseNullableIntArray(p, "s"), ParseNullableIntArray(p, "axes"), ParseNorm(p));
+                case "irfft2": return np.fft.irfft2(ops[0], ParseNullableIntArray(p, "s"), ParseNullableIntArray(p, "axes"), ParseNorm(p));
+                case "rfftn": return np.fft.rfftn(ops[0], ParseNullableIntArray(p, "s"), ParseNullableIntArray(p, "axes"), ParseNorm(p));
+                case "irfftn": return np.fft.irfftn(ops[0], ParseNullableIntArray(p, "s"), ParseNullableIntArray(p, "axes"), ParseNorm(p));
+                case "fftfreq": return np.fft.fftfreq(p["n"].GetInt32(), p["d"].GetDouble());
+                case "rfftfreq": return np.fft.rfftfreq(p["n"].GetInt32(), p["d"].GetDouble());
+                case "fftshift":
+                    return p.ContainsKey("axis")
+                        ? np.fft.fftshift(ops[0], p["axis"].GetInt32())
+                        : np.fft.fftshift(ops[0], ParseNullableIntArray(p, "axes"));
+                case "ifftshift":
+                    return p.ContainsKey("axis")
+                        ? np.fft.ifftshift(ops[0], p["axis"].GetInt32())
+                        : np.fft.ifftshift(ops[0], ParseNullableIntArray(p, "axes"));
+
                 // Reductions (axis/keepdims params).
                 case "sum": case "prod": case "min": case "max": case "mean":
                 case "std": case "var": case "argmax": case "argmin": case "all": case "any":
@@ -597,6 +627,14 @@ namespace NumSharp.UnitTest.Fuzz
 
         private static int? ParseAxis(IReadOnlyDictionary<string, JsonElement> p)
             => p.TryGetValue("axis", out var ax) && ax.ValueKind != JsonValueKind.Null ? ax.GetInt32() : (int?)null;
+
+        /// <summary>np.fft `norm` — the string or null (backward). Absent/JSON-null both mean null.</summary>
+        private static string ParseNorm(IReadOnlyDictionary<string, JsonElement> p)
+            => p.TryGetValue("norm", out var nrm) && nrm.ValueKind != JsonValueKind.Null ? nrm.GetString() : null;
+
+        /// <summary>An int[] param that may be JSON null (np.fft `s` / `axes` = None).</summary>
+        private static int[] ParseNullableIntArray(IReadOnlyDictionary<string, JsonElement> p, string key)
+            => p.TryGetValue(key, out var v) && v.ValueKind != JsonValueKind.Null ? ParseIntArray(v) : null;
 
         private static bool ParseKeepdims(IReadOnlyDictionary<string, JsonElement> p)
             => p.TryGetValue("keepdims", out var kd) && kd.GetBoolean();

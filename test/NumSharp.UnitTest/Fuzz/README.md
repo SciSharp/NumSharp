@@ -117,6 +117,7 @@ python test/oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer 
 python test/oracle/gen_oracle.py specials         # IEEE special-value parity (nan/±inf/±0/subnormal/max)
 python test/oracle/gen_oracle.py precision        # truthful-vs-precise (adversarial accumulation; needs mpmath)
 python test/oracle/gen_oracle.py products         # CBLAS product family values (inner/vdot/vecdot/matvec/...)
+python test/oracle/gen_oracle.py fft              # np.fft.* — 1-D/N-D/hermitian transforms + freq/shift helpers
 python test/oracle/gen_oracle.py random_parity    # seeded np.random stream bytes (portable + host-libm files)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
@@ -125,8 +126,20 @@ dotnet run test/oracle/gen_decimal_oracle.cs      # Decimal tiers (independent C
 
 The block shows the most-used modes; the full `gen_oracle.py` mode list (one tier file per mode) is
 `smoke astype_full binary divmod_power comparison unary reduce where place matmul rounding bitwise
-unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors groupa`.
+unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors groupa fft`.
 Regeneration is deterministic: rerunning an untouched mode must produce a zero corpus diff.
+
+The **`fft` tier** (`fft.jsonl`, 1,796 cases) gates the managed pocketfft engine
+(`src/NumSharp.Core/Fourier/`): the 1-D core (`fft`/`ifft`/`rfft`/`irfft`) + hermitian
+(`hfft`/`ihfft`) + the N-D forms (`fft2`/`ifft2`/`fftn`/`ifftn`/`rfft2`/`irfft2`/`rfftn`/`irfftn`)
++ helpers (`fftfreq`/`rfftfreq`/`fftshift`/`ifftshift`), swept over dtype, `n`/`s`
+{default/truncate/zero-pad/prime-13 Bluestein}, `norm` {backward/ortho/forward}, `axis`/`axes`, and the
+memory layouts {C, F, strided, reversed, transposed, broadcast-read}. **float64/complex128/int/bool are
+bit-exact** with NumPy 2.4.2; **float32/float16 are the one documented divergence** (F1 above) —
+NumSharp has no complex64, so it promotes to double (values = the correctly-rounded double result).
+A generator note that bit: NumPy's 2-D forms default `axes` to `(-2,-1)` but treat an *explicit*
+`axes=None` as all-axes (fftn), so the generator OMITS a `None` `s`/`axes`/`norm` to exercise each op's
+real default — which is exactly what NumSharp's null-coalescing (`axes ?? {-2,-1}`) mirrors.
 
 Char rides the applicable NumPy modes automatically (`char_tier` appends uint16-proxy cases
 relabelled to `char` into 18 tier files — arith/divmod/comparison/unary×2/bitwise/reduce/scan/stat/
@@ -189,6 +202,7 @@ their prior contents in every one of the 882 `where=all_false` cases.
 | Excuse class | Scope | Hits |
 |---|---|---|
 | NEP50 weak-scalar: 0-D operand promoted weakly | any multi-operand op × Dtype kind, 0-D operand present | 261 |
+| **F1** `np.fft(float32/float16)`: NumPy returns complex64/float32/float16, NumSharp complex128/float64 — a dtype-ONLY divergence (values = the correctly-rounded double result; bit-verified `fft(x32) == fft(x32.astype(f8))`). NumSharp has one complex type. The unnameable complex64 is routed to a Dtype divergence by `CompareArray`. Contractual dtypes (float64/complex128/int/bool) are bit-exact; the helpers never diverge | 14 fft transforms × {float32,float16} input × Dtype kind | 516 |
 | unary ~ULP (transcendental/magnitude algorithm difference) | single-operand × Value, every diff ≤2 ULP — **EXCEPT exp/log/sin/cos/rad2deg/deg2rad at a float32 result, which are gated bit-exact** (see below) | 563 |
 | complex unary within 3 ULP (full NumPy-algorithm port) | complex unary × Value, ≤3 ULP | 11 |
 | complex cos/sin/arccos/sinh/cosh pathological edge (NaN zero-sign / subnormal / overflow boundary) | those 5 ops × complex × Value | 0 |

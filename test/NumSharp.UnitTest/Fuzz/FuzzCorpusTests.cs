@@ -263,6 +263,18 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Tail() => RunCorpus("tail.jsonl");
 
+        // FFT (np.fft.*): the 1-D core (fft/ifft/rfft/irfft) + hermitian (hfft/ihfft) + the N-D forms
+        // (fft2/ifft2/fftn/ifftn/rfft2/irfft2/rfftn/irfftn) + helpers (fftfreq/rfftfreq/fftshift/
+        // ifftshift), swept over dtype {float64/complex128/int/bool CONTRACTUAL; float32/float16 the
+        // documented complex64 divergence}, n/s {default/truncate/zero-pad/prime-13 Bluestein}, norm
+        // {backward/ortho/forward}, axis/axes, and the memory layouts {C, F, strided, reversed,
+        // transposed, broadcast-read}. The managed pocketfft engine is bit-identical to NumPy 2.4.2 on
+        // the double/complex128 path; float32/float16 promote to double (NumSharp has no complex64),
+        // excused dtype-only in MisalignedRegistry (F1) — values are the correctly-rounded double result.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Fft() => RunCorpus("fft.jsonl");
+
         // W12 parameter sweep: middle + negative axes (-1/-2/-3) for all reductions, ddof=1
         // sample std/var, and order='F' ravel across C/transposed/F-contiguous sources.
         [TestMethod]
@@ -409,6 +421,7 @@ namespace NumSharp.UnitTest.Fuzz
             ["dtype_text.jsonl"] = 2000,
             ["errors.jsonl"] = 8,
             ["errors_full.jsonl"] = 650,
+            ["fft.jsonl"] = 1700,
             ["groupa.jsonl"] = 82,
             ["iter.jsonl"] = 4400,
             ["logic.jsonl"] = 1775,

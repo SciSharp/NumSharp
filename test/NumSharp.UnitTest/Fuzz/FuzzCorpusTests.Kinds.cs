@@ -85,8 +85,22 @@ namespace NumSharp.UnitTest.Fuzz
             List<string> failures, Dictionary<string, int> documented)
         {
             var empty = Array.Empty<BitDiff.Diff>();
-            var tc = FuzzCorpus.DtypeToTC(exp.Dtype);
             string at = slot == null ? "" : $" {slot}";
+
+            // NumPy can produce a dtype NumSharp has no NPTypeCode for — complex64, from an fft over
+            // a float32/float16 input (NumSharp promotes to double and returns complex128). That
+            // unnameable dtype IS the divergence: route it as a Dtype difference for the registry to
+            // excuse, exactly as a mappable dtype mismatch would be. No other tier records an
+            // unmappable dtype (verified), so this only fires for the fft float32/float16 cells.
+            NPTypeCode tc;
+            try { tc = FuzzCorpus.DtypeToTC(exp.Dtype); }
+            catch (NotSupportedException)
+            {
+                var dr = MisalignedRegistry.Classify(c, DivergenceKind.Dtype, null, null, default, empty);
+                if (dr != null) Bump(documented, dr);
+                else failures.Add($"{c.Id} [{c.Layout}]{at}: NumPy dtype '{exp.Dtype}' has no NumSharp analog");
+                return;
+            }
 
             // NEP50: result dtype must match NumPy exactly (the headline promotion failure).
             if (result.typecode != tc)

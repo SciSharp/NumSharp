@@ -70,6 +70,17 @@ namespace NumSharp.UnitTest.Fuzz
         };
 
         /// <summary>
+        ///     The np.fft transform ops (NOT the helpers: fftfreq/rfftfreq are always float64 and
+        ///     fftshift/ifftshift preserve the input dtype, so neither ever diverges). Only these
+        ///     carry the float32/float16 -> complex128/float64 promotion divergence (F1 below).
+        /// </summary>
+        private static readonly System.Collections.Generic.HashSet<string> FftTransformOps = new()
+        {
+            "fft", "ifft", "rfft", "irfft", "hfft", "ihfft",
+            "fft2", "ifft2", "fftn", "ifftn", "rfft2", "irfft2", "rfftn", "irfftn"
+        };
+
+        /// <summary>
         ///     The unary ops whose float32 loop NumSharp ports from NumPy's own kernel rather than
         ///     delegating to the platform libm, and which are therefore held BIT-EXACT (no ULP
         ///     envelope). Adding an op here without a matching port would silently turn a real
@@ -108,6 +119,25 @@ namespace NumSharp.UnitTest.Fuzz
             if (kind == DivergenceKind.Value && c.Op == "divide" && tc == NPTypeCode.Complex
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex)";
+
+            // (F1) np.fft over a float32/float16 input. NumSharp has ONE complex type (complex128)
+            //      and no complex64, so it promotes to double and returns complex128 (fft/rfft/ihfft/
+            //      the N-D forms) or float64 (irfft/hfft) where NumPy 2.x returns complex64 / float32
+            //      / float16. A dtype-ONLY divergence: the VALUES are the correctly-rounded double
+            //      result — bit-verified that np.fft.fft(x_f32) == np.fft.fft(x_f32.astype(f8))
+            //      byte-for-byte with NumSharp's own output. Two shapes reach here: the mappable one
+            //      (float32/float16 expected from irfft/hfft, a normal result-dtype mismatch) and the
+            //      UNNAMEABLE complex64 (fft/rfft/ihfft/...), routed as a Dtype divergence by
+            //      CompareArray. float64/complex128/int/bool inputs are CONTRACTUAL (bit-exact) and
+            //      are NOT touched here; the helpers never diverge (see FftTransformOps). Matches
+            //      NumPy's own still-published "numpy.fft promotes float32 ... to ... complex128"
+            //      docstring; a real complex64 dtype would flip these bit-exact automatically.
+            if (kind == DivergenceKind.Dtype && FftTransformOps.Contains(c.Op)
+                && c.Operands.Length >= 1
+                && (c.Operands[0].Dtype == "float32" || c.Operands[0].Dtype == "float16"))
+                return "np.fft(float32/float16): NumPy returns complex64/float32/float16; NumSharp has "
+                     + "no complex64 and promotes to complex128/float64 (values = the correctly-rounded "
+                     + "double result) [documented]";
 
             // ----------------------------------------------------------------------------------
             // W1 dtype-expansion divergences — real NumSharp bugs surfaced by widening the corpus

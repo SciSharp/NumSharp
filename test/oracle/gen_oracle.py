@@ -5105,6 +5105,216 @@ def gen_products():
     return cases
 
 
+# ============================================================================
+# FFT tier (np.fft.*) — the differential gate for the managed pocketfft engine
+# (src/NumSharp.Core/Fourier/). NumPy 2.4.2 is the oracle.
+#
+# DTYPE POLICY (probed 2.4.2): the forward/complex transforms return complex128
+# for float64/complex128/int/bool input and complex64 for float32/float16;
+# irfft/hfft return float64 (float32/float16 -> float32/float16). NumSharp has
+# ONE complex type (complex128) and no complex64, so it promotes float32/float16
+# to double and returns complex128 / float64 — a bit-verified equality with
+# NumPy's OWN double computation (np.fft.fft(x32) == np.fft.fft(x32.astype(f8))
+# was confirmed byte-identical to NumSharp). That makes float64/complex128/int/
+# bool the CONTRACTUAL (bit-exact) cells, and float32/float16 the ONE documented
+# divergence — recorded here as-produced (complex64/float32/float16) and excused
+# in MisalignedRegistry as a dtype-ONLY difference (values = the correctly-
+# rounded double result). complex64 has no NumSharp NPTypeCode, so its cases
+# reach the harness through CompareArray's unmappable-dtype -> Dtype route.
+# ============================================================================
+
+# Clean, discriminating FFT values — NO NaN/inf. Every output bin sums the WHOLE
+# signal, so a single NaN blanks the entire spectrum and stops discriminating the
+# butterflies / twiddles / Bluestein chirp. Deterministic; small magnitudes keep
+# float16 (11-bit mantissa) representable so its cells are honest.
+_FFT_POOL = [1.0, -2.0, 3.5, 0.0, -0.5, 2.25, -1.75, 4.0, 6.5, -3.0, 0.25, 5.0,
+             -4.5, 7.0, -1.0, 2.0, 0.75, -6.0, 3.0, -0.25, 8.0, -2.5, 1.25, -3.75]
+
+FFT_REAL_DTYPES = ["float64", "float32", "float16", "int32", "bool"]      # rfft/ihfft (real input)
+FFT_ANY_DTYPES = FFT_REAL_DTYPES + ["complex128"]                          # fft/ifft/irfft/hfft
+
+
+def _fft_fill(n, dt):
+    dt = np.dtype(dt)
+    if dt.kind == "c":
+        r = np.array(_FFT_POOL, dtype=np.float64)
+        vals = (r + 1j * np.roll(r, 3)).astype(dt)
+    elif dt.kind == "b":
+        vals = (np.arange(len(_FFT_POOL)) % 2 == 0)
+    elif dt.kind in "iu":
+        vals = np.array([int(round(v)) for v in _FFT_POOL], dtype=dt)
+    else:  # float16 / float32 / float64
+        vals = np.array(_FFT_POOL, dtype=np.float64).astype(dt)
+    if len(vals) < n:
+        vals = np.tile(vals, (n + len(vals) - 1) // len(vals))
+    return np.ascontiguousarray(vals[:n].copy())
+
+
+def _fft_base(shape, dt):
+    n = int(np.prod(shape)) if len(shape) else 1
+    return np.ascontiguousarray(_fft_fill(n, dt).reshape(shape))
+
+
+def _fft_layouts_1d(dt):
+    """(name, base, view) for 1-D transforms — copy_input over C / strided / reversed / offset."""
+    L = []
+    b = _fft_base((8,), dt);   L.append(("c1d", b, b))
+    b = _fft_base((16,), dt);  L.append(("strided2_1d", b, b[::2]))
+    b = _fft_base((8,), dt);   L.append(("neg_1d", b, b[::-1]))
+    b = _fft_base((10,), dt);  L.append(("offset_1d", b, b[2:9]))          # len 7 (radix-7, offset)
+    return L
+
+
+def _fft_layouts_nd(dt):
+    """(name, base, view) for multi-axis transforms — C / F / col-strided / reversed / bcast / 3-D."""
+    L = []
+    b = _fft_base((4, 5), dt);   L.append(("c2d", b, b))
+    b = _fft_base((5, 4), dt);   L.append(("f2d", b, b.T))                 # (4,5) F-contiguous
+    b = _fft_base((4, 10), dt);  L.append(("strided_cols", b, b[:, ::2]))  # (4,5) column-strided
+    b = _fft_base((4, 5), dt);   L.append(("neg2d", b, b[::-1, ::-1]))
+    b = _fft_base((5,), dt);     L.append(("bcast_row", b, np.broadcast_to(b, (4, 5))))
+    b = _fft_base((2, 3, 4), dt); L.append(("c3d", b, b))
+    b = _fft_base((2, 3, 4), dt); L.append(("transp3d", b, b.transpose(2, 0, 1)))  # (4,2,3)
+    return L
+
+
+def _fft_expected(r):
+    r = np.asarray(r)
+    shape = [int(d) for d in r.shape]                                       # BEFORE ascontiguousarray
+    return {"dtype": r.dtype.name, "shape": shape,
+            "buffer": np.ascontiguousarray(r).tobytes().hex()}
+
+
+# 1-D transforms: (valid input dtypes, callable(view, n, axis, norm)).
+_FFT_1D_OPS = {
+    "fft":   (FFT_ANY_DTYPES,  lambda v, n, ax, nm: np.fft.fft(v, n, ax, nm)),
+    "ifft":  (FFT_ANY_DTYPES,  lambda v, n, ax, nm: np.fft.ifft(v, n, ax, nm)),
+    "rfft":  (FFT_REAL_DTYPES, lambda v, n, ax, nm: np.fft.rfft(v, n, ax, nm)),
+    "irfft": (FFT_ANY_DTYPES,  lambda v, n, ax, nm: np.fft.irfft(v, n, ax, nm)),
+    "hfft":  (FFT_ANY_DTYPES,  lambda v, n, ax, nm: np.fft.hfft(v, n, ax, nm)),
+    "ihfft": (FFT_REAL_DTYPES, lambda v, n, ax, nm: np.fft.ihfft(v, n, ax, nm)),
+}
+
+# N-D transforms: op -> valid input dtypes. The call goes through _fft_nd_call, which OMITS a
+# None argument rather than passing it — because NumPy's 2-D forms DEFAULT axes to (-2,-1) but
+# treat an EXPLICIT axes=None as "all axes" (fftn behaviour). NumSharp coalesces a null axes to
+# (-2,-1) (its default), so the generator must exercise NumPy's DEFAULT (omit axes), not the
+# axes=None path NumSharp cannot express. Same reasoning for s / norm.
+_FFT_ND_OPS = {
+    "fft2":   FFT_ANY_DTYPES,  "ifft2":  FFT_ANY_DTYPES,
+    "fftn":   FFT_ANY_DTYPES,  "ifftn":  FFT_ANY_DTYPES,
+    "rfft2":  FFT_REAL_DTYPES, "irfft2": FFT_ANY_DTYPES,
+    "rfftn":  FFT_REAL_DTYPES, "irfftn": FFT_ANY_DTYPES,
+}
+
+
+def _fft_nd_call(op, view, s, axes, norm):
+    kw = {}
+    if s is not None:
+        kw["s"] = list(s)
+    if axes is not None:
+        kw["axes"] = list(axes)
+    if norm is not None:
+        kw["norm"] = norm
+    return getattr(np.fft, op)(view, **kw)
+
+
+def gen_fft():
+    cases = []
+    n = [0]
+
+    def emit(op, params, operands, r, layout, dt):
+        cases.append({
+            "id": f"{op}/{layout}/{dt}/{n[0]}",
+            "op": op, "params": params, "operands": operands,
+            "expected": _fft_expected(r), "layout": layout, "valueclass": "fft",
+        })
+        n[0] += 1
+
+    def try_emit(op, params, operands, call, layout, dt):
+        try:
+            r = call()
+        except Exception:
+            return False                       # NumPy raised (e.g. rfft(complex)) — error parity is separate
+        emit(op, params, operands, r, layout, dt)
+        return True
+
+    # ---- 1-D core -----------------------------------------------------------
+    for op, (dtypes, f) in _FFT_1D_OPS.items():
+        for dt in dtypes:
+            # (a) default n/axis/norm across every layout — copy_input over each memory descriptor.
+            for lname, base, view in (_fft_layouts_1d(dt) + _fft_layouts_nd(dt)):
+                try_emit(op, {"n": None, "axis": -1, "norm": None}, [describe(base, view)],
+                         lambda f=f, view=view: f(view, None, -1, None), lname, dt)
+            # (b) n sweep on a contiguous 1-D signal: 4 truncate, 12 zero-pad, 13 prime (Bluestein).
+            b = _fft_base((8,), dt)
+            for nn in (4, 12, 13):
+                try_emit(op, {"n": nn, "axis": -1, "norm": None}, [describe(b, b)],
+                         lambda f=f, b=b, nn=nn: f(b, nn, -1, None), "c1d_n", dt)
+            # (c) norm sweep (ortho, forward, explicit backward) on the same signal.
+            for nm in ("ortho", "forward", "backward"):
+                try_emit(op, {"n": None, "axis": -1, "norm": nm}, [describe(b, b)],
+                         lambda f=f, b=b, nm=nm: f(b, None, -1, nm), "c1d_norm", dt)
+            # (d) axis sweep on 2-D and 3-D contiguous inputs (middle/negative axes).
+            b2 = _fft_base((4, 5), dt)
+            for ax in (0, 1, -2):
+                try_emit(op, {"n": None, "axis": ax, "norm": None}, [describe(b2, b2)],
+                         lambda f=f, b2=b2, ax=ax: f(b2, None, ax, None), f"c2d_ax{ax}", dt)
+            b3 = _fft_base((2, 3, 4), dt)
+            for ax in (0, 1, -1):
+                try_emit(op, {"n": None, "axis": ax, "norm": None}, [describe(b3, b3)],
+                         lambda f=f, b3=b3, ax=ax: f(b3, None, ax, None), f"c3d_ax{ax}", dt)
+
+    # ---- N-D ----------------------------------------------------------------
+    for op, dtypes in _FFT_ND_OPS.items():
+        for dt in dtypes:
+            # (a) default s/axes over the multi-axis layouts (axes OMITTED -> the op's real default).
+            for lname, base, view in _fft_layouts_nd(dt):
+                try_emit(op, {"s": None, "axes": None, "norm": None}, [describe(base, view)],
+                         lambda op=op, view=view: _fft_nd_call(op, view, None, None, None), lname, dt)
+            b2 = _fft_base((4, 5), dt)
+            # (b) s sweep: [2,3] truncate, [6,6] pad, [-1,3] the -1 "full length" sentinel.
+            for s in ([2, 3], [6, 6], [-1, 3]):
+                try_emit(op, {"s": s, "axes": None, "norm": None}, [describe(b2, b2)],
+                         lambda op=op, b2=b2, s=s: _fft_nd_call(op, b2, s, None, None), "c2d_s", dt)
+            # (c) norm sweep.
+            for nm in ("ortho", "forward"):
+                try_emit(op, {"s": None, "axes": None, "norm": nm}, [describe(b2, b2)],
+                         lambda op=op, b2=b2, nm=nm: _fft_nd_call(op, b2, None, None, nm), "c2d_norm", dt)
+            # (d) explicit axes (order + negative) on a 3-D input.
+            b3 = _fft_base((2, 3, 4), dt)
+            for ax in ([0, 1], [2, 0], [-1, -2]):
+                try_emit(op, {"s": None, "axes": ax, "norm": None}, [describe(b3, b3)],
+                         lambda op=op, b3=b3, ax=ax: _fft_nd_call(op, b3, None, ax, None), "c3d_axes", dt)
+
+    # ---- helpers ------------------------------------------------------------
+    # fftfreq / rfftfreq: pure generators (float64), no operand. n even/odd/prime/tiny, d varied.
+    for nn in (8, 7, 13, 1, 2, 16):
+        for d in (1.0, 0.5, 2.0):
+            emit("fftfreq", {"n": nn, "d": d}, [], np.fft.fftfreq(nn, d), "freq", "float64")
+            emit("rfftfreq", {"n": nn, "d": d}, [], np.fft.rfftfreq(nn, d), "freq", "float64")
+
+    # fftshift / ifftshift: dtype-preserving cyclic roll. layouts x dtypes x axes {None,int,tuple}.
+    for dt in ("int32", "float64", "complex128", "float32"):
+        for lname, base, view in (_fft_layouts_1d(dt) + _fft_layouts_nd(dt)):
+            nd = view.ndim
+            specs = [("axes", None)]                      # all axes
+            if nd >= 1:
+                specs.append(("axis", 0))                 # single-int overload
+            if nd >= 2:
+                specs.append(("axis", -1))
+                specs.append(("axes", [0, nd - 1]))       # tuple
+            for kind, ax in specs:
+                params = {"axis": ax} if kind == "axis" else {"axes": ax}
+                np_ax = tuple(ax) if isinstance(ax, list) else ax
+                try_emit("fftshift", params, [describe(base, view)],
+                         lambda view=view, np_ax=np_ax: np.fft.fftshift(view, axes=np_ax), lname, dt)
+                try_emit("ifftshift", params, [describe(base, view)],
+                         lambda view=view, np_ax=np_ax: np.fft.ifftshift(view, axes=np_ax), lname, dt)
+
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -5284,8 +5494,11 @@ def main():
         portable, host = gen_random_parity()                            # seeded MT19937 stream bytes
         write_jsonl(os.path.join(corpus_dir, "random_parity.jsonl"), portable)
         write_jsonl(os.path.join(corpus_dir, "random_parity_host.jsonl"), host)
+    elif mode == "fft":
+        cases = gen_fft()                                               # np.fft.* differential tier
+        write_jsonl(os.path.join(corpus_dir, "fft.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | specials | precision | random_parity | products)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | specials | precision | random_parity | products | fft)")
         sys.exit(2)
 
 
