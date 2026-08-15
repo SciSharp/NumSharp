@@ -17,10 +17,12 @@ namespace NumSharp
         /// <param name="stop">End of interval. The interval does not include this value.</param>
         /// <param name="step">Spacing between values. Default is 1.</param>
         /// <param name="dtype">The type of the output array. If null, infers from inputs (int64 for integers, float64 for floats).</param>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of evenly spaced values.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arange.html</remarks>
-        public static NDArray arange(double start, double stop, double step, Type dtype)
+        public static NDArray arange(double start, double stop, double step, Type dtype, string device = null)
         {
+            ValidateDevice(device);
             return arange(start, stop, step, dtype?.GetTypeCode() ?? NPTypeCode.Empty);
         }
 
@@ -222,10 +224,11 @@ namespace NumSharp
         /// </summary>
         /// <param name="stop">End of interval (exclusive).</param>
         /// <param name="dtype">The type of the output array.</param>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of evenly spaced values from 0 to stop-1.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arange.html</remarks>
-        public static NDArray arange(double stop, Type dtype)
-            => arange(0, stop, 1, dtype);
+        public static NDArray arange(double stop, Type dtype, string device = null)
+            => arange(0, stop, 1, dtype, device);
 
         /// <summary>
         /// Return evenly spaced values within a given interval.
@@ -243,10 +246,11 @@ namespace NumSharp
         /// <param name="start">Start of interval (inclusive).</param>
         /// <param name="stop">End of interval (exclusive).</param>
         /// <param name="dtype">The type of the output array.</param>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of evenly spaced values.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arange.html</remarks>
-        public static NDArray arange(double start, double stop, Type dtype)
-            => arange(start, stop, 1, dtype);
+        public static NDArray arange(double start, double stop, Type dtype, string device = null)
+            => arange(start, stop, 1, dtype, device);
 
         /// <summary>
         /// Return evenly spaced values within a given interval.

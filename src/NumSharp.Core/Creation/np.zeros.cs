@@ -65,10 +65,12 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">Shape of the new array,</param>
         /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of zeros with the given shape, dtype.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros(Shape shape, Type dtype)
+        public static NDArray zeros(Shape shape, Type dtype, string device = null)
         {
+            ValidateDevice(device);
             return zeros(shape, (dtype ?? typeof(double)).GetTypeCode());
         }
 

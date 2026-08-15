@@ -535,6 +535,40 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The device on which this array lives. NumSharp — like NumPy — is single-device and always
+        ///     CPU-resident, so this is always the string <c>"cpu"</c>. Exposed for Array-API conformance,
+        ///     so code such as <c>xp.zeros(shape, device: x.device)</c> ports from NumPy unchanged.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.device.html</remarks>
+        public string device => "cpu";
+
+        /// <summary>
+        ///     Array-API device transfer. NumSharp has only the CPU device, so the sole accepted target is
+        ///     <c>"cpu"</c>, for which the SAME array is returned with no copy — matching NumPy, which returns
+        ///     <c>self</c>. Any other device raises.
+        /// </summary>
+        /// <param name="device">Target device. Must be <c>"cpu"</c>.</param>
+        /// <param name="stream">Accepted for Array-API signature parity; must be <c>null</c> (NumSharp models no streams).</param>
+        /// <returns>This array, unchanged.</returns>
+        /// <exception cref="ArgumentNullException">If <paramref name="device"/> is <c>null</c> (NumPy raises <c>TypeError</c>).</exception>
+        /// <exception cref="ArgumentException">If <paramref name="device"/> is not <c>"cpu"</c>, or <paramref name="stream"/> is non-null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.to_device.html</remarks>
+        public NDArray to_device(string device, object stream = null)
+        {
+            // NumPy parses `device` as a required str first, so a null device is a TypeError before the
+            // stream check; then stream, then the device value (conversion_utils.c / array_api_standard.c).
+            if (device is null)
+                throw new ArgumentNullException(nameof(device), "to_device() argument 1 must be str, not None");
+            if (stream != null)
+                throw new ArgumentException("The stream argument in to_device() is not supported");
+            // Single quotes around 'cpu' here — the creation-path device= message uses double quotes.
+            // The asymmetry is deliberate and matches NumPy 2.x verbatim.
+            if (!string.Equals(device, "cpu", StringComparison.Ordinal))
+                throw new ArgumentException($"Unsupported device: {device}. Only 'cpu' is accepted.");
+            return this;
+        }
+
+        /// <summary>
         ///     The shape representing this <see cref="NDArray"/>.
         /// </summary>
         public Shape Shape

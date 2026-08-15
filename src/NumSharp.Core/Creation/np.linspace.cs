@@ -17,9 +17,11 @@ namespace NumSharp
         /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
-        public static NDArray linspace(double start, double stop, long num, bool endpoint, Type dtype)
+        public static NDArray linspace(double start, double stop, long num, bool endpoint, Type dtype, string device = null)
         {
+            ValidateDevice(device);
             return linspace(start, stop, num, endpoint, (dtype ?? typeof(double)).GetTypeCode());
         }
 
@@ -33,9 +35,10 @@ namespace NumSharp
         /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
-        public static NDArray linspace(double start, double stop, int num, bool endpoint, Type dtype)
-            => linspace(start, stop, (long)num, endpoint, dtype);
+        public static NDArray linspace(double start, double stop, int num, bool endpoint, Type dtype, string device = null)
+            => linspace(start, stop, (long)num, endpoint, dtype, device);
 
         /// <summary>
         ///     Return evenly spaced numbers over a specified interval.<br></br>

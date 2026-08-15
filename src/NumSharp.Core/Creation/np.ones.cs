@@ -66,9 +66,11 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">Shape of the new array.</param>
         /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones(Shape shape, Type dtype)
+        public static NDArray ones(Shape shape, Type dtype, string device = null)
         {
+            ValidateDevice(device);
             return ones(shape, (dtype ?? typeof(double)).GetTypeCode());
         }
 

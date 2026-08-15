@@ -17,8 +17,8 @@ namespace NumSharp
         /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
         /// <returns>Array interpretation of a. If a is an ndarray or a subclass of ndarray, it is returned as-is and no copy is performed.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
-        public static NDArray asanyarray(in object a, Type dtype = null)
-            => asanyarray(in a, dtype, 'K');
+        public static NDArray asanyarray(in object a, Type dtype = null, string device = null)
+            => asanyarray(in a, dtype, 'K', device);
 
         /// <summary>
         ///     Convert the input to an ndarray with a specified memory layout.
@@ -26,10 +26,12 @@ namespace NumSharp
         /// <param name="a">Input data.</param>
         /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
         /// <param name="order">'C', 'F', 'A' or 'K' (default — resolved against a).</param>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array interpretation of a in the requested layout.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
-        public static NDArray asanyarray(in object a, Type dtype, char order)
+        public static NDArray asanyarray(in object a, Type dtype, char order, string device = null)
         {
+            ValidateDevice(device);
             NDArray ret;
             switch (a) {
                 case null:
