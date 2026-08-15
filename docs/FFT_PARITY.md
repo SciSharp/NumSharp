@@ -4,7 +4,7 @@
 > C# inside `NumSharp.Core` (`src/NumSharp.Core/Fourier/`) — no native dependency, no P/Invoke,
 > nothing to install. The engine is a scalar-double port of **pocketfft**, NumPy's own vendored FFT
 > library, so the double/complex128 path is **bit-for-bit identical to NumPy 2.4.2** rather than
-> merely close. Gate: the portable `fft.jsonl` differential-fuzz tier (1,796 cases, floor 1,700) +
+> merely close. Gate: the portable `fft.jsonl` differential-fuzz tier (2,000 cases, floor 1,700) +
 > 330 `Fourier`-namespace unit tests.
 >
 > **One deliberate divergence, now genuinely dtype-only:** NumSharp has a single complex type
@@ -250,14 +250,16 @@ flip the dtype cell automatically, values unchanged.
 
 ## 8. Gates
 
-- **Differential-fuzz tier** `Fuzz/corpus/fft.jsonl` — **1,796 cases** (floor 1,700 in
+- **Differential-fuzz tier** `Fuzz/corpus/fft.jsonl` — **2,000 cases** (floor 1,700 in
   `FuzzCorpusTests`), the FFT sub-registry of `OpRegistry` (all 16 transforms + 4 helpers), generated
   by `gen_oracle.gen_fft`. Swept over dtype {float64/complex128/int/bool contractual; float32/float16
-  the documented cell} × `n` {default, truncate 4, pad 12, prime 13 (Bluestein)} × the four `norm`
-  values × axis {0, 1, middle, negative} × layouts {C, F, strided, reversed, offset, broadcast-read,
-  transposed, 3-D} × the N-D `s`/`axes` sweeps. Bit-compared against NumPy 2.4.2 (complex128 exact;
-  the float32/float16 cells assert F1). Discriminating values only (no NaN/inf — a single NaN blanks
-  a whole spectrum and stops discriminating the butterflies/twiddles/Bluestein chirp).
+  values bit-exact, dtype-only cell} × `n` {default, truncate 4, pad 12, prime 13 (Bluestein), and the
+  perfect squares 9/25/49/64/121/169 that force each mixed-radix codelet's ido>1 branch — pass3/5/7/8/
+  11/passg} × the four `norm` values × axis {0, 1, middle, negative} × layouts {C, F, strided, reversed,
+  offset, broadcast-read, transposed, 3-D} × the N-D `s`/`axes` sweeps. Bit-compared against NumPy 2.4.2
+  (complex128 exact; the float32/float16 cells are VALUE-verified via up-cast, then F1 excuses the
+  dtype). Discriminating values only (no NaN/inf — a single NaN blanks a whole spectrum and stops
+  discriminating the butterflies/twiddles/Bluestein chirp).
 - **Unit tests** — 330 under the `Fourier` namespace, all green:
 
   | File | methods | covers |

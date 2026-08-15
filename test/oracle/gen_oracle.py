@@ -5310,13 +5310,15 @@ def gen_fft():
             for lname, base, view in (_fft_layouts_1d(dt) + _fft_layouts_nd(dt)):
                 try_emit(op, {"n": None, "axis": -1, "norm": None}, [describe(base, view)],
                          lambda f=f, view=view: f(view, None, -1, None), lname, dt)
-            # (b) n sweep on a contiguous 1-D signal: 4 truncate, 12 zero-pad, 13 prime (Bluestein),
-            # 49 = 7*7 (radix-7 codelet with ido>1), 121 = 11*11 (radix-11 codelet with ido>1). The
-            # last two are load-bearing: pocketfft's pass7/pass11 have a distinct ido>1 branch that the
-            # {4,12,13} sizes never reach, and a transcription bug there (special_mul on ca/cb instead of
-            # ca+-cb) went undetected until the float32 port exercised n=98/259 — see FFT_PARITY.md §7.
+            # (b) n sweep on a contiguous 1-D signal. Beyond {4 truncate, 12 zero-pad, 13 prime
+            # (Bluestein)} the perfect-square sizes force EACH mixed-radix codelet's distinct ido>1
+            # branch — 9=3²(pass3), 25=5²(pass5), 49=7²(pass7), 64=8²(pass8), 121=11²(pass11),
+            # 169=13²(passg ido>1); pass4 ido>1 is already hit by 12=4·3. Load-bearing: pass7/pass11's
+            # ido>1 branch had a transcription bug (special_mul on ca/cb instead of ca±cb, the PM) that
+            # {4,12,13} never reached — undetected until the float32 port exercised n=98/259
+            # (FFT_PARITY.md §7). The squares gate the whole codelet family against that bug class.
             b = _fft_base((8,), dt)
-            for nn in (4, 12, 13, 49, 121):
+            for nn in (4, 9, 12, 13, 25, 49, 64, 121, 169):
                 try_emit(op, {"n": nn, "axis": -1, "norm": None}, [describe(b, b)],
                          lambda f=f, b=b, nn=nn: f(b, nn, -1, None), "c1d_n", dt)
             # (c) norm sweep (ortho, forward, explicit backward) on the same signal.

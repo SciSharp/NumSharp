@@ -1622,8 +1622,9 @@ excuse, not a skipped comparison. **Bonus:** this port uncovered and fixed a pre
 double `Cfftp`/`CfftpF` `pass7`/`pass11` **ido>1** codelets (they applied `special_mul` to `ca`/`cb`
 instead of `ca±cb` — the PM — so `np.fft.fft(float64, n)` was silently wrong for any radix-7/11 factor at
 ido>1: n=49/98/121/143/259/…, latent because the corpus n-sweep was only {4,12,13}). Gate:
-`Fuzz/corpus/fft.jsonl` (1,864 cases, floor 1,700; n-sweep now includes 49/121 to cover pass7/pass11
-ido>1; `OpRegistry` all 16 transforms + 4 helpers, `gen_oracle.gen_fft`, `MisalignedRegistry` F1) +
+`Fuzz/corpus/fft.jsonl` (2,000 cases, floor 1,700; n-sweep now includes the perfect squares
+9/25/49/64/121/169 to gate every mixed-radix codelet's ido>1 branch pass3/5/7/8/11/passg — the bug
+class above; `OpRegistry` all 16 transforms + 4 helpers, `gen_oracle.gen_fft`, `MisalignedRegistry` F1) +
 **330** `Fourier`-namespace unit tests. See `Fourier/np.fft.{cs,Standard,Real,Hermitian,Helper,RawFft}.cs`
 + `Fourier/PocketFFT*.cs` (+ `*.Single.cs`); issues **#114** / **#569**.
 
