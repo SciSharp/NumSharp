@@ -350,16 +350,29 @@ namespace NumSharp.Utilities
         {
             Complex w = Acos(z);
             double rx = w.Real, ry = w.Imaginary;
-            // cacosh(NaN + I*NaN) = NaN + I*NaN
-            if (double.IsNaN(rx) && double.IsNaN(ry))
-                return new Complex(ry, rx);
-            // cacosh(NaN + I*+-Inf) = +Inf + I*NaN ; cacosh(+-Inf + I*NaN) = +Inf + I*NaN
-            if (double.IsNaN(rx))
-                return new Complex(Math.Abs(ry), rx);
-            // cacosh(0 + I*NaN) = NaN + I*NaN
-            if (double.IsNaN(ry))
-                return new Complex(ry, ry);
+            // Hot path: for every FINITE z, cacos returns a finite result (neither part NaN), so the
+            // NaN corners are never entered. One predictable branch guards them — a bitwise `|` (a
+            // single test, versus the original's three branches that re-evaluated IsNaN(rx) twice) —
+            // then the general result cacosh(z) = ±I*cacos(z), sign chosen so Re >= 0.
+            if (double.IsNaN(rx) | double.IsNaN(ry))
+                return AcoshSpecial(rx, ry);
             return new Complex(Math.Abs(ry), Math.CopySign(rx, z.Imaginary));
+        }
+
+        /// <summary>
+        /// <c>npy_cacosh</c> NaN/Inf corners, split out of <see cref="Acosh"/> (the
+        /// <see cref="Exp"/>/<see cref="ExpSpecial"/> pattern) so the finite hot path stays
+        /// branch-light and inlinable. Entered only when <see cref="Acos"/> yielded a NaN part.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static Complex AcoshSpecial(double rx, double ry)
+        {
+            if (double.IsNaN(rx))
+                // cacosh(NaN + I*NaN) = NaN + I*NaN
+                // cacosh(NaN + I*+-Inf) = +Inf + I*NaN ; cacosh(+-Inf + I*NaN) = +Inf + I*NaN
+                return double.IsNaN(ry) ? new Complex(ry, rx) : new Complex(Math.Abs(ry), rx);
+            // cacosh(0 + I*NaN) = NaN + I*NaN   (rx finite, ry is NaN)
+            return new Complex(ry, ry);
         }
 
         // ---- non-finite kernels (C99 Annex G, ported from npy_math_complex.c.src) ----
@@ -534,8 +547,24 @@ namespace NumSharp.Utilities
         public static Complex Sqrt(Complex z)
         {
             double a = z.Real, b = z.Imaginary;
-            if (a == 0.0 && b == 0.0)                               // sqrt(+-0 +- I0) = +0 +- I0 (keeps b's sign)
-                return new Complex(0.0, b);
+            // Hot path: finite real part and a non-infinite imaginary part (every ordinary sqrt; a
+            // NaN b flows into CsqrtCore and yields (NaN,NaN) just as the original did). The three
+            // non-finite corners — infinite b, NaN a, infinite a — live in the cold split below, so
+            // the fast path is one combined guard instead of four sequential special branches.
+            if (double.IsFinite(a) & !double.IsInfinity(b))
+            {
+                if (a == 0.0 && b == 0.0)                           // sqrt(+-0 +- I0) = +0 +- I0 (keeps b's sign)
+                    return new Complex(0.0, b);
+                return CsqrtCore(a, b);
+            }
+            return SqrtSpecial(a, b);
+        }
+
+        /// <summary><c>npy_csqrt</c> non-finite corners (FreeBSD msun order preserved), reached only
+        /// when the real part is non-finite or the imaginary part is infinite.</summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static Complex SqrtSpecial(double a, double b)
+        {
             if (double.IsInfinity(b))                               // sqrt(x +- I Inf) = +Inf +- I Inf
                 return new Complex(double.PositiveInfinity, b);
             if (double.IsNaN(a))
@@ -543,13 +572,10 @@ namespace NumSharp.Utilities
                 double t = (b - b) / (b - b);                       // raise invalid if b is not NaN
                 return new Complex(a, t);
             }
-            if (double.IsInfinity(a))
-            {
-                if (double.IsNegative(a))                           // -Inf: 0 + Inf i (or NaN +- Inf i)
-                    return new Complex(Math.Abs(b - b), Math.CopySign(a, b));
-                return new Complex(a, Math.CopySign(b - b, b));     // +Inf: +Inf + 0 i
-            }
-            return CsqrtCore(a, b);
+            // a is +-Inf (b finite or NaN, not infinite)
+            if (double.IsNegative(a))                               // -Inf: 0 + Inf i (or NaN +- Inf i)
+                return new Complex(Math.Abs(b - b), Math.CopySign(a, b));
+            return new Complex(a, Math.CopySign(b - b, b));         // +Inf: +Inf + 0 i
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -588,14 +614,26 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double Hypot(double x, double y)
         {
-            if (double.IsInfinity(x) || double.IsInfinity(y)) return double.PositiveInfinity;
-            if (double.IsNaN(x) || double.IsNaN(y)) return double.NaN;
+            // Hot path: both parts finite (every ordinary |z|). One combined branch replaces the
+            // original two-Infinity + two-NaN guards — IsFinite is a single exponent-field compare.
+            if (!double.IsFinite(x) | !double.IsFinite(y))
+                return HypotNonFinite(x, y);
             x = Math.Abs(x);
             y = Math.Abs(y);
             if (x < y) { double tmp = x; x = y; y = tmp; }
             if (x == 0.0) return 0.0;   // both 0 -> 0
             double r = y / x;
             return x * Math.Sqrt(1.0 + r * r);
+        }
+
+        /// <summary>Non-finite corners of <see cref="Hypot"/>, split out (kept off the hot path):
+        /// C99 <c>hypot(±inf, *) = +inf</c> even when the other part is NaN; otherwise (a NaN is
+        /// present, neither part infinite) NaN.</summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static double HypotNonFinite(double x, double y)
+        {
+            if (double.IsInfinity(x) || double.IsInfinity(y)) return double.PositiveInfinity;
+            return double.NaN;
         }
 
         /// <summary>
