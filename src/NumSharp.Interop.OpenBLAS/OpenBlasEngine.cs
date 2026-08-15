@@ -72,6 +72,37 @@ namespace NumSharp.Interop.OpenBLAS
             ///     is negative / not a whole number of elements (<c>blas_stride</c> returned 0).
             /// </summary>
             void Dot(T* ip1, long is1, T* ip2, long is2, T* op, long n);
+
+            // ---- Level-3 BLAS infrastructure (trmm/trsm/symm/syr2k) --------------------------------
+            // These have NO consumer in the parity dispatchers: NumPy's np.* matrix product uses only
+            // gemm/gemv/syrk/dot, and trmm/trsm appear in NumPy solely inside its private reference
+            // LAPACK. They are bound as reusable building blocks (a future triangular-solve / symmetric
+            // product could route through them). Unlike gemm/gemv/syrk above — which bake NumPy's
+            // alpha=1/beta=0 — these expose alpha (trmm/trsm) and alpha/beta (symm/syr2k) in full, as
+            // they have no fixed consumer to constrain the scalars. Availability tracks the loaded
+            // library: a routine it did not export throws EntryPointNotFoundException when called.
+
+            /// <summary>Triangular matrix–matrix multiply — <c>B := alpha·op(A)·B</c> (Side=Left) or
+            /// <c>B := alpha·B·op(A)</c> (Side=Right), A triangular; B (m×n) overwritten.</summary>
+            void Trmm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
+                CBlasDiag diag, long m, long n, T alpha, T* a, long lda, T* b, long ldb);
+
+            /// <summary>Triangular solve with multiple RHS — <c>op(A)·X = alpha·B</c> (Side=Left) or
+            /// <c>X·op(A) = alpha·B</c> (Side=Right), A triangular; X overwrites B (m×n).</summary>
+            void Trsm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
+                CBlasDiag diag, long m, long n, T alpha, T* a, long lda, T* b, long ldb);
+
+            /// <summary>Symmetric matrix–matrix multiply — <c>C := alpha·A·B + beta·C</c> (Side=Left,
+            /// A symmetric) or <c>C := alpha·B·A + beta·C</c> (Side=Right); only <paramref name="uplo"/>
+            /// of A is read. C is m×n.</summary>
+            void Symm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, long m, long n,
+                T alpha, T* a, long lda, T* b, long ldb, T beta, T* c, long ldc);
+
+            /// <summary>Symmetric rank-2k update — <c>C := alpha·A·Bᵀ + alpha·B·Aᵀ + beta·C</c>
+            /// (Trans=NoTrans) or the transposed form; only <paramref name="uplo"/> of the symmetric
+            /// n×n C is written.</summary>
+            void Syr2k(CBlasOrder order, CBlasUpLo uplo, CBlasTranspose trans, long n, long k,
+                T alpha, T* a, long lda, T* b, long ldb, T beta, T* c, long ldc);
         }
 
         /// <summary>float32 cblas bindings — NumPy's <c>#prefix = s#</c> expansion.</summary>
@@ -118,6 +149,22 @@ namespace NumSharp.Interop.OpenBLAS
                     *op = sum;
                 }
             }
+
+            public void Trmm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
+                CBlasDiag diag, long m, long n, float alpha, float* a, long lda, float* b, long ldb)
+                => OpenBlasNative.Strmm(order, side, uplo, transA, diag, m, n, alpha, a, lda, b, ldb);
+
+            public void Trsm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
+                CBlasDiag diag, long m, long n, float alpha, float* a, long lda, float* b, long ldb)
+                => OpenBlasNative.Strsm(order, side, uplo, transA, diag, m, n, alpha, a, lda, b, ldb);
+
+            public void Symm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, long m, long n,
+                float alpha, float* a, long lda, float* b, long ldb, float beta, float* c, long ldc)
+                => OpenBlasNative.Ssymm(order, side, uplo, m, n, alpha, a, lda, b, ldb, beta, c, ldc);
+
+            public void Syr2k(CBlasOrder order, CBlasUpLo uplo, CBlasTranspose trans, long n, long k,
+                float alpha, float* a, long lda, float* b, long ldb, float beta, float* c, long ldc)
+                => OpenBlasNative.Ssyr2k(order, uplo, trans, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
         }
 
         /// <summary>float64 cblas bindings — NumPy's <c>#prefix = d#</c> expansion.</summary>
@@ -164,6 +211,22 @@ namespace NumSharp.Interop.OpenBLAS
                     *op = sum;
                 }
             }
+
+            public void Trmm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
+                CBlasDiag diag, long m, long n, double alpha, double* a, long lda, double* b, long ldb)
+                => OpenBlasNative.Dtrmm(order, side, uplo, transA, diag, m, n, alpha, a, lda, b, ldb);
+
+            public void Trsm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
+                CBlasDiag diag, long m, long n, double alpha, double* a, long lda, double* b, long ldb)
+                => OpenBlasNative.Dtrsm(order, side, uplo, transA, diag, m, n, alpha, a, lda, b, ldb);
+
+            public void Symm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, long m, long n,
+                double alpha, double* a, long lda, double* b, long ldb, double beta, double* c, long ldc)
+                => OpenBlasNative.Dsymm(order, side, uplo, m, n, alpha, a, lda, b, ldb, beta, c, ldc);
+
+            public void Syr2k(CBlasOrder order, CBlasUpLo uplo, CBlasTranspose trans, long n, long k,
+                double alpha, double* a, long lda, double* b, long ldb, double beta, double* c, long ldc)
+                => OpenBlasNative.Dsyr2k(order, uplo, trans, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
         }
 
         /// <summary>
