@@ -700,6 +700,102 @@ public class NpApiOverloadTests_UnaryMath
 
     #endregion
 
+    #region Arcsinh - np.arcsinh / np.asinh (Array-API alias)
+
+    [TestMethod]
+    public void Arcsinh_NoParams_Compiles()
+    {
+        var a = np.array(new double[] { 0.0, 1.0, 2.0 });
+        var result = np.arcsinh(a);
+        Assert.IsNotNull(result);
+        Assert.AreEqual(0.0, result.GetDouble(0), Tolerance);
+        Assert.AreEqual(Math.Asinh(1.0), result.GetDouble(1), Tolerance);
+    }
+
+    [TestMethod]
+    public void Arcsinh_WithType_Compiles()
+    {
+        var a = np.array(new double[] { 0.0, 1.0, 2.0 });
+        var result = np.arcsinh(a, typeof(float));
+        Assert.IsNotNull(result);
+        Assert.AreEqual(NPTypeCode.Single, result.typecode);
+    }
+
+    [TestMethod]
+    public void Asinh_Alias_Compiles()
+    {
+        var a = np.array(new double[] { -1.0, 0.0, 3.0 });
+        var result = np.asinh(a);
+        Assert.IsNotNull(result);
+        Assert.AreEqual(Math.Asinh(3.0), result.GetDouble(2), Tolerance);
+    }
+
+    #endregion
+
+    #region Arccosh - np.arccosh / np.acosh (Array-API alias)
+
+    [TestMethod]
+    public void Arccosh_NoParams_Compiles()
+    {
+        var a = np.array(new double[] { 1.0, 2.0, 3.0 });   // domain [1, inf)
+        var result = np.arccosh(a);
+        Assert.IsNotNull(result);
+        Assert.AreEqual(0.0, result.GetDouble(0), Tolerance);
+        Assert.AreEqual(Math.Acosh(2.0), result.GetDouble(1), Tolerance);
+    }
+
+    [TestMethod]
+    public void Arccosh_WithType_Compiles()
+    {
+        var a = np.array(new double[] { 1.0, 2.0, 3.0 });
+        var result = np.arccosh(a, typeof(float));
+        Assert.IsNotNull(result);
+        Assert.AreEqual(NPTypeCode.Single, result.typecode);
+    }
+
+    [TestMethod]
+    public void Acosh_Alias_Compiles()
+    {
+        var a = np.array(new double[] { 1.0, 4.0 });
+        var result = np.acosh(a);
+        Assert.IsNotNull(result);
+        Assert.AreEqual(Math.Acosh(4.0), result.GetDouble(1), Tolerance);
+    }
+
+    #endregion
+
+    #region Arctanh - np.arctanh / np.atanh (Array-API alias)
+
+    [TestMethod]
+    public void Arctanh_NoParams_Compiles()
+    {
+        var a = np.array(new double[] { 0.0, 0.5, -0.5 });  // domain (-1, 1)
+        var result = np.arctanh(a);
+        Assert.IsNotNull(result);
+        Assert.AreEqual(0.0, result.GetDouble(0), Tolerance);
+        Assert.AreEqual(Math.Atanh(0.5), result.GetDouble(1), Tolerance);
+    }
+
+    [TestMethod]
+    public void Arctanh_WithType_Compiles()
+    {
+        var a = np.array(new double[] { 0.0, 0.5, -0.5 });
+        var result = np.arctanh(a, typeof(float));
+        Assert.IsNotNull(result);
+        Assert.AreEqual(NPTypeCode.Single, result.typecode);
+    }
+
+    [TestMethod]
+    public void Atanh_Alias_Compiles()
+    {
+        var a = np.array(new double[] { -0.25, 0.0, 0.25 });
+        var result = np.atanh(a);
+        Assert.IsNotNull(result);
+        Assert.AreEqual(Math.Atanh(0.25), result.GetDouble(2), Tolerance);
+    }
+
+    #endregion
+
     #region Sinh - np.sinh (2 overloads)
 
     [TestMethod]

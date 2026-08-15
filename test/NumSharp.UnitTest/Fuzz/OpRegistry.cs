@@ -58,6 +58,9 @@ namespace NumSharp.UnitTest.Fuzz
                 case "arcsin": return np.arcsin(ops[0]);
                 case "arccos": return np.arccos(ops[0]);
                 case "arctan": return np.arctan(ops[0]);
+                case "arcsinh": return np.arcsinh(ops[0]);
+                case "arccosh": return np.arccosh(ops[0]);
+                case "arctanh": return np.arctanh(ops[0]);
                 case "deg2rad": return np.deg2rad(ops[0]);
                 case "rad2deg": return np.rad2deg(ops[0]);
                 case "positive": return np.positive(ops[0]);

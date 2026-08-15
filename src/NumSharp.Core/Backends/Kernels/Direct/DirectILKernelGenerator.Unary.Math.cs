@@ -172,6 +172,23 @@ namespace NumSharp.Backends.Kernels
                     EmitMathCall(il, "Atan", type);
                     break;
 
+                case UnaryOp.Asinh:
+                    // Math.Asinh/MathF.Asinh — byte-identical to NumPy 2.4.2 (npy_asinh/asinhf) on
+                    // this platform: both call the MSVC ucrtbase CRT. Verified 0-diff across 4521
+                    // adversarial inputs at f32 AND f64 (specials/±inf/NaN/subnormals/±0 included).
+                    EmitMathCall(il, "Asinh", type);
+                    break;
+
+                case UnaryOp.Acosh:
+                    // Math.Acosh/MathF.Acosh — byte-identical to NumPy 2.4.2 (npy_acosh/acoshf).
+                    EmitMathCall(il, "Acosh", type);
+                    break;
+
+                case UnaryOp.Atanh:
+                    // Math.Atanh/MathF.Atanh — byte-identical to NumPy 2.4.2 (npy_atanh/atanhf).
+                    EmitMathCall(il, "Atanh", type);
+                    break;
+
                 case UnaryOp.Exp2:
                     // Use Math.Pow(2, x) since Math.Exp2 may not be available
                     EmitExp2Call(il, type);

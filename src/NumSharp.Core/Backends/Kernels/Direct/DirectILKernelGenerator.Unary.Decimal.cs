@@ -71,6 +71,9 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.ASin:
                 case UnaryOp.ACos:
                 case UnaryOp.ATan:
+                case UnaryOp.Asinh:
+                case UnaryOp.Acosh:
+                case UnaryOp.Atanh:
                 case UnaryOp.Log2:
                 case UnaryOp.Log10:
                     // Convert to double, perform operation, convert back
@@ -90,6 +93,9 @@ namespace NumSharp.Backends.Kernels
                         UnaryOp.ASin => "Asin",
                         UnaryOp.ACos => "Acos",
                         UnaryOp.ATan => "Atan",
+                        UnaryOp.Asinh => "Asinh",
+                        UnaryOp.Acosh => "Acosh",
+                        UnaryOp.Atanh => "Atanh",
                         UnaryOp.Log2 => "Log2",
                         UnaryOp.Log10 => "Log10",
                         _ => throw new NotSupportedException()
@@ -366,6 +372,18 @@ namespace NumSharp.Backends.Kernels
                     il.EmitCall(OpCodes.Call, CachedMethods.ComplexAtan, null);
                     break;
 
+                case UnaryOp.Asinh:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexAsinh, null);
+                    break;
+
+                case UnaryOp.Acosh:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexAcosh, null);
+                    break;
+
+                case UnaryOp.Atanh:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexAtanh, null);
+                    break;
+
                 // Note: UnaryOp.Cbrt is deliberately NOT handled for Complex — NumPy's np.cbrt raises
                 // TypeError for complex inputs, so falling through to the default throw keeps parity.
 
@@ -493,6 +511,9 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.ASin:
                 case UnaryOp.ACos:
                 case UnaryOp.ATan:
+                case UnaryOp.Asinh:
+                case UnaryOp.Acosh:
+                case UnaryOp.Atanh:
                 case UnaryOp.Round:
                 case UnaryOp.Deg2Rad:
                 case UnaryOp.Rad2Deg:

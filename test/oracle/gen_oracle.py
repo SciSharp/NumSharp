@@ -134,6 +134,7 @@ UNARY_EXTRA_OPS = {
     "log2": np.log2, "log10": np.log10, "log1p": np.log1p,
     "sinh": np.sinh, "cosh": np.cosh, "tanh": np.tanh,
     "arcsin": np.arcsin, "arccos": np.arccos, "arctan": np.arctan,
+    "arcsinh": np.arcsinh, "arccosh": np.arccosh, "arctanh": np.arctanh,
     "deg2rad": np.deg2rad, "rad2deg": np.rad2deg,
     "positive": np.positive,
     "rint": np.rint,   # round-half-to-even; float-tier dtype like the others in this group
@@ -4386,6 +4387,7 @@ SPECIAL_UNARY_OPS = {
     "trunc": np.trunc, "rint": np.rint, "sin": np.sin, "cos": np.cos, "tan": np.tan, "exp": np.exp, "log": np.log,
     "exp2": np.exp2, "expm1": np.expm1, "log2": np.log2, "log10": np.log10, "log1p": np.log1p, "sinh": np.sinh,
     "cosh": np.cosh, "tanh": np.tanh, "arcsin": np.arcsin, "arccos": np.arccos, "arctan": np.arctan,
+    "arcsinh": np.arcsinh, "arccosh": np.arccosh, "arctanh": np.arctanh,
     "deg2rad": np.deg2rad, "rad2deg": np.rad2deg, "isnan": np.isnan, "isinf": np.isinf, "isfinite": np.isfinite,
 }
 SPECIAL_BINARY_OPS = {

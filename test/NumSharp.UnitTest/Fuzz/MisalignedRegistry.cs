@@ -593,14 +593,19 @@ namespace NumSharp.UnitTest.Fuzz
             //         the npy_ccos identity pick opposite signs.
             //       - arccos with a sub-DBL_MIN imaginary part: Complex.Acos flushes the denormal real
             //         part to 0 where NumPy's cacos _do_hard_work keeps it (arccos(2 + 1e-308 i).real
-            //         ~ 5.8e-309) — a denormal-range edge.
+            //         ~ 5.8e-309) — a denormal-range edge. arccosh INHERITS this exact case: NumSharp
+            //         computes cacosh via the msun formula on Acos (cacosh(z) = ±I·cacos(z)), so the
+            //         flushed denormal becomes arccosh(2 + 1e-308 i).imag = 0 vs NumPy's 5.77e-309.
+            //         (arcsinh = swap(asin(swap)) and arctanh = catanh are fully ≤3 ULP — asin/atan
+            //         have no such edge — so they stay under the generic 3-ULP branch above.)
             //       - sinh/cosh at the overflow boundary |x| in [710, 710.13]: Windows' CRT sinh
             //         overflows to inf while .NET Math.Sinh stays finite (a platform-libm boundary,
             //         absent on glibc).
             //     Scoped to these op names so a >3-ULP regression in ANY other complex unary op fails.
             if (kind == DivergenceKind.Value && c.Operands.Length == 1 && tc == NPTypeCode.Complex
-                && (c.Op == "cos" || c.Op == "sin" || c.Op == "arccos" || c.Op == "sinh" || c.Op == "cosh"))
-                return "complex cos/sin/arccos/sinh/cosh pathological edge (NaN zero-sign / subnormal / overflow boundary) [documented]";
+                && (c.Op == "cos" || c.Op == "sin" || c.Op == "arccos" || c.Op == "arccosh"
+                    || c.Op == "sinh" || c.Op == "cosh"))
+                return "complex cos/sin/arccos/arccosh/sinh/cosh pathological edge (NaN zero-sign / subnormal / overflow boundary) [documented]";
 
             // (7c) Complex REDUCTIONS / SCANS (min/max/sum/prod/mean/std/var, cumsum/cumprod) with a
             //     NaN element: complex ordering with NaN is implementation-defined. NumPy carries the

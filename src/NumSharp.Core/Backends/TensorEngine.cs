@@ -171,6 +171,13 @@ namespace NumSharp
         public abstract NDArray ASin(NDArray nd, Type dtype);
         public abstract NDArray ASin(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
+        public abstract NDArray ASinh(NDArray nd, Type dtype);
+        public abstract NDArray ASinh(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray ACosh(NDArray nd, Type dtype);
+        public abstract NDArray ACosh(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray ATanh(NDArray nd, Type dtype);
+        public abstract NDArray ATanh(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+
         public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, Type dtype, NDArray @out = null);
         public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, NPTypeCode? typeCode = null, NDArray @out = null);
 

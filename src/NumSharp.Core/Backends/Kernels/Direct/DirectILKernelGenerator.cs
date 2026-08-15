@@ -633,6 +633,14 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Acos");
             public static readonly MethodInfo ComplexAtan = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Atan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Atan");
+            // Inverse hyperbolic: NumSharp derives casinh/cacosh from the byte-exact Asin/Acos via the
+            // exact msun involution, and exposes the already-ported catanh (which drives Atan).
+            public static readonly MethodInfo ComplexAsinh = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Asinh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Asinh");
+            public static readonly MethodInfo ComplexAcosh = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Acosh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Acosh");
+            public static readonly MethodInfo ComplexAtanh = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Atanh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Atanh");
             public static readonly MethodInfo ComplexPow = typeof(System.Numerics.Complex).GetMethod("Pow", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Pow");
             // Log10/Reciprocal/Log1p route through NDComplexMath (Complex.Log10 drifts past 1 ULP from

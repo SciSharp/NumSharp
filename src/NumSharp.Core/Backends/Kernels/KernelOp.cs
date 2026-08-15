@@ -61,6 +61,10 @@ namespace NumSharp.Backends.Kernels
         ASin,
         ACos,
         ATan,
+        // Inverse hyperbolic (np.arcsinh/arccosh/arctanh; Array-API aliases asinh/acosh/atanh)
+        Asinh,
+        Acosh,
+        Atanh,
         Sign,
         Ceil,
         Floor,

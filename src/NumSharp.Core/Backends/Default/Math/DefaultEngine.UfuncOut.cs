@@ -116,6 +116,11 @@ namespace NumSharp.Backends
             UnaryOp.ASin => "arcsin",
             UnaryOp.ACos => "arccos",
             UnaryOp.ATan => "arctan",
+            // NumPy's canonical ufunc name is 'arcsinh' even for the np.asinh alias
+            // (np.asinh is np.arcsinh, so ufunc.__name__ == 'arcsinh').
+            UnaryOp.Asinh => "arcsinh",
+            UnaryOp.Acosh => "arccosh",
+            UnaryOp.Atanh => "arctanh",
             UnaryOp.BitwiseNot => "invert",
             UnaryOp.LogicalNot => "logical_not",
             UnaryOp.Positive => "positive",

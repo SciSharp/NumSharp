@@ -233,6 +233,9 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr ASin(NDExpr x) => new UnaryNode(UnaryOp.ASin, x);
         public static NDExpr ACos(NDExpr x) => new UnaryNode(UnaryOp.ACos, x);
         public static NDExpr ATan(NDExpr x) => new UnaryNode(UnaryOp.ATan, x);
+        public static NDExpr Asinh(NDExpr x) => new UnaryNode(UnaryOp.Asinh, x);
+        public static NDExpr Acosh(NDExpr x) => new UnaryNode(UnaryOp.Acosh, x);
+        public static NDExpr Atanh(NDExpr x) => new UnaryNode(UnaryOp.Atanh, x);
         public static NDExpr Deg2Rad(NDExpr x) => new UnaryNode(UnaryOp.Deg2Rad, x);
         public static NDExpr Rad2Deg(NDExpr x) => new UnaryNode(UnaryOp.Rad2Deg, x);
 
