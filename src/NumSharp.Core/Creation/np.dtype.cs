@@ -379,7 +379,7 @@ namespace NumSharp
         }
     }
 
-    internal enum NPY_SCALARKIND
+    public enum NPY_SCALARKIND
     {
         NPY_NOSCALAR = -1,
         NPY_BOOL_SCALAR,
@@ -393,7 +393,7 @@ namespace NumSharp
     /// <summary>
     ///     https://numpy.org/doc/stable/reference/c-api/dtype.html#enumerated-types
     /// </summary>
-    internal enum NPY_TYPECHAR
+    public enum NPY_TYPECHAR
     {
         NPY_BOOLLTR = '?',
         NPY_BYTELTR = 'b',

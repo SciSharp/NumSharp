@@ -408,7 +408,7 @@ namespace NumSharp
         /// </summary>
         [DebuggerNonUserCode]
         [MethodImpl(OptimizeAndInline)]
-        internal static NPTypeCode ToTypeCode(this NPY_TYPECHAR typeCode)
+        public static NPTypeCode ToTypeCode(this NPY_TYPECHAR typeCode)
         {
             switch (typeCode)
             {
@@ -480,7 +480,7 @@ namespace NumSharp
         /// </summary>
         [DebuggerNonUserCode]
         [MethodImpl(OptimizeAndInline)]
-        internal static NPY_TYPECHAR ToTYPECHAR(this NPTypeCode typeCode)
+        public static NPY_TYPECHAR ToTYPECHAR(this NPTypeCode typeCode)
         {
             switch (typeCode)
             {
@@ -549,7 +549,7 @@ namespace NumSharp
         /// <summary>
         ///     Returns the equivalent numpy's name, e.g. <see cref="NPTypeCode.Int32"/> is np.int32, therefore the return is "int32".
         /// </summary>
-        internal static string AsNumpyDtypeName(this NPTypeCode typeCode)
+        public static string AsNumpyDtypeName(this NPTypeCode typeCode)
         {
             switch (typeCode)
             {

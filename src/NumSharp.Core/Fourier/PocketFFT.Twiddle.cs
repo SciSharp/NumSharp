@@ -27,7 +27,7 @@ namespace NumSharp.Fourier
     /// pocketfft's exact real/imag operation order.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Cmplx
+    public struct Cmplx
     {
         public double r, i;
 
@@ -68,7 +68,7 @@ namespace NumSharp.Fourier
     /// only ~2√n trig calls are made. <b>Parity-critical</b>: the recurrence and multiply order
     /// are kept exact. Thigh == double for the double engine.
     /// </summary>
-    internal sealed class SinCos2PiByN
+    public sealed class SinCos2PiByN
     {
         private readonly long N, mask, shift;
         private readonly Cmplx[] v1, v2;
@@ -153,7 +153,7 @@ namespace NumSharp.Fourier
     /// Port of the pocketfft <c>util</c> subset used by 1-D planning (lines 373-431):
     /// prime-factor test, cost model and the "good size" search for Bluestein padding.
     /// </summary>
-    internal static class PocketFFTUtil
+    public static class PocketFFTUtil
     {
         public static long LargestPrimeFactor(long n)
         {

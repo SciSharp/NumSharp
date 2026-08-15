@@ -10,7 +10,7 @@ using System.Buffers;
 
 namespace NumSharp.Fourier
 {
-    internal sealed unsafe class Fftblue
+    public sealed unsafe class Fftblue
     {
         private readonly long n, n2;
         private readonly Cfftp plan;

@@ -12,7 +12,7 @@ using System.Collections.Concurrent;
 namespace NumSharp.Fourier
 {
     /// <summary>Flexible complex 1-D transform: FFTPACK mixed-radix or Bluestein.</summary>
-    internal sealed unsafe class PocketFFTComplexPlan
+    public sealed unsafe class PocketFFTComplexPlan
     {
         private readonly Cfftp packplan;
         private readonly Fftblue blueplan;
@@ -44,7 +44,7 @@ namespace NumSharp.Fourier
     }
 
     /// <summary>Flexible real 1-D transform: FFTPACK mixed-radix or Bluestein.</summary>
-    internal sealed unsafe class PocketFFTRealPlan
+    public sealed unsafe class PocketFFTRealPlan
     {
         private readonly Rfftp packplan;
         private readonly Fftblue blueplan;
@@ -79,7 +79,7 @@ namespace NumSharp.Fourier
     /// <summary>Bounded plan cache. Plans are immutable + deterministic, so sharing them across
     /// transforms of the same length is safe and reproduces numpy bit-for-bit (only the twiddle
     /// setup is saved). Bounded so a program touching many distinct lengths cannot leak.</summary>
-    internal static class PocketFFTPlanCache
+    public static class PocketFFTPlanCache
     {
         private const int MaxEntries = 64;
         private static readonly ConcurrentDictionary<long, PocketFFTComplexPlan> _cplx = new();

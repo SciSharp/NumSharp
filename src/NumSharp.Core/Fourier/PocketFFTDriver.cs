@@ -18,7 +18,7 @@ using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
-    internal static unsafe class PocketFFTDriver
+    public static unsafe class PocketFFTDriver
     {
         /// <summary>
         /// Run a 1-D pocketfft transform along <paramref name="axis"/> of <paramref name="a"/>.
@@ -30,7 +30,7 @@ namespace NumSharp
         /// <param name="isForward">true = forward (fft/rfft), false = inverse (ifft/irfft).</param>
         /// <param name="fct">Normalisation factor applied inside the transform.</param>
         /// <param name="out">Optional preallocated output (shape = a.shape with axis-&gt;n_out).</param>
-        internal static NDArray Execute(NDArray a, int n, int axis, bool isReal, bool isForward, double fct, NDArray @out = null)
+        public static NDArray Execute(NDArray a, int n, int axis, bool isReal, bool isForward, double fct, NDArray @out = null)
         {
             int ndim = a.ndim;
             if (ndim == 0)

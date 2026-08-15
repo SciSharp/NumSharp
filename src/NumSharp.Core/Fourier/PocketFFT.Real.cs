@@ -16,7 +16,7 @@ using System.Runtime.CompilerServices;
 
 namespace NumSharp.Fourier
 {
-    internal sealed unsafe class Rfftp
+    public sealed unsafe class Rfftp
     {
         private sealed class FctData
         {

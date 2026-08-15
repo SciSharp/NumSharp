@@ -11,7 +11,7 @@ namespace NumSharp.Utilities
     /// Provides transcendental math functions for decimal type.
     /// .NET does not provide these natively since decimal is designed for financial calculations.
     /// </summary>
-    internal static class DecimalMath
+    public static class DecimalMath
     {
         private const MethodImplOptions Inline = MethodImplOptions.AggressiveInlining;
 
@@ -389,7 +389,7 @@ namespace NumSharp.Utilities
         /// Computes remainder with maximum precision retained.
         /// </summary>
         [MethodImpl(Inline)]
-        internal static decimal Remainder(decimal d1, decimal d2)
+        public static decimal Remainder(decimal d1, decimal d2)
         {
             if (Math.Abs(d1) < Math.Abs(d2))
                 return d1;
