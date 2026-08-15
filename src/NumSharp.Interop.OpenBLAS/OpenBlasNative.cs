@@ -103,6 +103,91 @@ namespace NumSharp.Interop.OpenBLAS
         private static delegate* unmanaged[Cdecl]<IntPtr> _getConfig;
         private static delegate* unmanaged[Cdecl]<IntPtr> _getCoreName;
 
+        #region function pointers — LAPACK LU family (getrf / gesv, for np.linalg det/slogdet/solve/inv)
+
+        // Fortran LAPACK is column-major and passes EVERY argument by pointer, scalars included. The
+        // complex routines take the matrix as `double*` — a complex*16 is two interleaved doubles,
+        // which is exactly System.Numerics.Complex's [Real, Imaginary] layout, so a Complex* casts to
+        // double* with no copy. Only the double/cdouble routines are bound: numpy's linalg always
+        // upcasts float32→double (the 'd' gufunc signature) and casts the result back, so there is no
+        // sgetrf/cgetrf path to reproduce.
+        //
+        // ILP64 (64-bit fortran_int): m, n, lda, ldb, ipiv entries and info are all 64-bit.
+        private static delegate* unmanaged[Cdecl]<long*, long*, double*, long*, long*, long*, void> _dgetrf64;
+        private static delegate* unmanaged[Cdecl]<long*, long*, double*, long*, long*, double*, long*, long*, void> _dgesv64;
+        private static delegate* unmanaged[Cdecl]<long*, long*, double*, long*, long*, long*, void> _zgetrf64;
+        private static delegate* unmanaged[Cdecl]<long*, long*, double*, long*, long*, double*, long*, long*, void> _zgesv64;
+
+        // LP64 (32-bit fortran_int): the scipy-openblas32 build (win-arm64, x86) and stock system OpenBLAS.
+        private static delegate* unmanaged[Cdecl]<int*, int*, double*, int*, int*, int*, void> _dgetrf32;
+        private static delegate* unmanaged[Cdecl]<int*, int*, double*, int*, int*, double*, int*, int*, void> _dgesv32;
+        private static delegate* unmanaged[Cdecl]<int*, int*, double*, int*, int*, int*, void> _zgetrf32;
+        private static delegate* unmanaged[Cdecl]<int*, int*, double*, int*, int*, double*, int*, int*, void> _zgesv32;
+
+        #endregion
+
+        #region function pointers — LAPACK Cholesky/QR family (potrf / geqrf / orgqr, for np.linalg cholesky/qr)
+
+        // Same conventions as the LU family above: column-major, every scalar by pointer, complex
+        // matrices as interleaved `double*` (== System.Numerics.Complex layout), and only the double /
+        // cdouble routines are bound because numpy's linalg computes float32 in double then downcasts.
+        //
+        // potrf's `uplo` is a Fortran CHARACTER*1; it is passed as a `byte*` to a single 'L'/'U' byte.
+        // The gfortran ABI appends a hidden character-length argument, but potrf never reads it (LSAME
+        // compares one char), and it is the LAST argument, so omitting it is safe under cdecl — verified
+        // on the bundled scipy-openblas (info==0, bit-identical factor to numpy). geqrf/orgqr have no
+        // character arguments. All three take a workspace: call with LWORK == -1 to have WORK[0] receive
+        // the optimal size, then allocate and call again — exactly as numpy's init_geqrf / init_gqr do.
+        private static delegate* unmanaged[Cdecl]<byte*, long*, double*, long*, long*, void> _dpotrf64;
+        private static delegate* unmanaged[Cdecl]<byte*, long*, double*, long*, long*, void> _zpotrf64;
+        private static delegate* unmanaged[Cdecl]<long*, long*, double*, long*, double*, double*, long*, long*, void> _dgeqrf64;
+        private static delegate* unmanaged[Cdecl]<long*, long*, double*, long*, double*, double*, long*, long*, void> _zgeqrf64;
+        private static delegate* unmanaged[Cdecl]<long*, long*, long*, double*, long*, double*, double*, long*, long*, void> _dorgqr64;
+        private static delegate* unmanaged[Cdecl]<long*, long*, long*, double*, long*, double*, double*, long*, long*, void> _zungqr64;
+
+        private static delegate* unmanaged[Cdecl]<byte*, int*, double*, int*, int*, void> _dpotrf32;
+        private static delegate* unmanaged[Cdecl]<byte*, int*, double*, int*, int*, void> _zpotrf32;
+        private static delegate* unmanaged[Cdecl]<int*, int*, double*, int*, double*, double*, int*, int*, void> _dgeqrf32;
+        private static delegate* unmanaged[Cdecl]<int*, int*, double*, int*, double*, double*, int*, int*, void> _zgeqrf32;
+        private static delegate* unmanaged[Cdecl]<int*, int*, int*, double*, int*, double*, double*, int*, int*, void> _dorgqr32;
+        private static delegate* unmanaged[Cdecl]<int*, int*, int*, double*, int*, double*, double*, int*, int*, void> _zungqr32;
+
+        #endregion
+
+        #region function pointers — LAPACK SVD/least-squares family (gesdd / gelsd, for np.linalg svd/lstsq)
+
+        // Same conventions as the LU/QR families: column-major, every scalar by pointer, complex matrices
+        // as interleaved `double*` (== System.Numerics.Complex layout), and only the double / cdouble
+        // routines are bound because numpy's linalg computes float32 in double then downcasts. `jobz` is a
+        // Fortran CHARACTER*1 passed as a single 'N'/'S'/'A' byte (same hidden-length-arg argument the
+        // potrf comment makes — it is the FIRST argument here, but LAPACK never reads the length). Both
+        // take a workspace queried with LWORK == -1 (writes WORK[0]); gelsd's query ALSO writes IWORK[0]
+        // with the needed integer-workspace size, exactly as numpy's init_gesdd / init_gelsd do.
+        //
+        // The complex routines carry an extra REAL RWORK buffer the real ones do not, and the singular
+        // values S are ALWAYS the real basetype (double), so `s`/`rwork`/`rcond` are `double*` on both.
+        private static delegate* unmanaged[Cdecl]<byte*, long*, long*, double*, long*, double*, double*, long*, double*, long*, double*, long*, long*, long*, void> _dgesdd64;
+        private static delegate* unmanaged[Cdecl]<byte*, long*, long*, double*, long*, double*, double*, long*, double*, long*, double*, long*, double*, long*, long*, void> _zgesdd64;
+        private static delegate* unmanaged[Cdecl]<long*, long*, long*, double*, long*, double*, long*, double*, double*, long*, double*, long*, long*, long*, void> _dgelsd64;
+        private static delegate* unmanaged[Cdecl]<long*, long*, long*, double*, long*, double*, long*, double*, double*, long*, double*, long*, double*, long*, long*, void> _zgelsd64;
+
+        private static delegate* unmanaged[Cdecl]<byte*, int*, int*, double*, int*, double*, double*, int*, double*, int*, double*, int*, int*, int*, void> _dgesdd32;
+        private static delegate* unmanaged[Cdecl]<byte*, int*, int*, double*, int*, double*, double*, int*, double*, int*, double*, int*, double*, int*, int*, void> _zgesdd32;
+        private static delegate* unmanaged[Cdecl]<int*, int*, int*, double*, int*, double*, int*, double*, double*, int*, double*, int*, int*, int*, void> _dgelsd32;
+        private static delegate* unmanaged[Cdecl]<int*, int*, int*, double*, int*, double*, int*, double*, double*, int*, double*, int*, double*, int*, int*, void> _zgelsd32;
+
+        #endregion
+
+        /// <summary>
+        ///     True when the loaded library additionally exports the LAPACK LU routines the
+        ///     factorisation backend needs (<c>getrf</c>/<c>gesv</c> for double and cdouble). A plain
+        ///     reference CBLAS has no LAPACK, so this can be false while <see cref="IsLoaded"/> is true.
+        /// </summary>
+        internal static bool IsLapackLoaded { get; private set; }
+
+        /// <summary>The width of a LAPACK <c>fortran_int</c> in bytes — 8 for ILP64, 4 for LP64.</summary>
+        internal static int FortranIntSize => IsIlp64 ? 8 : 4;
+
         /// <summary>
         ///     The BLAS integer ceiling — NumPy's <c>BLAS_MAXSIZE</c>, "-1 to be conservative, in case
         ///     blas internally uses a for loop with an inclusive upper bound".
@@ -301,6 +386,15 @@ namespace NumSharp.Interop.OpenBLAS
                 _ssyrk32 = null; _dsyrk32 = null; _sdot32 = null; _ddot32 = null;
                 _saxpy32 = null; _daxpy32 = null;
                 _setNumThreads = null; _getNumThreads = null; _getConfig = null; _getCoreName = null;
+                _dgetrf64 = null; _dgesv64 = null; _zgetrf64 = null; _zgesv64 = null;
+                _dgetrf32 = null; _dgesv32 = null; _zgetrf32 = null; _zgesv32 = null;
+                _dpotrf64 = null; _zpotrf64 = null; _dgeqrf64 = null; _zgeqrf64 = null;
+                _dorgqr64 = null; _zungqr64 = null;
+                _dpotrf32 = null; _zpotrf32 = null; _dgeqrf32 = null; _zgeqrf32 = null;
+                _dorgqr32 = null; _zungqr32 = null;
+                _dgesdd64 = null; _zgesdd64 = null; _dgelsd64 = null; _zgelsd64 = null;
+                _dgesdd32 = null; _zgesdd32 = null; _dgelsd32 = null; _zgelsd32 = null;
+                IsLapackLoaded = false;
             }
         }
 
@@ -400,6 +494,11 @@ namespace NumSharp.Interop.OpenBLAS
                 foreach (var name in new[] { prefix + "openblas_get_corename" + suffix, "openblas_get_corename" })
                     if (NativeLibrary.TryGetExport(handle, name, out p)) { _getCoreName = (delegate* unmanaged[Cdecl]<IntPtr>)p; break; }
 
+                // Optional LAPACK LU family — a full OpenBLAS ships it, a bare reference CBLAS does not.
+                // Bound all-or-nothing so IsLapackLoaded is honest: a half-bound set would let a
+                // factorisation call a null pointer.
+                BindLapack(handle, prefix, suffix, ilp64);
+
                 return;
             }
 
@@ -416,6 +515,95 @@ namespace NumSharp.Interop.OpenBLAS
                 throw new EntryPointNotFoundException(
                     $"OpenBlasEngine.Enable: the loaded BLAS library is missing the required symbol '{name}'.");
             return p;
+        }
+
+        /// <summary>
+        ///     Binds the LAPACK LU routines if the library exports them. Unlike the CBLAS symbols this
+        ///     is OPTIONAL: a reference CBLAS has no LAPACK, so a miss simply leaves
+        ///     <see cref="IsLapackLoaded"/> false and the factorisation backend declines (the engine
+        ///     then raises the same "needs a LAPACK backend" the no-backend case does). Bound
+        ///     all-or-nothing — a partially-resolved set would let a call dereference a null pointer.
+        /// </summary>
+        private static void BindLapack(IntPtr handle, string prefix, string suffix, bool ilp64)
+        {
+            if (!TryResolveLapack(handle, prefix, suffix, "dgetrf", out var dgetrf) ||
+                !TryResolveLapack(handle, prefix, suffix, "dgesv", out var dgesv) ||
+                !TryResolveLapack(handle, prefix, suffix, "zgetrf", out var zgetrf) ||
+                !TryResolveLapack(handle, prefix, suffix, "zgesv", out var zgesv) ||
+                !TryResolveLapack(handle, prefix, suffix, "dpotrf", out var dpotrf) ||
+                !TryResolveLapack(handle, prefix, suffix, "zpotrf", out var zpotrf) ||
+                !TryResolveLapack(handle, prefix, suffix, "dgeqrf", out var dgeqrf) ||
+                !TryResolveLapack(handle, prefix, suffix, "zgeqrf", out var zgeqrf) ||
+                !TryResolveLapack(handle, prefix, suffix, "dorgqr", out var dorgqr) ||
+                !TryResolveLapack(handle, prefix, suffix, "zungqr", out var zungqr) ||
+                !TryResolveLapack(handle, prefix, suffix, "dgesdd", out var dgesdd) ||
+                !TryResolveLapack(handle, prefix, suffix, "zgesdd", out var zgesdd) ||
+                !TryResolveLapack(handle, prefix, suffix, "dgelsd", out var dgelsd) ||
+                !TryResolveLapack(handle, prefix, suffix, "zgelsd", out var zgelsd))
+            {
+                return; // no LAPACK — factorisations decline, products still work
+            }
+
+            if (ilp64)
+            {
+                _dgetrf64 = (delegate* unmanaged[Cdecl]<long*, long*, double*, long*, long*, long*, void>)dgetrf;
+                _dgesv64 = (delegate* unmanaged[Cdecl]<long*, long*, double*, long*, long*, double*, long*, long*, void>)dgesv;
+                _zgetrf64 = (delegate* unmanaged[Cdecl]<long*, long*, double*, long*, long*, long*, void>)zgetrf;
+                _zgesv64 = (delegate* unmanaged[Cdecl]<long*, long*, double*, long*, long*, double*, long*, long*, void>)zgesv;
+                _dpotrf64 = (delegate* unmanaged[Cdecl]<byte*, long*, double*, long*, long*, void>)dpotrf;
+                _zpotrf64 = (delegate* unmanaged[Cdecl]<byte*, long*, double*, long*, long*, void>)zpotrf;
+                _dgeqrf64 = (delegate* unmanaged[Cdecl]<long*, long*, double*, long*, double*, double*, long*, long*, void>)dgeqrf;
+                _zgeqrf64 = (delegate* unmanaged[Cdecl]<long*, long*, double*, long*, double*, double*, long*, long*, void>)zgeqrf;
+                _dorgqr64 = (delegate* unmanaged[Cdecl]<long*, long*, long*, double*, long*, double*, double*, long*, long*, void>)dorgqr;
+                _zungqr64 = (delegate* unmanaged[Cdecl]<long*, long*, long*, double*, long*, double*, double*, long*, long*, void>)zungqr;
+                _dgesdd64 = (delegate* unmanaged[Cdecl]<byte*, long*, long*, double*, long*, double*, double*, long*, double*, long*, double*, long*, long*, long*, void>)dgesdd;
+                _zgesdd64 = (delegate* unmanaged[Cdecl]<byte*, long*, long*, double*, long*, double*, double*, long*, double*, long*, double*, long*, double*, long*, long*, void>)zgesdd;
+                _dgelsd64 = (delegate* unmanaged[Cdecl]<long*, long*, long*, double*, long*, double*, long*, double*, double*, long*, double*, long*, long*, long*, void>)dgelsd;
+                _zgelsd64 = (delegate* unmanaged[Cdecl]<long*, long*, long*, double*, long*, double*, long*, double*, double*, long*, double*, long*, double*, long*, long*, void>)zgelsd;
+            }
+            else
+            {
+                _dgetrf32 = (delegate* unmanaged[Cdecl]<int*, int*, double*, int*, int*, int*, void>)dgetrf;
+                _dgesv32 = (delegate* unmanaged[Cdecl]<int*, int*, double*, int*, int*, double*, int*, int*, void>)dgesv;
+                _zgetrf32 = (delegate* unmanaged[Cdecl]<int*, int*, double*, int*, int*, int*, void>)zgetrf;
+                _zgesv32 = (delegate* unmanaged[Cdecl]<int*, int*, double*, int*, int*, double*, int*, int*, void>)zgesv;
+                _dpotrf32 = (delegate* unmanaged[Cdecl]<byte*, int*, double*, int*, int*, void>)dpotrf;
+                _zpotrf32 = (delegate* unmanaged[Cdecl]<byte*, int*, double*, int*, int*, void>)zpotrf;
+                _dgeqrf32 = (delegate* unmanaged[Cdecl]<int*, int*, double*, int*, double*, double*, int*, int*, void>)dgeqrf;
+                _zgeqrf32 = (delegate* unmanaged[Cdecl]<int*, int*, double*, int*, double*, double*, int*, int*, void>)zgeqrf;
+                _dorgqr32 = (delegate* unmanaged[Cdecl]<int*, int*, int*, double*, int*, double*, double*, int*, int*, void>)dorgqr;
+                _zungqr32 = (delegate* unmanaged[Cdecl]<int*, int*, int*, double*, int*, double*, double*, int*, int*, void>)zungqr;
+                _dgesdd32 = (delegate* unmanaged[Cdecl]<byte*, int*, int*, double*, int*, double*, double*, int*, double*, int*, double*, int*, int*, int*, void>)dgesdd;
+                _zgesdd32 = (delegate* unmanaged[Cdecl]<byte*, int*, int*, double*, int*, double*, double*, int*, double*, int*, double*, int*, double*, int*, int*, void>)zgesdd;
+                _dgelsd32 = (delegate* unmanaged[Cdecl]<int*, int*, int*, double*, int*, double*, int*, double*, double*, int*, double*, int*, int*, int*, void>)dgelsd;
+                _zgelsd32 = (delegate* unmanaged[Cdecl]<int*, int*, int*, double*, int*, double*, int*, double*, double*, int*, double*, int*, double*, int*, int*, void>)zgelsd;
+            }
+
+            IsLapackLoaded = true;
+        }
+
+        /// <summary>
+        ///     Resolves a Fortran LAPACK symbol across the spellings the supported builds use: the
+        ///     scheme's own (<c>scipy_dgesv64_</c> / <c>scipy_dgesv</c>), the Fortran trailing-underscore
+        ///     form a stock OpenBLAS exports (<c>dgesv_</c>), and their uppercase variants.
+        /// </summary>
+        private static bool TryResolveLapack(IntPtr handle, string prefix, string suffix, string baseName, out IntPtr p)
+        {
+            string upper = baseName.ToUpperInvariant();
+            var candidates = new[]
+            {
+                prefix + baseName + suffix,
+                prefix + baseName + "_" + suffix,
+                prefix + upper + suffix,
+                prefix + upper + "_" + suffix
+            };
+
+            foreach (var name in candidates)
+                if (NativeLibrary.TryGetExport(handle, name, out p))
+                    return true;
+
+            p = IntPtr.Zero;
+            return false;
         }
 
         /// <summary>
@@ -877,6 +1065,58 @@ namespace NumSharp.Interop.OpenBLAS
         [DllImport("libc", EntryPoint = "setenv", CharSet = CharSet.Ansi)]
         private static extern int UnixSetEnv(string name, string value, int overwrite);
 
+        [DllImport("ucrtbase.dll", EntryPoint = "hypot", CallingConvention = CallingConvention.Cdecl)]
+        private static extern double WindowsHypot(double x, double y);
+
+        [DllImport("libm", EntryPoint = "hypot", CallingConvention = CallingConvention.Cdecl)]
+        private static extern double UnixHypot(double x, double y);
+
+        private static readonly bool IsWindowsOS = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        private static int _hypotMode; // 0 = unprobed, 1 = system hypot, 2 = managed fallback
+
+        /// <summary>
+        ///     <c>|z|</c> via the SAME system <c>hypot</c> NumPy's <c>npy_cabs</c> links against, so the
+        ///     complex determinant fold (<c>det</c>/<c>slogdet</c>) stays bit-identical to NumPy.
+        /// </summary>
+        /// <remarks>
+        ///     .NET's <see cref="System.Numerics.Complex.Abs"/> uses its own scaled hypot, which differs
+        ///     from the CRT's by ~1 ULP on ~12 % of inputs — enough to shift the last bits of a complex
+        ///     determinant. NumPy's <c>npy_hypot</c> is a straight <c>return hypot(x, y)</c>, so calling
+        ///     that same CRT routine reproduces it exactly. On the rare host with no callable system
+        ///     <c>hypot</c> this degrades to a portable scaled hypot (correct, not bit-pinned).
+        /// </remarks>
+        internal static double Hypot(double x, double y)
+        {
+            switch (_hypotMode)
+            {
+                case 1:
+                    return IsWindowsOS ? WindowsHypot(x, y) : UnixHypot(x, y);
+                case 2:
+                    break;
+                default:
+                    try
+                    {
+                        double r = IsWindowsOS ? WindowsHypot(x, y) : UnixHypot(x, y);
+                        _hypotMode = 1;
+                        return r;
+                    }
+                    catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+                    {
+                        _hypotMode = 2;
+                    }
+
+                    break;
+            }
+
+            double ax = Math.Abs(x), ay = Math.Abs(y);
+            if (ax < ay)
+                (ax, ay) = (ay, ax);
+            if (ax == 0.0)
+                return 0.0;
+            double t = ay / ax;
+            return ax * Math.Sqrt(1.0 + t * t);
+        }
+
         /// <summary>
         ///     Sets an environment variable somewhere a NATIVE <c>getenv()</c> can actually read it.
         /// </summary>
@@ -1086,6 +1326,272 @@ namespace NumSharp.Interop.OpenBLAS
                 _daxpy64(n, alpha, x, incX, y, incY);
             else
                 _daxpy32((int)n, alpha, x, (int)incX, y, (int)incY);
+        }
+
+        #endregion
+
+        #region LAPACK LU wrappers (fortran_int width marshalled per IsIlp64)
+
+        // Each wrapper takes/returns the arguments in ELEMENTS and hands the fortran routine the
+        // by-pointer scalars it expects, widened to the build's integer width. `ipiv` is caller-owned
+        // storage of at least min(m,n) fortran_int entries; det/slogdet read it back (see
+        // FortranIntSize), solve/inv ignore it. `info` (returned) is the LAPACK status: 0 success,
+        // >0 the 1-based index of the first exactly-zero U pivot (singular).
+
+        internal static long Dgetrf(long m, long n, double* a, long lda, void* ipiv)
+        {
+            if (IsIlp64)
+            {
+                long mm = m, nn = n, ll = lda, info = 0;
+                _dgetrf64(&mm, &nn, a, &ll, (long*)ipiv, &info);
+                return info;
+            }
+            else
+            {
+                int mm = (int)m, nn = (int)n, ll = (int)lda, info = 0;
+                _dgetrf32(&mm, &nn, a, &ll, (int*)ipiv, &info);
+                return info;
+            }
+        }
+
+        internal static long Zgetrf(long m, long n, double* a, long lda, void* ipiv)
+        {
+            if (IsIlp64)
+            {
+                long mm = m, nn = n, ll = lda, info = 0;
+                _zgetrf64(&mm, &nn, a, &ll, (long*)ipiv, &info);
+                return info;
+            }
+            else
+            {
+                int mm = (int)m, nn = (int)n, ll = (int)lda, info = 0;
+                _zgetrf32(&mm, &nn, a, &ll, (int*)ipiv, &info);
+                return info;
+            }
+        }
+
+        internal static long Dgesv(long n, long nrhs, double* a, long lda, void* ipiv, double* b, long ldb)
+        {
+            if (IsIlp64)
+            {
+                long nn = n, nr = nrhs, ll = lda, lb = ldb, info = 0;
+                _dgesv64(&nn, &nr, a, &ll, (long*)ipiv, b, &lb, &info);
+                return info;
+            }
+            else
+            {
+                int nn = (int)n, nr = (int)nrhs, ll = (int)lda, lb = (int)ldb, info = 0;
+                _dgesv32(&nn, &nr, a, &ll, (int*)ipiv, b, &lb, &info);
+                return info;
+            }
+        }
+
+        internal static long Zgesv(long n, long nrhs, double* a, long lda, void* ipiv, double* b, long ldb)
+        {
+            if (IsIlp64)
+            {
+                long nn = n, nr = nrhs, ll = lda, lb = ldb, info = 0;
+                _zgesv64(&nn, &nr, a, &ll, (long*)ipiv, b, &lb, &info);
+                return info;
+            }
+            else
+            {
+                int nn = (int)n, nr = (int)nrhs, ll = (int)lda, lb = (int)ldb, info = 0;
+                _zgesv32(&nn, &nr, a, &ll, (int*)ipiv, b, &lb, &info);
+                return info;
+            }
+        }
+
+        /// <summary>Reads pivot entry <paramref name="i"/> from a fortran_int buffer at the bound width.</summary>
+        internal static long ReadPivot(void* ipiv, long i)
+            => IsIlp64 ? ((long*)ipiv)[i] : ((int*)ipiv)[i];
+
+        #endregion
+
+        #region LAPACK Cholesky/QR wrappers (fortran_int width marshalled per IsIlp64)
+
+        // As with the LU wrappers, arguments are in ELEMENTS and the fortran routine gets its scalars
+        // by pointer widened to the build's integer width. `uplo` is 'L' or 'U' as a byte. `info` is the
+        // LAPACK status: 0 success, <0 illegal argument, and for potrf >0 the leading minor order that
+        // is not positive definite. geqrf/orgqr take a caller-owned workspace; call with lwork == -1 for
+        // the size query (writes work[0]) then again with the allocated buffer.
+
+        internal static long Dpotrf(byte uplo, long n, double* a, long lda)
+        {
+            if (IsIlp64)
+            {
+                byte u = uplo; long nn = n, ll = lda, info = 0;
+                _dpotrf64(&u, &nn, a, &ll, &info);
+                return info;
+            }
+            else
+            {
+                byte u = uplo; int nn = (int)n, ll = (int)lda, info = 0;
+                _dpotrf32(&u, &nn, a, &ll, &info);
+                return info;
+            }
+        }
+
+        internal static long Zpotrf(byte uplo, long n, double* a, long lda)
+        {
+            if (IsIlp64)
+            {
+                byte u = uplo; long nn = n, ll = lda, info = 0;
+                _zpotrf64(&u, &nn, a, &ll, &info);
+                return info;
+            }
+            else
+            {
+                byte u = uplo; int nn = (int)n, ll = (int)lda, info = 0;
+                _zpotrf32(&u, &nn, a, &ll, &info);
+                return info;
+            }
+        }
+
+        internal static long Dgeqrf(long m, long n, double* a, long lda, double* tau, double* work, long lwork)
+        {
+            if (IsIlp64)
+            {
+                long mm = m, nn = n, ll = lda, lw = lwork, info = 0;
+                _dgeqrf64(&mm, &nn, a, &ll, tau, work, &lw, &info);
+                return info;
+            }
+            else
+            {
+                int mm = (int)m, nn = (int)n, ll = (int)lda, lw = (int)lwork, info = 0;
+                _dgeqrf32(&mm, &nn, a, &ll, tau, work, &lw, &info);
+                return info;
+            }
+        }
+
+        internal static long Zgeqrf(long m, long n, double* a, long lda, double* tau, double* work, long lwork)
+        {
+            if (IsIlp64)
+            {
+                long mm = m, nn = n, ll = lda, lw = lwork, info = 0;
+                _zgeqrf64(&mm, &nn, a, &ll, tau, work, &lw, &info);
+                return info;
+            }
+            else
+            {
+                int mm = (int)m, nn = (int)n, ll = (int)lda, lw = (int)lwork, info = 0;
+                _zgeqrf32(&mm, &nn, a, &ll, tau, work, &lw, &info);
+                return info;
+            }
+        }
+
+        internal static long Dorgqr(long m, long n, long k, double* a, long lda, double* tau, double* work, long lwork)
+        {
+            if (IsIlp64)
+            {
+                long mm = m, nn = n, kk = k, ll = lda, lw = lwork, info = 0;
+                _dorgqr64(&mm, &nn, &kk, a, &ll, tau, work, &lw, &info);
+                return info;
+            }
+            else
+            {
+                int mm = (int)m, nn = (int)n, kk = (int)k, ll = (int)lda, lw = (int)lwork, info = 0;
+                _dorgqr32(&mm, &nn, &kk, a, &ll, tau, work, &lw, &info);
+                return info;
+            }
+        }
+
+        internal static long Zungqr(long m, long n, long k, double* a, long lda, double* tau, double* work, long lwork)
+        {
+            if (IsIlp64)
+            {
+                long mm = m, nn = n, kk = k, ll = lda, lw = lwork, info = 0;
+                _zungqr64(&mm, &nn, &kk, a, &ll, tau, work, &lw, &info);
+                return info;
+            }
+            else
+            {
+                int mm = (int)m, nn = (int)n, kk = (int)k, ll = (int)lda, lw = (int)lwork, info = 0;
+                _zungqr32(&mm, &nn, &kk, a, &ll, tau, work, &lw, &info);
+                return info;
+            }
+        }
+
+        #endregion
+
+        #region LAPACK SVD/least-squares wrappers (fortran_int width marshalled per IsIlp64)
+
+        // Arguments are in ELEMENTS; the fortran routine gets its scalars by pointer widened to the
+        // build's integer width. `jobz` is 'N'/'S'/'A' as a byte. `s`/`rcond`/`rwork` are the real
+        // basetype (double). `info` is the LAPACK status: 0 success, <0 illegal argument, and for
+        // gesdd/gelsd >0 the algorithm failed to converge. The workspace query (lwork == -1) writes
+        // work[0]; gelsd's query ALSO writes iwork[0] with the needed integer-workspace size.
+
+        internal static long Dgesdd(byte jobz, long m, long n, double* a, long lda, double* s,
+            double* u, long ldu, double* vt, long ldvt, double* work, long lwork, void* iwork)
+        {
+            if (IsIlp64)
+            {
+                byte jz = jobz; long mm = m, nn = n, la = lda, lu = ldu, lvt = ldvt, lw = lwork, info = 0;
+                _dgesdd64(&jz, &mm, &nn, a, &la, s, u, &lu, vt, &lvt, work, &lw, (long*)iwork, &info);
+                return info;
+            }
+            else
+            {
+                byte jz = jobz; int mm = (int)m, nn = (int)n, la = (int)lda, lu = (int)ldu, lvt = (int)ldvt, lw = (int)lwork, info = 0;
+                _dgesdd32(&jz, &mm, &nn, a, &la, s, u, &lu, vt, &lvt, work, &lw, (int*)iwork, &info);
+                return info;
+            }
+        }
+
+        internal static long Zgesdd(byte jobz, long m, long n, double* a, long lda, double* s,
+            double* u, long ldu, double* vt, long ldvt, double* work, long lwork, double* rwork, void* iwork)
+        {
+            if (IsIlp64)
+            {
+                byte jz = jobz; long mm = m, nn = n, la = lda, lu = ldu, lvt = ldvt, lw = lwork, info = 0;
+                _zgesdd64(&jz, &mm, &nn, a, &la, s, u, &lu, vt, &lvt, work, &lw, rwork, (long*)iwork, &info);
+                return info;
+            }
+            else
+            {
+                byte jz = jobz; int mm = (int)m, nn = (int)n, la = (int)lda, lu = (int)ldu, lvt = (int)ldvt, lw = (int)lwork, info = 0;
+                _zgesdd32(&jz, &mm, &nn, a, &la, s, u, &lu, vt, &lvt, work, &lw, rwork, (int*)iwork, &info);
+                return info;
+            }
+        }
+
+        internal static long Dgelsd(long m, long n, long nrhs, double* a, long lda, double* b, long ldb,
+            double* s, double rcond, out long rank, double* work, long lwork, void* iwork)
+        {
+            if (IsIlp64)
+            {
+                long mm = m, nn = n, nr = nrhs, la = lda, lb = ldb, rk = 0, lw = lwork, info = 0; double rc = rcond;
+                _dgelsd64(&mm, &nn, &nr, a, &la, b, &lb, s, &rc, &rk, work, &lw, (long*)iwork, &info);
+                rank = rk;
+                return info;
+            }
+            else
+            {
+                int mm = (int)m, nn = (int)n, nr = (int)nrhs, la = (int)lda, lb = (int)ldb, rk = 0, lw = (int)lwork, info = 0; double rc = rcond;
+                _dgelsd32(&mm, &nn, &nr, a, &la, b, &lb, s, &rc, &rk, work, &lw, (int*)iwork, &info);
+                rank = rk;
+                return info;
+            }
+        }
+
+        internal static long Zgelsd(long m, long n, long nrhs, double* a, long lda, double* b, long ldb,
+            double* s, double rcond, out long rank, double* work, long lwork, double* rwork, void* iwork)
+        {
+            if (IsIlp64)
+            {
+                long mm = m, nn = n, nr = nrhs, la = lda, lb = ldb, rk = 0, lw = lwork, info = 0; double rc = rcond;
+                _zgelsd64(&mm, &nn, &nr, a, &la, b, &lb, s, &rc, &rk, work, &lw, rwork, (long*)iwork, &info);
+                rank = rk;
+                return info;
+            }
+            else
+            {
+                int mm = (int)m, nn = (int)n, nr = (int)nrhs, la = (int)lda, lb = (int)ldb, rk = 0, lw = (int)lwork, info = 0; double rc = rcond;
+                _zgelsd32(&mm, &nn, &nr, a, &la, b, &lb, s, &rc, &rk, work, &lw, rwork, (int*)iwork, &info);
+                rank = rk;
+                return info;
+            }
         }
 
         #endregion

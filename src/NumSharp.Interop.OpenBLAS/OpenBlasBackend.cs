@@ -56,6 +56,48 @@ namespace NumSharp.Interop.OpenBLAS
         public bool TryMatMulBatched(NDArray left, NDArray right, NDArray result)
             => OpenBlasEngine.TryMatmulBatched(left, right, result);
 
+        #region LU factorisations (LAPACK getrf / gesv)
+
+        // These answer only when the loaded library also exports LAPACK (a full OpenBLAS does; a bare
+        // reference CBLAS does not). A miss returns false and the engine raises its "needs a LAPACK
+        // backend" — the same outcome as no backend at all. float32 operands are computed in double
+        // and cast back, exactly as NumPy's linalg does; every other dtype falls through.
+
+        /// <inheritdoc/>
+        public bool TryInv(NDArray a, out NDArray result)
+            => OpenBlasEngine.TryInv(a, out result);
+
+        /// <inheritdoc/>
+        public bool TrySolve(NDArray a, NDArray b, bool oneDimensionalRhs, out NDArray result)
+            => OpenBlasEngine.TrySolve(a, b, oneDimensionalRhs, out result);
+
+        /// <inheritdoc/>
+        public bool TryDet(NDArray a, out NDArray result)
+            => OpenBlasEngine.TryDet(a, out result);
+
+        /// <inheritdoc/>
+        public bool TrySlogdet(NDArray a, out NDArray sign, out NDArray logabsdet)
+            => OpenBlasEngine.TrySlogdet(a, out sign, out logabsdet);
+
+        #endregion
+
+        #region Cholesky / QR factorisations (LAPACK potrf / geqrf / orgqr)
+
+        // Same story as the LU family: they answer only when the loaded library exports LAPACK, compute
+        // float32 in double and cast back exactly as NumPy does, and decline every other dtype so the
+        // engine raises its "needs a LAPACK backend". A not-positive-definite / bad-argument matrix is a
+        // genuine LinAlgError from the routine (the operand WAS served), not a decline — it propagates.
+
+        /// <inheritdoc/>
+        public bool TryCholesky(NDArray a, bool upper, out NDArray result)
+            => OpenBlasEngine.TryCholesky(a, upper, out result);
+
+        /// <inheritdoc/>
+        public bool TryQr(NDArray a, string mode, out NDArray q, out NDArray r)
+            => OpenBlasEngine.TryQr(a, mode, out q, out r);
+
+        #endregion
+
         /// <summary>The loaded library's own description, for diagnostics.</summary>
         public override string ToString() => "OpenBlasBackend " + Info;
     }

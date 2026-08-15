@@ -48,6 +48,20 @@ namespace NumSharp.Interop.OpenBLAS
             => OpenBlasNative.IsLoaded && BackendFactory.GetEngine().Blas is OpenBlasBackend;
 
         /// <summary>
+        ///     True when the loaded library also provides the LAPACK LU routines the <c>np.linalg</c>
+        ///     factorisations need (<c>det</c>/<c>slogdet</c>/<c>solve</c>/<c>inv</c>, and everything
+        ///     built on them — <c>matrix_power</c> with a negative exponent, <c>tensorinv</c>,
+        ///     <c>tensorsolve</c>).
+        /// </summary>
+        /// <remarks>
+        ///     A full OpenBLAS (including the bundled scipy-openblas) exports LAPACK; a bare reference
+        ///     CBLAS does not. When it does not, those functions raise exactly as they would with no
+        ///     backend installed, while <c>dot</c>/<c>matmul</c> still accelerate — the factorisations
+        ///     have no managed fallback, unlike the products.
+        /// </remarks>
+        public static bool LapackAvailable => OpenBlasNative.IsLoaded && OpenBlasNative.IsLapackLoaded;
+
+        /// <summary>
         ///     Path, symbol scheme, integer width, thread count and build string of the loaded
         ///     library, or null when none is loaded.
         /// </summary>
