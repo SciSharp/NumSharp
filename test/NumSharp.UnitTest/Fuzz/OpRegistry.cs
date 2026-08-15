@@ -212,6 +212,7 @@ namespace NumSharp.UnitTest.Fuzz
                 case "argsort": return ApplyArgsort(ops[0], p["axis"].GetInt32());
                 case "sort": return np.sort(ops[0], p["axis"].GetInt32());          // Group A B2: value sort
                 case "searchsorted": return np.searchsorted(ops[0], ops[1], p["side"].GetString());
+                case "digitize": return np.digitize(ops[0], ops[1], p["right"].GetBoolean()); // searchsorted + monotonicity
                 case "nonzero": return np.nonzero(ops[0])[0]; // 1-D: single int64 index array
                 case "flatnonzero": return np.flatnonzero(ops[0]);                  // Group A B3
                 case "argwhere": return np.argwhere(ops[0]);                        // Group A B3

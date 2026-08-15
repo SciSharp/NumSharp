@@ -1642,6 +1642,57 @@ def gen_searchsorted(dtypes):
     return cases
 
 
+# digitize applies to numeric non-complex dtypes (complex x raises TypeError).
+DIGITIZE_DTYPES = ["float64", "float32", "int64", "int32", "int16", "uint8"]
+
+
+def gen_digitize(dtypes):
+    """np.digitize: searchsorted + monotonicity. Same-dtype inc/dec bins x right, a mixed-dtype
+    promotion lock (float x into int bins), and NaN-in-x cases (which pin searchsorted's
+    NaN-as-largest total order — the carry/bisect fix)."""
+    cases = []
+    n = 0
+
+    def emit(x, bins, right, tag, vclass):
+        nonlocal n
+        r = np.asarray(np.digitize(x, bins, right=right))
+        cases.append({
+            "id": f"digitize/{tag}/right={right}/{n}",
+            "op": "digitize",
+            "params": {"right": bool(right)},
+            "operands": [describe(x, x), describe(bins, bins)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "digitize",
+            "valueclass": vclass,
+        })
+        n += 1
+
+    for dt in dtypes:
+        inc = np.sort(_distinct(6, dt))               # increasing, distinct edges
+        dec = inc[::-1].copy()                        # decreasing edges
+        x = _distinct(8, dt)                          # spans below/in/above the bin range
+        for right in (False, True):
+            emit(x, inc, right, f"inc/{dt}", "distinct")
+            emit(x, dec, right, f"dec/{dt}", "distinct")
+
+    # Mixed dtype: float64 x into int32 bins — locks the result_type(bins, x) promotion
+    # (a naive cast of x into the bins dtype would truncate).
+    xf = np.array([1.2, 10.0, 12.4, 15.5, 20.0, -1.0], dtype=np.float64)
+    bi = np.array([0, 5, 10, 15, 20], dtype=np.int32)
+    for right in (False, True):
+        emit(xf, bi, right, "mixed", "mixed")
+
+    # NaN in x — a NaN sorts to the end (len(bins)) and must not corrupt a following key.
+    for dt in ("float64", "float32"):
+        binsf = np.array([0, 1, 2.5, 4, 10], dtype=np.dtype(dt))
+        xn = np.array([np.nan, 1.0, np.nan, 6.0, -1.0, 100.0], dtype=np.dtype(dt))
+        for right in (False, True):
+            emit(xn, binsf, right, f"nan/{dt}", "nan")
+
+    return cases
+
+
 def gen_nonzero(dtypes):
     cases = []
     n = 0
@@ -5441,6 +5492,7 @@ def main():
         cases = gen_argsort(SORT_DTYPES)
         cases += gen_sort(SORT_DTYPES)                                  # Group A B2: value sort
         cases += gen_searchsorted(SORT_DTYPES)
+        cases += gen_digitize(DIGITIZE_DTYPES)                          # digitize = searchsorted + monotonicity
         cases += gen_nonzero(SORT_DTYPES)
         cases += gen_unary(NZ_OPS, NZ_DTYPES, list(LAYOUTS.keys()))     # Group A B3: flatnonzero/argwhere
         cases += gen_unique(["bool", "int32", "uint8", "int64", "float64", "float32", "complex128"])  # B3: unique
