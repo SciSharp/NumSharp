@@ -138,9 +138,22 @@ namespace NumSharp
 
                     // NumPy's own composition, verbatim — and the reason a bad order is reported by
                     // `norm` in the caller's words ("Invalid norm order for matrices.") rather than by
-                    // `cond` itself. (NumPy inverts ignoring errors — a singular operand yields nan →
-                    // inf below; NumSharp's `inv` raises instead, a known divergence for these orders.)
-                    var invx = inv(ToCommon(x, common));
+                    // `cond` itself. NumPy inverts IGNORING errors: a singular operand yields nan from
+                    // the raw inv gufunc, which the nan→inf tail below turns into inf. NumSharp's
+                    // `np.linalg.inv` RAISES on a singular matrix, so for a single (2-D) operand the raise
+                    // is caught and the same nan→inf path is taken. A singular element inside a STACK
+                    // still raises (per-element nan-fill would need a non-raising inv) — documented
+                    // [Misaligned] divergence.
+                    NDArray invx;
+                    try
+                    {
+                        invx = inv(ToCommon(x, common));
+                    }
+                    catch (LinAlgError) when (x.ndim == 2)
+                    {
+                        return CondNanToInf(NDArray.Scalar(double.NaN).astype(realT), x);
+                    }
+
                     r = np.multiply(norm(x, p, new[] {-2, -1}), norm(invx, p, new[] {-2, -1}));
                     r = r.astype(realT);
                 }
