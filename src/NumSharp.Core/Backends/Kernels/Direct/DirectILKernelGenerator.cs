@@ -716,6 +716,16 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Cbrt");
             public static readonly MethodInfo HalfExp2 = typeof(Half).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Exp2");
+            // Inverse hyperbolic: Half.Asinh/Acosh/Atanh (IHyperbolicFunctions<Half>) internally
+            // compute in float32 — byte-IDENTICAL to NumPy's float16 loop (astype 'e'->'f', i.e.
+            // (Half)asinhf((float)h); verified 0 finite-diffs over all 65536 f16 values) AND faster
+            // than the Half->double->Math.X->Half bridge the rest of the arc-trig f16 tier still uses.
+            public static readonly MethodInfo HalfAsinh = typeof(Half).GetMethod("Asinh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Asinh");
+            public static readonly MethodInfo HalfAcosh = typeof(Half).GetMethod("Acosh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Acosh");
+            public static readonly MethodInfo HalfAtanh = typeof(Half).GetMethod("Atanh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Atanh");
             // Note: .NET's Half exposes log1p as LogP1 and expm1 as ExpM1 (IFloatingPointIeee754<Half>).
             // Half.LogP1/ExpM1 lose subnormal precision because internally they compute (1 + x) in
             // Half, which rounds x < Half.Epsilon (≈ 2^-11) to 0. NumPy promotes to a higher-precision

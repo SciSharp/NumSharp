@@ -505,15 +505,27 @@ namespace NumSharp.Backends.Kernels
                     il.EmitCall(OpCodes.Call, CachedMethods.HalfLog2, null);
                     break;
 
+                case UnaryOp.Asinh:
+                    // Byte-IDENTICAL to NumPy's float16 loop (astype 'e'->'f': (Half)asinhf((float)h)):
+                    // Half.Asinh computes in float32. 0 finite-diffs over all 65536 f16 values, and
+                    // faster than the double bridge below. (arcsin/sinh etc. still use the double arm.)
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfAsinh, null);
+                    break;
+
+                case UnaryOp.Acosh:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfAcosh, null);
+                    break;
+
+                case UnaryOp.Atanh:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfAtanh, null);
+                    break;
+
                 case UnaryOp.Sinh:
                 case UnaryOp.Cosh:
                 case UnaryOp.Tanh:
                 case UnaryOp.ASin:
                 case UnaryOp.ACos:
                 case UnaryOp.ATan:
-                case UnaryOp.Asinh:
-                case UnaryOp.Acosh:
-                case UnaryOp.Atanh:
                 case UnaryOp.Round:
                 case UnaryOp.Deg2Rad:
                 case UnaryOp.Rad2Deg:

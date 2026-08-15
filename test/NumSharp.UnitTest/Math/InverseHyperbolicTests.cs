@@ -82,6 +82,51 @@ namespace NumSharp.UnitTest.Maths
             np.arctanh(np.array(new[] { 0.5f })).GetAtIndex<float>(0).Should().Be(0.54930615f);
         }
 
+        // ---------------------------------------------------------------- float16 BYTE-EXACT (native Half.Asinh, = NumPy astype 'e'->'f')
+
+        [TestMethod]
+        public void Float16_ByteExact()
+        {
+            // NumPy 2.4.2 float16 loop = (Half)asinhf((float)h); NumSharp uses native Half.Asinh
+            // (also float32-internal) -> byte-identical. Bit patterns from np.arcsinh(f16).view(uint16).
+            ushort Bits(NDArray r, int i) => BitConverter.HalfToUInt16Bits(r.GetAtIndex<Half>(i));
+
+            var rs = np.arcsinh(np.array(new[] { (Half)0.0f, (Half)1.0f, (Half)2.0f }));
+            rs.typecode.Should().Be(NPTypeCode.Half);
+            Bits(rs, 0).Should().Be(0x0000);
+            Bits(rs, 1).Should().Be(0x3b0d);
+            Bits(rs, 2).Should().Be(0x3dc6);
+
+            var rc = np.arccosh(np.array(new[] { (Half)1.0f, (Half)2.0f, (Half)4.0f }));
+            Bits(rc, 0).Should().Be(0x0000);
+            Bits(rc, 1).Should().Be(0x3d45);
+            Bits(rc, 2).Should().Be(0x4020);
+
+            var rt = np.arctanh(np.array(new[] { (Half)0.0f, (Half)0.5f, (Half)(-0.5f) }));
+            Bits(rt, 0).Should().Be(0x0000);
+            Bits(rt, 1).Should().Be(0x3865);
+            Bits(rt, 2).Should().Be(0xb865);
+        }
+
+        // ---------------------------------------------------------------- overload resolution (all forms unambiguous)
+
+        [TestMethod]
+        public void Overloads_AllFormsResolve()
+        {
+            var x = np.array(new[] { 0.5, 1.0, 2.0 });
+            // (x) ; (x, out) ; (x, out, where) ; (x, out, where, dtype) ; (x, dtype:) ; (x, NPTypeCode) ; (x, Type)
+            np.arcsinh(x).typecode.Should().Be(NPTypeCode.Double);
+            np.arcsinh(x, np.zeros(3, NPTypeCode.Double)).typecode.Should().Be(NPTypeCode.Double);
+            np.arcsinh(x, np.zeros(3, NPTypeCode.Double), np.array(new[] { true, false, true })).typecode.Should().Be(NPTypeCode.Double);
+            np.arcsinh(x, dtype: NPTypeCode.Single).typecode.Should().Be(NPTypeCode.Single);
+            np.arcsinh(x, NPTypeCode.Single).typecode.Should().Be(NPTypeCode.Single);   // positional NPTypeCode overload
+            np.arcsinh(x, typeof(float)).typecode.Should().Be(NPTypeCode.Single);        // positional Type overload
+            // aliases resolve the same 3 arg-shapes
+            np.asinh(x, NPTypeCode.Single).typecode.Should().Be(NPTypeCode.Single);
+            np.acosh(np.array(new[] { 2.0 }), typeof(float)).typecode.Should().Be(NPTypeCode.Single);
+            np.atanh(x, dtype: NPTypeCode.Single).typecode.Should().Be(NPTypeCode.Single);
+        }
+
         // ---------------------------------------------------------------- dtype tiers (NEP50 float promotion)
 
         [TestMethod]
