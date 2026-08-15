@@ -684,7 +684,28 @@ genuine defect worth fixing on its own terms (note .NET's `float.ExpM1`/`double.
 `Exp(x)-1`/`Log(1+x)` and do NOT help). float16 loops (17 differing values out of all 65,536) and float64
 `exp`/`log`/`sin`/`cos` already agree with NumPy bit-for-bit on this platform and need no port.
 ### Math — Reductions
-`all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `average_returned`, `count_nonzero`, `cumprod`, `cumsum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `ptp`, `quantile`, `std`, `sum`, `var`
+`all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `average_returned`, `count_nonzero`, `cov`, `cumprod`, `cumsum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `ptp`, `quantile`, `std`, `sum`, `var`
+
+`cov(m, y=None, rowvar=True, bias=False, ddof=None, fweights=None, aweights=None, dtype=None)` is a **pure
+composition** over `average`/`dot`/`concatenate`/`atleast_2d`/`conjugate`/`squeeze` (no new kernel), a line-for-line
+port of NumPy's `numpy/lib/_function_base_impl.cov`. `m`/`y` are 1-D or 2-D (>2-D → `ValueError`); `rowvar=False`
+transposes the variable/observation relationship; `ddof` overrides `bias` (defaults: `bias→N`, else `N-1`). Result
+dtype is `result_type(m[, y], float64)` (int/bool→float64, complex128 stays complex) unless `dtype` is given — but
+NOT force-cast at the end, so `dtype=float32` **with** any weights still yields float64 (the float64 weights promote
+`avg`→`dot`), matching NumPy exactly. `fweights` (integer frequency) / `aweights` (relative) combine to `w=fw*aw`;
+the `fact = w_sum - ddof*sum(w*aw)/w_sum` normalization, the `fact<=0 → +inf` (DoF≤0) degenerate path, and the empty
+`(0,0)`-float64 / single-observation `nan` / scalar `nan` edges all match NumPy. Error taxonomy is verbatim:
+`ValueError` (`m has more than 2 dimensions`, `{f,a}weights cannot be negative`), `TypeError` (`fweights must be
+integer`), and the new house `RuntimeError` (`cannot handle multidimensional {f,a}weights`, `incompatible numbers of
+samples and {f,a}weights`); weights summing to zero raise `DivideByZeroException` (NumPy `ZeroDivisionError`). **Two
+NumPy fidelity details ported deliberately:** `X -= avg[:, None]` is done in the operand's dtype (so `dtype=float32`
+without weights keeps float32), and for **complex** input NumPy's `fact` inherits complex128 so its `.../w_sum`
+division is Smith's-method `numer*(1/w_sum)` — reproduced as a reciprocal-multiply because it rounds 1 ULP off real
+division and decides finite-vs-inf when `fact ~ 0`. Differential-verified across 2556 cases (5 dtypes × shapes ×
+rowvar/bias/ddof × weight combos × y × layouts): bit-exact for small observation counts, otherwise within managed-GEMM
+tolerance (cov is **GEMM-bound** — as fast as `np.dot`, i.e. slower than NumPy's BLAS by default but byte-identical
+and BLAS-fast once `NumSharp.Interop.OpenBLAS` is referenced). Gate: `Statistics/np.cov.BattleTests.cs` (34). See
+`Statistics/np.cov.cs`.
 
 ### Math — NaN-Aware
 `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`, `nansum`, `nanvar`
