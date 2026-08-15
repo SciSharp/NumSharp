@@ -154,7 +154,7 @@ public class MatMulStridedTests
     }
 
     // =====================================================================
-    // Double — SIMD stride-aware simple path
+    // Double — SIMD stride-aware GEMM (simple path + blocked GEBP)
     // =====================================================================
 
     [TestMethod]
@@ -187,6 +187,79 @@ public class MatMulStridedTests
         result.GetDouble(0, 0).Should().Be(28.0);
         result.GetDouble(1, 1).Should().Be(98.0);
         result.GetDouble(2, 0).Should().Be(124.0);
+    }
+
+    [TestMethod]
+    public void Dot_Double_TransposedA_Large_BlockedPath()
+    {
+        // Dims > BLOCKING_THRESHOLD (128) → blocked GEBP; aStride0==1 →
+        // PackADoublePanelsStrided's two-vector-load fast path. Bit-exact vs
+        // the contiguous copy because packing normalizes both operands into
+        // identical panels, so the micro-kernel FMA order is the same.
+        np.random.seed(42);
+        var l = np.random.randn(200L, 150L).astype(NPTypeCode.Double);
+        var lt = l.transpose();
+
+        var result = np.dot(lt, l);
+        var reference = np.dot(lt.copy(), l);
+
+        lt.Shape.IsContiguous.Should().BeFalse();
+        np.array_equal(result, reference).Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void Dot_Double_ContigByTransposedB_Large_BlockedPath()
+    {
+        // L @ Lt — B transposed-contiguous, exercises PackB bStride0==1.
+        // This is the np.cov pattern (dot(Xc, Xc.T)) that motivated the
+        // blocked double kernel.
+        np.random.seed(7);
+        var l = np.random.randn(500L, 400L).astype(NPTypeCode.Double);
+        var lt = l.transpose();
+
+        var result = np.dot(l, lt);
+        var reference = np.dot(l, lt.copy());
+
+        lt.Shape.IsContiguous.Should().BeFalse();
+        np.array_equal(result, reference).Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void Dot_Double_SlicedWithOffset_Large_BlockedPath()
+    {
+        // 2D slice — non-contiguous with Shape.offset > 0 at blocked size,
+        // exercises PackA's general (scalar) branch plus the offset path.
+        np.random.seed(23);
+        var big = np.random.randn(300L, 260L).astype(NPTypeCode.Double);
+        var sliced = big["1:, 2:"];                      // (299, 258)
+        var b = np.random.randn(258L, 130L).astype(NPTypeCode.Double);
+
+        sliced.Shape.offset.Should().BeGreaterThan(0);
+        sliced.Shape.IsContiguous.Should().BeFalse();
+
+        var result = np.dot(sliced, b);
+        var reference = np.dot(sliced.copy(), b);
+
+        np.array_equal(result, reference).Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void Dot_Double_Contiguous_Large_ExactVsInt64Oracle()
+    {
+        // Independent oracle for the blocked path on contiguous inputs: with
+        // small integer values every product and partial sum is exact in both
+        // int64 and double (max ≈ 16800 « 2^53), so the blocked double GEMM
+        // must agree bit-for-bit with the INumber<long> kernel — a completely
+        // separate code path — regardless of accumulation order.
+        var ai = (np.arange(150 * 140) % 13).reshape(150, 140);
+        var bi = (np.arange(140 * 130) % 11).reshape(140, 130);
+        var ad = ai.astype(NPTypeCode.Double);
+        var bd = bi.astype(NPTypeCode.Double);
+
+        var result = np.dot(ad, bd);
+        var oracle = np.dot(ai.astype(NPTypeCode.Int64), bi.astype(NPTypeCode.Int64)).astype(NPTypeCode.Double);
+
+        np.array_equal(result, oracle).Should().BeTrue();
     }
 
     // =====================================================================
