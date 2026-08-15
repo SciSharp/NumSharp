@@ -160,7 +160,7 @@ namespace NumSharp
                             result = FrobeniusOverBoth(a, rowAxis, colAxis);
                             break;
                         case "nuc":
-                            result = SingularValueNorm(a, "nuc");
+                            result = SingularValueNorm(a, rowAxis, colAxis, "nuc");
                             break;
                         default:
                             throw new ValueError("Invalid norm order for matrices.");
@@ -177,7 +177,7 @@ namespace NumSharp
                     // NumPy reduces one axis FIRST and then shifts the surviving axis index down if
                     // the reduced one sat before it — so these pairs are not interchangeable.
                     if (order == 2d || order == -2d)
-                        result = SingularValueNorm(a, order == 2d ? "2" : "-2");
+                        result = SingularValueNorm(a, rowAxis, colAxis, order == 2d ? "2" : "-2");
                     else if (order == 1d)
                         result = np.amax(np.sum(np.abs(a), rowAxis), Shift(colAxis, rowAxis));
                     else if (order == -1d)
@@ -210,18 +210,18 @@ namespace NumSharp
             /// <summary>An axis index after a LOWER-numbered axis has been reduced away.</summary>
             private static int Shift(int axis, int removed) => axis > removed ? axis - 1 : axis;
 
-            private static NDArray SingularValueNorm(NDArray a, string which)
+            private static NDArray SingularValueNorm(NDArray a, int rowAxis, int colAxis, string which)
             {
-                var common = CommonType(a);
-                a.TensorEngine.Svd(ToCommon(a, common), fullMatrices: false, computeUv: false);
-
-                throw new NotSupportedException(
-                    $"np.linalg.norm with a matrix order of '{which}' is not implemented. It is one of " +
-                    "the three orders defined through singular values (2, -2 and 'nuc'); every other " +
-                    "order computes normally without a backend. The decomposition is reached above, " +
-                    "which is where the call stops while no LAPACK backend is installed. This line is " +
-                    "the REMAINING work rather than the missing backend: taking the largest, smallest " +
-                    "or total singular value still has to be written.");
+                // NumPy's _multi_svd_norm: move the two matrix axes to the end, take the singular values
+                // over them, then reduce — 2 → largest, -2 → smallest, 'nuc' → sum of the singulars.
+                var y = np.moveaxis(a, new[] {rowAxis, colAxis}, new[] {-2, -1});
+                var s = svdvals(y);
+                return which switch
+                {
+                    "2" => np.amax(s, -1),
+                    "-2" => np.amin(s, -1),
+                    _ => np.sum(s, -1), // "nuc"
+                };
             }
 
             /// <summary>

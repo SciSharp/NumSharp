@@ -48,20 +48,37 @@ namespace NumSharp
                     throw new ValueError("`rtol` and `rcond` can't be both set.");
 
                 AssertStacked2d(a);
+
+                // C# cannot tell NumPy's rtol=_NoValue (default → 1e-15) apart from rtol=None
+                // (Array-API default → max(M,N)*eps), so an explicit rcond or rtol is honoured and with
+                // neither set NumPy's 1e-15 default applies.
+                double rc = rcond ?? rtol ?? 1e-15;
+
+                int nd = a.ndim;
+                long m = a.Shape.dimensions[nd - 2];
+                long n = a.Shape.dimensions[nd - 1];
+
+                // Empty matrix: NumPy returns an uninitialised (…, N, M) WITHOUT decomposing, keeping the
+                // ORIGINAL dtype (unlike the SVD path, which is always floating).
+                if (m == 0 || n == 0)
+                {
+                    var emptyDims = (long[]) a.Shape.dimensions.Clone();
+                    emptyDims[nd - 2] = n;
+                    emptyDims[nd - 1] = m;
+                    return np.zeros(new Shape(emptyDims), a.typecode);
+                }
+
                 var common = CommonType(a);
+                var aConj = np.conjugate(ToCommon(a, common));
+                var (u, s, vt) = aConj.TensorEngine.Svd(aConj, fullMatrices: false, computeUv: true);
 
-                // Every route through pinv is defined by singular values, so the operand reaches the
-                // decomposition before any of pinv's own arithmetic — and that is where the call
-                // stops today. Neither the cutoff nor the Hermitian shortcut changes it.
-                a.TensorEngine.Svd(ToCommon(a, common), fullMatrices: false, computeUv: true);
-
-                throw new NotSupportedException(
-                    "np.linalg.pinv is not implemented. Its validation and dtype resolution are " +
-                    "complete and the decomposition it is built on is reached above, which is where " +
-                    "the call stops while no LAPACK backend is installed. This line is the REMAINING " +
-                    "work rather than the missing backend: pinv still needs its own reconstruction — " +
-                    "discard the singular values below the cutoff, reciprocate the rest, and recombine " +
-                    "with the conjugate-transposed factors.");
+                // Discard singular values at or below rcond * largest, reciprocate the rest, and recombine
+                // with the (plain, since `a` was conjugated) transposed factors — NumPy's exact sequence.
+                var cutoff = np.multiply(np.amax(s, -1, keepdims: true), NDArray.Scalar(rc));
+                var large = np.greater(s, cutoff);
+                var sInv = np.where(large, np.reciprocal(s), np.zeros_like(s));
+                return np.matmul(np.swapaxes(vt, -1, -2),
+                    np.multiply(np.expand_dims(sInv, -1), np.swapaxes(u, -1, -2)));
             }
 
             /// <summary>

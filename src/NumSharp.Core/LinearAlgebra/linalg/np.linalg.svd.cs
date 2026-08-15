@@ -73,15 +73,28 @@ namespace NumSharp
                     return NDArray.Scalar(A.TensorEngine.CountNonZero(A) == 0 ? 0L : 1L);
 
                 var common = CommonType(A);
-                A.TensorEngine.Svd(ToCommon(A, common), fullMatrices: false, computeUv: false);
+                var s = A.TensorEngine.Svd(ToCommon(A, common), fullMatrices: false, computeUv: false).S;
 
-                throw new NotSupportedException(
-                    "np.linalg.matrix_rank is not implemented for operands of two dimensions or more. " +
-                    "Validation and the rank-0/rank-1 short circuits are complete and the decomposition " +
-                    "the general case is built on is reached above, which is where the call stops while " +
-                    "no LAPACK backend is installed. This line is the REMAINING work rather than the " +
-                    "missing backend: counting the singular values above the tolerance still has to be " +
-                    "written.");
+                int nd = A.ndim;
+                long m = A.Shape.dimensions[nd - 2];
+                long n = A.Shape.dimensions[nd - 1];
+
+                NDArray tolArr;
+                if (tol is null)
+                {
+                    // Default: max(M,N) * eps(S.dtype) * largest singular value (MATLAB's rule). The eps is
+                    // the singular values' own — float32's for a float32 operand, float64's otherwise.
+                    double eps = s.typecode == NPTypeCode.Single ? 1.1920928955078125e-07 : 2.220446049250313e-16;
+                    double rtolVal = rtol ?? (Math.Max(m, n) * eps);
+                    tolArr = np.multiply(np.amax(s, -1, keepdims: true), NDArray.Scalar(rtolVal));
+                }
+                else
+                {
+                    // asarray(tol)[..., newaxis] — a scalar threshold broadcasts against the last axis.
+                    tolArr = NDArray.Scalar(tol.Value);
+                }
+
+                return np.count_nonzero(np.greater(s, tolArr), -1);
             }
 
             /// <summary>
@@ -103,31 +116,78 @@ namespace NumSharp
             /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
             public static NDArray cond(NDArray x, object p = null)
             {
+                if (IsEmpty2d(x))
+                    throw new LinAlgError("cond is not defined on empty arrays");
+
+                NDArray r;
                 if (p is null || IsOrder(p, 2) || IsOrder(p, -2))
                 {
-                    AssertStacked2d(x);
-                    var svdCommon = CommonType(x);
-                    x.TensorEngine.Svd(ToCommon(x, svdCommon), fullMatrices: false, computeUv: false);
+                    // The default and ±2 orders come straight from the singular values: the ratio of the
+                    // largest to the smallest (2/None), or its reciprocal (-2). Division by a zero
+                    // singular value gives inf/nan here rather than raising, matching NumPy's errstate.
+                    var s = svdvals(x);
+                    var sMax = s["..., 0"];
+                    var sMin = s["..., -1"];
+                    r = IsOrder(p, -2) ? np.divide(sMin, sMax) : np.divide(sMax, sMin);
+                }
+                else
+                {
+                    AssertStackedSquare(x);
+                    var common = CommonType(x);
+                    var realT = common == NPTypeCode.Complex ? NPTypeCode.Double : common;
 
-                    throw new NotSupportedException(
-                        "np.linalg.cond is not implemented. Validation is complete and the " +
-                        "decomposition this order is defined by is reached above, which is where the " +
-                        "call stops while no LAPACK backend is installed. This line is the REMAINING " +
-                        "work rather than the missing backend: forming the ratio of the largest and " +
-                        "smallest singular values still has to be written.");
+                    // NumPy's own composition, verbatim — and the reason a bad order is reported by
+                    // `norm` in the caller's words ("Invalid norm order for matrices.") rather than by
+                    // `cond` itself. (NumPy inverts ignoring errors — a singular operand yields nan →
+                    // inf below; NumSharp's `inv` raises instead, a known divergence for these orders.)
+                    var invx = inv(ToCommon(x, common));
+                    r = np.multiply(norm(x, p, new[] {-2, -1}), norm(invx, p, new[] {-2, -1}));
+                    r = r.astype(realT);
                 }
 
-                AssertStackedSquare(x);
-                var common = CommonType(x);
-
-                // NumPy's own composition, verbatim — and the reason a bad order is reported by
-                // `norm` in the caller's words ("Invalid norm order for matrices.") rather than by
-                // `cond` itself.
-                return np.multiply(norm(x, p, new[] {-2, -1}), norm(inv(ToCommon(x, common)), p, new[] {-2, -1}));
+                return CondNanToInf(r, x);
             }
 
             private static bool IsOrder(object p, double value)
                 => p is not null && p is not string && Convert.ToDouble(p) == value;
+
+            /// <summary>
+            ///     NumPy's <c>_is_empty_2d</c> — <c>size == 0</c> AND the product of the last two
+            ///     dimensions is 0 (so a zero-length BATCH like <c>(0,3,3)</c> is NOT empty here).
+            /// </summary>
+            private static bool IsEmpty2d(NDArray x)
+            {
+                if (x.size != 0)
+                    return false;
+
+                int nd = x.ndim;
+                long prod = 1;
+                for (int i = Math.Max(0, nd - 2); i < nd; i++)
+                    prod *= x.Shape.dimensions[i];
+                return prod == 0;
+            }
+
+            /// <summary>
+            ///     NumPy's tail of <c>cond</c>: turn a NaN condition number into <c>inf</c> — UNLESS the
+            ///     matrix itself held a NaN (over its last two axes), in which case the NaN is kept. A
+            ///     NaN only arises here from a <c>0/0</c> (an all-zero matrix), which is infinitely
+            ///     ill-conditioned.
+            /// </summary>
+            private static NDArray CondNanToInf(NDArray r, NDArray x)
+            {
+                var nanMask = np.isnan(r);
+                if (!np.any(nanMask))
+                    return r;
+
+                NDArray apply = nanMask;
+                if (x.typecode is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Half or NPTypeCode.Complex)
+                {
+                    var xNan = np.any(np.isnan(x), new[] {-2, -1}, null);
+                    apply = np.logical_and(nanMask, np.logical_not(xNan));
+                }
+
+                return np.where(apply, NDArray.Scalar(double.PositiveInfinity).astype(r.typecode), r);
+            }
         }
     }
 }

@@ -98,6 +98,25 @@ namespace NumSharp.Interop.OpenBLAS
 
         #endregion
 
+        #region SVD / least-squares factorisations (LAPACK gesdd / gelsd)
+
+        // Same story again: they answer only when the loaded library exports LAPACK, compute float32 in
+        // double and cast back exactly as NumPy does, and decline every other dtype so the engine raises
+        // its "needs a LAPACK backend". A non-convergence is a genuine LinAlgError from the routine (the
+        // operand WAS served), not a decline — it propagates. TrySvd is also what turns on pinv,
+        // matrix_rank, cond and the spectral/nuclear matrix norms, which reconstruct on top of it.
+
+        /// <inheritdoc/>
+        public bool TrySvd(NDArray a, bool fullMatrices, bool computeUv, out NDArray u, out NDArray s, out NDArray vh)
+            => OpenBlasEngine.TrySvd(a, fullMatrices, computeUv, out u, out s, out vh);
+
+        /// <inheritdoc/>
+        public bool TryLstsq(NDArray a, NDArray b, double rcond,
+            out NDArray solution, out NDArray residuals, out NDArray rank, out NDArray singularValues)
+            => OpenBlasEngine.TryLstsq(a, b, rcond, out solution, out residuals, out rank, out singularValues);
+
+        #endregion
+
         /// <summary>The loaded library's own description, for diagnostics.</summary>
         public override string ToString() => "OpenBlasBackend " + Info;
     }

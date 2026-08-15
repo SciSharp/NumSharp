@@ -101,6 +101,12 @@ namespace NumSharp.Interop.OpenBLAS
             /// </summary>
             long Gelsd(long m, long n, long nrhs, T* a, long lda, T* b, long ldb, double* s, double rcond,
                 out long rank, T* work, long lwork, double* rwork, void* iwork);
+
+            /// <summary>
+            ///     Squared magnitude <c>|v|²</c> as a real — NumPy's <c>abs2</c>, used to form
+            ///     <c>lstsq</c>'s residuals as the squared 2-norm of each excess column.
+            /// </summary>
+            double Abs2(T v);
         }
 
         /// <summary>float64 LAPACK bindings — NumPy's real <c>'d'</c> signature.</summary>
@@ -156,6 +162,8 @@ namespace NumSharp.Interop.OpenBLAS
             public long Gelsd(long m, long n, long nrhs, double* a, long lda, double* b, long ldb, double* s,
                 double rcond, out long rank, double* work, long lwork, double* rwork, void* iwork)
                 => OpenBlasNative.Dgelsd(m, n, nrhs, a, lda, b, ldb, s, rcond, out rank, work, lwork, iwork);
+
+            public double Abs2(double v) => v * v;
         }
 
         /// <summary>complex128 LAPACK bindings — NumPy's <c>'D'</c> signature (cdouble).</summary>
@@ -225,6 +233,8 @@ namespace NumSharp.Interop.OpenBLAS
                 double rcond, out long rank, Complex* work, long lwork, double* rwork, void* iwork)
                 => OpenBlasNative.Zgelsd(m, n, nrhs, (double*)a, lda, (double*)b, ldb, s, rcond, out rank,
                     (double*)work, lwork, rwork, iwork);
+
+            public double Abs2(Complex v) => v.Real * v.Real + v.Imaginary * v.Imaginary;
         }
 
         // ----------------------------------------------------------------------------------------
