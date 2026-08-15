@@ -214,6 +214,10 @@ namespace NumSharp.UnitTest.Fuzz
                 case "searchsorted": return np.searchsorted(ops[0], ops[1], p["side"].GetString());
                 case "digitize": return np.digitize(ops[0], ops[1], p["right"].GetBoolean()); // searchsorted + monotonicity
                 case "nonzero": return np.nonzero(ops[0])[0]; // 1-D: single int64 index array
+                case "bincount": // count (1 operand) or weighted sum (2 operands); minlength always recorded
+                    return ops.Length >= 2
+                        ? np.bincount(ops[0], ops[1], p["minlength"].GetInt32())
+                        : np.bincount(ops[0], null, p["minlength"].GetInt32());
                 case "flatnonzero": return np.flatnonzero(ops[0]);                  // Group A B3
                 case "argwhere": return np.argwhere(ops[0]);                        // Group A B3
                 case "unique": return np.unique(ops[0]);                            // Group A B3
@@ -260,6 +264,7 @@ namespace NumSharp.UnitTest.Fuzz
                 case "compress": return np.compress(ops[0], ops[1], p["axis"].GetInt32());
                 case "extract": return np.extract(ops[0], ops[1]);
                 case "convolve": return np.convolve(ops[0], ops[1], p["mode"].GetString());
+                case "correlate": return np.correlate(ops[0], ops[1], p["mode"].GetString());
                 case "append": return p.ContainsKey("axis")
                     ? np.append(ops[0], ops[1], p["axis"].GetInt32())
                     : np.append(ops[0], ops[1]);

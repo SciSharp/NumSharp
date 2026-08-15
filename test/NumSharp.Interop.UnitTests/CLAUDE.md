@@ -193,8 +193,9 @@ don't assume it raises.
 5. Cover the **error taxonomy** too (both stacks raise, same message).
 6. Keep matrices small (correctness gate). Dispose every `PyObject`.
 
-`CholeskyQrFactorisationTests` here (cholesky/qr — 19 cases: dtypes, modes, layouts, batch, complex,
-edge, error) and `LapackDifferentialProbe` (inv) are the templates. Offline value gates for the same
+`CholeskyQrLiveParityTests` (cholesky/qr) and `LapackDifferentialTests` (the LU family —
+solve/inv/det/slogdet/matrix_power/tensorinv/tensorsolve, across dtypes/layouts/batch/edge/error) are
+the templates. Offline value gates for the same
 ops live in `test/NumSharp.UnitTest/Backends/*FactorisationTests.cs` (they run without Python and
 assert to a tolerance for cross-machine robustness); this project is the *byte-exact, live* half.
 

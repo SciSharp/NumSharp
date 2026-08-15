@@ -1713,6 +1713,64 @@ def gen_nonzero(dtypes):
     return cases
 
 
+# bincount input must be NON-NEGATIVE integers (cast to int64); complex/float raise, so exclude them.
+# Char has no NumPy dtype (it rides the uint16 proxy at runtime; uint16 here covers its value semantics).
+BINCOUNT_DTYPES = ["bool", "uint8", "int8", "int16", "uint16", "int32", "uint32", "int64", "uint64"]
+
+
+def gen_bincount(dtypes):
+    """np.bincount: count occurrences of each non-negative int (int64 result) + optional float64
+    weighted sum + minlength. Covers integer/bool input dtypes, contiguous / reversed / strided
+    input views (NumSharp copies to contiguous int64 — order-independent counting), the minlength
+    pad, and the weighted path (a sequential accumulation that must be BIT-EXACT with NumPy).
+    Small arrays are enough for value parity: the privatized count path is bit-identical to the
+    plain scatter (integer add is associative), proven separately in the unit tests."""
+    cases = []
+    n = 0
+
+    def emit(params, operands, r, tag):
+        nonlocal n
+        cases.append({
+            "id": f"bincount/{tag}/{n}",
+            "op": "bincount",
+            "params": params,
+            "operands": operands,
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "bincount",
+            "valueclass": "nonneg",
+        })
+        n += 1
+
+    for dt in dtypes:
+        # A pool WITH repeats (so counts exceed 1). bool only holds 0/1.
+        if dt == "bool":
+            a = np.array([True, False, True, True, False, True, True, False], dtype=bool)
+        else:
+            a = np.array([0, 1, 1, 2, 2, 2, 3, 0, 1, 2, 3, 3, 3, 0], dtype=np.dtype(dt))
+        emit({"minlength": 0}, [describe(a, a)], np.asarray(np.bincount(a)), f"count/{dt}")
+        emit({"minlength": 10}, [describe(a, a)], np.asarray(np.bincount(a, minlength=10)), f"minlen/{dt}")
+        # reversed + strided input views -> exercise the copy-to-contiguous path.
+        rev = a[::-1]
+        emit({"minlength": 0}, [describe(a, rev)], np.asarray(np.bincount(rev)), f"rev/{dt}")
+        strd = a[::2]
+        emit({"minlength": 0}, [describe(a, strd)], np.asarray(np.bincount(strd)), f"strided/{dt}")
+
+    # Weighted (float64 output). x fixed int64; weights span float64/float32/int32 (all cast to f64).
+    xw = np.array([0, 1, 1, 2, 0, 2, 3], dtype=np.int64)
+    for wdt in ("float64", "float32", "int32"):
+        if wdt == "int32":
+            w = np.array([1, 2, 3, 4, 5, 6, 7], dtype=np.int32)
+        else:
+            w = np.array([0.5, 1.5, -2.0, 3.25, 4.0, 0.0, 7.5], dtype=np.dtype(wdt))
+        emit({"minlength": 0}, [describe(xw, xw), describe(w, w)],
+             np.asarray(np.bincount(xw, weights=w)), f"weighted/{wdt}")
+        emit({"minlength": 9}, [describe(xw, xw), describe(w, w)],
+             np.asarray(np.bincount(xw, weights=w, minlength=9)), f"weighted_ml/{wdt}")
+
+    return cases
+
+
 # W13 — SIMD-tail boundary sizes. 1-D arrays straddling the V128/V256/V512 lane counts so the
 # unrolled-SIMD body, 1-vector remainder, and scalar tail are all exercised at their seams.
 TAIL_SIZES = [1, 2, 3, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129]
@@ -5511,6 +5569,7 @@ def main():
         cases += gen_searchsorted(SORT_DTYPES)
         cases += gen_digitize(DIGITIZE_DTYPES)                          # digitize = searchsorted + monotonicity
         cases += gen_nonzero(SORT_DTYPES)
+        cases += gen_bincount(BINCOUNT_DTYPES)                          # counting: bincount (+ weights/minlength)
         cases += gen_unary(NZ_OPS, NZ_DTYPES, list(LAYOUTS.keys()))     # Group A B3: flatnonzero/argwhere
         cases += gen_unique(["bool", "int32", "uint8", "int64", "float64", "float32", "complex128"])  # B3: unique
         cases += gen_sort_special()                                     # G11: NaN + strided/negstride
