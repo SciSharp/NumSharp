@@ -23,8 +23,10 @@ namespace NumSharp
             public static (NDArray eigenvalues, NDArray eigenvectors) eig(NDArray a)
             {
                 AssertStackedSquare(a);
+                AssertFinite(a);
                 var common = CommonType(a);
-                return a.TensorEngine.Eig(ToCommon(a, common), computeVectors: true);
+                var (w, v) = a.TensorEngine.Eig(ToCommon(a, common), computeVectors: true);
+                return CollapseEig(w, v, common);
             }
 
             /// <summary>
@@ -35,8 +37,40 @@ namespace NumSharp
             public static NDArray eigvals(NDArray a)
             {
                 AssertStackedSquare(a);
+                AssertFinite(a);
                 var common = CommonType(a);
-                return a.TensorEngine.Eig(ToCommon(a, common), computeVectors: false).eigenvalues;
+                var w = a.TensorEngine.Eig(ToCommon(a, common), computeVectors: false).eigenvalues;
+                return CollapseEig(w, null, common).eigenvalues;
+            }
+
+            /// <summary>
+            ///     NumPy's <c>eig</c>/<c>eigvals</c> Python-layer tail. The LAPACK <c>geev</c> gufunc
+            ///     ALWAYS returns complex128 (a real matrix can carry a complex-conjugate eigenpair), so
+            ///     for a REAL operand the result is collapsed to a real dtype when every imaginary part
+            ///     is zero (<c>if not isComplexType(t) and all(w.imag == 0)</c>); otherwise it stays
+            ///     complex. The final width then follows the operand: <c>float32 → float32</c> when real
+            ///     (<c>complex128</c> when complex — NumSharp has no complex64), <c>float64</c>/int/bool
+            ///     <c>→ float64</c> when real, and a complex operand stays complex.
+            /// </summary>
+            private static (NDArray eigenvalues, NDArray eigenvectors) CollapseEig(NDArray w, NDArray v, NPTypeCode common)
+            {
+                NPTypeCode resultType;
+                if (common != NPTypeCode.Complex && np.all(np.equal(np.imag(w), NDArray.Scalar(0.0))))
+                {
+                    // Every eigenvalue is real — drop the (zero) imaginary part and take the real dtype.
+                    w = np.real(w);
+                    v = v is null ? null : np.real(v);
+                    resultType = common == NPTypeCode.Single ? NPTypeCode.Single : NPTypeCode.Double;
+                }
+                else
+                {
+                    // csingle and cdouble both collapse onto NumSharp's single complex width.
+                    resultType = NPTypeCode.Complex;
+                }
+
+                w = w.astype(resultType);
+                v = v is null ? null : v.astype(resultType);
+                return (w, v);
             }
 
             /// <summary>

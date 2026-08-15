@@ -31,6 +31,21 @@ namespace NumSharp.Interop.OpenBLAS
         Lower = 122
     }
 
+    /// <summary>Unit/non-unit diagonal flag — mirrors <c>enum CBLAS_DIAG</c> in npy_cblas.h.</summary>
+    internal enum CBlasDiag
+    {
+        NonUnit = 131,
+        Unit = 132
+    }
+
+    /// <summary>Operand side for the triangular/symmetric Level-3 routines — mirrors
+    /// <c>enum CBLAS_SIDE</c> in npy_cblas.h.</summary>
+    internal enum CBlasSide
+    {
+        Left = 141,
+        Right = 142
+    }
+
     /// <summary>
     ///     Binding to an external CBLAS shared library, used exclusively by the opt-in
     ///     byte-parity matrix-product backend this package installs (<see cref="OpenBlasEngine"/> →
@@ -81,6 +96,20 @@ namespace NumSharp.Interop.OpenBLAS
         private static delegate* unmanaged[Cdecl]<long, float, float*, long, float*, long, void> _saxpy64;
         private static delegate* unmanaged[Cdecl]<long, double, double*, long, double*, long, void> _daxpy64;
 
+        // Level-3 siblings of gemm/syrk — trmm/trsm (Order,Side,Uplo,TransA,Diag,M,N,alpha,A,lda,B,ldb),
+        // symm (Order,Side,Uplo,M,N,alpha,A,lda,B,ldb,beta,C,ldc) and syr2k
+        // (Order,Uplo,Trans,N,K,alpha,A,lda,B,ldb,beta,C,ldc). Bound best-effort (see BindLevel3Extras):
+        // nothing in the parity backend calls them, they exist as infrastructure a future consumer can
+        // reach through IBlasType<T>.
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, long, long, float, float*, long, float*, long, void> _strmm64;
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, long, long, double, double*, long, double*, long, void> _dtrmm64;
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, long, long, float, float*, long, float*, long, void> _strsm64;
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, long, long, double, double*, long, double*, long, void> _dtrsm64;
+        private static delegate* unmanaged[Cdecl]<int, int, int, long, long, float, float*, long, float*, long, float, float*, long, void> _ssymm64;
+        private static delegate* unmanaged[Cdecl]<int, int, int, long, long, double, double*, long, double*, long, double, double*, long, void> _dsymm64;
+        private static delegate* unmanaged[Cdecl]<int, int, int, long, long, float, float*, long, float*, long, float, float*, long, void> _ssyr2k64;
+        private static delegate* unmanaged[Cdecl]<int, int, int, long, long, double, double*, long, double*, long, double, double*, long, void> _dsyr2k64;
+
         #endregion
 
         #region function pointers — LP64 (32-bit BLAS int)
@@ -95,6 +124,16 @@ namespace NumSharp.Interop.OpenBLAS
         private static delegate* unmanaged[Cdecl]<int, double*, int, double*, int, double> _ddot32;
         private static delegate* unmanaged[Cdecl]<int, float, float*, int, float*, int, void> _saxpy32;
         private static delegate* unmanaged[Cdecl]<int, double, double*, int, double*, int, void> _daxpy32;
+
+        // LP64 (32-bit BLAS int) twins of the Level-3 siblings above.
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, int, int, float, float*, int, float*, int, void> _strmm32;
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, int, int, double, double*, int, double*, int, void> _dtrmm32;
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, int, int, float, float*, int, float*, int, void> _strsm32;
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, int, int, double, double*, int, double*, int, void> _dtrsm32;
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, float, float*, int, float*, int, float, float*, int, void> _ssymm32;
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, double, double*, int, double*, int, double, double*, int, void> _dsymm32;
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, float, float*, int, float*, int, float, float*, int, void> _ssyr2k32;
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, double, double*, int, double*, int, double, double*, int, void> _dsyr2k32;
 
         #endregion
 
@@ -175,6 +214,32 @@ namespace NumSharp.Interop.OpenBLAS
         private static delegate* unmanaged[Cdecl]<byte*, int*, int*, double*, int*, double*, double*, int*, double*, int*, double*, int*, double*, int*, int*, void> _zgesdd32;
         private static delegate* unmanaged[Cdecl]<int*, int*, int*, double*, int*, double*, int*, double*, double*, int*, double*, int*, int*, int*, void> _dgelsd32;
         private static delegate* unmanaged[Cdecl]<int*, int*, int*, double*, int*, double*, int*, double*, double*, int*, double*, int*, double*, int*, int*, void> _zgelsd32;
+
+        #endregion
+
+        #region function pointers — LAPACK eigen family (syevd / heevd / geev, for np.linalg eig/eigh/eigvals/eigvalsh)
+
+        // Same conventions as the LU/QR/SVD families: column-major, every scalar by pointer, complex
+        // matrices as interleaved `double*` (== System.Numerics.Complex layout), and only the double /
+        // cdouble routines are bound because numpy's linalg computes float32 in double then downcasts.
+        // `jobz`/`uplo` (syevd/heevd) and `jobvl`/`jobvr` (geev) are Fortran CHARACTER*1 passed as single
+        // 'N'/'V'/'L'/'U' bytes. The gfortran ABI appends one hidden character-length argument PER char
+        // arg at the very END of the list (after info); LAPACK's LSAME reads one char through the pointer
+        // and never the length, so — exactly as with potrf's uplo and gesdd's jobz — omitting them is safe
+        // under cdecl even with TWO char args (verified: syevd/geev return info==0 and a factor
+        // bit-identical to numpy). The eigenvalue vector W of syevd/heevd is ALWAYS the real basetype
+        // (double), and the complex routines carry a REAL rwork buffer the real ones do not, so
+        // `w`/`rwork` are `double*` on both. Workspace query: lwork==-1 writes work[0]; syevd/heevd ALSO
+        // write iwork[0] (liwork==-1) and heevd rwork[0] (lrwork==-1); geev writes only work[0].
+        private static delegate* unmanaged[Cdecl]<byte*, byte*, long*, double*, long*, double*, double*, long*, long*, long*, long*, void> _dsyevd64;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*, long*, double*, long*, double*, double*, long*, double*, long*, long*, long*, long*, void> _zheevd64;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*, long*, double*, long*, double*, double*, double*, long*, double*, long*, double*, long*, long*, void> _dgeev64;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*, long*, double*, long*, double*, double*, long*, double*, long*, double*, long*, double*, long*, void> _zgeev64;
+
+        private static delegate* unmanaged[Cdecl]<byte*, byte*, int*, double*, int*, double*, double*, int*, int*, int*, int*, void> _dsyevd32;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*, int*, double*, int*, double*, double*, int*, double*, int*, int*, int*, int*, void> _zheevd32;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*, int*, double*, int*, double*, double*, double*, int*, double*, int*, double*, int*, int*, void> _dgeev32;
+        private static delegate* unmanaged[Cdecl]<byte*, byte*, int*, double*, int*, double*, double*, int*, double*, int*, double*, int*, double*, int*, void> _zgeev32;
 
         #endregion
 
@@ -385,6 +450,10 @@ namespace NumSharp.Interop.OpenBLAS
                 _sgemm32 = null; _dgemm32 = null; _sgemv32 = null; _dgemv32 = null;
                 _ssyrk32 = null; _dsyrk32 = null; _sdot32 = null; _ddot32 = null;
                 _saxpy32 = null; _daxpy32 = null;
+                _strmm64 = null; _dtrmm64 = null; _strsm64 = null; _dtrsm64 = null;
+                _ssymm64 = null; _dsymm64 = null; _ssyr2k64 = null; _dsyr2k64 = null;
+                _strmm32 = null; _dtrmm32 = null; _strsm32 = null; _dtrsm32 = null;
+                _ssymm32 = null; _dsymm32 = null; _ssyr2k32 = null; _dsyr2k32 = null;
                 _setNumThreads = null; _getNumThreads = null; _getConfig = null; _getCoreName = null;
                 _dgetrf64 = null; _dgesv64 = null; _zgetrf64 = null; _zgesv64 = null;
                 _dgetrf32 = null; _dgesv32 = null; _zgetrf32 = null; _zgesv32 = null;
@@ -394,6 +463,8 @@ namespace NumSharp.Interop.OpenBLAS
                 _dorgqr32 = null; _zungqr32 = null;
                 _dgesdd64 = null; _zgesdd64 = null; _dgelsd64 = null; _zgelsd64 = null;
                 _dgesdd32 = null; _zgesdd32 = null; _dgelsd32 = null; _zgelsd32 = null;
+                _dsyevd64 = null; _zheevd64 = null; _dgeev64 = null; _zgeev64 = null;
+                _dsyevd32 = null; _zheevd32 = null; _dgeev32 = null; _zgeev32 = null;
                 IsLapackLoaded = false;
             }
         }
@@ -494,6 +565,12 @@ namespace NumSharp.Interop.OpenBLAS
                 foreach (var name in new[] { prefix + "openblas_get_corename" + suffix, "openblas_get_corename" })
                     if (NativeLibrary.TryGetExport(handle, name, out p)) { _getCoreName = (delegate* unmanaged[Cdecl]<IntPtr>)p; break; }
 
+                // Optional Level-3 BLAS siblings — trmm/trsm/symm/syr2k. Best-effort like the
+                // openblas_* extensions above: they are not part of the required core (nothing in the
+                // parity backend calls them), so a miss leaves a null pointer the wrapper reports, never
+                // failing the gemm/gemv/syrk/dot/axpy bind.
+                BindLevel3Extras(handle, prefix, suffix, ilp64);
+
                 // Optional LAPACK LU family — a full OpenBLAS ships it, a bare reference CBLAS does not.
                 // Bound all-or-nothing so IsLapackLoaded is honest: a half-bound set would let a
                 // factorisation call a null pointer.
@@ -518,6 +595,42 @@ namespace NumSharp.Interop.OpenBLAS
         }
 
         /// <summary>
+        ///     Best-effort binding of the real (s/d) Level-3 BLAS siblings of gemm/syrk — trmm, trsm,
+        ///     symm and syr2k. These are NOT called by the parity backend (NumPy's np.* matrix dispatch
+        ///     uses only gemm/gemv/syrk/dot; trmm/trsm live in NumPy solely inside its private reference
+        ///     LAPACK), so they are OPTIONAL: a library missing one leaves that pointer null and the
+        ///     wrapper throws only if the routine is actually called — exactly like the openblas_*
+        ///     extensions. They exist as building blocks a future consumer can reach through
+        ///     <c>IBlasType&lt;T&gt;</c>. Uses the same (prefix, suffix) scheme the required core bound.
+        /// </summary>
+        private static void BindLevel3Extras(IntPtr handle, string prefix, string suffix, bool ilp64)
+        {
+            IntPtr p;
+            if (ilp64)
+            {
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_strmm" + suffix, out p)) _strmm64 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, long, long, float, float*, long, float*, long, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_dtrmm" + suffix, out p)) _dtrmm64 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, long, long, double, double*, long, double*, long, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_strsm" + suffix, out p)) _strsm64 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, long, long, float, float*, long, float*, long, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_dtrsm" + suffix, out p)) _dtrsm64 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, long, long, double, double*, long, double*, long, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_ssymm" + suffix, out p)) _ssymm64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, float, float*, long, float*, long, float, float*, long, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_dsymm" + suffix, out p)) _dsymm64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, double, double*, long, double*, long, double, double*, long, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_ssyr2k" + suffix, out p)) _ssyr2k64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, float, float*, long, float*, long, float, float*, long, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_dsyr2k" + suffix, out p)) _dsyr2k64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, double, double*, long, double*, long, double, double*, long, void>)p;
+            }
+            else
+            {
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_strmm" + suffix, out p)) _strmm32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, int, int, float, float*, int, float*, int, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_dtrmm" + suffix, out p)) _dtrmm32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, int, int, double, double*, int, double*, int, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_strsm" + suffix, out p)) _strsm32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, int, int, float, float*, int, float*, int, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_dtrsm" + suffix, out p)) _dtrsm32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, int, int, double, double*, int, double*, int, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_ssymm" + suffix, out p)) _ssymm32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, float, float*, int, float*, int, float, float*, int, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_dsymm" + suffix, out p)) _dsymm32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, double, double*, int, double*, int, double, double*, int, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_ssyr2k" + suffix, out p)) _ssyr2k32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, float, float*, int, float*, int, float, float*, int, void>)p;
+                if (NativeLibrary.TryGetExport(handle, prefix + "cblas_dsyr2k" + suffix, out p)) _dsyr2k32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, double, double*, int, double*, int, double, double*, int, void>)p;
+            }
+        }
+
+        /// <summary>
         ///     Binds the LAPACK LU routines if the library exports them. Unlike the CBLAS symbols this
         ///     is OPTIONAL: a reference CBLAS has no LAPACK, so a miss simply leaves
         ///     <see cref="IsLapackLoaded"/> false and the factorisation backend declines (the engine
@@ -539,7 +652,11 @@ namespace NumSharp.Interop.OpenBLAS
                 !TryResolveLapack(handle, prefix, suffix, "dgesdd", out var dgesdd) ||
                 !TryResolveLapack(handle, prefix, suffix, "zgesdd", out var zgesdd) ||
                 !TryResolveLapack(handle, prefix, suffix, "dgelsd", out var dgelsd) ||
-                !TryResolveLapack(handle, prefix, suffix, "zgelsd", out var zgelsd))
+                !TryResolveLapack(handle, prefix, suffix, "zgelsd", out var zgelsd) ||
+                !TryResolveLapack(handle, prefix, suffix, "dsyevd", out var dsyevd) ||
+                !TryResolveLapack(handle, prefix, suffix, "zheevd", out var zheevd) ||
+                !TryResolveLapack(handle, prefix, suffix, "dgeev", out var dgeev) ||
+                !TryResolveLapack(handle, prefix, suffix, "zgeev", out var zgeev))
             {
                 return; // no LAPACK — factorisations decline, products still work
             }
@@ -560,6 +677,10 @@ namespace NumSharp.Interop.OpenBLAS
                 _zgesdd64 = (delegate* unmanaged[Cdecl]<byte*, long*, long*, double*, long*, double*, double*, long*, double*, long*, double*, long*, double*, long*, long*, void>)zgesdd;
                 _dgelsd64 = (delegate* unmanaged[Cdecl]<long*, long*, long*, double*, long*, double*, long*, double*, double*, long*, double*, long*, long*, long*, void>)dgelsd;
                 _zgelsd64 = (delegate* unmanaged[Cdecl]<long*, long*, long*, double*, long*, double*, long*, double*, double*, long*, double*, long*, double*, long*, long*, void>)zgelsd;
+                _dsyevd64 = (delegate* unmanaged[Cdecl]<byte*, byte*, long*, double*, long*, double*, double*, long*, long*, long*, long*, void>)dsyevd;
+                _zheevd64 = (delegate* unmanaged[Cdecl]<byte*, byte*, long*, double*, long*, double*, double*, long*, double*, long*, long*, long*, long*, void>)zheevd;
+                _dgeev64 = (delegate* unmanaged[Cdecl]<byte*, byte*, long*, double*, long*, double*, double*, double*, long*, double*, long*, double*, long*, long*, void>)dgeev;
+                _zgeev64 = (delegate* unmanaged[Cdecl]<byte*, byte*, long*, double*, long*, double*, double*, long*, double*, long*, double*, long*, double*, long*, void>)zgeev;
             }
             else
             {
@@ -577,6 +698,10 @@ namespace NumSharp.Interop.OpenBLAS
                 _zgesdd32 = (delegate* unmanaged[Cdecl]<byte*, int*, int*, double*, int*, double*, double*, int*, double*, int*, double*, int*, double*, int*, int*, void>)zgesdd;
                 _dgelsd32 = (delegate* unmanaged[Cdecl]<int*, int*, int*, double*, int*, double*, int*, double*, double*, int*, double*, int*, int*, int*, void>)dgelsd;
                 _zgelsd32 = (delegate* unmanaged[Cdecl]<int*, int*, int*, double*, int*, double*, int*, double*, double*, int*, double*, int*, double*, int*, int*, void>)zgelsd;
+                _dsyevd32 = (delegate* unmanaged[Cdecl]<byte*, byte*, int*, double*, int*, double*, double*, int*, int*, int*, int*, void>)dsyevd;
+                _zheevd32 = (delegate* unmanaged[Cdecl]<byte*, byte*, int*, double*, int*, double*, double*, int*, double*, int*, int*, int*, int*, void>)zheevd;
+                _dgeev32 = (delegate* unmanaged[Cdecl]<byte*, byte*, int*, double*, int*, double*, double*, double*, int*, double*, int*, double*, int*, int*, void>)dgeev;
+                _zgeev32 = (delegate* unmanaged[Cdecl]<byte*, byte*, int*, double*, int*, double*, double*, int*, double*, int*, double*, int*, double*, int*, void>)zgeev;
             }
 
             IsLapackLoaded = true;
@@ -1328,6 +1453,152 @@ namespace NumSharp.Interop.OpenBLAS
                 _daxpy32((int)n, alpha, x, (int)incX, y, (int)incY);
         }
 
+        // ---- Level-3 siblings (trmm/trsm/symm/syr2k), bound best-effort by BindLevel3Extras. Unlike
+        // the gemm/gemv/syrk wrappers above (which bake numpy's alpha=1/beta=0), these expose alpha
+        // (trmm/trsm) and alpha/beta (symm/syr2k) in full, since they have no fixed consumer to
+        // constrain them. A routine the loaded library did not export surfaces as a clear
+        // EntryPointNotFoundException rather than a null-pointer access violation.
+
+        private static EntryPointNotFoundException NotBound(string sym)
+            => new EntryPointNotFoundException(
+                $"OpenBlasEngine: the loaded BLAS library does not export '{sym}'. This Level-3 routine " +
+                "is bound best-effort and is unavailable on the current library.");
+
+        /// <summary>cblas_?trmm — triangular matrix–matrix multiply <c>B := alpha·op(A)·B</c> (Side=Left)
+        /// or <c>B := alpha·B·op(A)</c> (Side=Right); A is the <paramref name="uplo"/> triangle, unit or
+        /// non-unit per <paramref name="diag"/>, B (m×n) is overwritten.</summary>
+        internal static void Strmm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
+            CBlasDiag diag, long m, long n, float alpha, float* a, long lda, float* b, long ldb)
+        {
+            if (IsIlp64)
+            {
+                if (_strmm64 == null) throw NotBound("cblas_strmm");
+                _strmm64((int)order, (int)side, (int)uplo, (int)transA, (int)diag, m, n, alpha, a, lda, b, ldb);
+            }
+            else
+            {
+                if (_strmm32 == null) throw NotBound("cblas_strmm");
+                _strmm32((int)order, (int)side, (int)uplo, (int)transA, (int)diag, (int)m, (int)n, alpha, a, (int)lda, b, (int)ldb);
+            }
+        }
+
+        /// <summary>cblas_?trmm (double).</summary>
+        internal static void Dtrmm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
+            CBlasDiag diag, long m, long n, double alpha, double* a, long lda, double* b, long ldb)
+        {
+            if (IsIlp64)
+            {
+                if (_dtrmm64 == null) throw NotBound("cblas_dtrmm");
+                _dtrmm64((int)order, (int)side, (int)uplo, (int)transA, (int)diag, m, n, alpha, a, lda, b, ldb);
+            }
+            else
+            {
+                if (_dtrmm32 == null) throw NotBound("cblas_dtrmm");
+                _dtrmm32((int)order, (int)side, (int)uplo, (int)transA, (int)diag, (int)m, (int)n, alpha, a, (int)lda, b, (int)ldb);
+            }
+        }
+
+        /// <summary>cblas_?trsm — triangular solve with multiple RHS: <c>op(A)·X = alpha·B</c> (Side=Left)
+        /// or <c>X·op(A) = alpha·B</c> (Side=Right); the solution X overwrites B (m×n).</summary>
+        internal static void Strsm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
+            CBlasDiag diag, long m, long n, float alpha, float* a, long lda, float* b, long ldb)
+        {
+            if (IsIlp64)
+            {
+                if (_strsm64 == null) throw NotBound("cblas_strsm");
+                _strsm64((int)order, (int)side, (int)uplo, (int)transA, (int)diag, m, n, alpha, a, lda, b, ldb);
+            }
+            else
+            {
+                if (_strsm32 == null) throw NotBound("cblas_strsm");
+                _strsm32((int)order, (int)side, (int)uplo, (int)transA, (int)diag, (int)m, (int)n, alpha, a, (int)lda, b, (int)ldb);
+            }
+        }
+
+        /// <summary>cblas_?trsm (double).</summary>
+        internal static void Dtrsm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
+            CBlasDiag diag, long m, long n, double alpha, double* a, long lda, double* b, long ldb)
+        {
+            if (IsIlp64)
+            {
+                if (_dtrsm64 == null) throw NotBound("cblas_dtrsm");
+                _dtrsm64((int)order, (int)side, (int)uplo, (int)transA, (int)diag, m, n, alpha, a, lda, b, ldb);
+            }
+            else
+            {
+                if (_dtrsm32 == null) throw NotBound("cblas_dtrsm");
+                _dtrsm32((int)order, (int)side, (int)uplo, (int)transA, (int)diag, (int)m, (int)n, alpha, a, (int)lda, b, (int)ldb);
+            }
+        }
+
+        /// <summary>cblas_?symm — symmetric matrix–matrix multiply <c>C := alpha·A·B + beta·C</c>
+        /// (Side=Left, A symmetric m×m) or <c>C := alpha·B·A + beta·C</c> (Side=Right, A symmetric n×n);
+        /// only the <paramref name="uplo"/> triangle of A is referenced. C is m×n.</summary>
+        internal static void Ssymm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, long m, long n,
+            float alpha, float* a, long lda, float* b, long ldb, float beta, float* c, long ldc)
+        {
+            if (IsIlp64)
+            {
+                if (_ssymm64 == null) throw NotBound("cblas_ssymm");
+                _ssymm64((int)order, (int)side, (int)uplo, m, n, alpha, a, lda, b, ldb, beta, c, ldc);
+            }
+            else
+            {
+                if (_ssymm32 == null) throw NotBound("cblas_ssymm");
+                _ssymm32((int)order, (int)side, (int)uplo, (int)m, (int)n, alpha, a, (int)lda, b, (int)ldb, beta, c, (int)ldc);
+            }
+        }
+
+        /// <summary>cblas_?symm (double).</summary>
+        internal static void Dsymm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, long m, long n,
+            double alpha, double* a, long lda, double* b, long ldb, double beta, double* c, long ldc)
+        {
+            if (IsIlp64)
+            {
+                if (_dsymm64 == null) throw NotBound("cblas_dsymm");
+                _dsymm64((int)order, (int)side, (int)uplo, m, n, alpha, a, lda, b, ldb, beta, c, ldc);
+            }
+            else
+            {
+                if (_dsymm32 == null) throw NotBound("cblas_dsymm");
+                _dsymm32((int)order, (int)side, (int)uplo, (int)m, (int)n, alpha, a, (int)lda, b, (int)ldb, beta, c, (int)ldc);
+            }
+        }
+
+        /// <summary>cblas_?syr2k — symmetric rank-2k update <c>C := alpha·A·Bᵀ + alpha·B·Aᵀ + beta·C</c>
+        /// (Trans=NoTrans, A/B n×k) or the transposed form (Trans=Trans, A/B k×n); only the
+        /// <paramref name="uplo"/> triangle of the symmetric n×n C is written.</summary>
+        internal static void Ssyr2k(CBlasOrder order, CBlasUpLo uplo, CBlasTranspose trans, long n, long k,
+            float alpha, float* a, long lda, float* b, long ldb, float beta, float* c, long ldc)
+        {
+            if (IsIlp64)
+            {
+                if (_ssyr2k64 == null) throw NotBound("cblas_ssyr2k");
+                _ssyr2k64((int)order, (int)uplo, (int)trans, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+            }
+            else
+            {
+                if (_ssyr2k32 == null) throw NotBound("cblas_ssyr2k");
+                _ssyr2k32((int)order, (int)uplo, (int)trans, (int)n, (int)k, alpha, a, (int)lda, b, (int)ldb, beta, c, (int)ldc);
+            }
+        }
+
+        /// <summary>cblas_?syr2k (double).</summary>
+        internal static void Dsyr2k(CBlasOrder order, CBlasUpLo uplo, CBlasTranspose trans, long n, long k,
+            double alpha, double* a, long lda, double* b, long ldb, double beta, double* c, long ldc)
+        {
+            if (IsIlp64)
+            {
+                if (_dsyr2k64 == null) throw NotBound("cblas_dsyr2k");
+                _dsyr2k64((int)order, (int)uplo, (int)trans, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+            }
+            else
+            {
+                if (_dsyr2k32 == null) throw NotBound("cblas_dsyr2k");
+                _dsyr2k32((int)order, (int)uplo, (int)trans, (int)n, (int)k, alpha, a, (int)lda, b, (int)ldb, beta, c, (int)ldc);
+            }
+        }
+
         #endregion
 
         #region LAPACK LU wrappers (fortran_int width marshalled per IsIlp64)
@@ -1590,6 +1861,85 @@ namespace NumSharp.Interop.OpenBLAS
                 int mm = (int)m, nn = (int)n, nr = (int)nrhs, la = (int)lda, lb = (int)ldb, rk = 0, lw = (int)lwork, info = 0; double rc = rcond;
                 _zgelsd32(&mm, &nn, &nr, a, &la, b, &lb, s, &rc, &rk, work, &lw, rwork, (int*)iwork, &info);
                 rank = rk;
+                return info;
+            }
+        }
+
+        #endregion
+
+        #region LAPACK eigen wrappers (fortran_int width marshalled per IsIlp64)
+
+        // Arguments in ELEMENTS; the fortran routine gets its scalars by pointer widened to the build's
+        // integer width. `jobz`/`uplo`/`jobvl`/`jobvr` are single 'N'/'V'/'L'/'U' bytes. `w` (syevd/heevd
+        // eigenvalues), `rwork` and `wr`/`wi` (geev real parts) are the real basetype (double). `info` is
+        // the LAPACK status: 0 success, <0 illegal argument, >0 non-convergence. The workspace query
+        // (lwork==-1) writes work[0]; syevd/heevd ALSO write iwork[0] (liwork==-1) and heevd rwork[0]
+        // (lrwork==-1). `iwork` is caller-owned fortran_int storage (read back at FortranIntSize).
+
+        internal static long Dsyevd(byte jobz, byte uplo, long n, double* a, long lda, double* w,
+            double* work, long lwork, void* iwork, long liwork)
+        {
+            if (IsIlp64)
+            {
+                byte jz = jobz, up = uplo; long nn = n, la = lda, lw = lwork, li = liwork, info = 0;
+                _dsyevd64(&jz, &up, &nn, a, &la, w, work, &lw, (long*)iwork, &li, &info);
+                return info;
+            }
+            else
+            {
+                byte jz = jobz, up = uplo; int nn = (int)n, la = (int)lda, lw = (int)lwork, li = (int)liwork, info = 0;
+                _dsyevd32(&jz, &up, &nn, a, &la, w, work, &lw, (int*)iwork, &li, &info);
+                return info;
+            }
+        }
+
+        internal static long Zheevd(byte jobz, byte uplo, long n, double* a, long lda, double* w,
+            double* work, long lwork, double* rwork, long lrwork, void* iwork, long liwork)
+        {
+            if (IsIlp64)
+            {
+                byte jz = jobz, up = uplo; long nn = n, la = lda, lw = lwork, lr = lrwork, li = liwork, info = 0;
+                _zheevd64(&jz, &up, &nn, a, &la, w, work, &lw, rwork, &lr, (long*)iwork, &li, &info);
+                return info;
+            }
+            else
+            {
+                byte jz = jobz, up = uplo; int nn = (int)n, la = (int)lda, lw = (int)lwork, lr = (int)lrwork, li = (int)liwork, info = 0;
+                _zheevd32(&jz, &up, &nn, a, &la, w, work, &lw, rwork, &lr, (int*)iwork, &li, &info);
+                return info;
+            }
+        }
+
+        internal static long Dgeev(byte jobvl, byte jobvr, long n, double* a, long lda,
+            double* wr, double* wi, double* vl, long ldvl, double* vr, long ldvr, double* work, long lwork)
+        {
+            if (IsIlp64)
+            {
+                byte jl = jobvl, jr = jobvr; long nn = n, la = lda, lvl = ldvl, lvr = ldvr, lw = lwork, info = 0;
+                _dgeev64(&jl, &jr, &nn, a, &la, wr, wi, vl, &lvl, vr, &lvr, work, &lw, &info);
+                return info;
+            }
+            else
+            {
+                byte jl = jobvl, jr = jobvr; int nn = (int)n, la = (int)lda, lvl = (int)ldvl, lvr = (int)ldvr, lw = (int)lwork, info = 0;
+                _dgeev32(&jl, &jr, &nn, a, &la, wr, wi, vl, &lvl, vr, &lvr, work, &lw, &info);
+                return info;
+            }
+        }
+
+        internal static long Zgeev(byte jobvl, byte jobvr, long n, double* a, long lda,
+            double* w, double* vl, long ldvl, double* vr, long ldvr, double* work, long lwork, double* rwork)
+        {
+            if (IsIlp64)
+            {
+                byte jl = jobvl, jr = jobvr; long nn = n, la = lda, lvl = ldvl, lvr = ldvr, lw = lwork, info = 0;
+                _zgeev64(&jl, &jr, &nn, a, &la, w, vl, &lvl, vr, &lvr, work, &lw, rwork, &info);
+                return info;
+            }
+            else
+            {
+                byte jl = jobvl, jr = jobvr; int nn = (int)n, la = (int)lda, lvl = (int)ldvl, lvr = (int)ldvr, lw = (int)lwork, info = 0;
+                _zgeev32(&jl, &jr, &nn, a, &la, w, vl, &lvl, vr, &lvr, work, &lw, rwork, &info);
                 return info;
             }
         }

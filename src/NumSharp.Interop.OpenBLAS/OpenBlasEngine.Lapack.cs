@@ -107,6 +107,35 @@ namespace NumSharp.Interop.OpenBLAS
             ///     <c>lstsq</c>'s residuals as the squared 2-norm of each excess column.
             /// </summary>
             double Abs2(T v);
+
+            /// <summary>
+            ///     Column-major symmetric/Hermitian eigendecomposition (LAPACK <c>syevd</c>/<c>heevd</c>):
+            ///     <paramref name="a"/> is overwritten with the orthonormal eigenvectors (columns) when
+            ///     <paramref name="jobz"/> is 'V', and the eigenvalues — ALWAYS the real basetype
+            ///     (double), in ASCENDING order — fill <paramref name="w"/>. <paramref name="rwork"/> is
+            ///     used only by the complex routine (null for real). Same workspace-query protocol as
+            ///     <see cref="Geqrf"/>, extended: <paramref name="lwork"/>/<paramref name="lrwork"/>/
+            ///     <paramref name="liwork"/> == -1 writes <c>work[0]</c>/<c>rwork[0]</c>/<c>iwork[0]</c>.
+            ///     Returns LAPACK <c>info</c>.
+            /// </summary>
+            long Syevd(byte jobz, byte uplo, long n, T* a, long lda, double* w, T* work, long lwork,
+                double* rwork, long lrwork, void* iwork, long liwork);
+
+            /// <summary>
+            ///     Column-major general eigendecomposition (LAPACK <c>geev</c>), producing ALWAYS-COMPLEX
+            ///     outputs: eigenvalues <paramref name="w"/> (n) and — when <paramref name="jobvr"/> is
+            ///     'V' — the right eigenvectors <paramref name="vr"/> (column-major n×n, LD = n). The real
+            ///     routine (<c>dgeev</c>) writes split real parts into the caller-hoisted
+            ///     <paramref name="wr"/>/<paramref name="wi"/>/<paramref name="vrr"/> scratch and this
+            ///     method assembles the complex result exactly as NumPy's <c>mk_complex_array</c> /
+            ///     <c>mk_geev_complex_eigenvectors</c>; the complex routine (<c>zgeev</c>) writes
+            ///     <paramref name="w"/>/<paramref name="vr"/> directly and uses <paramref name="rwork"/>
+            ///     (2n). Left eigenvectors are never computed (jobvl='N'). A workspace query
+            ///     (<paramref name="lwork"/> == -1) writes <c>work[0]</c> and SKIPS the assembly. Returns
+            ///     LAPACK <c>info</c>.
+            /// </summary>
+            long Geev(byte jobvr, long n, T* a, long lda, Complex* w, Complex* vr, long ldvr,
+                T* work, long lwork, double* wr, double* wi, T* vrr, double* rwork);
         }
 
         /// <summary>float64 LAPACK bindings — NumPy's real <c>'d'</c> signature.</summary>
@@ -164,6 +193,30 @@ namespace NumSharp.Interop.OpenBLAS
                 => OpenBlasNative.Dgelsd(m, n, nrhs, a, lda, b, ldb, s, rcond, out rank, work, lwork, iwork);
 
             public double Abs2(double v) => v * v;
+
+            // dsyevd has no RWORK (real routine) — the parameter is ignored.
+            public long Syevd(byte jobz, byte uplo, long n, double* a, long lda, double* w, double* work,
+                long lwork, double* rwork, long lrwork, void* iwork, long liwork)
+                => OpenBlasNative.Dsyevd(jobz, uplo, n, a, lda, w, work, lwork, iwork, liwork);
+
+            public long Geev(byte jobvr, long n, double* a, long lda, Complex* w, Complex* vr, long ldvr,
+                double* work, long lwork, double* wr, double* wi, double* vrr, double* rwork)
+            {
+                // jobvl='N' — left vectors are never computed, so VL is not referenced; alias VR's buffer
+                // for it exactly as NumPy does (vlr == vrr when jobvl != 'V').
+                long info = OpenBlasNative.Dgeev((byte)'N', jobvr, n, a, lda, wr, wi, vrr, ldvr, vrr, ldvr, work, lwork);
+                if (lwork < 0 || info != 0)
+                    return info; // workspace query (nothing computed) or failure — no assembly
+
+                // process_geev_results (scalar_trait): translate dgeev's real WR/WI/VRR into the
+                // always-complex W/VR the gufunc returns.
+                for (long i = 0; i < n; i++)
+                    w[i] = new Complex(wr[i], wi[i]); // mk_complex_array
+                if (jobvr == (byte)'V')
+                    AssembleGeevEigenvectors(vr, vrr, wi, n); // mk_geev_complex_eigenvectors
+
+                return info;
+            }
         }
 
         /// <summary>complex128 LAPACK bindings — NumPy's <c>'D'</c> signature (cdouble).</summary>
@@ -235,6 +288,19 @@ namespace NumSharp.Interop.OpenBLAS
                     (double*)work, lwork, rwork, iwork);
 
             public double Abs2(Complex v) => v.Real * v.Real + v.Imaginary * v.Imaginary;
+
+            // zheevd's eigenvalue vector W and RWORK are the real basetype (double); the interleaved-double
+            // cast is the same as the other complex routines.
+            public long Syevd(byte jobz, byte uplo, long n, Complex* a, long lda, double* w, Complex* work,
+                long lwork, double* rwork, long lrwork, void* iwork, long liwork)
+                => OpenBlasNative.Zheevd(jobz, uplo, n, (double*)a, lda, w, (double*)work, lwork, rwork, lrwork, iwork, liwork);
+
+            public long Geev(byte jobvr, long n, Complex* a, long lda, Complex* w, Complex* vr, long ldvr,
+                Complex* work, long lwork, double* wr, double* wi, Complex* vrr, double* rwork)
+                // zgeev writes W and VR (complex) directly — no real->complex assembly, so the wr/wi/vrr
+                // scratch is unused here. VL is not referenced (jobvl='N'); alias VR's buffer as NumPy does.
+                => OpenBlasNative.Zgeev((byte)'N', jobvr, n, (double*)a, lda, (double*)w, (double*)vr, ldvr,
+                    (double*)vr, ldvr, (double*)work, lwork, rwork);
         }
 
         // ----------------------------------------------------------------------------------------

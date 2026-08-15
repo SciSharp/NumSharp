@@ -117,6 +117,25 @@ namespace NumSharp.Interop.OpenBLAS
 
         #endregion
 
+        #region Eigen factorisations (LAPACK syevd / heevd / geev)
+
+        // Same story as the other LAPACK families: they answer only when the loaded library exports
+        // LAPACK, compute float32 in double and cast back exactly as NumPy does, and decline every other
+        // dtype so the engine raises its "needs a LAPACK backend". A non-convergent element is a genuine
+        // LinAlgError from the routine (the operand WAS served), not a decline — it propagates. TryEig
+        // always hands back complex128; the np.linalg.eig wrapper collapses it to a real result when the
+        // imaginary parts all vanish, exactly as NumPy's Python layer does.
+
+        /// <inheritdoc/>
+        public bool TryEigh(NDArray a, char uplo, bool computeVectors, out NDArray eigenvalues, out NDArray eigenvectors)
+            => OpenBlasEngine.TryEigh(a, uplo, computeVectors, out eigenvalues, out eigenvectors);
+
+        /// <inheritdoc/>
+        public bool TryEig(NDArray a, bool computeVectors, out NDArray eigenvalues, out NDArray eigenvectors)
+            => OpenBlasEngine.TryEig(a, computeVectors, out eigenvalues, out eigenvectors);
+
+        #endregion
+
         /// <summary>The loaded library's own description, for diagnostics.</summary>
         public override string ToString() => "OpenBlasBackend " + Info;
     }

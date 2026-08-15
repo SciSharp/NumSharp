@@ -81,6 +81,30 @@ namespace NumSharp
             }
 
             /// <summary>
+            ///     Port of <c>_assert_finite</c> — <c>eig</c>/<c>eigvals</c> reject an operand holding
+            ///     inf or NaN (the general eigensolver has no defined answer for them), where
+            ///     <c>eigh</c>/<c>eigvalsh</c> do NOT check.
+            /// </summary>
+            /// <remarks>
+            ///     Only the float family can be non-finite; every integer/bool width — and NumSharp's
+            ///     <c>Decimal</c>/<c>Char</c>, which have no inf/NaN representation — is finite by
+            ///     construction, exactly as NumPy's <c>isfinite</c> is all-True for them. Skipping them
+            ///     is equivalent to NumPy's check and avoids running <c>isfinite</c> on a dtype NumPy has
+            ///     no loop for. Runs BEFORE <see cref="CommonType"/>, so a float16 NaN reports this
+            ///     message rather than the "unsupported in linalg" one — matching NumPy's order.
+            /// </remarks>
+            internal static void AssertFinite(params NDArray[] arrays)
+            {
+                foreach (var a in arrays)
+                {
+                    bool floaty = a.typecode is NPTypeCode.Half or NPTypeCode.Single
+                        or NPTypeCode.Double or NPTypeCode.Complex;
+                    if (floaty && !np.all(np.isfinite(a)))
+                        throw new LinAlgError("Array must not contain infs or NaNs");
+                }
+            }
+
+            /// <summary>
             ///     Port of <c>_commonType</c> — the dtype a LAPACK route produces.
             /// </summary>
             /// <remarks>
