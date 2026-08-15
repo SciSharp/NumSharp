@@ -52,4 +52,24 @@
     <NumSharpPublicKeyToken>cc7b13ffcd2ddd51</NumSharpPublicKeyToken>
   </PropertyGroup>
 
+  <!-- ====================================================================================
+       Shared NuGet package icon — ONE brand asset for every shippable package, so it cannot
+       drift the way the per-csproj `PackageIconUrl` did. That element is deprecated (NU5048)
+       and renders NO icon on nuget.org; `PackageIcon` embeds a real image in the package.
+
+       Centralised here beside signing because it is identical across NumSharp / NumSharp.Bitmap /
+       NumSharp.Interop.* — a new package inherits it for free instead of copy-pasting a fourth
+       icon include. $(MSBuildThisFileDirectory) is the repo root, so the path resolves for a
+       project in any subdirectory, and the checked-in 128×128 PNG travels to CI with the repo.
+       The <None> is inert for non-packable projects (tests/benchmarks never pack); only the four
+       `GeneratePackageOnBuild` packages embed it. Override `PackageIcon` in a project to change it.
+       ==================================================================================== -->
+  <PropertyGroup>
+    <PackageIcon Condition="'$(PackageIcon)' == ''">numsharp.icon128.png</PackageIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)docs\website-src\images\numsharp.icon128.png"
+          Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
 </Project>

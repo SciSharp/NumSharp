@@ -11,20 +11,28 @@
     <!-- NuGet package (co-versioned with NumSharp) -->
     <PackageId>NumSharp.Interop.pythonnet</PackageId>
     <Version>0.60.0</Version>
-    <Authors>SciSharp STACK</Authors>
+    <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <Product>NumSharp</Product>
+    <Company>SciSharp STACK</Company>
+    <Copyright>2021 © SciSharp STACK Team</Copyright>
     <Description>Zero-copy interop between NumSharp NDArray and the Python ecosystem via Python.NET (pythonnet). Converts NumSharp arrays to/from numpy — and ANY object implementing the PEP 3118 buffer protocol (memoryview, array.array, PIL, torch, ...) — without a Numpy.NET dependency, so it works with any numpy / any Python.</Description>
     <PackageTags>NumSharp;NumPy;pythonnet;Python.NET;interop;buffer-protocol;scientific-computing;PEP3118</PackageTags>
-    <PackageProjectUrl>https://github.com/SciSharp/NumSharp</PackageProjectUrl>
+    <PackageProjectUrl>https://scisharp.github.io/NumSharp/docs/interop/pythonnet.html</PackageProjectUrl>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageOutputPath>../../packages</PackageOutputPath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Symbols: embed the .pdb in the .nupkg (matches NumSharp.Core / NumSharp.Bitmap). The
+         release pipeline uploads/pushes only *.nupkg, so a separate .snupkg would be dropped. -->
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 

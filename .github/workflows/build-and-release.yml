@@ -128,8 +128,9 @@ jobs:
         mkdir -p artifacts/signing-check
         for proj in src/NumSharp.Core/NumSharp.Core.csproj \
                     src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
+                    src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
                     src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj; do
-          # Tolerate absence: NumSharp.Interop.OpenBLAS does not exist on every branch.
+          # Tolerate absence: the interop packages do not exist on every branch.
           [ -f "$proj" ] || { echo "skip (absent): $proj"; continue; }
           echo "::group::pack $proj"
           dotnet pack "$proj" --configuration Release --output artifacts/signing-check \
@@ -274,6 +275,19 @@ jobs:
           10.0.x
         dotnet-quality: 'preview'
 
+    - name: Setup Python (for OpenBLAS native-asset staging)
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    # NumSharp.Interop.OpenBLAS bundles the prebuilt OpenBLAS binaries NumPy pins as per-RID runtime
+    # assets. They are gitignored, so a clean release checkout has none — fetch_openblas.py downloads
+    # all 8 RIDs from PyPI and verifies two sha256s each against the checked-in manifest (pure stdlib,
+    # no pip needed). RequireOpenBlasAssets=true at build/pack (below) then makes a missing asset a
+    # hard error, so the package can never publish as an empty managed shell.
+    - name: Stage OpenBLAS native assets
+      run: python src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py
+
     - name: Get version info
       id: version
       shell: bash
@@ -288,8 +302,15 @@ jobs:
 
     - name: Build
       run: |
+        # -t:Rebuild (NOT incremental): every shipping project now emits XML docs
+        # (GenerateDocumentationFile), and the Pack steps below run --no-build. An incremental
+        # build can declare a stale target-framework up-to-date and skip CoreCompile, leaving no
+        # .xml on disk — pack then fails NU5026, or (worse) packs stale output. Rebuild forces a
+        # clean compile of every TFM so --no-build always packs a complete, current tree. This is
+        # the repo convention for anything that gets packed (see .claude/CLAUDE.md / OpenBLAS design).
         dotnet build src/NumSharp.Core/NumSharp.Core.csproj \
           --configuration Release \
+          -t:Rebuild \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
           -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
@@ -299,6 +320,7 @@ jobs:
 
         dotnet build src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
           --configuration Release \
+          -t:Rebuild \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
           -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
@@ -311,7 +333,21 @@ jobs:
         # (the csproj's hardcoded 0.60.0 is only the local-dev default).
         dotnet build src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
           --configuration Release \
+          -t:Rebuild \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
+
+        # OpenBLAS: native assets were staged above; RequireOpenBlasAssets=true makes a missing
+        # bundle a hard error (GeneratePackageOnBuild packs during build, so it is enforced here too).
+        dotnet build src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj \
+          --configuration Release \
+          -t:Rebuild \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:RequireOpenBlasAssets=true \
           -p:Version=${{ steps.version.outputs.VERSION }} \
           -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
           -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
@@ -347,6 +383,17 @@ jobs:
           --no-build \
           --output artifacts/nuget \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+
+        dotnet pack src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj \
+          --configuration Release \
+          --no-build \
+          --output artifacts/nuget \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:RequireOpenBlasAssets=true \
           -p:Version=${{ steps.version.outputs.VERSION }} \
           -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
           -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
@@ -420,6 +467,7 @@ jobs:
           echo "dotnet add package NumSharp --version ${VERSION}"
           echo "dotnet add package NumSharp.Bitmap --version ${VERSION}"
           echo "dotnet add package NumSharp.Interop.pythonnet --version ${VERSION}"
+          echo "dotnet add package NumSharp.Interop.OpenBLAS --version ${VERSION}"
           echo '```'
           echo ""
           echo "### Packages"
@@ -429,6 +477,7 @@ jobs:
           echo "| NumSharp | [![NuGet](https://img.shields.io/nuget/v/NumSharp.svg)](https://www.nuget.org/packages/NumSharp/${VERSION}) |"
           echo "| NumSharp.Bitmap | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Bitmap.svg)](https://www.nuget.org/packages/NumSharp.Bitmap/${VERSION}) |"
           echo "| NumSharp.Interop.pythonnet | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.pythonnet.svg)](https://www.nuget.org/packages/NumSharp.Interop.pythonnet/${VERSION}) |"
+          echo "| NumSharp.Interop.OpenBLAS | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.OpenBLAS.svg)](https://www.nuget.org/packages/NumSharp.Interop.OpenBLAS/${VERSION}) |"
         } > RELEASE_BODY.md
         if [ -f "$NOTES_FILE" ]; then
           { echo ""; echo "---"; echo ""; cat "$NOTES_FILE"; } >> RELEASE_BODY.md

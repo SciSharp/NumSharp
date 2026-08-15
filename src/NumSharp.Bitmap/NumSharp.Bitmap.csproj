@@ -6,7 +6,7 @@
     <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <PackageOutputPath>../../packages</PackageOutputPath>
     <Description>Windows-only extensions for System.Drawing.Bitmap for creating NDArray and Bitmap with or without copying. Uses GDI+ via System.Drawing.Common.</Description>
-    <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
+    <PackageProjectUrl>https://scisharp.github.io/NumSharp/docs/extensions/bitmap.html</PackageProjectUrl>
     <Copyright>2021 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <PackageReleaseNotes>Added complicated shape and bbp inference mechanism. Added argument 'discardAlpha' to all methods.</PackageReleaseNotes>
@@ -16,7 +16,7 @@
     <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
     <LangVersion>latest</LangVersion>
-    <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
+    <!-- Package icon is centralized in ../../Directory.Build.props (PackageIcon). -->
     <PackageId>NumSharp.Bitmap</PackageId>
     <Product>NumSharp.Bitmap</Product>
     <Company>SciSharp STACK</Company>
@@ -28,8 +28,10 @@
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <Platforms>AnyCPU;x64</Platforms>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <Configurations>Debug;Release;Publish</Configurations>
     <PackageVersion>0.60.0</PackageVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
@@ -46,6 +48,7 @@
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <Target Name="LogDebugInfo">
