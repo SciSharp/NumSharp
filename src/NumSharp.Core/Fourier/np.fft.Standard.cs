@@ -19,7 +19,7 @@ namespace NumSharp
         public NDArray fft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             int nn = n ?? ShapeAt(a, axis);
-            return RawFft(a, nn, axis, isReal: false, isForward: true, norm, @out, "fft");
+            return RawFft(a, nn, axis, isReal: false, isForward: true, norm, @out, "fft", IsSinglePrecision(a));
         }
 
         /// <summary>
@@ -34,7 +34,7 @@ namespace NumSharp
         public NDArray ifft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             int nn = n ?? ShapeAt(a, axis);
-            return RawFft(a, nn, axis, isReal: false, isForward: false, norm, @out, "ifft");
+            return RawFft(a, nn, axis, isReal: false, isForward: false, norm, @out, "ifft", IsSinglePrecision(a));
         }
 
         /// <summary>
@@ -49,7 +49,10 @@ namespace NumSharp
         /// <param name="out">Optional pre-allocated complex output.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fft2.html</remarks>
         public NDArray fft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => RawFftNd(a, s, axes ?? new[] { -2, -1 }, (arr, n, ax, nrm, o) => fft(arr, n, ax, nrm, o), norm, @out);
+        {
+            bool floatPrec = IsSinglePrecision(a); // float-precision source: every 1-D leaf reproduces its own numpy loop
+            return RawFftNd(a, s, axes ?? new[] { -2, -1 }, (arr, n, ax, nrm, o) => RawFft(arr, n, ax, false, true, nrm, o, "fft", floatPrec), norm, @out);
+        }
 
         /// <summary>
         ///     Compute the 2-dimensional inverse discrete Fourier Transform (over the last two axes by
@@ -63,7 +66,10 @@ namespace NumSharp
         /// <param name="out">Accepted for signature parity; NumPy passes <c>out=None</c> internally.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ifft2.html</remarks>
         public NDArray ifft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => RawFftNd(a, s, axes ?? new[] { -2, -1 }, (arr, n, ax, nrm, o) => ifft(arr, n, ax, nrm, o), norm, @out: null);
+        {
+            bool floatPrec = IsSinglePrecision(a);
+            return RawFftNd(a, s, axes ?? new[] { -2, -1 }, (arr, n, ax, nrm, o) => RawFft(arr, n, ax, false, false, nrm, o, "ifft", floatPrec), norm, @out: null);
+        }
 
         /// <summary>
         ///     Compute the N-dimensional discrete Fourier Transform over the given axes (all axes by
@@ -78,7 +84,10 @@ namespace NumSharp
         /// <param name="out">Optional pre-allocated complex output.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fftn.html</remarks>
         public NDArray fftn(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => RawFftNd(a, s, axes, (arr, n, ax, nrm, o) => fft(arr, n, ax, nrm, o), norm, @out);
+        {
+            bool floatPrec = IsSinglePrecision(a);
+            return RawFftNd(a, s, axes, (arr, n, ax, nrm, o) => RawFft(arr, n, ax, false, true, nrm, o, "fft", floatPrec), norm, @out);
+        }
 
         /// <summary>
         ///     Compute the N-dimensional inverse discrete Fourier Transform (<c>ifftn(fftn(a)) == a</c>).
@@ -91,6 +100,9 @@ namespace NumSharp
         /// <param name="out">Optional pre-allocated complex output.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ifftn.html</remarks>
         public NDArray ifftn(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => RawFftNd(a, s, axes, (arr, n, ax, nrm, o) => ifft(arr, n, ax, nrm, o), norm, @out);
+        {
+            bool floatPrec = IsSinglePrecision(a);
+            return RawFftNd(a, s, axes, (arr, n, ax, nrm, o) => RawFft(arr, n, ax, false, false, nrm, o, "ifft", floatPrec), norm, @out);
+        }
     }
 }

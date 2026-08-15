@@ -100,7 +100,17 @@ namespace NumSharp
         /// <param name="norm">One of <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated output; its shape is validated.</param>
         /// <param name="name">The public API name for the seam message (e.g. "fft").</param>
-        internal static NDArray RawFft(NDArray a, int n, int axis, bool isReal, bool isForward, string norm, NDArray @out, string name)
+        /// <param name="floatPrec">
+        ///     The ORIGINAL user input is float32/float16, so numpy 2.x returns complex64/float32/float16.
+        ///     NumSharp has no complex64 (issue #569), so the result dtype stays complex128/float64 but the
+        ///     VALUES are made bit-identical to numpy's. numpy computes almost all of these in DOUBLE and
+        ///     ROUNDS to complex64/float32/float16 — with ONE exception: <c>rfft</c> of a float32 input,
+        ///     which numpy runs through its single-precision <c>ff-&gt;F</c> loop (see
+        ///     <see cref="PocketFFTDriver"/>). The normalisation factor is computed in the input's
+        ///     <c>real_dtype</c> (float32/float16), matching numpy's <c>reciprocal(sqrt(n, dtype=...))</c>.
+        ///     Threaded through the N-D compositions so every 1-D leaf reproduces its own numpy loop.
+        /// </param>
+        internal static NDArray RawFft(NDArray a, int n, int axis, bool isReal, bool isForward, string norm, NDArray @out, string name, bool floatPrec = false)
         {
             if (n < 1)
                 throw new ValueError($"Invalid number of FFT data points ({n}) specified.");
@@ -110,15 +120,23 @@ namespace NumSharp
             if (!isForward)
                 effNorm = SwapDirection(norm);
 
-            // fct: backward/None -> 1 ; ortho -> 1/sqrt(n) ; forward -> 1/n. Computed in double
-            // (the complex128 path's real precision).
+            // fct = reciprocal(sqrt/n) computed in the input's real_dtype (numpy's _raw_fft:
+            // real_dtype = result_type(a.real.dtype, 1.0)). For a float32 input (or a complex64-precision
+            // N-D intermediate — a complex operand under floatPrec) this is float32; for a float16 input
+            // it is float16; otherwise double. The value is then carried as a double (upcast) — numpy
+            // itself upcasts the fct when the transform runs in double.
+            int realKind; // 0 double, 1 float32, 2 float16
+            if (floatPrec && a.typecode == NPTypeCode.Half) realKind = 2;
+            else if (floatPrec && (a.typecode == NPTypeCode.Single || a.typecode == NPTypeCode.Complex)) realKind = 1;
+            else realKind = 0;
+
             double fct;
             if (effNorm == null || effNorm == "backward")
                 fct = 1.0;
             else if (effNorm == "ortho")
-                fct = 1.0 / Math.Sqrt(n);
+                fct = FftFct(n, realKind, ortho: true);
             else if (effNorm == "forward")
-                fct = 1.0 / n;
+                fct = FftFct(n, realKind, ortho: false);
             else
                 // Only reachable for a FORWARD transform with a bad norm (the inverse path already
                 // threw in SwapDirection above). NumPy's forward message has NO space after "backward,".
@@ -151,8 +169,43 @@ namespace NumSharp
             // output (a.shape with axis replaced by nOut, dtype per the policy above — complex128 for
             // the complex/forward outputs, float64 for irfft), runs the strided all-but-axis 1-D
             // transform, and scales by fct. `name` is retained for callers' diagnostics.
-            return PocketFFTDriver.Execute(a, n, axis, isReal, isForward, fct, @out);
+            // numpy's fft ufunc picks the SINGLE loop only when the fct operand is a float — i.e. for
+            // ortho/forward norms (fct = reciprocal(...) in real_dtype). For backward/None the Python
+            // fct is the INT 1, which nudges numpy's loop resolution to the DOUBLE loop, so even a
+            // single-eligible operand (complex64 / rfft-float32) is computed in double + rounded.
+            bool effNormUnity = effNorm == null || effNorm == "backward";
+            return PocketFFTDriver.Execute(a, n, axis, isReal, isForward, fct, @out, floatPrec, effNormUnity);
         }
+
+        /// <summary>
+        ///     numpy's <c>reciprocal(sqrt(n, dtype=real_dtype))</c> (ortho) / <c>reciprocal(n, real_dtype)</c>
+        ///     (forward), computed in the operand's real_dtype then upcast to double. realKind: 0 = double,
+        ///     1 = float32, 2 = float16. float16 sqrt/reciprocal go via float32 exactly as numpy's half ufuncs.
+        /// </summary>
+        private static double FftFct(int n, int realKind, bool ortho)
+        {
+            switch (realKind)
+            {
+                case 1: // float32
+                    return ortho ? (double)(1f / MathF.Sqrt((float)n)) : (double)(1f / (float)n);
+                case 2: // float16 (numpy half ops round through float32)
+                    return ortho
+                        ? (double)(Half)(1f / (float)((Half)MathF.Sqrt((float)(Half)n)))
+                        : (double)(Half)(1f / (float)(Half)n);
+                default: // double
+                    return ortho ? 1.0 / Math.Sqrt(n) : 1.0 / n;
+            }
+        }
+
+        /// <summary>
+        ///     True when <paramref name="a"/> is a float32/float16 array — the inputs numpy 2.x returns as
+        ///     complex64/float32/float16. NumSharp keeps the result dtype complex128/float64 (no complex64 —
+        ///     issue #569) but reproduces numpy's VALUES: it computes in double and rounds to the numpy
+        ///     result precision, except <c>rfft(float32)</c> which numpy runs single-precision. Complex128,
+        ///     float64, integer and bool inputs are contractual double-precision (return false).
+        /// </summary>
+        internal static bool IsSinglePrecision(NDArray a)
+            => a.typecode == NPTypeCode.Single || a.typecode == NPTypeCode.Half;
 
         /// <summary>
         ///     Port of <c>_cook_nd_args</c> (numpy 2.4.2). Resolves the per-axis lengths <c>s</c> and the

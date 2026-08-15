@@ -2786,6 +2786,17 @@ def gen_groupa():
                 continue
             emit("convolve", {"mode": mode}, [describe(av, av), describe(vv, vv)], r)
 
+        # correlate — 1-D, all three modes, BOTH size relations. correlate is non-commutative:
+        # (vv, av) has len(a) < len(v), so the engine correlates(v, a) and reverses the output.
+        # complex128 additionally exercises the conjugation of the second argument.
+        for mode in ["valid", "same", "full"]:
+            for (ea, ev) in [(av, vv), (vv, av)]:
+                try:
+                    r = np.correlate(ea, ev, mode)
+                except Exception:
+                    continue
+                emit("correlate", {"mode": mode}, [describe(ea, ea), describe(ev, ev)], r)
+
         # append — flatten form (axis=None) + along axis 0.
         vals1 = _cbase((4,), d)
         emit("append", {}, [describe(a2, a2), describe(vals1, vals1)], np.append(a2, vals1))
@@ -5299,9 +5310,13 @@ def gen_fft():
             for lname, base, view in (_fft_layouts_1d(dt) + _fft_layouts_nd(dt)):
                 try_emit(op, {"n": None, "axis": -1, "norm": None}, [describe(base, view)],
                          lambda f=f, view=view: f(view, None, -1, None), lname, dt)
-            # (b) n sweep on a contiguous 1-D signal: 4 truncate, 12 zero-pad, 13 prime (Bluestein).
+            # (b) n sweep on a contiguous 1-D signal: 4 truncate, 12 zero-pad, 13 prime (Bluestein),
+            # 49 = 7*7 (radix-7 codelet with ido>1), 121 = 11*11 (radix-11 codelet with ido>1). The
+            # last two are load-bearing: pocketfft's pass7/pass11 have a distinct ido>1 branch that the
+            # {4,12,13} sizes never reach, and a transcription bug there (special_mul on ca/cb instead of
+            # ca+-cb) went undetected until the float32 port exercised n=98/259 — see FFT_PARITY.md §7.
             b = _fft_base((8,), dt)
-            for nn in (4, 12, 13):
+            for nn in (4, 12, 13, 49, 121):
                 try_emit(op, {"n": nn, "axis": -1, "norm": None}, [describe(b, b)],
                          lambda f=f, b=b, nn=nn: f(b, nn, -1, None), "c1d_n", dt)
             # (c) norm sweep (ortho, forward, explicit backward) on the same signal.

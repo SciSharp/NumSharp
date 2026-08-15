@@ -19,7 +19,7 @@ namespace NumSharp
         public NDArray rfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             int nn = n ?? ShapeAt(a, axis);
-            return RawFft(a, nn, axis, isReal: true, isForward: true, norm, @out, "rfft");
+            return RawFft(a, nn, axis, isReal: true, isForward: true, norm, @out, "rfft", IsSinglePrecision(a));
         }
 
         /// <summary>
@@ -36,7 +36,7 @@ namespace NumSharp
         public NDArray irfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             int nn = n ?? (ShapeAt(a, axis) - 1) * 2;
-            return RawFft(a, nn, axis, isReal: true, isForward: false, norm, @out, "irfft");
+            return RawFft(a, nn, axis, isReal: true, isForward: false, norm, @out, "irfft", IsSinglePrecision(a));
         }
 
         /// <summary>
@@ -65,15 +65,16 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfftn.html</remarks>
         public NDArray rfftn(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
         {
+            bool floatPrec = IsSinglePrecision(a); // float-precision source: thread it so every leaf reproduces its own numpy loop
             var (ss, aa) = CookNdArgs(a, s, axes, invreal: false);
             // NumPy indexes s[-1]/axes[-1] with no axes to transform (0-d input, or an explicit
             // empty `axes`), leaking a bare IndexError("list index out of range"). Reproduce it here
             // rather than let C# surface an IndexOutOfRangeException.
             if (aa.Length == 0)
                 throw new IndexError("list index out of range");
-            a = rfft(a, ss[aa.Length - 1], aa[aa.Length - 1], norm, @out);
+            a = RawFft(a, ss[aa.Length - 1], aa[aa.Length - 1], isReal: true, isForward: true, norm, @out, "rfft", floatPrec);
             for (int ii = aa.Length - 2; ii >= 0; ii--)
-                a = fft(a, ss[ii], aa[ii], norm, @out);
+                a = RawFft(a, ss[ii], aa[ii], isReal: false, isForward: true, norm, @out, "fft", floatPrec);
             return a;
         }
 
@@ -104,6 +105,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfftn.html</remarks>
         public NDArray irfftn(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
         {
+            bool floatPrec = IsSinglePrecision(a); // float-precision source: thread it so every leaf reproduces its own numpy loop
             var (ss, aa) = CookNdArgs(a, s, axes, invreal: true);
             // As in rfftn: no axes to transform leaks NumPy's IndexError("list index out of range")
             // at the s[-1]/axes[-1] access. (For a shapeless `s`, the invreal defaulting inside
@@ -111,8 +113,8 @@ namespace NumSharp
             if (aa.Length == 0)
                 throw new IndexError("list index out of range");
             for (int ii = 0; ii < aa.Length - 1; ii++)
-                a = ifft(a, ss[ii], aa[ii], norm, @out: null);
-            a = irfft(a, ss[aa.Length - 1], aa[aa.Length - 1], norm, @out);
+                a = RawFft(a, ss[ii], aa[ii], isReal: false, isForward: false, norm, @out: null, "ifft", floatPrec);
+            a = RawFft(a, ss[aa.Length - 1], aa[aa.Length - 1], isReal: true, isForward: false, norm, @out, "irfft", floatPrec);
             return a;
         }
     }

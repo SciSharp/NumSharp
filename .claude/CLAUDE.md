@@ -598,7 +598,25 @@ texts differ in wording; `np.broadcast_to(a, (2^62, 6))` builds the view where N
 `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`
 
 ### Math — Arithmetic
-`abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`, `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `cos`, `cosh`, `deg2rad`, `degrees`, `divide`, `exp`, `exp2`, `expm1`, `floor`, `floor_divide`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`, `reciprocal`, `rint`, `sign`, `sin`, `sinh`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc`
+`abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`, `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`, `divide`, `exp`, `exp2`, `expm1`, `floor`, `floor_divide`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`, `reciprocal`, `rint`, `sign`, `sin`, `sinh`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc`
+
+**`correlate` / `convolve` — the sliding multiply-accumulate family** (NumPy `_pyarray_correlate` +
+`small_correlate`; `Math/NdArray.SlidingDot.cs`). `np.correlate(a, v, mode='valid')` is cross-correlation
+`c_k = Σ_n a_{n+k}·conj(v_n)`; `np.convolve(a, v, mode='full')` is `correlate(a, v[::-1])` (no conjugation).
+Both share ONE 3-region engine — left ramp (scalar), middle (**outer-vectorized over output positions**,
+`Vector<T>` separate-mul-add for the 10 SIMD dtypes; char via ushort), right ramp — plus a length-gated
+`DotSimd` inner reduction (len≥32) for the ramps/few-output tail of large kernels. correlate is
+non-commutative: when `len(a)<len(v)` the operands swap and the output is time-reversed (`_pyarray_revert`),
+and a complex `v` is conjugated. Mode strings are case-SENSITIVE (NumPy's two near-miss messages reproduced).
+**Bit-parity:** outer-vectorization keeps each output's `Σ_t a[i+t]·k[t]` in t-order, so it is BYTE-IDENTICAL
+to the scalar sequential sum — hence to NumPy for the small-kernel regime (verified 1170 cases × 13 dtypes + 24
+`groupa` fuzz cases). Integer/bool/complex/decimal/Half are exact at every size (integer SIMD wrap and the
+reordered inner reduction are both modular-exact). Only LONG float32/float64 kernels carry a bounded-ULP
+divergence — a pre-existing property of the scalar sum (NumSharp.Core has no cblas), NOT introduced by the SIMD
+path. **Perf (NPY/NS, best-of-9, Release):** geomean **~4×** — common small-kernel/long-signal cases **2.3–29×**,
+mid/large kernels **1.75–6×**; the sole at-parity corner is the large symmetric-kernel `full` case (`2000×2000`
+≈ **1.00×**, ramp-dominated pure dot bounded by OpenBLAS's tuned `ddot`). See `Math/np.correlate.cs`,
+`Math/NdArray.{Correlate,Convolve,SlidingDot}.cs`.
 
 **Inverse hyperbolic** `arcsinh`/`arccosh`/`arctanh` (+ NumPy 2.0 Array-API aliases `asinh`/`acosh`/`atanh`, same ufunc) follow the `arcsin`/`sinh` engine seam (`ASinh`/`ACosh`/`ATanh` → `ExecuteUnaryOp` → `UnaryOp.{Asinh,Acosh,Atanh}` IL kernels) with the `f(x, out=, where=, dtype=)` ufunc surface + positional-dtype convenience overloads. **Real float32/float64 are BYTE-IDENTICAL to NumPy 2.4.2** — `Math.Asinh/Acosh/Atanh` and the `MathF` twins call the same MSVC `ucrtbase` CRT as `npy_asinh/acosh/atanh` (verified 0-diff over 4521 adversarial inputs at both widths, specials/±inf/NaN/subnormals/±0 included), same class as the platform-libm `exp2`/`log1p` cells. **Perf (NPY/NS, Release, best-of-11 warm, `out=`, 10M on byte-identical inputs):** `arcsinh` **0.99×**, `arccosh` **1.00×**, `arctanh` **0.97×** — parity, and this is the correct ceiling rather than a shortfall. These three are the ONE arc-family NumPy has **no active SIMD kernel** for on win-amd64 (its SVML `asinh`/`acosh`/`atanh` are AVX-512/Linux-gated, never compiled into the 2.4.2 wheel), so — unlike `exp`/`log`/`sin`/`cos`/`tanh`, which NumSharp ports bit-exactly and BEATS — there is nothing to port and byte-parity REQUIRES the same scalar `ucrtbase` CRT on both sides. The kernel is a **non-unrolled scalar loop** (`EmitUnaryScalarLoop`; these three fall through every `CanUseUnarySimd` branch, as they must — there is no `Vector<double>.Asinh`); its only edge over a naive managed loop is a raw-pointer direct `call` with no bounds checks, and that alone is enough to BEAT `System.Numerics.Tensors.TensorPrimitives.Asinh`, .NET's own SIMD transcendental library (one-process warm best-of-15, f64 10M, same array: NumSharp IL kernel **97.3 ms** < TensorPrimitives 101.1 ms < naive `Math.Asinh` loop 105.5 ms). Two speedup levers were POC'd and REJECTED: (1) 4×/8× **unrolling** the CRT-call loop does not help — the `ucrtbase` call latency dominates and the extra body is a wash-to-slightly-slower for asinh/atanh (measured); (2) **SIMD buys nothing byte-exactly** — TensorPrimitives is itself **0-ULP** vs NumPy over 10M f64 AND f32 inputs *precisely because it does NOT vectorize these three* (no correctly-rounded vector asinh/acosh/atanh exists, so it falls to the scalar CRT), which is the direct proof that a vector kernel would necessarily DIVERGE. The only faster route is a divergent SIMD polynomial (SLEEF/Cephes, ~1–4 ULP off), which breaks byte-parity and is therefore rejected. So there is no NumSharp-side overhead left to reclaim. Integer/bool tier to float per `ResolveUnaryFloatReturnType` (bool/i8/u8→f16, i16/u16/char→f32, i32+→f64); **float16 is BYTE-EXACT** via native `Half.Asinh/Acosh/Atanh` (which compute in float32 = NumPy's `astype 'e'->'f'`, `(Half)asinhf((float)h)` — verified 0 finite-diffs over all 65536 f16 values, and faster than the double bridge the rest of the arc-trig f16 tier still uses); Decimal via the decimal→double bridge (valid-domain 15-sig-fig; out-of-domain NaN/inf throws `OverflowException` on `(decimal)NaN` — a pre-existing bridge limitation shared by ALL decimal transcendentals: `arcsin(2m)`/`sqrt(-1m)`/`log(0m)` behave identically, no NumPy decimal analog). **Complex128** is derived from the byte-exact `Asin`/`Acos`/`Atan`(=`Catanh`) ports through NumPy's own msun involution `I·conj(·)` — a pure component-swap (`(z.Im, z.Re)`, zero arithmetic): `asinh(z)=swap(asin(swap z))`, `atanh(z)=catanh(z)` (already ported, drives `atan`), `acosh(z)=cacosh_formula(acos(z))` — so they inherit the whole complex-unary family's documented **≤3 ULP** envelope (the three identities are bit-exact inside NumPy itself, verified 0-diff over 20,036 inputs). `arccosh` inherits `arccos`'s one sub-DBL_MIN-imaginary pathological edge (`[Misaligned]` branch 7). Gates: `Math/InverseHyperbolicTests.cs` (16) + `NpApiOverloadTests_UnaryMath` regions + the `unary_extra`/`specials` fuzz tiers (all 14 dtypes × layouts). See `Math/np.{arcsinh,arccosh,arctanh}.cs`, `Utilities/NDComplexMath.cs`.
 
@@ -1583,15 +1601,31 @@ order (divide-by-zero first, then `device`, then — `fftfreq` only — negative
 `n` → `ValueError("n should be an integer")`); `fftshift`/`ifftshift` are dtype-preserving cyclic
 rolls by `±(dim//2)` (0-d → no-op copy, `[Misaligned]`).
 
-**ONE deliberate divergence (`[Misaligned]` F1):** NumSharp has a single complex type (complex128)
-and **no complex64**, so a **float32/float16** input computes in double and returns complex128/float64
-where NumPy 2.x returns complex64/float32/float16. A **dtype-only** difference — the VALUES are the
-correctly-rounded double result (bit-verified: `np.fft.fft(x_f32) == np.fft.fft(x_f32.astype(f8))`
-byte-for-byte). float64/complex128/int/bool inputs are **contractual (bit-exact)**; the helpers never
-diverge. Closing it needs a complex64 dtype (issue #569), not FFT work. Gate:
-`Fuzz/corpus/fft.jsonl` (1,796 cases, floor 1,700; `OpRegistry` all 16 transforms + 4 helpers,
-`gen_oracle.gen_fft`, `MisalignedRegistry` F1) + **330** `Fourier`-namespace unit tests
-(`test/NumSharp.UnitTest/Fourier/np.fft.*.Test.cs`). See `Fourier/np.fft.{cs,Standard,Real,Hermitian,Helper,RawFft}.cs` + `Fourier/PocketFFT*.cs`; issue **#114**.
+**ONE deliberate divergence (`[Misaligned]` F1), now genuinely dtype-only:** NumSharp has a single
+complex type (complex128) and **no complex64**, so a **float32/float16** input returns complex128/float64
+where NumPy 2.x returns complex64/float32/float16. The **VALUES are BIT-IDENTICAL to NumPy 2.4.2** (902/902,
+every transform × size × norm × layout) — NumSharp reproduces NumPy's exact per-loop precision, which is
+NOT a blanket "promote to double". NumPy's fft ufuncs carry a single (`Ff->F`/`ff->F`) and a double
+(`Dd->D`/`dd->D`) loop and pick between them by operand shape: a **real float32/float16 input** to
+fft/ifft/irfft promotes real→complex128 → the **double** loop → double compute rounded to the
+complex64/float32/float16 output (`PocketFFTDriver.RoundInPlace`); **rfft of a float32 real input** and
+**fft/ifft/irfft of a complex64-precision N-D intermediate** hit a **single** loop — but only when the
+norm factor is a float (ortho/forward), since backward/None's int `fct=1` resolves to the double loop.
+NumSharp mirrors this with a genuine single-precision pocketfft engine
+(`Fourier/PocketFFT.{Complex,Real,Bluestein,Plan}.Single.cs`, `CmplxF`, `TwiddleF.At`) gated in
+`PocketFFTDriver.Execute` on `floatPrec && !effNormUnity && (complex operand || rfft-float32)`; the norm
+factor is computed in the input's real_dtype (`RawFft.FftFct`). float64/complex128/int/bool inputs are
+**contractual (bit-exact)**; the helpers never diverge. The residual dtype cell needs complex64 (issue
+#569), not FFT work. **The harness now VALUE-verifies these cells** (up-casts NumPy's complex64/float32/
+float16 and bit-compares — `FuzzCorpusTests.Kinds.FftFloatValuesMatch`), so F1 is a checked dtype-only
+excuse, not a skipped comparison. **Bonus:** this port uncovered and fixed a pre-existing bug in the
+double `Cfftp`/`CfftpF` `pass7`/`pass11` **ido>1** codelets (they applied `special_mul` to `ca`/`cb`
+instead of `ca±cb` — the PM — so `np.fft.fft(float64, n)` was silently wrong for any radix-7/11 factor at
+ido>1: n=49/98/121/143/259/…, latent because the corpus n-sweep was only {4,12,13}). Gate:
+`Fuzz/corpus/fft.jsonl` (1,864 cases, floor 1,700; n-sweep now includes 49/121 to cover pass7/pass11
+ido>1; `OpRegistry` all 16 transforms + 4 helpers, `gen_oracle.gen_fft`, `MisalignedRegistry` F1) +
+**330** `Fourier`-namespace unit tests. See `Fourier/np.fft.{cs,Standard,Real,Hermitian,Helper,RawFft}.cs`
++ `Fourier/PocketFFT*.cs` (+ `*.Single.cs`); issues **#114** / **#569**.
 
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`

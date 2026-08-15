@@ -7,11 +7,12 @@
 > merely close. Gate: the portable `fft.jsonl` differential-fuzz tier (1,796 cases, floor 1,700) +
 > 330 `Fourier`-namespace unit tests.
 >
-> **One deliberate divergence:** NumSharp has a single complex type (`System.Numerics.Complex` =
-> complex128) and **no complex64**, so a float32/float16 input is computed in double and returned as
-> complex128/float64 where NumPy 2.x returns complex64/float32. The *values* are the correctly-rounded
-> double result; only the result *dtype* differs. See §7. Closing it is issue
-> [#569](https://github.com/SciSharp/NumSharp/issues/569), not FFT work.
+> **One deliberate divergence, now genuinely dtype-only:** NumSharp has a single complex type
+> (`System.Numerics.Complex` = complex128) and **no complex64**, so a float32/float16 input is returned
+> as complex128/float64 where NumPy 2.x returns complex64/float32/float16. The **values are bit-identical
+> to NumPy 2.4.2** (verified 902/902 across every transform × size × norm × layout), not merely close —
+> NumSharp reproduces NumPy's exact per-loop precision (see §7). Only the result *dtype* differs; closing
+> that is issue [#569](https://github.com/SciSharp/NumSharp/issues/569) (a complex64 dtype), not FFT work.
 
 Status date: 2026-08-14 · Branch: `journey3` · Issue:
 [SciSharp/NumSharp#114](https://github.com/SciSharp/NumSharp/issues/114) · Plan:
@@ -195,35 +196,55 @@ also promoted/added `np.conjugate`/`np.conj` (a full ufunc with `out=`/`where=`/
 | `float64` | complex128 (fwd/complex) · float64 (irfft/hfft) | **contractual — bit-exact vs NumPy 2.4.2** |
 | `complex128` | complex128 | **contractual — bit-exact** |
 | `int*` / `bool` | promoted to double → complex128 / float64 | **contractual — bit-exact** (NumPy promotes identically) |
-| `float32` / `float16` | complex128 / float64 (NumPy: complex64 / float32/float16) | **dtype-only divergence** — see §7 |
+| `float32` / `float16` | complex128 / float64 (NumPy: complex64 / float32/float16) | **values bit-exact; dtype-only divergence** — see §7 |
 | `Decimal` | — | pocketfft is float-only; Decimal has no NumPy FFT dtype |
 
 ---
 
-## 7. The one deliberate divergence — no complex64
+## 7. The one deliberate divergence — no complex64 (values are bit-exact)
 
-NumSharp has exactly one complex type, `System.Numerics.Complex` (complex128), and no complex64. So
-a **float32/float16** input is computed in double and returned as **complex128** (fft/rfft/ihfft and
-the N-D forms) or **float64** (irfft/hfft), where NumPy 2.x returns complex64/float32/float16.
+NumSharp has exactly one complex type, `System.Numerics.Complex` (complex128), and no complex64. So a
+**float32/float16** input is returned as **complex128** (fft/rfft/ihfft and the N-D forms) or
+**float64** (irfft/hfft), where NumPy 2.x returns complex64/float32/float16. **The VALUES are
+bit-identical to NumPy 2.4.2** — verified 902/902 over every transform × {radix, radfg, Bluestein}
+size × {backward, ortho, forward} norm × {1-D, N-D, truncate, zero-pad} — so the only divergence is
+the result *dtype*.
 
-This is a **dtype-only** difference: the values are the correctly-rounded double result. It is
-bit-verified that
+**This required reproducing NumPy's actual per-loop precision, which is subtler than "promote to
+double".** NumPy's fft ufuncs register a single (`Ff->F` / `ff->F`) and a double (`Dd->D` / `dd->D`)
+loop, and the loop it picks — hence whether the transform runs in single or double — depends on the
+operand shapes, NOT a blanket promotion:
 
-```
-np.fft.fft(x_f32)  ==  np.fft.fft(x_f32.astype(np.float64))    # byte-for-byte, both stacks
-```
+- **A real float32/float16 input to fft/ifft/irfft** must be promoted to complex, and NumPy promotes it
+  to **complex128** → the **double** loop → the double transform, cast (rounded) to the complex64/
+  float32/float16 output. NumSharp does the same: the existing double engine, then a round-to-result-
+  precision pass (`PocketFFTDriver.RoundInPlace`).
+- **`rfft` of a float32 real input**, and **fft/ifft/irfft of a complex64-precision operand** (the N-D
+  intermediates), already match a *single* loop without a real→complex128 promotion → the **single**
+  transform — but **only when the normalization factor is a float** (ortho/forward norm). For
+  backward/None the Python `fct` is the **int `1`**, which resolves NumPy's ufunc to the **double**
+  loop, so those cells are double + round too. NumSharp mirrors this exactly via a genuine
+  **single-precision pocketfft engine** (`PocketFFT.{Complex,Real,Bluestein}.Single.cs` +
+  `PocketFFT.Plan.Single.cs`), gated in `PocketFFTDriver.Execute` on `floatPrec && !effNormUnity &&
+  (complex operand || rfft-float32)`. Its butterflies run in `float`; its twiddle table is the double
+  `SinCos2PiByN` narrowed at lookup (`TwiddleF.At`, exactly `sincos_2pibyn<float>`'s `Thigh==double`
+  rule). Single-precision results are up-cast float→double on write, so the complex128/float64 output
+  holds the complex64/float32 values.
+- The **normalization factor** itself is computed in the input's `real_dtype` (float32/float16),
+  matching NumPy's `reciprocal(sqrt(n, dtype=real_dtype))` — `RawFft.FftFct`.
 
-so NumSharp's output is exactly NumPy's *own* double computation of the same signal — and it matches
-NumPy's still-published docstring ("numpy.fft promotes float32 … to … complex128"). It is recorded in
-the corpus **as NumPy produces it** (complex64/float32/float16) and excused in `MisalignedRegistry`
-as **F1**, scoped to `FftTransformOps` × a float32/float16 first operand (the helpers never diverge —
-`fftfreq`/`rfftfreq` are always float64 and the shifts preserve dtype). complex64 has no NumSharp
-`NPTypeCode`, so those cases reach the harness through `CompareArray`'s unmappable-dtype → `Dtype`
-route.
+The result is recorded in the corpus **as NumPy produces it** (complex64/float32/float16) and the
+residual **dtype** mismatch is excused in `MisalignedRegistry` as **F1** — but the harness now
+**value-verifies** these cells (up-casting NumPy's complex64/float32/float16 bytes and bit-comparing),
+so F1 is a *values-checked* dtype-only excuse, not a skipped comparison. Full parity means adding a
+`complex64` dtype ([#569](https://github.com/SciSharp/NumSharp/issues/569)); a real complex64 would
+flip the dtype cell automatically, values unchanged.
 
-Full parity here means adding a `complex64` dtype and porting pocketfft's float engine — a separate,
-larger initiative tracked as [#569](https://github.com/SciSharp/NumSharp/issues/569). A real
-complex64 dtype would flip these cells bit-exact automatically.
+> **Bonus fix found while doing this:** the pre-existing double `Cfftp`/`CfftpF` `pass7`/`pass11`
+> codelets applied `special_mul` to `ca`/`cb` instead of `ca±cb` (the `PM`) in their **ido>1** branch —
+> so `np.fft.fft(float64, n)` was silently WRONG for any `n` with a radix-7 or radix-11 factor at
+> ido>1 (n = 49, 98, 121, 143, 259, …). Latent because the `fft.jsonl` n-sweep was only {4, 12, 13}.
+> Now corrected (matches pocketfft's `PARTSTEP7`/`PARTSTEP11`) and covered by added corpus sizes.
 
 ---
 

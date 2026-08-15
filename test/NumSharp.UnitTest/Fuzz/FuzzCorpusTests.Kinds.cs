@@ -97,8 +97,13 @@ namespace NumSharp.UnitTest.Fuzz
             catch (NotSupportedException)
             {
                 var dr = MisalignedRegistry.Classify(c, DivergenceKind.Dtype, null, null, default, empty);
-                if (dr != null) Bump(documented, dr);
-                else failures.Add($"{c.Id} [{c.Layout}]{at}: NumPy dtype '{exp.Dtype}' has no NumSharp analog");
+                if (dr == null)
+                    failures.Add($"{c.Id} [{c.Layout}]{at}: NumPy dtype '{exp.Dtype}' has no NumSharp analog");
+                // F1 excuses the complex64 dtype — but the VALUES must still be bit-exact (the divergence
+                // is dtype-ONLY, not a compute gap). Up-cast NumPy's complex64 and bit-compare.
+                else if (IsFftFloatCell(c, exp, result) && !FftFloatValuesMatch(exp, result))
+                    failures.Add($"{c.Id} [{c.Layout}]{at}: fft {exp.Dtype} VALUES diverge from NumPy after up-cast (not dtype-only)");
+                else Bump(documented, dr);
                 return;
             }
 
@@ -106,8 +111,13 @@ namespace NumSharp.UnitTest.Fuzz
             if (result.typecode != tc)
             {
                 var reason = MisalignedRegistry.Classify(c, DivergenceKind.Dtype, null, null, tc, empty);
-                if (reason != null) Bump(documented, reason);
-                else failures.Add($"{c.Id} [{c.Layout}]{at}: result dtype {result.typecode} != NumPy {exp.Dtype}");
+                if (reason == null)
+                    failures.Add($"{c.Id} [{c.Layout}]{at}: result dtype {result.typecode} != NumPy {exp.Dtype}");
+                // As above (irfft/hfft returning float64 where NumPy returns float32/float16): the excused
+                // dtype divergence must still carry bit-exact values.
+                else if (IsFftFloatCell(c, exp, result) && !FftFloatValuesMatch(exp, result))
+                    failures.Add($"{c.Id} [{c.Layout}]{at}: fft {exp.Dtype} VALUES diverge from NumPy after up-cast (not dtype-only)");
+                else Bump(documented, reason);
                 return;
             }
             // Broadcasting: result shape must match NumPy.
@@ -145,6 +155,48 @@ namespace NumSharp.UnitTest.Fuzz
                     TruthNote(expected, actual, truth, d.Index, tc))) +
                 (diffs.Count > 3 ? $" (+{diffs.Count - 3} more)" : "") +
                 (shrunk != null ? $"\n      minimal repro: {shrunk}" : ""));
+        }
+
+        /// <summary>
+        ///     An fft transform cell where NumSharp promoted the result (complex128/float64) because it
+        ///     has no complex64 dtype, while NumPy returned complex64/float32/float16 — the F1 divergence.
+        ///     Helpers (fftfreq/rfftfreq/fftshift/ifftshift) never promote, so they are excluded.
+        /// </summary>
+        private static bool IsFftFloatCell(FuzzCorpus.Case c, FuzzCorpus.Expected exp, NDArray result)
+            => c.Op.Contains("fft") && !c.Op.Contains("freq") && !c.Op.Contains("shift")
+               && (exp.Dtype == "complex64" || exp.Dtype == "float32" || exp.Dtype == "float16")
+               && (result.typecode == NPTypeCode.Complex || result.typecode == NPTypeCode.Double);
+
+        /// <summary>
+        ///     Verify the fft float32/float16 VALUES are bit-identical to NumPy despite the dtype
+        ///     divergence: up-cast NumPy's complex64/float32/float16 result bytes to NumSharp's
+        ///     complex128/float64 precision (an exact widening) and bit-compare. True == dtype-only.
+        /// </summary>
+        private static bool FftFloatValuesMatch(FuzzCorpus.Expected exp, NDArray result)
+        {
+            byte[] want = FuzzCorpus.FromHex(exp.Buffer);   // NumPy complex64 / float32 / float16
+            byte[] got = FuzzCorpus.ResultBytes(result);    // NumSharp complex128 / float64
+            byte[] up;
+            switch (exp.Dtype)
+            {
+                case "complex64":                            // 2 float32 -> 2 float64 per element
+                case "float32":                              // float32 -> float64
+                    up = new byte[want.Length * 2];
+                    for (int i = 0; i + 4 <= want.Length; i += 4)
+                        BitConverter.GetBytes((double)BitConverter.ToSingle(want, i)).CopyTo(up, i * 2);
+                    break;
+                case "float16":                              // float16 -> float64
+                    up = new byte[want.Length * 4];
+                    for (int i = 0; i + 2 <= want.Length; i += 2)
+                        BitConverter.GetBytes((double)BitConverter.Int16BitsToHalf(BitConverter.ToInt16(want, i))).CopyTo(up, i * 4);
+                    break;
+                default:
+                    return false;
+            }
+            if (up.Length != got.Length) return false;
+            for (int i = 0; i < up.Length; i++)
+                if (up[i] != got[i]) return false;
+            return true;
         }
 
         /// <summary>
