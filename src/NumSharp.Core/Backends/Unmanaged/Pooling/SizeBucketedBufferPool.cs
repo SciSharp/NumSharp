@@ -101,7 +101,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         ///     Default OFF (the field is read once at startup) so production paths are untouched.
         /// </summary>
         public static readonly bool GuardPagesEnabled =
-            OsVirtualMemory.IsSupported && Environment.GetEnvironmentVariable("NUMSHARP_DEBUG_GUARD_PAGES") == "1";
+            OsVirtualMemory.IsSupported && EnvVars.DebugGuardPages;
 
         // Guard-mode bookkeeping: usable pointer -> reserved region base (for FreeGuarded).
         private static readonly ConcurrentDictionary<IntPtr, IntPtr> _guardRegions = new();

@@ -23,23 +23,15 @@ namespace NumSharp.Interop.UnitTests
         public static string Reason { get; private set; } = "not initialized";
 
         /// <summary>
-        ///     When set (env var <c>NUMSHARP_PYTHONNET_REQUIRE_ENGINE</c> = <c>1</c>/<c>true</c>), an
-        ///     unavailable engine is a HARD FAILURE instead of an Inconclusive skip. CI sets it in the
-        ///     interop job — that job installs Python + numpy and PROMISES an engine, so a runner where
-        ///     discovery silently fails must go red, not green-by-skipping (the one failure mode a
-        ///     self-skipping suite hides). Off by default, so a developer machine or a bare CI image
-        ///     without Python still skips gracefully.
+        ///     Whether an unavailable Python+numpy engine is a HARD FAILURE rather than an Inconclusive
+        ///     skip. <b>Defaults to TRUE</b> (see <see cref="NumSharp.EnvVars.PythonnetRequireEngine"/>):
+        ///     this suite exists to exercise NumSharp.Interop.pythonnet, so if that interop is
+        ///     referenced/used and the engine does not start, discovery is broken and must go red — not
+        ///     green-by-skipping (the one failure mode a self-skipping suite hides). Override from OUTSIDE
+        ///     with <c>NUMSHARP_PYTHONNET_REQUIRE_ENGINE=0</c> (or <c>false</c>/<c>no</c>/<c>off</c>) to
+        ///     allow a graceful skip on a developer machine or bare CI image without Python.
         /// </summary>
-        private static readonly bool RequireEngine = IsTruthyEnv("NUMSHARP_PYTHONNET_REQUIRE_ENGINE");
-
-        private static bool IsTruthyEnv(string name)
-        {
-            string v = Environment.GetEnvironmentVariable(name);
-            if (string.IsNullOrEmpty(v)) return false;
-            v = v.Trim();
-            return v == "1" || string.Equals(v, "true", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(v, "yes", StringComparison.OrdinalIgnoreCase);
-        }
+        private static readonly bool RequireEngine = NumSharp.EnvVars.PythonnetRequireEngine;
 
         [AssemblyInitialize]
         public static void Start(TestContext _)
@@ -172,7 +164,7 @@ namespace NumSharp.Interop.UnitTests
         {
             var attempts = new List<string>();
 
-            string env = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL");
+            string env = NumSharp.EnvVars.PythonNetPyDll;
             if (!string.IsNullOrEmpty(env))
             {
                 if (File.Exists(env) || !Path.IsPathRooted(env))

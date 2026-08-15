@@ -38,7 +38,7 @@ if ((dbgScript?.IsJITOptimizerDisabled ?? false) || (dbgCore?.IsJITOptimizerDisa
     return;
 }
 
-string section = (Environment.GetEnvironmentVariable("NUMSHARP_BENCH_NDITER_SECTION") ?? "all").Trim().ToLowerInvariant();
+string section = (EnvVars.BenchNditerSection ?? "all").Trim().ToLowerInvariant();
 bool Want(string s) => section == "all" || section == s;
 
 int fails = 0;

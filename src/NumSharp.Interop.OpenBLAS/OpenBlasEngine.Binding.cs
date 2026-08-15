@@ -269,8 +269,7 @@ namespace NumSharp.Interop.OpenBLAS
         [ModuleInitializer]
         internal static void BundleAutoinstall()
         {
-            if (string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL"), "0",
-                    StringComparison.Ordinal))
+            if (!EnvVars.OpenBlasBundleAutoinstall)
                 return;
 
             try

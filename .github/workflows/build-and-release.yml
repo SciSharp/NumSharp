@@ -160,10 +160,10 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
-    # This job installs Python + numpy below, so the engine MUST start here. The flag turns
-    # PythonSession's normal Inconclusive-when-absent skip into a hard failure — otherwise a runner
-    # where libpython discovery silently breaks (the macOS-framework class of bug) would report every
-    # interop test as skipped and the job would go green having proven nothing.
+    # This job installs Python + numpy below, so the engine MUST start here. Requiring the engine is
+    # now PythonSession's DEFAULT (an absent engine hard-fails instead of skipping), so this line is
+    # explicit belt-and-suspenders — it also guards against an ambient NUMSHARP_PYTHONNET_REQUIRE_ENGINE=0
+    # from the runner environment silently re-enabling the green-by-skipping failure mode.
     env:
       NUMSHARP_PYTHONNET_REQUIRE_ENGINE: '1'
 

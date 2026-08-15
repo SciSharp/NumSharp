@@ -166,7 +166,7 @@ namespace NumSharp.Interop.OpenBLAS
                 // produce confidently wrong bits. Only the unattended case searches.
                 string requested = !string.IsNullOrWhiteSpace(path)
                     ? path
-                    : Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_LIBRARY");
+                    : EnvVars.OpenBlasLibrary; // e.g. C:/opt/openblas/scipy_openblas64.dll | /usr/lib/x86_64-linux-gnu/libopenblas.so.0 | /opt/homebrew/opt/openblas/lib/libopenblas.dylib
                 bool strict = !string.IsNullOrWhiteSpace(requested);
 
                 var tried = new List<string>();
@@ -506,8 +506,7 @@ namespace NumSharp.Interop.OpenBLAS
                 foreach (var p in Expand(dir))
                     yield return p;
 
-            if (!string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_USE_BUNDLED"), "0",
-                    StringComparison.Ordinal))
+            if (EnvVars.OpenBlasUseBundled)
                 foreach (var dir in BundledDirectories())
                     foreach (var p in Expand(dir))
                         yield return p;
@@ -713,7 +712,7 @@ namespace NumSharp.Interop.OpenBLAS
         /// </remarks>
         private static IEnumerable<string> UserPathCandidates()
         {
-            var v = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_SEARCH_PATH");
+            var v = EnvVars.OpenBlasSearchPath;
             if (string.IsNullOrWhiteSpace(v))
                 yield break;
 
@@ -775,7 +774,7 @@ namespace NumSharp.Interop.OpenBLAS
             // ExplicitOpenBlasRootDirectories), above the bundle — a caller sets those deliberately.
             // What remains here is AMBIENT tooling: a conda/vcpkg activation or a distro package,
             // which sits BELOW the bundled parity default.
-            var conda = Environment.GetEnvironmentVariable("CONDA_PREFIX");
+            var conda = EnvVars.CondaPrefix;
             if (!string.IsNullOrWhiteSpace(conda))
             {
                 yield return Path.Combine(conda, "lib");              // posix conda
@@ -785,7 +784,7 @@ namespace NumSharp.Interop.OpenBLAS
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                var vcpkg = Environment.GetEnvironmentVariable("VCPKG_ROOT");
+                var vcpkg = EnvVars.VcpkgRoot;
                 if (!string.IsNullOrWhiteSpace(vcpkg))
                     foreach (var triplet in new[] { "x64-windows", "arm64-windows", "x86-windows" })
                         yield return Path.Combine(vcpkg, "installed", triplet, "bin");
@@ -825,7 +824,7 @@ namespace NumSharp.Interop.OpenBLAS
         /// </remarks>
         private static IEnumerable<string> PathEnvDirectories()
         {
-            var pathVar = Environment.GetEnvironmentVariable("PATH");
+            var pathVar = EnvVars.SystemPath;
             if (string.IsNullOrEmpty(pathVar))
                 yield break;
 
