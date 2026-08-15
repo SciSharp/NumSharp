@@ -88,10 +88,6 @@
     "numpy.shape": {
       "target": "NumSharp.NDArray.Shape",
       "notes": "NumSharp exposes shape as an NDArray Shape property rather than the top-level NumPy tuple-returning helper."
-    },
-    "numpy.linalg.matrix_power": {
-      "target": "NumSharp.NDArray.matrix_power",
-      "notes": "Matrix power is available as an NDArray instance method rather than under an linalg namespace."
     }
   },
   "support": {

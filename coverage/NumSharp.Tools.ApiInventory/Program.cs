@@ -9,7 +9,13 @@ var inventory = new ApiInventory(
     AssemblyVersion: typeof(np).Assembly.GetName().Version?.ToString() ?? "unknown",
     Np: InspectType(typeof(np), BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly),
     NdArray: InspectType(typeof(NDArray), BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-    Random: InspectType(typeof(NumPyRandom), BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+    Random: InspectType(typeof(NumPyRandom), BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+    // np.fft.* and np.linalg.* are function namespaces the coverage denominator counts, but they live
+    // on facade types (a property-returned module and a nested static class) rather than on `np` itself.
+    // Reflect them explicitly — without this the whole np.fft surface and every linalg factorisation are
+    // invisible to the inventory and get mis-reported as "missing".
+    Fft: InspectType(typeof(FourierModule), BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+    Linalg: InspectType(typeof(np.linalg), BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly));
 
 Console.WriteLine(JsonSerializer.Serialize(inventory, new JsonSerializerOptions
 {
@@ -153,7 +159,9 @@ internal sealed record ApiInventory(
     string AssemblyVersion,
     TypeInventory Np,
     TypeInventory NdArray,
-    TypeInventory Random);
+    TypeInventory Random,
+    TypeInventory Fft,
+    TypeInventory Linalg);
 
 internal sealed record TypeInventory(
     string Type,

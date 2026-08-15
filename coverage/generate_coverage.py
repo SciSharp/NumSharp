@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.1.2"
+GENERATOR_VERSION = "1.2.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -230,6 +230,8 @@ class SourceLocator:
         "np": re.compile(r"\bclass\s+np\b"),
         "ndarray": re.compile(r"\bclass\s+NDArray(?:\s|<)"),
         "random": re.compile(r"\bclass\s+NumPyRandom\b"),
+        "fft": re.compile(r"\bclass\s+FourierModule\b"),
+        "linalg": re.compile(r"\bclass\s+linalg\b"),
     }
 
     def __init__(self) -> None:
@@ -311,12 +313,16 @@ def category_for(surface: str, name: str, kind: str) -> str:
 
 def member_maps(inventory: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], dict[str, list[dict[str, Any]]]]:
     by_target: dict[str, dict[str, Any]] = {}
-    by_surface: dict[str, list[dict[str, Any]]] = {"np": [], "ndarray": [], "random": []}
+    by_surface: dict[str, list[dict[str, Any]]] = {"np": [], "ndarray": [], "random": [], "fft": [], "linalg": []}
     source_locator = SourceLocator()
+    # np.fft.* lives on the FourierModule facade (reached via the np.fft property) and np.linalg.* on the
+    # nested np.linalg static class, so their prefixes are the facade type names — not "NumSharp.np".
     definitions = (
         ("np", "NumSharp.np", inventory["np"]),
         ("ndarray", "NumSharp.NDArray", inventory["ndArray"]),
         ("random", "NumSharp.NumPyRandom", inventory["random"]),
+        ("fft", "NumSharp.FourierModule", inventory["fft"]),
+        ("linalg", "NumSharp.np.linalg", inventory["linalg"]),
     )
     for surface, prefix, type_data in definitions:
         for collection in ("methods", "properties", "fields"):
@@ -387,7 +393,13 @@ def direct_target(row: dict[str, Any], targets: dict[str, dict[str, Any]]) -> st
     kind = row["kind"]
     if row["id"] == "numpy.ndarray":
         return "NumSharp.NDArray"
-    prefix = {"np": "NumSharp.np", "ndarray": "NumSharp.NDArray", "random": "NumSharp.NumPyRandom"}.get(surface)
+    prefix = {
+        "np": "NumSharp.np",
+        "ndarray": "NumSharp.NDArray",
+        "random": "NumSharp.NumPyRandom",
+        "fft": "NumSharp.FourierModule",
+        "linalg": "NumSharp.np.linalg",
+    }.get(surface)
     if prefix:
         candidate = f"{prefix}.{name}"
         member = targets.get(candidate)
