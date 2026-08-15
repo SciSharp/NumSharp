@@ -62,6 +62,24 @@ namespace NumSharp.Interop.OpenBLAS
         public static bool LapackAvailable => OpenBlasNative.IsLoaded && OpenBlasNative.IsLapackLoaded;
 
         /// <summary>
+        ///     True when the loaded library also exports the complex128 CBLAS products the parity
+        ///     backend needs for <c>np.dot</c>/<c>np.matmul</c> and the five product gufuncs
+        ///     (<c>inner</c>/<c>vdot</c>/<c>vecdot</c>/<c>matvec</c>/<c>vecmat</c>) on complex128 —
+        ///     <c>zgemm</c>/<c>zgemv</c>/<c>zsyrk</c>/<c>zdotu_sub</c>/<c>zdotc_sub</c>/<c>zaxpy</c>.
+        /// </summary>
+        /// <remarks>
+        ///     A full OpenBLAS (including the bundled scipy-openblas) exports the complex products; a
+        ///     bare real-only reference CBLAS does not. When it does not, complex <c>np.dot</c>/
+        ///     <c>np.matmul</c> and the complex product gufuncs fall through to NumSharp's managed
+        ///     complex kernels — a correct answer, but NOT byte-identical to NumPy (complex float
+        ///     accumulation is not associative). This is the mirror of <see cref="LapackAvailable"/>
+        ///     for the products, and is what a byte-exact live-parity gate keys off to decline a host
+        ///     where the complex products are not loaded rather than assert against the managed kernel.
+        /// </remarks>
+        public static bool ComplexProductsAvailable
+            => OpenBlasNative.IsLoaded && OpenBlasNative.IsComplexBlasLoaded;
+
+        /// <summary>
         ///     Path, symbol scheme, integer width, thread count and build string of the loaded
         ///     library, or null when none is loaded.
         /// </summary>
