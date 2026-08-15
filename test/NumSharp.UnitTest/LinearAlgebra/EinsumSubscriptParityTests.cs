@@ -1,5 +1,4 @@
 using System;
-using System.Text.RegularExpressions;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
@@ -11,16 +10,16 @@ namespace NumSharp.UnitTest.LinearAlgebra
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     The contraction is not implemented, so a VALID expression surfaces as
-    ///     <see cref="NotSupportedException"/> — but the parser has already resolved the output
-    ///     shape by then and the message carries it. <see cref="Contracts"/> reads it back, which is
-    ///     what makes the parser comparable against NumPy's real answer without a kernel: every
-    ///     shape asserted below was produced by running the same expression through NumPy 2.4.2.
+    ///     The contraction now computes, so a VALID expression returns an array — and
+    ///     <see cref="Contracts"/> asserts its SHAPE against NumPy's. Every shape below was produced
+    ///     by running the same expression through NumPy 2.4.2; the value parity is gated separately by
+    ///     <see cref="EinsumContractionTests"/>.
     ///     </para>
     ///     <para>
     ///     NumPy carries TWO einsum parsers — the C one behind the default <c>optimize=False</c> and
     ///     a Python one behind the <c>optimize</c> path — and they word the same rejection
-    ///     differently. These are the C one's texts, since that is what a default call hits.
+    ///     differently. These are the C one's texts, since that is what a default call hits, and they
+    ///     are unchanged by the contraction landing (the engine parses before it contracts).
     ///     </para>
     /// </remarks>
     [TestClass]
@@ -32,17 +31,13 @@ namespace NumSharp.UnitTest.LinearAlgebra
         private static NDArray V3 => np.arange(3.0);
 
         /// <summary>
-        ///     Asserts the expression parses and that the contraction WOULD produce
-        ///     <paramref name="shape"/> — the shape NumPy 2.4.2 actually returns for it.
+        ///     Asserts the expression parses and CONTRACTS to <paramref name="shape"/> — the shape
+        ///     NumPy 2.4.2 actually returns for it.
         /// </summary>
         private static void Contracts(string shape, Func<NDArray> call)
         {
-            var raised = new Action(() => call()).Should().Throw<NotSupportedException>()
-                .Which;
-
-            var match = Regex.Match(raised.Message, @"shape \(([^)]*)\)");
-            match.Success.Should().BeTrue("the message must carry the resolved output shape");
-            match.Groups[1].Value.Should().Be(shape);
+            var result = call();
+            string.Join(",", result.shape).Should().Be(shape);
         }
 
         #region shapes the parser resolves
@@ -349,15 +344,12 @@ namespace NumSharp.UnitTest.LinearAlgebra
         #endregion
 
         [TestMethod]
-        public void TheKernelIsWhatIsMissing_AndTheMessageSaysSo()
+        public void TheContractionComputes_ThroughTheMatrixProduct()
         {
-            // Not the same story as np.linalg: no backend will supply this. The message has to send
-            // the reader to tensordot rather than to a package.
-            new Action(() => np.einsum("ij,jk->ik", A23, A32))
-                .Should().Throw<NotSupportedException>()
-                .Which.Message.Should().Contain("contraction kernel")
-                .And.Contain("np.tensordot")
-                .And.NotContain("IBlasBackend");
+            // The subscripts that used to resolve only a SHAPE now resolve a value. A plain matmul
+            // reduces to np.matmul (hence OpenBLAS when a backend is referenced); the answer is
+            // NumPy's. arange(6).reshape(2,3) @ arange(6).reshape(3,2) = [[10,13],[28,40]].
+            np.einsum("ij,jk->ik", A23, A32).Should().BeOfValues(10, 13, 28, 40).And.BeShaped(2, 2);
         }
     }
 }

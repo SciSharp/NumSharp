@@ -80,16 +80,6 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [TestMethod]
-        public void Einsum_IsASignatureStub_AndSaysSoDistinctly()
-        {
-            // Not waiting on a backend — waiting on a subscript parser. The message must not read
-            // like the LAPACK ones or a reader will go looking for a package to install.
-            new Action(() => np.einsum("ij,jk->ik", M23, np.arange(6.0).reshape(3, 2)))
-                .Should().Throw<NotSupportedException>()
-                .Which.Message.Should().Contain("np.einsum").And.Contain("np.tensordot");
-        }
-
-        [TestMethod]
         public void MatrixPower_StopsOnlyOnANegativeExponent()
         {
             // a**-n is inv(a)**n, so this is the one power that needs a backend.
@@ -190,6 +180,19 @@ namespace NumSharp.UnitTest.LinearAlgebra
             np.linalg.multi_dot(new[] {np.arange(3.0), B, C}, o12)
                 .Should().BeShaped(2).And.BeOfValues(324, 422);
             o12.Should().BeOfValues(324, 422);
+        }
+
+        [TestMethod]
+        public void Einsum_Computes_WithoutABackend_LikeTheProducts()
+        {
+            // einsum is a composition over the matrix PRODUCTS, so it sits on the products' side of
+            // the seam: it computes with the managed kernels when no backend is installed (a backend
+            // only changes WHICH product runs), never a NotSupportedException like the factorisations.
+            np.einsum("ij,jk->ik", np.arange(6.0).reshape(2, 3), np.arange(6.0).reshape(3, 2))
+                .Should().BeOfValues(10, 13, 28, 40).And.BeShaped(2, 2);
+
+            np.einsum("ii->", np.arange(9.0).reshape(3, 3)).Should().BeOfValues(12);   // trace
+            np.einsum("ij->ji", M23).Should().BeShaped(3, 2);                          // transpose
         }
 
         [TestMethod]

@@ -18,17 +18,16 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.einsum.html
         ///     <para>
-        ///     <b>The subscripts are fully parsed and validated; the CONTRACTION is not implemented</b>
-        ///     and raises <see cref="NotSupportedException"/> from the engine. Every rejection below
-        ///     therefore behaves exactly as NumPy's today — a malformed expression, a wrong operand
+        ///     The contraction is a composition over the matrix products — a port of NumPy's
+        ///     <c>bmm_einsum</c> (its <c>optimize=</c> path) that reduces each pairwise contraction to
+        ///     <see cref="matmul"/>, so it <b>runs through OpenBLAS whenever a backend is referenced</b>
+        ///     (byte-identical to NumPy for float32/float64/complex128) and through the managed GEMM
+        ///     otherwise. Integer and boolean contractions are byte-exact; a pure float summation done
+        ///     outside a product (e.g. <c>ij-&gt;i</c>, or across three or more operands) can differ in
+        ///     the last ULP because its accumulation order follows <see cref="sum"/> and a left-to-right
+        ///     fold. Every rejection below is unchanged — a malformed expression, a wrong operand
         ///     count, a bad ellipsis, an impossible diagonal or a shape conflict is reported the same
-        ///     way and with the same text.
-        ///     </para>
-        ///     <para>
-        ///     Unlike the LAPACK entry points this is not waiting on a backend. What is missing is a
-        ///     contraction kernel and a path planner, both NumSharp's own work. Express the
-        ///     contraction with <see cref="tensordot(NDArray, NDArray, int)"/>, <see cref="dot"/>,
-        ///     <see cref="matmul"/> or <see cref="vecdot"/> in the meantime.
+        ///     way and with the same text as NumPy's default parser.
         ///     </para>
         ///     <para>
         ///     <b>One deliberate divergence.</b> NumPy carries TWO independent einsum parsers — the C
@@ -83,12 +82,10 @@ namespace NumSharp
             RequireCasting(casting);
             RequireOptimize(optimize);
 
-            // Parses AND validates: rank, ellipsis grammar, operand count, output labels, out='s
-            // rank, every diagonal and every label extent. Nothing below this line can be reached
-            // by an expression NumPy would reject.
-            var plan = EinsumSubscripts.Parse(subscripts, operands, @out);
-
-            return operands[0].TensorEngine.Einsum(subscripts, operands, @out, dtype, order, casting, optimize, plan.OutputShape);
+            // The engine parses AND validates (rank, ellipsis grammar, operand count, output labels,
+            // out='s rank, every diagonal and every label extent) before it contracts — so a
+            // malformed expression is rejected there with NumPy's own text, exactly as before.
+            return operands[0].TensorEngine.Einsum(subscripts, operands, @out, dtype, order, casting, optimize);
         }
 
         /// <summary>

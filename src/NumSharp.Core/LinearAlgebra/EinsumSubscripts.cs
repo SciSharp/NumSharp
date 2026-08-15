@@ -171,6 +171,83 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Renders the parsed <see cref="sbyte"/> label plan into concrete per-operand term
+        ///     strings plus the output term string — the form the contraction driver consumes, and
+        ///     the same one NumPy's <c>_parse_einsum_input</c> hands to <c>bmm_einsum</c>.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     A diagonal (a negative offset back to a first occurrence) is rendered as the REPEATED
+        ///     label, so <c>"ii"</c> comes back as <c>"ii"</c> and the driver's single-term prep takes
+        ///     the diagonal exactly as NumPy's <c>c_einsum("ii->i", a)</c> would.
+        ///     </para>
+        ///     <para>
+        ///     Each ellipsis (broadcast) dimension is given a RESERVED character from the Unicode
+        ///     private-use area — <c>U+E000 + slot</c> — chosen so it can never collide with an ASCII
+        ///     letter label (labels are <c>A-Z</c>/<c>a-z</c>). These characters are internal to the
+        ///     driver's index bookkeeping and never surface; using a reserved range instead of NumPy's
+        ///     "letters not otherwise used" pool sidesteps the 52-letter ceiling that pool imposes.
+        ///     Broadcast dimensions align to the RIGHT of the global broadcast block, exactly as
+        ///     <see cref="ResolveShape"/> aligns their extents, so a shared ellipsis maps to the same
+        ///     reserved character across every operand and the output.
+        ///     </para>
+        /// </remarks>
+        internal (string[] InputTerms, string OutputTerm) BuildTerms()
+        {
+            const int broadcastBase = 0xE000;
+
+            var inputTerms = new string[OperandLabels.Length];
+            for (int iop = 0; iop < OperandLabels.Length; iop++)
+            {
+                var labels = OperandLabels[iop];
+
+                int operandBroadcastNdim = 0;
+                foreach (sbyte label in labels)
+                {
+                    if (label == 0)
+                        operandBroadcastNdim++;
+                }
+
+                var term = new StringBuilder(labels.Length);
+                int broadcastSeen = 0;
+                for (int idim = 0; idim < labels.Length; idim++)
+                {
+                    sbyte label = labels[idim];
+                    if (label > 0)
+                    {
+                        term.Append((char)label);
+                    }
+                    else if (label < 0)
+                    {
+                        // A diagonal — render the label of the first occurrence it points back to.
+                        int first = idim + label;
+                        term.Append((char)labels[first]);
+                    }
+                    else
+                    {
+                        int slot = BroadcastNdim - operandBroadcastNdim + broadcastSeen;
+                        broadcastSeen++;
+                        term.Append((char)(broadcastBase + slot));
+                    }
+                }
+
+                inputTerms[iop] = term.ToString();
+            }
+
+            var output = new StringBuilder(OutputLabels.Length);
+            int outputBroadcast = 0;
+            foreach (sbyte label in OutputLabels)
+            {
+                if (label > 0)
+                    output.Append((char)label);
+                else
+                    output.Append((char)(broadcastBase + outputBroadcast++));
+            }
+
+            return (inputTerms, output.ToString());
+        }
+
+        /// <summary>
         ///     Port of <c>parse_operand_subscripts</c>.
         /// </summary>
         private static sbyte[] ParseOperandLabels(string subscripts, int start, int length, int ndim, int iop,

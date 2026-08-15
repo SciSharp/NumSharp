@@ -1366,7 +1366,7 @@ introselect (`Utilities/QuickSelect.cs`, the median/percentile primitive), the s
   See `Sorting_Searching_Counting/np.{partition,argpartition,lexsort,nanargmax,sort_complex}.cs`.
 
 ### Linear Algebra
-`diag`, `diagflat`, `diag_indices`, `diag_indices_from`, `diagonal`, `dot`, `einsum` (subscripts parsed; contraction pending), `fill_diagonal`, `inner`, `mask_indices`, `matmul`, `matvec`, `outer`, `tensordot`, `trace`, `tril`, `tril_indices`, `tril_indices_from`, `triu`, `triu_indices`, `triu_indices_from`, `vdot`, `vecdot`, `vecmat`
+`diag`, `diagflat`, `diag_indices`, `diag_indices_from`, `diagonal`, `dot`, `einsum` (contracts via the matrix products / OpenBLAS), `fill_diagonal`, `inner`, `mask_indices`, `matmul`, `matvec`, `outer`, `tensordot`, `trace`, `tril`, `tril_indices`, `tril_indices_from`, `triu`, `triu_indices`, `triu_indices_from`, `vdot`, `vecdot`, `vecmat`
 
 `np.linalg.*`: `cholesky`, `cond`, `cross`, `det`, `diagonal`, `eig`, `eigh`, `eigvals`, `eigvalsh`, `inv`, `lstsq`, `matmul`, `matrix_norm`, `matrix_power`, `matrix_rank`, `matrix_transpose`, `multi_dot`, `norm`, `outer`, `pinv`, `qr`, `slogdet`, `solve`, `svd`, `svdvals`, `tensordot`, `tensorinv`, `tensorsolve`, `trace`, `vecdot`, `vector_norm` (+ `LinAlgError`)
 
@@ -1473,15 +1473,39 @@ renders for humans everywhere else).
 stacking three 0-d arrays gives `(3,1)` where NumPy gives `(3,)`. `linalg.cross` routes around it
 with `expand_dims`+`concatenate`.
 
-### `np.einsum` — the subscript language is complete, the contraction is not
+### `np.einsum` — subscript language + contraction, the contraction routed through the matrix products
 
 The parser is a port of `PyArray_EinsteinSum`'s parsing block plus `parse_operand_subscripts` and
 `parse_output_subscripts` (`numpy/_core/src/multiarray/einsum.cpp`) — `EinsumSubscripts.cs`. **Every
-expression NumPy accepts parses, every expression NumPy rejects is rejected with NumPy's own text,
-and the output SHAPE is resolved** — it is carried in the `NotSupportedException` the engine then
-raises, which is what let the whole surface be differential-tested against NumPy without a kernel
-(75 cases: 73 exact, 2 the documented divergence below). Both spellings work: the subscripts string
-and NumPy's sublist form `np.einsum(a, [0,1], b, [1,2], [0,2])`.
+expression NumPy accepts parses AND CONTRACTS, and every expression NumPy rejects is rejected with
+NumPy's own text.** Both spellings work: the subscripts string and NumPy's sublist form
+`np.einsum(a, [0,1], b, [1,2], [0,2])`.
+
+**The contraction goes through OpenBLAS "like other functions", by construction.** It is a port of
+NumPy's OWN `optimize=` path — `bmm_einsum` + `_parse_eq_to_batch_matmul` in `einsumfunc.py` — which
+reduces every pairwise contraction to a `matmul` (plus a single-operand einsum that takes diagonals,
+sums, and transposes the terms first), or to a broadcast `multiply` when nothing is contracted. So
+the products land on `TensorEngine.Matmul`, which already dispatches on `Blas`: with
+`NumSharp.Interop.OpenBLAS` referenced the float32/float64/complex128 contractions are **byte-identical
+to NumPy**, and without it they fall to the managed GEMM (exactly as `np.matmul` itself does). There
+is deliberately **no `TryEinsum` seam** — einsum reaches a backend the indirect way `np.tensordot` and
+`np.linalg.multi_dot` do, through the product. `TensorEngine.Einsum` (`Backends/TensorEngine.Einsum.cs`)
+is the whole composition: N operands fold left-to-right, each step through `PairwiseContract`.
+
+**Value parity, with a probed split.** Integer and boolean contractions are byte-exact everywhere
+(modular / logical reduction is order-independent); every product-shaped case (matmul, batched
+matmul, matvec, `ij,kj->ik`, tensor contractions, inner/outer/kron) reduces to `np.matmul`/
+`np.multiply` bit-for-bit — verified: `einsum(...)` equals the direct product IN-PROCESS across
+f64/c128 — so it inherits their parity. A pure FLOAT summation done OUTSIDE a product (`ij->i`, a
+diagonal-then-sum, or the accumulation across three or more float operands) can differ in the last
+ULP because its order follows `np.sum` and the left-to-right fold rather than NumPy's einsum
+iterator; those stay `allclose`. All 15 dtypes contract (Half/Decimal/Char via the scalar matmul
+paths, complex UNCONJUGATED — einsum never conjugates, unlike `vdot`). einsum preserves the operand
+dtype like NumPy (`einsum('ij->i', int32)` is int32, NOT `np.sum`'s widened int64); two-operand
+promotion is `result_type`; `dtype=` forces the accumulation dtype under the `casting` rule; `out=`
+and `order=` are honoured. Differential-verified against NumPy 2.4.2 across 300+ cases (all dtypes ×
+matmul/transpose/diagonal/trace/reductions/outer/inner/batched/ellipsis/multi-diagonal/broadcast-
+contraction/3-operand/scalar).
 
 **NumPy has TWO einsum parsers** — the C one behind the default `optimize=False` and a Python one
 (`einsumfunc.py`) behind the `optimize` path — and they word the same rejection differently.
@@ -1524,12 +1548,12 @@ and naming them is also what keeps them unambiguous here: NumSharp converts scal
 implicitly, so a fully positional 7-argument call matches both the `params` overload and the full one
 and the compiler rejects it.
 
-**Not implemented and deliberately out of scope:** `np.einsum_path` (NumPy's contraction planner —
-its own function, ~400 lines of optimal/greedy search), and the contraction kernel itself. Unlike
-`np.linalg`, einsum is NOT waiting on a backend — a summation kernel over an arbitrary label set and
-a path planner are NumSharp's own work — so the seam has no `TryEinsum` and the message points at
-`np.tensordot` rather than at a package to install. Gate:
-`LinearAlgebra/EinsumSubscriptParityTests.cs` (21).
+**Deliberately out of scope:** `np.einsum_path` (NumPy's contraction planner — its own function,
+~400 lines of optimal/greedy search). The `optimize=` argument is accepted and validated but does not
+change the numerics — NumSharp always contracts pairwise left-to-right; a smarter path would only
+change float accumulation order (hence the last ULP for 3+ float operands), never correctness. Gate:
+`LinearAlgebra/EinsumSubscriptParityTests.cs` (subscript grammar + resolved shapes) +
+`LinearAlgebra/EinsumContractionTests.cs` (the values, against NumPy 2.4.2).
 
 **Signature parity is its own gate.** `LinAlgSignatureParityTests` reflects over the whole surface
 and asserts each function has an overload whose parameter NAMES appear in NumPy's ORDER, plus the

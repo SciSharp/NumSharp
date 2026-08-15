@@ -219,37 +219,9 @@ namespace NumSharp
 
         #endregion
 
-        #region Einstein summation
-
-        /// <summary>
-        ///     <c>np.einsum</c> — the contraction itself, reached only once the subscripts have
-        ///     parsed and every operand validated.
-        /// </summary>
-        /// <param name="outputShape">
-        ///     The shape the contraction produces, already resolved by the parser — so an
-        ///     implementation inherits the ellipsis, diagonal and broadcast bookkeeping instead of
-        ///     redoing it.
-        /// </param>
-        /// <remarks>
-        ///     Deliberately NOT routed through <see cref="Blas"/>: only the pairwise contractions
-        ///     <c>optimize=</c> plans can reach a BLAS, and they reach it through
-        ///     <see cref="Dot"/>/<c>np.tensordot</c> already. What is missing here is a summation
-        ///     kernel over an arbitrary label set and a contraction-path planner — NumSharp's own
-        ///     work — so there is no operand shape a backend could answer for, and no
-        ///     <c>TryEinsum</c> on the seam.
-        /// </remarks>
-        public virtual NDArray Einsum(string subscripts, NDArray[] operands, NDArray @out,
-            NPTypeCode? dtype, char order, string casting, object optimize, long[] outputShape)
-            => throw new NotSupportedException(
-                $"np.einsum cannot compute \"{subscripts}\" — {GetType().Name} implements no " +
-                "contraction kernel. The subscripts parsed cleanly and the result would have shape (" +
-                string.Join(",", outputShape) + "), so what is missing is the KERNEL, not the " +
-                "expression. Unlike the np.linalg entry points this is not waiting on a backend: " +
-                "einsum needs a summation kernel over an arbitrary label set plus a contraction-path " +
-                "planner, both NumSharp's own work. Express the contraction with np.tensordot, " +
-                "np.dot, np.matmul or np.vecdot in the meantime.");
-
-        #endregion
+        // np.einsum's contraction lives in TensorEngine.Einsum.cs — a composition over the matrix
+        // products (Dot/Matmul) so it inherits their Blas routing, exactly as NumPy's einsumfunc.py
+        // composes over c_einsum + matmul rather than adding a new low-level kernel.
 
         /// <summary>
         ///     The one message every unserved factorisation raises. It names the NumPy API, the
