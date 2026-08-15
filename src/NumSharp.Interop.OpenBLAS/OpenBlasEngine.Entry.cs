@@ -30,8 +30,10 @@ namespace NumSharp.Interop.OpenBLAS
 
             if (typeCode == NPTypeCode.Single)
                 Matmul2D<float, SingleBlas>(left, right, result);
-            else
+            else if (typeCode == NPTypeCode.Double)
                 Matmul2D<double, DoubleBlas>(left, right, result);
+            else
+                Matmul2D<Complex, ComplexBlas>(left, right, result);
 
             return true;
         }
@@ -97,8 +99,10 @@ namespace NumSharp.Interop.OpenBLAS
 
             if (typeCode == NPTypeCode.Single)
                 MatmulBatched<float, SingleBlas>(left, right, result, dm, dn, dp);
-            else
+            else if (typeCode == NPTypeCode.Double)
                 MatmulBatched<double, DoubleBlas>(left, right, result, dm, dn, dp);
+            else
+                MatmulBatched<Complex, ComplexBlas>(left, right, result, dm, dn, dp);
 
             return true;
         }
@@ -206,17 +210,21 @@ namespace NumSharp.Interop.OpenBLAS
             // HAVE_CBLAS branch of PyArray_MatrixProduct2 — only for ndim <= 2.
             if (left.Shape.NDim <= 2 && right.Shape.NDim <= 2)
             {
-                return typeCode == NPTypeCode.Single
-                    ? TryDot2D<float, SingleBlas>(left, right, out result)
-                    : TryDot2D<double, DoubleBlas>(left, right, out result);
+                if (typeCode == NPTypeCode.Single)
+                    return TryDot2D<float, SingleBlas>(left, right, out result);
+                if (typeCode == NPTypeCode.Double)
+                    return TryDot2D<double, DoubleBlas>(left, right, out result);
+                return TryDot2D<Complex, ComplexBlas>(left, right, out result);
             }
 
             if (left.Shape.NDim == 0 || right.Shape.NDim == 0)
                 return false; // np.multiply — exact either way, leave it to the engine
 
-            return typeCode == NPTypeCode.Single
-                ? TryDotND<float, SingleBlas>(left, right, out result)
-                : TryDotND<double, DoubleBlas>(left, right, out result);
+            if (typeCode == NPTypeCode.Single)
+                return TryDotND<float, SingleBlas>(left, right, out result);
+            if (typeCode == NPTypeCode.Double)
+                return TryDotND<double, DoubleBlas>(left, right, out result);
+            return TryDotND<Complex, ComplexBlas>(left, right, out result);
         }
 
         /// <summary>

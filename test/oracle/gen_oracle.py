@@ -3435,7 +3435,7 @@ def char_tier(mode):
 # divergence starts at k=10 (45% of elements on the MLP shapes) and reaches 94%
 # at k=784, so this tier sweeps k across the blocking boundaries with random
 # float values, in every layout the two dispatchers route differently.
-MATMUL_PARITY_DTYPES = ["float32", "float64"]
+MATMUL_PARITY_DTYPES = ["float32", "float64", "complex128"]
 
 # k values: 1..4 (agreeing region), the powers of two and their +-1 neighbours
 # (OpenBLAS panel edges), NumSharp's own KC=256 boundary, and the MLP's 784.
@@ -3444,23 +3444,35 @@ MATMUL_PARITY_KS = [1, 2, 3, 4, 5, 7, 8, 9, 10, 15, 16, 17, 31, 32, 33, 63, 64, 
 
 
 def _mp_values(shape, dt, rng, valueclass="normal"):
-    """Operand values. Random by default — regular ramps hide reassociation error."""
+    """Operand values. Random by default — regular ramps hide reassociation error.
+
+    complex128 draws an INDEPENDENT real and imaginary part (a real-only .astype would zero the
+    imag and never exercise zgemm/zdotc's cross terms); every value class applies to both parts.
+    """
     n = int(np.prod(shape)) if shape else 1
-    if valueclass == "wide":
-        # Magnitudes spanning ~40 decades: summation order dominates the result.
-        mant = rng.standard_normal(n)
-        expo = rng.randint(-18, 18, n)
-        a = (mant * (10.0 ** expo))
-    elif valueclass == "specials":
-        a = rng.standard_normal(n)
-        if n >= 4:
+    ndt = np.dtype(dt)
+
+    def draw():
+        if valueclass == "wide":
+            # Magnitudes spanning ~40 decades: summation order dominates the result.
+            return rng.standard_normal(n) * (10.0 ** rng.randint(-18, 18, n))
+        return rng.standard_normal(n)
+
+    a = draw() + 1j * draw() if ndt.kind == "c" else draw()
+
+    if valueclass == "specials" and n >= 4:
+        if ndt.kind == "c":
+            a[0] = complex(np.inf, 1.0)
+            a[1] = complex(-np.inf, np.nan)
+            a[2] = complex(np.nan, np.inf)
+            a[3] = complex(0.0, -0.0)
+        else:
             a[0] = np.inf
             a[1] = -np.inf
             a[2] = np.nan
             a[3] = 0.0
-    else:
-        a = rng.standard_normal(n)
-    return np.ascontiguousarray(a.astype(np.dtype(dt)).reshape(shape))
+
+    return np.ascontiguousarray(a.astype(ndt).reshape(shape))
 
 
 def _mp_layout(arr, kind, rng):
@@ -3504,6 +3516,34 @@ def _mp_case(cases, op, name, A, ar, B, br, rng, valueclass="normal"):
     baseB, viewB = _mp_layout(B, br, rng)
     f = np.dot if op == "dot" else np.matmul
     r = np.asarray(f(viewA, viewB))
+    cases.append({
+        "id": f"{op}/{name}/{ar}{br}/{A.dtype.name}x{B.dtype.name}/{len(cases)}",
+        "op": op,
+        "params": {},
+        "operands": [describe(baseA, viewA), describe(baseB, viewB)],
+        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+        "layout": f"{ar}{br}",
+        "valueclass": valueclass,
+    })
+
+
+_MP_PRODUCT_FNS = {"inner": np.inner, "vdot": np.vdot, "vecdot": np.vecdot,
+                   "matvec": np.matvec, "vecmat": np.vecmat}
+
+
+def _mp_prod_case(cases, op, name, A, ar, B, br, rng, valueclass="normal"):
+    """Emit one parity case for the CBLAS product family beyond dot/matmul.
+
+    Same host-pinned, backend-enabled gate as _mp_case, but for inner/vdot/vecdot/matvec/vecmat —
+    whose managed fallbacks (Multiply+ReduceAdd for vecdot, conj+dotu for complex vdot, conj+gemv
+    for complex vecmat) reassociate the sum differently than NumPy's cblas dot/dotc/gemm and so are
+    NOT byte-identical here. Deep contraction lengths and every routing layout make that show.
+    OpRegistry dispatches vecdot with axis=-1 by default, matching np.vecdot's last-axis core.
+    """
+    baseA, viewA = _mp_layout(A, ar, rng)
+    baseB, viewB = _mp_layout(B, br, rng)
+    r = np.asarray(_MP_PRODUCT_FNS[op](viewA, viewB))
     cases.append({
         "id": f"{op}/{name}/{ar}{br}/{A.dtype.name}x{B.dtype.name}/{len(cases)}",
         "op": op,
@@ -3611,6 +3651,39 @@ def gen_matmul_parity():
                  V((40, 5), dt, "specials"), "C", rng, "specials")
         _mp_case(cases, "dot", "vecvec_wide", V((400,), dt, "wide"), "C",
                  V((400,), dt, "wide"), "C", rng, "wide")
+
+        # --- the CBLAS product family beyond dot/matmul. Backend byte-parity for inner (dot on the
+        # swapaxes'd operand), vdot (the CONJUGATING zdotc for complex), vecdot (per-inner dotc, was
+        # Multiply+ReduceAdd), matvec (gemv / per-row dotu) and vecmat (complex gemm-ConjTrans /
+        # real gemv, else per-col dotc). Deep K (44/300) so reassociation shows; the F/stride2
+        # layouts and the dn==1 shapes drive the blasable-vs-portable route split; the 3-D operands
+        # exercise the gufunc's broadcast-of-leading-axes outer loop.
+        for kk in (44, 300):
+            _mp_prod_case(cases, "inner", f"vec_k{kk}", V((kk,), dt), "C", V((kk,), dt), "C", rng)
+            _mp_prod_case(cases, "vdot", f"vec_k{kk}", V((kk,), dt), "C", V((kk,), dt), "C", rng)
+            _mp_prod_case(cases, "vecdot", f"k{kk}", V((kk,), dt), "C", V((kk,), dt), "C", rng)
+        _mp_prod_case(cases, "inner", "mat", V((6, 120), dt), "C", V((5, 120), dt), "C", rng)
+        _mp_prod_case(cases, "inner", "matF", V((6, 120), dt), "F", V((5, 120), dt), "C", rng)
+        _mp_prod_case(cases, "vdot", "frob", V((8, 30), dt), "C", V((8, 30), dt), "C", rng)
+        _mp_prod_case(cases, "vdot", "frobF", V((8, 30), dt), "F", V((8, 30), dt), "C", rng)
+        for lm in ("C", "F", "stride2"):
+            _mp_prod_case(cases, "matvec", f"mv_{lm}", V((30, 60), dt), lm, V((60,), dt), "C", rng)
+            _mp_prod_case(cases, "vecmat", f"vm_{lm}", V((60,), dt), "C", V((60, 30), dt), lm, rng)
+        # gufunc outer loop over broadcast leading axes (stacked, and vector-vs-batch broadcast).
+        _mp_prod_case(cases, "vecdot", "batch", V((7, 90), dt), "C", V((7, 90), dt), "C", rng)
+        _mp_prod_case(cases, "vecdot", "bcast", V((90,), dt), "C", V((7, 90), dt), "C", rng)
+        _mp_prod_case(cases, "matvec", "batch", V((5, 30, 60), dt), "C", V((5, 60), dt), "C", rng)
+        _mp_prod_case(cases, "matvec", "bcast", V((5, 30, 60), dt), "C", V((60,), dt), "C", rng)
+        _mp_prod_case(cases, "vecmat", "batch", V((5, 60), dt), "C", V((5, 60, 30), dt), "C", rng)
+        _mp_prod_case(cases, "vecmat", "bcast", V((60,), dt), "C", V((5, 60, 30), dt), "C", rng)
+        # non-blasable core (dn==1 / dm==1) -> per-row/col dot instead of gemv/gemm.
+        _mp_prod_case(cases, "matvec", "dn1", V((30, 1), dt), "C", V((1,), dt), "C", rng)
+        _mp_prod_case(cases, "vecmat", "dn1", V((1,), dt), "C", V((1, 30), dt), "C", rng)
+        # complex vecmat/vecdot with WIDE magnitudes — the conjugating path under reassociation stress.
+        _mp_prod_case(cases, "vecdot", "wide", V((256,), dt, "wide"), "C",
+                      V((256,), dt, "wide"), "C", rng, "wide")
+        _mp_prod_case(cases, "vdot", "wide", V((256,), dt, "wide"), "C",
+                      V((256,), dt, "wide"), "C", rng, "wide")
 
     # --- blocked / multi-threaded kernel sizes (f32 only for corpus weight; f64 smaller).
     _mp_case(cases, "dot", "big", _mp_values((64, 256), "float32", rng), "C",

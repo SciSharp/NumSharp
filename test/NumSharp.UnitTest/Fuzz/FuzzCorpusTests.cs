@@ -427,7 +427,7 @@ namespace NumSharp.UnitTest.Fuzz
             ["logic.jsonl"] = 1775,
             ["manip.jsonl"] = 6060,
             ["matmul.jsonl"] = 769,
-            ["matmul_parity.jsonl"] = 342,
+            ["matmul_parity.jsonl"] = 470,
             ["modf.jsonl"] = 51,
             ["nanreduce.jsonl"] = 6692,
             ["numpy_f32_kernels.jsonl"] = 140,

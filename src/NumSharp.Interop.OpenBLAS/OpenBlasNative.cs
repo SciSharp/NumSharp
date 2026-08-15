@@ -4,6 +4,7 @@ using NumSharp.Backends;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics.X86;
 
@@ -137,6 +138,40 @@ namespace NumSharp.Interop.OpenBLAS
 
         #endregion
 
+        #region function pointers — complex128 BLAS products (zgemm / zgemv / zsyrk / zdotu_sub / zdotc_sub / zaxpy)
+
+        // The complex CBLAS product family behind np.dot / np.matmul for complex128, and the complex
+        // gufunc products (vdot/vecdot/vecmat use the CONJUGATING zdotc, matmul/dot/inner/matvec the
+        // UNCONJUGATED zdotu — see cblasfuncs.c, matmul.c.src, arraytypes.c.src, vdot.c). A
+        // System.Numerics.Complex is two interleaved doubles == BLAS complex*16, so a Complex* casts to
+        // double* with no copy (the same trick the LAPACK z-routines above rely on).
+        //
+        // ABI note that differs from the real gemm/gemv/syrk/axpy above: the complex routines take
+        // alpha and beta BY POINTER (const void*), not by value — so these signatures carry a `double*`
+        // where the real ones carry a `float`/`double`. And the dot is the `_sub` out-pointer form
+        // (cblas_zdotu_sub / cblas_zdotc_sub write the complex result through a trailing `double*`)
+        // rather than a struct-return, matching what NumPy calls and avoiding the compiler-specific
+        // by-value complex-struct return ABI.
+        //
+        // ILP64 (64-bit BLAS int): m/n/k/lda/ldb/ldc/incX/incY are 64-bit; the data and scalars stay
+        // `double*` regardless of the integer width.
+        private static delegate* unmanaged[Cdecl]<int, int, int, long, long, long, double*, double*, long, double*, long, double*, double*, long, void> _zgemm64;
+        private static delegate* unmanaged[Cdecl]<int, int, long, long, double*, double*, long, double*, long, double*, double*, long, void> _zgemv64;
+        private static delegate* unmanaged[Cdecl]<int, int, int, long, long, double*, double*, long, double*, double*, long, void> _zsyrk64;
+        private static delegate* unmanaged[Cdecl]<long, double*, long, double*, long, double*, void> _zdotu_sub64;
+        private static delegate* unmanaged[Cdecl]<long, double*, long, double*, long, double*, void> _zdotc_sub64;
+        private static delegate* unmanaged[Cdecl]<long, double*, double*, long, double*, long, void> _zaxpy64;
+
+        // LP64 (32-bit BLAS int): scipy-openblas32 (win-arm64, x86) and stock system OpenBLAS.
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, int, double*, double*, int, double*, int, double*, double*, int, void> _zgemm32;
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, double*, double*, int, double*, int, double*, double*, int, void> _zgemv32;
+        private static delegate* unmanaged[Cdecl]<int, int, int, int, int, double*, double*, int, double*, double*, int, void> _zsyrk32;
+        private static delegate* unmanaged[Cdecl]<int, double*, int, double*, int, double*, void> _zdotu_sub32;
+        private static delegate* unmanaged[Cdecl]<int, double*, int, double*, int, double*, void> _zdotc_sub32;
+        private static delegate* unmanaged[Cdecl]<int, double*, double*, int, double*, int, void> _zaxpy32;
+
+        #endregion
+
         private static delegate* unmanaged[Cdecl]<int, void> _setNumThreads;
         private static delegate* unmanaged[Cdecl]<int> _getNumThreads;
         private static delegate* unmanaged[Cdecl]<IntPtr> _getConfig;
@@ -249,6 +284,16 @@ namespace NumSharp.Interop.OpenBLAS
         ///     reference CBLAS has no LAPACK, so this can be false while <see cref="IsLoaded"/> is true.
         /// </summary>
         internal static bool IsLapackLoaded { get; private set; }
+
+        /// <summary>
+        ///     True when the loaded library additionally exports the complex128 CBLAS products the
+        ///     parity backend needs (<c>zgemm</c>/<c>zgemv</c>/<c>zsyrk</c>/<c>zdotu_sub</c>/
+        ///     <c>zdotc_sub</c>/<c>zaxpy</c>). Bound best-effort and all-or-nothing: a library missing
+        ///     any of them leaves this false and complex <c>np.dot</c>/<c>np.matmul</c> fall through to
+        ///     NumSharp's managed complex kernel (correct, not byte-parity). Every full OpenBLAS ships
+        ///     the whole set; the flag exists so a bare real-only CBLAS declines cleanly.
+        /// </summary>
+        internal static bool IsComplexBlasLoaded { get; private set; }
 
         /// <summary>The width of a LAPACK <c>fortran_int</c> in bytes — 8 for ILP64, 4 for LP64.</summary>
         internal static int FortranIntSize => IsIlp64 ? 8 : 4;
@@ -454,6 +499,11 @@ namespace NumSharp.Interop.OpenBLAS
                 _ssymm64 = null; _dsymm64 = null; _ssyr2k64 = null; _dsyr2k64 = null;
                 _strmm32 = null; _dtrmm32 = null; _strsm32 = null; _dtrsm32 = null;
                 _ssymm32 = null; _dsymm32 = null; _ssyr2k32 = null; _dsyr2k32 = null;
+                _zgemm64 = null; _zgemv64 = null; _zsyrk64 = null;
+                _zdotu_sub64 = null; _zdotc_sub64 = null; _zaxpy64 = null;
+                _zgemm32 = null; _zgemv32 = null; _zsyrk32 = null;
+                _zdotu_sub32 = null; _zdotc_sub32 = null; _zaxpy32 = null;
+                IsComplexBlasLoaded = false;
                 _setNumThreads = null; _getNumThreads = null; _getConfig = null; _getCoreName = null;
                 _dgetrf64 = null; _dgesv64 = null; _zgetrf64 = null; _zgesv64 = null;
                 _dgetrf32 = null; _dgesv32 = null; _zgetrf32 = null; _zgesv32 = null;
@@ -571,6 +621,13 @@ namespace NumSharp.Interop.OpenBLAS
                 // failing the gemm/gemv/syrk/dot/axpy bind.
                 BindLevel3Extras(handle, prefix, suffix, ilp64);
 
+                // Optional complex128 products — zgemm/zgemv/zsyrk/zdotu_sub/zdotc_sub/zaxpy. Bound
+                // all-or-nothing (IsComplexBlasLoaded) so a bare real-only CBLAS declines complex
+                // cleanly rather than dereferencing a null pointer. Not part of the required core: the
+                // real s/d products are what the bind above guarantees, and a library without the
+                // complex set simply leaves complex np.dot/np.matmul on the managed kernel.
+                BindComplexBlas(handle, prefix, suffix, ilp64);
+
                 // Optional LAPACK LU family — a full OpenBLAS ships it, a bare reference CBLAS does not.
                 // Bound all-or-nothing so IsLapackLoaded is honest: a half-bound set would let a
                 // factorisation call a null pointer.
@@ -629,6 +686,52 @@ namespace NumSharp.Interop.OpenBLAS
                 if (NativeLibrary.TryGetExport(handle, prefix + "cblas_dsyr2k" + suffix, out p)) _dsyr2k32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, double, double*, int, double*, int, double, double*, int, void>)p;
             }
         }
+
+        /// <summary>
+        ///     Binds the complex128 CBLAS products if the library exports them. Like
+        ///     <see cref="BindLapack"/> this is OPTIONAL and ALL-OR-NOTHING: a bare real-only reference
+        ///     CBLAS has no complex products, so a miss simply leaves <see cref="IsComplexBlasLoaded"/>
+        ///     false and complex <c>np.dot</c>/<c>np.matmul</c> fall through to NumSharp's managed
+        ///     complex kernel. A partially-resolved set would let a complex product dereference a null
+        ///     pointer, so every symbol is resolved into a local before a single static is written.
+        /// </summary>
+        private static void BindComplexBlas(IntPtr handle, string prefix, string suffix, bool ilp64)
+        {
+            if (!TryGet(handle, prefix + "cblas_zgemm" + suffix, out var zgemm) ||
+                !TryGet(handle, prefix + "cblas_zgemv" + suffix, out var zgemv) ||
+                !TryGet(handle, prefix + "cblas_zsyrk" + suffix, out var zsyrk) ||
+                !TryGet(handle, prefix + "cblas_zdotu_sub" + suffix, out var zdotu) ||
+                !TryGet(handle, prefix + "cblas_zdotc_sub" + suffix, out var zdotc) ||
+                !TryGet(handle, prefix + "cblas_zaxpy" + suffix, out var zaxpy))
+            {
+                return; // no complex products — complex dot/matmul stay on the managed kernel
+            }
+
+            if (ilp64)
+            {
+                _zgemm64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, long, double*, double*, long, double*, long, double*, double*, long, void>)zgemm;
+                _zgemv64 = (delegate* unmanaged[Cdecl]<int, int, long, long, double*, double*, long, double*, long, double*, double*, long, void>)zgemv;
+                _zsyrk64 = (delegate* unmanaged[Cdecl]<int, int, int, long, long, double*, double*, long, double*, double*, long, void>)zsyrk;
+                _zdotu_sub64 = (delegate* unmanaged[Cdecl]<long, double*, long, double*, long, double*, void>)zdotu;
+                _zdotc_sub64 = (delegate* unmanaged[Cdecl]<long, double*, long, double*, long, double*, void>)zdotc;
+                _zaxpy64 = (delegate* unmanaged[Cdecl]<long, double*, double*, long, double*, long, void>)zaxpy;
+            }
+            else
+            {
+                _zgemm32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, int, double*, double*, int, double*, int, double*, double*, int, void>)zgemm;
+                _zgemv32 = (delegate* unmanaged[Cdecl]<int, int, int, int, double*, double*, int, double*, int, double*, double*, int, void>)zgemv;
+                _zsyrk32 = (delegate* unmanaged[Cdecl]<int, int, int, int, int, double*, double*, int, double*, double*, int, void>)zsyrk;
+                _zdotu_sub32 = (delegate* unmanaged[Cdecl]<int, double*, int, double*, int, double*, void>)zdotu;
+                _zdotc_sub32 = (delegate* unmanaged[Cdecl]<int, double*, int, double*, int, double*, void>)zdotc;
+                _zaxpy32 = (delegate* unmanaged[Cdecl]<int, double*, double*, int, double*, int, void>)zaxpy;
+            }
+
+            IsComplexBlasLoaded = true;
+        }
+
+        /// <summary>Thin <see cref="NativeLibrary.TryGetExport"/> wrapper for the all-or-nothing binds.</summary>
+        private static bool TryGet(IntPtr handle, string name, out IntPtr p)
+            => NativeLibrary.TryGetExport(handle, name, out p);
 
         /// <summary>
         ///     Binds the LAPACK LU routines if the library exports them. Unlike the CBLAS symbols this
@@ -1451,6 +1554,74 @@ namespace NumSharp.Interop.OpenBLAS
                 _daxpy64(n, alpha, x, incX, y, incY);
             else
                 _daxpy32((int)n, alpha, x, (int)incX, y, (int)incY);
+        }
+
+        // ---- complex128 product wrappers ------------------------------------------------------------
+        // A System.Numerics.Complex is two interleaved doubles == BLAS complex*16, so a Complex* casts
+        // to the double* the delegates expect with no copy, and alpha/beta (a by-value Complex local)
+        // are handed over as &local reinterpreted double*. cblas_z{gemm,gemv,syrk,axpy} take alpha/beta
+        // BY POINTER (unlike the real routines' by-value scalars), and z{dotu,dotc}_sub write the result
+        // through the trailing double* — the `_sub` out-pointer form NumPy calls. Availability is gated
+        // on IsComplexBlasLoaded (bound all-or-nothing); the parity entry points check it before routing
+        // here, so these never see a null pointer.
+
+        internal static void Zgemm(CBlasOrder order, CBlasTranspose transA, CBlasTranspose transB,
+            long m, long n, long k, Complex alpha, Complex* a, long lda, Complex* b, long ldb, Complex beta, Complex* c, long ldc)
+        {
+            if (IsIlp64)
+                _zgemm64((int)order, (int)transA, (int)transB, m, n, k, (double*)&alpha, (double*)a, lda, (double*)b, ldb, (double*)&beta, (double*)c, ldc);
+            else
+                _zgemm32((int)order, (int)transA, (int)transB, (int)m, (int)n, (int)k, (double*)&alpha, (double*)a, (int)lda, (double*)b, (int)ldb, (double*)&beta, (double*)c, (int)ldc);
+        }
+
+        internal static void Zgemv(CBlasOrder order, CBlasTranspose trans, long m, long n,
+            Complex alpha, Complex* a, long lda, Complex* x, long incX, Complex beta, Complex* y, long incY)
+        {
+            if (IsIlp64)
+                _zgemv64((int)order, (int)trans, m, n, (double*)&alpha, (double*)a, lda, (double*)x, incX, (double*)&beta, (double*)y, incY);
+            else
+                _zgemv32((int)order, (int)trans, (int)m, (int)n, (double*)&alpha, (double*)a, (int)lda, (double*)x, (int)incX, (double*)&beta, (double*)y, (int)incY);
+        }
+
+        internal static void Zsyrk(CBlasOrder order, CBlasUpLo uplo, CBlasTranspose trans,
+            long n, long k, Complex alpha, Complex* a, long lda, Complex beta, Complex* c, long ldc)
+        {
+            if (IsIlp64)
+                _zsyrk64((int)order, (int)uplo, (int)trans, n, k, (double*)&alpha, (double*)a, lda, (double*)&beta, (double*)c, ldc);
+            else
+                _zsyrk32((int)order, (int)uplo, (int)trans, (int)n, (int)k, (double*)&alpha, (double*)a, (int)lda, (double*)&beta, (double*)c, (int)ldc);
+        }
+
+        /// <summary><c>cblas_zdotu_sub</c> — the UNCONJUGATED complex dot (<c>Σ x·y</c>), for np.dot /
+        /// np.matmul / np.inner / np.matvec. Result returned via the <c>_sub</c> out-pointer.</summary>
+        internal static Complex Zdotu(long n, Complex* x, long incX, Complex* y, long incY)
+        {
+            Complex result = default;
+            if (IsIlp64)
+                _zdotu_sub64(n, (double*)x, incX, (double*)y, incY, (double*)&result);
+            else
+                _zdotu_sub32((int)n, (double*)x, (int)incX, (double*)y, (int)incY, (double*)&result);
+            return result;
+        }
+
+        /// <summary><c>cblas_zdotc_sub</c> — the CONJUGATING complex dot (<c>Σ conj(x)·y</c>), for
+        /// np.vdot / np.vecdot / np.vecmat. Result returned via the <c>_sub</c> out-pointer.</summary>
+        internal static Complex Zdotc(long n, Complex* x, long incX, Complex* y, long incY)
+        {
+            Complex result = default;
+            if (IsIlp64)
+                _zdotc_sub64(n, (double*)x, incX, (double*)y, incY, (double*)&result);
+            else
+                _zdotc_sub32((int)n, (double*)x, (int)incX, (double*)y, (int)incY, (double*)&result);
+            return result;
+        }
+
+        internal static void Zaxpy(long n, Complex alpha, Complex* x, long incX, Complex* y, long incY)
+        {
+            if (IsIlp64)
+                _zaxpy64(n, (double*)&alpha, (double*)x, incX, (double*)y, incY);
+            else
+                _zaxpy32((int)n, (double*)&alpha, (double*)x, (int)incX, (double*)y, (int)incY);
         }
 
         // ---- Level-3 siblings (trmm/trsm/symm/syr2k), bound best-effort by BindLevel3Extras. Unlike

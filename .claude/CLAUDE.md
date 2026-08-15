@@ -123,7 +123,7 @@ bit-identical to the per-element route (25/25 A/B), 0.80× → **6.47×** on 200
 
 | Package | Implements | Serves | Why |
 |---------|-----------|--------|-----|
-| `NumSharp.Interop.OpenBLAS` (`src/NumSharp.Interop.OpenBLAS/`) | `OpenBlasBackend : IBlasBackend` | `np.dot`, `np.matmul` for float32/float64 | matrix products through OpenBLAS — faster on large matrices, and **byte-identical to NumPy**. **Bundles the binaries NumPy itself pins** (scipy-openblas 0.3.31.22.0, byte-identical to numpy 2.4.2's) as per-RID runtime assets, so parity needs no Python installed. See below and `docs/GEMM_PARITY.md`. |
+| `NumSharp.Interop.OpenBLAS` (`src/NumSharp.Interop.OpenBLAS/`) | `OpenBlasBackend : IBlasBackend` | `np.dot`, `np.matmul`, `np.inner`, `np.vdot`, `np.vecdot`, `np.matvec`, `np.vecmat` for float32/float64/**complex128** | matrix + vector products through OpenBLAS — faster on large matrices, and **byte-identical to NumPy**. **Bundles the binaries NumPy itself pins** (scipy-openblas 0.3.31.22.0, byte-identical to numpy 2.4.2's) as per-RID runtime assets, so parity needs no Python installed. See below and `docs/GEMM_PARITY.md`. |
 
 **`NumSharp.Interop.OpenBLAS`** exists because no portable algorithm can match NumPy's float matrix
 products: for f32/f64 mat@mat NumPy **always** calls cblas (since gh-23588 it copies non-blasable
@@ -138,8 +138,16 @@ they are different C code and **disagree** when an operand is not blasable (a st
 `@TYPE@_matmul`'s five routes incl. the `a @ a.T` **syrk** shortcut and NumPy's copy/transpose
 rules — which is why `IBlasBackend` has both `TryDot` and `TryMatMul2D` rather than one
 matrix-product method. Strides are ported in ELEMENTS (NumPy's are bytes — same logic with
-`itemsize == 1`). Scope is Single/Double; every other dtype falls through to the managed kernel
-(integer products are bit-exact by construction — modular addition is associative).
+`itemsize == 1`). Scope is **Single/Double/Complex128** — the three dtypes NumPy itself routes
+through cblas (`matmul.c.src`'s `#USEBLAS = 1,1,0,0,1,1,…` covers FLOAT/DOUBLE/CFLOAT/CDOUBLE).
+complex128 rides `zgemm`/`zgemv`/`zsyrk`/`zdotu` (the UNCONJUGATED dot behind dot/matmul/inner/matvec)
+plus `zdotc` (the CONJUGATING dot behind vdot/vecdot/vecmat) — with alpha/beta passed BY POINTER
+(`{1,0}`/`{0,0}`) and the dots via the `_sub` out-pointer form, exactly as NumPy calls them —
+because complex float accumulation is **NOT** associative and so genuinely needs the BLAS path
+(served only when the loaded library exports the complex products; a bare real-only CBLAS declines
+back to the managed complex kernel). Every OTHER dtype falls through to the managed kernel: integer
+and bool products are bit-exact by construction — modular addition **is** associative, so summation
+order cannot change the result.
 
 **The package BUNDLES the binary** (2026-07-26). It ships the prebuilt OpenBLAS artifacts NumPy
 itself pins — `scipy-openblas64==0.3.31.22.0` from numpy's `requirements/ci_requirements.txt`,
@@ -207,7 +215,9 @@ and ignored — removed before any
 release shipped them, pinned by `RetiredAutoinstallAlias_NoLongerSuppresses` — and a
 required-override miss at module load is reported to stderr, backend left uninstalled — never
 substituted). Gate: the **host-pinned**
-`matmul_parity` corpus tier (342 cases — 342 bit-exact with the backend, 294 divergent without it)
+`matmul_parity` corpus tier (589 cases — float32/float64/**complex128** `dot`·`matmul` plus the five
+product gufuncs `inner`/`vdot`/`vecdot`/`matvec`/`vecmat`, all bit-exact with the backend; the complex
+tier alone is 195 cases, the float ones stay byte-for-byte what they were)
 which goes `Inconclusive`, never red, on a host that cannot load the pinned library. The pin matches
 the library by **content hash**, not filename — bundling forced that and it is strictly stronger
 (a name is mangled by delvewheel on one side and plain on the other, so name-matching skipped a
@@ -1368,7 +1378,7 @@ two, and the split is a property of the problem rather than a decision:
 
 | | Members | With no backend installed |
 |---|---|---|
-| **Products** (CBLAS) | `inner`, `vdot`, `vecdot`, `matvec`, `vecmat`, `tensordot`, `linalg.multi_dot`, `matrix_power` (n ≥ 0), the `linalg` Array-API forms, `linalg.norm` except matrix ord ∈ {2, -2, 'nuc'} | **They compute.** Managed kernels; the `IBlasBackend` invariant holds — a backend changes WHICH implementation runs, never WHETHER an answer exists. |
+| **Products** (CBLAS) | `inner`, `vdot`, `vecdot`, `matvec`, `vecmat`, `tensordot`, `linalg.multi_dot`, `matrix_power` (n ≥ 0), the `linalg` Array-API forms, `linalg.norm` except matrix ord ∈ {2, -2, 'nuc'} | **They compute.** Managed kernels; the `IBlasBackend` invariant holds — a backend changes WHICH implementation runs, never WHETHER an answer exists. **With `NumSharp.Interop.OpenBLAS` referenced**, `dot`/`matmul`/`inner`/`vdot`/`vecdot`/`matvec`/`vecmat` route through cblas for **float32/float64/complex128**, byte-identical to NumPy (complex via `zgemm`/`zgemv`/`zsyrk`/`zdotu`/`zdotc`; `tensordot`/`multi_dot`/`matrix_power` inherit it by composing over `dot`/`matmul`) — the 5 product gufuncs override `IBlasBackend.Try{Inner,Vdot,Vecdot,Matvec,Vecmat}`. |
 | **Factorisations** (LAPACK) | `cholesky`, `det`, `slogdet`, `eig`, `eigvals`, `eigh`, `eigvalsh`, `inv`, `pinv`, `lstsq`, `qr`, `solve`, `svd`, `svdvals`, `matrix_rank`, `cond`, `tensorinv`, `tensorsolve`, `matrix_power` (n < 0), `norm` matrix ord ∈ {2, -2, 'nuc'} | **`NotSupportedException` from `TensorEngine`.** Core ships no managed LU/QR/SVD/eigensolver, so there is nothing to fall back to. The message names the NumPy API, the LAPACK routine and the `IBlasBackend.Try*` member to implement. |
 
 **The seam is `TensorEngine.Blas` — one property, not two.** `IBlasBackend.LinearAlgebra.cs` adds 15

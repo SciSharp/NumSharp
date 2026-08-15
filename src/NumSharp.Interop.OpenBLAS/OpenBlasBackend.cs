@@ -11,10 +11,13 @@ namespace NumSharp.Interop.OpenBLAS
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     It answers for <c>float32</c> and <c>float64</c> only, and returns false for everything
-    ///     else so the engine keeps computing it with its own managed kernels — integer and bool
-    ///     products do not need a BLAS anyway (modular integer addition is associative, so summation
-    ///     order cannot change the result).
+    ///     It answers for <c>float32</c>, <c>float64</c> and <c>complex128</c> (the dtypes NumPy itself
+    ///     routes through cblas), and returns false for everything else so the engine keeps computing
+    ///     it with its own managed kernels — integer and bool products do not need a BLAS anyway
+    ///     (modular integer addition is associative, so summation order cannot change the result;
+    ///     complex float accumulation is NOT associative and genuinely needs <c>zgemm</c>/<c>zdotu</c>
+    ///     for byte-parity). complex128 is served only when the loaded library exports the complex
+    ///     products; a bare real-only CBLAS declines it back to the managed complex kernel.
     ///     </para>
     ///     <para>
     ///     <b>Why the two entry points are ported separately.</b> <c>np.dot</c> and <c>np.matmul</c>
@@ -55,6 +58,37 @@ namespace NumSharp.Interop.OpenBLAS
         /// <inheritdoc/>
         public bool TryMatMulBatched(NDArray left, NDArray right, NDArray result)
             => OpenBlasEngine.TryMatmulBatched(left, right, result);
+
+        #region Products (CBLAS inner / vdot / vecdot / matvec / vecmat)
+
+        // The rest of what NumPy sends to cblas beyond dot/matmul. Each is a route-for-route port of
+        // NumPy 2.4.2's own dispatcher (cblasfuncs.c / matmul.c.src / vdot.c), so where the managed
+        // composition reassociates the sum differently — vecdot's Multiply+ReduceAdd, complex vdot's
+        // conj-then-dotu, complex vecmat's conj-then-gemv — this computes the byte-identical answer.
+        // They answer for float32/float64/complex128 (complex128 only when the complex products are
+        // loaded) and decline every other dtype, keeping the managed composition as the fallback.
+
+        /// <inheritdoc/>
+        public bool TryInner(NDArray a, NDArray b, out NDArray result)
+            => OpenBlasEngine.TryInner(a, b, out result);
+
+        /// <inheritdoc/>
+        public bool TryVdot(NDArray a, NDArray b, out NDArray result)
+            => OpenBlasEngine.TryVdot(a, b, out result);
+
+        /// <inheritdoc/>
+        public bool TryVecdot(NDArray x1, NDArray x2, out NDArray result)
+            => OpenBlasEngine.TryVecdot(x1, x2, out result);
+
+        /// <inheritdoc/>
+        public bool TryMatvec(NDArray x1, NDArray x2, out NDArray result)
+            => OpenBlasEngine.TryMatvec(x1, x2, out result);
+
+        /// <inheritdoc/>
+        public bool TryVecmat(NDArray x1, NDArray x2, out NDArray result)
+            => OpenBlasEngine.TryVecmat(x1, x2, out result);
+
+        #endregion
 
         #region LU factorisations (LAPACK getrf / gesv)
 

@@ -69,9 +69,20 @@ namespace NumSharp.Interop.OpenBLAS
             /// <summary>
             ///     NumPy's <c>@name@_dot</c> from arraytypes.c.src: chunked cblas <c>?dot</c> summed in
             ///     a <c>double</c> "for stability", or a sequential same-precision loop when a stride
-            ///     is negative / not a whole number of elements (<c>blas_stride</c> returned 0).
+            ///     is negative / not a whole number of elements (<c>blas_stride</c> returned 0). The
+            ///     UNCONJUGATED dot — <c>?dotu</c> for complex — behind np.dot / np.matmul / np.inner /
+            ///     np.matvec.
             /// </summary>
             void Dot(T* ip1, long is1, T* ip2, long is2, T* op, long n);
+
+            /// <summary>
+            ///     The CONJUGATING dot behind np.vdot / np.vecdot / np.vecmat — NumPy's
+            ///     <c>CDOUBLE_vdot</c> (vdot.c) / <c>@name@_dotc</c> (matmul.c.src): <c>Σ conj(ip1)·ip2</c>,
+            ///     cblas <c>?dotc_sub</c> summed in double, or a sequential same-precision loop for a
+            ///     non-blasable stride. For REAL dtypes conjugation is a no-op and NumPy uses the very
+            ///     same <c>@name@_dot</c>, so the real implementations delegate to <see cref="Dot"/>.
+            /// </summary>
+            void Dotc(T* ip1, long is1, T* ip2, long is2, T* op, long n);
 
             // ---- Level-3 BLAS infrastructure (trmm/trsm/symm/syr2k) --------------------------------
             // These have NO consumer in the parity dispatchers: NumPy's np.* matrix product uses only
@@ -150,6 +161,11 @@ namespace NumSharp.Interop.OpenBLAS
                 }
             }
 
+            // Real: conjugation is a no-op, and NumPy's real vecdot/vecmat/vdot use the very same
+            // @name@_dot (the sdot one) — so Dotc IS Dot.
+            public void Dotc(float* ip1, long is1, float* ip2, long is2, float* op, long n)
+                => Dot(ip1, is1, ip2, is2, op, n);
+
             public void Trmm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
                 CBlasDiag diag, long m, long n, float alpha, float* a, long lda, float* b, long ldb)
                 => OpenBlasNative.Strmm(order, side, uplo, transA, diag, m, n, alpha, a, lda, b, ldb);
@@ -212,6 +228,11 @@ namespace NumSharp.Interop.OpenBLAS
                 }
             }
 
+            // Real: conjugation is a no-op, and NumPy's real vecdot/vecmat/vdot use the very same
+            // @name@_dot (the ddot one) — so Dotc IS Dot.
+            public void Dotc(double* ip1, long is1, double* ip2, long is2, double* op, long n)
+                => Dot(ip1, is1, ip2, is2, op, n);
+
             public void Trmm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
                 CBlasDiag diag, long m, long n, double alpha, double* a, long lda, double* b, long ldb)
                 => OpenBlasNative.Dtrmm(order, side, uplo, transA, diag, m, n, alpha, a, lda, b, ldb);
@@ -227,6 +248,117 @@ namespace NumSharp.Interop.OpenBLAS
             public void Syr2k(CBlasOrder order, CBlasUpLo uplo, CBlasTranspose trans, long n, long k,
                 double alpha, double* a, long lda, double* b, long ldb, double beta, double* c, long ldc)
                 => OpenBlasNative.Dsyr2k(order, uplo, trans, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+        }
+
+        /// <summary>
+        ///     complex128 cblas bindings — NumPy's <c>#prefix = z#</c> expansion. A
+        ///     <see cref="Complex"/> is two interleaved doubles == BLAS <c>complex*16</c>, and NumPy's
+        ///     complex gemm/gemv/syrk/axpy pass <c>alpha=(1,0)</c> / <c>beta=(0,0)</c> BY POINTER
+        ///     (<c>oneD</c>/<c>zeroD</c>) — the wrappers below bake exactly those, mirroring the real
+        ///     structs' <c>1.0/0.0</c>.
+        /// </summary>
+        internal readonly struct ComplexBlas : IBlasType<Complex>
+        {
+            public void Gemm(CBlasOrder order, CBlasTranspose transA, CBlasTranspose transB,
+                long m, long n, long k, Complex* a, long lda, Complex* b, long ldb, Complex* c, long ldc)
+                => OpenBlasNative.Zgemm(order, transA, transB, m, n, k, Complex.One, a, lda, b, ldb, Complex.Zero, c, ldc);
+
+            public void Gemv(CBlasOrder order, CBlasTranspose trans, long m, long n,
+                Complex* a, long lda, Complex* x, long incX, Complex* y, long incY)
+                => OpenBlasNative.Zgemv(order, trans, m, n, Complex.One, a, lda, x, incX, Complex.Zero, y, incY);
+
+            public void Syrk(CBlasOrder order, CBlasUpLo uplo, CBlasTranspose trans,
+                long n, long k, Complex* a, long lda, Complex* c, long ldc)
+                => OpenBlasNative.Zsyrk(order, uplo, trans, n, k, Complex.One, a, lda, Complex.Zero, c, ldc);
+
+            public void Axpy(long n, Complex alpha, Complex* x, long incX, Complex* y, long incY)
+                => OpenBlasNative.Zaxpy(n, alpha, x, incX, y, incY);
+
+            // NumPy's CDOUBLE_dot (arraytypes.c.src): chunked cblas_zdotu_sub summed in a Complex
+            // (== NumPy's double sum[2], "double for stability" — a Complex IS two doubles), or a
+            // sequential same-precision loop for a non-blasable stride. UNCONJUGATED.
+            public void Dot(Complex* ip1, long is1, Complex* ip2, long is2, Complex* op, long n)
+            {
+                long is1b = BlasStride(is1), is2b = BlasStride(is2);
+                if (is1b != 0 && is2b != 0)
+                {
+                    Complex sum = Complex.Zero;
+                    long chunkMax = OpenBlasNative.CBlasChunk;
+                    while (n > 0)
+                    {
+                        long chunk = n < chunkMax ? n : chunkMax;
+                        sum += OpenBlasNative.Zdotu(chunk, ip1, is1b, ip2, is2b);
+                        ip1 += chunk * is1;
+                        ip2 += chunk * is2;
+                        n -= chunk;
+                    }
+
+                    *op = sum;
+                }
+                else
+                {
+                    Complex sum = Complex.Zero;
+                    for (long i = 0; i < n; i++, ip1 += is1, ip2 += is2)
+                        sum += *ip1 * *ip2;
+                    *op = sum;
+                }
+            }
+
+            // NumPy's CDOUBLE_vdot (vdot.c) / CDOUBLE_dotc (matmul.c.src): chunked cblas_zdotc_sub
+            // summed in a Complex, or a sequential conj(ip1)·ip2 loop for a non-blasable stride.
+            public void Dotc(Complex* ip1, long is1, Complex* ip2, long is2, Complex* op, long n)
+            {
+                long is1b = BlasStride(is1), is2b = BlasStride(is2);
+                if (is1b != 0 && is2b != 0)
+                {
+                    Complex sum = Complex.Zero;
+                    long chunkMax = OpenBlasNative.CBlasChunk;
+                    while (n > 0)
+                    {
+                        long chunk = n < chunkMax ? n : chunkMax;
+                        sum += OpenBlasNative.Zdotc(chunk, ip1, is1b, ip2, is2b);
+                        ip1 += chunk * is1;
+                        ip2 += chunk * is2;
+                        n -= chunk;
+                    }
+
+                    *op = sum;
+                }
+                else
+                {
+                    Complex sum = Complex.Zero;
+                    for (long i = 0; i < n; i++, ip1 += is1, ip2 += is2)
+                        sum += Complex.Conjugate(*ip1) * *ip2;
+                    *op = sum;
+                }
+            }
+
+            // The Level-3 siblings have no complex binding — nothing in the parity dispatchers calls
+            // them (they route only gemm/gemv/syrk/dot), and no consumer exists for a complex
+            // triangular/symmetric product, so they are deliberately unbound rather than adding surface
+            // for zero callers. Reached only by a mistaken direct call, which this reports clearly.
+            public void Trmm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
+                CBlasDiag diag, long m, long n, Complex alpha, Complex* a, long lda, Complex* b, long ldb)
+                => throw ComplexLevel3NotBound(nameof(Trmm));
+
+            public void Trsm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, CBlasTranspose transA,
+                CBlasDiag diag, long m, long n, Complex alpha, Complex* a, long lda, Complex* b, long ldb)
+                => throw ComplexLevel3NotBound(nameof(Trsm));
+
+            public void Symm(CBlasOrder order, CBlasSide side, CBlasUpLo uplo, long m, long n,
+                Complex alpha, Complex* a, long lda, Complex* b, long ldb, Complex beta, Complex* c, long ldc)
+                => throw ComplexLevel3NotBound(nameof(Symm));
+
+            public void Syr2k(CBlasOrder order, CBlasUpLo uplo, CBlasTranspose trans, long n, long k,
+                Complex alpha, Complex* a, long lda, Complex* b, long ldb, Complex beta, Complex* c, long ldc)
+                => throw ComplexLevel3NotBound(nameof(Syr2k));
+
+            private static NotSupportedException ComplexLevel3NotBound(string routine)
+                => new NotSupportedException(
+                    $"OpenBlasEngine: the complex128 Level-3 routine '{routine}' is not bound — the parity " +
+                    "matrix-product dispatchers use only gemm/gemv/syrk/dot, and no complex " +
+                    "triangular/symmetric product has a consumer, so ztrmm/ztrsm/zsymm/zsyr2k are " +
+                    "deliberately left unbound.");
         }
 
         /// <summary>
@@ -358,10 +490,18 @@ namespace NumSharp.Interop.OpenBLAS
                 NativeMemory.Clear(p, (nuint)count * (nuint)sizeof(T));
         }
 
-        /// <summary>Whether the parity backend can service this dtype pair at all.</summary>
+        /// <summary>Whether the parity backend can service this dtype at all.</summary>
+        /// <remarks>
+        ///     Single/Double whenever a CBLAS is loaded; Complex only when the loaded library also
+        ///     exports the complex128 products (<see cref="OpenBlasNative.IsComplexBlasLoaded"/>) — a
+        ///     bare real-only CBLAS declines complex here, so the engine keeps it on the managed kernel
+        ///     rather than routing to an unbound <c>zgemm</c>.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static bool IsSupported(NPTypeCode common)
-            => common == NPTypeCode.Single || common == NPTypeCode.Double;
+            => common == NPTypeCode.Single
+               || common == NPTypeCode.Double
+               || (common == NPTypeCode.Complex && OpenBlasNative.IsComplexBlasLoaded);
 
         /// <summary>
         ///     Casts an operand to the common dtype when needed. NumPy does this up front with
