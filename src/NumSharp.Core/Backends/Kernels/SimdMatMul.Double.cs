@@ -29,12 +29,20 @@ using NumSharp.Utilities;
 // matrix large enough to care about, packing is <3% of the total work.
 //
 // Small matrices (all dims <= BLOCKING_THRESHOLD) keep the simple IKJ SIMD
-// loop — its bStride1 != 1 case is scalar, which is fine at that size and
-// preserves the bit-exact accumulation order the small-products fuzz tier pins.
+// loop when B's inner stride is 1 — zero packing/alloc overhead there. When
+// bStride1 != 1 the simple path's inner loop is SCALAR, and blocked (whose
+// packing restores SIMD) is faster from ~4096 MACs up (measured: 3.0x at
+// 16^3 growing to 5.9x at 128^3; the worst mid-size cell, 8x128x128, is
+// 1.04x), so mid-size strided-B routes to blocked above that floor. Below it
+// the simple path stays — the two pack-buffer allocs (~0.5 us) would dominate
+// micro-dots (e.g. batched 4x4 stacks), and the tiny bit-exact fuzz-corpus
+// products keep their committed accumulation order.
 //
 // Measured on 500×2000 @ 2000×500 (Release, best-of-5): transposed B (the
 // A@A.T pattern np.cov hits) 346 ms → 23 ms (2.9 → 44 GFLOP/s), contiguous
-// 52 ms → 23 ms, transposed A 55 ms → 22 ms.
+// 52 ms → 23 ms, transposed A 55 ms → 22 ms. K-loop unrolling stays at 4x:
+// an 8x variant was measured 25% SLOWER at every shape/layout (doubled
+// live-range pressure on 16 YMM registers spills accumulators).
 //
 // =============================================================================
 
@@ -46,6 +54,13 @@ namespace NumSharp.Backends.Kernels
         // (MR, MC, KC, BLOCKING_THRESHOLD are shared with the float kernels;
         // NR = 16 is the float micro-kernel width, so double needs its own.)
         private const int NR_D = 8;
+
+        // When B's inner stride isn't 1 the simple path degenerates to a scalar
+        // inner loop, so blocked (which repacks B into contiguous panels) wins
+        // even below BLOCKING_THRESHOLD — measured faster from 16^3 (= 4096
+        // MACs, 3.0x) upward. Below this floor the pack-buffer allocations
+        // dominate and the simple path stays.
+        private const int SCALAR_FALLBACK_MAX_WORK = 4096;
 
         /// <summary>
         /// Stride-aware double matrix multiply: C = A * B.
@@ -65,7 +80,8 @@ namespace NumSharp.Backends.Kernels
             if (M == 0 || N == 0 || K == 0)
                 return;
 
-            if (M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD)
+            if (M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD
+                && (bStride1 == 1 || M * N * K < SCALAR_FALLBACK_MAX_WORK))
             {
                 MatMulDoubleSimpleStrided(A, aStride0, aStride1, B, bStride0, bStride1, C, M, N, K);
                 return;

@@ -244,6 +244,25 @@ public class MatMulStridedTests
     }
 
     [TestMethod]
+    public void Dot_Double_MidSizeTransposedB_BlockedReroute_ExactVsInt64Oracle()
+    {
+        // All dims <= BLOCKING_THRESHOLD but bStride1 != 1 with M*N*K >= 4096:
+        // the strided-B mid-size reroute sends this to the blocked kernel
+        // (the simple path's inner loop is scalar here). Small integer values
+        // keep every sum exact, so the result must agree bit-for-bit with the
+        // independent INumber<long> kernel whatever the accumulation order.
+        var ai = (np.arange(100 * 100) % 13).reshape(100, 100);
+        var bi = (np.arange(100 * 100) % 11).reshape(100, 100);
+        var bt = bi.astype(NPTypeCode.Double).transpose();
+
+        bt.Shape.IsContiguous.Should().BeFalse();
+        var result = np.dot(ai.astype(NPTypeCode.Double), bt);
+        var oracle = np.dot(ai.astype(NPTypeCode.Int64), bi.transpose().astype(NPTypeCode.Int64)).astype(NPTypeCode.Double);
+
+        np.array_equal(result, oracle).Should().BeTrue();
+    }
+
+    [TestMethod]
     public void Dot_Double_Contiguous_Large_ExactVsInt64Oracle()
     {
         // Independent oracle for the blocked path on contiguous inputs: with
