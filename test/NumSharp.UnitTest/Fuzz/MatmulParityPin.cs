@@ -75,7 +75,7 @@ namespace NumSharp.UnitTest.Fuzz
                 return "matmul_parity is host-pinned and no CBLAS library could be loaded here " +
                        $"({e.GetType().Name}: {e.Message.Split('\n')[0]}). The corpus was generated " +
                        $"against '{Blas_Library}' shipped with numpy {Numpy}; install that wheel or " +
-                       "point NUMSHARP_OPENBLAS_PARITY at its BLAS to run this gate.";
+                       "point NUMSHARP_OPENBLAS_LIBRARY at its BLAS to run this gate.";
             }
 
             var info = OpenBlasEngine.Info ?? string.Empty;

@@ -48,7 +48,7 @@
       <_NumSharpOpenBlasHasOverride>false</_NumSharpOpenBlasHasOverride>
       <_NumSharpOpenBlasHasOverride Condition="'@(_NumSharpOpenBlasRef)' != '' or
                                                '$(NUMSHARP_OPENBLAS_VERSION)' != '' or
-                                               '$(NUMSHARP_OPENBLAS_PATH)' != ''">true</_NumSharpOpenBlasHasOverride>
+                                               '$(NUMSHARP_OPENBLAS_SEARCH_PATH)' != ''">true</_NumSharpOpenBlasHasOverride>
 
       <!-- The RID whose asset is staged: an explicit RuntimeIdentifier, else the host. -->
       <_NumSharpOpenBlasRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_NumSharpOpenBlasRid>
@@ -82,9 +82,9 @@
         Condition="'$(_NumSharpOpenBlasHasOverride)' == 'true'"
         References="@(_NumSharpOpenBlasRef)"
         EnvVersion="$(NUMSHARP_OPENBLAS_VERSION)"
-        EnvPath="$(NUMSHARP_OPENBLAS_PATH)"
+        EnvPath="$(NUMSHARP_OPENBLAS_SEARCH_PATH)"
         EnvDistribution="$(NUMSHARP_OPENBLAS_DISTRIBUTION)"
-        EnvFeed="$(NUMSHARP_OPENBLAS_FEED)"
+        EnvFeed="$(NUMSHARP_OPENBLAS_PYPI_FEED_URL)"
         EnvSha256="$(NUMSHARP_OPENBLAS_SHA256)"
         EnvDelivery="$(NUMSHARP_OPENBLAS_DELIVERY)"
         ManifestPath="$(NumSharpOpenBlasManifest)"
@@ -118,9 +118,9 @@
         Condition="'$(_NumSharpOpenBlasHasOverride)' == 'true'"
         References="@(_NumSharpOpenBlasRef)"
         EnvVersion="$(NUMSHARP_OPENBLAS_VERSION)"
-        EnvPath="$(NUMSHARP_OPENBLAS_PATH)"
+        EnvPath="$(NUMSHARP_OPENBLAS_SEARCH_PATH)"
         EnvDistribution="$(NUMSHARP_OPENBLAS_DISTRIBUTION)"
-        EnvFeed="$(NUMSHARP_OPENBLAS_FEED)"
+        EnvFeed="$(NUMSHARP_OPENBLAS_PYPI_FEED_URL)"
         EnvSha256="$(NUMSHARP_OPENBLAS_SHA256)"
         EnvDelivery="$(NUMSHARP_OPENBLAS_DELIVERY)"
         ManifestPath="$(NumSharpOpenBlasManifest)"

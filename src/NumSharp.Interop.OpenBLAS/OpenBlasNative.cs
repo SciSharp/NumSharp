@@ -121,7 +121,7 @@ namespace NumSharp.Interop.OpenBLAS
         /// <param name="path">
         ///     Explicit file path, a directory to search, or null to auto-discover. Discovery runs
         ///     the delivery design's tier order (<c>docs/OPENBLAS_DELIVERY_DESIGN.md</c> §3):
-        ///     override path(s) (<c>NUMSHARP_OPENBLAS_PATH</c>, then a build-recorded path marker) →
+        ///     override path(s) (<c>NUMSHARP_OPENBLAS_SEARCH_PATH</c>, then a build-recorded path marker) →
         ///     a build-staged version override (REQUIRED — a miss throws, never falls through) →
         ///     explicit OpenBLAS roots (<c>OPENBLAS_HOME</c>/<c>OPENBLAS_ROOT</c>) → the bundled
         ///     runtime asset → machine tooling (see <see cref="AmbientCandidates"/>).
@@ -166,7 +166,7 @@ namespace NumSharp.Interop.OpenBLAS
                 // produce confidently wrong bits. Only the unattended case searches.
                 string requested = !string.IsNullOrWhiteSpace(path)
                     ? path
-                    : Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_PARITY");
+                    : Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_LIBRARY");
                 bool strict = !string.IsNullOrWhiteSpace(requested);
 
                 var tried = new List<string>();
@@ -182,7 +182,7 @@ namespace NumSharp.Interop.OpenBLAS
                             : $" (tried: {string.Join(", ", tried)}).") +
                         " The named library is used as given — parity is a claim about one specific " +
                         "binary, so no other one is substituted. Clear the path (or the " +
-                        "NUMSHARP_OPENBLAS_PARITY environment variable) to auto-discover instead.");
+                        "NUMSHARP_OPENBLAS_LIBRARY environment variable) to auto-discover instead.");
                 }
 
                 // Unattended discovery — the delivery design's tier order (§3). The marker is what a
@@ -190,7 +190,7 @@ namespace NumSharp.Interop.OpenBLAS
                 // bundle → machine tooling.
                 var marker = OpenBlasSourceMarker.TryFind();
 
-                // TIER 2a — override path(s): NUMSHARP_OPENBLAS_PATH (env wins over metadata, so it
+                // TIER 2a — override path(s): NUMSHARP_OPENBLAS_SEARCH_PATH (env wins over metadata, so it
                 // goes first), then a path-mode marker recorded by the build. Non-binding: a miss
                 // falls through.
                 if (TryLoadCandidates(OverridePathCandidates(marker), tried))
@@ -219,7 +219,7 @@ namespace NumSharp.Interop.OpenBLAS
                             "back to the bundled asset or a machine-wide OpenBLAS. Rebuild the " +
                             "project to re-stage the binary, remove the override (clear " +
                             "OpenBlasVersion / NUMSHARP_OPENBLAS_VERSION and rebuild), or bind an " +
-                            "explicit library via NUMSHARP_OPENBLAS_PARITY.");
+                            "explicit library via NUMSHARP_OPENBLAS_LIBRARY.");
                 }
 
                 // TIERS 3–4 — the bundled runtime asset (the zero-config parity default), then
@@ -231,8 +231,8 @@ namespace NumSharp.Interop.OpenBLAS
                     "OpenBlasEngine.Enable: no CBLAS library could be loaded. This package normally serves " +
                     "its bundled scipy-openblas runtime asset (runtimes/<rid>/native/); none was " +
                     "found for this platform and no other CBLAS was discovered. Point " +
-                    "NUMSHARP_OPENBLAS_PATH at a directory holding one (non-binding, highest " +
-                    "priority), or set NUMSHARP_OPENBLAS_PARITY to bind one specific binary. Tried: " +
+                    "NUMSHARP_OPENBLAS_SEARCH_PATH at a directory holding one (non-binding, highest " +
+                    "priority), or set NUMSHARP_OPENBLAS_LIBRARY to bind one specific binary. Tried: " +
                     string.Join(", ", tried));
             }
         }
@@ -419,7 +419,7 @@ namespace NumSharp.Interop.OpenBLAS
         }
 
         /// <summary>
-        ///     TIER 2a — the non-binding override locations: <c>NUMSHARP_OPENBLAS_PATH</c> (env),
+        ///     TIER 2a — the non-binding override locations: <c>NUMSHARP_OPENBLAS_SEARCH_PATH</c> (env),
         ///     then a path-mode source marker the build recorded (<c>&lt;OpenBlasPath&gt;</c> on the
         ///     <c>PackageReference</c>). Env before metadata, per the delivery design.
         /// </summary>
@@ -489,9 +489,9 @@ namespace NumSharp.Interop.OpenBLAS
         ///     2026-08-13): we never grab OpenBLAS out of a numpy installation. A conda/system
         ///     <i>OpenBLAS</i> package is still machine tooling below; a <i>numpy</i> is not. To
         ///     match a numpy whose OpenBLAS differs from the bundled one, NAME it —
-        ///     <c>OpenBlasEngine.Enable(path)</c> or <c>NUMSHARP_OPENBLAS_PARITY</c> (binding), or point
-        ///     <c>NUMSHARP_OPENBLAS_PATH</c> at it (non-binding priority).
-        ///     <c>NUMSHARP_OPENBLAS_BUNDLED=0</c> drops the bundled entry entirely, making machine
+        ///     <c>OpenBlasEngine.Enable(path)</c> or <c>NUMSHARP_OPENBLAS_LIBRARY</c> (binding), or point
+        ///     <c>NUMSHARP_OPENBLAS_SEARCH_PATH</c> at it (non-binding priority).
+        ///     <c>NUMSHARP_OPENBLAS_USE_BUNDLED=0</c> drops the bundled entry entirely, making machine
         ///     tooling the discovery default.
         ///     </para>
         /// </remarks>
@@ -506,7 +506,7 @@ namespace NumSharp.Interop.OpenBLAS
                 foreach (var p in Expand(dir))
                     yield return p;
 
-            if (!string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLED"), "0",
+            if (!string.Equals(Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_USE_BUNDLED"), "0",
                     StringComparison.Ordinal))
                 foreach (var dir in BundledDirectories())
                     foreach (var p in Expand(dir))
@@ -698,12 +698,12 @@ namespace NumSharp.Interop.OpenBLAS
         }
 
         /// <summary>
-        ///     Explicit, HIGHEST-PRIORITY discovery location(s) from <c>NUMSHARP_OPENBLAS_PATH</c> —
+        ///     Explicit, HIGHEST-PRIORITY discovery location(s) from <c>NUMSHARP_OPENBLAS_SEARCH_PATH</c> —
         ///     one or more files or directories (separated by the platform path separator), tried
         ///     FIRST, ahead of the bundled asset and every other candidate.
         /// </summary>
         /// <remarks>
-        ///     The non-binding sibling of <c>NUMSHARP_OPENBLAS_PARITY</c>. That one is BINDING — when set,
+        ///     The non-binding sibling of <c>NUMSHARP_OPENBLAS_LIBRARY</c>. That one is BINDING — when set,
         ///     ONLY it is tried and a failure is fatal, because it is how a caller pins the ONE
         ///     specific binary a parity claim is about. This one is softer: it takes PRIORITY over the
         ///     bundled default and the ambient scan when it holds a loadable BLAS, but is silently
@@ -713,7 +713,7 @@ namespace NumSharp.Interop.OpenBLAS
         /// </remarks>
         private static IEnumerable<string> UserPathCandidates()
         {
-            var v = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_PATH");
+            var v = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_SEARCH_PATH");
             if (string.IsNullOrWhiteSpace(v))
                 yield break;
 

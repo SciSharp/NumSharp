@@ -76,8 +76,8 @@ OpenBlasEngine.Disable();                                          // back to Nu
 ```
 
 Discovery order (summary; the authoritative table is §6.1, and the full delivery/discovery model is
-`docs/OPENBLAS_DELIVERY_DESIGN.md`): explicit path / `NUMSHARP_OPENBLAS_PARITY` (binding) → override
-paths (`NUMSHARP_OPENBLAS_PATH`, then a build-recorded `OpenBlasPath` marker) → a build-staged
+`docs/OPENBLAS_DELIVERY_DESIGN.md`): explicit path / `NUMSHARP_OPENBLAS_LIBRARY` (binding) → override
+paths (`NUMSHARP_OPENBLAS_SEARCH_PATH`, then a build-recorded `OpenBlasPath` marker) → a build-staged
 **version override** (`openblas.source.json`, hard-required) → an explicit OpenBLAS root
 (`OPENBLAS_HOME` / `OPENBLAS_ROOT`, promoted above the bundle) → the **bundled asset** (the parity
 default) → ambient machine-wide OpenBLAS (system installs, bare loader names, a PATH sweep). A pip-installed
@@ -296,11 +296,11 @@ this table is the current order.)
 
 | # | Source | Notes |
 |---|---|---|
-| 1 | explicit path / `NUMSHARP_OPENBLAS_PARITY` | **binding** — never substituted, not even by the bundled copy |
-| 2 | `NUMSHARP_OPENBLAS_PATH`, then a build-recorded `OpenBlasPath` marker | override path(s) — tried first, ahead of the bundled asset; non-binding (fall through when they hold no BLAS) |
+| 1 | explicit path / `NUMSHARP_OPENBLAS_LIBRARY` | **binding** — never substituted, not even by the bundled copy |
+| 2 | `NUMSHARP_OPENBLAS_SEARCH_PATH`, then a build-recorded `OpenBlasPath` marker | override path(s) — tried first, ahead of the bundled asset; non-binding (fall through when they hold no BLAS) |
 | 3 | build-staged **version override** (`openblas.source.json`, `mode: "version"`) | **hard-required** — a miss throws `OpenBlasRequiredOverrideException`, never falls through; sha-verified when the marker pins one |
 | 4 | explicit OpenBLAS root (`OPENBLAS_HOME` / `OPENBLAS_ROOT`) | a deliberate "use the OpenBLAS here" signal, so it **outranks the bundle**; **not** byte-parity with NumPy — trades parity-by-default for the named build |
-| 5 | **bundled `runtimes/<rid>/native/`** | the zero-config parity default; `NUMSHARP_OPENBLAS_BUNDLED=0` drops it |
+| 5 | **bundled `runtimes/<rid>/native/`** | the zero-config parity default; `NUMSHARP_OPENBLAS_USE_BUNDLED=0` drops it |
 | 6 | machine-wide OpenBLAS (apt / brew / MacPorts / conda / vcpkg / source) | **not** byte-parity with NumPy — a different build — so it ranks below the parity sources; honours the ambient `VCPKG_ROOT` / `CONDA_PREFIX` |
 | 7 | bare loader names | `libscipy_openblas64_`, `libscipy_openblas`, `scipy_openblas`, `libopenblas`, `libblas`, … |
 | 8 | every directory on `PATH` | **last resort** — sweeps for a BLAS under a non-standard name; broadest scan, reached only if nothing above binds |
@@ -309,7 +309,7 @@ A pip-installed numpy's `numpy.libs/` is **never scanned** (tier removed 2026-08
 design Goal 5): the bundled asset already *is* that binary at the pinned version, so a library's
 numeric output must not change because an unrelated `pip install` ran, and an app with no python
 must not get a different backend from one that has it. Matching some *other* numpy stays possible
-and is an explicit act (name it, or point `NUMSHARP_OPENBLAS_PATH` at it).
+and is an explicit act (name it, or point `NUMSHARP_OPENBLAS_SEARCH_PATH` at it).
 
 ##### Discovery widened: priority path, system scan, PATH sweep (2026-08-13)
 
@@ -320,10 +320,10 @@ ahead of all ambient tooling, and the two ambient scans rank last. Confirmed by 
 bundle and the system scan was removed the same day by the delivery redesign — see
 `docs/OPENBLAS_DELIVERY_DESIGN.md`, which also added the source-marker override tiers of rows 2–3.)
 
-- **`NUMSHARP_OPENBLAS_PATH` (row 2)** — the non-binding sibling of `NUMSHARP_OPENBLAS_PARITY`, tried
+- **`NUMSHARP_OPENBLAS_SEARCH_PATH` (row 2)** — the non-binding sibling of `NUMSHARP_OPENBLAS_LIBRARY`, tried
   FIRST (ahead of the bundled asset) so a caller who sets it wins, yet falling through to the rest
   when it holds no loadable BLAS. Use it to make a local build or an unpacked release take priority
-  over the bundled binary; `NUMSHARP_OPENBLAS_PARITY` remains the all-or-nothing binding knob. Parity by
+  over the bundled binary; `NUMSHARP_OPENBLAS_LIBRARY` remains the all-or-nothing binding knob. Parity by
   default is unaffected: the variable is unset in the common case, leaving the bundled asset first.
 - **Explicit OpenBLAS root (row 4, promoted above the bundle)** — `OPENBLAS_HOME` / `OPENBLAS_ROOT`
   (and the mixed-case spellings), OpenBLAS's own install convention. Unlike the *ambient*

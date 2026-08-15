@@ -38,9 +38,9 @@ FEED="$WORK/feed"; mkdir -p "$FEED"
 CONS="$WORK/consumer"; mkdir -p "$CONS"
 
 # The knobs must come from THIS script, not the ambient environment.
-unset NUMSHARP_OPENBLAS_VERSION NUMSHARP_OPENBLAS_PATH NUMSHARP_OPENBLAS_DISTRIBUTION \
-      NUMSHARP_OPENBLAS_FEED NUMSHARP_OPENBLAS_SHA256 NUMSHARP_OPENBLAS_DELIVERY \
-      NUMSHARP_OPENBLAS_PARITY NUMSHARP_OPENBLAS_BUNDLED NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL 2>/dev/null || true
+unset NUMSHARP_OPENBLAS_VERSION NUMSHARP_OPENBLAS_SEARCH_PATH NUMSHARP_OPENBLAS_DISTRIBUTION \
+      NUMSHARP_OPENBLAS_PYPI_FEED_URL NUMSHARP_OPENBLAS_SHA256 NUMSHARP_OPENBLAS_DELIVERY \
+      NUMSHARP_OPENBLAS_LIBRARY NUMSHARP_OPENBLAS_USE_BUNDLED NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL 2>/dev/null || true
 
 step() { printf '\n== %s ==\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -153,7 +153,7 @@ grep -q "CHECKSUM MISMATCH" "$WORK/sha.log" || fail "the failure must name the m
 echo "ok"
 
 step "6. a non-pypi.org feed without an explicit sha is refused (before any network)"
-( cd "$CONS" && NUMSHARP_OPENBLAS_FEED=https://mirror.example.invalid dotnet build -v q --nologo "-clp:ErrorsOnly" > "$WORK/feedx.log" 2>&1 ) \
+( cd "$CONS" && NUMSHARP_OPENBLAS_PYPI_FEED_URL=https://mirror.example.invalid dotnet build -v q --nologo "-clp:ErrorsOnly" > "$WORK/feedx.log" 2>&1 ) \
     && fail "a mirror without OpenBlasSha256 must fail the build"
 grep -q "requires an explicit" "$WORK/feedx.log" || fail "the failure must demand the sha; got: $(cat "$WORK/feedx.log")"
 echo "ok"
@@ -198,12 +198,12 @@ echo "ok"
 
 step "11. version + path combined (metadata version, env path): download INTO the dir, marker points there"
 PATH_DIR="$WORK/pathdir"; mkdir -p "$PATH_DIR"
-( cd "$CONS" && NUMSHARP_OPENBLAS_PATH="$PATH_DIR" run dotnet build -v q --nologo "-clp:ErrorsOnly" )
+( cd "$CONS" && NUMSHARP_OPENBLAS_SEARCH_PATH="$PATH_DIR" run dotnet build -v q --nologo "-clp:ErrorsOnly" )
 ls "$PATH_DIR"/*openblas* > /dev/null 2>&1 || fail "the version must be staged INTO OpenBlasPath (§5 table row 3)"
 grep -q '"mode": "version"' "$ROOT_MARKER" || fail "root marker must record the version override at $ROOT_MARKER"
 grep -q '"path"' "$ROOT_MARKER" || fail "root marker must point at the custom directory"
 [ ! -f "$RID_MARKER" ] || fail "the stale default-staged marker must be cleared when staging moves to OpenBlasPath"
-COMBRUN="$(cd "$CONS" && NUMSHARP_OPENBLAS_PATH="$PATH_DIR" dotnet run --no-build 2>/dev/null)"
+COMBRUN="$(cd "$CONS" && NUMSHARP_OPENBLAS_SEARCH_PATH="$PATH_DIR" dotnet run --no-build 2>/dev/null)"
 echo "$COMBRUN" | grep -qi "library=.*pathdir" || fail "runtime must bind from the custom directory: $COMBRUN"
 echo "$COMBRUN" | grep -q "bundled=False" || fail "a custom-dir override is not the bundle: $COMBRUN"
 echo "ok"
@@ -216,7 +216,7 @@ echo "ok"
 
 step "13. path-only mode (env, empty dir): non-binding marker, runtime falls through to the bundle"
 EMPTY_DIR="$WORK/emptydir"; mkdir -p "$EMPTY_DIR"
-( cd "$CONS" && NUMSHARP_OPENBLAS_PATH="$EMPTY_DIR" run dotnet build -v q --nologo "-clp:ErrorsOnly" )
+( cd "$CONS" && NUMSHARP_OPENBLAS_SEARCH_PATH="$EMPTY_DIR" run dotnet build -v q --nologo "-clp:ErrorsOnly" )
 grep -q '"mode": "path"' "$ROOT_MARKER" || fail "path marker missing at $ROOT_MARKER"
 PATHRUN="$(cd "$CONS" && dotnet run --no-build 2>/dev/null)"
 echo "$PATHRUN" | grep -q "bundled=True" || fail "an empty path override must fall through to the bundle: $PATHRUN"

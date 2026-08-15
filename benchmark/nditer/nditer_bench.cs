@@ -14,10 +14,10 @@
 //   pathology         : the known regression canaries (bcast-reduce 54x, etc.)
 //   dividends         : NumSharp-only wins (fusion / reuse / parallel banding)
 //
-// The benchmark is SECTION-ADDRESSABLE via the NPYITER_SECTION env var so the
+// The benchmark is SECTION-ADDRESSABLE via the NUMSHARP_BENCH_NDITER_SECTION env var so the
 // orchestrator can run each category in its own short-lived process (crash
 // isolation — the full mixed run intermittently AVs under GC pressure). With
-// NPYITER_SECTION unset or "all", it runs everything in one process.
+// NUMSHARP_BENCH_NDITER_SECTION unset or "all", it runs everything in one process.
 //
 // Run ONLY with:  dotnet run -c Release - < benchmark/nditer/nditer_bench.cs
 // =============================================================================
@@ -38,7 +38,7 @@ if ((dbgScript?.IsJITOptimizerDisabled ?? false) || (dbgCore?.IsJITOptimizerDisa
     return;
 }
 
-string section = (Environment.GetEnvironmentVariable("NPYITER_SECTION") ?? "all").Trim().ToLowerInvariant();
+string section = (Environment.GetEnvironmentVariable("NUMSHARP_BENCH_NDITER_SECTION") ?? "all").Trim().ToLowerInvariant();
 bool Want(string s) => section == "all" || section == s;
 
 int fails = 0;

@@ -70,8 +70,8 @@ namespace NumSharp.Interop.OpenBLAS
         /// </summary>
         /// <param name="library">
         ///     Path of the CBLAS shared library (or a directory holding one), or null to
-        ///     auto-discover: the <c>NUMSHARP_OPENBLAS_PARITY</c> environment variable (binding), then
-        ///     the override path(s) (<c>NUMSHARP_OPENBLAS_PATH</c> / a build-recorded
+        ///     auto-discover: the <c>NUMSHARP_OPENBLAS_LIBRARY</c> environment variable (binding), then
+        ///     the override path(s) (<c>NUMSHARP_OPENBLAS_SEARCH_PATH</c> / a build-recorded
         ///     <c>OpenBlasPath</c>), then a build-staged version override (required — a miss
         ///     throws), then an explicit OpenBLAS root (<c>OPENBLAS_HOME</c>/<c>OPENBLAS_ROOT</c>),
         ///     then the bundled runtime asset, then ambient machine tooling (system install

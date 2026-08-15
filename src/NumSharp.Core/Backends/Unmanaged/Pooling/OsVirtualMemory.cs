@@ -63,7 +63,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         ///     whose LAST byte sits immediately before an inaccessible (PAGE_NOACCESS) guard page,
         ///     so any read/write one byte past the buffer faults INSTANTLY (AccessViolation at the
         ///     offending access) instead of silently corrupting an adjacent allocation. Used only by
-        ///     <see cref="SizeBucketedBufferPool"/>'s opt-in NUMSHARP_GUARD_PAGES mode to localise an
+        ///     <see cref="SizeBucketedBufferPool"/>'s opt-in NUMSHARP_DEBUG_GUARD_PAGES mode to localise an
         ///     out-of-bounds write to the exact code/site/case that performs it. The base of the
         ///     reserved region (for <see cref="FreeGuarded"/>) is returned via <paramref name="region"/>.
         ///     Returns <see cref="IntPtr.Zero"/> (and region Zero) on failure.

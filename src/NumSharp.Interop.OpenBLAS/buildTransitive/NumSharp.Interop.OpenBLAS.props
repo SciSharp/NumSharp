@@ -12,9 +12,9 @@
      this package's — see the .targets' scan) or as environment variables, which WIN:
 
          NUMSHARP_OPENBLAS_VERSION       beats  <OpenBlasVersion>
-         NUMSHARP_OPENBLAS_PATH          beats  <OpenBlasPath>
+         NUMSHARP_OPENBLAS_SEARCH_PATH          beats  <OpenBlasPath>
          NUMSHARP_OPENBLAS_DISTRIBUTION  beats  <OpenBlasDistribution>
-         NUMSHARP_OPENBLAS_FEED          beats  <OpenBlasFeed>
+         NUMSHARP_OPENBLAS_PYPI_FEED_URL          beats  <OpenBlasFeed>
          NUMSHARP_OPENBLAS_SHA256        beats  <OpenBlasSha256>
          NUMSHARP_OPENBLAS_DELIVERY      beats  <OpenBlasDelivery>
      ================================================================================== -->

@@ -93,7 +93,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         public const int MaxBuffersPerLargeBucket = 2;
 
         /// <summary>
-        ///     Opt-in diagnostic page-heap mode (env <c>NUMSHARP_GUARD_PAGES=1</c>, Windows only).
+        ///     Opt-in diagnostic page-heap mode (env <c>NUMSHARP_DEBUG_GUARD_PAGES=1</c>, Windows only).
         ///     When on, every <see cref="Take"/>/<see cref="TakeZeroed"/> hands back a buffer whose
         ///     last byte abuts an inaccessible guard page (<see cref="OsVirtualMemory.AllocGuarded"/>),
         ///     pooling is bypassed, and any one-past-the-end write faults INSTANTLY at the offending
@@ -101,7 +101,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         ///     Default OFF (the field is read once at startup) so production paths are untouched.
         /// </summary>
         public static readonly bool GuardPagesEnabled =
-            OsVirtualMemory.IsSupported && Environment.GetEnvironmentVariable("NUMSHARP_GUARD_PAGES") == "1";
+            OsVirtualMemory.IsSupported && Environment.GetEnvironmentVariable("NUMSHARP_DEBUG_GUARD_PAGES") == "1";
 
         // Guard-mode bookkeeping: usable pointer -> reserved region base (for FreeGuarded).
         private static readonly ConcurrentDictionary<IntPtr, IntPtr> _guardRegions = new();

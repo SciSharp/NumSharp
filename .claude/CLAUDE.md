@@ -151,8 +151,8 @@ LP64 there — it exports `scipy_cblas_sgemm`, a symbol scheme `Bind` lacked (ad
 win-arm64 numpy's BLAS would have failed outright). Binaries are gitignored;
 `tools/openblas-manifest.json` is the checked-in pin and `tools/fetch_openblas.py` verifies **two**
 hashes per RID. Discovery order is fixed (`docs/OPENBLAS_DELIVERY_DESIGN.md` §3; runtime side
-implemented, gate `OpenBlasDeliveryTests`): explicit path/`NUMSHARP_OPENBLAS_PARITY` (binding) →
-override path(s) (`NUMSHARP_OPENBLAS_PATH` env, then a build-recorded `OpenBlasPath` marker;
+implemented, gate `OpenBlasDeliveryTests`): explicit path/`NUMSHARP_OPENBLAS_LIBRARY` (binding) →
+override path(s) (`NUMSHARP_OPENBLAS_SEARCH_PATH` env, then a build-recorded `OpenBlasPath` marker;
 non-binding) → build-staged **version override** (`openblas.source.json` marker, `mode:"version"` —
 **hard-required**: a miss throws `OpenBlasRequiredOverrideException`, never falls through; sha-verified
 when pinned) → explicit OpenBLAS root (`OPENBLAS_HOME`/`OPENBLAS_ROOT`, promoted ABOVE the bundle
@@ -161,7 +161,7 @@ when pinned) → explicit OpenBLAS root (`OPENBLAS_HOME`/`OPENBLAS_ROOT`, promot
 machine-wide OpenBLAS (apt/brew/MacPorts/conda/vcpkg/source install dirs; honours the ambient
 `VCPKG_ROOT`/`CONDA_PREFIX`; **not** parity) → bare names (64-bit **and**
 32-bit spellings — both scipy-openblas64/ILP64 and scipy-openblas32/LP64 bind, and 32 is the only
-build for 32-bit x86) → PATH sweep (last resort, non-standard names); `NUMSHARP_OPENBLAS_BUNDLED=0` drops
+build for 32-bit x86) → PATH sweep (last resort, non-standard names); `NUMSHARP_OPENBLAS_USE_BUNDLED=0` drops
 the bundled entry. `numpy.libs` is NEVER scanned (tier deleted — we never grab OpenBLAS out of a
 numpy installation; the bundle already IS that binary at the pin). **Build-time override** (design
 §5–§7, shipped in `buildTransitive/{props,targets}` + an inline `RoslynCodeTaskFactory` task —
@@ -188,7 +188,7 @@ bundling pins the build but *not* the answer — `OpenBlasEngine.Enable(coreType
 too (probed: Haswell/Nehalem/Sandybridge/Katmai all differ; it is opt-in because the default must
 match the local NumPy, which also dispatches by CPU; it must be set BEFORE load, and forcing an ISA
 above the CPU **kills the process with SIGILL**, so `Enable` refuses what it can recognise). A
-**named library is binding** (`OpenBlasEngine.Enable(path)` / `NUMSHARP_OPENBLAS_PARITY` is never silently
+**named library is binding** (`OpenBlasEngine.Enable(path)` / `NUMSHARP_OPENBLAS_LIBRARY` is never silently
 substituted, not even by the bundled copy). And the BLAS path is *faster* than the managed GEMM
 anyway (1.7–13×; 2048³ f64 293 ms vs 3860 ms).
 
@@ -199,7 +199,7 @@ either.
 
 API: `OpenBlasEngine.Enable(library, threads, coreType)` / `OpenBlasEngine.Disable()` / `OpenBlasEngine.Enabled` / `OpenBlasEngine.Info` /
 `OpenBlasEngine.LibraryPath` / `OpenBlasEngine.CoreName` / `OpenBlasEngine.IsBundledLibrary` (marker-aware: a staged override in
-the same folder layout reports false) / `OpenBlasEngine.CoreType`; `NUMSHARP_OPENBLAS_PATH` adds
+the same folder layout reports false) / `OpenBlasEngine.CoreType`; `NUMSHARP_OPENBLAS_SEARCH_PATH` adds
 highest-priority (non-binding) discovery locations tried before bundled;
 `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` opts out of the module-load install (`OpenBlasEngine.BundleAutoinstall`;
 the pre-rename `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` and `NUMSHARP_BLAS_AUTOINSTALL` spellings are RETIRED

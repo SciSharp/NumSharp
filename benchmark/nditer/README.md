@@ -30,7 +30,7 @@ Outputs (committed artifacts):
 
 ## Why an orchestrator instead of one script
 
-`nditer_bench.cs` is **section-addressable** via the `NPYITER_SECTION` env var.
+`nditer_bench.cs` is **section-addressable** via the `NUMSHARP_BENCH_NDITER_SECTION` env var.
 The orchestrator runs each section in its own short-lived `dotnet run` process
 and **retries up to 4× on a crash**. This exists because the full mixed-family
 run intermittently hits an uncatchable `AccessViolation` under heavy

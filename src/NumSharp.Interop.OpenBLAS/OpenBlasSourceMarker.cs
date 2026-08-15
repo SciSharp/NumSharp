@@ -30,7 +30,7 @@ namespace NumSharp.Interop.OpenBLAS
     ///     when <c>sha256</c> is present each candidate file is hash-verified before it is loaded —
     ///     a mismatched file is not the pinned binary and is never silently substituted.
     ///     <c>mode="path"</c>: <c>path</c> is a read-in-place directory (the build-time analog of
-    ///     <c>NUMSHARP_OPENBLAS_PATH</c>), non-binding — a miss falls through.
+    ///     <c>NUMSHARP_OPENBLAS_SEARCH_PATH</c>), non-binding — a miss falls through.
     ///     <c>mode="none"</c> or no marker at all: the folder is the ordinary bundle.
     ///     </para>
     /// </remarks>

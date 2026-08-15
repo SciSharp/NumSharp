@@ -37,14 +37,14 @@ namespace NumSharp.UnitTest.Backends
         [TestInitialize]
         public void Init()
         {
-            // A machine-level NUMSHARP_OPENBLAS_PATH is tier 2a and would bind BEFORE the marker
-            // tiers these tests exercise, and NUMSHARP_OPENBLAS_PARITY makes discovery strict and
+            // A machine-level NUMSHARP_OPENBLAS_SEARCH_PATH is tier 2a and would bind BEFORE the marker
+            // tiers these tests exercise, and NUMSHARP_OPENBLAS_LIBRARY makes discovery strict and
             // bypasses them entirely — park both for the duration. The explicit OPENBLAS_HOME/
             // OPENBLAS_ROOT roots are now promoted above the bundle, so park those too.
-            _previousOpenBlasPath = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_PATH");
-            _previousParityBlas = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_PARITY");
-            Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PATH", null);
-            Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PARITY", null);
+            _previousOpenBlasPath = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_SEARCH_PATH");
+            _previousParityBlas = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_LIBRARY");
+            Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_SEARCH_PATH", null);
+            Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_LIBRARY", null);
             foreach (var name in ExplicitRootEnvVars)
             {
                 _previousRoots[name] = Environment.GetEnvironmentVariable(name);
@@ -57,8 +57,8 @@ namespace NumSharp.UnitTest.Backends
         public void Cleanup()
         {
             File.Delete(MarkerPath);
-            Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PATH", _previousOpenBlasPath);
-            Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PARITY", _previousParityBlas);
+            Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_SEARCH_PATH", _previousOpenBlasPath);
+            Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_LIBRARY", _previousParityBlas);
             foreach (var kv in _previousRoots)
                 Environment.SetEnvironmentVariable(kv.Key, kv.Value);
             OpenBlasEngine.Disable();
@@ -344,7 +344,7 @@ namespace NumSharp.UnitTest.Backends
                 // Tier 1 over tier 2b: an explicit binding must bypass the marker tiers
                 // entirely — a broken pin cannot take down a caller who NAMED their binary.
                 WriteMarker(new { mode = "version", version = "9.9.9.9", path = emptyDir });
-                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PARITY", lib);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_LIBRARY", lib);
 
                 OpenBlasNative.Load(null);
                 Assert.IsNotNull(OpenBlasEngine.LibraryPath);
@@ -352,7 +352,7 @@ namespace NumSharp.UnitTest.Backends
             }
             finally
             {
-                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PARITY", null);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_LIBRARY", null);
                 File.Delete(MarkerPath);
                 Directory.Delete(emptyDir);
             }
@@ -372,7 +372,7 @@ namespace NumSharp.UnitTest.Backends
                 // path holds a loadable BLAS, a version marker with a dead staged dir must not
                 // throw — the caller's environment already answered.
                 WriteMarker(new { mode = "version", version = "9.9.9.9", path = emptyDir });
-                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PATH", Path.GetDirectoryName(lib));
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_SEARCH_PATH", Path.GetDirectoryName(lib));
 
                 OpenBlasNative.Load(null);
                 Assert.IsNotNull(OpenBlasEngine.LibraryPath);
@@ -381,7 +381,7 @@ namespace NumSharp.UnitTest.Backends
             }
             finally
             {
-                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_PATH", null);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_SEARCH_PATH", null);
                 File.Delete(MarkerPath);
                 Directory.Delete(emptyDir);
             }

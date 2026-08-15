@@ -31,7 +31,7 @@ one wins?"**
    (fail if it cannot be satisfied). **[DONE — runtime]**
 4. **Bundle above ambient machine tooling, below explicit overrides** — §10.1 resolved 2026-08-13:
    parity-by-default is preserved; machine tooling is the fallback when the bundle is absent or
-   opted out (`NUMSHARP_OPENBLAS_BUNDLED=0`). *(Amended from the original "last resort" wording.)* **[DONE]**
+   opted out (`NUMSHARP_OPENBLAS_USE_BUNDLED=0`). *(Amended from the original "last resort" wording.)* **[DONE]**
 5. **Never grab OpenBLAS out of a numpy installation** — remove the `numpy.libs` discovery tier. **[DONE]**
 6. **The bundled binary and the build-downloaded binary are byte-for-byte the same artifact**, dropped
    into the same layout, so one transparently replaces the other. **[NEW/INVARIANT]**
@@ -77,8 +77,8 @@ library wins.**
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │ RUNTIME priority (BundleAutoinstall)                                                │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
-│ 1. BINDING    NUMSHARP_OPENBLAS_PARITY / OpenBlasEngine.Enable(path) — exclusive, fatal miss  │  [EXISTS]
-│ 2. OVERRIDE   a) path    OpenBlasPath / NUMSHARP_OPENBLAS_PATH — read in place      │  [DONE]
+│ 1. BINDING    NUMSHARP_OPENBLAS_LIBRARY / OpenBlasEngine.Enable(path) — exclusive, fatal miss  │  [EXISTS]
+│ 2. OVERRIDE   a) path    OpenBlasPath / NUMSHARP_OPENBLAS_SEARCH_PATH — read in place      │  [DONE]
 │               b) version  staged binary + REQUIRED marker — hard-required           │  [DONE]
 │               c) root     OPENBLAS_HOME / OPENBLAS_ROOT — explicit, above bundle    │  [DONE]
 │ 3. BUNDLE     the nupkg's runtimes/<rid>/native default — parity by default         │  [DONE]
@@ -89,7 +89,7 @@ library wins.**
 
 Two things changed from the pre-design implementation:
 
-- **The overrides (tier 2) sit between the binding and the bundle.** They are `NUMSHARP_OPENBLAS_PATH`
+- **The overrides (tier 2) sit between the binding and the bundle.** They are `NUMSHARP_OPENBLAS_SEARCH_PATH`
   / a build-recorded `OpenBlasPath` (2a), a build-staged version override (2b), and — promoted here
   2026-08-14 — an explicit OpenBLAS root, `OPENBLAS_HOME` / `OPENBLAS_ROOT` (2c): a deliberate "use
   the OpenBLAS installed here" signal, so it too outranks the bundle (trading parity-by-default for
@@ -110,7 +110,7 @@ Build-time resolution decides what actually sits in tiers 2 and 3:
 | — | set | record `OpenBlasPath` as the read dir; write marker | path override (tier 2a) | no |
 
 **Environment always wins over `PackageReference` metadata** for the same knob
-(`NUMSHARP_OPENBLAS_VERSION` beats `<OpenBlasVersion>`, `NUMSHARP_OPENBLAS_PATH` beats `<OpenBlasPath>`).
+(`NUMSHARP_OPENBLAS_VERSION` beats `<OpenBlasVersion>`, `NUMSHARP_OPENBLAS_SEARCH_PATH` beats `<OpenBlasPath>`).
 
 ---
 
@@ -141,7 +141,7 @@ remains silent (fall back to NumSharp's managed SIMD GEMM).
 - **`PythonLibDirectories()` is deleted** (numpy.libs), along with its use of `VIRTUAL_ENV`/`PYTHONHOME`
   for that purpose. `CONDA_PREFIX` survives only as a machine-tooling root (a conda-installed *openblas*,
   not numpy's).
-- `NUMSHARP_OPENBLAS_BUNDLED=0` continues to drop the bundle entirely (machine tooling then becomes the
+- `NUMSHARP_OPENBLAS_USE_BUNDLED=0` continues to drop the bundle entirely (machine tooling then becomes the
   discovery default).
 - **A required-override miss at module load is loud but not fatal:** `BundleAutoinstall` catches
   `OpenBlasRequiredOverrideException`, reports it on stderr and leaves the backend UNINSTALLED (never
@@ -169,16 +169,16 @@ The override is configured **on the `PackageReference`**, not with a second pack
 | Metadata | Env (wins) | Meaning | Default |
 |---|---|---|---|
 | `OpenBlasVersion` | `NUMSHARP_OPENBLAS_VERSION` | scipy-openblas version to fetch from PyPI (enforced) | — (bundle) |
-| `OpenBlasPath` | `NUMSHARP_OPENBLAS_PATH` | directory the tooling is **read from** — and **downloaded to** if a version is also set (relative resolves against the project dir) | — |
+| `OpenBlasPath` | `NUMSHARP_OPENBLAS_SEARCH_PATH` | directory the tooling is **read from** — and **downloaded to** if a version is also set (relative resolves against the project dir) | — |
 | `OpenBlasDistribution` | `NUMSHARP_OPENBLAS_DISTRIBUTION` | `scipy-openblas64` \| `scipy-openblas32` (`64`/`32` aliases) | per-RID from the manifest (win-arm64 = 32) |
-| `OpenBlasFeed` | `NUMSHARP_OPENBLAS_FEED` | PyPI JSON base (mirror hook) | `pypi.org` |
+| `OpenBlasFeed` | `NUMSHARP_OPENBLAS_PYPI_FEED_URL` | PyPI JSON base (mirror hook) | `pypi.org` |
 | `OpenBlasSha256` | `NUMSHARP_OPENBLAS_SHA256` | expected extracted-lib hash | manifest hash (only for the pinned default) |
 | `OpenBlasDelivery` | `NUMSHARP_OPENBLAS_DELIVERY` | `none` \| `build` \| `package` (§6) | `build` |
 
 ### 5.2 Path mode vs version mode
 
 - **Path only (`OpenBlasPath`, no version):** read tooling from that directory at runtime (tier 2a),
-  exactly like a build-baked `NUMSHARP_OPENBLAS_PATH`. **No version enforcement** — a path is "look
+  exactly like a build-baked `NUMSHARP_OPENBLAS_SEARCH_PATH`. **No version enforcement** — a path is "look
   here", not a contract. If the directory holds no loadable BLAS, discovery falls through to machine
   tooling and then the bundle.
 - **Version (`OpenBlasVersion`):** the build downloads that version and stages it (§5.3). It is a
@@ -330,7 +330,7 @@ Runtime rules (implemented in `OpenBlasNative.Load` + `OpenBlasSourceMarker`):
   carries a `sha256`, each candidate file is hash-verified BEFORE loading; a same-named file with
   different bytes is not the pinned binary and is skipped (so an all-mismatch folder throws too).
   An explicit `"required": false` downgrades a miss to fall-through.
-- `mode = path` → read from `path` at **tier 2a** (after the env `NUMSHARP_OPENBLAS_PATH` — env wins
+- `mode = path` → read from `path` at **tier 2a** (after the env `NUMSHARP_OPENBLAS_SEARCH_PATH` — env wins
   over metadata); **not required** → fall through on miss.
 - `mode = none` / no marker → the `runtimes/<rid>/native` folder is the **bundle** → tier 3 (the
   parity default, per the §10.1 resolution), ahead of machine tooling.
@@ -343,7 +343,7 @@ explicit binding) when it is a required override, and the parity default (tier 3
 tooling but below any override) when it is the bundle — and the marker is what flips it. It exists
 precisely because Goal 6 makes the two binaries indistinguishable by content.
 
-The **binding** path (`NUMSHARP_OPENBLAS_PARITY` / explicit `OpenBlasEngine.Enable(path)`) is unchanged and still
+The **binding** path (`NUMSHARP_OPENBLAS_LIBRARY` / explicit `OpenBlasEngine.Enable(path)`) is unchanged and still
 short-circuits everything (tier 1, exclusive, fatal on miss). Symbol-scheme probing inside a bound
 library (`scipy_*64_` ILP64 → … → plain `cblas_*` LP64) is unchanged.
 
@@ -355,9 +355,9 @@ library (`scipy_*64_` ILP64 → … → plain `cblas_*` LP64) is unchanged.
 |---|---|---|
 | Method | `Blas.AutoInstall()` | `OpenBlasEngine.BundleAutoinstall()` |
 | Env (opt-out) | `NUMSHARP_BLAS_AUTOINSTALL=0` | `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` (old spellings `NUMSHARP_BLAS_AUTOINSTALL` and `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` RETIRED and ignored — neither released) |
-| Env (drop bundle) | `NUMSHARP_OPENBLAS_BUNDLED=0` | unchanged |
-| Env (binding) | `NUMSHARP_OPENBLAS_PARITY` | unchanged |
-| Env (override path) | `NUMSHARP_OPENBLAS_PATH` (runtime additive) | **override path** (runtime tier 2a **and** build read/download dir) |
+| Env (drop bundle) | `NUMSHARP_OPENBLAS_USE_BUNDLED=0` | unchanged |
+| Env (binding) | `NUMSHARP_OPENBLAS_LIBRARY` | unchanged |
+| Env (override path) | `NUMSHARP_OPENBLAS_SEARCH_PATH` (runtime additive) | **override path** (runtime tier 2a **and** build read/download dir) |
 | Env (override version) | — | `NUMSHARP_OPENBLAS_VERSION` (build) |
 | Env (override misc) | — | `NUMSHARP_OPENBLAS_{DISTRIBUTION,FEED,SHA256,DELIVERY}` |
 | Removed | numpy.libs scan (`PythonLibDirectories`) | deleted |
@@ -374,7 +374,7 @@ The alternative was chosen: the bundle stays **above** ambient machine tooling a
 explicit overrides (tier 3 of §3). This preserves the parity-by-default headline — referencing the
 package keeps giving NumPy-identical bits on every machine, including one with an apt/brew/conda/
 vcpkg OpenBLAS installed — while machine tooling remains the fallback when no bundle is present
-(asset-free build, unsupported RID) or the consumer opts out (`NUMSHARP_OPENBLAS_BUNDLED=0`, which makes
+(asset-free build, unsupported RID) or the consumer opts out (`NUMSHARP_OPENBLAS_USE_BUNDLED=0`, which makes
 machine tooling the discovery default). The originally-stated "bundle as last resort" model was
 rejected because it silently traded the package's core promise for ambient-tooling convenience: a
 distro OpenBLAS is not byte-identical to NumPy 2.4.2, and binding it by default would have made

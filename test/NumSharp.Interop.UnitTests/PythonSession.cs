@@ -23,14 +23,14 @@ namespace NumSharp.Interop.UnitTests
         public static string Reason { get; private set; } = "not initialized";
 
         /// <summary>
-        ///     When set (env var <c>NUMSHARP_INTEROP_REQUIRE_ENGINE</c> = <c>1</c>/<c>true</c>), an
+        ///     When set (env var <c>NUMSHARP_PYTHONNET_REQUIRE_ENGINE</c> = <c>1</c>/<c>true</c>), an
         ///     unavailable engine is a HARD FAILURE instead of an Inconclusive skip. CI sets it in the
         ///     interop job — that job installs Python + numpy and PROMISES an engine, so a runner where
         ///     discovery silently fails must go red, not green-by-skipping (the one failure mode a
         ///     self-skipping suite hides). Off by default, so a developer machine or a bare CI image
         ///     without Python still skips gracefully.
         /// </summary>
-        private static readonly bool RequireEngine = IsTruthyEnv("NUMSHARP_INTEROP_REQUIRE_ENGINE");
+        private static readonly bool RequireEngine = IsTruthyEnv("NUMSHARP_PYTHONNET_REQUIRE_ENGINE");
 
         private static bool IsTruthyEnv(string name)
         {
@@ -153,13 +153,13 @@ namespace NumSharp.Interop.UnitTests
             if (Available)
                 return;
 
-            // In CI the interop job installs Python + numpy and sets NUMSHARP_INTEROP_REQUIRE_ENGINE,
+            // In CI the interop job installs Python + numpy and sets NUMSHARP_PYTHONNET_REQUIRE_ENGINE,
             // so "engine unavailable" means discovery is broken on that runner — fail loudly rather than
             // report a vacuous green. The "Report Python host" CI step prints the exact discovery inputs
             // (base_prefix / INSTSONAME / LIBDIR) this Reason was computed from.
             if (RequireEngine)
                 Assert.Fail(
-                    "NUMSHARP_INTEROP_REQUIRE_ENGINE is set but the Python+numpy engine did not start, so the " +
+                    "NUMSHARP_PYTHONNET_REQUIRE_ENGINE is set but the Python+numpy engine did not start, so the " +
                     "interop suite would have skipped every test instead of proving anything. " +
                     $"Discovery reason: {Reason}");
 

@@ -308,7 +308,7 @@ namespace NumSharp.UnitTest.Backends
             Assert.IsFalse(OpenBlasEngine.Enabled);
         }
 
-        /// <summary>NUMSHARP_OPENBLAS_BUNDLED=0 drops the bundled entry from discovery.</summary>
+        /// <summary>NUMSHARP_OPENBLAS_USE_BUNDLED=0 drops the bundled entry from discovery.</summary>
         [TestMethod]
         public void BundledLibrary_CanBeOptedOutOf()
         {
@@ -316,10 +316,10 @@ namespace NumSharp.UnitTest.Backends
                 Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
 
             OpenBlasEngine.Disable();
-            var previous = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLED");
+            var previous = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_USE_BUNDLED");
             try
             {
-                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLED", "0");
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_USE_BUNDLED", "0");
 
                 // Whether anything else is installed is host-dependent; the assertion is only that
                 // the bundled asset is no longer what auto-discovery reaches for.
@@ -335,11 +335,11 @@ namespace NumSharp.UnitTest.Backends
                 }
 
                 if (loaded && OpenBlasEngine.IsBundledLibrary && !CBlasWasAlreadyLoaded())
-                    Assert.Fail("NUMSHARP_OPENBLAS_BUNDLED=0 was ignored: " + OpenBlasEngine.LibraryPath);
+                    Assert.Fail("NUMSHARP_OPENBLAS_USE_BUNDLED=0 was ignored: " + OpenBlasEngine.LibraryPath);
             }
             finally
             {
-                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_BUNDLED", previous);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_USE_BUNDLED", previous);
             }
         }
 

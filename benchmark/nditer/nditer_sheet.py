@@ -99,7 +99,7 @@ def run_ns(section, retries=4):
     # THIS checkout's csproj so the same bench runs unchanged on a Linux CI runner.
     src = src.replace("K:/source/NumSharp/src/NumSharp.Core/NumSharp.Core.csproj",
                       CORE_CSPROJ.replace(os.sep, "/"))
-    env = {**os.environ, "NPYITER_SECTION": section, **NS_ENV_EXTRA}
+    env = {**os.environ, "NUMSHARP_BENCH_NDITER_SECTION": section, **NS_ENV_EXTRA}
     for attempt in range(1, retries + 1):
         try:
             p = subprocess.run(["dotnet", "run", "-c", "Release", "-"], input=src,
@@ -115,7 +115,7 @@ def run_ns(section, retries=4):
 
 
 def run_np(section):
-    env = {**os.environ, "NPYITER_SECTION": section}
+    env = {**os.environ, "NUMSHARP_BENCH_NDITER_SECTION": section}
     try:
         p = subprocess.run([sys.executable, PY], capture_output=True, text=True,
                            cwd=REPO, env=env, timeout=NP_TIMEOUT)

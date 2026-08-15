@@ -1,10 +1,10 @@
 # =============================================================================
 # nditer_bench.py — NumPy side of THE canonical NDIter benchmark (identical
-# ids to nditer_bench.cs). Section-addressable via the NPYITER_SECTION env var
+# ids to nditer_bench.cs). Section-addressable via the NUMSHARP_BENCH_NDITER_SECTION env var
 # so the orchestrator (nditer_sheet.py) can run each category in its own
 # process. Emits machine-readable "id<TAB>milliseconds" rows on stdout.
 #
-# Run a section:  NPYITER_SECTION=elementwise python nditer_bench.py
+# Run a section:  NUMSHARP_BENCH_NDITER_SECTION=elementwise python nditer_bench.py
 # Run everything: python nditer_bench.py
 # =============================================================================
 import os
@@ -12,7 +12,7 @@ import sys
 import time
 import numpy as np
 
-SECTION = os.environ.get("NPYITER_SECTION", "all").strip().lower()
+SECTION = os.environ.get("NUMSHARP_BENCH_NDITER_SECTION", "all").strip().lower()
 
 
 def want(s):

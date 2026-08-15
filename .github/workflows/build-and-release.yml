@@ -165,7 +165,7 @@ jobs:
     # where libpython discovery silently breaks (the macOS-framework class of bug) would report every
     # interop test as skipped and the job would go green having proven nothing.
     env:
-      NUMSHARP_INTEROP_REQUIRE_ENGINE: '1'
+      NUMSHARP_PYTHONNET_REQUIRE_ENGINE: '1'
 
     steps:
     - uses: actions/checkout@v4
