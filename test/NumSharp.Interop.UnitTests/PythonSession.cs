@@ -36,6 +36,13 @@ namespace NumSharp.Interop.UnitTests
         [AssemblyInitialize]
         public static void Start(TestContext _)
         {
+            // This interop suite runs with OpenBLAS as the DEFAULT backend (unlike NumSharp.UnitTest,
+            // which suppresses the auto-install). TryEnable never throws — a bare CI image without the
+            // bundled asset simply keeps NumSharp's managed kernels, and the LU differential tests then
+            // report Inconclusive via OpenBlasEngine.LapackAvailable. Pinned to 1 thread so the
+            // byte-exact small-matrix comparisons against live numpy are deterministic.
+            NumSharp.Interop.OpenBLAS.OpenBlasEngine.TryEnable(threads: 1);
+
             try
             {
                 string dll = DiscoverPythonDll(out string reason);

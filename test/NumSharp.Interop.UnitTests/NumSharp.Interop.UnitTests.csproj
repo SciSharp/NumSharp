@@ -38,6 +38,14 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
     <ProjectReference Include="..\..\src\NumSharp.Interop.pythonnet\NumSharp.Interop.pythonnet.csproj" />
+    <!-- The optional external-CBLAS/LAPACK engine. Unlike NumSharp.UnitTest — which SUPPRESSES the
+         module-load auto-install because most of its tiers assert NumSharp's own managed kernels —
+         this interop suite deliberately runs with OpenBLAS as the DEFAULT backend (enabled in
+         PythonSession.Start), so np.dot/matmul/linalg go through the bundled scipy-openblas. The
+         bundled runtimes/<rid>/native/ asset flows to the output via this reference, and the
+         host-pinned differential tests compare NumSharp's OpenBLAS results against live numpy.linalg
+         over the same exported bytes. -->
+    <ProjectReference Include="..\..\src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj" />
   </ItemGroup>
 
 </Project>
