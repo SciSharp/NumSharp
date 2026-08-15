@@ -298,6 +298,7 @@ namespace NumSharp.UnitTest.Fuzz
                 case "matmul": return np.matmul(ops[0], ops[1]);
                 case "dot": return np.dot(ops[0], ops[1]);
                 case "outer": return np.outer(ops[0], ops[1]);
+                case "kron": return np.kron(ops[0], ops[1]);
 
                 // CBLAS product family (products tier): first VALUE gate for these — previously
                 // only their error contracts were tested. vecdot's axis/keepdims params select

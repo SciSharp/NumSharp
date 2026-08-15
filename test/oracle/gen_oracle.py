@@ -5187,12 +5187,29 @@ def gen_products():
             try_emit("matrix_power", {"n": pw}, [C(S33)],
                      lambda: np.linalg.matrix_power(S33, pw), f"n{pw}", dt)
 
+        # kron — Kronecker product. Values are plain a[i]*b[j], so the clean _mm_fill ramps map
+        # straight through (exact for every product dtype; integer/half products don't overflow at
+        # these sizes). Covers 1d/2d, both mixed-rank orders (the ndmin promotion), a 3-D operand,
+        # and a 0-d scalar operand (kron's multiply shortcut). Small sizes take the direct dispatch
+        # path; the tile fast-path is bit-identical (unit-test-pinned at size).
+        K22 = _mm_fill((2, 2), dt); K222 = _mm_fill((2, 2, 2), dt)
+        ksc = np.array(_mm_fill((2,), dt)[1])                       # 0-d scalar of this dtype
+        try_emit("kron", {}, [C(v4), C(w4)], lambda: np.kron(v4, w4), "1d", dt)
+        try_emit("kron", {}, [C(T23), C(T34)], lambda: np.kron(T23, T34), "2d", dt)
+        try_emit("kron", {}, [C(v4), C(T23)], lambda: np.kron(v4, T23), "1d_2d", dt)
+        try_emit("kron", {}, [C(T23), C(v4)], lambda: np.kron(T23, v4), "2d_1d", dt)
+        try_emit("kron", {}, [C(K222), C(K22)], lambda: np.kron(K222, K22), "3d_2d", dt)
+        try_emit("kron", {}, [C(T23), C(ksc)], lambda: np.kron(T23, ksc), "scalar_b", dt)
+
     # --- F-layout spot checks (the stride-aware read path) ----------------------------
     for dt in ("int32", "float64"):
         A = _mm_fill((3, 4), dt); B = _mm_fill((2, 4), dt)
         baseA, viewA = _mm_layout(A, "F")
         try_emit("inner", {}, [(baseA, viewA), (np.ascontiguousarray(B), B)],
                  lambda: np.inner(viewA, B), "F", dt)
+        # kron reading a non-contiguous (F) operand — exercises the reshape-materialisation path.
+        try_emit("kron", {}, [(baseA, viewA), (np.ascontiguousarray(B), B)],
+                 lambda: np.kron(viewA, B), "F", dt)
 
     # --- deep-truth (f32/f64, K=2049): Fraction-exact references ----------------------
     K = 2049
