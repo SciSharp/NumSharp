@@ -1370,20 +1370,23 @@ introselect (`Utilities/QuickSelect.cs`, the median/percentile primitive), the s
 
 `np.linalg.*`: `cholesky`, `cond`, `cross`, `det`, `diagonal`, `eig`, `eigh`, `eigvals`, `eigvalsh`, `inv`, `lstsq`, `matmul`, `matrix_norm`, `matrix_power`, `matrix_rank`, `matrix_transpose`, `multi_dot`, `norm`, `outer`, `pinv`, `qr`, `slogdet`, `solve`, `svd`, `svdvals`, `tensordot`, `tensorinv`, `tensorsolve`, `trace`, `vecdot`, `vector_norm` (+ `LinAlgError`)
 
-### The BLAS/LAPACK API surface — implemented vs. NSE-throwing shell
+### The BLAS/LAPACK API surface — fully implemented via OpenBLAS (NSE only for factorisations with no backend)
 
 Everything NumPy computes through the OpenBLAS binary the interop package bundles now has its public
-API, its NumPy-exact validation and its engine seam. Whether the NUMERICS exist splits cleanly in
-two, and the split is a property of the problem rather than a decision:
+API, its NumPy-exact validation, its engine seam AND — with `NumSharp.Interop.OpenBLAS` referenced —
+its numerics. Whether the numerics exist WITHOUT a backend still splits cleanly in two, and the split
+is a property of the problem rather than a decision:
 
-| | Members | With no backend installed |
+| | Members | Behaviour (installed backend vs none) |
 |---|---|---|
 | **Products** (CBLAS) | `inner`, `vdot`, `vecdot`, `matvec`, `vecmat`, `tensordot`, `linalg.multi_dot`, `matrix_power` (n ≥ 0), the `linalg` Array-API forms, `linalg.norm` except matrix ord ∈ {2, -2, 'nuc'} | **They compute.** Managed kernels; the `IBlasBackend` invariant holds — a backend changes WHICH implementation runs, never WHETHER an answer exists. **With `NumSharp.Interop.OpenBLAS` referenced**, `dot`/`matmul`/`inner`/`vdot`/`vecdot`/`matvec`/`vecmat` route through cblas for **float32/float64/complex128**, byte-identical to NumPy (complex via `zgemm`/`zgemv`/`zsyrk`/`zdotu`/`zdotc`; `tensordot`/`multi_dot`/`matrix_power` inherit it by composing over `dot`/`matmul`) — the 5 product gufuncs override `IBlasBackend.Try{Inner,Vdot,Vecdot,Matvec,Vecmat}`. |
-| **Factorisations** (LAPACK) | `cholesky`, `det`, `slogdet`, `eig`, `eigvals`, `eigh`, `eigvalsh`, `inv`, `pinv`, `lstsq`, `qr`, `solve`, `svd`, `svdvals`, `matrix_rank`, `cond`, `tensorinv`, `tensorsolve`, `matrix_power` (n < 0), `norm` matrix ord ∈ {2, -2, 'nuc'} | **`NotSupportedException` from `TensorEngine`.** Core ships no managed LU/QR/SVD/eigensolver, so there is nothing to fall back to. The message names the NumPy API, the LAPACK routine and the `IBlasBackend.Try*` member to implement. |
+| **Factorisations** (LAPACK) | `cholesky`, `det`, `slogdet`, `eig`, `eigvals`, `eigh`, `eigvalsh`, `inv`, `pinv`, `lstsq`, `qr`, `solve`, `svd`, `svdvals`, `matrix_rank`, `cond`, `tensorinv`, `tensorsolve`, `matrix_power` (n < 0), `norm` matrix ord ∈ {2, -2, 'nuc'} | **No backend: `NotSupportedException` from `TensorEngine`** — Core ships no managed LU/QR/SVD/eigensolver, so there is nothing to fall back to; the message names the NumPy API, the LAPACK routine and the `IBlasBackend.Try*` member. **With `NumSharp.Interop.OpenBLAS` referenced**, all 10 compute through LAPACK for **float32/float64/complex128** (`gesv`/`getrf`/`potrf`/`geev`/`syevd`/`heevd`/`gesdd`/`geqrf`/`orgqr`/`gelsd`), byte-identical to NumPy — float32 upcast to double and cast back exactly as NumPy's `_commonType` forces (complex via the `z` routines); the 10 factorisation `Try*` are overridden in `OpenBlasBackend`. |
 
 **The seam is `TensorEngine.Blas` — one property, not two.** `IBlasBackend.LinearAlgebra.cs` adds 15
 `Try*` members, ALL of them **default interface implementations returning false**, which is what let
-the file exist without touching `OpenBlasBackend`. (Default interface members are
+the file exist without touching `OpenBlasBackend` at first — it now **overrides all 15** (5 products +
+10 factorisations), while the interface defaults stay false so a third-party or real-only CBLAS backend
+still compiles. (Default interface members are
 interface-dispatched and invisible on the implementing class — pinned by a test that types the
 variable as `IBlasBackend` precisely because it must.) LAPACK belongs on this property because it
 lives inside the very binary already bundled: scipy-openblas ships `gesv`/`getrf`/`potrf`/`geev`/
@@ -1391,8 +1394,8 @@ lives inside the very binary already bundled: scipy-openblas ships `gesv`/`getrf
 are `virtual`, and each reads `Blas` into a **local** before calling it (GEMM_PARITY §9 — a
 test-then-call on a settable property was ~2 % NREs under a concurrent `Disable()`).
 
-**Validation runs before the throw, so the error contract is gated NOW** and does not move when the
-numerics land — `_assert_stacked_2d`/`_assert_stacked_square`/`_commonType` are ported verbatim
+**Validation runs before the throw**, so the error contract is gated the same whether or not a backend
+is installed — `_assert_stacked_2d`/`_assert_stacked_square`/`_commonType` are ported verbatim
 (`LinAlgError("{n}-dimensional array given. Array must be at least two-dimensional")`,
 `"Last 2 dimensions of the array must be square"`, `TypeError("array type float16 is unsupported in
 linalg")` — and `Decimal`/`Char`, which have no NumPy dtype, take float16's exit rather than
@@ -1543,8 +1546,10 @@ Gate: `LinearAlgebra/{BlasProductApiTests, LinAlgErrorParityTests, LinAlgEngineS
 LinAlgSignatureParityTests, EinsumSubscriptParityTests}.cs` (92 tests), backed by a 451-case NumPy
 differential matrix replayed through both libraries (dtype sweep × 10, memory-layout sweep × 8, the
 `axes=` paths, einsum's whole subscript grammar, every rejection): 435 exact, 5 expected NSE, 11
-documented divergences with verbatim messages, **0 unexplained**. `LinAlgEngineSeamTests`' first region is a checklist — **delete a case as each
-implementation lands**. These are API/error contracts rather than value-producing kernels, so they
+documented divergences with verbatim messages, **0 unexplained**. `LinAlgEngineSeamTests` now pins the
+**no-backend contract** (Core alone ships no LAPACK, so every factorisation still raises
+`NotSupportedException` there); the numerics have all landed in `NumSharp.Interop.OpenBLAS` and are
+gated by that package's live-parity tests. These are API/error contracts rather than value-producing kernels, so they
 are unit tests and deliberately absent from the differential-fuzz corpus.
 
 **Two known type-only divergences, messages verbatim on both sides:** the reshape/alignment errors
