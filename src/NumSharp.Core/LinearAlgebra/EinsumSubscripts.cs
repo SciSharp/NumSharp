@@ -1,9 +1,34 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text;
 
 namespace NumSharp
 {
+    /// <summary>
+    ///     One <c>np.einsum</c> call's resolved plan: the (cached, immutable) grammar plus the
+    ///     per-call facts that must not live on the shared grammar instance.
+    /// </summary>
+    internal readonly struct EinsumPlan
+    {
+        internal readonly EinsumSubscripts Grammar;
+
+        /// <summary>
+        ///     True when NumPy answers with a VIEW instead of contracting: a single operand, no
+        ///     <c>out=</c>, and nothing summed away — so the result is reachable through diagonals
+        ///     and a transpose alone. On this path NumPy ignores <c>order=</c> entirely and even
+        ///     discards a <c>dtype=</c> request (probed: <c>einsum('ii-&gt;i', int32, dtype=int64)</c>
+        ///     returns the int32 view), and the view is writeable iff the operand is.
+        /// </summary>
+        internal readonly bool SingleOperandView;
+
+        internal EinsumPlan(EinsumSubscripts grammar, bool singleOperandView)
+        {
+            Grammar = grammar;
+            SingleOperandView = singleOperandView;
+        }
+    }
+
     /// <summary>
     ///     A parsed <c>np.einsum</c> subscripts string: one label per dimension of every operand,
     ///     the output's labels, and the shape the contraction would produce.
@@ -44,20 +69,94 @@ namespace NumSharp
         /// <summary>How many dimensions the ellipsis contributes, across all operands.</summary>
         internal int BroadcastNdim;
 
-        /// <summary>The shape the contraction produces.</summary>
-        internal long[] OutputShape;
-
         /// <summary>True when the subscripts carried no <c>-&gt;</c> and the output was inferred.</summary>
         internal bool ImplicitOutput;
 
+        /// <summary>The rendered per-operand term strings the contraction driver consumes; see <see cref="BuildTerms"/>.</summary>
+        internal string[] InputTerms;
+
+        /// <summary>The rendered output term string; see <see cref="BuildTerms"/>.</summary>
+        internal string OutputTerm;
+
+        /// <summary>Label-only precomputation of <see cref="NothingIsSummed"/> — part of the cached grammar.</summary>
+        internal bool NothingSummed;
+
         /// <summary>
-        ///     Parses and fully validates a subscripts string against its operands.
+        ///     The grammar cache. A subscripts string over given operand RANKS always parses to the
+        ///     same labels — extents play no part in label parsing — so the parse is cached exactly
+        ///     the way NumPy's own <c>einsumfunc.py</c> caches its equation parsing
+        ///     (<c>functools.lru_cache</c>); only the extent/diagonal VALIDATION runs per call.
+        ///     Instances in the cache are immutable after construction and shared across threads.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, EinsumSubscripts> GrammarCache = new();
+
+        /// <summary>NumPy's parse cache holds 2^12 equations; a full cache simply resets.</summary>
+        private const int GrammarCacheCapacity = 4096;
+
+        /// <summary>
+        ///     Resolves a call: the (cached) grammar, the out= rank check, the per-call view/extent
+        ///     validation — in NumPy's error ORDER (grammar rejections, then out's rank, then
+        ///     diagonals, then cross-operand extents).
         /// </summary>
         /// <param name="out">
         ///     The caller's <c>out=</c>, checked for rank only — exactly where NumPy checks it,
         ///     which is after the output labels are known and before any operand is touched.
         /// </param>
-        internal static EinsumSubscripts Parse(string subscripts, NDArray[] operands, NDArray @out)
+        internal static EinsumPlan Bind(string subscripts, NDArray[] operands, NDArray @out)
+        {
+            EinsumSubscripts grammar = null;
+            string key = null;
+
+            if (operands.Length <= 32)
+            {
+                var sb = new StringBuilder(subscripts.Length + operands.Length + 1);
+                sb.Append(subscripts).Append('\0');
+                bool packable = true;
+                foreach (var op in operands)
+                {
+                    int ndim = op.ndim;
+                    if (ndim > char.MaxValue)
+                    {
+                        packable = false;
+                        break;
+                    }
+
+                    sb.Append((char)ndim);
+                }
+
+                if (packable)
+                {
+                    key = sb.ToString();
+                    GrammarCache.TryGetValue(key, out grammar);
+                }
+            }
+
+            if (grammar is null)
+            {
+                grammar = ParseGrammar(subscripts, operands);
+                if (key is not null)
+                {
+                    if (GrammarCache.Count >= GrammarCacheCapacity)
+                        GrammarCache.Clear();
+                    GrammarCache[key] = grammar;
+                }
+            }
+
+            if (@out is not null && @out.ndim != grammar.OutputLabels.Length)
+                throw new ValueError(
+                    $"out parameter does not have the correct number of dimensions, has {@out.ndim} " +
+                    $"but should have {grammar.OutputLabels.Length}");
+
+            bool singleOperandView = operands.Length == 1 && @out is null && grammar.NothingSummed;
+            grammar.ValidateExtents(operands, singleOperandView);
+            return new EinsumPlan(grammar, singleOperandView);
+        }
+
+        /// <summary>
+        ///     Parses a subscripts string against its operands' RANKS — everything about the call
+        ///     that does not depend on extents. The result is immutable and cacheable.
+        /// </summary>
+        private static EinsumSubscripts ParseGrammar(string subscripts, NDArray[] operands)
         {
             int nop = operands.Length;
 
@@ -153,12 +252,7 @@ namespace NumSharp
                 outputLabels = ParseOutputLabels(subscripts, pos + 2, broadcastNdim, labelCounts);
             }
 
-            if (@out is not null && @out.ndim != outputLabels.Length)
-                throw new ValueError(
-                    $"out parameter does not have the correct number of dimensions, has {@out.ndim} " +
-                    $"but should have {outputLabels.Length}");
-
-            var plan = new EinsumSubscripts
+            var grammar = new EinsumSubscripts
             {
                 OperandLabels = operandLabels,
                 OutputLabels = outputLabels,
@@ -166,8 +260,9 @@ namespace NumSharp
                 ImplicitOutput = implicitOutput
             };
 
-            plan.OutputShape = plan.ResolveShape(operands, @out);
-            return plan;
+            (grammar.InputTerms, grammar.OutputTerm) = grammar.BuildTerms();
+            grammar.NothingSummed = grammar.NothingIsSummed();
+            return grammar;
         }
 
         /// <summary>
@@ -192,7 +287,7 @@ namespace NumSharp
         ///     reserved character across every operand and the output.
         ///     </para>
         /// </remarks>
-        internal (string[] InputTerms, string OutputTerm) BuildTerms()
+        private (string[] InputTerms, string OutputTerm) BuildTerms()
         {
             const int broadcastBase = 0xE000;
 
@@ -392,16 +487,18 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Collapses each operand's diagonals, resolves every label's extent across operands,
-        ///     and builds the output shape.
+        ///     The per-call validation: collapses each operand's diagonals and resolves every
+        ///     label's extent across operands — everything about the call that DOES depend on
+        ///     extents. Reads the grammar, writes nothing to it (the instance is shared via the
+        ///     cache), and throws with NumPy's wording on the first conflict.
         /// </summary>
-        private long[] ResolveShape(NDArray[] operands, NDArray @out)
+        /// <param name="singleOperandView">
+        ///     Whether NumPy would answer this call with a view (single operand, no <c>out=</c>,
+        ///     nothing summed) — that attempt has its OWN wording for a bad diagonal, so which of
+        ///     the two messages a caller sees depends on all three conditions.
+        /// </param>
+        private void ValidateExtents(NDArray[] operands, bool singleOperandView)
         {
-            // NumPy attempts a no-copy view when there is a single operand, no out=, and nothing is
-            // summed away. That attempt has its OWN wording for a bad diagonal, so which of the two
-            // messages a caller sees depends on all three conditions.
-            bool singleOperandView = operands.Length == 1 && @out is null && NothingIsSummed();
-
             var extents = new long[128];
             for (int i = 0; i < extents.Length; i++)
                 extents[i] = -1;
@@ -491,15 +588,6 @@ namespace NumSharp
                 }
             }
 
-            var outputShape = new long[OutputLabels.Length];
-            int broadcastIndex = 0;
-            for (int i = 0; i < OutputLabels.Length; i++)
-            {
-                sbyte label = OutputLabels[i];
-                outputShape[i] = label == 0 ? broadcastShape[broadcastIndex++] : extents[label];
-            }
-
-            return outputShape;
         }
 
         /// <summary>

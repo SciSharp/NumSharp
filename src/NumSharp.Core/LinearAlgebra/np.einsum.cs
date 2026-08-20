@@ -30,6 +30,13 @@ namespace NumSharp
         ///     way and with the same text as NumPy's default parser.
         ///     </para>
         ///     <para>
+        ///     A single-operand expression that sums nothing away answers with a <b>view</b> of the
+        ///     operand, exactly as NumPy does: <c>np.einsum("ii-&gt;i", a)</c> is a WRITEABLE view of
+        ///     <c>a</c>'s diagonal (writing it writes <c>a</c>), <c>"ij-&gt;ji"</c> is the transpose
+        ///     view, and on this path <c>order=</c> and <c>dtype=</c> are ignored — NumPy's view
+        ///     attempt wins over both keywords.
+        ///     </para>
+        ///     <para>
         ///     <b>One deliberate divergence.</b> NumPy carries TWO independent einsum parsers — the C
         ///     one behind the default <c>optimize=False</c>, and a Python one behind the
         ///     <c>optimize</c> path — and they word their rejections differently for the same input.

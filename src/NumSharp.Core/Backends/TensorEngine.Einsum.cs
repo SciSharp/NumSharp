@@ -48,16 +48,55 @@ namespace NumSharp
             // Parse AND validate — rank, ellipsis grammar, operand count, output labels, out='s rank,
             // every diagonal and every label extent. Nothing past this line is reachable by an
             // expression NumPy would reject, and an impossible diagonal is reported here (with NumPy's
-            // wording) rather than surfacing later from np.diagonal.
-            var plan = EinsumSubscripts.Parse(subscripts, operands, @out);
-            var (inputTerms, outputTerm) = plan.BuildTerms();
+            // wording) rather than surfacing later from np.diagonal. The grammar half of the parse is
+            // cached by (subscripts, operand ranks), as NumPy caches its own equation parsing.
+            var plan = EinsumSubscripts.Bind(subscripts, operands, @out);
+            string[] inputTerms = plan.Grammar.InputTerms;
+            string outputTerm = plan.Grammar.OutputTerm;
+
+            // THE VIEW PATH — one operand, no out=, nothing summed. NumPy answers with a VIEW of the
+            // operand (diagonals + transpose only, get_combined_dims_view), and on this path it
+            // ignores order= ENTIRELY and even discards a dtype= request (probed on 2.4.2:
+            // einsum('ii->i', a, order='F'/'C') is the same non-contiguous view, and
+            // einsum('ii->i', int32, dtype=int64) returns the int32 view). The view is writeable iff
+            // the operand is — np.einsum('ii->i', a)[:] = 1 sets a's diagonal — where np.diagonal's
+            // contract is read-only, so the WRITEABLE flag is restored here, never in np.diagonal.
+            if (plan.SingleOperandView)
+            {
+                var view = SingleTermEinsum(operands[0], inputTerms[0], outputTerm, operands[0].typecode);
+
+                // Never hand back the operand INSTANCE itself (einsum('ij->ij', a)): NumPy returns a
+                // distinct view object, and returning `a` would let e.g. result.resize() mutate the
+                // operand where NumPy's view refuses.
+                if (ReferenceEquals(view, operands[0]))
+                    view = new NDArray(operands[0].Storage.Alias(operands[0].Shape)) { TensorEngine = operands[0].TensorEngine };
+                else if (!view.Shape.IsWriteable && operands[0].Shape.IsWriteable)
+                {
+                    // Re-alias from the OPERAND's storage, not the view's: Alias() inherits
+                    // read-onlyness from the storage it aliases (so a view of the read-only
+                    // np.diagonal stays read-only), and the operand's storage is the writeable one.
+                    // The view's Shape addresses the same buffer — offset and strides are absolute.
+                    view = new NDArray(operands[0].Storage.Alias(view.Shape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE)))
+                        { TensorEngine = operands[0].TensorEngine };
+                }
+
+                return view;
+            }
 
             // einsum accumulates in the operands' promoted dtype (NEP50 result_type), NOT np.sum's
             // widened accumulator: einsum('ij->i', int32) is int32, where np.sum would give int64.
-            // A dtype= override forces it (subject to the casting rule below).
+            // A dtype= override forces it. EVERY operand must reach the loop dtype under the casting
+            // rule — which is what makes casting='no' reject mixed dtypes — with NumPy's iterator
+            // wording verbatim.
             NPTypeCode computeType = dtype ?? np.result_type(operands);
-            if (dtype.HasValue)
-                RequireDtypeCastable(operands, dtype.Value, casting);
+            for (int i = 0; i < operands.Length; i++)
+            {
+                if (operands[i].typecode != computeType && !np.can_cast(operands[i].typecode, computeType, casting))
+                    throw new TypeError(
+                        $"Iterator operand {i} dtype could not be cast from " +
+                        $"dtype('{operands[i].typecode.AsNumpyDtypeName()}') to " +
+                        $"dtype('{computeType.AsNumpyDtypeName()}') according to the rule '{casting}'");
+            }
 
             var terms = new List<(NDArray Array, string Term)>(operands.Length);
             for (int i = 0; i < operands.Length; i++)
@@ -94,12 +133,24 @@ namespace NumSharp
             if (@out is null)
                 return result;
 
+            // Rank was validated at parse; a same-rank extent mismatch is reported here. NumPy leaks
+            // NpyIter's "remapped shapes" text for this (the same iterator wording the label-extent
+            // mismatch gets), so — like that case — NumSharp words it about the contraction instead.
             if (!ShapesEqual(@out.Shape.dimensions, result.Shape.dimensions))
                 throw new ValueError(
                     $"einsum() output parameter has shape ({string.Join(",", @out.Shape.dimensions)}) " +
                     $"but the contraction produces ({string.Join(",", result.Shape.dimensions)})");
 
-            np.copyto(@out, result, casting);
+            // The result must reach out='s dtype under the SAME casting rule as the inputs. NumPy's
+            // iterator names out as operand <nop> in this message.
+            if (@out.typecode != result.typecode && !np.can_cast(result.typecode, @out.typecode, casting))
+                throw new TypeError(
+                    $"Iterator requested dtype could not be cast from " +
+                    $"dtype('{result.typecode.AsNumpyDtypeName()}') to " +
+                    $"dtype('{@out.typecode.AsNumpyDtypeName()}'), the operand {operands.Length} dtype, " +
+                    $"according to the rule '{casting}'");
+
+            np.copyto(@out, result, "unsafe");
             return @out;
         }
 
@@ -448,6 +499,13 @@ namespace NumSharp
             return shape;
         }
 
+        /// <summary>
+        ///     Resolves the computed result's memory layout. Probed against 2.4.2: <c>'A'</c> AND
+        ///     <c>'K'</c> both come back F-contiguous when EVERY input is F-contiguous (a matmul,
+        ///     hadamard or 3-op chain over all-F operands is F even at the default <c>order='K'</c>),
+        ///     and C otherwise — where <c>'K'</c> leaves an already-computed C result untouched.
+        ///     The single-operand VIEW path never reaches this method (order is ignored there).
+        /// </summary>
         private static NDArray ApplyOrder(NDArray result, char order, NDArray[] operands)
         {
             switch (order)
@@ -456,7 +514,7 @@ namespace NumSharp
                     return np.ascontiguousarray(result);
                 case 'F':
                     return np.asfortranarray(result);
-                case 'A':
+                default:                 // 'A' and 'K'
                     bool allF = true;
                     foreach (var o in operands)
                     {
@@ -466,21 +524,9 @@ namespace NumSharp
                         break;
                     }
 
-                    return allF ? np.asfortranarray(result) : np.ascontiguousarray(result);
-                default:                 // 'K' — keep the natural layout (may be a view)
-                    return result;
-            }
-        }
-
-        /// <summary>Enforces <c>dtype=</c>'s casting rule the way NumPy's einsum loop does.</summary>
-        private static void RequireDtypeCastable(NDArray[] operands, NPTypeCode target, string casting)
-        {
-            for (int i = 0; i < operands.Length; i++)
-            {
-                if (!np.can_cast(operands[i].typecode, target, casting))
-                    throw new TypeError(
-                        $"Cannot cast einsum operand {i} from dtype('{operands[i].typecode.AsNumpyDtypeName()}') " +
-                        $"to dtype('{target.AsNumpyDtypeName()}') according to the rule '{casting}'");
+                    if (allF)
+                        return np.asfortranarray(result);
+                    return order == 'A' ? np.ascontiguousarray(result) : result;
             }
         }
 

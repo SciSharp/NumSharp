@@ -244,6 +244,170 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
         #endregion
 
+        #region the view path (single operand, no out=, nothing summed)
+
+        [TestMethod]
+        public void ViewPath_DiagonalIsAWriteableView_ThatWritesThrough()
+        {
+            // NumPy's documented idiom: np.einsum('ii->i', a)[:] = 1 sets a's diagonal. The view is
+            // WRITEABLE (np.diagonal's own contract is read-only — einsum restores the flag).
+            var a = np.arange(9.0).reshape(3, 3);
+            var d = np.einsum("ii->i", a);
+            d.Shape.IsWriteable.Should().BeTrue();
+
+            d.SetValue(99.0, 1);
+            a.GetValue<double>(1, 1).Should().Be(99.0, "the view shares a's storage");
+        }
+
+        [TestMethod]
+        public void ViewPath_TransposeAndIdentity_AreDistinctViewsThatShareStorage()
+        {
+            var a = np.arange(6.0).reshape(2, 3);
+
+            var t = np.einsum("ij->ji", a);
+            t.Shape.IsWriteable.Should().BeTrue();
+            t.SetValue(50.0, 2, 0);
+            a.GetValue<double>(0, 2).Should().Be(50.0);
+
+            // einsum('ij->ij', a) is a VIEW of a, never a itself — NumPy returns a distinct object,
+            // and handing back the operand would let result.resize() mutate it.
+            var r = np.einsum("ij->ij", a);
+            ReferenceEquals(r, a).Should().BeFalse();
+            r.SetValue(70.0, 1, 1);
+            a.GetValue<double>(1, 1).Should().Be(70.0);
+        }
+
+        [TestMethod]
+        public void ViewPath_BroadcastInputStaysReadOnly()
+        {
+            // Writeable IFF the operand is: a broadcast view is read-only, and so is its diagonal.
+            var bc = np.broadcast_to(np.arange(3.0), new Shape(3, 3));
+            np.einsum("ii->i", bc).Shape.IsWriteable.Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void ViewPath_IgnoresOrderAndDtypeRequests()
+        {
+            // Probed on 2.4.2: the view attempt wins over BOTH keywords — order='F'/'C' still
+            // returns the same non-contiguous view, and dtype=int64 on an int32 operand returns the
+            // int32 view rather than a widened copy.
+            var a = np.arange(9.0).reshape(3, 3);
+            var d = np.einsum("ii->i", new[] {a}, order: 'F');
+            d.Shape.IsContiguous.Should().BeFalse("the diagonal stride is n+1; NumPy does not copy it for order=");
+            d.SetValue(42.0, 0);
+            a.GetValue<double>(0, 0).Should().Be(42.0);
+
+            var i32 = np.arange(9).astype(NPTypeCode.Int32).reshape(3, 3);
+            np.einsum("ii->i", new[] {i32}, dtype: NPTypeCode.Int64).typecode.Should().Be(NPTypeCode.Int32);
+        }
+
+        #endregion
+
+        #region casting= gates every cast, with NumPy's iterator texts
+
+        [TestMethod]
+        public void CastingNo_RejectsThePromotionCast_Verbatim()
+        {
+            new Action(() => np.einsum("i,i->i",
+                    new[] {np.arange(3).astype(NPTypeCode.Int32), np.arange(3.0)}, casting: "no"))
+                .Should().Throw<TypeError>().WithMessage(
+                    "Iterator operand 0 dtype could not be cast from dtype('int32') to dtype('float64') " +
+                    "according to the rule 'no'");
+
+            // Same dtype everywhere needs no cast, so casting='no' computes.
+            np.einsum("i,i->i", new[] {np.arange(3.0), np.arange(3.0)}, casting: "no")
+                .Should().BeOfValues(0, 1, 4);
+        }
+
+        [TestMethod]
+        public void OutCast_IsRejectedUnderTheRule_Verbatim()
+        {
+            // NumPy names out as operand <nop> in this message (1 input -> operand 1).
+            new Action(() => np.einsum("ij->i",
+                    new[] {np.arange(6.0).reshape(2, 3)}, @out: np.zeros(new Shape(2), NPTypeCode.Int32)))
+                .Should().Throw<TypeError>().WithMessage(
+                    "Iterator requested dtype could not be cast from dtype('float64') to dtype('int32'), " +
+                    "the operand 1 dtype, according to the rule 'safe'");
+        }
+
+        #endregion
+
+        #region order= resolves the computed result's layout
+
+        [TestMethod]
+        public void Order_AllFortranInputs_ComeBackFortran_EvenAtTheDefaultK()
+        {
+            // Probed: c_einsum's iterator picks F for all-F inputs whatever 'A'/'K' says.
+            var fa = np.asfortranarray(np.arange(6.0).reshape(2, 3));
+            var fb = np.asfortranarray(np.arange(6.0).reshape(3, 2));
+
+            foreach (char order in new[] {'K', 'A', 'F'})
+            {
+                var r = np.einsum("ij,jk->ik", new[] {fa, fb}, order: order);
+                r.Shape.IsFContiguous.Should().BeTrue($"order '{order}' with all-F inputs is F in NumPy");
+                r.Should().BeOfValues(10, 13, 28, 40);
+            }
+
+            np.einsum("ij,jk->ik", new[] {fa, fb}, order: 'C').Shape.IsContiguous.Should().BeTrue();
+
+            // Mixed C,F stays C at 'K' and 'A'.
+            var ca = np.arange(6.0).reshape(2, 3);
+            np.einsum("ij,jk->ik", new[] {ca, fb}, order: 'K').Shape.IsContiguous.Should().BeTrue();
+            np.einsum("ij,jk->ik", new[] {ca, fb}, order: 'A').Shape.IsContiguous.Should().BeTrue();
+        }
+
+        #endregion
+
+        #region empties and degenerate extents
+
+        [TestMethod]
+        public void EmptyContractionAxis_GivesZeros_AndEmptyOperandsGiveEmptyResults()
+        {
+            // (2,0)@(0,3): every entry is an empty sum -> exactly 0, matching NumPy.
+            np.einsum("ij,jk->ik", np.ones(new Shape(2, 0)), np.ones(new Shape(0, 3)))
+                .Should().BeOfValues(0, 0, 0, 0, 0, 0).And.BeShaped(2, 3);
+
+            np.einsum("ij->i", np.ones(new Shape(2, 0))).Should().BeOfValues(0, 0).And.BeShaped(2);
+            np.einsum("ij->i", np.ones(new Shape(0, 3))).Should().BeShaped(0);
+            np.einsum("i->", np.ones(new Shape(0))).Should().BeOfValues(0).And.BeShaped();
+            np.einsum("ii->i", np.zeros(new Shape(0, 0))).Should().BeShaped(0);
+        }
+
+        #endregion
+
+        #region layouts (the full matrix is differential-verified; these pin one of each kind)
+
+        [TestMethod]
+        public void NonContiguousOperands_ContractCorrectly()
+        {
+            // Transposed lhs: arange(6).reshape(3,2).T @ arange(6).reshape(3,2).
+            var at = np.transpose(np.arange(6.0).reshape(3, 2));
+            np.einsum("ij,jk->ik", at, np.arange(6.0).reshape(3, 2))
+                .Should().BeOfValues(20, 26, 26, 35).And.BeShaped(2, 2);
+
+            // Negative-stride reduce: rows reversed.
+            np.einsum("ij->i", np.arange(6.0).reshape(2, 3)["::-1"])
+                .Should().BeOfValues(12, 3).And.BeShaped(2);
+
+            // F-order diagonal.
+            np.einsum("ii->i", np.asfortranarray(np.arange(9.0).reshape(3, 3)))
+                .Should().BeOfValues(0, 4, 8).And.BeShaped(3);
+        }
+
+        [TestMethod]
+        public void StridedOut_WritesThroughItsBase()
+        {
+            // out= may be a strided view; the result lands through its strides (probed layout).
+            var @base = np.zeros(new Shape(4, 4));
+            var target = @base["::2, ::2"];
+            var r = np.einsum("ij,jk->ik",
+                new[] {np.arange(4.0).reshape(2, 2), np.arange(4.0).reshape(2, 2)}, @out: target);
+            ReferenceEquals(r, target).Should().BeTrue();
+            @base.Should().BeOfValues(2, 0, 3, 0, 0, 0, 0, 0, 6, 0, 11, 0, 0, 0, 0, 0);
+        }
+
+        #endregion
+
         #region keywords: out=, dtype=, sublists
 
         [TestMethod]
@@ -265,11 +429,14 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [TestMethod]
-        public void Dtype_RejectsAnUnsafeCastUnderTheDefaultRule()
+        public void Dtype_RejectsAnUnsafeCastUnderTheDefaultRule_Verbatim()
         {
-            // int32 -> float32 is not a 'safe' cast, exactly as NumPy's einsum loop rejects it.
+            // int32 -> float32 is not a 'safe' cast, exactly as NumPy's einsum loop rejects it —
+            // note this expression SUMS ('ij->i'), so the view path does not swallow the dtype.
             new Action(() => np.einsum("ij->i", new[] {A23.astype(NPTypeCode.Int32)}, dtype: NPTypeCode.Single))
-                .Should().Throw<TypeError>();
+                .Should().Throw<TypeError>().WithMessage(
+                    "Iterator operand 0 dtype could not be cast from dtype('int32') to dtype('float32') " +
+                    "according to the rule 'safe'");
         }
 
         [TestMethod]

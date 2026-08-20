@@ -1502,10 +1502,57 @@ ULP because its order follows `np.sum` and the left-to-right fold rather than Nu
 iterator; those stay `allclose`. All 15 dtypes contract (Half/Decimal/Char via the scalar matmul
 paths, complex UNCONJUGATED — einsum never conjugates, unlike `vdot`). einsum preserves the operand
 dtype like NumPy (`einsum('ij->i', int32)` is int32, NOT `np.sum`'s widened int64); two-operand
-promotion is `result_type`; `dtype=` forces the accumulation dtype under the `casting` rule; `out=`
-and `order=` are honoured. Differential-verified against NumPy 2.4.2 across 300+ cases (all dtypes ×
-matmul/transpose/diagonal/trace/reductions/outer/inner/batched/ellipsis/multi-diagonal/broadcast-
-contraction/3-operand/scalar).
+promotion is `result_type`. Differential-verified against NumPy 2.4.2 across ~490 cases: 307
+value/dtype/edge (all dtypes × matmul/transpose/diagonal/trace/reductions/outer/inner/batched/
+ellipsis/multi-diagonal/broadcast-contraction/3-operand/scalar) + a 186-case MEMORY-LAYOUT matrix
+(F/transposed/strided/negative-stride/offset/broadcast on either operand × matmul/reduce/diagonal/
+batched/ellipsis/permuted-output + empties, ALL bit-exact on integer-valued data).
+
+**The single-operand VIEW path is NumPy's, keyword quirks included** (all probed on 2.4.2). One
+operand + no `out=` + nothing summed → a VIEW of the operand: `einsum('ii->i', a)` is **writeable**
+(`…[:] = 1` sets `a`'s diagonal — `np.diagonal`'s own contract stays read-only; einsum restores the
+flag by re-aliasing from the OPERAND's storage, because `Storage.Alias()` inherits read-onlyness
+from the storage it aliases — aliasing from the diagonal view's storage silently re-clears the bit),
+a broadcast operand's view stays read-only, and `einsum('ij->ij', a)` is a DISTINCT view object,
+never `a` itself (returning `a` would let `result.resize()` mutate the operand where NumPy's view
+refuses). On this path NumPy **ignores `order=` entirely** (`order='C'`/`'F'` still return the same
+non-contiguous diagonal view) and **discards a `dtype=` request** (`einsum('ii->i', int32,
+dtype=int64)` is the int32 view) — both reproduced.
+
+**`casting=` gates EVERY cast, with NumPy's iterator texts verbatim.** Each operand must reach the
+loop dtype under the rule — `Iterator operand 0 dtype could not be cast from dtype('int64') to
+dtype('float64') according to the rule 'no'` — which is what makes `casting='no'` reject mixed
+dtypes; and the result must reach `out=`'s dtype — `Iterator requested dtype could not be cast from
+dtype('float64') to dtype('int32'), the operand 1 dtype, according to the rule 'safe'` (out is
+operand `nop` in NumPy's numbering). A same-rank `out=` EXTENT mismatch is a second NpyIter-leak
+divergence (like the label-extent one): NumPy leaks the "remapped shapes" iterator text, NumSharp
+words it about the contraction (`einsum() output parameter has shape (…) but the contraction
+produces (…)`).
+
+**`order=` resolves the computed result's layout** — and `'A'` AND `'K'` both come back F-contiguous
+when EVERY input is F-contiguous (probed: an all-F matmul, hadamard or 3-op chain is F even at the
+default `'K'`), C otherwise, where `'K'` leaves the already-C computed result untouched. The view
+path above is exempt.
+
+**The grammar half of the parse is cached** by `(subscripts, operand ranks)` — labels depend on
+nothing else — in a 4096-entry `ConcurrentDictionary` (NumPy caches its own equation parse the same
+way, `lru_cache(2**12)`); the extent/diagonal validation always runs per call against the shared
+IMMUTABLE grammar instance (thread-hammered: 20K concurrent mixed valid/invalid calls, 0 errors).
+
+**Perf (NPY/NS vs NumPy's DEFAULT einsum — `optimize=False`, the C iterator; Release, best-of-7).**
+With `NumSharp.Interop.OpenBLAS` referenced: matmul 1024² f64 **23×**, 256² **5.6×**, 3-op chain
+`ij,jk,kl->il` 64² **146×** (NumPy's default 3-op einsum is the naive 4-label iterator; even its
+`optimize=True` path is ~0.9× vs ours), batched 128×16² **2.0×**, matvec 512² **1.9×**, hadamard 1M
+**3–4×**, complex128 64² **2.9×**, outer ~**1.1×**. Without a backend the product cells fall to the
+managed GEMM exactly as `np.matmul` does (1024² still **2.9×**, 256² **2.3×**, but matvec **0.21×**
+— the managed product kernels' own documented floor: `np.dot(m,v)`/`np.matvec` measure the same
+187µs themselves). Sub-1× cells, all inherited or fixed-cost: sub-5µs calls (4×4 matmul ~0.5×,
+trace/diagonal/transpose views 0.5–0.9× — the ~1–2µs composition floor vs c_einsum's single C call;
+vs NumPy's own `optimize=True` these same cells are **1.9–5.9×** in NumSharp's favor), big `ij->i`
+~0.8× (the shared axis-sum's parity — einsum adds nothing on top), and int32 64² ~0.5× (the managed
+int GEMM vs c_einsum's int SSE loop — our einsum equals our `np.matmul(i32)` there, and NumPy's own
+`np.matmul(i32)` is SLOWER than its einsum). einsum-specific overhead is ~2µs/call, under 1 % by
+64².
 
 **NumPy has TWO einsum parsers** — the C one behind the default `optimize=False` and a Python one
 (`einsumfunc.py`) behind the `optimize` path — and they word the same rejection differently.
