@@ -477,6 +477,17 @@ namespace NumSharp
 
         public int dtypesize => Storage.DTypeSize;
 
+        /// <summary>
+        ///     Total bytes consumed by the elements of the array — the LOGICAL element count
+        ///     (<see cref="size"/>) times the itemsize (<see cref="dtypesize"/>), matching NumPy's
+        ///     <c>PyArray_NBYTES = PyArray_ITEMSIZE * PyArray_SIZE</c>. Because it uses the logical size,
+        ///     a broadcast view reports its logical byte size (e.g. a <c>(1000,1000)</c> stride-0 view of
+        ///     one int32 reports <c>4000000</c>), not its one-element backing buffer; a 0-d array reports
+        ///     one itemsize and an empty array reports 0. Does not include the array object's own overhead.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.nbytes.html</remarks>
+        public long nbytes => Storage.Shape.Size * (long)Storage.DTypeSize;
+
         public char order => Storage.Shape.Order;
 
         public long[] strides => Storage.Shape.Strides;
