@@ -10,8 +10,8 @@ namespace NumSharp
         /// </summary>
         /// <remarks>
         ///     <para>
-        ///     <b>Most of this module needs a LAPACK backend and raises
-        ///     <see cref="NotSupportedException"/> without one.</b> NumSharp.Core is 100 % managed C#
+        ///     <b>Most of this module needs a matrix backend and raises
+        ///     <see cref="OpenBlasMissingBackendException"/> without one.</b> NumSharp.Core is 100 % managed C#
         ///     and carries no LU, QR, SVD or eigensolver, so — unlike the matrix products, which
         ///     always have a managed kernel to fall back on — a factorisation has nothing to compute
         ///     with until something assigns <see cref="TensorEngine.Blas"/>. The validation in front

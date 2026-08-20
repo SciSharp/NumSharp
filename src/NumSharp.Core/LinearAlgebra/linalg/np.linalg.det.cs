@@ -17,7 +17,7 @@ namespace NumSharp
             ///     underflow where <see cref="slogdet"/> stays finite.
             ///     </para>
             /// </remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static NDArray det(NDArray a)
             {
                 AssertStackedSquare(a);
@@ -35,7 +35,7 @@ namespace NumSharp
             ///     sign is a unit-modulus complex number rather than ±1.
             /// </returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.slogdet.html</remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static (NDArray sign, NDArray logabsdet) slogdet(NDArray a)
             {
                 AssertStackedSquare(a);

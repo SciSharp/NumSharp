@@ -18,9 +18,10 @@ namespace NumSharp.Backends
     ///     product family (<c>inner</c>/<c>vdot</c>/<c>vecdot</c>/<c>matvec</c>/<c>vecmat</c>) keeps
     ///     the invariant the rest of this interface states: NumSharp computes them with its own
     ///     managed kernels, so a backend changes WHICH implementation runs, never WHETHER the answer
-    ///     can be produced. The LAPACK family CANNOT keep it — NumSharp.Core ships no managed LU, QR,
-    ///     SVD or eigensolver, so with no backend installed (or one that declines) the engine has
-    ///     nothing to fall back to and raises <see cref="System.NotSupportedException"/>. Callers of
+    ///     can be produced. The factorisation family CANNOT keep it — NumSharp.Core ships no managed
+    ///     LU, QR, SVD or eigensolver, so with no backend installed (or one that declines) the engine
+    ///     has nothing to fall back to and raises <see cref="NumSharp.OpenBlasMissingBackendException"/>.
+    ///     Callers of
     ///     <c>np.linalg</c> must expect that; callers of the product family need not.
     ///     </para>
     ///     <para>

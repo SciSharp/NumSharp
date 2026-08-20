@@ -19,7 +19,7 @@ namespace NumSharp
             ///     Hermitian — it is both faster and guaranteed to give real eigenvalues.
             ///     </para>
             /// </remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static (NDArray eigenvalues, NDArray eigenvectors) eig(NDArray a)
             {
                 AssertStackedSquare(a);
@@ -33,7 +33,7 @@ namespace NumSharp
             ///     Eigenvalues of a general matrix, without the eigenvectors.
             /// </summary>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvals.html</remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static NDArray eigvals(NDArray a)
             {
                 AssertStackedSquare(a);
@@ -87,7 +87,7 @@ namespace NumSharp
             ///     counterpart dtype.
             /// </returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigh.html</remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static (NDArray eigenvalues, NDArray eigenvectors) eigh(NDArray a, char UPLO = 'L')
             {
                 char uplo = RequireUplo(UPLO);

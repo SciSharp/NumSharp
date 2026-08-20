@@ -26,7 +26,7 @@ namespace NumSharp
             ///     the "at least two-dimensional" one.
             ///     </para>
             /// </remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) lstsq(
                 NDArray a, NDArray b, double? rcond = null)
             {

@@ -20,9 +20,9 @@ namespace NumSharp
             ///     the first three powers are special-cased before the loop starts.
             ///     </para>
             ///     <para>
-            ///     A negative power is the only route here that needs a LAPACK backend
+            ///     A negative power is the only route here that needs a matrix backend
             ///     (<c>a**-n</c> is <c>inv(a)**n</c>), so it raises
-            ///     <see cref="NotSupportedException"/> while none is installed. Non-negative powers
+            ///     <see cref="OpenBlasMissingBackendException"/> while none is installed. Non-negative powers
             ///     work.
             ///     </para>
             /// </remarks>

@@ -20,7 +20,7 @@ namespace NumSharp
             ///     selected by rank alone and report their own core-dimension errors.
             ///     </para>
             /// </remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static NDArray solve(NDArray a, NDArray b)
             {
                 AssertStackedSquare(a);
@@ -56,7 +56,7 @@ namespace NumSharp
             ///     trailing block of <c>a.shape</c>.
             ///     </para>
             /// </remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static NDArray tensorsolve(NDArray a, NDArray b, int[] axes = null)
             {
                 var work = a;

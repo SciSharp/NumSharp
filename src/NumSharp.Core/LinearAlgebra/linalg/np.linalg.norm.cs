@@ -20,9 +20,9 @@ namespace NumSharp
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.norm.html
             ///     <para>
-            ///     <b>Every order works WITHOUT a LAPACK backend except three</b> — matrix
+            ///     <b>Every order works WITHOUT a matrix backend except three</b> — matrix
             ///     <c>ord</c> 2, -2 and <c>"nuc"</c>, which are defined through singular values and so
-            ///     raise <see cref="NotSupportedException"/>. The rest are reductions
+            ///     raise <see cref="OpenBlasMissingBackendException"/>. The rest are reductions
             ///     (<see cref="np.abs"/>, <see cref="np.sum"/>, <see cref="np.amax"/>,
             ///     <see cref="np.power"/>) and compute normally.
             ///     </para>

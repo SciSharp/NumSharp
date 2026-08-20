@@ -27,7 +27,7 @@ namespace NumSharp
             ///     spectral and nuclear matrix norms — which is why all of those stop here too.
             ///     </para>
             /// </remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static (NDArray U, NDArray S, NDArray Vh) svd(NDArray a, bool full_matrices = true,
                 bool compute_uv = true, bool hermitian = false)
             {
@@ -41,7 +41,7 @@ namespace NumSharp
             ///     <c>svd(x, compute_uv: false)</c>.
             /// </summary>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.svdvals.html</remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static NDArray svdvals(NDArray x)
             {
                 AssertStacked2d(x);
@@ -58,7 +58,7 @@ namespace NumSharp
             /// <param name="hermitian">Assume the operand is Hermitian.</param>
             /// <param name="rtol">Relative threshold; supplying it together with <paramref name="tol"/> is an error.</param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_rank.html</remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static NDArray matrix_rank(NDArray A, double? tol = null, bool hermitian = false,
                 double? rtol = null)
             {
@@ -113,7 +113,7 @@ namespace NumSharp
             ///     works without a backend.
             ///     </para>
             /// </remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static NDArray cond(NDArray x, object p = null)
             {
                 if (IsEmpty2d(x))

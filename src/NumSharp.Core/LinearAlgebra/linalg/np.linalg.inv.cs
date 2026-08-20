@@ -18,7 +18,7 @@ namespace NumSharp
             ///     determinant test.
             ///     </para>
             /// </remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static NDArray inv(NDArray a)
             {
                 AssertStackedSquare(a);
@@ -41,7 +41,7 @@ namespace NumSharp
             ///     upstream.
             /// </param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.pinv.html</remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static NDArray pinv(NDArray a, double? rcond = null, bool hermitian = false, double? rtol = null)
             {
                 if (rcond is not null && rtol is not null)
@@ -89,7 +89,7 @@ namespace NumSharp
             ///     How many LEADING axes form the "row" side. Must be positive.
             /// </param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.tensorinv.html</remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static NDArray tensorinv(NDArray a, int ind = 2)
             {
                 if (ind <= 0)

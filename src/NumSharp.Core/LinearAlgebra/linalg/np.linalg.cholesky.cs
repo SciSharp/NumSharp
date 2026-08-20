@@ -23,7 +23,7 @@ namespace NumSharp
             ///     <c>LinAlgError("Matrix is not positive definite")</c> from the factorisation.
             ///     </para>
             /// </remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static NDArray cholesky(NDArray a, bool upper = false)
             {
                 AssertStackedSquare(a);

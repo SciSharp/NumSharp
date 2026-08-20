@@ -20,7 +20,7 @@ namespace NumSharp
             ///     <c>(h, tau)</c>.
             /// </returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.qr.html</remarks>
-            /// <exception cref="NotSupportedException">No LAPACK backend serves these operands.</exception>
+            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
             public static (NDArray Q, NDArray R) qr(NDArray a, string mode = "reduced")
             {
                 string resolved = ResolveQrMode(mode);
