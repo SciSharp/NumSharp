@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace NumSharp
 {
@@ -156,12 +157,25 @@ namespace NumSharp
         private static void RequireOptimize(object optimize)
         {
             // NumPy accepts False/True/'greedy'/'optimal' — and silently tolerates any other STRING,
-            // falling through to greedy. Anything else is a contraction path, which it rejects
-            // unless the list opens with the marker 'einsum_path'.
-            if (optimize is null or bool or string)
+            // falling through to greedy. It also accepts a precomputed path from np.einsum_path (an
+            // EinsumPath, or NumPy's raw ['einsum_path', …] list) and a ('greedy'|'optimal', memory)
+            // tuple. NumSharp still contracts left-to-right whatever the path says (documented above),
+            // so this ACCEPTS-and-VALIDATES the same shapes NumPy does without acting on them.
+            switch (optimize)
+            {
+                case null:
+                case bool:
+                case string:
+                case EinsumPath:
+                    return;
+            }
+
+            if (optimize is ITuple tuple && tuple.Length == 2 && tuple[0] is string && IsNumber(tuple[1]))
+                return;
+            if (optimize is object[] list && list.Length > 0 && (list[0] as string) == EinsumPath.Marker)
                 return;
 
-            throw new TypeError($"Did not understand the path: {optimize}");
+            throw new TypeError($"Did not understand the path: {PyRepr(optimize)}");
         }
     }
 }

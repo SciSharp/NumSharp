@@ -1387,7 +1387,7 @@ introselect (`Utilities/QuickSelect.cs`, the median/percentile primitive), the s
   See `Sorting_Searching_Counting/np.{partition,argpartition,lexsort,nanargmax,sort_complex}.cs`.
 
 ### Linear Algebra
-`diag`, `diagflat`, `diag_indices`, `diag_indices_from`, `diagonal`, `dot`, `einsum` (contracts via the matrix products / OpenBLAS), `fill_diagonal`, `inner`, `mask_indices`, `matmul`, `matvec`, `outer`, `tensordot`, `trace`, `tril`, `tril_indices`, `tril_indices_from`, `triu`, `triu_indices`, `triu_indices_from`, `vdot`, `vecdot`, `vecmat`
+`diag`, `diagflat`, `diag_indices`, `diag_indices_from`, `diagonal`, `dot`, `einsum` (contracts via the matrix products / OpenBLAS), `einsum_path` (greedy/optimal contraction planner, byte-exact info string), `fill_diagonal`, `inner`, `mask_indices`, `matmul`, `matvec`, `outer`, `tensordot`, `trace`, `tril`, `tril_indices`, `tril_indices_from`, `triu`, `triu_indices`, `triu_indices_from`, `vdot`, `vecdot`, `vecmat`
 
 `np.linalg.*`: `cholesky`, `cond`, `cross`, `det`, `diagonal`, `eig`, `eigh`, `eigvals`, `eigvalsh`, `inv`, `lstsq`, `matmul`, `matrix_norm`, `matrix_power`, `matrix_rank`, `matrix_transpose`, `multi_dot`, `norm`, `outer`, `pinv`, `qr`, `slogdet`, `solve`, `svd`, `svdvals`, `tensordot`, `tensorinv`, `tensorsolve`, `trace`, `vecdot`, `vector_norm` (+ `LinAlgError`)
 
@@ -1616,12 +1616,32 @@ and naming them is also what keeps them unambiguous here: NumSharp converts scal
 implicitly, so a fully positional 7-argument call matches both the `params` overload and the full one
 and the compiler rejects it.
 
-**Deliberately out of scope:** `np.einsum_path` (NumPy's contraction planner — its own function,
-~400 lines of optimal/greedy search). The `optimize=` argument is accepted and validated but does not
-change the numerics — NumSharp always contracts pairwise left-to-right; a smarter path would only
-change float accumulation order (hence the last ULP for 3+ float operands), never correctness. Gate:
-`LinearAlgebra/EinsumSubscriptParityTests.cs` (subscript grammar + resolved shapes) +
-`LinearAlgebra/EinsumContractionTests.cs` (the values, against NumPy 2.4.2).
+**`np.einsum_path` — the contraction planner — is IMPLEMENTED** (`LinearAlgebra/{np.einsum_path,
+EinsumPathPlanner,EinsumPath}.cs`), a route-for-route port of NumPy 2.4.2's `einsumfunc.py`: its
+`_parse_einsum_input` parser, the `_greedy_path`/`_optimal_path` searches with the `_flop_count` cost
+model, and the `einsum_path` info-string builder. `np.einsum_path(subscripts, operands, optimize)`
+returns `(EinsumPath path, string repr)` — NumPy's `(['einsum_path', (1,2), (0,1)], "…")` tuple, where
+`EinsumPath` is a `readonly struct` (Deconstruct + indexer + `Steps`/`Count` + `ToList()` for NumPy's
+raw list + NumPy-format `ToString`). **The path and every numeric metric are byte-identical to NumPy**
+(differential-fuzzed 1,525 random contraction networks: path + full printed string). `optimize=` takes
+NumPy's whole `path_type` vocabulary — `false`/`null` (no-opt), `true`/`"greedy"`/`"optimal"`, a
+precomputed `EinsumPath` (explicit path), and a `("greedy"|"optimal", memory)` tuple — in NumPy's exact
+decision order, with the verbatim error taxonomy (`ValueError` for the parse/shape rejections;
+`KeyError` — a new `Exceptions/KeyError.cs` — for an unknown path name, reproducing NumPy's buggy
+`('Path name %s not found', '…')` leak; `RuntimeError` for an incomplete explicit path; `TypeError`
+"Did not understand the path: …" / "object of type '…' has no len()" for a bad path object). The
+returned `EinsumPath` ROUND-TRIPS into `np.einsum(…, optimize: path)` (also the raw list and the memory
+tuple) — accepted and validated, though einsum STILL contracts pairwise left-to-right (documented
+above), so the path changes nothing numerically, only which plan is displayed. **Two things done in
+integer arithmetic on purpose:** the `.3e` FLOP/size formatting rounds HALF-TO-EVEN like Python (.NET's
+`"0.000e+00"` rounds half-AWAY — 13825 → 1.383e+04 vs NumPy's 1.382e+04), so `Sci()` formats the
+integer directly; and the ellipsis PLACEHOLDER letters are the ONE inherent divergence — NumPy draws
+them from a hash-randomized set (`I`/`f`/`P` across three processes), so NumSharp draws them
+deterministically (the path and every number still match, only the `...`-expanded display letters
+differ, which NumPy itself does not pin). Deliberately NOT ported: `np.einsum_path`'s `einsum_call=True`
+hidden option (NumPy-internal; NumSharp's einsum has its own left-to-right driver). Gate:
+`LinearAlgebra/EinsumPathTests.cs` (23) + `EinsumSubscriptParityTests.cs` (subscript grammar) +
+`EinsumContractionTests.cs` (the values, against NumPy 2.4.2).
 
 **Signature parity is its own gate.** `LinAlgSignatureParityTests` reflects over the whole surface
 and asserts each function has an overload whose parameter NAMES appear in NumPy's ORDER, plus the
