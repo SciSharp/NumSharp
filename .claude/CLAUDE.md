@@ -1759,7 +1759,7 @@ class above; `OpRegistry` all 16 transforms + 4 helpers, `gen_oracle.gen_fft`, `
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
 ### File I/O
-`fromfile`, `load`, `load_npy`, `load_npz`, `save`, `savez`, `savez_compressed`, `tofile`
+`fromfile`, `load`, `load_npy`, `load_npz`, `save`, `savetxt`, `savez`, `savez_compressed`, `tofile`
 
 The `.npy`/`.npz` stack is a **port of NumPy 2.4.2's `numpy/lib/_format_impl.py`** (NEP-01) in
 `IO/{NpyFormat,NpzFile,PyLiteral}.cs`, and the writer is **byte-for-byte identical to NumPy's own
@@ -1844,6 +1844,31 @@ NumPy output) replayed by `NpyOracleTests` under the **`NpyOracle`** category �
 write / header-only write / verbatim error / round-trip / npz / live-view write / hostile-allocation.
 Reverse interop (NumPy reading NumSharp, the direction byte-equality can't cover for `.npz`) is the
 manual gate `python test/oracle/verify_npy_interop.py`.
+
+**`np.savetxt(fname, X, fmt='%.18e', delimiter=' ', newline='\n', header='', footer='', comments='# ',
+encoding=None)`** is a port of NumPy 2.4.2's `_npyio_impl.py::savetxt` (`APIs/np.savetxt.cs`), **byte-for-byte
+identical to NumPy's own output**. A 1-D array writes one value per line (NumPy's `atleast_2d(X).T`, `ncol=1`);
+a 2-D array writes a row per line; 0-D / ≥3-D raise `ValueError("Expected 1D or 2D array, got {n}D array
+instead")`. Each row is `format % tuple(row)` where `format` is the single spec joined `ncol` times by
+`delimiter`, a caller-supplied multi-`%` string (delimiter then ignored), or the list/tuple of specs joined —
+resolved with NumPy's verbatim errors (`ValueError "fmt has wrong number of % formats:  …"`, the new house
+`AttributeError "fmt has wrong shape.  …"`). The `%`-engine is the **existing `PrintfFormatter`** shared with
+`ndarray.tofile` (Python `%`-operator: flags `-+ 0#`, width, `.precision`, `d i u x X o e E f F g G s c %%`,
+2-digit-min exponent, `nan`/`inf`, `-0.0`); the multi-column `format % tuple(row)` path added
+`PrintfFormatter.FormatRow`/`FormatRowInto` (sequential-arg, appends straight into the batch buffer). Numeric
+specs **widen to double** (matching NumPy's `float()`/`int()` coercion, so `int64` past 2^53 and `float32`
+render at the double value) while `%s` uses each dtype's shortest scalar repr. **Complex** wraps a single spec
+as `' (%s+%sj)'` per column and applies the `+-`→`-` fix-up, exactly as NumPy. Overloads target a **filename**
+(`.gz` → gzip; Python text-mode `\n`→`os.linesep` translation, so a file matches NumPy on the same platform —
+CRLF on Windows), an open **`Stream`**, or a **`TextWriter`** (both verbatim `\n`, NumPy's file-handle path).
+Reads any layout (C/F/strided/transposed/negative-stride/broadcast/sliced) in logical C-order via
+`GetAtIndex`; all 15 dtypes (Char/Decimal have no NumPy analog but render via the same coercion). **Perf
+(NPY/NS):** file-to-file **~2.1×**, `%d`/`%g` **3–25×** (NumPy's `savetxt` is a pure-Python per-row loop).
+**Two deliberate divergences** (`[Misaligned]`): `%d`/`%i`/`%u` on **inf** raises `System.OverflowException`
+where NumPy raises `OverflowError` (message identical; NumSharp has no `OverflowError` type — nan still raises
+`ValueError` verbatim), and the AttributeError renders a C# `string[]` as a Python list repr. Gate:
+`IO/SaveTxtTests.cs` (probed against NumPy 2.4.2). See `APIs/np.savetxt.cs`,
+`Backends/Printing/PrintfFormatter.cs`.
 
 ### Printing / Formatting
 `array2string`, `array_repr`, `array_str`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `printoptions` (IDisposable context), `set_printoptions`

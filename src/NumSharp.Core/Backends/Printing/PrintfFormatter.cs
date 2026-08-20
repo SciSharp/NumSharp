@@ -106,6 +106,167 @@ namespace NumSharp.Backends.Printing
             return sb.ToString();
         }
 
+        /// <summary>
+        ///     Sequential-argument variant of <see cref="Format"/> — the port of CPython's
+        ///     <c>str.__mod__</c> applied to a TUPLE, as used by <c>numpy.savetxt</c>'s per-row
+        ///     <c>format % tuple(row)</c>. Every conversion spec consumes the NEXT value from
+        ///     <paramref name="args"/> (whereas <see cref="Format"/> feeds its single value to every
+        ///     spec); <c>%%</c> is a literal and consumes nothing.
+        /// </summary>
+        /// <exception cref="PrintfArgumentException">
+        ///     The number of conversion specs does not match <paramref name="args"/>.Count, or a
+        ///     <c>%c</c> conversion targets a non-integral value — the two conditions under which
+        ///     CPython's <c>%</c> operator raises a <see cref="TypeError"/> mid-row. NumPy's real
+        ///     branch catches this and reports the dtype/format mismatch; its complex branch lets it
+        ///     surface (a <see cref="PrintfArgumentException"/> IS a <see cref="TypeError"/>).
+        /// </exception>
+        public static string FormatRow(string format, System.Collections.Generic.IReadOnlyList<object> args,
+            System.Collections.Generic.IReadOnlyList<NPTypeCode> tcs)
+        {
+            var sb = new StringBuilder(format.Length + 16);
+            FormatRowInto(sb, format, args, tcs);
+            return sb.ToString();
+        }
+
+        /// <summary>
+        ///     <see cref="FormatRow"/> appending directly into <paramref name="sb"/> — the allocation-free
+        ///     form used on <c>np.savetxt</c>'s hot per-row path (no intermediate row string, the caller's
+        ///     batch buffer absorbs every row).
+        /// </summary>
+        public static void FormatRowInto(StringBuilder sb, string format,
+            System.Collections.Generic.IReadOnlyList<object> args,
+            System.Collections.Generic.IReadOnlyList<NPTypeCode> tcs)
+        {
+            int i = 0, n = format.Length, argIdx = 0, argCount = args.Count;
+            while (i < n)
+            {
+                char ch = format[i];
+                if (ch != '%')
+                {
+                    sb.Append(ch);
+                    i++;
+                    continue;
+                }
+
+                i++;
+                if (i < n && format[i] == '%') // "%%" -> literal '%', consumes no argument
+                {
+                    sb.Append('%');
+                    i++;
+                    continue;
+                }
+
+                // flags
+                bool left = false, plus = false, space = false, zero = false, alt = false;
+                while (i < n)
+                {
+                    char f = format[i];
+                    if (f == '-') left = true;
+                    else if (f == '+') plus = true;
+                    else if (f == ' ') space = true;
+                    else if (f == '0') zero = true;
+                    else if (f == '#') alt = true;
+                    else break;
+                    i++;
+                }
+
+                // width
+                int width = 0;
+                while (i < n && format[i] >= '0' && format[i] <= '9')
+                {
+                    width = width * 10 + (format[i] - '0');
+                    i++;
+                }
+
+                // .precision
+                int precision = -1;
+                if (i < n && format[i] == '.')
+                {
+                    i++;
+                    precision = 0;
+                    while (i < n && format[i] >= '0' && format[i] <= '9')
+                    {
+                        precision = precision * 10 + (format[i] - '0');
+                        i++;
+                    }
+                }
+
+                // length modifiers are meaningless here (a scalar per spec) — skip them.
+                while (i < n && (format[i] == 'l' || format[i] == 'h' || format[i] == 'L'))
+                    i++;
+
+                if (i >= n) // dangling '%...' with no conversion char — emit verbatim.
+                {
+                    sb.Append('%');
+                    break;
+                }
+
+                char conv = format[i];
+                i++;
+
+                if (argIdx >= argCount)
+                    throw new PrintfArgumentException("not enough arguments for format string");
+
+                object value = args[argIdx];
+                NPTypeCode tc = tcs[argIdx];
+                argIdx++;
+
+                // Integer/char conversions on a non-integral operand follow CPython's operand rules,
+                // which is where savetxt on a float array raises. %c and %x/%X/%o reject a float outright
+                // (a TypeError, which NumPy's real branch reports as the dtype/format mismatch); %d/%i/%u
+                // accept a FINITE float (truncating) but raise ValueError/OverflowError on nan/inf, which
+                // propagate uncaught. Integral dtypes (int/bool/char) always pass.
+                if (!IsIntegralTc(tc))
+                {
+                    switch (conv)
+                    {
+                        case 'c':
+                            throw new PrintfArgumentException("%c requires int or a single character");
+                        case 'x':
+                        case 'X':
+                        case 'o':
+                            throw new PrintfArgumentException($"%{conv} format: an integer is required, not float");
+                        case 'd':
+                        case 'i':
+                        case 'u':
+                        {
+                            double dv = ToReal(value);
+                            if (double.IsNaN(dv))
+                                throw new ValueError("cannot convert float NaN to integer");
+                            if (double.IsInfinity(dv))
+                                throw new OverflowException("cannot convert float infinity to integer");
+                            break;
+                        }
+                    }
+                }
+
+                sb.Append(Apply(conv, left, plus, space, zero, alt, width, precision, value, tc));
+            }
+
+            if (argIdx != argCount)
+                throw new PrintfArgumentException("not all arguments converted during string formatting");
+        }
+
+        private static bool IsIntegralTc(NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Boolean:
+                case NPTypeCode.SByte:
+                case NPTypeCode.Byte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                case NPTypeCode.UInt64:
+                case NPTypeCode.Char:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         private static string Apply(char conv, bool left, bool plus, bool space, bool zero, bool alt,
             int width, int precision, object value, NPTypeCode tc)
         {
