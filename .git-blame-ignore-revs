@@ -15,3 +15,6 @@ e0db3c3ed2bac06c255d4b1b7a327efc4e05447b
 
 # Rename benchmark projects GraphEngine->CSharp, Exploration->Sandbox (mechanical)
 002bc6219dae5ea8ebe0054dff2a91796375d0fb
+
+# Normalize mixed-case NdArray.* filenames to exact NDArray (case-only, pure git mv, R100)
+02cc162fc09c279b6be6abc3f25cc2b5c14ddc88
