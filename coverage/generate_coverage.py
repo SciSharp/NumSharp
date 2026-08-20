@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.4.0"
+GENERATOR_VERSION = "1.5.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -438,6 +438,16 @@ def auto_alternative(
 
 def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) -> tuple[list[dict[str, Any]], set[str]]:
     targets, surfaces, prefixes = member_maps(inventory)
+    # Case-sensitive matching IS the parity contract: NumPy's public API is case-sensitive, so every
+    # match below (direct_target / auto_alternative / aliases / the stray gate) is an exact dict
+    # lookup on the C# spelling. We ALSO fold case here to DETECT near-misses — an in-scope NumPy
+    # export left "missing" for which a same-surface NumSharp member differs only by case — and
+    # report them (never counting them as covered). This is the guard against silently satisfying
+    # NumPy's `histogram` with a C#-style `Histogram`. Keyed (surface, lowercased name).
+    case_folded: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for surface, members in surfaces.items():
+        for member in members:
+            case_folded.setdefault((surface, member["name"].lower()), []).append(member)
     aliases = overrides.get("aliases", {})
     support_overrides = overrides.get("support", {})
     stray_allowlist = overrides.get("stray_allowlist", {})
@@ -505,8 +515,24 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
             source_paths = []
             source_urls = []
 
+        # Case-insensitive near-miss detection: a still-missing in-scope export whose spelling matches
+        # a same-surface NumSharp member only when case is ignored. Reported, never counted — parity
+        # requires the exact NumPy spelling.
+        case_insensitive_matches: list[str] = []
+        if not target and export["in_default_scope"]:
+            case_insensitive_matches = sorted({
+                member["target"]
+                for member in case_folded.get((export["surface"], export["name"].lower()), [])
+                if member["name"] != export["name"]
+            })
+            if case_insensitive_matches:
+                notes.append(
+                    "Case-insensitive near-miss (NOT counted — NumPy parity is case-sensitive): "
+                    + ", ".join(case_insensitive_matches)
+                )
+
         display_status = "missing" if not target else support if support in {"partial", "unsupported"} else "available"
-        rows.append({
+        row = {
             **export,
             "category": category_for(export["surface"], export["name"], export["kind"]),
             "availability": availability,
@@ -518,7 +544,10 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
             "numsharp_source_paths": source_paths,
             "numsharp_source_urls": source_urls,
             "notes": " ".join(dict.fromkeys(notes)),
-        })
+        }
+        if case_insensitive_matches:
+            row["case_insensitive_matches"] = case_insensitive_matches
+        rows.append(row)
 
     unknown_aliases = set(aliases) - seen_ids
     unknown_support = set(support_overrides) - seen_ids
@@ -639,7 +668,7 @@ def csv_text(rows: list[dict[str, Any]]) -> str:
     columns = [
         "id", "origin", "surface", "category", "name", "kind", "in_default_scope", "status", "availability",
         "support", "numpy_signature", "numsharp_target", "numsharp_signatures", "numsharp_source_paths",
-        "numsharp_source_urls", "numsharp_obsolete", "notes", "documentation_url"
+        "numsharp_source_urls", "numsharp_obsolete", "case_insensitive_matches", "notes", "documentation_url"
     ]
     stream = io.StringIO(newline="")
     writer = csv.DictWriter(stream, fieldnames=columns, lineterminator="\n")
@@ -649,6 +678,7 @@ def csv_text(rows: list[dict[str, Any]]) -> str:
         flat["numsharp_signatures"] = " | ".join(row["numsharp_signatures"])
         flat["numsharp_source_paths"] = " | ".join(row["numsharp_source_paths"])
         flat["numsharp_source_urls"] = " | ".join(row["numsharp_source_urls"])
+        flat["case_insensitive_matches"] = " | ".join(row.get("case_insensitive_matches", []))
         writer.writerow(flat)
     return stream.getvalue()
 
@@ -688,6 +718,32 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
     for row in gaps[:50]:
         api = row["id"].replace("numpy.", "np.", 1).replace("np.ndarray.", "ndarray.", 1)
         lines.append(f"| [`{api}`]({row['documentation_url']}) | {row['surface']} | {row['status']} | {row['category']} |")
+
+    ci_rows = [
+        row for row in rows
+        if row["origin"] == "numpy" and row["in_default_scope"] and row.get("case_insensitive_matches")
+    ]
+    lines.extend([
+        "",
+        "## Case-insensitive near-misses",
+        "",
+        "NumPy's public API is case-sensitive, so a NumSharp member is credited only when the spelling "
+        "matches exactly. The generator additionally folds case to surface near-misses — in-scope NumPy "
+        "APIs left *missing* for which NumSharp exposes a same-surface member differing only by case. "
+        "These are **not** counted as available; rename to the exact NumPy spelling (or record a reviewed "
+        "alias) to close them.",
+        "",
+    ])
+    if ci_rows:
+        lines.append("| NumPy API | Surface | Differs only by case from |")
+        lines.append("|---|---|---|")
+        for row in sorted(ci_rows, key=lambda r: (r["surface"], r["name"].lower())):
+            api = row["id"].replace("numpy.", "np.", 1).replace("np.ndarray.", "ndarray.", 1)
+            targets_md = ", ".join(f"`{target}`" for target in row["case_insensitive_matches"])
+            lines.append(f"| [`{api}`]({row['documentation_url']}) | {row['surface']} | {targets_md} |")
+    else:
+        lines.append("_None detected._")
+
     lines.extend([
         "",
         "## Counting rules",
@@ -710,6 +766,7 @@ def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]
             "headline": "Available default-scope APIs divided by all default-scope NumPy APIs.",
             "default_scope": "Top-level NumPy callables; ndarray public methods and properties; callable exports of numpy.random, numpy.linalg, and numpy.fft.",
             "availability_note": "Compiled API availability is distinct from fully verified behavioral parity.",
+            "case_sensitivity": "NumPy API names are matched case-sensitively for parity. Case-insensitive near-misses are detected and reported (row field 'case_insensitive_matches'; the 'Case-insensitive near-misses' section of summary.md) but never counted as available.",
         },
         "summary": summary,
         "rows": rows,
@@ -759,6 +816,13 @@ def main() -> None:
     inventory = load_numsharp_inventory()
     overrides = load_overrides(args.overrides)
     rendered = render_outputs(np, inventory, overrides)
+    near_misses = [row for row in json.loads(rendered["coverage.json"])["rows"] if row.get("case_insensitive_matches")]
+    if near_misses:
+        print(f"Case-insensitive near-misses (NOT counted — NumPy parity is case-sensitive): {len(near_misses)}")
+        for row in near_misses:
+            print(f"  - {row['id']} ~ {', '.join(row['case_insensitive_matches'])}")
+    else:
+        print("Case-insensitive near-misses: none.")
     if args.check:
         check_outputs(args.output, rendered)
         print(f"Coverage artifact is current ({args.output}).")

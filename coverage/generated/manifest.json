@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generator": "coverage/generate_coverage.py",
-  "generator_version": "1.4.0",
+  "generator_version": "1.5.0",
   "numpy_version": "2.4.2",
   "numsharp_assembly_version": "0.60.0.0",
   "artifact_files": [
@@ -21,14 +21,14 @@
   "summary": {
     "default_scope": {
       "total": 560,
-      "available": 444,
+      "available": 459,
       "partial": 3,
       "unsupported": 0,
-      "missing": 113,
-      "exact": 411,
+      "missing": 98,
+      "exact": 426,
       "alias": 36,
-      "coverage_percent": 79.3,
-      "addressed_percent": 79.8
+      "coverage_percent": 82.0,
+      "addressed_percent": 82.5
     },
     "by_surface": {
       "fft": {
@@ -66,14 +66,14 @@
       },
       "np": {
         "total": 390,
-        "available": 291,
+        "available": 306,
         "partial": 1,
         "unsupported": 0,
-        "missing": 98,
-        "exact": 277,
+        "missing": 83,
+        "exact": 292,
         "alias": 15,
-        "coverage_percent": 74.6,
-        "addressed_percent": 74.9
+        "coverage_percent": 78.5,
+        "addressed_percent": 78.7
       },
       "random": {
         "total": 51,
@@ -101,14 +101,14 @@
       },
       "Array creation": {
         "total": 37,
-        "available": 27,
+        "available": 29,
         "partial": 0,
         "unsupported": 0,
-        "missing": 10,
-        "exact": 27,
+        "missing": 8,
+        "exact": 29,
         "alias": 0,
-        "coverage_percent": 73.0,
-        "addressed_percent": 73.0
+        "coverage_percent": 78.4,
+        "addressed_percent": 78.4
       },
       "Array metadata & memory": {
         "total": 5,
@@ -189,25 +189,25 @@
       },
       "Input & output": {
         "total": 5,
-        "available": 4,
+        "available": 5,
         "partial": 0,
         "unsupported": 0,
-        "missing": 1,
-        "exact": 4,
+        "missing": 0,
+        "exact": 5,
         "alias": 0,
-        "coverage_percent": 80.0,
-        "addressed_percent": 80.0
+        "coverage_percent": 100.0,
+        "addressed_percent": 100.0
       },
       "Linear algebra": {
         "total": 43,
-        "available": 41,
+        "available": 42,
         "partial": 0,
         "unsupported": 0,
-        "missing": 2,
-        "exact": 41,
+        "missing": 1,
+        "exact": 42,
         "alias": 0,
-        "coverage_percent": 95.3,
-        "addressed_percent": 95.3
+        "coverage_percent": 97.7,
+        "addressed_percent": 97.7
       },
       "Logic & comparison": {
         "total": 29,
@@ -222,25 +222,25 @@
       },
       "Math": {
         "total": 112,
-        "available": 82,
+        "available": 83,
         "partial": 0,
         "unsupported": 0,
-        "missing": 30,
-        "exact": 72,
+        "missing": 29,
+        "exact": 73,
         "alias": 10,
-        "coverage_percent": 73.2,
-        "addressed_percent": 73.2
+        "coverage_percent": 74.1,
+        "addressed_percent": 74.1
       },
       "Polynomials": {
         "total": 10,
-        "available": 0,
+        "available": 10,
         "partial": 0,
         "unsupported": 0,
-        "missing": 10,
-        "exact": 0,
+        "missing": 0,
+        "exact": 10,
         "alias": 0,
-        "coverage_percent": 0.0,
-        "addressed_percent": 0.0
+        "coverage_percent": 100.0,
+        "addressed_percent": 100.0
       },
       "Random": {
         "total": 51,

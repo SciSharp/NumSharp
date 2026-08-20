@@ -13,6 +13,8 @@ Four scan-integrity guards make a silent miss structurally hard:
 
 Members are reflected with both `Static` and `Instance` flags (per-member `static` recorded), so a static helper on an instance facade cannot escape the scan. The generator also warns when an `overrides.json` alias goes stale because a direct match now exists.
 
+**Matching is case-sensitive** — NumPy's public API is case-sensitive, so a NumSharp member is credited only when the spelling is identical (every match is an exact lookup). The generator additionally folds case to *detect* near-misses — an in-scope NumPy API left missing for which NumSharp exposes a same-surface member differing only by case — and reports them in `summary.md` under "Case-insensitive near-misses", per row via a `case_insensitive_matches` field (JSON/CSV), and on the console. They are **never** counted as available: this guards against silently satisfying NumPy's `histogram` with a C#-style `Histogram`. Close one by renaming to the exact NumPy spelling or recording a reviewed alias in `overrides.json`.
+
 ## Generate or verify
 
 ```bash

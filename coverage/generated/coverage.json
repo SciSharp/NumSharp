@@ -1,24 +1,25 @@
 {
   "schema_version": 1,
-  "generator_version": "1.4.0",
+  "generator_version": "1.5.0",
   "numpy_version": "2.4.2",
   "numsharp_assembly_version": "0.60.0.0",
   "methodology": {
     "headline": "Available default-scope APIs divided by all default-scope NumPy APIs.",
     "default_scope": "Top-level NumPy callables; ndarray public methods and properties; callable exports of numpy.random, numpy.linalg, and numpy.fft.",
-    "availability_note": "Compiled API availability is distinct from fully verified behavioral parity."
+    "availability_note": "Compiled API availability is distinct from fully verified behavioral parity.",
+    "case_sensitivity": "NumPy API names are matched case-sensitively for parity. Case-insensitive near-misses are detected and reported (row field 'case_insensitive_matches'; the 'Case-insensitive near-misses' section of summary.md) but never counted as available."
   },
   "summary": {
     "default_scope": {
       "total": 560,
-      "available": 444,
+      "available": 459,
       "partial": 3,
       "unsupported": 0,
-      "missing": 113,
-      "exact": 411,
+      "missing": 98,
+      "exact": 426,
       "alias": 36,
-      "coverage_percent": 79.3,
-      "addressed_percent": 79.8
+      "coverage_percent": 82.0,
+      "addressed_percent": 82.5
     },
     "by_surface": {
       "fft": {
@@ -56,14 +57,14 @@
       },
       "np": {
         "total": 390,
-        "available": 291,
+        "available": 306,
         "partial": 1,
         "unsupported": 0,
-        "missing": 98,
-        "exact": 277,
+        "missing": 83,
+        "exact": 292,
         "alias": 15,
-        "coverage_percent": 74.6,
-        "addressed_percent": 74.9
+        "coverage_percent": 78.5,
+        "addressed_percent": 78.7
       },
       "random": {
         "total": 51,
@@ -91,14 +92,14 @@
       },
       "Array creation": {
         "total": 37,
-        "available": 27,
+        "available": 29,
         "partial": 0,
         "unsupported": 0,
-        "missing": 10,
-        "exact": 27,
+        "missing": 8,
+        "exact": 29,
         "alias": 0,
-        "coverage_percent": 73.0,
-        "addressed_percent": 73.0
+        "coverage_percent": 78.4,
+        "addressed_percent": 78.4
       },
       "Array metadata & memory": {
         "total": 5,
@@ -179,25 +180,25 @@
       },
       "Input & output": {
         "total": 5,
-        "available": 4,
+        "available": 5,
         "partial": 0,
         "unsupported": 0,
-        "missing": 1,
-        "exact": 4,
+        "missing": 0,
+        "exact": 5,
         "alias": 0,
-        "coverage_percent": 80.0,
-        "addressed_percent": 80.0
+        "coverage_percent": 100.0,
+        "addressed_percent": 100.0
       },
       "Linear algebra": {
         "total": 43,
-        "available": 41,
+        "available": 42,
         "partial": 0,
         "unsupported": 0,
-        "missing": 2,
-        "exact": 41,
+        "missing": 1,
+        "exact": 42,
         "alias": 0,
-        "coverage_percent": 95.3,
-        "addressed_percent": 95.3
+        "coverage_percent": 97.7,
+        "addressed_percent": 97.7
       },
       "Logic & comparison": {
         "total": 29,
@@ -212,25 +213,25 @@
       },
       "Math": {
         "total": 112,
-        "available": 82,
+        "available": 83,
         "partial": 0,
         "unsupported": 0,
-        "missing": 30,
-        "exact": 72,
+        "missing": 29,
+        "exact": 73,
         "alias": 10,
-        "coverage_percent": 73.2,
-        "addressed_percent": 73.2
+        "coverage_percent": 74.1,
+        "addressed_percent": 74.1
       },
       "Polynomials": {
         "total": 10,
-        "available": 0,
+        "available": 10,
         "partial": 0,
         "unsupported": 0,
-        "missing": 10,
-        "exact": 0,
+        "missing": 0,
+        "exact": 10,
         "alias": 0,
-        "coverage_percent": 0.0,
-        "addressed_percent": 0.0
+        "coverage_percent": 100.0,
+        "addressed_percent": 100.0
       },
       "Random": {
         "total": 51,
@@ -6379,14 +6380,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.cross.html",
       "in_default_scope": true,
       "category": "Math",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.cross",
+      "numsharp_signatures": [
+        "NumSharp.NDArray cross(NumSharp.NDArray a, NumSharp.NDArray b, int axisa = -1, int axisb = -1, int axisc = -1, int? axis = null)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/LinearAlgebra/np.cross.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/LinearAlgebra/np.cross.cs"
+      ],
       "notes": ""
     },
     {
@@ -6930,7 +6937,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.dot",
       "numsharp_signatures": [
-        "NumSharp.NDArray dot(NumSharp.NDArray a, NumSharp.NDArray b)"
+        "NumSharp.NDArray dot(NumSharp.NDArray a, NumSharp.NDArray b, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -7156,14 +7163,22 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.einsum_path.html",
       "in_default_scope": true,
       "category": "Linear algebra",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.einsum_path",
+      "numsharp_signatures": [
+        "System.ValueTuple<NumSharp.EinsumPath, string> einsum_path(params object[] operands)",
+        "System.ValueTuple<NumSharp.EinsumPath, string> einsum_path(string subscripts, NumSharp.NDArray[] operands)",
+        "System.ValueTuple<NumSharp.EinsumPath, string> einsum_path(string subscripts, NumSharp.NDArray[] operands, object optimize)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/LinearAlgebra/np.einsum_path.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/LinearAlgebra/np.einsum_path.cs"
+      ],
       "notes": ""
     },
     {
@@ -10251,14 +10266,24 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.loadtxt.html",
       "in_default_scope": true,
       "category": "Array creation",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.loadtxt",
+      "numsharp_signatures": [
+        "NumSharp.NDArray loadtxt(System.Collections.Generic.IEnumerable<string> lines, NumSharp.NPTypeCode dtype = NumSharp.NPTypeCode.Double, string comments = \"#\", string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null, bool unpack = false, int ndmin = 0, int? max_rows = null, string quotechar = null)",
+        "NumSharp.NDArray loadtxt(System.IO.Stream stream, NumSharp.NPTypeCode dtype = NumSharp.NPTypeCode.Double, string comments = \"#\", string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null, bool unpack = false, int ndmin = 0, string encoding = null, int? max_rows = null, string quotechar = null)",
+        "NumSharp.NDArray loadtxt(System.IO.TextReader reader, NumSharp.NPTypeCode dtype = NumSharp.NPTypeCode.Double, string comments = \"#\", string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null, bool unpack = false, int ndmin = 0, int? max_rows = null, string quotechar = null)",
+        "NumSharp.NDArray loadtxt(string fname, NumSharp.NPTypeCode dtype = NumSharp.NPTypeCode.Double, string comments = \"#\", string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null, bool unpack = false, int ndmin = 0, string encoding = null, int? max_rows = null, string quotechar = null)",
+        "NumSharp.NDArray loadtxt(string fname, System.Type dtype, string comments = \"#\", string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null, bool unpack = false, int ndmin = 0, string encoding = null, int? max_rows = null, string quotechar = null)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/APIs/np.loadtxt.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.loadtxt.cs"
+      ],
       "notes": ""
     },
     {
@@ -10674,7 +10699,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.matmul",
       "numsharp_signatures": [
-        "NumSharp.NDArray matmul(NumSharp.NDArray x1, NumSharp.NDArray x2)"
+        "NumSharp.NDArray matmul(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, int[][] axes = null, int? axis = null, bool? keepdims = null, NumSharp.NPTypeCode? dtype = null, string casting = \"same_kind\", char order = 'K')"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -12010,7 +12035,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.outer",
       "numsharp_signatures": [
-        "NumSharp.NDArray outer(NumSharp.NDArray a, NumSharp.NDArray b)"
+        "NumSharp.NDArray outer(NumSharp.NDArray a, NumSharp.NDArray b, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -12242,14 +12267,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.poly.html",
       "in_default_scope": true,
       "category": "Polynomials",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.poly",
+      "numsharp_signatures": [
+        "NumSharp.NDArray poly(NumSharp.NDArray seq_of_zeros)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Polynomial/np.poly.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Polynomial/np.poly.cs"
+      ],
       "notes": ""
     },
     {
@@ -12282,14 +12313,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.polyadd.html",
       "in_default_scope": true,
       "category": "Polynomials",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.polyadd",
+      "numsharp_signatures": [
+        "NumSharp.NDArray polyadd(NumSharp.NDArray a1, NumSharp.NDArray a2)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Polynomial/np.polyarithmetic.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Polynomial/np.polyarithmetic.cs"
+      ],
       "notes": ""
     },
     {
@@ -12302,14 +12339,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.polyder.html",
       "in_default_scope": true,
       "category": "Polynomials",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.polyder",
+      "numsharp_signatures": [
+        "NumSharp.NDArray polyder(NumSharp.NDArray p, int m = 1)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Polynomial/np.polyder.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Polynomial/np.polyder.cs"
+      ],
       "notes": ""
     },
     {
@@ -12322,14 +12365,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.polydiv.html",
       "in_default_scope": true,
       "category": "Polynomials",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.polydiv",
+      "numsharp_signatures": [
+        "System.ValueTuple<NumSharp.NDArray, NumSharp.NDArray> polydiv(NumSharp.NDArray u, NumSharp.NDArray v)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Polynomial/np.polyarithmetic.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Polynomial/np.polyarithmetic.cs"
+      ],
       "notes": ""
     },
     {
@@ -12342,14 +12391,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html",
       "in_default_scope": true,
       "category": "Polynomials",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.polyfit",
+      "numsharp_signatures": [
+        "NumSharp.PolyfitResult polyfit(NumSharp.NDArray x, NumSharp.NDArray y, int deg, double? rcond = null, bool full = false, NumSharp.NDArray w = null, object cov = null)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Polynomial/np.polyfit.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Polynomial/np.polyfit.cs"
+      ],
       "notes": ""
     },
     {
@@ -12362,14 +12417,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.polyint.html",
       "in_default_scope": true,
       "category": "Polynomials",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.polyint",
+      "numsharp_signatures": [
+        "NumSharp.NDArray polyint(NumSharp.NDArray p, int m = 1, NumSharp.NDArray k = null)",
+        "NumSharp.NDArray polyint(NumSharp.NDArray p, int m, double k)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Polynomial/np.polyint.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Polynomial/np.polyint.cs"
+      ],
       "notes": ""
     },
     {
@@ -12382,14 +12444,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.polymul.html",
       "in_default_scope": true,
       "category": "Polynomials",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.polymul",
+      "numsharp_signatures": [
+        "NumSharp.NDArray polymul(NumSharp.NDArray a1, NumSharp.NDArray a2)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Polynomial/np.polyarithmetic.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Polynomial/np.polyarithmetic.cs"
+      ],
       "notes": ""
     },
     {
@@ -12422,14 +12490,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.polysub.html",
       "in_default_scope": true,
       "category": "Polynomials",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.polysub",
+      "numsharp_signatures": [
+        "NumSharp.NDArray polysub(NumSharp.NDArray a1, NumSharp.NDArray a2)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Polynomial/np.polyarithmetic.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Polynomial/np.polyarithmetic.cs"
+      ],
       "notes": ""
     },
     {
@@ -12442,14 +12516,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.polyval.html",
       "in_default_scope": true,
       "category": "Polynomials",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.polyval",
+      "numsharp_signatures": [
+        "NumSharp.NDArray polyval(NumSharp.NDArray p, NumSharp.NDArray x)",
+        "NumSharp.poly1d polyval(NumSharp.poly1d p, NumSharp.poly1d x)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Polynomial/np.polyval.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Polynomial/np.polyval.cs"
+      ],
       "notes": ""
     },
     {
@@ -13341,14 +13422,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.roots.html",
       "in_default_scope": true,
       "category": "Polynomials",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.roots",
+      "numsharp_signatures": [
+        "NumSharp.NDArray roots(NumSharp.NDArray p)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Polynomial/np.roots.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Polynomial/np.roots.cs"
+      ],
       "notes": ""
     },
     {
@@ -13498,14 +13585,25 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.savetxt.html",
       "in_default_scope": true,
       "category": "Input & output",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.savetxt",
+      "numsharp_signatures": [
+        "void savetxt(System.IO.Stream stream, NumSharp.NDArray X, string fmt = \"%.18e\", string delimiter = \" \", string newline = \"\\n\", string header = \"\", string footer = \"\", string comments = \"# \", string encoding = null)",
+        "void savetxt(System.IO.Stream stream, NumSharp.NDArray X, string[] fmt, string delimiter = \" \", string newline = \"\\n\", string header = \"\", string footer = \"\", string comments = \"# \", string encoding = null)",
+        "void savetxt(System.IO.TextWriter writer, NumSharp.NDArray X, string fmt = \"%.18e\", string delimiter = \" \", string newline = \"\\n\", string header = \"\", string footer = \"\", string comments = \"# \")",
+        "void savetxt(System.IO.TextWriter writer, NumSharp.NDArray X, string[] fmt, string delimiter = \" \", string newline = \"\\n\", string header = \"\", string footer = \"\", string comments = \"# \")",
+        "void savetxt(string fname, NumSharp.NDArray X, string fmt = \"%.18e\", string delimiter = \" \", string newline = \"\\n\", string header = \"\", string footer = \"\", string comments = \"# \", string encoding = null)",
+        "void savetxt(string fname, NumSharp.NDArray X, string[] fmt, string delimiter = \" \", string newline = \"\\n\", string header = \"\", string footer = \"\", string comments = \"# \", string encoding = null)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/APIs/np.savetxt.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.savetxt.cs"
+      ],
       "notes": ""
     },
     {
@@ -15704,14 +15802,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.vander.html",
       "in_default_scope": true,
       "category": "Array creation",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.vander",
+      "numsharp_signatures": [
+        "NumSharp.NDArray vander(NumSharp.NDArray x, int? N = null, bool increasing = false)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Creation/np.vander.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/np.vander.cs"
+      ],
       "notes": ""
     },
     {

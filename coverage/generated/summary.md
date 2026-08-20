@@ -2,14 +2,14 @@
 
 Compared with NumPy **2.4.2** using NumSharp assembly **0.60.0.0**.
 
-Headline API availability: **79.3%** (444 of 560 default-scope APIs). Including partial mappings, **79.8%** are addressed.
+Headline API availability: **82.0%** (459 of 560 default-scope APIs). Including partial mappings, **82.5%** are addressed.
 
 | Surface | Available | Partial | Unsupported | Missing | Total | Coverage |
 |---|---:|---:|---:|---:|---:|---:|
 | np.fft.* | 18 | 0 | 0 | 0 | 18 | 100.0% |
 | np.linalg.* | 31 | 0 | 0 | 0 | 31 | 100.0% |
 | ndarray.* | 56 | 1 | 0 | 13 | 70 | 80.0% |
-| np.* | 291 | 1 | 0 | 98 | 390 | 74.6% |
+| np.* | 306 | 1 | 0 | 83 | 390 | 78.5% |
 | np.random.* | 48 | 1 | 0 | 2 | 51 | 94.1% |
 
 > Availability is based on the compiled public API. It is not a blanket behavioral-parity claim; dtype, layout, signature, and edge-case parity require differential tests.
@@ -48,11 +48,9 @@ Headline API availability: **79.3%** (444 of 560 default-scope APIs). Including 
 | [`np.busday_offset`](https://numpy.org/doc/stable/reference/generated/numpy.busday_offset.html) | np | missing | Date & time |
 | [`np.choose`](https://numpy.org/doc/stable/reference/generated/numpy.choose.html) | np | missing | Indexing & selection |
 | [`np.copysign`](https://numpy.org/doc/stable/reference/generated/numpy.copysign.html) | np | missing | Math |
-| [`np.cross`](https://numpy.org/doc/stable/reference/generated/numpy.cross.html) | np | missing | Math |
 | [`np.datetime_as_string`](https://numpy.org/doc/stable/reference/generated/numpy.datetime_as_string.html) | np | missing | Date & time |
 | [`np.datetime_data`](https://numpy.org/doc/stable/reference/generated/numpy.datetime_data.html) | np | missing | Date & time |
 | [`np.divmod`](https://numpy.org/doc/stable/reference/generated/numpy.divmod.html) | np | missing | Math |
-| [`np.einsum_path`](https://numpy.org/doc/stable/reference/generated/numpy.einsum_path.html) | np | missing | Linear algebra |
 | [`np.fabs`](https://numpy.org/doc/stable/reference/generated/numpy.fabs.html) | np | missing | Math |
 | [`np.fix`](https://numpy.org/doc/stable/reference/generated/numpy.fix.html) | np | missing | Math |
 | [`np.float_power`](https://numpy.org/doc/stable/reference/generated/numpy.float_power.html) | np | missing | Math |
@@ -68,6 +66,14 @@ Headline API availability: **79.3%** (444 of 560 default-scope APIs). Including 
 | [`np.genfromtxt`](https://numpy.org/doc/stable/reference/generated/numpy.genfromtxt.html) | np | missing | Array creation |
 | [`np.geomspace`](https://numpy.org/doc/stable/reference/generated/numpy.geomspace.html) | np | missing | Array creation |
 | [`np.get_include`](https://numpy.org/doc/stable/reference/generated/numpy.get_include.html) | np | missing | Runtime & diagnostics |
+| [`np.getbufsize`](https://numpy.org/doc/stable/reference/generated/numpy.getbufsize.html) | np | missing | Floating-point handling |
+| [`np.geterr`](https://numpy.org/doc/stable/reference/generated/numpy.geterr.html) | np | missing | Floating-point handling |
+
+## Case-insensitive near-misses
+
+NumPy's public API is case-sensitive, so a NumSharp member is credited only when the spelling matches exactly. The generator additionally folds case to surface near-misses — in-scope NumPy APIs left *missing* for which NumSharp exposes a same-surface member differing only by case. These are **not** counted as available; rename to the exact NumPy spelling (or record a reviewed alias) to close them.
+
+_None detected._
 
 ## Counting rules
 
