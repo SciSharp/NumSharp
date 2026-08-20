@@ -202,5 +202,18 @@ namespace NumSharp.UnitTest.LinearAlgebra
                 .Should().Throw<ValueError>().WithMessage(
                     "matmul: Output operand 0 has a mismatch in its core dimension 1, with gufunc signature (n?,k),(k,m?)->(n?,m?) (size 3 is different from 2)");
         }
+
+        [TestMethod]
+        public void Matmul_Out_ExtraLeadingLoopDims_ReplicateProduct()
+        {
+            // out with extra leading LOOP dims is a broadcast target — NumPy replicates the product
+            // into each slab (probed: out=(5,2,2) for a (2,2) product is 5 copies). The trailing CORE
+            // dims still match exactly; only the leading loop dims broadcast.
+            var o = np.zeros(new Shape(5, 2, 2), NPTypeCode.Double);
+            var r = np.matmul(M23, M32, @out: o);
+            r.Should().BeSameAs(o);
+            r.Should().BeShaped(5, 2, 2).And.BeOfValues(
+                10, 13, 28, 40, 10, 13, 28, 40, 10, 13, 28, 40, 10, 13, 28, 40, 10, 13, 28, 40);
+        }
     }
 }

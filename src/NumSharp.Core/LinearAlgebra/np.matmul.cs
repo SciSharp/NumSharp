@@ -55,9 +55,10 @@ namespace NumSharp
         ///     <para>
         ///     Like the five sibling product gufuncs, NumPy's remaining ufunc keywords <c>subok</c> and
         ///     <c>signature</c> are not modelled (<c>signature</c> is what <paramref name="dtype"/>
-        ///     does; <c>subok</c> concerns ndarray subclasses NumSharp does not have). A wrong-shaped
-        ///     <paramref name="out"/> reports NumPy's verbatim core-dimension message for a core
-        ///     mismatch; the rarer loop-dimension / over-broadcast mismatches raise a clear
+        ///     does; <c>subok</c> concerns ndarray subclasses NumSharp does not have). A
+        ///     <paramref name="out"/> with a wrong CORE dim reports NumPy's verbatim core-dimension
+        ///     message; extra leading LOOP dims broadcast (replicating the product, as NumPy does), and
+        ///     the rarer genuine loop-dimension mismatch raises <c>copyto</c>'s broadcast
         ///     <c>ValueError</c> whose wording differs from NumPy's leaked iterator text (the same
         ///     latitude the siblings take).
         ///     </para>
@@ -222,41 +223,33 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Validates <paramref name="out"/>'s shape against the product's, right-aligned: the
-        ///     trailing dims must equal the product's exactly, any extra leading dims must be size 1.
-        ///     A CORE-dimension mismatch reports NumPy's verbatim gufunc message; the rarer
-        ///     loop-dimension / over-broadcast mismatches raise a clear (non-verbatim) ValueError.
+        ///     Validates <paramref name="out"/>'s CORE dims (the trailing <paramref name="outputCore"/>)
+        ///     against the product's — they must match exactly, reporting NumPy's verbatim
+        ///     core-dimension message on mismatch. The leading LOOP dims are left to <c>copyto</c>,
+        ///     which broadcasts the product into <paramref name="out"/> (so an out with extra leading
+        ///     dims replicates the product, exactly as NumPy does) and raises on a real loop mismatch.
         /// </summary>
         private static void ValidateMatmulOutputShape(NDArray result, NDArray @out, int outputCore)
         {
             int rn = result.ndim, on = @out.ndim;
-            if (on < rn)
-                throw OutputShapeMismatch(result, @out);
-
-            // Extra leading out dims (the ones the product has nothing to fill) must be size 1.
-            for (int i = 0; i < on - rn; i++)
-                if (@out.shape[i] != 1)
-                    throw OutputShapeMismatch(result, @out);
-
-            for (int i = 0; i < rn; i++)
+            // Only the TRAILING `outputCore` dims are the product's CORE dims — out must match them
+            // EXACTLY (NumPy's verbatim core-dimension message on mismatch). The remaining leading
+            // dims are LOOP dims the product BROADCASTS into, so out may carry any broadcast-compatible
+            // loop shape — INCLUDING extra leading dims of any size, which NumPy fills by replicating
+            // the product (probed: out=(5,2,2) for a (2,2) product is 5 copies). Those are left to
+            // copyto (called next), which broadcasts the product into out and raises on a genuine
+            // loop-dim mismatch. `on < outputCore` (out missing a core dim) also falls to copyto.
+            if (on < outputCore)
+                return;
+            for (int c = 0; c < outputCore; c++)
             {
-                long resDim = result.shape[i];
-                long outDim = @out.shape[on - rn + i];
-                if (outDim == resDim)
-                    continue;
-                // A trailing (core) dim carries NumPy's core-dimension message; a leading (loop) dim
-                // does not (NumPy leaks its iterator's remapped-shapes text there instead).
-                int coreIndex = i - (rn - outputCore);
-                if (coreIndex >= 0)
+                long resDim = result.shape[rn - outputCore + c];
+                long outDim = @out.shape[on - outputCore + c];
+                if (outDim != resDim)
                     throw new ValueError(
-                        $"matmul: Output operand 0 has a mismatch in its core dimension {coreIndex}, " +
+                        $"matmul: Output operand 0 has a mismatch in its core dimension {c}, " +
                         $"with gufunc signature {MatmulSignature} (size {outDim} is different from {resDim})");
-                throw OutputShapeMismatch(result, @out);
             }
         }
-
-        private static ValueError OutputShapeMismatch(NDArray result, NDArray @out) => new ValueError(
-            $"matmul: non-broadcastable output operand with shape {@out.Shape.ToPythonTuple()} " +
-            $"doesn't match the broadcast shape {result.Shape.ToPythonTuple()}");
     }
 }
