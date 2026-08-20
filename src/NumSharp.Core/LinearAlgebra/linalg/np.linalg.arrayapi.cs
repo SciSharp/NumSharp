@@ -99,10 +99,10 @@ namespace NumSharp
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.cross.html
             ///     <para>
-            ///     <b>Stricter than <c>np.cross</c>:</b> the Array-API form accepts 3-vectors ONLY,
-            ///     where the main-namespace function still takes the 2-vector form (deprecated in
-            ///     NumPy 2.0). NumSharp has no <c>np.cross</c>, so this is the whole cross product
-            ///     the library offers.
+            ///     <b>Stricter than <see cref="np.cross"/>:</b> the Array-API form accepts 3-vectors
+            ///     ONLY, over a single <paramref name="axis"/>, where the main-namespace
+            ///     <see cref="np.cross"/> also takes the 2-vector form (deprecated in NumPy 2.0) and a
+            ///     separate <c>axisa</c>/<c>axisb</c>/<c>axisc</c> per operand.
             ///     </para>
             /// </remarks>
             public static NDArray cross(NDArray x1, NDArray x2, int axis = -1)
