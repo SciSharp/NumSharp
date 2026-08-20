@@ -136,5 +136,22 @@ namespace NumSharp.Interop.UnitTests
             SameBytes(c, "np.polyfit(x, y, 2, cov=True)[0]", ("x", Xs()), ("y", Ys()));
             SameBytes(cov, "np.polyfit(x, y, 2, cov=True)[1]", ("x", Xs()), ("y", Ys()));
         }
+
+        [TestMethod]
+        public void Polyfit_UnscaledCovariance_ByteExact()
+        {
+            RequireLapack();
+            var (_, cov) = np.polyfit(Xs(), Ys(), 2, cov: "unscaled");
+            SameBytes(cov, "np.polyfit(x, y, 2, cov='unscaled')[1]", ("x", Xs()), ("y", Ys()));
+        }
+
+        [TestMethod]
+        public void Polyfit_Deg0_NegativeZero_ByteExact()
+        {
+            RequireLapack();
+            // The degree-0 fit is the (weighted) mean's negation artifact -0.0 — a signed zero that
+            // must survive byte-for-byte (bit pattern 0x8000000000000000).
+            SameBytes(np.polyfit(Xs(), Ys(), 0), "np.polyfit(x, y, 0)", ("x", Xs()), ("y", Ys()));
+        }
     }
 }

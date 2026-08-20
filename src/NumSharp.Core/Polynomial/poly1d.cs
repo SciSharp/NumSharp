@@ -7,7 +7,11 @@ namespace NumSharp
     ///     coefficient vector (highest power first) and the natural polynomial operations.
     ///     <para>
     ///     C# has no call syntax, so NumPy's <c>p(x)</c> evaluation is spelled <c>np.polyval(p, x)</c>; the
-    ///     indexer <c>p[k]</c> retrieves the coefficient of <c>x**k</c> exactly like NumPy.
+    ///     indexer <c>p[k]</c> retrieves the coefficient of <c>x**k</c> exactly like NumPy. NumPy's
+    ///     <c>p ** n</c> (polynomial power) has no <c>**</c> operator in C# — spell it with repeated
+    ///     multiplication (<c>p * p * p</c>), which NumPy defines it to equal. <see cref="ToString"/> renders
+    ///     NumPy's <c>repr</c> form (<c>poly1d([...])</c>); NumPy's separate pretty <c>str()</c> form is not
+    ///     reproduced (C# has a single <c>ToString</c>).
     ///     </para>
     /// </summary>
     /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.poly1d.html</remarks>
@@ -121,20 +125,19 @@ namespace NumSharp
         /// <summary>Sum of two polynomials.</summary>
         public static poly1d operator +(poly1d a, poly1d b) => new poly1d(np.polyadd(a._coeffs, b._coeffs));
 
-        /// <summary>Sum of a polynomial and coefficients.</summary>
+        /// <summary>Sum of a polynomial and coefficients (NumPy's <c>poly1d.__add__</c> -> polyadd).</summary>
         public static poly1d operator +(poly1d a, NDArray b) => new poly1d(np.polyadd(a._coeffs, new poly1d(b)._coeffs));
 
-        /// <summary>Sum of coefficients and a polynomial.</summary>
-        public static poly1d operator +(NDArray a, poly1d b) => new poly1d(np.polyadd(new poly1d(a)._coeffs, b._coeffs));
+        // No `operator +(NDArray, poly1d)`: NumPy's `array + poly1d` is ELEMENT-WISE (the ndarray wins
+        // via poly1d.__array__), NOT polyadd — the implicit poly1d->NDArray conversion already yields
+        // that. A reflected polyadd overload would both diverge from NumPy AND hijack `"string" + p`
+        // (the string implicitly becomes a char NDArray) into a garbage polyadd. Same for subtraction.
 
         /// <summary>Difference of two polynomials.</summary>
         public static poly1d operator -(poly1d a, poly1d b) => new poly1d(np.polysub(a._coeffs, b._coeffs));
 
-        /// <summary>Difference of a polynomial and coefficients.</summary>
+        /// <summary>Difference of a polynomial and coefficients (NumPy's <c>poly1d.__sub__</c> -> polysub).</summary>
         public static poly1d operator -(poly1d a, NDArray b) => new poly1d(np.polysub(a._coeffs, new poly1d(b)._coeffs));
-
-        /// <summary>Difference of coefficients and a polynomial.</summary>
-        public static poly1d operator -(NDArray a, poly1d b) => new poly1d(np.polysub(new poly1d(a)._coeffs, b._coeffs));
 
         /// <summary>Negation.</summary>
         public static poly1d operator -(poly1d a) => new poly1d(-a._coeffs);
@@ -161,6 +164,18 @@ namespace NumSharp
         public static (poly1d q, poly1d r) operator /(poly1d a, poly1d b)
         {
             var (q, rem) = np.polydiv(a._coeffs, b._coeffs);
+            return (new poly1d(q), new poly1d(rem));
+        }
+
+        /// <summary>
+        ///     Polynomial division by raw coefficients — <c>(quotient, remainder)</c>. NumPy's
+        ///     <c>poly1d.__truediv__</c> wraps a non-scalar in <c>poly1d</c> then divides, so <c>p / array</c>
+        ///     is polynomial division (a TUPLE), NOT the element-wise coefficient division the implicit
+        ///     <c>poly1d -&gt; NDArray</c> conversion would otherwise pick.
+        /// </summary>
+        public static (poly1d q, poly1d r) operator /(poly1d a, NDArray b)
+        {
+            var (q, rem) = np.polydiv(a._coeffs, new poly1d(b)._coeffs);
             return (new poly1d(q), new poly1d(rem));
         }
 

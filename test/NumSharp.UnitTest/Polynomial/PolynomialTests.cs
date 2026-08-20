@@ -275,6 +275,33 @@ namespace NumSharp.UnitTest.Polynomial
             np.polyder(p).Should().BeOfValues(2, 2);
         }
 
+        [TestMethod]
+        public void Poly1d_ReflectedAddSub_IsElementwise_LikeNumpy()
+        {
+            // NumPy: `array + poly1d` is ELEMENT-WISE (the ndarray wins via poly1d.__array__), returning
+            // a plain ndarray — NOT polyadd. `poly1d + array` (poly1d on the left) IS polyadd. There is
+            // deliberately no `operator +(NDArray, poly1d)` so the array-left form takes the implicit
+            // poly1d->NDArray conversion and adds element-wise (and `"str" + p` cannot hijack into a
+            // garbage polyadd).
+            var p = new poly1d(np.array(new long[] { 10, 20, 30 }));
+            NDArray arrayPlus = np.array(new long[] { 1, 2, 3 }) + p;
+            arrayPlus.Should().BeOfValues(11, 22, 33).And.BeShaped(3);       // element-wise
+            (np.array(new long[] { 1, 2, 3 }) - p).Should().BeOfValues(-9, -18, -27);
+            (p + np.array(new long[] { 1, 1 })).coeffs.Should().BeOfValues(10, 21, 31);  // polyadd (poly1d left)
+        }
+
+        [TestMethod]
+        public void Poly1d_DivideByRawArray_IsPolydiv_NotElementwise()
+        {
+            // NumPy's poly1d.__truediv__ wraps a non-scalar and divides polynomially: `p / array`
+            // returns a (quotient, remainder) tuple — NOT the element-wise coefficient division the
+            // implicit poly1d->NDArray conversion would otherwise select.
+            var p = new poly1d(np.array(new double[] { 1, 0, 0, 0, 4 }));
+            var (q, r) = p / np.array(new double[] { 1, 2, 3 });
+            Close(q.coeffs, 1, -2, 1);
+            Close(r.coeffs, 4, 1);
+        }
+
         #endregion
 
         #region no-backend contract (BLAS-routed members)
@@ -298,6 +325,19 @@ namespace NumSharp.UnitTest.Polynomial
         {
             new Action(() => np.roots(np.array(new double[] { 1, 2, 3, 4 }).reshape(2, 2)))
                 .Should().Throw<ValueError>().WithMessage("Input must be a rank-1 array.");
+        }
+
+        [TestMethod]
+        [Misaligned]
+        public void ZeroDInput_AcceptedViaAtleast1d_DivergesFromNumpyDispatcher()
+        {
+            // NumPy's @array_function_dispatch decorator rejects a 0-d array before roots/poly's body
+            // runs ("dispatcher for __array_function__ did not return an iterable"), an internal
+            // dispatch artifact with no NumSharp analogue. NumSharp has no such dispatcher, so the
+            // function BODY runs — and NumPy's own body would accept it too, via atleast_1d. So:
+            //   roots(0-d 5.0) -> a constant has no roots -> empty; poly(0-d 5.0) -> (x - 5) -> [1,-5].
+            np.roots(NDArray.Scalar(5.0)).Should().BeShaped(0);           // no eigvals reached
+            np.poly(NDArray.Scalar(5.0)).Should().BeOfValues(1.0, -5.0);  // pure, no eigvals
         }
 
         #endregion
