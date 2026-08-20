@@ -18,3 +18,6 @@ e0db3c3ed2bac06c255d4b1b7a327efc4e05447b
 
 # Normalize mixed-case NdArray.* filenames to exact NDArray (case-only, pure git mv, R100)
 02cc162fc09c279b6be6abc3f25cc2b5c14ddc88
+
+# Normalize remaining ndarray-variant filenames to exact NDArray (+ ndarray.md case-collision cleanup)
+f677d43e6642b72b4d3c29070f02e42a0dddec32
