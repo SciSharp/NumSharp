@@ -1759,7 +1759,7 @@ class above; `OpRegistry` all 16 transforms + 4 helpers, `gen_oracle.gen_fft`, `
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
 ### File I/O
-`fromfile`, `load`, `load_npy`, `load_npz`, `save`, `savetxt`, `savez`, `savez_compressed`, `tofile`
+`fromfile`, `load`, `load_npy`, `load_npz`, `loadtxt`, `save`, `savetxt`, `savez`, `savez_compressed`, `tofile`
 
 The `.npy`/`.npz` stack is a **port of NumPy 2.4.2's `numpy/lib/_format_impl.py`** (NEP-01) in
 `IO/{NpyFormat,NpzFile,PyLiteral}.cs`, and the writer is **byte-for-byte identical to NumPy's own
@@ -1869,6 +1869,34 @@ where NumPy raises `OverflowError` (message identical; NumSharp has no `Overflow
 `ValueError` verbatim), and the AttributeError renders a C# `string[]` as a Python list repr. Gate:
 `IO/SaveTxtTests.cs` (probed against NumPy 2.4.2). See `APIs/np.savetxt.cs`,
 `Backends/Printing/PrintfFormatter.cs`.
+
+**`np.loadtxt(fname, dtype=float, comments='#', delimiter=None, converters=None, skiprows=0, usecols=None,
+unpack=False, ndmin=0, encoding=None, max_rows=None, quotechar=None)`** is the reader complement — a port of NumPy
+2.4.2's `_npyio_impl.py::loadtxt` → `_read` plus its C text reader (`textreading/{tokenize.cpp,conversions.c,
+str_to_int.c,rows.c}`), in `APIs/np.loadtxt.cs`. Round-trips `np.savetxt` (byte-exact values). The C reader always
+yields a 2-D `(rows, cols)` array; **`ndmin` then squeezes size-1 axes** (so a single row/col → 1-D, a lone value →
+0-d) or expands. The **tokenizer** is a faithful port: `delimiter=None` splits on **runs of whitespace** (leading/
+trailing stripped, blank/comment-only lines → 0 fields → skipped) while an explicit single-char delimiter (incl. `' '`)
+keeps empty fields; `quotechar` protects delimiters/comments and doubles as an escape; a single-char `comment` strips
+to line-end (multi-char comment stripped per line, and rejected with `quotechar`). The **per-dtype parsers** match
+NumPy exactly: **bool via int64** (`"0"`/`"1"`, `-1`→True, `"True"`→error), integers **range-check** (`int8 "200"`→
+error) and **unsigned reject negatives** (`uint8 "-1"`→error), **float** uses `PyOS_string_to_double` semantics
+(case-insensitive `inf`/`infinity`/`nan`, rejects hex/`_`/trailing-junk/empty, NaN→`+qNaN 0x7FF8…`), **complex** is
+`to_complex_int` (`a`/`aj`/`a+bj`/`(a+bj)`/`1+-2j`). All 15 dtypes (Char/Decimal via the same coercion). `converters`
+(a `Func<string,object>` for all columns, or an `IDictionary<int,Func<string,object>>` per column), `usecols`
+(int[], negatives from the end), `unpack` (transpose), `skiprows`/`max_rows` (blank/comment lines don't count toward
+`max_rows`) and `encoding` are supported. Inputs: **filename** (`.gz` transparently decompressed; universal
+newlines), open **`Stream`**, **`TextReader`**, or **`IEnumerable<string>`** (lines, embedded newlines split). Errors
+are NumPy-verbatim: `ValueError("the number of columns changed from {a} to {b} at row {n}; …")`, `ValueError("could
+not convert string '{tok}' to {dtype} at row {r}, column {c}.")` (**row 0-based, column 1-based**), `ValueError(
+"invalid column index {k} at row {n} with {c} columns")`, `ValueError("Illegal value of ndmin keyword: …")`,
+`TypeError` for a multi-char/newline delimiter. Fields are parsed straight from the line's **char span** (no per-field
+string allocation on the common path). **Perf (NPY/NS):** integer/bool/discrete dtypes **1.5–1.9×**; **float-heavy
+input ~1.0–1.1× (parity)** — bounded by the correctly-rounded `double.Parse`, the analog of NumPy's `strtod` (the
+same floor on both sides, as with savetxt's `%.18e`). **Deliberate divergence:** the empty-input `UserWarning` is not
+emitted (NumSharp has no warnings module; the array is still the correct empty result). Gate: `IO/LoadTxtTests.cs`
+(probed against NumPy 2.4.2). Reuses the private `BytesToArray` helper from `np.fromfile.cs` (whose own parsers
+truncate rather than range-check, so loadtxt carries its own strict ones). See `APIs/np.loadtxt.cs`.
 
 ### Printing / Formatting
 `array2string`, `array_repr`, `array_str`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `printoptions` (IDisposable context), `set_printoptions`
