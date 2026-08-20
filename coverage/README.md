@@ -4,6 +4,15 @@ This directory is the reproducible source for NumSharp's public API coverage art
 
 The NumSharp surfaces are **discovered, not hardcoded**: `NumSharp.Tools.ApiInventory` reflects every public type in `NumSharp.Core` annotated with `[ModuleName("...")]` — `np` itself, `NDArray` (`"ndarray"`), and each function-namespace facade (`"np.random"` on `NumPyRandom`, `"np.fft"` on `FourierModule`, `"np.linalg"` on the nested `np.linalg` class). A new module facade joins the artifact by annotation alone; the generator fails loudly if a compared NumPy surface has no annotated host. Single-object DSL exports (`np.r_`, `np.s_`, `np.mgrid`, …) take no attribute — NumPy exports each as one object, so the property on `np` is already the whole coverage row.
 
+Four scan-integrity guards make a silent miss structurally hard:
+
+- **Unbacked surface** (generator) — a compared NumPy surface with no `[ModuleName]` host is a hard error.
+- **Stray host** (generator) — the tool emits the full public surface *outside* the annotated modules, and any still-missing in-scope NumPy export whose name exists there fails the run, naming the candidate types. Reviewed name coincidences are recorded in `overrides.json` under `"stray_allowlist"`.
+- **Facade shape** (tool) — a property on an annotated host returning a concrete class with many NumPy-style lowercase instance methods, or a public nested static class with lowercase static methods, must itself be annotated (the exact shapes `np.fft` and `np.linalg` were originally missed by).
+- **Hierarchy** (tool) — annotated types are reflected `DeclaredOnly`, so their base must be `object` (or itself annotated); growing a base class fails instead of silently hiding inherited members.
+
+Members are reflected with both `Static` and `Instance` flags (per-member `static` recorded), so a static helper on an instance facade cannot escape the scan. The generator also warns when an `overrides.json` alias goes stale because a direct match now exists.
+
 ## Generate or verify
 
 ```bash

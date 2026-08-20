@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generator_version": "1.3.0",
+  "generator_version": "1.4.0",
   "numpy_version": "2.4.2",
   "numsharp_assembly_version": "0.60.0.0",
   "methodology": {
@@ -333,8 +333,8 @@
       }
     },
     "all_numpy_exports": 677,
-    "numsharp_extensions": 121,
-    "catalog_rows": 798
+    "numsharp_extensions": 126,
+    "catalog_rows": 803
   },
   "rows": [
     {
@@ -17705,6 +17705,58 @@
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
     {
+      "id": "numsharp.ndarray.AsString",
+      "origin": "numsharp",
+      "surface": "ndarray",
+      "name": "AsString",
+      "kind": "method",
+      "numpy_signature": "",
+      "documentation_url": "",
+      "in_default_scope": false,
+      "category": "NumSharp-only APIs",
+      "availability": "extension",
+      "support": "extension",
+      "status": "extension",
+      "numsharp_target": "NumSharp.NDArray.AsString",
+      "numsharp_signatures": [
+        "string AsString(NumSharp.NDArray arr)"
+      ],
+      "numsharp_obsolete": false,
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Backends/NDArray.String.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.String.cs"
+      ],
+      "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
+    },
+    {
+      "id": "numsharp.ndarray.AsStringArray",
+      "origin": "numsharp",
+      "surface": "ndarray",
+      "name": "AsStringArray",
+      "kind": "method",
+      "numpy_signature": "",
+      "documentation_url": "",
+      "in_default_scope": false,
+      "category": "NumSharp-only APIs",
+      "availability": "extension",
+      "support": "extension",
+      "status": "extension",
+      "numsharp_target": "NumSharp.NDArray.AsStringArray",
+      "numsharp_signatures": [
+        "string[] AsStringArray(NumSharp.NDArray arr)"
+      ],
+      "numsharp_obsolete": false,
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Backends/NDArray.String.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.String.cs"
+      ],
+      "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
+    },
+    {
       "id": "numsharp.ndarray.Clone",
       "origin": "numsharp",
       "surface": "ndarray",
@@ -17993,6 +18045,58 @@
       ],
       "numsharp_source_urls": [
         "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.cs"
+      ],
+      "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
+    },
+    {
+      "id": "numsharp.ndarray.FromMultiDimArray",
+      "origin": "numsharp",
+      "surface": "ndarray",
+      "name": "FromMultiDimArray",
+      "kind": "method",
+      "numpy_signature": "",
+      "documentation_url": "",
+      "in_default_scope": false,
+      "category": "NumSharp-only APIs",
+      "availability": "extension",
+      "support": "extension",
+      "status": "extension",
+      "numsharp_target": "NumSharp.NDArray.FromMultiDimArray",
+      "numsharp_signatures": [
+        "NumSharp.NDArray FromMultiDimArray(System.Array ndarray, bool copy = true)"
+      ],
+      "numsharp_obsolete": false,
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Casting/NdArrayFromMultiDimArr.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArrayFromMultiDimArr.cs"
+      ],
+      "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
+    },
+    {
+      "id": "numsharp.ndarray.FromString",
+      "origin": "numsharp",
+      "surface": "ndarray",
+      "name": "FromString",
+      "kind": "method",
+      "numpy_signature": "",
+      "documentation_url": "",
+      "in_default_scope": false,
+      "category": "NumSharp-only APIs",
+      "availability": "extension",
+      "support": "extension",
+      "status": "extension",
+      "numsharp_target": "NumSharp.NDArray.FromString",
+      "numsharp_signatures": [
+        "NumSharp.NDArray FromString(string str)"
+      ],
+      "numsharp_obsolete": false,
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Backends/NDArray.String.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.String.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -19022,6 +19126,36 @@
       ],
       "numsharp_source_urls": [
         "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Manipulation/NDArray.roll.cs"
+      ],
+      "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
+    },
+    {
+      "id": "numsharp.ndarray.Scalar",
+      "origin": "numsharp",
+      "surface": "ndarray",
+      "name": "Scalar",
+      "kind": "method",
+      "numpy_signature": "",
+      "documentation_url": "",
+      "in_default_scope": false,
+      "category": "NumSharp-only APIs",
+      "availability": "extension",
+      "support": "extension",
+      "status": "extension",
+      "numsharp_target": "NumSharp.NDArray.Scalar",
+      "numsharp_signatures": [
+        "NumSharp.NDArray Scalar(T value)",
+        "NumSharp.NDArray Scalar(object value)",
+        "NumSharp.NDArray Scalar(object value)",
+        "NumSharp.NDArray Scalar(object value, NumSharp.NPTypeCode typeCode)",
+        "NumSharp.NDArray Scalar(object value, System.Type dtype)"
+      ],
+      "numsharp_obsolete": false,
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Creation/NdArray.Scalar.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.Scalar.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },

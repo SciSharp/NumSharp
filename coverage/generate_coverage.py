@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.3.0"
+GENERATOR_VERSION = "1.4.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -151,8 +151,10 @@ def load_numsharp_inventory() -> dict[str, Any]:
         data = json.loads(completed.stdout)
     except json.JSONDecodeError as error:
         raise SystemExit(f"NumSharp inventory emitted invalid JSON: {error}") from error
-    if data.get("schemaVersion") != 2 or not isinstance(data.get("modules"), dict) or not data["modules"]:
-        raise SystemExit("NumSharp inventory schema mismatch: expected schemaVersion 2 with a non-empty 'modules' map.")
+    if data.get("schemaVersion") != 3 or not isinstance(data.get("modules"), dict) or not data["modules"]:
+        raise SystemExit("NumSharp inventory schema mismatch: expected schemaVersion 3 with a non-empty 'modules' map.")
+    if not isinstance(data.get("unannotatedSurface"), dict):
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 3 must carry the 'unannotatedSurface' index.")
     return data
 
 
@@ -438,6 +440,7 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
     targets, surfaces, prefixes = member_maps(inventory)
     aliases = overrides.get("aliases", {})
     support_overrides = overrides.get("support", {})
+    stray_allowlist = overrides.get("stray_allowlist", {})
     seen_ids: set[str] = set()
     consumed_targets: set[str] = set()
     rows: list[dict[str, Any]] = []
@@ -461,6 +464,11 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
         seen_ids.add(row_id)
         alias = aliases.get(row_id)
         target = direct_target(export, targets, prefixes)
+        if alias and target:
+            sys.stderr.write(
+                f"WARNING: override alias for {row_id} is stale — {target} now matches directly; "
+                "delete the alias from overrides.json.\n"
+            )
         availability = "exact" if target else "missing"
         notes: list[str] = []
         if alias and not target:
@@ -514,9 +522,33 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
 
     unknown_aliases = set(aliases) - seen_ids
     unknown_support = set(support_overrides) - seen_ids
-    if unknown_aliases or unknown_support:
-        unknown = ", ".join(sorted(unknown_aliases | unknown_support))
+    unknown_strays = set(stray_allowlist) - seen_ids
+    if unknown_aliases or unknown_support or unknown_strays:
+        unknown = ", ".join(sorted(unknown_aliases | unknown_support | unknown_strays))
         raise SystemExit(f"Overrides reference NumPy exports that were not discovered: {unknown}")
+
+    # Stray-host gate: an in-scope NumPy export left "missing" whose name nevertheless exists on an
+    # UNANNOTATED public type is a scan miss (the np.fft failure mode — implemented, but on a type
+    # the inventory never reflects), not a genuine gap. Fail loudly, naming the candidate hosts.
+    # Reviewed name coincidences go in overrides.json under "stray_allowlist" ({numpy id: note}).
+    member_hosts: dict[str, list[str]] = {}
+    for type_name, members in inventory["unannotatedSurface"].items():
+        for member in members:
+            member_hosts.setdefault(member, []).append(type_name)
+    strays = [
+        (row["id"], member_hosts[row["name"]])
+        for row in rows
+        if row["origin"] == "numpy" and row["in_default_scope"] and row["status"] == "missing"
+        and row["id"] not in stray_allowlist and row["name"] in member_hosts
+    ]
+    if strays:
+        details = "".join(f"  - {row_id} exists on: {', '.join(hosts)}\n" for row_id, hosts in strays)
+        raise SystemExit(
+            "Missing NumPy exports whose names exist on unannotated NumSharp types (scan misses?):\n"
+            + details
+            + "Annotate the hosting type with [ModuleName(\"...\")], or record a reviewed name "
+            "coincidence in overrides.json under \"stray_allowlist\"."
+        )
 
     for surface, members in surfaces.items():
         for member in members:

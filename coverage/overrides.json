@@ -57,10 +57,6 @@
       "target": "NumSharp.np.vstack",
       "notes": "NumPy documents row_stack as an alias of vstack."
     },
-    "numpy.random": {
-      "target": "NumSharp.np.random",
-      "notes": "NumSharp exposes random through np.random."
-    },
     "numpy.ndarray.itemsize": {
       "target": "NumSharp.NDArray.dtypesize",
       "notes": "The element size is exposed as dtypesize in NumSharp."
@@ -107,5 +103,8 @@
       "status": "unsupported",
       "notes": "The public compatibility symbol exists, but NumSharp does not implement a Complex64 storage dtype."
     }
+  },
+  "stray_allowlist": {
+    "numpy.ndim": "Name coincidence: the ndim on Broadcast/NDIterator/UniqueResult is those objects' rank property (iterator protocol / result struct), not the top-level np.ndim(a) helper — which NumSharp does not implement."
   }
 }
