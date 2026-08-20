@@ -40,6 +40,10 @@ namespace NumSharp.UnitTest.IO
             Assert.AreEqual("2", string.Join(",", a.shape));
             Assert.AreEqual(new Complex(1, 2), (Complex)a.GetAtIndex(0));
             Assert.AreEqual(new Complex(3, -4), (Complex)a.GetAtIndex(1));
+            Assert.AreEqual(new Complex(0, 5), (Complex)np.fromstring("5j", NPTypeCode.Complex, sep: " ").GetAtIndex(0));
+            // imaginary unit is lowercase 'j' only — NumPy's fromstring rejects uppercase 'J'.
+            Assert.ThrowsException<ValueError>(() => np.fromstring("1+2J", NPTypeCode.Complex, sep: " "));
+            Assert.ThrowsException<ValueError>(() => np.fromstring("2J", NPTypeCode.Complex, sep: " "));
         }
 
         [TestMethod]

@@ -302,7 +302,8 @@ namespace NumSharp
 
         // Parse a complex literal: "a+bj" / "a-bj" / "bj" / "a" (optionally wrapped in parentheses, so the
         // "(1+2j)" form NumPy's tofile writes round-trips here — NumPy's own text reader only accepts the
-        // bare "1+2j" form, so this is a superset).
+        // bare "1+2j" form, so the parentheses are a deliberate superset). The imaginary unit is lowercase
+        // `j` ONLY, matching NumPy's fromstring/fromfile (which rejects `"1+2J"`) — probed against 2.4.2.
         private static Complex ParseComplex(string t)
         {
             string s = t.Trim();
@@ -313,7 +314,7 @@ namespace NumSharp
                 throw Unmatched();
 
             char last = s[s.Length - 1];
-            if (last != 'j' && last != 'J')
+            if (last != 'j')
                 return new Complex(ParseDouble(s), 0.0);
 
             string body = s.Substring(0, s.Length - 1);

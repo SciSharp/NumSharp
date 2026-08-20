@@ -1916,8 +1916,14 @@ splits on any whitespace run, a non-whitespace `sep`'s spaces are a wildcard, on
 and a bad/missing item raises the verbatim `ValueError("string or file could not be read to its end due to
 unmatched data")`. `count` caps the items (all 15 dtypes; default float64). The **binary mode was REMOVED in
 NumPy 1.22**, so an empty/`null` `sep` raises `ValueError("The binary mode of fromstring is removed, use frombuffer
-instead")` rather than reinterpreting the string's bytes (probed 2.4.2). Gate: `IO/FromStringTests.cs`. See
-`APIs/np.fromstring.cs`. **Not implemented — `genfromtxt`/`fromregex`:** both require NumPy's structured/record
+instead")` rather than reinterpreting the string's bytes (probed 2.4.2). Because it shares `fromfile`'s parser, it
+inherits that parser's **deliberate lenient-superset traits** (differentially mapped vs NumPy 2.4.2): the imaginary
+unit is lowercase `j` ONLY (`"1+2J"` rejected — fixed to match NumPy, was accepted), the parenthesised `"(1+2j)"`
+form is accepted (a superset that round-trips `tofile`; NumPy rejects it), and integer over/underflow **wraps
+deterministically** where NumPy's C parser is platform-specific — NumPy RAISES on a narrow-unsigned negative
+(`uint8 "-1"`, though `uint64 "-1"` wraps) and CLAMPS overflow via `strtol` (Windows 32-bit `long`), both portably
+avoided here (`loadtxt` carries strict range-checking parsers for full parity instead). Gate: `IO/FromStringTests.cs`.
+See `APIs/np.fromstring.cs`. **Not implemented — `genfromtxt`/`fromregex`:** both require NumPy's structured/record
 dtypes (and `genfromtxt` its masked-array + missing-value machinery), which NumSharp has no analog for; their
 non-structured subset would only re-expose `loadtxt`.
 

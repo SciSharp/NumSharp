@@ -155,7 +155,13 @@ namespace NumSharp.UnitTest.Casting
         [TestMethod]
         public void Text_Integer_WrapsIntoDtype()
         {
-            // "%d"-style parse wraps modulo the dtype width, like NumPy (int8 300 -> 44, uint8 -1 -> 255).
+            // fromfile's text parser is a deterministic superset: it reads the value into a wide integer and
+            // casts (wrapping) into the dtype width, so int8 300 -> 44 (matches NumPy) and uint8 -1 -> 255.
+            // NOTE this is a DELIBERATE, portable divergence from NumPy's fromstring/fromfile here: NumPy's C
+            // parser is platform-specific and inconsistent — it RAISES on a narrow-unsigned negative (uint8
+            // "-1" is a ValueError, though uint64 "-1" wraps to 2^64-1) and CLAMPS integer overflow via
+            // strtol (int32 "2^31" -> INT32_MAX on Windows' 32-bit long), where NumSharp always wraps
+            // deterministically. loadtxt carries its own strict range-checking parsers for full parity.
             string p = TempWithText("300,44,-1");
             try { CollectionAssert.AreEqual(new sbyte[] { 44, 44, -1 }, np.fromfile(p, NPTypeCode.SByte, sep: ",").ToArray<sbyte>()); }
             finally { File.Delete(p); }
