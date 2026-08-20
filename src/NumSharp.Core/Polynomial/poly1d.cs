@@ -1,5 +1,4 @@
 using System;
-using System.Text;
 
 namespace NumSharp
 {
@@ -186,14 +185,13 @@ namespace NumSharp
         /// <summary>Coefficient list, formatted as <c>poly1d([...])</c> (NumPy's <c>repr</c>).</summary>
         public override string ToString()
         {
-            var sb = new StringBuilder("poly1d([");
-            for (long i = 0; i < _coeffs.size; i++)
-            {
-                if (i > 0) sb.Append(", ");
-                sb.Append(_coeffs.GetAtIndex((int)i));
-            }
-            sb.Append("])");
-            return sb.ToString();
+            // NumPy's poly1d.__repr__: `repr(self.coeffs)[6:-1]` wrapped in poly1d(...) — i.e. the
+            // array repr with the "array(" prefix and trailing ")" stripped. NumSharp's array_repr
+            // (ToString(true)) is byte-exact to NumPy's, so this reproduces the alignment/precision.
+            string vals = _coeffs.ToString(true);
+            if (vals.StartsWith("array(", StringComparison.Ordinal) && vals.EndsWith(")", StringComparison.Ordinal))
+                vals = vals.Substring(6, vals.Length - 7);
+            return $"poly1d({vals})";
         }
     }
 

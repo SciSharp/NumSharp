@@ -94,6 +94,16 @@ namespace NumSharp.UnitTest.Polynomial
             double.IsNaN(v).Should().BeTrue();
         }
 
+        [TestMethod]
+        public void Polyval_ZeroDCoeffs_Throws()
+        {
+            // NumPy's `for pv in p` cannot iterate a 0-d coefficient array (a scalar is not `[c]`).
+            new Action(() => np.polyval(NDArray.Scalar(5L), np.array(new long[] { 1, 2, 3 })))
+                .Should().Throw<TypeError>().WithMessage("iteration over a 0-d array");
+            // ...but a 1-D length-1 array is a valid constant polynomial.
+            np.polyval(np.array(new long[] { 5 }), np.array(new long[] { 1, 2, 3 })).Should().BeOfValues(5, 5, 5);
+        }
+
         #endregion
 
         #region polyder / polyint
@@ -212,6 +222,16 @@ namespace NumSharp.UnitTest.Polynomial
             p.order.Should().Be(2);
             p.c.Should().BeOfValues(1, 2, 3);
             p.ToString().Should().Be("poly1d([1, 2, 3])");
+        }
+
+        [TestMethod]
+        public void Poly1d_Repr_ByteExactToNumpy()
+        {
+            // NumPy's poly1d.__repr__ is repr(coeffs)[6:-1] wrapped — including alignment, the trailing
+            // dot on whole floats, and the dtype suffix for non-default dtypes.
+            new poly1d(np.array(new double[] { 0.5, 1, 3 })).ToString().Should().Be("poly1d([0.5, 1. , 3. ])");
+            new poly1d(np.array(new sbyte[] { 1, 2, 3 })).ToString().Should().Be("poly1d([1, 2, 3], dtype=int8)");
+            new poly1d(np.array(Array.Empty<double>())).ToString().Should().Be("poly1d([0.])");
         }
 
         [TestMethod]

@@ -20,6 +20,11 @@ namespace NumSharp
             // A poly1d `x` composes the two polynomials — handled by the poly1d overload below.
             x = np.asanyarray(x);
 
+            // NumPy's `for pv in p` cannot iterate a 0-d coefficient array (a scalar is not a
+            // length-1 polynomial — that would be `[c]`). A 1-D length-1 array is a valid constant.
+            if (p.ndim == 0)
+                throw new TypeError("iteration over a 0-d array");
+
             long n = p.size;
             // No coefficients — NumPy's loop never runs, so the result is zeros_like(x).
             if (n == 0)
