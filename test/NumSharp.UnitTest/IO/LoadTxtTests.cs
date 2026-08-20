@@ -98,6 +98,28 @@ namespace NumSharp.UnitTest.IO
         }
 
         [TestMethod]
+        public void Complex_ImaginaryUnit_LowercaseJOnly()
+        {
+            // NumPy's imaginary_unit defaults to lowercase 'j'; uppercase 'J' is NOT the imaginary unit.
+            Assert.AreEqual(new Complex(1, 2), (Complex)L("1+2j", NPTypeCode.Complex).GetAtIndex(0));
+            AssertMsg<ValueError>(() => L("1+2J", NPTypeCode.Complex), "could not convert string '1+2J' to complex128 at row 0, column 1.");
+            AssertMsg<ValueError>(() => L("2J", NPTypeCode.Complex), "could not convert string '2J' to complex128 at row 0, column 1.");
+            AssertMsg<ValueError>(() => L("1.5J", NPTypeCode.Complex), "could not convert string '1.5J' to complex128 at row 0, column 1.");
+        }
+
+        [TestMethod]
+        public void Whitespace_C0Separators_SplitAndStripLikeNumpy()
+        {
+            // Py_UNICODE_ISSPACE (unlike .NET char.IsWhiteSpace) treats U+001C..U+001F as whitespace, so
+            // NumPy splits on them in whitespace mode and strips them around a field.
+            AssertArr(L("1\u001c2"), new[] { 2 }, NPTypeCode.Double, new double[] { 1, 2 });
+            AssertArr(L("1\u001d2\u001e3"), new[] { 3 }, NPTypeCode.Double, new double[] { 1, 2, 3 });
+            AssertArr(L("\u001f1 2\u001f"), new[] { 2 }, NPTypeCode.Double, new double[] { 1, 2 }); // leading/trailing stripped
+            // in delimiter mode a C0 separator at a field edge is stripped by the numeric parser (not a delimiter).
+            AssertArr(L("\u001c5\u001c,\u001c6\u001c", delimiter: ","), new[] { 2 }, NPTypeCode.Double, new double[] { 5, 6 });
+        }
+
+        [TestMethod]
         public void FloatParsing_InfNanSci()
         {
             AssertArr(L("inf -inf nan"), new[] { 3 }, NPTypeCode.Double,

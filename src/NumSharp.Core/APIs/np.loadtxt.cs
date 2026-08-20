@@ -427,9 +427,25 @@ namespace NumSharp
         // NumPy/C parse "nan" to the POSITIVE quiet NaN (0x7FF8…). See np.fromfile.cs.
         private static readonly double LoadtxtPositiveNaN = BitConverter.Int64BitsToDouble(0x7FF8000000000000L);
 
+        // NumPy's tokenizer and numeric parsers split/strip on `Py_UNICODE_ISSPACE`, which is IDENTICAL to
+        // .NET's char.IsWhiteSpace across the whole BMP EXCEPT that it ALSO treats the four C0 information
+        // separators U+001C..U+001F as whitespace (verified: the only difference). So `"1\x1c2"` in
+        // whitespace mode is two fields, and a leading/trailing separator is stripped by the field parsers.
+        private static bool IsLoadtxtWhitespace(char c) => char.IsWhiteSpace(c) || (c >= '\u001c' && c <= '\u001f');
+
+        // Trim leading/trailing loadtxt-whitespace — the exact strip NumPy's `double_from_ucs4` /
+        // `str_to_int64` apply before parsing a field (a superset of ReadOnlySpan.Trim()'s .NET set).
+        private static ReadOnlySpan<char> TrimLoadtxtWs(ReadOnlySpan<char> s)
+        {
+            int start = 0, end = s.Length;
+            while (start < end && IsLoadtxtWhitespace(s[start])) start++;
+            while (end > start && IsLoadtxtWhitespace(s[end - 1])) end--;
+            return s.Slice(start, end - start);
+        }
+
         private static bool TryDoubleLT(ReadOnlySpan<char> tok, out double value)
         {
-            ReadOnlySpan<char> s = tok.Trim();
+            ReadOnlySpan<char> s = TrimLoadtxtWs(tok);
             if (s.Length > 0)
             {
                 // inf / infinity / nan (case-insensitive, optional sign) — double.TryParse rejects these.
@@ -448,7 +464,7 @@ namespace NumSharp
 
         private static bool TryLongLT(ReadOnlySpan<char> tok, long min, long max, out long value)
         {
-            if (long.TryParse(tok.Trim(), NumberStyles.Integer, CI, out value) && value >= min && value <= max)
+            if (long.TryParse(TrimLoadtxtWs(tok), NumberStyles.Integer, CI, out value) && value >= min && value <= max)
                 return true;
             value = 0;
             return false;
@@ -456,24 +472,24 @@ namespace NumSharp
 
         private static bool TryULongLT(ReadOnlySpan<char> tok, ulong max, out ulong value)
         {
-            ReadOnlySpan<char> s = tok.Trim();
+            ReadOnlySpan<char> s = TrimLoadtxtWs(tok);
             value = 0;
             if (s.Length > 0 && s[0] == '-') return false; // unsigned rejects a negative sign outright
             return ulong.TryParse(s, NumberStyles.Integer, CI, out value) && value <= max;
         }
 
         private static bool TryDecimalLT(ReadOnlySpan<char> tok, out decimal value)
-            => decimal.TryParse(tok.Trim(), NumberStyles.Float, CI, out value);
+            => decimal.TryParse(TrimLoadtxtWs(tok), NumberStyles.Float, CI, out value);
 
         // Port of NumPy's to_complex_int (conversions.c): real, then optional '+'/'-' imaginary part ending
         // in 'j', optionally wrapped in parentheses.
         private static bool TryComplexLT(ReadOnlySpan<char> tok, out Complex value)
         {
             value = default;
-            ReadOnlySpan<char> s = tok.Trim();
+            ReadOnlySpan<char> s = TrimLoadtxtWs(tok);
             int i = 0, end = s.Length;
             bool paren = false;
-            if (i < end && s[i] == '(') { paren = true; i++; while (i < end && char.IsWhiteSpace(s[i])) i++; }
+            if (i < end && s[i] == '(') { paren = true; i++; while (i < end && IsLoadtxtWhitespace(s[i])) i++; }
 
             if (!ScanDouble(s, i, end, out double real, out int p)) return false;
             double imag;
@@ -484,7 +500,7 @@ namespace NumSharp
                 return true;
             }
 
-            if (s[p] == 'j' || s[p] == 'J')
+            if (s[p] == 'j')
             {
                 imag = real; real = 0.0; p++;
             }
@@ -492,18 +508,18 @@ namespace NumSharp
             {
                 if (s[p] == '+') p++; // advance so "1+-2j" reads the '-' as the imaginary sign
                 if (!ScanDouble(s, p, end, out imag, out p)) return false;
-                if (p >= end || (s[p] != 'j' && s[p] != 'J')) return false;
+                if (p >= end || s[p] != 'j') return false;
                 p++;
             }
             else imag = 0.0;
 
             if (paren)
             {
-                while (p < end && char.IsWhiteSpace(s[p])) p++;
+                while (p < end && IsLoadtxtWhitespace(s[p])) p++;
                 if (p < end && s[p] == ')') p++;
                 else return false;
             }
-            while (p < end && char.IsWhiteSpace(s[p])) p++;
+            while (p < end && IsLoadtxtWhitespace(s[p])) p++;
             if (p != end) return false;
 
             value = new Complex(real, imag);
@@ -576,7 +592,7 @@ namespace NumSharp
                     int fs;
                     if (ws)
                     {
-                        while (i < n && char.IsWhiteSpace(line[i])) i++;
+                        while (i < n && IsLoadtxtWhitespace(line[i])) i++;
                         if (i >= n) break;
                         if (hasComment && line[i] == comment) break;
                         fs = i;
@@ -592,7 +608,7 @@ namespace NumSharp
                     while (i < n)
                     {
                         char c = line[i];
-                        if (ws) { if (char.IsWhiteSpace(c)) break; }
+                        if (ws) { if (IsLoadtxtWhitespace(c)) break; }
                         else { if (c == delim) break; }
                         if (hasComment && c == comment) { commentEnds = true; break; }
                         i++;
@@ -617,7 +633,7 @@ namespace NumSharp
                     bool quoted = false;
                     if (ws)
                     {
-                        while (i < n && char.IsWhiteSpace(line[i])) i++;
+                        while (i < n && IsLoadtxtWhitespace(line[i])) i++;
                         if (i >= n) break;
                         if (hasComment && line[i] == comment) break;
                     }
@@ -647,7 +663,7 @@ namespace NumSharp
                     while (i < n)
                     {
                         char c = line[i];
-                        if (ws) { if (char.IsWhiteSpace(c)) break; }
+                        if (ws) { if (IsLoadtxtWhitespace(c)) break; }
                         else { if (c == delim) break; }
                         if (hasComment && c == comment) { commentEnds = true; break; }
                         qbuf.Append(c); i++;

@@ -1759,7 +1759,7 @@ class above; `OpRegistry` all 16 transforms + 4 helpers, `gen_oracle.gen_fft`, `
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
 ### File I/O
-`fromfile`, `load`, `load_npy`, `load_npz`, `loadtxt`, `save`, `savetxt`, `savez`, `savez_compressed`, `tofile`
+`fromfile`, `fromstring`, `load`, `load_npy`, `load_npz`, `loadtxt`, `save`, `savetxt`, `savez`, `savez_compressed`, `tofile`
 
 The `.npy`/`.npz` stack is a **port of NumPy 2.4.2's `numpy/lib/_format_impl.py`** (NEP-01) in
 `IO/{NpyFormat,NpzFile,PyLiteral}.cs`, and the writer is **byte-for-byte identical to NumPy's own
@@ -1857,7 +1857,13 @@ resolved with NumPy's verbatim errors (`ValueError "fmt has wrong number of % fo
 2-digit-min exponent, `nan`/`inf`, `-0.0`); the multi-column `format % tuple(row)` path added
 `PrintfFormatter.FormatRow`/`FormatRowInto` (sequential-arg, appends straight into the batch buffer). Numeric
 specs **widen to double** (matching NumPy's `float()`/`int()` coercion, so `int64` past 2^53 and `float32`
-render at the double value) while `%s` uses each dtype's shortest scalar repr. **Complex** wraps a single spec
+render at the double value) while `%s` uses each dtype's shortest scalar repr. On an INTEGER conversion
+(`d i u x X o`) a `.precision` is Python's **minimum-digit** count, left-zero-filled (`%.5d`→`00042`,
+`%.0d % 0`→`0`), the `0` flag composes with it (`%08.3d % 7`→`00000007`, Python-not-C), and with `#` the
+zero-fill lands BETWEEN the `0x`/`0o` prefix and the digits (`%#08x`→`0x0000ff`). `%c` renders a true integer's
+code point in `[0, 0x10FFFF]` and **raises** `OverflowError("%c arg not in range(0x110000)")` outside it; `%c`
+on a **bool** and `%x`/`%X`/`%o` on a bool are the `TypeError`→dtype/format mismatch (a bool is not an int for
+those conversions — probed), while `%d`/`%i`/`%u` accept a bool (→1/0). **Complex** wraps a single spec
 as `' (%s+%sj)'` per column and applies the `+-`→`-` fix-up, exactly as NumPy. Overloads target a **filename**
 (`.gz` → gzip; Python text-mode `\n`→`os.linesep` translation, so a file matches NumPy on the same platform —
 CRLF on Windows), an open **`Stream`**, or a **`TextWriter`** (both verbatim `\n`, NumPy's file-handle path).
@@ -1878,11 +1884,16 @@ yields a 2-D `(rows, cols)` array; **`ndmin` then squeezes size-1 axes** (so a s
 0-d) or expands. The **tokenizer** is a faithful port: `delimiter=None` splits on **runs of whitespace** (leading/
 trailing stripped, blank/comment-only lines → 0 fields → skipped) while an explicit single-char delimiter (incl. `' '`)
 keeps empty fields; `quotechar` protects delimiters/comments and doubles as an escape; a single-char `comment` strips
-to line-end (multi-char comment stripped per line, and rejected with `quotechar`). The **per-dtype parsers** match
-NumPy exactly: **bool via int64** (`"0"`/`"1"`, `-1`→True, `"True"`→error), integers **range-check** (`int8 "200"`→
-error) and **unsigned reject negatives** (`uint8 "-1"`→error), **float** uses `PyOS_string_to_double` semantics
-(case-insensitive `inf`/`infinity`/`nan`, rejects hex/`_`/trailing-junk/empty, NaN→`+qNaN 0x7FF8…`), **complex** is
-`to_complex_int` (`a`/`aj`/`a+bj`/`(a+bj)`/`1+-2j`). All 15 dtypes (Char/Decimal via the same coercion). `converters`
+to line-end (multi-char comment stripped per line, and rejected with `quotechar`). Whitespace is NumPy's
+`Py_UNICODE_ISSPACE`, which is `char.IsWhiteSpace` PLUS the four C0 information separators **U+001C..U+001F** (the
+only BMP difference, exhaustively verified) — so `"1\x1c2"` is two fields and a leading/trailing separator is
+stripped by the field parsers (`IsLoadtxtWhitespace`/`TrimLoadtxtWs`, used by both tokenizer and numeric parsers).
+The **per-dtype parsers** match NumPy exactly: **bool via int64** (`"0"`/`"1"`, `-1`→True, `"True"`→error), integers
+**range-check** (`int8 "200"`→ error) and **unsigned reject negatives** (`uint8 "-1"`→error), **float** uses
+`PyOS_string_to_double` semantics (case-insensitive `inf`/`infinity`/`nan`, rejects hex/`_`/trailing-junk/empty,
+NaN→`+qNaN 0x7FF8…`), **complex** is `to_complex_int` with the imaginary unit fixed to **lowercase `j` only**
+(`a`/`aj`/`a+bj`/`(a+bj)`/`1+-2j`; `"1+2J"`→error, matching NumPy's default `imaginary_unit='j'`). All 15 dtypes
+(Char/Decimal via the same coercion). `converters`
 (a `Func<string,object>` for all columns, or an `IDictionary<int,Func<string,object>>` per column), `usecols`
 (int[], negatives from the end), `unpack` (transpose), `skiprows`/`max_rows` (blank/comment lines don't count toward
 `max_rows`) and `encoding` are supported. Inputs: **filename** (`.gz` transparently decompressed; universal
@@ -1897,6 +1908,18 @@ same floor on both sides, as with savetxt's `%.18e`). **Deliberate divergence:**
 emitted (NumSharp has no warnings module; the array is still the correct empty result). Gate: `IO/LoadTxtTests.cs`
 (probed against NumPy 2.4.2). Reuses the private `BytesToArray` helper from `np.fromfile.cs` (whose own parsers
 truncate rather than range-check, so loadtxt carries its own strict ones). See `APIs/np.loadtxt.cs`.
+
+**`np.fromstring(string, dtype=float, count=-1, sep)`** (`APIs/np.fromstring.cs`) parses a 1-D array from the
+numbers in a text string — the SAME item reader `np.fromfile` uses for a text file, so it shares fromfile's
+`SplitTokens`/`SelectTokens`/`TokensToArray` (NumPy shares its `fromstr` the same way): a whitespace-only `sep`
+splits on any whitespace run, a non-whitespace `sep`'s spaces are a wildcard, one trailing separator is tolerated,
+and a bad/missing item raises the verbatim `ValueError("string or file could not be read to its end due to
+unmatched data")`. `count` caps the items (all 15 dtypes; default float64). The **binary mode was REMOVED in
+NumPy 1.22**, so an empty/`null` `sep` raises `ValueError("The binary mode of fromstring is removed, use frombuffer
+instead")` rather than reinterpreting the string's bytes (probed 2.4.2). Gate: `IO/FromStringTests.cs`. See
+`APIs/np.fromstring.cs`. **Not implemented — `genfromtxt`/`fromregex`:** both require NumPy's structured/record
+dtypes (and `genfromtxt` its masked-array + missing-value machinery), which NumSharp has no analog for; their
+non-structured subset would only re-expose `loadtxt`.
 
 ### Printing / Formatting
 `array2string`, `array_repr`, `array_str`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `printoptions` (IDisposable context), `set_printoptions`

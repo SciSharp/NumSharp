@@ -114,6 +114,47 @@ namespace NumSharp.UnitTest.IO
         }
 
         [TestMethod]
+        public void Fmt_IntegerPrecision_MinDigits()
+        {
+            // Python's `.precision` on d/i/u/x/X/o is the MINIMUM number of digits (left-zero-filled).
+            Assert.AreEqual("00042\n-00001\n", Cap(np.array(new int[] { 42, -1 }), "%.5d"));
+            Assert.AreEqual("0\n5\n", Cap(np.array(new int[] { 0, 5 }), "%.0d"));            // "0" is already one digit
+            Assert.AreEqual("  007\n", Cap(np.array(new int[] { 7 }), "%5.3d"));
+            // the '0' flag is honored TOGETHER with a precision (Python differs from C here).
+            Assert.AreEqual("00000007\n", Cap(np.array(new int[] { 7 }), "%08.3d"));
+            Assert.AreEqual("-0000007\n", Cap(np.array(new int[] { -7 }), "%08.3d"));
+            Assert.AreEqual("+0000007\n", Cap(np.array(new int[] { 7 }), "%+08.3d"));
+            Assert.AreEqual("007     \n", Cap(np.array(new int[] { 7 }), "%-8.3d"));         // left-justify -> spaces
+            Assert.AreEqual("00FF\n", Cap(np.array(new int[] { 255 }), "%.4X"));
+            Assert.AreEqual("052\n", Cap(np.array(new int[] { 42 }), "%.3o"));
+            // alt-prefix + precision + zero-fill: the zeros go BETWEEN the "0x" and the digits.
+            Assert.AreEqual("0x000ff\n", Cap(np.array(new int[] { 255 }), "%#.5x"));
+            Assert.AreEqual("0x0000ff\n", Cap(np.array(new int[] { 255 }), "%#08x"));
+            Assert.AreEqual("0x000000ff\n", Cap(np.array(new int[] { 255 }), "%#010.3x"));
+            Assert.AreEqual("0o00052\n", Cap(np.array(new int[] { 42 }), "%#.5o"));
+        }
+
+        [TestMethod]
+        public void Fmt_CharAndBool_MatchNumpyRaises()
+        {
+            // %c on an integer out of [0, 0x10FFFF] raises OverflowError (NumPy lets it propagate uncaught).
+            var neg = Assert.ThrowsException<OverflowException>(() => Cap(np.array(new int[] { -1 }), "%c"));
+            Assert.AreEqual("%c arg not in range(0x110000)", neg.Message);
+            var over = Assert.ThrowsException<OverflowException>(() => Cap(np.array(new int[] { 0x110000 }), "%c"));
+            Assert.AreEqual("%c arg not in range(0x110000)", over.Message);
+            Assert.AreEqual("A\n", Cap(np.array(new int[] { 65 }), "%c"));                   // in-range -> the code point
+            // bool is NOT an int for %c/%x/%X/%o — a TypeError reported as the dtype/format mismatch.
+            var bc = Assert.ThrowsException<TypeError>(() => Cap(np.array(new bool[] { true }), "%c"));
+            Assert.AreEqual("Mismatch between array dtype ('bool') and format specifier ('%c')", bc.Message);
+            var bx = Assert.ThrowsException<TypeError>(() => Cap(np.array(new bool[] { true }), "%x"));
+            Assert.AreEqual("Mismatch between array dtype ('bool') and format specifier ('%x')", bx.Message);
+            var bo = Assert.ThrowsException<TypeError>(() => Cap(np.array(new bool[] { true }), "%o"));
+            Assert.AreEqual("Mismatch between array dtype ('bool') and format specifier ('%o')", bo.Message);
+            // bool DOES take %d/%i/%u (renders 1/0).
+            Assert.AreEqual("1\n0\n", Cap(np.array(new bool[] { true, false }), "%d"));
+        }
+
+        [TestMethod]
         public void Fmt_Errors()
         {
             var a = Assert.ThrowsException<AttributeError>(() => Cap(np.array(new double[,] { { 1, 2.5 } }), new[] { "%d" }));
