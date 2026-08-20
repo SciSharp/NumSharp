@@ -8,7 +8,7 @@ using NumSharp.UnitTest.Utilities;
 namespace NumSharp.UnitTest.LinearAlgebra
 {
     /// <summary>
-    ///     Where <c>np.linalg</c> stops without a LAPACK backend — and, just as importantly, where
+    ///     Where <c>np.linalg</c> stops without a matrix backend — and, just as importantly, where
     ///     it does NOT stop.
     /// </summary>
     /// <remarks>
@@ -59,16 +59,30 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [TestMethod]
-        public void TheMessage_NamesTheApi_TheLapackRoutine_AndTheSeamMemberToImplement()
+        public void TheMessage_NamesTheApi_TheSeamMember_AndTheOpenBlasPackageToInstall()
         {
             // An exception that only says "not supported" leaves the reader nowhere; this one has
-            // to say what to install.
+            // to say what to install. There is no separate LAPACK seam — the one Blas property is
+            // filled by NumSharp.Interop.OpenBLAS — so the message names that package and never LAPACK.
             new Action(() => np.linalg.inv(Sq2))
                 .Should().Throw<NotSupportedException>()
                 .Which.Message.Should().Contain("np.linalg.inv")
-                .And.Contain("gesv")
                 .And.Contain(nameof(IBlasBackend.TryInv))
-                .And.Contain("TensorEngine.Blas");
+                .And.Contain("TensorEngine.Blas")
+                .And.Contain(OpenBlasMissingBackendException.PackageId)
+                .And.NotContain("LAPACK");
+        }
+
+        [TestMethod]
+        public void TheThrownType_IsOpenBlasMissingBackend_AndStaysCatchableAsNotSupported()
+        {
+            // The concrete type is new, but it derives from NotSupportedException so every existing
+            // `catch (NotSupportedException)` keeps working, and it carries the house marker interface
+            // like the rest of NumSharp's exceptions.
+            new Action(() => np.linalg.inv(Sq2)).Should().Throw<OpenBlasMissingBackendException>()
+                .Which.Should().BeAssignableTo<MissingBackendException>()
+                .And.BeAssignableTo<NotSupportedException>()
+                .And.BeAssignableTo<INumSharpException>();
         }
 
         [TestMethod]

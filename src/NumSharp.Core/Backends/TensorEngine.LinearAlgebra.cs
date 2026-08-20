@@ -5,8 +5,8 @@ using NumSharp.Backends;
 namespace NumSharp
 {
     /// <summary>
-    ///     The linear-algebra entry points: the products NumPy routes through CBLAS beyond
-    ///     <c>dot</c>/<c>matmul</c>, and the factorisations it routes through LAPACK.
+    ///     The linear-algebra entry points beyond <c>dot</c>/<c>matmul</c>: the matrix products (managed
+    ///     fallback, backend optional) and the matrix factorisations (backend required, no fallback).
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -17,10 +17,11 @@ namespace NumSharp
     ///     <para>
     ///     <b>Two behaviours live here and the difference matters to callers.</b> The product family
     ///     falls back to NumSharp's own managed kernels, so a backend changes which implementation
-    ///     runs and nothing else. The LAPACK family has no managed fallback — NumSharp.Core carries
-    ///     no LU, QR, SVD or eigensolver — so it raises <see cref="NotSupportedException"/> when no
-    ///     backend serves the operands. The members are <c>virtual</c> rather than <c>abstract</c>
-    ///     so an alternative engine overrides only what it actually implements.
+    ///     runs and nothing else. The factorisation family has no managed fallback — NumSharp.Core
+    ///     carries no LU, QR, SVD or eigensolver — so it raises
+    ///     <see cref="OpenBlasMissingBackendException"/> when no backend serves the operands. The
+    ///     members are <c>virtual</c> rather than <c>abstract</c> so an alternative engine overrides
+    ///     only what it actually implements.
     ///     </para>
     /// </remarks>
     public abstract partial class TensorEngine
@@ -114,47 +115,47 @@ namespace NumSharp
 
         #endregion
 
-        #region Factorisations — LAPACK, no managed fallback
+        #region Factorisations — backend required, no managed fallback
 
-        /// <summary><c>np.linalg.cholesky</c> — LAPACK <c>potrf</c>.</summary>
+        /// <summary><c>np.linalg.cholesky</c> — OpenBLAS <c>potrf</c>.</summary>
         public virtual NDArray Cholesky(NDArray a, bool upper)
         {
             var blas = Blas;
             if (blas != null && blas.TryCholesky(a, upper, out var result))
                 return result;
-            throw NoLapack("np.linalg.cholesky", "potrf", nameof(Backends.IBlasBackend.TryCholesky));
+            throw MissingBackend("np.linalg.cholesky", nameof(Backends.IBlasBackend.TryCholesky));
         }
 
-        /// <summary><c>np.linalg.det</c> — LAPACK <c>getrf</c>.</summary>
+        /// <summary><c>np.linalg.det</c> — OpenBLAS <c>getrf</c>.</summary>
         public virtual NDArray Det(NDArray a)
         {
             var blas = Blas;
             if (blas != null && blas.TryDet(a, out var result))
                 return result;
-            throw NoLapack("np.linalg.det", "getrf", nameof(Backends.IBlasBackend.TryDet));
+            throw MissingBackend("np.linalg.det", nameof(Backends.IBlasBackend.TryDet));
         }
 
-        /// <summary><c>np.linalg.slogdet</c> — LAPACK <c>getrf</c>.</summary>
+        /// <summary><c>np.linalg.slogdet</c> — OpenBLAS <c>getrf</c>.</summary>
         public virtual (NDArray sign, NDArray logabsdet) Slogdet(NDArray a)
         {
             var blas = Blas;
             if (blas != null && blas.TrySlogdet(a, out var sign, out var logabsdet))
                 return (sign, logabsdet);
-            throw NoLapack("np.linalg.slogdet", "getrf", nameof(Backends.IBlasBackend.TrySlogdet));
+            throw MissingBackend("np.linalg.slogdet", nameof(Backends.IBlasBackend.TrySlogdet));
         }
 
-        /// <summary><c>np.linalg.eig</c> / <c>np.linalg.eigvals</c> — LAPACK <c>geev</c>.</summary>
+        /// <summary><c>np.linalg.eig</c> / <c>np.linalg.eigvals</c> — OpenBLAS <c>geev</c>.</summary>
         public virtual (NDArray eigenvalues, NDArray eigenvectors) Eig(NDArray a, bool computeVectors)
         {
             var blas = Blas;
             if (blas != null && blas.TryEig(a, computeVectors, out var w, out var v))
                 return (w, v);
-            throw NoLapack(computeVectors ? "np.linalg.eig" : "np.linalg.eigvals", "geev",
+            throw MissingBackend(computeVectors ? "np.linalg.eig" : "np.linalg.eigvals",
                 nameof(Backends.IBlasBackend.TryEig));
         }
 
         /// <summary>
-        ///     <c>np.linalg.eigh</c> / <c>np.linalg.eigvalsh</c> — LAPACK <c>syevd</c> (real
+        ///     <c>np.linalg.eigh</c> / <c>np.linalg.eigvalsh</c> — OpenBLAS <c>syevd</c> (real
         ///     symmetric) or <c>heevd</c> (complex Hermitian).
         /// </summary>
         public virtual (NDArray eigenvalues, NDArray eigenvectors) Eigh(NDArray a, char uplo, bool computeVectors)
@@ -162,51 +163,51 @@ namespace NumSharp
             var blas = Blas;
             if (blas != null && blas.TryEigh(a, uplo, computeVectors, out var w, out var v))
                 return (w, v);
-            throw NoLapack(computeVectors ? "np.linalg.eigh" : "np.linalg.eigvalsh", "syevd/heevd",
+            throw MissingBackend(computeVectors ? "np.linalg.eigh" : "np.linalg.eigvalsh",
                 nameof(Backends.IBlasBackend.TryEigh));
         }
 
-        /// <summary><c>np.linalg.inv</c> — LAPACK <c>gesv</c> against the identity.</summary>
+        /// <summary><c>np.linalg.inv</c> — OpenBLAS <c>gesv</c> against the identity.</summary>
         public virtual NDArray Inv(NDArray a)
         {
             var blas = Blas;
             if (blas != null && blas.TryInv(a, out var result))
                 return result;
-            throw NoLapack("np.linalg.inv", "gesv", nameof(Backends.IBlasBackend.TryInv));
+            throw MissingBackend("np.linalg.inv", nameof(Backends.IBlasBackend.TryInv));
         }
 
-        /// <summary><c>np.linalg.lstsq</c> — LAPACK <c>gelsd</c>.</summary>
+        /// <summary><c>np.linalg.lstsq</c> — OpenBLAS <c>gelsd</c>.</summary>
         public virtual (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) Lstsq(
             NDArray a, NDArray b, double rcond)
         {
             var blas = Blas;
             if (blas != null && blas.TryLstsq(a, b, rcond, out var x, out var res, out var rank, out var s))
                 return (x, res, rank, s);
-            throw NoLapack("np.linalg.lstsq", "gelsd", nameof(Backends.IBlasBackend.TryLstsq));
+            throw MissingBackend("np.linalg.lstsq", nameof(Backends.IBlasBackend.TryLstsq));
         }
 
         /// <summary>
-        ///     <c>np.linalg.qr</c> — LAPACK <c>geqrf</c> plus <c>orgqr</c>/<c>ungqr</c>.
+        ///     <c>np.linalg.qr</c> — OpenBLAS <c>geqrf</c> plus <c>orgqr</c>/<c>ungqr</c>.
         /// </summary>
         public virtual (NDArray Q, NDArray R) Qr(NDArray a, string mode)
         {
             var blas = Blas;
             if (blas != null && blas.TryQr(a, mode, out var q, out var r))
                 return (q, r);
-            throw NoLapack("np.linalg.qr", "geqrf/orgqr", nameof(Backends.IBlasBackend.TryQr));
+            throw MissingBackend("np.linalg.qr", nameof(Backends.IBlasBackend.TryQr));
         }
 
-        /// <summary><c>np.linalg.solve</c> — LAPACK <c>gesv</c>.</summary>
+        /// <summary><c>np.linalg.solve</c> — OpenBLAS <c>gesv</c>.</summary>
         public virtual NDArray Solve(NDArray a, NDArray b, bool oneDimensionalRhs)
         {
             var blas = Blas;
             if (blas != null && blas.TrySolve(a, b, oneDimensionalRhs, out var result))
                 return result;
-            throw NoLapack("np.linalg.solve", "gesv", nameof(Backends.IBlasBackend.TrySolve));
+            throw MissingBackend("np.linalg.solve", nameof(Backends.IBlasBackend.TrySolve));
         }
 
         /// <summary>
-        ///     <c>np.linalg.svd</c> / <c>np.linalg.svdvals</c> — LAPACK <c>gesdd</c>. Also the engine
+        ///     <c>np.linalg.svd</c> / <c>np.linalg.svdvals</c> — OpenBLAS <c>gesdd</c>. Also the engine
         ///     behind <c>pinv</c>, <c>matrix_rank</c>, <c>cond</c> and the spectral/nuclear norms.
         /// </summary>
         public virtual (NDArray U, NDArray S, NDArray Vh) Svd(NDArray a, bool fullMatrices, bool computeUv)
@@ -214,7 +215,7 @@ namespace NumSharp
             var blas = Blas;
             if (blas != null && blas.TrySvd(a, fullMatrices, computeUv, out var u, out var s, out var vh))
                 return (u, s, vh);
-            throw NoLapack("np.linalg.svd", "gesdd", nameof(Backends.IBlasBackend.TrySvd));
+            throw MissingBackend("np.linalg.svd", nameof(Backends.IBlasBackend.TrySvd));
         }
 
         #endregion
@@ -224,18 +225,24 @@ namespace NumSharp
         // composes over c_einsum + matmul rather than adding a new low-level kernel.
 
         /// <summary>
-        ///     The one message every unserved factorisation raises. It names the NumPy API, the
-        ///     LAPACK routine NumPy uses, and the seam member a backend has to implement — so the
-        ///     exception says what to install rather than merely that something is missing.
+        ///     The one message every unserved factorisation raises. It names the NumPy API, the seam
+        ///     member a backend has to implement, and the package that supplies one — so the exception
+        ///     says what to install rather than merely that something is missing.
         /// </summary>
-        private NotSupportedException NoLapack(string api, string routines, string seamMember)
-            => new NotSupportedException(
-                $"{api} requires a LAPACK backend, and {GetType().Name} has none installed or the " +
+        /// <remarks>
+        ///     There is no separate seam for the factorisations in NumSharp: they ride the very same
+        ///     <see cref="Blas"/> property as the matrix products, filled by a single
+        ///     <c>NumSharp.Interop.OpenBLAS</c> reference — so the message points at that package rather
+        ///     than at "a backend" in the abstract.
+        /// </remarks>
+        private OpenBlasMissingBackendException MissingBackend(string api, string seamMember)
+            => new OpenBlasMissingBackendException(
+                $"{api} requires a matrix backend, and {GetType().Name} has none installed or the " +
                 $"installed one declined these operands. NumSharp.Core is 100 % managed C# and ships " +
                 $"no matrix factorisation of its own, so — unlike the matrix products, which always " +
                 $"have a managed kernel to fall back to — there is nothing to compute this with. " +
-                $"NumPy computes it with LAPACK {routines}. Reference a package that assigns " +
-                $"TensorEngine.Blas an IBlasBackend implementing {seamMember}.");
+                $"{OpenBlasMissingBackendException.HowToFix} The backend serves this operation through " +
+                $"its IBlasBackend.{seamMember}.");
     }
 }
 
