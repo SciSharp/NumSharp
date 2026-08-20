@@ -26,6 +26,7 @@ namespace NumSharp
     ///     pure compositions of the 1-D transforms.</para>
     /// </summary>
     /// <remarks>https://numpy.org/doc/stable/reference/routines.fft.html</remarks>
+    [ModuleName("np.fft")]
     public partial class FourierModule
     {
         internal FourierModule() { }

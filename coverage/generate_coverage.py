@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.2.0"
+GENERATOR_VERSION = "1.3.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -148,9 +148,23 @@ def load_numsharp_inventory() -> dict[str, Any]:
         sys.stderr.write(completed.stderr)
         raise SystemExit("Failed to reflect the NumSharp public API.")
     try:
-        return json.loads(completed.stdout)
+        data = json.loads(completed.stdout)
     except json.JSONDecodeError as error:
         raise SystemExit(f"NumSharp inventory emitted invalid JSON: {error}") from error
+    if data.get("schemaVersion") != 2 or not isinstance(data.get("modules"), dict) or not data["modules"]:
+        raise SystemExit("NumSharp inventory schema mismatch: expected schemaVersion 2 with a non-empty 'modules' map.")
+    return data
+
+
+def surface_for_module(module_name: str) -> str:
+    """Map a [ModuleName] value onto this generator's NumPy surface key.
+
+    The tool discovers module hosts by scanning NumSharp.Core for [ModuleName("...")] — nothing is
+    hardcoded on the C# side, so the mapping here must be mechanical too: "np" and "ndarray" are
+    themselves; a dotted "np.random"/"np.linalg"/"np.fft" is its suffix ("random"/"linalg"/"fft"),
+    matching the numpy-side surface names public_exports() emits.
+    """
+    return module_name[3:] if module_name.startswith("np.") else module_name
 
 
 def load_overrides(path: Path) -> dict[str, Any]:
@@ -226,20 +240,20 @@ def documentation_url(surface: str, name: str, kind: str) -> str:
 class SourceLocator:
     """Locate public member declarations without requiring compiler-specific PDB paths."""
 
-    TYPE_PATTERNS = {
-        "np": re.compile(r"\bclass\s+np\b"),
-        "ndarray": re.compile(r"\bclass\s+NDArray(?:\s|<)"),
-        "random": re.compile(r"\bclass\s+NumPyRandom\b"),
-        "fft": re.compile(r"\bclass\s+FourierModule\b"),
-        "linalg": re.compile(r"\bclass\s+linalg\b"),
-    }
+    def __init__(self, modules: dict[str, Any]) -> None:
+        # One class-declaration pattern per surface, derived from the CLR type hosting the module:
+        # the simple class name of "NumSharp.np+linalg" is "linalg", of "NumSharp.FourierModule" is
+        # "FourierModule". \b after the name still matches a generic partial ("class NDArray<T>").
+        self.patterns: dict[str, re.Pattern[str]] = {}
+        for module_name, type_data in modules.items():
+            simple = re.split(r"[.+]", type_data["type"])[-1].split("`")[0]
+            self.patterns[surface_for_module(module_name)] = re.compile(rf"\bclass\s+{re.escape(simple)}\b")
 
-    def __init__(self) -> None:
-        self.files: dict[str, list[tuple[Path, str]]] = {surface: [] for surface in self.TYPE_PATTERNS}
+        self.files: dict[str, list[tuple[Path, str]]] = {surface: [] for surface in self.patterns}
         source_root = ROOT / "src" / "NumSharp.Core"
         for path in source_root.rglob("*.cs"):
             text = path.read_text(encoding="utf-8-sig")
-            for surface, pattern in self.TYPE_PATTERNS.items():
+            for surface, pattern in self.patterns.items():
                 if pattern.search(text):
                     self.files[surface].append((path, text))
 
@@ -311,20 +325,26 @@ def category_for(surface: str, name: str, kind: str) -> str:
     return "Other"
 
 
-def member_maps(inventory: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+def member_maps(
+    inventory: dict[str, Any],
+) -> tuple[dict[str, dict[str, Any]], dict[str, list[dict[str, Any]]], dict[str, str]]:
+    """Index the tool's [ModuleName]-discovered modules by target id, surface, and target prefix.
+
+    Nothing here names a module: surfaces come from surface_for_module, and each target prefix is
+    the module's own CLR type name with nested '+' normalized to '.' — "NumSharp.np+linalg" hosts
+    "NumSharp.np.linalg.solve", "NumSharp.FourierModule" hosts "NumSharp.FourierModule.fft".
+    """
+    modules: dict[str, Any] = inventory["modules"]
     by_target: dict[str, dict[str, Any]] = {}
-    by_surface: dict[str, list[dict[str, Any]]] = {"np": [], "ndarray": [], "random": [], "fft": [], "linalg": []}
-    source_locator = SourceLocator()
-    # np.fft.* lives on the FourierModule facade (reached via the np.fft property) and np.linalg.* on the
-    # nested np.linalg static class, so their prefixes are the facade type names — not "NumSharp.np".
-    definitions = (
-        ("np", "NumSharp.np", inventory["np"]),
-        ("ndarray", "NumSharp.NDArray", inventory["ndArray"]),
-        ("random", "NumSharp.NumPyRandom", inventory["random"]),
-        ("fft", "NumSharp.FourierModule", inventory["fft"]),
-        ("linalg", "NumSharp.np.linalg", inventory["linalg"]),
-    )
-    for surface, prefix, type_data in definitions:
+    by_surface: dict[str, list[dict[str, Any]]] = {surface_for_module(name): [] for name in modules}
+    prefixes: dict[str, str] = {
+        surface_for_module(name): type_data["type"].replace("+", ".") for name, type_data in modules.items()
+    }
+    source_locator = SourceLocator(modules)
+    for module_name in sorted(modules, key=str.lower):
+        type_data = modules[module_name]
+        surface = surface_for_module(module_name)
+        prefix = prefixes[surface]
         for collection in ("methods", "properties", "fields"):
             for member in type_data[collection]:
                 source_paths = source_locator.locate(surface, member["name"], member["kind"])
@@ -343,7 +363,7 @@ def member_maps(inventory: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], d
         "sourcePaths": ["src/NumSharp.Core/Backends/NDArray.cs"],
         "sourceUrls": [NUMSHARP_SOURCE_BASE_URL + "src/NumSharp.Core/Backends/NDArray.cs"],
     }
-    return by_target, by_surface
+    return by_target, by_surface, prefixes
 
 
 def public_exports(np: Any) -> list[dict[str, Any]]:
@@ -387,19 +407,13 @@ def public_exports(np: Any) -> list[dict[str, Any]]:
     return exports
 
 
-def direct_target(row: dict[str, Any], targets: dict[str, dict[str, Any]]) -> str | None:
+def direct_target(row: dict[str, Any], targets: dict[str, dict[str, Any]], prefixes: dict[str, str]) -> str | None:
     surface = row["surface"]
     name = row["name"]
     kind = row["kind"]
     if row["id"] == "numpy.ndarray":
         return "NumSharp.NDArray"
-    prefix = {
-        "np": "NumSharp.np",
-        "ndarray": "NumSharp.NDArray",
-        "random": "NumSharp.NumPyRandom",
-        "fft": "NumSharp.FourierModule",
-        "linalg": "NumSharp.np.linalg",
-    }.get(surface)
+    prefix = prefixes.get(surface)
     if prefix:
         candidate = f"{prefix}.{name}"
         member = targets.get(candidate)
@@ -408,9 +422,12 @@ def direct_target(row: dict[str, Any], targets: dict[str, dict[str, Any]]) -> st
     return None
 
 
-def auto_alternative(row: dict[str, Any], targets: dict[str, dict[str, Any]]) -> tuple[str | None, str | None]:
-    if row["surface"] in {"ndarray", "linalg"} and row["kind"] in CALLABLE_KINDS:
-        target = f"NumSharp.np.{row['name']}"
+def auto_alternative(
+    row: dict[str, Any], targets: dict[str, dict[str, Any]], prefixes: dict[str, str]
+) -> tuple[str | None, str | None]:
+    np_prefix = prefixes.get("np")
+    if np_prefix and row["surface"] in {"ndarray", "linalg"} and row["kind"] in CALLABLE_KINDS:
+        target = f"{np_prefix}.{row['name']}"
         if target in targets:
             noun = "instance method" if row["surface"] == "ndarray" else "linalg namespace function"
             return target, f"Available through the static NumSharp np API instead of the NumPy {noun}."
@@ -418,20 +435,32 @@ def auto_alternative(row: dict[str, Any], targets: dict[str, dict[str, Any]]) ->
 
 
 def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) -> tuple[list[dict[str, Any]], set[str]]:
-    targets, surfaces = member_maps(inventory)
+    targets, surfaces, prefixes = member_maps(inventory)
     aliases = overrides.get("aliases", {})
     support_overrides = overrides.get("support", {})
     seen_ids: set[str] = set()
     consumed_targets: set[str] = set()
     rows: list[dict[str, Any]] = []
 
-    for export in public_exports(np):
+    exports = public_exports(np)
+    # Guard the discovery loop: every NumPy surface compared here must have a [ModuleName]-annotated
+    # host in NumSharp.Core. Without this, dropping an annotation silently zeroes that surface back
+    # to all-missing — exactly the failure mode attribute discovery was built to end.
+    unbacked = sorted({export["surface"] for export in exports} - set(prefixes))
+    if unbacked:
+        raise SystemExit(
+            "NumPy surfaces without a [ModuleName]-annotated NumSharp host: "
+            + ", ".join(unbacked)
+            + ". Annotate the hosting type (e.g. [ModuleName(\"np.fft\")]) in NumSharp.Core."
+        )
+
+    for export in exports:
         row_id = export["id"]
         if row_id in seen_ids:
             raise SystemExit(f"Duplicate coverage id: {row_id}")
         seen_ids.add(row_id)
         alias = aliases.get(row_id)
-        target = direct_target(export, targets)
+        target = direct_target(export, targets, prefixes)
         availability = "exact" if target else "missing"
         notes: list[str] = []
         if alias and not target:
@@ -442,7 +471,7 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
             if alias.get("notes"):
                 notes.append(alias["notes"])
         elif not target:
-            target, automatic_note = auto_alternative(export, targets)
+            target, automatic_note = auto_alternative(export, targets, prefixes)
             if target:
                 availability = "alias"
                 notes.append(automatic_note or "Available on an alternate NumSharp surface.")

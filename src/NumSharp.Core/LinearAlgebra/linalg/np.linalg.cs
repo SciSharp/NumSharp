@@ -35,6 +35,7 @@ namespace NumSharp
         ///     accepts 2-vectors. Each is implemented against its own contract.
         ///     </para>
         /// </remarks>
+        [ModuleName("np.linalg")]
         public static partial class linalg
         {
             /// <summary>

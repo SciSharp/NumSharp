@@ -2,6 +2,8 @@
 
 This directory is the reproducible source for NumSharp's public API coverage artifact. It compares the public exports of pinned NumPy **2.4.2** with the public surface of the compiled NumSharp assembly.
 
+The NumSharp surfaces are **discovered, not hardcoded**: `NumSharp.Tools.ApiInventory` reflects every public type in `NumSharp.Core` annotated with `[ModuleName("...")]` — `np` itself, `NDArray` (`"ndarray"`), and each function-namespace facade (`"np.random"` on `NumPyRandom`, `"np.fft"` on `FourierModule`, `"np.linalg"` on the nested `np.linalg` class). A new module facade joins the artifact by annotation alone; the generator fails loudly if a compared NumPy surface has no annotated host. Single-object DSL exports (`np.r_`, `np.s_`, `np.mgrid`, …) take no attribute — NumPy exports each as one object, so the property on `np` is already the whole coverage row.
+
 ## Generate or verify
 
 ```bash

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generator": "coverage/generate_coverage.py",
-  "generator_version": "1.2.0",
+  "generator_version": "1.3.0",
   "numpy_version": "2.4.2",
   "numsharp_assembly_version": "0.60.0.0",
   "artifact_files": [
@@ -21,14 +21,14 @@
   "summary": {
     "default_scope": {
       "total": 560,
-      "available": 430,
+      "available": 444,
       "partial": 3,
       "unsupported": 0,
-      "missing": 127,
-      "exact": 397,
+      "missing": 113,
+      "exact": 411,
       "alias": 36,
-      "coverage_percent": 76.8,
-      "addressed_percent": 77.3
+      "coverage_percent": 79.3,
+      "addressed_percent": 79.8
     },
     "by_surface": {
       "fft": {
@@ -55,25 +55,25 @@
       },
       "ndarray": {
         "total": 70,
-        "available": 54,
+        "available": 56,
         "partial": 1,
         "unsupported": 0,
-        "missing": 15,
-        "exact": 37,
+        "missing": 13,
+        "exact": 39,
         "alias": 18,
-        "coverage_percent": 77.1,
-        "addressed_percent": 78.6
+        "coverage_percent": 80.0,
+        "addressed_percent": 81.4
       },
       "np": {
         "total": 390,
-        "available": 279,
+        "available": 291,
         "partial": 1,
         "unsupported": 0,
-        "missing": 110,
-        "exact": 265,
+        "missing": 98,
+        "exact": 277,
         "alias": 15,
-        "coverage_percent": 71.5,
-        "addressed_percent": 71.8
+        "coverage_percent": 74.6,
+        "addressed_percent": 74.9
       },
       "random": {
         "total": 51,
@@ -90,14 +90,14 @@
     "by_category": {
       "Array attributes": {
         "total": 17,
-        "available": 10,
+        "available": 11,
         "partial": 1,
         "unsupported": 0,
-        "missing": 6,
-        "exact": 9,
+        "missing": 5,
+        "exact": 10,
         "alias": 2,
-        "coverage_percent": 58.8,
-        "addressed_percent": 64.7
+        "coverage_percent": 64.7,
+        "addressed_percent": 70.6
       },
       "Array creation": {
         "total": 37,
@@ -123,14 +123,14 @@
       },
       "Array methods": {
         "total": 34,
-        "available": 25,
+        "available": 26,
         "partial": 0,
         "unsupported": 0,
-        "missing": 9,
-        "exact": 14,
+        "missing": 8,
+        "exact": 15,
         "alias": 11,
-        "coverage_percent": 73.5,
-        "addressed_percent": 73.5
+        "coverage_percent": 76.5,
+        "addressed_percent": 76.5
       },
       "Date & time": {
         "total": 6,
@@ -222,14 +222,14 @@
       },
       "Math": {
         "total": 112,
-        "available": 75,
+        "available": 82,
         "partial": 0,
         "unsupported": 0,
-        "missing": 37,
-        "exact": 65,
+        "missing": 30,
+        "exact": 72,
         "alias": 10,
-        "coverage_percent": 67.0,
-        "addressed_percent": 67.0
+        "coverage_percent": 73.2,
+        "addressed_percent": 73.2
       },
       "Polynomials": {
         "total": 10,
@@ -310,14 +310,14 @@
       },
       "Statistics & histograms": {
         "total": 9,
-        "available": 0,
+        "available": 5,
         "partial": 0,
         "unsupported": 0,
-        "missing": 9,
-        "exact": 0,
+        "missing": 4,
+        "exact": 5,
         "alias": 0,
-        "coverage_percent": 0.0,
-        "addressed_percent": 0.0
+        "coverage_percent": 55.6,
+        "addressed_percent": 55.6
       },
       "Text & formatting": {
         "total": 11,
@@ -343,7 +343,7 @@
       }
     },
     "all_numpy_exports": 677,
-    "numsharp_extensions": 120,
-    "catalog_rows": 797
+    "numsharp_extensions": 121,
+    "catalog_rows": 798
   }
 }

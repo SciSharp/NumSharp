@@ -4,18 +4,38 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using NumSharp;
 
+// Module surfaces are DISCOVERED, not hardcoded: every public type in NumSharp.Core annotated with
+// [ModuleName("...")] is a NumPy module host (np itself, NDArray, and each function-namespace facade —
+// NumPyRandom/FourierModule/np.linalg today). A new facade joins the coverage artifact by annotation
+// alone. The hardcoded typeof(...) list this replaces is how the whole np.fft surface and every linalg
+// factorisation went missing from the artifact in the first place.
+var assembly = typeof(np).Assembly;
+var modules = new SortedDictionary<string, TypeInventory>(StringComparer.Ordinal);
+foreach (var type in assembly.GetExportedTypes())
+{
+    var module = type.GetCustomAttribute<ModuleNameAttribute>(inherit: false);
+    if (module is null)
+        continue;
+    if (modules.TryGetValue(module.Name, out var taken))
+        throw new InvalidOperationException(
+            $"Duplicate [ModuleName(\"{module.Name}\")]: both {taken.Type} and {type.FullName} claim it.");
+
+    // A static class hosts static functions (np, np.linalg); an instance facade hosts instance
+    // methods reached through its singleton property (np.random, np.fft) or the array itself.
+    var isStaticClass = type.IsAbstract && type.IsSealed;
+    var flags = BindingFlags.Public | BindingFlags.DeclaredOnly
+                | (isStaticClass ? BindingFlags.Static : BindingFlags.Instance);
+    modules.Add(module.Name, InspectType(type, flags));
+}
+
+if (modules.Count == 0)
+    throw new InvalidOperationException(
+        $"No [ModuleName]-annotated types found in {assembly.GetName().Name} — the inventory would be empty.");
+
 var inventory = new ApiInventory(
-    SchemaVersion: 1,
-    AssemblyVersion: typeof(np).Assembly.GetName().Version?.ToString() ?? "unknown",
-    Np: InspectType(typeof(np), BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly),
-    NdArray: InspectType(typeof(NDArray), BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-    Random: InspectType(typeof(NumPyRandom), BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-    // np.fft.* and np.linalg.* are function namespaces the coverage denominator counts, but they live
-    // on facade types (a property-returned module and a nested static class) rather than on `np` itself.
-    // Reflect them explicitly — without this the whole np.fft surface and every linalg factorisation are
-    // invisible to the inventory and get mis-reported as "missing".
-    Fft: InspectType(typeof(FourierModule), BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-    Linalg: InspectType(typeof(np.linalg), BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly));
+    SchemaVersion: 2,
+    AssemblyVersion: assembly.GetName().Version?.ToString() ?? "unknown",
+    Modules: modules);
 
 Console.WriteLine(JsonSerializer.Serialize(inventory, new JsonSerializerOptions
 {
@@ -157,11 +177,10 @@ static string FriendlyType(Type type)
 internal sealed record ApiInventory(
     int SchemaVersion,
     string AssemblyVersion,
-    TypeInventory Np,
-    TypeInventory NdArray,
-    TypeInventory Random,
-    TypeInventory Fft,
-    TypeInventory Linalg);
+    // Keyed by [ModuleName] value ("np", "ndarray", "np.random", "np.fft", "np.linalg", ...), ordinal
+    // order for deterministic output. Dictionary KEYS bypass the camelCase policy, so the dotted
+    // module names survive verbatim.
+    IReadOnlyDictionary<string, TypeInventory> Modules);
 
 internal sealed record TypeInventory(
     string Type,

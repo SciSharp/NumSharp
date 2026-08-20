@@ -39,6 +39,7 @@ namespace NumSharp
     /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html</remarks>
     [DebuggerTypeProxy(nameof(NDArrayDebuggerProxy))]
     [SuppressMessage("ReSharper", "ParameterHidesMember")]
+    [ModuleName("ndarray")]
     public partial class NDArray : IIndex, ICloneable, IEnumerable, IDisposable
     {
         protected TensorEngine tensorEngine;
