@@ -30,7 +30,7 @@ namespace NumSharp.Interop.OpenBLAS
     ///     <see cref="TryMatMul2D"/> rather than one matrix-product method.
     ///     </para>
     /// </remarks>
-    public sealed class OpenBlasBackend : IBlasBackend
+    public sealed class OpenBlasBackend : IBlasBackend, ISlidingDotBackend
     {
         /// <inheritdoc/>
         public string Info
@@ -167,6 +167,27 @@ namespace NumSharp.Interop.OpenBLAS
         /// <inheritdoc/>
         public bool TryEig(NDArray a, bool computeVectors, out NDArray eigenvalues, out NDArray eigenvectors)
             => OpenBlasEngine.TryEig(a, computeVectors, out eigenvalues, out eigenvectors);
+
+        #endregion
+
+        #region Sliding dot (np.correlate / np.convolve) — the byte-parity dotfunc
+
+        // np.correlate / np.convolve reduce every ramp position, and the middle whenever NumPy's
+        // small_correlate declines (a real kernel longer than 11, or any complex kernel), with NumPy's
+        // per-dtype dotfunc — the same double-accumulated chunked cblas ?dot (?dotu for complex) the
+        // product family uses. Exposing it through the ISlidingDotBackend seam is what lets the sliding
+        // kernels match NumPy byte-for-byte on the long float32/float64 and complex128 kernels the
+        // managed reduction reorders; short real kernels stay on the managed path (already byte-exact),
+        // and this declines every non-cblas dtype so those stay managed too.
+
+        /// <inheritdoc/>
+        bool ISlidingDotBackend.SupportsDot(NPTypeCode dtype)
+            => OpenBlasEngine.SupportsSlidingDot(dtype);
+
+        /// <inheritdoc/>
+        unsafe void ISlidingDotBackend.Dot(NPTypeCode dtype,
+            void* a, long strideA, void* b, long strideB, void* result, long count)
+            => OpenBlasEngine.SlidingDot(dtype, a, strideA, b, strideB, result, count);
 
         #endregion
 

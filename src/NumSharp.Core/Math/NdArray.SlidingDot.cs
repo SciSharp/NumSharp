@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends;
 using SRCS = System.Runtime.CompilerServices;
 
 namespace NumSharp
@@ -97,6 +98,23 @@ namespace NumSharp
             // BOOL_dot's OR-of-ANDs with early exit; decimal (no NumPy analog) accumulates in
             // decimal for full precision. Char rides the ushort SIMD kernel (same 2-byte modular
             // arithmetic).
+            // OpenBLAS priority: when a byte-parity BLAS backend is installed (TensorEngine.Blas also
+            // implements ISlidingDotBackend), route the EXACT positions NumPy sends through cblas — every
+            // ramp, plus the middle when small_correlate declines — through that backend's ?dot, so
+            // np.correlate/np.convolve match NumPy to the last bit on the long float32/float64 and
+            // complex128 kernels the managed reduction reorders. small_correlate (arraytypes.c.src)
+            // covers real float kernels of length <= 11 with a plain sequential sum, and the managed
+            // outer-vec middle + small (<= 11) ramps are already byte-identical to NumPy there, so only
+            // real n2 > 11 and complex (small_correlate never applies to complex) need the backend — and
+            // for those NumPy routes every ramp AND middle position through cblas, so there is no mixed
+            // managed/native path within one call. A backend that declines this dtype (e.g. a real-only
+            // CBLAS handed complex) leaves the managed kernel in place.
+            var slidingBlas = data.TensorEngine.Blas as ISlidingDotBackend;
+            bool useBlas = slidingBlas != null
+                           && (retType == NPTypeCode.Single || retType == NPTypeCode.Double || retType == NPTypeCode.Complex)
+                           && slidingBlas.SupportsDot(retType)
+                           && (retType == NPTypeCode.Complex || n2 > SmallCorrelateMaxKernel);
+
             unsafe
             {
                 void* a = (void*)data.Address;
@@ -114,10 +132,19 @@ namespace NumSharp
                     case NPTypeCode.UInt32: SlidingSimd((uint*)a,   (uint*)k,   (uint*)o,   n2, nLeft, nRight, mid); break;
                     case NPTypeCode.Int64:  SlidingSimd((long*)a,   (long*)k,   (long*)o,   n2, nLeft, nRight, mid); break;
                     case NPTypeCode.UInt64: SlidingSimd((ulong*)a,  (ulong*)k,  (ulong*)o,  n2, nLeft, nRight, mid); break;
-                    case NPTypeCode.Single: SlidingSimd((float*)a,  (float*)k,  (float*)o,  n2, nLeft, nRight, mid); break;
-                    case NPTypeCode.Double: SlidingSimd((double*)a, (double*)k, (double*)o, n2, nLeft, nRight, mid); break;
+                    case NPTypeCode.Single:
+                        if (useBlas) SlidingBlas(slidingBlas, NPTypeCode.Single, (float*)a, (float*)k, (float*)o, n2, nLeft, nRight, mid);
+                        else SlidingSimd((float*)a, (float*)k, (float*)o, n2, nLeft, nRight, mid);
+                        break;
+                    case NPTypeCode.Double:
+                        if (useBlas) SlidingBlas(slidingBlas, NPTypeCode.Double, (double*)a, (double*)k, (double*)o, n2, nLeft, nRight, mid);
+                        else SlidingSimd((double*)a, (double*)k, (double*)o, n2, nLeft, nRight, mid);
+                        break;
                     case NPTypeCode.Half:    SlidingHalf((Half*)a, (Half*)k, (Half*)o, n2, nLeft, nRight, mid); break;
-                    case NPTypeCode.Complex: SlidingComplex((Complex*)a, (Complex*)k, (Complex*)o, n2, nLeft, nRight, mid); break;
+                    case NPTypeCode.Complex:
+                        if (useBlas) SlidingBlas(slidingBlas, NPTypeCode.Complex, (Complex*)a, (Complex*)k, (Complex*)o, n2, nLeft, nRight, mid);
+                        else SlidingComplex((Complex*)a, (Complex*)k, (Complex*)o, n2, nLeft, nRight, mid);
+                        break;
                     case NPTypeCode.Decimal: SlidingDecimal((decimal*)a, (decimal*)k, (decimal*)o, n2, nLeft, nRight, mid); break;
                     case NPTypeCode.Boolean: SlidingBoolean((bool*)a, (bool*)k, (bool*)o, n2, nLeft, nRight, mid); break;
                     default:
@@ -142,6 +169,44 @@ namespace NumSharp
         // dot through cblas and reorders — take the reordered SIMD reduction. The main middle loop
         // is always outer-vectorized (scalar per-lane order), so it is unaffected by this gate.
         private const long InnerDotSimdMin = 32;
+
+        // NumPy's small_correlate (arraytypes.c.src) handles the fully-overlapping MIDDLE with a plain
+        // sequential sum ONLY for uniform real float32/float64 kernels of length <= 11 ("Calling a BLAS
+        // dot product for the inner loop is overkill for small kernels"); anything longer, and every
+        // complex kernel, falls to the cblas dotfunc. The managed outer-vec middle reproduces that
+        // sequential sum bit-for-bit, so at or below this the managed path already matches NumPy without
+        // a backend — this is the boundary above which the ISlidingDotBackend route takes over.
+        internal const long SmallCorrelateMaxKernel = 11;
+
+        // --------------------------------------------------------------------------------------
+        //  Byte-parity BLAS path — float32 / float64 / complex128 when a byte-parity backend is
+        //  installed AND NumPy routes the reduction through cblas (real kernel longer than 11, or any
+        //  complex kernel). Every ramp AND middle position goes through the backend's ?dot, exactly the
+        //  positions and exactly the summation (double-accumulated chunked cblas ?dot / ?dotu) NumPy's
+        //  _pyarray_correlate uses when small_correlate declines — so the result is byte-identical to
+        //  NumPy. The index arithmetic is IDENTICAL to SlidingSimd/SlidingComplex below (same ramp/
+        //  middle/ramp positions); only the inner dot is swapped from the reordered managed reduction to
+        //  the backend's. One backend call per output position mirrors NumPy's own per-position dotfunc
+        //  call: this trades the managed SIMD speed for NumPy parity, the opt-in the backend exists for.
+        // --------------------------------------------------------------------------------------
+        private static unsafe void SlidingBlas<T>(ISlidingDotBackend blas, NPTypeCode tc,
+            T* a, T* k, T* o, long n2, long nLeft, long nRight, long mid)
+            where T : unmanaged
+        {
+            // Left ramp: out[j] = sum_t a[t] * k[(nLeft - j) + t], length (n2 - nLeft + j).
+            for (long j = 0; j < nLeft; j++)
+                blas.Dot(tc, a, 1, k + (nLeft - j), 1, o + j, n2 - nLeft + j);
+
+            // Middle: out[nLeft + i] = sum_{t=0}^{n2-1} a[i+t] * k[t], i in [0, mid).
+            T* om = o + nLeft;
+            for (long i = 0; i < mid; i++)
+                blas.Dot(tc, a + i, 1, k, 1, om + i, n2);
+
+            // Right ramp: out[nLeft + mid + j] = sum_t a[(mid + j) + t] * k[t], length (n2 - 1 - j).
+            T* orr = o + nLeft + mid;
+            for (long j = 0; j < nRight; j++)
+                blas.Dot(tc, a + mid + j, 1, k, 1, orr + j, n2 - 1 - j);
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SlidingSimd<T>(T* a, T* k, T* o, long n2, long nLeft, long nRight, long mid)

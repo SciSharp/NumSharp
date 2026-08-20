@@ -618,15 +618,36 @@ Both share ONE 3-region engine — left ramp (scalar), middle (**outer-vectorize
 `DotSimd` inner reduction (len≥32) for the ramps/few-output tail of large kernels. correlate is
 non-commutative: when `len(a)<len(v)` the operands swap and the output is time-reversed (`_pyarray_revert`),
 and a complex `v` is conjugated. Mode strings are case-SENSITIVE (NumPy's two near-miss messages reproduced).
-**Bit-parity:** outer-vectorization keeps each output's `Σ_t a[i+t]·k[t]` in t-order, so it is BYTE-IDENTICAL
-to the scalar sequential sum — hence to NumPy for the small-kernel regime (verified 1170 cases × 13 dtypes + 24
-`groupa` fuzz cases). Integer/bool/complex/decimal/Half are exact at every size (integer SIMD wrap and the
-reordered inner reduction are both modular-exact). Only LONG float32/float64 kernels carry a bounded-ULP
-divergence — a pre-existing property of the scalar sum (NumSharp.Core has no cblas), NOT introduced by the SIMD
-path. **Perf (NPY/NS, best-of-9, Release):** geomean **~4×** — common small-kernel/long-signal cases **2.3–29×**,
-mid/large kernels **1.75–6×**; the sole at-parity corner is the large symmetric-kernel `full` case (`2000×2000`
-≈ **1.00×**, ramp-dominated pure dot bounded by OpenBLAS's tuned `ddot`). See `Math/np.correlate.cs`,
-`Math/NdArray.{Correlate,Convolve,SlidingDot}.cs`.
+**Bit-parity (managed, the default):** outer-vectorization keeps each output's `Σ_t a[i+t]·k[t]` in t-order, so
+it is BYTE-IDENTICAL to the scalar sequential sum — hence to NumPy for the small-kernel regime (verified 1170
+cases × 13 dtypes + 24 `groupa` fuzz cases). Integer/bool/decimal/Half are exact at EVERY size (integer SIMD
+wrap and the reordered inner reduction are both modular-exact). LONG float32/float64 kernels — **and complex128
+at any length** — carry a bounded-ULP divergence, because NumPy reduces exactly those positions through cblas
+`?dot` (`?dotu` for complex) while Core has no cblas (the earlier "complex exact at every size" claim was wrong —
+complex128 diverged on 690/699 outputs for a length-200 kernel).
+
+**Byte-parity with `NumSharp.Interop.OpenBLAS` (2026-08-20):** the backend closes that gap — this was the ONE
+product-adjacent family that did NOT consult the BLAS seam. NumPy's `_pyarray_correlate` reduces every ramp
+position, and the middle whenever `small_correlate` declines (a real kernel longer than 11, or ANY complex
+kernel), with its per-dtype `dotfunc` (double-accumulated chunked cblas `?dot`/`?dotu`). When `TensorEngine.Blas`
+also implements the new `ISlidingDotBackend` seam (`Backends/ISlidingDotBackend.cs`), `SlidingCorrelate` routes
+those EXACT positions through the SAME scipy-openblas `sdot`/`ddot`/`zdotu` NumPy calls (served by
+`OpenBlasEngine.SlidingDot`, reusing the product family's byte-exact `@name@_dot`), so
+`np.correlate`/`np.convolve` become BYTE-IDENTICAL to NumPy for float32/float64/complex128 — same lever, same
+three parity conditions (build, thread count, DYNAMIC_ARCH kernel) as the products. The `small_correlate`-eligible
+regime (real float, n2 ≤ 11) STAYS on the managed kernel — already byte-exact there — so there is no mixed
+managed/native path within a call, and a backend that declines the dtype (real-only CBLAS handed complex) leaves
+the managed kernel in place. It is opt-in and per-position (one backend `?dot` per output, mirroring NumPy's own
+per-position `dotfunc` call), so it trades the managed SIMD speed for parity — the whole reason the backend
+exists. Live-verified against NumPy 2.4.2: managed diverges on 533–690/699 outputs (length-200 kernel), backend
+byte-exact on every dtype × mode × region. Gate: `SlidingDotLiveParityTests` (11, live-numpy adjudicated); the
+managed path stays the `groupa` fuzz default.
+
+**Perf (managed default; NPY/NS, best-of-9, Release):** geomean **~4×** — common small-kernel/long-signal cases
+**2.3–29×**, mid/large kernels **1.75–6×**; the sole at-parity corner is the large symmetric-kernel `full` case
+(`2000×2000` ≈ **1.00×**, ramp-dominated pure dot bounded by OpenBLAS's tuned `ddot`). See `Math/np.correlate.cs`,
+`Math/NdArray.{Correlate,Convolve,SlidingDot}.cs`, `Backends/ISlidingDotBackend.cs`,
+`NumSharp.Interop.OpenBLAS/OpenBlasEngine.SlidingDot.cs`.
 
 **Inverse hyperbolic** `arcsinh`/`arccosh`/`arctanh` (+ NumPy 2.0 Array-API aliases `asinh`/`acosh`/`atanh`, same ufunc) follow the `arcsin`/`sinh` engine seam (`ASinh`/`ACosh`/`ATanh` → `ExecuteUnaryOp` → `UnaryOp.{Asinh,Acosh,Atanh}` IL kernels) with the `f(x, out=, where=, dtype=)` ufunc surface + positional-dtype convenience overloads. **Real float32/float64 are BYTE-IDENTICAL to NumPy 2.4.2** — `Math.Asinh/Acosh/Atanh` and the `MathF` twins call the same MSVC `ucrtbase` CRT as `npy_asinh/acosh/atanh` (verified 0-diff over 4521 adversarial inputs at both widths, specials/±inf/NaN/subnormals/±0 included), same class as the platform-libm `exp2`/`log1p` cells. **Perf (NPY/NS, Release, best-of-11 warm, `out=`, 10M on byte-identical inputs):** `arcsinh` **0.99×**, `arccosh` **1.00×**, `arctanh` **0.97×** — parity, and this is the correct ceiling rather than a shortfall. These three are the ONE arc-family NumPy has **no active SIMD kernel** for on win-amd64 (its SVML `asinh`/`acosh`/`atanh` are AVX-512/Linux-gated, never compiled into the 2.4.2 wheel), so — unlike `exp`/`log`/`sin`/`cos`/`tanh`, which NumSharp ports bit-exactly and BEATS — there is nothing to port and byte-parity REQUIRES the same scalar `ucrtbase` CRT on both sides. The kernel is a **non-unrolled scalar loop** (`EmitUnaryScalarLoop`; these three fall through every `CanUseUnarySimd` branch, as they must — there is no `Vector<double>.Asinh`); its only edge over a naive managed loop is a raw-pointer direct `call` with no bounds checks, and that alone is enough to BEAT `System.Numerics.Tensors.TensorPrimitives.Asinh`, .NET's own SIMD transcendental library (one-process warm best-of-15, f64 10M, same array: NumSharp IL kernel **97.3 ms** < TensorPrimitives 101.1 ms < naive `Math.Asinh` loop 105.5 ms). Two speedup levers were POC'd and REJECTED: (1) 4×/8× **unrolling** the CRT-call loop does not help — the `ucrtbase` call latency dominates and the extra body is a wash-to-slightly-slower for asinh/atanh (measured); (2) **SIMD buys nothing byte-exactly** — TensorPrimitives is itself **0-ULP** vs NumPy over 10M f64 AND f32 inputs *precisely because it does NOT vectorize these three* (no correctly-rounded vector asinh/acosh/atanh exists, so it falls to the scalar CRT), which is the direct proof that a vector kernel would necessarily DIVERGE. The only faster route is a divergent SIMD polynomial (SLEEF/Cephes, ~1–4 ULP off), which breaks byte-parity and is therefore rejected. So there is no NumSharp-side overhead left to reclaim. Integer/bool tier to float per `ResolveUnaryFloatReturnType` (bool/i8/u8→f16, i16/u16/char→f32, i32+→f64); **float16 is BYTE-EXACT** via native `Half.Asinh/Acosh/Atanh` (which compute in float32 = NumPy's `astype 'e'->'f'`, `(Half)asinhf((float)h)` — verified 0 finite-diffs over all 65536 f16 values, and faster than the double bridge the rest of the arc-trig f16 tier still uses); Decimal via the decimal→double bridge (valid-domain 15-sig-fig; out-of-domain NaN/inf throws `OverflowException` on `(decimal)NaN` — a pre-existing bridge limitation shared by ALL decimal transcendentals: `arcsin(2m)`/`sqrt(-1m)`/`log(0m)` behave identically, no NumPy decimal analog). **Complex128** is derived from the byte-exact `Asin`/`Acos`/`Atan`(=`Catanh`) ports through NumPy's own msun involution `I·conj(·)` — a pure component-swap (`(z.Im, z.Re)`, zero arithmetic): `asinh(z)=swap(asin(swap z))`, `atanh(z)=catanh(z)` (already ported, drives `atan`), `acosh(z)=cacosh_formula(acos(z))` — so they inherit the whole complex-unary family's documented **≤3 ULP** envelope (the three identities are bit-exact inside NumPy itself, verified 0-diff over 20,036 inputs). `arccosh` inherits `arccos`'s one sub-DBL_MIN-imaginary pathological edge (`[Misaligned]` branch 7). Gates: `Math/InverseHyperbolicTests.cs` (16) + `NpApiOverloadTests_UnaryMath` regions + the `unary_extra`/`specials` fuzz tiers (all 14 dtypes × layouts). See `Math/np.{arcsinh,arccosh,arctanh}.cs`, `Utilities/NDComplexMath.cs`.
 
@@ -1844,7 +1865,7 @@ manual gate `python test/oracle/verify_npy_interop.py`.
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
 | unique family | `Manipulation/NDArray.unique.cs` + `NDArray.unique.Kwargs.cs` (sort+mask core + axis path), `Manipulation/np.unique.cs` (`np.unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.Hash.cs` (int + complex hash fast path, splitmix64). Design + measured perf decisions: `docs/UNIQUE_DESIGN.md` |
 | Selection family | `Indexing/np.{take,take_along_axis,put,place,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,Place,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed) |
-| BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`) |
+| BLAS/LAPACK seam | `Backends/IBlasBackend.cs` + `IBlasBackend.LinearAlgebra.cs` (15 default `Try*`), `Backends/TensorEngine.LinearAlgebra.cs` (virtuals + `LinAlgHelper`); `Backends/ISlidingDotBackend.cs` (optional level-1 `?dot` seam for `correlate`/`convolve`, `OpenBlasEngine.SlidingDot`) |
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,tensordot}.cs`, `LinearAlgebra/GufuncGuard.cs` |
 | einsum | `LinearAlgebra/np.einsum.cs`, `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (class + `_assert_*`/`_commonType` ports) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs`; `Exceptions/LinAlgError.cs` |
