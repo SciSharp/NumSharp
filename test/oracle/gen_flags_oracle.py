@@ -333,6 +333,86 @@ CHAINS = [
     "fb_rw_view_toggle", "fb_ro_view_w1", "bcast_of_ro_w1",
 ]
 
+
+# Layout matrix: the RESULT flags of order= producers, stacking/joining, axis reductions,
+# creation-with-layout, and advanced indexing — surfaces the recipe catalog (single-array
+# producers) does not reach. Each case records ONLY the base flags record (no setflags
+# scenarios). These are all cases where NumSharp matches NumPy bit-for-bit; the handful of
+# numpy-internal-representation divergences (reshape-order owndata, stack-of-F layout vote,
+# sort-F layout, nonzero shared-buffer views, read-only reduction SCALARS, linspace's
+# astype(copy=False) owndata, mixed-index layout) are documented as [Misaligned] unit tests
+# in FlagsOracleTests, not pinned here. Twin: FlagsOracleRecipes.BuildLayout (C#).
+def _c2(): return np.arange(12).astype(np.int64).reshape(3, 4)
+def _f2(): return np.asfortranarray(np.arange(12).astype(np.int64).reshape(3, 4))
+def _st(): return np.arange(24).astype(np.int64).reshape(3, 8)[:, ::2]   # strided (3,4)
+
+
+def build_layout(name):
+    kind, rest = name.split(".", 1)
+    if kind == "order":
+        op, tag, o = rest.split("_")
+        src = {"c": _c2, "f": _f2, "s": _st}[tag]()
+        if op == "copy":    return src.copy(order=o)
+        if op == "ravel":   return np.ravel(src, order=o)
+        if op == "astype":  return src.astype(np.int64, order=o, copy=True)
+        if op == "flatten": return src.flatten(order=o)
+        raise KeyError(name)
+    if kind == "make":
+        if rest == "zeros_F":        return np.zeros((3, 4), order="F")
+        if rest == "ones_F":         return np.ones((3, 4), order="F")
+        if rest == "empty_F":        return np.empty((3, 4), order="F")  # flags only (content uninit)
+        if rest == "eye_F":          return np.eye(3, order="F")
+        if rest == "eye_k1":         return np.eye(3, k=1)
+        if rest == "identity":       return np.identity(3)
+        if rest == "tri":            return np.tri(3)
+        if rest == "triu":           return np.triu(_c2())
+        if rest == "tril":           return np.tril(_c2())
+        if rest == "diagflat":       return np.diagflat(np.arange(3).astype(np.int64))
+        if rest == "full":           return np.full((3, 4), 7, dtype=np.int64)
+        if rest == "full_like_ordF": return np.full_like(_c2(), 7, order="F")
+        if rest == "ascontig_f":     return np.ascontiguousarray(_f2())
+        if rest == "asfortran_c":    return np.asfortranarray(_c2())
+        raise KeyError(name)
+    if kind == "compute":
+        if rest == "sum_ax0_keep":  return np.sum(_c2(), axis=0, keepdims=True)
+        if rest == "sum_ax1_keep":  return np.sum(_c2(), axis=1, keepdims=True)
+        if rest == "mean_keep":     return np.mean(_c2(), axis=0, keepdims=True)
+        if rest == "sum_ax0":       return np.sum(_c2(), axis=0)
+        if rest == "cumsum_ax":     return np.cumsum(_c2(), axis=1)
+        if rest == "cumsum_axF":    return np.cumsum(_f2(), axis=0)
+        if rest == "diff_ax0":      return np.diff(_c2(), axis=0)
+        if rest == "sort_c":        return np.sort(_c2())
+        if rest == "argsort":       return np.argsort(_c2())
+        if rest == "matmul":        return _c2() @ _c2().T
+        if rest == "matmulF":       return _f2() @ _f2().T
+        if rest == "where3":        return np.where(_c2() > 5, _c2(), np.zeros((3, 4), np.int64))
+        if rest == "clip":          return np.clip(_c2(), 2, 8)
+        if rest == "unique":        return np.unique(np.array([3, 1, 2, 1]).astype(np.int64))
+        raise KeyError(name)
+    if kind == "fancy":
+        if rest == "rows":       return _c2()[[0, 2]]
+        if rest == "elem":       return _c2()[[0, 2], [1, 3]]
+        if rest == "bmask2d":    return _c2()[_c2() > 5]
+        if rest == "take_along": return np.take_along_axis(_c2(), np.argsort(_c2(), axis=1), axis=1)
+        if rest == "choose":     return np.choose(np.array([0, 1, 0]), [np.arange(3).astype(np.int64), np.arange(3, 6).astype(np.int64)])
+        if rest == "ix":         return _c2()[np.ix_([0, 2], [1, 3])]
+        raise KeyError(name)
+    raise KeyError(name)
+
+
+LAYOUTS = (
+    [f"order.{op}_{tag}_{o}" for op in ("copy", "ravel", "astype")
+     for tag in "cfs" for o in "CFAK"]
+    + [f"order.flatten_{tag}_{o}" for tag in "cf" for o in "CF"]
+    + [f"make.{n}" for n in ("zeros_F", "ones_F", "empty_F", "eye_F", "eye_k1", "identity",
+                             "tri", "triu", "tril", "diagflat", "full", "full_like_ordF",
+                             "ascontig_f", "asfortran_c")]
+    + [f"compute.{n}" for n in ("sum_ax0_keep", "sum_ax1_keep", "mean_keep", "sum_ax0",
+                                "cumsum_ax", "cumsum_axF", "diff_ax0", "sort_c", "argsort",
+                                "matmul", "matmulF", "where3", "clip", "unique")]
+    + [f"fancy.{n}" for n in ("rows", "elem", "bmask2d", "take_along", "choose", "ix")]
+)
+
 # The dtype-independence sweep: same flags record for every dtype.
 SWEEP_RECIPES = ["c2d_view", "f2d", "t2d", "strided", "bcast_full", "negstride"]
 
@@ -432,6 +512,15 @@ def main():
         cases.append({"id": f"chain/{name}", "recipe": name, "dtype": "int64", "ops": [],
                       "err": err, "f": flags_record(final)})
         del final
+        gc.collect()
+
+    # 6) layout matrix: RESULT flags of order= producers / stacking / reductions / creation /
+    #    advanced indexing (base record only; the documented divergences live in [Misaligned] tests).
+    for name in LAYOUTS:
+        a = build_layout(name)
+        cases.append({"id": f"layout/{name}", "recipe": name, "dtype": "int64", "ops": [],
+                      "err": None, "f": flags_record(a)})
+        del a
         gc.collect()
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

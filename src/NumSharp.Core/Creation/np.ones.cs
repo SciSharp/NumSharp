@@ -123,5 +123,21 @@ namespace NumSharp
 
             return new NDArray(ArraySlice.Allocate(typeCode, shape.size, one), shape);
         }
+
+        /// <summary>
+        ///     Return a new array of ones with a specified memory layout — the port of NumPy's
+        ///     <c>np.ones(shape, dtype, order='C')</c> order parameter (mirrors <see cref="empty(Shape, char, Type)"/>).
+        /// </summary>
+        /// <param name="shape">Shape of the new array.</param>
+        /// <param name="order">Memory layout: 'C' (row-major), 'F' (column-major), 'A'/'K' (default to 'C' with no source).</param>
+        /// <param name="dtype">Desired data-type. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <returns>Array of ones in the requested layout (the fill is order-independent, so only the flags differ).</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
+        public static NDArray ones(Shape shape, char order, Type dtype = null)
+        {
+            char physical = OrderResolver.Resolve(order);
+            var orderedShape = new Shape(shape.dimensions, physical);
+            return ones(orderedShape, (dtype ?? typeof(double)).GetTypeCode());
+        }
     }
 }

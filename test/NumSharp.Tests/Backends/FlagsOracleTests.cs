@@ -201,6 +201,100 @@ namespace NumSharp.Tests.Backends
         }
 
         /// <summary>
+        ///     Layout-matrix twins of <c>gen_flags_oracle.py::build_layout</c>: the RESULT flags of
+        ///     order= producers, creation-with-layout, axis reductions and advanced indexing — the
+        ///     surfaces the single-array recipe catalog does not reach. Every case matches NumPy
+        ///     bit-for-bit (the numpy-internal-representation divergences are documented as
+        ///     [Misaligned] unit tests, not pinned here). Keys are IDENTICAL to the Python builder.
+        /// </summary>
+        public static NDArray BuildLayout(string name)
+        {
+            NDArray C2() => np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4);
+            NDArray F2() => np.asfortranarray(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4));
+            NDArray ST() => np.arange(24).astype(NPTypeCode.Int64).reshape(3, 8)[":, ::2"];
+
+            int dot = name.IndexOf('.');
+            string kind = name.Substring(0, dot);
+            string rest = name.Substring(dot + 1);
+
+            switch (kind)
+            {
+                case "order":
+                {
+                    var parts = rest.Split('_');          // op_tag_o
+                    string op = parts[0], tag = parts[1];
+                    char o = parts[2][0];
+                    var src = tag == "c" ? C2() : tag == "f" ? F2() : ST();
+                    return op switch
+                    {
+                        "copy" => src.copy(o),
+                        "ravel" => np.ravel(src, o),
+                        "astype" => src.astype(NPTypeCode.Int64, copy: true, order: o),
+                        "flatten" => src.flatten(o),
+                        _ => throw new ArgumentException(name),
+                    };
+                }
+                case "make":
+                    return rest switch
+                    {
+                        "zeros_F" => np.zeros(new Shape(3, 4), 'F'),
+                        "ones_F" => np.ones(new Shape(3, 4), 'F'),
+                        "empty_F" => np.empty(new Shape(3, 4), 'F'),
+                        "eye_F" => np.eye(3, order: 'F'),
+                        "eye_k1" => np.eye(3, k: 1),
+                        "identity" => np.identity(3),
+                        "tri" => np.tri(3),
+                        "triu" => np.triu(C2()),
+                        "tril" => np.tril(C2()),
+                        "diagflat" => np.diagflat(np.arange(3).astype(NPTypeCode.Int64)),
+                        "full" => np.full(new Shape(3, 4), 7, NPTypeCode.Int64),
+                        "full_like_ordF" => np.full_like(C2(), 7, typeof(long), 'F'),
+                        "ascontig_f" => np.ascontiguousarray(F2()),
+                        "asfortran_c" => np.asfortranarray(C2()),
+                        _ => throw new ArgumentException(name),
+                    };
+                case "compute":
+                    return rest switch
+                    {
+                        "sum_ax0_keep" => np.sum(C2(), axis: 0, keepdims: true),
+                        "sum_ax1_keep" => np.sum(C2(), axis: 1, keepdims: true),
+                        "mean_keep" => np.mean(C2(), axis: 0, keepdims: true),
+                        "sum_ax0" => np.sum(C2(), axis: 0),
+                        "cumsum_ax" => np.cumsum(C2(), axis: 1),
+                        "cumsum_axF" => np.cumsum(F2(), axis: 0),
+                        "diff_ax0" => np.diff(C2(), axis: 0),
+                        "sort_c" => np.sort(C2()),
+                        "argsort" => np.argsort(C2()),
+                        "matmul" => np.matmul(C2(), C2().T),
+                        "matmulF" => np.matmul(F2(), F2().T),
+                        "where3" => np.where(C2() > 5, C2(), np.zeros(new Shape(3, 4), NPTypeCode.Int64)),
+                        "clip" => np.clip(C2(), (NDArray)2, (NDArray)8),
+                        "unique" => np.unique(np.array(new long[] { 3, 1, 2, 1 })).values,
+                        _ => throw new ArgumentException(name),
+                    };
+                case "fancy":
+                    return rest switch
+                    {
+                        "rows" => C2()[new int[] { 0, 2 }],
+                        "elem" => C2()[np.array(new int[] { 0, 2 }), np.array(new int[] { 1, 3 })],
+                        "bmask2d" => C2()[C2() > 5],
+                        "take_along" => np.take_along_axis(C2(), np.argsort(C2(), axis: 1), 1),
+                        "choose" => np.choose(np.array(new int[] { 0, 1, 0 }),
+                            new NDArray[] { np.arange(3).astype(NPTypeCode.Int64), np.arange(3, 6).astype(NPTypeCode.Int64) }),
+                        "ix" => IxResult(C2()),
+                        _ => throw new ArgumentException(name),
+                    };
+                default: throw new ArgumentException($"unknown layout kind '{name}'");
+            }
+
+            static NDArray IxResult(NDArray c)
+            {
+                var g = np.ix_(np.array(new int[] { 0, 2 }), np.array(new int[] { 1, 3 }));
+                return c[g[0], g[1]];
+            }
+        }
+
+        /// <summary>
         ///     Cross-object chain twins of <c>gen_flags_oracle.py::build_chain</c>: multi-array
         ///     choreography a single recipe×scenario cell cannot express. Returns the FIRST error
         ///     (or null) and the FINAL array whose flags the corpus pins.
@@ -437,14 +531,16 @@ namespace NumSharp.Tests.Backends
 
     /// <summary>
     ///     The <c>ndarray.flags</c> / <c>ndarray.setflags</c> differential gate: replays
-    ///     <c>Backends/corpus/flags_oracle.jsonl</c> — 998 cases of REAL NumPy 2.4.2 output
+    ///     <c>Backends/corpus/flags_oracle.jsonl</c> — 1072 cases of REAL NumPy 2.4.2 output
     ///     (87 layout/producer recipes × base record + verbatim repr + ~9 setflags transition
     ///     scenarios each incl. error messages and post-error rollback states + a 13-dtype ×
     ///     6-layout independence sweep + identity-vs-copy consumers + 14 cross-object CHAINS:
     ///     _IsWriteable re-evaluated after the base's own state changed, re-enable through
     ///     view-of-view chains, flag NON-propagation to existing views, ALIGNED recomputation,
-    ///     memmap/frombuffer view toggles) — and asserts NumSharp's ENTIRE flags record matches
-    ///     bit-for-bit. No Python at test time; regenerate with
+    ///     memmap/frombuffer view toggles + a 74-case LAYOUT MATRIX: the result flags of order=
+    ///     producers (copy/ravel/flatten/astype × C/F/A/K × C/F/strided source), stacking,
+    ///     axis reductions, creation-with-layout, and advanced indexing) — and asserts NumSharp's
+    ///     ENTIRE flags record matches bit-for-bit. No Python at test time; regenerate with
     ///     <c>python test/oracle/gen_flags_oracle.py</c>.
     ///
     ///     <para>Plus NumPy-free heavy sweeps: every bracket key against its dotted twin across all
@@ -464,6 +560,9 @@ namespace NumSharp.Tests.Backends
         {
             /// <summary>Cross-object chain case (replayed via <see cref="FlagsOracleRecipes.BuildChain"/>).</summary>
             public bool IsChain => Id.StartsWith("chain/", StringComparison.Ordinal);
+
+            /// <summary>Layout-matrix case (replayed via <see cref="FlagsOracleRecipes.BuildLayout"/>).</summary>
+            public bool IsLayout => Id.StartsWith("layout/", StringComparison.Ordinal);
         }
 
         private static List<OracleCase> _cases;
@@ -536,6 +635,19 @@ namespace NumSharp.Tests.Backends
             NDArray a = null;
             try
             {
+                if (c.IsLayout)
+                {
+                    a = FlagsOracleRecipes.BuildLayout(c.Recipe);
+                    var layoutActual = Record(a);
+                    foreach (var kv in c.Flags)
+                    {
+                        if (layoutActual[kv.Key] != kv.Value)
+                            failures.Add($"{c.Id}: flags.{kv.Key} — numpy={kv.Value} numsharp={layoutActual[kv.Key]}");
+                    }
+
+                    return;
+                }
+
                 if (c.IsChain)
                 {
                     var (chainErr, final) = FlagsOracleRecipes.BuildChain(c.Recipe, _mmapDir);
@@ -636,7 +748,7 @@ namespace NumSharp.Tests.Backends
 
         [TestMethod]
         public void Corpus_BaseRecords_AndVerbatimRepr_MatchNumpy()
-            => RunGroup(c => c.Ops.Length == 0 && c.Dtype == "int64" && !c.Shared.HasValue && !c.IsChain && !c.Id.Contains("/dtype."), floor: 85);
+            => RunGroup(c => c.Ops.Length == 0 && c.Dtype == "int64" && !c.Shared.HasValue && !c.IsChain && !c.IsLayout && !c.Id.Contains("/dtype."), floor: 85);
 
         [TestMethod]
         public void Corpus_SetflagsTransitions_MatchNumpy()
@@ -655,10 +767,14 @@ namespace NumSharp.Tests.Backends
             => RunGroup(c => c.IsChain, floor: 14);
 
         [TestMethod]
+        public void Corpus_LayoutMatrix_MatchNumpy()
+            => RunGroup(c => c.IsLayout, floor: 70);
+
+        [TestMethod]
         public void Corpus_Floors_AllRecipesPresent_ManyErrorCases()
         {
-            Assert.IsTrue(_cases.Count >= 990, $"corpus shrank: {_cases.Count} < 990");
-            Assert.AreEqual(87, _cases.Where(c => !c.Shared.HasValue && !c.IsChain).Select(c => c.Recipe).Distinct().Count(), "recipe catalog changed size");
+            Assert.IsTrue(_cases.Count >= 1060, $"corpus shrank: {_cases.Count} < 1060");
+            Assert.AreEqual(87, _cases.Where(c => !c.Shared.HasValue && !c.IsChain && !c.IsLayout).Select(c => c.Recipe).Distinct().Count(), "recipe catalog changed size");
             Assert.IsTrue(_cases.Count(c => c.Err.HasValue) >= 190, "error-case floor");
             // every scenario token family is represented
             foreach (var op in new[] { "w0", "w1", "a0", "a1", "u1", "w0a0", "a0u1", "a0w1", "u0" })
@@ -717,7 +833,7 @@ namespace NumSharp.Tests.Backends
         public void BracketKeys_EqualDottedProperties_AcrossEveryRecipe()
         {
             // 87 recipes × 22 keys — the subscript surface can never drift from the attributes.
-            foreach (var recipe in _cases.Where(c => !c.Shared.HasValue && !c.IsChain).Select(c => c.Recipe).Distinct())
+            foreach (var recipe in _cases.Where(c => !c.Shared.HasValue && !c.IsChain && !c.IsLayout).Select(c => c.Recipe).Distinct())
             {
                 var a = FlagsOracleRecipes.Build(recipe, "int64", _mmapDir);
                 try
@@ -742,7 +858,7 @@ namespace NumSharp.Tests.Backends
         {
             // NumPy's arrayflags __eq__ compares the flags int; ours compares num. The law must hold
             // over every pair of layouts (87² comparisons), plus hashcode consistency.
-            var arrays = _cases.Where(c => !c.Shared.HasValue && !c.IsChain).Select(c => c.Recipe).Distinct()
+            var arrays = _cases.Where(c => !c.Shared.HasValue && !c.IsChain && !c.IsLayout).Select(c => c.Recipe).Distinct()
                 .Select(r => (r, a: FlagsOracleRecipes.Build(r, "int64", _mmapDir))).ToList();
             try
             {
@@ -871,7 +987,7 @@ namespace NumSharp.Tests.Backends
             // np.isfortran IS a.flags.fnc (numpy/_core/numeric.py) — hold the law over every
             // corpus base record, whose fnc field is NumPy-pinned.
             foreach (var c in _cases.Where(x => x.Ops.Length == 0 && x.Dtype == "int64"
-                                                && !x.Shared.HasValue && !x.IsChain && !x.Id.Contains("/dtype.")))
+                                                && !x.Shared.HasValue && !x.IsChain && !x.IsLayout && !x.Id.Contains("/dtype.")))
             {
                 var a = FlagsOracleRecipes.Build(c.Recipe, c.Dtype, _mmapDir);
                 try
@@ -895,7 +1011,7 @@ namespace NumSharp.Tests.Backends
             // sweep can never silently go vacuous.
             int asserted = 0;
             foreach (var c in _cases.Where(x => x.Ops.Length == 0 && x.Dtype == "int64"
-                                                && !x.Shared.HasValue && !x.IsChain && !x.Id.Contains("/dtype.")))
+                                                && !x.Shared.HasValue && !x.IsChain && !x.IsLayout && !x.Id.Contains("/dtype.")))
             {
                 var a = FlagsOracleRecipes.Build(c.Recipe, c.Dtype, _mmapDir);
                 try
@@ -1104,6 +1220,56 @@ namespace NumSharp.Tests.Backends
         }
 
         // ---- documented divergences ([Misaligned]) ----------------------------------------
+
+        [TestMethod]
+        [Misaligned]
+        public void LayoutDivergences_NumpyInternalRepresentations_Documented()
+        {
+            // The layout/ corpus section pins every RESULT-flags case where NumSharp MATCHES NumPy.
+            // This test pins the complementary set — seven surfaces where NumSharp's flags DIVERGE
+            // because NumPy exposes an internal representation NumSharp deliberately does not model.
+            // All probed against NumPy 2.4.2; the VALUES are identical in every case, only the
+            // memory-layout FLAGS differ. Documented here so a future change is a conscious choice.
+
+            // (1) A full reduction / trace returns a read-only numpy SCALAR (num=263, WRITEABLE off);
+            //     NumSharp has no scalar type, so its 0-d result is a writeable array (num=1287).
+            np.sum(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4)).flags.writeable
+                .Should().BeTrue("NumSharp full-reduction 0-d is writeable; NumPy's scalar is read-only");
+            np.trace(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4)).flags.writeable
+                .Should().BeTrue("NumSharp trace 0-d is writeable; NumPy's scalar is read-only");
+
+            // (2) reshape(order='F') that must reorder COPIES in NumSharp (owndata=True); NumPy
+            //     returns a view of an internal F-copy (owndata=False). F-contiguous on both sides.
+            var rc = np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4).reshape(new Shape(2, 6), 'F');
+            rc.flags.f_contiguous.Should().BeTrue();
+            rc.flags.owndata.Should().BeTrue("NumSharp reshape(order='F') copy owns; NumPy views an internal copy");
+
+            // (3) A strided reshape NumPy can express as a non-contiguous VIEW, NumSharp materialises
+            //     as a C-contiguous owned copy (values identical; shares-memory differs).
+            var rs = np.arange(24).astype(NPTypeCode.Int64).reshape(3, 8)[":, ::2"].reshape(new Shape(2, 6), 'C');
+            rs.flags.c_contiguous.Should().BeTrue("NumSharp copies to C-contig; NumPy returns a strided view");
+
+            // (4) np.stack of F-contiguous operands: NumPy's layout vote yields NEITHER-contig
+            //     (num=1284); NumSharp yields F-contig (num=1286). Both owned copies.
+            var f = np.asfortranarray(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4));
+            np.stack(new[] { f, f }, axis: 0).flags.f_contiguous
+                .Should().BeTrue("NumSharp stack-of-F is F-contig; NumPy's vote makes it neither-contig");
+
+            // (5) np.sort of an F-contiguous array returns a C-contiguous copy (house convention,
+            //     already documented in CLAUDE.md); NumPy keeps F-order (copy(order='K')).
+            np.sort(f).flags.c_contiguous
+                .Should().BeTrue("NumSharp sort returns C-contig copy; NumPy keeps the input's F-order");
+
+            // (6) np.nonzero returns contiguous OWNED index arrays in NumSharp; NumPy returns strided
+            //     VIEWS into one shared (ndim, count) buffer (num=1280, owndata off).
+            np.nonzero(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4))[0].flags.owndata
+                .Should().BeTrue("NumSharp nonzero arrays own; NumPy's are views into a shared buffer");
+
+            // (7) np.linspace owns its buffer in NumSharp; NumPy's result is astype(copy=False) over
+            //     an internal array, so owndata=False.
+            np.linspace(0.0, 1.0, 5).flags.owndata
+                .Should().BeTrue("NumSharp linspace owns; NumPy's is an astype(copy=False) view");
+        }
 
         [TestMethod]
         [Misaligned]

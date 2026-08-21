@@ -701,9 +701,7 @@ namespace NumSharp
             ValidateAstypeCasting(dtype.GetTypeCode(), casting);
             char physical = OrderResolver.Resolve(order, this.Shape);
             var casted = TensorEngine.Cast(this, dtype, copy);
-            if (physical == 'F' && casted.Shape.NDim > 1 && !casted.Shape.IsFContiguous)
-                return casted.copy('F');
-            return casted;
+            return RelayoutAstype(casted, physical);
         }
 
         /// <summary>
@@ -738,8 +736,30 @@ namespace NumSharp
             ValidateAstypeCasting(typeCode, casting);
             char physical = OrderResolver.Resolve(order, this.Shape);
             var casted = TensorEngine.Cast(this, typeCode, copy);
-            if (physical == 'F' && casted.Shape.NDim > 1 && !casted.Shape.IsFContiguous)
+            return RelayoutAstype(casted, physical);
+        }
+
+        /// <summary>
+        ///     Force the cast result into the astype-requested physical layout. NumPy's
+        ///     <c>astype(order=…)</c> ALWAYS honours the order — <c>order='C'</c> on an F-contiguous
+        ///     source produces a C-contiguous result, and <c>order='F'</c> on a C-contiguous source an
+        ///     F-contiguous one (probed on 2.4.2). <see cref="Backends.TensorEngine.Cast"/> preserves the
+        ///     source layout (a same-dtype copy of an F array stays F), so the requested order must be
+        ///     re-imposed here — previously only the 'F' half existed, so <c>F.astype(t, order:'C')</c>
+        ///     silently kept F. Both orders coincide for ndim ≤ 1, so no re-layout is needed there.
+        /// </summary>
+        private static NDArray RelayoutAstype(NDArray casted, char physical)
+        {
+            // Guard the empty sentinel (`new NDArray(typecode)`, null dimensions) and 0-/1-D shapes
+            // by reading the raw dimensions field — Shape.NDim/IsContiguous NRE on a null-dims shape,
+            // and both C and F coincide for ndim ≤ 1, so no re-layout is possible or needed there.
+            var dims = casted.Shape.dimensions;
+            if (dims is null || dims.Length <= 1)
+                return casted;
+            if (physical == 'F' && !casted.Shape.IsFContiguous)
                 return casted.copy('F');
+            if (physical == 'C' && !casted.Shape.IsContiguous)
+                return casted.copy('C');
             return casted;
         }
 
