@@ -176,19 +176,66 @@ namespace NumSharp.Tests.View
         }
 
         [TestMethod]
-        public void View_NonContiguous_ThrowsForDifferentSize()
+        public void View_OuterStridedDifferentSize_Works()
         {
-            // Non-contiguous arrays can't be viewed as different-sized types
-            var arr = np.arange(12).reshape(3, 4);
-            var sliced = arr["::2"]; // Non-contiguous slice
+            // NumPy 2.x: view(dtype) with a different itemsize only requires the LAST axis to be
+            // contiguous, NOT the whole array. An outer-strided slice (contiguous last axis) is allowed.
+            //   np.arange(12).reshape(3,4)[::2].view(np.int32)
+            //     -> shape (2, 8), strides (64, 4) bytes, shares memory.
+            var arr = np.arange(12).reshape(3, 4); // int64
+            var sliced = arr["::2"];               // (2,4), outer-strided, last axis contiguous
 
-            // Same size type should work
-            var sameSizeView = sliced.view<long>();
-            sameSizeView.Should().NotBeNull();
+            // Same size type works (any layout).
+            sliced.view<long>().Should().NotBeNull();
 
-            // Different size type should throw
-            Action act = () => sliced.view<int>();
-            act.Should().Throw<InvalidOperationException>();
+            // Different (smaller) size: last axis is rescaled, outer stride preserved.
+            var view = sliced.view<int>();
+            view.shape.Should().BeEquivalentTo(new long[] { 2, 8 });
+            view.Shape.Strides.Should().BeEquivalentTo(new long[] { 16, 1 }); // element strides (bytes/4)
+            // int64 rows [0,1,2,3] and [8,9,10,11] reinterpreted little-endian as int32.
+            view.flatten().ToArray<int>().Should().BeEquivalentTo(
+                new[] { 0, 0, 1, 0, 2, 0, 3, 0, 8, 0, 9, 0, 10, 0, 11, 0 });
+
+            // Writes through to the shared base.
+            view.SetInt32(999, 0, 0);
+            sliced.GetInt64(0, 0).Should().Be(999);
+        }
+
+        [TestMethod]
+        public void View_LastAxisNonContiguousDifferentSize_Throws()
+        {
+            // The last axis is NOT contiguous (reversed / transposed), so a different-size view is
+            // rejected — matching NumPy's ValueError "the last axis must be contiguous".
+            Action reversed = () => np.arange(5).astype(np.int32)["::-1"].view<short>();
+            reversed.Should().Throw<InvalidOperationException>();
+
+            Action transposed = () => np.arange(6).astype(np.int32).reshape(2, 3).T.view<short>();
+            transposed.Should().Throw<InvalidOperationException>();
+        }
+
+        [TestMethod]
+        public void View_BroadcastOuterDifferentSize_StaysReadOnly()
+        {
+            // NumPy allows a different-size view of a broadcast (stride-0 outer, contiguous last axis)
+            // and the result is READ-ONLY, like the source.
+            //   np.broadcast_to(np.arange(4, dtype=int32), (3,4)).view(np.int16)
+            //     -> shape (3, 8), strides (0, 2) bytes, WRITEABLE=False.
+            var b = np.broadcast_to(np.arange(4).astype(np.int32), new Shape(3, 4));
+            var view = b.view<short>();
+            view.shape.Should().BeEquivalentTo(new long[] { 3, 8 });
+            view.Shape.Strides.Should().BeEquivalentTo(new long[] { 0, 1 });
+            view.Shape.IsWriteable.Should().BeFalse();
+            view.flatten().ToArray<short>().Should().BeEquivalentTo(
+                new short[] { 0, 0, 1, 0, 2, 0, 3, 0, 0, 0, 1, 0, 2, 0, 3, 0, 0, 0, 1, 0, 2, 0, 3, 0 });
+        }
+
+        [TestMethod]
+        public void View_0dDifferentSize_Throws()
+        {
+            // NumPy: "Changing the dtype of a 0d array is only supported if the itemsize is unchanged".
+            var scalar = np.array(5).astype(np.int32).reshape(new int[0]);
+            Action act = () => scalar.view<short>();
+            act.Should().Throw<ArgumentException>();
         }
 
         [TestMethod]
