@@ -34,6 +34,53 @@ namespace NumSharp.Tests.Backends
         public void Nbytes_StridedView()
             => np.arange(24).astype(np.int32).reshape(4, 6)["...,::2"].nbytes.Should().Be(4 * 3 * 4);
 
+        // ---- itemsize --------------------------------------------------------------------
+
+        [TestMethod]
+        public void Itemsize_AllDtypes_MatchNumpy()
+        {
+            // 13 dtypes with a NumPy analog — byte-identical to NumPy 2.4.2 ndarray.itemsize.
+            np.zeros(new Shape(3), NPTypeCode.Boolean).itemsize.Should().Be(1);
+            np.zeros(new Shape(3), NPTypeCode.SByte).itemsize.Should().Be(1);
+            np.zeros(new Shape(3), NPTypeCode.Byte).itemsize.Should().Be(1);
+            np.zeros(new Shape(3), NPTypeCode.Int16).itemsize.Should().Be(2);
+            np.zeros(new Shape(3), NPTypeCode.UInt16).itemsize.Should().Be(2);
+            np.zeros(new Shape(3), NPTypeCode.Int32).itemsize.Should().Be(4);
+            np.zeros(new Shape(3), NPTypeCode.UInt32).itemsize.Should().Be(4);
+            np.zeros(new Shape(3), NPTypeCode.Int64).itemsize.Should().Be(8);
+            np.zeros(new Shape(3), NPTypeCode.UInt64).itemsize.Should().Be(8);
+            np.zeros(new Shape(3), NPTypeCode.Half).itemsize.Should().Be(2);
+            np.zeros(new Shape(3), NPTypeCode.Single).itemsize.Should().Be(4);
+            np.zeros(new Shape(3), NPTypeCode.Double).itemsize.Should().Be(8);
+            np.zeros(new Shape(3), NPTypeCode.Complex).itemsize.Should().Be(16);
+            // 2 NumSharp-only dtypes (no NumPy analog) — report their in-memory element size.
+            np.zeros(new Shape(3), NPTypeCode.Char).itemsize.Should().Be(2);
+            np.zeros(new Shape(3), NPTypeCode.Decimal).itemsize.Should().Be(16);
+        }
+
+        [TestMethod]
+        public void Itemsize_IsLayoutInvariant()
+        {
+            // itemsize is a property of the dtype ALONE — identical across every layout (NumPy parity).
+            var a = np.arange(24).astype(np.float64).reshape(2, 3, 4);
+            a.itemsize.Should().Be(8);                                             // C-contiguous
+            np.array(5.0).itemsize.Should().Be(8);                                 // 0-d scalar
+            np.zeros(new Shape(0, 3), NPTypeCode.Double).itemsize.Should().Be(8);  // empty
+            a[":, ::2"].itemsize.Should().Be(8);                                   // strided
+            a.T.itemsize.Should().Be(8);                                           // transposed
+            a["::-1"].itemsize.Should().Be(8);                                     // negative-stride
+            np.broadcast_to(np.array(new[] { 7 }).reshape(1, 1), new Shape(1000, 1000)).itemsize.Should().Be(4); // broadcast int32
+            a.astype(np.int16).itemsize.Should().Be(2);                            // after astype
+        }
+
+        [TestMethod]
+        public void Itemsize_AliasesDtypesize_AndComposesNbytes()
+        {
+            var a = np.arange(24).astype(np.float64).reshape(2, 3, 4);
+            a.itemsize.Should().Be(a.dtypesize);                 // alias of the legacy name
+            ((long)a.size * a.itemsize).Should().Be(a.nbytes);   // size * itemsize == nbytes
+        }
+
         // ---- flags: matrix (byte-for-byte NumPy across layouts) --------------------------
 
         private static (int C, int F, int own, int wr, int beh, int carr, int farr, int fnc, int forc, int num) Row(NDArray a)

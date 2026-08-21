@@ -478,6 +478,18 @@ namespace NumSharp
         public int dtypesize => Storage.DTypeSize;
 
         /// <summary>
+        ///     Length of one array element in bytes — NumPy's <c>ndarray.itemsize</c>. This is a pure
+        ///     property of the <see cref="dtype"/> and is independent of shape, strides, offset or layout,
+        ///     so every view of a given dtype (C/F-contiguous, sliced, strided, transposed, negative-stride,
+        ///     broadcast, 0-d or empty) reports the same value. Byte-identical to NumPy for the 13 dtypes
+        ///     with a NumPy analog (e.g. float64→8, complex128→16, int8/bool→1); the two NumSharp-only
+        ///     dtypes report their in-memory element size (Char→2, Decimal→16). Alias of the legacy
+        ///     <see cref="dtypesize"/>; the product <see cref="size"/> * <c>itemsize</c> is <see cref="nbytes"/>.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.itemsize.html</remarks>
+        public int itemsize => Storage.DTypeSize;
+
+        /// <summary>
         ///     Total bytes consumed by the elements of the array — the LOGICAL element count
         ///     (<see cref="size"/>) times the itemsize (<see cref="dtypesize"/>), matching NumPy's
         ///     <c>PyArray_NBYTES = PyArray_ITEMSIZE * PyArray_SIZE</c>. Because it uses the logical size,
