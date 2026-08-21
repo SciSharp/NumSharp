@@ -166,7 +166,7 @@ namespace NumSharp
                 case 'W':
                     return arr.Shape.IsWriteable;
                 case 'O':
-                    return !arr.Storage.IsView;
+                    return arr.Storage.OwnsData; // false for views AND externally-based arrays (memmaps)
                 default:
                     return true;
             }

@@ -26,9 +26,13 @@ namespace NumSharp
                 return new NDArray(val.Storage.AliasComplexLane(imaginary: true));
 
             // Real / int / bool: NumPy returns a READ-ONLY all-zeros array of the SAME shape and dtype
-            // (probed: `np.imag(real).flags.writeable` is False, dtype preserved).
+            // (probed: `np.imag(real).flags.writeable` is False, dtype preserved — and it OWNS its zeros:
+            // owndata=True, base=None, so clear WRITEABLE on the owned array itself rather than aliasing
+            // a view, which would misreport owndata=False. setflags(write=True) on it then succeeds,
+            // exactly as NumPy's _IsWriteable allows for an owner).
             var zeros = np.zeros(new Shape(val.shape), val.typecode);
-            return new NDArray(zeros.Storage.Alias(zeros.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)));
+            zeros.Storage.SetShapeUnsafe(zeros.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
+            return zeros;
         }
     }
 }

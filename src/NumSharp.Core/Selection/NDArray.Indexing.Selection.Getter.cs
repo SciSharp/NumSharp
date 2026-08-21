@@ -1292,15 +1292,15 @@ namespace NumSharp
             {
                 var idxAddr = computedOffsets.Address;
                 var srcAddr = source.Address;
-                var dst = new NDArray<T>(Shape.Vector(computedOffsets.size), false);
+                // Allocate at the FINAL retShape and fill flat (the fresh buffer is C-contiguous either
+                // way) — a terminal dst.reshape(retShape) would hand back a VIEW of the hidden temp and
+                // misreport flags.owndata=False, where NumPy's fancy result OWNS its data.
+                var dst = new NDArray<T>(retShape ?? new[] { computedOffsets.size }, false);
                 T* dstAddr = dst.Address;
                 //indices point to a scalar
                 var len = dst.size;
                 for (long i = 0; i < len; i++)
                     dstAddr[i] = srcAddr[idxAddr[i]];
-
-                if (retShape != null)
-                    return dst.reshape(retShape);
 
                 return dst;
             }
@@ -1370,7 +1370,12 @@ namespace NumSharp
                 Buffer.MemoryCopy(srcAddr + so, dstAddr + doff, copySize, copySize);
             }
 
-            return dst.MakeGeneric<T>();
+            // Return the owned result INSTANCE, not a MakeGeneric alias of it — the alias is pure
+            // type-plumbing but it chains _baseStorage to the (invisible) fresh buffer, misreporting
+            // flags.owndata=False where NumPy's fancy result owns its data. A caller-supplied @out that
+            // is not already generic still needs the typed wrapper (a view of the user's array — its
+            // owndata=False is then genuinely true).
+            return dst as NDArray<T> ?? dst.MakeGeneric<T>();
         }
 
         /// <summary>

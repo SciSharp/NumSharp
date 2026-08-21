@@ -122,10 +122,14 @@ namespace NumSharp.Backends
             // NumPy returns an empty array with shape (0,) or similar
             if (slicedShape.size == 0)
             {
-                // Create empty storage with correct dtype and shape
+                // Create empty storage with correct dtype and shape. It is still a VIEW of the parent
+                // (NumPy: owndata=False, base set — there are no elements, so the fresh zero-length
+                // buffer shares nothing, but the base chain carries owndata and the setflags(write=True)
+                // base-writeability answer).
                 var emptySlice = ArraySlice.Allocate(_typecode, 0, false);
                 var emptyStorage = new UnmanagedStorage();
                 emptyStorage._Allocate(slicedShape, emptySlice);
+                emptyStorage._baseStorage = _baseStorage ?? this;
                 return emptyStorage;
             }
 

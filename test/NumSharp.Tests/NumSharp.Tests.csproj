@@ -62,6 +62,14 @@
     </None>
   </ItemGroup>
 
+  <!-- ndarray.flags / ndarray.setflags oracle: real NumPy 2.4.2 flag records + verbatim errors,
+       replayed by FlagsOracleTests (no Python in CI). Regenerate: python test/oracle/gen_flags_oracle.py -->
+  <ItemGroup>
+    <None Update="Backends\corpus\flags_oracle.jsonl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
   <!-- Hand-made NumPy fixtures for NumpyCompatibilityTests / NpyFormatVersionTests. Those tests
        resolve "test_compat" relative to the working directory and SKIP (silently passing) when it is
        absent, so without this rule they assert nothing on a clean checkout. -->

@@ -140,6 +140,24 @@ namespace NumSharp.Backends
         internal bool WriteProtected;
 
         /// <summary>
+        ///     Set when this storage's memory belongs to a FOREIGN owner even though no
+        ///     <see cref="_baseStorage"/> exists — a memory-mapped file (every <c>mmap_mode</c>, the file
+        ///     mapping is the real owner), or an external buffer wrap. It is the NumPy analog of a
+        ///     non-array <c>base</c> object: such arrays report <c>flags.owndata == False</c> (NumPy's
+        ///     memmap does, in every mode) and <c>np.require(…, "O")</c> copies them.
+        /// </summary>
+        /// <remarks>Orthogonal to <see cref="WriteProtected"/>: an <c>'r+'</c> memmap is externally based
+        /// yet writable; an <c>'r'</c> memmap is both.</remarks>
+        internal bool ExternalBase;
+
+        /// <summary>
+        ///     Does this storage own the memory it addresses — NumPy's <c>OWNDATA</c>: no base storage
+        ///     (<see cref="_baseStorage"/>) and no foreign owner (<see cref="ExternalBase"/>). Read by
+        ///     <c>ndarray.flags.owndata</c> and <c>np.require("O")</c>.
+        /// </summary>
+        internal bool OwnsData => _baseStorage is null && !ExternalBase;
+
+        /// <summary>
         ///     May this array's WRITEABLE flag be turned (back) on? The NumSharp analog of NumPy's
         ///     <c>_IsWriteable</c> (<c>numpy/_core/src/multiarray/common.c</c>), consulted by
         ///     <see cref="NDArray.setflags"/> / <c>flags.writeable = true</c>:

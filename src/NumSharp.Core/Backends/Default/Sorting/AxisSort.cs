@@ -54,7 +54,7 @@ namespace NumSharp.Backends.Sorting
         public static void SortInPlace(NDArray a, int? axis)
         {
             if (!a.Shape.IsWriteable)
-                throw new InvalidOperationException("sort: cannot sort a read-only (broadcast) array in place.");
+                throw new ValueError("sort array is read-only"); // NumPy 2.4.2 verbatim (probed)
             if (axis == null)
             {
                 // In-place flatten-sort only well-defined for contiguous; NumPy raises otherwise.

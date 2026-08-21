@@ -57,7 +57,9 @@ namespace NumSharp
         private bool C => _arr.Shape.IsContiguous;
         private bool F => _arr.Shape.IsFContiguous;
         private bool W => _arr.Shape.IsWriteable;
-        private bool O => !_arr.Storage.IsView;
+        // OWNDATA: no base storage AND no foreign owner (a memmap's memory belongs to the file mapping,
+        // NumPy's non-array base — its owndata is False in every mmap_mode).
+        private bool O => _arr.Storage.OwnsData;
 
         /// <summary>The data is in a single, C-style contiguous segment (<c>C_CONTIGUOUS</c>).</summary>
         public bool c_contiguous => C;
