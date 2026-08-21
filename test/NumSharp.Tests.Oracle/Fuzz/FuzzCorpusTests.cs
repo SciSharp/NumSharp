@@ -217,6 +217,26 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Products() => RunCorpus("products.jsonl");
 
+        // The PORTABLE polynomial family: poly (1-D roots), polyval (Horner), vander, polyder,
+        // polyint, polyadd/polysub/polymul, polydiv (quotient+remainder tuple), and poly1d
+        // (leading-zero normalisation + construction from roots). Pure array arithmetic /
+        // convolution / Horner with NO backend and NO long reduction, so bit-exact vs NumPy
+        // everywhere (probed). The three BACKEND polynomial ops — roots, polyfit, poly of a 2-D
+        // matrix — ride the host-pinned LinalgParity tier (they reach eigvals/lstsq).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Poly() => RunCorpus("poly.jsonl");
+
+        // np.einsum + np.einsum_path. einsum is byte-exact for integer/complex-integer
+        // contractions (order-independent) and SMALL-EXACT float contractions, plus the whole
+        // view path (transpose/diagonal/no-sum) — operands are kept small-exact because larger
+        // float contractions route through matmul (NumPy's default einsum uses its own C
+        // iterator). einsum_path returns the info STRING (text kind), shape-derived and
+        // byte-identical for non-ellipsis subscripts.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Einsum() => RunCorpus("einsum.jsonl");
+
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         [DoNotParallelize]
@@ -464,7 +484,9 @@ namespace NumSharp.Tests.Fuzz
             ["manip.jsonl"] = 6060,
             ["matmul.jsonl"] = 769,
             ["matmul_parity.jsonl"] = 470,
-            ["linalg_parity.jsonl"] = 210,
+            ["linalg_parity.jsonl"] = 220,
+            ["poly.jsonl"] = 60,
+            ["einsum.jsonl"] = 35,
             ["modf.jsonl"] = 51,
             ["nanreduce.jsonl"] = 6692,
             ["numpy_f32_kernels.jsonl"] = 140,
@@ -472,7 +494,7 @@ namespace NumSharp.Tests.Fuzz
             ["out_where.jsonl"] = 3500,
             ["params.jsonl"] = 966,
             ["place.jsonl"] = 12,
-            ["products.jsonl"] = 150,
+            ["products.jsonl"] = 310,
             ["precision.jsonl"] = 80,
             ["random_parity.jsonl"] = 30,
             ["random_parity_host.jsonl"] = 86,

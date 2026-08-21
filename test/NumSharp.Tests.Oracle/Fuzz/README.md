@@ -450,6 +450,49 @@ checks instead, and listed in Table 1):
   whose summation order rounds 1 ULP off NumPy (measured: `cond(a,'fro')` differs in the last byte); only
   the SVD-based orders (`cond` None/2/-2, `norm` 2/-2/'nuc' — exactly the task scope) are recorded.
 
+`roots`, `polyfit` and `poly` of a **2-D matrix** also ride this host-pinned tier (added 2026-08-21): they
+reach the LAPACK seam (companion-matrix `eigvals` / `lstsq`) and THROW without the backend, so they cannot
+be portable. Small operands, threads=1, byte-exact.
+
+### Polynomial family (`poly` tier)
+
+`poly.jsonl` (`gen_oracle.py poly`) is the FIRST value gate for the PORTABLE polynomial family — `poly`
+(1-D roots→coefficients), `polyval` (Horner), `vander`, `polyder`, `polyint`, `polyadd`/`polysub`/`polymul`,
+`polydiv` (quotient+remainder tuple), and `poly1d` (leading-zero normalisation + construction from roots).
+These are pure array arithmetic / convolution / Horner with NO backend and NO long reduction, so they are
+**bit-exact vs NumPy everywhere** — probed: Horner evaluation order, leading-zero normalisation and
+polynomial long division all match byte-for-byte, across float64/float32/complex128 + small-exact int64 and
+strided/reversed reads. The three BACKEND polynomial ops (`roots`/`polyfit`/`poly`-of-a-matrix) ride
+`linalg_parity` instead (above). `poly` and `polyint` on int64 return **float64** (NumPy floats them), which
+the corpus records; `polyder`/`vander` preserve int64. The pure single-operand ops (poly/polyder/polyint/
+vander/poly1d/cov/corrcoef) are **carved out of the blanket "unary ~ULP" excuse** in `MisalignedRegistry`
+(they are arithmetic, not transcendental-libm, so a ≤2-ULP drift is a regression — the same narrowing the
+ported float32 kernels get).
+
+### einsum (`einsum` tier)
+
+`einsum.jsonl` (`gen_oracle.py einsum`) gates `np.einsum` + `np.einsum_path`. **einsum** is byte-exact vs
+NumPy for INTEGER/complex-integer contractions (order-independent) and for SMALL-EXACT float contractions
+(short exact sums), plus the whole VIEW path (transpose/diagonal/no-sum/copy) — probed across
+matmul/transpose/diag/trace/row-sum/col-sum/full-sum/dot/outer/hadamard/frobenius/batched. **Operands are
+NONZERO on purpose:** a signed zero diverges in the outer/hadamard einsums (NumPy's `sop` accumulator, seeded
+`+0.0`, absorbs a `-x*0 = -0.0` term into `+0.0` while NumSharp's element-wise multiply keeps the raw
+`-0.0`), so zero operands are avoided — signed-zero and larger-float-contraction handling are out of scope
+(the latter routes through matmul; NumPy's default einsum uses its own C iterator, so it is NOT byte-exact
+and stays small-exact here). **einsum_path** returns the contraction planner's info STRING (`text` kind); it
+is shape-derived (operand values irrelevant) and byte-identical to NumPy for non-ellipsis subscripts (the
+ellipsis placeholder letters are NumPy's one hash-randomised divergence and are avoided).
+
+### cross / cov / corrcoef (in the `products` tier)
+
+The `products` tier gained the lone product-family gap and the covariance pair (2026-08-21). **`cross`** is
+multiply-subtract (`a1*b2 - a2*b1`, …) with NO reduction, so it is bit-exact for float64/float32/complex128/
+int64 at every value and layout (int32-and-narrower widen to int64 in NumPy 2.x's cross — a dtype divergence
+left out). **`cov`/`corrcoef`** are normalized dot products, byte-exact for the SMALL observation counts
+here (the dot is an exact short float sum) across rowvar/bias/ddof/y/complex/int-widen; the WEIGHTED cov path
+(`fweights`/`aweights`) rounds 1 ULP off in the `fact` normalisation (measured) and is left to cov's
+tolerance battle-tests.
+
 ### np.random byte-parity (`random_parity` tiers)
 
 The documented claim — MT19937 with 1-to-1 seed/state parity, "byte-identical sequences" — was

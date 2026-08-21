@@ -3868,6 +3868,20 @@ def _lp_lstsq(cases, name, a, b, dt):
     })
 
 
+def _lp_poly_fit(cases, x, y, deg, dt):
+    """polyfit reaches lstsq (backend); default return is the coefficient array."""
+    bx, vx = np.ascontiguousarray(x), np.ascontiguousarray(x)
+    by, vy = np.ascontiguousarray(y), np.ascontiguousarray(y)
+    r = np.asarray(np.polyfit(vx, vy, deg))
+    cases.append({
+        "id": f"polyfit/deg{deg}/{dt}/C/{len(cases)}",
+        "op": "polyfit", "params": {"deg": deg},
+        "operands": [describe(bx, vx), describe(by, vy)],
+        "expected": _arr_expected(r),
+        "layout": "C", "valueclass": "linalg",
+    })
+
+
 def gen_linalg_parity():
     # Deterministic single-thread bytes regardless of ambient OPENBLAS_NUM_THREADS.
     _set_openblas_threads(1)
@@ -4090,6 +4104,30 @@ def gen_linalg_parity():
     for dt in ("float32", "int32"):
         _lp_lstsq(cases, f"over_{dt}", OVER.astype(dt) if dt != "int32" else OVER.astype("int32"),
                   Y1.astype(dt) if dt != "int32" else Y1.astype("int32"), dt)
+
+    # ==========================  polynomial backend ops  ================================
+    # roots (eigenvalues of the companion matrix), polyfit (lstsq) and poly of a 2-D matrix
+    # (char poly via eigvals) all reach the LAPACK seam and THROW without the backend, so they
+    # ride this host-pinned tier rather than the portable poly.jsonl. Small operands, threads=1.
+    for dt in ("float64", "float32", "complex128"):
+        rp = np.array([1, -6, 11, -6]).astype(dt)          # roots 1,2,3
+        _lp_arr(cases, "roots", "cubic", rp, {}, lambda v: np.roots(v), dt, "C", rng)
+    _lp_arr(cases, "roots", "quad_complex", np.array([1., 0, 1]), {},   # roots ±i
+            lambda v: np.roots(v), "float64", "C", rng)
+    _lp_arr(cases, "roots", "leading_zeros", np.array([0., 0, 1, -3, 2]), {},
+            lambda v: np.roots(v), "float64", "C", rng)
+    # poly of a 2-D matrix -> characteristic polynomial (eigvals path)
+    for dt in ("float64", "complex128"):
+        Mp = np.array([[1, 2], [3, 4]]).astype(dt)
+        _lp_arr(cases, "poly", "mat2", Mp, {}, lambda v: np.poly(v), dt, "C", rng)
+    _lp_arr(cases, "poly", "mat3", np.array([[2., 0, 0], [1, 3, 0], [4, 5, 6]]), {},
+            lambda v: np.poly(v), "float64", "C", rng)
+    # polyfit -> least-squares coefficients (lstsq path); default return is the coeff array.
+    xf = np.array([0., 1, 2, 3, 4])
+    yf = np.array([1., 3, 2, 5, 4])
+    for deg in (1, 2, 3):
+        _lp_poly_fit(cases, xf, yf, deg, "float64")
+    _lp_poly_fit(cases, xf.astype(np.float32), yf.astype(np.float32), 2, "float32")
 
     return cases
 # =====================================================================================
@@ -5646,8 +5684,228 @@ def gen_products():
         try_emit("tensordot", {"axes": 1}, [C(a2), C(mk)],
                  lambda: np.tensordot(a2, mk, 1), "deep", dt, truth=t)
 
+    # --- cross: the lone product-family gap. The cross product is multiply-subtract
+    #     (a1*b2 - a2*b1, ...), NO long reduction, so it is bit-exact for float/complex/
+    #     int64 at every value and every layout (it reads through strides). int32 and
+    #     narrower widen to int64 in NumPy 2.x's cross — a dtype divergence deliberately
+    #     left out; the product logic is dtype-agnostic and the four dtypes here cover it.
+    CROSS_DTYPES = ["float64", "float32", "complex128", "int64"]
+    for dt in CROSS_DTYPES:
+        ndt = np.dtype(dt)
+
+        def cv(vals, _ndt=ndt):
+            a = np.array(vals, dtype=np.float64)
+            if _ndt.kind == "c":
+                a = a + 1j * a[::-1]
+            return np.ascontiguousarray(a.astype(_ndt))
+
+        a3, b3 = cv([1, 2, 3]), cv([4, 5, 6])
+        emit("cross", {}, [C(a3), C(b3)], np.cross(a3, b3), "3v", dt)
+        A23 = np.ascontiguousarray(np.stack([cv([1, 2, 3]), cv([-2, 0, 4])]))
+        B23 = np.ascontiguousarray(np.stack([cv([4, 5, 6]), cv([1, -1, 2])]))
+        emit("cross", {}, [C(A23), C(B23)], np.cross(A23, B23), "batch", dt)
+    # axis params: vectors laid out along axis 0 (columns).
+    Ac = np.ascontiguousarray(np.array([[1., 4], [2, 5], [3, 6]]))
+    Bc = np.ascontiguousarray(np.array([[7., 1], [8, 0], [9, 2]]))
+    emit("cross", {"axisa": 0, "axisb": 0, "axisc": 0}, [C(Ac), C(Bc)],
+         np.cross(Ac, Bc, axisa=0, axisb=0, axisc=0), "axis0", "float64")
+    # strided/reversed reads of the cross operand (F / negrow / negcol).
+    A23f = np.ascontiguousarray(np.array([[1., 2, 3], [4, 5, 6]]))
+    B23f = np.ascontiguousarray(np.array([[7., 8, 9], [1, 0, 2]]))
+    for lay in ("F", "negrow", "negcol"):
+        baseA, viewA = _mm_layout(A23f, lay)
+        emit("cross", {}, [(baseA, viewA), (np.ascontiguousarray(B23f), B23f)],
+             np.cross(viewA, B23f), f"lay_{lay}", "float64")
+
+    # --- cov / corrcoef: covariance is a normalized dot product, so byte-exact for SMALL
+    #     observation counts (the dot is an exact short float sum). The UNWEIGHTED param
+    #     surface (rowvar/bias/ddof/y/complex/int-widen) is recorded here; WEIGHTED cov
+    #     (fweights/aweights) rounds 1 ULP off in the `fact` normalization and is left to
+    #     cov's tolerance battle-tests. A second operand IS the `y` variable (OpRegistry
+    #     keys off the operand count).
+    Mcov = np.array([[0., 2, 1, 4], [3, 1, 5, 2]])
+    x1, y1 = np.array([1., 2, 3, 4]), np.array([2., 1, 4, 3])
+    Mc = np.array([[1 + 1j, 2 - 1j, 3 + 0j], [0 + 2j, 1 + 0j, 2 - 2j]])
+    emit("cov", {}, [C(Mcov)], np.cov(Mcov), "2x4", "float64")
+    emit("cov", {"bias": True}, [C(Mcov)], np.cov(Mcov, bias=True), "bias", "float64")
+    emit("cov", {"ddof": 0}, [C(Mcov)], np.cov(Mcov, ddof=0), "ddof0", "float64")
+    emit("cov", {"ddof": 2}, [C(Mcov)], np.cov(Mcov, ddof=2), "ddof2", "float64")
+    emit("cov", {"rowvar": False}, [C(Mcov)], np.cov(Mcov, rowvar=False), "colvar", "float64")
+    emit("cov", {}, [C(x1)], np.cov(x1), "1d", "float64")
+    emit("cov", {}, [C(x1), C(y1)], np.cov(x1, y1), "xy", "float64")
+    emit("cov", {}, [C(Mcov.astype(np.int64))], np.cov(Mcov.astype(np.int64)), "int", "int64")
+    emit("cov", {}, [C(Mc)], np.cov(Mc), "complex", "complex128")
+    emit("corrcoef", {}, [C(Mcov)], np.corrcoef(Mcov), "2x4", "float64")
+    emit("corrcoef", {"rowvar": False}, [C(Mcov)], np.corrcoef(Mcov, rowvar=False), "colvar", "float64")
+    emit("corrcoef", {}, [C(x1), C(y1)], np.corrcoef(x1, y1), "xy", "float64")
+    emit("corrcoef", {}, [C(Mc)], np.corrcoef(Mc), "complex", "complex128")
+
     if skipped:
         print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+# ---------------------------------------------------------------------------
+# T-poly — the PORTABLE polynomial family (poly.jsonl). These are pure array
+# arithmetic / convolution / Horner with NO backend and NO long reduction, so
+# they are bit-exact everywhere (probed: Horner order, leading-zero normalisation
+# and polynomial division all match NumPy byte-for-byte). The three BACKEND
+# polynomial ops — roots (eigvals of the companion matrix), polyfit (lstsq) and
+# poly of a 2-D matrix (eigvals) — ride the host-pinned linalg_parity tier instead.
+def gen_poly():
+    cases = []
+    n = 0
+
+    def add(op, params, operands, r, tag, dt):
+        nonlocal n
+        exp = _tuple_expected([np.asarray(x) for x in r]) if isinstance(r, tuple) \
+            else _arr_expected(np.asarray(r))
+        cases.append({"id": f"{op}/{tag}/{dt}/{n}", "op": op, "params": params,
+                      "operands": operands, "expected": exp, "layout": tag, "valueclass": "poly"})
+        n += 1
+
+    def C(a):
+        a = np.ascontiguousarray(a)
+        return describe(a, a)
+
+    for dt in ["float64", "float32", "complex128", "int64"]:
+        ndt = np.dtype(dt)
+
+        def cast(vals, _ndt=ndt):
+            a = np.array(vals, dtype=np.float64)
+            if _ndt.kind == "c":
+                a = a + 1j * (0.5 * a[::-1])
+            return np.ascontiguousarray(a.astype(_ndt))
+
+        # poly (1-D roots -> coefficients, the convolution branch)
+        add("poly", {}, [C(cast([1, 2, 3]))], np.poly(cast([1, 2, 3])), "roots3", dt)
+        add("poly", {}, [C(cast([1, -1, 2, -2]))], np.poly(cast([1, -1, 2, -2])), "roots4", dt)
+        # polyval (Horner)
+        p, x = cast([1, -2, 3]), cast([0, 1, 2, 3])
+        add("polyval", {}, [C(p), C(x)], np.polyval(p, x), "vec", dt)
+        add("polyval", {}, [C(cast([2, 0, -1, 5])), C(cast([-1, 0.5, 2]))],
+            np.polyval(cast([2, 0, -1, 5]), cast([-1, 0.5, 2])), "vec2", dt)
+        # vander
+        xv = cast([1, 2, 3, 4])
+        add("vander", {"N": 3}, [C(xv)], np.vander(xv, 3), "N3", dt)
+        add("vander", {}, [C(xv)], np.vander(xv), "default", dt)
+        add("vander", {"increasing": True}, [C(xv)], np.vander(xv, increasing=True), "inc", dt)
+        # polyder
+        pd = cast([1, 2, 3, 4, 5])
+        add("polyder", {}, [C(pd)], np.polyder(pd), "m1", dt)
+        add("polyder", {"m": 2}, [C(pd)], np.polyder(pd, 2), "m2", dt)
+        # polyint (always float-returning; k = integration constant)
+        add("polyint", {}, [C(pd)], np.polyint(pd), "m1", dt)
+        add("polyint", {"m": 2}, [C(pd)], np.polyint(pd, 2), "m2", dt)
+        add("polyint", {"k": 3.0}, [C(cast([1, 2, 3]))], np.polyint(cast([1, 2, 3]), k=3.0), "k", dt)
+        # polyadd / polysub / polymul (different-length operands)
+        a1, a2 = cast([1, 2, 3]), cast([4, 5])
+        add("polyadd", {}, [C(a1), C(a2)], np.polyadd(a1, a2), "difflen", dt)
+        add("polysub", {}, [C(a1), C(a2)], np.polysub(a1, a2), "difflen", dt)
+        add("polymul", {}, [C(a1), C(a2)], np.polymul(a1, a2), "conv", dt)
+        # polydiv -> (quotient, remainder) tuple
+        add("polydiv", {}, [C(cast([1, 2, 3, 4])), C(cast([1, 1]))],
+            np.polydiv(cast([1, 2, 3, 4]), cast([1, 1])), "div", dt)
+        # poly1d: leading-zero normalisation, and construction from roots
+        add("poly1d_coeffs", {}, [C(cast([0, 0, 1, 2, 3]))],
+            np.poly1d(cast([0, 0, 1, 2, 3])).coeffs, "norm", dt)
+        add("poly1d_fromroots", {}, [C(cast([1, 2, 3]))],
+            np.poly1d(cast([1, 2, 3]), r=True).coeffs, "fromroots", dt)
+
+    # layouts (float64): polyval and vander read their operands through strides.
+    xL = np.array([1., 2, 3, 4])
+    pL = np.array([1., -2, 3])
+    for lay in ("F", "negrow"):
+        # a 1-D operand: reverse it (F == C for 1-D, so use a reversed view for a real stride).
+        base = np.ascontiguousarray(xL[::-1]); view = base[::-1]
+        add("vander", {"N": 3}, [describe(base, view)], np.vander(view, 3), f"vander_{lay}", "float64")
+        base2 = np.ascontiguousarray(pL[::-1]); view2 = base2[::-1]
+        add("polyval", {}, [describe(base2, view2), C(xL)], np.polyval(view2, xL), f"polyval_{lay}", "float64")
+
+    return cases
+
+
+# ---------------------------------------------------------------------------
+# T-einsum — np.einsum + np.einsum_path (einsum.jsonl). einsum is byte-exact vs
+# NumPy for INTEGER/complex-integer contractions (order-independent) and for
+# SMALL-EXACT float contractions (short exact sums), plus the whole VIEW path
+# (transpose/diagonal/no-sum) — probed. Larger float contractions differ (NumSharp
+# routes them through matmul; NumPy's default einsum uses its own C iterator), so
+# operands are kept small-exact. einsum_path returns the info STRING (text kind);
+# it is shape-derived (no values) and byte-identical to NumPy for non-ellipsis
+# subscripts (the ellipsis placeholder letters are NumPy's one hash-randomised
+# divergence and are avoided here).
+def gen_einsum():
+    cases = []
+    n = 0
+
+    def add(op, params, operands, expected, tag, dt):
+        nonlocal n
+        cases.append({"id": f"{op}/{tag}/{dt}/{n}", "op": op, "params": params,
+                      "operands": operands, "expected": expected, "layout": tag, "valueclass": "einsum"})
+        n += 1
+
+    def C(a):
+        a = np.ascontiguousarray(a)
+        return describe(a, a)
+
+    for dt in ["float64", "complex128", "int64"]:
+        ndt = np.dtype(dt)
+
+        # NONZERO value pool: a signed zero would diverge in the outer/hadamard einsums, where
+        # NumPy's sop accumulator (seeded +0.0) absorbs the sign of a `-x * 0 = -0.0` term into
+        # +0.0 while NumSharp's element-wise multiply keeps the raw -0.0. Avoiding zero operands
+        # keeps the contraction gate strictly byte-exact; zero/negative accumulation is already
+        # gated by the products tier.
+        _re = np.array([1, 2, 3, -1, -2, 4, 5], dtype=np.float64)
+        _im = np.array([1, -1, 2, -2, 3], dtype=np.float64)
+
+        def sm(shape, off=0, _ndt=ndt):
+            k = int(np.prod(shape))
+            a = _re[(np.arange(k) + off) % len(_re)]
+            if _ndt.kind == "c":
+                a = a + 1j * _im[(np.arange(k) + off) % len(_im)]
+            return np.ascontiguousarray(a.astype(_ndt).reshape(shape))
+
+        E = lambda s, *ops: _arr_expected(np.asarray(np.einsum(s, *ops)))
+        M23, M34, M33 = sm((2, 3)), sm((3, 4), 2), sm((3, 3))
+        v3, w3 = sm((3,)), sm((3,), 4)
+        B1, B2 = sm((2, 2, 3)), sm((2, 3, 2), 1)
+        cases_specs = [
+            ("ij,jk->ik", (M23, M34), "matmul"),
+            ("ij->ji", (M23,), "transpose"),
+            ("ii->i", (M33,), "diag"),
+            ("ii->", (M33,), "trace"),
+            ("ij->i", (M23,), "rowsum"),
+            ("ij->j", (M23,), "colsum"),
+            ("ij->", (M23,), "fullsum"),
+            ("i,i->", (v3, w3), "dot"),
+            ("i,j->ij", (v3, sm((2,), 3)), "outer"),
+            ("ij,ij->ij", (M23, sm((2, 3), 5)), "hadamard"),
+            ("ij,ij->", (M23, sm((2, 3), 5)), "frobenius"),
+            ("bij,bjk->bik", (B1, B2), "batched"),
+            ("ij->ij", (M23,), "copy"),
+        ]
+        for subs, ops, tag in cases_specs:
+            add("einsum", {"subscripts": subs}, [C(o) for o in ops], E(subs, *ops), tag, dt)
+
+    # einsum_path — the contraction planner's info string (text kind). Shape-only.
+    def path(subs, shapes, optimize, tag):
+        nonlocal n
+        ops = [np.zeros(s) for s in shapes]
+        _, rep = np.einsum_path(subs, *ops, optimize=optimize)
+        cases.append({"id": f"einsum_path/{tag}/{n}", "op": "einsum_path",
+                      "params": {"subscripts": subs, "optimize": optimize},
+                      "operands": [C(o) for o in ops],
+                      "expected": {"kind": "text", "value": rep}, "layout": tag, "valueclass": "einsum"})
+        n += 1
+
+    path("ij,jk,kl->il", [(4, 5), (5, 6), (6, 7)], "greedy", "chain3_greedy")
+    path("ij,jk,kl->il", [(4, 5), (5, 6), (6, 7)], "optimal", "chain3_optimal")
+    path("ij,jk->ik", [(3, 4), (4, 5)], "greedy", "matmul")
+    path("ea,fb,abcd,gc,hd->efgh", [(5, 4), (5, 4), (4, 4, 4, 4), (5, 4), (5, 4)], "greedy", "tensor5_greedy")
+    path("ea,fb,abcd,gc,hd->efgh", [(5, 4), (5, 4), (4, 4, 4, 4), (5, 4), (5, 4)], "optimal", "tensor5_optimal")
+
     return cases
 
 
@@ -6042,6 +6300,12 @@ def main():
         # interop live-parity suite proves) — gen_linalg_parity() forces single-thread, so
         # blas_identity() records blas_threads=1 and the C# gate enables the backend at 1.
         write_jsonl(os.path.join(corpus_dir, "linalg_parity.host.jsonl"), [blas_identity()])
+    elif mode == "poly":
+        cases = gen_poly()                                             # portable polynomial family
+        write_jsonl(os.path.join(corpus_dir, "poly.jsonl"), cases)
+    elif mode == "einsum":
+        cases = gen_einsum()                                           # np.einsum + einsum_path
+        write_jsonl(os.path.join(corpus_dir, "einsum.jsonl"), cases)
     elif mode == "specials":
         cases = gen_specials()                                          # IEEE special-value parity tier
         write_jsonl(os.path.join(corpus_dir, "specials.jsonl"), cases)
@@ -6059,7 +6323,7 @@ def main():
         cases = gen_fft()                                               # np.fft.* differential tier
         write_jsonl(os.path.join(corpus_dir, "fft.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | specials | precision | random_parity | products | fft)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | products | fft)")
         sys.exit(2)
 
 

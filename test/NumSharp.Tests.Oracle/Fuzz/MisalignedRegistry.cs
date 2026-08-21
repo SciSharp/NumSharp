@@ -103,6 +103,23 @@ namespace NumSharp.Tests.Fuzz
             "tanh"
         };
 
+        /// <summary>
+        ///     Single-operand ops that are PURE ARITHMETIC (convolution / Horner / powers / leading-
+        ///     zero normalisation / normalized dot) rather than transcendental-libm — so they have NO
+        ///     legitimate reason to differ from NumPy by a ULP, and are held BIT-EXACT. Carved out of
+        ///     the blanket "unary ~ULP" excuse below for the same reason the ported float32 kernels
+        ///     are: the excuse's rationale ("transcendental/magnitude algorithm difference") does not
+        ///     apply, so a ≤2-ULP drift here is a regression, not algorithm noise, and must fail the
+        ///     gate. Probed byte-exact vs NumPy 2.4.2 (poly.jsonl / the cov/corrcoef cases in
+        ///     products.jsonl). The 2-operand siblings (polyval/polyadd/polymul/cross/einsum/…) never
+        ///     reach the unary branch and are already held strict.
+        /// </summary>
+        private static readonly System.Collections.Generic.HashSet<string> ByteExactArithmeticUnaryOps = new()
+        {
+            "poly", "polyder", "polyint", "vander", "poly1d_coeffs", "poly1d_fromroots",
+            "cov", "corrcoef"
+        };
+
         public static string Classify(
             FuzzCorpus.Case c, DivergenceKind kind,
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs,
@@ -549,6 +566,7 @@ namespace NumSharp.Tests.Fuzz
             if (kind == DivergenceKind.Value && c.Operands.Length == 1
                 && !(tc == NPTypeCode.Single && NumPyPortedFloat32Kernels.Contains(c.Op))
                 && !(tc == NPTypeCode.Double && NumPyPortedFloat64Kernels.Contains(c.Op))
+                && !ByteExactArithmeticUnaryOps.Contains(c.Op)
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "unary ~ULP (transcendental/magnitude algorithm difference)";
 

@@ -319,6 +319,13 @@ namespace NumSharp.Tests.Fuzz
                     return new[] { x, res, rank, sv };
                 }
 
+                // polydiv -> (quotient, remainder). Portable (polynomial long division).
+                case "polydiv":
+                {
+                    var (q, r) = np.polydiv(ops[0], ops[1]);
+                    return new[] { q, r };
+                }
+
                 default:
                     throw new NotSupportedException($"tuple op '{op}' is not registered in OpRegistry");
             }
@@ -361,6 +368,12 @@ namespace NumSharp.Tests.Fuzz
             {
                 case "array_str": return np.array_str(ops[0]);
                 case "array_repr": return np.array_repr(ops[0]);
+                // einsum_path returns the contraction planner's info STRING (shape-derived, so
+                // the operand values are irrelevant). Byte-identical to NumPy for non-ellipsis
+                // subscripts; the tuple's path structure is encoded in this same string.
+                case "einsum_path":
+                    return np.einsum_path(p["subscripts"].GetString(), ops,
+                                          (object)p["optimize"].GetString()).repr;
                 default:
                     throw new NotSupportedException($"text op '{op}' is not registered in OpRegistry");
             }

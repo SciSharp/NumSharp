@@ -365,6 +365,51 @@ namespace NumSharp.Tests.Fuzz
                 // qr(mode='r') -> just R; reduced/complete/raw tuples are in ApplyTuple.
                 case "qr": return np.linalg.qr(ops[0], "r").R;
 
+                // ---- cross / cov / corrcoef (products tier: dot-based value gate) ----------
+                // cross is multiply-subtract (no reduction) -> portable. cov/corrcoef are
+                // normalized dot products -> byte-exact for the small operands here. A SECOND
+                // operand is cov/corrcoef's `y` variable (keyed off the operand count).
+                case "cross":
+                    return p.ContainsKey("axisa")
+                        ? np.cross(ops[0], ops[1], axisa: p["axisa"].GetInt32(),
+                                   axisb: p["axisb"].GetInt32(), axisc: p["axisc"].GetInt32())
+                        : np.cross(ops[0], ops[1]);
+                case "cov":
+                    return np.cov(ops[0], ops.Length > 1 ? ops[1] : null,
+                                  rowvar: !p.TryGetValue("rowvar", out var cvr) || cvr.GetBoolean(),
+                                  bias: p.TryGetValue("bias", out var cvb) && cvb.GetBoolean(),
+                                  ddof: p.TryGetValue("ddof", out var cvd) ? cvd.GetInt32() : (int?)null);
+                case "corrcoef":
+                    return np.corrcoef(ops[0], ops.Length > 1 ? ops[1] : null,
+                                       rowvar: !p.TryGetValue("rowvar", out var ccr) || ccr.GetBoolean());
+
+                // ---- einsum (portable small-exact; float/int contractions + the view path) --
+                case "einsum": return np.einsum(p["subscripts"].GetString(), ops);
+
+                // ---- polynomial family --------------------------------------------------
+                // Pure/portable (poly.jsonl): polyval/vander/polyder/polyint/polyadd/polysub/
+                // polymul/poly1d, and poly of a 1-D root sequence. Backend (linalg_parity):
+                // roots (eigvals), polyfit (lstsq), poly of a 2-D matrix (eigvals) — `poly`
+                // dispatches on the operand rank inside np.poly, so ONE case serves both.
+                case "poly": return np.poly(ops[0]);
+                case "roots": return np.roots(ops[0]);
+                case "polyfit": return np.polyfit(ops[0], ops[1], p["deg"].GetInt32()).coeffs;
+                case "polyval": return np.polyval(ops[0], ops[1]);
+                case "vander":
+                    return np.vander(ops[0],
+                                     p.TryGetValue("N", out var vN) ? vN.GetInt32() : (int?)null,
+                                     p.TryGetValue("increasing", out var vI) && vI.GetBoolean());
+                case "polyder": return np.polyder(ops[0], p.TryGetValue("m", out var pdm) ? pdm.GetInt32() : 1);
+                case "polyint":
+                    return p.ContainsKey("k")
+                        ? np.polyint(ops[0], p.TryGetValue("m", out var pim) ? pim.GetInt32() : 1, p["k"].GetDouble())
+                        : np.polyint(ops[0], p.TryGetValue("m", out var pim2) ? pim2.GetInt32() : 1);
+                case "polyadd": return np.polyadd(ops[0], ops[1]);
+                case "polysub": return np.polysub(ops[0], ops[1]);
+                case "polymul": return np.polymul(ops[0], ops[1]);
+                case "poly1d_coeffs": return new poly1d(ops[0]).coeffs;
+                case "poly1d_fromroots": return new poly1d(ops[0], r: true).coeffs;
+
                 // ---- diag / tri family ----------------------------------------------------
                 // `tri` is a pure generator: ops[0] is a 1-element carrier whose dtype selects
                 // tri's dtype (the corpus loops dtype through it), N/M/k come from params.
