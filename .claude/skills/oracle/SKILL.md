@@ -47,7 +47,7 @@ and the divergence ledger `test/NumSharp.Tests.Oracle/Fuzz/README.md`. This skil
 ## The gate
 
 `dotnet test --filter "TestCategory=FuzzMatrix"` runs the gate classes:
-- **`FuzzCorpusTests`** — the op corpus (~50 tiers; `astype/binary/unary/reduce/manip/...`, the value/parity tiers `specials/precision/products/fft/matmul_parity/numpy_f32_kernels/...`, and the result-kind tiers `iter/dtype_text/out_where/errors_full`). This is where new-op work lands.
+- **`FuzzCorpusTests`** — the op corpus (~50 tiers; `astype/binary/unary/reduce/manip/...`, the value/parity tiers `specials/precision/products/fft/matmul_parity/numpy_f32_kernels/...`, and the result-kind & error-parity tiers `iter/dtype_text/out_where/errors_full`). This is where new-op work lands.
 - **`IndexOracleTests`** — advanced-indexing get/set (`index_curated` + `index_dtype` + `index_setter_dtype` + `index_random`).
 - **`MetamorphicTests`** — NumPy-free invariants (round-trips / involutions), no oracle needed.
 - **`HarnessSelfTests`** — proves the gate has teeth (BitDiff catches value/NaN/-0 diffs; the corpus is non-vacuous). A green FuzzMatrix that skipped every case would fail here.

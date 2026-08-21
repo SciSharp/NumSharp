@@ -22,7 +22,9 @@ Everything else — including signed zero (`-0.0` ≠ `0.0`), integer wrap, floa
 
 2. **NumSharp is wrong → it's a real bug.** Fix the op. If you can't fix it now, carve the shrunk case into an
    `[OpenBugs]` reproduction (`OpenBugs.cs`, or a focused file like `OpenBugs.DtypeCoverage.cs` / `OpenBugs.Char.cs`)
-   so CI excludes it but it's tracked and un-silenced. Do NOT excuse a real bug in `MisalignedRegistry`.
+   so CI excludes it but it's tracked and un-silenced. Do NOT excuse a real bug in `MisalignedRegistry`. Once fixed,
+   if the divergence came from the nightly soak, drop the shrunk repro into `Fuzz/corpus/regressions/` — the
+   `FuzzRegression` tier auto-replays every `regressions/*.jsonl`, so that exact case is gated bit-exact forever after.
 
 3. **The difference is intended and defensible → excuse it in `MisalignedRegistry.cs`.** This is for documented,
    deliberate NumSharp-vs-NumPy differences (e.g. a dtype NumSharp handles differently by design, an error-text

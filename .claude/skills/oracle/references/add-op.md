@@ -142,7 +142,9 @@ When no existing `gen_<mode>` fits (a new op family with its own fixtures — mi
    `write_jsonl(corpus_dir + "/<newmode>.jsonl", gen_<newmode>(...) [+ char_tier("<newmode>")])`, and add the
    `char_tier` branch if you want Char coverage.
 3. **New test method** — add `[FuzzMatrix] public void <Tier>() => RunCorpus("<newmode>.jsonl");` in
-   `FuzzCorpusTests.cs`.
+   `FuzzCorpusTests.cs`. Recommended: also add a `MinCases["<newmode>.jsonl"] = <~80% of the count>` floor in that
+   file, so a silently truncated regeneration fails loudly instead of passing with a fraction of its cells (unlisted
+   files default to a floor of 1).
 4. **Register the opnames** in `OpRegistry.cs` as usual, regenerate (`python gen_oracle.py <newmode>`), build, run.
 
 ## Adding a new DTYPE or LAYOUT

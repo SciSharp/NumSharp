@@ -16,7 +16,7 @@ python gen_oracle.py <mode>
 #                       reduce nanreduce scan stat logic modf manip sort tail rounding params
 #                       aliasing copyto place where matmul errors groupa
 #   value/parity tiers: specials precision products fft random_parity matmul_parity numpy_f32
-#   result-kind tiers:  iter dtype_text out_where errors_full
+#   kind/out=/error:    iter dtype_text out_where errors_full   (result-kind + ufunc out=/where= + message parity)
 # Authoritative list = the `elif mode == ...` branches in gen_oracle.py's main() (and its
 # unknown-mode error message). Notes: `numpy_f32` writes BOTH numpy_f32_kernels.jsonl AND
 # numpy_f64_kernels.jsonl; `matmul_parity` ALSO writes the host pin matmul_parity.host.jsonl;
