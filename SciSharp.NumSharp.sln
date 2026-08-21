@@ -27,7 +27,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Tests.Interop", "t
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Tests.Oracle", "test\NumSharp.Tests.Oracle\NumSharp.Tests.Oracle.csproj", "{2926BF3B-491A-45E1-ADE8-F4CC0CECDB17}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "oracle", "oracle", "{296CAFDF-6C4C-5222-8E96-3746EBAF8B3E}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "NumSharp.Tests.Oracle.Python", "NumSharp.Tests.Oracle.Python", "{296CAFDF-6C4C-5222-8E96-3746EBAF8B3E}"
 	ProjectSection(SolutionItems) = preProject
 		test\oracle\fuzz_random.py = test\oracle\fuzz_random.py
 		test\oracle\gen_decimal_oracle.cs = test\oracle\gen_decimal_oracle.cs
