@@ -1056,6 +1056,10 @@ def gen_manip(dtypes, layout_names):
                 ("atleast_2d", {}, lambda v: np.atleast_2d(v)),
                 ("atleast_3d", {}, lambda v: np.atleast_3d(v)),
                 ("flip", {}, lambda v: np.flip(v)),            # reverse ALL axes (0-d -> scalar)
+                # byteswap: reverse each element's bytes (dtype preserved, values reinterpreted).
+                # ndarray METHOD (no np.byteswap); not-inplace never raises, so no nd/sz guard.
+                # Complex swaps its two halves; 1-byte dtypes are a value no-op (still a copy).
+                ("byteswap", {}, lambda v: v.byteswap()),
             ]
             if sz > 0:
                 jobs.append(("reshape", {"shape": [sz]}, lambda v, sz=sz: v.reshape(sz)))

@@ -100,6 +100,8 @@ namespace NumSharp.Tests.Fuzz
                     return p.ContainsKey("axis") ? np.flip(ops[0], p["axis"].GetInt32()) : np.flip(ops[0]);
                 case "fliplr": return np.fliplr(ops[0]);
                 case "flipud": return np.flipud(ops[0]);
+                // ndarray.byteswap (no np.byteswap) — not-inplace returns a fresh byte-swapped copy.
+                case "byteswap": return ops[0].byteswap();
                 case "permute_dims": return np.permute_dims(ops[0],
                     p.ContainsKey("axes") ? ParseIntArray(p["axes"]) : null);
                 case "matrix_transpose": return np.matrix_transpose(ops[0]);
