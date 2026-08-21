@@ -707,6 +707,15 @@ def run_manipulation_benchmarks(n: int, iterations: int) -> List[BenchmarkResult
     r.name, r.category, r.suite, r.dtype = "np.trim_zeros", "TrimZeros", "Manipulation", dtype_name
     results.append(r)
 
+    # byteswap (journey3): reverse each element's bytes (endian toggle) into a fresh copy — the one
+    # O(N) byte-permutation op here (a fused read->VPSHUFB->write pass, non-temporal above the
+    # L2-scale threshold). Twin of Benchmarks/Manipulation/ByteswapBenchmarks.cs; "np.byteswap"
+    # normalizes onto the C# "np.byteswap(a)" label for the (op, dtype, N) join.
+    def np_byteswap(): return arr_2d.byteswap()
+    r = benchmark(np_byteswap, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.byteswap", "Byteswap", "Manipulation", dtype_name
+    results.append(r)
+
     # The two-dimensional base family (journey3): diag / diagflat / tri / tril / triu /
     # fill_diagonal / tril_indices / triu_indices. Three distinct cost classes, kept apart
     # deliberately: diag(2-D) is an O(1) read-only diagonal VIEW (measures dispatch overhead);
