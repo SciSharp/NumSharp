@@ -89,7 +89,7 @@ operand as the result.
 
 ```bash
 cd test/oracle
-python gen_oracle.py <mode>          # e.g. manip  -> writes ../NumSharp.UnitTest/Fuzz/corpus/manip.jsonl
+python gen_oracle.py <mode>          # e.g. manip  -> writes ../NumSharp.UnitTest.Oracle/Fuzz/corpus/manip.jsonl
 ```
 
 Sanity-check the op landed (compact JSON — parse it, don't grep for `"op": "…"`):
@@ -98,7 +98,7 @@ Sanity-check the op landed (compact JSON — parse it, don't grep for `"op": "�
 python - <<'PY'
 import json, collections
 c = collections.Counter()
-for line in open("../NumSharp.UnitTest/Fuzz/corpus/manip.jsonl", encoding="utf-8"):
+for line in open("../NumSharp.UnitTest.Oracle/Fuzz/corpus/manip.jsonl", encoding="utf-8"):
     if line.strip(): c[json.loads(line)["op"]] += 1
 print({k: c[k] for k in ["flip","fliplr","trim_zeros"]})
 PY
@@ -139,5 +139,5 @@ When no existing `gen_<mode>` fits (a new op family with its own fixtures — mi
 - **Dtype**: widen the mode's dtype axis toward `ALL_DTYPES` in `gen_oracle.py` (most tiers already use it). Char
   and Decimal are handled by their own paths (see `regenerate.md`). Then regenerate + rerun.
 - **Layout**: add a `(base, view)` builder to `layout_catalog.py` AND mirror it under the same name in
-  `test/NumSharp.UnitTest/Fuzz/LayoutCatalog.cs` (the C# side must rebuild the identical view). Regenerate every
+  `test/NumSharp.UnitTest.Oracle/Fuzz/LayoutCatalog.cs` (the C# side must rebuild the identical view). Regenerate every
   affected tier.

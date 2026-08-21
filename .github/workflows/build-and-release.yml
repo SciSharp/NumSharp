@@ -41,6 +41,12 @@ jobs:
     - name: Build
       run: dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
+    # The differential-fuzz ORACLE is its own project (isolated so the optional OpenBLAS engine can be
+    # managed apart from the managed-kernel tiers). It carries the FuzzMatrix gate plus the host-pinned
+    # matmul_parity / BlasBackendDelta tiers, so it must build and test on the release-blocking path.
+    - name: Build Oracle (differential-fuzz gate)
+      run: dotnet build test/NumSharp.UnitTest.Oracle/NumSharp.UnitTest.Oracle.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
     # Test filtering:
     #   - OpenBugs: excluded (known-failing bug reproductions)
     #   - HighMemory: excluded (requires 8GB+ RAM, too much for CI runners)
@@ -76,6 +82,33 @@ jobs:
           FILTER="$FILTER&TestCategory!=WindowsOnly"
         fi
         dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+          --configuration Release --no-build --framework net10.0 \
+          --filter "$FILTER" --logger "trx"
+
+    # The differential-fuzz gate (FuzzMatrix) now lives in NumSharp.UnitTest.Oracle. Same category
+    # filter — the Oracle project carries no OpenBugs/HighMemory tiers, but the filter is harmless and
+    # keeps the two suites symmetric.
+    - name: Test Oracle (net8.0)
+      shell: bash
+      timeout-minutes: 10
+      run: |
+        FILTER="TestCategory!=OpenBugs&TestCategory!=HighMemory"
+        if [[ "$RUNNER_OS" != "Windows" ]]; then
+          FILTER="$FILTER&TestCategory!=WindowsOnly"
+        fi
+        dotnet test test/NumSharp.UnitTest.Oracle/NumSharp.UnitTest.Oracle.csproj \
+          --configuration Release --no-build --framework net8.0 \
+          --filter "$FILTER" --logger "trx"
+
+    - name: Test Oracle (net10.0)
+      shell: bash
+      timeout-minutes: 10
+      run: |
+        FILTER="TestCategory!=OpenBugs&TestCategory!=HighMemory"
+        if [[ "$RUNNER_OS" != "Windows" ]]; then
+          FILTER="$FILTER&TestCategory!=WindowsOnly"
+        fi
+        dotnet test test/NumSharp.UnitTest.Oracle/NumSharp.UnitTest.Oracle.csproj \
           --configuration Release --no-build --framework net10.0 \
           --filter "$FILTER" --logger "trx"
 

@@ -15,6 +15,11 @@ using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("NumSharp.UnitTest, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
+// The isolated differential-fuzz ORACLE harness (Fuzz/ moved out of NumSharp.UnitTest). It
+// reconstructs corpus operands through the same internal view of Shape (strides/offset) and reads
+// result bytes through Storage, exactly as NumSharp.UnitTest did before the split.
+[assembly: InternalsVisibleTo("NumSharp.UnitTest.Oracle, PublicKey=" + NumSharpFriendKey.PublicKey)]
+
 // Optional out-of-box backends: they subclass DefaultEngine and so need the same internal view of
 // Shape (strides/offset) and the promotion helpers that the built-in kernels have.
 [assembly: InternalsVisibleTo("NumSharp.Interop.OpenBLAS, PublicKey=" + NumSharpFriendKey.PublicKey)]

@@ -207,7 +207,7 @@ static class Gen
         string here = AppContext.BaseDirectory;
         // resolve test/oracle dir regardless of run cwd: walk up to find NumSharp.UnitTest sibling.
         string oracleDir = FindOracleDir();
-        string corpus = Path.GetFullPath(Path.Combine(oracleDir, "..", "NumSharp.UnitTest", "Fuzz", "corpus"));
+        string corpus = Path.GetFullPath(Path.Combine(oracleDir, "..", "NumSharp.UnitTest.Oracle", "Fuzz", "corpus"));
         Directory.CreateDirectory(corpus);
 
         var unary = new List<string>();

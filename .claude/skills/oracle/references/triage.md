@@ -60,5 +60,5 @@ reported Passed. That's an intermittent teardown crash, not a red case. Re-run t
 
 ## Ledger
 
-The complete, human-readable divergence ledger is `test/NumSharp.UnitTest/Fuzz/README.md`. Keep it and
+The complete, human-readable divergence ledger is `test/NumSharp.UnitTest.Oracle/Fuzz/README.md`. Keep it and
 `MisalignedRegistry.cs` in sync when you excuse something.

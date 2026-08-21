@@ -2237,7 +2237,7 @@ test/oracle/                          corpus generators (NumPy 2.4.2 — run by 
                                       NumSharp.UnitTest/IO/corpus/npy_oracle.zip (286 cases)
   interop_write.cs                    the reverse direction: NumSharp writes, verify_npy_interop.py reads
   verify_npy_interop.py               manual gate — real NumPy reads NumSharp's output (needs Python + SDK)
-test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
+test/NumSharp.UnitTest.Oracle/Fuzz/          C# replay harness (no Python)
   FuzzCorpus.cs                       rebuilds EXACT NDArray views from (dtype,shape,strides,offset,bytes)
   OpRegistry.cs                       op-name → NumSharp call (pairs 1:1 with gen_oracle.py)
   BitDiff.cs / Shrinker.cs            bit-exact compare (NaN tokenized; Decimal by canonical VALUE so 1.0m≡1.00m) / shrink a failure to 1 element
@@ -2263,7 +2263,7 @@ test/NumSharp.UnitTest/IO/            .npy/.npz format gate (no Python)
                                       test_compat\* — do not drop that rule.
 ```
 
-- **Generators live in `test/oracle/`** and write the corpus into `test/NumSharp.UnitTest/Fuzz/corpus/` (path resolved relative to `test/oracle/`). CI replays the committed corpus, never the generators.
+- **Generators live in `test/oracle/`** and write the corpus into `test/NumSharp.UnitTest.Oracle/Fuzz/corpus/` (path resolved relative to `test/oracle/`). CI replays the committed corpus, never the generators.
 - **Result kinds & error messages.** `expected.kind` widens the corpus past "one array": `array`
   (default — dtype+shape+bytes), `scalar` (a C# scalar wrapped 0-d), `dtype` (compared by NumPy
   dtype NAME — gates the promotion table directly), `text` (printing, verbatim) and `tuple` (N
@@ -2293,7 +2293,7 @@ test/NumSharp.UnitTest/IO/            .npy/.npz format gate (no Python)
 - **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul rounding bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors groupa specials precision products random_parity`; `precision` additionally needs `mpmath`) + `python test/oracle/gen_index_oracle.py` (the `index_*` tiers) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl` + `dotnet run test/oracle/gen_decimal_oracle.cs` (the `decimal_*` tiers), then `dotnet build` (copies the corpus to test output).
 - **Truthful vs precise** (`precision.jsonl`, 72 truth-bearing cases): each case carries `expected.truth` — the correctly-rounded mathematical reference (exact `Fraction` / 200-bit mpmath, generator-side only) — over precision-ADVERSARIAL inputs (wide-magnitude/cancellation sums at N≤2049, large-mean variance, near-1 products, expm1/log1p small-|x|) the ordinary 8–36-element pools cannot express. Policy (the vision is byte-identical NumPy parity): **bit-exact to NumPy passes without truth ever being read — precise never fails**; truth only adjudicates divergences. Not-less-truthful than NumPy → excused "prefer-precise" parity debt (being MORE accurate than NumPy is still a divergence to close by porting NumPy's algorithm, never a win); less truthful beyond 4×/+8 ULP slack → precision LOSS, red unless a bounded known-bug branch covers it (`MisalignedRegistry` P1–P3; the unbounded summation blanket is gated on truth-absence so losses can't hide in it). Findings on arrival, excused bounded ≤256 ULP (P3): f32 var/std accumulation 55/26 ULP vs truth (NumPy 3/2), negative-stride reduce path 11–32 ULP (NumPy exact).
 - **Products & random streams**: `products.jsonl` (287) is the FIRST value gate for `inner`/`vdot`/`vecdot`/`matvec`/`vecmat`/`tensordot`/`linalg.multi_dot`/`linalg.matrix_power` — small-exact operands across all 13 dtypes (bit-parity holds even vs NumPy's BLAS since depth-4 float sums are exact; conjugation + loop-dtype rules gated) plus deep-K truth-bearing f32/f64 cases adjudicated prefer-precise. `random_parity.jsonl` (38, portable MT19937/uniform-arithmetic dists, hard everywhere) + `random_parity_host.jsonl` (108, libm-consuming transform/rejection samplers — win-amd64-authored, Inconclusive off-Windows like matmul_parity) pin the documented byte-identical seed claim the statistical tests couldn't. Findings: 8 samplers carved + pinned under `OpenBugsRandom.RandomParity_*` (gamma shape<1 via 2-arg, f, pareto, standard_cauchy, binomial, negative_binomial, multinomial, multivariate_normal); chisquare/wald/noncentral_f/dirichlet ride a scoped ≤8-ULP (32 wald) R1 envelope; C-long int outputs recorded widened to NumSharp's fixed int64.
-- **Run the gate**: `dotnet test --filter "TestCategory=FuzzMatrix"`. Each case is bit-exact (pass), a documented difference in `MisalignedRegistry` (excused, never silent), or a failure (red). Full divergence ledger: `test/NumSharp.UnitTest/Fuzz/README.md`.
+- **Run the gate**: `dotnet test --filter "TestCategory=FuzzMatrix"`. Each case is bit-exact (pass), a documented difference in `MisalignedRegistry` (excused, never silent), or a failure (red). Full divergence ledger: `test/NumSharp.UnitTest.Oracle/Fuzz/README.md`.
 
 ### The `.npy`/`.npz` format oracle (same philosophy, separate corpus)
 

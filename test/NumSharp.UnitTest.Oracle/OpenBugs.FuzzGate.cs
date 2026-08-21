@@ -16,7 +16,7 @@ namespace NumSharp.UnitTest
     ///     under [OpenBugs] below. NumPy 2.4.2 is the source of truth for every assertion.
     /// </summary>
     [TestClass]
-    public class FuzzGateRegressionTests : TestClass
+    public class FuzzGateRegressionTests
     {
         // ============================================================================
         //  F16 / B8: np.invert on non-integer dtypes must throw CLEANLY, never crash.
@@ -84,7 +84,7 @@ namespace NumSharp.UnitTest
     ///     invisible until a real regression sailed through the gate.
     /// </summary>
     [TestClass]
-    public class MisalignedRegistryTightnessTests : TestClass
+    public class MisalignedRegistryTightnessTests
     {
         private static FuzzCorpus.Case Case(string op, params (string dtype, long[] shape)[] operands)
             => new FuzzCorpus.Case

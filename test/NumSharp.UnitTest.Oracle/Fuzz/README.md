@@ -20,7 +20,7 @@ test/oracle/                         corpus generators (NumPy 2.4.2)
                                      varstd,matmul,astype,stat,where,sort,manip}.jsonl (12 tiers, 695 cases)
   fuzz_random.py                     seeded random fuzzer (13 dtypes × unary/binary/comparison/where/
                                      flat-reduce/astype kinds; NumSharp-producible layouts)
-test/NumSharp.UnitTest/Fuzz/
+test/NumSharp.UnitTest.Oracle/Fuzz/
   FuzzCorpus.cs                      reconstructs EXACT NDArray views from (dtype,shape,strides,offset,bytes)
   BitDiff.cs                         bit-exact compare; NaN tokenized; Decimal tokenized by canonical VALUE
                                      (scale-insensitive: 1.0m == 1.00m); ULP helpers (documented near-misses)

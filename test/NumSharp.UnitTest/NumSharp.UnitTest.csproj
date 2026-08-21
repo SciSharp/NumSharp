@@ -35,11 +35,14 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\NumSharp.Bitmap\NumSharp.Bitmap.csproj" />
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
-    <!-- The optional external-CBLAS engine. Referenced ONLY so its gate can run: the host-pinned
-         matmul_parity corpus tier and the BlasEngine contract tests. Its module initializer would
-         install the engine for the whole test run, which must NOT happen (every other tier asserts
-         NumSharp's own kernels), so the test assembly opts out via NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0
-         in BlasEngineAutoInstallGuard and enables it per-test instead. -->
+    <!-- The optional external-CBLAS/LAPACK engine. The differential-fuzz oracle (incl. the
+         host-pinned matmul_parity tier) moved to NumSharp.UnitTest.Oracle; this project keeps the
+         reference for its remaining ENGINE tests — the LAPACK factorisation gates in Backends/,
+         LinAlgEngineSeamTests (which asserts the NO-backend contract), and the Level-3 BLAS binding
+         tests. Its module initializer would install the engine for the whole test run, which must
+         NOT happen (every other tier asserts NumSharp's own kernels, and the seam test asserts the
+         backend is ABSENT), so this assembly opts out via NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0 in
+         its own BlasEngineAutoInstallGuard and the engine tests enable it per-test instead. -->
     <ProjectReference Include="..\..\src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj" />
   </ItemGroup>
 
@@ -49,12 +52,7 @@
     </None>
   </ItemGroup>
 
-  <!-- Differential-fuzzer oracle corpus: committed JSONL replayed by MSTest (no Python in CI). -->
-  <ItemGroup>
-    <None Update="Fuzz\corpus\**\*.jsonl">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
+  <!-- The differential-fuzzer oracle corpus (Fuzz/corpus/**) moved to NumSharp.UnitTest.Oracle. -->
 
   <!-- .npy/.npz format oracle: real NumPy 2.4.2 output, replayed by NpyOracleTests (no Python in CI). -->
   <ItemGroup>
