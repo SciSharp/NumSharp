@@ -80,12 +80,12 @@ namespace NumSharp.Backends
             // handle negative strides or offset-based views correctly.
             if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
             {
-                bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.strides[axis] == 1);
+                bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.Shape.Strides[axis] == 1);
                 var key = new CumulativeAxisKernelKey(inputArr.GetTypeCode, retTypeCode, ReductionOp.CumProd, innerAxisContiguous);
                 var kernel = DirectILKernelGenerator.TryGetCumulativeAxisKernel(key);
                 if (kernel != null)
                 {
-                    fixed (long* inputStrides = arr.strides)
+                    fixed (long* inputStrides = arr.Shape.Strides)
                     fixed (long* shapePtr = arr.shape)
                     {
                         kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);

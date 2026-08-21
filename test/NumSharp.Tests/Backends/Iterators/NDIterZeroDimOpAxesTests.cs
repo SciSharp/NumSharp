@@ -48,7 +48,9 @@ namespace NumSharp.Tests.Backends.Iterators
             return pr;
         }
 
-        private static long ByteStride(NDArray a, int axis) => a.strides[axis] * a.dtypesize;
+        // ndarray.strides is now byte strides (NumPy parity); read the ELEMENT stride from the Shape
+        // and scale by itemsize so this keeps meaning byte stride regardless of the public property.
+        private static long ByteStride(NDArray a, int axis) => a.Shape.Strides[axis] * a.dtypesize;
 
         // ============================ the bug: 1-D drop-only-axis ============================
 

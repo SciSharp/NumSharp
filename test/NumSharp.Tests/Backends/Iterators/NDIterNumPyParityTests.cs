@@ -1522,9 +1522,8 @@ namespace NumSharp.Tests.Backends.Iterators
             var arr = np.arange(5);
             var rev = arr["::-1"];
 
-            // NumSharp uses element strides, not byte strides like NumPy
-            // NumPy: -8 bytes = -1 element (sizeof(long) = 8)
-            Assert.AreEqual(-1, rev.strides[0], "Reversed array should have negative stride");
+            // ndarray.strides is byte strides (NumPy parity): reversed int64 array → -8 bytes.
+            Assert.AreEqual(-8, rev.strides[0], "Reversed array should have negative stride");
 
             using var iter = NDIterRef.New(rev, NDIterGlobalFlags.MULTI_INDEX | NDIterGlobalFlags.C_INDEX);
 
@@ -1564,9 +1563,9 @@ namespace NumSharp.Tests.Backends.Iterators
             var arr2d = np.arange(6).reshape(2, 3);
             var rev2d = arr2d["::-1, :"];
 
-            // NumSharp uses element strides: -24 bytes / 8 = -3 elements, 8 bytes / 8 = 1 element
-            Assert.AreEqual(-3, rev2d.strides[0], "First axis should have negative stride");
-            Assert.AreEqual(1, rev2d.strides[1], "Second axis should have positive stride");
+            // ndarray.strides is byte strides (NumPy parity): int64 (2,3) row-reversed → (-24, 8) bytes.
+            Assert.AreEqual(-24, rev2d.strides[0], "First axis should have negative stride");
+            Assert.AreEqual(8, rev2d.strides[1], "Second axis should have positive stride");
 
             using var iter = NDIterRef.New(rev2d, NDIterGlobalFlags.MULTI_INDEX | NDIterGlobalFlags.C_INDEX);
 
@@ -1607,9 +1606,9 @@ namespace NumSharp.Tests.Backends.Iterators
             var arr2d = np.arange(6).reshape(2, 3);
             var rev2d = arr2d[":, ::-1"];
 
-            // NumSharp uses element strides: 24 bytes / 8 = 3 elements, -8 bytes / 8 = -1 element
-            Assert.AreEqual(3, rev2d.strides[0], "First axis should have positive stride");
-            Assert.AreEqual(-1, rev2d.strides[1], "Second axis should have negative stride");
+            // ndarray.strides is byte strides (NumPy parity): int64 (2,3) col-reversed → (24, -8) bytes.
+            Assert.AreEqual(24, rev2d.strides[0], "First axis should have positive stride");
+            Assert.AreEqual(-8, rev2d.strides[1], "Second axis should have negative stride");
 
             using var iter = NDIterRef.New(rev2d, NDIterGlobalFlags.MULTI_INDEX | NDIterGlobalFlags.C_INDEX);
 
@@ -1650,9 +1649,9 @@ namespace NumSharp.Tests.Backends.Iterators
             var arr2d = np.arange(6).reshape(2, 3);
             var rev2d = arr2d["::-1, ::-1"];
 
-            // NumSharp uses element strides: -24 bytes / 8 = -3 elements, -8 bytes / 8 = -1 element
-            Assert.AreEqual(-3, rev2d.strides[0], "First axis should have negative stride");
-            Assert.AreEqual(-1, rev2d.strides[1], "Second axis should have negative stride");
+            // ndarray.strides is byte strides (NumPy parity): int64 (2,3) both-reversed → (-24, -8) bytes.
+            Assert.AreEqual(-24, rev2d.strides[0], "First axis should have negative stride");
+            Assert.AreEqual(-8, rev2d.strides[1], "Second axis should have negative stride");
 
             using var iter = NDIterRef.New(rev2d, NDIterGlobalFlags.MULTI_INDEX | NDIterGlobalFlags.C_INDEX);
 
@@ -1780,10 +1779,10 @@ namespace NumSharp.Tests.Backends.Iterators
             var arr = np.arange(24).reshape(2, 3, 4);
             var rev = arr["::-1, :, ::-1"];
 
-            // NumSharp uses element strides: -96/8=-12, 32/8=4, -8/8=-1
-            Assert.AreEqual(-12, rev.strides[0], "First axis should have negative stride");
-            Assert.AreEqual(4, rev.strides[1], "Second axis should have positive stride");
-            Assert.AreEqual(-1, rev.strides[2], "Third axis should have negative stride");
+            // ndarray.strides is byte strides (NumPy parity): rev.strides == (-96, 32, -8) as in NumPy.
+            Assert.AreEqual(-96, rev.strides[0], "First axis should have negative stride");
+            Assert.AreEqual(32, rev.strides[1], "Second axis should have positive stride");
+            Assert.AreEqual(-8, rev.strides[2], "Third axis should have negative stride");
 
             using var iter = NDIterRef.New(rev, NDIterGlobalFlags.MULTI_INDEX);
 

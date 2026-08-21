@@ -88,12 +88,12 @@ namespace NumSharp.Backends
                 var ret = new NDArray(retTypeCode, new Shape(shape.dimensions), false);
                 if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
                 {
-                    bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.strides[axis] == 1);
+                    bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.Shape.Strides[axis] == 1);
                     var key = new CumulativeAxisKernelKey(arr.GetTypeCode, retTypeCode, ReductionOp.CumSum, innerAxisContiguous);
                     var kernel = DirectILKernelGenerator.TryGetCumulativeAxisKernel(key);
                     if (kernel != null)
                     {
-                        fixed (long* inputStrides = arr.strides)
+                        fixed (long* inputStrides = arr.Shape.Strides)
                         fixed (long* shapePtr = arr.shape)
                             kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
                         return order == 'F' && ret.Shape.NDim > 1 ? ret.copy('F') : ret;
@@ -127,8 +127,8 @@ namespace NumSharp.Backends
             // at scan-axis index 0 and the kernel walks forward in logical order regardless.
             var aux = new ILKernelGenerator.ScanAxisAux
             {
-                InByteStride = input.strides[axis] * input.dtypesize,
-                OutByteStride = ret.strides[axis] * ret.dtypesize,
+                InByteStride = input.Shape.Strides[axis] * input.dtypesize,
+                OutByteStride = ret.Shape.Strides[axis] * ret.dtypesize,
                 AxisLen = shape[axis],
             };
 
@@ -234,7 +234,7 @@ namespace NumSharp.Backends
                         // kernel reads from a raw base, so fold the offset in here — same base
                         // math as DefaultEngine.ReductionOp.cs.
                         byte* baseAddr = (byte*)arr.Address + arr.Shape.offset * arr.dtypesize;
-                        fixed (long* strides = arr.strides)
+                        fixed (long* strides = arr.Shape.Strides)
                         fixed (long* shape = arr.shape)
                         {
                             kernel((void*)baseAddr, (void*)ret.Address, strides, shape, arr.ndim, arr.size);

@@ -502,7 +502,28 @@ namespace NumSharp
 
         public char order => Storage.Shape.Order;
 
-        public long[] strides => Storage.Shape.Strides;
+        /// <summary>
+        ///     The strides of the array, in BYTES per axis — matching NumPy's <c>ndarray.strides</c>
+        ///     (<c>PyArray_STRIDES</c>): the number of bytes to step in memory to advance one element
+        ///     along each dimension. Equal to the element strides times the <see cref="dtypesize"/>
+        ///     (itemsize), so a stride-0 broadcast axis stays 0 and a negative-stride (reversed) view
+        ///     stays negative. A 0-d array reports an empty array. A fresh array is returned on each
+        ///     access. Internal kernels that need ELEMENT strides must read
+        ///     <see cref="Shape"/>.<see cref="View.Shape.Strides"/> instead.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.strides.html</remarks>
+        public long[] strides
+        {
+            get
+            {
+                long[] elementStrides = Storage.Shape.Strides;
+                int itemsize = Storage.DTypeSize;
+                var byteStrides = new long[elementStrides.Length];
+                for (int i = 0; i < elementStrides.Length; i++)
+                    byteStrides[i] = elementStrides[i] * itemsize;
+                return byteStrides;
+            }
+        }
 
         /// <summary>
         ///     A 1-D iterator over the array.

@@ -85,7 +85,15 @@ namespace NumSharp
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.ndarray.item.html
         /// </remarks>
-        public object item(long i, long j) => Storage.GetValue(new[] { i, j });
+        public object item(long i, long j)
+        {
+            // NumPy's item(*args) requires exactly ndim indices (or a single flat index). Two indices
+            // are valid only for a 2-D array; anything else raises, matching numpy's
+            // "incorrect number of indices for array" rather than silently dropping/padding an axis.
+            if (ndim != 2)
+                throw new ArgumentException($"Incorrect number of indices for array with {ndim} dimensions.");
+            return Storage.GetValue(new[] { i, j });
+        }
 
         /// <summary>
         /// Copy an element of an array to a standard Python scalar and return it.
@@ -110,7 +118,14 @@ namespace NumSharp
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.ndarray.item.html
         /// </remarks>
-        public object item(long i, long j, long k) => Storage.GetValue(new[] { i, j, k });
+        public object item(long i, long j, long k)
+        {
+            // Three indices are valid only for a 3-D array (see item(i, j) — NumPy requires exactly
+            // ndim indices), else "incorrect number of indices for array".
+            if (ndim != 3)
+                throw new ArgumentException($"Incorrect number of indices for array with {ndim} dimensions.");
+            return Storage.GetValue(new[] { i, j, k });
+        }
 
         /// <summary>
         /// Copy an element of an array to a standard Python scalar and return it.

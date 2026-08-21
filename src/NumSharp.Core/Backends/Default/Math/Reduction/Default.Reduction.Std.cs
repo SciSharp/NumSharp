@@ -255,7 +255,7 @@ namespace NumSharp.Backends
             byte* basePtr = (byte*)arr.Address + arr.Shape.offset * arr.dtypesize;
             bool contig = arr.Shape.IsContiguous;
             var dims = arr.shape;
-            var strides = arr.strides;
+            var strides = arr.Shape.Strides;
             int ndim = arr.ndim;
             long n = arr.size;
 

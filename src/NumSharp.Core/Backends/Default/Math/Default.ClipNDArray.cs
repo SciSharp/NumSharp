@@ -198,12 +198,12 @@ namespace NumSharp.Backends
 
             byte* sBase = (byte*)src.Address + src.Shape.offset * src.dtypesize;
             bool srcC = src.Shape.IsContiguous && src.Shape.offset == 0;
-            var srcStr = src.strides;
+            var srcStr = src.Shape.Strides;
 
             byte* loBase = loCast is null ? null : (byte*)loCast.Address + loCast.Shape.offset * loCast.dtypesize;
             byte* hiBase = hiCast is null ? null : (byte*)hiCast.Address + hiCast.Shape.offset * hiCast.dtypesize;
-            long[] loStr = loCast?.strides;
-            long[] hiStr = hiCast?.strides;
+            long[] loStr = loCast?.Shape.Strides;
+            long[] hiStr = hiCast?.Shape.Strides;
             bool loC = !arr || loCast is null || (loCast.Shape.IsContiguous && loCast.Shape.offset == 0);
             bool hiC = !arr || hiCast is null || (hiCast.Shape.IsContiguous && hiCast.Shape.offset == 0);
 

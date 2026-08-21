@@ -1563,8 +1563,8 @@ namespace NumSharp.Tests
 
             // np.copy materializes with clean contiguous shape [3, 1]
             var copy = np.copy(a);
-            copy.strides.Should().BeEquivalentTo(new long[] { 3, 1 },
-                "np.copy produces contiguous strides [3,1]");
+            copy.strides.Should().BeEquivalentTo(new long[] { 12, 4 },
+                "np.copy produces contiguous int32 strides — element [3,1] → bytes [12,4] (NumPy parity)");
             copy.Shape.IsBroadcasted.Should().BeFalse(
                 "np.copy clears broadcast flag");
 
@@ -2516,17 +2516,16 @@ namespace NumSharp.Tests
         public void Bug_SwapAxes_Strides_WrongForAxis02()
         {
             var a = np.arange(24).reshape(2, 3, 4);
-            a.strides.Should().BeEquivalentTo(new long[] { 12, 4, 1 });
+            // ndarray.strides is byte strides (NumPy parity): int64 (2,3,4) element [12,4,1] → bytes [96,32,8].
+            a.strides.Should().BeEquivalentTo(new long[] { 96, 32, 8 });
 
             var b = np.swapaxes(a, 0, 2);
             b.shape.Should().BeEquivalentTo(new long[] { 4, 3, 2 });
 
-            // NumPy: strides are permuted, not recomputed
-            b.strides.Should().BeEquivalentTo(new long[] { 1, 4, 12 },
-                "NumPy: swapaxes(0,2) swaps strides[0] and strides[2]: [12,4,1] → [1,4,12]. " +
-                "The result is non-contiguous (strides not in descending order). " +
-                "NumSharp returns [6,2,1] — standard C-contiguous strides for shape (4,3,2) — " +
-                "because Transpose copies data into fresh storage (Bug 64) which gets new strides.");
+            // NumPy: strides are permuted (in bytes), not recomputed.
+            b.strides.Should().BeEquivalentTo(new long[] { 8, 32, 96 },
+                "swapaxes(0,2) swaps strides[0] and strides[2]; int64 element [1,4,12] → bytes [8,32,96], " +
+                "matching NumPy's np.swapaxes(a,0,2).strides.");
         }
 
         /// <summary>
@@ -2544,9 +2543,9 @@ namespace NumSharp.Tests
             var b = np.swapaxes(a, 0, 1);
             b.shape.Should().BeEquivalentTo(new long[] { 3, 2, 4 });
 
-            b.strides.Should().BeEquivalentTo(new long[] { 4, 12, 1 },
-                "NumPy: swapaxes(0,1) swaps strides[0] and strides[1]: [12,4,1] → [4,12,1]. " +
-                "NumSharp returns [8,4,1] — C-contiguous strides for shape (3,2,4).");
+            b.strides.Should().BeEquivalentTo(new long[] { 32, 96, 8 },
+                "swapaxes(0,1) swaps strides[0] and strides[1]; int64 element [4,12,1] → bytes [32,96,8], " +
+                "matching NumPy's np.swapaxes(a,0,1).strides.");
         }
 
         /// <summary>
@@ -2564,9 +2563,9 @@ namespace NumSharp.Tests
             var b = np.swapaxes(a, 1, 2);
             b.shape.Should().BeEquivalentTo(new long[] { 2, 4, 3 });
 
-            b.strides.Should().BeEquivalentTo(new long[] { 12, 1, 4 },
-                "NumPy: swapaxes(1,2) swaps strides[1] and strides[2]: [12,4,1] → [12,1,4]. " +
-                "NumSharp returns [12,3,1] — C-contiguous strides for shape (2,4,3).");
+            b.strides.Should().BeEquivalentTo(new long[] { 96, 8, 32 },
+                "swapaxes(1,2) swaps strides[1] and strides[2]; int64 element [12,1,4] → bytes [96,8,32], " +
+                "matching NumPy's np.swapaxes(a,1,2).strides.");
         }
 
         // ================================================================

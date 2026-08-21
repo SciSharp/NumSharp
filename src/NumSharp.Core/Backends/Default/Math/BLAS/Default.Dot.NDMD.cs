@@ -95,9 +95,9 @@ namespace NumSharp.Backends
             int rhsNdim = rhs.ndim;
 
             // Pre-compute strides for iteration
-            long lhsInnerStride = lhs.strides[lhsNdim - 1];  // Stride along contracting dim in lhs
-            long rhsContractStride = rhs.strides[rhsNdim - 2];  // Stride along contracting dim in rhs
-            long rhsInnerStride = rhs.strides[rhsNdim - 1];  // Stride along last dim in rhs
+            long lhsInnerStride = lhs.Shape.Strides[lhsNdim - 1];  // Stride along contracting dim in lhs
+            long rhsContractStride = rhs.Shape.Strides[rhsNdim - 2];  // Stride along contracting dim in rhs
+            long rhsInnerStride = rhs.Shape.Strides[rhsNdim - 1];  // Stride along last dim in rhs
 
             // Total elements to compute
             long totalLhs = 1;
@@ -116,13 +116,13 @@ namespace NumSharp.Backends
             for (long li = 0; li < totalLhs; li++)
             {
                 // Compute lhs base offset: position in lhs without last dim
-                long lhsBase = ComputeBaseOffset64(li, lhsIterStrides, lhs.strides, lshape.Length);
+                long lhsBase = ComputeBaseOffset64(li, lhsIterStrides, lhs.Shape.Strides, lshape.Length);
 
                 // For each position in rhs (excluding contract dim)
                 for (long ri = 0; ri < totalRhs; ri++)
                 {
                     // Compute rhs base offset: we need to skip the contract dimension
-                    long rhsBase = ComputeRhsBaseOffset64(ri, rhsIterStrides, rhs.strides, rshape, rhsNdim);
+                    long rhsBase = ComputeRhsBaseOffset64(ri, rhsIterStrides, rhs.Shape.Strides, rshape, rhsNdim);
 
                     // Compute dot product along contracting dimension
                     float sum = DotProductFloat(
@@ -150,9 +150,9 @@ namespace NumSharp.Backends
             int lhsNdim = lhs.ndim;
             int rhsNdim = rhs.ndim;
 
-            long lhsInnerStride = lhs.strides[lhsNdim - 1];
-            long rhsContractStride = rhs.strides[rhsNdim - 2];
-            long rhsInnerStride = rhs.strides[rhsNdim - 1];
+            long lhsInnerStride = lhs.Shape.Strides[lhsNdim - 1];
+            long rhsContractStride = rhs.Shape.Strides[rhsNdim - 2];
+            long rhsInnerStride = rhs.Shape.Strides[rhsNdim - 1];
 
             long totalLhs = 1;
             for (int i = 0; i < lshape.Length; i++)
@@ -167,11 +167,11 @@ namespace NumSharp.Backends
 
             for (long li = 0; li < totalLhs; li++)
             {
-                long lhsBase = ComputeBaseOffset64(li, lhsIterStrides, lhs.strides, lshape.Length);
+                long lhsBase = ComputeBaseOffset64(li, lhsIterStrides, lhs.Shape.Strides, lshape.Length);
 
                 for (long ri = 0; ri < totalRhs; ri++)
                 {
-                    long rhsBase = ComputeRhsBaseOffset64(ri, rhsIterStrides, rhs.strides, rshape, rhsNdim);
+                    long rhsBase = ComputeRhsBaseOffset64(ri, rhsIterStrides, rhs.Shape.Strides, rshape, rhsNdim);
 
                     double sum = DotProductDouble(
                         lhsPtr + lhsBase, lhsInnerStride,
