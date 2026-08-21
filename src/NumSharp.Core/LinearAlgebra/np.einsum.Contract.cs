@@ -4,7 +4,7 @@ using System.Text;
 
 namespace NumSharp
 {
-    public abstract partial class TensorEngine
+    public static partial class np
     {
         /// <summary>
         ///     <c>np.einsum</c> — the contraction itself, reached once the subscripts have parsed and
@@ -17,17 +17,20 @@ namespace NumSharp
         ///     ("batched-matrix-multiply einsum") reduces every pairwise contraction to a
         ///     <c>matmul</c> (plus a single-operand einsum to take diagonals, sum, and transpose the
         ///     terms first), or to a broadcast <c>multiply</c> when nothing is contracted. This is a
-        ///     port of that, over NumSharp's own <see cref="np.matmul"/> / <see cref="np.multiply"/> /
-        ///     <see cref="np.sum"/> / <see cref="np.transpose"/> / <see cref="np.diagonal"/>.
+        ///     port of that, over NumSharp's own <see cref="matmul"/> / <see cref="multiply"/> /
+        ///     <see cref="sum"/> / <see cref="transpose"/> / <see cref="diagonal"/>. It lives here in
+        ///     the <see cref="np"/> layer, next to <see cref="tensordot"/> and
+        ///     <see cref="linalg.multi_dot"/>, because — exactly like them — it is a pure composition
+        ///     over the matrix products with no engine state and no seam of its own.
         ///     </para>
         ///     <para>
         ///     <b>This is what makes einsum "go through OpenBLAS like other functions".</b> The
-        ///     products land on <see cref="Matmul"/> (2-D <c>gemm</c> and batched), which already
-        ///     dispatches on <see cref="Blas"/> — so with <c>NumSharp.Interop.OpenBLAS</c> referenced,
-        ///     the float32/float64/complex128 contractions are byte-identical to NumPy's, and without
-        ///     it they fall back to the managed GEMM. There is deliberately no <c>TryEinsum</c> seam:
-        ///     einsum reaches a backend the same indirect way <c>np.tensordot</c> and
-        ///     <c>np.linalg.multi_dot</c> do, through the matrix product.
+        ///     products land on <see cref="TensorEngine.Matmul"/> (2-D <c>gemm</c> and batched), which
+        ///     already dispatches on <see cref="TensorEngine.Blas"/> — so with
+        ///     <c>NumSharp.Interop.OpenBLAS</c> referenced, the float32/float64/complex128 contractions
+        ///     are byte-identical to NumPy's, and without it they fall back to the managed GEMM. There
+        ///     is deliberately no <c>TryEinsum</c> seam: einsum reaches a backend the same indirect way
+        ///     <c>np.tensordot</c> and <c>np.linalg.multi_dot</c> do, through the matrix product.
         ///     </para>
         ///     <para>
         ///     <b>Value parity.</b> For every contraction that reduces to a matrix product — matmul,
@@ -38,11 +41,11 @@ namespace NumSharp
         ///     place a last-ULP difference can appear is a FLOAT summation done outside a product —
         ///     a pure reduction such as <c>ij-&gt;i</c>, a diagonal-then-sum, or the accumulation
         ///     across three or more float operands — because that summation order follows NumSharp's
-        ///     <see cref="np.sum"/> and a left-to-right pairwise fold rather than NumPy's einsum
+        ///     <see cref="sum"/> and a left-to-right pairwise fold rather than NumPy's einsum
         ///     iterator; the results stay <c>allclose</c>.
         ///     </para>
         /// </remarks>
-        public virtual NDArray Einsum(string subscripts, NDArray[] operands, NDArray @out,
+        private static NDArray EinsumContract(string subscripts, NDArray[] operands, NDArray @out,
             NPTypeCode? dtype, char order, string casting, object optimize)
         {
             // Parse AND validate — rank, ellipsis grammar, operand count, output labels, out='s rank,
@@ -247,8 +250,8 @@ namespace NumSharp
         ///     A single pairwise contraction <c>a[aTerm], b[bTerm] -&gt; outTerm</c> — port of
         ///     <c>bmm_einsum</c> + <c>_parse_eq_to_batch_matmul</c>. Every index is classified from
         ///     the operands' ACTUAL shapes (so size-1 broadcasting is handled exactly as NumPy does),
-        ///     then the contraction runs as one <see cref="np.matmul"/> (batched when there are shared
-        ///     output indices) or, when nothing is contracted, one broadcast <see cref="np.multiply"/>.
+        ///     then the contraction runs as one <see cref="matmul"/> (batched when there are shared
+        ///     output indices) or, when nothing is contracted, one broadcast <see cref="multiply"/>.
         /// </summary>
         private static NDArray PairwiseContract(NDArray a, string aTerm, NDArray b, string bTerm,
             string outTerm, NPTypeCode computeType)
@@ -400,7 +403,7 @@ namespace NumSharp
         /// <summary>
         ///     The no-contraction case — an outer / Hadamard / broadcast product. Each operand is
         ///     transposed to the output's order and reshaped with length-1 axes wherever it lacks an
-        ///     output label, then a single broadcast <see cref="np.multiply"/> forms the result.
+        ///     output label, then a single broadcast <see cref="multiply"/> forms the result.
         /// </summary>
         private static NDArray PureMultiplication(NDArray a, string aTerm, long[] shapeA,
             NDArray b, string bTerm, long[] shapeB, string outTerm, NPTypeCode computeType)

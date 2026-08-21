@@ -220,9 +220,11 @@ namespace NumSharp
 
         #endregion
 
-        // np.einsum's contraction lives in TensorEngine.Einsum.cs — a composition over the matrix
-        // products (Dot/Matmul) so it inherits their Blas routing, exactly as NumPy's einsumfunc.py
-        // composes over c_einsum + matmul rather than adding a new low-level kernel.
+        // np.einsum's contraction does NOT live here — it is a pure composition over the matrix
+        // products (Matmul/Multiply) with no engine state and no seam, so it sits in the np layer next
+        // to np.tensordot and np.linalg.multi_dot (LinearAlgebra/np.einsum.Contract.cs). It inherits
+        // Blas routing the same indirect way they do, through np.matmul, exactly as NumPy's
+        // einsumfunc.py composes over c_einsum + matmul rather than adding a low-level kernel.
 
         /// <summary>
         ///     The one message every unserved factorisation raises. It names the NumPy API, the seam

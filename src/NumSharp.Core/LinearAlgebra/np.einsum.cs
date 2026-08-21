@@ -90,10 +90,12 @@ namespace NumSharp
             RequireCasting(casting);
             RequireOptimize(optimize);
 
-            // The engine parses AND validates (rank, ellipsis grammar, operand count, output labels,
-            // out='s rank, every diagonal and every label extent) before it contracts — so a
-            // malformed expression is rejected there with NumPy's own text, exactly as before.
-            return operands[0].TensorEngine.Einsum(subscripts, operands, @out, dtype, order, casting, optimize);
+            // The contractor parses AND validates (rank, ellipsis grammar, operand count, output
+            // labels, out='s rank, every diagonal and every label extent) before it contracts — so a
+            // malformed expression is rejected there with NumPy's own text. It is a pure composition
+            // over the matrix products (see np.einsum.Contract.cs), so it reaches a backend the same
+            // indirect way tensordot/multi_dot do — through np.matmul — with no engine seam of its own.
+            return EinsumContract(subscripts, operands, @out, dtype, order, casting, optimize);
         }
 
         /// <summary>
