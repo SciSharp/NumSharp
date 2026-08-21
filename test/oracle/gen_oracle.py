@@ -3109,6 +3109,46 @@ def gen_groupa():
              [describe(selA, selA), describe(selB, selB), describe(chA, chA), describe(chB, chB), describe(seldef, seldef)],
              np.select([selA, selB], [chA, chB], seldef))
 
+        # choose — an int64 index selects, element-wise, among `nc` choice arrays (dtype d).
+        # NumPy is the oracle for the per-position gather, the broadcast, and the mode arithmetic.
+        # Operands are [index, choice0..choice_{nc-1}]; "nc" is the choice count. The result is a
+        # pure byte-gather, so it is bit-exact once the operands are replayed from recorded bytes.
+        ch0 = _cbase((6,), d)
+        ch1 = _cbase((6,), d) + 10
+        ch2 = _cbase((6,), d) + 20
+        cidx3 = np.array([2, 0, 1, 2, 1, 0], dtype=np.int64)
+        emit("choose", {"nc": 3, "mode": "raise"},
+             [describe(cidx3, cidx3), describe(ch0, ch0), describe(ch1, ch1), describe(ch2, ch2)],
+             np.choose(cidx3, [ch0, ch1, ch2]))
+        cidx2 = np.array([0, 1, 1, 0, 1, 0], dtype=np.int64)
+        emit("choose", {"nc": 2, "mode": "raise"},
+             [describe(cidx2, cidx2), describe(ch0, ch0), describe(ch1, ch1)],
+             np.choose(cidx2, [ch0, ch1]))
+        # out-of-range indices exercise wrap (modulo, sign-corrected) and clip (saturate).
+        coob = np.array([3, -1, 5, 0, -4, 2], dtype=np.int64)
+        emit("choose", {"nc": 3, "mode": "wrap"},
+             [describe(coob, coob), describe(ch0, ch0), describe(ch1, ch1), describe(ch2, ch2)],
+             np.choose(coob, [ch0, ch1, ch2], mode="wrap"))
+        emit("choose", {"nc": 3, "mode": "clip"},
+             [describe(coob, coob), describe(ch0, ch0), describe(ch1, ch1), describe(ch2, ch2)],
+             np.choose(coob, [ch0, ch1, ch2], mode="clip"))
+        # 2-D index + 2-D choices — the strided odometer over the full result shape.
+        ci2 = (np.arange(12).reshape(3, 4) % 3).astype(np.int64)
+        cd0 = _cbase((3, 4), d)
+        cd1 = _cbase((3, 4), d) + 5
+        cd2 = _cbase((3, 4), d) + 9
+        emit("choose", {"nc": 3, "mode": "raise"},
+             [describe(ci2, ci2), describe(cd0, cd0), describe(cd1, cd1), describe(cd2, cd2)],
+             np.choose(ci2, [cd0, cd1, cd2]))
+
+        # --- neighbouring selection ops (strengthen the family `choose` sits in) ---
+        # compress along axis 1 (the corpus above only had axis 0).
+        ccond = np.array([True, False, True, True], dtype=bool)
+        emit("compress", {"axis": 1}, [describe(ccond, ccond), describe(a2, a2)], np.compress(ccond, a2, 1))
+        # take along axis 2 of a 3-D source (the corpus above only had axis 0 / 1).
+        tidx3 = np.array([0, 2, 1, 3], dtype=np.int64)
+        emit("take", {"axis": 2}, [describe(a3, a3), describe(tidx3, tidx3)], np.take(a3, tidx3, 2))
+
     # select — layout coverage: a TRANSPOSED cond+choice, a BROADCAST cond over a 2-D choice,
     # and an all-false fall-through to the default. int32 payload; the kernel is dtype-agnostic
     # (per-dtype value coverage is in the loop above).
@@ -3125,6 +3165,42 @@ def gen_groupa():
     sch = _cbase((6,), sd)
     emit("select", {"nc": 1}, [describe(sfalse, sfalse), describe(sch, sch), describe(sdef, sdef)],
          np.select([sfalse], [sch], sdef))
+
+    # choose — layout + broadcast coverage (int32 payload; the gather is dtype-agnostic, so the
+    # per-dtype value coverage is in the loop above). Reversed (negative-stride) index, a
+    # column-reversed choice VIEW, a (3,1)x(1,4) broadcast, a scalar (0-d) choice broadcast, and
+    # a 0-d index against 0-d choices (0-d result).
+    cd = np.dtype("int32")
+    lidx = np.array([0, 1, 0, 1, 1, 0], dtype=np.int64)
+    lch0 = _cbase((6,), cd)
+    lch1 = _cbase((6,), cd) + 10
+    emit("choose", {"nc": 2, "mode": "raise"},
+         [describe(lidx, lidx[::-1]), describe(lch0, lch0), describe(lch1, lch1)],
+         np.choose(lidx[::-1], [lch0, lch1]))
+    tci = (np.arange(12).reshape(3, 4) % 2).astype(np.int64)
+    tc0 = _cbase((3, 4), cd)
+    tc1 = _cbase((3, 4), cd) + 100
+    emit("choose", {"nc": 2, "mode": "raise"},
+         [describe(tci, tci), describe(tc0, tc0[:, ::-1]), describe(tc1, tc1)],
+         np.choose(tci, [tc0[:, ::-1], tc1]))
+    bidx = np.array([[0], [1], [0]], dtype=np.int64)        # (3,1) index
+    bc0 = _cbase((1, 4), cd)                                # (1,4) choices -> broadcast to (3,4)
+    bc1 = _cbase((1, 4), cd) + 50
+    emit("choose", {"nc": 2, "mode": "raise"},
+         [describe(bidx, bidx), describe(bc0, bc0), describe(bc1, bc1)],
+         np.choose(bidx, [bc0, bc1]))
+    sidx = np.array([0, 1, 0, 1, 0], dtype=np.int64)
+    sc0 = np.array(7, dtype=cd)                             # 0-d scalar choice
+    sc1 = _cbase((5,), cd) + 20
+    emit("choose", {"nc": 2, "mode": "raise"},
+         [describe(sidx, sidx), describe(sc0, sc0), describe(sc1, sc1)],
+         np.choose(sidx, [sc0, sc1]))
+    zidx = np.array(1, dtype=np.int64)                      # 0-d index + 0-d choices -> 0-d result
+    zc0 = np.array(3, dtype=cd)
+    zc1 = np.array(9, dtype=cd)
+    emit("choose", {"nc": 2, "mode": "raise"},
+         [describe(zidx, zidx), describe(zc0, zc0), describe(zc1, zc1)],
+         np.choose(zidx, [zc0, zc1]))
 
     # ravel_multi_index / unravel_index — index<->coord transforms (int64, dtype-independent).
     row = np.array([0, 1, 2, 0], dtype=np.int64)

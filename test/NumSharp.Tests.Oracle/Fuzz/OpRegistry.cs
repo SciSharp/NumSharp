@@ -192,6 +192,18 @@ namespace NumSharp.Tests.Fuzz
                     return np.select(conds, choices, ops[2 * nc]);
                 }
 
+                // choose — operands are [index, choice0..choice_{nc-1}]; params "nc" gives the choice
+                // count and "mode" the clip mode (default raise). Choices are strong NDArrays here
+                // (weak-scalar dtype resolution is covered by unit tests, not the corpus).
+                case "choose":
+                {
+                    int nc = p["nc"].GetInt32();
+                    var choices = new NDArray[nc];
+                    for (int i = 0; i < nc; i++) choices[i] = ops[1 + i];
+                    string mode = p.TryGetValue("mode", out var cm) ? cm.GetString() : "raise";
+                    return np.choose(ops[0], choices, null, mode);
+                }
+
                 // W15 copyto: cross-dtype / strided-dst / scalar-broadcast-src. dst (ops[0]) is mutated
                 // in place and IS the result; casting rule comes from params (default same_kind).
                 case "copyto":
