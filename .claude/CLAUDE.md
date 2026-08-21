@@ -798,7 +798,7 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
 `can_cast`, `common_type`, `find_common_type`, `finfo`, `iinfo`, `issubdtype`, `min_scalar_type`, `mintypecode`, `promote_types`, `result_type`
 
 ### Selection
-`compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`
+`choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`
 
 `np.take_along_axis(arr, indices, axis=-1)` (NumPy `numpy/lib/_shape_base_impl.py`) is the per-slice
 gather: it matches 1-D index and data slices oriented along `axis` and looks each output element up

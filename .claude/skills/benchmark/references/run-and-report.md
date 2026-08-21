@@ -37,12 +37,28 @@ The nditer subsystem reports a section that crashes all retries (the known inter
 
 ## Reading the report
 
-- **Convention is NPY/NS** (NumPy_ms / NumSharp_ms, `>1` = NumSharp faster). Icons ✅ `≥1.0` 🟡 `≥0.5` 🟠 `≥0.2`
-  🔴 `<0.2`.
+- **Convention is NPY/NS** (NumPy_ms / NumSharp_ms, `>1` = NumSharp faster). Bands: ✅ `≥1.0×` 🟡 `≥0.5×`
+  🟠 `≥0.2×` 🔴 `<0.2×` · **▫ negligible** (sub-µs either side or >20× — excluded from geomeans & Best/Worst)
+  · **⚪** (C# side unjoined). The `%NumPy🕐` column = NumSharp_ms / NumPy_ms × 100 = share of NumPy's time
+  NumSharp uses (<100% = faster).
+- **Credibility gating** (`merge-results.py` `classify()`): only rows where **both sides did ≥1µs of work AND the
+  speedup is within 20×** count toward the geomeans and rankings. Sub-µs call-overhead rows, view returns, lazy
+  allocs and dead-code-eliminated kernels are `▫ negligible` — kept in the per-suite tables, never showcased.
 - The report has a **per-size geomean summary** + the full **per-(op, dtype, N) ratio matrix**, then the five
   appended subsystem sections.
 - A row missing a C# or NumPy value ("C# not run" / "NumPy only") almost always means the two names didn't
   **normalize to the same join key** — check the C# `[Benchmark(Description)]` vs the NumPy `.name`.
+
+## Reports & UI surfaces (canonical → human-facing)
+
+They drift — know which is which:
+- **`benchmark/benchmark-report.md`** — the canonical text report (merge output). Tracked; refreshed by CI. Start here.
+- **`benchmark/history/latest/*`** — the committable snapshot the docs/CI reference.
+- **`benchmark/benchmark-dashboard.md`** — a dense ASCII-bar sheet from `scripts/render_dashboard.py`. Gitignored,
+  **NOT** wired into `run_benchmark.py` or CI — run it by hand to seed the DocFX dashboard's numbers.
+- **`docs/website-src/docs/benchmarks-dashboard.md`** — the **real UI**: a hand-built HTML/CSS/JS dashboard (the
+  website's "Benchmarks" hub, numbers embedded inline). Not auto-generated — edit by hand from fresh report numbers.
+- **`benchmark/README.md`** is a static orientation guide, **not** the report — CI never refreshes it.
 
 ## History snapshots — what we commit
 

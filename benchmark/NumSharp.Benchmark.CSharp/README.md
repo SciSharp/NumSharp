@@ -11,9 +11,9 @@ Industry-standard performance benchmarks for [NumSharp](https://github.com/SciSh
 | Metric | Coverage |
 |--------|----------|
 | **Operations** | 130+ benchmarked operations |
-| **Data Types** | All 12 NumSharp types |
-| **Suites** | 12 benchmark categories |
-| **Array Sizes** | Scalar, 100, 1K, 100K, 10M elements |
+| **Data Types** | All 15 NumSharp types |
+| **Suites** | 14 comparison categories (+ experimental/allocation classes with no NumPy twin) |
+| **Array Sizes** | Scalar, 100, 1K, 100K, 10M elements (the official run uses 1K / 100K / 10M) |
 
 ## Quick Start
 
@@ -203,7 +203,7 @@ NumSharp.Benchmark.CSharp/
 TypeParameterSource.CommonTypes        // int32, int64, float32, float64 (fast benchmarks)
 TypeParameterSource.ArithmeticTypes    // All types except bool, char
 TypeParameterSource.TranscendentalTypes // float32, float64, decimal (for sqrt, log, trig)
-TypeParameterSource.AllNumericTypes    // All 12 NumSharp types
+TypeParameterSource.AllNumericTypes    // All 15 NumSharp types
 ```
 
 ### Array Sizes

@@ -4,7 +4,7 @@ namespace NumSharp.Benchmark.CSharp.Infrastructure;
 
 /// <summary>
 /// Provides type parameter sources for parameterized benchmarks.
-/// Supports all 12 NumSharp NPTypeCodes.
+/// Supports all 15 NumSharp NPTypeCodes.
 /// </summary>
 public static class TypeParameterSource
 {

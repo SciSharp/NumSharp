@@ -222,7 +222,7 @@ def build_manifest(snap_name, run_ts, head, subject, dirty, dirty_files, env,
           "| `benchmark-report.md` | op-matrix (per-(op,dtype,N) ratio) + appended NDIter/Layout/Operand/Cast/Fusion |",
           "| `benchmark-report.json` / `.csv` | unified machine-readable / spreadsheet form |",
           "| `numpy-results.json` | raw NumPy timings (merge input) |",
-          "| `nditer_results.*` + `cards/` | iterator benchmark sheet + README cards |",
+          "| `nditer_results.*` + `cards/` | iterator benchmark sheet + summary cards (ops/cat) |",
           "| `layout_/operand_/cast_/fusion_results.*` | the four matrix-subsystem sheets |", "",
           "Raw BenchmarkDotNet per-class JSON (~tens of MB) is **not** persisted here "
           "(regenerable). Reproduce with `python benchmark/run_benchmark.py`."]

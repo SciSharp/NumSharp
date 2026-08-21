@@ -71,7 +71,7 @@ The most common task. Full worked example in **`references/add-benchmark.md`**. 
 
 ## Other tasks → where to go
 
-- **Run the suite (official / subset), interpret the report, snapshots** → `references/run-and-report.md`.
+- **Run the suite (official / subset), interpret the report, the reports/UI surfaces + snapshots** → `references/run-and-report.md`. (The human-facing UI is the hand-built DocFX page `docs/website-src/docs/benchmarks-dashboard.md`, not `benchmark/README.md`.)
 - **Add or edit a matrix subsystem (nditer/layout/operand/cast/fusion)** → `references/subsystems.md`.
 - **Everything else (all suites, config internals, troubleshooting, type map)** → `benchmark/CLAUDE.md`.
 
