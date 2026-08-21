@@ -78,7 +78,7 @@ namespace NumSharp.UnitTest.Lifetime
         ///     </para>
         ///     <para>One is diagnosed to a line:</para>
         ///     <list type="bullet">
-        ///       <item><b>convolve same / valid</b> — <c>NdArray.Convolve.cs</c> ends with
+        ///       <item><b>convolve same / valid</b> — <c>NDArray.Convolve.cs</c> ends with
         ///             <c>return full["a:b"].copy();</c>. That slice is a VIEW, it is never disposed,
         ///             and it holds an ARC ref to <c>full</c>, so the <c>using var full</c> directly
         ///             above it cannot free the buffer. Mode 'full' takes no slice and measures 0 —

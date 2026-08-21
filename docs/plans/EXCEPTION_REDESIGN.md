@@ -156,7 +156,7 @@ NumSharpException (base)
 | `Backends/Iterators/NDIteratorExtensions.cs` | 10 | Type switch default | `UnsupportedDTypeException` |
 | `Backends/Iterators/MultiIterator.cs` | 10 | Type switch default | `UnsupportedDTypeException` |
 | `Backends/Unmanaged/UnmanagedStorage.cs` | 8 | Type switch default | `UnsupportedDTypeException` |
-| `Casting/Implicit/NdArray.Implicit.Array.cs` | 6 | Type switch default | `UnsupportedDTypeException` |
+| `Casting/Implicit/NDArray.Implicit.Array.cs` | 6 | Type switch default | `UnsupportedDTypeException` |
 | `Backends/Unmanaged/UnmanagedMemoryBlock.cs` | 6 | Type switch default | `UnsupportedDTypeException` |
 | Other files | 14 | Various | Review individually |
 
@@ -218,10 +218,10 @@ default:
 
 | File | Count | Context | New Exception | New Message |
 |------|-------|---------|---------------|-------------|
-| `Casting/Implicit/NdArray.Implicit.ValueTypes.cs` | 13 | `if (nd.ndim != 0)` - scalar conversion | `ScalarConversionException` | `cannot convert {ndim}D array to scalar` |
+| `Casting/Implicit/NDArray.Implicit.ValueTypes.cs` | 13 | `if (nd.ndim != 0)` - scalar conversion | `ScalarConversionException` | `cannot convert {ndim}D array to scalar` |
 | `RandomSampling/np.random.uniform.cs` | 1 | Shape validation | `BroadcastException` | Review context |
 | `Creation/np.mgrid.cs` | 1 | Invalid input | `ShapeException` | Review context |
-| `Operations/Elementwise/NdArray.DetermineEmptyResult.cs` | 1 | Shape mismatch | `BroadcastException` | NumPy msg |
+| `Operations/Elementwise/NDArray.DetermineEmptyResult.cs` | 1 | Shape mismatch | `BroadcastException` | NumPy msg |
 | `LinearAlgebra/NdArray.multi_dot.cs` | 2 | Commented out | N/A | Dead code |
 
 **Note:** The scalar conversion cases (13 of 18) should use a new `ScalarConversionException`:

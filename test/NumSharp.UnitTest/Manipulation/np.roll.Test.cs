@@ -1227,7 +1227,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         // ================================================================
-        // REGRESSION: Existing tests from NdArray.Roll.Test.cs (re-verified)
+        // REGRESSION: Existing tests from NDArray.Roll.Test.cs (re-verified)
         // ================================================================
 
         [TestMethod]

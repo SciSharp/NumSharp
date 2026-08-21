@@ -157,7 +157,7 @@ public class AuditV2_MathReductions
     // ============================================================================
     // T1.14 — np.convolve accumulates in double, loses int64 precision
     // ============================================================================
-    // File: src/NumSharp.Core/Math/NdArray.Convolve.cs:138-188 (ConvolveFullTyped<T>)
+    // File: src/NumSharp.Core/Math/NDArray.Convolve.cs:138-188 (ConvolveFullTyped<T>)
     //
     // The inner loop accumulates `double sum = 0` even for int64 input. Values whose
     // magnitude exceeds 2^53 (double's mantissa precision) lose precision. NumPy uses

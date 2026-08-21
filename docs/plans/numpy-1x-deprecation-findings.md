@@ -156,7 +156,7 @@ Two bugs make `np.any(nd, axis)` always throw `InvalidOperationException`:
 | 4 | `stardard_normal` method name is misspelled (missing 'd') | `RandomSampling/np.random.randn.cs` | **Low** | Typo |
 | 5 | `bool + bool` uses OR (`||`) instead of integer addition | `Utilities/Maths/Operator.cs:32` | **Medium** | Wrong semantics |
 | 6 | `np.any(axis)` always throws — `ComputeAnyPerAxis` returns false + has inverted logic | `Logic/np.any.cs:130-162` | **High** | Two bugs |
-| 7 | `np.convolve` always returns null — Regen template never generated | `Math/NdArray.Convolve.cs` | **Medium** | Dead code |
+| 7 | `np.convolve` always returns null — Regen template never generated | `Math/NDArray.Convolve.cs` | **Medium** | Dead code |
 | 8 | `floor`/`ceil` cast integer inputs to Double | `Backends/Default/Math/Default.Floor.cs`, `NPTypeCode.cs:577` | **Medium** | NumPy 1.x behavior |
 
 ---

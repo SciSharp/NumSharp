@@ -1177,7 +1177,7 @@ namespace NumSharp.UnitTest.Casting
             ((float)r.GetAtIndex<Half>(0)).Should().BeApproximately(32f, 0.01f);
         }
 
-        // H6: NdArray.Convolve scalar path with Half pointers.
+        // H6: NDArray.Convolve scalar path with Half pointers.
         // NumPy: convolve([1,2,3] half, [0,1,0.5] half, 'full') = [0, 1, 2.5, 4, 1.5]
         [TestMethod]
         public void Convolve_HalfArrays_Works()
