@@ -163,6 +163,18 @@ namespace NumSharp
                 var npyCasting = ParseCasting(casting);
                 var perOpFlags = ParseOpFlags(op_flags, op, nop);
 
+                // A write flag on a READ-ONLY operand refuses at construction — NumPy's
+                // nditer_constr.c:1068 (PyArray_FailUnlessWriteable "operand array with iterator
+                // write flag set"), reproduced verbatim. Even a copy/updateifcopy request must
+                // write BACK to the original, so read-onlyness is never relaxed by them.
+                for (int i = 0; i < nop; i++)
+                {
+                    if (op[i] is not null
+                        && (perOpFlags[i] & (NDIterPerOpFlags.READWRITE | NDIterPerOpFlags.WRITEONLY)) != 0
+                        && !op[i].Shape.IsWriteable)
+                        throw new ValueError("operand array with iterator write flag set is read-only");
+                }
+
                 // NumPy rejects EXTERNAL_LOOP combined with index tracking up front
                 // (nditer_constr.c) — reproduce the message verbatim.
                 if ((globalFlags & NDIterGlobalFlags.EXTERNAL_LOOP) != 0 &&

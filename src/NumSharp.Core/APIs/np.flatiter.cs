@@ -130,6 +130,10 @@ namespace NumSharp
             // cast machinery once (numpy-exact narrowing/wrap/truncation) — SetAtIndex itself never casts.
             private void SetScalar(long flat, object value)
             {
+                // NumPy's flatiter assignment names the target "underlying array"
+                // (iter_ass_subscript: ValueError "underlying array is read-only") — a DIFFERENT
+                // message from the generic setters' "assignment destination is read-only".
+                NumSharpException.ThrowIfNotWriteable(_base.Shape, "underlying array");
                 if (value != null && value.GetType() == _base.dtype)
                     _base.SetAtIndex(value, flat);
                 else
@@ -310,6 +314,9 @@ namespace NumSharp
 
             private void Scatter(long[] positions, NDArray values)
             {
+                // Raised at ENTRY like NumPy's iter_ass_subscript — even a zero-length fancy set on a
+                // read-only base refuses (SetScalar's own guard would never run for n == 0).
+                NumSharpException.ThrowIfNotWriteable(_base.Shape, "underlying array");
                 long n = positions.Length;
                 bool broadcast = values.size == 1;
                 if (!broadcast && values.size != n)

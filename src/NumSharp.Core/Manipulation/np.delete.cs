@@ -41,6 +41,22 @@ namespace NumSharp
             => delete(arr, (long)obj, axis);
 
         /// <summary>
+        ///     NumPy's <c>delete</c>/<c>insert</c> allocate their output in the SOURCE's memory order —
+        ///     <c>arrorder = 'F' if arr.flags.fnc else 'C'</c> (<c>_function_base_impl.py</c>), so an
+        ///     F-ordered input yields an F-contiguous owned result (probed: num 1286). The composition
+        ///     kernels here build C-contiguous results, so relabel to F when the source was F-and-not-C.
+        ///     IDEMPOTENT (an already-F result passes through), so nested overload delegation is safe.
+        /// </summary>
+        internal static NDArray WithSourceOrder(NDArray arr, NDArray result)
+        {
+            if (result.ndim > 1
+                && arr.Shape.IsFContiguous && !arr.Shape.IsContiguous
+                && result.Shape.IsContiguous && !result.Shape.IsFContiguous)
+                return asfortranarray(result);
+            return result;
+        }
+
+        /// <summary>
         ///     Long-index overload of <see cref="delete(NDArray, int, int?)"/>.
         /// </summary>
         public static NDArray delete(NDArray arr, long obj, int? axis = null)
@@ -48,7 +64,7 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
 
             var ctx = PrepareAxisContext(arr, axis);
-            return DeleteSingleIndex(ctx.work, obj, ctx.axis);
+            return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, obj, ctx.axis));
         }
 
         /// <summary>
@@ -61,7 +77,7 @@ namespace NumSharp
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
             var ctx = PrepareAxisContext(arr, axis);
-            return DeleteSlice(ctx.work, obj, ctx.axis);
+            return WithSourceOrder(arr, DeleteSlice(ctx.work, obj, ctx.axis));
         }
 
         /// <summary>
@@ -77,7 +93,7 @@ namespace NumSharp
             for (int i = 0; i < obj.Length; i++) longs[i] = obj[i];
 
             var ctx = PrepareAxisContext(arr, axis);
-            return DeleteIndexArray(ctx.work, longs, ctx.axis);
+            return WithSourceOrder(arr, DeleteIndexArray(ctx.work, longs, ctx.axis));
         }
 
         /// <summary>
@@ -89,7 +105,7 @@ namespace NumSharp
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
             var ctx = PrepareAxisContext(arr, axis);
-            return DeleteIndexArray(ctx.work, (long[])obj.Clone(), ctx.axis);
+            return WithSourceOrder(arr, DeleteIndexArray(ctx.work, (long[])obj.Clone(), ctx.axis));
         }
 
         /// <summary>
@@ -115,7 +131,7 @@ namespace NumSharp
             for (int i = 0; i < obj.Length; i++) keep[i] = !obj[i];
 
             var keepArr = np.array(keep);
-            try { return np.compress(keepArr, ctx.work, ctx.axis); }
+            try { return WithSourceOrder(arr, np.compress(keepArr, ctx.work, ctx.axis)); }
             finally { keepArr.Dispose(); }
         }
 
@@ -146,7 +162,7 @@ namespace NumSharp
                 bool[] keep = new bool[N];
                 for (long i = 0; i < N; i++) keep[i] = !obj.GetBoolean((int)i);
                 var keepArr = np.array(keep);
-                try { return np.compress(keepArr, ctx.work, ctx.axis); }
+                try { return WithSourceOrder(arr, np.compress(keepArr, ctx.work, ctx.axis)); }
                 finally { keepArr.Dispose(); }
             }
 
@@ -154,12 +170,12 @@ namespace NumSharp
             if (obj.size == 1)
             {
                 long idx = ToInt64Scalar(obj, "delete");
-                return DeleteSingleIndex(ctx.work, idx, ctx.axis);
+                return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, idx, ctx.axis));
             }
 
             // Materialise indices into a managed long[] for the multi-index path.
             long[] indices = ToInt64Vector(obj, "delete");
-            return DeleteIndexArray(ctx.work, indices, ctx.axis);
+            return WithSourceOrder(arr, DeleteIndexArray(ctx.work, indices, ctx.axis));
         }
 
         // ---------------------------- helpers ----------------------------

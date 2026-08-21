@@ -52,7 +52,7 @@ namespace NumSharp
             if (values is null) throw new ArgumentNullException(nameof(values));
 
             var ctx = PrepareAxisContext(arr, axis);
-            return InsertSingleIndex(ctx.work, obj, values, ctx.axis, scalarObj: true);
+            return WithSourceOrder(arr, InsertSingleIndex(ctx.work, obj, values, ctx.axis, scalarObj: true));
         }
 
         /// <summary>
@@ -90,7 +90,7 @@ namespace NumSharp
             // Slice obj is never treated as scalar for the broadcast quirk
             // (matches NumPy: ``isinstance(obj, slice)`` short-circuits the
             // scalar check).
-            return InsertMultiIndex(ctx.work, indices, values, ctx.axis);
+            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, indices, values, ctx.axis));
         }
 
         /// <summary>
@@ -119,7 +119,7 @@ namespace NumSharp
             for (int i = 0; i < obj.Length; i++) longs[i] = obj[i];
 
             var ctx = PrepareAxisContext(arr, axis);
-            return InsertMultiIndex(ctx.work, longs, values, ctx.axis);
+            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, longs, values, ctx.axis));
         }
 
         /// <summary>
@@ -143,7 +143,7 @@ namespace NumSharp
             if (values is null) throw new ArgumentNullException(nameof(values));
 
             var ctx = PrepareAxisContext(arr, axis);
-            return InsertMultiIndex(ctx.work, (long[])obj.Clone(), values, ctx.axis);
+            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, (long[])obj.Clone(), values, ctx.axis));
         }
 
         /// <summary>
@@ -194,7 +194,7 @@ namespace NumSharp
                         nameof(obj));
                 using var nzIdx = np.flatnonzero(obj);
                 long[] indices = ToInt64Vector(nzIdx, "insert");
-                return InsertMultiIndex(ctx.work, indices, values, ctx.axis);
+                return WithSourceOrder(arr, InsertMultiIndex(ctx.work, indices, values, ctx.axis));
             }
 
             if (obj.ndim > 1)
@@ -206,7 +206,7 @@ namespace NumSharp
             if (obj.ndim == 0)
             {
                 long idx = ToInt64Scalar(obj, "insert");
-                return InsertSingleIndex(ctx.work, idx, values, ctx.axis, scalarObj: true);
+                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, idx, values, ctx.axis, scalarObj: true));
             }
 
             // 1-D with size==1 still uses the single-index broadcast path but
@@ -214,9 +214,9 @@ namespace NumSharp
             // the moveaxis quirk).
             long[] objIndices = ToInt64Vector(obj, "insert");
             if (objIndices.Length == 1)
-                return InsertSingleIndex(ctx.work, objIndices[0], values, ctx.axis, scalarObj: false);
+                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, objIndices[0], values, ctx.axis, scalarObj: false));
 
-            return InsertMultiIndex(ctx.work, objIndices, values, ctx.axis);
+            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, objIndices, values, ctx.axis));
         }
 
         // ---------------------------- impl ----------------------------

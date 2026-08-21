@@ -112,6 +112,38 @@ def build(recipe, dtype="int64"):
     if recipe == "eye3":          return np.eye(3)
     if recipe == "frombuffer_ro": return np.frombuffer(bytes(range(4)), dtype=np.uint8)
     if recipe == "frombuffer_rw": return np.frombuffer(bytearray(range(4)), dtype=np.uint8)
+    # --- wave 2: producers found by scanning NumPy's own flags usages -----------------------
+    if recipe == "squeeze_c":     return np.zeros((3, 1, 4), dtype=dt).squeeze()
+    if recipe == "squeeze_f":     return np.asfortranarray(np.zeros((3, 1, 4), dtype=dt)).squeeze()
+    if recipe == "swapaxes3d":    return np.arange(24).astype(dt).reshape(2, 3, 4).swapaxes(0, 2)
+    if recipe == "expand_dims0":  return np.expand_dims(np.arange(6).astype(dt), 0)
+    if recipe == "atleast2d_1d":  return np.atleast_2d(np.arange(6).astype(dt))
+    if recipe == "rot90_2d":      return np.rot90(np.arange(12).astype(dt).reshape(3, 4))
+    if recipe == "flip0":         return np.flip(np.arange(12).astype(dt).reshape(3, 4), 0)
+    if recipe == "mt2d":          return np.arange(12).astype(dt).reshape(3, 4).mT
+    if recipe == "split0":        return np.split(np.arange(12).astype(dt), 3)[0]
+    if recipe == "unstack0":      return np.unstack(np.arange(6).astype(dt).reshape(2, 3))[0]
+    if recipe == "getfield_i32":  return np.arange(6).getfield(np.int32, 0)
+    if recipe == "pad_c":         return np.pad(np.arange(12).astype(dt).reshape(3, 4), 1)
+    if recipe == "pad_f":         return np.pad(np.asfortranarray(np.arange(12).astype(dt).reshape(3, 4)), 1)
+    if recipe == "delete_f":      return np.delete(np.asfortranarray(np.arange(12).astype(dt).reshape(3, 4)), 1, axis=0)
+    if recipe == "insert_f":      return np.insert(np.asfortranarray(np.arange(12).astype(dt).reshape(3, 4)), 1, 0, axis=0)
+    if recipe == "concat_cc":     return np.concatenate([np.arange(6).astype(dt).reshape(2, 3), np.arange(6).astype(dt).reshape(2, 3)])
+    if recipe == "concat_ff":
+        f = np.asfortranarray(np.arange(6).astype(dt).reshape(2, 3))
+        return np.concatenate([f, f])
+    if recipe == "zeros_like_f":  return np.zeros_like(np.asfortranarray(np.arange(6).astype(dt).reshape(2, 3)))
+    if recipe == "ones_like_t":   return np.ones_like(np.arange(12).astype(dt).reshape(3, 4).T)
+    if recipe == "empty_like_strided": return np.empty_like(np.arange(12).astype(dt).reshape(3, 4)[:, ::2])
+    if recipe == "meshgrid_nocopy": return np.meshgrid(np.arange(3).astype(dt), np.arange(2).astype(dt), copy=False)[0]
+    if recipe == "ro_view":
+        x = np.arange(6).astype(dt)
+        x.setflags(write=False)
+        return x[1:]
+    if recipe == "ro_view_dtype":
+        x = np.arange(6)
+        x.setflags(write=False)
+        return x.view(np.int32)
     if recipe == "mmap_r":        return np.load(_mmap_path("m5", np.arange(5.0)), mmap_mode="r")
     if recipe == "mmap_rp":       return np.load(_mmap_path("m5", np.arange(5.0)), mmap_mode="r+")
     if recipe == "mmap_c":        return np.load(_mmap_path("m5", np.arange(5.0)), mmap_mode="c")
@@ -131,7 +163,34 @@ RECIPES = [
     "astype", "copy_c", "copy_f", "eye3",
     "frombuffer_ro", "frombuffer_rw",
     "mmap_r", "mmap_rp", "mmap_c", "mmap_r_f", "mmap_empty_r",
+    # wave 2 (from scanning NumPy's own flags consumers/producers):
+    "squeeze_c", "squeeze_f", "swapaxes3d", "expand_dims0", "atleast2d_1d", "rot90_2d", "flip0",
+    "mt2d", "split0", "unstack0", "getfield_i32", "pad_c", "pad_f", "delete_f", "insert_f",
+    "concat_cc", "concat_ff", "zeros_like_f", "ones_like_t", "empty_like_strided",
+    "meshgrid_nocopy", "ro_view", "ro_view_dtype",
 ]
+
+# Identity-vs-copy consumers: NumPy's asarray family DECIDES from the flags whether to return the
+# same memory or copy (ascontiguousarray no-ops on C-contiguous input, asfortranarray on
+# F-contiguous, ravel views a contiguous 1-D). Each case pins the result's flags AND whether the
+# result SHARES the source's memory (np.shares_memory; C# compares buffer addresses).
+def build_consumer(recipe):
+    if recipe == "ascontig_c":
+        a = np.arange(12).reshape(3, 4);            return a, np.ascontiguousarray(a)
+    if recipe == "ascontig_f":
+        a = np.asfortranarray(np.arange(6).reshape(2, 3)); return a, np.ascontiguousarray(a)
+    if recipe == "ascontig_strided":
+        a = np.arange(12).reshape(3, 4)[:, ::2];    return a, np.ascontiguousarray(a)
+    if recipe == "asfortran_f":
+        a = np.asfortranarray(np.arange(6).reshape(2, 3)); return a, np.asfortranarray(a)
+    if recipe == "asfortran_c":
+        a = np.arange(12).reshape(3, 4);            return a, np.asfortranarray(a)
+    if recipe == "ravel_c1d":
+        a = np.arange(6);                           return a, np.ravel(a)
+    raise KeyError(recipe)
+
+
+CONSUMERS = ["ascontig_c", "ascontig_f", "ascontig_strided", "asfortran_f", "asfortran_c", "ravel_c1d"]
 
 # The dtype-independence sweep: same flags record for every dtype.
 SWEEP_RECIPES = ["c2d_view", "f2d", "t2d", "strided", "bcast_full", "negstride"]
@@ -179,14 +238,15 @@ def main():
     cases = []
 
     # 1) base records + verbatim str(flags), default dtype.
-    # bcast_arrays0 skips str: NumPy renders its WARN_ON_WRITE deprecation state as
-    # "WRITEABLE : True  (with WARN_ON_WRITE=True)" — machinery NumSharp deliberately does not
+    # bcast_arrays0/meshgrid_nocopy skip str: NumPy renders their WARN_ON_WRITE deprecation state
+    # as "WRITEABLE : True  (with WARN_ON_WRITE=True)" — machinery NumSharp deliberately does not
     # model (its broadcast_arrays results are plainly writeable, which is what NumPy's become).
+    no_str = {"bcast_arrays0", "meshgrid_nocopy"}
     for r in RECIPES:
         a = build(r)
         case = {"id": f"{r}/base", "recipe": r, "dtype": "int64", "ops": [],
                 "err": None, "f": flags_record(a)}
-        if r != "bcast_arrays0":
+        if r not in no_str:
             case["str"] = str(a.flags)
         cases.append(case)
         del a
@@ -215,6 +275,15 @@ def main():
                           "err": None, "f": flags_record(a)})
             del a
             gc.collect()
+
+    # 4) identity-vs-copy consumers (asarray family): result flags + shared-memory verdict.
+    for r in CONSUMERS:
+        src, res = build_consumer(r)
+        cases.append({"id": f"consumer/{r}", "recipe": r, "dtype": "int64", "ops": [],
+                      "err": None, "f": flags_record(res),
+                      "shared": bool(np.shares_memory(src, res))})
+        del src, res
+        gc.collect()
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", newline="\n") as fh:

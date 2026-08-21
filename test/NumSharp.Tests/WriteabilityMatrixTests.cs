@@ -97,8 +97,12 @@ namespace NumSharp.Tests
         {
             // (1) a[i,j] is a writeable 0-d view (NumPy: immutable scalar, WRITEABLE=False).
             Assert.IsTrue(MISALIGNED && Owned()["1, 2"].Shape.IsWriteable);
-            // (2) squeeze of a broadcast is a writeable copy via reshape (NumPy: read-only view).
-            Assert.IsTrue(MISALIGNED && np.squeeze(np.expand_dims(Broadcast(), 0)).Shape.IsWriteable);
+            // (2) RESOLVED to parity (flags-oracle wave 2): squeeze is now a stride-dropping VIEW,
+            // so squeezing a broadcast yields a READ-ONLY broadcast view exactly like NumPy —
+            // the old reshape-based squeeze materialized a writeable copy here.
+            var sq = np.squeeze(np.expand_dims(Broadcast(), 0));
+            Assert.IsFalse(sq.Shape.IsWriteable);
+            Assert.IsTrue(sq.Shape.IsBroadcasted);
         }
     }
 }

@@ -98,8 +98,11 @@ namespace NumSharp
                 // 3. Reallocation is required. Ownership and reference checks fire ONLY here (a
                 //    same-size resize is a pure reshape and skips them, exactly like NumPy).
 
-                // a. Must own its data (not a slice/reshape/transpose view).
-                if (this.Storage.IsView)
+                // a. Must own its data — not a slice/reshape/transpose view, and not an externally-based
+                //    array either (a memmap's memory belongs to the file mapping; NumPy's memmap.resize
+                //    refuses with the same text, and reallocating a mapped region would be fatal).
+                //    Note NumPy checks OWNERSHIP only, not WRITEABLE: a read-only OWNER resizes fine.
+                if (!this.Storage.OwnsData)
                     throw new IncorrectShapeException("cannot resize this array: it does not own its data");
 
                 // b. Must not be shared with another array (unless the caller opts out via refcheck).

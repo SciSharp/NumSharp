@@ -12,10 +12,25 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input data.</param>
         /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html</remarks>
+        /// <remarks>
+        ///     A pure VIEW like NumPy's <c>PyArray_Squeeze</c>: the length-one axes are dropped from the
+        ///     dims AND strides while offset/buffer stay — never a reshape (which rebuilds C-strides and
+        ///     so lost F-contiguity, and MATERIALIZED non-contiguous inputs where NumPy shares memory).
+        ///     Probed: <c>np.asfortranarray(zeros((3,1,4))).squeeze()</c> is F-contiguous, a transposed
+        ///     input stays a strided view, and a broadcast input keeps stride-0 (read-only).
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html
+        /// </remarks>
         public static NDArray squeeze(NDArray a)
         {
-            return a.reshape(a.shape.Where(x => x != 1).ToArray());
+            var dims = a.Shape.dimensions;
+            int keep = 0;
+            for (int i = 0; i < dims.Length; i++)
+                if (dims[i] != 1)
+                    keep++;
+            if (keep == dims.Length)
+                return new NDArray(a.Storage.Alias()); // nothing to remove — still a fresh view object
+
+            return SqueezeView(a, keep, onlyAxis: -1);
         }
 
         /// <summary>
@@ -37,7 +52,40 @@ namespace NumSharp
             if (a.shape[axis] != 1)
                 throw new IncorrectShapeException($"Unable to squeeze axis {axis} because it is of length {a.shape[axis]} and not 1.");
 
-            return a.reshape(squeeze_fast(a.Shape, axis));
+            // Stride-dropping VIEW (see squeeze(NDArray)) removing ONLY the named axis.
+            return SqueezeView(a, a.ndim - 1, onlyAxis: axis);
+        }
+
+        /// <summary>
+        ///     Builds the squeezed VIEW: dims and strides minus the removed length-one axes (all of them,
+        ///     or only <paramref name="onlyAxis"/>), offset and buffer preserved — NumPy's
+        ///     <c>PyArray_Squeeze</c>/<c>SelectedSqueeze</c>. Writeability/read-onlyness inherit through
+        ///     <see cref="UnmanagedStorage.Alias(Shape)"/>.
+        /// </summary>
+        private static NDArray SqueezeView(NDArray a, int keep, int onlyAxis)
+        {
+            var dims = a.Shape.dimensions;
+            var strides = a.Shape.strides;
+
+            if (keep == 0)
+            {
+                var scalar = new Shape(Array.Empty<long>(), Array.Empty<long>(), a.Shape.offset, a.Shape.BufferSize);
+                return new NDArray(a.Storage.Alias(scalar));
+            }
+
+            var newDims = new long[keep];
+            var newStrides = new long[keep];
+            int j = 0;
+            for (int i = 0; i < dims.Length; i++)
+            {
+                if (onlyAxis >= 0 ? i == onlyAxis : dims[i] == 1)
+                    continue;
+                newDims[j] = dims[i];
+                newStrides[j] = strides[i];
+                j++;
+            }
+
+            return new NDArray(a.Storage.Alias(new Shape(newDims, newStrides, a.Shape.offset, a.Shape.BufferSize)));
         }
 
         /// <summary>
