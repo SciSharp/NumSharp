@@ -58,6 +58,31 @@ namespace NumSharp.Backends.Kernels
 
         internal static readonly ConcurrentDictionary<SearchKernelKey, SearchSortedKernel> _searchCache = new();
 
+        // Resolved once (fail-fast at type load) so kernel emission never pays the GetMethod cost.
+        private static readonly MethodInfo _numpyComplexLess =
+            typeof(DirectILKernelGenerator).GetMethod(nameof(NumpyComplexLess),
+                BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("NumpyComplexLess not found");
+
+        /// <summary>
+        /// NumPy's <c>CDOUBLE_LT</c> (npysort_common.h): NaN-aware lexicographic complex "less-than",
+        /// returning 1/0 for the IL comparator convention. The real parts compare first; when they are
+        /// equal (or BOTH real parts are NaN) the imaginary parts break the tie; and any NaN component
+        /// sorts LAST. This is the SAME total order <c>np.sort</c> / <c>np.sort_complex</c> apply
+        /// (see <c>AxisSort.ComplexCmp</c>), so <c>searchsorted</c> stays consistent with a
+        /// complex-sorted array — a real-only compare did not.
+        /// </summary>
+        internal static int NumpyComplexLess(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            double ar = a.Real, ai = a.Imaginary, br = b.Real, bi = b.Imaginary;
+            bool aiN = double.IsNaN(ai), biN = double.IsNaN(bi);
+            if (ar < br) return (!aiN || biN) ? 1 : 0;                        // a.im not NaN, OR b.im NaN
+            if (ar > br) return (biN && !aiN) ? 1 : 0;                        // b.im NaN AND a.im not NaN
+            if (ar == br || (double.IsNaN(ar) && double.IsNaN(br)))           // reals equal, or both real-NaN
+                return (ai < bi || (biN && !aiN)) ? 1 : 0;
+            return double.IsNaN(br) ? 1 : 0;                                  // b.real is NaN
+        }
+
         /// <summary>
         /// Get or generate a searchsorted kernel.
         /// </summary>
@@ -108,13 +133,13 @@ namespace NumSharp.Backends.Kernels
         {
             int elemSize = GetTypeSize(key.Type);
 
-            // Complex: load only the Real (double) component for comparison.
-            // System.Numerics.Complex memory layout puts Real first (m_real, m_imaginary),
-            // so ldind.r8 on a Complex* yields Real directly while the element stride remains 16 bytes.
-            // Matches the legacy NumSharp behavior (Converts.ToDouble(Complex) -> Real).
-            bool isComplex = key.Type == NPTypeCode.Complex;
-            var compareType = isComplex ? NPTypeCode.Double : key.Type;
-            var compareClrType = isComplex ? typeof(double) : GetClrType(key.Type);
+            // Compare in the element's OWN dtype. Complex loads the full 16-byte struct and compares
+            // lexicographically (real, then imaginary) via NumPy's CDOUBLE_LT (see EmitLess), so
+            // searchsorted agrees with np.sort / np.sort_complex — which use the same total order.
+            // (A real-only compare diverged whenever two elements shared a real part but differed in
+            //  imag, or a key carried a NaN imaginary component.)
+            var compareType = key.Type;
+            var compareClrType = GetClrType(key.Type);
 
             // ---- locals ----
             var locI       = il.DeclareLocal(typeof(long));   // outer key index
@@ -344,14 +369,19 @@ namespace NumSharp.Backends.Kernels
         /// Emit NumPy's <c>less(x, y)</c> functor (numpy_tag.h), leaving int32 0/1 on the stack.
         /// Float tags: <c>(x &lt; y) | (x==x &amp; y!=y)</c> — the second term makes NaN sort last
         /// (finite &lt; NaN true, NaN &lt; finite false, NaN &lt; NaN false), matching
-        /// FLOAT_LT / DOUBLE_LT / HALF_LT. Complex flows here via its Real (Double) component.
-        /// Decimal has no NaN and uses its ordered operator; integer/char/bool use the ordered
-        /// clt / clt.un.
+        /// FLOAT_LT / DOUBLE_LT / HALF_LT. Complex uses NumPy's CDOUBLE_LT (NaN-aware lexicographic
+        /// real-then-imag) via <see cref="NumpyComplexLess"/>. Decimal has no NaN and uses its
+        /// ordered operator; integer/char/bool use the ordered clt / clt.un.
         /// </summary>
         private static void EmitLess(ILGenerator il, NPTypeCode type, LocalBuilder x, LocalBuilder y)
         {
             switch (type)
             {
+                case NPTypeCode.Complex:
+                    il.Emit(OpCodes.Ldloc, x); il.Emit(OpCodes.Ldloc, y);
+                    il.EmitCall(OpCodes.Call, _numpyComplexLess, null);   // CDOUBLE_LT -> int 0/1
+                    return;
+
                 case NPTypeCode.Single:
                 case NPTypeCode.Double:
                     // (x < y) | (x==x & y!=y)      [ceq/clt are ordered: NaN operand -> 0]

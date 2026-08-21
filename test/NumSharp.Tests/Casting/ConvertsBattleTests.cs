@@ -1101,10 +1101,34 @@ namespace NumSharp.Tests.Casting
         [TestMethod]
         public void Searchsorted_ComplexArray_FindsPosition()
         {
-            // Complex compared by real part (NumPy semantics — emits warning in NumPy)
+            // Complex is compared with NumPy's CDOUBLE_LT — NaN-aware LEXICOGRAPHIC (real, then imag),
+            // the SAME total order np.sort/np.sort_complex use (not real-part-only).
             var arr = np.array(new[] { new Complex(1, 0), new Complex(3, 0), new Complex(5, 0), new Complex(7, 0) });
             var idx = np.searchsorted(arr, np.asarray(new Complex(4, 0)));
             idx.GetAtIndex<long>(0).Should().Be(2);
+        }
+
+        [TestMethod]
+        public void Searchsorted_Complex_Lexicographic_ImagBreaksTie()
+        {
+            // Equal real parts -> the imaginary component orders them (numpy 2.4.2):
+            //   np.searchsorted([2+1j,2+3j,2+5j], 2+4j)              -> left 2, right 2
+            //   np.searchsorted([2+1j,2+3j,2+5j], 2+3j, side='...')  -> left 1, right 2
+            var a = np.array(new[] { new Complex(2, 1), new Complex(2, 3), new Complex(2, 5) });
+            np.searchsorted(a, np.asarray(new Complex(2, 4)), "left").GetAtIndex<long>(0).Should().Be(2);
+            np.searchsorted(a, np.asarray(new Complex(2, 4)), "right").GetAtIndex<long>(0).Should().Be(2);
+            np.searchsorted(a, np.asarray(new Complex(2, 3)), "left").GetAtIndex<long>(0).Should().Be(1);
+            np.searchsorted(a, np.asarray(new Complex(2, 3)), "right").GetAtIndex<long>(0).Should().Be(2);
+        }
+
+        [TestMethod]
+        public void Searchsorted_Complex_NaNComponent_SortsLast()
+        {
+            // Any NaN component sorts LAST (CDOUBLE_LT): a NaN imaginary part on an in-range real
+            // still lands at len(a). np.searchsorted([1,2,3], complex(2, nan)) -> 3 (both sides).
+            var a = np.array(new[] { new Complex(1, 0), new Complex(2, 0), new Complex(3, 0) });
+            np.searchsorted(a, np.asarray(new Complex(2, double.NaN)), "left").GetAtIndex<long>(0).Should().Be(3);
+            np.searchsorted(a, np.asarray(new Complex(2, double.NaN)), "right").GetAtIndex<long>(0).Should().Be(3);
         }
 
         [TestMethod]

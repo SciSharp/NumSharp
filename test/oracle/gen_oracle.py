@@ -1621,8 +1621,29 @@ def gen_argsort(dtypes):
 
 
 def gen_searchsorted(dtypes):
+    """np.searchsorted differential corpus (NumPy 2.4.2 is the oracle). Families:
+
+      base    — sorted DISTINCT a + distinct v, same dtype, left/right (kernel baseline; UNCHANGED).
+      dup     — a WITH duplicates + keys below/at/in-gap/above: first-vs-last occurrence (left/right
+                MUST differ) AND the out-of-range clamp to 0 / len(a).
+      mixed   — a.dtype != v.dtype: NumPy searches in result_type(a, v) and NEVER casts the key DOWN
+                to a's dtype (the cc676ea8 promotion path — fractional/out-of-range/negative keys that
+                would wrap or truncate under a naive down-cast).
+      sorter  — UNSORTED a + argsort(a) as `sorter` (the separate argbinsearch IL-kernel path).
+      nan     — NaN keys, and a NaN in a's tail: NaN sorts LAST and must not corrupt the carried bound.
+      cplx    — complex with equal real / differing imag / NaN component: NumPy's CDOUBLE_LT is
+                NaN-aware LEXICOGRAPHIC (real then imag), the same order np.sort uses.
+      strided — non-contiguous (::2), offset slice, and negative-stride a (the contiguousA=false /
+                arrStride!=elemSize kernel path; NumPy is the oracle even for a reversed view).
+      empty   — empty a (all zeros), scalar v (0-d result), empty v (empty result).
+
+    The cross-cutting families (mixed/sorter/nan/cplx/strided/empty) are gated on len(dtypes) > 1
+    so char_tier's single-dtype uint16->char weave only picks up the same-dtype base/dup families.
+    """
     cases = []
     n = 0
+
+    # Family: base (UNCHANGED — keep the original 26 cases byte-identical).
     for dt in dtypes:
         a = np.sort(_distinct(8, dt))
         v = _distinct(6, dt)
@@ -1639,6 +1660,126 @@ def gen_searchsorted(dtypes):
                 "valueclass": "distinct",
             })
             n += 1
+
+    def emit(a_pair, v_pair, side, tag, vclass, sorter_pair=None):
+        """Serialize one (a, v[, sorter]) searchsorted case; NumPy computes the oracle result."""
+        nonlocal n
+        a_base, a_view = a_pair
+        v_base, v_view = v_pair
+        ops = [describe(a_base, a_view), describe(v_base, v_view)]
+        s_view = None
+        if sorter_pair is not None:
+            s_base, s_view = sorter_pair
+            ops.append(describe(s_base, s_view))
+        r = np.asarray(np.searchsorted(a_view, v_view, side=side, sorter=s_view))
+        cases.append({
+            "id": f"searchsorted/{tag}/{side}/{n}",
+            "op": "searchsorted",
+            "params": {"side": side},
+            "operands": ops,
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": f"searchsorted_{tag}",
+            "valueclass": vclass,
+        })
+        n += 1
+
+    # Family: duplicates (first-vs-last) + out-of-range clamp. Runs per dtype (incl. the char weave).
+    # min(a)=1 so key 0 probes below-min for unsigned too; key 9 probes above-max.
+    for dt in dtypes:
+        a = np.sort(np.array([1, 2, 2, 4, 4, 4, 6, 8], dtype=dt))
+        v = np.array([0, 1, 2, 3, 4, 5, 8, 9], dtype=dt)
+        for side in ("left", "right"):
+            emit((a, a), (v, v), side, f"dup/{dt}", "dup")
+
+    # Cross-cutting families — skipped under the single-dtype char-weave call.
+    if len(dtypes) > 1:
+        # mixed dtype: (a_vals, a_dtype, v_vals, v_dtype, tag). The keys are chosen to expose a
+        # naive down-cast to a's dtype (fractional, out-of-a's-range, negative-into-unsigned).
+        mixed = [
+            ([1, 2, 3, 4, 5, 6, 7, 8], "int32",      [0.5, 2.5, 4.0, 8.5, 9.0], "float64", "i32_f64"),
+            ([0, 1, 2, 3, 4, 5, 6, 7], "int8",       [-200, 3, 100, 127, 300],  "int64",   "i8_i64_oob"),
+            ([10, 20, 30, 40, 50],     "int8",       [5.0, 15.5, 45.0, 100.0],  "float64", "i8_f64"),
+            ([1, 2, 3, 4, 5],          "uint8",      [-5, 0, 3, 300],           "int16",   "u8_i16_neg"),
+            ([1, 2, 3, 4, 5, 6, 7, 8], "float32",    [0.5, 2.25, 8.75, 9.0],    "float64", "f32_f64"),
+            ([1, 2, 3, 4, 5],          "int64",      [0, 3, 5, 6],              "uint64",  "i64_u64"),
+            ([0, 0, 1, 1],             "bool",       [-1, 0, 1, 2],             "int32",   "bool_i32"),
+            ([1, 2, 3, 4, 5],          "complex128", [0.5, 2.0, 5.5],           "float64", "c128_f64"),
+            ([1, 2, 3, 4, 5, 6, 7, 8], "float64",    [-1, 3, 8, 9],             "int32",   "f64_i32"),
+            ([1, 2, 3, 4, 5],          "uint16",     [-1, 3, 70000],            "int32",   "u16_i32_oob"),
+        ]
+        for (av, adt, vv, vdt, tag) in mixed:
+            a = np.sort(np.array(av, dtype=adt))
+            v = np.array(vv, dtype=vdt)
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"mixed/{tag}", "mixed")
+
+        # sorter: UNSORTED a (with duplicates) + argsort(a). Exercises the argbinsearch kernel.
+        for dt in ("int32", "int64", "uint8", "int16", "float32", "float64", "float16", "complex128"):
+            a = np.array([5, 1, 3, 1, 5, 2, 3, 4], dtype=dt)
+            sorter = np.argsort(a, kind="stable").astype(np.int64)   # NumPy sorter dtype is intp (int64)
+            v = np.array([1, 3, 5, 0, 6], dtype=dt)
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"sorter/{dt}", "sorter", sorter_pair=(sorter, sorter))
+
+        # NaN keys (carry reset), and a NaN sitting in a's sorted tail.
+        for dt in ("float16", "float32", "float64"):
+            a = np.sort(np.array([-2, 0, 1.5, 3, 10], dtype=dt))
+            v = np.array([np.nan, 1.0, np.nan, 100.0, -5.0, 3.0], dtype=dt)
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"nan/{dt}", "nan")
+        for dt in ("float32", "float64"):
+            a = np.array([1.0, 2.0, 3.0, np.nan], dtype=dt)          # sorted: NaN last
+            v = np.array([2.5, np.nan, 0.0, 5.0], dtype=dt)
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"nan_in_a/{dt}", "nan")
+
+        # complex lexicographic (CDOUBLE_LT): equal real / differing imag / NaN component.
+        ca1 = np.sort(np.array([1 + 0j, 2 + 1j, 2 + 3j, 2 + 5j, 3 + 0j, 3 + 2j], dtype=np.complex128))
+        cv1 = np.array([2 + 2j, 2 + 4j, 2 + 3j, 3 + 1j, 0.5 + 0j,
+                        complex(2, np.nan), complex(np.nan, 0)], dtype=np.complex128)
+        ca2 = np.sort(np.array([0 + 0j, 0 + 1j, 0 + 2j, 1 + 0j, 1 + 1j], dtype=np.complex128))
+        cv2 = np.array([0 + 1.5j, 0 - 1j, 1 + 0.5j, complex(0, np.nan)], dtype=np.complex128)
+        for (a, v, tag) in ((ca1, cv1, "c1"), (ca2, cv2, "c2")):
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"cplx/{tag}", "cplx")
+
+        # strided a: non-contiguous (::2), offset slice, negative-stride (reversed => descending;
+        # NumPy is still the oracle — it searches the same strided memory).
+        for dt in ("int32", "float64", "uint8", "complex128"):
+            base = np.arange(16).astype(dt)     # already sorted
+            view = base[::2]                    # ascending, stride 2 (non-contiguous)
+            v = np.array([1, 4, 7, 10, 15, 0], dtype=dt)
+            for side in ("left", "right"):
+                emit((base, view), (v, v), side, f"strided/{dt}", "strided")
+        for dt in ("int32", "float64"):
+            base = np.arange(20).astype(dt)
+            view = base[3:15]                   # offset 3, contiguous
+            v = np.array([0, 5, 14, 19, 10], dtype=dt)
+            for side in ("left", "right"):
+                emit((base, view), (v, v), side, f"offset/{dt}", "strided")
+        base = np.arange(8, dtype=np.int32)
+        view = base[::-1]                       # [7..0], stride -1 (descending; oracle = NumPy)
+        v = np.array([3, 0, 7, 5], dtype=np.int32)
+        for side in ("left", "right"):
+            emit((base, view), (v, v), side, "negstride/int32", "strided")
+
+        # empty a (all zeros), scalar v (0-d result), empty v (empty result).
+        for dt in ("int32", "float64"):
+            a = np.array([], dtype=dt)
+            v = np.array([1, 2, 3], dtype=dt)
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"empty_a/{dt}", "empty")
+        for dt in ("int32", "float64"):
+            a = np.sort(_distinct(8, dt))
+            v = np.array(3, dtype=dt)           # 0-d scalar key -> 0-d result
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"scalar_v/{dt}", "scalar")
+        for dt in ("int32", "float64"):
+            a = np.sort(_distinct(8, dt))
+            v = np.array([], dtype=dt)          # empty v -> empty result
+            emit((a, a), (v, v), "left", f"empty_v/{dt}", "empty")
+
     return cases
 
 

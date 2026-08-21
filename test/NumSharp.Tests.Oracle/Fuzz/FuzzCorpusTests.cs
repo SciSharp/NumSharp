@@ -502,7 +502,7 @@ namespace NumSharp.Tests.Fuzz
             ["reduce.jsonl"] = 9004,
             ["rounding.jsonl"] = 665,
             ["scan.jsonl"] = 907,
-            ["sort.jsonl"] = 401,
+            ["sort.jsonl"] = 940,   // +102: searchsorted expansion (dup/mixed-promotion/sorter/nan/complex-lex/strided/empty)
             ["specials.jsonl"] = 1866,
             ["stat.jsonl"] = 3412,
             ["tail.jsonl"] = 1872,

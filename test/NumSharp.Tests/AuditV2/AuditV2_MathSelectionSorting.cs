@@ -184,19 +184,14 @@ public class AuditV2_MathSelectionSorting
     /// produces the bisect-right answer. The function's own docstring even admits
     /// it is "left-most position … equivalent to NumPy's searchsorted with side='left'".
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.27c")]
+    [TestMethod]   // RESOLVED: searchsorted now has the `side` parameter (was [OpenBugs] audit-v2-T1.27c).
     public void T1_27c_BinarySearchRightmost_MisnamedActuallyLeftmost()
     {
-        // Repeat the canonical NumPy test:
-        //   side='left'  → 1
-        //   side='right' → 3
+        // Canonical NumPy test:  np.searchsorted([1,2,2,3], 2, side='left') -> 1 ; side='right' -> 3
         var a = np.array(new int[] { 1, 2, 2, 3 });
-        long actual = np.searchsorted(a, 2);
-
-        // The function returns 'left'. We can't request 'right' today. When the
-        // implementation grows a `side` parameter, calling it with side="right"
-        // should produce 3. The current API can't express that — that's the bug.
-        actual.Should().Be(3, "this assertion verifies the future side='right' path returns 3");
+        np.searchsorted(a, 2).Should().Be(1, "the default side='left' returns the FIRST suitable index");
+        np.searchsorted(a, 2, side: "left").Should().Be(1);
+        np.searchsorted(a, 2, side: "right").Should().Be(3, "side='right' returns the LAST suitable index");
     }
 
     // ---------------------------------------------------------------------------

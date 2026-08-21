@@ -211,7 +211,8 @@ namespace NumSharp.Tests.Fuzz
                 // Sorting / searching (T14).
                 case "argsort": return ApplyArgsort(ops[0], p["axis"].GetInt32());
                 case "sort": return np.sort(ops[0], p["axis"].GetInt32());          // Group A B2: value sort
-                case "searchsorted": return np.searchsorted(ops[0], ops[1], p["side"].GetString());
+                case "searchsorted": return np.searchsorted(ops[0], ops[1], p["side"].GetString(),
+                                                             ops.Length >= 3 ? ops[2] : null);   // ops[2] = optional sorter
                 case "digitize": return np.digitize(ops[0], ops[1], p["right"].GetBoolean()); // searchsorted + monotonicity
                 case "nonzero": return np.nonzero(ops[0])[0]; // 1-D: single int64 index array
                 case "bincount": // count (1 operand) or weighted sum (2 operands); minlength always recorded
