@@ -317,6 +317,28 @@ namespace NumSharp.Tests.Manipulation
         }
 
         [TestMethod]
+        public void Fill_VeryHighNdim_NoNdimLimit_HeapOdometer()
+        {
+            // NumSharp has NO ndim cap (NumPy refuses >64 dims), so the inner-contiguous fill fast path must
+            // work at ANY rank — its odometer heap-allocates the coord array past the stack budget. Shape
+            // [3, 1, 1, ..., 1, 4] (12 elements) at ndim=70 and 200; [::2] on axis 0 is non-contiguous with a
+            // unit-stride inner run, so it hits the fast path. Verified vs NumPy at its max rank 64 (identical:
+            // 9,9,9,9,4,5,6,7,9,9,9,9); here we assert the same at ranks NumPy cannot even represent.
+            foreach (int ndim in new[] { 70, 200 })
+            {
+                var dims = new int[ndim];
+                for (int i = 0; i < ndim; i++) dims[i] = 1;
+                dims[0] = 3; dims[ndim - 1] = 4;
+                var p = np.arange(12).astype(np.int32).reshape(new Shape(dims));
+                p["::2"].fill(9);   // rows 0 and 2 (first/last 4 elements) -> 9; row 1 (middle 4) untouched
+                var flat = p.flatten();
+                var expected = new long[] { 9, 9, 9, 9, 4, 5, 6, 7, 9, 9, 9, 9 };
+                for (int i = 0; i < 12; i++)
+                    Convert.ToInt64(flat.GetAtIndex(i)).Should().Be(expected[i], $"ndim={ndim} element {i}");
+            }
+        }
+
+        [TestMethod]
         public void Fill_FortranContiguous_WritesThrough()
         {
             var f = np.asfortranarray(np.arange(6).astype(np.int32).reshape(2, 3));
