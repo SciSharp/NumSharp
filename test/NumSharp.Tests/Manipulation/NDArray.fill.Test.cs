@@ -94,11 +94,96 @@ namespace NumSharp.Tests.Manipulation
         }
 
         [TestMethod]
-        public void Fill_NonFiniteFloatIntoInt_Raises()
+        public void Fill_NaNIntoInt_RaisesValueError()
         {
+            // NumPy 2.4.2: a NaN float assigned to an integer dtype is a ValueError (NOT an OverflowError),
+            // with a dtype-independent message — its float->int setitem funnels through Python's int().
             var a = np.zeros(new Shape(3), NPTypeCode.Int32);
-            ((Action)(() => a.fill(double.NaN))).Should().Throw<OverflowException>();
-            ((Action)(() => a.fill(double.PositiveInfinity))).Should().Throw<OverflowException>();
+            ((Action)(() => a.fill(double.NaN))).Should().Throw<ValueError>()
+                .WithMessage("cannot convert float NaN to integer");
+            // Half / float32 NaN sources take the same branch.
+            ((Action)(() => np.zeros(new Shape(2), NPTypeCode.SByte).fill(Half.NaN)))
+                .Should().Throw<ValueError>().WithMessage("*NaN to integer*");
+            ((Action)(() => np.zeros(new Shape(2), NPTypeCode.UInt64).fill(float.NaN)))
+                .Should().Throw<ValueError>().WithMessage("*NaN to integer*");
+        }
+
+        [TestMethod]
+        public void Fill_InfIntoInt_RaisesOverflow()
+        {
+            // NumPy 2.4.2: ±inf into an integer dtype is an OverflowError, message says "infinity" for BOTH signs.
+            var a = np.zeros(new Shape(3), NPTypeCode.Int32);
+            ((Action)(() => a.fill(double.PositiveInfinity))).Should().Throw<OverflowException>()
+                .WithMessage("cannot convert float infinity to integer");
+            ((Action)(() => a.fill(double.NegativeInfinity))).Should().Throw<OverflowException>()
+                .WithMessage("cannot convert float infinity to integer");
+        }
+
+        // ---- complex source rejection (NumPy funnels through int()/float()) ----------------
+
+        [TestMethod]
+        public void Fill_ComplexIntoInt_RaisesTypeError()
+        {
+            // NumPy 2.4.2: a (weak) complex assigned to a non-bool integer dtype is a TypeError — even with a
+            // zero imaginary part. NumSharp used to silently drop the imaginary part and store the real part.
+            var a = np.zeros(new Shape(3), NPTypeCode.Int32);
+            ((Action)(() => a.fill(new Complex(2, 3)))).Should().Throw<TypeError>()
+                .WithMessage("int() argument must be a string, a bytes-like object or a real number, not 'complex'");
+            ((Action)(() => a.fill(new Complex(2, 0)))).Should().Throw<TypeError>()
+                .WithMessage("*not 'complex'*");
+        }
+
+        [TestMethod]
+        public void Fill_ComplexIntoFloatFamily_RaisesTypeError()
+        {
+            // NumPy 2.4.2: a (weak) complex into a real float dtype is a TypeError via float(). Decimal has no
+            // NumPy analog but is a real float-family type, so it takes the same rejection.
+            foreach (var tc in new[] { NPTypeCode.Half, NPTypeCode.Single, NPTypeCode.Double, NPTypeCode.Decimal })
+                ((Action)(() => np.zeros(new Shape(2), tc).fill(new Complex(2, 3)))).Should().Throw<TypeError>()
+                    .WithMessage("float() argument must be a string or a real number, not 'complex'");
+        }
+
+        [TestMethod]
+        public void Fill_ComplexIntoBool_Truthiness()
+        {
+            // A complex into bool is NOT rejected — it truthiness-tests (nonzero -> True), matching NumPy.
+            var a = np.zeros(new Shape(2), NPTypeCode.Boolean);
+            a.fill(new Complex(2, 3));
+            a.GetBoolean(0).Should().BeTrue();
+            a.fill(new Complex(0, 0));
+            a.GetBoolean(0).Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void Fill_ComplexIntoComplex_Works()
+        {
+            var a = np.zeros(new Shape(2), NPTypeCode.Complex);
+            a.fill(new Complex(2, 3));
+            a.GetAtIndex(0).Should().Be(new Complex(2, 3));
+        }
+
+        [TestMethod]
+        public void Fill_StrongComplex0d_IntoReal_DropsImaginary()
+        {
+            // A STRONG 0-d complex NDArray takes the raw-cast path (drops the imaginary part), matching NumPy's
+            // 0-d-array raw cast (np.zeros(3,int).fill(np.array(2+3j)) == 2) — NOT the weak-scalar TypeError.
+            var ai = np.zeros(new Shape(2), NPTypeCode.Int32);
+            ai.fill(NDArray.Scalar(new Complex(2, 3)));
+            ai.GetInt32(0).Should().Be(2);
+
+            var af = np.zeros(new Shape(2), NPTypeCode.Double);
+            af.fill(NDArray.Scalar(new Complex(2, 3)));
+            af.GetDouble(0).Should().Be(2.0);
+        }
+
+        [TestMethod]
+        public void Fill_OneElementArray_IsSequenceError()
+        {
+            // NumPy: even a 1-element (ndim>=1) array is "setting an array element with a sequence." — only a
+            // 0-d array is a valid strong scalar.
+            var a = np.zeros(new Shape(3), NPTypeCode.Int32);
+            ((Action)(() => a.fill(np.array(new[] { 5 })))).Should().Throw<ValueError>()
+                .WithMessage("*setting an array element with a sequence*");
         }
 
         [TestMethod]
@@ -200,6 +285,35 @@ namespace NumSharp.Tests.Manipulation
             var r = np.arange(6).astype(np.int32);
             r["::-1"].fill(3);
             for (int i = 0; i < 6; i++) r.GetInt32(i).Should().Be(3);
+        }
+
+        [TestMethod]
+        public void Fill_3D_InnerContiguousStridedMiddle_WritesThrough()
+        {
+            // (2,3,4)[:, ::2, :] — innermost axis contiguous, middle axis strided: the inner-run fast path
+            // walks the outer/middle axes as an odometer, filling each contiguous inner run (verified vs NumPy).
+            var m = np.arange(24).astype(np.int32).reshape(2, 3, 4);
+            m[":, ::2, :"].fill(7);
+            for (int i = 0; i < 2; i++)
+                for (int k = 0; k < 4; k++)
+                {
+                    m.GetInt32(i, 0, k).Should().Be(7);   // middle rows 0 and 2 filled
+                    m.GetInt32(i, 2, k).Should().Be(7);
+                }
+            m.GetInt32(0, 1, 0).Should().Be(4);           // middle row 1 untouched
+            m.GetInt32(1, 1, 3).Should().Be(19);
+        }
+
+        [TestMethod]
+        public void Fill_NegativeOuterStride_InnerContiguous_WritesThrough()
+        {
+            // (4,5)[::-1] — outer stride is NEGATIVE but the inner axis stays contiguous. The odometer adds
+            // coord*stride (stride < 0), so every row is still filled; the whole array becomes the value.
+            var m = np.arange(20).astype(np.int32).reshape(4, 5);
+            m["::-1"].fill(9);
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 5; j++)
+                    m.GetInt32(i, j).Should().Be(9);
         }
 
         [TestMethod]
