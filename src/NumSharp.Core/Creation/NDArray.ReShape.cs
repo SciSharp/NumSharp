@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics.CodeAnalysis;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
@@ -14,39 +15,31 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
         public NDArray reshape(Shape newShape)
         {
-            return reshape(ref newShape);
+            return ReshapeCore(newShape, 'C');
         }
 
         /// <summary>
-        ///     Gives a new shape to an array without changing its data, filling values in the specified order.
+        ///     Gives a new shape to an array without changing its data, reading the elements in the
+        ///     specified index order.
         /// </summary>
-        /// <param name="newShape">The new shape. Dimensions must be explicit (no -1 placeholder on the F-order path).</param>
+        /// <param name="newShape">The new shape (one dimension may be -1 — inferred, any order).</param>
         /// <param name="order">
-        ///     Read/write order for the reshape.
+        ///     Read/write index order for the reshape.
         ///     'C' (default) - row-major, 'F' - column-major,
-        ///     'A' - preserve source layout when possible, 'K' - memory order.
-        ///     When 'F', values are both read in F-order from the source and written in F-order
-        ///     to the destination, producing an F-contiguous result with NumPy-aligned values.
+        ///     'A' - 'F' when the source is F-contiguous and NOT C-contiguous, else 'C';
+        ///     'K' raises NumPy's <c>ValueError("order 'K' is not permitted for reshaping")</c>.
         /// </param>
-        /// <returns>Reshaped array. For order='F' this is always a newly-allocated F-contiguous copy.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/generated/numpy.reshape.html
-        ///     The F-order path does not currently support the -1 placeholder dimension —
-        ///     pre-compute the inferred dim and pass explicit sizes. A mismatched size raises
-        ///     <see cref="IncorrectShapeException"/> via the UnmanagedStorage constructor.
-        /// </remarks>
+        /// <returns>
+        ///     A VIEW whenever the reshape can be expressed over the existing strides
+        ///     (contiguous-in-order relabel, or NumPy's <c>_attempt_nocopy_reshape</c> grouping —
+        ///     which can yield a non-contiguous strided view); otherwise a view over an INTERNAL
+        ///     copy taken in <paramref name="order"/> (so the result reports owndata=False either
+        ///     way, exactly like NumPy's reshape).
+        /// </returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
         public NDArray reshape(Shape newShape, char order)
         {
-            char physical = OrderResolver.Resolve(order, this.Shape);
-            if (physical != 'F')
-                return reshape(ref newShape);
-
-            // F-order reshape: read source column-major, write destination column-major.
-            // Equivalent to placing flatten('F') memory into an F-contiguous shape.
-            var fFlat = this.flatten('F');
-            var dims = (long[])newShape.Dimensions.Clone();
-            var fShape = new Shape(dims, 'F');
-            return new NDArray(new UnmanagedStorage(fFlat.Storage.InternalArray, fShape)) { TensorEngine = TensorEngine };
+            return ReshapeCore(newShape, order);
         }
 
         /// <summary>
@@ -57,18 +50,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
         public NDArray reshape(ref Shape newShape)
         {
-            // NumPy: reshape returns a view when possible (contiguous), otherwise a copy
-            // For non-contiguous arrays (transposed/sliced), we must copy to get correct values
-            if (!Shape.IsContiguous)
-            {
-                // Clone data to contiguous, then reshape the clean copy
-                var copy = new NDArray(CloneData(), Shape.Clean()) { TensorEngine = TensorEngine };
-                return copy.reshape(ref newShape);
-            }
-
-            var ret = Storage.Alias();
-            ret.Reshape(ref newShape, false);
-            return new NDArray(ret) {TensorEngine = TensorEngine};
+            return ReshapeCore(newShape, 'C');
         }
 
         /// <summary>
@@ -98,18 +80,106 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray reshape(params long[] shape)
         {
-            // NumPy: reshape returns a view when possible (contiguous), otherwise a copy
-            // For non-contiguous arrays (transposed/sliced), we must copy to get correct values
-            if (!Shape.IsContiguous)
+            return ReshapeCore(new Shape(shape), 'C');
+        }
+
+        /// <summary>
+        ///     The reshape engine — a port of NumPy's <c>_reshape_with_copy_arg</c>
+        ///     (numpy/_core/src/multiarray/shape.c, <c>NPY_COPY_IF_NEEDED</c>), route for route:
+        ///     <list type="number">
+        ///     <item>order 'A' resolves via <c>PyArray_ISFORTRAN</c> (F-and-not-C); 'K' raises
+        ///     NumPy's ValueError verbatim.</item>
+        ///     <item>Same dims (checked BEFORE -1 resolution) → <c>PyArray_View</c>: a full alias
+        ///     keeping shape, strides, offset, and flags (a same-shape reshape of a strided view
+        ///     stays that strided view).</item>
+        ///     <item><c>_fix_unknown_dimension</c> + size validation with NumPy's verbatim error
+        ///     texts (delegated to the existing <see cref="Shape.Reshape(Shape, bool)"/> port).</item>
+        ///     <item>Contiguous in the requested order (or size ≤ 1 / size 0, which NumPy always
+        ///     flags contiguous) → relabel the same buffer window as a view.</item>
+        ///     <item><see cref="Shape.TryNocopyReshape"/> → a (possibly non-contiguous) strided
+        ///     VIEW sharing this array's memory — <c>arange(24).reshape(3,8)[:, ::2].reshape(2,6)</c>
+        ///     is the byte-stride (96,16) view NumPy returns, and a reversed 1-D input splits to
+        ///     negative-stride 2-D.</item>
+        ///     <item>Otherwise copy in <paramref name="order"/> and return a view OVER that
+        ///     internal copy — NumPy's reshape result reports owndata=False on the copy path too
+        ///     (its base is the internal copy), e.g. reshape(order:'F') of a C source.</item>
+        ///     </list>
+        /// </summary>
+        private NDArray ReshapeCore(Shape requestedShape, char order)
+        {
+            var src = this.Shape;
+
+            // The uninitialized-shape sentinel has no dims/flags to reason about — keep the
+            // legacy alias+relabel route for it verbatim.
+            if (src.IsEmpty)
             {
-                // Clone data to contiguous, then reshape the clean copy
-                var copy = new NDArray(CloneData(), Shape.Clean()) { TensorEngine = TensorEngine };
-                return copy.reshape(shape);
+                var legacy = Storage.Alias();
+                legacy.Reshape(ref requestedShape, false);
+                return new NDArray(legacy) { TensorEngine = TensorEngine };
             }
 
-            var ret = Storage.Alias();
-            ret.Reshape(shape, false);
-            return new NDArray(ret) {TensorEngine = TensorEngine};
+            // ---- order resolution (_reshape_with_copy_arg's head) ----
+            if (order == 'A' || order == 'a')
+                order = src.IsFContiguous && !src.IsContiguous ? 'F' : 'C'; // PyArray_ISFORTRAN
+            else if (order == 'K' || order == 'k')
+                throw new ValueError("order 'K' is not permitted for reshaping"); // NumPy verbatim
+            else if (order == 'c')
+                order = 'C';
+            else if (order == 'f')
+                order = 'F';
+            else if (order != 'C' && order != 'F')
+                OrderResolver.Resolve(order, src); // throws the house order-vocabulary ArgumentException
+
+            // ---- quick same-shape check (BEFORE -1 resolution) → a plain full view ----
+            var reqDims = requestedShape.dimensions ?? System.Array.Empty<long>();
+            if (reqDims.Length == src.NDim)
+            {
+                bool same = true;
+                for (int i = 0; i < reqDims.Length && same; i++)
+                    same = src.dimensions[i] == reqDims[i];
+                if (same)
+                    return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
+            }
+
+            // ---- -1 resolution + size validation (NumPy's verbatim texts, already ported) ----
+            var resolvedDims = src.Reshape(requestedShape, @unsafe: false).dimensions;
+
+            // ---- contiguous in the requested order: relabel the same buffer window ----
+            // size ≤ 1 and size 0 arrays are always contiguous in NumPy's flag model, so they
+            // relabel unconditionally (this is also what keeps TryNocopyReshape's non-zero-size
+            // precondition honest).
+            bool contigInOrder = order == 'F' ? src.IsFContiguous : src.IsContiguous;
+            if (contigInOrder || src.size <= 1)
+                return MakeReshapeView(this, resolvedDims, order);
+
+            // ---- _attempt_nocopy_reshape: express the reshape over the existing strides ----
+            if (src.TryNocopyReshape(resolvedDims, order == 'F', out var nocopyStrides))
+            {
+                var viewShape = new Shape((long[])resolvedDims.Clone(), nocopyStrides, src.offset,
+                    src.bufferSize > 0 ? src.bufferSize : src.size);
+                return new NDArray(Storage.Alias(viewShape)) { TensorEngine = TensorEngine };
+            }
+
+            // ---- copy in the requested order, then hand back a VIEW of that internal copy ----
+            var copy = NDIter.CopyAs(this.typecode, this, order, TensorEngine);
+            return MakeReshapeView(copy, resolvedDims, order);
+        }
+
+        /// <summary>
+        ///     Relabel <paramref name="source"/>'s buffer window as <paramref name="dims"/> with
+        ///     dense strides in <paramref name="order"/> — the "interpret the contiguous buffer
+        ///     correctly" step of NumPy's reshape. Always an alias: offset and bufferSize carry
+        ///     over (a C-contiguous split child reshapes in place at its own offset), writeability
+        ///     is inherited, and the result reports owndata=False whether the source is the
+        ///     original array or reshape's internal copy.
+        /// </summary>
+        private static NDArray MakeReshapeView(NDArray source, long[] dims, char order)
+        {
+            var srcShape = source.Shape;
+            var dimsClone = (long[])dims.Clone();
+            var viewShape = new Shape(dimsClone, Shape.ContiguousStridesFor(dimsClone, order == 'F'),
+                srcShape.offset, srcShape.bufferSize > 0 ? srcShape.bufferSize : srcShape.size);
+            return new NDArray(source.Storage.Alias(viewShape)) { TensorEngine = source.TensorEngine };
         }
 
         /// <summary>

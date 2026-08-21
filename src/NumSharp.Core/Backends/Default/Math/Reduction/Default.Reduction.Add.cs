@@ -61,7 +61,7 @@ namespace NumSharp.Backends
             var r = NDArray.Scalar(result);
             if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
-            return r;
+            return r.MarkReductionScalar();
         }
 
         private unsafe NDArray ExecuteAxisReduction(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out, ReductionOp op)
@@ -121,7 +121,9 @@ namespace NumSharp.Backends
                 for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : result.shape[sd++];
                 result.Storage.Reshape(new Shape(ks));
             }
-            return result;
+            // A fresh 0-d result (1-D input reduced over its only axis) is a numpy SCALAR at the
+            // boundary — read-only; an out= operand returns writeable (PyArray_Return semantics).
+            return @out is not null ? result : result.MarkReductionScalar();
         }
 
         /// <summary>
@@ -247,7 +249,8 @@ namespace NumSharp.Backends
                 for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : result.shape[sd++];
                 result.Storage.Reshape(new Shape(ks));
             }
-            return result;
+            // Same PyArray_Return rule as ExecuteAxisReduction's exit.
+            return @out is not null ? result : result.MarkReductionScalar();
         }
 
         /// <summary>
@@ -299,7 +302,7 @@ namespace NumSharp.Backends
                 if (@out is not null) { @out.SetAtIndex(defaultVal, 0); return @out; }
                 var r = NDArray.Scalar(defaultVal);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
-                return r;
+                return r.MarkReductionScalar();
             }
             var axis = NormalizeAxis(axis_.Value, arr.ndim);
             var resultShape = Shape.GetAxis(shape, axis);
@@ -335,7 +338,7 @@ namespace NumSharp.Backends
             {
                 var v = arr.GetAtIndex(0);
                 if (outputType != arr.GetTypeCode) v = Converts.ChangeType(v, outputType);
-                return NDArray.Scalar(v);
+                return NDArray.Scalar(v).MarkReductionScalar();
             }
             var result = new NDArray(outputType, new Shape(resultDims), false);
             if (outputType == arr.GetTypeCode) for (long i = 0; i < result.size; i++) result.SetAtIndex(arr.GetAtIndex(i), i);

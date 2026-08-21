@@ -100,6 +100,16 @@ namespace NumSharp.Backends
             if (!_shape.IsWriteable && shape.IsWriteable)
                 shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
 
+            // The mirror half of NumPy's inherit-the-writeable-bit rule: a child carved from an
+            // ALREADY-broadcast parent whose writeable was re-enabled (ndarray.setflags(write: true))
+            // re-inherits that override — the child's computed False came from the broadcastness it
+            // INHERITED, not from a fresh protection decision, and the user explicitly opted in on
+            // the parent (probed 2.4.2: slice/step/T/squeeze of a setflags-writeable broadcast_to
+            // all report writeable=True). A broadcast INTRODUCED over a non-broadcast parent keeps
+            // the computed read-only default (np.broadcast_to additionally clears explicitly).
+            else if (_shape.IsBroadcasted && _shape.IsWriteable && shape.IsBroadcasted && !shape.IsWriteable)
+                shape = shape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
+
             // ALIGNED is the opposite: a fresh view re-reports it even when the source (whose shape a
             // caller may pass verbatim, e.g. einsum's identity view) was setflags(align: false)-cleared —
             // NumPy recomputes alignment per new array object, and NumSharp data is always aligned.
@@ -140,10 +150,13 @@ namespace NumSharp.Backends
         public UnmanagedStorage Alias(ref Shape shape)
         {
             var r = new UnmanagedStorage();
-            // A view inherits writeability from what it aliases, and re-reports ALIGNED (see Alias(Shape)).
+            // A view inherits writeability from what it aliases, and re-reports ALIGNED (see Alias(Shape));
+            // the broadcast-writeable override re-inherits the same way (see Alias(Shape)).
             var aliasShape = (!_shape.IsWriteable && shape.IsWriteable)
                 ? shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)
-                : shape;
+                : (_shape.IsBroadcasted && _shape.IsWriteable && shape.IsBroadcasted && !shape.IsWriteable)
+                    ? shape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE)
+                    : shape;
             if ((aliasShape._flags & (int)ArrayFlags.ALIGNED) == 0)
                 aliasShape = aliasShape.WithFlags(flagsToSet: ArrayFlags.ALIGNED);
             r._shape = aliasShape;

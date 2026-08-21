@@ -250,6 +250,116 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The two dense stride recipes behind reshape's relabel-as-view step, exposed for
+        ///     <see cref="NDArray.reshape(Shape, char)"/>'s core (the private per-order helpers
+        ///     back the Shape constructors).
+        /// </summary>
+        internal static long[] ContiguousStridesFor(long[] dims, bool fOrder)
+            => fOrder ? ComputeFContiguousStrides(dims) : ComputeContiguousStrides(dims);
+
+        /// <summary>
+        ///     Attempt to reshape this layout to <paramref name="newdims"/> WITHOUT copying data —
+        ///     a line-for-line port of NumPy's <c>_attempt_nocopy_reshape</c>
+        ///     (numpy/_core/src/multiarray/shape.c), in element units (NumPy's byte itemsize
+        ///     becomes 1). Groups the old and new axes into equal-size runs; a run of old axes
+        ///     must be "contiguous enough" (each pair related by <c>stride[k] ==
+        ///     dim[k+1]*stride[k+1]</c> for C order, mirrored for F) to combine, and each new run
+        ///     re-splits the combined extent. Size-1 old axes are dropped first (their strides do
+        ///     not matter); trailing size-1 NEW axes take the stride of the next-fastest index.
+        /// </summary>
+        /// <remarks>
+        ///     The caller must have already validated that the sizes match and are NON-ZERO
+        ///     (NumPy's caller guarantees the same; zero-size and size-1 arrays are always
+        ///     contiguous-flagged and take the relabel path instead). Negative and zero strides
+        ///     ride through the arithmetic exactly as NumPy's do — a reversed 1-D array splits to
+        ///     negative-stride 2-D, and a broadcast's stride-0 axes split to stride-0 runs.
+        /// </remarks>
+        /// <returns>true and the view strides on success; false when a copy is required.</returns>
+        internal readonly bool TryNocopyReshape(long[] newdims, bool isFOrder, out long[] newStrides)
+        {
+            int newnd = newdims.Length;
+            newStrides = new long[newnd];
+
+            int srcNdim = dimensions?.Length ?? 0;
+
+            // Remove axes with dimension 1 from the old array. They have no effect
+            // but would need special cases since their strides do not matter.
+            Span<long> olddims = srcNdim <= 64 ? stackalloc long[Math.Max(1, srcNdim)] : new long[srcNdim];
+            Span<long> oldstrides = srcNdim <= 64 ? stackalloc long[Math.Max(1, srcNdim)] : new long[srcNdim];
+            int oldnd = 0;
+            for (int i = 0; i < srcNdim; i++)
+            {
+                if (dimensions[i] != 1)
+                {
+                    olddims[oldnd] = dimensions[i];
+                    oldstrides[oldnd] = strides[i];
+                    oldnd++;
+                }
+            }
+
+            // oi..oj and ni..nj give the axis ranges currently worked with.
+            int oi = 0, oj = 1, ni = 0, nj = 1;
+            while (ni < newnd && oi < oldnd)
+            {
+                long np = newdims[ni];
+                long op = olddims[oi];
+
+                while (np != op)
+                {
+                    if (np < op)
+                        np *= newdims[nj++]; // misses trailing 1s; these are handled later
+                    else
+                        op *= olddims[oj++];
+                }
+
+                // Check whether the original axes can be combined.
+                for (int ok = oi; ok < oj - 1; ok++)
+                {
+                    if (isFOrder)
+                    {
+                        if (oldstrides[ok + 1] != olddims[ok] * oldstrides[ok])
+                            return false; // not contiguous enough
+                    }
+                    else
+                    {
+                        // C order
+                        if (oldstrides[ok] != olddims[ok + 1] * oldstrides[ok + 1])
+                            return false; // not contiguous enough
+                    }
+                }
+
+                // Calculate new strides for all axes currently worked with.
+                if (isFOrder)
+                {
+                    newStrides[ni] = oldstrides[oi];
+                    for (int nk = ni + 1; nk < nj; nk++)
+                        newStrides[nk] = newStrides[nk - 1] * newdims[nk - 1];
+                }
+                else
+                {
+                    // C order
+                    newStrides[nj - 1] = oldstrides[oj - 1];
+                    for (int nk = nj - 1; nk > ni; nk--)
+                        newStrides[nk - 1] = newStrides[nk] * newdims[nk];
+                }
+
+                ni = nj++;
+                oi = oj++;
+            }
+
+            // Set strides corresponding to trailing 1s of the new shape (ni == 0 — an all-1s
+            // new shape — is unreachable through the size<=1 relabel gate, but guard the
+            // newdims[ni-1] read NumPy leaves to unreachable-UB anyway).
+            long lastStride = ni >= 1 ? newStrides[ni - 1] : 1;
+            if (isFOrder && ni >= 1)
+                lastStride *= newdims[ni - 1];
+            for (int nk = ni; nk < newnd; nk++)
+                newStrides[nk] = lastStride;
+
+            return true;
+        }
+
+        /// <summary>
         ///     Expands one or more axes with size-1 dimensions, matching NumPy's
         ///     <c>np.expand_dims(a, axis)</c> tuple-axis semantics.
         /// </summary>

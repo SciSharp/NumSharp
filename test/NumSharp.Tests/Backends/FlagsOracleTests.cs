@@ -212,6 +212,14 @@ namespace NumSharp.Tests.Backends
             NDArray C2() => np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4);
             NDArray F2() => np.asfortranarray(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4));
             NDArray ST() => np.arange(24).astype(NPTypeCode.Int64).reshape(3, 8)[":, ::2"];
+            NDArray T3() => np.transpose(np.arange(24).astype(NPTypeCode.Int64).reshape(2, 3, 4), new int[] { 2, 0, 1 });
+            NDArray BC() => np.broadcast_to(np.arange(3).astype(NPTypeCode.Int64), new Shape(4, 3));
+            NDArray BCW()
+            {
+                var b = BC();
+                b.setflags(write: true);
+                return b;
+            }
 
             int dot = name.IndexOf('.');
             string kind = name.Substring(0, dot);
@@ -282,6 +290,48 @@ namespace NumSharp.Tests.Backends
                         "choose" => np.choose(np.array(new int[] { 0, 1, 0 }),
                             new NDArray[] { np.arange(3).astype(NPTypeCode.Int64), np.arange(3, 6).astype(NPTypeCode.Int64) }),
                         "ix" => IxResult(C2()),
+                        _ => throw new ArgumentException(name),
+                    };
+                case "parity":
+                    // The formerly-[Misaligned] numpy-internal representations, now modelled:
+                    // KEEPORDER sorts/copies, the concatenate stride vote, reshape's nocopy-view /
+                    // view-of-internal-copy, nonzero's shared multi-index buffer, linspace's
+                    // astype(copy=False) view, read-only reduction SCALARS, and the broadcast
+                    // writeable-override inheritance.
+                    return rest switch
+                    {
+                        "sort_f" => np.sort(F2()),
+                        "sort_t3d" => np.sort(T3()),
+                        "sort_bcast" => np.sort(BC()),
+                        "partition_f" => np.partition(F2(), 2),
+                        "copy_t3d_K" => T3().copy('K'),
+                        "copy_bcast_K" => BC().copy('K'),
+                        "astype_bcast_K" => BC().astype(NPTypeCode.Int64, copy: true, order: 'K'),
+                        "stack_f0" => np.stack(new[] { F2(), F2() }, axis: 0),
+                        "stack_f1" => np.stack(new[] { F2(), F2() }, axis: 1),
+                        "stack_f2" => np.stack(new[] { F2(), F2() }, axis: 2),
+                        "reshape_F" => C2().reshape(new Shape(2, 6), 'F'),
+                        "reshape_nocopy" => ST().reshape(2, 6),
+                        "reshape_copy" => np.arange(24).astype(NPTypeCode.Int64).reshape(4, 6)["::2, :"].reshape(3, 4),
+                        "reshape_neg1d" => np.arange(12).astype(NPTypeCode.Int64)["::-1"].reshape(3, 4),
+                        "reshape_A_f" => F2().reshape(new Shape(12), 'A'),
+                        "nonzero0" => np.nonzero(C2())[0],
+                        "nonzero1" => np.nonzero(C2())[1],
+                        "nonzero_1d" => np.nonzero(np.array(new long[] { 0, 1, 2, 0, 3 }))[0],
+                        "nonzero_empty" => np.nonzero(np.zeros(new Shape(3, 4), NPTypeCode.Double))[0],
+                        "where1" => np.where(C2() > 3)[0],
+                        "linspace" => np.linspace(0.0, 1.0, 5),
+                        "linspace_f32" => np.linspace(0.0, 1.0, 5, true, NPTypeCode.Single),
+                        "linspace_num1" => np.linspace(0.0, 1.0, 1),
+                        "reduce_sum" => np.sum(C2()),
+                        "reduce_trace" => np.trace(C2()),
+                        "reduce_std" => np.std(C2()),
+                        "reduce_argmax1d" => np.argmax(np.arange(3).astype(NPTypeCode.Int64), 0),
+                        "reduce_median" => np.median(C2()),
+                        "reduce_ptp" => np.ptp(C2()),
+                        "bcastw_slice" => BCW()["1:3"],
+                        "bcastw_T" => BCW().T,
+                        "bcastw_step" => BCW()[":, ::2"],
                         _ => throw new ArgumentException(name),
                     };
                 default: throw new ArgumentException($"unknown layout kind '{name}'");
@@ -768,12 +818,12 @@ namespace NumSharp.Tests.Backends
 
         [TestMethod]
         public void Corpus_LayoutMatrix_MatchNumpy()
-            => RunGroup(c => c.IsLayout, floor: 70);
+            => RunGroup(c => c.IsLayout, floor: 100);  // 70 pre-parity + the 32 `parity.` cases
 
         [TestMethod]
         public void Corpus_Floors_AllRecipesPresent_ManyErrorCases()
         {
-            Assert.IsTrue(_cases.Count >= 1060, $"corpus shrank: {_cases.Count} < 1060");
+            Assert.IsTrue(_cases.Count >= 1100, $"corpus shrank: {_cases.Count} < 1100");
             Assert.AreEqual(87, _cases.Where(c => !c.Shared.HasValue && !c.IsChain && !c.IsLayout).Select(c => c.Recipe).Distinct().Count(), "recipe catalog changed size");
             Assert.IsTrue(_cases.Count(c => c.Err.HasValue) >= 190, "error-case floor");
             // every scenario token family is represented
@@ -1219,71 +1269,83 @@ namespace NumSharp.Tests.Backends
             }
         }
 
-        // ---- documented divergences ([Misaligned]) ----------------------------------------
+        // ---- the formerly-[Misaligned] numpy-internal representations, now modelled ---------
 
         [TestMethod]
-        [Misaligned]
-        public void LayoutDivergences_NumpyInternalRepresentations_Documented()
+        public void LayoutParity_NumpyInternalRepresentations_Modelled()
         {
-            // The layout/ corpus section pins every RESULT-flags case where NumSharp MATCHES NumPy.
-            // This test pins the complementary set — seven surfaces where NumSharp's flags DIVERGE
-            // because NumPy exposes an internal representation NumSharp deliberately does not model.
-            // All probed against NumPy 2.4.2; the VALUES are identical in every case, only the
-            // memory-layout FLAGS differ. Documented here so a future change is a conscious choice.
+            // The seven surfaces this test used to document as [Misaligned] divergences are now
+            // MODELLED (all probed against NumPy 2.4.2; the corpus `parity.` layout cases pin the
+            // flag records, this test additionally pins the STRIDES and shares-memory semantics
+            // the flags record cannot express).
+            long[] B(NDArray a)
+            {
+                var s = a.Shape.strides;
+                var r = new long[s.Length];
+                for (int i = 0; i < s.Length; i++) r[i] = s[i] * a.dtypesize;
+                return r;
+            }
 
-            // (1) A full reduction / trace returns a read-only numpy SCALAR (num=263, WRITEABLE off);
-            //     NumSharp has no scalar type, so its 0-d result is a writeable array (num=1287).
-            np.sum(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4)).flags.writeable
-                .Should().BeTrue("NumSharp full-reduction 0-d is writeable; NumPy's scalar is read-only");
-            np.trace(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4)).flags.writeable
-                .Should().BeTrue("NumSharp trace 0-d is writeable; NumPy's scalar is read-only");
+            // (1) A full reduction / trace is NumPy's read-only SCALAR (PyArray_Return): num=263.
+            np.sum(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4)).flags.num.Should().Be(263);
+            np.trace(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4)).flags.num.Should().Be(263);
 
-            // (2) reshape(order='F') that must reorder COPIES in NumSharp (owndata=True); NumPy
-            //     returns a view of an internal F-copy (owndata=False). F-contiguous on both sides.
+            // (2) reshape(order='F') that must reorder returns a VIEW of an internal F-copy:
+            //     owndata=False, F-contiguous, byte strides (8, 16) — num=1282.
             var rc = np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4).reshape(new Shape(2, 6), 'F');
-            rc.flags.f_contiguous.Should().BeTrue();
-            rc.flags.owndata.Should().BeTrue("NumSharp reshape(order='F') copy owns; NumPy views an internal copy");
+            rc.flags.num.Should().Be(1282);
+            B(rc).Should().Equal(8L, 16L);
 
-            // (3) A strided reshape NumPy can express as a non-contiguous VIEW, NumSharp materialises
-            //     as a C-contiguous owned copy (values identical; shares-memory differs).
-            var rs = np.arange(24).astype(NPTypeCode.Int64).reshape(3, 8)[":, ::2"].reshape(new Shape(2, 6), 'C');
-            rs.flags.c_contiguous.Should().BeTrue("NumSharp copies to C-contig; NumPy returns a strided view");
+            // (3) A strided reshape NumPy can express over the existing strides is a NON-contiguous
+            //     VIEW sharing memory: byte strides (96, 16), num=1280, write-through.
+            var big = np.arange(24).astype(NPTypeCode.Int64);
+            var rs = big.reshape(3, 8)[":, ::2"].reshape(new Shape(2, 6), 'C');
+            rs.flags.num.Should().Be(1280);
+            B(rs).Should().Equal(96L, 16L);
+            rs.SetAtIndex(999L, 0);
+            big.GetInt64(0).Should().Be(999L, "the nocopy reshape shares the source's memory");
 
-            // (4) np.stack of F-contiguous operands: NumPy's layout vote yields NEITHER-contig
-            //     (num=1284); NumSharp yields F-contig (num=1286). Both owned copies.
+            // (4) np.stack of F-contiguous operands: the multi-operand KEEPORDER vote (size-1 axes
+            //     never vote) yields NEITHER-contig — num=1284, byte strides (96, 8, 24).
             var f = np.asfortranarray(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4));
-            np.stack(new[] { f, f }, axis: 0).flags.f_contiguous
-                .Should().BeTrue("NumSharp stack-of-F is F-contig; NumPy's vote makes it neither-contig");
+            var sk = np.stack(new[] { f, f }, axis: 0);
+            sk.flags.num.Should().Be(1284);
+            B(sk).Should().Equal(96L, 8L, 24L);
 
-            // (5) np.sort of an F-contiguous array returns a C-contiguous copy (house convention,
-            //     already documented in CLAUDE.md); NumPy keeps F-order (copy(order='K')).
-            np.sort(f).flags.c_contiguous
-                .Should().BeTrue("NumSharp sort returns C-contig copy; NumPy keeps the input's F-order");
+            // (5) np.sort = copy(order='K') + in-place: an F input keeps F order (8, 24).
+            var sf = np.sort(f);
+            sf.flags.f_contiguous.Should().BeTrue();
+            B(sf).Should().Equal(8L, 24L);
 
-            // (6) np.nonzero returns contiguous OWNED index arrays in NumSharp; NumPy returns strided
-            //     VIEWS into one shared (ndim, count) buffer (num=1280, owndata off).
-            np.nonzero(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4))[0].flags.owndata
-                .Should().BeTrue("NumSharp nonzero arrays own; NumPy's are views into a shared buffer");
+            // (6) np.nonzero returns strided VIEWS into one shared (count, ndim) buffer:
+            //     owndata=False, byte stride ndim*8, num=1280.
+            var nz = np.nonzero(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4));
+            nz[0].flags.num.Should().Be(1280);
+            B(nz[0]).Should().Equal(16L);
+            nz[1].flags.owndata.Should().BeFalse("both tuple entries are columns of the shared multi-index buffer");
 
-            // (7) np.linspace owns its buffer in NumSharp; NumPy's result is astype(copy=False) over
-            //     an internal array, so owndata=False.
-            np.linspace(0.0, 1.0, 5).flags.owndata
-                .Should().BeTrue("NumSharp linspace owns; NumPy's is an astype(copy=False) view");
+            // (7) np.linspace (float64) is NumPy's in-place-mutated arange VIEW passed through
+            //     astype(copy=False): owndata=False, num=1283.
+            np.linspace(0.0, 1.0, 5).flags.num.Should().Be(1283);
         }
 
         [TestMethod]
-        [Misaligned]
-        public void SliceOfWriteableBroadcast_RevertsToReadOnly()
+        public void SliceOfWriteableBroadcast_InheritsTheOverride()
         {
-            // DIVERGENCE: NumPy views INHERIT the writeable flag, so a slice of a setflags-writeable
-            // broadcast stays writeable; NumSharp recomputes broadcast shapes as read-only on every
-            // fresh view (its deliberate broadcast-write-protection invariant) and only ever CLEARS
-            // on inheritance — deliberate-clear producers like np.diagonal depend on clear-only
-            // propagation, so a blanket NumPy-style inherit would silently undo their contracts.
+            // NumPy views INHERIT the writeable bit, so every view of a setflags-writeable
+            // broadcast stays writeable (probed 2.4.2: num=1280 for slice/step/T); a PLAIN
+            // broadcast's views stay read-only, and np.broadcast_to itself always clears — the
+            // override only propagates from an ALREADY-broadcast, explicitly re-enabled parent.
             var bc = np.broadcast_to(np.arange(3), new Shape(4, 3));
             bc.setflags(write: true);
             bc.flags.writeable.Should().BeTrue();
-            bc["1:3"].flags.writeable.Should().BeFalse("NumSharp recomputes broadcast W on fresh views (NumPy would inherit True)");
+            bc["1:3"].flags.num.Should().Be(1280, "views of a re-enabled broadcast inherit writeable=True");
+            bc.T.flags.num.Should().Be(1280);
+
+            var plain = np.broadcast_to(np.arange(3), new Shape(4, 3));
+            plain["1:3"].flags.writeable.Should().BeFalse("views of a plain broadcast stay read-only");
+            np.broadcast_to(bc, new Shape(2, 4, 3)).flags.writeable
+                .Should().BeFalse("broadcast_to always clears, even over a re-enabled broadcast parent");
         }
     }
 }

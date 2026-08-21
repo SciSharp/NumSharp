@@ -182,24 +182,19 @@ namespace NumSharp
             }
             else
             {
-                // NumPy-aligned: F-contiguous destination only when every input
-                // is F-contiguous AND NOT every input is also C-contiguous
-                // (PyArray_CreateMultiSortedStridePerm ambiguity resolution:
-                // inputs that are BOTH C- and F-contig, e.g. (N,1)/(1,N) views,
-                // resolve to C order — probed NumPy 2.4.2). Same rule as
-                // np.block's _block_slicing: order = 'F' if F and not C.
-                bool allF = true, allC = true;
+                // NumPy lays the fresh output out along the multi-operand KEEPORDER stride
+                // vote (PyArray_CreateMultiSortedStridePerm, ported in StridePerm): all-C
+                // inputs give C; all-F inputs that are not also C give F (both-C&F operands,
+                // e.g. (N,1)/(1,N) views, never vote through their size-1 axis and resolve to
+                // C); and voting through size-1 axes is what makes np.stack of F-contiguous
+                // (3,4) operands allocate the NEITHER-contiguous byte strides (96,8,24) —
+                // probed NumPy 2.4.2. The general copy path below writes through dst slice
+                // views, so any perm layout fills correctly; the memcpy/cast fast paths gate
+                // on contiguity and simply decline the exotic ones.
+                var inputShapes = new Shape[workArrays.Length];
                 for (int k = 0; k < workArrays.Length; k++)
-                {
-                    var sh = workArrays[k].Shape;
-                    if (!sh.IsFContiguous)
-                        allF = false;
-                    if (!sh.IsContiguous)
-                        allC = false;
-                    if (!allF && !allC)
-                        break;
-                }
-                var retShape = allF && !allC ? new Shape(firstShape, 'F') : new Shape(firstShape);
+                    inputShapes[k] = workArrays[k].Shape;
+                var retShape = StridePerm.ConcatOutputShape(firstShape, inputShapes);
                 // fillZeros: false — every byte is overwritten below.
                 dst = new NDArray(resultType, retShape, fillZeros: false);
             }

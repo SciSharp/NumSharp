@@ -34,7 +34,11 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(nd));
 
             if (nd.TensorEngine is DefaultEngine defaultEngine)
-                return defaultEngine.Any(nd, axis, keepdims);
+            {
+                var reduced = defaultEngine.Any(nd, axis, keepdims);
+                reduced.MarkReductionScalar(); // 1-D input reduced to 0-d -> numpy scalar (read-only)
+                return reduced;
+            }
 
             var result = nd.TensorEngine.Any(nd, axis);
             if (keepdims && nd.ndim > 0)
@@ -66,7 +70,11 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(axis));
 
             if (nd.TensorEngine is DefaultEngine defaultEngine)
-                return defaultEngine.Any(nd, axis, keepdims);
+            {
+                var reduced = defaultEngine.Any(nd, axis, keepdims);
+                reduced.MarkReductionScalar(); // every axis reduced away -> numpy scalar (read-only)
+                return reduced;
+            }
 
             if (axis.Length == 0)
                 return DefaultEngine.CastToBoolPreservingShape(nd);
@@ -133,7 +141,9 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(a));
 
             NDArray<bool> reduced = ReduceAnyWithWhere(a, axis, keepdims, @where);
-            return @out is null ? reduced : WriteToOut(reduced, @out);
+            // A fresh 0-d result is a numpy SCALAR (np.bool_) at the boundary: read-only
+            // (PyArray_Return semantics); out= returns the writeable out array itself.
+            return @out is null ? reduced.MarkReductionScalar() : WriteToOut(reduced, @out);
         }
 
         /// <summary>

@@ -4153,6 +4153,16 @@ namespace NumSharp.Backends.Iteration
             Shape outShape;
             if (srcShape.NDim == 0)
                 outShape = Shape.NewScalar();
+            else if ((order == 'K' || order == 'k') && !srcShape.IsContiguous && !srcShape.IsFContiguous)
+            {
+                // True KEEPORDER (PyArray_NewLikeArray NPY_KEEPORDER): a neither-contiguous source
+                // allocates along its SORTED STRIDE PERM rather than collapsing to C — a 3-D
+                // transpose keeps its exact stride order (a neither-contiguous owned result) and a
+                // broadcast's stride-0 axes sort slowest (F-ish layout). Probed NumPy 2.4.2 via
+                // copy/astype/np.sort order='K'. Sources that ARE C- or F-contiguous fall through
+                // to the binary resolve below, which is exact for them.
+                outShape = StridePerm.KeepOrderShape(srcShape);
+            }
             else
             {
                 char physical = OrderResolver.Resolve(order, srcShape);

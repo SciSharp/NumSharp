@@ -19,7 +19,7 @@ namespace NumSharp.Backends
                 {
                     var r = NDArray.Scalar(double.NaN);
                     if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
-                    return r;
+                    return r.MarkReductionScalar();
                 }
                 var axis = NormalizeAxis(axis_.Value, arr.ndim);
                 var resultShape = Shape.GetAxis(shape, axis);
@@ -48,7 +48,7 @@ namespace NumSharp.Backends
                 var outputType = typeCode ?? arr.GetTypeCode.GetComputingType();
                 var r = NDArray.Scalar(Converts.ChangeType(val, outputType));
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
-                return r;
+                return r.MarkReductionScalar();
             }
 
             if (axis_ == null)
@@ -57,7 +57,7 @@ namespace NumSharp.Backends
                 var r = NDArray.Scalar(result);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
-                return r;
+                return r.MarkReductionScalar();
             }
 
             var axis2 = NormalizeAxis(axis_.Value, arr.ndim);

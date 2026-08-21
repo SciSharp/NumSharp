@@ -21,7 +21,8 @@ namespace NumSharp
             var minRes = np.amin(a, axis, keepdims);
             var diff = maxRes - minRes;
 
-            return WriteOrReturn(diff, @out);
+            // Fresh 0-d ptp is a numpy SCALAR (read-only); out= returns the writeable out.
+            return @out is null ? diff.MarkReductionScalar() : WriteOrReturn(diff, @out);
         }
 
         public static NDArray ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false)

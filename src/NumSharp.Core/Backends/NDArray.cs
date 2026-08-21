@@ -535,6 +535,13 @@ namespace NumSharp
             {
                 if (ndim == 1 || Shape.IsScalar) //because it is already flat, there is no need to clone even if it is already sliced.
                     return new NDArray(Storage);
+                // flat's documented contract is the raveled C-order IMAGE — a materialized copy
+                // for ANY non-contiguous layout (its ~15 internal consumers walk the buffer
+                // linearly). reshape must NOT be used here: it now returns nocopy strided VIEWS
+                // for combinable layouts (NumPy reshape parity), which would both write through
+                // and break the linear walks.
+                if (!Shape.IsContiguous)
+                    return new NDArray(new UnmanagedStorage(Storage.CloneData(), Shape.Vector(size))) { TensorEngine = TensorEngine };
                 return this.reshape(new Shape(size));
             }
         }
@@ -699,8 +706,14 @@ namespace NumSharp
         public NDArray astype(Type dtype, bool copy, char order, string casting = "unsafe")
         {
             ValidateAstypeCasting(dtype.GetTypeCode(), casting);
-            char physical = OrderResolver.Resolve(order, this.Shape);
             var casted = TensorEngine.Cast(this, dtype, copy);
+            // 'K' (astype's default) is fully handled by Cast's KEEPORDER allocation — including
+            // the neither-contiguous sorted-stride-perm layouts (3-D transpose, broadcast) that a
+            // binary C/F resolve cannot express; re-imposing the collapsed order here would both
+            // undo that layout and force a copy out of a satisfied `copy: false` call.
+            if (order == 'K' || order == 'k')
+                return casted;
+            char physical = OrderResolver.Resolve(order, this.Shape);
             return RelayoutAstype(casted, physical);
         }
 
@@ -734,8 +747,12 @@ namespace NumSharp
         public NDArray astype(NPTypeCode typeCode, bool copy, char order, string casting = "unsafe")
         {
             ValidateAstypeCasting(typeCode, casting);
-            char physical = OrderResolver.Resolve(order, this.Shape);
             var casted = TensorEngine.Cast(this, typeCode, copy);
+            // 'K' (astype's default) is fully handled by Cast's KEEPORDER allocation — see the
+            // Type-overload twin above for why re-imposing a collapsed C/F order here is wrong.
+            if (order == 'K' || order == 'k')
+                return casted;
+            char physical = OrderResolver.Resolve(order, this.Shape);
             return RelayoutAstype(casted, physical);
         }
 

@@ -57,7 +57,9 @@ namespace NumSharp
             // 3-4x faster than the generic diagonal+ascontig+sum chain.
             if ((a.ndim == 2 || a.ndim == 3) && dtype is null && @out is null &&
                 TryTraceFast(a, offset, axis1, axis2, out var fast))
-                return fast;
+                // The 2-D fast result is 0-d — a numpy SCALAR (read-only) at the boundary;
+                // the general path below inherits the same from the engine Sum's exit.
+                return fast.MarkReductionScalar();
 
             // diagonal() validates ndim, axis values, and axis1!=axis2 and emits
             // a 1-D-extended view (the diagonal axis is the last dim of the result).

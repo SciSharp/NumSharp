@@ -127,6 +127,12 @@ namespace NumSharp
             if (num == 1)
             {
                 ret.SetAtIndex(Converts.ChangeType(start, typeCode), 0);
+                // NumPy's div = endpoint ? num-1 : num. endpoint=false makes div = 1 > 0, so its
+                // scalar in-place branch runs (y *= step on the arange-reshape view) and the float64
+                // result is that VIEW (owndata=False, probed 2.4.2); endpoint=true (div=0) takes the
+                // rebinding `y = y * delta` branch and owns. Other dtypes rebind via astype and own.
+                if (!endpoint && typeCode == NPTypeCode.Double)
+                    return new NDArray(ret.Storage.Alias()) { TensorEngine = ret.TensorEngine };
                 return ret;
             }
 
@@ -276,7 +282,12 @@ namespace NumSharp
                          for (long i = 0; i < num; i++) addr[i] = Converts.ToDouble(start + i * step);
                     }
 
-                    return ret;
+                    // NumPy's float64 linspace is a reshape-VIEW of its internal arange buffer
+                    // mutated in place (y *= step; y += start), and astype(float64, copy=False)
+                    // returns that view verbatim — so the result reports OWNDATA=False (probed
+                    // 2.4.2; num >= 2 here, so div > 0 and the in-place branch is always the one
+                    // NumPy took). Every other dtype rebinds through a real astype copy and owns.
+                    return new NDArray(ret.Storage.Alias()) { TensorEngine = ret.TensorEngine };
 	            }
 	            case NPTypeCode.Single:
 	            {

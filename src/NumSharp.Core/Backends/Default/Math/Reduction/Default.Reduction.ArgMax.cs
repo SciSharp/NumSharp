@@ -72,7 +72,7 @@ namespace NumSharp.Backends
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape));
                 }
-                return r;
+                return r.MarkReductionScalar();
             }
 
             if (axis_ == null)
@@ -87,7 +87,7 @@ namespace NumSharp.Backends
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape));
                 }
-                return r;
+                return r.MarkReductionScalar();
             }
 
             var axis = axis_.Value;
@@ -105,7 +105,9 @@ namespace NumSharp.Backends
                     // Keep the axis but reduce to size 1 (it's already 1)
                     return np.zeros(shape.dimensions, NPTypeCode.Int64);
                 }
-                return np.squeeze_fast(np.zeros(shape.dimensions, NPTypeCode.Int64), axis);
+                // 1-D input whose only axis has size 1 squeezes to a fresh 0-d — a numpy
+                // SCALAR (read-only) at the boundary.
+                return np.squeeze_fast(np.zeros(shape.dimensions, NPTypeCode.Int64), axis).MarkReductionScalar();
             }
 
             //handle keepdims - prepare output shape
@@ -174,7 +176,8 @@ namespace NumSharp.Backends
             if (keepdims)
                 ret.Storage.Reshape(outputShape);
 
-            return ret;
+            // 1-D input reduced over its only axis → numpy SCALAR (read-only) at the boundary.
+            return ret.MarkReductionScalar();
         }
 
         /// <summary>
@@ -206,7 +209,8 @@ namespace NumSharp.Backends
             if (keepdims)
                 ret.Storage.Reshape(outputShape);
 
-            return ret;
+            // 1-D input reduced over its only axis → numpy SCALAR (read-only) at the boundary.
+            return ret.MarkReductionScalar();
         }
 
         /// <summary>
@@ -274,7 +278,8 @@ namespace NumSharp.Backends
             if (keepdims)
                 ret.Storage.Reshape(outputShape);
 
-            return ret;
+            // 1-D input reduced over its only axis → numpy SCALAR (read-only) at the boundary.
+            return ret.MarkReductionScalar();
         }
 
         /// <summary>
@@ -344,7 +349,8 @@ namespace NumSharp.Backends
             if (keepdims)
                 ret.Storage.Reshape(outputShape);
 
-            return ret;
+            // 1-D input reduced over its only axis → numpy SCALAR (read-only) at the boundary.
+            return ret.MarkReductionScalar();
         }
 
     }

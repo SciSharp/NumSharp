@@ -337,14 +337,20 @@ CHAINS = [
 # Layout matrix: the RESULT flags of order= producers, stacking/joining, axis reductions,
 # creation-with-layout, and advanced indexing — surfaces the recipe catalog (single-array
 # producers) does not reach. Each case records ONLY the base flags record (no setflags
-# scenarios). These are all cases where NumSharp matches NumPy bit-for-bit; the handful of
-# numpy-internal-representation divergences (reshape-order owndata, stack-of-F layout vote,
-# sort-F layout, nonzero shared-buffer views, read-only reduction SCALARS, linspace's
-# astype(copy=False) owndata, mixed-index layout) are documented as [Misaligned] unit tests
-# in FlagsOracleTests, not pinned here. Twin: FlagsOracleRecipes.BuildLayout (C#).
+# scenarios). Every case matches NumPy bit-for-bit — including the `parity.` family, the
+# formerly-[Misaligned] numpy-internal representations now modelled: KEEPORDER sorts and
+# copies (sorted-stride-perm), the concatenate multi-operand stride vote (stack-of-F is
+# neither-contig), reshape's nocopy-view / view-of-internal-copy, nonzero's shared
+# (count, ndim) multi-index buffer, linspace's astype(copy=False) view, the read-only
+# reduction SCALARS (PyArray_Return), and writeable-override inheritance on broadcast
+# views. Twin: FlagsOracleRecipes.BuildLayout (C#).
 def _c2(): return np.arange(12).astype(np.int64).reshape(3, 4)
 def _f2(): return np.asfortranarray(np.arange(12).astype(np.int64).reshape(3, 4))
 def _st(): return np.arange(24).astype(np.int64).reshape(3, 8)[:, ::2]   # strided (3,4)
+def _t3(): return np.transpose(np.arange(24).astype(np.int64).reshape(2, 3, 4), (2, 0, 1))
+def _bc(): return np.broadcast_to(np.arange(3).astype(np.int64), (4, 3))
+def _bcw():
+    b = _bc(); b.flags.writeable = True; return b
 
 
 def build_layout(name):
@@ -397,6 +403,47 @@ def build_layout(name):
         if rest == "choose":     return np.choose(np.array([0, 1, 0]), [np.arange(3).astype(np.int64), np.arange(3, 6).astype(np.int64)])
         if rest == "ix":         return _c2()[np.ix_([0, 2], [1, 3])]
         raise KeyError(name)
+    if kind == "parity":
+        # KEEPORDER sorts/copies (sorted stride perm)
+        if rest == "sort_f":         return np.sort(_f2())
+        if rest == "sort_t3d":       return np.sort(_t3())
+        if rest == "sort_bcast":     return np.sort(_bc())
+        if rest == "partition_f":    return np.partition(_f2(), 2)
+        if rest == "copy_t3d_K":     return _t3().copy(order="K")
+        if rest == "copy_bcast_K":   return _bc().copy(order="K")
+        if rest == "astype_bcast_K": return _bc().astype(np.int64, order="K", copy=True)
+        # concatenate multi-operand stride vote (size-1 axes never vote -> neither-contig)
+        if rest == "stack_f0":       return np.stack([_f2(), _f2()], axis=0)
+        if rest == "stack_f1":       return np.stack([_f2(), _f2()], axis=1)
+        if rest == "stack_f2":       return np.stack([_f2(), _f2()], axis=2)
+        # reshape: nocopy strided views + views of the internal copy
+        if rest == "reshape_F":      return _c2().reshape((2, 6), order="F")
+        if rest == "reshape_nocopy": return _st().reshape(2, 6)
+        if rest == "reshape_copy":   return np.arange(24).astype(np.int64).reshape(4, 6)[::2, :].reshape(3, 4)
+        if rest == "reshape_neg1d":  return np.arange(12).astype(np.int64)[::-1].reshape(3, 4)
+        if rest == "reshape_A_f":    return _f2().reshape(12, order="A")
+        # nonzero: columns of one shared (count, ndim) multi-index buffer
+        if rest == "nonzero0":       return np.nonzero(_c2())[0]
+        if rest == "nonzero1":       return np.nonzero(_c2())[1]
+        if rest == "nonzero_1d":     return np.nonzero(np.array([0, 1, 2, 0, 3]).astype(np.int64))[0]
+        if rest == "nonzero_empty":  return np.nonzero(np.zeros((3, 4)))[0]
+        if rest == "where1":         return np.where(_c2() > 3)[0]
+        # linspace: in-place-mutated arange view (float64) vs owning astype copies
+        if rest == "linspace":       return np.linspace(0.0, 1.0, 5)
+        if rest == "linspace_f32":   return np.linspace(0, 1, 5, dtype=np.float32)
+        if rest == "linspace_num1":  return np.linspace(0.0, 1.0, 1)
+        # full reductions: numpy SCALARS (PyArray_Return) -> read-only num=263
+        if rest == "reduce_sum":     return np.sum(_c2())
+        if rest == "reduce_trace":   return np.trace(_c2())
+        if rest == "reduce_std":     return np.std(_c2())
+        if rest == "reduce_argmax1d": return np.argmax(np.arange(3).astype(np.int64), axis=0)
+        if rest == "reduce_median":  return np.median(_c2())
+        if rest == "reduce_ptp":     return np.ptp(_c2())
+        # views of a setflags(write=True)-re-enabled broadcast inherit the override
+        if rest == "bcastw_slice":   return _bcw()[1:3]
+        if rest == "bcastw_T":       return _bcw().T
+        if rest == "bcastw_step":    return _bcw()[:, ::2]
+        raise KeyError(name)
     raise KeyError(name)
 
 
@@ -411,6 +458,16 @@ LAYOUTS = (
                                 "cumsum_ax", "cumsum_axF", "diff_ax0", "sort_c", "argsort",
                                 "matmul", "matmulF", "where3", "clip", "unique")]
     + [f"fancy.{n}" for n in ("rows", "elem", "bmask2d", "take_along", "choose", "ix")]
+    + [f"parity.{n}" for n in ("sort_f", "sort_t3d", "sort_bcast", "partition_f",
+                               "copy_t3d_K", "copy_bcast_K", "astype_bcast_K",
+                               "stack_f0", "stack_f1", "stack_f2",
+                               "reshape_F", "reshape_nocopy", "reshape_copy",
+                               "reshape_neg1d", "reshape_A_f",
+                               "nonzero0", "nonzero1", "nonzero_1d", "nonzero_empty", "where1",
+                               "linspace", "linspace_f32", "linspace_num1",
+                               "reduce_sum", "reduce_trace", "reduce_std", "reduce_argmax1d",
+                               "reduce_median", "reduce_ptp",
+                               "bcastw_slice", "bcastw_T", "bcastw_step")]
 )
 
 # The dtype-independence sweep: same flags record for every dtype.

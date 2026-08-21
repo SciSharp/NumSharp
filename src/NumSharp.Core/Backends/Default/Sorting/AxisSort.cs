@@ -36,7 +36,11 @@ namespace NumSharp.Backends.Sorting
 
         // ============================ public entry points ============================
 
-        /// <summary>np.sort: returns a new C-contiguous sorted array (axis=null flattens).</summary>
+        /// <summary>np.sort: copy(order='K') then sort in place (axis=null flattens) — NumPy's
+        /// fromnumeric.sort verbatim, so an F-contiguous input keeps its F layout, a 3-D transpose
+        /// keeps its exact stride order, and strided/negative-stride inputs come back C (probed
+        /// 2.4.2). The line driver walks the copy's own strides, so the in-place pass is
+        /// layout-agnostic.</summary>
         public static NDArray Sort(NDArray a, int? axis)
         {
             if (axis == null)
@@ -45,7 +49,7 @@ namespace NumSharp.Backends.Sorting
                 SortInPlace(flat, 0);
                 return flat;
             }
-            var res = a.copy('C');
+            var res = a.copy('K');
             SortInPlace(res, NormalizeAxis(axis.Value, a.ndim));
             return res;
         }

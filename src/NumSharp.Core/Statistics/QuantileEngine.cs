@@ -290,7 +290,9 @@ namespace NumSharp.Statistics
                 np.copyto(@out, result);
                 return @out;
             }
-            return result;
+            // A fresh 0-d result (scalar q, axis=None — the np.median/percentile/quantile flat
+            // forms) is a numpy SCALAR at the boundary: read-only (PyArray_Return semantics).
+            return result.MarkReductionScalar();
         }
 
         /// <summary>
@@ -361,7 +363,9 @@ namespace NumSharp.Statistics
                 np.copyto(@out, result);
                 return @out;
             }
-            return result;
+            // A fresh 0-d result (scalar q, axis=None — the np.median/percentile/quantile flat
+            // forms) is a numpy SCALAR at the boundary: read-only (PyArray_Return semantics).
+            return result.MarkReductionScalar();
         }
 
         // ── helpers ─────────────────────────────────────────────────────────────────

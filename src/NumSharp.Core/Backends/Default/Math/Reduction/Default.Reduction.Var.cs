@@ -31,7 +31,7 @@ namespace NumSharp.Backends
                             keepdimsShape[i] = 1;
                         r.Storage.Reshape(new Shape(keepdimsShape));
                     }
-                    return r;
+                    return r.MarkReductionScalar();
                 }
 
                 // Axis specified - check if reducing along zero-size axis
@@ -91,7 +91,7 @@ namespace NumSharp.Backends
                 }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
                     r.Storage.Reshape(Shape.Scalar);
-                return r;
+                return r.MarkReductionScalar();
             }
 
             if (axis_ == null)
@@ -107,7 +107,7 @@ namespace NumSharp.Backends
                 }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
                     r.Storage.Reshape(Shape.Scalar);
-                return r;
+                return r.MarkReductionScalar();
             }
             var axis = axis_.Value;
             while (axis < 0)

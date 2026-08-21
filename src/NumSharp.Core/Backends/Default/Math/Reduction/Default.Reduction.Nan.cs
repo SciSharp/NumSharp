@@ -218,7 +218,7 @@ namespace NumSharp.Backends
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape));
                 }
-                return r;
+                return r.MarkReductionScalar();
             }
             else
             {
@@ -256,7 +256,7 @@ namespace NumSharp.Backends
                     keepdimsShape[i] = 1;
                 r.Storage.Reshape(new Shape(keepdimsShape));
             }
-            return r;
+            return r.MarkReductionScalar();
         }
 
         private static float NanReduceScalarFloat(NDArray arr, ReductionOp op)
@@ -657,7 +657,7 @@ namespace NumSharp.Backends
                     for (int i = 0; i < arr.ndim; i++) ks[i] = 1;
                     r.Storage.Reshape(new Shape(ks));
                 }
-                return r;
+                return r.MarkReductionScalar();
             }
 
             // Axis reduction via iterator: iterate per slice and sum with NaN-skip.

@@ -39,7 +39,9 @@ namespace NumSharp.Backends.Sorting
                 return flat;
             }
             int ax = AxisSort.NormalizeAxis(axis.Value, a.ndim);
-            var res = a.copy('C');
+            // NumPy partition = copy(order='K') + in-place (fromnumeric.partition verbatim):
+            // an F input keeps F layout, strided/negative come back C (probed 2.4.2).
+            var res = a.copy('K');
             PartitionInPlaceCore(res, ax, WidenKth(kth));
             return res;
         }
@@ -59,7 +61,8 @@ namespace NumSharp.Backends.Sorting
                 return flat;
             }
             int ax = AxisSort.NormalizeAxis(axis.Value, a.ndim);
-            var res = a.copy('C');
+            // NumPy partition = copy(order='K') + in-place — same rule as the scalar-kth overload.
+            var res = a.copy('K');
             PartitionInPlaceCore(res, ax, ExtractKthValues(kth));
             return res;
         }
