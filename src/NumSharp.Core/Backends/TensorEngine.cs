@@ -284,7 +284,6 @@ namespace NumSharp
 
         #endregion
 
-
         #region Indexing
 
         public abstract NDArray<long>[] NonZero(NDArray a);

@@ -9,6 +9,7 @@ namespace NumSharp
         /// 
         /// Note: this is not a numpy function.
         /// </summary>
+        [Obsolete("Non numpy functionality, will be removed in future versions. use np.clip() instead.")]
         public void Normalize()
         {
             var min = this.min(0);
