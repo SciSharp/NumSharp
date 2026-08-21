@@ -1,164 +1,133 @@
-﻿//using System;
-//using System.Linq;
-//using System.Runtime.CompilerServices;
-//using System.Runtime.InteropServices;
-//using BenchmarkDotNet.Attributes;
-//using BenchmarkDotNet.Engines;
-//using NumSharp.Backends.Unmanaged;
-//
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Configs;
+using NumSharp.Backends.Unmanaged;
+using NumSharp.Unmanaged.Memory;
 
-//namespace NumSharp.Benchmark.Unmanaged
-//{
-//    //| Method | RunStrategy |     Mean |     Error |   StdDev |   Median |      Min |       Max |
-//    //|------- |------------ |---------:|----------:|---------:|---------:|---------:|----------:|
-//    //|  copy3 |   ColdStart | 82.16 ms | 1.6843 ms | 4.966 ms | 80.67 ms | 74.72 ms | 100.53 ms |
-//    //|  copy2 |   ColdStart | 51.93 ms | 1.6390 ms | 4.833 ms | 50.80 ms | 46.71 ms |  69.27 ms |
-//    //|  copy1 |   ColdStart | 82.57 ms | 1.7267 ms | 5.091 ms | 80.91 ms | 77.42 ms | 104.33 ms |
-//    //|   copy |   ColdStart | 81.56 ms | 1.4580 ms | 4.299 ms | 80.34 ms | 75.82 ms |  95.28 ms |
+namespace NumSharp.Benchmark.Unmanaged
+{
+    // Revived 2026-08 (was fully commented out). Compares four ways to allocate + copy a small
+    // unmanaged block (length = 100 ints). The outer loop repeats one alloc+copy; OperationsPerInvoke
+    // = iterations, so the reported Mean is the cost of ONE alloc+copy (and Allocated is per-op).
+    //   * copy  (baseline) — new block + Span<T>.CopyTo
+    //   * copy1            — new block + Buffer.MemoryCopy
+    //   * copy2            — StackedMemoryPool.Take() block + Buffer.MemoryCopy (pooled allocation)
+    //   * copy3            — new block + msvcrt memcpy P/Invoke   (Windows only)
+    //
+    // The StackedMemoryPool arm was ported to the current pool API (Take()/Return(IntPtr)/Dispose());
+    // the old TakeBuffer(len)/ReturnBuffer(byte[])/Clear() no longer exist. Inputs are immutable across
+    // invocations (each Copy* allocates and frees its OWN result; Copy2's Take is balanced by the
+    // returned block's Free-triggered Return), so setup is [GlobalSetup] — NOT [IterationSetup], which
+    // would force UnrollFactor=1 and needlessly re-allocate the pool before every iteration.
 
-//    //|  copy3 |  Throughput | 77.54 ms | 0.5398 ms | 1.441 ms | 77.34 ms | 74.97 ms |  82.12 ms |
-//    //|  copy2 |  Throughput | 46.63 ms | 0.7886 ms | 2.263 ms | 45.68 ms | 44.21 ms |  53.55 ms |
-//    //|  copy1 |  Throughput | 78.04 ms | 0.4407 ms | 1.191 ms | 77.75 ms | 75.55 ms |  82.27 ms |
-//    //|   copy |  Throughput | 80.73 ms | 1.1966 ms | 3.433 ms | 79.41 ms | 75.95 ms |  89.08 ms |
+    // ── Latest results (net10.0 Release, InProcessEmit Throughput, per-op via OperationsPerInvoke; 2026-08-21).
+    //    Mean = cost of ONE alloc+copy of 100 ints. Pooled allocation (copy2) is fastest (0.62x); fresh
+    //    block + Span.CopyTo / Buffer.MemoryCopy / msvcrt memcpy are all ~parity. ──
+    //   | Method            | Mean      | Ratio | Rank | Allocated |
+    //   |------------------ |----------:|------:|-----:|----------:|
+    //   | copy  (baseline)  | 114.94 ns |  1.00 |    2 |      96 B |   new block + Span.CopyTo
+    //   | copy1             | 113.97 ns |  0.99 |    2 |      96 B |   new block + Buffer.MemoryCopy
+    //   | copy2             |  71.17 ns |  0.62 |    1 |     152 B |   pooled block + Buffer.MemoryCopy
+    //   | copy3             | 117.93 ns |  1.03 |    2 |      96 B |   new block + msvcrt memcpy
+    [Config(typeof(UnmanagedThroughputConfig))]
+    public unsafe class UnmanagedCopy
+    {
+        private const int length = 100;
+        private const int iterations = 800_000;
 
-//    [SimpleJob(RunStrategy.ColdStart, targetCount: 100)]
-//    [SimpleJob(RunStrategy.Throughput, targetCount: 100)]
-//    [MinColumn, MaxColumn, MeanColumn, MedianColumn]
-//    [HtmlExporter]
-//    public unsafe class UnmanagedCopy
-//    {
-//        private const int length = 100;
-//        private const int iterations = 800_000;
+        private UnmanagedMemoryBlock<int> @from;
+        private static StackedMemoryPool pool;
 
-//        private UnmanagedMemoryBlock<int> from;
-//        private UnmanagedByteStorage<int> fromvec;
-//        private UnmanagedMemoryBlock<int> to;
-//        private UnmanagedByteStorage<int> setvec;
+        [GlobalSetup]
+        public void Setup()
+        {
+            @from = new UnmanagedMemoryBlock<int>(length);
+            for (int i = 0; i < length; i++)
+                @from[i] = i + 1;
+            pool = new StackedMemoryPool(1_677_721, 19);
+        }
 
-//        private UnmanagedMemoryBlock<int> fromsimple;
-//        private UnmanagedMemoryBlock<int> tosimple;
+        [GlobalCleanup]
+        public void Cleanup()
+        {
+            // Untimed correctness guard: the copy must reproduce the source.
+            var c = Copy<int>(@from);
+            for (long i = 0; i < length; i++)
+                if (c.Address[i] != @from.Address[i]) throw new Exception("copy verification failed");
+            c.Free();
 
-//        IDisposable[] memoryTrash;
-//        private static StackedMemoryPool pool = default;
+            @from.Free();
+            pool?.Dispose();
+            pool = null;
+        }
 
-//        NDArray nd;
+        [Benchmark(OperationsPerInvoke = iterations)]
+        public void copy3()
+        {
+            for (int j = 0; j < iterations; j++)
+                Copy3<int>(@from).Free();
+        }
 
-//        [IterationSetup]
-//        public void Setup()
-//        {
-//            @from = new UnmanagedMemoryBlock<int>(length);
-//            fromvec = new UnmanagedByteStorage<int>(new int[10 * length], new Shape(10, length));
-//            to = new UnmanagedMemoryBlock<int>(length);
-//            setvec = new UnmanagedByteStorage<int>(Enumerable.Range(0, length).ToArray(), new Shape(length));
-//            nd = np.arange(length * 10).reshape(10, length);
+        [Benchmark(OperationsPerInvoke = iterations)]
+        public void copy2()
+        {
+            for (int j = 0; j < iterations; j++)
+                Copy2<int>(@from).Free();
+        }
 
-//            fromsimple = new UnmanagedMemoryBlock<int>(length);
-//            tosimple = new UnmanagedMemoryBlock<int>(length);
-//            pool = new StackedMemoryPool(1_677_721, 19);
-//        }
+        [Benchmark(OperationsPerInvoke = iterations)]
+        public void copy1()
+        {
+            for (int j = 0; j < iterations; j++)
+                Copy1<int>(@from).Free();
+        }
 
-//        [BenchmarkDotNet.Attributes.IterationCleanup()]
-//        public void Cleanup()
-//        {
-//            if (memoryTrash != null)
-//                for (var i = 0; i < memoryTrash.Length; i++)
-//                {
-//                    var vector = memoryTrash[i];
-//                    if (vector == null)
-//                        break;
-//                    vector.Dispose();
-//                    memoryTrash[i] = null;
-//                }
+        [Benchmark(Baseline = true, OperationsPerInvoke = iterations)]
+        public void copy()
+        {
+            for (int j = 0; j < iterations; j++)
+                Copy<int>(@from).Free();
+        }
 
-//            if (pool != null)
-//            {
-//                pool.Clear();
-//                pool = null;
-//            }
-//        }
+        [DllImport("msvcrt.dll", EntryPoint = "memcpy", CallingConvention = CallingConvention.Cdecl, SetLastError = false)]
+        public static extern int MemCopy(void* dest, void* src, UIntPtr count);
 
+        [MethodImpl(OptimizeAndInline)]
+        public static UnmanagedMemoryBlock<T> Copy3<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
+        {
+            var len = source.Count * sizeof(T);
+            var ret = new UnmanagedMemoryBlock<T>(source.Count);
+            MemCopy(ret.Address, source.Address, (UIntPtr)len);
+            return ret;
+        }
 
-//        [Benchmark]
-//        public void copy3()
-//        {
-//            for (int j = 0; j < iterations; j++)
-//            {
-//                Copy3<int>(@from).Free();
-//            }
-//        }
+        [MethodImpl(OptimizeAndInline)]
+        public static UnmanagedMemoryBlock<T> Copy2<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
+        {
+            var len = source.Count * sizeof(T);
+            var buffer = pool.Take();
+            var ret = new UnmanagedMemoryBlock<T>((T*)buffer.ToPointer(), source.Count, () => pool.Return(buffer));
+            Buffer.MemoryCopy(source.Address, ret.Address, len, len);
+            return ret;
+        }
 
-//        [Benchmark]
-//        public void copy2()
-//        {
-//            for (int j = 0; j < iterations; j++)
-//            {
-//                Copy2<int>(@from).Free();
-//            }
-//        }
+        [MethodImpl(OptimizeAndInline)]
+        public static UnmanagedMemoryBlock<T> Copy1<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
+        {
+            var ret = new UnmanagedMemoryBlock<T>(source.Count);
+            var len = ret.Count * sizeof(T);
+            Buffer.MemoryCopy(source.Address, ret.Address, len, len);
+            return ret;
+        }
 
-//        [Benchmark]
-//        public void copy1()
-//        {
-//            for (int j = 0; j < iterations; j++)
-//            {
-//                Copy1<int>(@from).Free();
-//            }
-//        }
-
-
-//        [Benchmark]
-//        public void copy()
-//        {
-//            for (int j = 0; j < iterations; j++)
-//            {
-//                Copy<int>(@from).Free();
-//            }
-//        }
-
-//        static UnmanagedCopy() { }
-
-//        [DllImport("msvcrt.dll", EntryPoint = "memcpy", CallingConvention = CallingConvention.Cdecl, SetLastError = false)]
-//        public static extern int MemCopy(void* dest, void* src, UIntPtr count);
-
-
-//        [MethodImpl(OptimizeAndInline)]
-//        public static UnmanagedMemoryBlock<T> Copy3<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
-//        {
-//            var len = source.Count * sizeof(T);
-//            var ret = new UnmanagedMemoryBlock<T>(source.Count);
-//            MemCopy(ret.Address, source.Address, (UIntPtr)len);
-//            //Buffer.MemoryCopy(source._itemBuffer, ret._itemBuffer, len, len);
-//            //source.AsSpan().CopyTo(ret.AsSpan());
-//            return ret;
-//        }
-
-//        [MethodImpl(OptimizeAndInline)]
-//        public static UnmanagedMemoryBlock<T> Copy2<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
-//        {
-//            var len = source.Count * sizeof(T);
-//            var buffer = pool.TakeBuffer(len);
-//            var ret = new UnmanagedMemoryBlock<T>((T*)Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0), source.Count, () => pool.ReturnBuffer(buffer));
-//            Buffer.MemoryCopy(source.Address, ret.Address, len, len);
-//            //source.AsSpan().CopyTo(ret.AsSpan());
-//            return ret;
-//        }
-
-//        [MethodImpl(OptimizeAndInline)]
-//        public static UnmanagedMemoryBlock<T> Copy1<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
-//        {
-//            var ret = new UnmanagedMemoryBlock<T>(source.Count);
-//            var len = ret.Count * sizeof(T);
-//            Buffer.MemoryCopy(source.Address, ret.Address, len, len);
-//            //source.AsSpan().CopyTo(ret.AsSpan());
-//            return ret;
-//        }
-
-//        [MethodImpl(OptimizeAndInline)]
-//        public static UnmanagedMemoryBlock<T> Copy<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
-//        {
-//            var ret = new UnmanagedMemoryBlock<T>(source.Count);
-//            source.AsSpan().CopyTo(ret.AsSpan());
-//            return ret;
-//        }
-//    }
-//}
+        [MethodImpl(OptimizeAndInline)]
+        public static UnmanagedMemoryBlock<T> Copy<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
+        {
+            var ret = new UnmanagedMemoryBlock<T>(source.Count);
+            new Span<T>(source.Address, (int)source.Count).CopyTo(new Span<T>(ret.Address, (int)ret.Count));
+            return ret;
+        }
+    }
+}
