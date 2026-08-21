@@ -125,6 +125,44 @@ namespace NumSharp.Backends
         public bool IsView => _baseStorage != null;
 
         /// <summary>
+        ///     Set when this storage wraps FOREIGN memory that must never become writeable — a read-only
+        ///     memory-mapped file (<c>np.load(mmap_mode: "r")</c>), or a buffer whose exporter declared it
+        ///     read-only (<c>np.frombuffer</c> over a read-only <see cref="MemoryView"/>). It is the gate
+        ///     NumPy expresses through the buffer protocol (its <c>_IsWriteable</c> asks the non-array base
+        ///     for a writable buffer and a read-only exporter refuses): without it,
+        ///     <c>setflags(write: true)</c> on an <c>'r'</c> memmap would re-enable WRITEABLE and the next
+        ///     write would reach PROT_READ pages — an access violation, not an exception.
+        /// </summary>
+        /// <remarks>
+        ///     Ordinary owned allocations and ordinary views never set this; a cleared WRITEABLE flag alone
+        ///     (e.g. <c>a.flags.writeable = false</c> on your own array) is reversible and does NOT imply it.
+        /// </remarks>
+        internal bool WriteProtected;
+
+        /// <summary>
+        ///     May this array's WRITEABLE flag be turned (back) on? The NumSharp analog of NumPy's
+        ///     <c>_IsWriteable</c> (<c>numpy/_core/src/multiarray/common.c</c>), consulted by
+        ///     <see cref="NDArray.setflags"/> / <c>flags.writeable = true</c>:
+        ///     <list type="bullet">
+        ///         <item>an array over foreign read-only memory (<see cref="WriteProtected"/>) — never
+        ///         (NumPy: the non-array base refuses a writable buffer);</item>
+        ///         <item>a view — iff its base is writeable (NumPy walks the collapsed base chain and
+        ///         accepts if ANY base is writeable; NumSharp's <see cref="_baseStorage"/> is flattened to
+        ///         the ultimate owner, which is that same answer);</item>
+        ///         <item>an owner of ordinary memory — always (NumPy: <c>base == NULL || OWNDATA</c>).</item>
+        ///     </list>
+        /// </summary>
+        internal bool CanEnableWriteable()
+        {
+            if (WriteProtected)
+                return false;
+            var b = _baseStorage;
+            if (b is not null)
+                return b.Shape.IsWriteable && !b.WriteProtected;
+            return true;
+        }
+
+        /// <summary>
         ///     The data type of internal storage array.
         /// </summary>
         /// <value>numpys equal dtype</value>
@@ -1044,6 +1082,14 @@ namespace NumSharp.Backends
             //    values = values.Clone();
             //    shape = Shape.Clean();
             //}
+
+            // A fresh storage re-reports ALIGNED even when its shape was borrowed verbatim from a
+            // setflags(align: false)-cleared source (GetData's identity subshape, sliced views, …):
+            // NumPy recomputes alignment for every new array object, and NumSharp data is always
+            // genuinely aligned — the cleared bit belongs to the array it was cleared on alone.
+            // (setflags itself mutates via SetShapeUnsafe, which this deliberately does not touch.)
+            if ((shape._flags & (int)ArrayFlags.ALIGNED) == 0)
+                shape = shape.WithFlags(flagsToSet: ArrayFlags.ALIGNED);
 
             _shape = shape;
             _typecode = values.TypeCode;

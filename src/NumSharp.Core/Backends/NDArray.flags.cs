@@ -27,8 +27,11 @@ namespace NumSharp
     ///     verified equal to NumPy across every layout (C/F/strided/transposed/broadcast/0-d/empty).
     ///
     ///     <para>
-    ///     ALIGNED is always true (managed allocations are always aligned) and WRITEBACKIFCOPY is always
-    ///     false (NumSharp has no copy-on-write handoff), matching what a NumSharp array can be.
+    ///     ALIGNED is true for every fresh array (managed allocations are always aligned) and can only be
+    ///     cleared through <see cref="NDArray.setflags"/> / <c>flags["A"] = false</c> — NumPy parity, the
+    ///     flag then reads back False and <c>num</c>/<c>behaved</c>/<c>carray</c>/<c>farray</c> follow.
+    ///     WRITEBACKIFCOPY is always false (NumSharp has no copy-on-write handoff), matching what a
+    ///     NumSharp array can be.
     ///     </para>
     /// </summary>
     public sealed class NDArrayFlags : IEquatable<NDArrayFlags>
@@ -47,8 +50,10 @@ namespace NumSharp
             _arr = arr ?? throw new ArgumentNullException(nameof(arr));
         }
 
-        // ALIGNED is always true for NumSharp's managed allocations (matching np.require's treatment).
-        private const bool A = true;
+        // ALIGNED is read live from the Shape: every fresh array has it (managed allocations are always
+        // aligned) and only setflags(align: false) clears it (NumPy parity) — fresh views/copies of an
+        // align-cleared array come back aligned, since every new Shape recomputes its flags.
+        private bool A => (_arr.Shape.Flags & ArrayFlags.ALIGNED) != 0;
         private bool C => _arr.Shape.IsContiguous;
         private bool F => _arr.Shape.IsFContiguous;
         private bool W => _arr.Shape.IsWriteable;
@@ -69,7 +74,11 @@ namespace NumSharp
         /// <summary>The array owns the memory it uses — false for any view (slice/reshape/transpose/broadcast).</summary>
         public bool owndata => O;
 
-        /// <summary>The data and all elements are aligned appropriately for the hardware — always true in NumSharp.</summary>
+        /// <summary>
+        ///     The data and all elements are aligned appropriately for the hardware — true for every fresh
+        ///     NumSharp array; clearable via <see cref="NDArray.setflags"/> (<c>align: false</c>) for NumPy
+        ///     parity.
+        /// </summary>
         public bool aligned => A;
 
         /// <summary>A copy-on-write handoff is pending — always false in NumSharp (unmodeled).</summary>
@@ -114,30 +123,19 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Whether the array is writeable. Assignable, matching NumPy's <c>a.flags.writeable = …</c>:
-        ///     setting FALSE makes the array read-only (in place). Setting TRUE re-enables an array that OWNS
-        ///     its data (the round-trip on your own array); re-enabling a non-owning view — which NumPy
-        ///     permits when the base is writeable — is refused here for safety (a stride-0 broadcast or a
-        ///     read-only memmap must not be made writeable), a documented divergence.
+        ///     Whether the array is writeable. Assignable, matching NumPy's <c>a.flags.writeable = …</c>
+        ///     (which routes through <c>setflags</c>, as this does): setting FALSE makes the array
+        ///     read-only (in place). Setting TRUE follows NumPy's <c>_IsWriteable</c> rule — an owner of
+        ///     ordinary memory always re-enables; a view re-enables iff its base is writeable (so a
+        ///     <c>np.broadcast_to</c> view of your own array CAN be made writeable, writes then aliasing
+        ///     across the stride-0 axes exactly as in NumPy); an array over foreign read-only memory (an
+        ///     <c>'r'</c> memmap, a read-only buffer) raises
+        ///     <c>ValueError("cannot set WRITEABLE flag to True of this array")</c>.
         /// </summary>
         public bool writeable
         {
             get => W;
-            set
-            {
-                if (value)
-                {
-                    if (W) return;
-                    if (!O)
-                        throw new ValueError("cannot set WRITEABLE flag to True of this array");
-                    _arr.Storage.SetShapeUnsafe(_arr.Shape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE));
-                }
-                else
-                {
-                    if (!W) return;
-                    _arr.Storage.SetShapeUnsafe(_arr.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
-                }
-            }
+            set => _arr.setflags(write: value);
         }
 
         /// <summary>
@@ -200,17 +198,12 @@ namespace NumSharp
             }
         }
 
-        // NumSharp's managed allocations are always aligned, so ALIGNED cannot actually change; the setter is
-        // accepted (as NumPy accepts it) but is a no-op, a documented divergence from NumPy's mutable flag.
-        private static void aligned_set(bool value) { }
+        // Routes through setflags exactly as NumPy's arrayflags setters call arr.setflags(...) — so
+        // aligned IS mutable (align: false clears the live flag) and writebackifcopy keeps NumPy's
+        // set-True ValueError. (flagsobject.c relies on the same delegation.)
+        private void aligned_set(bool value) => _arr.setflags(align: value);
 
-        // NumPy raises when asked to set WRITEBACKIFCOPY to True (it is set only internally, by the C API);
-        // False is a harmless no-op here since NumSharp never sets it.
-        private static void writebackifcopy_set(bool value)
-        {
-            if (value)
-                throw new ValueError("cannot set WRITEBACKIFCOPY flag to True");
-        }
+        private void writebackifcopy_set(bool value) => _arr.setflags(uic: value);
 
         /// <summary>Two flags objects are equal when their <see cref="num"/> integers match (NumPy's <c>__eq__</c>).</summary>
         public bool Equals(NDArrayFlags other) => other is not null && num == other.num;

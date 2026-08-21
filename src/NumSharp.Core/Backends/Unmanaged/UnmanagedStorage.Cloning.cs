@@ -35,7 +35,12 @@ namespace NumSharp.Backends
         public UnmanagedStorage Alias()
         {
             var r = new UnmanagedStorage();
-            r._shape = _shape;
+            // A fresh view re-reports ALIGNED even when the source was setflags(align: false)-cleared:
+            // NumPy recomputes alignment for every new array object from the data pointer, and NumSharp
+            // data is always genuinely aligned — the cleared bit belongs to the source array alone.
+            r._shape = (_shape._flags & (int)ArrayFlags.ALIGNED) == 0
+                ? _shape.WithFlags(flagsToSet: ArrayFlags.ALIGNED)
+                : _shape;
             r._typecode = _typecode;
             r._dtype = _dtype;
             if (InternalArray != null)
@@ -95,6 +100,12 @@ namespace NumSharp.Backends
             if (!_shape.IsWriteable && shape.IsWriteable)
                 shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
 
+            // ALIGNED is the opposite: a fresh view re-reports it even when the source (whose shape a
+            // caller may pass verbatim, e.g. einsum's identity view) was setflags(align: false)-cleared —
+            // NumPy recomputes alignment per new array object, and NumSharp data is always aligned.
+            if ((shape._flags & (int)ArrayFlags.ALIGNED) == 0)
+                shape = shape.WithFlags(flagsToSet: ArrayFlags.ALIGNED);
+
             r._shape = shape;
             r.Count = shape.size; //incase shape is sliced
             r._baseStorage = _baseStorage ?? this;
@@ -129,10 +140,13 @@ namespace NumSharp.Backends
         public UnmanagedStorage Alias(ref Shape shape)
         {
             var r = new UnmanagedStorage();
-            // A view inherits writeability from what it aliases (see Alias(Shape)).
-            r._shape = (!_shape.IsWriteable && shape.IsWriteable)
+            // A view inherits writeability from what it aliases, and re-reports ALIGNED (see Alias(Shape)).
+            var aliasShape = (!_shape.IsWriteable && shape.IsWriteable)
                 ? shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)
                 : shape;
+            if ((aliasShape._flags & (int)ArrayFlags.ALIGNED) == 0)
+                aliasShape = aliasShape.WithFlags(flagsToSet: ArrayFlags.ALIGNED);
+            r._shape = aliasShape;
             r._typecode = _typecode;
             r._dtype = _dtype;
             if (InternalArray != null)
@@ -256,6 +270,11 @@ namespace NumSharp.Backends
             // stay read-only. The freshly-built strided/same-size shape may have defaulted WRITEABLE back on.
             if (!_shape.IsWriteable && shape.IsWriteable)
                 shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+
+            // ALIGNED re-reports on the fresh view (the same-itemsize path passes `_shape` verbatim, which
+            // may carry a setflags(align: false) clear) — see Alias(Shape).
+            if ((shape._flags & (int)ArrayFlags.ALIGNED) == 0)
+                shape = shape.WithFlags(flagsToSet: ArrayFlags.ALIGNED);
 
             var newSlice = ArraySlice.Wrap<T>((T*)InternalArray.Address, wrapCount);
             var r = new UnmanagedStorage();

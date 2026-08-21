@@ -235,9 +235,16 @@ namespace NumSharp
                 result = flat1d.view(typeof(byte))[$"{offset}:{offset + windowBytes}"].view(dtype.AsType());
             }
 
-            // NumPy: a read-only buffer yields a read-only array. Propagate the source's writeability.
-            if (buffer.@readonly && result.Shape.IsWriteable)
-                result.Storage.SetShapeUnsafe(result.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
+            // NumPy: a read-only buffer yields a read-only array. Propagate the source's writeability,
+            // and pin the exporter's read-only declaration on the boundary storage (WriteProtected) so
+            // setflags(write: true) refuses it the way NumPy's _IsWriteable refuses a non-writable
+            // buffer base (np.frombuffer(b"...").setflags(write=True) → ValueError).
+            if (buffer.@readonly)
+            {
+                result.Storage.WriteProtected = true;
+                if (result.Shape.IsWriteable)
+                    result.Storage.SetShapeUnsafe(result.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
+            }
 
             return result;
         }

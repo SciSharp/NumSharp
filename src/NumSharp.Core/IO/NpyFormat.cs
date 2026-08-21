@@ -1023,7 +1023,12 @@ namespace NumSharp.IO
                     transferred = true;
                     var empty = new NDArray(header.Dtype.TypeCode, new Shape(header.Shape));
                     if (!writeable)
+                    {
+                        // NumPy refuses setflags(write=True) on an 'r' memmap even when it is empty
+                        // (its mmap base has no writable buffer) — mark it so ours refuses too.
+                        empty.Storage.WriteProtected = true;
                         empty.Storage.SetShapeUnsafe(empty.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
+                    }
                     return empty;
                 }
 
@@ -1111,6 +1116,18 @@ namespace NumSharp.IO
 
             NDArray nd = WrapMappedBlock(header.Dtype.TypeCode, (void*)dataPtr, count, free, new Shape(header.Shape));
 
+            // 'r'/'readonly' → non-writeable, applied to the WRAP storage (the owner) BEFORE any view is
+            // taken: the F-order reshape/transpose below then inherit read-onlyness from it, and
+            // setflags(write: true) refuses both the owner (WriteProtected — NumPy's non-writable mmap
+            // buffer base) and every view of it (base non-writeable). Clearing only the FINAL view's
+            // shape would leave the wrap storage writeable underneath it, and the base-chain re-enable
+            // rule would then let a write reach PROT_READ pages.
+            if (!writeable)
+            {
+                nd.Storage.WriteProtected = true;
+                nd.Storage.SetShapeUnsafe(nd.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
+            }
+
             // The file holds F-order data: interpret the flat bytes with the reversed shape, then transpose
             // — NumPy's `array.reshape(shape[::-1]).transpose()`. The transpose is a zero-copy view, so the
             // result still shares the mapped memory.
@@ -1122,8 +1139,8 @@ namespace NumSharp.IO
                 nd = nd.reshape(reversed).T;
             }
 
-            // 'r'/'readonly' → a non-writeable view, matching NumPy's read-only memmap.
-            if (!writeable)
+            // Defensive: the wrap-storage clear above already propagates through reshape/transpose.
+            if (!writeable && nd.Shape.IsWriteable)
                 nd.Storage.SetShapeUnsafe(nd.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
 
             return nd;
