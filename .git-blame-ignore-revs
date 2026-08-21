@@ -24,3 +24,6 @@ f677d43e6642b72b4d3c29070f02e42a0dddec32
 
 # Fix stale NdArray.* file-path references in comments/docs to renamed NDArray.* files
 f4cdc1ecdb9fd0ff3997dc63f9b82aa3ae7de100
+
+# Isolate the differential-fuzz oracle harness into NumSharp.UnitTest.Oracle (pure git mv, R100)
+e6fd25438ba488038494c60a2333b2850501ff64
