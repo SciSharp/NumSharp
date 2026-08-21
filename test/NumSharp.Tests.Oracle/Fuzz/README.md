@@ -417,6 +417,39 @@ than BLAS), 2 f32 deep contractions in P3's bounded known-loss scope. The tier a
 harness trap on arrival: a positional `axis` int to `np.vecdot` silently binds `out=` via the
 int→NDArray implicit conversion — the registry passes it BY NAME (documented at the call).
 
+### LAPACK factorisation family (`linalg_parity` tier)
+
+`linalg_parity.jsonl` (264 cases, `gen_oracle.py linalg_parity`) is the FIRST *corpus* value gate for the
+LAPACK factorisations — `cholesky`, `eig`, `eigvals`, `eigh`, `eigvalsh`, `svd`, `svdvals`, `pinv`,
+`matrix_rank`, `cond`, `lstsq`, `qr` and `norm{2,-2,'nuc'}` — previously gated only by the interop
+live-parity suite. **HOST-PINNED exactly like `matmul_parity`** (`linalg_parity.host.jsonl`, same
+`MatmulParityPin` shape), because `NumSharp.Core` ships NO managed LU/QR/SVD/eigensolver: these compute
+ONLY through the opt-in `NumSharp.Interop.OpenBLAS` backend, and the result bytes come out of a specific
+LAPACK build dispatched to a specific CPU kernel. The gate enables that backend before replay and
+`Disable()`s after; a host that cannot load NumPy 2.4.2's pinned scipy-openblas (matched by CONTENT
+sha256, not file name) goes **Inconclusive, never red**. Pinned at **threads=1** — the deterministic
+config the interop suite proves — rather than `matmul_parity`'s ambient max; `gen_linalg_parity()` forces
+single-thread via ctypes so the recorded bytes are threading-independent. NumPy's `linalg` is "lite" (it
+factorises every operand in double/cdouble and rounds back once, `_commonType`), so **float32 results are
+byte-identical too** and int/bool operands widen to float64 — verified across dtypes/layouts/shapes/batched/
+degenerate. **264/264 bit-exact** on the pinned host (empirically probed 25/26 before wiring; the sign/phase
+freedom of eigenvectors/U/Vh/Q/R is resolved identically because the SAME LAPACK routine runs on both sides).
+
+Tuple results (`svd`→(U,S,Vh), `eig`/`eigh`→(w,v), `qr`→(Q,R)/(h,τ), `lstsq`→(x,res,rank,s)) ride the
+`kind:"tuple"` comparator (arity asserted); the array siblings (incl. `svd(compute_uv=False)`→S and
+`qr(mode='r')`→R) ride the ordinary bytes contract. Only the **byte-reproducible** surface is recorded —
+three outputs are NOT and are deliberately EXCLUDED (covered by the interop suite's reconstruction/tolerance
+checks instead, and listed in Table 1):
+
+- **complex-Hermitian `eigh` EIGENVECTORS** — `heevd` does not canonicalize the phase and it is not
+  reproducible across processes; the eigenVALUES (`eigvalsh`, and `eigh`'s `[0]` slot for REAL-symmetric
+  input) are recorded, but complex-Hermitian cases contribute VALUES ONLY (via `eigvalsh`).
+- **float32 `eig`/`eigvals` with COMPLEX eigenvalues** — NumPy yields complex64, NumSharp complex128 (no
+  complex64 dtype); float32 eig is recorded only for all-REAL-eigenvalue matrices.
+- **`cond`/`norm` orders that are NOT SVD-based** (`fro`/1/-1/±inf) — they compose an elementwise reduction
+  whose summation order rounds 1 ULP off NumPy (measured: `cond(a,'fro')` differs in the last byte); only
+  the SVD-based orders (`cond` None/2/-2, `norm` 2/-2/'nuc' — exactly the task scope) are recorded.
+
 ### np.random byte-parity (`random_parity` tiers)
 
 The documented claim — MT19937 with 1-to-1 seed/state parity, "byte-identical sequences" — was

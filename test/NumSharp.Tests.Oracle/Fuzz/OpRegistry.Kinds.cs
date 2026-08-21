@@ -287,6 +287,38 @@ namespace NumSharp.Tests.Fuzz
                 case "broadcast_arrays":
                     return np.broadcast_arrays(ops);
 
+                // ---- LAPACK factorisation family (linalg_parity tier; TUPLE results) ----
+                // svd/eig/eigh/qr return multiple arrays; lstsq returns four. Computable ONLY
+                // through NumSharp.Interop.OpenBLAS (the host-pinned gate enables it). ARITY is
+                // asserted by CompareTuple. Array-result siblings (cholesky/eigvals/eigvalsh/
+                // svdvals/pinv/matrix_rank/cond/norm, svd compute_uv=false, qr mode='r') are in
+                // OpRegistry.cs::Apply. Params pair 1:1 with gen_oracle.py::gen_linalg_parity.
+                case "svd":
+                {
+                    var (u, s, vh) = np.linalg.svd(ops[0], full_matrices: p["full_matrices"].GetBoolean());
+                    return new[] { u, s, vh };
+                }
+                case "eig":
+                {
+                    var (w, v) = np.linalg.eig(ops[0]);
+                    return new[] { w, v };
+                }
+                case "eigh":
+                {
+                    var (w, v) = np.linalg.eigh(ops[0], ParseUplo(p));
+                    return new[] { w, v };
+                }
+                case "qr":                                                          // reduced/complete/raw
+                {
+                    var (q, r) = np.linalg.qr(ops[0], p["mode"].GetString());
+                    return new[] { q, r };
+                }
+                case "lstsq":
+                {
+                    var (x, res, rank, sv) = np.linalg.lstsq(ops[0], ops[1]);
+                    return new[] { x, res, rank, sv };
+                }
+
                 default:
                     throw new NotSupportedException($"tuple op '{op}' is not registered in OpRegistry");
             }

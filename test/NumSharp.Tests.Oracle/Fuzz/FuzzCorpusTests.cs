@@ -110,6 +110,42 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
+        // The LAPACK FACTORISATION family byte parity through the opt-in NumSharp.Interop.OpenBLAS
+        // engine: np.linalg.{cholesky,eig,eigvals,eigh,eigvalsh,svd,svdvals,pinv,matrix_rank,cond,
+        // lstsq,qr} and np.linalg.norm{2,-2,'nuc'}. NumSharp.Core ships NO managed LU/QR/SVD/eigen
+        // solver — these compute ONLY through the backend — and the result bytes come out of a
+        // specific LAPACK build dispatched to a specific CPU kernel. NumPy's linalg is "lite": it
+        // factorises every operand in double/cdouble and rounds the result back once (_commonType),
+        // so a float32 operand is byte-identical too and int/bool widen to float64.
+        //
+        // HOST-PINNED exactly like MatmulParity, but at threads=1 (the deterministic config the
+        // interop live-parity suite proves — see test/NumSharp.Tests.Interop/*LiveParityTests.cs).
+        // A host that cannot load the pinned library makes the tier INCONCLUSIVE with the reason,
+        // never red. Only the BYTE-REPRODUCIBLE surface is recorded — complex-Hermitian eigh
+        // EIGENVECTORS (heevd phase, cross-process non-reproducible), float32-eig-with-complex-
+        // eigenvalues (complex64 vs complex128), and non-SVD cond/norm orders are excluded by the
+        // generator and covered by the interop suite instead. See linalg_parity.host.jsonl and
+        // Fuzz/README.md.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [DoNotParallelize]   // Enables/Disables the process-global OpenBLAS engine; must not overlap other tiers.
+        public void LinalgParity()
+        {
+            var pin = MatmulParityPin.Load("linalg_parity.host.jsonl");
+            string mismatch = pin.TryEnableParityBackend();
+            if (mismatch != null)
+                Assert.Inconclusive(mismatch);
+
+            try
+            {
+                RunCorpus("linalg_parity.jsonl");
+            }
+            finally
+            {
+                NumSharp.Interop.OpenBLAS.OpenBlasEngine.Disable();
+            }
+        }
+
         // T9 bitwise & shift: bitwise_and/or/xor (& | ^), invert (~), left/right_shift across
         // integer + bool dtypes, pairwise layouts, and shift-count edges that straddle the bit width.
         [TestMethod]
@@ -428,6 +464,7 @@ namespace NumSharp.Tests.Fuzz
             ["manip.jsonl"] = 6060,
             ["matmul.jsonl"] = 769,
             ["matmul_parity.jsonl"] = 470,
+            ["linalg_parity.jsonl"] = 210,
             ["modf.jsonl"] = 51,
             ["nanreduce.jsonl"] = 6692,
             ["numpy_f32_kernels.jsonl"] = 140,

@@ -335,6 +335,36 @@ namespace NumSharp.Tests.Fuzz
                 case "trace": return np.trace(ops[0]);                              // Group A
                 case "diagonal": return np.diagonal(ops[0]);                        // Group A
 
+                // ---- LAPACK factorisation family (linalg_parity tier; ARRAY results) ----
+                // Computable ONLY through NumSharp.Interop.OpenBLAS — the host-pinned gate
+                // enables that backend before replay, then Disable()s. Tuple results
+                // (svd/eig/eigh/qr) live in OpRegistry.Kinds.cs::ApplyTuple. Every param
+                // here pairs 1:1 with gen_oracle.py::gen_linalg_parity.
+                case "cholesky":
+                    return np.linalg.cholesky(ops[0], p.TryGetValue("upper", out var chu) && chu.GetBoolean());
+                case "eigvals": return np.linalg.eigvals(ops[0]);
+                case "eigvalsh": return np.linalg.eigvalsh(ops[0], ParseUplo(p));
+                case "svdvals": return np.linalg.svdvals(ops[0]);
+                case "pinv":
+                    return p.ContainsKey("rcond")
+                        ? np.linalg.pinv(ops[0], rcond: p["rcond"].GetDouble())
+                        : np.linalg.pinv(ops[0]);
+                case "matrix_rank":
+                    if (p.ContainsKey("tol")) return np.linalg.matrix_rank(ops[0], tol: p["tol"].GetDouble());
+                    if (p.ContainsKey("rtol")) return np.linalg.matrix_rank(ops[0], rtol: p["rtol"].GetDouble());
+                    return np.linalg.matrix_rank(ops[0]);
+                case "cond":                                                        // SVD orders only (None/2/-2)
+                    return p.ContainsKey("p") ? np.linalg.cond(ops[0], p["p"].GetInt32()) : np.linalg.cond(ops[0]);
+                case "norm":                                                        // matrix orders 2/-2/'nuc'
+                    return p.ContainsKey("axis")
+                        ? np.linalg.norm(ops[0], ParseOrd(p["ord"]), ParseIntArray(p["axis"]),
+                                         p.TryGetValue("keepdims", out var nkd) && nkd.GetBoolean())
+                        : np.linalg.norm(ops[0], ParseOrd(p["ord"]));
+                // svd(compute_uv=false) -> just S; the (U,S,Vh) tuple form is in ApplyTuple.
+                case "svd": return np.linalg.svd(ops[0], full_matrices: p["full_matrices"].GetBoolean(), compute_uv: false).S;
+                // qr(mode='r') -> just R; reduced/complete/raw tuples are in ApplyTuple.
+                case "qr": return np.linalg.qr(ops[0], "r").R;
+
                 // ---- diag / tri family ----------------------------------------------------
                 // `tri` is a pure generator: ops[0] is a 1-element carrier whose dtype selects
                 // tri's dtype (the corpus loops dtype through it), N/M/k come from params.
@@ -520,6 +550,14 @@ namespace NumSharp.Tests.Fuzz
                 list.Add(e.GetInt32());
             return list.ToArray();
         }
+
+        /// <summary>UPLO for the symmetric/Hermitian eigensolvers — 'L' (default) or 'U'.</summary>
+        private static char ParseUplo(IReadOnlyDictionary<string, JsonElement> p)
+            => p.TryGetValue("UPLO", out var u) ? u.GetString()[0] : 'L';
+
+        /// <summary>norm/cond order: a string ('nuc'/'fro') or a boxed int (2/-2/…), as np.linalg expects.</summary>
+        private static object ParseOrd(JsonElement e)
+            => e.ValueKind == JsonValueKind.String ? (object)e.GetString() : e.GetInt32();
 
         private static double[] ParseDoubleArray(JsonElement arr)
         {

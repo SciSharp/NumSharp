@@ -3758,6 +3758,340 @@ def blas_identity():
     except OSError as e:
         info["blas_error"] = str(e)
     return info
+
+
+# ---------------------------------------------------------------------------
+# T-linalg — the LAPACK FACTORISATION family byte-parity for the opt-in BLAS
+# backend (linalg_parity). SAME host-pinned model as matmul_parity: NumPy's
+# np.linalg.{cholesky,eig,eigvals,eigh,eigvalsh,svd,svdvals,pinv,matrix_rank,
+# cond,lstsq,qr} and np.linalg.norm{2,-2,'nuc'} all delegate to scipy-openblas
+# LAPACK, whose result bits depend on the library build, the DYNAMIC_ARCH kernel
+# and the worker-thread count. NumSharp.Core ships NO managed LU/QR/SVD/eigen
+# solver, so these are computable ONLY through NumSharp.Interop.OpenBLAS — and
+# byte-identical to NumPy exactly when the three levers agree.
+#
+# It is deliberately a SEPARATE tier from matmul_parity because it is pinned at
+# threads=1 (the config the interop live-parity suite proves deterministic — see
+# test/NumSharp.Tests.Interop/*LiveParityTests.cs) rather than the ambient max,
+# and its results are TUPLES (svd/eig/eigh/qr/lstsq) as well as arrays.
+#
+# Only the BYTE-REPRODUCIBLE surface is recorded (empirically probed on this host,
+# 25/26 byte-exact). Three factorisation outputs are NOT byte-reproducible and are
+# deliberately EXCLUDED (covered instead by the interop suite's reconstruction /
+# tolerance checks, and documented in Fuzz/README.md):
+#   * complex-HERMITIAN eigh EIGENVECTORS — heevd does not canonicalize the phase
+#     and it is not reproducible across processes; complex-Hermitian eigenVALUES
+#     (eigvalsh, and eigh's [0] slot for REAL-symmetric input) are recorded.
+#   * float32 eig with COMPLEX eigenvalues — NumPy yields complex64, NumSharp
+#     complex128 (no complex64 dtype); float32 eig is recorded only for matrices
+#     with all-REAL eigenvalues.
+#   * cond/norm ORDERS that are not SVD-based (fro/1/-1/inf) — they compose an
+#     elementwise reduction whose summation order rounds 1 ULP off NumPy; only the
+#     SVD-based orders (cond None/2/-2, norm 2/-2/'nuc') are recorded.
+LINALG_PARITY_DTYPES = ["float64", "complex128", "float32"]
+
+
+def _set_openblas_threads(n):
+    """Force the loaded scipy-openblas to <n> threads so the recorded bytes are a
+    deterministic single-threaded function of the input, independent of the ambient
+    OPENBLAS_NUM_THREADS. Mirrors blas_identity()'s ctypes probe; best-effort."""
+    import ctypes
+    import glob
+    root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(np.__file__))), "numpy.libs")
+    for pat in ("*scipy_openblas*.dll", "*scipy_openblas*.so*", "*scipy_openblas*.dylib",
+                "*openblas*.dll", "*openblas*.so*", "*openblas*.dylib"):
+        hits = sorted(glob.glob(os.path.join(root, pat)))
+        if not hits:
+            continue
+        try:
+            dll = ctypes.CDLL(hits[-1])
+        except OSError:
+            continue
+        for name in ("scipy_openblas_set_num_threads64_", "openblas_set_num_threads64_",
+                     "openblas_set_num_threads"):
+            fn = getattr(dll, name, None)
+            if fn is not None:
+                fn(ctypes.c_int(n))
+                return True
+    return False
+
+
+def _lp_operand(a, layout, rng):
+    """(base, view) holding EXACTLY a's values in the requested memory layout, reusing
+    the matmul_parity layout recipes. C/F work for any rank; the strided/reversed recipes
+    are 2-D only (guarded by the caller)."""
+    if layout == "C" or a.ndim == 0:
+        base = np.ascontiguousarray(a)
+        return base, base
+    return _mp_layout(a, layout, rng)
+
+
+def _lp_arr(cases, op, name, a, params, fn, dt, layout, rng):
+    """Record ONE array-result factorisation case (cholesky/eigvals/eigvalsh/svdvals/
+    pinv/matrix_rank/cond/norm, and svd(compute_uv=False)/qr(mode='r'))."""
+    base, view = _lp_operand(a, layout, rng)
+    r = np.asarray(fn(view))
+    cases.append({
+        "id": f"{op}/{name}/{dt}/{layout}/{len(cases)}",
+        "op": op, "params": params,
+        "operands": [describe(base, view)],
+        "expected": _arr_expected(r),
+        "layout": layout, "valueclass": "linalg",
+    })
+
+
+def _lp_tuple(cases, op, name, a, params, fn, dt, layout, rng):
+    """Record ONE tuple-result factorisation case (svd/eig/eigh/qr) — every slot, so
+    ARITY is asserted too."""
+    base, view = _lp_operand(a, layout, rng)
+    r = [np.asarray(x) for x in fn(view)]
+    cases.append({
+        "id": f"{op}/{name}/{dt}/{layout}/{len(cases)}",
+        "op": op, "params": params,
+        "operands": [describe(base, view)],
+        "expected": _tuple_expected(r),
+        "layout": layout, "valueclass": "linalg",
+    })
+
+
+def _lp_lstsq(cases, name, a, b, dt):
+    """lstsq takes TWO operands and returns a 4-tuple (solution, residuals, rank, s)."""
+    ba, va = np.ascontiguousarray(a), np.ascontiguousarray(a)
+    bb, vb = np.ascontiguousarray(b), np.ascontiguousarray(b)
+    r = [np.asarray(x) for x in np.linalg.lstsq(va, vb, rcond=None)]
+    cases.append({
+        "id": f"lstsq/{name}/{dt}/C/{len(cases)}",
+        "op": "lstsq", "params": {"rcond": None},
+        "operands": [describe(ba, va), describe(bb, vb)],
+        "expected": _tuple_expected(r),
+        "layout": "C", "valueclass": "linalg",
+    })
+
+
+def gen_linalg_parity():
+    # Deterministic single-thread bytes regardless of ambient OPENBLAS_NUM_THREADS.
+    _set_openblas_threads(1)
+    cases = []
+    rng = np.random.RandomState(20260821)
+
+    # ---- reference operands (integer-valued so every dtype cast is exact) -----------------
+    SPD3 = np.array([[4., 2, 1], [2, 5, 3], [1, 3, 6]])                       # symmetric PD
+    SPD4 = np.array([[4., 1, 0, 1], [1, 5, 2, 0], [0, 2, 6, 1], [1, 0, 1, 7]])
+    HPD2 = np.array([[2 + 0j, 1 - 1j], [1 + 1j, 3 + 0j]])                     # Hermitian PD
+    HPD3 = np.array([[3 + 0j, 1 - 1j, 0], [1 + 1j, 4 + 0j, 0 - 1j], [0, 0 + 1j, 5 + 0j]])
+    HERM_NPD = np.array([[1 + 0j, 0 - 2j], [0 + 2j, 5 + 0j]])                 # Hermitian, not used for chol
+    SYM_NPD = np.array([[0., 1, 2], [1, 3, 1], [2, 1, 0]])                    # symmetric, indefinite
+    REAL_EIG = np.array([[2., 0, 0], [1, 3, 0], [4, 5, 6]])                   # non-sym, all-real eigs
+    CPLX_EIG = np.array([[1., -1], [1, 1]])                                   # non-sym, complex eigs
+    CPLX_EIG3 = np.array([[1., 2, 0], [0, 3, 1], [2, 0, 4]])                  # non-sym, complex eigs
+    CPLX_IN = np.array([[1 + 0j, 2 - 1j], [0 + 1j, 3 + 0j]])                  # complex input (zgeev)
+    TALL = np.array([[1., 2, 3], [4, 5, 6], [7, 8, 10], [1, 0, 2]])          # 4x3
+    WIDE = np.array([[1., 2, 3, 4], [5, 6, 7, 8], [9, 10, 12, 11]])          # 3x4
+    SQR = np.array([[4., 1, 2], [0, 3, 1], [1, 0, 5]])                        # 3x3 non-symmetric
+    CTALL = np.array([[1 + 2j, 3 - 1j], [4 + 0j, 1 + 1j], [-2 + 1j, 0 + 3j], [1 + 0j, 2 - 2j]])  # 4x2
+    RANKDEF = np.array([[1., 2, 3], [2, 4, 6], [1, 1, 1]])                    # rank 2
+
+    def cast(a, dt):
+        return np.ascontiguousarray(a).astype(dt)
+
+    # ---- layout sweeps ---------------------------------------------------------------------
+    LAYOUTS_2D = ["C", "F", "negrow", "negcol", "stride2", "slice"]
+
+    # ==========================  cholesky  ==============================================
+    for dt in LINALG_PARITY_DTYPES:
+        srcs = [("spd3", SPD3), ("spd4", SPD4)] + \
+               ([("hpd2", HPD2), ("hpd3", HPD3)] if dt == "complex128" else [])
+        for nm, a in srcs:
+            for upper in (False, True):
+                _lp_arr(cases, "cholesky", f"{nm}_u{int(upper)}", cast(a, dt),
+                        {"upper": upper}, lambda v, u=upper: np.linalg.cholesky(v, upper=u), dt, "C", rng)
+    # integer / bool widen to float64
+    for dt in ("int32", "int64", "uint8", "bool"):
+        _lp_arr(cases, "cholesky", "spd3_widen", cast(np.array([[4., 0, 0], [0, 9, 0], [0, 0, 16]]), dt),
+                {"upper": False}, lambda v: np.linalg.cholesky(v), dt, "C", rng)
+    # layouts (float64) + batched + degenerate
+    for lay in LAYOUTS_2D:
+        _lp_arr(cases, "cholesky", "spd3_lay", SPD3, {"upper": False},
+                lambda v: np.linalg.cholesky(v), "float64", lay, rng)
+    _lp_arr(cases, "cholesky", "batch", np.stack([SPD3, SPD3 * 2.0, SPD3 + np.eye(3)]),
+            {"upper": False}, lambda v: np.linalg.cholesky(v), "float64", "C", rng)
+    _lp_arr(cases, "cholesky", "1x1", np.array([[4.0]]), {"upper": False},
+            lambda v: np.linalg.cholesky(v), "float64", "C", rng)
+    _lp_arr(cases, "cholesky", "empty00", np.zeros((0, 0)), {"upper": False},
+            lambda v: np.linalg.cholesky(v), "float64", "C", rng)
+
+    # ==========================  eigvalsh / eigh  =======================================
+    for dt in LINALG_PARITY_DTYPES:
+        for nm, a in [("spd3", SPD3), ("sym_npd", SYM_NPD)]:
+            for uplo in ("L", "U"):
+                _lp_arr(cases, "eigvalsh", f"{nm}_{uplo}", cast(a, dt), {"UPLO": uplo},
+                        lambda v, u=uplo: np.linalg.eigvalsh(v, UPLO=u), dt, "C", rng)
+                # eigh: REAL-symmetric eigenVECTORS are reproducible -> tuple (both slots).
+                _lp_tuple(cases, "eigh", f"{nm}_{uplo}", cast(a, dt), {"UPLO": uplo},
+                          lambda v, u=uplo: np.linalg.eigh(v, UPLO=u), dt, "C", rng)
+    # complex-Hermitian: eigenVALUES only (eigenvectors' heevd phase is not reproducible).
+    for nm, a in [("hpd2", HPD2), ("hpd3", HPD3), ("herm_npd", HERM_NPD)]:
+        for uplo in ("L", "U"):
+            _lp_arr(cases, "eigvalsh", f"{nm}_{uplo}", np.ascontiguousarray(a), {"UPLO": uplo},
+                    lambda v, u=uplo: np.linalg.eigvalsh(v, UPLO=u), "complex128", "C", rng)
+    # integer / bool widen; batched; layouts (real symmetric)
+    for dt in ("int32", "int64", "bool"):
+        _lp_arr(cases, "eigvalsh", "diag_widen", cast(np.diag([4., 9, 16]), dt), {"UPLO": "L"},
+                lambda v: np.linalg.eigvalsh(v), dt, "C", rng)
+    _lp_arr(cases, "eigvalsh", "batch", np.stack([SPD3, SPD3 * 2.0, SPD3 + np.eye(3)]), {"UPLO": "L"},
+            lambda v: np.linalg.eigvalsh(v), "float64", "C", rng)
+    _lp_tuple(cases, "eigh", "batch", np.stack([SPD3, SPD3 * 2.0]), {"UPLO": "L"},
+              lambda v: np.linalg.eigh(v), "float64", "C", rng)
+    for lay in ("F", "negrow", "negcol"):
+        _lp_arr(cases, "eigvalsh", "spd3_lay", SPD3, {"UPLO": "L"},
+                lambda v: np.linalg.eigvalsh(v), "float64", lay, rng)
+
+    # ==========================  eig / eigvals  =========================================
+    # float64 + complex128 over real-eig / complex-eig / complex-input matrices.
+    for dt in ("float64", "complex128"):
+        srcs = [("realeig", REAL_EIG), ("cplxeig", CPLX_EIG), ("cplxeig3", CPLX_EIG3)]
+        if dt == "complex128":
+            srcs += [("cplxin", CPLX_IN)]
+        for nm, a in srcs:
+            _lp_arr(cases, "eigvals", f"{nm}", cast(a, dt), {}, lambda v: np.linalg.eigvals(v), dt, "C", rng)
+            _lp_tuple(cases, "eig", f"{nm}", cast(a, dt), {}, lambda v: np.linalg.eig(v), dt, "C", rng)
+    # float32: only REAL-eig matrices (complex-eig float32 -> complex64, a dtype divergence).
+    _lp_arr(cases, "eigvals", "realeig", cast(REAL_EIG, "float32"), {}, lambda v: np.linalg.eigvals(v), "float32", "C", rng)
+    _lp_tuple(cases, "eig", "realeig", cast(REAL_EIG, "float32"), {}, lambda v: np.linalg.eig(v), "float32", "C", rng)
+    # batched: one complex-eig + one real-eig -> whole result complex on both sides.
+    _lp_tuple(cases, "eig", "batch", np.stack([CPLX_EIG, np.array([[2., 0], [0, 3]])]), {},
+              lambda v: np.linalg.eig(v), "float64", "C", rng)
+    _lp_arr(cases, "eigvals", "batch", np.stack([REAL_EIG, REAL_EIG + np.eye(3)]), {},
+            lambda v: np.linalg.eigvals(v), "float64", "C", rng)
+
+    # ==========================  svd / svdvals  =========================================
+    for dt in LINALG_PARITY_DTYPES:
+        rects = [("tall", TALL), ("wide", WIDE), ("sqr", SQR)] + \
+                ([("ctall", CTALL)] if dt == "complex128" else [])
+        for nm, a in rects:
+            for full in (False, True):
+                _lp_tuple(cases, "svd", f"{nm}_f{int(full)}", cast(a, dt), {"full_matrices": full},
+                          lambda v, f=full: np.linalg.svd(v, full_matrices=f), dt, "C", rng)
+            # compute_uv=False -> just S (array kind)
+            _lp_arr(cases, "svd", f"{nm}_novec", cast(a, dt), {"full_matrices": False, "compute_uv": False},
+                    lambda v: np.linalg.svd(v, compute_uv=False), dt, "C", rng)
+            _lp_arr(cases, "svdvals", f"{nm}", cast(a, dt), {}, lambda v: np.linalg.svdvals(v), dt, "C", rng)
+    # layouts (float64 tall) + batched + degenerate
+    for lay in LAYOUTS_2D:
+        _lp_tuple(cases, "svd", "tall_lay", TALL, {"full_matrices": False},
+                  lambda v: np.linalg.svd(v, full_matrices=False), "float64", lay, rng)
+        _lp_arr(cases, "svdvals", "tall_lay", TALL, {}, lambda v: np.linalg.svdvals(v), "float64", lay, rng)
+    _lp_tuple(cases, "svd", "batch", np.stack([TALL, TALL + 1.0, TALL * 2.0]), {"full_matrices": False},
+              lambda v: np.linalg.svd(v, full_matrices=False), "float64", "C", rng)
+    _lp_arr(cases, "svdvals", "batch", np.stack([TALL, TALL + 1.0]), {},
+            lambda v: np.linalg.svdvals(v), "float64", "C", rng)
+    _lp_tuple(cases, "svd", "1x1", np.array([[7.0]]), {"full_matrices": True},
+              lambda v: np.linalg.svd(v, full_matrices=True), "float64", "C", rng)
+    _lp_tuple(cases, "svd", "empty03", np.zeros((0, 3)), {"full_matrices": True},
+              lambda v: np.linalg.svd(v, full_matrices=True), "float64", "C", rng)
+    _lp_tuple(cases, "svd", "empty30", np.zeros((3, 0)), {"full_matrices": True},
+              lambda v: np.linalg.svd(v, full_matrices=True), "float64", "C", rng)
+
+    # ==========================  pinv  ==================================================
+    for dt in LINALG_PARITY_DTYPES:
+        rects = [("tall", TALL), ("wide", WIDE), ("sqr", SQR)] + \
+                ([("ctall", CTALL)] if dt == "complex128" else [])
+        for nm, a in rects:
+            _lp_arr(cases, "pinv", f"{nm}", cast(a, dt), {}, lambda v: np.linalg.pinv(v), dt, "C", rng)
+    _lp_arr(cases, "pinv", "tall_rcond", TALL, {"rcond": 1e-10},
+            lambda v: np.linalg.pinv(v, rcond=1e-10), "float64", "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_arr(cases, "pinv", "tall_lay", TALL, {}, lambda v: np.linalg.pinv(v), "float64", lay, rng)
+    _lp_arr(cases, "pinv", "batch", np.stack([TALL, TALL + 1.0]), {},
+            lambda v: np.linalg.pinv(v), "float64", "C", rng)
+
+    # ==========================  matrix_rank  ===========================================
+    RANK_FULL = np.array([[1., 2, 3], [4, 5, 6], [7, 8, 10]])
+    for dt in ("float64", "float32", "complex128", "int64"):
+        _lp_arr(cases, "matrix_rank", "full", cast(RANK_FULL, dt), {},
+                lambda v: np.linalg.matrix_rank(v), dt, "C", rng)
+    _lp_arr(cases, "matrix_rank", "def", RANKDEF, {}, lambda v: np.linalg.matrix_rank(v), "float64", "C", rng)
+    _lp_arr(cases, "matrix_rank", "def_tol", RANKDEF, {"tol": 0.5},
+            lambda v: np.linalg.matrix_rank(v, tol=0.5), "float64", "C", rng)
+    _lp_arr(cases, "matrix_rank", "def_rtol", RANKDEF, {"rtol": 0.1},
+            lambda v: np.linalg.matrix_rank(v, rtol=0.1), "float64", "C", rng)
+    _lp_arr(cases, "matrix_rank", "batch",
+            np.stack([RANK_FULL, np.eye(3), RANKDEF]), {},
+            lambda v: np.linalg.matrix_rank(v), "float64", "C", rng)
+
+    # ==========================  cond (SVD-based orders None/2/-2)  ======================
+    for dt in ("float64", "complex128"):
+        a = SPD3 if dt == "float64" else HPD3
+        for pk, pv, pf in [("none", None, None), ("2", 2, 2), ("neg2", -2, -2)]:
+            params = {} if pv is None else {"p": pv}
+            _lp_arr(cases, "cond", f"{dt[:4]}_{pk}", cast(a, dt), params,
+                    lambda v, pp=pf: np.linalg.cond(v) if pp is None else np.linalg.cond(v, pp), dt, "C", rng)
+    _lp_arr(cases, "cond", "batch", np.stack([SPD3, SPD3 + np.eye(3)]), {},
+            lambda v: np.linalg.cond(v), "float64", "C", rng)
+
+    # ==========================  norm (matrix orders 2/-2/'nuc')  =======================
+    for dt in ("float64", "complex128"):
+        rects = [("tall", TALL), ("sqr", SQR)] + ([("ctall", CTALL)] if dt == "complex128" else [])
+        for nm, a in rects:
+            for ok, ov in [("2", 2), ("neg2", -2), ("nuc", "nuc")]:
+                _lp_arr(cases, "norm", f"{nm}_{ok}", cast(a, dt), {"ord": ov},
+                        lambda v, o=ov: np.linalg.norm(v, o), dt, "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_arr(cases, "norm", "tall_2_lay", TALL, {"ord": 2}, lambda v: np.linalg.norm(v, 2), "float64", lay, rng)
+        _lp_arr(cases, "norm", "tall_nuc_lay", TALL, {"ord": "nuc"}, lambda v: np.linalg.norm(v, "nuc"), "float64", lay, rng)
+    # stacked over an axis tuple + keepdims
+    STACK234 = np.arange(24.0).reshape(2, 3, 4)
+    _lp_arr(cases, "norm", "stack_2_ax", STACK234, {"ord": 2, "axis": [1, 2]},
+            lambda v: np.linalg.norm(v, 2, axis=(1, 2)), "float64", "C", rng)
+    _lp_arr(cases, "norm", "stack_nuc_ax", STACK234, {"ord": "nuc", "axis": [1, 2]},
+            lambda v: np.linalg.norm(v, "nuc", axis=(1, 2)), "float64", "C", rng)
+    _lp_arr(cases, "norm", "stack_nuc_kd", STACK234, {"ord": "nuc", "axis": [1, 2], "keepdims": True},
+            lambda v: np.linalg.norm(v, "nuc", axis=(1, 2), keepdims=True), "float64", "C", rng)
+
+    # ==========================  qr (reduced/complete/r/raw)  ===========================
+    for dt in LINALG_PARITY_DTYPES:
+        rects = [("tall", TALL), ("wide", WIDE), ("sqr", SQR)] + \
+                ([("ctall", CTALL)] if dt == "complex128" else [])
+        for nm, a in rects:
+            for mode in ("reduced", "complete", "raw"):
+                _lp_tuple(cases, "qr", f"{nm}_{mode}", cast(a, dt), {"mode": mode},
+                          lambda v, m=mode: np.linalg.qr(v, mode=m), dt, "C", rng)
+            # r-mode returns just R (array kind)
+            _lp_arr(cases, "qr", f"{nm}_r", cast(a, dt), {"mode": "r"},
+                    lambda v: np.linalg.qr(v, mode="r"), dt, "C", rng)
+    for dt in ("int64", "bool"):
+        _lp_tuple(cases, "qr", "tall_widen", cast(TALL, dt), {"mode": "reduced"},
+                  lambda v: np.linalg.qr(v, mode="reduced"), dt, "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_tuple(cases, "qr", "tall_lay", TALL, {"mode": "reduced"},
+                  lambda v: np.linalg.qr(v, mode="reduced"), "float64", lay, rng)
+    _lp_tuple(cases, "qr", "batch", np.arange(3 * 5 * 3.0).reshape(3, 5, 3) + np.eye(5, 3), {"mode": "reduced"},
+              lambda v: np.linalg.qr(v, mode="reduced"), "float64", "C", rng)
+    _lp_tuple(cases, "qr", "30_reduced", np.zeros((3, 0)), {"mode": "reduced"},
+              lambda v: np.linalg.qr(v, mode="reduced"), "float64", "C", rng)
+    _lp_tuple(cases, "qr", "1x1_complete", np.array([[5.0]]), {"mode": "complete"},
+              lambda v: np.linalg.qr(v, mode="complete"), "float64", "C", rng)
+
+    # ==========================  lstsq  =================================================
+    OVER = np.array([[0., 1], [1, 1], [2, 1], [3, 1]])          # 4x2 overdetermined
+    Y1 = np.array([-1., 0.2, 0.9, 2.1])                          # 1-D b
+    Y2 = np.array([[-1., -2], [0.2, 0.4], [0.9, 1.8], [2.1, 4.2]])  # 2-D b
+    UNDER = np.array([[1., 2, 3], [4, 5, 6]])                    # 2x3 underdetermined
+    SQ2 = np.array([[1., 2], [3, 5]])                            # 2x2 square
+    RD = np.array([[1., 2], [2, 4], [3, 6]])                     # 3x2 rank-deficient
+    CA = np.array([[1 + 0j, 1 + 0j], [1 + 0j, 0 + 1j], [1 + 0j, 2 + 0j], [0 + 0j, 1 + 0j]])
+    CB = np.array([1 + 1j, 2 + 0j, 3 + 0j, 0 + 1j])
+    _lp_lstsq(cases, "over_y1", OVER, Y1, "float64")
+    _lp_lstsq(cases, "over_y2", OVER, Y2, "float64")
+    _lp_lstsq(cases, "under", UNDER, np.array([1., 2]), "float64")
+    _lp_lstsq(cases, "square", SQ2, np.array([1., 2]), "float64")
+    _lp_lstsq(cases, "rankdef", RD, np.array([1., 2, 3]), "float64")
+    _lp_lstsq(cases, "complex", CA, CB, "complex128")
+    for dt in ("float32", "int32"):
+        _lp_lstsq(cases, f"over_{dt}", OVER.astype(dt) if dt != "int32" else OVER.astype("int32"),
+                  Y1.astype(dt) if dt != "int32" else Y1.astype("int32"), dt)
+
+    return cases
 # =====================================================================================
 # Result KINDS and ERROR parity.
 #
@@ -5701,6 +6035,13 @@ def main():
         # host whose BLAS binary + dispatched kernel + thread count match. The C# gate
         # reports Inconclusive (never red) when they do not.
         write_jsonl(os.path.join(corpus_dir, "matmul_parity.host.jsonl"), [blas_identity()])
+    elif mode == "linalg_parity":
+        cases = gen_linalg_parity()                                     # LAPACK factorisation byte gate
+        write_jsonl(os.path.join(corpus_dir, "linalg_parity.jsonl"), cases)
+        # Host-pinned like matmul_parity, but at threads=1 (the deterministic config the
+        # interop live-parity suite proves) — gen_linalg_parity() forces single-thread, so
+        # blas_identity() records blas_threads=1 and the C# gate enables the backend at 1.
+        write_jsonl(os.path.join(corpus_dir, "linalg_parity.host.jsonl"), [blas_identity()])
     elif mode == "specials":
         cases = gen_specials()                                          # IEEE special-value parity tier
         write_jsonl(os.path.join(corpus_dir, "specials.jsonl"), cases)
@@ -5718,7 +6059,7 @@ def main():
         cases = gen_fft()                                               # np.fft.* differential tier
         write_jsonl(os.path.join(corpus_dir, "fft.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | specials | precision | random_parity | products | fft)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | specials | precision | random_parity | products | fft)")
         sys.exit(2)
 
 

@@ -43,15 +43,26 @@ namespace NumSharp.Tests.Fuzz
         public string Blas_Corename { get; set; }
         public int Blas_Threads { get; set; }
 
+        /// <summary>
+        ///     The corpus tier this pin guards (e.g. <c>matmul_parity</c> / <c>linalg_parity</c>),
+        ///     derived from the host-file name so the Inconclusive diagnostics name the right
+        ///     regeneration command. The same host-pin shape guards both tiers.
+        /// </summary>
+        public string Tier { get; private set; } = "matmul_parity";
+
         private static readonly JsonSerializerOptions J = new() { PropertyNameCaseInsensitive = true };
 
-        public static MatmulParityPin Load()
+        public static MatmulParityPin Load(string fileName = "matmul_parity.host.jsonl")
         {
-            var path = FuzzCorpus.CorpusPath("matmul_parity.host.jsonl");
+            var path = FuzzCorpus.CorpusPath(fileName);
             foreach (var line in File.ReadLines(path))
             {
                 if (!string.IsNullOrWhiteSpace(line))
-                    return JsonSerializer.Deserialize<MatmulParityPin>(line, J);
+                {
+                    var pin = JsonSerializer.Deserialize<MatmulParityPin>(line, J);
+                    pin.Tier = fileName.Replace(".host.jsonl", "");
+                    return pin;
+                }
             }
 
             throw new InvalidDataException($"empty host pin: {path}");
@@ -72,7 +83,7 @@ namespace NumSharp.Tests.Fuzz
             }
             catch (Exception e)
             {
-                return "matmul_parity is host-pinned and no CBLAS library could be loaded here " +
+                return $"{Tier} is host-pinned and no CBLAS library could be loaded here " +
                        $"({e.GetType().Name}: {e.Message.Split('\n')[0]}). The corpus was generated " +
                        $"against '{Blas_Library}' shipped with numpy {Numpy}; install that wheel or " +
                        "point NUMSHARP_OPENBLAS_LIBRARY at its BLAS to run this gate.";
@@ -90,10 +101,10 @@ namespace NumSharp.Tests.Fuzz
                 if (!string.Equals(loadedHash, Blas_Library_Sha256, StringComparison.OrdinalIgnoreCase))
                 {
                     OpenBlasEngine.Disable();
-                    return $"matmul_parity is host-pinned to the BLAS binary sha256 " +
+                    return $"{Tier} is host-pinned to the BLAS binary sha256 " +
                            $"{Blas_Library_Sha256} ('{Blas_Library}', numpy {Numpy}); this host " +
                            $"loaded {loadedHash} — {info}. Different builds round differently — " +
-                           "regenerate the corpus here (python test/oracle/gen_oracle.py matmul_parity) " +
+                           $"regenerate the corpus here (python test/oracle/gen_oracle.py {Tier}) " +
                            "to gate against your own host.";
                 }
             }
@@ -101,16 +112,16 @@ namespace NumSharp.Tests.Fuzz
                      !info.Contains(Blas_Library, StringComparison.OrdinalIgnoreCase))
             {
                 OpenBlasEngine.Disable();
-                return $"matmul_parity is host-pinned to '{Blas_Library}' (numpy {Numpy}); this host " +
+                return $"{Tier} is host-pinned to '{Blas_Library}' (numpy {Numpy}); this host " +
                        $"loaded a different BLAS: {info}. Different binaries round differently — " +
-                       "regenerate the corpus here (python test/oracle/gen_oracle.py matmul_parity) " +
+                       $"regenerate the corpus here (python test/oracle/gen_oracle.py {Tier}) " +
                        "to gate against your own host.";
             }
 
             if (!string.IsNullOrEmpty(Blas_Corename) && !info.Contains(Blas_Corename, StringComparison.OrdinalIgnoreCase))
             {
                 OpenBlasEngine.Disable();
-                return $"matmul_parity is host-pinned to the '{Blas_Corename}' OpenBLAS kernel " +
+                return $"{Tier} is host-pinned to the '{Blas_Corename}' OpenBLAS kernel " +
                        $"({Blas_Config}); this CPU dispatched to a different one: {info}. " +
                        "DYNAMIC_ARCH picks a different accumulator layout per micro-architecture.";
             }
