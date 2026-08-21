@@ -17,7 +17,7 @@ survive the crossing, who frees what, the codec, the GIL, dtypes and versions.
 [Troubleshooting](#troubleshooting) · [Claims](#claims-ledger)
 
 > Verified on CPython 3.12.12 · numpy 2.4.2 · pythonnet 3.0.5 · net8.0/net10.0.
-> Every claim below is reproduced by a test in `NumSharp.Interop.UnitTests`.
+> Every claim below is reproduced by a test in `NumSharp.Tests.Interop`.
 
 ---
 
@@ -591,6 +591,6 @@ import route works uniformly across pythonnet 3.0.x.
 - [Numpy.NET](numpy-net.md) — driving these same buffers through SciSharp's `Numpy.Bare` C# API
 - [Interoperability](index.md) — the contract underneath every NumSharp bridge
 
-[gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Interop.UnitTests/DocExamples.PythonnetNumpyPage.cs
-[gate-gil]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Interop.UnitTests/GilPolicyTests.cs
-[gate-shutdown]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Interop.UnitTests/ShutdownLeakTests.cs
+[gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/DocExamples.PythonnetNumpyPage.cs
+[gate-gil]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/GilPolicyTests.cs
+[gate-shutdown]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/ShutdownLeakTests.cs

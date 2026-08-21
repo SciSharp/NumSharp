@@ -11,7 +11,7 @@ exception type). The C# replayer (Fuzz/IndexOracleTests.cs) rebuilds the SAME ba
 the SAME index from a portable TOKEN encoding, runs get/set, and bit-compares shape + values +
 which-side-raised. No Python runs at test time or in CI.
 
-Output (JSONL, one case per line), into test/NumSharp.UnitTest.Oracle/Fuzz/corpus/:
+Output (JSONL, one case per line), into test/NumSharp.Tests.Oracle/Fuzz/corpus/:
   index_curated.jsonl  — deterministic basic/fancy/bool/0-d-bool/mixed matrix + setters
   index_dtype.jsonl    — a handful of index forms swept across all 13 NumPy dtypes
   index_random_<seed>.jsonl — seeded random fuzz over the whole index space
@@ -440,7 +440,7 @@ def write_jsonl(path, cases):
             f.write(json.dumps(row, separators=(",", ":")) + "\n")
 
 here = os.path.dirname(os.path.abspath(__file__))
-corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.UnitTest.Oracle", "Fuzz", "corpus"))
+corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
 write_jsonl(os.path.join(corpus_dir, "index_curated.jsonl"), curated)
 write_jsonl(os.path.join(corpus_dir, "index_dtype.jsonl"),   dtype_cases)
 write_jsonl(os.path.join(corpus_dir, "index_setter_dtype.jsonl"), setter_dtype_cases)

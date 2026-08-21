@@ -25,7 +25,7 @@ Three outcomes per case: **bit-exact** (pass), a **documented divergence** in `M
 silent), or a **failure** (red → real bug, auto-shrunk to a 1-element repro).
 
 The authoritative narrative lives in the project `.claude/CLAUDE.md` → "Differential-Fuzz Pipeline (NumPy oracle)"
-and the divergence ledger `test/NumSharp.UnitTest.Oracle/Fuzz/README.md`. This skill is the **actionable playbook**.
+and the divergence ledger `test/NumSharp.Tests.Oracle/Fuzz/README.md`. This skill is the **actionable playbook**.
 
 ## File map
 
@@ -37,12 +37,12 @@ and the divergence ledger `test/NumSharp.UnitTest.Oracle/Fuzz/README.md`. This s
 | Generator | `test/oracle/gen_decimal_oracle.cs` | Independent C# oracle for `Decimal` (no NumPy analog). |
 | Generator | `test/oracle/gen_npy_oracle.py` | `.npy`/`.npz` format oracle (separate corpus + gate). |
 | Generator | `test/oracle/fuzz_random.py` | Seeded random fuzzer (nightly soak). |
-| Harness | `test/NumSharp.UnitTest.Oracle/Fuzz/OpRegistry.cs` | **op-name → NumSharp call.** Pairs 1:1 with `gen_oracle.py`. |
-| Harness | `test/NumSharp.UnitTest.Oracle/Fuzz/FuzzCorpus.cs` | Rebuilds exact NDArray views from `(dtype,shape,strides,offset,bytes)`. |
-| Harness | `test/NumSharp.UnitTest.Oracle/Fuzz/FuzzCorpusTests.cs` | One `[FuzzMatrix]` test per corpus file (`RunCorpus("<tier>.jsonl")`). |
-| Harness | `test/NumSharp.UnitTest.Oracle/Fuzz/{BitDiff,Shrinker}.cs` | Bit-exact compare (NaN tokenized; Decimal by value) / shrink to 1 element. |
-| Harness | `test/NumSharp.UnitTest.Oracle/Fuzz/MisalignedRegistry.cs` | The excused, documented divergences. |
-| Corpus | `test/NumSharp.UnitTest.Oracle/Fuzz/corpus/*.jsonl` | The committed corpus (~68K cases). Copied to test output by the csproj glob. |
+| Harness | `test/NumSharp.Tests.Oracle/Fuzz/OpRegistry.cs` | **op-name → NumSharp call.** Pairs 1:1 with `gen_oracle.py`. |
+| Harness | `test/NumSharp.Tests.Oracle/Fuzz/FuzzCorpus.cs` | Rebuilds exact NDArray views from `(dtype,shape,strides,offset,bytes)`. |
+| Harness | `test/NumSharp.Tests.Oracle/Fuzz/FuzzCorpusTests.cs` | One `[FuzzMatrix]` test per corpus file (`RunCorpus("<tier>.jsonl")`). |
+| Harness | `test/NumSharp.Tests.Oracle/Fuzz/{BitDiff,Shrinker}.cs` | Bit-exact compare (NaN tokenized; Decimal by value) / shrink to 1 element. |
+| Harness | `test/NumSharp.Tests.Oracle/Fuzz/MisalignedRegistry.cs` | The excused, documented divergences. |
+| Corpus | `test/NumSharp.Tests.Oracle/Fuzz/corpus/*.jsonl` | The committed corpus (~68K cases). Copied to test output by the csproj glob. |
 
 ## The gate
 
@@ -95,7 +95,7 @@ is in **`references/add-op.md`** — read it when adding an op. In brief:
 - **Decimal has no NumPy analog.** It rides the independent C# oracle `gen_decimal_oracle.cs` (naive scalar
   `System.Decimal`), regenerated via `dotnet run test/oracle/gen_decimal_oracle.cs`. If your op needs Decimal
   coverage, add it there too.
-- **The generator resolves paths relative to `test/oracle/`** and writes into `test/NumSharp.UnitTest.Oracle/Fuzz/corpus/`.
+- **The generator resolves paths relative to `test/oracle/`** and writes into `test/NumSharp.Tests.Oracle/Fuzz/corpus/`.
   Run it from `test/oracle/` (or with that CWD). CI replays the committed corpus and never runs the generator.
 - **OpRegistry's `default:` throws `NotSupportedException(op)`** — so a corpus op with no registered case fails the
   tier loudly. If a tier goes red immediately on a new op, you forgot (or mistyped) the `OpRegistry` case.

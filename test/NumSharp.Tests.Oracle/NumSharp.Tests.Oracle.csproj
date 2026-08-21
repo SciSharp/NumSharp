@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The differential-fuzz ORACLE, isolated from NumSharp.Tests so the OpenBLAS engine can be
+    managed in one place. This assembly OWNS the two-variation engine lifecycle: its module
+    initializer (Fuzz/BlasEngineAutoInstallGuard.cs) suppresses the package's auto-install so the
+    default state is BLAS-off (Variation A), and the parity tests (FuzzCorpusTests.MatmulParity,
+    BlasBackendDelta, MatmulParityBackendTests) enable/disable the backend explicitly (Variation B).
+    Everything here is the committed NumPy 2.4.2 corpus + its C# replay harness — no Python at test
+    time. See test/NumSharp.Tests.Oracle/Fuzz/README.md.
+  -->
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Platforms>AnyCPU</Platforms>
+    <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. Signed because
+         NumSharp.Core grants it InternalsVisibleTo, which now names a PublicKey. -->
+    <Configurations>Debug;Release;Publish</Configurations>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
+    <DocumentationFile />
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="3.8.3" />
+    <PackageReference Include="Codecov" Version="1.13.0" />
+    <PackageReference Include="AwesomeAssertions" Version="9.3.0" />
+    <PackageReference Include="OpenCover" Version="4.7.922" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+    <!-- The optional external-CBLAS/LAPACK engine. Referenced so the host-pinned matmul_parity tier,
+         BlasBackendDelta and the BlasEngine contract tests can run. Its module-load auto-install is
+         SUPPRESSED here (Fuzz/BlasEngineAutoInstallGuard.cs sets NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0
+         before any interop type is touched), because every other tier asserts NumSharp's own managed
+         kernels; the parity tests enable it per-test and disable it again. -->
+    <ProjectReference Include="..\..\src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj" />
+  </ItemGroup>
+
+  <!-- Differential-fuzzer oracle corpus: committed JSONL replayed by MSTest (no Python in CI). -->
+  <ItemGroup>
+    <None Update="Fuzz\corpus\**\*.jsonl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

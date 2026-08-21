@@ -5543,7 +5543,7 @@ def write_jsonl(path, cases):
 
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
-    corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.UnitTest.Oracle", "Fuzz", "corpus"))
+    corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
     mode = sys.argv[1] if len(sys.argv) > 1 else "smoke"
 
     if mode == "iter":

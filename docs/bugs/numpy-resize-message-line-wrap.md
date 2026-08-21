@@ -113,11 +113,11 @@ assert fragments.
 ## Where it is handled today
 
 - Gates asserting fragments:
-  `test/NumSharp.Interop.UnitTests/DocExamples.InteropIndexPage.cs` →
+  `test/NumSharp.Tests.Interop/DocExamples.InteropIndexPage.cs` →
   `Contract_RefcheckGuard_SeesOtherReferencesToTheBlock`;
-  `test/NumSharp.Interop.UnitTests/DocExamples.PythonnetNumpyPage.cs` →
+  `test/NumSharp.Tests.Interop/DocExamples.PythonnetNumpyPage.cs` →
   `Troubleshooting_SymptomsAreVerbatim`, `Lifetime_ALiveConversionLocksResizing_BothSides`;
-  `test/NumSharp.Interop.UnitTests/DocExamples.NpFrombufferPage.cs` →
+  `test/NumSharp.Tests.Interop/DocExamples.NpFrombufferPage.cs` →
   `LiveView_LocksTheSourceAgainstResize`.
 - The interop docs (`docs/website-src/docs/interop/index.md`, `pythonnet-numpy.md`) quote the
   sentence inline with the wrap collapsed — deliberate, for readability in prose and table cells;

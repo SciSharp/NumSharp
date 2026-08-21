@@ -148,7 +148,7 @@ namespace NumSharp
 
         #endregion
 
-        #region Python.NET interop (test suite: NumSharp.Interop.UnitTests)
+        #region Python.NET interop (test suite: NumSharp.Tests.Interop)
 
         /// <summary>External <c>PYTHONNET_PYDLL</c>: absolute path to the libpython shared library Python.NET should host. <b>Default:</b> <c>null</c> → the suite probes common interpreters for one that imports numpy. Example: <c>/usr/lib/x86_64-linux-gnu/libpython3.12.so</c>.</summary>
         public static string PythonNetPyDll => Get("PYTHONNET_PYDLL");

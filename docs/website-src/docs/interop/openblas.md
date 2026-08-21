@@ -602,8 +602,8 @@ the seam and is gated today — an implementation only has to supply numerics.
 - [`docs/OPENBLAS_DELIVERY_DESIGN.md`][delivery] — the delivery/discovery model: the two phases,
   the source marker, the transitive story, every resolved decision
 
-[gate-backend]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.UnitTest/Backends/MatmulParityBackendTests.cs
-[gate-delivery]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.UnitTest/Backends/OpenBlasDeliveryTests.cs
+[gate-backend]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/MatmulParityBackendTests.cs
+[gate-delivery]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/OpenBlasDeliveryTests.cs
 [gate-build]: https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
 [gemm]: https://github.com/SciSharp/NumSharp/blob/master/docs/GEMM_PARITY.md
 [delivery]: https://github.com/SciSharp/NumSharp/blob/master/docs/OPENBLAS_DELIVERY_DESIGN.md

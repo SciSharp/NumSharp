@@ -309,7 +309,7 @@ kernels later.
 
 ## 4. Cross-cutting: testing & data
 
-- **A real MSTest project** (`test/NeuralNetwork.NumSharp.UnitTest`). Today the
+- **A real MSTest project** (`test/NeuralNetwork.NumSharp.Tests`). Today the
   gates are dotnet-run scripts. Minimum bar: finite-difference gradient
   check for every layer/activation/loss `Backward` (the Softmax one already
   proved its worth), optimizer trajectory pins vs hand-computed values, and a

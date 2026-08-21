@@ -8,7 +8,7 @@ getter and the setter `NDArray.Indexing.Selection.Setter.cs`). The recommended
 Every case in the truth table below is now bit-exact with NumPy 2.4.2 (GET and SET,
 including ints-as-advanced, newaxis separators, negative wrap, 2-D-broadcast advanced
 indices and 4-D placements). Verified by differential probing and pinned as tests:
-`test/NumSharp.UnitTest/Selection/IndexingProbeMatrix.Tests.cs` (`c32`–`c50`,
+`test/NumSharp.Tests/Selection/IndexingProbeMatrix.Tests.cs` (`c32`–`c50`,
 `cs14`–`cs19`, `cse03`) and `CombinedIndexing.MatrixTests.cs`
 (`Get_TwoMasks_SeparatedBySlice_AdvancedAxesToFront`,
 `Get_TwoArrays_ContiguousThenSlice_BlockInPlace`,

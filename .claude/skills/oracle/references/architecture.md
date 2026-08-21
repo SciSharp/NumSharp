@@ -14,7 +14,7 @@ is the source of truth; the corpus is committed; no Python at test time.**
 - `char_tier(mode)` re-runs the relevant `gen_<mode>` with the Char pool and relabels `uint16 → char`.
 - `main()` dispatches `mode → gen_<mode>(...) + char_tier(mode) → write_jsonl(corpus/<mode>.jsonl)`.
 
-**Replay** — `test/NumSharp.UnitTest.Oracle/Fuzz/`:
+**Replay** — `test/NumSharp.Tests.Oracle/Fuzz/`:
 - `FuzzCorpus.cs` — parses each JSONL line and rebuilds the EXACT `NDArray` view from `(dtype, shape, strides,
   offset, bytes)`, so C# sees byte-identical operands.
 - `OpRegistry.cs` — `Apply(op, params, ops)` maps opname → the NumSharp call. Pairs 1:1 with `gen_oracle.py`.
@@ -50,7 +50,7 @@ is the source of truth; the corpus is committed; no Python at test time.**
 
 ## Where the corpus lives and how it reaches tests
 
-- Generators write to `test/NumSharp.UnitTest.Oracle/Fuzz/corpus/*.jsonl` (path resolved relative to `test/oracle/`).
+- Generators write to `test/NumSharp.Tests.Oracle/Fuzz/corpus/*.jsonl` (path resolved relative to `test/oracle/`).
 - The test `.csproj` has a glob that copies `corpus/*.jsonl` into the build output; `RunCorpus` reads them from
   there. So a regeneration is only "live" after a `dotnet build`.
 - The whole point: **CI runs `dotnet test --filter TestCategory=FuzzMatrix` with no Python** — it replays committed

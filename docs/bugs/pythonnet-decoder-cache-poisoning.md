@@ -111,7 +111,7 @@ other decodable.
 
 ## How it is gated
 
-`test/NumSharp.Interop.UnitTests/DocExamples.PythonnetNumpyPage.cs` →
+`test/NumSharp.Tests.Interop/DocExamples.PythonnetNumpyPage.cs` →
 `Codec_RegisterBeforeFirstConversion_OrThePairIsPoisoned`. The test is dual-branch because
 registration is process-global and test order is not guaranteed:
 

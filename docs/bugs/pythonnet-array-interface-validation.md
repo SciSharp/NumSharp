@@ -87,7 +87,7 @@ zero-copy, and every non-numpy strided `memoryview` still imports through `ViewV
 
 ## How it is gated
 
-`test/NumSharp.Interop.UnitTests/ArrayInterfaceValidationTests.cs` (5 tests): one per malformed class
+`test/NumSharp.Tests.Interop/ArrayInterfaceValidationTests.cs` (5 tests): one per malformed class
 asserting a `NotSupportedException` whose message matches the numpy wording, plus a control proving a
 valid strided interface still imports zero-copy AND aliases (write-through visible in numpy). The full
 interop suite (239 tests) passes with the guards in place.

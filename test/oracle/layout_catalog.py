@@ -2,7 +2,7 @@
 layout_catalog.py — the canonical catalog of memory layouts (the 40 variations:
 26 single-array + 9 pairwise + 5 where-triple).
 
-Mirrored 1:1 by NumSharp.UnitTest.Oracle/Fuzz/LayoutCatalog.cs (same layout names both sides).
+Mirrored 1:1 by NumSharp.Tests.Oracle/Fuzz/LayoutCatalog.cs (same layout names both sides).
 
 Each builder takes a numpy dtype and returns (base, view):
   * `base` is ALWAYS a freshly-allocated C-contiguous ndarray. Its raw memory therefore

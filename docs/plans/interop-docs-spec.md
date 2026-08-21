@@ -23,7 +23,7 @@ The four files currently in that folder — `index.md`, `pythonnet.md`, `zero-co
 over. They are prior art, not source material. The new pages are written from:
 
 - the package source (`src/NumSharp.Interop.pythonnet/`, 7 files, 2,469 lines),
-- the test suite (`test/NumSharp.Interop.UnitTests/`, 21 files),
+- the test suite (`test/NumSharp.Tests.Interop/`, 21 files),
 - the measurements recorded in §9 of this spec, taken live this session.
 
 `zero-copy-model.md` has no successor page: the view-vs-copy decision belongs inside page 2, and
@@ -120,7 +120,7 @@ A blockquote directly under the on-this-page row, on every page:
 
 ```markdown
 > Verified on CPython 3.12.12 · numpy 2.4.2 · pythonnet 3.0.5 · net8.0/net10.0.
-> Every claim below is reproduced by a test in `NumSharp.Interop.UnitTests`.
+> Every claim below is reproduced by a test in `NumSharp.Tests.Interop`.
 ```
 
 The version list names the stack the claims were actually measured on. It is prose — nothing fails
@@ -183,7 +183,7 @@ Format, verbatim:
   file). Renders identically to an inline link and keeps ~30 repetitions of a 120-character URL
   out of the markdown source.
 - The link target is the **file** on `master`, never a line anchor (`#L123` rots on every edit):
-  `[gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Interop.UnitTests/<File>.cs`
+  `[gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/<File>.cs`
 - Multiple gates for one claim: comma-separated links inside one `<sub>`.
 - A claim proven by a self-skipping test (§8.3) gets a trailing `†`, explained once per page in the
   claims ledger.
@@ -471,7 +471,7 @@ A page is finished when:
 2. Every behavioural claim has a gate line, and every gate line names a test that exists and passes.
 3. The claims ledger has one row per behavioural claim, each with a real observable.
 4. Every C# block appears, verbatim or trivially adapted, in the page's `DocExamples` class.
-5. `dotnet test test/NumSharp.Interop.UnitTests` is green on `net8.0` and `net10.0`.
+5. `dotnet test test/NumSharp.Tests.Interop` is green on `net8.0` and `net10.0`.
 6. Page 3 has been read start to finish with pages 1, 2 and 4 unavailable, and nothing was missing.
 7. The DocFX build produces no warnings for the page and `toc.yml` resolves.
 

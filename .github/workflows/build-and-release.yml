@@ -39,13 +39,13 @@ jobs:
         dotnet-quality: 'preview'
 
     - name: Build
-      run: dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+      run: dotnet build test/NumSharp.Tests/NumSharp.Tests.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # The differential-fuzz ORACLE is its own project (isolated so the optional OpenBLAS engine can be
     # managed apart from the managed-kernel tiers). It carries the FuzzMatrix gate plus the host-pinned
     # matmul_parity / BlasBackendDelta tiers, so it must build and test on the release-blocking path.
     - name: Build Oracle (differential-fuzz gate)
-      run: dotnet build test/NumSharp.UnitTest.Oracle/NumSharp.UnitTest.Oracle.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+      run: dotnet build test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # Test filtering:
     #   - OpenBugs: excluded (known-failing bug reproductions)
@@ -66,7 +66,7 @@ jobs:
         if [[ "$RUNNER_OS" != "Windows" ]]; then
           FILTER="$FILTER&TestCategory!=WindowsOnly"
         fi
-        dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+        dotnet test test/NumSharp.Tests/NumSharp.Tests.csproj \
           --configuration Release --no-build --framework net8.0 \
           --filter "$FILTER" --logger "trx"
 
@@ -81,11 +81,11 @@ jobs:
         if [[ "$RUNNER_OS" != "Windows" ]]; then
           FILTER="$FILTER&TestCategory!=WindowsOnly"
         fi
-        dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+        dotnet test test/NumSharp.Tests/NumSharp.Tests.csproj \
           --configuration Release --no-build --framework net10.0 \
           --filter "$FILTER" --logger "trx"
 
-    # The differential-fuzz gate (FuzzMatrix) now lives in NumSharp.UnitTest.Oracle. Same category
+    # The differential-fuzz gate (FuzzMatrix) now lives in NumSharp.Tests.Oracle. Same category
     # filter — the Oracle project carries no OpenBugs/HighMemory tiers, but the filter is harmless and
     # keeps the two suites symmetric.
     - name: Test Oracle (net8.0)
@@ -96,7 +96,7 @@ jobs:
         if [[ "$RUNNER_OS" != "Windows" ]]; then
           FILTER="$FILTER&TestCategory!=WindowsOnly"
         fi
-        dotnet test test/NumSharp.UnitTest.Oracle/NumSharp.UnitTest.Oracle.csproj \
+        dotnet test test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj \
           --configuration Release --no-build --framework net8.0 \
           --filter "$FILTER" --logger "trx"
 
@@ -108,7 +108,7 @@ jobs:
         if [[ "$RUNNER_OS" != "Windows" ]]; then
           FILTER="$FILTER&TestCategory!=WindowsOnly"
         fi
-        dotnet test test/NumSharp.UnitTest.Oracle/NumSharp.UnitTest.Oracle.csproj \
+        dotnet test test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj \
           --configuration Release --no-build --framework net10.0 \
           --filter "$FILTER" --logger "trx"
 
@@ -235,21 +235,21 @@ jobs:
         print('LIBDIR      ', sysconfig.get_config_var('LIBDIR'))"
 
     - name: Build
-      run: dotnet build test/NumSharp.Interop.UnitTests/NumSharp.Interop.UnitTests.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+      run: dotnet build test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # No category filter: the interop suite carries no OpenBugs/HighMemory tests,
     # and every test already self-asserts a LiveExports/LiveImports leak baseline.
     - name: Test (net8.0)
       timeout-minutes: 10
       run: |
-        dotnet test test/NumSharp.Interop.UnitTests/NumSharp.Interop.UnitTests.csproj \
+        dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
           --configuration Release --no-build --framework net8.0 --logger "trx"
       shell: bash
 
     - name: Test (net10.0)
       timeout-minutes: 10
       run: |
-        dotnet test test/NumSharp.Interop.UnitTests/NumSharp.Interop.UnitTests.csproj \
+        dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
           --configuration Release --no-build --framework net10.0 --logger "trx"
       shell: bash
 

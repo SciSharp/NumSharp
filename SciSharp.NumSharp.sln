@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29519.181
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.UnitTest", "test\NumSharp.UnitTest\NumSharp.UnitTest.csproj", "{3EDDE7AA-8037-4663-9DD4-FFB85FF962E5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Tests", "test\NumSharp.Tests\NumSharp.Tests.csproj", "{3EDDE7AA-8037-4663-9DD4-FFB85FF962E5}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Benchmark", "test\NumSharp.Benchmark\NumSharp.Benchmark.csproj", "{2D475706-0F69-4C9B-83B9-03AB1AE38186}"
 EndProject
@@ -23,9 +23,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Interop.pythonnet"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{0C88DD14-F956-CE84-757C-A364CCF449FC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Interop.UnitTests", "test\NumSharp.Interop.UnitTests\NumSharp.Interop.UnitTests.csproj", "{32AF8082-0458-4DC4-8AC8-56677DC03C09}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Tests.Interop", "test\NumSharp.Tests.Interop\NumSharp.Tests.Interop.csproj", "{32AF8082-0458-4DC4-8AC8-56677DC03C09}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.UnitTest.Oracle", "test\NumSharp.UnitTest.Oracle\NumSharp.UnitTest.Oracle.csproj", "{2926BF3B-491A-45E1-ADE8-F4CC0CECDB17}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Tests.Oracle", "test\NumSharp.Tests.Oracle\NumSharp.Tests.Oracle.csproj", "{2926BF3B-491A-45E1-ADE8-F4CC0CECDB17}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -214,6 +214,7 @@ Global
 		{AE525A8B-833C-4DC7-A537-3EC45C9B553E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{32AF8082-0458-4DC4-8AC8-56677DC03C09} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
 		{2926BF3B-491A-45E1-ADE8-F4CC0CECDB17} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
+		{2D475706-0F69-4C9B-83B9-03AB1AE38186} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4E76C21C-C7A8-4A7B-B408-D5F551E83BDD}

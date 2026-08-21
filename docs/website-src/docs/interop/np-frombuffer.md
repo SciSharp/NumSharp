@@ -16,7 +16,7 @@ This page is self-contained. You do not need the rest of the interop documentati
 [Troubleshooting](#troubleshooting) · [Claims](#claims-ledger)
 
 > Verified on CPython 3.12.12 · numpy 2.4.2 · pythonnet 3.0.5 · net8.0/net10.0.
-> Every claim below is reproduced by a test in `NumSharp.Interop.UnitTests`.
+> Every claim below is reproduced by a test in `NumSharp.Tests.Interop`.
 
 ---
 
@@ -525,4 +525,4 @@ on an image without it.
 - [Numpy.NET](numpy-net.md) — sharing these same buffers with SciSharp's `Numpy` / `Numpy.Bare`
 - [Interoperability](index.md) — the contract underneath every NumSharp bridge
 
-[gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Interop.UnitTests/DocExamples.NpFrombufferPage.cs
+[gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/DocExamples.NpFrombufferPage.cs

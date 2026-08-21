@@ -14,7 +14,7 @@ Numpy.NET adds, and how to run both libraries side by side while migrating in ei
 [Troubleshooting](#troubleshooting) · [Claims](#claims-ledger)
 
 > Verified on CPython 3.12.12 · numpy 2.4.2 · pythonnet 3.0.5 · Numpy.Bare 3.11.1.33 ·
-> net8.0/net10.0. Every claim below is reproduced by a test in `NumSharp.Interop.UnitTests`.
+> net8.0/net10.0. Every claim below is reproduced by a test in `NumSharp.Tests.Interop`.
 
 ---
 
@@ -303,5 +303,5 @@ GIL discipline every test runs under — is [`NumpyNetInteropTests`][gate-suite]
   no numpy (or Numpy.NET) required
 - [Interoperability](index.md) — the contract underneath every NumSharp bridge
 
-[gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Interop.UnitTests/DocExamples.NumpyNetPage.cs
-[gate-suite]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Interop.UnitTests/NumpyNetInteropTests.cs
+[gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/DocExamples.NumpyNetPage.cs
+[gate-suite]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/NumpyNetInteropTests.cs

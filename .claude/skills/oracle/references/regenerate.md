@@ -26,7 +26,7 @@ dotnet run gen_decimal_oracle.cs
 python fuzz_random.py 1234 2000 random_smoke.jsonl
 
 # then, from the test project:
-cd ../NumSharp.UnitTest.Oracle && dotnet build     # copies corpus/*.jsonl to bin/.../Fuzz/corpus/
+cd ../NumSharp.Tests.Oracle && dotnet build     # copies corpus/*.jsonl to bin/.../Fuzz/corpus/
 ```
 
 The `.npy`/`.npz` FORMAT oracle is a **separate** corpus + gate (`gen_npy_oracle.py` → `IO/corpus/npy_oracle.zip`,
@@ -71,4 +71,4 @@ and MSVC produce different bytes — as do the vectorized and scalar loops of on
 purpose (they pin NumSharp's hand-written cast kernels against themselves), but regenerating them elsewhere rewrites
 them, and the diff is a host difference, not a NumSharp bug. `fuzz_random.py` is the exception: it recomputes
 expectations on the host, so it defuses that value class and is portable by construction. Details:
-`test/NumSharp.UnitTest.Oracle/Fuzz/README.md` → "Host-dependent values".
+`test/NumSharp.Tests.Oracle/Fuzz/README.md` → "Host-dependent values".

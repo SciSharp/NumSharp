@@ -7,7 +7,7 @@ name: Fuzz Soak
 #
 # On a divergence the harness prints a shrunk single-element repro (Shrinker) in the log and the
 # offending corpus is uploaded as an artifact — copy the minimal line into
-# test/NumSharp.UnitTest.Oracle/Fuzz/corpus/regressions/ so FuzzRegression pins it on every CI thereafter.
+# test/NumSharp.Tests.Oracle/Fuzz/corpus/regressions/ so FuzzRegression pins it on every CI thereafter.
 
 on:
   schedule:
@@ -53,8 +53,8 @@ jobs:
         FIXED_SEEDS="${{ github.event.inputs.seeds || '1 2 3 4 5' }}"
         COUNT="${{ github.event.inputs.count || '200000' }}"
         EVIDENCE="fuzz-soak-evidence.jsonl"
-        CORPUS="test/NumSharp.UnitTest.Oracle/Fuzz/corpus/random_smoke.jsonl"
-        COPIED_CORPUS="test/NumSharp.UnitTest.Oracle/bin/Release/net10.0/Fuzz/corpus/random_smoke.jsonl"
+        CORPUS="test/NumSharp.Tests.Oracle/Fuzz/corpus/random_smoke.jsonl"
+        COPIED_CORPUS="test/NumSharp.Tests.Oracle/bin/Release/net10.0/Fuzz/corpus/random_smoke.jsonl"
         STATUS=0
 
         : > "$EVIDENCE"
@@ -129,7 +129,7 @@ jobs:
             if [[ "$source_cases" -ne "$COUNT" ]]; then
               echo "::error::Generator wrote $source_cases cases for seed=$seed; expected $COUNT"
               result="source-count-mismatch"
-            elif ! dotnet build test/NumSharp.UnitTest.Oracle/NumSharp.UnitTest.Oracle.csproj \
+            elif ! dotnet build test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj \
                 --configuration Release -p:NoWarn=CS1591 >/dev/null; then
               result="build-failed"
             elif [[ ! -f "$COPIED_CORPUS" ]]; then
@@ -141,7 +141,7 @@ jobs:
               if [[ "$copied_cases" -ne "$COUNT" || "$copied_sha" != "$source_sha" ]]; then
                 echo "::error::Test-output corpus does not match the generated $COUNT-case corpus for seed=$seed"
                 result="copied-corpus-mismatch"
-              elif ! dotnet test test/NumSharp.UnitTest.Oracle/NumSharp.UnitTest.Oracle.csproj \
+              elif ! dotnet test test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj \
                   --configuration Release --no-build --framework net10.0 \
                   --filter "ClassName~FuzzCorpusTests&Name~FuzzRandom" \
                   --logger "trx;LogFileName=$trx_name"; then
@@ -175,7 +175,7 @@ jobs:
         name: fuzz-soak-evidence
         path: |
           fuzz-soak-evidence.jsonl
-          test/NumSharp.UnitTest.Oracle/TestResults/fuzz-*.trx
+          test/NumSharp.Tests.Oracle/TestResults/fuzz-*.trx
         if-no-files-found: warn
         retention-days: 14
 

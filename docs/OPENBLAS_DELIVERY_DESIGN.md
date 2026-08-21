@@ -442,7 +442,7 @@ Downloading + later loading native code selected by build metadata is a supply-c
   (`Load` tier orchestration, `OverridePathCandidates`, `VersionOverrideCandidates`,
   `AmbientCandidates`, `BundledDirectories`, `SystemBlasDirectories`, `PathEnvDirectories`).
 - Source marker & required-override contract: `src/NumSharp.Interop.OpenBLAS/OpenBlasSourceMarker.cs`,
-  `OpenBlasRequiredOverrideException.cs`; runtime gate `test/NumSharp.UnitTest/Backends/OpenBlasDeliveryTests.cs`.
+  `OpenBlasRequiredOverrideException.cs`; runtime gate `test/NumSharp.Tests/Backends/OpenBlasDeliveryTests.cs`.
 - Autoinstall & backend wiring: `src/NumSharp.Interop.OpenBLAS/OpenBlasEngine.Binding.cs`
   (`BundleAutoinstall`, `Enable`, `Disable`).
 - Build-phase override delivery: `src/NumSharp.Interop.OpenBLAS/buildTransitive/NumSharp.Interop.OpenBLAS.{props,targets}`

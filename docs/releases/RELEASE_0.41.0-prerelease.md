@@ -458,7 +458,7 @@ Install-Package NumSharp -Version 0.41.0-prerelease
 ## Testing
 
 ```bash
-cd test/NumSharp.UnitTest
+cd test/NumSharp.Tests
 
 # Run tests excluding known issues
 dotnet test -- "--treenode-filter=/*/*/*/*[Category!=OpenBugs]"

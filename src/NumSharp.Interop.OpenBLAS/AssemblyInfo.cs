@@ -11,7 +11,7 @@ using NumSharp.Interop.OpenBLAS;
 // access control. The literal is duplicated rather than shared because NumSharp.Core's copy is
 // `internal` to Core, and this project reaching for it would invert the dependency it is
 // declaring. StrongNameTests pins both against the compiled output.
-[assembly: InternalsVisibleTo("NumSharp.UnitTest, PublicKey=" + BlasFriendKey.PublicKey)]
+[assembly: InternalsVisibleTo("NumSharp.Tests, PublicKey=" + BlasFriendKey.PublicKey)]
 [assembly: InternalsVisibleTo("NumSharp.DotNetRunScript, PublicKey=" + BlasFriendKey.PublicKey)]
 
 namespace NumSharp.Interop.OpenBLAS;

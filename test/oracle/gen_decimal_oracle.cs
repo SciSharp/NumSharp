@@ -205,9 +205,9 @@ static class Gen
     public static void Main()
     {
         string here = AppContext.BaseDirectory;
-        // resolve test/oracle dir regardless of run cwd: walk up to find NumSharp.UnitTest sibling.
+        // resolve test/oracle dir regardless of run cwd: walk up to find NumSharp.Tests sibling.
         string oracleDir = FindOracleDir();
-        string corpus = Path.GetFullPath(Path.Combine(oracleDir, "..", "NumSharp.UnitTest.Oracle", "Fuzz", "corpus"));
+        string corpus = Path.GetFullPath(Path.Combine(oracleDir, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"));
         Directory.CreateDirectory(corpus);
 
         var unary = new List<string>();
@@ -750,13 +750,13 @@ static class Gen
     static string FindOracleDir()
     {
         // this file lives in test/oracle/; AppContext.BaseDirectory is the build temp, so search upward
-        // from the current directory for a folder containing NumSharp.UnitTest.
+        // from the current directory for a folder containing NumSharp.Tests.
         var dir = Directory.GetCurrentDirectory();
         for (int i = 0; i < 8 && dir != null; i++)
         {
             var cand = Path.Combine(dir, "test", "oracle");
-            if (Directory.Exists(Path.Combine(dir, "test", "NumSharp.UnitTest"))) return cand;
-            if (Path.GetFileName(dir) == "oracle" && Directory.Exists(Path.Combine(dir, "..", "NumSharp.UnitTest"))) return dir;
+            if (Directory.Exists(Path.Combine(dir, "test", "NumSharp.Tests"))) return cand;
+            if (Path.GetFileName(dir) == "oracle" && Directory.Exists(Path.Combine(dir, "..", "NumSharp.Tests"))) return dir;
             dir = Path.GetDirectoryName(dir);
         }
         // fallback: assume invoked from test/oracle

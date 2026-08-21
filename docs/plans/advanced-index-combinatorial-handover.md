@@ -164,7 +164,7 @@ collides a 0-length axis with a size-1 axis.
 ### Diagnostic tooling (scratchpad — recreate from `Fuzz/IndexOracleTests.cs`)
 
 The scratchpad harnesses are not committed; recreate `replay_index_jsonl.cs` by lifting the
-base-recipe + token reconstruction from `test/NumSharp.UnitTest/Fuzz/IndexOracleTests.cs` (the C# half
+base-recipe + token reconstruction from `test/NumSharp.Tests/Fuzz/IndexOracleTests.cs` (the C# half
 is identical). It reads the committed corpus `index_random_20240626.jsonl` (resolve an absolute path
 or it looks under `test/.../Fuzz/corpus/`):
 - **`replay_index_jsonl.cs <file> [SKIP] [LIMIT] [gc]`** — primary measurement; prints categorized
@@ -204,7 +204,7 @@ shape, values, and which inputs raise). Highlights relevant here:
 | `afd2ca22` | `SetData(NDArray,long[])` broadcasts+validates | `a[(object)0]=v` fills row |
 | `998c1d23` | over-index with **advanced** raises (mem-safety guard) | `a[arr,arr,arr]` raises |
 
-These are pinned in `test/NumSharp.UnitTest/Selection/Indexing.{Basic,Fancy,Edge,LayoutValue}Parity.MatrixTests.cs`
+These are pinned in `test/NumSharp.Tests/Selection/Indexing.{Basic,Fancy,Edge,LayoutValue}Parity.MatrixTests.cs`
 (now zero active `[OpenBugs]`) and `NDArray.Indexing.Test.cs`.
 
 ---
@@ -365,7 +365,7 @@ Validation done here (all currently scattered/missing in NumSharp):
 ### Phase A — lock the differential gate (do first, ~½ day)
 The proof harness currently lives only in scratchpad. Make it a committed, CI-replayable gate
 following the existing oracle pattern (`.claude/CLAUDE.md` → "Differential-Fuzz Pipeline",
-`test/oracle/`, `test/NumSharp.UnitTest/Fuzz/`):
+`test/oracle/`, `test/NumSharp.Tests/Fuzz/`):
 1. Move `scratchpad/gen_index_oracle.py` → `test/oracle/gen_index_oracle.py`. It already emits
    a portable **token** corpus (see §7) for getter+setter across 14 base recipes + a dtype
    sweep, with a seeded random-fuzz layer. Have it write `Fuzz/corpus/index_*.jsonl`.

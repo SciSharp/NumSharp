@@ -13,12 +13,12 @@ using System.Runtime.CompilerServices;
 // compile-time constant, which is what an attribute argument requires. Global attributes must
 // precede type declarations, so the holder class follows them.
 
-[assembly: InternalsVisibleTo("NumSharp.UnitTest, PublicKey=" + NumSharpFriendKey.PublicKey)]
+[assembly: InternalsVisibleTo("NumSharp.Tests, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
-// The isolated differential-fuzz ORACLE harness (Fuzz/ moved out of NumSharp.UnitTest). It
+// The isolated differential-fuzz ORACLE harness (Fuzz/ moved out of NumSharp.Tests). It
 // reconstructs corpus operands through the same internal view of Shape (strides/offset) and reads
-// result bytes through Storage, exactly as NumSharp.UnitTest did before the split.
-[assembly: InternalsVisibleTo("NumSharp.UnitTest.Oracle, PublicKey=" + NumSharpFriendKey.PublicKey)]
+// result bytes through Storage, exactly as NumSharp.Tests did before the split.
+[assembly: InternalsVisibleTo("NumSharp.Tests.Oracle, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
 // Optional out-of-box backends: they subclass DefaultEngine and so need the same internal view of
 // Shape (strides/offset) and the promotion helpers that the built-in kernels have.
@@ -29,7 +29,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NumSharp.Interop.pythonnet, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
 // The Python.NET interop test assembly exercises the same internals.
-[assembly: InternalsVisibleTo("NumSharp.Interop.UnitTests, PublicKey=" + NumSharpFriendKey.PublicKey)]
+[assembly: InternalsVisibleTo("NumSharp.Tests.Interop, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
 [assembly: InternalsVisibleTo("NumSharp.Benchmark, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
@@ -50,7 +50,7 @@ using System.Runtime.CompilerServices;
 /// <remarks>
 ///     Mirrors the <c>NumSharpPublicKey</c> property in the repo-root <c>Directory.Build.props</c>.
 ///     Both are pinned against the actual compiled output by
-///     <c>test/NumSharp.UnitTest/Assembly/StrongNameTests.cs</c>, so the two copies cannot drift
+///     <c>test/NumSharp.Tests/Assembly/StrongNameTests.cs</c>, so the two copies cannot drift
 ///     apart silently — a mismatch turns that gate red rather than degrading into a friend
 ///     reference that no longer resolves.
 /// </remarks>

@@ -13,7 +13,7 @@ changes.
 [Claims](#claims-ledger)
 
 > Verified on CPython 3.12.12 · numpy 2.4.2 · pythonnet 3.0.5 · net8.0/net10.0.
-> Every claim below is reproduced by a test in `NumSharp.Interop.UnitTests` — this page's own
+> Every claim below is reproduced by a test in `NumSharp.Tests.Interop` — this page's own
 > gates run without Python, because the contract is NumSharp's alone.
 
 ---
@@ -192,5 +192,5 @@ above applies to it; it has [its own page](openblas.md).
 - [Buffering & Memory](../buffering.md) — how NumSharp's own storage, slices and reference
   counting work underneath all of this
 
-[gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Interop.UnitTests/DocExamples.InteropIndexPage.cs
-[gate-npy]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.UnitTest/IO/NpyOracleTests.cs
+[gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/DocExamples.InteropIndexPage.cs
+[gate-npy]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/IO/NpyOracleTests.cs

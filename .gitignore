@@ -353,7 +353,7 @@ src/NumSharp.Python/NumSharpPy/NumSharp.dll
 docfx_project/src
 /coverage.xml
 test/NumSharp.Benchmark/LocalBenches.cs
-test/NumSharp.UnitTest/DevTests*.cs
+test/NumSharp.Tests/DevTests*.cs
 
 # Local design documents (not tracked in git)
 docs/DESIGN.md

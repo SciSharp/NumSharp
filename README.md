@@ -128,13 +128,13 @@ print(window.sum(axis=0))
 Build:
 
 ```bash
-dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release
+dotnet build test/NumSharp.Tests/NumSharp.Tests.csproj --configuration Release
 ```
 
 Run the normal CI-style unit test filter:
 
 ```bash
-dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+dotnet test test/NumSharp.Tests/NumSharp.Tests.csproj \
   --configuration Release \
   --no-build \
   --framework net8.0 \

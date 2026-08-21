@@ -11,7 +11,7 @@ using NumSharp.Interop.PythonNet;
 // access control. The literal is duplicated rather than shared because NumSharp.Core's copy is
 // `internal` to Core, and this project reaching for it would invert the dependency it is
 // declaring. StrongNameTests pins both against the compiled output.
-[assembly: InternalsVisibleTo("NumSharp.Interop.UnitTests, PublicKey=" + PythonNetFriendKey.PublicKey)]
+[assembly: InternalsVisibleTo("NumSharp.Tests.Interop, PublicKey=" + PythonNetFriendKey.PublicKey)]
 [assembly: InternalsVisibleTo("NumSharp.DotNetRunScript, PublicKey=" + PythonNetFriendKey.PublicKey)]
 
 namespace NumSharp.Interop.PythonNet;
