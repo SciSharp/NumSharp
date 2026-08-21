@@ -1,8 +1,9 @@
 # Regenerating the oracle corpus
 
-All generators are **deterministic** (fixed seeds, no `random` at gen time) and require **`numpy==2.4.2`**. The
-corpus is committed; CI replays it and never runs these. After regenerating, `dotnet build` copies the `.jsonl`
-into the test output via the csproj glob.
+All generators are **deterministic** — `gen_oracle.py` uses no RNG; `gen_index_oracle.py` and `fuzz_random.py` use a
+PINNED seed — and require **`numpy==2.4.2`** (the `precision` tier additionally needs `mpmath`). The corpus is
+committed; CI replays it and never runs these. After regenerating, `dotnet build` (in `NumSharp.Tests.Oracle`) copies
+the `.jsonl` into the test output via the csproj glob.
 
 ## Command matrix
 
@@ -11,9 +12,15 @@ cd test/oracle
 
 # 1. The op corpus (gen_oracle.py) — one file per mode. Pass the mode(s) you touched:
 python gen_oracle.py <mode>
-#   modes: smoke astype_full binary divmod_power comparison unary reduce where place matmul
-#          bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing
-#          copyto errors
+#   core value tiers:   smoke astype_full binary divmod_power comparison unary unary_extra bitwise
+#                       reduce nanreduce scan stat logic modf manip sort tail rounding params
+#                       aliasing copyto place where matmul errors groupa
+#   value/parity tiers: specials precision products fft random_parity matmul_parity numpy_f32
+#   result-kind tiers:  iter dtype_text out_where errors_full
+# Authoritative list = the `elif mode == ...` branches in gen_oracle.py's main() (and its
+# unknown-mode error message). Notes: `numpy_f32` writes BOTH numpy_f32_kernels.jsonl AND
+# numpy_f64_kernels.jsonl; `matmul_parity` ALSO writes the host pin matmul_parity.host.jsonl;
+# `random_parity` writes both random_parity.jsonl (portable) and random_parity_host.jsonl (win-amd64).
 # Regenerate ALL modes by looping them (each writes its own corpus/<...>.jsonl).
 
 # 2. The advanced-indexing oracle (index_curated / index_dtype / index_random tiers):
@@ -37,15 +44,18 @@ corpus above.
 
 Every `gen_<mode>` is `for layout in LAYOUTS: for dtype in <MODE>_DTYPES: for job in jobs: record`.
 
-- **Layouts** come from `layout_catalog.py` — the "44 variations" (C-contiguous, F-contiguous, strided, reversed,
-  offset, broadcast, transposed, and pair/where builders). Each builder returns `(base, view)` where `base` is a
-  fresh C-contiguous array whose `.tobytes()` is what gets serialized, and `view` is the operand the op sees
-  (reconstructable from `shape/strides/offset` into `base`'s bytes). To add a layout, add a builder there and mirror
-  it in `LayoutCatalog.cs` (same name both sides).
-- **Dtypes** are widened per mode toward `ALL_DTYPES`. Shape/manip ops are dtype-agnostic so `MANIP_DTYPES =
-  ALL_DTYPES`; numeric tiers use narrower axes where a dtype is meaningless.
-- **Char** (no NumPy dtype) is woven into every tier by `char_tier("<mode>")`, which re-runs `gen_<mode>` with the
-  Char pool (`[_C]`) and relabels `uint16 → char`. Nothing extra to do — adding your op to `gen_<mode>` gets Char.
+- **Layouts** come from `layout_catalog.py` — the 40 variations (26 single-array + 9 pairwise + 5 where-triple:
+  C-contiguous, F-contiguous, strided, reversed, offset, broadcast, transposed, 0-d/empty/high-rank). Each builder
+  returns `(base, view)` where `base` is a fresh C-contiguous array whose `.tobytes()` is what gets serialized, and
+  `view` is the operand the op sees (reconstructable from `shape/strides/offset` into `base`'s bytes). To add a
+  layout, add a builder there and regenerate the affected tiers — **no C# mirror is needed**: `FuzzCorpus.Reconstruct`
+  aliases any `(shape, strides, offset)` over the base bytes generically (there is no `LayoutCatalog.cs`).
+- **Dtypes** are widened per mode toward `ALL_DTYPES` (the 13 NumPy-representable dtypes). Shape/manip ops are
+  dtype-agnostic so `MANIP_DTYPES = ALL_DTYPES`; numeric tiers use narrower axes where a dtype is meaningless.
+- **Char** (no NumPy dtype) is woven into the 18 tiers whose `main()` branch calls `char_tier("<mode>")`, which
+  re-runs `gen_<mode>` with the Char pool (`[_C]`) and relabels `uint16 → char`. Adding your op to one of those
+  `gen_<mode>`s gets Char automatically; modes with no `char_tier` call (`modf`/`place`/`nanreduce`/`params`/… and
+  every value-parity/result-kind tier) have no Char coverage.
 - **Decimal** (no NumPy analog) rides `gen_decimal_oracle.cs` separately (step 3 above).
 - **The value pools** (`_FLOAT_POOL`, `_INT_POOL` in `layout_catalog.py`) front-load the edges that break kernels:
   `nan, inf, -inf, -0.0, 0.0`, type min/max boundaries, narrowing-wrap seams. `_INT_POOL` STARTS with `0` — that's

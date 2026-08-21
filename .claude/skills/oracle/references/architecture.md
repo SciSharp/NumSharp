@@ -6,7 +6,7 @@ is the source of truth; the corpus is committed; no Python at test time.**
 
 ## 1. The op oracle (the main one)
 
-**Generate** — `test/oracle/gen_oracle.py` (~1,900 lines). Structure:
+**Generate** — `test/oracle/gen_oracle.py` (~5,700 lines). Structure:
 - Value pools + layout builders imported from `layout_catalog.py`.
 - One `gen_<mode>(dtypes, layout_names)` per op family. Each loops `layout × dtype`, builds `(base, view)`, runs a
   `jobs` list of `(opname, params, lambda)`, and appends a case `{id, op, params, operands:[{dtype,shape,strides,
@@ -20,12 +20,24 @@ is the source of truth; the corpus is committed; no Python at test time.**
 - `OpRegistry.cs` — `Apply(op, params, ops)` maps opname → the NumSharp call. Pairs 1:1 with `gen_oracle.py`.
 - `BitDiff.cs` — bit-exact compare (NaN tokenized, Decimal by value). `Shrinker.cs` — minimizes a failure.
 - `FuzzCorpusTests.cs` — one `[FuzzMatrix]` `[TestMethod]` per corpus file, each calling `RunCorpus("<tier>.jsonl")`.
-- `MisalignedRegistry.cs` — the excused, documented divergences.
+  A per-file `MinCases` floor rejects a silently truncated regeneration.
+- `MisalignedRegistry.cs` — the excused, documented divergences (`Classify(...)` returns a reason string; scoped
+  tight and pinned by `OpenBugs.FuzzGate.cs`).
+
+**Result kinds & error parity** — the corpus is not only single arrays:
+- `expected.kind` (`array` default / `scalar` / `dtype` / `text` / `tuple`) selects the comparator in
+  `FuzzCorpusTests.Kinds.cs`; non-array ops are dispatched by `OpRegistry.Kinds.cs`
+  (`ApplyTuple`/`ApplyDtype`/`ApplyText`), paired with the `gen_iter`/`gen_dtype_text`/`gen_out_where` generators.
+  A `tuple` asserts ARITY first then every slot; a `dtype` compares by NumPy dtype name (how the NEP50 promotion
+  table itself is gated); `text` is verbatim (the array-printing port).
+- Error parity has two strengths: `errors.jsonl` (weak "threw something") and `errors_full.jsonl` /
+  `error:{type,text}` (NumPy's exception TYPE + verbatim MESSAGE, via `CheckError`/`ErrorTypeMap`).
 
 ## 2. The advanced-indexing oracle
 
-- `test/oracle/gen_index_oracle.py` → `index_curated` / `index_dtype` / `index_random` tiers (getter/setter over
-  base recipes). Replayed by `IndexOracleTests.cs` (also `[FuzzMatrix]`).
+- `test/oracle/gen_index_oracle.py` → `index_curated` / `index_dtype` / `index_setter_dtype` / `index_random` tiers
+  (getter/setter over base recipes, portable token encoding). Replayed by `IndexOracleTests.cs` (also `[FuzzMatrix]`)
+  — it compares result shape, values, and which-side-raised.
 
 ## 3. The Decimal oracle (no NumPy analog)
 
@@ -40,11 +52,35 @@ is the source of truth; the corpus is committed; no Python at test time.**
   be BYTE-IDENTICAL to `np.save`, not merely readable. Reverse interop (NumPy reading NumSharp) is the manual gate
   `python test/oracle/verify_npy_interop.py`.
 
+## 5. Specialized value / parity tiers (still the op corpus, replayed by `FuzzCorpusTests`)
+
+Beyond the elementwise/reduce matrices, `gen_oracle.py` emits several targeted tiers:
+- `specials` — IEEE nan/±inf/±0/subnormal/max forced through math/reduce/scan/matmul across float widths.
+- `precision` — truthful-vs-precise: each case carries a THIRD buffer `expected.truth` (correctly-rounded,
+  mpmath/`Fraction`), consulted ONLY to adjudicate which side lost precision on a NumPy divergence (branches P1–P3).
+  Bit-exact-to-NumPy always passes without truth being read.
+- `products` — the first value gate for the CBLAS product family (inner/vdot/vecdot/matvec/vecmat/tensordot/
+  multi_dot/matrix_power).
+- `fft` — the whole `np.fft.*` surface (float64/complex128 bit-exact; float32/float16 the documented complex64
+  dtype-only divergence, values verified after up-cast).
+- `numpy_f32` — writes `numpy_f32_kernels` + `numpy_f64_kernels`: the exp/log/sin/cos/tanh/rad2deg/deg2rad kernels
+  NumSharp ports from NumPy itself, held BIT-EXACT (carved out of the ~ULP excuse).
+- `random_parity` / `random_parity_host` — seeded MT19937 stream bytes; `matmul_parity` — np.dot/np.matmul byte
+  parity through the optional `NumSharp.Interop.OpenBLAS` engine.
+
+**Host-pinned:** `matmul_parity` and `random_parity_host` record bytes reproducible only on the authoring host
+(BLAS build + kernel + thread count, or the win-amd64 CRT libm), so they assert `Inconclusive` — never red —
+elsewhere (see `triage.md`).
+
 ## Other harness pieces
 
 - `MetamorphicTests.cs` — NumPy-free invariants (round-trips / involutions / identities); catch bugs the oracle
   can't (no reference needed).
-- `HarnessSelfTests.cs` — proves the harness has teeth (BitDiff actually detects value/NaN/-0 diffs; non-vacuous).
+- `HarnessSelfTests.cs` — proves the harness has teeth (BitDiff actually detects value/NaN/-0 diffs; the corpus is
+  non-vacuous; the Shrinker reproduces a planted divergence). Also a `[FuzzMatrix]` gate class.
+- `OpenBugs.FuzzGate.cs` — `MisalignedRegistryTightnessTests` (each excuse branch pinned from both sides — a gross
+  regression in the neighbouring cell must NOT be excused) + `FuzzGateRegressionTests` (real bugs the tightening
+  exposed, fixed-in-src or pinned `[OpenBugs]`).
 - `fuzz_random.py` — the nightly-soak seeded fuzzer (`.github/workflows/fuzz-soak.yml`), ~1M fresh cases/night;
   shrunk failures get pinned under `Fuzz/corpus/regressions/`.
 

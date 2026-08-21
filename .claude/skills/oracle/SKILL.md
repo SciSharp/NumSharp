@@ -31,8 +31,8 @@ and the divergence ledger `test/NumSharp.Tests.Oracle/Fuzz/README.md`. This skil
 
 | Side | File | Role |
 |------|------|------|
-| Generator | `test/oracle/gen_oracle.py` | Deterministic op matrices (~90 ops) across modes. Writes `Fuzz/corpus/*.jsonl`. |
-| Generator | `test/oracle/layout_catalog.py` | The memory-layout builders (the "44 variations") + value pools. |
+| Generator | `test/oracle/gen_oracle.py` | Deterministic op matrices (150+ ops, ~5.7K lines) across modes. Writes `Fuzz/corpus/*.jsonl`. |
+| Generator | `test/oracle/layout_catalog.py` | The memory-layout builders (40 variations: 26 single + 9 pair + 5 where) + value pools. |
 | Generator | `test/oracle/gen_index_oracle.py` | Advanced-indexing get/set oracle (`index_*` tiers). |
 | Generator | `test/oracle/gen_decimal_oracle.cs` | Independent C# oracle for `Decimal` (no NumPy analog). |
 | Generator | `test/oracle/gen_npy_oracle.py` | `.npy`/`.npz` format oracle (separate corpus + gate). |
@@ -42,14 +42,15 @@ and the divergence ledger `test/NumSharp.Tests.Oracle/Fuzz/README.md`. This skil
 | Harness | `test/NumSharp.Tests.Oracle/Fuzz/FuzzCorpusTests.cs` | One `[FuzzMatrix]` test per corpus file (`RunCorpus("<tier>.jsonl")`). |
 | Harness | `test/NumSharp.Tests.Oracle/Fuzz/{BitDiff,Shrinker}.cs` | Bit-exact compare (NaN tokenized; Decimal by value) / shrink to 1 element. |
 | Harness | `test/NumSharp.Tests.Oracle/Fuzz/MisalignedRegistry.cs` | The excused, documented divergences. |
-| Corpus | `test/NumSharp.Tests.Oracle/Fuzz/corpus/*.jsonl` | The committed corpus (~68K cases). Copied to test output by the csproj glob. |
+| Corpus | `test/NumSharp.Tests.Oracle/Fuzz/corpus/*.jsonl` | The committed corpus (100K+ cases across ~57 files). Copied to test output by the csproj glob. |
 
 ## The gate
 
-`dotnet test --filter "TestCategory=FuzzMatrix"` runs three gate classes:
-- **`FuzzCorpusTests`** — the op corpus (~40 tiers; `astype/binary/unary/reduce/manip/...`). This is where new-op work lands.
-- **`IndexOracleTests`** — advanced-indexing get/set (`index_curated` + `index_dtype` + `index_random`).
-- **`MetamorphicTests`** — NumPy-free invariants (round-trips / involutions).
+`dotnet test --filter "TestCategory=FuzzMatrix"` runs the gate classes:
+- **`FuzzCorpusTests`** — the op corpus (~50 tiers; `astype/binary/unary/reduce/manip/...`, the value/parity tiers `specials/precision/products/fft/matmul_parity/numpy_f32_kernels/...`, and the result-kind tiers `iter/dtype_text/out_where/errors_full`). This is where new-op work lands.
+- **`IndexOracleTests`** — advanced-indexing get/set (`index_curated` + `index_dtype` + `index_setter_dtype` + `index_random`).
+- **`MetamorphicTests`** — NumPy-free invariants (round-trips / involutions), no oracle needed.
+- **`HarnessSelfTests`** — proves the gate has teeth (BitDiff catches value/NaN/-0 diffs; the corpus is non-vacuous). A green FuzzMatrix that skipped every case would fail here.
 
 Run one tier while iterating: `dotnet test --no-build -f net10.0 --filter "FullyQualifiedName~FuzzCorpusTests.Manip"`.
 
@@ -91,7 +92,9 @@ is in **`references/add-op.md`** — read it when adding an op. In brief:
   so adding one job renumbers every following id. Expect a large `git diff` on `*.jsonl` — it's renumbering, not
   semantic churn.
 - **Char has no NumPy dtype.** It rides the `uint16` proxy: `char_tier("<mode>")` re-runs your `gen_<mode>` with the
-  Char pool and relabels `uint16 → char`. Add your op to `gen_<mode>` and Char coverage is automatic.
+  Char pool and relabels `uint16 → char`. Add your op to a `gen_<mode>` whose `main()` branch calls `char_tier` (18
+  of them — arith/divmod/comparison/unary×2/bitwise/reduce/scan/stat/manip/sort/tail/astype/where/logic/matmul/
+  rounding/copyto) and Char coverage is automatic; a mode with no `char_tier` call (e.g. `modf`, `place`) has none.
 - **Decimal has no NumPy analog.** It rides the independent C# oracle `gen_decimal_oracle.cs` (naive scalar
   `System.Decimal`), regenerated via `dotnet run test/oracle/gen_decimal_oracle.cs`. If your op needs Decimal
   coverage, add it there too.
@@ -99,6 +102,15 @@ is in **`references/add-op.md`** — read it when adding an op. In brief:
   Run it from `test/oracle/` (or with that CWD). CI replays the committed corpus and never runs the generator.
 - **OpRegistry's `default:` throws `NotSupportedException(op)`** — so a corpus op with no registered case fails the
   tier loudly. If a tier goes red immediately on a new op, you forgot (or mistyped) the `OpRegistry` case.
+- **A new LAYOUT needs only the Python builder — there is NO `LayoutCatalog.cs`.** `FuzzCorpus.Reconstruct` rebuilds
+  any operand view from the serialized `(dtype, shape, element-strides, offset, base-bytes)` descriptor, so the C#
+  side is layout-agnostic. Add the `(base, view)` builder to `layout_catalog.py`, regenerate the affected tiers —
+  done. (The "mirror it in `LayoutCatalog.cs`" line in `layout_catalog.py`'s own header is stale.)
+- **Non-array results have their own wiring.** An op that returns a dtype, a string, a scalar, or a tuple is NOT
+  registered in `OpRegistry.Apply`; it goes through `OpRegistry.Kinds.cs` (`ApplyTuple`/`ApplyDtype`/`ApplyText`)
+  paired with `gen_oracle.py`'s `gen_dtype_text`/`gen_iter`/`gen_out_where`, and the generator marks it with
+  `expected.kind` (`dtype`/`text`/`tuple`/`scalar`) via `_arr_expected(kind=…)`/`_tuple_expected`. See
+  `references/architecture.md` → "Result kinds".
 
 ## References
 

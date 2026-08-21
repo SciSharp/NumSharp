@@ -26,8 +26,20 @@ Everything else — including signed zero (`-0.0` ≠ `0.0`), integer wrap, floa
 
 3. **The difference is intended and defensible → excuse it in `MisalignedRegistry.cs`.** This is for documented,
    deliberate NumSharp-vs-NumPy differences (e.g. a dtype NumSharp handles differently by design, an error-text
-   divergence). Add an entry keyed to the op/case with a one-line rationale. The gate then treats it as expected,
-   not a pass and not a failure — and it shows up in the divergence ledger, never silently.
+   divergence, a bounded transcendental ULP gap). The mechanism is a branch in `MisalignedRegistry.Classify(...)`
+   that returns a one-line reason string (`null` = not excused = red); the runner counts and PRINTS each excused
+   reason per tier, so it is never silent. Three rules, all learned the hard way:
+   - **Scope the branch to the exact `(op, dtype, kind)` cell.** A blanket "any complex value diff" once excused a
+     gross complex-matmul regression. Match the op name, the `tc`, the `DivergenceKind`, and (for ULP gaps) a tight
+     tolerance — anything broader lets a neighbouring regression through.
+   - **Guard every ULP/near-miss branch with `diffs.Count > 0`.** `diffs.All(...)` is VACUOUSLY true on an empty
+     diff list, so an unrelated divergence (error-text, wrong arity) would otherwise be silently excused as
+     "within N ULP".
+   - **Pin the scope from BOTH sides** in `test/NumSharp.Tests.Oracle/OpenBugs.FuzzGate.cs`
+     (`MisalignedRegistryTightnessTests`): a paired NOT-excused test (a gross regression in the neighbouring cell →
+     `null`) and STILL-excused test (the documented divergence → non-null), so a future re-broadening turns red.
+   The gate then treats it as expected, not a pass and not a failure — keep the human-readable ledger
+   `test/NumSharp.Tests.Oracle/Fuzz/README.md` in sync.
 
 4. **The generator/registry is wrong → fix the corpus, not the excuse.** Common causes:
    - Wrong `OpRegistry` mapping (e.g. routed to the wrong overload, or read the wrong param key).
@@ -47,16 +59,35 @@ Everything else — including signed zero (`-0.0` ≠ `0.0`), integer wrap, floa
 
 ## Error parity
 
-Cases can also assert **error parity** — NumPy raising must correspond to NumSharp raising. The generator records
-raising cases it chooses to keep (many are skipped by `try/except`); the harness checks NumSharp raises too. If
-NumSharp succeeds where NumPy raised (or vice versa), that's a divergence to classify like any other. Verbatim
-error-message matching is generally handled by dedicated unit tests, not the byte corpus.
+Cases can also assert **error parity** — NumPy raising must correspond to NumSharp raising. Two tiers, deliberately
+different in strength:
+- **Weak ("threw something"):** `errors.jsonl`, plus any case flagged `expects_throw` with no recorded exception.
+  NumSharp must throw *anything*; type and message are not checked. NumSharp succeeding where NumPy raised (or vice
+  versa) is a divergence to classify like any other.
+- **Message parity:** `errors_full.jsonl`, plus any case carrying `error: {type, text}` (recorded verbatim at
+  generation time — the cells every value tier skips). `CheckError` (in `FuzzCorpusTests.Kinds.cs`) holds NumSharp to
+  BOTH the exception type (via the NumPy-class → .NET-type map `ErrorTypeMap`; identical names like
+  `ValueError`/`AxisError` always match) AND the message verbatim, after `NormalizeMessage` strips .NET's
+  `" (Parameter 'x')"` framing. **So verbatim error text IS gated by the corpus now** — this is no longer only a
+  unit-test concern.
+
+A message mismatch routes through `MisalignedRegistry` as an `ErrorText` divergence, so a documented wording gap is
+excused-but-printed, not silently accepted.
 
 ## The known teardown crash is NOT a divergence
 
 A full `TestCategory=FuzzMatrix` run can end "Test host process crashed" (`AccessViolation`) after every test
 reported Passed. That's an intermittent teardown crash, not a red case. Re-run the specific `FuzzCorpusTests` class
 (it exits 0 cleanly) to confirm the tier is actually green.
+
+## Host-pinned tiers go Inconclusive, not red
+
+`matmul_parity` and `random_parity_host` record bytes reproducible only on a specific host — the exact BLAS build +
+DYNAMIC_ARCH kernel + thread count NumPy used, or the win-amd64 CRT libm. When the host doesn't match (checked via
+`MatmulParityPin` by BLAS binary SHA-256 / core name, or an OS check), the tier asserts **`Inconclusive`**, never
+red — a machine without NumPy's wheel has nothing to be wrong about. Seeing "Inconclusive" on these two tiers
+off-host is expected, not a failure; regenerate the corpus on your host (`python gen_oracle.py matmul_parity` /
+`random_parity`) to gate against your machine.
 
 ## Ledger
 
