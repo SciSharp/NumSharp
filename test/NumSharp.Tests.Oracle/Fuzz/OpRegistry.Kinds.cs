@@ -318,6 +318,15 @@ namespace NumSharp.Tests.Fuzz
                     var (x, res, rank, sv) = np.linalg.lstsq(ops[0], ops[1]);
                     return new[] { x, res, rank, sv };
                 }
+                // slogdet -> (sign, logabsdet). LU (getrf), so byte-reproducible. For a complex
+                // operand `sign` is a unit-modulus COMPLEX and `logabsdet` stays real float —
+                // CompareTuple asserts both the arity and each slot's dtype. Array siblings
+                // (det/inv/solve/tensorinv/tensorsolve) are in OpRegistry.cs::Apply.
+                case "slogdet":
+                {
+                    var (sign, logabsdet) = np.linalg.slogdet(ops[0]);
+                    return new[] { sign, logabsdet };
+                }
 
                 // polydiv -> (quotient, remainder). Portable (polynomial long division).
                 case "polydiv":

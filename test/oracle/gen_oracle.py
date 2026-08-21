@@ -3868,6 +3868,22 @@ def _lp_lstsq(cases, name, a, b, dt):
     })
 
 
+def _lp_arr2(cases, op, name, a, b, params, fn, dt, layout, rng):
+    """A TWO-operand array-result factorisation (solve/tensorsolve): `a` carried in the
+    requested layout (reusing the matmul_parity recipes), `b` always C-contiguous. Mirrors
+    _lp_lstsq's operand shape but for a single array result rather than the 4-tuple."""
+    base_a, view_a = _lp_operand(a, layout, rng)
+    base_b, view_b = np.ascontiguousarray(b), np.ascontiguousarray(b)
+    r = np.asarray(fn(view_a, view_b))
+    cases.append({
+        "id": f"{op}/{name}/{dt}/{layout}/{len(cases)}",
+        "op": op, "params": params,
+        "operands": [describe(base_a, view_a), describe(base_b, view_b)],
+        "expected": _arr_expected(r),
+        "layout": layout, "valueclass": "linalg",
+    })
+
+
 def _lp_poly_fit(cases, x, y, deg, dt):
     """polyfit reaches lstsq (backend); default return is the coefficient array."""
     bx, vx = np.ascontiguousarray(x), np.ascontiguousarray(x)
@@ -4128,6 +4144,114 @@ def gen_linalg_parity():
     for deg in (1, 2, 3):
         _lp_poly_fit(cases, xf, yf, deg, "float64")
     _lp_poly_fit(cases, xf.astype(np.float32), yf.astype(np.float32), 2, "float32")
+
+    # ==========================  LU-factorisation family  ===============================
+    # solve/inv/det/slogdet/tensorinv/tensorsolve all reach getrf/gesv. Unlike the eigen/SVD
+    # factorisations there is NO sign- or phase-ambiguity: LU with partial pivoting is a
+    # deterministic function of the input, so EVERY output is byte-reproducible (probed 2/2
+    # per case, cross-process). float32 upcasts to double and rounds back once (_commonType),
+    # so it is byte-identical too; int/bool widen to float64. These are the OpenBLAS-dependent
+    # linalg members with no managed fallback and, until now, no committed differential-fuzz
+    # gate at all.
+    INV2 = np.array([[2., 1], [1, 3]])                         # 2x2 invertible
+    DINV = np.diag([2., 3, 4])                                 # diagonal invertible (int/bool widen -> chol/eye)
+    B1 = np.array([1., 2, 3])                                  # solve RHS: a vector (b.ndim == 1)
+    B2 = np.array([[1., 4], [2, 5], [3, 6]])                  # solve RHS: a 3x2 stack of columns
+    CB = np.array([1 + 1j, 2 + 0j])                            # complex vector RHS
+    CB2 = np.array([[1 + 1j, 0], [2 + 0j, 1 - 1j]])           # complex matrix RHS
+    BASE6 = np.array([[10, 1, 0, 2, 0, 1], [0, 11, 1, 0, 1, 0], [1, 0, 12, 0, 0, 1],
+                      [0, 2, 0, 13, 1, 0], [1, 0, 0, 1, 14, 0], [0, 1, 0, 0, 1, 15]], float)  # invertible 6x6
+
+    # ---- inv ----
+    for dt in LINALG_PARITY_DTYPES:
+        srcs = [("sqr", SQR), ("inv2", INV2)] + ([("cplxin", CPLX_IN)] if dt == "complex128" else [])
+        for nm, a in srcs:
+            _lp_arr(cases, "inv", nm, cast(a, dt), {}, lambda v: np.linalg.inv(v), dt, "C", rng)
+    for dt in ("int32", "int64", "uint8", "bool"):
+        _lp_arr(cases, "inv", "diag_widen", cast(DINV, dt), {}, lambda v: np.linalg.inv(v), dt, "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_arr(cases, "inv", "sqr_lay", SQR, {}, lambda v: np.linalg.inv(v), "float64", lay, rng)
+    _lp_arr(cases, "inv", "batch", np.stack([SQR, SQR + np.eye(3)]), {},
+            lambda v: np.linalg.inv(v), "float64", "C", rng)
+    _lp_arr(cases, "inv", "1x1", np.array([[4.0]]), {}, lambda v: np.linalg.inv(v), "float64", "C", rng)
+
+    # ---- det (single -> 0-D scalar; a stack -> 1-D; a singular operand -> exactly the LU product) ----
+    for dt in LINALG_PARITY_DTYPES:
+        srcs = [("sqr", SQR), ("inv2", INV2)] + ([("cplxin", CPLX_IN)] if dt == "complex128" else [])
+        for nm, a in srcs:
+            _lp_arr(cases, "det", nm, cast(a, dt), {}, lambda v: np.linalg.det(v), dt, "C", rng)
+    for dt in ("int32", "int64", "bool"):
+        _lp_arr(cases, "det", "diag_widen", cast(DINV, dt), {}, lambda v: np.linalg.det(v), dt, "C", rng)
+    _lp_arr(cases, "det", "singular", RANKDEF, {}, lambda v: np.linalg.det(v), "float64", "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_arr(cases, "det", "sqr_lay", SQR, {}, lambda v: np.linalg.det(v), "float64", lay, rng)
+    _lp_arr(cases, "det", "batch", np.stack([SQR, SQR + np.eye(3), RANKDEF]), {},
+            lambda v: np.linalg.det(v), "float64", "C", rng)
+    _lp_arr(cases, "det", "1x1", np.array([[7.0]]), {}, lambda v: np.linalg.det(v), "float64", "C", rng)
+
+    # ---- slogdet (tuple: sign, logabsdet; a complex sign is a unit-modulus complex, not +-1;
+    #               a singular operand gives (0, -inf)) ----
+    for dt in LINALG_PARITY_DTYPES:
+        srcs = [("sqr", SQR)] + ([("cplxin", CPLX_IN)] if dt == "complex128" else [])
+        for nm, a in srcs:
+            _lp_tuple(cases, "slogdet", nm, cast(a, dt), {}, lambda v: np.linalg.slogdet(v), dt, "C", rng)
+    for dt in ("int32", "int64", "bool"):
+        _lp_tuple(cases, "slogdet", "diag_widen", cast(DINV, dt), {}, lambda v: np.linalg.slogdet(v), dt, "C", rng)
+    _lp_tuple(cases, "slogdet", "singular", RANKDEF, {}, lambda v: np.linalg.slogdet(v), "float64", "C", rng)
+    _lp_tuple(cases, "slogdet", "batch", np.stack([SQR, RANKDEF]), {},
+              lambda v: np.linalg.slogdet(v), "float64", "C", rng)
+    _lp_tuple(cases, "slogdet", "1x1", np.array([[7.0]]), {}, lambda v: np.linalg.slogdet(v), "float64", "C", rng)
+
+    # ---- solve (b is a stack of VECTORS iff EXACTLY 1-D, else a stack of MATRICES — NumPy 2.0) ----
+    for dt in ("float64", "float32"):
+        _lp_arr2(cases, "solve", "sqr_vec", cast(SQR, dt), cast(B1, dt), {},
+                 lambda va, vb: np.linalg.solve(va, vb), dt, "C", rng)
+        _lp_arr2(cases, "solve", "sqr_mat", cast(SQR, dt), cast(B2, dt), {},
+                 lambda va, vb: np.linalg.solve(va, vb), dt, "C", rng)
+    _lp_arr2(cases, "solve", "cplx_vec", CPLX_IN, CB, {},
+             lambda va, vb: np.linalg.solve(va, vb), "complex128", "C", rng)
+    _lp_arr2(cases, "solve", "cplx_mat", CPLX_IN, CB2, {},
+             lambda va, vb: np.linalg.solve(va, vb), "complex128", "C", rng)
+    _lp_arr2(cases, "solve", "int_widen", cast(SQR, "int64"), cast(B1, "int64"), {},
+             lambda va, vb: np.linalg.solve(va, vb), "int64", "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_arr2(cases, "solve", "sqr_lay", SQR, B1, {},
+                 lambda va, vb: np.linalg.solve(va, vb), "float64", lay, rng)
+    _lp_arr2(cases, "solve", "batch_mat", np.stack([SQR, SQR + np.eye(3)]), np.stack([B2, B2 + 1.0]), {},
+             lambda va, vb: np.linalg.solve(va, vb), "float64", "C", rng)
+    _lp_arr2(cases, "solve", "bcast_vec", np.stack([SQR, SQR + np.eye(3)]), B1, {},
+             lambda va, vb: np.linalg.solve(va, vb), "float64", "C", rng)
+    _lp_arr2(cases, "solve", "1x1", np.array([[4.0]]), np.array([2.0]), {},
+             lambda va, vb: np.linalg.solve(va, vb), "float64", "C", rng)
+
+    # ---- tensorinv (reshape -> inv -> reshape; `ind` LEADING axes form the row side) ----
+    for dt in LINALG_PARITY_DTYPES:
+        _lp_arr(cases, "tensorinv", "ind2", cast(BASE6.reshape(2, 3, 3, 2), dt), {"ind": 2},
+                lambda v: np.linalg.tensorinv(v, ind=2), dt, "C", rng)
+        _lp_arr(cases, "tensorinv", "ind1", cast(BASE6.reshape(6, 2, 3), dt), {"ind": 1},
+                lambda v: np.linalg.tensorinv(v, ind=1), dt, "C", rng)
+
+    # ---- tensorsolve (reshape -> solve -> reshape; `axes` move to the rightmost, in order) ----
+    TB = np.arange(1.0, 7.0).reshape(2, 3)
+    for dt in LINALG_PARITY_DTYPES:
+        _lp_arr2(cases, "tensorsolve", "std", cast(BASE6.reshape(2, 3, 6), dt), cast(TB, dt), {},
+                 lambda va, vb: np.linalg.tensorsolve(va, vb), dt, "C", rng)
+    _lp_arr2(cases, "tensorsolve", "axes", BASE6.reshape(6, 2, 3), TB, {"axes": [0]},
+             lambda va, vb: np.linalg.tensorsolve(va, vb, axes=[0]), "float64", "C", rng)
+
+    # ---- matrix_power with NEGATIVE n (= inv(a) ** |n| -> LAPACK gesv). Positive/zero n is a
+    #      portable managed product and lives in products.jsonl; negative n THROWS without the
+    #      backend, so its byte gate belongs here next to inv. int/bool widen to float64. ----
+    for dt in ("float64", "float32", "complex128"):
+        src = CPLX_IN if dt == "complex128" else SQR
+        for n in (-1, -2, -3):
+            _lp_arr(cases, "matrix_power", f"n{n}", cast(src, dt), {"n": n},
+                    lambda v, k=n: np.linalg.matrix_power(v, k), dt, "C", rng)
+    _lp_arr(cases, "matrix_power", "int_widen", cast(SQR, "int64"), {"n": -2},
+            lambda v: np.linalg.matrix_power(v, -2), "int64", "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_arr(cases, "matrix_power", "sqr_lay", SQR, {"n": -1},
+                lambda v: np.linalg.matrix_power(v, -1), "float64", lay, rng)
 
     return cases
 # =====================================================================================

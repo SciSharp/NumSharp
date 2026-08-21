@@ -484,7 +484,7 @@ namespace NumSharp.Tests.Fuzz
             ["manip.jsonl"] = 6060,
             ["matmul.jsonl"] = 769,
             ["matmul_parity.jsonl"] = 470,
-            ["linalg_parity.jsonl"] = 220,
+            ["linalg_parity.jsonl"] = 340,   // +90: LU family (solve/inv/det/slogdet/tensorinv/tensorsolve) + matrix_power(n<0)
             ["poly.jsonl"] = 60,
             ["einsum.jsonl"] = 35,
             ["modf.jsonl"] = 51,

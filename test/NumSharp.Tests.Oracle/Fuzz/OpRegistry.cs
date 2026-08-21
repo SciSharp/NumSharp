@@ -365,6 +365,22 @@ namespace NumSharp.Tests.Fuzz
                 // qr(mode='r') -> just R; reduced/complete/raw tuples are in ApplyTuple.
                 case "qr": return np.linalg.qr(ops[0], "r").R;
 
+                // ---- LU-factorisation family (linalg_parity tier; ARRAY results) --------
+                // solve/inv/det/tensorinv/tensorsolve reach getrf/gesv (deterministic partial
+                // pivoting -> byte-reproducible, no eigenvector-phase ambiguity). slogdet's
+                // (sign, logabsdet) TUPLE is in OpRegistry.Kinds.cs::ApplyTuple. `det` of a
+                // single matrix is a 0-D scalar; a stack is 1-D. Params pair 1:1 with
+                // gen_oracle.py::gen_linalg_parity's LU-factorisation block.
+                case "inv": return np.linalg.inv(ops[0]);
+                case "det": return np.linalg.det(ops[0]);
+                case "solve": return np.linalg.solve(ops[0], ops[1]);
+                case "tensorinv":
+                    return np.linalg.tensorinv(ops[0], p.TryGetValue("ind", out var tiv) ? tiv.GetInt32() : 2);
+                case "tensorsolve":
+                    return p.ContainsKey("axes")
+                        ? np.linalg.tensorsolve(ops[0], ops[1], ParseIntArray(p["axes"]))
+                        : np.linalg.tensorsolve(ops[0], ops[1]);
+
                 // ---- cross / cov / corrcoef (products tier: dot-based value gate) ----------
                 // cross is multiply-subtract (no reduction) -> portable. cov/corrcoef are
                 // normalized dot products -> byte-exact for the small operands here. A SECOND

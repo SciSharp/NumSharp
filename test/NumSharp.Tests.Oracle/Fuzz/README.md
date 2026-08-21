@@ -419,10 +419,11 @@ int→NDArray implicit conversion — the registry passes it BY NAME (documented
 
 ### LAPACK factorisation family (`linalg_parity` tier)
 
-`linalg_parity.jsonl` (264 cases, `gen_oracle.py linalg_parity`) is the FIRST *corpus* value gate for the
-LAPACK factorisations — `cholesky`, `eig`, `eigvals`, `eigh`, `eigvalsh`, `svd`, `svdvals`, `pinv`,
-`matrix_rank`, `cond`, `lstsq`, `qr` and `norm{2,-2,'nuc'}` — previously gated only by the interop
-live-parity suite. **HOST-PINNED exactly like `matmul_parity`** (`linalg_parity.host.jsonl`, same
+`linalg_parity.jsonl` (366 cases, `gen_oracle.py linalg_parity`) is the FIRST *corpus* value gate for the
+LAPACK factorisations — the eigen/SVD/QR/Cholesky family `cholesky`, `eig`, `eigvals`, `eigh`, `eigvalsh`,
+`svd`, `svdvals`, `pinv`, `matrix_rank`, `cond`, `lstsq`, `qr`, `norm{2,-2,'nuc'}`, and the **LU family**
+`solve`, `inv`, `det`, `slogdet`, `tensorinv`, `tensorsolve` and `matrix_power(n<0)` (added 2026-08-21) —
+previously gated only by the interop live-parity suite. **HOST-PINNED exactly like `matmul_parity`** (`linalg_parity.host.jsonl`, same
 `MatmulParityPin` shape), because `NumSharp.Core` ships NO managed LU/QR/SVD/eigensolver: these compute
 ONLY through the opt-in `NumSharp.Interop.OpenBLAS` backend, and the result bytes come out of a specific
 LAPACK build dispatched to a specific CPU kernel. The gate enables that backend before replay and
@@ -449,6 +450,18 @@ checks instead, and listed in Table 1):
 - **`cond`/`norm` orders that are NOT SVD-based** (`fro`/1/-1/±inf) — they compose an elementwise reduction
   whose summation order rounds 1 ULP off NumPy (measured: `cond(a,'fro')` differs in the last byte); only
   the SVD-based orders (`cond` None/2/-2, `norm` 2/-2/'nuc' — exactly the task scope) are recorded.
+
+The **LU family** (`solve`/`inv`/`det`/`slogdet`/`tensorinv`/`tensorsolve` + `matrix_power(n<0)`, added
+2026-08-21) reaches `getrf`/`gesv`. Unlike the eigen/SVD factorisations it has **no sign/phase ambiguity** —
+LU with partial pivoting is a deterministic function of the input — so **every** output is byte-reproducible
+and NOTHING here is excluded (probed 2/2 per case, cross-process). `det` of one matrix is a 0-D scalar and of
+a stack is 1-D; `slogdet` is a `kind:"tuple"` `(sign, logabsdet)` where a complex operand's `sign` is a
+unit-modulus complex and `logabsdet` stays real; a singular operand gives `det`→0 and `slogdet`→`(0,-inf)`
+exactly (same LU product on both sides). `solve` covers NumPy 2.0's b-is-a-vector-iff-1-D rule (vector /
+matrix / batched-matrix / broadcast-vector RHS); `tensorinv`/`tensorsolve` are reshape→`inv`/`solve`→reshape;
+`matrix_power(n<0)` is `inv(a)**|n|` (portable positive/zero `n` stays in `products.jsonl`). float32 upcasts
+to double and rounds back, so it is byte-identical too; int/bool widen to float64 — verified across
+dtypes/layouts/shapes/batched/degenerate.
 
 `roots`, `polyfit` and `poly` of a **2-D matrix** also ride this host-pinned tier (added 2026-08-21): they
 reach the LAPACK seam (companion-matrix `eigvals` / `lstsq`) and THROW without the backend, so they cannot
