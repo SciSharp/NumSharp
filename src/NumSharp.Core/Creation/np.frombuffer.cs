@@ -130,6 +130,138 @@ namespace NumSharp
             }
         }
 
+        // -------------------------------------------------------------------------------------------------
+        // np.MemoryView overloads — the memoryview CONSUMER side, round-tripping ndarray.data.
+        //
+        // NumPy's np.frombuffer(memoryview) is ZERO-COPY: the result shares the buffer's memory (writing
+        // through hits the source) and is writeable iff the buffer is; it requires a C-contiguous buffer
+        // (a strided/transposed memoryview raises "BufferError: memoryview: underlying buffer is not
+        // C-contiguous"), reinterprets the bytes as `dtype`, and applies offset(bytes)/count(elements)
+        // with the SAME validation as the byte[] path.
+        //
+        // NumSharp reproduces this by aliasing the source array's already-unmanaged buffer through the
+        // existing zero-copy view primitives — reshape (C-contig -> 1-D view) -> view(byte) (reinterpret
+        // to a flat byte view) -> byte-slice (the offset window) -> view(dtype) (reinterpret to the target
+        // dtype). No data is copied and no per-element loop runs (frombuffer is a pure reinterpretation);
+        // ARC on the shared MemoryBlock keeps the source buffer alive for as long as the result lives, so
+        // the source array may be disposed while the view stays valid (NumPy's memoryview `.base`).
+        // -------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Interpret a <see cref="MemoryView"/> (obtained from <see cref="NDArray.data"/>) as a
+        /// 1-dimensional array, sharing its memory (zero-copy) — the consumer side of <c>ndarray.data</c>.
+        /// </summary>
+        /// <param name="buffer">A <see cref="MemoryView"/> over a C-contiguous array.</param>
+        /// <param name="dtype">Data-type of the returned array. Default is float64.</param>
+        /// <param name="count">Number of items to read. -1 means all data in the buffer.</param>
+        /// <param name="offset">Start reading the buffer from this offset (in bytes). Default is 0.</param>
+        /// <returns>A 1-D <see cref="NDArray"/> that VIEWS the buffer's memory (writes through to the source).</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.frombuffer.html</remarks>
+        public static NDArray frombuffer(MemoryView buffer, Type dtype = null, long count = -1, long offset = 0)
+        {
+            return frombuffer(buffer, (dtype ?? typeof(double)).GetTypeCode(), count, offset);
+        }
+
+        /// <inheritdoc cref="frombuffer(MemoryView, Type, long, long)"/>
+        public static NDArray frombuffer(MemoryView buffer, NPTypeCode dtype, long count = -1, long offset = 0)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            if (dtype == NPTypeCode.Empty)
+                dtype = NPTypeCode.Double;
+
+            // NumPy requires a C-contiguous buffer: a non-contiguous memoryview raises
+            // "BufferError: memoryview: underlying buffer is not C-contiguous".
+            if (!buffer.c_contiguous)
+                throw new InvalidOperationException("memoryview: underlying buffer is not C-contiguous");
+
+            long bufferLength = buffer.nbytes;
+            int itemSize = dtype.SizeOf();
+
+            // Validate offset (in bytes) — same contract as the byte[] path.
+            if (offset < 0 || offset > bufferLength)
+                throw new ArgumentException(
+                    $"offset must be non-negative and no greater than buffer length ({bufferLength})",
+                    nameof(offset));
+
+            long availableBytes = bufferLength - offset;
+
+            // Validate alignment.
+            if (availableBytes % itemSize != 0)
+                throw new ArgumentException(
+                    "buffer size must be a multiple of element size",
+                    nameof(buffer));
+
+            long maxCount = availableBytes / itemSize;
+
+            long actualCount;
+            if (count < 0)
+                actualCount = maxCount;
+            else if (count > maxCount)
+                throw new ArgumentException(
+                    "buffer is smaller than requested size",
+                    nameof(count));
+            else
+                actualCount = count;
+
+            if (actualCount == 0)
+                return new NDArray(dtype, Shape.Vector(0), false);
+
+            // Zero-copy alias of the source's unmanaged buffer through the existing view primitives — no
+            // data copy and no per-element loop (frombuffer is a pure reinterpretation). ARC on the shared
+            // MemoryBlock keeps the source buffer alive for the returned view's lifetime.
+            var src = buffer.obj;
+            NDArray flat1d = src.reshape(new Shape(src.size)); // C-contiguous -> distinct 1-D view
+            NDArray result;
+
+            if (offset % itemSize == 0)
+            {
+                // Aligned offset — offset==0 and, whenever the source's byte count is a multiple of the
+                // target itemsize, every valid offset. Reinterpret in ELEMENT space (skips the byte detour):
+                // one view(dtype) for a differing dtype, plus a slice only when a sub-range is requested.
+                long offsetElems = offset / itemSize;
+                NDArray whole = dtype == flat1d.typecode ? flat1d : flat1d.view(dtype.AsType());
+                result = offsetElems == 0 && actualCount == whole.size
+                    ? whole
+                    : whole[$"{offsetElems}:{offsetElems + actualCount}"];
+            }
+            else
+            {
+                // Non-aligned offset — only reachable when the source byte count is NOT a multiple of the
+                // target itemsize (e.g. a byte/bool source reinterpreted as int16 at an odd offset). Slice a
+                // flat byte window at the byte offset, then reinterpret to the target dtype.
+                long windowBytes = actualCount * itemSize;
+                result = flat1d.view(typeof(byte))[$"{offset}:{offset + windowBytes}"].view(dtype.AsType());
+            }
+
+            // NumPy: a read-only buffer yields a read-only array. Propagate the source's writeability.
+            if (buffer.@readonly && result.Shape.IsWriteable)
+                result.Storage.SetShapeUnsafe(result.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
+
+            return result;
+        }
+
+        /// <summary>
+        /// Interpret a <see cref="MemoryView"/> as a 1-dimensional array, given a dtype STRING
+        /// (e.g. <c>"&lt;i4"</c>, <c>"&gt;u4"</c> for big-endian uint32). Little-endian / native dtypes are
+        /// a zero-copy view; a big-endian dtype needs a byte-swap and so COPIES (as the byte[] path does).
+        /// </summary>
+        /// <inheritdoc cref="frombuffer(MemoryView, Type, long, long)"/>
+        public static NDArray frombuffer(MemoryView buffer, string dtype, long count = -1, long offset = 0)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            var (typeCode, needsByteSwap) = ParseDtypeString(dtype);
+            if (!needsByteSwap)
+                return frombuffer(buffer, typeCode, count, offset);
+
+            // Big-endian: NumSharp swaps to native, which cannot be done in place on the shared buffer —
+            // materialize the bytes and route through the byte[] swap path (a COPY, matching that path).
+            return frombuffer(buffer.tobytes(), dtype, count, offset);
+        }
+
         /// <summary>
         /// Interpret a buffer as a 1-dimensional array.
         /// </summary>
