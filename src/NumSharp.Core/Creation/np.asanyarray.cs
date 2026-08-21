@@ -129,6 +129,26 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Convert a <see cref="MemoryView"/> (obtained from <see cref="NDArray.data"/>) to an ndarray,
+        ///     passing ndarray subclasses through — the consumer round-trip of <c>ndarray.data</c>. Matches
+        ///     NumPy's <c>np.asanyarray(a.data)</c> (a zero-copy VIEW sharing memory, copying only if a
+        ///     dtype/layout change forces it). A dedicated overload is required because a <see cref="MemoryView"/>
+        ///     is not otherwise resolvable by the <c>object</c> converter above. Equivalent to
+        ///     <c>np.asanyarray(buffer.obj, …)</c>.
+        /// </summary>
+        /// <param name="buffer">A <see cref="MemoryView"/> over an array.</param>
+        /// <param name="dtype">By default, the data-type is inferred from the source.</param>
+        /// <param name="order">'C', 'F', 'A' or 'K' (default).</param>
+        /// <param name="device">Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
+        public static NDArray asanyarray(MemoryView buffer, Type dtype = null, char order = 'K', string device = null)
+        {
+            if (buffer is null)
+                throw new ArgumentNullException(nameof(buffer));
+            return asanyarray(buffer.obj, dtype, order, device);
+        }
+
+        /// <summary>
         ///     Copies an <see cref="IEnumerable{T}"/> into a freshly allocated <typeparamref name="T"/>[].
         ///     Specialised for List&lt;T&gt; and ICollection&lt;T&gt; to skip the enumerator and to
         ///     use <see cref="GC.AllocateUninitializedArray{T}(int, bool)"/> since we overwrite every slot.

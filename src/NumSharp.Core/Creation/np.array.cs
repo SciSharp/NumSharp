@@ -29,6 +29,24 @@ namespace NumSharp
                 : new NDArray(nd.Storage) { TensorEngine = nd.TensorEngine };
 
         /// <summary>
+        ///     Create an array from a <see cref="MemoryView"/> (obtained from <see cref="NDArray.data"/>) —
+        ///     the consumer round-trip of <c>ndarray.data</c>. Matches NumPy's <c>np.array(a.data)</c>,
+        ///     which reads the buffer's shape/strides/dtype and (by default) COPIES, preserving the
+        ///     source's N-D shape and layout. Equivalent to <c>np.array(buffer.obj, copy)</c>; a copy is
+        ///     always writeable, even from a read-only (broadcast) source.
+        /// </summary>
+        /// <param name="buffer">A <see cref="MemoryView"/> over an array.</param>
+        /// <param name="copy">When <c>true</c> (default) the source storage is cloned; when <c>false</c> the storage is shared (alias).</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
+        [MethodImpl(OptimizeAndInline)]
+        public static NDArray array(MemoryView buffer, bool copy = true)
+        {
+            if (buffer is null)
+                throw new ArgumentNullException(nameof(buffer));
+            return array(buffer.obj, copy);
+        }
+
+        /// <summary>
         ///     Creates a scalar (0-dimensional) <see cref="NDArray"/> from a single value.
         /// </summary>
         /// <typeparam name="T">The type of the value, must be compliant to numpy's supported dtypes.</typeparam>

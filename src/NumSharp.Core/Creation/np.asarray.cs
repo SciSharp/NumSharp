@@ -152,6 +152,52 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Convert a <see cref="MemoryView"/> (obtained from <see cref="NDArray.data"/>) to an ndarray —
+        ///     the consumer round-trip of <c>ndarray.data</c>. Matches NumPy's <c>np.asarray(a.data)</c>,
+        ///     which reads the buffer's shape/strides/dtype and returns a zero-copy VIEW sharing its memory
+        ///     (copying only if a dtype/layout change forces it), preserving the source's N-D shape and
+        ///     layout. Equivalent to <c>np.asarray(buffer.obj, …)</c>.
+        /// </summary>
+        /// <param name="buffer">A <see cref="MemoryView"/> over an array.</param>
+        /// <param name="dtype">Requested dtype. <c>null</c> keeps the source dtype.</param>
+        /// <param name="order">'C', 'F', 'A', or 'K' (default).</param>
+        /// <param name="copy">Tri-state copy: <c>null</c> = if-needed, <c>true</c> = always, <c>false</c> = never (raises).</param>
+        /// <param name="like">Reference for array-function dispatch — accepted for parity, no effect.</param>
+        /// <param name="device">Only <c>"cpu"</c> or <c>null</c>.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
+        public static NDArray asarray(
+            MemoryView buffer,
+            Type dtype = null,
+            char order = 'K',
+            bool? copy = null,
+            NDArray like = null,
+            string device = null)
+        {
+            if (buffer is null)
+                throw new ArgumentNullException(nameof(buffer));
+            return asarray(buffer.obj, dtype, order, copy, like, device);
+        }
+
+        /// <summary>
+        ///     Convert a <see cref="MemoryView"/> to an ndarray, taking a NumPy-style dtype string
+        ///     (e.g. <c>"float32"</c>, <c>"&lt;i4"</c>). See
+        ///     <see cref="asarray(MemoryView, Type, char, bool?, NDArray, string)"/>.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
+        public static NDArray asarray(
+            MemoryView buffer,
+            string dtype,
+            char order = 'K',
+            bool? copy = null,
+            NDArray like = null,
+            string device = null)
+        {
+            if (buffer is null)
+                throw new ArgumentNullException(nameof(buffer));
+            return asarray(buffer.obj, dtype, order, copy, like, device);
+        }
+
+        /// <summary>
         ///     Returns true when <paramref name="shape"/>'s memory layout already satisfies the requested
         ///     order ('C', 'F', 'A', 'K'). Mirrors NumPy's <c>STRIDING_OK</c> macro:
         ///     'A' and 'K' impose no layout constraint, so a copy is never forced for layout reasons.

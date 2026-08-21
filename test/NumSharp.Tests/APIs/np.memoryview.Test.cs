@@ -200,5 +200,94 @@ namespace NumSharp.Tests.APIs
             Assert.IsTrue(ReferenceEquals(b, b.data.obj));       // numpy: mv.obj is a
             Assert.IsFalse(ReferenceEquals(b.data, b.data));     // a fresh handle per access
         }
+
+        // ---- Consumer round-trip: np.array / asarray / asanyarray / ascontiguousarray /
+        //      asfortranarray of ndarray.data (all probed against NumPy 2.4.2). ----
+
+        [TestMethod]
+        public void Asarray_Roundtrip_IsView_PreservesShape()
+        {
+            // numpy: np.asarray(a.data) shares memory and preserves the 2-D shape/layout.
+            var src = np.arange(6).astype(np.int32).reshape(2, 3);
+            var v = np.asarray(src.data);
+            CollectionAssert.AreEqual(new long[] {2, 3 }, v.shape);
+            v.SetValue(123, 1, 2);                              // write-through hits the source
+            Assert.AreEqual(123L, S(src.GetValue(1, 2)));
+        }
+
+        [TestMethod]
+        public void Array_Roundtrip_Copies_PreservesShape()
+        {
+            // numpy: np.array(a.data) COPIES (independent) and preserves shape.
+            var src = np.arange(6).astype(np.int32).reshape(2, 3);
+            var c = np.array(src.data);
+            CollectionAssert.AreEqual(new long[] {2, 3 }, c.shape);
+            c.SetValue(123, 1, 2);
+            Assert.AreEqual(123L, S(c.GetValue(1, 2)));
+            Assert.AreEqual(5L, S(src.GetValue(1, 2)));         // source untouched (copy)
+        }
+
+        [TestMethod]
+        public void Asanyarray_Roundtrip_IsView()
+        {
+            // Previously threw NotSupportedException (bound to the object converter). Now a view.
+            var src = np.arange(6).astype(np.int32).reshape(2, 3);
+            var v = np.asanyarray(src.data);
+            CollectionAssert.AreEqual(new long[] {2, 3 }, v.shape);
+            v.SetValue(77, 0, 1);
+            Assert.AreEqual(77L, S(src.GetValue(0, 1)));
+        }
+
+        [TestMethod]
+        public void Ascontiguousarray_Roundtrip_ForcesC()
+        {
+            // numpy: ascontiguousarray(F.data) -> C-contiguous.
+            var f = np.arange(6).astype(np.int32).reshape(2, 3).T;   // (3,2) F-contiguous
+            Assert.IsFalse(f.Shape.IsContiguous);
+            var r = np.ascontiguousarray(f.data);
+            CollectionAssert.AreEqual(new long[] {3, 2 }, r.shape);
+            Assert.IsTrue(r.Shape.IsContiguous);
+        }
+
+        [TestMethod]
+        public void Asfortranarray_Roundtrip_ForcesF()
+        {
+            // numpy: asfortranarray(C.data) -> F-contiguous.
+            var c = np.arange(6).astype(np.int32).reshape(2, 3);     // C-contiguous
+            var r = np.asfortranarray(c.data);
+            CollectionAssert.AreEqual(new long[] {2, 3 }, r.shape);
+            Assert.IsTrue(r.Shape.IsFContiguous);
+        }
+
+        [TestMethod]
+        public void Asarray_Roundtrip_DtypeConverts()
+        {
+            var src = np.arange(6).astype(np.int32).reshape(2, 3);
+            Assert.AreEqual(typeof(float), np.asarray(src.data, np.float32).dtype);   // Type overload
+            Assert.AreEqual(typeof(float), np.asarray(src.data, "float32").dtype);    // string overload
+        }
+
+        [TestMethod]
+        public void Array_From_Readonly_Broadcast_Is_Writeable_Copy()
+        {
+            // numpy: np.array(broadcast.data) is a writeable copy of the logical values.
+            var bc = np.broadcast_to(np.arange(3).astype(np.int32), (2, 3));
+            Assert.IsTrue(bc.data.@readonly);
+            var c = np.array(bc.data);
+            CollectionAssert.AreEqual(new long[] {2, 3 }, c.shape);
+            Assert.IsTrue(c.Shape.IsWriteable);
+            Assert.AreEqual(0L, S(c.GetValue(0, 0)));
+            Assert.AreEqual(2L, S(c.GetValue(1, 2)));
+        }
+
+        [TestMethod]
+        public void Roundtrip_NullBuffer_Throws()
+        {
+            Assert.ThrowsException<ArgumentNullException>(() => np.array((np.MemoryView)null));
+            Assert.ThrowsException<ArgumentNullException>(() => np.asarray((np.MemoryView)null));
+            Assert.ThrowsException<ArgumentNullException>(() => np.asanyarray((np.MemoryView)null));
+            Assert.ThrowsException<ArgumentNullException>(() => np.ascontiguousarray((np.MemoryView)null));
+            Assert.ThrowsException<ArgumentNullException>(() => np.asfortranarray((np.MemoryView)null));
+        }
     }
 }
