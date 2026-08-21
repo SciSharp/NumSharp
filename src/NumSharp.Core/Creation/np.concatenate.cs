@@ -183,7 +183,7 @@ namespace NumSharp
             else
             {
                 // NumPy lays the fresh output out along the multi-operand KEEPORDER stride
-                // vote (PyArray_CreateMultiSortedStridePerm, ported in StridePerm): all-C
+                // vote (PyArray_CreateMultiSortedStridePerm, ported on Shape): all-C
                 // inputs give C; all-F inputs that are not also C give F (both-C&F operands,
                 // e.g. (N,1)/(1,N) views, never vote through their size-1 axis and resolve to
                 // C); and voting through size-1 axes is what makes np.stack of F-contiguous
@@ -194,7 +194,7 @@ namespace NumSharp
                 var inputShapes = new Shape[workArrays.Length];
                 for (int k = 0; k < workArrays.Length; k++)
                     inputShapes[k] = workArrays[k].Shape;
-                var retShape = StridePerm.ConcatOutputShape(firstShape, inputShapes);
+                var retShape = Shape.ConcatOutputShape(firstShape, inputShapes);
                 // fillZeros: false — every byte is overwritten below.
                 dst = new NDArray(resultType, retShape, fillZeros: false);
             }

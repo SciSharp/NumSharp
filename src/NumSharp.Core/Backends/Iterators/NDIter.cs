@@ -4161,7 +4161,7 @@ namespace NumSharp.Backends.Iteration
                 // broadcast's stride-0 axes sort slowest (F-ish layout). Probed NumPy 2.4.2 via
                 // copy/astype/np.sort order='K'. Sources that ARE C- or F-contiguous fall through
                 // to the binary resolve below, which is exact for them.
-                outShape = StridePerm.KeepOrderShape(srcShape);
+                outShape = srcShape.KeepOrder();
             }
             else
             {

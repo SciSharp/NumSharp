@@ -2,28 +2,27 @@ using System;
 
 namespace NumSharp
 {
-    /// <summary>
-    ///     Ports of NumPy's stride-permutation helpers (numpy/_core/src/multiarray/shape.c):
-    ///     <c>PyArray_CreateSortedStridePerm</c> (single array) and
-    ///     <c>PyArray_CreateMultiSortedStridePerm</c> (the multi-operand KEEPORDER vote that
-    ///     <c>PyArray_ConcatenateArrays</c> lays its output out with). Together they answer
-    ///     "which axis varies fastest in memory" — the full KEEPORDER semantics that the binary
-    ///     C/F answer of <see cref="OrderResolver"/> cannot express (a 3-D transpose keeps its
-    ///     exact stride ORDER; a broadcast's stride-0 axes sort slowest).
-    /// </summary>
-    /// <remarks>
-    ///     Strides here are in ELEMENTS (NumSharp's convention; NumPy's are bytes). Every
-    ///     comparison is a |stride| ordering WITHIN one array, so the unit scales out and the
-    ///     two conventions produce identical permutations.
-    /// </remarks>
-    internal static class StridePerm
+    public partial struct Shape
     {
+        // Ports of NumPy's stride-permutation machinery (numpy/_core/src/multiarray/shape.c):
+        // PyArray_CreateSortedStridePerm (single array) and PyArray_CreateMultiSortedStridePerm
+        // (the multi-operand KEEPORDER vote PyArray_ConcatenateArrays lays its output out with).
+        // Together they answer "which axis varies fastest in memory" — the full KEEPORDER
+        // semantics that OrderResolver's binary C/F answer cannot express (a 3-D transpose keeps
+        // its exact stride ORDER; a broadcast's stride-0 axes sort slowest). They live on Shape,
+        // beside TryNocopyReshape, because they are pure dimension/stride computations — exactly
+        // the concern this struct owns.
+        //
+        // Strides here are in ELEMENTS (NumSharp's convention; NumPy's are bytes). Every
+        // comparison is a |stride| ordering WITHIN one array, so the unit scales out and the two
+        // conventions produce identical permutations.
+
         /// <summary>
         ///     <c>PyArray_CreateSortedStridePerm</c>: axis indices sorted descending by |stride|,
         ///     equal magnitudes keeping their original axis order (NumPy's comparator tie-breaks
         ///     on the perm index — "C-order is the default in the face of ambiguity").
         /// </summary>
-        internal static int[] SortedPerm(long[] strides)
+        internal static int[] SortedStridePerm(long[] strides)
         {
             int ndim = strides.Length;
             var perm = new int[ndim];
@@ -55,7 +54,7 @@ namespace NumSharp
         ///     step NumPy runs after either perm sort (<c>PyArray_NewLikeArray</c> KEEPORDER,
         ///     <c>PyArray_ConcatenateArrays</c>): the axis the perm ranks LAST varies fastest.
         /// </summary>
-        internal static long[] BuildStrides(long[] dims, int[] perm)
+        internal static long[] StridesForPerm(long[] dims, int[] perm)
         {
             var strides = new long[dims.Length];
             long s = 1;
@@ -77,7 +76,7 @@ namespace NumSharp
         ///     is cleared even after the comparison stopped being ambiguous, but only ever SET
         ///     while it still is — both quirks are load-bearing and ported verbatim).
         /// </summary>
-        internal static int[] MultiSortedPerm(Shape[] shapes, int ndim)
+        internal static int[] MultiSortedStridePerm(Shape[] shapes, int ndim)
         {
             var perm = new int[ndim];
             for (int i = 0; i < ndim; i++)
@@ -129,18 +128,18 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The KEEPORDER shape for a fresh OWNED allocation mirroring
-        ///     <paramref name="source"/>'s memory order (NumPy <c>PyArray_NewLikeArray</c> with
-        ///     <c>NPY_KEEPORDER</c> — what <c>copy(order='K')</c>/<c>astype(order='K')</c>
-        ///     allocate). C-/F-contiguous sources come back as plain C/F shapes; a 3-D transpose
-        ///     keeps its exact stride order (a neither-contiguous owned array), and a broadcast's
-        ///     stride-0 axes sort slowest (probed 2.4.2: copying a <c>(4, 3)</c> row-broadcast
-        ///     with order='K' yields byte strides <c>(8, 32)</c> — F-contiguous).
+        ///     The KEEPORDER shape for a fresh OWNED allocation mirroring THIS shape's memory
+        ///     order (NumPy <c>PyArray_NewLikeArray</c> with <c>NPY_KEEPORDER</c> — what
+        ///     <c>copy(order='K')</c>/<c>astype(order='K')</c> allocate). C-/F-contiguous
+        ///     sources come back as plain C/F shapes; a 3-D transpose keeps its exact stride
+        ///     order (a neither-contiguous owned array), and a broadcast's stride-0 axes sort
+        ///     slowest (probed 2.4.2: copying a <c>(4, 3)</c> row-broadcast with order='K'
+        ///     yields byte strides <c>(8, 32)</c> — F-contiguous).
         /// </summary>
-        internal static Shape KeepOrderShape(Shape source)
+        internal readonly Shape KeepOrder()
         {
-            var dims = (long[])source.dimensions.Clone();
-            return new Shape(dims, BuildStrides(dims, SortedPerm(source.strides)));
+            var dims = (long[])dimensions.Clone();
+            return new Shape(dims, StridesForPerm(dims, SortedStridePerm(strides)));
         }
 
         /// <summary>
@@ -168,7 +167,7 @@ namespace NumSharp
             if (allC)
                 return new Shape(dims);
 
-            return new Shape(dims, BuildStrides(dims, MultiSortedPerm(inputs, dims.Length)));
+            return new Shape(dims, StridesForPerm(dims, MultiSortedStridePerm(inputs, dims.Length)));
         }
     }
 }
