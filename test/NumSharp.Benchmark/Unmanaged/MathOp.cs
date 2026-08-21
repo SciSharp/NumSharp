@@ -48,8 +48,8 @@ namespace NumSharp.Benchmark.Unmanaged
     //|                ScalarAddBoxed |  Throughput |           16 | 7,772.17 us |    78.140 us |    51.6847 us | 7,744.84 us | 7,727.88 us |  7,869.93 us | 101.44 |    1.53 |
     //|                        Direct |  Throughput |           16 |    76.63 us |     1.483 us |     0.9810 us |    76.31 us |    75.48 us |     78.35 us |   1.00 |    0.00 |
 
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 10)]
-    [SimpleJob(RunStrategy.Throughput, targetCount: 10)]
+    [SimpleJob(RunStrategy.ColdStart, iterationCount: 10)]
+    [SimpleJob(RunStrategy.Throughput, iterationCount: 10)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class MathOp

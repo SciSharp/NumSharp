@@ -8,8 +8,8 @@ using BenchmarkDotNet.Running;
 namespace NumSharp.Benchmark
 {
     //[RPlotExporter, RankColumn]
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 20)]
-    [SimpleJob(RunStrategy.Throughput, targetCount: 20)]
+    [SimpleJob(RunStrategy.ColdStart, iterationCount: 20)]
+    [SimpleJob(RunStrategy.Throughput, iterationCount: 20)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class SumArray

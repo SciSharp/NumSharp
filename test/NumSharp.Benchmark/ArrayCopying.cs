@@ -8,8 +8,8 @@ using BenchmarkDotNet.Engines;
 namespace NumSharp.Benchmark
 {
     //[RPlotExporter, RankColumn]
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 10)]
-    [SimpleJob(RunStrategy.Throughput, targetCount: 10)]
+    [SimpleJob(RunStrategy.ColdStart, iterationCount: 10)]
+    [SimpleJob(RunStrategy.Throughput, iterationCount: 10)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class ArrayCopying

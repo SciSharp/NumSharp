@@ -6,8 +6,8 @@ using NumSharp.Utilities;
 
 namespace NumSharp.Benchmark
 {
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 3)]
-    [SimpleJob(RunStrategy.Throughput, targetCount: 3)]
+    [SimpleJob(RunStrategy.ColdStart, iterationCount: 3)]
+    [SimpleJob(RunStrategy.Throughput, iterationCount: 3)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class ArrayAssignmentUnspecifiedType

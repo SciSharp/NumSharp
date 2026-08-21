@@ -29,7 +29,7 @@ namespace NumSharp.Benchmark
                 {
                     string method = $"NumSharp.Benchmark.{args[i]}";
                     var type = Type.GetType(method);
-                    BenchmarkRunner.Run(type);
+                    if (type != null) BenchmarkRunner.Run(type);
                 }
             }
             else
@@ -40,7 +40,7 @@ namespace NumSharp.Benchmark
 //                IConfig config = null;
 //#endif
 //                BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args, config);
-                BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args, ManualConfig.Create(DefaultConfig.Instance).With(ConfigOptions.DisableOptimizationsValidator));
+                BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args, ManualConfig.Create(DefaultConfig.Instance).WithOptions(ConfigOptions.DisableOptimizationsValidator));
             }
 
             if (args?.Length > 0)
@@ -49,7 +49,7 @@ namespace NumSharp.Benchmark
                 {
                     string method = $"OMath.Benchmarks.{args[i]}";
                     var type = Type.GetType(method);
-                    BenchmarkRunner.Run(type);
+                    if (type != null) BenchmarkRunner.Run(type);
                 }
             }
             else

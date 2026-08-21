@@ -20,7 +20,7 @@ namespace NumSharp.Benchmark.Unmanaged
     //|                       ViaBase_Abstract | 14.965 us | 0.0358 us | 0.0525 us | 14.981 us | 14.808 us | 15.006 us |  5.89 |    0.08 |
     //|                 ViaBase_AbstractSealed | 14.973 us | 0.0367 us | 0.0538 us | 14.990 us | 14.815 us | 15.018 us |  5.89 |    0.07 |
 
-    [SimpleJob(launchCount: 1, warmupCount: 10, targetCount: 30)]
+    [SimpleJob(launchCount: 1, warmupCount: 10, iterationCount: 30)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     public class VirtualMethod
     {

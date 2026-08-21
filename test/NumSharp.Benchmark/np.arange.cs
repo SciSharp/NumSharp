@@ -8,7 +8,7 @@ using NumSharp;
 
 namespace NumSharp.Benchmark
 {
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 10)]
+    [SimpleJob(RunStrategy.ColdStart, iterationCount: 10)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     public class nparange
     {
