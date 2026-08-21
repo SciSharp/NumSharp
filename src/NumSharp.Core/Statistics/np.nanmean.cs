@@ -26,7 +26,7 @@ namespace NumSharp
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
             {
-                return a.Clone();
+                return a.Clone().MarkReductionScalar(); // 0-d input -> numpy scalar (read-only)
             }
 
             // Element-wise (axis=None): compute mean ignoring NaN
@@ -96,7 +96,7 @@ namespace NumSharp
                     keepdimsShape[i] = 1;
                 r.Storage.Reshape(new Shape(keepdimsShape));
             }
-            return r;
+            return r.MarkReductionScalar();
         }
 
         /// <summary>

@@ -324,7 +324,9 @@ namespace NumSharp.Backends
             if (@out is not null) { @out.SetAtIndex(r.GetAtIndex(0), 0); return @out; }
             if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
-            return r;
+            // A 0-d exit — including keepdims over a 0-d input, whose (1,)*0 reshape is still
+            // 0-d — is a numpy SCALAR (read-only); (1,) keepdims results pass through writeable.
+            return r.MarkReductionScalar();
         }
 
         private NDArray HandleTrivialAxisReduction(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out)

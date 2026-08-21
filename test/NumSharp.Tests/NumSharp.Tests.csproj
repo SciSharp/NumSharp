@@ -70,6 +70,17 @@
     </None>
   </ItemGroup>
 
+  <!-- Layout-parity oracle: real NumPy 2.4.2 layout/strides/flags/shares/VALUES records for the
+       modelled numpy-internal representations (reshape nocopy-views, KEEPORDER sorts/copies, the
+       concat/stack stride vote, nonzero shared-buffer views, linspace owndata, read-only reduction
+       scalars, broadcast writeable inherit), replayed bit-exact by LayoutParityOracleTests
+       (no Python in CI). Regenerate: python test/oracle/gen_layout_parity_oracle.py -->
+  <ItemGroup>
+    <None Update="Backends\corpus\layout_parity_oracle.jsonl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
   <!-- Hand-made NumPy fixtures for NumpyCompatibilityTests / NpyFormatVersionTests. Those tests
        resolve "test_compat" relative to the working directory and SKIP (silently passing) when it is
        absent, so without this rule they assert nothing on a clean checkout. -->

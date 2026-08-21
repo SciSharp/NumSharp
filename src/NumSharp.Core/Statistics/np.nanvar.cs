@@ -31,26 +31,26 @@ namespace NumSharp
                 if (arr.GetTypeCode == NPTypeCode.Single)
                 {
                     float val = arr.GetSingle();
-                    return NDArray.Scalar(float.IsNaN(val) ? float.NaN : 0f);
+                    return NDArray.Scalar(float.IsNaN(val) ? float.NaN : 0f).MarkReductionScalar();
                 }
                 else if (arr.GetTypeCode == NPTypeCode.Double)
                 {
                     double val = arr.GetDouble();
-                    return NDArray.Scalar(double.IsNaN(val) ? double.NaN : 0.0);
+                    return NDArray.Scalar(double.IsNaN(val) ? double.NaN : 0.0).MarkReductionScalar();
                 }
                 else if (arr.GetTypeCode == NPTypeCode.Half)
                 {
                     Half val = arr.GetHalf();
-                    return NDArray.Scalar(Half.IsNaN(val) ? Half.NaN : (Half)0);
+                    return NDArray.Scalar(Half.IsNaN(val) ? Half.NaN : (Half)0).MarkReductionScalar();
                 }
                 else if (arr.GetTypeCode == NPTypeCode.Complex)
                 {
                     // NumPy: nanvar of complex returns float64.
                     Complex val = arr.GetComplex();
                     bool isNaN = double.IsNaN(val.Real) || double.IsNaN(val.Imaginary);
-                    return NDArray.Scalar(isNaN ? double.NaN : 0.0);
+                    return NDArray.Scalar(isNaN ? double.NaN : 0.0).MarkReductionScalar();
                 }
-                return NDArray.Scalar(0.0);
+                return NDArray.Scalar(0.0).MarkReductionScalar();
             }
 
             // Element-wise (axis=None): compute variance ignoring NaN
@@ -170,7 +170,7 @@ namespace NumSharp
                     keepdimsShape[i] = 1;
                 r.Storage.Reshape(new Shape(keepdimsShape));
             }
-            return r;
+            return r.MarkReductionScalar();
         }
 
         /// <summary>
