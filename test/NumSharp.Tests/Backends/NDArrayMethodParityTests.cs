@@ -296,5 +296,148 @@ namespace NumSharp.Tests.Backends
             g3.trace(0, 1, 2).Should().BeShaped(2);
             g3.trace(0, 1, 2).Should().BeOfValues(15, 51);
         }
+
+        // ---------------- searchsorted: key/array promotion (correctness fix) ----------------
+
+        [TestMethod]
+        public void Searchsorted_PromotesKeyToCommonType_NotTruncate()
+        {
+            // NumPy (PyArray_SearchSorted) searches in result_type(a, v); it must NOT cast the key
+            // down to a's dtype — doing so truncated 2.5 -> 2 and returned the wrong index 1.
+            // Probed NumPy 2.4.2: [1,2,3,4].searchsorted(2.5)=2, (4.5)=4, (0.5)=0, (2.5,right)=2, (-0.5)=0.
+            var a = np.array(new[] { 1, 2, 3, 4 });
+            a.searchsorted(2.5).Should().Be(2L);
+            a.searchsorted(4.5).Should().Be(4L);
+            a.searchsorted(0.5).Should().Be(0L);
+            a.searchsorted(2.5, "right").Should().Be(2L);
+            a.searchsorted(-0.5).Should().Be(0L);
+            // free function matches the instance method
+            np.searchsorted(a, 2.5).Should().Be(2L);
+            np.searchsorted(a, 4.5).Should().Be(4L);
+            // same-dtype path is unchanged
+            a.searchsorted(2).Should().Be(1L);
+            a.searchsorted(3, "right").Should().Be(3L);
+        }
+
+        [TestMethod]
+        public void Searchsorted_WideKey_IntoNarrowArray_DoesNotWrap()
+        {
+            // int8 array with a key beyond int8 range: NumPy widens via result_type instead of
+            // wrapping the key. Probed: int8[1,2,3,4].searchsorted(300)=4, int8[10,20,30].searchsorted(25)=2.
+            np.array(new sbyte[] { 1, 2, 3, 4 }).searchsorted(300).Should().Be(4L);
+            np.array(new sbyte[] { 10, 20, 30 }).searchsorted(25).Should().Be(2L);
+            // negative key into an unsigned array: uint8[1,2,3,4].searchsorted(-5)=0, (2.5)=2
+            np.array(new byte[] { 1, 2, 3, 4 }).searchsorted(-5).Should().Be(0L);
+            np.array(new byte[] { 1, 2, 3, 4 }).searchsorted(2.5).Should().Be(2L);
+        }
+
+        [TestMethod]
+        public void Searchsorted_ArrayKey_MixedDtype_Promotes()
+        {
+            // Probed: int[1,2,3,4].searchsorted([0.5, 2.5, 9.9]) == [0, 2, 4]; bool.searchsorted(0.5)=1.
+            var a = np.array(new[] { 1, 2, 3, 4 });
+            var res = a.searchsorted(np.array(new[] { 0.5, 2.5, 9.9 }));
+            res.Should().BeOfValues(0L, 2L, 4L);
+            SameAsFree(res, np.searchsorted(a, np.array(new[] { 0.5, 2.5, 9.9 })));
+            np.array(new[] { false, true, true }).searchsorted(0.5).Should().Be(1L);
+        }
+
+        // ---------------- cumsum / cumprod: out= parameter (NumPy signature parity) ----------------
+
+        [TestMethod]
+        public void Cumsum_Out_ReturnsOut_And_Writes()
+        {
+            var a = np.array(new long[] { 1, 2, 3, 4 });
+            var buf = np.zeros(new Shape(4), NPTypeCode.Int64);
+            var r = a.cumsum(@out: buf);
+            ReferenceEquals(r, buf).Should().BeTrue("cumsum(out=) returns the out array (NumPy parity)");
+            r.Should().BeOfValues(1L, 3L, 6L, 10L);
+            // free function parity
+            var buf2 = np.zeros(new Shape(4), NPTypeCode.Int64);
+            var rf = np.cumsum(a, null, null, buf2);
+            ReferenceEquals(rf, buf2).Should().BeTrue();
+            buf2.Should().BeOfValues(1L, 3L, 6L, 10L);
+        }
+
+        [TestMethod]
+        public void Cumsum_Out_UnsafeCast_Truncates()
+        {
+            // NumPy stores the result into out with UNSAFE casting: a float result into an int out
+            // truncates. Probed: [1.5,2.5,3.5].cumsum(out=int64) -> [1,4,7].
+            var af = np.array(new[] { 1.5, 2.5, 3.5 });
+            var outI = np.zeros(new Shape(3), NPTypeCode.Int64);
+            af.cumsum(@out: outI);
+            outI.Should().BeOfValues(1L, 4L, 7L);
+        }
+
+        [TestMethod]
+        public void Cumsum_Out_WithDtype_AccumulatesInDtype_StoresInOut()
+        {
+            // dtype governs the accumulator, out governs storage. Probed 2.4.2:
+            // [1,2,3,4].cumsum(dtype=f32, out=f64) -> [1.,3.,6.,10.] in the f64 out.
+            var a = np.array(new[] { 1, 2, 3, 4 });
+            var outF = np.zeros(new Shape(4), NPTypeCode.Double);
+            var r = a.cumsum(dtype: typeof(float), @out: outF);
+            ReferenceEquals(r, outF).Should().BeTrue();
+            r.Should().BeOfType(NPTypeCode.Double);
+            r.Should().BeOfValues(1.0, 3.0, 6.0, 10.0);
+        }
+
+        [TestMethod]
+        public void Cumsum_Out_Axis2D()
+        {
+            var m = np.array(new long[] { 1, 2, 3, 4 }).reshape(2, 2);
+            var buf = np.zeros(new Shape(2, 2), NPTypeCode.Int64);
+            var r = m.cumsum(axis: 1, @out: buf);
+            ReferenceEquals(r, buf).Should().BeTrue();
+            r.Should().BeOfValues(1L, 3L, 3L, 7L);
+        }
+
+        [TestMethod]
+        public void Cumsum_Out_WrongShape_Throws()
+        {
+            var a = np.array(new long[] { 1, 2, 3, 4 });
+            Action bad = () => a.cumsum(@out: np.zeros(new Shape(3), NPTypeCode.Int64));
+            bad.Should().Throw<IncorrectShapeException>();
+        }
+
+        [TestMethod]
+        public void Cumprod_Out_ReturnsOut_And_Writes()
+        {
+            var a = np.array(new long[] { 1, 2, 3, 4 });
+            var buf = np.zeros(new Shape(4), NPTypeCode.Int64);
+            var r = a.cumprod(@out: buf);
+            ReferenceEquals(r, buf).Should().BeTrue("cumprod(out=) returns the out array (NumPy parity)");
+            r.Should().BeOfValues(1L, 2L, 6L, 24L);
+            // free function parity
+            var buf2 = np.zeros(new Shape(4), NPTypeCode.Int64);
+            np.cumprod(a, null, null, buf2);
+            buf2.Should().BeOfValues(1L, 2L, 6L, 24L);
+        }
+
+        // ---------------- clip: dtype= kwarg + no-bounds copy ----------------
+
+        [TestMethod]
+        public void Clip_NoBounds_ReturnsCopy()
+        {
+            // NumPy 2.x: a.clip() with neither bound returns the array unchanged (a copy). Older
+            // NumPy raised "One of max or min must be given"; 2.4.2 does not.
+            var a = np.array(new[] { 1, 2, 3 });
+            var r = a.clip();
+            r.Should().BeOfValues(1, 2, 3);
+            r.Shape.IsWriteable.Should().BeTrue("clip() returns a fresh writeable copy");
+        }
+
+        [TestMethod]
+        public void Clip_Dtype_MatchesFree_And_Numpy()
+        {
+            // ndarray.clip(min, max, out, **kwargs) passes dtype through. Probed 2.4.2:
+            // int[1,2,3,4].clip(2,3,dtype=f64) -> float64 [2.,2.,3.,3.].
+            var a = np.array(new[] { 1, 2, 3, 4 });
+            var r = a.clip((NDArray)2, (NDArray)3, dtype: typeof(double));
+            r.Should().BeOfType(NPTypeCode.Double);
+            r.Should().BeOfValues(2.0, 2.0, 3.0, 3.0);
+            SameAsFree(r, np.clip(a, (NDArray)2, (NDArray)3, dtype: NPTypeCode.Double));
+        }
     }
 }

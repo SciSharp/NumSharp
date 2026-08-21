@@ -512,7 +512,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(2, result);
     }
 
-    [TestMethod, OpenBugs]
+    [TestMethod]
     public void Bug12_Searchsorted_ArrayInput_WrongResults()
     {
         // NUMPY 2.4.2:
@@ -524,9 +524,10 @@ public class NumpyAlignmentBugTests
 
         var result = np.searchsorted(arr, values);
 
+        // Result is int64 (NumPy intp): read it with GetInt64, not GetInt32.
         Assert.AreEqual(2, result.size);
-        Assert.AreEqual(1, result.GetInt32(0), "index to insert 2 should be 1");
-        Assert.AreEqual(3, result.GetInt32(1), "index to insert 4 should be 3");
+        Assert.AreEqual(1L, result.GetInt64(0), "index to insert 2 should be 1");
+        Assert.AreEqual(3L, result.GetInt64(1), "index to insert 4 should be 3");
     }
 
     #endregion

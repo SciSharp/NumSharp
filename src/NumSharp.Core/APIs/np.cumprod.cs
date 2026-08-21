@@ -10,11 +10,13 @@ namespace NumSharp
         /// <param name="arr">Input array.</param>
         /// <param name="axis">Axis along which the cumulative product is computed. The default (None) is to compute the cumprod over the flattened array.</param>
         /// <param name="typeCode">Type of the returned array and of the accumulator in which the elements are multiplied. If dtype is not specified, it defaults to the dtype of a, unless a has an integer dtype with a precision less than that of the default platform integer. In that case, the default platform integer is used.</param>
+        /// <param name="out">Alternate output array in which to place the result. It must have the same shape and buffer length as the expected output, but its dtype may differ (the result is cast into it with NumPy's unsafe casting) and a reference to <paramref name="out"/> is returned.</param>
         /// <returns>A new array holding the result is returned unless out is specified, in which case a reference to out is returned. The result has the same size as a, and the same shape as a if axis is not None or a is a 1-d array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumprod.html</remarks>
-        public static NDArray cumprod(NDArray arr, int? axis = null, NPTypeCode? typeCode = null)
+        public static NDArray cumprod(NDArray arr, int? axis = null, NPTypeCode? typeCode = null, NDArray @out = null)
         {
-            return arr.TensorEngine.ReduceCumMul(arr, axis, typeCode);
+            NDArray result = arr.TensorEngine.ReduceCumMul(arr, axis, typeCode);
+            return WriteScanToOut(result, @out);
         }
     }
 }
