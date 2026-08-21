@@ -29,9 +29,15 @@ namespace NumSharp
         {
             if (@out is null)
                 return result;
+            // A read-only out refuses FIRST — probed 2.4.2: a wrong-sized read-only out reports
+            // "output array is read-only", not the size error (accumulate validates writeability
+            // ahead of the accumulation-shape check). Without the guard the copyto below raised
+            // the generic assignment text instead of NumPy's ufunc-out wording.
+            NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
             if (!@out.Shape.Equals(result.Shape))
-                throw new IncorrectShapeException(
-                    $"provided out is the wrong shape for the cumulative reduction: expected {result.Shape}, got {@out.Shape}");
+                // NumPy 2.4.2 verbatim (PyUFunc_Accumulate); house IncorrectShapeException stands
+                // in for NumPy's ValueError per the long-standing shape-error convention.
+                throw new IncorrectShapeException("provided out is the wrong size for the accumulation.");
             copyto(@out, result, casting: "unsafe");
             return @out;
         }

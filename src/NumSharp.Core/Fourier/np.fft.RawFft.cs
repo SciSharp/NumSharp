@@ -154,6 +154,16 @@ namespace NumSharp
                 // NumPy: raise if len(out.shape) != a.ndim or out.shape[axis] != n_out.
                 if (@out.ndim != a.ndim || @out.shape[axis] != nOut)
                     throw new ValueError("output array has wrong shape.");
+
+                // A read-only out refuses AFTER the shape check (probed 2.4.2: a wrong-shaped
+                // read-only out reports the shape error — _raw_fft's Python-level check fires
+                // before the ufunc's writeable validation, whose "output array is read-only" text
+                // this reproduces through the house guard, same as the elementwise ufunc out=
+                // path). Without it the driver writes @out's buffer directly and a non-writeable
+                // target (a setflags(write=False) array, a broadcast view, an 'r' memmap) is
+                // silently corrupted. One guard here covers the whole family — fft/ifft/rfft/
+                // irfft and the hfft/ihfft compositions all funnel through RawFft.
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
             }
 
             // rfft (real-forward) has NO complex loop: NumPy's rfft_n_even/rfft_n_odd ufunc refuses a

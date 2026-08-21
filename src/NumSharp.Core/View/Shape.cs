@@ -174,9 +174,12 @@ namespace NumSharp
 
         /// <summary>
         ///     Computes whether any dimension is broadcast (stride=0 with dim > 1).
+        ///     Internal so view-producers that pre-derive flags for the no-walk ctor
+        ///     (<see cref="np.split"/>'s <c>DeriveSubFlags</c>) judge broadcastness with the
+        ///     SAME rule the walking ctor uses.
         /// </summary>
         [MethodImpl(Inline)]
-        private static bool ComputeIsBroadcastedStatic(long[] dims, long[] strides)
+        internal static bool ComputeIsBroadcastedStatic(long[] dims, long[] strides)
         {
             if (strides == null || strides.Length == 0)
                 return false;
@@ -201,9 +204,13 @@ namespace NumSharp
         ///         <item>Any dimension of size 0 makes the array trivially both C- and F-contiguous.</item>
         ///     </list>
         ///     NumSharp uses element-indexed strides (sd starts at 1) rather than byte strides.
+        ///     Internal so view-producers that pre-derive flags for the no-walk ctor
+        ///     (<see cref="np.split"/>'s <c>DeriveSubFlags</c>) compute contiguity with the SAME
+        ///     size-1-relaxed walk the walking ctor uses — parent-flag algebra cannot express the
+        ///     relaxation (a <c>(1,4)</c> child of a C-only parent is BOTH C- and F-contiguous).
         /// </remarks>
         [MethodImpl(Inline)]
-        private static (bool isC, bool isF) ComputeContiguousFlagsStatic(long[] dims, long[] strides)
+        internal static (bool isC, bool isF) ComputeContiguousFlagsStatic(long[] dims, long[] strides)
         {
             if (dims == null || dims.Length == 0)
                 return (true, true); // scalar is both

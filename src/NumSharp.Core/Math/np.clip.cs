@@ -33,6 +33,12 @@ namespace NumSharp
             if (a_max is not null && max is not null)
                 throw new ArgumentException("clip(): cannot specify both 'a_max' and 'max'.");
 
+            // A read-only out refuses FIRST — probed 2.4.2: NumPy's clip ufunc reports
+            // "output array is read-only" ahead of any broadcast/shape error, and even ahead of
+            // the no-bounds identity path (clip(a, out=ro) with neither bound still raises).
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+
             var lo = a_min ?? min;
             var hi = a_max ?? max;
             var result = a.TensorEngine.ClipNDArray(a, lo, hi, dtype, @out);

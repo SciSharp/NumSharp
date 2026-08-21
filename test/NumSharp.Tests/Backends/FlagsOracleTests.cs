@@ -151,7 +151,178 @@ namespace NumSharp.Tests.Backends
                 case "mmap_c": return Mmap(mmapDir, np.arange(5.0), "c");
                 case "mmap_r_f": return Mmap(mmapDir, np.asfortranarray(np.arange(6.0).reshape(2, 3)), "r");
                 case "mmap_empty_r": return Mmap(mmapDir, np.zeros(new Shape(0, 3)), "r");
+                // --- wave 3: split children (the size-1 contiguity relaxation), imag-of-complex,
+                //     and producers applied to READ-ONLY sources -------------------------------
+                case "split2d_row": return np.split(np.arange(12).astype(tc).reshape(3, 4), 3)[0];
+                case "split2d_ax1": return np.split(np.arange(12).astype(tc).reshape(3, 4), 2, axis: 1)[0];
+                case "split_f3d_ax0": return np.split(np.asfortranarray(np.arange(24).astype(tc).reshape(2, 3, 4)), 2, axis: 0)[0];
+                case "split_bcast_end": return np.split(np.broadcast_to(np.arange(3).astype(tc), new Shape(4, 3)), 4, axis: 0)[0];
+                case "imag_complex": return np.imag(np.arange(4).astype(NPTypeCode.Complex));
+                case "ro_T":
+                {
+                    // A read-only reshape-VIEW source: the collapsed base chain skips the read-only
+                    // intermediate, so w1 on the transpose SUCCEEDS (ro_owner_T is the refusing twin).
+                    var x = np.arange(12).astype(tc).reshape(3, 4);
+                    x.setflags(write: false);
+                    return x.T;
+                }
+                case "ro_owner_T":
+                {
+                    var x = np.zeros(new Shape(3, 4), tc);
+                    x.setflags(write: false);
+                    return x.T;
+                }
+                case "ro_reshape_copy":
+                {
+                    var x = np.arange(12).astype(tc).reshape(3, 4);
+                    x.setflags(write: false);
+                    return x.T.reshape(12);
+                }
+                case "ro_fancy":
+                {
+                    var x = np.arange(6).astype(tc);
+                    x.setflags(write: false);
+                    return x[new int[] { 0, 2, 4 }];
+                }
+                case "ro_ascontig":
+                {
+                    var x = np.arange(6).astype(tc);
+                    x.setflags(write: false);
+                    return np.ascontiguousarray(x);
+                }
+                case "ro_astype_nocopy":
+                {
+                    var x = np.arange(6).astype(tc);
+                    x.setflags(write: false);
+                    return x.astype(tc, copy: false);
+                }
                 default: throw new ArgumentException($"unknown recipe '{recipe}'");
+            }
+        }
+
+        /// <summary>
+        ///     Cross-object chain twins of <c>gen_flags_oracle.py::build_chain</c>: multi-array
+        ///     choreography a single recipe×scenario cell cannot express. Returns the FIRST error
+        ///     (or null) and the FINAL array whose flags the corpus pins.
+        /// </summary>
+        public static ((string type, string message)? err, NDArray final) BuildChain(string name, string mmapDir)
+        {
+            (string, string)? err = null;
+
+            void TrySet(NDArray arr, bool? write = null, bool? align = null, bool? uic = null)
+            {
+                try
+                {
+                    arr.setflags(write: write, align: align, uic: uic);
+                }
+                catch (ValueError e)
+                {
+                    err ??= (e.GetType().Name, e.Message);
+                }
+            }
+
+            switch (name)
+            {
+                case "view_w1_after_owner_reenabled":
+                {
+                    var x = np.arange(6).astype(NPTypeCode.Int64); x.setflags(write: false);
+                    var v = x["1:"];
+                    x.setflags(write: true);
+                    TrySet(v, write: true);
+                    return (err, v);
+                }
+                case "subview_of_ro_view_base":
+                {
+                    var x = np.arange(6).astype(NPTypeCode.Int64);
+                    var v = x["1:"]; v.setflags(write: false);
+                    return (err, v["1:"]);
+                }
+                case "subview_of_ro_view_w1":
+                {
+                    var x = np.arange(6).astype(NPTypeCode.Int64);
+                    var v = x["1:"]; v.setflags(write: false);
+                    var w = v["1:"];
+                    TrySet(w, write: true);
+                    return (err, w);
+                }
+                case "existing_view_owner_w0":
+                {
+                    var x = np.arange(6).astype(NPTypeCode.Int64);
+                    var v = x["1:"];
+                    x.setflags(write: false);
+                    return (err, v);
+                }
+                case "existing_view_w1_refused":
+                {
+                    var x = np.arange(6).astype(NPTypeCode.Int64);
+                    var v = x["1:"];
+                    x.setflags(write: false);
+                    TrySet(v, write: true); // refused although v is ALREADY writeable (unconditional rule)
+                    return (err, v);        // …and v STAYS writeable
+                }
+                case "existing_view_owner_a0":
+                {
+                    var x = np.arange(6).astype(NPTypeCode.Int64);
+                    var v = x["1:"];
+                    x.setflags(align: false);
+                    return (err, v);
+                }
+                case "view_of_a0_recomputes":
+                {
+                    var x = np.arange(6).astype(NPTypeCode.Int64); x.setflags(align: false);
+                    return (err, x["1:"]);
+                }
+                case "copy_of_a0_recomputes":
+                {
+                    var x = np.arange(6).astype(NPTypeCode.Int64); x.setflags(align: false);
+                    return (err, x.copy());
+                }
+                case "mmap_rp_view_toggle":
+                {
+                    var m = Mmap(mmapDir, np.arange(5.0), "r+");
+                    var v = m["1:"]; v.setflags(write: false);
+                    TrySet(v, write: true);
+                    return (err, v);
+                }
+                case "mmap_r_view_w1":
+                {
+                    var m = Mmap(mmapDir, np.arange(5.0), "r");
+                    var v = m["1:"];
+                    TrySet(v, write: true);
+                    return (err, v);
+                }
+                case "mmap_c_view_toggle":
+                {
+                    var m = Mmap(mmapDir, np.arange(5.0), "c");
+                    var v = m["1:"]; v.setflags(write: false);
+                    TrySet(v, write: true);
+                    return (err, v);
+                }
+                case "fb_rw_view_toggle":
+                {
+                    var src = np.arange(6).astype(NPTypeCode.Byte);
+                    var fb = np.frombuffer(src.data, typeof(byte));
+                    var v = fb["1:"]; v.setflags(write: false);
+                    TrySet(v, write: true);
+                    return (err, v);
+                }
+                case "fb_ro_view_w1":
+                {
+                    var src = np.arange(6).astype(NPTypeCode.Byte);
+                    src.setflags(write: false);
+                    var fb = np.frombuffer(src.data, typeof(byte));
+                    var v = fb["1:"];
+                    TrySet(v, write: true);
+                    return (err, v);
+                }
+                case "bcast_of_ro_w1":
+                {
+                    var x = np.arange(6).astype(NPTypeCode.Int64); x.setflags(write: false);
+                    var b = np.broadcast_to(x, new Shape(4, 6));
+                    TrySet(b, write: true);
+                    return (err, b);
+                }
+                default: throw new ArgumentException($"unknown chain '{name}'");
             }
         }
 
@@ -266,16 +437,22 @@ namespace NumSharp.Tests.Backends
 
     /// <summary>
     ///     The <c>ndarray.flags</c> / <c>ndarray.setflags</c> differential gate: replays
-    ///     <c>Backends/corpus/flags_oracle.jsonl</c> — 615 cases of REAL NumPy 2.4.2 output
-    ///     (52 layout/producer recipes × base record + verbatim repr + ~9 setflags transition
+    ///     <c>Backends/corpus/flags_oracle.jsonl</c> — 998 cases of REAL NumPy 2.4.2 output
+    ///     (87 layout/producer recipes × base record + verbatim repr + ~9 setflags transition
     ///     scenarios each incl. error messages and post-error rollback states + a 13-dtype ×
-    ///     6-layout independence sweep) — and asserts NumSharp's ENTIRE flags record matches
+    ///     6-layout independence sweep + identity-vs-copy consumers + 14 cross-object CHAINS:
+    ///     _IsWriteable re-evaluated after the base's own state changed, re-enable through
+    ///     view-of-view chains, flag NON-propagation to existing views, ALIGNED recomputation,
+    ///     memmap/frombuffer view toggles) — and asserts NumSharp's ENTIRE flags record matches
     ///     bit-for-bit. No Python at test time; regenerate with
     ///     <c>python test/oracle/gen_flags_oracle.py</c>.
     ///
     ///     <para>Plus NumPy-free heavy sweeps: every bracket key against its dotted twin across all
-    ///     52 recipes, a 14-API write-guard enforcement sweep across the setflags toggle, flags
-    ///     equality-law checks across all recipe pairs, and np.require flag interplay.</para>
+    ///     87 recipes, a 15-API write-guard enforcement sweep across the setflags toggle, the
+    ///     out= guard family with NumPy's per-API texts and validation ORDER (cumsum/cumprod/
+    ///     clip/matmul read-only-first; take/compress shape→cast→WRITEBACKIFCOPY; fft
+    ///     shape→read-only), the split-children-equal-slice-twins flags law, flags equality-law
+    ///     checks across all recipe pairs, and np.require flag interplay.</para>
     /// </summary>
     [TestClass]
     public class FlagsOracleTests
@@ -283,7 +460,11 @@ namespace NumSharp.Tests.Backends
         private sealed record OracleCase(
             string Id, string Recipe, string Dtype, string[] Ops,
             (string type, string message)? Err,
-            Dictionary<string, long> Flags, string Str, bool? Shared);
+            Dictionary<string, long> Flags, string Str, bool? Shared)
+        {
+            /// <summary>Cross-object chain case (replayed via <see cref="FlagsOracleRecipes.BuildChain"/>).</summary>
+            public bool IsChain => Id.StartsWith("chain/", StringComparison.Ordinal);
+        }
 
         private static List<OracleCase> _cases;
         private static string _mmapDir;
@@ -355,6 +536,27 @@ namespace NumSharp.Tests.Backends
             NDArray a = null;
             try
             {
+                if (c.IsChain)
+                {
+                    var (chainErr, final) = FlagsOracleRecipes.BuildChain(c.Recipe, _mmapDir);
+                    a = final;
+                    if (c.Err.HasValue != chainErr.HasValue
+                        || (c.Err.HasValue && (c.Err.Value.type != chainErr.Value.type || c.Err.Value.message != chainErr.Value.message)))
+                    {
+                        failures.Add($"{c.Id}: error mismatch — numpy={FmtErr(c.Err)} numsharp={FmtErr(chainErr)}");
+                        return;
+                    }
+
+                    var chainActual = Record(a);
+                    foreach (var kv in c.Flags)
+                    {
+                        if (chainActual[kv.Key] != kv.Value)
+                            failures.Add($"{c.Id}: flags.{kv.Key} — numpy={kv.Value} numsharp={chainActual[kv.Key]}");
+                    }
+
+                    return;
+                }
+
                 if (c.Shared.HasValue)
                 {
                     // Identity-vs-copy consumer case: flags of the result + shares-memory verdict.
@@ -434,11 +636,11 @@ namespace NumSharp.Tests.Backends
 
         [TestMethod]
         public void Corpus_BaseRecords_AndVerbatimRepr_MatchNumpy()
-            => RunGroup(c => c.Ops.Length == 0 && c.Dtype == "int64" && !c.Shared.HasValue && !c.Id.Contains("/dtype."), floor: 74);
+            => RunGroup(c => c.Ops.Length == 0 && c.Dtype == "int64" && !c.Shared.HasValue && !c.IsChain && !c.Id.Contains("/dtype."), floor: 85);
 
         [TestMethod]
         public void Corpus_SetflagsTransitions_MatchNumpy()
-            => RunGroup(c => c.Ops.Length > 0, floor: 690);
+            => RunGroup(c => c.Ops.Length > 0, floor: 800);
 
         [TestMethod]
         public void Corpus_DtypeIndependenceSweep_MatchNumpy()
@@ -449,11 +651,15 @@ namespace NumSharp.Tests.Backends
             => RunGroup(c => c.Shared.HasValue, floor: 6);
 
         [TestMethod]
+        public void Corpus_CrossObjectChains_MatchNumpy()
+            => RunGroup(c => c.IsChain, floor: 14);
+
+        [TestMethod]
         public void Corpus_Floors_AllRecipesPresent_ManyErrorCases()
         {
-            Assert.IsTrue(_cases.Count >= 850, $"corpus shrank: {_cases.Count} < 850");
-            Assert.AreEqual(76, _cases.Where(c => !c.Shared.HasValue).Select(c => c.Recipe).Distinct().Count(), "recipe catalog changed size");
-            Assert.IsTrue(_cases.Count(c => c.Err.HasValue) >= 150, "error-case floor");
+            Assert.IsTrue(_cases.Count >= 990, $"corpus shrank: {_cases.Count} < 990");
+            Assert.AreEqual(87, _cases.Where(c => !c.Shared.HasValue && !c.IsChain).Select(c => c.Recipe).Distinct().Count(), "recipe catalog changed size");
+            Assert.IsTrue(_cases.Count(c => c.Err.HasValue) >= 190, "error-case floor");
             // every scenario token family is represented
             foreach (var op in new[] { "w0", "w1", "a0", "a1", "u1", "w0a0", "a0u1", "a0w1", "u0" })
                 Assert.IsTrue(_cases.Any(c => c.Ops.Contains(op)), $"no case exercises op '{op}'");
@@ -482,6 +688,13 @@ namespace NumSharp.Tests.Backends
             failures.Clear();
             CompareCase(badShared, failures);
             Assert.IsTrue(failures.Count >= 1, "a wrong shares-memory expectation must be detected");
+
+            var chain = _cases.First(x => x.Id == "chain/view_w1_after_owner_reenabled");
+            var badChain = new OracleCase(chain.Id, chain.Recipe, chain.Dtype, chain.Ops, chain.Err,
+                new Dictionary<string, long>(chain.Flags) { ["W"] = 1 - chain.Flags["W"] }, null, null);
+            failures.Clear();
+            CompareCase(badChain, failures);
+            Assert.IsTrue(failures.Count >= 1, "a perturbed chain expectation must be detected");
         }
 
         // ---- NumPy-free heavy sweeps -------------------------------------------------------
@@ -503,8 +716,8 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void BracketKeys_EqualDottedProperties_AcrossEveryRecipe()
         {
-            // 52 recipes × 22 keys — the subscript surface can never drift from the attributes.
-            foreach (var recipe in _cases.Where(c => !c.Shared.HasValue).Select(c => c.Recipe).Distinct())
+            // 87 recipes × 22 keys — the subscript surface can never drift from the attributes.
+            foreach (var recipe in _cases.Where(c => !c.Shared.HasValue && !c.IsChain).Select(c => c.Recipe).Distinct())
             {
                 var a = FlagsOracleRecipes.Build(recipe, "int64", _mmapDir);
                 try
@@ -528,8 +741,8 @@ namespace NumSharp.Tests.Backends
         public void FlagsEquality_IsExactlyNumEquality_AcrossEveryRecipePair()
         {
             // NumPy's arrayflags __eq__ compares the flags int; ours compares num. The law must hold
-            // over every pair of layouts (52² comparisons), plus hashcode consistency.
-            var arrays = _cases.Where(c => !c.Shared.HasValue).Select(c => c.Recipe).Distinct()
+            // over every pair of layouts (87² comparisons), plus hashcode consistency.
+            var arrays = _cases.Where(c => !c.Shared.HasValue && !c.IsChain).Select(c => c.Recipe).Distinct()
                 .Select(r => (r, a: FlagsOracleRecipes.Build(r, "int64", _mmapDir))).ToList();
             try
             {
@@ -658,7 +871,7 @@ namespace NumSharp.Tests.Backends
             // np.isfortran IS a.flags.fnc (numpy/_core/numeric.py) — hold the law over every
             // corpus base record, whose fnc field is NumPy-pinned.
             foreach (var c in _cases.Where(x => x.Ops.Length == 0 && x.Dtype == "int64"
-                                                && !x.Shared.HasValue && !x.Id.Contains("/dtype.")))
+                                                && !x.Shared.HasValue && !x.IsChain && !x.Id.Contains("/dtype.")))
             {
                 var a = FlagsOracleRecipes.Build(c.Recipe, c.Dtype, _mmapDir);
                 try
@@ -682,7 +895,7 @@ namespace NumSharp.Tests.Backends
             // sweep can never silently go vacuous.
             int asserted = 0;
             foreach (var c in _cases.Where(x => x.Ops.Length == 0 && x.Dtype == "int64"
-                                                && !x.Shared.HasValue && !x.Id.Contains("/dtype.")))
+                                                && !x.Shared.HasValue && !x.IsChain && !x.Id.Contains("/dtype.")))
             {
                 var a = FlagsOracleRecipes.Build(c.Recipe, c.Dtype, _mmapDir);
                 try
@@ -759,6 +972,135 @@ namespace NumSharp.Tests.Backends
             ro.setflags(write: false);
             ro.resize(new Shape(3)); // ownership check only — NumPy allows this too
             ro.size.Should().Be(3);
+        }
+
+        // ---- out= write-guards with NumPy's per-API texts and validation ORDER --------------
+
+        [TestMethod]
+        public void OutGuards_ReadOnlyOut_NumpyVerbatimTexts_AndOrder()
+        {
+            // All probed against NumPy 2.4.2. cumsum/cumprod/clip/matmul refuse a read-only out
+            // FIRST (its message wins even when the shape is ALSO wrong); take validates shape,
+            // then castability, then read-only — and its read-only text is the WRITEBACKIFCOPY
+            // wording (PyArray_TakeFrom wraps out in a writeback view); compress inherits take's.
+            // House mapping: NumPy's ValueError type arrives as NumSharpException, texts verbatim.
+            var a = np.arange(6).astype(NPTypeCode.Double);
+
+            NDArray Ro(Shape s, NPTypeCode tc = NPTypeCode.Double)
+            {
+                var o = np.zeros(s, tc);
+                o.setflags(write: false);
+                return o;
+            }
+
+            // cumsum / cumprod — read-only first, then NumPy's accumulation-size text.
+            ((Action)(() => np.cumsum(a, @out: Ro(new Shape(6)))))
+                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+            ((Action)(() => np.cumprod(a, @out: Ro(new Shape(6)))))
+                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+            ((Action)(() => np.cumsum(a, @out: Ro(new Shape(9)))))
+                .Should().Throw<NumSharpException>().WithMessage("output array is read-only", "read-only wins over wrong size (probed)");
+            ((Action)(() => np.cumsum(a, @out: np.zeros(new Shape(9)))))
+                .Should().Throw<IncorrectShapeException>().WithMessage("provided out is the wrong size for the accumulation.");
+
+            // clip — read-only first, even when the out shape could not broadcast.
+            ((Action)(() => np.clip(a, (NDArray)1, (NDArray)4, @out: Ro(new Shape(6)))))
+                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+            ((Action)(() => np.clip(a, (NDArray)1, (NDArray)4, @out: Ro(new Shape(2)))))
+                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+
+            // matmul — read-only first, ahead of the core-dimension mismatch.
+            var m = np.eye(3);
+            ((Action)(() => np.matmul(m, m, @out: Ro(new Shape(3, 3)))))
+                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+            ((Action)(() => np.matmul(m, m, @out: Ro(new Shape(4, 4)))))
+                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+
+            // take — shape error FIRST, castability second, read-only LAST with take's own text.
+            var idx = np.array(new long[] { 0, 1, 2, 3, 4, 5 });
+            ((Action)(() => np.take(a, idx, @out: Ro(new Shape(6)))))
+                .Should().Throw<NumSharpException>().WithMessage("WRITEBACKIFCOPY base is read-only");
+            ((Action)(() => np.take(a, idx, @out: Ro(new Shape(9)))))
+                .Should().Throw<ArgumentException>().WithMessage("*output array does not match result of ndarray.take*");
+            ((Action)(() => np.take(a, idx, @out: Ro(new Shape(6), NPTypeCode.Complex))))
+                .Should().Throw<TypeError>().WithMessage("*Cannot cast array data from dtype('complex128')*");
+
+            // compress rides take's out dispatch — same writeback wording.
+            var cond = np.array(new[] { true, true, true, true, true, true });
+            ((Action)(() => np.compress(cond, a, @out: Ro(new Shape(6)))))
+                .Should().Throw<NumSharpException>().WithMessage("WRITEBACKIFCOPY base is read-only");
+
+            // fft family — wrong shape FIRST (_raw_fft's Python-level check), read-only second;
+            // one guard in RawFft covers fft/ifft/rfft/irfft (probed each on 2.4.2).
+            ((Action)(() => np.fft.fft(a, @out: Ro(new Shape(6), NPTypeCode.Complex))))
+                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+            ((Action)(() => np.fft.fft(a, @out: Ro(new Shape(9), NPTypeCode.Complex))))
+                .Should().Throw<ValueError>().WithMessage("output array has wrong shape.");
+            ((Action)(() => np.fft.ifft(a, @out: Ro(new Shape(6), NPTypeCode.Complex))))
+                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+            ((Action)(() => np.fft.rfft(a, @out: Ro(new Shape(4), NPTypeCode.Complex))))
+                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+            ((Action)(() => np.fft.irfft(np.fft.rfft(a), @out: Ro(new Shape(6)))))
+                .Should().Throw<NumSharpException>().WithMessage("output array is read-only");
+
+            // Re-enabled targets accept every one of the calls the guard refused.
+            var o6 = np.zeros(new Shape(6)); o6.setflags(write: false); o6.setflags(write: true);
+            np.cumsum(a, @out: o6);
+            np.clip(a, (NDArray)1, (NDArray)4, @out: o6);
+            np.take(a, idx, @out: o6);
+            var oc = np.zeros(new Shape(6), NPTypeCode.Complex); oc.setflags(write: false); oc.setflags(write: true);
+            np.fft.fft(a, @out: oc);
+            var o33 = np.zeros(new Shape(3, 3)); o33.setflags(write: false); o33.setflags(write: true);
+            np.matmul(m, m, @out: o33);
+        }
+
+        // ---- split children carry the SAME flags their slice-built twins get -----------------
+
+        [TestMethod]
+        public void SplitChildren_FlagsEqualEquivalentSliceViews()
+        {
+            // np.split derives child flags through a fast path (no walking Shape ctor). The law:
+            // every child's flags record equals the flags of the IDENTICAL slice-built view, so
+            // the derivation can never drift from the canonical computation — including the size-1
+            // contiguity relaxation (a (1,4) child of a C-only parent is BOTH C- and F-contiguous)
+            // and a broadcast that ENDS when the split axis collapses to length 1.
+            var layouts = new (string name, NDArray arr, int sections, int axis)[]
+            {
+                ("c2d_ax0", np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4), 3, 0),
+                ("c2d_ax1", np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4), 2, 1),
+                ("f2d_ax0", np.asfortranarray(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4)), 3, 0),
+                ("f2d_ax1", np.asfortranarray(np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4)), 2, 1),
+                ("f3d_ax0", np.asfortranarray(np.arange(24).astype(NPTypeCode.Int64).reshape(2, 3, 4)), 2, 0),
+                ("t2d_ax0", np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4).T, 2, 0),
+                ("row16_ax1", np.arange(6).astype(NPTypeCode.Int64).reshape(1, 6), 2, 1),
+                ("bcast_end_ax0", np.broadcast_to(np.arange(3).astype(NPTypeCode.Int64), new Shape(4, 3)), 4, 0),
+                ("bcast_keep_ax0", np.broadcast_to(np.arange(3).astype(NPTypeCode.Int64), new Shape(4, 3)), 2, 0),
+                ("bcast_ax1", np.broadcast_to(np.arange(3).astype(NPTypeCode.Int64), new Shape(4, 3)), 3, 1),
+                ("ro_ax0", MakeRo(), 3, 0),
+            };
+
+            foreach (var (name, arr, sections, axis) in layouts)
+            {
+                var children = np.split(arr, sections, axis: axis);
+                long step = arr.shape[axis] / sections;
+                for (int i = 0; i < children.Length; i++)
+                {
+                    string sliceExpr = axis == 0
+                        ? $"{i * step}:{(i + 1) * step}"
+                        : string.Join(",", Enumerable.Repeat(":", axis)) + $",{i * step}:{(i + 1) * step}";
+                    var twin = arr[sliceExpr];
+                    Assert.AreEqual(twin.flags.num, children[i].flags.num,
+                        $"{name}[{i}]: split child num {children[i].flags.num} != slice twin num {twin.flags.num}");
+                    Assert.AreEqual(twin.Shape.IsBroadcasted, children[i].Shape.IsBroadcasted, $"{name}[{i}]: broadcast bit");
+                }
+            }
+
+            static NDArray MakeRo()
+            {
+                var x = np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4);
+                x.setflags(write: false);
+                return x;
+            }
         }
 
         // ---- documented divergences ([Misaligned]) ----------------------------------------

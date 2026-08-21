@@ -5,14 +5,20 @@ Replayed (no Python) by FlagsOracleTests.cs, whose FlagsOracleRecipes builds the
 array per recipe token and applies the IDENTICAL setflags op tokens.
 
 Case axes:
-  * ~52 layout/producer RECIPES (owned/view/F/transposed/strided/negstride/offset/composed/
+  * ~86 layout/producer RECIPES (owned/view/F/transposed/strided/negstride/offset/composed/
     newaxis/broadcast x4/broadcast_arrays/fancy/bmask/reshape/ravel/view(dtype)/diag/diagonal/
-    imag/real/astype/copy C+F/eye/frombuffer ro+rw/memmap r,r+,c,F-order,empty) — each records
-    the FULL flags record (11 bools + num) and the verbatim 6-line str(flags).
+    imag/real/astype/copy C+F/eye/frombuffer ro+rw/memmap r,r+,c,F-order,empty; wave 2 adds the
+    producers found scanning NumPy's own flags usages; wave 3 adds split CHILDREN — the size-1
+    contiguity relaxation a parent-flag derivation cannot express — imag-of-complex, and
+    producers applied to READ-ONLY sources) — each records the FULL flags record (11 bools +
+    num) and, at base, the verbatim 6-line str(flags).
   * ~9 setflags TRANSITION scenarios per recipe (w0, w1, w0+w1, a0, a0+a1, u1, one-call
     write&align, one-call align+uic -> error, one-call align+write) + u0 on owners — each
     records the error (type+message, verbatim) and the POST state (rollback checked).
   * a 13-dtype x 6-layout sweep proving the flags record is dtype-independent.
+  * 14 cross-object CHAINS (wave 3): _IsWriteable re-evaluated after the base's own state
+    changed, re-enable through view-of-view chains, flag NON-propagation to existing views,
+    ALIGNED recomputation on fresh views/copies, memmap/frombuffer view toggles.
 
 Encoding notes:
   * num is masked with 0x7FFFFFFF: NumPy's broadcast_arrays results carry the internal
@@ -149,6 +155,41 @@ def build(recipe, dtype="int64"):
     if recipe == "mmap_c":        return np.load(_mmap_path("m5", np.arange(5.0)), mmap_mode="c")
     if recipe == "mmap_r_f":      return np.load(_mmap_path("mF", np.asfortranarray(np.arange(6.0).reshape(2, 3))), mmap_mode="r")
     if recipe == "mmap_empty_r":  return np.load(_mmap_path("mE", np.zeros((0, 3))), mmap_mode="r")
+    # --- wave 3: split children (the size-1 contiguity relaxation the fast-path derivation
+    #     missed), the missing imag-of-complex view, and producers applied to READ-ONLY
+    #     sources (view-inheritance vs copy-resets-W vs identity-preserves-RO) -------------
+    if recipe == "split2d_row":   return np.split(np.arange(12).astype(dt).reshape(3, 4), 3)[0]
+    if recipe == "split2d_ax1":   return np.split(np.arange(12).astype(dt).reshape(3, 4), 2, axis=1)[0]
+    if recipe == "split_f3d_ax0": return np.split(np.asfortranarray(np.arange(24).astype(dt).reshape(2, 3, 4)), 2, axis=0)[0]
+    if recipe == "split_bcast_end": return np.split(np.broadcast_to(np.arange(3).astype(dt), (4, 3)), 4, axis=0)[0]
+    if recipe == "imag_complex":  return np.imag(np.arange(4).astype(np.complex128))
+    if recipe == "ro_T":
+        # NB deliberately a read-only reshape-VIEW source: its collapsed base chain skips the
+        # read-only intermediate and lands on the WRITEABLE astype owner, so w1 on the transpose
+        # SUCCEEDS (NumPy's "if ANY base is writeable" rule) — the counterpart ro_owner_T refuses.
+        x = np.arange(12).astype(dt).reshape(3, 4)
+        x.setflags(write=False)
+        return x.T
+    if recipe == "ro_owner_T":
+        x = np.zeros((3, 4), dtype=dt)
+        x.setflags(write=False)
+        return x.T
+    if recipe == "ro_reshape_copy":
+        x = np.arange(12).astype(dt).reshape(3, 4)
+        x.setflags(write=False)
+        return x.T.reshape(12)
+    if recipe == "ro_fancy":
+        x = np.arange(6).astype(dt)
+        x.setflags(write=False)
+        return x[[0, 2, 4]]
+    if recipe == "ro_ascontig":
+        x = np.arange(6).astype(dt)
+        x.setflags(write=False)
+        return np.ascontiguousarray(x)
+    if recipe == "ro_astype_nocopy":
+        x = np.arange(6).astype(dt)
+        x.setflags(write=False)
+        return x.astype(dt, copy=False)
     raise KeyError(recipe)
 
 
@@ -168,6 +209,9 @@ RECIPES = [
     "mt2d", "split0", "unstack0", "getfield_i32", "pad_c", "pad_f", "delete_f", "insert_f",
     "concat_cc", "concat_ff", "zeros_like_f", "ones_like_t", "empty_like_strided",
     "meshgrid_nocopy", "ro_view", "ro_view_dtype",
+    # wave 3 (split children / imag-of-complex / read-only-source producers):
+    "split2d_row", "split2d_ax1", "split_f3d_ax0", "split_bcast_end", "imag_complex",
+    "ro_T", "ro_owner_T", "ro_reshape_copy", "ro_fancy", "ro_ascontig", "ro_astype_nocopy",
 ]
 
 # Identity-vs-copy consumers: NumPy's asarray family DECIDES from the flags whether to return the
@@ -191,6 +235,103 @@ def build_consumer(recipe):
 
 
 CONSUMERS = ["ascontig_c", "ascontig_f", "ascontig_strided", "asfortran_f", "asfortran_c", "ravel_c1d"]
+
+
+# Cross-object chains: multi-array choreography a single recipe×scenario cell cannot express —
+# _IsWriteable re-evaluated against a base whose OWN state changed after the view was made,
+# re-enabling through view-of-view chains, per-array flag NON-propagation to existing views,
+# ALIGNED recomputation on fresh views/copies of an align-cleared owner, and the w0→w1 toggles
+# on memmap/frombuffer views. Each chain records the FIRST error (verbatim, or None) and the
+# flags record of the FINAL array.
+def build_chain(name):
+    err = None
+
+    def try_set(arr, **kw):
+        nonlocal err
+        try:
+            arr.setflags(**kw)
+        except ValueError as e:
+            if err is None:
+                err = {"t": type(e).__name__, "m": str(e)}
+
+    if name == "view_w1_after_owner_reenabled":
+        x = np.arange(6).astype(np.int64); x.setflags(write=False)
+        v = x[1:]
+        x.setflags(write=True)
+        try_set(v, write=True)
+        return err, v
+    if name == "subview_of_ro_view_base":
+        x = np.arange(6).astype(np.int64)
+        v = x[1:]; v.setflags(write=False)
+        return err, v[1:]
+    if name == "subview_of_ro_view_w1":
+        x = np.arange(6).astype(np.int64)
+        v = x[1:]; v.setflags(write=False)
+        w = v[1:]
+        try_set(w, write=True)
+        return err, w
+    if name == "existing_view_owner_w0":
+        x = np.arange(6).astype(np.int64)
+        v = x[1:]
+        x.setflags(write=False)
+        return err, v
+    if name == "existing_view_w1_refused":
+        x = np.arange(6).astype(np.int64)
+        v = x[1:]
+        x.setflags(write=False)
+        try_set(v, write=True)   # refused although v is ALREADY writeable (unconditional rule)
+        return err, v            # …and v STAYS writeable
+    if name == "existing_view_owner_a0":
+        x = np.arange(6).astype(np.int64)
+        v = x[1:]
+        x.setflags(align=False)
+        return err, v
+    if name == "view_of_a0_recomputes":
+        x = np.arange(6).astype(np.int64); x.setflags(align=False)
+        return err, x[1:]
+    if name == "copy_of_a0_recomputes":
+        x = np.arange(6).astype(np.int64); x.setflags(align=False)
+        return err, x.copy()
+    if name == "mmap_rp_view_toggle":
+        m = np.load(_mmap_path("m5", np.arange(5.0)), mmap_mode="r+")
+        v = m[1:]; v.setflags(write=False)
+        try_set(v, write=True)
+        return err, v
+    if name == "mmap_r_view_w1":
+        m = np.load(_mmap_path("m5", np.arange(5.0)), mmap_mode="r")
+        v = m[1:]
+        try_set(v, write=True)
+        return err, v
+    if name == "mmap_c_view_toggle":
+        m = np.load(_mmap_path("m5", np.arange(5.0)), mmap_mode="c")
+        v = m[1:]; v.setflags(write=False)
+        try_set(v, write=True)
+        return err, v
+    if name == "fb_rw_view_toggle":
+        fb = np.frombuffer(bytearray(range(6)), dtype=np.uint8)
+        v = fb[1:]; v.setflags(write=False)
+        try_set(v, write=True)
+        return err, v
+    if name == "fb_ro_view_w1":
+        fb = np.frombuffer(bytes(range(6)), dtype=np.uint8)
+        v = fb[1:]
+        try_set(v, write=True)
+        return err, v
+    if name == "bcast_of_ro_w1":
+        x = np.arange(6).astype(np.int64); x.setflags(write=False)
+        b = np.broadcast_to(x, (4, 6))
+        try_set(b, write=True)
+        return err, b
+    raise KeyError(name)
+
+
+CHAINS = [
+    "view_w1_after_owner_reenabled", "subview_of_ro_view_base", "subview_of_ro_view_w1",
+    "existing_view_owner_w0", "existing_view_w1_refused", "existing_view_owner_a0",
+    "view_of_a0_recomputes", "copy_of_a0_recomputes",
+    "mmap_rp_view_toggle", "mmap_r_view_w1", "mmap_c_view_toggle",
+    "fb_rw_view_toggle", "fb_ro_view_w1", "bcast_of_ro_w1",
+]
 
 # The dtype-independence sweep: same flags record for every dtype.
 SWEEP_RECIPES = ["c2d_view", "f2d", "t2d", "strided", "bcast_full", "negstride"]
@@ -283,6 +424,14 @@ def main():
                       "err": None, "f": flags_record(res),
                       "shared": bool(np.shares_memory(src, res))})
         del src, res
+        gc.collect()
+
+    # 5) cross-object chains: first error (verbatim) + the FINAL array's flags record.
+    for name in CHAINS:
+        err, final = build_chain(name)
+        cases.append({"id": f"chain/{name}", "recipe": name, "dtype": "int64", "ops": [],
+                      "err": err, "f": flags_record(final)})
+        del final
         gc.collect()
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

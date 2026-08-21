@@ -89,6 +89,12 @@ namespace NumSharp
                     $"Cannot cast array data from dtype('{@out.GetTypeCode.AsNumpyDtypeName()}') to dtype('{a.GetTypeCode.AsNumpyDtypeName()}') according to the rule 'safe'");
             }
 
+            // A read-only out refuses LAST of the three out validations (probed 2.4.2: shape, then
+            // castability, then this) — and with take's own quirky text: PyArray_TakeFrom wraps out
+            // in PyArray_FromArray(..., NPY_ARRAY_WRITEBACKIFCOPY), whose writeability check names
+            // the writeback base, not the "output array" the elementwise ufuncs name.
+            NumSharpException.ThrowIfNotWriteable(@out.Shape, "WRITEBACKIFCOPY base");
+
             np.copyto(@out, result, casting: "unsafe");
             return @out;
         }

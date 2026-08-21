@@ -82,6 +82,12 @@ namespace NumSharp
                     "matmul: axis can only be used with a single shared core dimension, not with the " +
                     $"3 distinct ones implied by signature {MatmulSignature}.");
 
+            // A read-only out refuses FIRST — probed 2.4.2: NumPy's gufunc machinery reports
+            // "output array is read-only" ahead of the core-dimension mismatch error, so the guard
+            // sits before any out-shape validation below.
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+
             var a = x1;
             var b = x2;
             int[] outputAxes = Array.Empty<int>();

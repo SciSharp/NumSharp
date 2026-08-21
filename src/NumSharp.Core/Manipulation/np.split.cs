@@ -126,7 +126,7 @@ namespace NumSharp
         ///     Each per-sub-array call:
         ///     <list type="bullet">
         ///         <item>Reuses a shared dims[] when the previous sub had the same length on the split axis (typical case for int sections — at most 2 distinct lengths)</item>
-        ///         <item>Derives sub flags from parent flags in O(1) via <see cref="DeriveSubFlags"/></item>
+        ///         <item>Derives sub flags once per distinct sub-length via <see cref="DeriveSubFlags"/> — an O(ndim) recompute with the canonical Shape walks (parent-flag algebra cannot express NumPy's size-1 contiguity relaxation)</item>
         ///         <item>Derives sub size in O(1) from <c>parent.size * subLen / parent.dim[axis]</c></item>
         ///         <item>Constructs Shape through the no-walk ctor</item>
         ///     </list>
@@ -147,7 +147,6 @@ namespace NumSharp
             private readonly int _ndim;
             private readonly int _axis;
             private readonly int _parentFlags;
-            private readonly bool _parentBroadcasted;
 
             private SplitContext(NDArray ary, int axis)
             {
@@ -163,7 +162,6 @@ namespace NumSharp
                 _axis = axis;
                 _axisDim = _srcDims[axis];
                 _parentFlags = shp._flags;
-                _parentBroadcasted = (_parentFlags & (int)ArrayFlags.BROADCASTED) != 0;
                 // Per-slab size: parent.size / axisDim. For axisDim==0 the parent is
                 // empty; we keep otherDimsProduct=0 so sub-size collapses to 0.
                 _otherDimsProduct = _axisDim == 0 ? 0 : shp.size / _axisDim;
@@ -195,14 +193,14 @@ namespace NumSharp
                 if (extras > 0)
                 {
                     dimsLarge = BuildSubDims(Neach + 1);
-                    flagsLarge = DeriveSubFlags(Neach + 1);
+                    flagsLarge = DeriveSubFlags(dimsLarge);
                     sizeLarge = _otherDimsProduct * (Neach + 1);
                     hashLarge = ComputeHashFromDims(dimsLarge, sizeLarge);
                 }
                 if (Nsections > extras)
                 {
                     dimsSmall = BuildSubDims(Neach);
-                    flagsSmall = DeriveSubFlags(Neach);
+                    flagsSmall = DeriveSubFlags(dimsSmall);
                     sizeSmall = _otherDimsProduct * Neach;
                     hashSmall = ComputeHashFromDims(dimsSmall, sizeSmall);
                 }
@@ -251,7 +249,7 @@ namespace NumSharp
                     if (subLen != lastSubLen)
                     {
                         cachedDims = BuildSubDims(subLen);
-                        cachedFlags = DeriveSubFlags(subLen);
+                        cachedFlags = DeriveSubFlags(cachedDims);
                         cachedSize = _otherDimsProduct * subLen;
                         cachedHash = ComputeHashFromDims(cachedDims, cachedSize);
                         lastSubLen = subLen;
@@ -291,7 +289,7 @@ namespace NumSharp
                     if (subLen != lastSubLen)
                     {
                         cachedDims = BuildSubDims(subLen);
-                        cachedFlags = DeriveSubFlags(subLen);
+                        cachedFlags = DeriveSubFlags(cachedDims);
                         cachedSize = _otherDimsProduct * subLen;
                         cachedHash = ComputeHashFromDims(cachedDims, cachedSize);
                         lastSubLen = subLen;
@@ -342,34 +340,40 @@ namespace NumSharp
             ///     </list>
             /// </summary>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-            private int DeriveSubFlags(long subLen)
+            private int DeriveSubFlags(long[] subDims)
             {
                 // NumPy convention: any 0-dim → both C and F contig (vacuously),
                 // ALIGNED. WRITEABLE inherits from parent (so a read-only view's
                 // empty sub stays read-only).
                 int parentWriteable = _parentFlags & (int)ArrayFlags.WRITEABLE;
-                if (subLen == 0 || _otherDimsProduct == 0)
-                    return (int)(ArrayFlags.C_CONTIGUOUS | ArrayFlags.F_CONTIGUOUS
-                                | ArrayFlags.ALIGNED) | parentWriteable;
+                for (int i = 0; i < subDims.Length; i++)
+                {
+                    if (subDims[i] == 0)
+                        return (int)(ArrayFlags.C_CONTIGUOUS | ArrayFlags.F_CONTIGUOUS
+                                    | ArrayFlags.ALIGNED) | parentWriteable;
+                }
 
-                // Broadcast preserved (sub's broadcast axes are inherited unchanged).
-                // BROADCASTED implies non-writeable per NumPy.
-                if (_parentBroadcasted)
+                // Broadcastness is RECOMPUTED for the child's dims (same rule as the walking Shape
+                // ctor): collapsing the split axis to length 1 ENDS a broadcast running along it —
+                // a stride-0 axis of size 1 is not broadcast — after which contiguity is judged
+                // normally. BROADCASTED implies non-writeable per NumPy, and a child of a read-only
+                // broadcast stays read-only on the non-broadcast path too (parentWriteable is 0).
+                if (Shape.ComputeIsBroadcastedStatic(subDims, _srcStrides))
                     return (int)(ArrayFlags.BROADCASTED | ArrayFlags.ALIGNED);
 
+                // Contiguity is RECOMPUTED with NumPy's _UpdateContiguousFlags walk over the
+                // child's dims (size-1 dims skipped) — parent-flag algebra cannot express the
+                // relaxation. Probed against NumPy 2.4.2: np.split of a C-contiguous (3,4) into
+                // three (1,4) children gives C1 F1 num=259 (the collapsed axis stops mattering,
+                // making the child BOTH-contiguous), and a (1,6) parent split on axis 1 keeps its
+                // (1,3) children C-contiguous — both were mis-derived by the old
+                // parent-C/parent-F × axis-position inference.
+                var (isC, isF) = Shape.ComputeContiguousFlagsStatic(subDims, _srcStrides);
                 int flags = (int)ArrayFlags.ALIGNED | parentWriteable;
-                bool sameLen = subLen == _axisDim;
-                bool parentC = (_parentFlags & (int)ArrayFlags.C_CONTIGUOUS) != 0;
-                bool parentF = (_parentFlags & (int)ArrayFlags.F_CONTIGUOUS) != 0;
-
-                // C-contig invariant breaks at i=axis-1 when subLen < axisDim and axis>0.
-                if (parentC && (_axis == 0 || sameLen))
+                if (isC)
                     flags |= (int)ArrayFlags.C_CONTIGUOUS;
-
-                // F-contig invariant breaks at i=axis+1 when subLen < axisDim and axis<ndim-1.
-                if (parentF && (_axis == _ndim - 1 || sameLen))
+                if (isF)
                     flags |= (int)ArrayFlags.F_CONTIGUOUS;
-
                 return flags;
             }
 
