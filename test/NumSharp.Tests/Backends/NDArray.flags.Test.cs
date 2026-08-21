@@ -34,6 +34,49 @@ namespace NumSharp.Tests.Backends
         public void Nbytes_StridedView()
             => np.arange(24).astype(np.int32).reshape(4, 6)["...,::2"].nbytes.Should().Be(4 * 3 * 4);
 
+        [TestMethod]
+        public void Nbytes_AllDtypes_MatchNumpy()
+        {
+            // nbytes = size * itemsize (NumPy PyArray_NBYTES = ITEMSIZE * SIZE) on 3*5*2 = 30 elements.
+            // 13 dtypes with a NumPy analog — byte-identical to NumPy 2.4.2 ndarray.nbytes.
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.Boolean).nbytes.Should().Be(30);   // itemsize 1
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.SByte).nbytes.Should().Be(30);
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.Byte).nbytes.Should().Be(30);
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.Int16).nbytes.Should().Be(60);     // itemsize 2
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.UInt16).nbytes.Should().Be(60);
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.Half).nbytes.Should().Be(60);
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.Int32).nbytes.Should().Be(120);    // itemsize 4
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.UInt32).nbytes.Should().Be(120);
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.Single).nbytes.Should().Be(120);
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.Int64).nbytes.Should().Be(240);    // itemsize 8
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.UInt64).nbytes.Should().Be(240);
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.Double).nbytes.Should().Be(240);
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.Complex).nbytes.Should().Be(480);  // itemsize 16
+            // 2 NumSharp-only dtypes (no NumPy analog) — 30 * their in-memory itemsize.
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.Char).nbytes.Should().Be(60);      // itemsize 2
+            np.zeros(new Shape(3, 5, 2), NPTypeCode.Decimal).nbytes.Should().Be(480);  // itemsize 16
+        }
+
+        [TestMethod]
+        public void Nbytes_LayoutMatrix_MatchNumpy()
+        {
+            // nbytes tracks the LOGICAL size (independent of strides/offset/layout), so every non-copying
+            // view of the 24-element int32 base still reports 24 * 4 = 96 bytes. Probed against NumPy 2.4.2.
+            var b = np.arange(24).astype(np.int32).reshape(4, 6);                 // C-contiguous, 96
+            np.asfortranarray(b).nbytes.Should().Be(96);                          // F-contiguous
+            b.T.nbytes.Should().Be(96);                                           // transposed
+            b["::-1"].nbytes.Should().Be(96);                                     // negative-stride
+            np.broadcast_to(np.arange(6).astype(np.int32).reshape(1, 6), new Shape(4, 6)).nbytes.Should().Be(96); // partial broadcast
+            np.zeros(new Shape(2, 1, 3, 1, 4), NPTypeCode.Int32).nbytes.Should().Be(96); // rank-5
+            // Copying selections: a fresh owning array whose byte count follows its own size.
+            b[new int[] { 0, 2 }].nbytes.Should().Be(48);                         // fancy-indexed (2,6)
+            b[b % 2 == 0].nbytes.Should().Be(48);                                 // boolean-mask (12,)
+            np.array(new[] { 9 }).nbytes.Should().Be(4);                          // one-element 1-D int32
+            b[0, 0].nbytes.Should().Be(4);                                        // 0-d view
+            b.astype(np.int16).nbytes.Should().Be(48);                            // astype -> itemsize 2
+            b.astype(np.complex128).nbytes.Should().Be(384);                      // astype -> itemsize 16
+        }
+
         // ---- itemsize --------------------------------------------------------------------
 
         [TestMethod]
