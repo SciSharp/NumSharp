@@ -1,5 +1,7 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace NumSharp
 {
@@ -24,9 +26,9 @@ namespace NumSharp
         ///     subclass (NumPy's is pending-deprecated), so the result is a plain 2-D <see cref="NDArray"/>
         ///     — the special matrix operators (<c>*</c> as matmul, <c>**</c> as matrix power, <c>.H</c>,
         ///     <c>.I</c>) are NOT provided. The result dtype follows NumPy's two-stage
-        ///     <see cref="result_type(NDArray[])"/> promotion (per row, then across rows). Block shapes are
-        ///     validated by <c>concatenate</c>, so a ragged width or a per-row height mismatch raises the
-        ///     usual concatenation shape error. See <see cref="block(object)"/> for the N-D generalization.
+        ///     <see cref="result_type(NDArray[])"/> promotion (per row, then across rows). Errors reproduce
+        ///     NumPy's <see cref="ValueError"/> verbatim (see <see cref="bmat(ITuple)"/> remarks). See
+        ///     <see cref="block(object)"/> for the N-D generalization.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.bmat.html
         /// </remarks>
         public static NDArray bmat(NDArray[][] obj)
@@ -42,10 +44,10 @@ namespace NumSharp
             {
                 if (obj[i] is null)
                     throw new ArgumentNullException($"{nameof(obj)}[{i}]");
-                rows[i] = concatenate(obj[i], -1);
+                rows[i] = BmatConcat(obj[i], -1);
             }
 
-            return asmatrix(concatenate(rows, 0));
+            return asmatrix(BmatConcat(rows, 0));
         }
 
         /// <summary>
@@ -66,7 +68,7 @@ namespace NumSharp
             if (obj is null)
                 throw new ArgumentNullException(nameof(obj));
 
-            return asmatrix(concatenate(obj, -1));
+            return asmatrix(BmatConcat(obj, -1));
         }
 
         /// <summary>
@@ -88,6 +90,59 @@ namespace NumSharp
 
             // NumPy's bmat(ndarray) is matrix(obj) with copy=True, so the result must not alias obj.
             return asmatrix(obj.copy());
+        }
+
+        /// <summary>
+        ///     Build a 2-D array from C# tuples of blocks — <c>(A, B)</c> is a single side-by-side row and
+        ///     <c>((A, B), (C, D))</c> is a nested block matrix — the tuple spelling of NumPy's
+        ///     <c>np.bmat((A, B))</c> / <c>np.bmat(((A, B), (C, D)))</c>.
+        /// </summary>
+        /// <param name="obj">
+        ///     A <see cref="ITuple"/> (any <c>ValueTuple</c>/<c>Tuple</c>): if its first entry is a bare
+        ///     block (<see cref="NDArray"/>) the whole tuple is one row joined along the last axis;
+        ///     otherwise each entry is a row (itself a tuple / <c>NDArray[]</c> / sequence of blocks),
+        ///     concatenated per row and stacked along axis 0.
+        /// </param>
+        /// <returns>The assembled 2-D array.</returns>
+        /// <remarks>
+        ///     Port of NumPy 2.x <c>numpy.bmat</c>'s <c>isinstance(obj, (tuple, list))</c> branch. Mixed
+        ///     forms work too — <c>([A, B], [C, D])</c> (a tuple of lists) — since a row may be a tuple, an
+        ///     <c>NDArray[]</c>, or any <see cref="IEnumerable"/> of blocks; a non-<see cref="NDArray"/>
+        ///     entry is passed through <see cref="asanyarray(in object, Type)"/> exactly as NumPy runs
+        ///     <c>asarray</c> over the entries. Still pure concatenation (no matrix products).
+        ///     <para>
+        ///     <b>Error parity.</b> The errors reproduce <c>numpy.concatenate</c>'s contract as
+        ///     <see cref="ValueError"/> with NumPy's verbatim text (see <see cref="BmatConcat"/>): an empty
+        ///     tuple / row → "need at least one array to concatenate"; a leading 0-D block (a scalar, or a
+        ///     <c>null</c> — NumPy's <c>None</c> becomes a 0-D array) → "zero-dimensional arrays cannot be
+        ///     concatenated"; a later block whose rank differs from the first → "all the input arrays must
+        ///     have same number of dimensions, but the array at index 0 has {n} dimension(s) and the array
+        ///     at index {k} has {m} dimension(s)". A width/height mismatch between well-ranked blocks keeps
+        ///     <c>concatenate</c>'s <see cref="IncorrectShapeException"/> — same verbatim NumPy text, the
+        ///     library-wide house exception type for shape/alignment errors.
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.bmat.html
+        ///     </para>
+        /// </remarks>
+        public static NDArray bmat(ITuple obj)
+        {
+            if (obj is null)
+                throw new ArgumentNullException(nameof(obj));
+
+            // Port of numpy.bmat's tuple/list loop (defmatrix.py):
+            //   for row in obj:
+            //       if isinstance(row, ndarray): return matrix(concatenate(obj, axis=-1))   # flat row
+            //       else: arr_rows.append(concatenate(row, axis=-1))
+            //   return matrix(concatenate(arr_rows, axis=0))
+            var arrRows = new List<NDArray>(obj.Length);
+            for (int i = 0; i < obj.Length; i++)
+            {
+                object row = obj[i];
+                if (row is NDArray)
+                    return asmatrix(BmatConcat(BmatTupleToBlocks(obj), -1));
+                arrRows.Add(BmatConcat(BmatRowToBlocks(row), -1));
+            }
+
+            return asmatrix(BmatConcat(arrRows.ToArray(), 0));
         }
 
         /// <summary>
@@ -139,6 +194,89 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Concatenates one row's (or the stacked rows') blocks, reproducing <c>numpy.concatenate</c>'s
+        ///     error contract as <see cref="ValueError"/> with NumPy's verbatim message text so bmat's
+        ///     errors match NumPy exactly. NumPy takes the rank from <c>arrays[0]</c>, so a leading 0-D
+        ///     block reports "zero-dimensional…" while a *later* rank mismatch reports "same number of
+        ///     dimensions…"; a <c>null</c> block is treated as a 0-D array (NumPy's <c>asarray(None)</c>).
+        ///     Well-ranked blocks with mismatched extents fall through to
+        ///     <see cref="concatenate(NDArray[], int?, NDArray, NPTypeCode?, string)"/>, whose
+        ///     <see cref="IncorrectShapeException"/> carries the same verbatim NumPy text.
+        /// </summary>
+        private static NDArray BmatConcat(NDArray[] blocks, int axis)
+        {
+            if (blocks.Length == 0)
+                throw new ValueError("need at least one array to concatenate");
+
+            // NumPy: ndim = PyArray_NDIM(arrays[0]); if (ndim == 0) -> "zero-dimensional…".
+            // A null block == a 0-D array (NumPy's asarray(None)).
+            int ndim0 = blocks[0]?.ndim ?? 0;
+            if (ndim0 == 0)
+                throw new ValueError("zero-dimensional arrays cannot be concatenated");
+
+            for (int k = 1; k < blocks.Length; k++)
+            {
+                int ndimk = blocks[k]?.ndim ?? 0;
+                if (ndimk != ndim0)
+                    throw new ValueError(
+                        "all the input arrays must have same number of dimensions, but the array at " +
+                        $"index 0 has {ndim0} dimension(s) and the array at index {k} has {ndimk} dimension(s)");
+            }
+
+            // All blocks share ndim ≥ 1 (so none is null here); concatenate does the extent check + copy.
+            return concatenate(blocks, axis);
+        }
+
+        /// <summary>Materialises every entry of a flat tuple <c>(A, B, …)</c> to a block.</summary>
+        private static NDArray[] BmatTupleToBlocks(ITuple t)
+        {
+            var blocks = new NDArray[t.Length];
+            for (int i = 0; i < t.Length; i++)
+                blocks[i] = BmatElementToBlock(t[i]);
+            return blocks;
+        }
+
+        /// <summary>
+        ///     Materialises a row (a tuple / <c>NDArray[]</c> / sequence of blocks) into its block array.
+        /// </summary>
+        private static NDArray[] BmatRowToBlocks(object row)
+        {
+            switch (row)
+            {
+                case NDArray[] a:
+                    return a;
+                case ITuple t:
+                    return BmatTupleToBlocks(t);
+                case string:
+                    throw new ArgumentException("bmat: a row must be a sequence of blocks, not a string.");
+                case IEnumerable ie:
+                {
+                    var list = new List<NDArray>();
+                    foreach (var e in ie)
+                        list.Add(BmatElementToBlock(e));
+                    return list.ToArray();
+                }
+                default:
+                    throw new ArgumentException(
+                        $"bmat: each row must be a sequence of blocks, got {row?.GetType().Name ?? "null"}.");
+            }
+        }
+
+        /// <summary>
+        ///     Converts a tuple entry to a block: an <see cref="NDArray"/> passes through, <c>null</c> stays
+        ///     <c>null</c> (a 0-D array to <see cref="BmatConcat"/>, matching NumPy's <c>None</c>), and any
+        ///     other value goes through <see cref="asanyarray(in object, Type)"/> — as NumPy runs
+        ///     <c>asarray</c> over the entries (a scalar so produced is 0-D and rejected identically).
+        /// </summary>
+        private static NDArray BmatElementToBlock(object e)
+            => e switch
+            {
+                null => null,
+                NDArray nd => nd,
+                _ => asanyarray(e)
+            };
+
+        /// <summary>
         ///     Port of NumPy's <c>defmatrix._from_string</c>: split on <c>';'</c> for rows, split each row
         ///     on commas and whitespace for the block names, resolve each name, then
         ///     <c>concatenate(row_blocks, axis=-1)</c> per row and <c>concatenate(rows, axis=0)</c>.
@@ -160,10 +298,10 @@ namespace NumSharp
                 for (int c = 0; c < tokens.Length; c++)
                     cols[c] = BmatResolveName(tokens[c], ldict, gdict);
 
-                rowArrays[r] = concatenate(cols, -1);
+                rowArrays[r] = BmatConcat(cols, -1);
             }
 
-            return concatenate(rowArrays, 0);
+            return BmatConcat(rowArrays, 0);
         }
 
         /// <summary>

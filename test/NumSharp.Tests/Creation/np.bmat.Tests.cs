@@ -215,11 +215,14 @@ namespace NumSharp.Tests.Creation
 
         [TestMethod]
         public void EmptyFlat_Raises() =>
-            ((Action)(() => np.bmat(new NDArray[0]))).Should().Throw<ArgumentException>();
+            // NumPy: ValueError("need at least one array to concatenate") — verbatim, no param suffix.
+            ((Action)(() => np.bmat(new NDArray[0]))).Should().Throw<ValueError>()
+                .WithMessage("need at least one array to concatenate");
 
         [TestMethod]
         public void EmptyNested_Raises() =>
-            ((Action)(() => np.bmat(new NDArray[0][]))).Should().Throw<ArgumentException>();
+            ((Action)(() => np.bmat(new NDArray[0][]))).Should().Throw<ValueError>()
+                .WithMessage("need at least one array to concatenate");
 
         // ─── null arguments ─────────────────────────────────────────────────
 
@@ -239,5 +242,75 @@ namespace NumSharp.Tests.Creation
         public void NullStringInput_Throws() =>
             ((Action)(() => np.bmat((string)null, new Dictionary<string, NDArray>())))
                 .Should().Throw<ArgumentNullException>();
+
+        // ─── ITuple (C# tuple) forms — np.bmat((A,B)) / np.bmat(((A,B),(C,D))) ──
+
+        [TestMethod]
+        public void Tuple_Flat_ConcatenatesHorizontally()
+        {
+            var m = np.bmat((A(), B()));
+            m.shape.Should().Equal(new long[] { 2, 4 });
+            np.array_equal(m, np.array(new long[,] { { 1, 1, 2, 2 }, { 1, 1, 2, 2 } })).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Tuple_Nested_TilesMatrix()
+        {
+            var m = np.bmat(((A(), B()), (C(), D())));
+            m.shape.Should().Equal(new long[] { 4, 4 });
+            np.array_equal(m, np.bmat(new[] { new[] { A(), B() }, new[] { C(), D() } })).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Tuple_ThreeElement_Flat() =>
+            np.bmat((A(), B(), A())).shape.Should().Equal(new long[] { 2, 6 });
+
+        [TestMethod]
+        public void Tuple_Single_Element() =>
+            np.bmat(ValueTuple.Create(A())).shape.Should().Equal(new long[] { 2, 2 });
+
+        [TestMethod]
+        public void Tuple_OfArrays_Nested() =>
+            np.bmat((new[] { A(), B() }, new[] { C(), D() })).shape.Should().Equal(new long[] { 4, 4 });
+
+        [TestMethod]
+        public void Tuple_Empty_Raises() =>
+            ((Action)(() => np.bmat(ValueTuple.Create()))).Should().Throw<ValueError>()
+                .WithMessage("need at least one array to concatenate");
+
+        // ─── NumPy-verbatim error messages (concatenate contract) ────────────
+
+        [TestMethod]
+        public void Error_ZeroDimensionalSingle_VerbatimValueError() =>
+            // np.bmat([np.array(5)]) -> ValueError "zero-dimensional arrays cannot be concatenated"
+            ((Action)(() => np.bmat(new[] { NDArray.Scalar(5) })))
+                .Should().Throw<ValueError>().WithMessage("zero-dimensional arrays cannot be concatenated");
+
+        [TestMethod]
+        public void Error_NullBlockTrailing_IsDimensionMismatch() =>
+            // NumPy's None is a 0-D array; a 2-D block first -> "same number of dimensions" (rank vs arrays[0]).
+            ((Action)(() => np.bmat(new[] { new NDArray[] { A(), null } })))
+                .Should().Throw<ValueError>().WithMessage(
+                    "all the input arrays must have same number of dimensions, but the array at index 0 " +
+                    "has 2 dimension(s) and the array at index 1 has 0 dimension(s)");
+
+        [TestMethod]
+        public void Error_NullBlockLeading_IsZeroDimensional() =>
+            // A leading 0-D block (null) -> NumPy reports "zero-dimensional…" (rank taken from arrays[0]).
+            ((Action)(() => np.bmat(new[] { new NDArray[] { null, A() } })))
+                .Should().Throw<ValueError>().WithMessage("zero-dimensional arrays cannot be concatenated");
+
+        [TestMethod]
+        public void Error_ScalarInTuple_DimensionMismatch() =>
+            // np.bmat((A, 5)) -> the scalar is a 0-D block -> "same number of dimensions".
+            ((Action)(() => np.bmat((A(), (object)5))))
+                .Should().Throw<ValueError>().WithMessage(
+                    "all the input arrays must have same number of dimensions, but the array at index 0 " +
+                    "has 2 dimension(s) and the array at index 1 has 0 dimension(s)");
+
+        [TestMethod]
+        public void Error_EmptyString_VerbatimValueError() =>
+            ((Action)(() => np.bmat("", new Dictionary<string, NDArray>())))
+                .Should().Throw<ValueError>().WithMessage("need at least one array to concatenate");
     }
 }
