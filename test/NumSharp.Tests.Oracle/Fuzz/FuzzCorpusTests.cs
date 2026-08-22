@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Tests.Fuzz;
 
@@ -267,6 +268,31 @@ namespace NumSharp.Tests.Fuzz
             RunCorpus("random_parity_host.jsonl");
         }
 
+        // PCG64 Generator (np.random.default_rng) byte-parity, PORTABLE half: pure PCG64 bits +
+        // exactly-rounded IEEE (random, integers, uniform, permutation, shuffle, choice, bytes) plus
+        // the new RandomState helpers random_integers/bytes (pure MT19937 bits). Hard-gated on every
+        // host — NumSharp's Generator stream is bit-identical to default_rng(seed) by construction.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void GeneratorParity() => RunCorpus("generator_parity.jsonl");
+
+        // PCG64 Generator byte-parity, HOST-LIBM half: the ziggurat / rejection samplers whose
+        // transform consumes log1p/exp/pow (standard_normal, standard_exponential, normal,
+        // exponential, standard_gamma, gamma). Byte-exact on win-amd64 (Kahan log1p + Math.* ==
+        // ucrtbase); off-Windows both sides shift with their local libm, so it is Inconclusive there
+        // (the random_parity_host / matmul_parity pattern).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void GeneratorParityHostLibm()
+        {
+            if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows))
+                Assert.Inconclusive(
+                    "generator_parity_host.jsonl is authored against the win-amd64 CRT libm; " +
+                    "ziggurat/rejection sampler streams are libm-dependent by construction.");
+            RunCorpus("generator_parity_host.jsonl");
+        }
+
         // W5 cumulative (T11): cumsum/cumprod (axis None + per-axis, NEP50 accumulator) and diff
         // (n=1,2; axis 0/last; output shrinks by n) across int/uint/float/complex dtypes.
         [TestMethod]
@@ -515,6 +541,8 @@ namespace NumSharp.Tests.Fuzz
             ["precision.jsonl"] = 80,
             ["random_parity.jsonl"] = 40,
             ["random_parity_host.jsonl"] = 86,
+            ["generator_parity.jsonl"] = 68,
+            ["generator_parity_host.jsonl"] = 32,
             ["random_smoke.jsonl"] = 1600,
             ["reduce.jsonl"] = 9004,
             ["rounding.jsonl"] = 665,
@@ -569,7 +597,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         case "array":
                         case "scalar":
-                            CompareArray(c, OpRegistry.Apply(c.Op, c.Params, operands),
+                            CompareArray(c, DispatchApply(c.Op, c.Params, operands),
                                          c.Expected, null, failures, documented);
                             break;
                         case "tuple":
@@ -603,6 +631,11 @@ namespace NumSharp.Tests.Fuzz
                 Assert.Fail($"{failures.Count}/{cases.Count} cases diverged from NumPy (unexpected):\n  " +
                             string.Join("\n  ", failures.Take(60)));
         }
+
+        // Routes the "grnd" PCG64 Generator stream op to its dedicated handler (OpRegistry.Generator.cs)
+        // without adding a case to OpRegistry.Apply's switch; every other op goes to Apply as usual.
+        private static NDArray DispatchApply(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
+            => op == "grnd" ? OpRegistry.GeneratorDraw(p) : OpRegistry.Apply(op, p, ops);
 
         private static void Bump(Dictionary<string, int> d, string key) => d[key] = d.TryGetValue(key, out var n) ? n + 1 : 1;
 

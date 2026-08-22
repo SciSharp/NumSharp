@@ -6975,6 +6975,170 @@ def gen_fft():
     return cases
 
 
+# =====================================================================================
+# np.random PCG64 Generator byte-parity ("generator_parity" tiers). The legacy
+# random_parity tiers above pin the MT19937 RandomState streams; these pin the MODERN
+# default_rng(seed) -> Generator(PCG64) streams (a DIFFERENT bit generator + different
+# algorithms: Lemire bounded integers, ziggurat normal/exponential), plus the two new
+# RandomState helpers np.random.random_integers and np.random.bytes.
+#
+# TWO FILES, same split as random_parity:
+#   * generator_parity.jsonl      — PORTABLE: pure PCG64 bits + exactly-rounded IEEE
+#     (random, integers, uniform, permutation, shuffle, choice, bytes) + the RandomState
+#     helpers random_integers/bytes (pure MT19937 bits). Hard-gated on every host.
+#   * generator_parity_host.jsonl — HOST-libm: the ziggurat / rejection samplers whose
+#     transform consumes log1p/exp/pow (standard_normal, standard_exponential, normal,
+#     exponential, standard_gamma, gamma). Byte-exact on win-amd64 (Kahan log1p + Math.*
+#     == ucrtbase); reported Inconclusive off-Windows (the random_parity_host pattern).
+#
+# Every case seeds a FRESH default_rng / RandomState, so replaying never mutates global
+# np.random state (matches the fresh-instance isolation the rnd tier uses). Op key "grnd";
+# pairs 1:1 with OpRegistry.GeneratorDraw. int-output methods are int64 on BOTH sides
+# (Generator.integers defaults int64; NumSharp matches) except random_integers, which is
+# C-long == int32 on the win-amd64 authoring host (NumSharp matches, same as randint).
+_GEN_DTYPE = {
+    "float64": np.float64, "float32": np.float32,
+    "int8": np.int8, "int16": np.int16, "int32": np.int32, "int64": np.int64,
+    "uint8": np.uint8, "uint16": np.uint16, "uint32": np.uint32, "uint64": np.uint64,
+    "bool": np.bool_,
+}
+_GRND_SEEDS = [42, 987654321]
+_GRND_SIZES = [[7], [2, 3]]
+
+
+def gen_generator_parity():
+    portable = []
+    host = []
+    n = 0
+
+    def emit(into, method, params, r):
+        nonlocal n
+        r = np.asarray(r)
+        into.append({
+            "id": f"grnd/{method}/{params.get('dtype', '-')}/seed{params['seed']}/{n}",
+            "op": "grnd",
+            "params": params,
+            "operands": [],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "grnd",
+            "valueclass": "stream",
+        })
+        n += 1
+
+    def run(method, params):
+        seed = params["seed"]
+        args = params.get("args", [])
+        size = tuple(params["size"]) if "size" in params else ()
+        dtype = params.get("dtype")
+        npdt = _GEN_DTYPE[dtype] if dtype else None
+        draws = params.get("draws", 1)
+
+        # ---- RandomState helpers (fresh instance, MT19937) ----
+        if method == "random_integers":
+            rs = np.random.RandomState(seed)
+            hi = None if len(args) < 2 else int(args[1])
+            r = None
+            for _ in range(draws):
+                r = rs.random_integers(int(args[0]), hi, size if size else None)
+            return np.asarray(r)
+        if method == "rs_bytes":
+            rs = np.random.RandomState(seed)
+            r = None
+            for _ in range(draws):
+                r = np.frombuffer(rs.bytes(int(args[0])), dtype=np.uint8)
+            return r
+
+        # ---- Generator (PCG64) ----
+        rng = np.random.default_rng(seed)
+        r = None
+        for _ in range(draws):
+            if method == "random":
+                r = rng.random(size, dtype=npdt or np.float64)
+            elif method == "integers":
+                r = rng.integers(int(args[0]), int(args[1]), size,
+                                 dtype=npdt or np.int64, endpoint=params.get("endpoint", False))
+            elif method == "uniform":
+                r = rng.uniform(args[0], args[1], size)
+            elif method == "permutation":
+                r = rng.permutation(int(args[0]))
+            elif method == "shuffle":
+                r = np.arange(int(args[0]))
+                rng.shuffle(r)
+            elif method == "choice":
+                r = rng.choice(int(args[0]), size, replace=params.get("replace", True),
+                               p=params.get("p"), shuffle=params.get("cshuffle", True))
+            elif method == "bytes":
+                r = np.frombuffer(rng.bytes(int(args[0])), dtype=np.uint8)
+            elif method == "standard_normal":
+                r = rng.standard_normal(size, dtype=npdt or np.float64)
+            elif method == "standard_exponential":
+                r = rng.standard_exponential(size, dtype=npdt or np.float64,
+                                             method=params.get("emethod", "zig"))
+            elif method == "normal":
+                r = rng.normal(args[0], args[1], size)
+            elif method == "exponential":
+                r = rng.exponential(args[0], size)
+            elif method == "standard_gamma":
+                r = rng.standard_gamma(args[0], size, dtype=npdt or np.float64)
+            elif method == "gamma":
+                r = rng.gamma(args[0], args[1], size)
+            else:
+                raise ValueError(f"unknown generator method '{method}'")
+        return np.asarray(r)
+
+    def cases(into, method, base_params, sized=True, draws2=False):
+        specs = ([(_GRND_SEEDS[0], _GRND_SIZES[0]), (_GRND_SEEDS[0], _GRND_SIZES[1]),
+                  (_GRND_SEEDS[1], _GRND_SIZES[0])]
+                 if sized else [(_GRND_SEEDS[0], None), (_GRND_SEEDS[1], None)])
+        for seed, size in specs:
+            p = dict(base_params, method=method, seed=seed)
+            if size is not None:
+                p["size"] = size
+            emit(into, method, p, run(method, p))
+        if draws2:
+            p = dict(base_params, method=method, seed=_GRND_SEEDS[0],
+                     size=_GRND_SIZES[0], draws=2)
+            emit(into, method, p, run(method, p))
+
+    # ---- PORTABLE: pure PCG64 bits + exactly-rounded IEEE ----
+    cases(portable, "random", {"args": [], "dtype": "float64"}, draws2=True)
+    cases(portable, "random", {"args": [], "dtype": "float32"})
+    cases(portable, "uniform", {"args": [-3.0, 7.0]})
+    for dt in ("int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"):
+        cases(portable, "integers", {"args": [0, 100], "dtype": dt})
+    cases(portable, "integers", {"args": [-50, 50], "dtype": "int32"}, draws2=True)
+    cases(portable, "integers", {"args": [0, 100], "dtype": "int32", "endpoint": True})
+    cases(portable, "integers", {"args": [0, 2], "dtype": "bool"})
+    cases(portable, "permutation", {"args": [10]}, sized=False)
+    cases(portable, "shuffle", {"args": [12]}, sized=False)
+    cases(portable, "choice", {"args": [10]})
+    cases(portable, "choice", {"args": [10], "replace": False})
+    cases(portable, "choice", {"args": [4], "p": [0.1, 0.2, 0.3, 0.4]})
+    for length in (1, 8, 13):
+        cases(portable, "bytes", {"args": [length]}, sized=False)
+    # RandomState helpers (portable MT19937 bits)
+    cases(portable, "random_integers", {"args": [1, 6]})
+    cases(portable, "random_integers", {"args": [5]}, sized=False)  # high=None -> [1, low]
+    for length in (1, 10):
+        cases(portable, "rs_bytes", {"args": [length]}, sized=False)
+
+    # ---- HOST-libm: ziggurat / rejection samplers ----
+    cases(host, "standard_normal", {"args": [], "dtype": "float64"}, draws2=True)
+    cases(host, "standard_normal", {"args": [], "dtype": "float32"})
+    cases(host, "standard_exponential", {"args": [], "dtype": "float64", "emethod": "zig"}, draws2=True)
+    cases(host, "standard_exponential", {"args": [], "dtype": "float64", "emethod": "inv"})
+    cases(host, "standard_exponential", {"args": [], "dtype": "float32", "emethod": "zig"})
+    cases(host, "normal", {"args": [5.0, 2.5]})
+    cases(host, "exponential", {"args": [2.5]})
+    cases(host, "standard_gamma", {"args": [2.0], "dtype": "float64"})
+    cases(host, "standard_gamma", {"args": [0.5], "dtype": "float64"})  # shape<1 branch
+    cases(host, "standard_gamma", {"args": [2.0], "dtype": "float32"})
+    cases(host, "gamma", {"args": [2.0, 3.0]})
+
+    return portable, host
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -7191,11 +7355,15 @@ def main():
         portable, host = gen_random_parity()                            # seeded MT19937 stream bytes
         write_jsonl(os.path.join(corpus_dir, "random_parity.jsonl"), portable)
         write_jsonl(os.path.join(corpus_dir, "random_parity_host.jsonl"), host)
+    elif mode == "generator_parity":
+        portable, host = gen_generator_parity()                         # seeded PCG64 Generator stream bytes
+        write_jsonl(os.path.join(corpus_dir, "generator_parity.jsonl"), portable)
+        write_jsonl(os.path.join(corpus_dir, "generator_parity_host.jsonl"), host)
     elif mode == "fft":
         cases = gen_fft()                                               # np.fft.* differential tier
         write_jsonl(os.path.join(corpus_dir, "fft.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | products | fft)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft)")
         sys.exit(2)
 
 
