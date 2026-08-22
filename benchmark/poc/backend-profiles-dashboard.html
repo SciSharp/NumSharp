@@ -2347,6 +2347,13 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   });
 
   const buildDataTable = (visibleRows, isNoData = false) => {
+    const availabilityLabel = (row) => {
+      const label = row.availability === "missing_backend" ? "Missing backend"
+        : row.availability === "not_supported" ? "Not supported"
+        : row.availability === "not_measured" ? "Not measured"
+        : "No comparable timing";
+      return `${label}${row.exceptionType ? ` · ${row.exceptionType}` : ""}`;
+    };
     const body = visibleRows.map((row, index) => isNoData
       ? `<tr${rowVisibility(index)}>
           <td class="num">${index + 1}</td>
@@ -2354,6 +2361,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
           <td>${escapeHtml(row.suite)}</td>
           <td>${escapeHtml(row.dtype)}</td>
           <td class="num">${formatN(row.n)}</td>
+          <td>${escapeHtml(availabilityLabel(row))}</td>
         </tr>`
       : `<tr${rowVisibility(index)}>
           <td class="num">${index + 1}</td>
@@ -2368,7 +2376,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         </tr>`).join("");
 
     const header = isNoData
-      ? `<tr><th class="num">#</th><th>Operation</th><th>Suite</th><th>Dtype</th><th class="num">N</th></tr>`
+      ? `<tr><th class="num">#</th><th>Operation</th><th>Suite</th><th>Dtype</th><th class="num">N</th><th>State</th></tr>`
       : `<tr><th class="num">#</th><th>Operation</th><th>Suite</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th><th>Band</th></tr>`;
 
     return `
@@ -2391,8 +2399,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     if (rows.length === 0) {
       return `
         <div class="ns-tip-backend-panel${activeClass}" id="${id}-${backend}" role="tabpanel"${hidden}>
-          <div class="ns-tip-meta">${label} · 0 measured rows</div>
-          <div class="ns-tip-empty">No ${label} measurements in this grouping.</div>
+          <div class="ns-tip-meta">${label} · 0 ${isNoData ? "no-data" : "measured"} rows</div>
+          <div class="ns-tip-empty">No ${label} ${isNoData ? "unavailable records" : "measurements"} in this grouping.</div>
         </div>`;
     }
 
@@ -2400,7 +2408,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       const visibleRows = sortRows(rows, "index");
       return `
         <div class="ns-tip-backend-panel${activeClass}" id="${id}-${backend}" role="tabpanel"${hidden}>
-          <div class="ns-tip-meta">${label} · ${Math.min(topCount, rows.length)} of ${rows.length} pending rows</div>
+          <div class="ns-tip-meta">${label} · ${Math.min(topCount, rows.length)} of ${rows.length} no-data rows</div>
           ${buildDataTable(visibleRows, true)}
         </div>`;
     }
@@ -2968,10 +2976,34 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     }];
   });
 
+  const unavailableProfileRows = (combinedRows, profile) => combinedRows.flatMap((row, index) => {
+    const result = row.profiles?.[profile];
+    if (!result || result.availability === "available") return [];
+    return [{
+      index,
+      operation: row.operation || "",
+      suite: row.suite || "",
+      category: row.category || "",
+      dtype: row.dtype || "",
+      n: numberOrNull(row.n),
+      ratio: null,
+      pctNumPy: null,
+      numpyMs: numberOrNull(row.numpy_ms),
+      numSharpMs: null,
+      status: "no_data",
+      availability: result.availability,
+      exceptionType: result.exception_type || "",
+      exceptionMessage: result.exception_message || "",
+      functionName: functionNameFromOperation(row.operation || "")
+    }];
+  });
+
   const initializeBenchmarkTooltips = async () => {
     let rawRows;
     let nativeRows = [];
     let managedRows = [];
+    let nativeUnavailableRows = [];
+    let managedUnavailableRows = [];
     let legacyPayload = false;
     try {
       const response = await fetch(reportUrl);
@@ -2985,6 +3017,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       rawRows = legacyPayload ? payload : (payload.rows || []);
       managedRows = legacyPayload ? [] : profileRows(rawRows, "managed");
       nativeRows = legacyPayload ? [] : profileRows(rawRows, "openblas");
+      managedUnavailableRows = legacyPayload ? [] : unavailableProfileRows(rawRows, "managed");
+      nativeUnavailableRows = legacyPayload ? [] : unavailableProfileRows(rawRows, "openblas");
     } catch (error) {
       document.querySelectorAll("[data-tip]").forEach((element) => {
         element.setAttribute("title", element.getAttribute("data-tip").replace(/\n/g, " | "));
@@ -3018,8 +3052,12 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     document.querySelectorAll(".status-segment").forEach((element) => {
       const band = bandForElement(element);
       if (!band) return;
-      const bandRows = managedRows.filter((row) => rowMatchesBand(row, band));
-      const nativeBandRows = nativeRows.filter((row) => rowMatchesBand(row, band));
+      const bandRows = band.noData
+        ? managedRows.filter((row) => rowMatchesBand(row, band)).concat(managedUnavailableRows)
+        : managedRows.filter((row) => rowMatchesBand(row, band));
+      const nativeBandRows = band.noData
+        ? nativeRows.filter((row) => rowMatchesBand(row, band)).concat(nativeUnavailableRows)
+        : nativeRows.filter((row) => rowMatchesBand(row, band));
       const title = band.noData ? "No-data benchmark rows" : `${band.title} benchmark rows`;
       attachTooltip(element, buildTooltipTable(title, bandRows, nativeBandRows, { noData: band.noData }), title);
     });
