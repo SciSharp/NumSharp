@@ -177,14 +177,23 @@ namespace NumSharp.Interop.OpenBLAS
             }
 
             var outShape = nd == 0 ? Shape.Scalar : new Shape(SubArray(dimensions, nd));
-            // fillZeros:false + the single Zero below mirrors cblasfuncs.c's UNINITIALISED
-            // new_array_for_sum + its lone memset; the default ctor zeroed a redundant second time.
+            // fillZeros:false + the conditional Zero below mirrors cblasfuncs.c's UNINITIALISED
+            // new_array_for_sum (the default ctor zeroed a redundant second time).
             var outBuf = new NDArray(typeCode, outShape, fillZeros: false);
             result = outBuf;
 
             T* op = (T*)outBuf.Address + outBuf.Shape.offset;
             long numElements = outShape.size;
-            Zero(op, numElements);
+
+            // cblasfuncs.c memsets the output unconditionally, but that zero is only OBSERVABLE on the
+            // routes that accumulate into it — the scalar/axpy Level-1 path — or that return the zeros
+            // as the answer (l == 0, an empty contraction). The matrix-matrix route at the bottom fully
+            // overwrites the buffer with gemm/syrk (beta == 0 never reads C), so pre-zeroing it is a
+            // wasted second write of the whole result — the exact redundant-memset lever np.matmul's
+            // kernel already drops. Every OTHER route keeps the memset, so their bytes are unchanged.
+            bool bothMatrix = ap1shape == MatrixShape.Matrix && ap2shape == MatrixShape.Matrix;
+            if (!bothMatrix || l == 0)
+                Zero(op, numElements);
             if (numElements == 0 || l == 0)
                 return true;
 

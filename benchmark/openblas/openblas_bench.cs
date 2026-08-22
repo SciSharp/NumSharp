@@ -19,7 +19,22 @@ Console.WriteLine($"INFO library={Path.GetFileName(OpenBlasEngine.LibraryPath)};
 
 double Best(Action body, int rounds)
 {
-    body();
+    // Warm to JIT steady-state (tier-1) BEFORE timing — NumPy is native and always warm, so a single
+    // body() warmup would time NumSharp's managed glue while still tier-0 and understate the small-N
+    // LAPACK/product calls by ~15-30% (measured). Warm to a call-count AND wall-clock floor, capped
+    // so a slow op does not warm indefinitely; NumPy's twin harness reaches steady state in one call.
+    var warm = Stopwatch.StartNew();
+    int warmIters = 0;
+    while ((warmIters < 150 || warm.Elapsed.TotalMilliseconds < 40.0) && warm.Elapsed.TotalMilliseconds < 250.0)
+    {
+        body();
+        warmIters++;
+    }
+
+    // best-of-21 floor (repo perf convention): a min over only 3-7 samples of a ~60 us-1.5 ms op has
+    // ~15-20% jitter and swings a cell 0.7x<->1.3x run-to-run; 21 timed rounds report the steady-state
+    // minimum. Applied symmetrically on the NumPy twin.
+    rounds = Math.Max(rounds, 21);
     double best = double.MaxValue;
     for (int i = 0; i < rounds; i++)
     {

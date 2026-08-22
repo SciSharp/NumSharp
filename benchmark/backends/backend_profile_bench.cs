@@ -39,7 +39,26 @@ string backendInfo = profile == "openblas" ? OpenBlasEngine.Info : "Managed C# (
 
 double Best(Action body, int rounds)
 {
-    body();
+    // Warm to JIT steady-state (tier-1) BEFORE timing. NumPy is native and always warm, so timing
+    // NumSharp's managed glue while it is still tier-0 compares cold-vs-warm and understates the
+    // small-N LAPACK/product calls by ~15-30% (measured: a single body() warmup leaves e.g.
+    // tensorinv/tensordot ~25% slower than their steady state). Warm until BOTH a call-count floor
+    // (trips tiered compilation) and a wall-clock floor (lets the background re-JIT land) are met,
+    // capped so a slow op does not warm indefinitely. NumPy reaches steady state in one call, so its
+    // twin harness needs no matching change.
+    var warm = Stopwatch.StartNew();
+    int warmIters = 0;
+    while ((warmIters < 150 || warm.Elapsed.TotalMilliseconds < 40.0) && warm.Elapsed.TotalMilliseconds < 250.0)
+    {
+        body();
+        warmIters++;
+    }
+
+    // best-of-21 (the repo's perf-convention floor): the small-N products/LAPACK calls are ~60 us-1.5 ms
+    // with ~15-20% run-to-run jitter, so a min over only 3-7 samples is unstable enough to swing a single
+    // cell 0.7x<->1.3x between runs. Take the min over at least 21 timed rounds so the reported number is
+    // the steady-state minimum rather than one noisy draw. Applied symmetrically on the NumPy twin.
+    rounds = Math.Max(rounds, 21);
     double best = double.MaxValue;
     for (int i = 0; i < rounds; i++)
     {

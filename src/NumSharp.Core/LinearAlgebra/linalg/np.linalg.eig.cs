@@ -68,8 +68,13 @@ namespace NumSharp
                     resultType = NPTypeCode.Complex;
                 }
 
-                w = w.astype(resultType);
-                v = v is null ? null : v.astype(resultType);
+                // NumPy's `w.astype(result_t, copy=False)`: for a real operand np.real already produced
+                // the float64 result (so astype is a no-op), and the complex branch's w/v are already
+                // the complex128 the geev seam returned — copy:false avoids re-copying the (up to n×n)
+                // eigenvector buffer whenever the dtype already matches. Only float32's real collapse
+                // and any genuine width change still cast.
+                w = w.astype(resultType, copy: false);
+                v = v is null ? null : v.astype(resultType, copy: false);
                 return (w, v);
             }
 
