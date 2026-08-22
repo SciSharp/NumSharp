@@ -1,5 +1,7 @@
 using System;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends;
+using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
 
 namespace NumSharp
 {
@@ -136,6 +138,17 @@ namespace NumSharp
         /// </summary>
         private static NDArray SortedSearchMembership(NDArray elemT, NDArray testT)
         {
+            // Hash-set membership (O(n+m)) replaces the sort + n·searchsorted below for hashable
+            // dtypes. That searchsorted — n binary searches over the m-element sorted test set — was
+            // the isin bottleneck (1M float64: ~317ms of a ~213ms call; NumPy's in1d is itself
+            // sort-based here, so hashing BEATS it). Integer bit patterns are exact; floats normalize
+            // -0.0→+0.0 and exclude NaN (NaN never equals itself — never a member). Complex/Half/
+            // Decimal keep the sort path (Decimal needs value-equality: 1.0m == 1.00m by value, not
+            // bits). Returns null when it declines (huge test set) so the sort path runs.
+            NDArray hashed = TryHashMembership(elemT, testT);
+            if (hashed is not null)
+                return hashed;
+
             NDArray u = np.sort(testT);
             long m = u.size;
             if (m == 0)
@@ -146,6 +159,115 @@ namespace NumSharp
             NDArray gathered = np.take(u, clamped);
             NDArray inRange = idx < (NDArray)m;                     // idx == m => greater than all => not found
             return (gathered == elemT) & inRange;
+        }
+
+        /// <summary>
+        ///     Open-addressing hash-set membership: build a table of <paramref name="testT"/>'s
+        ///     (normalized) bit patterns, then probe every element of <paramref name="elemT"/> — O(n+m)
+        ///     vs the sort path's O(m log m + n log m). Handles the hashable dtypes (integer-family +
+        ///     char + float32/float64); declines (returns null) for Complex/Half/Decimal and for a test
+        ///     set too large to index, leaving <see cref="SortedSearchMembership"/> to run.
+        /// </summary>
+        private static NDArray TryHashMembership(NDArray elemT, NDArray testT)
+        {
+            // elemT and testT are the SAME dtype here (both cast to result_type upstream).
+            if (testT.size > (1L << 29))   // ~512M distinct-candidates: fall back rather than over-allocate the table
+                return null;
+            switch (elemT.typecode)
+            {
+                case NPTypeCode.Boolean: return HashMembership<bool>(elemT, testT, floatSem: false);
+                case NPTypeCode.Byte: return HashMembership<byte>(elemT, testT, floatSem: false);
+                case NPTypeCode.SByte: return HashMembership<sbyte>(elemT, testT, floatSem: false);
+                case NPTypeCode.Int16: return HashMembership<short>(elemT, testT, floatSem: false);
+                case NPTypeCode.UInt16: return HashMembership<ushort>(elemT, testT, floatSem: false);
+                case NPTypeCode.Char: return HashMembership<char>(elemT, testT, floatSem: false);
+                case NPTypeCode.Int32: return HashMembership<int>(elemT, testT, floatSem: false);
+                case NPTypeCode.UInt32: return HashMembership<uint>(elemT, testT, floatSem: false);
+                case NPTypeCode.Int64: return HashMembership<long>(elemT, testT, floatSem: false);
+                case NPTypeCode.UInt64: return HashMembership<ulong>(elemT, testT, floatSem: false);
+                case NPTypeCode.Single: return HashMembership<float>(elemT, testT, floatSem: true);
+                case NPTypeCode.Double: return HashMembership<double>(elemT, testT, floatSem: true);
+                default: return null;   // Complex / Half / Decimal → sort path
+            }
+        }
+
+        private static unsafe NDArray HashMembership<T>(NDArray elemT, NDArray testT, bool floatSem)
+            where T : unmanaged
+        {
+            // `.Address` ignores Shape.offset, so a sliced/broadcast view must be materialized first
+            // (the upstream astype already produces a fresh contiguous array when the dtype changed).
+            if (elemT.Shape.IsSliced || elemT.Shape.IsBroadcasted) elemT = elemT.copy();
+            if (testT.Shape.IsSliced || testT.Shape.IsBroadcasted) testT = testT.copy();
+            long m = testT.size, n = elemT.size;
+
+            // Pre-size to load factor ≤ 0.5 (next pow2 ≥ 2·m) so no growth/rehash is needed.
+            long want = m * 2 + 1;
+            int cap = 1024;
+            while (cap < want) cap <<= 1;
+            int mask = cap - 1;
+            var keys = new ulong[cap];
+            var used = new bool[cap];
+
+            T* tp = (T*)testT.Address;
+            for (long i = 0; i < m; i++)
+            {
+                T v = tp[i];
+                if (floatSem && IsNaNFloat(v)) continue;   // NaN is never a member
+                ulong k = KeyBits(v, floatSem);
+                int h = (int)(Splitmix(k) & (ulong)mask);
+                while (used[h]) { if (keys[h] == k) goto inserted; h = (h + 1) & mask; }
+                used[h] = true; keys[h] = k;
+                inserted: ;
+            }
+
+            var result = new NDArray(NPTypeCode.Boolean, new Shape(n), false);
+            bool* rp = (bool*)result.Address;
+            T* ep = (T*)elemT.Address;
+            for (long i = 0; i < n; i++)
+            {
+                T v = ep[i];
+                if (floatSem && IsNaNFloat(v)) { rp[i] = false; continue; }
+                ulong k = KeyBits(v, floatSem);
+                int h = (int)(Splitmix(k) & (ulong)mask);
+                bool found = false;
+                while (used[h]) { if (keys[h] == k) { found = true; break; } h = (h + 1) & mask; }
+                rp[i] = found;
+            }
+            return result;
+        }
+
+        /// <summary>Normalized bit key: raw zero-extended bits for integers; for floats, -0.0→+0.0
+        /// collapses to 0 so signed zeros share a bucket (NaN is filtered by the caller).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static ulong KeyBits<T>(T v, bool floatSem) where T : unmanaged
+        {
+            if (floatSem)
+            {
+                if (typeof(T) == typeof(double)) { double d = SysUnsafe.As<T, double>(ref v); return d == 0.0 ? 0UL : BitConverter.DoubleToUInt64Bits(d); }
+                if (typeof(T) == typeof(float)) { float f = SysUnsafe.As<T, float>(ref v); return f == 0f ? 0UL : BitConverter.SingleToUInt32Bits(f); }
+            }
+            int sz = SysUnsafe.SizeOf<T>();
+            if (sz == 1) return SysUnsafe.As<T, byte>(ref v);
+            if (sz == 2) return SysUnsafe.As<T, ushort>(ref v);
+            if (sz == 4) return SysUnsafe.As<T, uint>(ref v);
+            return SysUnsafe.As<T, ulong>(ref v);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsNaNFloat<T>(T v) where T : unmanaged
+        {
+            if (typeof(T) == typeof(double)) return double.IsNaN(SysUnsafe.As<T, double>(ref v));
+            if (typeof(T) == typeof(float)) return float.IsNaN(SysUnsafe.As<T, float>(ref v));
+            return false;
+        }
+
+        /// <summary>splitmix64 finalizer — avalanches every bit into the low bits used as the table index.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static ulong Splitmix(ulong k)
+        {
+            k = (k ^ (k >> 30)) * 0xBF58476D1CE4E5B9UL;
+            k = (k ^ (k >> 27)) * 0x94D049BB133111EBUL;
+            return k ^ (k >> 31);
         }
 
         /// <summary>
