@@ -3330,6 +3330,17 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         scheduleHideTooltip(element);
       });
       instance.popper.addEventListener("click", (event) => {
+        const loadMoreButton = event.target instanceof Element
+          ? event.target.closest("[data-load-more]")
+          : null;
+        if (loadMoreButton && containsNode(instance.popper, loadMoreButton)) {
+          event.preventDefault();
+          event.stopPropagation();
+          revealRemainingRows(loadMoreButton);
+          instance.popperInstance?.update?.();
+          return;
+        }
+
         const button = event.target instanceof Element
           ? event.target.closest(".ns-tip-switch-button, .ns-tip-backend-button")
           : null;
@@ -3494,8 +3505,12 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     initializeBreakdownCoaches();
 
     document.addEventListener("click", (event) => {
+      const eventPath = typeof event.composedPath === "function" ? event.composedPath() : [];
       const clickedInsideTooltip = targetElements.some((element) =>
-        containsNode(element, event.target) || containsNode(element._tippy?.popper, event.target));
+        containsNode(element, event.target)
+        || containsNode(element._tippy?.popper, event.target)
+        || eventPath.includes(element)
+        || eventPath.includes(element._tippy?.popper));
 
       if (!clickedInsideTooltip) {
         targetElements.forEach((element) => closeTooltip(element, true));
