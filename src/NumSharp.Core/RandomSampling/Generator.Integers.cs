@@ -41,7 +41,49 @@ namespace NumSharp
             long highInclusive = endpoint ? hiArg : hiArg - 1;
 
             ComputeOffRng(tc, dtype, lo, highInclusive, endpoint, out int width, out ulong off, out ulong rng);
+            return FillIntegers(dtype, tc, size, width, off, rng);
+        }
 
+        /// <summary>
+        ///     Unsigned overload of <see cref="integers(long, long?, Shape, Type, bool)"/> — the only way
+        ///     to reach the upper half of the <c>uint64</c> range (values above <see cref="long.MaxValue"/>),
+        ///     which NumPy addresses with arbitrary-precision Python ints. The full <c>[0, 2**64)</c> range
+        ///     is drawn as <c>integers(0UL, ulong.MaxValue, dtype: np.uint64, endpoint: true)</c>.
+        /// </summary>
+        /// <remarks>
+        ///     Anything expressible in the signed domain is forwarded verbatim to the signed overload, so
+        ///     only genuinely-large uint64 requests take the dedicated path — which, like NumPy, rejects a
+        ///     non-uint64 dtype whose range cannot hold the requested high (<c>high is out of bounds…</c>).
+        /// </remarks>
+        public NDArray integers(ulong low, ulong? high = null, Shape size = default, Type dtype = null, bool endpoint = false)
+        {
+            // Everything that fits the signed domain goes through the (byte-exact, well-tested) signed path.
+            if (low <= long.MaxValue && (high is null || high.Value <= (ulong)long.MaxValue))
+                return integers((long)low, high is null ? (long?)null : (long)high.Value, size, dtype, endpoint);
+
+            // Values exceed the signed range: only uint64 can represent them (NumPy's per-dtype bound check).
+            dtype = dtype ?? typeof(long);
+            NPTypeCode tc = dtype.GetTypeCode();
+            if (tc != NPTypeCode.UInt64)
+                throw new ValueError($"high is out of bounds for {tc.AsNumpyDtypeName()}");
+
+            ulong lo, hiArg;
+            if (high is null) { hiArg = low; lo = 0UL; }
+            else { lo = low; hiArg = high.Value; }
+
+            // hiArg > long.MaxValue on this path (else we forwarded above), so hiArg - 1 cannot underflow.
+            ulong hiInclusive = endpoint ? hiArg : hiArg - 1UL;
+            if (lo > hiInclusive)
+                throw new ValueError(FormatBoundsErrorU(endpoint, lo));
+
+            ulong off = lo;
+            ulong rng = hiInclusive - lo;
+            return FillIntegers(dtype, tc, size, 64, off, rng);
+        }
+
+        // Shared result builder: size==0 -> empty, size==None -> scalar, else a filled dtype array.
+        private NDArray FillIntegers(Type dtype, NPTypeCode tc, Shape size, int width, ulong off, ulong rng)
+        {
             // size == 0 -> empty array of the requested dtype (drawn no state).
             if (!IsNoSize(size) && size.size == 0)
                 return new NDArray(dtype, size);
@@ -113,6 +155,14 @@ namespace NumSharp
         }
 
         private static string FormatBoundsError(bool closed, long low)
+        {
+            if (low == 0)
+                return closed ? "high < 0" : "high <= 0";
+            return closed ? "low > high" : "low >= high";
+        }
+
+        // Unsigned twin of FormatBoundsError for the uint64-large path.
+        private static string FormatBoundsErrorU(bool closed, ulong low)
         {
             if (low == 0)
                 return closed ? "high < 0" : "high <= 0";

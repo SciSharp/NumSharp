@@ -34,12 +34,17 @@ namespace NumSharp
         /// </remarks>
         public void shuffle(NDArray x, int axis = 0)
         {
+            // NumPy evaluates `n = len(x)` before any other check, so a 0-d array raises TypeError here
+            // ("len() of unsized object") rather than an axis error.
+            if (x.ndim == 0)
+                throw new TypeError("len() of unsized object");
+
             if (!x.Shape.IsWriteable)
                 throw new ValueError("array is read-only");
 
             int nd = x.ndim;
             int ax = axis < 0 ? axis + nd : axis;
-            if (nd == 0 || ax < 0 || ax >= nd)
+            if (ax < 0 || ax >= nd)
                 throw new ArgumentException($"axis {axis} is out of bounds for array of dimension {nd}");
 
             if (x.size == 0)
@@ -93,6 +98,105 @@ namespace NumSharp
 
             long[] idx = FisherYatesIndices(x.shape[ax]);
             return np.take(x, np.array(idx), axis: ax);
+        }
+
+        /// <summary>
+        ///     Randomly permute <paramref name="x"/> along <paramref name="axis"/>. Unlike
+        ///     <see cref="shuffle"/>, each slice along the axis is shuffled INDEPENDENTLY of the others.
+        /// </summary>
+        /// <param name="x">Array to shuffle (at least 1-D when an axis is given).</param>
+        /// <param name="axis">Axis whose slices are each shuffled; <c>null</c> shuffles the flattened array.</param>
+        /// <param name="out">Optional destination (must match <paramref name="x"/>'s shape); returned when given.</param>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.permuted.html
+        ///     <br/>Byte-identical to NumPy: <c>axis=None</c> shuffles the C-order flattened copy;
+        ///     an explicit axis runs an independent <c>random_interval</c> Fisher–Yates over each 1-D
+        ///     slice, iterating the remaining axes in C-order (NumPy's <c>PyArray_IterAllButAxis</c>).
+        /// </remarks>
+        public NDArray permuted(NDArray x, int? axis = null, NDArray @out = null)
+        {
+            NDArray target;
+            if (@out is null)
+            {
+                target = x.copy();
+            }
+            else
+            {
+                if (!@out.Shape.IsWriteable)
+                    throw new ValueError("out is read-only");
+                if (!@out.Shape.Equals(x.Shape))
+                    throw new ValueError("out must have the same shape as x");
+                np.copyto(@out, x);
+                target = @out;
+            }
+
+            if (axis is null)
+            {
+                if (target.ndim == 0)
+                    shuffle(target); // NumPy shuffles `out` here → 0-d raises TypeError("len() of unsized object")
+                else
+                {
+                    // Shuffle the flattened array (C-order for a contiguous target; the common path).
+                    NDArray flat = target.Shape.IsContiguous ? target.reshape(target.size) : target.copy().reshape(target.size);
+                    Shuffle1D(flat);
+                    if (!target.Shape.IsContiguous)
+                        CopyInPlace(target, flat);
+                }
+                return target;
+            }
+
+            int nd = target.ndim;
+            int ax = axis.Value < 0 ? axis.Value + nd : axis.Value;
+            if (nd == 0 || ax < 0 || ax >= nd)
+                throw new ArgumentException($"axis {axis} is out of bounds for array of dimension {nd}");
+
+            PermutedAlongAxis(target, ax);
+            return target;
+        }
+
+        // Independent Fisher–Yates (random_interval) over every 1-D slice along `ax`, visiting the
+        // remaining axes in C-order — the byte-exact analog of NumPy's IterAllButAxis loop in permuted.
+        private unsafe void PermutedAlongAxis(NDArray target, int ax)
+        {
+            long axlen = target.shape[ax];
+            if (axlen <= 1 || target.size == 0)
+                return;
+
+            int itemsize = target.dtypesize;
+            long axStrideBytes = target.Shape.strides[ax] * itemsize;
+            byte* basePtr = target.Storage.Address + target.Shape.offset * itemsize;
+            byte* buf = stackalloc byte[16]; // widest dtype (Complex/Decimal)
+
+            int nd = target.ndim;
+            // The non-axis dimensions and their byte strides, in original (C) order.
+            var dims = new long[nd - 1];
+            var strides = new long[nd - 1];
+            int k = 0;
+            for (int d = 0; d < nd; d++)
+                if (d != ax) { dims[k] = target.shape[d]; strides[k] = target.Shape.strides[d] * itemsize; k++; }
+
+            long outerCount = target.size / axlen;
+            var coord = new long[nd - 1];
+            for (long o = 0; o < outerCount; o++)
+            {
+                long baseOff = 0;
+                for (int d = 0; d < nd - 1; d++) baseOff += coord[d] * strides[d];
+                byte* slice = basePtr + baseOff;
+
+                for (long i = axlen - 1; i >= 1; i--)
+                {
+                    ulong j = RandomInterval((ulong)i);
+                    if ((long)j == i) continue;
+                    byte* pi = slice + i * axStrideBytes;
+                    byte* pj = slice + (long)j * axStrideBytes;
+                    Buffer.MemoryCopy(pj, buf, 16, itemsize);
+                    Buffer.MemoryCopy(pi, pj, itemsize, itemsize);
+                    Buffer.MemoryCopy(buf, pi, itemsize, itemsize);
+                }
+
+                // C-order odometer over the non-axis dimensions (last dim fastest).
+                for (int d = nd - 2; d >= 0; d--) { if (++coord[d] < dims[d]) break; coord[d] = 0; }
+            }
         }
 
         // Build the permutation produced by in-place Fisher–Yates over [0, m).

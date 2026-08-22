@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace NumSharp
 {
@@ -92,9 +93,9 @@ namespace NumSharp
                     throw new ValueError("negative dimensions are not allowed");
 
                 if (p is not null)
-                    throw new NotSupportedException("choice(replace=false) with p (weighted sampling without replacement) is not yet ported in NumSharp.");
-
-                idx = ChoiceNoReplaceUniform(popSize, count, shuffle, shape, isScalar);
+                    idx = ChoiceNoReplaceWeighted(p, count, shape, isScalar);
+                else
+                    idx = ChoiceNoReplaceUniform(popSize, count, shuffle, shape, isScalar);
             }
 
             // ---- map indices back onto the population ----
@@ -168,6 +169,71 @@ namespace NumSharp
             if (isScalar)
                 return arr.reshape(Shape.Scalar); // 0-d
             return arr.reshape(shape);
+        }
+
+        // replace=False, p!=None : weighted sampling without replacement (numpy _generator.pyx
+        // choice, the `p is not None` branch). Draws `size-n_uniq` uniforms per round, maps them
+        // through the current (found-zeroed) normalised CDF via searchsorted(side='right'), keeps the
+        // batch's first-occurrence-unique hits, and repeats until `size` distinct indices are found.
+        // Composed from the byte-exact `random` draw + sequential cumsum + bisect_right, so the stream
+        // matches default_rng(seed).choice(..., replace=False, p=...) bit-for-bit.
+        private unsafe NDArray ChoiceNoReplaceWeighted(NDArray p, long size, Shape shape, bool isScalar)
+        {
+            var pd = p.astype(np.float64);
+            long d = pd.size;
+            var pw = new double[d];
+            long nonzero = 0;
+            for (long i = 0; i < d; i++)
+            {
+                pw[i] = Convert.ToDouble(pd.GetAtIndex(i));
+                if (pw[i] > 0) nonzero++;
+            }
+            if (nonzero < size)
+                throw new ValueError("Fewer non-zero entries in p than size");
+
+            var found = new long[size];
+            var seen = new HashSet<long>();
+            var cdf = new double[d];
+            long nUniq = 0;
+
+            while (nUniq < size)
+            {
+                long need = size - nUniq;
+                // x = self.random((need,)) — the byte-exact float64 draw.
+                NDArray x = random(new Shape(need));
+                double* xp = (double*)x.Address;
+
+                // Zero the probabilities of already-found indices, then rebuild the normalised CDF.
+                for (long k = 0; k < nUniq; k++) pw[found[k]] = 0.0;
+                double acc = 0.0;
+                for (long i = 0; i < d; i++) { acc += pw[i]; cdf[i] = acc; }
+                double last = cdf[d - 1];
+                for (long i = 0; i < d; i++) cdf[i] /= last;
+
+                // searchsorted(cdf, x, side='right'); keep first-occurrence-unique hits in order.
+                for (long t = 0; t < need && nUniq < size; t++)
+                {
+                    long ins = BisectRight(cdf, xp[t]);
+                    if (seen.Add(ins))
+                        found[nUniq++] = ins;
+                }
+            }
+
+            var arr = np.array(found);
+            return isScalar ? arr.reshape(Shape.Scalar) : arr.reshape(shape);
+        }
+
+        // bisect_right on a sorted double[] (numpy searchsorted side='right'): first index i with a[i] > v.
+        private static long BisectRight(double[] a, double v)
+        {
+            long lo = 0, hi = a.Length;
+            while (lo < hi)
+            {
+                long mid = (lo + hi) >> 1;
+                if (v < a[mid]) hi = mid;
+                else lo = mid + 1;
+            }
+            return lo;
         }
 
         // numpy _shuffle_int : Fisher-Yates over int64[] using random_bounded_uint64(0, i, 0, 0).

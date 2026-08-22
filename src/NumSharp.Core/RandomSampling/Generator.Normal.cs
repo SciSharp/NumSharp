@@ -28,8 +28,10 @@ namespace NumSharp
             }
 
             if (IsNoSize(size))
+                // size=None returns a float64 scalar even for dtype=float32 (NumPy float_fill widens
+                // the float32 draw to a Python float); only sized/out= stay float32.
                 return tc == NPTypeCode.Single
-                    ? NDArray.Scalar(NextStandardNormalF())
+                    ? NDArray.Scalar((double)NextStandardNormalF())
                     : NDArray.Scalar(NextStandardNormal());
 
             return tc == NPTypeCode.Single

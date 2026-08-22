@@ -33,7 +33,9 @@ namespace NumSharp
             }
 
             if (IsNoSize(size))
-                return f32 ? NDArray.Scalar(NextStandardGammaF(shapeF)) : NDArray.Scalar(NextStandardGamma(shape));
+                // size=None returns a float64 scalar even for dtype=float32 (NumPy float_fill widens
+                // the float32 draw to a Python float); only sized/out= stay float32.
+                return f32 ? NDArray.Scalar((double)NextStandardGammaF(shapeF)) : NDArray.Scalar(NextStandardGamma(shape));
 
             return f32
                 ? FillFloatDist(size, () => NextStandardGammaF(shapeF))

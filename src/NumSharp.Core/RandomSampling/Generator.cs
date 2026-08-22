@@ -79,8 +79,12 @@ namespace NumSharp
 
             if (IsNoSize(size))
             {
+                // NumPy's float_fill/double_fill return a Python float (float64) for size=None even
+                // when dtype=float32 — the float32 draw is widened to double for the scalar return
+                // (_common.pyx float_fill: `random_func(state, 1, &out_val); return out_val`, the C
+                // float auto-converting to a Python float). Only the sized/out= paths stay float32.
                 if (tc == NPTypeCode.Single)
-                    return NDArray.Scalar(_bitGenerator.NextFloat());
+                    return NDArray.Scalar((double)_bitGenerator.NextFloat());
                 return NDArray.Scalar(_bitGenerator.NextDouble());
             }
 
@@ -115,12 +119,19 @@ namespace NumSharp
         /// <summary>
         ///     Validates an <c>out=</c> array against the requested size and loop dtype (NumPy semantics).
         /// </summary>
+        /// <remarks>
+        ///     Mirrors NumPy's <c>check_output</c> (<c>_common.pyx</c>, <c>require_c_array=False</c>) —
+        ///     the checks run in NumPy's order (contiguity/writability → dtype → shape) and use its
+        ///     verbatim messages, and a C- OR F-contiguous writable array is accepted (the random fills
+        ///     write the raw buffer sequentially, so an F-contiguous <c>out</c> receives the same bytes
+        ///     NumPy would write).
+        /// </remarks>
         private static void ValidateOut(NDArray @out, Shape size, NPTypeCode loopType, string name)
         {
+            if (!((@out.Shape.IsContiguous || @out.Shape.IsFContiguous) && @out.Shape.IsWriteable))
+                throw new ValueError("Supplied output array must be contiguous, writable, aligned, and in machine byte-order.");
             if (@out.GetTypeCode != loopType)
                 throw new TypeError($"Supplied output array has the wrong type. Expected {loopType.AsNumpyDtypeName()}, got {@out.GetTypeCode.AsNumpyDtypeName()}");
-            if (!@out.Shape.IsContiguous)
-                throw new ValueError("Supplied output array is not contiguous, writable or aligned.");
             if (!IsNoSize(size) && !size.Equals(@out.Shape))
                 throw new ValueError("size must match out.shape when used together");
         }
