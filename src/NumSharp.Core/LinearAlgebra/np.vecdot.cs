@@ -77,9 +77,17 @@ namespace NumSharp
                 // NumPy allows a bare `axis` only where every core dimension is the SAME one — true
                 // for vecdot's (n),(n)->() and for no other member of this family (matvec and vecmat
                 // raise TypeError). It names the shared core axis in EACH operand, so both move it
-                // to the end and the ordinary kernel runs.
-                a = moveaxis(a, RequireAxisInRange(axis.Value, a), -1);
-                b = moveaxis(b, RequireAxisInRange(axis.Value, b), -1);
+                // to the end and the ordinary kernel runs. When the named axis IS already the last
+                // one — the overwhelmingly common case, and what np.linalg.vecdot's axis=-1 default
+                // always resolves to — the moveaxis is a pure no-op view rebuild, so skip it (the
+                // validation still runs). This is what kept np.linalg.vecdot ~2x slower than a bare
+                // np.vecdot on the same 1-D operands.
+                int ra = RequireAxisInRange(axis.Value, a);
+                if (ra != a.ndim - 1)
+                    a = moveaxis(a, ra, -1);
+                int rb = RequireAxisInRange(axis.Value, b);
+                if (rb != b.ndim - 1)
+                    b = moveaxis(b, rb, -1);
             }
 
             GufuncGuard.RequireCoreSize("vecdot", VecdotSignature, 1, 0, b.shape[b.ndim - 1], a.shape[a.ndim - 1]);

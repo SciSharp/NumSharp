@@ -420,7 +420,10 @@ namespace NumSharp.Interop.OpenBLAS
             int nd = shape.NDim;
             long m = shape.dimensions[nd - 1];
 
-            var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape((long[])shape.dimensions.Clone()));
+            // fillZeros:false: Delinearize writes EVERY cell of each m×m block from the LAPACK
+            // solution, so the whole result is overwritten and pre-zeroing is wasted — a warm pooled
+            // buffer avoids the page-fault/memset cost the default ctor pays before dgesv.
+            var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape((long[])shape.dimensions.Clone()), fillZeros: false);
             if (result.size == 0)
                 return result; // (…,0,0) → empty inverse, matching NumPy
 
