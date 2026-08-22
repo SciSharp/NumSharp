@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.5.0"
+GENERATOR_VERSION = "1.6.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -151,10 +151,12 @@ def load_numsharp_inventory() -> dict[str, Any]:
         data = json.loads(completed.stdout)
     except json.JSONDecodeError as error:
         raise SystemExit(f"NumSharp inventory emitted invalid JSON: {error}") from error
-    if data.get("schemaVersion") != 3 or not isinstance(data.get("modules"), dict) or not data["modules"]:
-        raise SystemExit("NumSharp inventory schema mismatch: expected schemaVersion 3 with a non-empty 'modules' map.")
+    if data.get("schemaVersion") != 4 or not isinstance(data.get("modules"), dict) or not data["modules"]:
+        raise SystemExit("NumSharp inventory schema mismatch: expected schemaVersion 4 with a non-empty 'modules' map.")
     if not isinstance(data.get("unannotatedSurface"), dict):
-        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 3 must carry the 'unannotatedSurface' index.")
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 4 must carry the 'unannotatedSurface' index.")
+    if not isinstance(data.get("exportedTypes"), list):
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 4 must carry the 'exportedTypes' index.")
     return data
 
 
@@ -283,6 +285,23 @@ class SourceLocator:
     @staticmethod
     def github_urls(paths: list[str]) -> list[str]:
         return [NUMSHARP_SOURCE_BASE_URL + quote(path, safe="/") for path in paths]
+
+
+def locate_type_source(name: str) -> list[str]:
+    """Best-effort path to the .cs file declaring a NumSharp class, for crediting a type-match row.
+
+    Only NumPy CLASS exports reach here (Generator/PCG64/SeedSequence/BitGenerator/MT19937), so a
+    plain `class <Name>` scan over NumSharp.Core is enough — these are top-level types, not members.
+    """
+    pattern = re.compile(rf"\b(?:sealed\s+|abstract\s+|partial\s+|static\s+)*class\s+{re.escape(name)}\b")
+    source_root = ROOT / "src" / "NumSharp.Core"
+    for path in sorted(source_root.rglob("*.cs")):
+        try:
+            if pattern.search(path.read_text(encoding="utf-8-sig")):
+                return [path.relative_to(ROOT).as_posix()]
+        except OSError:
+            continue
+    return []
 
 
 def category_for(surface: str, name: str, kind: str) -> str:
@@ -438,6 +457,13 @@ def auto_alternative(
 
 def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) -> tuple[list[dict[str, Any]], set[str]]:
     targets, surfaces, prefixes = member_maps(inventory)
+    # Exported-type index (simple name -> full name) for crediting a NumPy CLASS export against a
+    # NumSharp type of the same name. A repeated simple name prefers the root NumSharp.<Name>.
+    numsharp_types_by_simple: dict[str, str] = {}
+    for full in inventory.get("exportedTypes", []):
+        simple = full.rsplit(".", 1)[-1].split("+")[-1]
+        if simple not in numsharp_types_by_simple or full == f"NumSharp.{simple}":
+            numsharp_types_by_simple[simple] = full
     # Case-sensitive matching IS the parity contract: NumPy's public API is case-sensitive, so every
     # match below (direct_target / auto_alternative / aliases / the stray gate) is an exact dict
     # lookup on the C# spelling. We ALSO fold case here to DETECT near-misses — an in-scope NumPy
@@ -494,7 +520,18 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
                 availability = "alias"
                 notes.append(automatic_note or "Available on an alternate NumSharp surface.")
 
-        support = "declared" if target else "missing"
+        # Type-match: a NumPy CLASS export credited to a NumSharp exported type of the same name
+        # (numpy.random.Generator -> NumSharp.Generator). Class exports are out of default scope, so
+        # this only fixes the Types catalog — it is what let Generator/PCG64/SeedSequence/
+        # BitGenerator/MT19937 read "missing" while NumSharp exports every one of them.
+        type_target = None
+        if not target and export["kind"] not in CALLABLE_KINDS:
+            type_target = numsharp_types_by_simple.get(export["name"])
+            if type_target:
+                availability = "type"
+                notes.append(f"NumSharp exports the {export['name']} type ({type_target}).")
+
+        support = "declared" if (target or type_target) else "missing"
         support_override = support_overrides.get(row_id)
         if support_override:
             support = support_override["status"]
@@ -509,6 +546,12 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
             obsolete = member.get("obsolete", False)
             source_paths = member.get("sourcePaths", [])
             source_urls = member.get("sourceUrls", [])
+        elif type_target:
+            consumed_targets.add(type_target)
+            signatures = [f"public class {export['name']}"]
+            obsolete = False
+            source_paths = locate_type_source(export["name"])
+            source_urls = SourceLocator.github_urls(source_paths)
         else:
             signatures = []
             obsolete = False
@@ -531,14 +574,15 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
                     + ", ".join(case_insensitive_matches)
                 )
 
-        display_status = "missing" if not target else support if support in {"partial", "unsupported"} else "available"
+        matched = target or type_target
+        display_status = "missing" if not matched else support if support in {"partial", "unsupported"} else "available"
         row = {
             **export,
             "category": category_for(export["surface"], export["name"], export["kind"]),
             "availability": availability,
             "support": support,
             "status": display_status,
-            "numsharp_target": target,
+            "numsharp_target": matched,
             "numsharp_signatures": signatures,
             "numsharp_obsolete": obsolete,
             "numsharp_source_paths": source_paths,

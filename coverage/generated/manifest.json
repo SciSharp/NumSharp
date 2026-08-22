@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generator": "coverage/generate_coverage.py",
-  "generator_version": "1.5.0",
+  "generator_version": "1.6.0",
   "numpy_version": "2.4.2",
   "numsharp_assembly_version": "0.60.0.0",
   "artifact_files": [
@@ -21,14 +21,14 @@
   "summary": {
     "default_scope": {
       "total": 560,
-      "available": 472,
-      "partial": 3,
+      "available": 478,
+      "partial": 2,
       "unsupported": 0,
-      "missing": 85,
-      "exact": 457,
-      "alias": 18,
-      "coverage_percent": 84.3,
-      "addressed_percent": 84.8
+      "missing": 80,
+      "exact": 463,
+      "alias": 17,
+      "coverage_percent": 85.4,
+      "addressed_percent": 85.7
     },
     "by_surface": {
       "fft": {
@@ -66,25 +66,25 @@
       },
       "np": {
         "total": 390,
-        "available": 309,
+        "available": 312,
         "partial": 1,
         "unsupported": 0,
-        "missing": 80,
-        "exact": 295,
+        "missing": 77,
+        "exact": 298,
         "alias": 15,
-        "coverage_percent": 79.2,
-        "addressed_percent": 79.5
+        "coverage_percent": 80.0,
+        "addressed_percent": 80.3
       },
       "random": {
         "total": 51,
-        "available": 48,
-        "partial": 1,
+        "available": 51,
+        "partial": 0,
         "unsupported": 0,
-        "missing": 2,
-        "exact": 46,
-        "alias": 3,
-        "coverage_percent": 94.1,
-        "addressed_percent": 96.1
+        "missing": 0,
+        "exact": 49,
+        "alias": 2,
+        "coverage_percent": 100.0,
+        "addressed_percent": 100.0
       }
     },
     "by_category": {
@@ -200,14 +200,14 @@
       },
       "Linear algebra": {
         "total": 43,
-        "available": 42,
+        "available": 43,
         "partial": 0,
         "unsupported": 0,
-        "missing": 1,
-        "exact": 42,
+        "missing": 0,
+        "exact": 43,
         "alias": 0,
-        "coverage_percent": 97.7,
-        "addressed_percent": 97.7
+        "coverage_percent": 100.0,
+        "addressed_percent": 100.0
       },
       "Logic & comparison": {
         "total": 29,
@@ -244,25 +244,25 @@
       },
       "Random": {
         "total": 51,
-        "available": 48,
-        "partial": 1,
+        "available": 51,
+        "partial": 0,
         "unsupported": 0,
-        "missing": 2,
-        "exact": 46,
-        "alias": 3,
-        "coverage_percent": 94.1,
-        "addressed_percent": 96.1
+        "missing": 0,
+        "exact": 49,
+        "alias": 2,
+        "coverage_percent": 100.0,
+        "addressed_percent": 100.0
       },
       "Reductions": {
         "total": 50,
-        "available": 48,
+        "available": 50,
         "partial": 0,
         "unsupported": 0,
-        "missing": 2,
-        "exact": 46,
+        "missing": 0,
+        "exact": 48,
         "alias": 2,
-        "coverage_percent": 96.0,
-        "addressed_percent": 96.0
+        "coverage_percent": 100.0,
+        "addressed_percent": 100.0
       },
       "Runtime & diagnostics": {
         "total": 5,

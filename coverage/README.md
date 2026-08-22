@@ -37,6 +37,8 @@ CI generates a fresh copy under `artifacts/numpy-numsharp-coverage/`, validates 
 
 The default denominator includes NumPy top-level callables, `ndarray` methods and properties, and callables from `numpy.random`, `numpy.linalg`, and `numpy.fft`. NumPy types, constants, and modules are catalogued but do not affect the headline percentage. NumSharp-only APIs are catalogued separately and also do not affect it.
 
+A NumPy **class** export (for example `numpy.random.Generator`, `PCG64`, `SeedSequence`, `BitGenerator`, `MT19937`) is credited when NumSharp exports a public type of the same name — a `"type"` availability match against the inventory's `exportedTypes` index. This carries the type existence the member-name index cannot (a class such as `BitGenerator` has no public members of its own), and, being out of default scope, it fixes the Types catalog without moving the headline.
+
 Platform-conditional extended-precision aliases (`float96`, `float128`, `complex192`, and `complex256`) are excluded so the artifact is byte-identical across Windows and Linux. NumPy's portable `longdouble` and `clongdouble` names remain catalogued.
 
 - **Exact** — the corresponding NumSharp surface has the same public member name.

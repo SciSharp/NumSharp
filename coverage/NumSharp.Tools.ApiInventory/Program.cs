@@ -43,14 +43,22 @@ foreach (var (type, moduleName) in annotatedTypes)
 }
 
 var inventory = new ApiInventory(
-    SchemaVersion: 3,
+    SchemaVersion: 4,
     AssemblyVersion: assembly.GetName().Version?.ToString() ?? "unknown",
     Modules: modules,
     // The full public surface OUTSIDE the annotated modules (type -> member names). The generator
     // cross-checks every still-missing in-scope NumPy export against this index and fails when the
     // name exists here — a NumPy function implemented on an unannotated type is a scan miss, not a
     // genuine gap. Extension-method hosts are exported static classes, so they land here too.
-    UnannotatedSurface: BuildUnannotatedSurface(assembly, annotatedTypes.Keys));
+    UnannotatedSurface: BuildUnannotatedSurface(assembly, annotatedTypes.Keys),
+    // Every exported public type's full name. A NumPy CLASS export (numpy.random.Generator/PCG64/
+    // SeedSequence/BitGenerator/MT19937) is credited when NumSharp exports a type of the same name —
+    // the member-name index above cannot carry that, since a class like BitGenerator has no public
+    // members of its own. Includes types with no public members, which UnannotatedSurface omits.
+    ExportedTypes: assembly.GetExportedTypes()
+        .Select(type => type.FullName ?? type.Name)
+        .OrderBy(name => name, StringComparer.Ordinal)
+        .ToArray());
 
 Console.WriteLine(JsonSerializer.Serialize(inventory, new JsonSerializerOptions
 {
@@ -303,7 +311,10 @@ internal sealed record ApiInventory(
     IReadOnlyDictionary<string, TypeInventory> Modules,
     // Every OTHER exported type's public member names — the stray-host index the generator checks
     // still-missing NumPy exports against.
-    IReadOnlyDictionary<string, string[]> UnannotatedSurface);
+    IReadOnlyDictionary<string, string[]> UnannotatedSurface,
+    // Every exported public type's full name — the type-match index behind crediting a NumPy CLASS
+    // export against a NumSharp type of the same name (numpy.random.Generator -> NumSharp.Generator).
+    IReadOnlyList<string> ExportedTypes);
 
 internal sealed record TypeInventory(
     string Type,

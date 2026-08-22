@@ -2,15 +2,15 @@
 
 Compared with NumPy **2.4.2** using NumSharp assembly **0.60.0.0**.
 
-Headline API availability: **84.3%** (472 of 560 default-scope APIs). Including partial mappings, **84.8%** are addressed.
+Headline API availability: **85.4%** (478 of 560 default-scope APIs). Including partial mappings, **85.7%** are addressed.
 
 | Surface | Available | Partial | Unsupported | Missing | Total | Coverage |
 |---|---:|---:|---:|---:|---:|---:|
 | np.fft.* | 18 | 0 | 0 | 0 | 18 | 100.0% |
 | np.linalg.* | 31 | 0 | 0 | 0 | 31 | 100.0% |
 | ndarray.* | 66 | 1 | 0 | 3 | 70 | 94.3% |
-| np.* | 309 | 1 | 0 | 80 | 390 | 79.2% |
-| np.random.* | 48 | 1 | 0 | 2 | 51 | 94.1% |
+| np.* | 312 | 1 | 0 | 77 | 390 | 80.0% |
+| np.random.* | 51 | 0 | 0 | 0 | 51 | 100.0% |
 
 > Availability is based on the compiled public API. It is not a blanket behavioral-parity claim; dtype, layout, signature, and edge-case parity require differential tests.
 
@@ -20,7 +20,6 @@ Headline API availability: **84.3%** (472 of 560 default-scope APIs). Including 
 |---|---|---|---|
 | [`ndarray.data`](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.data.html) | ndarray | partial | Array attributes |
 | [`np.shape`](https://numpy.org/doc/stable/reference/generated/numpy.shape.html) | np | partial | Shape manipulation |
-| [`np.random.random_integers`](https://numpy.org/doc/stable/reference/random/generated/numpy.random.random_integers.html) | random | partial | Random |
 | [`ndarray.ctypes`](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.ctypes.html) | ndarray | missing | Array attributes |
 | [`ndarray.dump`](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.dump.html) | ndarray | missing | Array methods |
 | [`ndarray.dumps`](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.dumps.html) | ndarray | missing | Array methods |
@@ -32,7 +31,6 @@ Headline API availability: **84.3%** (472 of 560 default-scope APIs). Including 
 | [`np.binary_repr`](https://numpy.org/doc/stable/reference/generated/numpy.binary_repr.html) | np | missing | Text & formatting |
 | [`np.bitwise_count`](https://numpy.org/doc/stable/reference/generated/numpy.bitwise_count.html) | np | missing | Math |
 | [`np.blackman`](https://numpy.org/doc/stable/reference/generated/numpy.blackman.html) | np | missing | Window functions |
-| [`np.bmat`](https://numpy.org/doc/stable/reference/generated/numpy.bmat.html) | np | missing | Linear algebra |
 | [`np.broadcast_shapes`](https://numpy.org/doc/stable/reference/generated/numpy.broadcast_shapes.html) | np | missing | Shape manipulation |
 | [`np.busday_count`](https://numpy.org/doc/stable/reference/generated/numpy.busday_count.html) | np | missing | Date & time |
 | [`np.busday_offset`](https://numpy.org/doc/stable/reference/generated/numpy.busday_offset.html) | np | missing | Date & time |
@@ -68,6 +66,8 @@ Headline API availability: **84.3%** (472 of 560 default-scope APIs). Including 
 | [`np.hypot`](https://numpy.org/doc/stable/reference/generated/numpy.hypot.html) | np | missing | Math |
 | [`np.i0`](https://numpy.org/doc/stable/reference/generated/numpy.i0.html) | np | missing | Math |
 | [`np.info`](https://numpy.org/doc/stable/reference/generated/numpy.info.html) | np | missing | Runtime & diagnostics |
+| [`np.interp`](https://numpy.org/doc/stable/reference/generated/numpy.interp.html) | np | missing | Math |
+| [`np.is_busday`](https://numpy.org/doc/stable/reference/generated/numpy.is_busday.html) | np | missing | Date & time |
 
 ## Case-insensitive near-misses
 

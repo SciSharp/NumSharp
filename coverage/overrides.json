@@ -65,10 +65,6 @@
       "target": "NumSharp.NumPyRandom.random_sample",
       "notes": "NumPy documents sample as an alias of random_sample."
     },
-    "numpy.random.random_integers": {
-      "target": "NumSharp.NumPyRandom.randint",
-      "notes": "Use randint and adjust the upper bound; deprecated random_integers includes the high endpoint."
-    },
     "numpy.shape": {
       "target": "NumSharp.NDArray.Shape",
       "notes": "NumSharp exposes shape as an NDArray Shape property rather than the top-level NumPy tuple-returning helper."
@@ -78,10 +74,6 @@
     "numpy.ndarray.data": {
       "status": "partial",
       "notes": "Data<T>() returns a typed NumSharp ArraySlice and is not NumPy's Python buffer object."
-    },
-    "numpy.random.random_integers": {
-      "status": "partial",
-      "notes": "The available randint alternative has an exclusive upper bound, while random_integers historically used an inclusive upper bound."
     },
     "numpy.shape": {
       "status": "partial",
