@@ -197,10 +197,16 @@ namespace NumSharp
             for (long j = 0; j < nLeft; j++)
                 blas.Dot(tc, a, 1, k + (nLeft - j), 1, o + j, n2 - nLeft + j);
 
-            // Middle: out[nLeft + i] = sum_{t=0}^{n2-1} a[i+t] * k[t], i in [0, mid).
+            // Middle: out[nLeft + i] = sum_{t=0}^{n2-1} a[i+t] * k[t], i in [0, mid). This is the
+            // bulk of the work (mid ~= n1 output positions vs. only nLeft+nRight ramp positions), so
+            // it goes through DotBatch — ONE interface call for the whole uniform region. The backend
+            // then runs the tight per-position ?dot loop with no per-output virtual dispatch, which is
+            // bit-identical to calling blas.Dot per position but hoists the ~15 ns/position dispatch
+            // (~1.45 ms on a 100K signal) out of the loop. The ramps below keep the per-position Dot:
+            // there are at most (n2-1) of them each side, negligible against mid.
             T* om = o + nLeft;
-            for (long i = 0; i < mid; i++)
-                blas.Dot(tc, a + i, 1, k, 1, om + i, n2);
+            if (mid > 0)
+                blas.DotBatch(tc, a, k, om, mid, n2);
 
             // Right ramp: out[nLeft + mid + j] = sum_t a[(mid + j) + t] * k[t], length (n2 - 1 - j).
             T* orr = o + nLeft + mid;

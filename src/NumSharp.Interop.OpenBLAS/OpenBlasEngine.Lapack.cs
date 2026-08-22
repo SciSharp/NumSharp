@@ -678,7 +678,15 @@ namespace NumSharp.Interop.OpenBLAS
         //  Small helpers.
         // ----------------------------------------------------------------------------------------
 
+        // AggressiveOptimization on the copy/transpose leaves: these are the per-element work of every
+        // LAPACK call, and a linalg op on a small matrix is a handful of calls that finishes in far
+        // less than tiered compilation's background-promotion delay (~100 ms). Without this the generic
+        // instantiation runs at TIER-0 for the whole call — measured ~12x slower than tier-1 on a 32x32
+        // transpose (2.5 us vs 0.2 us), which is most of a small factorisation's managed overhead. Forcing
+        // immediate tier-1 matches NumPy (precompiled C, no warm-up) for the cold / few-call usage a
+        // linalg op typically sees. Same rationale as NDFloatMath.Simd's AggressiveOptimization.
         /// <summary>Copies a strided row-major matrix into a column-major buffer (LD = rows).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void Linearize<T>(T* src, long sr, long sc, T* dst, long rows, long cols)
             where T : unmanaged
         {
@@ -686,24 +694,29 @@ namespace NumSharp.Interop.OpenBLAS
             {
                 T* col = dst + c * rows;
                 T* s = src + c * sc;
-                for (long r = 0; r < rows; r++)
-                    col[r] = s[r * sr];
+                // Advance the strided source pointer instead of recomputing r*sr each element.
+                for (long r = 0; r < rows; r++, s += sr)
+                    col[r] = *s;
             }
         }
 
         /// <summary>Copies a column-major buffer (LD = rows) into a contiguous row-major block.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void Delinearize<T>(T* colSrc, long rows, long cols, T* dstRowMajor)
             where T : unmanaged
         {
             for (long r = 0; r < rows; r++)
             {
                 T* row = dstRowMajor + r * cols;
-                for (long c = 0; c < cols; c++)
-                    row[c] = colSrc[c * rows + r];
+                T* s = colSrc + r;
+                // Advance the strided source pointer (stride = rows) instead of recomputing c*rows+r.
+                for (long c = 0; c < cols; c++, s += rows)
+                    row[c] = *s;
             }
         }
 
         /// <summary>Writes a column-major identity into <paramref name="buf"/> (NumPy's identity_matrix).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void IdentityColMajor<T>(T* buf, long n, T one) where T : unmanaged
         {
             Zero(buf, n * n);

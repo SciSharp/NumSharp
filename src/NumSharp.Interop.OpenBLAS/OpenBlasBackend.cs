@@ -189,6 +189,15 @@ namespace NumSharp.Interop.OpenBLAS
             void* a, long strideA, void* b, long strideB, void* result, long count)
             => OpenBlasEngine.SlidingDot(dtype, a, strideA, b, strideB, result, count);
 
+        /// <inheritdoc/>
+        // Override the default per-position fallback: switch on the dtype ONCE and run the whole
+        // fully-overlapping middle through the tight native ?dot loop, so np.correlate/np.convolve
+        // pay the interface dispatch once for the region instead of once per output. Bit-identical
+        // to the per-position path (same DoubleBlas.Dot / NumPy @name@_dot); only the dispatch moves.
+        unsafe void ISlidingDotBackend.DotBatch(NPTypeCode dtype,
+            void* a, void* b, void* result, long count, long n2)
+            => OpenBlasEngine.SlidingDotBatch(dtype, a, b, result, count, n2);
+
         #endregion
 
         /// <summary>The loaded library's own description, for diagnostics.</summary>

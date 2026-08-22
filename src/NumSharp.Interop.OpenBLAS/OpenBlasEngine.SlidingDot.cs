@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using NumSharp;
 
 namespace NumSharp.Interop.OpenBLAS
@@ -51,6 +52,52 @@ namespace NumSharp.Interop.OpenBLAS
                 default:
                     throw new NotSupportedException(
                         $"OpenBlasEngine.SlidingDot: dtype {dtype} is not a cblas dot dtype " +
+                        "(only Single/Double/Complex route through cblas ?dot in NumPy's dotfunc).");
+            }
+        }
+
+        /// <summary>
+        ///     The fully-overlapping MIDDLE of a sliding correlate as ONE call:
+        ///     <c>result[i] = @name@_dot(a + i, 1, b, 1, n2)</c> for <c>i</c> in <c>[0, count)</c>.
+        ///     The dtype is dispatched ONCE here, then the per-position loop calls the concrete
+        ///     <c>@name@Blas.Dot</c> directly (no <see cref="Backends.ISlidingDotBackend"/> virtual
+        ///     dispatch, no re-switch) — the hot path for <c>np.correlate</c>/<c>np.convolve</c>. The
+        ///     inner <c>ops.Dot</c> is NumPy's <c>@name@_dot</c> exactly, so this is bit-identical to
+        ///     the per-position <see cref="SlidingDot"/> route the ramps still use; only the dispatch
+        ///     is hoisted out of the ~100K-iteration loop.
+        /// </summary>
+        internal static void SlidingDotBatch(NPTypeCode dtype,
+            void* a, void* b, void* result, long count, long n2)
+        {
+            switch (dtype)
+            {
+                case NPTypeCode.Single:
+                {
+                    float* pa = (float*)a, pk = (float*)b, po = (float*)result;
+                    var ops = default(SingleBlas);
+                    for (long i = 0; i < count; i++)
+                        ops.Dot(pa + i, 1, pk, 1, po + i, n2);
+                    break;
+                }
+                case NPTypeCode.Double:
+                {
+                    double* pa = (double*)a, pk = (double*)b, po = (double*)result;
+                    var ops = default(DoubleBlas);
+                    for (long i = 0; i < count; i++)
+                        ops.Dot(pa + i, 1, pk, 1, po + i, n2);
+                    break;
+                }
+                case NPTypeCode.Complex:
+                {
+                    Complex* pa = (Complex*)a, pk = (Complex*)b, po = (Complex*)result;
+                    var ops = default(ComplexBlas);
+                    for (long i = 0; i < count; i++)
+                        ops.Dot(pa + i, 1, pk, 1, po + i, n2);
+                    break;
+                }
+                default:
+                    throw new NotSupportedException(
+                        $"OpenBlasEngine.SlidingDotBatch: dtype {dtype} is not a cblas dot dtype " +
                         "(only Single/Double/Complex route through cblas ?dot in NumPy's dotfunc).");
             }
         }
