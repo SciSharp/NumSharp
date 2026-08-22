@@ -2265,7 +2265,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     const ratio = row.ratio;
     if (!Number.isFinite(ratio)) return "ns-perf-empty";
     if (ratio >= 2) return "ns-perf-excellent";
-    if (ratio >= 1.05) return "ns-perf-good";
+    if (ratio >= 0.95) return "ns-perf-good";
     if (ratio >= 0.8) return "ns-perf-near";
     if (ratio >= 0.33) return "ns-perf-slow";
     return "ns-perf-bad";
@@ -2492,7 +2492,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     };
     const suiteKey = (value) => String(value || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
     const scoreTone = (score) => !Number.isFinite(score) ? ["metric-near", "var(--quiet)"]
-      : score >= 1.05 ? ["metric-good", "var(--good)"]
+      : score >= 0.95 ? ["metric-good", "var(--good)"]
       : score >= 0.8 ? ["metric-near", "var(--near)"]
       : ["metric-slow", "var(--slow)"];
 
@@ -2520,7 +2520,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
     const heatClass = (score) => !Number.isFinite(score) ? "heat-empty"
       : score >= 1.25 ? "heat-best"
-      : score >= 1.05 ? "heat-good"
+      : score >= 0.95 ? "heat-good"
       : score >= 0.8 ? "heat-near"
       : score >= 0.33 ? "heat-slow" : "heat-bad";
     document.querySelectorAll(".dtype-panel").forEach((panel) => {
@@ -2547,7 +2547,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const ratioToneClass = (ratio) => {
     if (!Number.isFinite(ratio)) return "func-tone-empty";
     if (ratio >= 100) return "func-tone-extreme";
-    if (ratio >= 1.05) return "func-tone-good";
+    if (ratio >= 0.95) return "func-tone-good";
     if (ratio >= 0.8) return "func-tone-near";
     if (ratio >= 0.33) return "func-tone-slow";
     return "func-tone-bad";
@@ -2556,7 +2556,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const ratioColor = (ratio) => {
     if (!Number.isFinite(ratio)) return "#87909a";
     if (ratio >= 100) return "#0e7490";
-    if (ratio >= 1.05) return "var(--good)";
+    if (ratio >= 0.95) return "var(--good)";
     if (ratio >= 0.8) return "var(--near)";
     if (ratio >= 0.33) return "var(--slow)";
     return "var(--bad)";
@@ -3541,7 +3541,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const toneClass = (ratio) => {
     if (!Number.isFinite(ratio)) return "func-tone-empty";
     if (ratio >= 100) return "func-tone-extreme";
-    if (ratio >= 1.05) return "func-tone-good";
+    if (ratio >= 0.95) return "func-tone-good";
     if (ratio >= .8) return "func-tone-near";
     if (ratio >= .33) return "func-tone-slow";
     return "func-tone-bad";
