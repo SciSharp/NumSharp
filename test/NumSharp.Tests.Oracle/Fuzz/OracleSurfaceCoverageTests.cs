@@ -38,7 +38,13 @@ namespace NumSharp.Tests.Fuzz
         // value bytes to compare in an operand/result corpus.
         private static readonly HashSet<string> SiblingOwned = new()
         {
-            "array2string", "evaluate", "finfo", "flat",
+            "array2string",
+            // bmat is pure block-assembly (concatenation) over the already-fuzzed concatenate +
+            // asmatrix — its nested-block ([[A,B],[C,D]]) and string+dict inputs have no single-operand
+            // corpus representation (the same reason block needs a bespoke multi-operand oracle path);
+            // gated by the dedicated np.bmat.Tests.cs suite verified against NumPy 2.4.2.
+            "bmat",
+            "evaluate", "finfo", "flat",
             "format_float_positional", "format_float_scientific",
             "get_printoptions", "iinfo", "load", "load_npy", "load_npz",
             "nditer_chunks", "printoptions", "save", "savez",
