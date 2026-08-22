@@ -1494,6 +1494,11 @@ def run_bool_logic_benchmarks(n, iterations):
 
 def run_nan_reduction_benchmarks(n, dtype_name, iterations):
     a = create_random_array(n, dtype_name, seed=42)
+    # nanprod multiplies the whole array; full-range data blows the product up to inf (and the C#
+    # Decimal cell, which has no inf, threw OverflowException). Give nanprod its own [0.5, 1.0] input
+    # so the product stays finite, mirroring the C# NanReductionBenchmarks._aProd (and ProdBenchmarks).
+    np.random.seed(42)
+    a_prod = (np.random.rand(n) * 0.5 + 0.5).astype(DTYPES[dtype_name])
     return [
         _b(lambda: np.nansum(a), n, iterations, "np.nansum(a)", "Reduction", dtype_name),
         _b(lambda: np.nanmean(a), n, iterations, "np.nanmean(a)", "Reduction", dtype_name),
@@ -1501,7 +1506,7 @@ def run_nan_reduction_benchmarks(n, dtype_name, iterations):
         _b(lambda: np.nanmin(a), n, iterations, "np.nanmin(a)", "Reduction", dtype_name),
         _b(lambda: np.nanstd(a), n, iterations, "np.nanstd(a)", "Reduction", dtype_name),
         _b(lambda: np.nanvar(a), n, iterations, "np.nanvar(a)", "Reduction", dtype_name),
-        _b(lambda: np.nanprod(a), n, iterations, "np.nanprod(a)", "Reduction", dtype_name),
+        _b(lambda: np.nanprod(a_prod), n, iterations, "np.nanprod(a)", "Reduction", dtype_name),
         _b(lambda: np.nanmedian(a), n, iterations, "np.nanmedian(a)", "Reduction", dtype_name),
         _b(lambda: np.nanpercentile(a, 50), n, iterations, "np.nanpercentile(a, 50)", "Reduction", dtype_name),
         _b(lambda: np.nanquantile(a, 0.5), n, iterations, "np.nanquantile(a, 0.5)", "Reduction", dtype_name),
