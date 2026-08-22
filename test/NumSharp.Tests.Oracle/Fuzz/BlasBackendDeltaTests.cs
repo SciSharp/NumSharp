@@ -19,8 +19,9 @@ namespace NumSharp.Tests.Fuzz
     ///     (see <see cref="OpenBlasEngine"/>) — and that property is consulted by ONLY the matrix
     ///     products (<c>dot</c>/<c>matmul</c> + the five gufuncs <c>inner</c>/<c>vdot</c>/
     ///     <c>vecdot</c>/<c>matvec</c>/<c>vecmat</c>), their compositions (<c>tensordot</c>/
-    ///     <c>multi_dot</c>/<c>matrix_power</c>), the <c>ISlidingDotBackend</c> pair
-    ///     (<c>correlate</c>/<c>convolve</c>), and the LAPACK factorisations — and ONLY for
+    ///     <c>multi_dot</c>/<c>matrix_power</c>/<c>cov</c>/<c>corrcoef</c>/<c>einsum</c>), the
+    ///     <c>ISlidingDotBackend</c> pair (<c>correlate</c>/<c>convolve</c>), and the LAPACK
+    ///     factorisations — and ONLY for
     ///     float32/float64/complex128 (integer/bool are modular-exact; Decimal/Half/Char always
     ///     fall through the managed kernel). Every OTHER op in every OTHER tier runs the identical
     ///     <c>DefaultEngine</c> code in both variations, so replaying it under the backend is pure
@@ -52,11 +53,13 @@ namespace NumSharp.Tests.Fuzz
     ///
     ///     <para>
     ///     This is additive: it does not touch the managed tiers (<c>matmul</c>/<c>products</c>/
-    ///     <c>groupa</c> keep running Variation A) nor the host-pinned <c>matmul_parity</c> tier,
+    ///     <c>groupa</c>/<c>specials</c>/<c>einsum</c> keep running Variation A) nor the host-pinned
+    ///     <c>matmul_parity</c> tier,
     ///     which already gates the deep-float dot/matmul + gufunc byte-parity. The value here is the
     ///     dedup mechanism itself, the portable "no unexpected flips" safety net across the affected
     ///     tiers, and extending the backend byte-check to <c>tensordot</c>/<c>multi_dot</c>/
-    ///     <c>matrix_power</c>/<c>convolve</c>/<c>correlate</c> wherever a case genuinely flips.
+    ///     <c>matrix_power</c>/<c>cov</c>/<c>corrcoef</c>/<c>einsum</c>/<c>convolve</c>/
+    ///     <c>correlate</c> wherever a case genuinely flips.
     ///     </para>
     /// </summary>
     public partial class FuzzCorpusTests
@@ -72,7 +75,7 @@ namespace NumSharp.Tests.Fuzz
             "dot", "dot_aat", "dot_ata",
             "matmul", "matmul_aat", "matmul_ata",
             "inner", "vdot", "vecdot", "matvec", "vecmat",
-            "tensordot", "multi_dot", "matrix_power",
+            "tensordot", "multi_dot", "matrix_power", "cov", "corrcoef", "einsum",
             "convolve", "correlate",
         };
 
@@ -87,12 +90,15 @@ namespace NumSharp.Tests.Fuzz
         };
 
         /// <summary>
-        ///     The ONLY committed tiers that contain a BLAS-affected op. The other ~45 are 100%
+        ///     The ONLY ordinary committed tiers that contain a BLAS-affected op. The others are 100%
         ///     managed in both variations; loading them here would be the noise this runner exists
-        ///     to avoid. (<c>matmul_parity</c> is excluded on purpose — it is already replayed
-        ///     backend-on by <see cref="FuzzCorpusTests.MatmulParity"/>.)
+        ///     to avoid. <c>matmul_parity</c> and <c>linalg_parity</c> are excluded on purpose —
+        ///     they are already replayed backend-on by their dedicated host-pinned gates.
         /// </summary>
-        private static readonly string[] BlasAffectedTiers = { "matmul.jsonl", "products.jsonl", "groupa.jsonl" };
+        private static readonly string[] BlasAffectedTiers =
+        {
+            "matmul.jsonl", "products.jsonl", "groupa.jsonl", "specials.jsonl", "einsum.jsonl",
+        };
 
         [TestMethod]
         [TestCategory("FuzzMatrix")]
@@ -107,7 +113,7 @@ namespace NumSharp.Tests.Fuzz
                         && (c.Expected?.KindOrArray == "array" || c.Expected?.KindOrArray == "scalar"))
                         cases.Add(c);
 
-            const int floor = 800;   // matmul dot/matmul (~1356) + products (~287) + groupa conv/corr (~36)
+            const int floor = 1400;  // ~80% of the current 1.7K+ affected ordinary-corpus cases
             Assert.IsTrue(cases.Count >= floor,
                 $"only {cases.Count} BLAS-affected array cases across {string.Join(", ", BlasAffectedTiers)} " +
                 $"(committed floor {floor}) — a truncated corpus, or the affected ops moved tiers");
@@ -116,9 +122,9 @@ namespace NumSharp.Tests.Fuzz
             OpenBlasEngine.Disable();
             Assert.IsFalse(OpenBlasEngine.Enabled,
                 "the backend leaked in from a prior test — pass 1 must run on NumSharp's managed kernels");
-            var managed = new byte[cases.Count][];
+            var managed = new ComputationOutcome[cases.Count];
             for (int i = 0; i < cases.Count; i++)
-                managed[i] = TryComputeBytes(cases[i], out _);
+                managed[i] = TryCompute(cases[i], out _);
 
             // Turn the backend on. The pin decides ONLY whether the vs-NumPy byte check (claim 3) is
             // valid on this host; the managed-vs-backend dedup (claims 1-2) is NumSharp-vs-NumSharp
@@ -143,13 +149,14 @@ namespace NumSharp.Tests.Fuzz
                 for (int i = 0; i < cases.Count; i++)
                 {
                     var c = cases[i];
-                    byte[] b1 = managed[i];
-                    byte[] b2 = TryComputeBytes(c, out NDArray r2);
+                    ComputationOutcome b1 = managed[i];
+                    ComputationOutcome b2 = TryCompute(c, out NDArray r2);
 
                     // "threw" is a comparable outcome: both sides throwing (e.g. dot(int8), which the
-                    // backend also declines) is a dedup, not a change.
-                    bool same = (b1 == null && b2 == null)
-                                || (b1 != null && b2 != null && b1.AsSpan().SequenceEqual(b2));
+                    // backend also declines) is a dedup, not a change. Successful outcomes include
+                    // dtype and shape as well as bytes, so a backend cannot silently change metadata
+                    // while preserving an all-zero/empty payload.
+                    bool same = b1.Equals(b2);
                     if (same) { deduped++; continue; }
 
                     flipped++;
@@ -167,7 +174,7 @@ namespace NumSharp.Tests.Fuzz
                     // NumPy's bytes exactly. A different BLAS build rounds differently, so elsewhere we
                     // assert only the structural flip above and leave the byte comparison to that host.
                     if (!hostPinned) continue;
-                    if (b2 == null)
+                    if (b2.Threw)
                     {
                         failures.Add($"{c.Id} [{c.Layout}] {c.Op}: backend THREW where the managed kernel " +
                             "produced a result");
@@ -202,7 +209,35 @@ namespace NumSharp.Tests.Fuzz
         ///     the dedup: two null passes (both threw) are identical, one null (a flip that enables or
         ///     breaks the op) is surfaced.
         /// </summary>
-        private static byte[] TryComputeBytes(FuzzCorpus.Case c, out NDArray result)
+        private readonly struct ComputationOutcome : IEquatable<ComputationOutcome>
+        {
+            public readonly bool Threw;
+            private readonly NPTypeCode _dtype;
+            private readonly long[] _shape;
+            private readonly byte[] _bytes;
+
+            private ComputationOutcome(bool threw, NPTypeCode dtype, long[] shape, byte[] bytes)
+            {
+                Threw = threw;
+                _dtype = dtype;
+                _shape = shape;
+                _bytes = bytes;
+            }
+
+            public static ComputationOutcome FromResult(NDArray result)
+                => new(false, result.typecode, result.Shape.Dimensions.ToArray(), FuzzCorpus.ResultBytes(result));
+
+            public static ComputationOutcome FromThrow()
+                => new(true, default, null, null);
+
+            public bool Equals(ComputationOutcome other)
+                => Threw == other.Threw
+                   && (Threw || (_dtype == other._dtype
+                                 && _shape.AsSpan().SequenceEqual(other._shape)
+                                 && _bytes.AsSpan().SequenceEqual(other._bytes)));
+        }
+
+        private static ComputationOutcome TryCompute(FuzzCorpus.Case c, out NDArray result)
         {
             result = null;
             try
@@ -213,12 +248,12 @@ namespace NumSharp.Tests.Fuzz
                 if (c.Alias && operands.Length == 1)
                     operands = new[] { operands[0], operands[0] };
                 result = OpRegistry.Apply(c.Op, c.Params, operands);
-                return FuzzCorpus.ResultBytes(result);
+                return ComputationOutcome.FromResult(result);
             }
             catch
             {
                 result = null;
-                return null;
+                return ComputationOutcome.FromThrow();
             }
         }
     }

@@ -32,6 +32,14 @@ namespace NumSharp.Tests.Fuzz
 
         [TestMethod]
         [TestCategory("FuzzMatrix")]
+        public void Creation() => RunCorpus("creation.jsonl");
+
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Conversion() => RunCorpus("conversion.jsonl");
+
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
         public void Unary() => RunCorpus("unary.jsonl");
 
         // The float32 kernels NumSharp ports from NumPy itself — exp, log, sin, cos (and rad2deg/
@@ -81,10 +89,9 @@ namespace NumSharp.Tests.Fuzz
         // differently (gemm / both gemv directions / ?dot / syrk / the portable loop / batched /
         // N-D dot) — where NumSharp's own GEMM diverges from NumPy on up to 94% of elements.
         //
-        // The engine comes from the OPTIONAL NumSharp.Interop.OpenBLAS package (a DefaultEngine
-        // subclass); NumSharp.Core itself is 100% managed and has no BLAS in it at all. Note the
-        // ORDER below: the engine must be installed BEFORE the operands are built, because an
-        // NDArray resolves its engine at construction.
+        // The backend comes from the OPTIONAL NumSharp.Interop.OpenBLAS package and is assigned to
+        // the cached DefaultEngine's one Blas property; NumSharp.Core itself remains 100% managed.
+        // The property affects arrays already constructed as well as new ones.
         //
         // HOST-PINNED, like the MSVC-pinned cast kernels: the expected bytes come out of a
         // specific BLAS binary, dispatched to a specific CPU kernel, at a specific thread count.
@@ -156,7 +163,7 @@ namespace NumSharp.Tests.Fuzz
         // each Char op is generated through the uint16 NumPy proxy and relabelled uint16->char
         // (gen_oracle.char_tier), appended into its native tier file (binary_arith/divmod_power/
         // comparison/unary/unary_extra/bitwise/reduce/scan/stat/manip/sort/tail/astype_full/
-        // where/logic/matmul/rounding/copyto — 18 tier files). So the existing per-tier gates
+        // where/logic/matmul/rounding/copyto/creation/conversion — 20 tier files). So the existing per-tier gates
         // assert NumSharp's Char ≡ uint16. The verified Char bugs (promote(Char,Byte)->Byte,
         // reciprocal/power/invert, dot 1-D) are carved out of the green corpus and reproduced in
         // OpenBugs.Char.cs (OpenBugsCharTests) / OpenBugs.FuzzGaps.cs under [OpenBugs].
@@ -203,8 +210,8 @@ namespace NumSharp.Tests.Fuzz
         // manipulation + exactly-rounded IEEE arithmetic (uniform/rand/random_sample/randint/
         // permutation/shuffle/choice) — bit-exact on every host. The documented 1-to-1 seed
         // claim was previously guarded only by STATISTICAL tests (mean within 0.01), which
-        // would pass with a completely different generator. [DoNotParallelize]: the cases
-        // seed and draw from the GLOBAL np.random instance.
+        // would pass with a completely different generator. Each case uses its own RandomState,
+        // keeping the oracle independent from the process-global np.random stream.
         // CBLAS product family: inner/vdot/vecdot/matvec/vecmat/tensordot/multi_dot/
         // matrix_power — the FIRST value gate for these ops (previously only their error
         // contracts were tested). Small-exact operands across all 13 dtypes (contraction
@@ -239,7 +246,6 @@ namespace NumSharp.Tests.Fuzz
 
         [TestMethod]
         [TestCategory("FuzzMatrix")]
-        [DoNotParallelize]
         public void RandomParity() => RunCorpus("random_parity.jsonl");
 
         // np.random byte-parity, HOST-LIBM half: every distribution whose transform consumes
@@ -251,7 +257,6 @@ namespace NumSharp.Tests.Fuzz
         // sides shift together against their local NumPy, so a red here would be meaningless).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
-        [DoNotParallelize]
         public void RandomParityHostLibm()
         {
             if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
@@ -461,6 +466,8 @@ namespace NumSharp.Tests.Fuzz
             ["binary_divmod_power.jsonl"] = 793,
             ["bitwise.jsonl"] = 590,
             ["comparison.jsonl"] = 1857,
+            ["creation.jsonl"] = 241,
+            ["conversion.jsonl"] = 862,
             ["copyto.jsonl"] = 91,
             ["decimal_astype.jsonl"] = 17,
             ["decimal_binary.jsonl"] = 78,
@@ -474,29 +481,30 @@ namespace NumSharp.Tests.Fuzz
             ["decimal_unary.jsonl"] = 72,
             ["decimal_varstd.jsonl"] = 17,
             ["decimal_where.jsonl"] = 3,
-            ["dtype_text.jsonl"] = 2000,
+            ["dtype_text.jsonl"] = 2094,
             ["errors.jsonl"] = 8,
             ["errors_full.jsonl"] = 650,
             ["fft.jsonl"] = 1700,
-            ["groupa.jsonl"] = 82,
+            ["groupa.jsonl"] = 237,
             ["iter.jsonl"] = 4400,
             ["logic.jsonl"] = 1775,
-            ["manip.jsonl"] = 6060,
+            ["manip.jsonl"] = 13397,
             ["matmul.jsonl"] = 769,
             ["matmul_parity.jsonl"] = 470,
             ["linalg_parity.jsonl"] = 340,   // +90: LU family (solve/inv/det/slogdet/tensorinv/tensorsolve) + matrix_power(n<0)
             ["poly.jsonl"] = 60,
             ["einsum.jsonl"] = 35,
             ["modf.jsonl"] = 51,
+            ["multioutput.jsonl"] = 51,
             ["nanreduce.jsonl"] = 6692,
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
             ["out_where.jsonl"] = 3500,
             ["params.jsonl"] = 966,
             ["place.jsonl"] = 12,
-            ["products.jsonl"] = 310,
+            ["products.jsonl"] = 326,
             ["precision.jsonl"] = 80,
-            ["random_parity.jsonl"] = 30,
+            ["random_parity.jsonl"] = 40,
             ["random_parity_host.jsonl"] = 86,
             ["random_smoke.jsonl"] = 1600,
             ["reduce.jsonl"] = 9004,
@@ -506,8 +514,8 @@ namespace NumSharp.Tests.Fuzz
             ["specials.jsonl"] = 1866,
             ["stat.jsonl"] = 3412,
             ["tail.jsonl"] = 1872,
-            ["unary.jsonl"] = 4222,
-            ["unary_extra.jsonl"] = 4305,
+            ["unary.jsonl"] = 5969,
+            ["unary_extra.jsonl"] = 6052,
             ["where.jsonl"] = 75,
         };
 

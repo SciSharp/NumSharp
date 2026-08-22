@@ -189,6 +189,24 @@ namespace NumSharp.Tests
                 "complex matmul has no excuse branch — it must be bit-exact");
         }
 
+        [TestMethod]
+        public void Corrcoef_ComplexGrossDiff_NotExcused()
+        {
+            var c = Case("corrcoef", ("complex128", new long[] { 2, 3 }));
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                C128(1.0, 0.0), C128(2.0, 0.0), NPTypeCode.Complex, OneDiff)
+                .Should().BeNull("the corrcoef composition is bounded to inherited divide ULP noise");
+        }
+
+        [TestMethod]
+        public void Corrcoef_ComplexOneUlp_StillExcused()
+        {
+            var c = Case("corrcoef", ("complex128", new long[] { 2, 3 }));
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                C128(1.0, 0.0), C128(UlpUp(1.0), 0.0), NPTypeCode.Complex, OneDiff)
+                .Should().NotBeNull("complex corrcoef inherits the documented npy_cdivide rounding");
+        }
+
         // ---- B3: cumprod dtype excuse only on the size<=1 fast path ----
 
         [TestMethod]
@@ -283,6 +301,28 @@ namespace NumSharp.Tests
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 C128(double.NaN, 4540.0), C128(double.NaN, double.NaN), NPTypeCode.Complex,
                 new[] { new BitDiff.Diff(0, "NaN:aa", "NaN:NaN") }).Should().NotBeNull();
+        }
+
+        // ---- K1: the public nditer trace uses the same narrow layout carve as nditer_* ----
+
+        [TestMethod]
+        public void K1_NditerDirect_Transposed3d_StillExcused()
+        {
+            var c = Case("nditer", ("int32", new long[] { 2, 3, 4 }));
+            c.Layout = "transposed_3d";
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                BitConverter.GetBytes(1), BitConverter.GetBytes(2), NPTypeCode.Int32, OneDiff)
+                .Should().NotBeNull("the renamed public trace must retain the measured K1 carve");
+        }
+
+        [TestMethod]
+        public void K1_NditerDirect_ContiguousNeighbour_NotExcused()
+        {
+            var c = Case("nditer", ("int32", new long[] { 2, 3, 4 }));
+            c.Layout = "c_contiguous_3d";
+            MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                BitConverter.GetBytes(1), BitConverter.GetBytes(2), NPTypeCode.Int32, OneDiff)
+                .Should().BeNull("K1 is limited to the three measured layouts");
         }
 
         // ---- decimal std last-digit scope (surfaced by B1) ----

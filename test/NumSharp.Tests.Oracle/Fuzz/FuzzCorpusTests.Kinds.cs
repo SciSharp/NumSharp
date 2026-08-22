@@ -43,6 +43,15 @@ namespace NumSharp.Tests.Fuzz
         public void DtypeText() => RunCorpus("dtype_text.jsonl");
 
         /// <summary>
+        ///     Public multi-output APIs. Every slot is recorded so the gate asserts tuple arity
+        ///     as well as each output's dtype, shape and bytes; this supersedes the older
+        ///     one-piece-at-a-time coverage for split-like functions.
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void MultiOutput() => RunCorpus("multioutput.jsonl");
+
+        /// <summary>
         ///     Error parity with NumPy's ACTUAL message. The deterministic op matrices are re-run
         ///     by the generator keeping only the cells where NumPy raises — cells the value tiers
         ///     silently skip — and each records the exception type and text verbatim. This is a

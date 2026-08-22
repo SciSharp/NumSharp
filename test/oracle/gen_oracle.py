@@ -17,9 +17,11 @@ Case schema:
 
 operand-descriptor = {dtype, shape, strides(elements), offset(elements), bufferSize(elements), buffer(hex of base)}
 """
+import io
 import json
 import os
 import sys
+import tempfile
 import warnings
 
 import numpy as np
@@ -120,6 +122,10 @@ UNARY_OPS = {
     "sqrt": np.sqrt, "cbrt": np.cbrt, "square": np.square, "reciprocal": np.reciprocal,
     "floor": np.floor, "ceil": np.ceil, "trunc": np.trunc,
     "sin": np.sin, "cos": np.cos, "tan": np.tan, "exp": np.exp, "log": np.log,
+    # Complex-number accessors (real inputs are valid too). These are central post-FFT paths and
+    # must see the same full dtype x layout matrix as every other unary operation.
+    "conjugate": np.conjugate, "conj": np.conj, "real": np.real, "imag": np.imag,
+    "angle": np.angle, "angle_deg": lambda a: np.angle(a, deg=True),
 }
 # All 13 NumPy-representable dtypes (W1: was a 7-dtype subset — now exercises float16 as an
 # INPUT and the narrow integers int8/int16/uint16/uint32/uint64 through every unary kernel).
@@ -134,7 +140,9 @@ UNARY_EXTRA_OPS = {
     "log2": np.log2, "log10": np.log10, "log1p": np.log1p,
     "sinh": np.sinh, "cosh": np.cosh, "tanh": np.tanh,
     "arcsin": np.arcsin, "arccos": np.arccos, "arctan": np.arctan,
-    "arcsinh": np.arcsinh, "arccosh": np.arccosh, "arctanh": np.arctanh,
+    "arcsinh": np.arcsinh, "asinh": np.asinh,
+    "arccosh": np.arccosh, "acosh": np.acosh,
+    "arctanh": np.arctanh, "atanh": np.atanh,
     "deg2rad": np.deg2rad, "rad2deg": np.rad2deg,
     "positive": np.positive,
     "rint": np.rint,   # round-half-to-even; float-tier dtype like the others in this group
@@ -1046,6 +1054,8 @@ def gen_manip(dtypes, layout_names):
             nd = view.ndim
             jobs = [
                 ("ravel", {}, lambda v: np.ravel(v)),
+                ("copy", {}, lambda v: np.copy(v, order="K")),
+                ("resize", {"shape": [2, 3]}, lambda v: np.resize(v, (2, 3))),
                 ("transpose", {}, lambda v: np.transpose(v)),
                 ("expand_dims", {"axis": 0}, lambda v: np.expand_dims(v, 0)),
                 ("squeeze", {}, lambda v: np.squeeze(v)),
@@ -3010,6 +3020,26 @@ def gen_groupa():
         insvals = _cbase((4,), d)
         emit("insert", {"obj": 1, "axis": 0}, [describe(a2, a2), describe(insvals, insvals)], np.insert(a2, 1, insvals, 0))
 
+        # Public shape/join surface that previously had no direct value oracle.
+        cs0 = _cbase((4,), d)
+        cs1 = np.roll(cs0, 1)
+        emit("column_stack", {}, [describe(cs0, cs0), describe(cs1, cs1)],
+             np.column_stack((cs0, cs1)))
+
+        b0 = _cbase((2, 2), d)
+        b1 = b0 + np.array(10, dtype=d)
+        b2 = b0 + np.array(20, dtype=d)
+        b3 = b0 + np.array(30, dtype=d)
+        emit("block", {}, [describe(x, x) for x in (b0, b1, b2, b3)],
+             np.block([[b0, b1], [b2, b3]]))
+
+        bv = _cbase((3,), d)
+        emit("broadcast_to", {"shape": [4, 3]}, [describe(bv, bv)],
+             np.broadcast_to(bv, (4, 3)))
+        bs = _cbase((), d)
+        emit("broadcast_to", {"shape": [2, 3]}, [describe(bs, bs)],
+             np.broadcast_to(bs, (2, 3)))
+
         # split / hsplit / vsplit / dsplit — one case per output piece.
         s = _cbase((6,), d)
         for pi, part in enumerate(np.split(s, 3)):
@@ -3203,13 +3233,30 @@ def gen_groupa():
          np.choose(zidx, [zc0, zc1]))
 
     # ravel_multi_index / unravel_index — index<->coord transforms (int64, dtype-independent).
-    row = np.array([0, 1, 2, 0], dtype=np.int64)
-    col = np.array([1, 3, 0, 2], dtype=np.int64)
-    emit("ravel_multi_index", {"dims": [3, 4]}, [describe(row, row), describe(col, col)],
-         np.ravel_multi_index((row, col), (3, 4)))
-    flat = np.array([0, 5, 11, 7], dtype=np.int64)
-    for pi, part in enumerate(np.unravel_index(flat, (3, 4))):
-        emit("unravel_index", {"shape": [3, 4], "piece": pi}, [describe(flat, flat)], part)
+    index_specs = [
+        ([3, 4], np.array([0, 1, 2, 0], dtype=np.int64),
+         np.array([1, 3, 0, 2], dtype=np.int64), "raise", "C"),
+        ([3, 4], np.array([0, 1, 2, 0], dtype=np.int64),
+         np.array([1, 3, 0, 2], dtype=np.int64), "raise", "F"),
+        ([3, 4], np.array([-1, 3, 4, 1], dtype=np.int64),
+         np.array([4, -1, 8, 2], dtype=np.int64), "wrap", "C"),
+        ([3, 4], np.array([-1, 3, 4, 1], dtype=np.int64),
+         np.array([4, -1, 8, 2], dtype=np.int64), "clip", "C"),
+    ]
+    for dims, row, col, mode, order in index_specs:
+        emit("ravel_multi_index", {"dims": dims, "mode": mode, "order": order},
+             [describe(row, row), describe(col, col)],
+             np.ravel_multi_index((row, col), tuple(dims), mode=mode, order=order))
+
+    unravel_specs = [
+        (np.array([0, 5, 11, 7], dtype=np.int64), [3, 4], "C"),
+        (np.array([0, 5, 11, 7], dtype=np.int64), [3, 4], "F"),
+        (np.array([0, 7, 23, 13], dtype=np.int64), [2, 3, 4], "C"),
+    ]
+    for flat, shape, order in unravel_specs:
+        for pi, part in enumerate(np.unravel_index(flat, tuple(shape), order=order)):
+            emit("unravel_index", {"shape": shape, "order": order, "piece": pi},
+                 [describe(flat, flat)], part)
 
     # ---- isin + set operations (arraysetops; NumPy _arraysetops_impl.py). --------------------
     # Value-dependent 2-operand ops: element/test (and ar1/ar2) must SHARE values for membership
@@ -4520,6 +4567,310 @@ def _case(op, params, operands, expected, layout, valueclass="mixed", cid=None):
     return c
 
 
+# ---- multi-output public surface ----------------------------------------------------
+
+def gen_multioutput():
+    """Public APIs whose observable contract is a tuple/list of arrays.
+
+    Older tiers often selected one result with a ``piece`` parameter. That proves the chosen
+    values but cannot detect a wrong ARITY or a broken sibling result. This tier records every
+    slot and lets the tuple comparator assert arity, dtype, shape and bytes for all of them.
+    """
+    cases = []
+    n = 0
+
+    def emit_tuple(opname, params, arrays, result, layout="multioutput"):
+        nonlocal n
+        operands = [describe(a, a) for a in arrays]
+        cases.append(_case(opname, params, operands, _tuple_expected(list(result)), layout, "tuple",
+                           cid=f"{opname}/{layout}/{n}"))
+        n += 1
+
+    def emit_array(opname, params, array, result, layout="multioutput"):
+        nonlocal n
+        cases.append(_case(opname, params, [describe(array, array)], _arr_expected(result),
+                           layout, "array", cid=f"{opname}/{layout}/{n}"))
+        n += 1
+
+    for dt in ["int32", "float64", "uint8", "complex128"]:
+        d = np.dtype(dt)
+
+        a6 = _cbase((6,), d)
+        emit_tuple("split", {"sections": 3, "axis": 0}, [a6], np.split(a6, 3), f"split/{dt}")
+
+        a7 = _cbase((7,), d)
+        emit_tuple("array_split", {"sections": 3, "axis": 0}, [a7], np.array_split(a7, 3),
+                   f"array_split/{dt}")
+
+        h = _cbase((3, 4), d)
+        emit_tuple("hsplit", {"sections": 2}, [h], np.hsplit(h, 2), f"hsplit/{dt}")
+
+        v = _cbase((4, 3), d)
+        emit_tuple("vsplit", {"sections": 2}, [v], np.vsplit(v, 2), f"vsplit/{dt}")
+
+        dd = _cbase((2, 3, 4), d)
+        emit_tuple("dsplit", {"sections": 2}, [dd], np.dsplit(dd, 2), f"dsplit/{dt}")
+        emit_tuple("unstack", {"axis": 0}, [dd], np.unstack(dd, axis=0), f"unstack0/{dt}")
+        emit_tuple("unstack", {"axis": -1}, [dd], np.unstack(dd, axis=-1), f"unstack-1/{dt}")
+
+        # Array-API unique_* family. inverse_indices must retain the ORIGINAL 2-D input shape;
+        # all index/count outputs are intp. unique_values(integer/complex, sorted=False) has a
+        # deliberately platform-specific hash order in NumPy, so only its portable float path is
+        # byte-gated here; the other three functions are sorted and portable for every dtype.
+        if d.kind == "c":
+            u = np.array([[2 + 1j, 1 + 0j, 2 + 1j], [0 + 0j, 1 + 0j, 3 - 1j]], dtype=d)
+        else:
+            u = np.array([[2, 1, 2], [0, 1, 3]], dtype=d)
+        emit_tuple("unique_counts", {}, [u], np.unique_counts(u), f"unique_counts/{dt}")
+        emit_tuple("unique_inverse", {}, [u], np.unique_inverse(u), f"unique_inverse/{dt}")
+        emit_tuple("unique_all", {}, [u], np.unique_all(u), f"unique_all/{dt}")
+        if d.kind == "f":
+            emit_array("unique_values", {}, u, np.unique_values(u), f"unique_values/{dt}")
+
+    # unique_values(sorted=False) is portable for floating dtypes. Add both narrow widths and an
+    # adversarial signed-zero/NaN payload class so this public op is not represented by one row.
+    for dt in ["float16", "float32"]:
+        u = np.array([[2, 1, 2], [0, 1, 3]], dtype=dt)
+        emit_array("unique_values", {}, u, np.unique_values(u), f"unique_values/{dt}")
+    u_special = np.array([np.nan, -0.0, 0.0, 2.0, np.nan, -1.0], dtype=np.float64)
+    emit_array("unique_values", {}, u_special, np.unique_values(u_special), "unique_values/special")
+
+    # Broadcasting returns one view per operand and preserves each operand's dtype.
+    ba = np.arange(3, dtype=np.int32).reshape(3, 1)
+    bb = np.arange(4, dtype=np.float64).reshape(1, 4)
+    emit_tuple("broadcast_arrays", {}, [ba, bb], np.broadcast_arrays(ba, bb), "broadcast2")
+    bc = np.array(2 + 3j, dtype=np.complex128)
+    emit_tuple("broadcast_arrays", {}, [ba, bb, bc], np.broadcast_arrays(ba, bb, bc), "broadcast3")
+    bd = np.arange(6, dtype=np.float32).reshape(2, 1, 3)
+    be = np.arange(4, dtype=np.int16).reshape(1, 4, 1)
+    emit_tuple("broadcast_arrays", {}, [bd, be], np.broadcast_arrays(bd, be), "broadcast_rank3")
+    bf = np.array(True, dtype=bool)
+    bg = np.arange(5, dtype=np.uint64)
+    emit_tuple("broadcast_arrays", {}, [bf, bg], np.broadcast_arrays(bf, bg), "broadcast_scalar")
+
+    # meshgrid's indexing/sparse/copy parameters change both shape and result arity/slots.
+    mx = np.array([1, 2, 4], dtype=np.int32)
+    my = np.array([0.5, 1.5], dtype=np.float64)
+    for indexing in ["xy", "ij"]:
+        for sparse in [False, True]:
+            emit_tuple("meshgrid", {"indexing": indexing, "sparse": sparse, "copy": True},
+                       [mx, my], np.meshgrid(mx, my, indexing=indexing, sparse=sparse, copy=True),
+                       f"meshgrid/{indexing}/sparse={int(sparse)}")
+
+    # unravel_index returns one coordinate array per dimension.
+    flat = np.array([0, 5, 11, 7], dtype=np.int64)
+    emit_tuple("unravel_index_all", {"shape": [3, 4]}, [flat], np.unravel_index(flat, (3, 4)),
+               "unravel2")
+    emit_tuple("unravel_index_all", {"shape": [3, 4], "order": "F"}, [flat],
+               np.unravel_index(flat, (3, 4), order="F"), "unravel2F")
+    flat3 = np.array([0, 7, 23, 13], dtype=np.int64)
+    emit_tuple("unravel_index_all", {"shape": [2, 3, 4]}, [flat3],
+               np.unravel_index(flat3, (2, 3, 4)), "unravel3")
+    scalar_flat = np.array(5, dtype=np.int64)
+    emit_tuple("unravel_index_all", {"shape": [2, 3]}, [scalar_flat],
+               np.unravel_index(scalar_flat, (2, 3)), "unravel_scalar")
+
+    # modf's two outputs have independent signed-zero/inf behavior; use both contiguous and
+    # negative-stride operands at the two dtypes NumSharp currently implements.
+    for dt in ["float32", "float64"]:
+        mbase = np.array([-np.inf, -2.5, -0.0, 0.0, 1.25, np.inf], dtype=dt)
+        emit_tuple("modf", {}, [mbase], np.modf(mbase), f"modf/c/{dt}")
+        mrev = mbase[::-1]
+        cases.append(_case("modf", {}, [describe(mbase, mrev)], _tuple_expected(np.modf(mrev)),
+                           f"modf/neg/{dt}", "tuple", cid=f"modf/neg/{dt}/{n}"))
+        n += 1
+
+    # np.average(..., returned=True): the second slot (sum of weights) has its own shape/dtype
+    # contract and was wholly invisible while only the first average result was gated.
+    for dt in ["int32", "float64"]:
+        a = _cbase((3, 4), np.dtype(dt))
+        emit_tuple("average_returned", {"axis": None, "keepdims": False, "weighted": False},
+                   [a], np.average(a, returned=True), f"average/all/{dt}")
+        w = np.arange(1, 13, dtype=np.float64).reshape(3, 4)
+        emit_tuple("average_returned", {"axis": 1, "keepdims": True, "weighted": True},
+                   [a, w], np.average(a, axis=1, weights=w, returned=True, keepdims=True),
+                   f"average/weighted/{dt}")
+
+    return cases
+
+
+# ---- deterministic creation ---------------------------------------------------------
+
+def gen_creation(dtypes):
+    """Deterministic creation APIs, including zero-operand calls.
+
+    ``empty``/``empty_like`` have undefined initial bytes, so each result is immediately filled
+    with zero on BOTH sides before serialization. That turns their deterministic shape/dtype/
+    writeability contract into an ordinary byte comparison; the sibling flags oracle continues
+    to own order/stride/ownership parity.
+    """
+    cases = []
+    n = 0
+
+    def emit(opname, params, operands, result, layout="creation"):
+        nonlocal n
+        cases.append(_case(opname, params, [describe(a, a) for a in operands],
+                           _arr_expected(result), layout, "creation",
+                           cid=f"{opname}/{layout}/{n}"))
+        n += 1
+
+    for dt in dtypes:
+        d = np.dtype(dt)
+        # Bool arange is defined only for result length <= 2 in NumPy 2.x.
+        stop = 2 if d.kind == "b" else 7
+        emit("arange", {"start": 0.0, "stop": float(stop), "step": 1.0, "dtype": dt}, [],
+             np.arange(0, stop, 1, dtype=d), f"arange/{dt}")
+        emit("linspace", {"start": -2.0, "stop": 3.0, "num": 7, "endpoint": True, "dtype": dt}, [],
+             np.linspace(-2.0, 3.0, 7, endpoint=True, dtype=d), f"linspace/{dt}")
+        emit("linspace", {"start": 0.0, "stop": 1.0, "num": 5, "endpoint": False, "dtype": dt}, [],
+             np.linspace(0.0, 1.0, 5, endpoint=False, dtype=d), f"linspace_noend/{dt}")
+
+        shape = [2, 3]
+        emit("zeros", {"shape": shape, "dtype": dt}, [], np.zeros(shape, dtype=d), f"zeros/{dt}")
+        emit("ones", {"shape": shape, "dtype": dt}, [], np.ones(shape, dtype=d), f"ones/{dt}")
+        emit("full", {"shape": shape, "fill": 3, "dtype": dt}, [], np.full(shape, 3, dtype=d),
+             f"full/{dt}")
+        empty = np.empty(shape, dtype=d)
+        empty.fill(0)
+        emit("empty", {"shape": shape, "dtype": dt}, [], empty, f"empty/{dt}")
+        emit("eye", {"n": 3, "m": 4, "k": -1, "dtype": dt, "order": "C"}, [],
+             np.eye(3, 4, k=-1, dtype=d, order="C"), f"eye/{dt}")
+        emit("identity", {"n": 4, "dtype": dt}, [], np.identity(4, dtype=d), f"identity/{dt}")
+
+        # Like-creators must preserve the source shape/dtype while resolving K-order. Values are
+        # checked here; the sibling layout oracle checks the resulting strides/flags.
+        for lname in ["c_contiguous_2d", "f_contiguous_2d", "strided_2d_cols"]:
+            base, view = LAYOUTS[lname](d)
+            operand = describe(base, view)
+            for opname, params, result in [
+                ("empty_like", {}, np.empty_like(view)),
+                ("zeros_like", {}, np.zeros_like(view)),
+                ("ones_like", {}, np.ones_like(view)),
+                ("full_like", {"fill": 2}, np.full_like(view, 2)),
+            ]:
+                if opname == "empty_like":
+                    result.fill(0)
+                cases.append(_case(opname, params, [operand], _arr_expected(result),
+                                   f"{opname}/{lname}/{dt}", "creation",
+                                   cid=f"{opname}/{lname}/{dt}/{n}"))
+                n += 1
+
+    # Coordinate-grid creators. Sparse mode is a tuple; dense mode is one array.
+    for dt in ["int32", "float64"]:
+        dims = [2, 3, 4]
+        emit("indices", {"dimensions": dims, "dtype": dt}, [],
+             np.indices(dims, dtype=np.dtype(dt)), f"indices/{dt}")
+        sparse = np.indices(dims, dtype=np.dtype(dt), sparse=True)
+        cases.append(_case("indices_sparse", {"dimensions": dims, "dtype": dt}, [],
+                           _tuple_expected(sparse), f"indices_sparse/{dt}", "creation",
+                           cid=f"indices_sparse/{dt}/{n}"))
+        n += 1
+
+    return cases
+
+
+# ---- array conversion ---------------------------------------------------------------
+
+CONVERSION_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d",
+                      "strided_step2_1d", "negstride_1d", "scalar_0d", "empty_2d",
+                      "broadcast_1d_to_2d"]
+
+
+def gen_conversion(dtypes):
+    """Value/error half of the as*/array/require/frombuffer/fromstring surface.
+
+    The sibling flags + layout oracles own strides/ownership/writeability; this tier owns the
+    dtype/shape/bytes and the finite-check error. Together they cover the whole observable result.
+    """
+    cases = []
+    n = 0
+
+    def add_result(opname, params, operands, result, layout, dt):
+        nonlocal n
+        cases.append(_case(opname, params, operands, _arr_expected(result), layout, "conversion",
+                           cid=f"{opname}/{layout}/{dt}/{n}"))
+        n += 1
+
+    for lname in CONVERSION_LAYOUTS:
+        fn = LAYOUTS[lname]
+        for dt in dtypes:
+            base, view = fn(np.dtype(dt))
+            operand = describe(base, view)
+            one = [operand]
+
+            add_result("array", {}, one, np.array(view, copy=True, order="K"), lname, dt)
+            add_result("asarray", {}, one, np.asarray(view), lname, dt)
+            add_result("asanyarray", {}, one, np.asanyarray(view), lname, dt)
+            add_result("ascontiguousarray", {}, one, np.ascontiguousarray(view), lname, dt)
+            add_result("asfortranarray", {}, one, np.asfortranarray(view), lname, dt)
+            add_result("require", {"requirements": ["C"]}, one,
+                       np.require(view, requirements=["C"]), lname + "/reqC", dt)
+            add_result("require", {"requirements": ["F"]}, one,
+                       np.require(view, requirements=["F"]), lname + "/reqF", dt)
+
+            if view.ndim <= 2:
+                add_result("asmatrix", {}, one, np.asmatrix(view), lname, dt)
+
+            try:
+                finite = np.asarray_chkfinite(view)
+            except Exception as e:
+                cases.append(_error_case("asarray_chkfinite", {}, one, e, lname,
+                                         cid=f"asarray_chkfinite/{lname}/{dt}/err/{n}"))
+                n += 1
+            else:
+                add_result("asarray_chkfinite", {}, one, finite, lname, dt)
+
+    # frombuffer: the operand supplies deterministic raw bytes; count+byte-offset exercise the
+    # byte-oriented API rather than reducing this to another astype case.
+    for dt in dtypes:
+        d = np.dtype(dt)
+        raw_arr = _fill(6, d)
+        result = np.frombuffer(raw_arr.tobytes(), dtype=d, count=4, offset=d.itemsize)
+        add_result("frombuffer", {"dtype": dt, "count": 4, "offset": int(d.itemsize)},
+                   [describe(raw_arr, raw_arr)], result, "frombuffer", dt)
+
+        # fromfile has the same binary contract but crosses a real file descriptor on the NumPy
+        # side and the public Stream overload on replay. The operand is the file's exact bytes.
+        # Windows does not permit NumPy to reopen an already-open NamedTemporaryFile, so close
+        # the descriptor before np.fromfile and remove the exact path in finally.
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(raw_arr.tobytes())
+            temp_name = f.name
+        try:
+            result = np.fromfile(temp_name, dtype=d, count=4, offset=d.itemsize)
+        finally:
+            os.unlink(temp_name)
+        add_result("fromfile", {"dtype": dt, "count": 4, "offset": int(d.itemsize), "sep": ""},
+                   [describe(raw_arr, raw_arr)], result, "fromfile/binary", dt)
+
+        text = "0,1,3,5"
+        result = np.fromstring(text, dtype=d, count=-1, sep=",")
+        add_result("fromstring", {"dtype": dt, "count": -1, "sep": ",", "text": text},
+                   [], result, "fromstring", dt)
+
+        # Text I/O is an artifact oracle: loadtxt materializes the parsed array, while savetxt
+        # records the emitted text verbatim. Safe small values make the cases portable for every
+        # NumPy dtype, including complex128.
+        text2d = "0,1,2\n3,4,5\n"
+        result = np.loadtxt(io.StringIO(text2d), dtype=d, delimiter=",")
+        add_result("loadtxt", {"dtype": dt, "delimiter": ",", "text": text2d},
+                   [], result, "loadtxt", dt)
+
+        saved = np.arange(6).astype(d).reshape(2, 3)
+        fmt = "%d" if d.kind in "bui" else "%.6g"
+        out = io.StringIO()
+        np.savetxt(out, saved, fmt=fmt, delimiter=",", newline="\n",
+                   header="head", footer="foot", comments="# ")
+        cases.append(_case("savetxt",
+                           {"fmt": fmt, "delimiter": ",", "newline": "\n",
+                            "header": "head", "footer": "foot", "comments": "# "},
+                           [describe(saved, saved)], {"kind": "text", "value": out.getvalue()},
+                           "savetxt", "conversion", cid=f"savetxt/{dt}/{n}"))
+        n += 1
+
+    return cases
+
+
 # ---- iterator traces ----------------------------------------------------------------
 #
 # np.ndindex / np.ndenumerate / np.nditer / np.broadcast return no array, which is why they
@@ -4594,13 +4945,13 @@ def gen_nditer(dtypes, layout_names, orders):
                 try:
                     with np.nditer(view, order=order) as it:
                         vals = np.array([x.copy() for x in it], dtype=view.dtype)
-                    cases.append(_case("nditer_values", {"order": order}, [operand],
+                    cases.append(_case("nditer", {"order": order}, [operand],
                                        _arr_expected(vals), ln, "iter",
-                                       cid=f"nditer_values/{ln}/{s}/{order}/{n}"))
+                                       cid=f"nditer/{ln}/{s}/{order}/{n}"))
                     n += 1
                 except Exception as e:
-                    cases.append(_error_case("nditer_values", {"order": order}, [operand], e, ln,
-                                             cid=f"nditer_values/{ln}/{s}/{order}/{n}"))
+                    cases.append(_error_case("nditer", {"order": order}, [operand], e, ln,
+                                             cid=f"nditer/{ln}/{s}/{order}/{n}"))
                     n += 1
                     continue
 
@@ -4718,6 +5069,43 @@ def gen_iter():
     cases += gen_nditer(ITER_DTYPES, ITER_LAYOUTS, ITER_ORDERS)
     cases += gen_nditer_pair(DT_PAIRS[:12], list(PAIR_LAYOUTS.keys()), ["C", "K"])
     cases += gen_broadcast(DT_PAIRS[:12], list(PAIR_LAYOUTS.keys()))
+    cases += gen_nested_iters()
+    return cases
+
+
+def gen_nested_iters():
+    """Materialize nested_iters' observable value stream.
+
+    Object-returning APIs become oracle-friendly when their protocol is reduced to the trace they
+    promise. Two axis partitions cover both two-level and three-level recursion; values retain the
+    operand dtype so the ordinary byte comparator still owns dtype and order.
+    """
+    cases = []
+    n = 0
+    for dt in ["int32", "float64", "complex128"]:
+        a = np.arange(12).astype(np.dtype(dt)).reshape(2, 3, 2)
+        for axes in [[[1], [0, 2]], [[0], [1], [2]]]:
+            iters = np.nested_iters(a, axes, flags=["multi_index"], order="C")
+            values = []
+
+            def walk(level):
+                for _ in iters[level]:
+                    if level == len(iters) - 1:
+                        values.append(iters[level][0].copy())
+                    else:
+                        walk(level + 1)
+
+            try:
+                walk(0)
+            finally:
+                for it in iters:
+                    it.close()
+
+            result = np.array(values, dtype=a.dtype)
+            cases.append(_case("nested_iters", {"axes": axes, "order": "C"},
+                               [describe(a, a)], _arr_expected(result), "nested", "iter",
+                               cid=f"nested_iters/{dt}/{len(axes)}level/{n}"))
+            n += 1
     return cases
 
 
@@ -4767,6 +5155,14 @@ def gen_dtype_text():
                            cid=f"min_scalar_type/{v}/{n}"))
         n += 1
 
+    # dtype construction itself (canonical name) and common_type over real operand arrays.
+    for dt in ALL_DTYPES:
+        r = np.dtype(dt)
+        cases.append(_case("dtype", {"dtype": dt}, [],
+                           {"kind": "dtype", "value": r.name}, "generator", "dtype",
+                           cid=f"dtype/{dt}/{n}"))
+        n += 1
+
     # result_type over real arrays (operand dtypes, not just dtype tokens)
     for ln in ["pp_contig_contig", "pp_contig_fortran", "pp_scalar_right", "pp_broadcast_row"]:
         fn = PAIR_LAYOUTS[ln]
@@ -4778,6 +5174,21 @@ def gen_dtype_text():
                                cid=f"result_type_arrays/{ln}/{sa},{sb}/{n}"))
             n += 1
 
+    for (sa, sb) in DT_PAIRS:
+        a = _cbase((3,), np.dtype(sa))
+        b = _cbase((3,), np.dtype(sb))
+        try:
+            r = np.common_type(a, b)
+        except Exception as e:
+            cases.append(_error_case("common_type", {}, [describe(a, a), describe(b, b)], e,
+                                     "common_type", kind="dtype",
+                                     cid=f"common_type/{sa},{sb}/err/{n}"))
+        else:
+            cases.append(_case("common_type", {}, [describe(a, a), describe(b, b)],
+                               {"kind": "dtype", "value": np.dtype(r).name},
+                               "common_type", "dtype", cid=f"common_type/{sa},{sb}/{n}"))
+        n += 1
+
     # --- scalar-returning predicates (wrapped 0-d, the np.allclose pattern) ---
     for frm in ALL_DTYPES:
         for to in ALL_DTYPES:
@@ -4788,6 +5199,28 @@ def gen_dtype_text():
                                    cid=f"can_cast/{frm}->{to}/{rule}/{n}"))
                 n += 1
 
+    # NumPy 2.x dtype predicates. The concrete issubdtype matrix gates the exact scalar-type
+    # relation; abstract categories are covered by isdtype's named kinds.
+    for dt in ALL_DTYPES:
+        for kind in ["bool", "integral", "real floating", "complex floating", "numeric"]:
+            r = np.isdtype(np.dtype(dt), kind)
+            cases.append(_case("isdtype", {"dtype": dt, "kind_name": kind}, [],
+                               _arr_expected(np.bool_(r), "scalar"), "generator", "predicate",
+                               cid=f"isdtype/{dt}/{kind}/{n}"))
+            n += 1
+        for other in ALL_DTYPES:
+            r = np.issubdtype(np.dtype(dt), np.dtype(other))
+            cases.append(_case("issubdtype", {"a": dt, "b": other}, [],
+                               _arr_expected(np.bool_(r), "scalar"), "generator", "predicate",
+                               cid=f"issubdtype/{dt},{other}/{n}"))
+            n += 1
+
+    for chars in ["fd", "if", "q", "Qf", "eF", "?"]:
+        cases.append(_case("mintypecode", {"typechars": chars}, [],
+                           {"kind": "text", "value": np.mintypecode(chars)},
+                           "generator", "text", cid=f"mintypecode/{chars}/{n}"))
+        n += 1
+
     for ln in DTYPE_TEXT_LAYOUTS:
         fn = LAYOUTS[ln]
         for s in ITER_DTYPES:
@@ -4795,7 +5228,9 @@ def gen_dtype_text():
             operand = describe(base, view)
             for opname, val in (("isscalar", np.isscalar(view)),
                                 ("iscomplexobj", np.iscomplexobj(view)),
-                                ("isrealobj", np.isrealobj(view))):
+                                ("isrealobj", np.isrealobj(view)),
+                                ("isfortran", np.isfortran(view)),
+                                ("iterable", np.iterable(view))):
                 cases.append(_case(opname, {}, [operand], _arr_expected(np.bool_(val), "scalar"),
                                    ln, "predicate", cid=f"{opname}/{ln}/{s}/{n}"))
                 n += 1
@@ -5855,6 +6290,47 @@ def gen_random_parity():
     cases_for(portable, "choice", [10])
     cases_for(portable, "choice", [4], extra={"p": [0.1, 0.2, 0.3, 0.4]})
 
+    # Public state-management surface. These are deliberately their OWN op keys rather than
+    # being inferred from rnd: seed is checked through a portable draw, get_state through a
+    # canonical full-state trace, and set_state by restoring a captured 624-word state before a
+    # draw. This catches a state shape/position/cache drift that identical first draws can hide.
+    for seed in [0, 42, 2 ** 31, 2 ** 32 - 1]:
+        np.random.seed(seed)
+        r = np.random.random_sample((8,))
+        portable.append(_case("seed", {"seed": seed, "size": [8]}, [], _arr_expected(r),
+                              "rnd/state", "stream", cid=f"seed/{seed}/{n}"))
+        n += 1
+
+    def state_text(state):
+        alg, key, pos, has_gauss, cached = state
+        bits = int(np.asarray(cached, dtype=np.float64).view(np.uint64))
+        return f"{alg}|{int(pos)}|{int(has_gauss)}|{bits:016x}|" + \
+               ",".join(str(int(x)) for x in key)
+
+    for seed, draws in [(0, 0), (1, 1), (42, 5), (2 ** 32 - 1, 17)]:
+        np.random.seed(seed)
+        if draws:
+            np.random.random_sample((draws,))
+        portable.append(_case("get_state", {"seed": seed, "draws": draws}, [],
+                              {"kind": "text", "value": state_text(np.random.get_state())},
+                              "rnd/state", "stream", cid=f"get_state/{seed}/{draws}/{n}"))
+        n += 1
+
+    for source_seed, advance in [(0, 0), (42, 1), (24680, 7), (2 ** 32 - 1, 17)]:
+        np.random.seed(source_seed)
+        if advance:
+            np.random.random_sample((advance,))
+        state = np.random.get_state()
+        np.random.set_state(state)
+        restored = np.random.random_sample((8,))
+        portable.append(_case("set_state",
+                              {"pos": int(state[2]), "has_gauss": int(state[3]),
+                               "cached_gaussian": float(state[4]), "size": [8]},
+                              [describe(state[1], state[1])], _arr_expected(restored),
+                              "rnd/state", "stream",
+                              cid=f"set_state/{source_seed}/{advance}/{n}"))
+        n += 1
+
     # --- host-libm: transform / rejection samplers ------------------------------------
     # standard_cauchy / multinomial / multivariate_normal are CARVED (see _RND_INT64_CAST
     # comment block) — gross stream divergence, pinned in OpenBugs.Random.cs.
@@ -5990,6 +6466,22 @@ def gen_products():
         try_emit("kron", {}, [C(T23), C(v4)], lambda: np.kron(T23, v4), "2d_1d", dt)
         try_emit("kron", {}, [C(K222), C(K22)], lambda: np.kron(K222, K22), "3d_2d", dt)
         try_emit("kron", {}, [C(T23), C(ksc)], lambda: np.kron(T23, ksc), "scalar_b", dt)
+
+    # Array-API norm spellings. Use Pythagorean fixtures whose sqrt is exact, isolating the
+    # axis/keepdims/dtype contracts from platform-libm noise and from the SVD-only matrix orders.
+    for dt in ("int32", "float32", "float64", "complex128"):
+        d = np.dtype(dt)
+        nv = np.array([3, 4], dtype=d)
+        nm = np.array([[3, 0], [0, 4]], dtype=d)
+        C = lambda a: (np.ascontiguousarray(a), np.ascontiguousarray(a))
+        try_emit("vector_norm", {"axis": None, "keepdims": False}, [C(nv)],
+                 lambda: np.linalg.vector_norm(nv), "default", dt)
+        try_emit("vector_norm", {"axis": 0, "keepdims": True}, [C(nv)],
+                 lambda: np.linalg.vector_norm(nv, axis=0, keepdims=True), "axis0_kd", dt)
+        try_emit("matrix_norm", {"keepdims": False, "ord": "fro"}, [C(nm)],
+                 lambda: np.linalg.matrix_norm(nm, ord="fro"), "fro", dt)
+        try_emit("matrix_norm", {"keepdims": True, "ord": 1}, [C(nm)],
+                 lambda: np.linalg.matrix_norm(nm, ord=1, keepdims=True), "ord1_kd", dt)
 
     # --- F-layout spot checks (the stride-aware read path) ----------------------------
     for dt in ("int32", "float64"):
@@ -6483,7 +6975,17 @@ def main():
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
     mode = sys.argv[1] if len(sys.argv) > 1 else "smoke"
 
-    if mode == "iter":
+    if mode == "conversion":
+        cases = gen_conversion(ALL_DTYPES)
+        cases += _relabel_dtype(gen_conversion(["uint16"]), "uint16", "char")
+        write_jsonl(os.path.join(corpus_dir, "conversion.jsonl"), cases)
+    elif mode == "creation":
+        cases = gen_creation(ALL_DTYPES)
+        cases += _relabel_dtype(gen_creation(["uint16"]), "uint16", "char")
+        write_jsonl(os.path.join(corpus_dir, "creation.jsonl"), cases)
+    elif mode == "multioutput":
+        write_jsonl(os.path.join(corpus_dir, "multioutput.jsonl"), gen_multioutput())
+    elif mode == "iter":
         # Iterator traces — see gen_iter. Order/layout resolution has no other gate.
         write_jsonl(os.path.join(corpus_dir, "iter.jsonl"), gen_iter())
     elif mode == "dtype_text":
@@ -6668,7 +7170,7 @@ def main():
         cases = gen_fft()                                               # np.fft.* differential tier
         write_jsonl(os.path.join(corpus_dir, "fft.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | products | fft)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | products | fft)")
         sys.exit(2)
 
 

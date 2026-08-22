@@ -117,7 +117,7 @@ namespace NumSharp.Tests.Fuzz
         private static readonly System.Collections.Generic.HashSet<string> ByteExactArithmeticUnaryOps = new()
         {
             "poly", "polyder", "polyint", "vander", "poly1d_coeffs", "poly1d_fromroots",
-            "cov", "corrcoef"
+            "cov", "conjugate", "real", "imag", "vector_norm", "matrix_norm"
         };
 
         public static string Classify(
@@ -136,6 +136,16 @@ namespace NumSharp.Tests.Fuzz
             if (kind == DivergenceKind.Value && c.Op == "divide" && tc == NPTypeCode.Complex
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex)";
+
+            // corrcoef normalizes a complex covariance matrix with two in-place complex/real
+            // divisions, so it inherits the same npy_cdivide-vs-System.Numerics rounding as the
+            // direct divide ufunc. Keep this composition explicit — the former blanket complex-
+            // unary excuse hid the one-ULP diagonal cell despite corrcoef being documented exact.
+            if (kind == DivergenceKind.Value && c.Op == "corrcoef" && tc == NPTypeCode.Complex
+                && c.Operands.Any(o => o.Dtype == "complex128")
+                && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
+                return "corrcoef(complex): normalization inherits npy_cdivide vs System.Numerics "
+                     + "rounding (bounded <=2 ULP) [documented]";
 
             // (F1) np.fft over a float32/float16 input. NumSharp has ONE complex type (complex128) and
             //      no complex64, so it returns complex128 (fft/rfft/ihfft/the N-D forms) or float64
@@ -601,6 +611,7 @@ namespace NumSharp.Tests.Fuzz
             //     504-point bit-exact sweep — so the WHOLE set is held to a TIGHT 3-ULP gate; a real
             //     regression fails.
             if (kind == DivergenceKind.Value && c.Operands.Length == 1 && tc == NPTypeCode.Complex
+                && !ByteExactArithmeticUnaryOps.Contains(c.Op)
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 3)))
                 return "complex unary within 3 ULP (full NumPy-algorithm port)";
 
@@ -682,7 +693,7 @@ namespace NumSharp.Tests.Fuzz
             //     emits more (shorter) chunks: the concatenated values agree but the chunk-length
             //     slot does not (e.g. [8] vs NumPy's [4], [6] vs [1]).
             // Scoped to nditer_* on these three layouts; every other layout/order is gated exactly.
-            if (c.Op != null && c.Op.StartsWith("nditer_")
+            if (c.Op != null && (c.Op == "nditer" || c.Op.StartsWith("nditer_"))
                 && (c.Layout == "transposed_3d" || c.Layout == "strided_2d_cols"
                     || c.Layout == "negstride_2d_offset"))
                 return "nditer traversal: order='A' axis ordering over a transposed 3-D operand, and "

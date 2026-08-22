@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text.Json;
 using NumSharp;
 
@@ -59,8 +61,11 @@ namespace NumSharp.Tests.Fuzz
                 case "arccos": return np.arccos(ops[0]);
                 case "arctan": return np.arctan(ops[0]);
                 case "arcsinh": return np.arcsinh(ops[0]);
+                case "asinh": return np.asinh(ops[0]);
                 case "arccosh": return np.arccosh(ops[0]);
+                case "acosh": return np.acosh(ops[0]);
                 case "arctanh": return np.arctanh(ops[0]);
+                case "atanh": return np.atanh(ops[0]);
                 case "deg2rad": return np.deg2rad(ops[0]);
                 case "rad2deg": return np.rad2deg(ops[0]);
                 case "positive": return np.positive(ops[0]);
@@ -83,6 +88,8 @@ namespace NumSharp.Tests.Fuzz
 
                 // Shape manipulation (T7).
                 case "ravel": return np.ravel(ops[0]);
+                case "copy": return np.copy(ops[0]);
+                case "resize": return np.resize(ops[0], new Shape(ParseLongArray(p["shape"])));
                 case "transpose": return np.transpose(ops[0]);
                 case "expand_dims": return np.expand_dims(ops[0], p["axis"].GetInt32());
                 case "squeeze": return np.squeeze(ops[0]);
@@ -124,6 +131,12 @@ namespace NumSharp.Tests.Fuzz
                 // Multi-output (T15): modf split into its two outputs (fractional / integral).
                 case "modf_frac": return np.modf(ops[0]).Item1;
                 case "modf_int": return np.modf(ops[0]).Item2;
+                case "conjugate": return np.conjugate(ops[0]);
+                case "conj": return np.conj(ops[0]);
+                case "real": return np.real(ops[0]);
+                case "imag": return np.imag(ops[0]);
+                case "angle": return np.angle(ops[0]);
+                case "angle_deg": return np.angle(ops[0], deg: true);
 
                 // Cumulative scans + finite differences (T11).
                 case "cumsum": return np.cumsum(ops[0], ParseAxis(p));
@@ -236,6 +249,7 @@ namespace NumSharp.Tests.Fuzz
                 case "flatnonzero": return np.flatnonzero(ops[0]);                  // Group A B3
                 case "argwhere": return np.argwhere(ops[0]);                        // Group A B3
                 case "unique": return np.unique(ops[0]);                            // Group A B3
+                case "unique_values": return np.unique_values(ops[0]);
 
                 // G12 (issue #623): partition/argpartition ride the DERIVED kth-values compare —
                 // the corpus stores take(partition(a, ks), ks) because the arrangement between kth
@@ -284,6 +298,14 @@ namespace NumSharp.Tests.Fuzz
                     ? np.append(ops[0], ops[1], p["axis"].GetInt32())
                     : np.append(ops[0], ops[1]);
                 case "insert": return np.insert(ops[0], p["obj"].GetInt32(), ops[1], p["axis"].GetInt32());
+                case "column_stack": return np.column_stack(ops);
+                case "block":
+                case "block_2x2": return np.block(new object[]
+                {
+                    new object[] { ops[0], ops[1] },
+                    new object[] { ops[2], ops[3] },
+                });
+                case "broadcast_to": return np.broadcast_to(ops[0], new Shape(ParseLongArray(p["shape"])));
                 case "split": return np.split(ops[0], p["sections"].GetInt32(), p["axis"].GetInt32())[p["piece"].GetInt32()];
                 case "hsplit": return np.hsplit(ops[0], p["sections"].GetInt32())[p["piece"].GetInt32()];
                 case "vsplit": return np.vsplit(ops[0], p["sections"].GetInt32())[p["piece"].GetInt32()];
@@ -291,8 +313,14 @@ namespace NumSharp.Tests.Fuzz
                 case "put": np.put(ops[0], ops[1], ops[2],
                     mode: p.TryGetValue("mode", out var putMode) ? putMode.GetString() : "raise");
                     return ops[0]; // mutates ops[0], IS the result
-                case "ravel_multi_index": return np.ravel_multi_index(new[] { ops[0], ops[1] }, ParseIntArray(p["dims"]));
-                case "unravel_index": return np.unravel_index(ops[0], ParseIntArray(p["shape"]))[p["piece"].GetInt32()];
+                case "ravel_multi_index":
+                    return np.ravel_multi_index(new[] { ops[0], ops[1] }, ParseIntArray(p["dims"]),
+                        p.TryGetValue("mode", out var rmiMode) ? rmiMode.GetString() : "raise",
+                        p.TryGetValue("order", out var rmiOrder) ? rmiOrder.GetString()[0] : 'C');
+                case "unravel_index":
+                    return np.unravel_index(ops[0], ParseIntArray(p["shape"]),
+                        p.TryGetValue("order", out var uriOrder) ? uriOrder.GetString()[0] : 'C')
+                        [p["piece"].GetInt32()];
 
                 // ---- isin / set operations (arraysetops). ops[0]=element/ar1, ops[1]=test/ar2.
                 // Value-dependent membership: fixtures overlap so each op bites. intersect1d's
@@ -337,6 +365,12 @@ namespace NumSharp.Tests.Fuzz
                         : np.tensordot(ops[0], ops[1], p["axes"].GetInt32());
                 case "multi_dot": return np.linalg.multi_dot(ops);
                 case "matrix_power": return np.linalg.matrix_power(ops[0], p["n"].GetInt32());
+                case "vector_norm":
+                    return p["axis"].ValueKind == JsonValueKind.Null
+                        ? np.linalg.vector_norm(ops[0], axis: null, keepdims: p["keepdims"].GetBoolean())
+                        : np.linalg.vector_norm(ops[0], p["axis"].GetInt32(), p["keepdims"].GetBoolean());
+                case "matrix_norm":
+                    return np.linalg.matrix_norm(ops[0], p["keepdims"].GetBoolean(), ParseOrd(p["ord"]));
 
                 // A matrix times its OWN transpose — the syrk shortcut both of NumPy's matrix
                 // -product dispatchers take when the two operands share a data pointer. The
@@ -440,6 +474,71 @@ namespace NumSharp.Tests.Fuzz
                 case "polymul": return np.polymul(ops[0], ops[1]);
                 case "poly1d_coeffs": return new poly1d(ops[0]).coeffs;
                 case "poly1d_fromroots": return new poly1d(ops[0], r: true).coeffs;
+
+                // ---- deterministic creation --------------------------------------------
+                case "arange": return np.arange(p["start"].GetDouble(), p["stop"].GetDouble(),
+                    p["step"].GetDouble(), FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                case "linspace": return np.linspace(p["start"].GetDouble(), p["stop"].GetDouble(),
+                    p["num"].GetInt32(), p["endpoint"].GetBoolean(),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                case "zeros": return np.zeros(new Shape(ParseLongArray(p["shape"])),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                case "ones": return np.ones(new Shape(ParseLongArray(p["shape"])),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                case "full": return np.full(new Shape(ParseLongArray(p["shape"])), p["fill"].GetInt32(),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                case "empty":
+                {
+                    var result = np.empty(new Shape(ParseLongArray(p["shape"])),
+                                          FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                    result.fill(0);
+                    return result;
+                }
+                case "eye": return np.eye(p["n"].GetInt32(), p["m"].GetInt32(), p["k"].GetInt32(),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()).AsType(), p["order"].GetString()[0]);
+                case "identity": return np.identity(p["n"].GetInt32(),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()).AsType());
+                case "zeros_like": return np.zeros_like(ops[0]);
+                case "ones_like": return np.ones_like(ops[0]);
+                case "full_like": return np.full_like(ops[0], p["fill"].GetInt32());
+                case "empty_like":
+                {
+                    var result = np.empty_like(ops[0]);
+                    result.fill(0);
+                    return result;
+                }
+                case "indices": return np.indices(ParseIntArray(p["dimensions"]),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+
+                // ---- array conversion -------------------------------------------------
+                case "array": return np.array(ops[0]);
+                case "asarray": return np.asarray(ops[0]);
+                case "asanyarray": return np.asanyarray(ops[0]);
+                case "ascontiguousarray": return np.ascontiguousarray(ops[0]);
+                case "asfortranarray": return np.asfortranarray(ops[0]);
+                case "asarray_chkfinite": return np.asarray_chkfinite(ops[0]);
+                case "asmatrix": return np.asmatrix(ops[0]);
+                case "require": return np.require(ops[0], requirements:
+                    p["requirements"].EnumerateArray().Select(x => x.GetString()).ToArray());
+                case "frombuffer": return np.frombuffer(FuzzCorpus.ResultBytes(ops[0]),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()), p["count"].GetInt64(),
+                    p["offset"].GetInt64());
+                case "fromstring": return np.fromstring(p["text"].GetString(),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()), p["count"].GetInt32(),
+                    p["sep"].GetString());
+                case "fromfile":
+                {
+                    using var stream = new MemoryStream(FuzzCorpus.ResultBytes(ops[0]), writable: false);
+                    return np.fromfile(stream, FuzzCorpus.DtypeToTC(p["dtype"].GetString()),
+                                       p["count"].GetInt32(), p["sep"].GetString(),
+                                       p["offset"].GetInt64());
+                }
+                case "loadtxt":
+                {
+                    using var reader = new StringReader(p["text"].GetString());
+                    return np.loadtxt(reader, FuzzCorpus.DtypeToTC(p["dtype"].GetString()),
+                                      delimiter: p["delimiter"].GetString());
+                }
 
                 // ---- diag / tri family ----------------------------------------------------
                 // `tri` is a pure generator: ops[0] is a 1-element carrier whose dtype selects
@@ -584,12 +683,23 @@ namespace NumSharp.Tests.Fuzz
                 // the tier's test method is [DoNotParallelize].
                 case "rnd":
                 {
-                    np.random.seed(p["seed"].GetInt32());
+                    np.random.seed(p["seed"].GetUInt32());
                     int draws = p.TryGetValue("draws", out var dr) ? dr.GetInt32() : 1;
                     NDArray r = null;
                     for (int k = 0; k < draws; k++)
                         r = RndDraw(p);
                     return r;
+                }
+                case "seed":
+                    np.random.seed(p["seed"].GetUInt32());
+                    return np.random.random_sample(ParseLongArray(p["size"]));
+                case "set_state":
+                {
+                    var state = new NativeRandomState(
+                        ops[0].ToArray<uint>(), p["pos"].GetInt32(), p["has_gauss"].GetInt32(),
+                        p["cached_gaussian"].GetDouble());
+                    np.random.set_state(state);
+                    return np.random.random_sample(ParseLongArray(p["size"]));
                 }
 
                 // Array/scalar-result ops added with the result-kind upgrade (iterator traces,

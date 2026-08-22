@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Text.Json;
 using NumSharp;
 
@@ -64,6 +67,7 @@ namespace NumSharp.Tests.Fuzz
 
                 // The value stream in iteration order — the whole point of the tier. A wrong
                 // order/layout resolution shows up here and nowhere else in the corpus.
+                case "nditer":
                 case "nditer_values":
                 {
                     var vals = new List<object>();
@@ -74,6 +78,39 @@ namespace NumSharp.Tests.Fuzz
                             vals.Add(it[0].GetAtIndex(0));
                             it.iternext();
                         }
+                    }
+                    return ValueVector(vals, ops[0].typecode);
+                }
+
+                // nested_iters is object-returning, like nditer. Materializing the recursive
+                // value stream makes its axis partition / child rebase contract byte-comparable.
+                case "nested_iters":
+                {
+                    int[][] axes = p["axes"].EnumerateArray()
+                        .Select(ParseIntArray)
+                        .ToArray();
+                    var vals = new List<object>();
+                    var iters = np.nested_iters(ops[0], axes, flags: new[] { "multi_index" },
+                                                order: ParseOrder(p));
+                    try
+                    {
+                        void Walk(int level)
+                        {
+                            foreach (var _ in iters[level])
+                            {
+                                if (level == iters.Length - 1)
+                                    vals.Add(iters[level][0].GetAtIndex(0));
+                                else
+                                    Walk(level + 1);
+                            }
+                        }
+
+                        Walk(0);
+                    }
+                    finally
+                    {
+                        foreach (var it in iters)
+                            it.Dispose();
                     }
                     return ValueVector(vals, ops[0].typecode);
                 }
@@ -109,6 +146,16 @@ namespace NumSharp.Tests.Fuzz
                     return NDArray.Scalar(np.can_cast(FuzzCorpus.DtypeToTC(p["from"].GetString()),
                                                       FuzzCorpus.DtypeToTC(p["to"].GetString()),
                                                       p["casting"].GetString()));
+                case "isdtype":
+                    return NDArray.Scalar(np.isdtype(FuzzCorpus.DtypeToTC(p["dtype"].GetString()),
+                                                      p["kind_name"].GetString()));
+                case "issubdtype":
+                    return NDArray.Scalar(np.issubdtype(FuzzCorpus.DtypeToTC(p["a"].GetString()),
+                                                        FuzzCorpus.DtypeToTC(p["b"].GetString())));
+                case "isfortran":
+                    return NDArray.Scalar(np.isfortran(ops[0]));
+                case "iterable":
+                    return NDArray.Scalar(np.iterable(ops[0]));
                 case "isscalar":
                     return NDArray.Scalar(np.isscalar(ops[0]));
                 case "iscomplexobj":
@@ -247,9 +294,45 @@ namespace NumSharp.Tests.Fuzz
 
                 case "meshgrid":
                 {
-                    var (x, y) = np.meshgrid(ops[0], ops[1]);
-                    return new[] { x, y };
+                    return np.meshgrid(ops[0], ops[1],
+                        indexing: p.TryGetValue("indexing", out var indexing) ? indexing.GetString() : "xy",
+                        sparse: p.TryGetValue("sparse", out var sparse) && sparse.GetBoolean(),
+                        copy: !p.TryGetValue("copy", out var copy) || copy.GetBoolean()).ToArray();
                 }
+
+                case "split":
+                    return np.split(ops[0], p["sections"].GetInt32(), p["axis"].GetInt32());
+                case "array_split":
+                    return np.array_split(ops[0], p["sections"].GetInt32(), p["axis"].GetInt32());
+                case "hsplit":
+                    return np.hsplit(ops[0], p["sections"].GetInt32());
+                case "vsplit":
+                    return np.vsplit(ops[0], p["sections"].GetInt32());
+                case "dsplit":
+                    return np.dsplit(ops[0], p["sections"].GetInt32());
+                case "unstack":
+                    return np.unstack(ops[0], p["axis"].GetInt32());
+                case "modf":
+                {
+                    var (fractional, integral) = np.modf(ops[0]);
+                    return new[] { fractional, integral };
+                }
+                case "average_returned":
+                {
+                    int? axis = p["axis"].ValueKind == JsonValueKind.Null
+                        ? (int?)null
+                        : p["axis"].GetInt32();
+                    NDArray weights = p["weighted"].GetBoolean() ? ops[1] : null;
+                    var (average, sumOfWeights) = np.average_returned(ops[0], axis, weights,
+                        p["keepdims"].GetBoolean());
+                    return new[] { average, sumOfWeights };
+                }
+                case "unique_counts":
+                    return np.unique_counts(ops[0]).ToArray();
+                case "unique_inverse":
+                    return np.unique_inverse(ops[0]).ToArray();
+                case "unique_all":
+                    return np.unique_all(ops[0]).ToArray();
 
                 // ---- ufunc out= / where= --------------------------------------------------
                 //
@@ -282,10 +365,14 @@ namespace NumSharp.Tests.Fuzz
                 }
 
                 case "unravel_index_all":
-                    return np.unravel_index(ops[0], ParseIntArray(p["shape"]));
+                    return np.unravel_index(ops[0], ParseIntArray(p["shape"]),
+                        p.TryGetValue("order", out var uriOrder) ? uriOrder.GetString()[0] : 'C');
 
                 case "broadcast_arrays":
                     return np.broadcast_arrays(ops);
+                case "indices_sparse":
+                    return np.indices_sparse(ParseIntArray(p["dimensions"]),
+                        FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
 
                 // ---- LAPACK factorisation family (linalg_parity tier; TUPLE results) ----
                 // svd/eig/eigh/qr return multiple arrays; lstsq returns four. Computable ONLY
@@ -360,6 +447,10 @@ namespace NumSharp.Tests.Fuzz
                                             FuzzCorpus.DtypeToTC(p["b"].GetString()));
                 case "min_scalar_type":
                     return np.min_scalar_type(ParseScalar(p["value"]));
+                case "dtype":
+                    return np.dtype(p["dtype"].GetString()).typecode;
+                case "common_type":
+                    return np.common_type_code(ops);
                 default:
                     throw new NotSupportedException($"dtype op '{op}' is not registered in OpRegistry");
             }
@@ -377,12 +468,34 @@ namespace NumSharp.Tests.Fuzz
             {
                 case "array_str": return np.array_str(ops[0]);
                 case "array_repr": return np.array_repr(ops[0]);
+                case "mintypecode": return np.mintypecode(p["typechars"].GetString()).ToString();
                 // einsum_path returns the contraction planner's info STRING (shape-derived, so
                 // the operand values are irrelevant). Byte-identical to NumPy for non-ellipsis
                 // subscripts; the tuple's path structure is encoded in this same string.
                 case "einsum_path":
                     return np.einsum_path(p["subscripts"].GetString(), ops,
                                           (object)p["optimize"].GetString()).repr;
+                case "savetxt":
+                {
+                    using var writer = new StringWriter(CultureInfo.InvariantCulture);
+                    np.savetxt(writer, ops[0], p["fmt"].GetString(), p["delimiter"].GetString(),
+                               p["newline"].GetString(), p["header"].GetString(),
+                               p["footer"].GetString(), p["comments"].GetString());
+                    return writer.ToString();
+                }
+                case "get_state":
+                {
+                    np.random.seed(p["seed"].GetUInt32());
+                    int draws = p["draws"].GetInt32();
+                    if (draws > 0)
+                        _ = np.random.random_sample(draws);
+                    var state = np.random.get_state();
+                    ulong bits = unchecked((ulong)BitConverter.DoubleToInt64Bits(state.CachedGaussian));
+                    return state.Algorithm + "|" + state.Pos.ToString(CultureInfo.InvariantCulture) + "|" +
+                           state.HasGauss.ToString(CultureInfo.InvariantCulture) + "|" +
+                           bits.ToString("x16", CultureInfo.InvariantCulture) + "|" +
+                           string.Join(",", state.Key.Select(x => x.ToString(CultureInfo.InvariantCulture)));
+                }
                 default:
                     throw new NotSupportedException($"text op '{op}' is not registered in OpRegistry");
             }
