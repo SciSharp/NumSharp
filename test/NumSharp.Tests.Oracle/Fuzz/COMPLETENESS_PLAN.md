@@ -1,9 +1,9 @@
-# Fuzz & Oracle Completeness — Remediation Plan (SOURCE OF TRUTH)
+# Fuzz & Oracle Completeness — 2026-07 Remediation Plan (HISTORICAL)
 
-> **This file is the single source of truth** for the three-workstream remediation of the
-> differential-fuzz pipeline. Every teammate reads it FIRST, works ONLY its own workstream,
-> and ACTIVELY updates its own `## Status — WS-*` section (and appends to the Bug Ledger) as
-> work progresses. Re-read the file immediately before every edit to it (others edit it too).
+> This completed plan is retained as the audit trail for the 2026-07 three-workstream remediation.
+> It is **not** the current coverage map. Use `COVERAGE_GAPS.md` for the measured live surface,
+> `README.md` for the divergence ledger, and `OracleSurfaceCoverageTests.cs` for mechanical
+> completeness enforcement.
 
 | Meta | Value |
 |---|---|

@@ -31,7 +31,7 @@ and the divergence ledger `test/NumSharp.Tests.Oracle/Fuzz/README.md`. This skil
 
 | Side | File | Role |
 |------|------|------|
-| Generator | `test/oracle/gen_oracle.py` | Deterministic op matrices (150+ ops, ~5.7K lines) across modes. Writes `Fuzz/corpus/*.jsonl`. |
+| Generator | `test/oracle/gen_oracle.py` | Deterministic value/error/kind/artifact matrices (363 corpus op keys, ~7.1K lines) across modes. Writes `Fuzz/corpus/*.jsonl`. |
 | Generator | `test/oracle/layout_catalog.py` | The memory-layout builders (40 variations: 26 single + 9 pair + 5 where) + value pools. |
 | Generator | `test/oracle/gen_index_oracle.py` | Advanced-indexing get/set oracle (`index_*` tiers). |
 | Generator | `test/oracle/gen_decimal_oracle.cs` | Independent C# oracle for `Decimal` (no NumPy analog). |
@@ -40,14 +40,17 @@ and the divergence ledger `test/NumSharp.Tests.Oracle/Fuzz/README.md`. This skil
 | Harness | `test/NumSharp.Tests.Oracle/Fuzz/OpRegistry.cs` | **op-name → NumSharp call.** Pairs 1:1 with `gen_oracle.py`. |
 | Harness | `test/NumSharp.Tests.Oracle/Fuzz/FuzzCorpus.cs` | Rebuilds exact NDArray views from `(dtype,shape,strides,offset,bytes)`. |
 | Harness | `test/NumSharp.Tests.Oracle/Fuzz/FuzzCorpusTests.cs` | One `[FuzzMatrix]` test per corpus file (`RunCorpus("<tier>.jsonl")`). |
+| Harness | `test/NumSharp.Tests.Oracle/Fuzz/OracleSurfaceCoverageTests.cs` | Public-surface inventory; rejects silent coverage omissions. |
 | Harness | `test/NumSharp.Tests.Oracle/Fuzz/{BitDiff,Shrinker}.cs` | Bit-exact compare (NaN tokenized; Decimal by value) / shrink to 1 element. |
 | Harness | `test/NumSharp.Tests.Oracle/Fuzz/MisalignedRegistry.cs` | The excused, documented divergences. |
-| Corpus | `test/NumSharp.Tests.Oracle/Fuzz/corpus/*.jsonl` | The committed corpus (100K+ cases across ~57 files). Copied to test output by the csproj glob. |
+| Corpus | `test/NumSharp.Tests.Oracle/Fuzz/corpus/*.jsonl` | The committed corpus (116,339 rows across 64 files). Copied to test output by the csproj glob. |
 
 ## The gate
 
 `dotnet test --filter "TestCategory=FuzzMatrix"` runs the gate classes:
-- **`FuzzCorpusTests`** — the op corpus (~50 tiers; `astype/binary/unary/reduce/manip/...`, the value/parity tiers `specials/precision/products/fft/matmul_parity/numpy_f32_kernels/...`, and the result-kind & error-parity tiers `iter/dtype_text/out_where/errors_full`). This is where new-op work lands.
+- **`FuzzCorpusTests`** — the op corpus (including deterministic `creation/conversion/multioutput`,
+  value/parity tiers `specials/precision/products/fft/matmul_parity/...`, and result-kind/error tiers
+  `iter/dtype_text/out_where/errors_full`). This is where new-op work lands.
 - **`IndexOracleTests`** — advanced-indexing get/set (`index_curated` + `index_dtype` + `index_setter_dtype` + `index_random`).
 - **`MetamorphicTests`** — NumPy-free invariants (round-trips / involutions), no oracle needed.
 - **`HarnessSelfTests`** — proves the gate has teeth (BitDiff catches value/NaN/-0 diffs; the corpus is non-vacuous). A green FuzzMatrix that skipped every case would fail here.
@@ -86,6 +89,8 @@ is in **`references/add-op.md`** — read it when adding an op. In brief:
 
 ## Critical gotchas (learned the hard way)
 
+- **Public-surface completeness is gated.** `OracleSurfaceCoverageTests` reflects `np`/`np.linalg`/
+  `np.fft`/`np.random` and fails on a public method with no corpus key or explicit classification.
 - **Pin `numpy==2.4.2`.** A different NumPy version can shift bytes and make the committed corpus wrong. Verify
   `python -c "import numpy; print(numpy.__version__)"` before regenerating.
 - **The corpus diff is huge but harmless.** Case `id`s carry a global running counter (`{op}/{layout}/{dtype}/{n}`),
@@ -94,7 +99,8 @@ is in **`references/add-op.md`** — read it when adding an op. In brief:
 - **Char has no NumPy dtype.** It rides the `uint16` proxy: `char_tier("<mode>")` re-runs your `gen_<mode>` with the
   Char pool and relabels `uint16 → char`. Add your op to a `gen_<mode>` whose `main()` branch calls `char_tier` (18
   of them — arith/divmod/comparison/unary×2/bitwise/reduce/scan/stat/manip/sort/tail/astype/where/logic/matmul/
-  rounding/copyto) and Char coverage is automatic; a mode with no `char_tier` call (e.g. `modf`, `place`) has none.
+  rounding/copyto) and Char coverage is automatic. `creation` and `conversion` append their own proxy
+  rows, bringing the committed total to 20 Char-bearing files; a mode with no proxy call (e.g. `modf`, `place`) has none.
 - **Decimal has no NumPy analog.** It rides the independent C# oracle `gen_decimal_oracle.cs` (naive scalar
   `System.Decimal`), regenerated via `dotnet run test/oracle/gen_decimal_oracle.cs`. If your op needs Decimal
   coverage, add it there too.

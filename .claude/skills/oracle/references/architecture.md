@@ -6,7 +6,7 @@ is the source of truth; the corpus is committed; no Python at test time.**
 
 ## 1. The op oracle (the main one)
 
-**Generate** — `test/oracle/gen_oracle.py` (~5,700 lines). Structure:
+**Generate** — `test/oracle/gen_oracle.py` (~6,900 lines). Structure:
 - Value pools + layout builders imported from `layout_catalog.py`.
 - One `gen_<mode>(dtypes, layout_names)` per op family. Each loops `layout × dtype`, builds `(base, view)`, runs a
   `jobs` list of `(opname, params, lambda)`, and appends a case `{id, op, params, operands:[{dtype,shape,strides,
@@ -21,6 +21,13 @@ is the source of truth; the corpus is committed; no Python at test time.**
 - `BitDiff.cs` — bit-exact compare (NaN tokenized, Decimal by value). `Shrinker.cs` — minimizes a failure.
 - `FuzzCorpusTests.cs` — one `[FuzzMatrix]` `[TestMethod]` per corpus file, each calling `RunCorpus("<tier>.jsonl")`.
   A per-file `MinCases` floor rejects a silently truncated regeneration.
+- `OracleSurfaceCoverageTests.cs` — reflects every public `np`/`np.linalg`/`np.fft`/`np.random`
+  method and rejects an unclassified surface addition.
+- `Journey3TouchedOracleCoverageTests.cs` — pins the conservative 186-callable master→journey3
+  production-file inventory and requires a direct committed case for all 186.
+- `OracleCoverageStrengthTests.cs` — rejects one-row coverage theatre: every ordinary op key needs
+  at least four cases and at least one changing axis (layout/params/dtype/valueclass/outcome); the
+  separate indexing corpus keeps explicit matrix floors.
 - `MisalignedRegistry.cs` — the excused, documented divergences (`Classify(...)` returns a reason string; scoped
   tight and pinned by `OpenBugs.FuzzGate.cs`).
 
@@ -55,6 +62,9 @@ is the source of truth; the corpus is committed; no Python at test time.**
 ## 5. Specialized value / parity tiers (still the op corpus, replayed by `FuzzCorpusTests`)
 
 Beyond the elementwise/reduce matrices, `gen_oracle.py` emits several targeted tiers:
+- `creation` / `conversion` / `multioutput` — deterministic zero-operand creators (including
+  `empty*` through post-allocation initialization), as*/buffer/text/file-artifact conversions
+  (including finite-check errors and verbatim `savetxt`), and full tuple arity/slot coverage.
 - `specials` — IEEE nan/±inf/±0/subnormal/max forced through math/reduce/scan/matmul across float widths.
 - `precision` — truthful-vs-precise: each case carries a THIRD buffer `expected.truth` (correctly-rounded,
   mpmath/`Fraction`), consulted ONLY to adjudicate which side lost precision on a NumPy divergence (branches P1–P3).
@@ -67,6 +77,9 @@ Beyond the elementwise/reduce matrices, `gen_oracle.py` emits several targeted t
   NumSharp ports from NumPy itself, held BIT-EXACT (carved out of the ~ULP excuse).
 - `random_parity` / `random_parity_host` — seeded MT19937 stream bytes; `matmul_parity` — np.dot/np.matmul byte
   parity through the optional `NumSharp.Interop.OpenBLAS` engine.
+- `BlasBackendDeltaTests` — managed/backend two-pass replay of the affected ordinary tiers. It
+  deduplicates identical outcomes by threw/result state + dtype + shape + bytes and adjudicates only
+  real flips (1,747 deduped / 28 changed out of 1,775 on the current corpus).
 
 **Host-pinned:** `matmul_parity` and `random_parity_host` record bytes reproducible only on the authoring host
 (BLAS build + kernel + thread count, or the win-amd64 CRT libm), so they assert `Inconclusive` — never red —

@@ -12,11 +12,12 @@ cd test/oracle
 
 # 1. The op corpus (gen_oracle.py) — one file per mode. Pass the mode(s) you touched:
 python gen_oracle.py <mode>
+#   surface/kind tiers: conversion creation multioutput iter dtype_text out_where errors_full
 #   core value tiers:   smoke astype_full binary divmod_power comparison unary unary_extra bitwise
 #                       reduce nanreduce scan stat logic modf manip sort tail rounding params
 #                       aliasing copyto place where matmul errors groupa
 #   value/parity tiers: specials precision products fft random_parity matmul_parity numpy_f32
-#   kind/out=/error:    iter dtype_text out_where errors_full   (result-kind + ufunc out=/where= + message parity)
+#   creation/conversion append their own Char proxy rows; the usual 18 modes use char_tier
 # Authoritative list = the `elif mode == ...` branches in gen_oracle.py's main() (and its
 # unknown-mode error message). Notes: `numpy_f32` writes BOTH numpy_f32_kernels.jsonl AND
 # numpy_f64_kernels.jsonl; `matmul_parity` ALSO writes the host pin matmul_parity.host.jsonl;

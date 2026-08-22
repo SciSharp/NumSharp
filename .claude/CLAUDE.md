@@ -2238,8 +2238,8 @@ Proves every NDIter-backed op is **bit-identical** to NumPy 2.4.2 across the inp
 ```
 test/oracle/                          corpus generators (NumPy 2.4.2 — run by hand / nightly soak)
   layout_catalog.py                   memory-layout builders (the 40 variations: 26 single + 9 pair + 5 where)
-  gen_oracle.py                       deterministic op matrices (astype/binary/unary/reduce/where/… — ~159 ops);
-                                      per-mode dtype axes widened to ALL_DTYPES; Char woven into 18 tier files
+  gen_oracle.py                       deterministic op matrices (363 corpus op keys across value/error/kind/artifact tiers);
+                                      per-mode dtype axes widened to ALL_DTYPES; Char woven into 20 tier files
                                       via the uint16 proxy (char_tier, relabelled uint16->char)
   gen_decimal_oracle.cs               INDEPENDENT C# oracle for Decimal (no NumPy analog): naive scalar
                                       System.Decimal math -> decimal_{unary,binary,reduce,scan,power,
@@ -2259,7 +2259,9 @@ test/NumSharp.Tests.Oracle/Fuzz/          C# replay harness (no Python)
   IndexOracleTests.cs                 index get/set differential gate (curated + dtype + seeded-random tiers)
   MetamorphicTests.cs                 oracle-free invariants (round-trips / involutions / identities — no NumPy)
   HarnessSelfTests.cs                 proves the harness has teeth (BitDiff detects value/NaN/-0 diffs; non-vacuous)
-  corpus/*.jsonl                      committed corpus (~79K cases / 48 tiers; op corpus ~65K incl. 4.4K Char woven + 695 Decimal + 2.3K specials + 100 precision/truth-bearing + 287 products + 146 random-stream), copied to test output via the csproj glob
+  corpus/*.jsonl                      committed corpus (116,339 rows / 64 files; ordinary op 103,208 +
+                                      index 12,426 + Decimal 703 + two host pins; 5,506 Char proxy rows),
+                                      copied to test output via the csproj glob
 test/NumSharp.Tests/IO/            .npy/.npz format gate (no Python)
   NpyOracleCorpus.cs                  opens npy_oracle.zip, rebuilds arrays from the manifest
   NpyOracleTests.cs                   one [NpyOracle] test per claim: read / byte-exact write / header-only
@@ -2283,29 +2285,44 @@ test/NumSharp.Tests/IO/            .npy/.npz format gate (no Python)
   slots, **arity asserted**). `error: {type, text}` records NumPy's exception verbatim, so error
   cases assert the actual MESSAGE, not merely that something was thrown (the legacy
   `expects_throw`-only cases keep the weaker assertion). Three tiers use them: **`iter.jsonl`**
-  (4,605 — materialized `ndindex`/`ndenumerate`/`nditer`/`broadcast` TRACES: the value stream,
+  (4,611 — materialized `ndindex`/`ndenumerate`/`nditer`/`nested_iters`/`broadcast` TRACES: the value stream,
   multi_index, c_index/f_index and external_loop chunk lengths across order C/F/A/K × 22 layouts;
   traversal ORDER has no other gate, and every other tier depends on it), **`dtype_text.jsonl`**
-  (2,111 — `promote_types`/`result_type`/`min_scalar_type`/`can_cast`/`isscalar`/`iscomplexobj`/
-  `isrealobj`/`size`/`array_str`/`array_repr`/`nonzero` at any rank) and **`errors_full.jsonl`**
+  (2,618 — promotion/dtype predicates, printing, scalar predicates and `nonzero` at any rank),
+  **`multioutput.jsonl`** (64 — full tuple arity + every slot for split/unstack/broadcast/meshgrid/
+  modf/average/unique), **`creation.jsonl`** (302), **`conversion.jsonl`** (1,078), and
+  **`errors_full.jsonl`**
   (688 raising cells over 22 distinct NumPy messages — the cells every value generator SKIPS) and
   **`out_where.jsonl`** (3,727 — ufunc `out=`/`where=` over 7 out layouts × 9 mask layouts × 28
   ufuncs; each case records BOTH the returned view AND the entire base buffer behind `out`, so
   masked-off slots are proven to keep their prior contents and a kernel writing outside a
   strided/offset/negstride window is caught — previously reached only through `maximum_out`/
   `minimum_out`/`clip_out`, 11 contiguous unmasked cases each).
-  A fourth, **** (3,727), gates ufunc / across 7 out layouts x 9 mask
-  layouts x 28 ufuncs: each case records BOTH the returned view and the ENTIRE base buffer behind
-  , so masked-off slots are proven to retain their prior contents and a kernel writing outside
-  a strided/offset/negstride view window is caught (previously reached only via maximum_out/
-  minimum_out/clip_out — 11 contiguous, unmasked cases each).
   Comparators: `FuzzCorpusTests.Kinds.cs`; callables: `OpRegistry.Kinds.cs`; ledger: `Fuzz/README.md`
   → Table 0.
-- **Three `FuzzMatrix` gates**: `FuzzCorpusTests` (the op corpus — ~65K cases across the tiers, checking dtype + shape + bytes + error parity + per-file minimum-count floors; Char woven into 18 tier files, 12 `Decimal*` tiers: unary/binary/reduce/scan/power/varstd/matmul/astype/stat/where/sort/manip), `IndexOracleTests` (the index oracle — `index_curated` 2,273 + `index_dtype` 104 + `index_setter_dtype` 10 (cross-dtype cast-on-set) + `index_random` 10,000; the advanced-indexing parity gate), and `MetamorphicTests` (12 NumPy-free invariants incl. Half/Complex/Decimal/bool/char + strided views). A failing op case auto-shrinks to a 1-element repro.
-- **Dtype coverage**: per-mode dtype axes widened toward `ALL_DTYPES`. **Char** (no NumPy dtype) is woven into 18 tier files via the uint16 proxy (`gen_oracle.char_tier`, relabelled uint16→char). **Decimal** (no NumPy analog) rides an independent C# oracle (`gen_decimal_oracle.cs`, naive scalar `System.Decimal`; incl. axis reductions, empty, negative int powers). Verified Char/clip-bool/round/dot bugs are carved from the green corpus and reproduced under `[OpenBugs]` (`OpenBugs.Char.cs`, `OpenBugs.DtypeCoverage.cs`, `OpenBugs.FuzzGaps.cs`) — NOT excused in `MisalignedRegistry`.
-- **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul matmul_parity linalg_parity poly einsum rounding bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors groupa specials precision products random_parity fft`; `precision` additionally needs `mpmath`; the host-pinned `matmul_parity`/`linalg_parity` also emit a `*.host.jsonl` pin — run `linalg_parity` with `OPENBLAS_NUM_THREADS=1` for the deterministic single-thread bytes it pins) + `python test/oracle/gen_index_oracle.py` (the `index_*` tiers) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl` + `dotnet run test/oracle/gen_decimal_oracle.cs` (the `decimal_*` tiers), then `dotnet build` (copies the corpus to test output).
+- **`FuzzMatrix` layers**: `FuzzCorpusTests` (ordinary managed kernels + host-pinned backend tiers +
+  the deduplicated backend delta), `IndexOracleTests`, `MetamorphicTests`, harness self-tests, and
+  `OracleSurfaceCoverageTests`. The public-surface guard inventories `np` 321 / `np.linalg` 31 /
+  `np.fft` 18 / `np.random` 48 and rejects an unclassified new API. A failing value case auto-shrinks.
+- **Dtype coverage**: per-mode dtype axes widened toward `ALL_DTYPES`. **Char** (no NumPy dtype) contributes
+  5,506 uint16-proxy rows across 20 files. **Decimal** (no NumPy analog) rides 703 cases from the
+  independent C# scalar oracle. Real product bugs are carved+pinned or fixed, never registry-excused.
+- **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>`
+  (modes include `conversion creation multioutput iter dtype_text out_where errors_full smoke astype_full
+  binary divmod_power comparison unary reduce where place matmul rounding bitwise unary_extra nanreduce
+  scan stat logic modf manip sort tail params aliasing copyto errors groupa numpy_f32 matmul_parity
+  linalg_parity poly einsum specials precision products random_parity fft`; `precision` additionally
+  needs `mpmath`) + the index/Decimal/NPY generators, then `dotnet build` to copy corpus assets.
 - **Truthful vs precise** (`precision.jsonl`, 72 truth-bearing cases): each case carries `expected.truth` — the correctly-rounded mathematical reference (exact `Fraction` / 200-bit mpmath, generator-side only) — over precision-ADVERSARIAL inputs (wide-magnitude/cancellation sums at N≤2049, large-mean variance, near-1 products, expm1/log1p small-|x|) the ordinary 8–36-element pools cannot express. Policy (the vision is byte-identical NumPy parity): **bit-exact to NumPy passes without truth ever being read — precise never fails**; truth only adjudicates divergences. Not-less-truthful than NumPy → excused "prefer-precise" parity debt (being MORE accurate than NumPy is still a divergence to close by porting NumPy's algorithm, never a win); less truthful beyond 4×/+8 ULP slack → precision LOSS, red unless a bounded known-bug branch covers it (`MisalignedRegistry` P1–P3; the unbounded summation blanket is gated on truth-absence so losses can't hide in it). Findings on arrival, excused bounded ≤256 ULP (P3): f32 var/std accumulation 55/26 ULP vs truth (NumPy 3/2), negative-stride reduce path 11–32 ULP (NumPy exact).
-- **Products & random streams**: `products.jsonl` (287) is the FIRST value gate for `inner`/`vdot`/`vecdot`/`matvec`/`vecmat`/`tensordot`/`linalg.multi_dot`/`linalg.matrix_power` — small-exact operands across all 13 dtypes (bit-parity holds even vs NumPy's BLAS since depth-4 float sums are exact; conjugation + loop-dtype rules gated) plus deep-K truth-bearing f32/f64 cases adjudicated prefer-precise. `random_parity.jsonl` (38, portable MT19937/uniform-arithmetic dists, hard everywhere) + `random_parity_host.jsonl` (108, libm-consuming transform/rejection samplers — win-amd64-authored, Inconclusive off-Windows like matmul_parity) pin the documented byte-identical seed claim the statistical tests couldn't. Findings: 8 samplers carved + pinned under `OpenBugsRandom.RandomParity_*` (gamma shape<1 via 2-arg, f, pareto, standard_cauchy, binomial, negative_binomial, multinomial, multivariate_normal); chisquare/wald/noncentral_f/dirichlet ride a scoped ≤8-ULP (32 wald) R1 envelope; C-long int outputs recorded widened to NumSharp's fixed int64.
+- **Products & random streams**: `products.jsonl` (408) gates the CBLAS family, tensor products,
+  cross/cov/corrcoef, and Array-API vector/matrix norms. `random_parity.jsonl` (38 portable) +
+  `random_parity_host.jsonl` (108 host-libm) pin 35 stream methods/distributions; seven public samplers
+  plus gamma(shape&lt;1) remain carved and `[OpenBugs]`-pinned.
+- **Managed vs OpenBLAS without duplicate noise**: ordinary tiers always run Core managed. The
+  host-pinned `matmul_parity`/`linalg_parity` tiers run backend-on. `BlasBackendDelta` replays only
+  the 1,775 affected ordinary cases: 1,747 identical outcomes are deduplicated; the 28 flips are
+  byte-compared with NumPy on the pinned host. Outcome equality includes threw/result, dtype, shape,
+  and bytes; a backend change on a non-CBLAS dtype is always a hard failure.
 - **LAPACK factorisations**: `linalg_parity.jsonl` (366) is the FIRST *corpus* value gate for the eigen/SVD/QR/Cholesky family `cholesky`/`eig`/`eigvals`/`eigh`/`eigvalsh`/`svd`/`svdvals`/`pinv`/`matrix_rank`/`cond{None,2,-2}`/`lstsq`/`qr` + `norm{2,-2,nuc}` AND the **LU family** `solve`/`inv`/`det`/`slogdet`/`tensorinv`/`tensorsolve` + `matrix_power(n<0)` (added 2026-08-21 — the OpenBLAS members that had ZERO committed oracle coverage) — **HOST-PINNED like `matmul_parity`** (`linalg_parity.host.jsonl`, same `MatmulParityPin`), because Core ships no managed LU/QR/SVD/eigensolver: they compute ONLY through `NumSharp.Interop.OpenBLAS`, byte-exact on NumPy's own pinned scipy-openblas at **threads=1**, Inconclusive off the pinned host. tuple results (svd/eig/eigh/qr/lstsq/**slogdet**) + array siblings; float32 byte-exact too (NumPy's "lite" double-compute-round). The LU family is `getrf`/`gesv` (deterministic pivoting), so EVERY output is byte-reproducible — nothing excluded (`det` 0-D/1-D, complex `slogdet` sign unit-modulus, singular→`(0,-inf)`); only the eigen/SVD side excludes complex-Hermitian `eigh` eigenvectors (heevd phase, cross-process — covered by `eigvalsh`), float32-`eig`-complex-eigenvalues (complex64 vs complex128), non-SVD `cond`/`norm` orders (1-ULP reduction-order). 366/366 bit-exact on the pinned host.
 - **Polynomial / einsum / cross / cov**: `poly.jsonl` (`gen_oracle.py poly`) gates the PORTABLE polynomial family (`poly` 1-D, `polyval`, `vander`, `polyder`, `polyint`, `polyadd`/`polysub`/`polymul`, `polydiv` tuple, `poly1d`) — pure arithmetic/convolution/Horner, bit-exact everywhere. `einsum.jsonl` gates `einsum` (integer + small-exact-float contractions + the view path; NONZERO operands, since a signed zero diverges via NumPy's `+0.0`-seeded `sop` accumulator) + `einsum_path` (the info STRING, `text` kind, shape-derived, non-ellipsis). The `products` tier gained **`cross`** (the lone product-family gap; multiply-subtract, bit-exact f64/f32/c128/i64) and **`cov`/`corrcoef`** (normalized dot, byte-exact SMALL/unweighted; weighted `fweights`/`aweights` is 1-ULP off → battle-tests). The backend polynomial ops (`roots`/`polyfit`/`poly`-of-a-matrix, via `eigvals`/`lstsq`) ride the host-pinned `linalg_parity` tier. The pure single-operand ops are carved out of the "unary ~ULP" blanket excuse so a ≤2-ULP drift fails.
 - **Run the gate**: `dotnet test --filter "TestCategory=FuzzMatrix"`. Each case is bit-exact (pass), a documented difference in `MisalignedRegistry` (excused, never silent), or a failure (red). Full divergence ledger: `test/NumSharp.Tests.Oracle/Fuzz/README.md`.

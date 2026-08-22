@@ -4,6 +4,26 @@ Proves every NDIter-backed operation produces **bit-identical** output to NumPy 
 full input space — caught systematically, not by hand-picked cases. The motivating failure (the
 cast saturate-vs-wrap bug, latent in `where`/`copyto`/`concatenate`) must be impossible to ship again.
 
+### Current measured snapshot (`journey3`, 2026-08-22)
+
+- **116,339 committed JSONL rows / 64 files**: 103,208 ordinary op cases, 12,426 advanced-index
+  cases, 703 independent Decimal cases, and two host-pin metadata rows. Char contributes 5,506
+  proxy rows across 20 files.
+- **363 distinct corpus op keys**. `OracleSurfaceCoverageTests` inventories the public surface
+  mechanically (`np` 321 · `np.linalg` 31 · `np.fft` 18 · `np.random` 48) and makes an
+  unclassified new API fail `FuzzMatrix`.
+- The journey3 receipt inventories **186 touched public callables and requires 186/186 direct
+  corpus keys**. The operation-strength gate additionally requires every ordinary op key to have
+  at least four non-duplicate-axis cases; advanced indexing keeps explicit 2,000/100/10/10,000
+  corpus floors.
+- New completeness tiers: `creation.jsonl` (302 deterministic creators), `conversion.jsonl`
+  (1,078 value/error/artifact cases), and `multioutput.jsonl` (64 full-tuple/arity cases). The older claim
+  that creation and tuple results do not fit the corpus is no longer true.
+- Managed/OpenBLAS variation: `BlasBackendDelta` finds 1,775 affected ordinary cases, deduplicates
+  1,747 identical managed/backend outcomes, and byte-checks the 28 real backend changes against
+  NumPy on the pinned host. Dedup includes threw/result state, dtype, shape, and bytes.
+- Full gate: **85/85 green on net8.0 and net10.0**.
+
 ## How it works
 
 NumPy is the oracle. Python (`test/oracle/`) generates a **committed, bytes-exact corpus**; the C# harness
@@ -17,7 +37,7 @@ test/oracle/                         corpus generators (NumPy 2.4.2)
                                      via the uint16 proxy (char_tier) — relabelled uint16->char, bytes intact
   gen_decimal_oracle.cs              INDEPENDENT C# oracle for Decimal (no NumPy analog): naive scalar
                                      System.Decimal math -> decimal_{unary,binary,reduce,scan,power,
-                                     varstd,matmul,astype,stat,where,sort,manip}.jsonl (12 tiers, 695 cases)
+                                     varstd,matmul,astype,stat,where,sort,manip}.jsonl (12 tiers, 703 cases)
   fuzz_random.py                     seeded random fuzzer (13 dtypes × unary/binary/comparison/where/
                                      flat-reduce/astype kinds; NumSharp-producible layouts)
 test/NumSharp.Tests.Oracle/Fuzz/
@@ -108,6 +128,9 @@ python test/oracle/gen_oracle.py comparison       # ==,!=,<,>,<=,>=
 python test/oracle/gen_oracle.py unary            # negate/abs/sqrt/trig/exp/log/...
 python test/oracle/gen_oracle.py reduce           # sum/prod/min/max/mean/std/var/argmax/argmin/all/any
 python test/oracle/gen_oracle.py where            # np.where(cond,x,y)
+python test/oracle/gen_oracle.py creation         # deterministic zero-operand creators + Char proxy
+python test/oracle/gen_oracle.py conversion       # array/as*/require/frombuffer/fromstring + errors
+python test/oracle/gen_oracle.py multioutput      # full tuple arity + every result slot
 python test/oracle/gen_oracle.py iter             # ndindex/ndenumerate/nditer/broadcast TRACES (order gate)
 python test/oracle/gen_oracle.py dtype_text       # dtype/scalar/text/tuple result kinds
 python test/oracle/gen_oracle.py errors_full      # the raising cells every value generator skips
@@ -124,12 +147,12 @@ python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
 dotnet run test/oracle/gen_decimal_oracle.cs      # Decimal tiers (independent C# System.Decimal oracle)
 ```
 
-The block shows the most-used modes; the full `gen_oracle.py` mode list (one tier file per mode) is
-`smoke astype_full binary divmod_power comparison unary reduce where place matmul rounding bitwise
-unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors groupa fft`.
+The authoritative full mode list is the unknown-mode message in `gen_oracle.py`; it includes
+`conversion creation multioutput iter dtype_text out_where errors_full` plus every value/parity
+mode shown here.
 Regeneration is deterministic: rerunning an untouched mode must produce a zero corpus diff.
 
-The **`fft` tier** (`fft.jsonl`, 1,796 cases) gates the managed pocketfft engine
+The **`fft` tier** (`fft.jsonl`, 2,000 cases) gates the managed pocketfft engine
 (`src/NumSharp.Core/Fourier/`): the 1-D core (`fft`/`ifft`/`rfft`/`irfft`) + hermitian
 (`hfft`/`ihfft`) + the N-D forms (`fft2`/`ifft2`/`fftn`/`ifftn`/`rfft2`/`irfft2`/`rfftn`/`irfftn`)
 + helpers (`fftfreq`/`rfftfreq`/`fftshift`/`ifftshift`), swept over dtype, `n`/`s`
@@ -142,8 +165,9 @@ A generator note that bit: NumPy's 2-D forms default `axes` to `(-2,-1)` but tre
 real default — which is exactly what NumSharp's null-coalescing (`axes ?? {-2,-1}`) mirrors.
 
 Char rides the applicable NumPy modes automatically (`char_tier` appends uint16-proxy cases
-relabelled to `char` into 18 tier files — arith/divmod/comparison/unary×2/bitwise/reduce/scan/stat/
-manip/sort/tail/astype/where/logic/matmul/rounding/copyto); there is no separate `char` mode.
+relabelled to `char` into 18 ordinary tier files — arith/divmod/comparison/unary×2/bitwise/reduce/
+scan/stat/manip/sort/tail/astype/where/logic/matmul/rounding/copyto); creation and conversion append
+their own proxy rows, for 20 Char-bearing files total. There is no separate `char` mode.
 Decimal is the one dtype with no NumPy analog, so it has its own C# generator (the last line
 above) rather than a `gen_oracle.py` mode.
 
@@ -171,7 +195,8 @@ guard and a removal candidate once confirmed dead.
 
 ### Table 0 — divergences found by the result-kind / error / iterator tiers
 
-Added with `iter.jsonl` (4,605), `dtype_text.jsonl` (2,111) and `errors_full.jsonl` (688). Every
+Added with `iter.jsonl` (4,611), `dtype_text.jsonl` (2,618), `multioutput.jsonl` (64) and
+`errors_full.jsonl` (688). Every
 row is scoped in `MisalignedRegistry` branches K1–K9, so each is counted and printed on every run.
 
 | Finding | Where | Status |
@@ -195,6 +220,16 @@ row is scoped in `MisalignedRegistry` branches K1–K9, so each is counted and p
 negstride / F / transposed all keep the bytes outside the view intact), and masked-off slots retain
 their prior contents in every one of the 882 `where=all_false` cases.
 
+**Findings from the 2026-08-21 surface-completeness expansion:** all newly exposed product defects
+were fixed with their corpus cells retained as hard regression proofs: `angle(deg=True)` 0-D
+float-tier widening · `full_like` selecting the fill value's CLR dtype · integer `linspace`
+truncating instead of flooring · Char ones/eye/identity writing `'1'` (0x31) ·
+`ascontiguousarray`/`asfortranarray` failing NumPy's ndim≥1 scalar contract · einsum's internal
+order materialization leaking that public scalar promotion into a `()` contraction result. The one
+algorithmic remainder is complex `corrcoef`: its two normalization divides inherit the existing
+`npy_cdivide` versus `System.Numerics.Complex` 1-ULP difference; it now has its own ≤2-ULP branch
+and paired tightness pins instead of hiding under the broad complex-unary envelope.
+
 ### Table 1 — live `MisalignedRegistry` excuse branches
 
 **Intended / algorithmic differences (permanent):**
@@ -207,6 +242,7 @@ their prior contents in every one of the 882 `where=all_false` cases.
 | complex unary within 3 ULP (full NumPy-algorithm port) | complex unary × Value, ≤3 ULP | 11 |
 | complex cos/sin/arccos/sinh/cosh pathological edge (NaN zero-sign / subnormal / overflow boundary) | those 5 ops × complex × Value | 0 |
 | complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex) | divide × complex × Value, ≤2 ULP | 17 |
+| complex corrcoef normalization inherits complex-division rounding | corrcoef × complex input/result × Value, ≤2 ULP | 1 |
 | complex add/subtract within 2 ULP (FMA contraction) | add/subtract × complex × Value, ≤2 ULP | 0 |
 | complex multiply cancellation / ~ULP at element magnitude (#12) | multiply × complex × Value, ≤16 element-magnitude ULP | 16 |
 | complex power ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow) (F5, ledger L6) | power × complex × Value, ≤512 element-magnitude ULP or non-finite | 30 |
@@ -326,9 +362,13 @@ exp2 malformed-IL crash (W3-C) · power(float16) scalar-broadcast crash (W1-B) �
 dimension** + int64/decimal/bool convolve accumulator (ledger L5, @737c59d6) · **all/any Half+Complex
 ignored `Shape.offset`** (ledger L4, @7804b2ad) · **round_(char)→Double** (ledger L8, @1a9cfa9f).
 
+The 2026-08-21 completeness pass additionally fixed: `angle(deg=True)` scalar dtype ·
+`full_like` dtype selection · integer `linspace` floor semantics · Char numeric-one creation ·
+0-D `ascontiguousarray`/`asfortranarray` rank · einsum scalar-result rank after order resolution.
+
 ### IEEE special-value parity (`specials` tier)
 
-`specials.jsonl` (2,333 cases, `gen_oracle.py specials`) FORCES nan / ±inf / ±0 / smallest-subnormal /
+`specials.jsonl` (2,393 cases, `gen_oracle.py specials`) FORCES nan / ±inf / ±0 / smallest-subnormal /
 ±max / ±tiny through the elementwise-math (unary + binary), reduction (incl. the `nan*` family), scan
 and matmul/dot/outer ops across float16/float32/float64/complex128 and every layout (contiguous /
 2-D / F-contiguous / step-2 strided / negative-stride). It closes three gaps the *incidental*
@@ -347,7 +387,7 @@ front-loading of specials in `layout_catalog._FLOAT_POOL` leaves:
 
 `BitDiff` tokenizes NaN (any payload → `"NaN"`) and bit-compares ±0.0 / ±inf, so the tier asserts the
 CONTRACTUAL part of IEEE parity — is-NaN, the sign of a zero, the sign of an infinity.
-**2,073 / 2,333 cases are bit-exact with NumPy 2.4.2**; the 260 excused are all pre-existing registry
+**2,118 / 2,393 cases are bit-exact with NumPy 2.4.2**; the 275 excused are all scoped registry
 branches surfaced anew by the denser inputs (chiefly the known `nan*`-family and complex-reduction
 divergences) PLUS the three the tier discovered — `S1`/`S2`/`S3` in Table 1. **Headline result: every
 real-dtype (f16/f32/f64) matmul/dot/outer specials case is bit-exact** — the managed float GEMM
@@ -403,7 +443,7 @@ silently.
 
 ### CBLAS product family (`products` tier)
 
-`products.jsonl` (287 cases, `gen_oracle.py products`) is the FIRST value gate for `inner`,
+`products.jsonl` (408 cases, `gen_oracle.py products`) is the FIRST value gate for `inner`,
 `vdot`, `vecdot`, `matvec`, `vecmat`, `tensordot`, `linalg.multi_dot` and `linalg.matrix_power` —
 previously only their error contracts were tested, yet they carry the cells that regress silently:
 vdot/vecdot conjugate the FIRST operand (complex), vecdot reduces in the LOOP dtype (int32 stays
@@ -412,8 +452,9 @@ Two value classes: the SMALL-EXACT bulk (contraction depth ≤4 over `_mm_fill` 
 exact, hence order-independent and bit-comparable even against NumPy's BLAS-backed dot/inner/vdot)
 across all 13 dtypes × the call-form matrix, and DEEP-TRUTH f32/f64 cases (K=2049 mixed-magnitude)
 carrying `expected.truth`, adjudicated by the prefer-precise branches since NumPy routes those
-through BLAS. **277/287 bit-exact**; 8 deep cases prefer-precise-excused (NumSharp CLOSER to truth
-than BLAS), 2 f32 deep contractions in P3's bounded known-loss scope. The tier also caught its own
+through BLAS. **397/408 bit-exact**; 8 deep cases prefer-precise-excused (NumSharp CLOSER to truth
+than BLAS), 2 f32 deep contractions in P3's bounded known-loss scope, and one complex corrcoef
+normalization cell in the explicit ≤2-ULP npy_cdivide envelope. The tier also caught its own
 harness trap on arrival: a positional `axis` int to `np.vecdot` silently binds `out=` via the
 int→NDArray implicit conversion — the registry passes it BY NAME (documented at the call).
 
@@ -433,7 +474,7 @@ config the interop suite proves — rather than `matmul_parity`'s ambient max; `
 single-thread via ctypes so the recorded bytes are threading-independent. NumPy's `linalg` is "lite" (it
 factorises every operand in double/cdouble and rounds back once, `_commonType`), so **float32 results are
 byte-identical too** and int/bool operands widen to float64 — verified across dtypes/layouts/shapes/batched/
-degenerate. **264/264 bit-exact** on the pinned host (empirically probed 25/26 before wiring; the sign/phase
+degenerate. **366/366 bit-exact** on the pinned host (empirically probed 25/26 before wiring; the sign/phase
 freedom of eigenvectors/U/Vh/Q/R is resolved identically because the SAME LAPACK routine runs on both sides).
 
 Tuple results (`svd`→(U,S,Vh), `eig`/`eigh`→(w,v), `qr`→(Q,R)/(h,τ), `lstsq`→(x,res,rank,s)) ride the
@@ -540,7 +581,7 @@ fixes int64 — the corpus records those streams WIDENED to int64 so the VALUES 
 `std` is oracled by an independent Newton decimal sqrt, NOT NumSharp's `DecimalMath`) across
 unary / binary / reduce (flat + **axis×keepdims** + **empty**) / scan / power (int exponents
 **−2…3**) / var / std / matmul / astype (decimal↔int·float·**bool·int16·uint64**) / stat (clip +
-median/ptp/percentile/quantile) / where / sort / manip × 13 single + 9 pair layouts — **695 cases
+median/ptp/percentile/quantile) / where / sort / manip × 13 single + 9 pair layouts — **703 cases
 across 12 tiers, all green** except the 15 registry-excused cells (11 argmax/argmin/count_nonzero
 result-dtype + 4 std-last-digit, both in Table 1). The one decimal-adjacent finding of the
 remediation: `DecimalMath.Pow` matches the exact reciprocal-of-product oracle for negative integer
