@@ -49,8 +49,17 @@ public class LogicBenchmarks : TypedBenchmarkBase
     [Benchmark(Description = "np.minimum(a, b)")] public NDArray Minimum() => np.minimum(_a, _b);
     [Benchmark(Description = "np.fmax(a, b)")] public NDArray FMax() => np.fmax(_a, _b);
     [Benchmark(Description = "np.fmin(a, b)")] public NDArray FMin() => np.fmin(_a, _b);
-    [Benchmark(Description = "np.iscomplex(a)")] public NDArray IsComplex() => np.iscomplex(_a);
-    [Benchmark(Description = "np.isreal(a)")] public NDArray IsReal() => np.isreal(_a);
+    // For a real input (Half/Single/Double only here) these short-circuit to a FRESH, owned bool
+    // array — np.iscomplex -> np.zeros(bool) (lazy), np.isreal -> np.ones(bool) — without touching
+    // the input, so they are O(1)-to-fast. BenchmarkDotNet then runs thousands of invocations per
+    // iteration (iscomplex's lazy zeros pilots at ~2.8us, so BDN scaled to ~9000 ops), and on Windows
+    // each committed buffer charges commit, OOMing the 10M case before finalizers reclaim them (only
+    // iscomplex tipped over; isreal's np.ones fills memory, so it throttled BDN and merely leaked).
+    // Dispose per invocation to bound resident memory (matches CreationBenchmarks, which disposes
+    // zeros AND ones, np.imag above, and the NumPy twin's discard-each-result loop). Safe because the
+    // result is a fresh owned array that never aliases _a (unlike np.real on a real input).
+    [Benchmark(Description = "np.iscomplex(a)")] public void IsComplex() { using var _ = np.iscomplex(_a); }
+    [Benchmark(Description = "np.isreal(a)")] public void IsReal() { using var _ = np.isreal(_a); }
     [Benchmark(Description = "np.iscomplexobj(a)")] public bool IsComplexObject() => np.iscomplexobj(_a);
     [Benchmark(Description = "np.isrealobj(a)")] public bool IsRealObject() => np.isrealobj(_a);
     [Benchmark(Description = "np.isscalar(a)")] public bool IsScalar() => np.isscalar(_a);
