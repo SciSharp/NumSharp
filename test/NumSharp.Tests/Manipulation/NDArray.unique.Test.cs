@@ -504,5 +504,47 @@ namespace NumSharp.Tests.Manipulation
             r[3].GetInt64(1).Should().Be(1); // 2+0i once
             r[3].GetInt64(2).Should().Be(1); // 3+0i once
         }
+
+        [TestMethod]
+        public void Unique_HighCardinality_RadixBailout()
+        {
+            // The integer hash path bails out to a radix sort past ~131k distinct values (a size the
+            // oracle's small corpus arrays never reach). Deterministically build >131k distinct int32
+            // over a wide range and verify np.unique / unique_values / unique_counts / unique_all all
+            // match .NET's own Distinct/GroupBy (sorted), which is the same set the sort path yields.
+            const int n = 300_000;
+            var rng = new System.Random(20260822);
+            var data = new int[n];
+            for (int i = 0; i < n; i++) data[i] = rng.Next(0, 20_000_000); // ~297k distinct → bails
+            var arr = np.array(data);
+
+            var expected = data.Distinct().OrderBy(x => x).ToArray();
+            expected.Length.Should().BeGreaterThan(131_072, "the test must actually trigger the bail-out");
+
+            // np.unique (values)
+            np.unique(arr).values.ToArray<int>().Should().Equal(expected);
+            // unique_values (hash entry point directly)
+            np.unique_values(arr).ToArray<int>().Should().Equal(expected);
+
+            var counts = data.GroupBy(x => x).OrderBy(g => g.Key).Select(g => (long)g.Count()).ToArray();
+            // unique_counts (hash-with-counts bail-out)
+            var (uv, uc) = np.unique_counts(arr);
+            uv.ToArray<int>().Should().Equal(expected);
+            uc.ToArray<long>().Should().Equal(counts);
+            // np.unique(return_counts) — the generic counts-only path also bails
+            var rc = arr.unique(return_index: false, return_inverse: false, return_counts: true);
+            rc[0].ToArray<int>().Should().Equal(expected);
+            rc[1].ToArray<long>().Should().Equal(counts);
+
+            // unique_all: values + counts + reconstruction invariant (values[inverse] == input)
+            var ua = np.unique_all(arr);
+            ua.values.ToArray<int>().Should().Equal(expected);
+            ua.counts.ToArray<long>().Should().Equal(counts);
+            var vals = ua.values.ToArray<int>();
+            var inv = ua.inverse_indices.ToArray<long>();
+            for (int i = 0; i < n; i++) vals[inv[i]].Should().Be(data[i]);
+            var idx = ua.indices.ToArray<long>();
+            for (int k = 0; k < vals.Length; k++) data[idx[k]].Should().Be(vals[k]);
+        }
     }
 }

@@ -106,6 +106,16 @@ namespace NumSharp
 
             var data = ExtractKeysOnly<T>(n);   // resolves any layout (strided/transposed/reversed) to C-order
 
+            // High-cardinality bail-out: once the distinct set grows past ~L2 the open-addressing
+            // table becomes a cache-miss per insert, so an LSD radix sort of `data` (sequential,
+            // comparison-free) overtakes it — exactly where NumPy's own std::unordered_set path
+            // thrashes (int32 2M-distinct: NumPy 1540ms). This is the "cheap cardinality sample
+            // cannot decide hash-vs-sort" problem solved by OBSERVING growth instead of guessing:
+            // low/medium cardinality never reaches the threshold (the array's own distinct count is
+            // the ceiling), so it keeps the hash; only a genuinely large distinct set bails, and the
+            // wasted inserts are bounded by the threshold. The radix result is the SAME sorted set.
+            const long HashBailoutThreshold = 1L << 17;   // ~131k distinct: table past L2, radix wins
+
             int cap = 1024;
             var table = new T[cap];
             var used = new bool[cap];
@@ -146,6 +156,11 @@ namespace NumSharp
                 table[h] = v;
                 if (wantCounts) cnt[h] = 1;
                 uniqueCount++;
+                if (uniqueCount >= HashBailoutThreshold)   // high cardinality — radix beats the hash from here
+                {
+                    RadixSortValues(data, (int)n);
+                    return RadixDedupSortedInt<T>(data, (int)n, wantCounts);
+                }
                 matched: ;
             }
 

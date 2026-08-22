@@ -154,6 +154,43 @@ namespace NumSharp.Backends.Sorting
             return xs;
         }
 
+        /// <summary>
+        /// Keyed variant of <see cref="ArgSortU32"/>: co-sorts <paramref name="idx"/> by
+        /// <paramref name="keys"/> AND exposes the buffer holding the sorted KEYS via
+        /// <paramref name="sortedKeys"/> (either <paramref name="keys"/> or <paramref name="keyTmp"/>,
+        /// whichever the double-buffer parity landed on — the trivial-pass skip makes it unpredictable,
+        /// so it is tracked, not computed). Used by <c>np.unique</c>'s perm path so the sorted values
+        /// come back through the monotonic key's inverse transform with NO gather (the sorted key
+        /// column is already in memory-order), while the sorted index column supplies the permutation.
+        /// </summary>
+        internal static long* ArgSortU32(uint* keys, uint* keyTmp, long* idx, long* idxTmp,
+                                         int n, int nbytes, int* hist, out uint* sortedKeys)
+        {
+            if (n <= 1) { sortedKeys = keys; return idx; }
+            if (n <= InsertionThreshold32) { ArgInsertionU32(keys, idx, n); sortedKeys = keys; return idx; }
+            BuildHist32(keys, n, nbytes, hist);
+            uint* ks = keys, kd = keyTmp;
+            long* xs = idx, xd = idxTmp;
+            for (int shift = 0, pass = 0; pass < nbytes; pass++, shift += 8)
+            {
+                int* h = hist + pass * 256;
+                if (h[(int)((ks[0] >> shift) & 0xFF)] == n)
+                    continue;
+                Prefix(h);
+                for (int i = 0; i < n; i++)
+                {
+                    int d = (int)((ks[i] >> shift) & 0xFF);
+                    int p = h[d]++;
+                    kd[p] = ks[i];
+                    xd[p] = xs[i];
+                }
+                uint* tk = ks; ks = kd; kd = tk;
+                long* tx = xs; xs = xd; xd = tx;
+            }
+            sortedKeys = ks;
+            return xs;
+        }
+
         internal static ulong* SortU64(ulong* keys, ulong* tmp, int n, int* hist)
         {
             if (n <= 1) return keys;
@@ -200,6 +237,36 @@ namespace NumSharp.Backends.Sorting
                 ulong* tk = ks; ks = kd; kd = tk;
                 long* tx = xs; xs = xd; xd = tx;
             }
+            return xs;
+        }
+
+        /// <summary>8-byte twin of the keyed <see cref="ArgSortU32(uint*,uint*,long*,long*,int,int,int*,out uint*)"/>:
+        /// exposes the sorted-key buffer alongside the sorted index column (see that overload).</summary>
+        internal static long* ArgSortU64(ulong* keys, ulong* keyTmp, long* idx, long* idxTmp,
+                                         int n, int* hist, out ulong* sortedKeys)
+        {
+            if (n <= 1) { sortedKeys = keys; return idx; }
+            if (n <= InsertionThreshold64) { ArgInsertionU64(keys, idx, n); sortedKeys = keys; return idx; }
+            BuildHist64(keys, n, hist);
+            ulong* ks = keys, kd = keyTmp;
+            long* xs = idx, xd = idxTmp;
+            for (int shift = 0, pass = 0; pass < 8; pass++, shift += 8)
+            {
+                int* h = hist + pass * 256;
+                if (h[(int)((ks[0] >> shift) & 0xFF)] == n)
+                    continue;
+                Prefix(h);
+                for (int i = 0; i < n; i++)
+                {
+                    int d = (int)((ks[i] >> shift) & 0xFF);
+                    int p = h[d]++;
+                    kd[p] = ks[i];
+                    xd[p] = xs[i];
+                }
+                ulong* tk = ks; ks = kd; kd = tk;
+                long* tx = xs; xs = xd; xd = tx;
+            }
+            sortedKeys = ks;
             return xs;
         }
 

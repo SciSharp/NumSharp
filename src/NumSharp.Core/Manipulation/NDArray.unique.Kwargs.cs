@@ -58,13 +58,25 @@ namespace NumSharp
             if (!return_index && !return_inverse && !return_counts)
                 return new[] { uniqueValuesOnly<T>(n) };
 
+            // Counts-only (no index/inverse): the perm is unused (counts are run-lengths of the
+            // sorted values). Integer-family → the hash path (fast low/med, radix bail at high card),
+            // same routing as np.unique_counts; Decimal keeps the BCL perm path below.
+            if (return_counts && !return_index && !return_inverse && typeof(T) != typeof(decimal) && n <= (1L << 28))
+            {
+                var (cv, cc) = UniqueHashSortedInt<T>(wantCounts: true);
+                return new[] { cv, cc };
+            }
+
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLong<T>(n, return_index, return_inverse, return_counts, firstNaN: -1);
 
             var (keys, perm) = ExtractKeysAndPerm<T>(n);
-            // No comparer → uses Comparer<T>.Default which delegates to IComparable<T>.
-            // Inlines well in the JIT for primitive types; no delegate dispatch.
-            System.Array.Sort(keys, perm);
+            // Radix argsort (LSD, comparison-free) replaces the BCL introsort for every radix-able
+            // dtype; Decimal (no monotonic key) keeps Comparer<T>.Default. Radix is stable so ties
+            // resolve ascending-index (first occurrence) — which the min-perm-within-run emit also
+            // recovers, so the outputs are byte-identical to the BCL path.
+            if (typeof(T) != typeof(decimal)) RadixArgSortKeysPerm(keys, perm, (int)n);
+            else System.Array.Sort(keys, perm);
 
             return BuildSortedResults<T>(keys, perm, n, return_index, return_inverse, return_counts, firstNaN: -1);
         }
@@ -75,11 +87,22 @@ namespace NumSharp
         private unsafe NDArray uniqueValuesOnly<T>(long n)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
+            // Integer-family values-only: the open-addressing hash path (NDArray.unique.Hash.cs)
+            // beats any sort at low/medium cardinality and bails to radix at high cardinality —
+            // mirroring NumPy's own hash selection for these dtypes, but bailing to radix where
+            // NumPy's std::unordered_set thrashes (int32 2M-distinct: NumPy 1540ms → us ~40ms). Its
+            // own n>2^28 guard falls back to the sort path, so route there only within that bound
+            // (else the fallback would re-enter here and recurse). Decimal has no monotonic radix key
+            // and no bitwise-hash (1.0m != 1.00m by bits) → BCL sort.
+            if (typeof(T) != typeof(decimal) && n <= (1L << 28))
+                return UniqueHashSortedInt<T>(wantCounts: false).values;
+
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLong<T>(n, false, false, false, firstNaN: -1)[0];
 
             var keys = ExtractKeysOnly<T>(n);
-            System.Array.Sort(keys);
+            if (typeof(T) != typeof(decimal)) RadixSortValues(keys, (int)n);
+            else System.Array.Sort(keys);
             return EmitValuesOnly<T>(keys, n);
         }
 
@@ -102,12 +125,22 @@ namespace NumSharp
             if (!return_index && !return_inverse && !return_counts)
                 return new[] { uniqueValuesOnlyDouble(n, equal_nan) };
 
+            // Counts-only: skip the perm argsort — counts are run-lengths of the sorted values, which
+            // the emit derives from the mask alone (the perm is only read for index/inverse).
+            if (return_counts && !return_index && !return_inverse && IsManagedSortableLength(n))
+            {
+                var kc = ExtractKeysOnly<double>(n);
+                long fn = PartitionNaN_DoubleKeysOnly(kc, n);
+                RadixSortValues(kc, (int)fn);
+                return EmitValuesAndCountsFloat<double>(kc, n, fn, equal_nan);
+            }
+
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongFloat<double>(n, equal_nan, return_index, return_inverse, return_counts);
 
             var (keys, perm) = ExtractKeysAndPerm<double>(n);
             long firstNaN = PartitionNaN_Double(keys, perm, n);
-            System.Array.Sort(keys, perm, 0, (int)firstNaN);
+            RadixArgSortKeysPerm(keys, perm, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
             StabilizeNaNTail(perm, firstNaN, n);
 
             return BuildMaskAndEmit<double>(keys, perm, n, firstNaN, equal_nan,
@@ -128,7 +161,7 @@ namespace NumSharp
 
             var keys = ExtractKeysOnly<double>(n);
             long firstNaN = PartitionNaN_DoubleKeysOnly(keys, n);
-            System.Array.Sort(keys, 0, (int)firstNaN);
+            RadixSortValues(keys, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
             return EmitValuesOnlyFloat<double>(keys, n, firstNaN, equal_nan);
         }
 
@@ -140,12 +173,21 @@ namespace NumSharp
             if (!return_index && !return_inverse && !return_counts)
                 return new[] { uniqueValuesOnlyFloat(n, equal_nan) };
 
+            // Counts-only: skip the perm argsort (see uniqueFlatSortedDouble).
+            if (return_counts && !return_index && !return_inverse && IsManagedSortableLength(n))
+            {
+                var kc = ExtractKeysOnly<float>(n);
+                long fn = PartitionNaN_FloatKeysOnly(kc, n);
+                RadixSortValues(kc, (int)fn);
+                return EmitValuesAndCountsFloat<float>(kc, n, fn, equal_nan);
+            }
+
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongFloat<float>(n, equal_nan, return_index, return_inverse, return_counts);
 
             var (keys, perm) = ExtractKeysAndPerm<float>(n);
             long firstNaN = PartitionNaN_Float(keys, perm, n);
-            System.Array.Sort(keys, perm, 0, (int)firstNaN);
+            RadixArgSortKeysPerm(keys, perm, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
             StabilizeNaNTail(perm, firstNaN, n);
 
             return BuildMaskAndEmit<float>(keys, perm, n, firstNaN, equal_nan,
@@ -159,7 +201,7 @@ namespace NumSharp
 
             var keys = ExtractKeysOnly<float>(n);
             long firstNaN = PartitionNaN_FloatKeysOnly(keys, n);
-            System.Array.Sort(keys, 0, (int)firstNaN);
+            RadixSortValues(keys, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
             return EmitValuesOnlyFloat<float>(keys, n, firstNaN, equal_nan);
         }
 
@@ -552,6 +594,65 @@ namespace NumSharp
             }
 
             return new NDArray(valuesSlice, Shape.Vector(uniqueCount));
+        }
+
+        /// <summary>
+        ///     Counts-only emit for the float paths (Double/Single). Mirrors
+        ///     <see cref="EmitValuesOnlyFloat{T}"/> for the values AND <see cref="EmitOutputs{T}"/>'s
+        ///     counts branch (run-length between mask=true positions), so its output is byte-identical
+        ///     to the perm path's <c>BuildMaskAndEmit</c> for <c>return_counts</c>-only — but it needs
+        ///     NO perm (counts are run-lengths of the sorted values; the perm argsort is pure waste
+        ///     when neither index nor inverse is requested). <paramref name="keys"/>[0..firstNaN) is
+        ///     radix-sorted ascending; [firstNaN..n) is the NaN run (original bits, partition order).
+        /// </summary>
+        private unsafe NDArray[] EmitValuesAndCountsFloat<T>(T[] keys, long n, long firstNaN, bool equal_nan)
+            where T : unmanaged, IEquatable<T>
+        {
+            long uniqueCount = firstNaN > 0 ? 1 : 0;
+            for (long i = 1; i < firstNaN; i++)
+                if (!keys[i].Equals(keys[i - 1])) uniqueCount++;
+            long nanCount = n - firstNaN;
+            if (nanCount > 0) uniqueCount += equal_nan ? 1 : nanCount;
+
+            var vblock = new UnmanagedMemoryBlock<T>(uniqueCount);
+            var cblock = new UnmanagedMemoryBlock<long>(uniqueCount);
+            T* vp = vblock.Address;
+            long* cp = cblock.Address;
+            long vi = 0;
+
+            if (firstNaN > 0)
+            {
+                vp[vi] = keys[0];
+                long runStart = 0;
+                for (long i = 1; i < firstNaN; i++)
+                {
+                    if (!keys[i].Equals(keys[i - 1]))
+                    {
+                        cp[vi++] = i - runStart;   // count of the run that just ended
+                        vp[vi] = keys[i];
+                        runStart = i;
+                    }
+                }
+                cp[vi++] = firstNaN - runStart;    // last prefix run (up to the NaN boundary)
+            }
+
+            if (nanCount > 0)
+            {
+                if (equal_nan)
+                {
+                    vp[vi] = keys[firstNaN]; cp[vi] = nanCount; vi++;
+                }
+                else
+                {
+                    for (long i = firstNaN; i < n; i++) { vp[vi] = keys[i]; cp[vi] = 1; vi++; }
+                }
+            }
+
+            return new[]
+            {
+                new NDArray(new ArraySlice<T>(vblock), Shape.Vector(uniqueCount)),
+                new NDArray(new ArraySlice<long>(cblock), Shape.Vector(uniqueCount)),
+            };
         }
 
         /// <summary>
