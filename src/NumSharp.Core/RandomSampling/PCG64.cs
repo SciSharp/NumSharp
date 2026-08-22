@@ -42,11 +42,11 @@ namespace NumSharp
         /// <summary>Constructs and seeds a PCG64 from a single integer seed.</summary>
         public PCG64(long seed) : this(new SeedSequence(seed)) { }
 
-        /// <summary>The seed sequence this generator was constructed from.</summary>
-        public SeedSequence SeedSeq => _seedSeq;
+        /// <summary>The seed sequence this generator was constructed from (NumPy <c>PCG64.seed_seq</c>).</summary>
+        public SeedSequence seed_seq => _seedSeq;
 
         /// <inheritdoc/>
-        public override string Name => "PCG64";
+        internal override string Name => "PCG64";
 
         // pcg_setseq_128_srandom_r
         private void Srandom(UInt128 initState, UInt128 initSeq)
@@ -73,7 +73,7 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        public override ulong NextUInt64()
+        internal override ulong NextUInt64()
         {
             // pcg_setseq_128_xsl_rr_64_random_r: step, then output the new state.
             Step();
@@ -81,7 +81,7 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        public override uint NextUInt32()
+        internal override uint NextUInt32()
         {
             // pcg64_next32: serve the cached high half, else draw a 64-bit word and cache its high half.
             if (_hasUint32)
@@ -97,37 +97,43 @@ namespace NumSharp
 
         // ---- state get/set (numpy pcg64_get_state / pcg64_set_state) ----
 
-        /// <summary>Snapshot of the PCG64 internal state (NumPy's <c>bit_generator.state</c>).</summary>
+        /// <summary>
+        ///     Snapshot of the PCG64 internal state (the typed stand-in for NumPy's
+        ///     <c>bit_generator.state</c> dict; field names match its keys).
+        /// </summary>
         public readonly struct Pcg64StateData
         {
             /// <summary>The 128-bit LCG state.</summary>
-            public UInt128 State { get; }
+            public UInt128 state { get; }
             /// <summary>The 128-bit LCG increment (stream selector).</summary>
-            public UInt128 Inc { get; }
+            public UInt128 inc { get; }
             /// <summary>Whether a cached 32-bit word is pending.</summary>
-            public bool HasUInt32 { get; }
-            /// <summary>The cached 32-bit word (valid only when <see cref="HasUInt32"/>).</summary>
-            public uint UInteger { get; }
+            public bool has_uint32 { get; }
+            /// <summary>The cached 32-bit word (valid only when <see cref="has_uint32"/>).</summary>
+            public uint uinteger { get; }
 
-            internal Pcg64StateData(UInt128 state, UInt128 inc, bool hasUint32, uint uinteger)
+            internal Pcg64StateData(UInt128 state, UInt128 inc, bool has_uint32, uint uinteger)
             {
-                State = state;
-                Inc = inc;
-                HasUInt32 = hasUint32;
-                UInteger = uinteger;
+                this.state = state;
+                this.inc = inc;
+                this.has_uint32 = has_uint32;
+                this.uinteger = uinteger;
             }
         }
 
-        /// <summary>Returns the current internal state.</summary>
-        public Pcg64StateData GetState() => new Pcg64StateData(_state, _inc, _hasUint32, _uinteger);
-
-        /// <summary>Restores a previously captured internal state.</summary>
-        public void SetState(Pcg64StateData state)
+        /// <summary>
+        ///     Gets or sets the current internal state (NumPy's <c>bit_generator.state</c> property).
+        /// </summary>
+        public Pcg64StateData state
         {
-            _state = state.State;
-            _inc = state.Inc;
-            _hasUint32 = state.HasUInt32;
-            _uinteger = state.UInteger;
+            get => new Pcg64StateData(_state, _inc, _hasUint32, _uinteger);
+            set
+            {
+                _state = value.state;
+                _inc = value.inc;
+                _hasUint32 = value.has_uint32;
+                _uinteger = value.uinteger;
+            }
         }
     }
 }

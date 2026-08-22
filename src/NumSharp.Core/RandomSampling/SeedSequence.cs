@@ -30,36 +30,41 @@ namespace NumSharp
 
         private readonly uint[] _pool;
         private readonly uint[] _entropy;
+        private object _originalEntropy;
 
-        /// <summary>The (non-negative) run-entropy this sequence was constructed from, as uint32 words.</summary>
-        public uint[] Entropy => (uint[])_entropy.Clone();
+        /// <summary>The seed this sequence was constructed from (NumPy <c>SeedSequence.entropy</c>).</summary>
+        public object entropy => _originalEntropy;
 
-        /// <summary>The number of uint32 words in the entropy pool (always 4 here).</summary>
-        public int PoolSize => _pool.Length;
+        /// <summary>The mixed uint32 entropy pool (NumPy <c>SeedSequence.pool</c>).</summary>
+        public uint[] pool => (uint[])_pool.Clone();
+
+        /// <summary>The number of uint32 words in the entropy pool (NumPy <c>SeedSequence.pool_size</c>; always 4 here).</summary>
+        public int pool_size => _pool.Length;
 
         /// <summary>Constructs a sequence from fresh, unpredictable OS entropy (NumPy's <c>seed=None</c>).</summary>
         public SeedSequence()
             : this(RandomEntropy()) { }
 
         /// <summary>Constructs a sequence from a single non-negative integer seed.</summary>
-        public SeedSequence(long entropy) : this(FromInteger(entropy)) { }
+        public SeedSequence(long entropy) : this(FromInteger(entropy)) { _originalEntropy = entropy; }
 
         /// <summary>Constructs a sequence from a single non-negative integer seed.</summary>
-        public SeedSequence(ulong entropy) : this(IntToUint32Array(entropy)) { }
+        public SeedSequence(ulong entropy) : this(IntToUint32Array(entropy)) { _originalEntropy = entropy; }
 
         /// <summary>Constructs a sequence from a single non-negative integer seed of arbitrary size.</summary>
-        public SeedSequence(BigInteger entropy) : this(IntToUint32Array(entropy)) { }
+        public SeedSequence(BigInteger entropy) : this(IntToUint32Array(entropy)) { _originalEntropy = entropy; }
 
         /// <summary>Constructs a sequence from a sequence of non-negative integers.</summary>
-        public SeedSequence(int[] entropy) : this(CoerceSequence(entropy)) { }
+        public SeedSequence(int[] entropy) : this(CoerceSequence(entropy)) { _originalEntropy = entropy; }
 
         /// <summary>Constructs a sequence from a sequence of non-negative integers.</summary>
-        public SeedSequence(long[] entropy) : this(CoerceSequence(entropy)) { }
+        public SeedSequence(long[] entropy) : this(CoerceSequence(entropy)) { _originalEntropy = entropy; }
 
         /// <summary>Constructs a sequence directly from a uint32 word array (NumPy's uint32-ndarray pass-through).</summary>
         public SeedSequence(uint[] entropy)
         {
             _entropy = entropy ?? Array.Empty<uint>();
+            _originalEntropy = _entropy;
             _pool = new uint[DEFAULT_POOL_SIZE];
             MixEntropy(_pool, _entropy);
         }
@@ -179,10 +184,27 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Return the requested number of words for PRNG seeding (NumPy
+        ///     <c>generate_state(n_words, dtype=np.uint32)</c>). Returns a <c>uint[]</c> for
+        ///     <c>uint32</c> (the default) or a <c>ulong[]</c> for <c>uint64</c>.
+        /// </summary>
+        public Array generate_state(int n_words, Type dtype = null)
+        {
+            if (dtype == null)
+                return GenerateState(n_words);
+            var tc = dtype.GetTypeCode();
+            if (tc == NPTypeCode.UInt32)
+                return GenerateState(n_words);
+            if (tc == NPTypeCode.UInt64)
+                return GenerateState64(n_words);
+            throw new ValueError("only support uint32 or uint64");
+        }
+
+        /// <summary>
         ///     Returns <paramref name="nWords"/> uint32 words for PRNG seeding (NumPy
         ///     <c>generate_state(n_words, np.uint32)</c>).
         /// </summary>
-        public uint[] GenerateState(int nWords)
+        internal uint[] GenerateState(int nWords)
         {
             var state = new uint[nWords];
             uint hashConst = INIT_B;
@@ -206,7 +228,7 @@ namespace NumSharp
         ///     <c>generate_state(n_words, np.uint64)</c> — draws twice as many uint32 and views them
         ///     little-endian).
         /// </summary>
-        public ulong[] GenerateState64(int nWords)
+        internal ulong[] GenerateState64(int nWords)
         {
             uint[] words = GenerateState(nWords * 2);
             var result = new ulong[nWords];

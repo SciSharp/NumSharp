@@ -155,9 +155,9 @@ namespace NumSharp.Tests.RandomSampling
             var rng = np.random.default_rng(99);
             rng.random(3); // advance
             var pcg = (PCG64)rng.bit_generator;
-            var state = pcg.GetState();
+            var state = pcg.state;
             var a = rng.random(5);
-            pcg.SetState(state);
+            pcg.state = state;
             var b = rng.random(5);
             for (long i = 0; i < 5; i++)
                 Convert.ToDouble(a.GetAtIndex(i)).Should().Be(Convert.ToDouble(b.GetAtIndex(i)));
