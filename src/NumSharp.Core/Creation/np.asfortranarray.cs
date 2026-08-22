@@ -15,7 +15,10 @@ namespace NumSharp
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            return asarray(a, dtype, 'F');
+            var result = asarray(a, dtype, 'F');
+            // Same ndim>=1 contract as ascontiguousarray. A 0-D scalar is both C/F contiguous,
+            // so NumPy returns a length-one view rather than materializing it.
+            return result.ndim == 0 ? result.reshape(1) : result;
         }
 
         /// <summary>

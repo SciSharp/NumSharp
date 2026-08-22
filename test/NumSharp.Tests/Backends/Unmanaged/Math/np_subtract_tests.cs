@@ -44,7 +44,7 @@ namespace NumSharp.Tests.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(rtc == NPTypeCode.Char ? '1'-1 : 0);
+                Convert.ToInt32(val).Should().Be(0);
                 Console.WriteLine(val);
             }
         }

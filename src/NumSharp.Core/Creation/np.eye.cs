@@ -59,7 +59,7 @@ namespace NumSharp
                 case NPTypeCode.Half:    one = (Half)1; break;
                 case NPTypeCode.SByte:   one = (sbyte)1; break;
                 case NPTypeCode.String:  one = "1"; break;
-                case NPTypeCode.Char:    one = '1'; break;
+                case NPTypeCode.Char:    one = (char)1; break;
                 default:                 one = Converts.ChangeType((byte)1, typeCode); break;
             }
 

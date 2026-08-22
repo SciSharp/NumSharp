@@ -63,7 +63,8 @@ namespace NumSharp.Tests.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(rtc == NPTypeCode.Char ? '1' : 1);
+                Convert.ToInt32(val).Should().Be(1,
+                    "Char is NumSharp's uint16-like numeric dtype, so ones(Char) contains U+0001");
                 Console.WriteLine(val);
             }
         }

@@ -511,6 +511,12 @@ namespace NumSharp
         /// </summary>
         private static NDArray ApplyOrder(NDArray result, char order, NDArray[] operands)
         {
+            // A scalar result has no physical axis order. The PUBLIC ascontiguousarray /
+            // asfortranarray APIs intentionally promote 0-D to shape (1,), per NumPy, but using
+            // them here would corrupt einsum('i,i->')'s contractual scalar shape ().
+            if (result.ndim == 0)
+                return result;
+
             switch (order)
             {
                 case 'C':

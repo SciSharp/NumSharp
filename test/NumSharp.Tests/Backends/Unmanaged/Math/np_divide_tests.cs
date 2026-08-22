@@ -71,7 +71,7 @@ namespace NumSharp.Tests.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(rtc == NPTypeCode.Char ? 26 : 2);
+                Convert.ToInt32(val).Should().Be(2);
                 Console.WriteLine(val);
             }
         }
@@ -101,7 +101,7 @@ namespace NumSharp.Tests.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(rtc == NPTypeCode.Char ? 0 : 1);
+                Convert.ToInt32(val).Should().Be(1);
                 Console.WriteLine(val);
             }
         }

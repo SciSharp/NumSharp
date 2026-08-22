@@ -118,6 +118,14 @@ namespace NumSharp
             if (typeCode == NPTypeCode.Empty)
                 throw new ArgumentException("Invalid typeCode", nameof(typeCode));
 
+            // NumPy 1.20+ floors the inexact linspace values before casting to an explicitly
+            // requested integer dtype (rather than truncating toward zero). Char follows UInt16.
+            bool floorInteger = typeCode == NPTypeCode.SByte || typeCode == NPTypeCode.Byte
+                                || typeCode == NPTypeCode.Int16 || typeCode == NPTypeCode.UInt16
+                                || typeCode == NPTypeCode.Int32 || typeCode == NPTypeCode.UInt32
+                                || typeCode == NPTypeCode.Int64 || typeCode == NPTypeCode.UInt64
+                                || typeCode == NPTypeCode.Char;
+
             NDArray ret = new NDArray(typeCode, new Shape(num), false);
 
             // Handle num <= 1 edge cases to avoid division by zero
@@ -126,17 +134,29 @@ namespace NumSharp
 
             if (num == 1)
             {
-                ret.SetAtIndex(Converts.ChangeType(start, typeCode), 0);
+                ret.SetAtIndex(Converts.ChangeType(floorInteger ? Math.Floor(start) : start, typeCode), 0);
                 // NumPy's div = endpoint ? num-1 : num. endpoint=false makes div = 1 > 0, so its
                 // scalar in-place branch runs (y *= step on the arange-reshape view) and the float64
                 // result is that VIEW (owndata=False, probed 2.4.2); endpoint=true (div=0) takes the
                 // rebinding `y = y * delta` branch and owns. Other dtypes rebind via astype and own.
                 if (!endpoint && typeCode == NPTypeCode.Double)
-                    return new NDArray(ret.Storage.Alias()) { TensorEngine = ret.TensorEngine };
+                {
+                    var view = new NDArray(ret.Storage.Alias()) { TensorEngine = ret.TensorEngine };
+                    ret.Dispose();
+                    return view;
+                }
                 return ret;
             }
 
             double step = (stop - start) / (endpoint ? num - 1.0 : num);
+
+            double Sample(long i)
+            {
+                // NumPy overwrites y[-1] with stop before the optional integer floor/cast, avoiding
+                // accumulated endpoint drift.
+                double value = endpoint && i == num - 1 ? stop : start + i * step;
+                return floorInteger ? Math.Floor(value) : value;
+            }
 
             switch (ret.GetTypeCode)
             {
@@ -169,7 +189,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (bool*)ret.Address;
-                        for (long i = 0; i < num; i++) addr[i] = (start + i * step) != 0;
+                        for (long i = 0; i < num; i++) addr[i] = Sample(i) != 0;
                     }
 
                     return ret;
@@ -179,7 +199,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (byte*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToByte(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToByte(Sample(i));
                     }
 
                     return ret;
@@ -189,7 +209,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (sbyte*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToSByte(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToSByte(Sample(i));
                     }
 
                     return ret;
@@ -199,7 +219,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (short*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToInt16(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToInt16(Sample(i));
                     }
 
                     return ret;
@@ -209,7 +229,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (ushort*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToUInt16(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToUInt16(Sample(i));
                     }
 
                     return ret;
@@ -219,7 +239,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (int*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToInt32(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToInt32(Sample(i));
                     }
 
                     return ret;
@@ -229,7 +249,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (uint*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToUInt32(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToUInt32(Sample(i));
                     }
 
                     return ret;
@@ -239,7 +259,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (long*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToInt64(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToInt64(Sample(i));
                     }
 
                     return ret;
@@ -249,7 +269,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (ulong*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToUInt64(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToUInt64(Sample(i));
                     }
 
                     return ret;
@@ -259,7 +279,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (char*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToChar(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToChar(Sample(i));
                     }
 
                     return ret;
@@ -269,7 +289,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (Half*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = (Half)(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = (Half)Sample(i);
                     }
 
                     return ret;
@@ -279,7 +299,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (double*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToDouble(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToDouble(Sample(i));
                     }
 
                     // NumPy's float64 linspace is a reshape-VIEW of its internal arange buffer
@@ -287,14 +307,16 @@ namespace NumSharp
                     // returns that view verbatim — so the result reports OWNDATA=False (probed
                     // 2.4.2; num >= 2 here, so div > 0 and the in-place branch is always the one
                     // NumPy took). Every other dtype rebinds through a real astype copy and owns.
-                    return new NDArray(ret.Storage.Alias()) { TensorEngine = ret.TensorEngine };
+                    var view = new NDArray(ret.Storage.Alias()) { TensorEngine = ret.TensorEngine };
+                    ret.Dispose();
+                    return view;
 	            }
 	            case NPTypeCode.Single:
 	            {
                     unsafe
                     {
                         var addr = (float*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToSingle(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToSingle(Sample(i));
                     }
 
                     return ret;
@@ -304,7 +326,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (decimal*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToDecimal(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToDecimal(Sample(i));
                     }
 
                     return ret;
@@ -314,7 +336,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (System.Numerics.Complex*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = new System.Numerics.Complex(start + i * step, 0);
+                         for (long i = 0; i < num; i++) addr[i] = new System.Numerics.Complex(Sample(i), 0);
                     }
 
                     return ret;

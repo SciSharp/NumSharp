@@ -110,7 +110,9 @@ namespace NumSharp
                     one = "1";
                     break;
                 case NPTypeCode.Char:
-                    one = '1';
+                    // Char is NumSharp's uint16-like numeric dtype. Numeric one is U+0001;
+                    // the printable character '1' is 0x0031 and violates the uint16 oracle.
+                    one = (char)1;
                     break;
                 default:
                     one = Converts.ChangeType((byte)1, typeCode);

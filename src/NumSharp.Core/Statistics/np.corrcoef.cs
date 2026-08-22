@@ -61,9 +61,12 @@ namespace NumSharp
             // input, so `.real` (a no-op for a real array) keeps stddev real.
             NDArray stddev = np.sqrt(np.real(d));
 
-            // c /= stddev[:, None]; c /= stddev[None, :] — normalise by the row and column stddevs.
-            c = c / stddev.reshape(stddev.size, 1);
-            c = c / stddev.reshape(1, stddev.size);
+            // c /= stddev[:, None]; c /= stddev[None, :] — NumPy performs BOTH divisions in
+            // place, so preserve that ufunc/out structure. The underlying complex division still
+            // inherits the tightly bounded npy_cdivide-vs-System.Numerics 1-ULP difference recorded
+            // by the oracle; changing allocation alone cannot remove that algorithmic delta.
+            np.divide(c, stddev.reshape(stddev.size, 1), @out: c);
+            np.divide(c, stddev.reshape(1, stddev.size), @out: c);
 
             // Clip real (and, for complex, imaginary) lanes to [-1, 1] IN PLACE, exactly as NumPy does:
             // np.real(c) is c itself for a real array and a write-through float64 lane view for a

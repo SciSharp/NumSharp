@@ -31,7 +31,9 @@ namespace NumSharp
         public static NDArray full_like(NDArray a, object fill_value, Type dtype, char order, string device = null)
         {
             ValidateDevice(device);
-            var typeCode = (dtype ?? fill_value?.GetType() ?? a.dtype).GetTypeCode();
+            // NumPy's *_like contract preserves a.dtype unless dtype= is explicitly supplied.
+            // fill_value is CAST into that dtype; its CLR type never selects the result dtype.
+            var typeCode = (dtype ?? a.dtype).GetTypeCode();
             char physical = OrderResolver.Resolve(order, a.Shape);
             var shape = new Shape((long[])a.shape.Clone(), physical);
 

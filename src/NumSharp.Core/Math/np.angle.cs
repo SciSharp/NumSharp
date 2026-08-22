@@ -48,11 +48,15 @@ namespace NumSharp
             }
 
             if (deg)
-                // NumPy: `a *= 180 / pi`, an in-place multiply at a's own dtype by the WEAK double 180/pi.
-                // NumSharp's `NDArray * double` keeps a's tier and computes at that precision, which is
-                // bit-identical to NumPy (verified at float16/float32/float64 — e.g. float16 pi -> 179.9,
-                // NOT 180, because the multiply rounds in float16).
-                a = a * (180.0 / Math.PI);
+            {
+                // NumPy: `a *= 180 / pi`, an in-place multiply at a's own dtype by the WEAK double
+                // 180/pi. Materialize that weak scalar IN the resolved angle tier and force the same
+                // loop dtype. The ordinary `NDArray * double` operator happens to preserve the tier
+                // for non-scalar arrays, but promotes a 0-D Half/Single result to Double — exactly the
+                // shape-dependent dtype bug the differential oracle caught.
+                using var scale = NDArray.Scalar(180.0 / Math.PI, a.typecode);
+                a = np.multiply(a, scale, dtype: a.typecode);
+            }
 
             return a;
         }

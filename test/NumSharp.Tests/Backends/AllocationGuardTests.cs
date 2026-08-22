@@ -175,7 +175,9 @@ namespace NumSharp.Tests.Backends
 
             var like = np.full_like(np.ones(new Shape(2, 3)), 9);
             like.Shape.Dimensions.Should().Equal(2L, 3L);
-            like.GetInt32(1, 2).Should().Be(9);
+            like.GetTypeCode.Should().Be(NPTypeCode.Double,
+                "full_like preserves the source dtype unless dtype= is explicit");
+            like.GetDouble(1, 2).Should().Be(9d);
         }
 
         [TestMethod]
