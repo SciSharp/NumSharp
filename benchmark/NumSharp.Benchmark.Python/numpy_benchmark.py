@@ -1933,7 +1933,12 @@ def run_where_benchmarks(n, iterations):
 
 
 def run_cumulative_benchmarks(n, dtype_name, iterations):
-    a = create_random_array(n, dtype_name, seed=42)
+    """Cumulative product (mirror C# CumulativeBenchmarks). Values in [0.5, 1.0] keep the running
+    product finite at every size (the C# class uses the same range), so it stays a real workload
+    instead of collapsing to inf almost immediately — full-range data blows up (and the C# Decimal
+    cell, which has no inf, threw OverflowException)."""
+    np.random.seed(42)
+    a = (np.random.rand(n) * 0.5 + 0.5).astype(DTYPES[dtype_name])
     return [
         _b(lambda: np.cumprod(a), n, iterations, "np.cumprod(a)", "Reduction", dtype_name),
     ]

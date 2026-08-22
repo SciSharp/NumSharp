@@ -74,7 +74,14 @@ public class UnaryFamilyBenchmarks : TypedBenchmarkBase
     [Benchmark(Description = "np.conjugate(a)")] public NDArray Conjugate() => np.conjugate(_a);
     [Benchmark(Description = "np.conj(a)")] public NDArray Conj() => np.conj(_a);
     [Benchmark(Description = "np.real(a)")] public NDArray Real() => np.real(_a);
-    [Benchmark(Description = "np.imag(a)")] public NDArray Imag() => np.imag(_a);
+    // np.imag(real) has no imaginary lane to view, so it returns a FRESH, owned, lazily-allocated
+    // zeros array — O(1)-fast. BenchmarkDotNet then runs thousands of invocations per iteration, and
+    // on Windows each committed-but-untouched buffer charges commit, OOMing the 10M case before
+    // finalizers reclaim them. Dispose per invocation to bound resident memory (matches
+    // CreationBenchmarks and the NumPy twin's discard-each-result loop). Safe because inputs here are
+    // always real (Half/Single/Double), so the result is a fresh owned array and never aliases _a —
+    // unlike np.real, whose real-input result IS a view of _a and must NOT be disposed.
+    [Benchmark(Description = "np.imag(a)")] public void Imag() { using var _ = np.imag(_a); }
     [Benchmark(Description = "np.rint(a)")] public NDArray Rint() => np.rint(_a);
     [Benchmark(Description = "np.round(a)")] public NDArray Round() => np.round_(_a);
 }
