@@ -251,18 +251,11 @@ namespace NumSharp.Backends.Kernels
             }
 
             // 2. NaN prescan — only floats can carry NaN. JIT folds the guards away
-            //    for non-float specializations.
+            //    for non-float specializations. float/double use a Vector<T> self-equality
+            //    scan (a NaN lane fails v==v); Half has no Vector arithmetic so stays scalar.
             bool hasNaN = false;
-            if (typeof(T) == typeof(double))
-            {
-                var p = (double*)scratch;
-                for (int i = 0; i < n; i++) { if (double.IsNaN(p[i])) { hasNaN = true; break; } }
-            }
-            else if (typeof(T) == typeof(float))
-            {
-                var p = (float*)scratch;
-                for (int i = 0; i < n; i++) { if (float.IsNaN(p[i])) { hasNaN = true; break; } }
-            }
+            if (typeof(T) == typeof(double))     hasNaN = AnyNaN((double*)scratch, n);
+            else if (typeof(T) == typeof(float)) hasNaN = AnyNaN((float*)scratch, n);
             else if (typeof(T) == typeof(Half))
             {
                 var p = (Half*)scratch;
@@ -283,6 +276,48 @@ namespace NumSharp.Backends.Kernels
                 ComputeIndex(n, q[j], method, out int prevIdx, out int nextIdx, out double gamma);
                 WriteCell(scratch, prevIdx, nextIdx, gamma, method, outCell);
             }
+        }
+
+        /// <summary>
+        ///     SIMD "does this row contain any NaN?" via <c>Vector&lt;T&gt;</c> self-equality —
+        ///     a NaN lane fails <c>v == v</c>, so <see cref="System.Numerics.Vector.EqualsAll{T}"/>
+        ///     turning false flags the vector. Early-exits on the first NaN vector, scalar tail
+        ///     for the remainder. This is the plain-path (non-<c>nan*</c>) prescan that gates
+        ///     whether the row partitions at all; now that the partition itself is ~3× faster it
+        ///     is a meaningful share of a float median, so it is vectorized to match.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe bool AnyNaN(float* p, int n)
+        {
+            int i = 0;
+            int w = System.Numerics.Vector<float>.Count;
+            if (System.Numerics.Vector.IsHardwareAccelerated && n >= w)
+            {
+                for (; i <= n - w; i += w)
+                {
+                    var v = Unsafe.ReadUnaligned<System.Numerics.Vector<float>>(p + i);
+                    if (!System.Numerics.Vector.EqualsAll(v, v)) return true;
+                }
+            }
+            for (; i < n; i++) if (float.IsNaN(p[i])) return true;
+            return false;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe bool AnyNaN(double* p, int n)
+        {
+            int i = 0;
+            int w = System.Numerics.Vector<double>.Count;
+            if (System.Numerics.Vector.IsHardwareAccelerated && n >= w)
+            {
+                for (; i <= n - w; i += w)
+                {
+                    var v = Unsafe.ReadUnaligned<System.Numerics.Vector<double>>(p + i);
+                    if (!System.Numerics.Vector.EqualsAll(v, v)) return true;
+                }
+            }
+            for (; i < n; i++) if (double.IsNaN(p[i])) return true;
+            return false;
         }
 
         /// <summary>

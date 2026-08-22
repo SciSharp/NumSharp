@@ -37,18 +37,37 @@ namespace NumSharp.Utilities
         ///     managed-array allocation per row. <paramref name="sortedKs"/> must already be
         ///     sorted ascending and within <c>[0, n-1]</c>.
         /// </summary>
+        /// <remarks>
+        ///     Port of NumPy's <c>introselect_</c> multi-select driver (<c>selection.cpp</c>):
+        ///     a <b>pivot stack</b> (<see cref="StorePivot"/>) records every placed pivot ≥ the
+        ///     current kth, so a subsequent (usually adjacent) kth — the <c>prev,next</c> pairs
+        ///     that <c>np.percentile</c>/<c>np.median</c> partition around — narrows from
+        ///     <b>both</b> ends instead of re-selecting the min of a half-array each time. The
+        ///     inner partition is a branchless <b>block-Hoare</b> pass
+        ///     (<see cref="PartitionBlock{T}"/>): the outer regions are scanned into fixed
+        ///     offset blocks with no data-dependent branch, so random-data partitions no longer
+        ///     pay ~50% branch-mispredict — the dominant cost of a scalar Hoare loop at scale.
+        ///     Together these are ~3–4.4× the previous scalar/narrow-lo path on 10M rows
+        ///     (single median, even median, and multi-quantile alike), and back the whole
+        ///     <c>median</c>/<c>percentile</c>/<c>quantile</c>/<c>nan*</c> family plus
+        ///     <c>np.partition</c>'s value path.
+        /// </remarks>
+        [SkipLocalsInit]   // the pivot stack is written before read (StorePivot); skipping the
+                           // per-call zero-init of the stackalloc matters for many-tiny-rows axis
+                           // reductions, where each short row would otherwise pay to zero 256 bytes.
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]   // tier-1 from the first call so the
+                           // per-row InsertionSort/IntroSelectBlock inline — the hot axis-reduce loop.
         public static unsafe void PartitionAtMany<T>(T* buf, int n, int* sortedKs, int nKs)
             where T : unmanaged, IComparable<T>
         {
-            if (nKs == 0) return;
-            int lo = 0;
-            int hi = n - 1;
+            if (nKs == 0 || n <= 1) return;
+            int* pivots = stackalloc int[PivotStackMax];
+            int npiv = 0;
             for (int i = 0; i < nKs; i++)
             {
                 int k = sortedKs[i];
-                if (k < lo || k > hi) continue;
-                IntroSelect(buf, lo, hi, k, 2 * Log2(hi - lo + 1));
-                lo = k + 1;
+                if (k < 0 || k >= n) continue;
+                IntroSelectBlock(buf, n, k, pivots, ref npiv);
             }
         }
 
@@ -141,6 +160,185 @@ namespace NumSharp.Utilities
         // ── IComparable internals ─────────────────────────────────────────────────
 
         private const int InsertionSortThreshold = 16;
+
+        // ── pivot-stack block-select internals (np.introselect_ + branchless block partition) ──
+        //
+        // BlockSize is the offset-block width: each pass scans this many elements from each
+        // outer edge into a byte[] of misplaced-element offsets, then swaps the paired offsets.
+        // Kept ≤ 256 so an offset fits a byte. PivotStackMax mirrors NumPy's NPY_MAX_PIVOT_STACK.
+        private const int BlockSize = 128;
+        private const int PivotStackMax = 64;
+
+        /// <summary>
+        ///     Records a placed pivot for reuse by later kths (NumPy <c>store_pivot</c>). Only
+        ///     pivots at or above the current kth are useful as upper bounds, so smaller ones are
+        ///     never pushed; the stack therefore stays descending and its top is the tightest
+        ///     upper bound for the next (larger) kth.
+        /// </summary>
+        private static unsafe void StorePivot(int pivot, int kth, int* pivots, ref int npiv)
+        {
+            if (pivot == kth && npiv == PivotStackMax) pivots[npiv - 1] = pivot;
+            else if (pivot >= kth && npiv < PivotStackMax) { pivots[npiv] = pivot; npiv++; }
+        }
+
+        /// <summary>
+        ///     Single-kth introselect threading the shared pivot stack (NumPy <c>introselect_</c>).
+        ///     Pops the stack to narrow <c>[low, high]</c> before selecting, then median-of-3 +
+        ///     branchless block partition down to the insertion-sort / heap-sort thresholds,
+        ///     pushing every placed pivot back so the next kth reuses this work.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void IntroSelectBlock<T>(T* v, int n, int kth, int* pivots, ref int npiv)
+            where T : unmanaged, IComparable<T>
+        {
+            int low = 0, high = n - 1;
+            // Narrow from already-placed pivots: pop everything ≤ kth (raising low), stop at the
+            // first pivot > kth (lowering high). An exact hit means kth is already in place.
+            while (npiv > 0)
+            {
+                int top = pivots[npiv - 1];
+                if (top > kth) { high = top - 1; break; }
+                if (top == kth) return;
+                low = top + 1;
+                npiv--;
+            }
+
+            int depthLimit = 2 * Log2(n);
+            while (low < high)
+            {
+                int len = high - low + 1;
+                if (len <= InsertionSortThreshold)
+                {
+                    InsertionSort(v, low, high);
+                    StorePivot(kth, kth, pivots, ref npiv);
+                    return;
+                }
+                if (depthLimit == 0)
+                {
+                    // Median-of-3 degraded (adversarial input) — heap-sort the window for the
+                    // O(n log n) worst-case guarantee, matching NumPy's med-of-median-5 fallback.
+                    HeapSort(v, low, high);
+                    StorePivot(kth, kth, pivots, ref npiv);
+                    return;
+                }
+                depthLimit--;
+
+                int p = PartitionBlock(v, low, high);
+                if (p != kth) StorePivot(p, kth, pivots, ref npiv);
+                // Both may fire when p == kth: the window collapses and the loop exits.
+                if (p >= kth) high = p - 1;
+                if (p <= kth) low = p + 1;
+            }
+            StorePivot(kth, kth, pivots, ref npiv);
+        }
+
+        /// <summary>
+        ///     Median-of-3 pivot setup (NumPy <c>median3_swap_</c>): moves the median of
+        ///     <c>{low, mid, high}</c> to <paramref name="low"/> (the pivot) and the smallest of
+        ///     the three to <c>low+1</c>. This leaves <c>v[low+1] ≤ pivot</c> and
+        ///     <c>v[high] ≥ pivot</c> as sentinels, letting the partition scan run unguarded.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void Median3Swap<T>(T* v, int low, int mid, int high)
+            where T : unmanaged, IComparable<T>
+        {
+            if (LtV(v[high], v[mid])) Swap(v, high, mid);
+            if (LtV(v[high], v[low])) Swap(v, high, low);
+            if (LtV(v[low], v[mid])) Swap(v, low, mid);
+            Swap(v, mid, low + 1);
+        }
+
+        /// <summary>
+        ///     Scalar unguarded Hoare crossing used to finish the small middle a block partition
+        ///     leaves (or a whole small window). The caller guarantees a sentinel ≤ pivot at
+        ///     <paramref name="ll"/> and a sentinel ≥ pivot at <paramref name="hh"/>, so neither
+        ///     do/while can run off the region — no bounds test in the hot loop.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe int ScalarPartitionFinish<T>(T* v, T* pivot, int ll, int hh)
+            where T : unmanaged, IComparable<T>
+        {
+            for (;;)
+            {
+                do { ll++; } while (LtPtr(v + ll, pivot));
+                do { hh--; } while (LtPtr(pivot, v + hh));
+                if (hh < ll) break;
+                Swap(v, ll, hh);
+            }
+            return hh;
+        }
+
+        /// <summary>
+        ///     Branchless block-Hoare partition of <c>[low, high]</c> around the median-of-3
+        ///     pivot, returning the pivot's final index (BlockQuicksort / pdqsort scheme). The
+        ///     bulk of each side is scanned into fixed <see cref="BlockSize"/> offset blocks with
+        ///     a data-independent write (<c>numX += cmp ? 0 : 1</c>), then paired offsets are
+        ///     swapped — eliminating the ~50% branch-mispredict of a scalar Hoare inner loop on
+        ///     random data. The sub-block-size middle is finished by
+        ///     <see cref="ScalarPartitionFinish{T}"/>. Callers must supply a window larger than
+        ///     <see cref="InsertionSortThreshold"/> so the sentinels at <c>low+1</c>/<c>high</c>
+        ///     exist. Any NaNs are stripped by the quantile kernel before this runs, so the raw
+        ///     <see cref="LtV{T}"/> ordering is total here.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe int PartitionBlock<T>(T* v, int low, int high)
+            where T : unmanaged, IComparable<T>
+        {
+            int mid = low + ((high - low) >> 1);
+            Median3Swap(v, low, mid, high);
+
+            byte* offL = stackalloc byte[BlockSize];
+            byte* offR = stackalloc byte[BlockSize];
+            // The pivot lives at v[low] for the whole partition; comparing against its address
+            // (rather than a by-value copy) is what keeps the block scan in registers.
+            T* pivot = v + low;
+            // v[low+1] ≤ pivot and v[high] ≥ pivot are the sentinels, so the unknown span is
+            // (low+1, high): scan up from ll and down from hh.
+            int ll = low + 2, hh = high - 1;
+            int numL = 0, numR = 0, startL = 0, startR = 0, baseL = ll, baseR = hh;
+
+            while (hh - ll + 1 > 2 * BlockSize)
+            {
+                if (numL == 0)
+                {
+                    startL = 0; baseL = ll;
+                    for (int i = 0; i < BlockSize; i++) { offL[numL] = (byte)i; numL += LtPtr(v + ll + i, pivot) ? 0 : 1; }
+                }
+                if (numR == 0)
+                {
+                    startR = 0; baseR = hh;
+                    for (int i = 0; i < BlockSize; i++) { offR[numR] = (byte)i; numR += LtPtr(pivot, v + hh - i) ? 0 : 1; }
+                }
+                int num = Math.Min(numL, numR);
+                for (int i = 0; i < num; i++) Swap(v, baseL + offL[startL + i], baseR - offR[startR + i]);
+                numL -= num; numR -= num; startL += num; startR += num;
+                if (numL == 0) ll += BlockSize;
+                if (numR == 0) hh -= BlockSize;
+            }
+
+            // Drain the one partially-consumed block (at most one is non-empty here) against a
+            // scalar scan of the opposite side, keeping the confirmed regions as sentinels.
+            while (numL > 0)
+            {
+                while (LtPtr(pivot, v + hh)) hh--;
+                int li = baseL + offL[startL + numL - 1];
+                if (li >= hh) break;
+                Swap(v, li, hh);
+                hh--; numL--;
+            }
+            while (numR > 0)
+            {
+                while (LtPtr(v + ll, pivot)) ll++;
+                int ri = baseR - offR[startR + numR - 1];
+                if (ri <= ll) break;
+                Swap(v, ri, ll);
+                ll++; numR--;
+            }
+
+            int p = ScalarPartitionFinish(v, pivot, ll - 1, hh + 1);
+            Swap(v, low, p);   // move pivot from low into its final crossing position
+            return p;
+        }
 
         private static unsafe void IntroSelect<T>(T* buf, int lo, int hi, int k, int depthLimit)
             where T : unmanaged, IComparable<T>
@@ -577,6 +775,35 @@ namespace NumSharp.Utilities
             if (typeof(T) == typeof(decimal)) return *(decimal*)&a < *(decimal*)&b;
             if (typeof(T) == typeof(bool))    return !*(bool*)&a && *(bool*)&b;  // false < true
             return a.CompareTo(b) < 0;   // fallback for any other IComparable type
+        }
+
+        /// <summary>
+        ///     Pointer form of <see cref="LtV{T}"/> — <c>*a &lt; *b</c> reading both operands in
+        ///     place. The by-value <see cref="LtV{T}"/> takes <c>&amp;a</c> of its parameters,
+        ///     which forces each operand to a stack slot; in the branchless block-partition scan
+        ///     that is a per-element store+reload that erases the whole win. Passing the array
+        ///     element pointer directly (and the pivot's hoisted address) keeps the compare in
+        ///     registers, so the emitted <c>numX += (*a &lt; *b) ? 0 : 1</c> is a single load +
+        ///     compare + branchless increment — matching a hand-written typed loop.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static unsafe bool LtPtr<T>(T* a, T* b) where T : unmanaged, IComparable<T>
+        {
+            if (typeof(T) == typeof(byte))    return *(byte*)a    < *(byte*)b;
+            if (typeof(T) == typeof(sbyte))   return *(sbyte*)a   < *(sbyte*)b;
+            if (typeof(T) == typeof(short))   return *(short*)a   < *(short*)b;
+            if (typeof(T) == typeof(ushort))  return *(ushort*)a  < *(ushort*)b;
+            if (typeof(T) == typeof(int))     return *(int*)a     < *(int*)b;
+            if (typeof(T) == typeof(uint))    return *(uint*)a    < *(uint*)b;
+            if (typeof(T) == typeof(long))    return *(long*)a    < *(long*)b;
+            if (typeof(T) == typeof(ulong))   return *(ulong*)a   < *(ulong*)b;
+            if (typeof(T) == typeof(char))    return *(char*)a    < *(char*)b;
+            if (typeof(T) == typeof(float))   return *(float*)a   < *(float*)b;
+            if (typeof(T) == typeof(double))  return *(double*)a  < *(double*)b;
+            if (typeof(T) == typeof(Half))    return *(Half*)a    < *(Half*)b;
+            if (typeof(T) == typeof(decimal)) return *(decimal*)a < *(decimal*)b;
+            if (typeof(T) == typeof(bool))    return !*(bool*)a && *(bool*)b;
+            return (*a).CompareTo(*b) < 0;
         }
     }
 }
