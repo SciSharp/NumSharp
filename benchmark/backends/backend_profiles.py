@@ -49,9 +49,9 @@ def profile_result(profile: str, cs: dict, numpy_ms: float | None) -> dict:
             status = "negligible"
         elif ratio >= 1.05:
             status = "faster"
-        elif ratio >= 0.5:
+        elif ratio >= 0.8:
             status = "close"
-        elif ratio >= 0.2:
+        elif ratio >= 0.33:
             status = "slower"
         else:
             status = "much_slower"

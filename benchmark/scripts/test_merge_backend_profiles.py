@@ -56,6 +56,20 @@ class BackendProfileMergeTests(unittest.TestCase):
         self.assertEqual("openblas", combined["rows"][0]["effective_profile"])
         self.assertEqual(0.2, combined["rows"][0]["numsharp_ms"])
 
+    def test_status_thresholds_match_dashboard(self):
+        cases = [
+            (1.05, "faster"),
+            (1.049, "close"),
+            (0.8, "close"),
+            (0.799, "slower"),
+            (0.33, "slower"),
+            (0.329, "much_slower"),
+        ]
+        for ratio, expected in cases:
+            with self.subTest(ratio=ratio):
+                _, _, status = module.performance_status(1.0, 1.0 / ratio)
+                self.assertEqual(expected, status)
+
 
 if __name__ == "__main__":
     unittest.main()

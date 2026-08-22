@@ -65,9 +65,9 @@ def performance_status(numpy_ms: float | None, numsharp_ms: float | None) -> tup
         return ratio, pct_numpy, "negligible"
     if ratio >= 1.05:
         return ratio, pct_numpy, "faster"
-    if ratio >= 0.5:
+    if ratio >= 0.8:
         return ratio, pct_numpy, "close"
-    if ratio >= 0.2:
+    if ratio >= 0.33:
         return ratio, pct_numpy, "slower"
     return ratio, pct_numpy, "much_slower"
 
@@ -331,6 +331,9 @@ def main() -> None:
     parser.add_argument("--managed-extra", type=Path, help="Additional Managed availability/timing profile envelope")
     parser.add_argument("--openblas", type=Path, help="OpenBLAS profile JSON or legacy openblas_results.tsv")
     parser.add_argument("--output", required=True, type=Path, help="Output base path, without extension")
+    parser.add_argument("--snapshot-date", help="Override the report provenance date (YYYY-MM-DD)")
+    parser.add_argument("--commit", help="Override the benchmarked commit hash")
+    parser.add_argument("--numpy-version", help="Override the measured NumPy version")
     args = parser.parse_args()
 
     managed_rows = load_json_profile(args.managed, "managed")
@@ -345,6 +348,12 @@ def main() -> None:
             openblas_rows = load_json_profile(args.openblas, "openblas")
 
     metadata = report_metadata(args.output)
+    if args.snapshot_date:
+        metadata["snapshot_date"] = args.snapshot_date
+    if args.commit:
+        metadata["commit"] = args.commit
+    if args.numpy_version:
+        metadata["numpy_version"] = args.numpy_version
     managed = profile_envelope("managed", managed_rows, metadata)
     openblas = profile_envelope("openblas", openblas_rows, metadata)
     combined = combine(managed, openblas)

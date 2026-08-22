@@ -180,13 +180,13 @@ def get_status(ratio: Optional[float]) -> str:
     """Status band from ratio = NumPy ÷ NumSharp (>1.0× = NumSharp faster)."""
     if ratio is None:
         return "no_data"
-    if ratio >= 1.0:
-        return "faster"          # NumSharp ≥ NumPy speed
-    if ratio >= 0.5:
-        return "close"           # within 2× slower
-    if ratio >= 0.2:
-        return "slower"          # 2–5× slower
-    return "much_slower"         # >5× slower
+    if ratio >= 1.05:
+        return "faster"
+    if ratio >= 0.8:
+        return "close"
+    if ratio >= 0.33:
+        return "slower"
+    return "much_slower"
 
 
 # A row is only a CREDIBLE throughput comparison when BOTH sides did measurable work.

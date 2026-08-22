@@ -238,7 +238,7 @@
         "numsharp_ms": 0.052,
         "ratio": 0.625,
         "pct_numpy": 160.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -469,7 +469,7 @@
         "numsharp_ms": 0.0038,
         "ratio": 0.605263,
         "pct_numpy": 165.217,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -490,7 +490,7 @@
         "numsharp_ms": 0.0109,
         "ratio": 0.238532,
         "pct_numpy": 419.231,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -511,7 +511,7 @@
         "numsharp_ms": 0.4359,
         "ratio": 0.263363,
         "pct_numpy": 379.704,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -553,7 +553,7 @@
         "numsharp_ms": 0.0196,
         "ratio": 0.770408,
         "pct_numpy": 129.801,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -574,7 +574,7 @@
         "numsharp_ms": 0.0056,
         "ratio": 0.321429,
         "pct_numpy": 311.111,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -679,7 +679,7 @@
         "numsharp_ms": 0.3718,
         "ratio": 0.766003,
         "pct_numpy": 130.548,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -742,7 +742,7 @@
         "numsharp_ms": 0.541,
         "ratio": 0.633826,
         "pct_numpy": 157.772,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -910,7 +910,7 @@
         "numsharp_ms": 0.0038,
         "ratio": 0.578947,
         "pct_numpy": 172.727,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -994,7 +994,7 @@
         "numsharp_ms": 0.5449,
         "ratio": 0.783447,
         "pct_numpy": 127.641,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -1183,7 +1183,7 @@
         "numsharp_ms": 0.6009,
         "ratio": 0.632385,
         "pct_numpy": 158.132,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -1204,7 +1204,7 @@
         "numsharp_ms": 62.7471,
         "ratio": 0.754056,
         "pct_numpy": 132.616,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -1246,7 +1246,7 @@
         "numsharp_ms": 0.6253,
         "ratio": 0.614105,
         "pct_numpy": 162.839,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -1288,7 +1288,7 @@
         "numsharp_ms": 0.0052,
         "ratio": 0.230769,
         "pct_numpy": 433.333,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -1372,7 +1372,7 @@
         "numsharp_ms": 0.4731,
         "ratio": 0.640668,
         "pct_numpy": 156.087,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -1393,7 +1393,7 @@
         "numsharp_ms": 47.527,
         "ratio": 0.720794,
         "pct_numpy": 138.736,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -1435,7 +1435,7 @@
         "numsharp_ms": 0.0291,
         "ratio": 0.233677,
         "pct_numpy": 427.941,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -1498,7 +1498,7 @@
         "numsharp_ms": 0.0569,
         "ratio": 0.239016,
         "pct_numpy": 418.382,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -1540,7 +1540,7 @@
         "numsharp_ms": 0.0037,
         "ratio": 0.297297,
         "pct_numpy": 336.364,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -1666,7 +1666,7 @@
         "numsharp_ms": 0.0044,
         "ratio": 0.272727,
         "pct_numpy": 366.667,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -1792,7 +1792,7 @@
         "numsharp_ms": 0.0034,
         "ratio": 0.323529,
         "pct_numpy": 309.091,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -1855,7 +1855,7 @@
         "numsharp_ms": 0.0039,
         "ratio": 0.25641,
         "pct_numpy": 390.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -2128,7 +2128,7 @@
         "numsharp_ms": 0.9172,
         "ratio": 0.328609,
         "pct_numpy": 304.313,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -2149,7 +2149,7 @@
         "numsharp_ms": 48.2161,
         "ratio": 0.673615,
         "pct_numpy": 148.453,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -2380,7 +2380,7 @@
         "numsharp_ms": 0.0527,
         "ratio": 0.571157,
         "pct_numpy": 175.083,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -2443,7 +2443,7 @@
         "numsharp_ms": 0.0998,
         "ratio": 0.300601,
         "pct_numpy": 332.667,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -2632,7 +2632,7 @@
         "numsharp_ms": 0.0561,
         "ratio": 0.515152,
         "pct_numpy": 194.118,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -2695,7 +2695,7 @@
         "numsharp_ms": 0.1025,
         "ratio": 0.284878,
         "pct_numpy": 351.027,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -2800,7 +2800,7 @@
         "numsharp_ms": 0.0032,
         "ratio": 0.3125,
         "pct_numpy": 320.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -2884,7 +2884,7 @@
         "numsharp_ms": 0.9214,
         "ratio": 0.324832,
         "pct_numpy": 307.852,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -2905,7 +2905,7 @@
         "numsharp_ms": 47.2843,
         "ratio": 0.73499,
         "pct_numpy": 136.056,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -3010,7 +3010,7 @@
         "numsharp_ms": 0.1055,
         "ratio": 0.267299,
         "pct_numpy": 374.113,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -3115,7 +3115,7 @@
         "numsharp_ms": 0.0019,
         "ratio": 0.578947,
         "pct_numpy": 172.727,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -3136,7 +3136,7 @@
         "numsharp_ms": 0.0535,
         "ratio": 0.592523,
         "pct_numpy": 168.77,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -3199,7 +3199,7 @@
         "numsharp_ms": 0.1076,
         "ratio": 0.324349,
         "pct_numpy": 308.309,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -3388,7 +3388,7 @@
         "numsharp_ms": 0.0532,
         "ratio": 0.556391,
         "pct_numpy": 179.73,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -3451,7 +3451,7 @@
         "numsharp_ms": 0.1085,
         "ratio": 0.329954,
         "pct_numpy": 303.073,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -3556,7 +3556,7 @@
         "numsharp_ms": 0.0031,
         "ratio": 0.322581,
         "pct_numpy": 310.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -3640,7 +3640,7 @@
         "numsharp_ms": 0.4905,
         "ratio": 0.600612,
         "pct_numpy": 166.497,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -3661,7 +3661,7 @@
         "numsharp_ms": 48.3856,
         "ratio": 0.685154,
         "pct_numpy": 145.953,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -3703,7 +3703,7 @@
         "numsharp_ms": 0.0283,
         "ratio": 0.233216,
         "pct_numpy": 428.788,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -3766,7 +3766,7 @@
         "numsharp_ms": 0.0562,
         "ratio": 0.233096,
         "pct_numpy": 429.008,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -4312,7 +4312,7 @@
         "numsharp_ms": 0.0044,
         "ratio": 0.25,
         "pct_numpy": 400.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -4396,7 +4396,7 @@
         "numsharp_ms": 0.47,
         "ratio": 0.628723,
         "pct_numpy": 159.052,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -4417,7 +4417,7 @@
         "numsharp_ms": 48.9655,
         "ratio": 0.633113,
         "pct_numpy": 157.95,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -4438,7 +4438,7 @@
         "numsharp_ms": 0.0037,
         "ratio": 0.702703,
         "pct_numpy": 142.308,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -4501,7 +4501,7 @@
         "numsharp_ms": 0.005,
         "ratio": 0.5,
         "pct_numpy": 200.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -4522,7 +4522,7 @@
         "numsharp_ms": 0.0642,
         "ratio": 0.26324,
         "pct_numpy": 379.882,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -4627,7 +4627,7 @@
         "numsharp_ms": 0.0022,
         "ratio": 0.5,
         "pct_numpy": 200.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -4690,7 +4690,7 @@
         "numsharp_ms": 0.005,
         "ratio": 0.52,
         "pct_numpy": 192.308,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -4816,7 +4816,7 @@
         "numsharp_ms": 0.0035,
         "ratio": 0.314286,
         "pct_numpy": 318.182,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -4879,7 +4879,7 @@
         "numsharp_ms": 0.0035,
         "ratio": 0.314286,
         "pct_numpy": 318.182,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -5152,7 +5152,7 @@
         "numsharp_ms": 0.4969,
         "ratio": 0.601127,
         "pct_numpy": 166.354,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -5173,7 +5173,7 @@
         "numsharp_ms": 47.9527,
         "ratio": 0.650307,
         "pct_numpy": 153.773,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -5215,7 +5215,7 @@
         "numsharp_ms": 0.0295,
         "ratio": 0.261017,
         "pct_numpy": 383.117,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -5278,7 +5278,7 @@
         "numsharp_ms": 0.0637,
         "ratio": 0.609105,
         "pct_numpy": 164.175,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -5383,7 +5383,7 @@
         "numsharp_ms": 0.0014,
         "ratio": 0.714286,
         "pct_numpy": 140.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -5467,7 +5467,7 @@
         "numsharp_ms": 0.069,
         "ratio": 0.527536,
         "pct_numpy": 189.56,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -5572,7 +5572,7 @@
         "numsharp_ms": 0.0014,
         "ratio": 0.714286,
         "pct_numpy": 140.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -5635,7 +5635,7 @@
         "numsharp_ms": 0.0014,
         "ratio": 0.714286,
         "pct_numpy": 140.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -5719,7 +5719,7 @@
         "numsharp_ms": 0.0639,
         "ratio": 0.564945,
         "pct_numpy": 177.008,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -5908,7 +5908,7 @@
         "numsharp_ms": 0.4874,
         "ratio": 0.593352,
         "pct_numpy": 168.534,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -5929,7 +5929,7 @@
         "numsharp_ms": 46.5946,
         "ratio": 0.715257,
         "pct_numpy": 139.81,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -5971,7 +5971,7 @@
         "numsharp_ms": 0.0288,
         "ratio": 0.229167,
         "pct_numpy": 436.364,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -6013,7 +6013,7 @@
         "numsharp_ms": 0.003,
         "ratio": 0.666667,
         "pct_numpy": 150.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -6034,7 +6034,7 @@
         "numsharp_ms": 0.062,
         "ratio": 0.237097,
         "pct_numpy": 421.769,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -6391,7 +6391,7 @@
         "numsharp_ms": 0.0013,
         "ratio": 0.769231,
         "pct_numpy": 130.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -6664,7 +6664,7 @@
         "numsharp_ms": 0.4774,
         "ratio": 0.675744,
         "pct_numpy": 147.985,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -6685,7 +6685,7 @@
         "numsharp_ms": 47.2297,
         "ratio": 0.666938,
         "pct_numpy": 149.939,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -6727,7 +6727,7 @@
         "numsharp_ms": 0.0303,
         "ratio": 0.257426,
         "pct_numpy": 388.462,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -6979,7 +6979,7 @@
         "numsharp_ms": 0.0635,
         "ratio": 0.532283,
         "pct_numpy": 187.87,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -7231,7 +7231,7 @@
         "numsharp_ms": 0.0658,
         "ratio": 0.551672,
         "pct_numpy": 181.267,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -7420,7 +7420,7 @@
         "numsharp_ms": 0.5023,
         "ratio": 0.607605,
         "pct_numpy": 164.581,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -7441,7 +7441,7 @@
         "numsharp_ms": 46.2797,
         "ratio": 0.70618,
         "pct_numpy": 141.607,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -7546,7 +7546,7 @@
         "numsharp_ms": 0.064,
         "ratio": 0.20625,
         "pct_numpy": 484.848,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -7924,7 +7924,7 @@
         "numsharp_ms": 0.0361,
         "ratio": 0.66482,
         "pct_numpy": 150.417,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -8176,7 +8176,7 @@
         "numsharp_ms": 0.062,
         "ratio": 0.664516,
         "pct_numpy": 150.485,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -8281,7 +8281,7 @@
         "numsharp_ms": 0.0047,
         "ratio": 0.553191,
         "pct_numpy": 180.769,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -8428,7 +8428,7 @@
         "numsharp_ms": 0.0545,
         "ratio": 0.72844,
         "pct_numpy": 137.28,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -8470,7 +8470,7 @@
         "numsharp_ms": 0.0039,
         "ratio": 0.641026,
         "pct_numpy": 156.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -8491,7 +8491,7 @@
         "numsharp_ms": 0.0856,
         "ratio": 0.771028,
         "pct_numpy": 129.697,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -8554,7 +8554,7 @@
         "numsharp_ms": 0.085,
         "ratio": 0.778824,
         "pct_numpy": 128.399,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -8701,7 +8701,7 @@
         "numsharp_ms": 47.2287,
         "ratio": 0.656042,
         "pct_numpy": 152.429,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -8743,7 +8743,7 @@
         "numsharp_ms": 0.0283,
         "ratio": 0.261484,
         "pct_numpy": 382.432,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -8995,7 +8995,7 @@
         "numsharp_ms": 0.0643,
         "ratio": 0.510109,
         "pct_numpy": 196.037,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -9163,7 +9163,7 @@
         "numsharp_ms": 0.0016,
         "ratio": 0.6875,
         "pct_numpy": 145.455,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -9247,7 +9247,7 @@
         "numsharp_ms": 0.0646,
         "ratio": 0.575851,
         "pct_numpy": 173.656,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -9457,7 +9457,7 @@
         "numsharp_ms": 26.6795,
         "ratio": 0.619018,
         "pct_numpy": 161.546,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -9541,7 +9541,7 @@
         "numsharp_ms": 0.0029,
         "ratio": 0.689655,
         "pct_numpy": 145.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -9751,7 +9751,7 @@
         "numsharp_ms": 0.4983,
         "ratio": 0.761589,
         "pct_numpy": 131.304,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -9772,7 +9772,7 @@
         "numsharp_ms": 64.2754,
         "ratio": 0.716974,
         "pct_numpy": 139.475,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -9793,7 +9793,7 @@
         "numsharp_ms": 0.0036,
         "ratio": 0.694444,
         "pct_numpy": 144.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -9814,7 +9814,7 @@
         "numsharp_ms": 0.5589,
         "ratio": 0.683306,
         "pct_numpy": 146.347,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -10066,7 +10066,7 @@
         "numsharp_ms": 0.5174,
         "ratio": 0.731156,
         "pct_numpy": 136.77,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -10171,7 +10171,7 @@
         "numsharp_ms": 0.005,
         "ratio": 0.66,
         "pct_numpy": 151.515,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -10192,7 +10192,7 @@
         "numsharp_ms": 0.4732,
         "ratio": 0.63694,
         "pct_numpy": 157.001,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -10213,7 +10213,7 @@
         "numsharp_ms": 47.2299,
         "ratio": 0.664297,
         "pct_numpy": 150.535,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -10255,7 +10255,7 @@
         "numsharp_ms": 0.0302,
         "ratio": 0.278146,
         "pct_numpy": 359.524,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -10507,7 +10507,7 @@
         "numsharp_ms": 0.0679,
         "ratio": 0.500736,
         "pct_numpy": 199.706,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -10759,7 +10759,7 @@
         "numsharp_ms": 0.0653,
         "ratio": 0.545176,
         "pct_numpy": 183.427,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -10906,7 +10906,7 @@
         "numsharp_ms": 67.2047,
         "ratio": 0.501594,
         "pct_numpy": 199.364,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -10948,7 +10948,7 @@
         "numsharp_ms": 0.4736,
         "ratio": 0.619721,
         "pct_numpy": 161.363,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -10969,7 +10969,7 @@
         "numsharp_ms": 94.8897,
         "ratio": 0.321355,
         "pct_numpy": 311.182,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -11011,7 +11011,7 @@
         "numsharp_ms": 0.0305,
         "ratio": 0.288525,
         "pct_numpy": 346.591,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -11263,7 +11263,7 @@
         "numsharp_ms": 0.0633,
         "ratio": 0.532385,
         "pct_numpy": 187.834,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -11515,7 +11515,7 @@
         "numsharp_ms": 0.0625,
         "ratio": 0.5888,
         "pct_numpy": 169.837,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -11704,7 +11704,7 @@
         "numsharp_ms": 0.0701,
         "ratio": 0.593438,
         "pct_numpy": 168.51,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -11725,7 +11725,7 @@
         "numsharp_ms": 26.8739,
         "ratio": 0.619594,
         "pct_numpy": 161.396,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -11746,7 +11746,7 @@
         "numsharp_ms": 0.0031,
         "ratio": 0.645161,
         "pct_numpy": 155.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -11809,7 +11809,7 @@
         "numsharp_ms": 0.003,
         "ratio": 0.633333,
         "pct_numpy": 157.895,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -11956,7 +11956,7 @@
         "numsharp_ms": 0.4839,
         "ratio": 0.634429,
         "pct_numpy": 157.622,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -11977,7 +11977,7 @@
         "numsharp_ms": 45.6205,
         "ratio": 0.690963,
         "pct_numpy": 144.725,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -12019,7 +12019,7 @@
         "numsharp_ms": 0.0272,
         "ratio": 0.283088,
         "pct_numpy": 353.247,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -12082,7 +12082,7 @@
         "numsharp_ms": 0.06,
         "ratio": 0.253333,
         "pct_numpy": 394.737,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -12250,7 +12250,7 @@
         "numsharp_ms": 0.002,
         "ratio": 0.5,
         "pct_numpy": 200.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -12439,7 +12439,7 @@
         "numsharp_ms": 0.0015,
         "ratio": 0.666667,
         "pct_numpy": 150.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -12691,7 +12691,7 @@
         "numsharp_ms": 0.002,
         "ratio": 0.5,
         "pct_numpy": 200.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -12712,7 +12712,7 @@
         "numsharp_ms": 0.068,
         "ratio": 0.589706,
         "pct_numpy": 169.576,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -12775,7 +12775,7 @@
         "numsharp_ms": 0.0847,
         "ratio": 0.757969,
         "pct_numpy": 131.931,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -12817,7 +12817,7 @@
         "numsharp_ms": 0.0034,
         "ratio": 0.5,
         "pct_numpy": 200.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13090,7 +13090,7 @@
         "numsharp_ms": 0.1183,
         "ratio": 0.289941,
         "pct_numpy": 344.898,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13111,7 +13111,7 @@
         "numsharp_ms": 28.4663,
         "ratio": 0.595258,
         "pct_numpy": 167.994,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13237,7 +13237,7 @@
         "numsharp_ms": 6.955,
         "ratio": 0.73839,
         "pct_numpy": 135.43,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13300,7 +13300,7 @@
         "numsharp_ms": 12.949,
         "ratio": 0.643123,
         "pct_numpy": 155.491,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13342,7 +13342,7 @@
         "numsharp_ms": 0.1238,
         "ratio": 0.320679,
         "pct_numpy": 311.839,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13363,7 +13363,7 @@
         "numsharp_ms": 28.6289,
         "ratio": 0.670312,
         "pct_numpy": 149.184,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13489,7 +13489,7 @@
         "numsharp_ms": 6.4347,
         "ratio": 0.32317,
         "pct_numpy": 309.435,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13552,7 +13552,7 @@
         "numsharp_ms": 6.6677,
         "ratio": 0.781649,
         "pct_numpy": 127.935,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13615,7 +13615,7 @@
         "numsharp_ms": 12.8917,
         "ratio": 0.687062,
         "pct_numpy": 145.547,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13657,7 +13657,7 @@
         "numsharp_ms": 0.1284,
         "ratio": 0.274143,
         "pct_numpy": 364.773,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13678,7 +13678,7 @@
         "numsharp_ms": 35.2017,
         "ratio": 0.518305,
         "pct_numpy": 192.937,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13804,7 +13804,7 @@
         "numsharp_ms": 6.5946,
         "ratio": 0.766688,
         "pct_numpy": 130.431,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13867,7 +13867,7 @@
         "numsharp_ms": 12.2722,
         "ratio": 0.688238,
         "pct_numpy": 145.298,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13909,7 +13909,7 @@
         "numsharp_ms": 0.1302,
         "ratio": 0.260369,
         "pct_numpy": 384.071,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -13930,7 +13930,7 @@
         "numsharp_ms": 34.5739,
         "ratio": 0.535051,
         "pct_numpy": 186.898,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14056,7 +14056,7 @@
         "numsharp_ms": 6.6117,
         "ratio": 0.307258,
         "pct_numpy": 325.459,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14182,7 +14182,7 @@
         "numsharp_ms": 12.3715,
         "ratio": 0.73523,
         "pct_numpy": 136.012,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14224,7 +14224,7 @@
         "numsharp_ms": 0.1242,
         "ratio": 0.276973,
         "pct_numpy": 361.047,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14245,7 +14245,7 @@
         "numsharp_ms": 29.6977,
         "ratio": 0.595662,
         "pct_numpy": 167.88,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14371,7 +14371,7 @@
         "numsharp_ms": 7.0718,
         "ratio": 0.726562,
         "pct_numpy": 137.635,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14434,7 +14434,7 @@
         "numsharp_ms": 12.2409,
         "ratio": 0.681347,
         "pct_numpy": 146.768,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14476,7 +14476,7 @@
         "numsharp_ms": 0.1183,
         "ratio": 0.312764,
         "pct_numpy": 319.73,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14497,7 +14497,7 @@
         "numsharp_ms": 31.338,
         "ratio": 0.554094,
         "pct_numpy": 180.475,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14686,7 +14686,7 @@
         "numsharp_ms": 6.5475,
         "ratio": 0.77118,
         "pct_numpy": 129.671,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14749,7 +14749,7 @@
         "numsharp_ms": 12.3488,
         "ratio": 0.690197,
         "pct_numpy": 144.886,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14791,7 +14791,7 @@
         "numsharp_ms": 0.125,
         "ratio": 0.2632,
         "pct_numpy": 379.939,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14812,7 +14812,7 @@
         "numsharp_ms": 32.5932,
         "ratio": 0.523183,
         "pct_numpy": 191.138,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -14938,7 +14938,7 @@
         "numsharp_ms": 6.9221,
         "ratio": 0.728912,
         "pct_numpy": 137.191,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15001,7 +15001,7 @@
         "numsharp_ms": 12.0652,
         "ratio": 0.696665,
         "pct_numpy": 143.541,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15043,7 +15043,7 @@
         "numsharp_ms": 0.1526,
         "ratio": 0.220839,
         "pct_numpy": 452.819,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15064,7 +15064,7 @@
         "numsharp_ms": 28.1371,
         "ratio": 0.613126,
         "pct_numpy": 163.098,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15190,7 +15190,7 @@
         "numsharp_ms": 5.9899,
         "ratio": 0.285414,
         "pct_numpy": 350.369,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15358,7 +15358,7 @@
         "numsharp_ms": 0.1137,
         "ratio": 0.23131,
         "pct_numpy": 432.319,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15379,7 +15379,7 @@
         "numsharp_ms": 22.2517,
         "ratio": 0.695511,
         "pct_numpy": 143.779,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15610,7 +15610,7 @@
         "numsharp_ms": 0.1167,
         "ratio": 0.224507,
         "pct_numpy": 445.42,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15631,7 +15631,7 @@
         "numsharp_ms": 21.8891,
         "ratio": 0.701619,
         "pct_numpy": 142.528,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15757,7 +15757,7 @@
         "numsharp_ms": 6.2329,
         "ratio": 0.317653,
         "pct_numpy": 314.809,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15799,7 +15799,7 @@
         "numsharp_ms": 0.0363,
         "ratio": 0.793388,
         "pct_numpy": 126.042,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15820,7 +15820,7 @@
         "numsharp_ms": 6.652,
         "ratio": 0.773226,
         "pct_numpy": 129.328,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15883,7 +15883,7 @@
         "numsharp_ms": 12.2088,
         "ratio": 0.699938,
         "pct_numpy": 142.87,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15925,7 +15925,7 @@
         "numsharp_ms": 0.1344,
         "ratio": 0.25,
         "pct_numpy": 400.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -15946,7 +15946,7 @@
         "numsharp_ms": 29.6976,
         "ratio": 0.584189,
         "pct_numpy": 171.178,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16135,7 +16135,7 @@
         "numsharp_ms": 12.0356,
         "ratio": 0.699649,
         "pct_numpy": 142.929,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16177,7 +16177,7 @@
         "numsharp_ms": 0.1198,
         "ratio": 0.282972,
         "pct_numpy": 353.392,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16198,7 +16198,7 @@
         "numsharp_ms": 29.2974,
         "ratio": 0.577208,
         "pct_numpy": 173.248,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16324,7 +16324,7 @@
         "numsharp_ms": 6.0434,
         "ratio": 0.324552,
         "pct_numpy": 308.117,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16366,7 +16366,7 @@
         "numsharp_ms": 0.043,
         "ratio": 0.672093,
         "pct_numpy": 148.789,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16387,7 +16387,7 @@
         "numsharp_ms": 6.6387,
         "ratio": 0.775423,
         "pct_numpy": 128.962,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16450,7 +16450,7 @@
         "numsharp_ms": 12.7413,
         "ratio": 0.656785,
         "pct_numpy": 152.257,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16492,7 +16492,7 @@
         "numsharp_ms": 0.1281,
         "ratio": 0.257611,
         "pct_numpy": 388.182,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16513,7 +16513,7 @@
         "numsharp_ms": 32.583,
         "ratio": 0.550198,
         "pct_numpy": 181.753,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16639,7 +16639,7 @@
         "numsharp_ms": 6.4238,
         "ratio": 0.777624,
         "pct_numpy": 128.597,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16702,7 +16702,7 @@
         "numsharp_ms": 12.1869,
         "ratio": 0.693622,
         "pct_numpy": 144.171,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16744,7 +16744,7 @@
         "numsharp_ms": 0.1335,
         "ratio": 0.255431,
         "pct_numpy": 391.496,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16765,7 +16765,7 @@
         "numsharp_ms": 27.7808,
         "ratio": 0.64816,
         "pct_numpy": 154.283,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16891,7 +16891,7 @@
         "numsharp_ms": 6.1,
         "ratio": 0.294836,
         "pct_numpy": 339.172,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -16996,7 +16996,7 @@
         "numsharp_ms": 0.0815,
         "ratio": 0.322699,
         "pct_numpy": 309.886,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17059,7 +17059,7 @@
         "numsharp_ms": 0.1194,
         "ratio": 0.221106,
         "pct_numpy": 452.273,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17080,7 +17080,7 @@
         "numsharp_ms": 23.7658,
         "ratio": 0.649033,
         "pct_numpy": 154.075,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17185,7 +17185,7 @@
         "numsharp_ms": 0.0335,
         "ratio": 0.773134,
         "pct_numpy": 129.344,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17269,7 +17269,7 @@
         "numsharp_ms": 10.0599,
         "ratio": 0.757403,
         "pct_numpy": 132.03,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17332,7 +17332,7 @@
         "numsharp_ms": 26.9743,
         "ratio": 0.565924,
         "pct_numpy": 176.702,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17416,7 +17416,7 @@
         "numsharp_ms": 0.006,
         "ratio": 0.25,
         "pct_numpy": 400.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17479,7 +17479,7 @@
         "numsharp_ms": 0.0036,
         "ratio": 0.305556,
         "pct_numpy": 327.273,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17542,7 +17542,7 @@
         "numsharp_ms": 0.0043,
         "ratio": 0.232558,
         "pct_numpy": 430.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17563,7 +17563,7 @@
         "numsharp_ms": 0.0647,
         "ratio": 0.295209,
         "pct_numpy": 338.743,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17731,7 +17731,7 @@
         "numsharp_ms": 0.0042,
         "ratio": 0.261905,
         "pct_numpy": 381.818,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17794,7 +17794,7 @@
         "numsharp_ms": 0.0042,
         "ratio": 0.238095,
         "pct_numpy": 420.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17857,7 +17857,7 @@
         "numsharp_ms": 0.0036,
         "ratio": 0.277778,
         "pct_numpy": 360.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17899,7 +17899,7 @@
         "numsharp_ms": 23.4199,
         "ratio": 0.654396,
         "pct_numpy": 152.813,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -17983,7 +17983,7 @@
         "numsharp_ms": 0.0087,
         "ratio": 0.206897,
         "pct_numpy": 483.333,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18046,7 +18046,7 @@
         "numsharp_ms": 0.004,
         "ratio": 0.3,
         "pct_numpy": 333.333,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18109,7 +18109,7 @@
         "numsharp_ms": 0.0042,
         "ratio": 0.261905,
         "pct_numpy": 381.818,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18172,7 +18172,7 @@
         "numsharp_ms": 0.0039,
         "ratio": 0.282051,
         "pct_numpy": 354.545,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18193,7 +18193,7 @@
         "numsharp_ms": 0.1329,
         "ratio": 0.218962,
         "pct_numpy": 456.701,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18214,7 +18214,7 @@
         "numsharp_ms": 28.7993,
         "ratio": 0.570017,
         "pct_numpy": 175.433,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18298,7 +18298,7 @@
         "numsharp_ms": 0.0057,
         "ratio": 0.210526,
         "pct_numpy": 475.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18361,7 +18361,7 @@
         "numsharp_ms": 0.0045,
         "ratio": 0.222222,
         "pct_numpy": 450.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18424,7 +18424,7 @@
         "numsharp_ms": 0.0044,
         "ratio": 0.227273,
         "pct_numpy": 440.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18466,7 +18466,7 @@
         "numsharp_ms": 25.8004,
         "ratio": 0.629126,
         "pct_numpy": 158.951,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18571,7 +18571,7 @@
         "numsharp_ms": 0.0444,
         "ratio": 0.27027,
         "pct_numpy": 370.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18697,7 +18697,7 @@
         "numsharp_ms": 0.0463,
         "ratio": 0.552916,
         "pct_numpy": 180.859,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18739,7 +18739,7 @@
         "numsharp_ms": 0.0034,
         "ratio": 0.5,
         "pct_numpy": 200.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18823,7 +18823,7 @@
         "numsharp_ms": 0.0468,
         "ratio": 0.544872,
         "pct_numpy": 183.529,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -18886,7 +18886,7 @@
         "numsharp_ms": 0.0456,
         "ratio": 0.274123,
         "pct_numpy": 364.8,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -19054,7 +19054,7 @@
         "numsharp_ms": 0.0041,
         "ratio": 0.243902,
         "pct_numpy": 410.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -19075,7 +19075,7 @@
         "numsharp_ms": 0.0929,
         "ratio": 0.270183,
         "pct_numpy": 370.12,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -19138,7 +19138,7 @@
         "numsharp_ms": 0.0118,
         "ratio": 0.635593,
         "pct_numpy": 157.333,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -19222,7 +19222,7 @@
         "numsharp_ms": 22.7525,
         "ratio": 0.296104,
         "pct_numpy": 337.719,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -19327,7 +19327,7 @@
         "numsharp_ms": 0.022,
         "ratio": 0.613636,
         "pct_numpy": 162.963,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -19390,7 +19390,7 @@
         "numsharp_ms": 0.011,
         "ratio": 0.636364,
         "pct_numpy": 157.143,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -19474,7 +19474,7 @@
         "numsharp_ms": 21.6593,
         "ratio": 0.325698,
         "pct_numpy": 307.032,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -19516,7 +19516,7 @@
         "numsharp_ms": 0.0119,
         "ratio": 0.588235,
         "pct_numpy": 170.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -19579,7 +19579,7 @@
         "numsharp_ms": 0.0283,
         "ratio": 0.65371,
         "pct_numpy": 152.973,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -19642,7 +19642,7 @@
         "numsharp_ms": 0.0107,
         "ratio": 0.64486,
         "pct_numpy": 155.072,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -19726,7 +19726,7 @@
         "numsharp_ms": 21.9882,
         "ratio": 0.309416,
         "pct_numpy": 323.19,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -19894,7 +19894,7 @@
         "numsharp_ms": 0.0122,
         "ratio": 0.581967,
         "pct_numpy": 171.831,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20083,7 +20083,7 @@
         "numsharp_ms": 0.0188,
         "ratio": 0.734043,
         "pct_numpy": 136.232,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20146,7 +20146,7 @@
         "numsharp_ms": 0.0111,
         "ratio": 0.63964,
         "pct_numpy": 156.338,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20272,7 +20272,7 @@
         "numsharp_ms": 0.0113,
         "ratio": 0.628319,
         "pct_numpy": 159.155,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20398,7 +20398,7 @@
         "numsharp_ms": 0.0117,
         "ratio": 0.598291,
         "pct_numpy": 167.143,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20482,7 +20482,7 @@
         "numsharp_ms": 23.5193,
         "ratio": 0.290753,
         "pct_numpy": 343.935,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20524,7 +20524,7 @@
         "numsharp_ms": 0.0135,
         "ratio": 0.548148,
         "pct_numpy": 182.432,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20713,7 +20713,7 @@
         "numsharp_ms": 0.0313,
         "ratio": 0.322684,
         "pct_numpy": 309.901,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20734,7 +20734,7 @@
         "numsharp_ms": 22.1563,
         "ratio": 0.289611,
         "pct_numpy": 345.291,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20776,7 +20776,7 @@
         "numsharp_ms": 0.0144,
         "ratio": 0.513889,
         "pct_numpy": 194.595,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20839,7 +20839,7 @@
         "numsharp_ms": 0.0201,
         "ratio": 0.651741,
         "pct_numpy": 153.435,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20860,7 +20860,7 @@
         "numsharp_ms": 21.7217,
         "ratio": 0.322723,
         "pct_numpy": 309.863,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20902,7 +20902,7 @@
         "numsharp_ms": 0.0255,
         "ratio": 0.266667,
         "pct_numpy": 375.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20965,7 +20965,7 @@
         "numsharp_ms": 0.0312,
         "ratio": 0.323718,
         "pct_numpy": 308.911,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -20986,7 +20986,7 @@
         "numsharp_ms": 11.5786,
         "ratio": 0.558729,
         "pct_numpy": 178.978,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21154,7 +21154,7 @@
         "numsharp_ms": 0.025,
         "ratio": 0.264,
         "pct_numpy": 378.788,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21217,7 +21217,7 @@
         "numsharp_ms": 0.0325,
         "ratio": 0.323077,
         "pct_numpy": 309.524,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21238,7 +21238,7 @@
         "numsharp_ms": 10.4863,
         "ratio": 0.645881,
         "pct_numpy": 154.827,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21280,7 +21280,7 @@
         "numsharp_ms": 0.0148,
         "ratio": 0.641892,
         "pct_numpy": 155.789,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21343,7 +21343,7 @@
         "numsharp_ms": 0.0258,
         "ratio": 0.709302,
         "pct_numpy": 140.984,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21406,7 +21406,7 @@
         "numsharp_ms": 0.0218,
         "ratio": 0.302752,
         "pct_numpy": 330.303,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21469,7 +21469,7 @@
         "numsharp_ms": 0.0324,
         "ratio": 0.314815,
         "pct_numpy": 317.647,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21532,7 +21532,7 @@
         "numsharp_ms": 0.0161,
         "ratio": 0.509317,
         "pct_numpy": 196.341,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21658,7 +21658,7 @@
         "numsharp_ms": 0.0254,
         "ratio": 0.259843,
         "pct_numpy": 384.848,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21721,7 +21721,7 @@
         "numsharp_ms": 0.0333,
         "ratio": 0.318318,
         "pct_numpy": 314.151,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21742,7 +21742,7 @@
         "numsharp_ms": 11.4363,
         "ratio": 0.573665,
         "pct_numpy": 174.318,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21784,7 +21784,7 @@
         "numsharp_ms": 0.0186,
         "ratio": 0.634409,
         "pct_numpy": 157.627,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21847,7 +21847,7 @@
         "numsharp_ms": 0.0239,
         "ratio": 0.761506,
         "pct_numpy": 131.319,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -21994,7 +21994,7 @@
         "numsharp_ms": 23.1326,
         "ratio": 0.278274,
         "pct_numpy": 359.358,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -22099,7 +22099,7 @@
         "numsharp_ms": 0.0207,
         "ratio": 0.642512,
         "pct_numpy": 155.639,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -22288,7 +22288,7 @@
         "numsharp_ms": 0.0073,
         "ratio": 0.767123,
         "pct_numpy": 130.357,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -22666,7 +22666,7 @@
         "numsharp_ms": 0.039,
         "ratio": 0.305128,
         "pct_numpy": 327.731,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -22876,7 +22876,7 @@
         "numsharp_ms": 0.1194,
         "ratio": 0.226131,
         "pct_numpy": 442.222,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -23086,7 +23086,7 @@
         "numsharp_ms": 0.0074,
         "ratio": 0.797297,
         "pct_numpy": 125.424,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -23296,7 +23296,7 @@
         "numsharp_ms": 0.0137,
         "ratio": 0.671533,
         "pct_numpy": 148.913,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -23422,7 +23422,7 @@
         "numsharp_ms": 0.0121,
         "ratio": 0.586777,
         "pct_numpy": 170.423,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -23674,7 +23674,7 @@
         "numsharp_ms": 0.0132,
         "ratio": 0.507576,
         "pct_numpy": 197.015,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -23905,7 +23905,7 @@
         "numsharp_ms": 0.0153,
         "ratio": 0.633987,
         "pct_numpy": 157.732,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -24031,7 +24031,7 @@
         "numsharp_ms": 0.0148,
         "ratio": 0.655405,
         "pct_numpy": 152.577,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -24199,7 +24199,7 @@
         "numsharp_ms": 0.0038,
         "ratio": 0.289474,
         "pct_numpy": 345.455,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -24262,7 +24262,7 @@
         "numsharp_ms": 0.005,
         "ratio": 0.22,
         "pct_numpy": 454.545,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -24430,7 +24430,7 @@
         "numsharp_ms": 0.0063,
         "ratio": 0.666667,
         "pct_numpy": 150.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -24451,7 +24451,7 @@
         "numsharp_ms": 0.0677,
         "ratio": 0.735598,
         "pct_numpy": 135.944,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -24619,7 +24619,7 @@
         "numsharp_ms": 0.0143,
         "ratio": 0.601399,
         "pct_numpy": 166.279,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -24745,7 +24745,7 @@
         "numsharp_ms": 0.0154,
         "ratio": 0.688312,
         "pct_numpy": 145.283,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -24871,7 +24871,7 @@
         "numsharp_ms": 0.0142,
         "ratio": 0.697183,
         "pct_numpy": 143.434,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -24913,7 +24913,7 @@
         "numsharp_ms": 0.002,
         "ratio": 0.55,
         "pct_numpy": 181.818,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -24997,7 +24997,7 @@
         "numsharp_ms": 0.0138,
         "ratio": 0.724638,
         "pct_numpy": 138.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -25039,7 +25039,7 @@
         "numsharp_ms": 0.0044,
         "ratio": 0.25,
         "pct_numpy": 400.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -25102,7 +25102,7 @@
         "numsharp_ms": 0.0046,
         "ratio": 0.217391,
         "pct_numpy": 460.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -25123,7 +25123,7 @@
         "numsharp_ms": 0.0136,
         "ratio": 0.727941,
         "pct_numpy": 137.374,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -25165,7 +25165,7 @@
         "numsharp_ms": 0.0053,
         "ratio": 0.207547,
         "pct_numpy": 481.818,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -25480,7 +25480,7 @@
         "numsharp_ms": 0.0087,
         "ratio": 0.770115,
         "pct_numpy": 129.851,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -25501,7 +25501,7 @@
         "numsharp_ms": 0.004,
         "ratio": 0.25,
         "pct_numpy": 400.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -25627,7 +25627,7 @@
         "numsharp_ms": 0.0049,
         "ratio": 0.204082,
         "pct_numpy": 490.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -25753,7 +25753,7 @@
         "numsharp_ms": 0.0152,
         "ratio": 0.546053,
         "pct_numpy": 183.133,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -25816,7 +25816,7 @@
         "numsharp_ms": 6.8639,
         "ratio": 0.663763,
         "pct_numpy": 150.656,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -25900,7 +25900,7 @@
         "numsharp_ms": 7.1109,
         "ratio": 0.628683,
         "pct_numpy": 159.063,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -25921,7 +25921,7 @@
         "numsharp_ms": 0.0078,
         "ratio": 0.576923,
         "pct_numpy": 173.333,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -26005,7 +26005,7 @@
         "numsharp_ms": 0.0161,
         "ratio": 0.571429,
         "pct_numpy": 175.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -26068,7 +26068,7 @@
         "numsharp_ms": 7.0775,
         "ratio": 0.6516,
         "pct_numpy": 153.468,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -26110,7 +26110,7 @@
         "numsharp_ms": 7.1635,
         "ratio": 0.643875,
         "pct_numpy": 155.31,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -26131,7 +26131,7 @@
         "numsharp_ms": 0.0087,
         "ratio": 0.54023,
         "pct_numpy": 185.106,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -26278,7 +26278,7 @@
         "numsharp_ms": 3.4142,
         "ratio": 0.695361,
         "pct_numpy": 143.81,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -26320,7 +26320,7 @@
         "numsharp_ms": 3.4587,
         "ratio": 0.689508,
         "pct_numpy": 145.031,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -26404,7 +26404,7 @@
         "numsharp_ms": 3.3874,
         "ratio": 0.69174,
         "pct_numpy": 144.563,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -26446,7 +26446,7 @@
         "numsharp_ms": 0.1102,
         "ratio": 0.243194,
         "pct_numpy": 411.194,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -26488,7 +26488,7 @@
         "numsharp_ms": 3.3509,
         "ratio": 0.676863,
         "pct_numpy": 147.74,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -26614,7 +26614,7 @@
         "numsharp_ms": 4.7925,
         "ratio": 0.258696,
         "pct_numpy": 386.554,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -27265,7 +27265,7 @@
         "numsharp_ms": 0.3131,
         "ratio": 0.21367,
         "pct_numpy": 468.012,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -27454,7 +27454,7 @@
         "numsharp_ms": 0.0261,
         "ratio": 0.222222,
         "pct_numpy": 450.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -27580,7 +27580,7 @@
         "numsharp_ms": 0.4392,
         "ratio": 0.301457,
         "pct_numpy": 331.722,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -27601,7 +27601,7 @@
         "numsharp_ms": 0.0268,
         "ratio": 0.208955,
         "pct_numpy": 478.571,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -27643,7 +27643,7 @@
         "numsharp_ms": 0.0036,
         "ratio": 0.277778,
         "pct_numpy": 360.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -27727,7 +27727,7 @@
         "numsharp_ms": 0.0107,
         "ratio": 0.224299,
         "pct_numpy": 445.833,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -27748,7 +27748,7 @@
         "numsharp_ms": 0.1731,
         "ratio": 0.244945,
         "pct_numpy": 408.255,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -28063,7 +28063,7 @@
         "numsharp_ms": 0.2382,
         "ratio": 0.307305,
         "pct_numpy": 325.41,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -28231,7 +28231,7 @@
         "numsharp_ms": 0.1898,
         "ratio": 0.581138,
         "pct_numpy": 172.076,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -28294,7 +28294,7 @@
         "numsharp_ms": 0.0125,
         "ratio": 0.264,
         "pct_numpy": 378.788,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -28336,7 +28336,7 @@
         "numsharp_ms": 3.1763,
         "ratio": 0.220288,
         "pct_numpy": 453.952,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -28357,7 +28357,7 @@
         "numsharp_ms": 0.3168,
         "ratio": 0.202967,
         "pct_numpy": 492.691,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -28462,7 +28462,7 @@
         "numsharp_ms": 0.007,
         "ratio": 0.3,
         "pct_numpy": 333.333,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -28483,7 +28483,7 @@
         "numsharp_ms": 0.1677,
         "ratio": 0.247466,
         "pct_numpy": 404.096,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -28588,7 +28588,7 @@
         "numsharp_ms": 0.2355,
         "ratio": 0.315924,
         "pct_numpy": 316.532,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -28651,7 +28651,7 @@
         "numsharp_ms": 3.9233,
         "ratio": 0.253715,
         "pct_numpy": 394.143,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -28693,7 +28693,7 @@
         "numsharp_ms": 0.1441,
         "ratio": 0.752949,
         "pct_numpy": 132.811,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -28735,7 +28735,7 @@
         "numsharp_ms": 0.0051,
         "ratio": 0.313725,
         "pct_numpy": 318.75,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -29092,7 +29092,7 @@
         "numsharp_ms": 0.1399,
         "ratio": 0.609006,
         "pct_numpy": 164.202,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -29113,7 +29113,7 @@
         "numsharp_ms": 13.5604,
         "ratio": 0.709721,
         "pct_numpy": 140.9,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -29155,7 +29155,7 @@
         "numsharp_ms": 0.0221,
         "ratio": 0.321267,
         "pct_numpy": 311.268,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -29260,7 +29260,7 @@
         "numsharp_ms": 0.0046,
         "ratio": 0.608696,
         "pct_numpy": 164.286,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -29281,7 +29281,7 @@
         "numsharp_ms": 0.9578,
         "ratio": 0.782731,
         "pct_numpy": 127.758,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -29365,7 +29365,7 @@
         "numsharp_ms": 17.3502,
         "ratio": 0.506259,
         "pct_numpy": 197.527,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -29449,7 +29449,7 @@
         "numsharp_ms": 0.005,
         "ratio": 0.62,
         "pct_numpy": 161.29,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -29554,7 +29554,7 @@
         "numsharp_ms": 14.7234,
         "ratio": 0.586447,
         "pct_numpy": 170.518,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -29680,7 +29680,7 @@
         "numsharp_ms": 0.0386,
         "ratio": 0.305699,
         "pct_numpy": 327.119,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -30709,7 +30709,7 @@
         "numsharp_ms": 0.0023,
         "ratio": 0.608696,
         "pct_numpy": 164.286,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -31717,7 +31717,7 @@
         "numsharp_ms": 0.0048,
         "ratio": 0.625,
         "pct_numpy": 160.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -31738,7 +31738,7 @@
         "numsharp_ms": 0.9993,
         "ratio": 0.761533,
         "pct_numpy": 131.314,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -31822,7 +31822,7 @@
         "numsharp_ms": 13.4484,
         "ratio": 0.650576,
         "pct_numpy": 153.71,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -31864,7 +31864,7 @@
         "numsharp_ms": 0.1361,
         "ratio": 0.20867,
         "pct_numpy": 479.225,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -31885,7 +31885,7 @@
         "numsharp_ms": 32.4967,
         "ratio": 0.506208,
         "pct_numpy": 197.547,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -31906,7 +31906,7 @@
         "numsharp_ms": 0.0051,
         "ratio": 0.627451,
         "pct_numpy": 159.375,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -31927,7 +31927,7 @@
         "numsharp_ms": 0.9707,
         "ratio": 0.783455,
         "pct_numpy": 127.64,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -32011,7 +32011,7 @@
         "numsharp_ms": 14.2823,
         "ratio": 0.634751,
         "pct_numpy": 157.542,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -32179,7 +32179,7 @@
         "numsharp_ms": 0.0582,
         "ratio": 0.206186,
         "pct_numpy": 485.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -32494,7 +32494,7 @@
         "numsharp_ms": 0.0067,
         "ratio": 0.507463,
         "pct_numpy": 197.059,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -32599,7 +32599,7 @@
         "numsharp_ms": 0.1073,
         "ratio": 0.319664,
         "pct_numpy": 312.828,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -32641,7 +32641,7 @@
         "numsharp_ms": 0.0087,
         "ratio": 0.505747,
         "pct_numpy": 197.727,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -32830,7 +32830,7 @@
         "numsharp_ms": 0.0049,
         "ratio": 0.204082,
         "pct_numpy": 490.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -32872,7 +32872,7 @@
         "numsharp_ms": 0.0046,
         "ratio": 0.23913,
         "pct_numpy": 418.182,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -32956,7 +32956,7 @@
         "numsharp_ms": 0.0029,
         "ratio": 0.758621,
         "pct_numpy": 131.818,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -32977,7 +32977,7 @@
         "numsharp_ms": 0.0671,
         "ratio": 0.204173,
         "pct_numpy": 489.781,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -33166,7 +33166,7 @@
         "numsharp_ms": 0.0049,
         "ratio": 0.510204,
         "pct_numpy": 196.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -33691,7 +33691,7 @@
         "numsharp_ms": 0.0053,
         "ratio": 0.320755,
         "pct_numpy": 311.765,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -33733,7 +33733,7 @@
         "numsharp_ms": 0.0081,
         "ratio": 0.641975,
         "pct_numpy": 155.769,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -33754,7 +33754,7 @@
         "numsharp_ms": 0.0636,
         "ratio": 0.261006,
         "pct_numpy": 383.133,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -33796,7 +33796,7 @@
         "numsharp_ms": 10.2505,
         "ratio": 0.753729,
         "pct_numpy": 132.674,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -33838,7 +33838,7 @@
         "numsharp_ms": 0.5989,
         "ratio": 0.684421,
         "pct_numpy": 146.109,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -34048,7 +34048,7 @@
         "numsharp_ms": 0.0133,
         "ratio": 0.631579,
         "pct_numpy": 158.333,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -34069,7 +34069,7 @@
         "numsharp_ms": 0.0668,
         "ratio": 0.305389,
         "pct_numpy": 327.451,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -34153,7 +34153,7 @@
         "numsharp_ms": 0.0107,
         "ratio": 0.308411,
         "pct_numpy": 324.242,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -34216,7 +34216,7 @@
         "numsharp_ms": 0.0087,
         "ratio": 0.678161,
         "pct_numpy": 147.458,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -34279,7 +34279,7 @@
         "numsharp_ms": 0.0075,
         "ratio": 0.32,
         "pct_numpy": 312.5,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -34468,7 +34468,7 @@
         "numsharp_ms": 0.0041,
         "ratio": 0.682927,
         "pct_numpy": 146.429,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -34636,7 +34636,7 @@
         "numsharp_ms": 0.0636,
         "ratio": 0.248428,
         "pct_numpy": 402.532,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -34825,7 +34825,7 @@
         "numsharp_ms": 0.0576,
         "ratio": 0.692708,
         "pct_numpy": 144.361,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -34846,7 +34846,7 @@
         "numsharp_ms": 9.8072,
         "ratio": 0.749816,
         "pct_numpy": 133.366,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -35413,7 +35413,7 @@
         "numsharp_ms": 0.0688,
         "ratio": 0.71657,
         "pct_numpy": 139.554,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -35455,7 +35455,7 @@
         "numsharp_ms": 0.0054,
         "ratio": 0.777778,
         "pct_numpy": 128.571,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -35476,7 +35476,7 @@
         "numsharp_ms": 0.0654,
         "ratio": 0.729358,
         "pct_numpy": 137.107,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -35644,7 +35644,7 @@
         "numsharp_ms": 0.0064,
         "ratio": 0.640625,
         "pct_numpy": 156.098,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -35665,7 +35665,7 @@
         "numsharp_ms": 0.0611,
         "ratio": 0.783961,
         "pct_numpy": 127.557,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -35791,7 +35791,7 @@
         "numsharp_ms": 9.0406,
         "ratio": 0.523173,
         "pct_numpy": 191.141,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -35833,7 +35833,7 @@
         "numsharp_ms": 4.489,
         "ratio": 0.684874,
         "pct_numpy": 146.012,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -36022,7 +36022,7 @@
         "numsharp_ms": 0.0042,
         "ratio": 0.761905,
         "pct_numpy": 131.25,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -36043,7 +36043,7 @@
         "numsharp_ms": 0.0045,
         "ratio": 0.711111,
         "pct_numpy": 140.625,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -36442,7 +36442,7 @@
         "numsharp_ms": 0.0592,
         "ratio": 0.263514,
         "pct_numpy": 379.487,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -36484,7 +36484,7 @@
         "numsharp_ms": 0.0584,
         "ratio": 0.297945,
         "pct_numpy": 335.632,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -36505,7 +36505,7 @@
         "numsharp_ms": 0.0095,
         "ratio": 0.505263,
         "pct_numpy": 197.917,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -36589,7 +36589,7 @@
         "numsharp_ms": 0.009,
         "ratio": 0.566667,
         "pct_numpy": 176.471,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -36820,7 +36820,7 @@
         "numsharp_ms": 0.2425,
         "ratio": 0.701031,
         "pct_numpy": 142.647,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -36841,7 +36841,7 @@
         "numsharp_ms": 0.0034,
         "ratio": 0.676471,
         "pct_numpy": 147.826,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -36862,7 +36862,7 @@
         "numsharp_ms": 0.2264,
         "ratio": 0.738516,
         "pct_numpy": 135.407,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -36988,7 +36988,7 @@
         "numsharp_ms": 0.0132,
         "ratio": 0.69697,
         "pct_numpy": 143.478,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -37177,7 +37177,7 @@
         "numsharp_ms": 0.0028,
         "ratio": 0.785714,
         "pct_numpy": 127.273,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -37345,7 +37345,7 @@
         "numsharp_ms": 0.004,
         "ratio": 0.625,
         "pct_numpy": 160.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -37492,7 +37492,7 @@
         "numsharp_ms": 0.0597,
         "ratio": 0.256281,
         "pct_numpy": 390.196,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -37513,7 +37513,7 @@
         "numsharp_ms": 0.0131,
         "ratio": 0.519084,
         "pct_numpy": 192.647,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -37534,7 +37534,7 @@
         "numsharp_ms": 3.162,
         "ratio": 0.664295,
         "pct_numpy": 150.536,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -37576,7 +37576,7 @@
         "numsharp_ms": 0.0339,
         "ratio": 0.277286,
         "pct_numpy": 360.638,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -37660,7 +37660,7 @@
         "numsharp_ms": 2.1625,
         "ratio": 0.227699,
         "pct_numpy": 439.175,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -37765,7 +37765,7 @@
         "numsharp_ms": 0.0014,
         "ratio": 0.785714,
         "pct_numpy": 127.273,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -37786,7 +37786,7 @@
         "numsharp_ms": 0.0799,
         "ratio": 0.673342,
         "pct_numpy": 148.513,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -37891,7 +37891,7 @@
         "numsharp_ms": 0.2826,
         "ratio": 0.684713,
         "pct_numpy": 146.047,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -37954,7 +37954,7 @@
         "numsharp_ms": 3.5529,
         "ratio": 0.23561,
         "pct_numpy": 424.43,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38143,7 +38143,7 @@
         "numsharp_ms": 0.0983,
         "ratio": 0.245168,
         "pct_numpy": 407.884,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38164,7 +38164,7 @@
         "numsharp_ms": 9.6003,
         "ratio": 0.238315,
         "pct_numpy": 419.612,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38311,7 +38311,7 @@
         "numsharp_ms": 0.0176,
         "ratio": 0.511364,
         "pct_numpy": 195.556,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38332,7 +38332,7 @@
         "numsharp_ms": 1.4844,
         "ratio": 0.570668,
         "pct_numpy": 175.233,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38353,7 +38353,7 @@
         "numsharp_ms": 0.0641,
         "ratio": 0.74415,
         "pct_numpy": 134.382,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38374,7 +38374,7 @@
         "numsharp_ms": 5.3942,
         "ratio": 0.743243,
         "pct_numpy": 134.546,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38395,7 +38395,7 @@
         "numsharp_ms": 0.0303,
         "ratio": 0.686469,
         "pct_numpy": 145.673,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38479,7 +38479,7 @@
         "numsharp_ms": 0.0184,
         "ratio": 0.788043,
         "pct_numpy": 126.897,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38500,7 +38500,7 @@
         "numsharp_ms": 1.7164,
         "ratio": 0.799639,
         "pct_numpy": 125.056,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38521,7 +38521,7 @@
         "numsharp_ms": 0.1135,
         "ratio": 0.564758,
         "pct_numpy": 177.067,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38542,7 +38542,7 @@
         "numsharp_ms": 10.7262,
         "ratio": 0.606785,
         "pct_numpy": 164.803,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38563,7 +38563,7 @@
         "numsharp_ms": 0.0202,
         "ratio": 0.717822,
         "pct_numpy": 139.31,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38584,7 +38584,7 @@
         "numsharp_ms": 1.758,
         "ratio": 0.75603,
         "pct_numpy": 132.27,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38605,7 +38605,7 @@
         "numsharp_ms": 0.0158,
         "ratio": 0.601266,
         "pct_numpy": 166.316,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38626,7 +38626,7 @@
         "numsharp_ms": 1.2127,
         "ratio": 0.710316,
         "pct_numpy": 140.782,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38647,7 +38647,7 @@
         "numsharp_ms": 0.0246,
         "ratio": 0.747967,
         "pct_numpy": 133.696,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38731,7 +38731,7 @@
         "numsharp_ms": 0.1437,
         "ratio": 0.508699,
         "pct_numpy": 196.58,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38752,7 +38752,7 @@
         "numsharp_ms": 14.4138,
         "ratio": 0.514653,
         "pct_numpy": 194.306,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38941,7 +38941,7 @@
         "numsharp_ms": 0.0161,
         "ratio": 0.720497,
         "pct_numpy": 138.793,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -38962,7 +38962,7 @@
         "numsharp_ms": 1.5253,
         "ratio": 0.709762,
         "pct_numpy": 140.892,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39004,7 +39004,7 @@
         "numsharp_ms": 1.8742,
         "ratio": 0.785722,
         "pct_numpy": 127.271,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39214,7 +39214,7 @@
         "numsharp_ms": 0.6324,
         "ratio": 0.720746,
         "pct_numpy": 138.745,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39235,7 +39235,7 @@
         "numsharp_ms": 0.0152,
         "ratio": 0.710526,
         "pct_numpy": 140.741,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39382,7 +39382,7 @@
         "numsharp_ms": 1.3646,
         "ratio": 0.779496,
         "pct_numpy": 128.288,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39487,7 +39487,7 @@
         "numsharp_ms": 0.013,
         "ratio": 0.669231,
         "pct_numpy": 149.425,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39508,7 +39508,7 @@
         "numsharp_ms": 1.3616,
         "ratio": 0.642626,
         "pct_numpy": 155.611,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39571,7 +39571,7 @@
         "numsharp_ms": 0.0149,
         "ratio": 0.718121,
         "pct_numpy": 139.252,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39592,7 +39592,7 @@
         "numsharp_ms": 1.4634,
         "ratio": 0.711015,
         "pct_numpy": 140.644,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39676,7 +39676,7 @@
         "numsharp_ms": 1.1432,
         "ratio": 0.761634,
         "pct_numpy": 131.297,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39697,7 +39697,7 @@
         "numsharp_ms": 0.0079,
         "ratio": 0.670886,
         "pct_numpy": 149.057,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39718,7 +39718,7 @@
         "numsharp_ms": 0.7641,
         "ratio": 0.503076,
         "pct_numpy": 198.777,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39781,7 +39781,7 @@
         "numsharp_ms": 0.0325,
         "ratio": 0.763077,
         "pct_numpy": 131.048,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39802,7 +39802,7 @@
         "numsharp_ms": 3.6366,
         "ratio": 0.783919,
         "pct_numpy": 127.564,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39865,7 +39865,7 @@
         "numsharp_ms": 0.0493,
         "ratio": 0.758621,
         "pct_numpy": 131.818,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -39886,7 +39886,7 @@
         "numsharp_ms": 4.9276,
         "ratio": 0.72861,
         "pct_numpy": 137.248,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -40054,7 +40054,7 @@
         "numsharp_ms": 0.009,
         "ratio": 0.577778,
         "pct_numpy": 173.077,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -40075,7 +40075,7 @@
         "numsharp_ms": 2.2157,
         "ratio": 0.703164,
         "pct_numpy": 142.214,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -40117,7 +40117,7 @@
         "numsharp_ms": 0.0175,
         "ratio": 0.531429,
         "pct_numpy": 188.172,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -40264,7 +40264,7 @@
         "numsharp_ms": 4.6402,
         "ratio": 0.312336,
         "pct_numpy": 320.168,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -40306,7 +40306,7 @@
         "numsharp_ms": 0.0289,
         "ratio": 0.287197,
         "pct_numpy": 348.193,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -40390,7 +40390,7 @@
         "numsharp_ms": 0.2396,
         "ratio": 0.611853,
         "pct_numpy": 163.438,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -40495,7 +40495,7 @@
         "numsharp_ms": 0.0051,
         "ratio": 0.686275,
         "pct_numpy": 145.714,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -40516,7 +40516,7 @@
         "numsharp_ms": 4.1621,
         "ratio": 0.263353,
         "pct_numpy": 379.719,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -40558,7 +40558,7 @@
         "numsharp_ms": 0.0379,
         "ratio": 0.30343,
         "pct_numpy": 329.565,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -40642,7 +40642,7 @@
         "numsharp_ms": 0.2466,
         "ratio": 0.520681,
         "pct_numpy": 192.056,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -41272,7 +41272,7 @@
         "numsharp_ms": 1.6262,
         "ratio": 0.638667,
         "pct_numpy": 156.576,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -41461,7 +41461,7 @@
         "numsharp_ms": 16.5594,
         "ratio": 0.575015,
         "pct_numpy": 173.909,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -41503,7 +41503,7 @@
         "numsharp_ms": 0.167,
         "ratio": 0.636527,
         "pct_numpy": 157.103,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -41524,7 +41524,7 @@
         "numsharp_ms": 16.3639,
         "ratio": 0.613472,
         "pct_numpy": 163.007,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -41650,7 +41650,7 @@
         "numsharp_ms": 7.7117,
         "ratio": 0.682975,
         "pct_numpy": 146.418,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -43456,7 +43456,7 @@
         "numsharp_ms": 0.0091,
         "ratio": 0.648352,
         "pct_numpy": 154.237,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -43519,7 +43519,7 @@
         "numsharp_ms": 0.0176,
         "ratio": 0.568182,
         "pct_numpy": 176.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -43666,7 +43666,7 @@
         "numsharp_ms": 4.2928,
         "ratio": 0.303042,
         "pct_numpy": 329.987,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -43792,7 +43792,7 @@
         "numsharp_ms": 0.2397,
         "ratio": 0.626617,
         "pct_numpy": 159.587,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -43918,7 +43918,7 @@
         "numsharp_ms": 3.6563,
         "ratio": 0.282253,
         "pct_numpy": 354.293,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -43960,7 +43960,7 @@
         "numsharp_ms": 0.0392,
         "ratio": 0.306122,
         "pct_numpy": 326.667,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -44044,7 +44044,7 @@
         "numsharp_ms": 0.2409,
         "ratio": 0.550851,
         "pct_numpy": 181.537,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -44086,7 +44086,7 @@
         "numsharp_ms": 0.1948,
         "ratio": 0.778234,
         "pct_numpy": 128.496,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -44149,7 +44149,7 @@
         "numsharp_ms": 0.6672,
         "ratio": 0.749251,
         "pct_numpy": 133.467,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -44170,7 +44170,7 @@
         "numsharp_ms": 84.4157,
         "ratio": 0.582257,
         "pct_numpy": 171.746,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -44275,7 +44275,7 @@
         "numsharp_ms": 0.0561,
         "ratio": 0.272727,
         "pct_numpy": 366.667,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -44296,7 +44296,7 @@
         "numsharp_ms": 5.5064,
         "ratio": 0.751743,
         "pct_numpy": 133.024,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -44359,7 +44359,7 @@
         "numsharp_ms": 1.862,
         "ratio": 0.282868,
         "pct_numpy": 353.522,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -44548,7 +44548,7 @@
         "numsharp_ms": 0.3481,
         "ratio": 0.575984,
         "pct_numpy": 173.616,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -44611,7 +44611,7 @@
         "numsharp_ms": 1.5303,
         "ratio": 0.3251,
         "pct_numpy": 307.598,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -44653,7 +44653,7 @@
         "numsharp_ms": 0.0112,
         "ratio": 0.767857,
         "pct_numpy": 130.233,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -44800,7 +44800,7 @@
         "numsharp_ms": 0.3421,
         "ratio": 0.593686,
         "pct_numpy": 168.439,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -45682,7 +45682,7 @@
         "numsharp_ms": 78.1015,
         "ratio": 0.595589,
         "pct_numpy": 167.901,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46354,7 +46354,7 @@
         "numsharp_ms": 0.1482,
         "ratio": 0.778003,
         "pct_numpy": 128.534,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46375,7 +46375,7 @@
         "numsharp_ms": 19.8474,
         "ratio": 0.705251,
         "pct_numpy": 141.793,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46501,7 +46501,7 @@
         "numsharp_ms": 6.5028,
         "ratio": 0.312404,
         "pct_numpy": 320.098,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46522,7 +46522,7 @@
         "numsharp_ms": 0.0013,
         "ratio": 0.769231,
         "pct_numpy": 130.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46543,7 +46543,7 @@
         "numsharp_ms": 0.0599,
         "ratio": 0.270451,
         "pct_numpy": 369.753,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46585,7 +46585,7 @@
         "numsharp_ms": 0.0013,
         "ratio": 0.769231,
         "pct_numpy": 130.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46627,7 +46627,7 @@
         "numsharp_ms": 0.8026,
         "ratio": 0.530152,
         "pct_numpy": 188.625,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46690,7 +46690,7 @@
         "numsharp_ms": 3.6697,
         "ratio": 0.545876,
         "pct_numpy": 183.192,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46732,7 +46732,7 @@
         "numsharp_ms": 0.0549,
         "ratio": 0.262295,
         "pct_numpy": 381.25,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46753,7 +46753,7 @@
         "numsharp_ms": 9.1638,
         "ratio": 0.517471,
         "pct_numpy": 193.248,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46774,7 +46774,7 @@
         "numsharp_ms": 0.0013,
         "ratio": 0.769231,
         "pct_numpy": 130.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46816,7 +46816,7 @@
         "numsharp_ms": 0.2514,
         "ratio": 0.623309,
         "pct_numpy": 160.434,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46837,7 +46837,7 @@
         "numsharp_ms": 0.0013,
         "ratio": 0.769231,
         "pct_numpy": 130.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46879,7 +46879,7 @@
         "numsharp_ms": 0.6969,
         "ratio": 0.764385,
         "pct_numpy": 130.824,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46963,7 +46963,7 @@
         "numsharp_ms": 0.0014,
         "ratio": 0.714286,
         "pct_numpy": 140.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -46984,7 +46984,7 @@
         "numsharp_ms": 0.0627,
         "ratio": 0.274322,
         "pct_numpy": 364.535,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -47257,7 +47257,7 @@
         "numsharp_ms": 6.6478,
         "ratio": 0.308974,
         "pct_numpy": 323.651,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -47278,7 +47278,7 @@
         "numsharp_ms": 0.0013,
         "ratio": 0.769231,
         "pct_numpy": 130.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -47299,7 +47299,7 @@
         "numsharp_ms": 0.059,
         "ratio": 0.276271,
         "pct_numpy": 361.963,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -47383,7 +47383,7 @@
         "numsharp_ms": 0.7009,
         "ratio": 0.650877,
         "pct_numpy": 153.639,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -47488,7 +47488,7 @@
         "numsharp_ms": 0.0535,
         "ratio": 0.272897,
         "pct_numpy": 366.438,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -47572,7 +47572,7 @@
         "numsharp_ms": 0.2529,
         "ratio": 0.643733,
         "pct_numpy": 155.344,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -47719,7 +47719,7 @@
         "numsharp_ms": 0.0013,
         "ratio": 0.769231,
         "pct_numpy": 130.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -47740,7 +47740,7 @@
         "numsharp_ms": 0.0617,
         "ratio": 0.28363,
         "pct_numpy": 352.571,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -47761,7 +47761,7 @@
         "numsharp_ms": 9.4625,
         "ratio": 0.500999,
         "pct_numpy": 199.601,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -47845,7 +47845,7 @@
         "numsharp_ms": 0.0099,
         "ratio": 0.606061,
         "pct_numpy": 165.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -48097,7 +48097,7 @@
         "numsharp_ms": 0.0098,
         "ratio": 0.653061,
         "pct_numpy": 153.125,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -48139,7 +48139,7 @@
         "numsharp_ms": 94.8567,
         "ratio": 0.52147,
         "pct_numpy": 191.766,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -48685,7 +48685,7 @@
         "numsharp_ms": 0.1352,
         "ratio": 0.227071,
         "pct_numpy": 440.391,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -48937,7 +48937,7 @@
         "numsharp_ms": 0.0092,
         "ratio": 0.630435,
         "pct_numpy": 158.621,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -49000,7 +49000,7 @@
         "numsharp_ms": 0.0175,
         "ratio": 0.571429,
         "pct_numpy": 175.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -49147,7 +49147,7 @@
         "numsharp_ms": 3.9465,
         "ratio": 0.327885,
         "pct_numpy": 304.985,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -49189,7 +49189,7 @@
         "numsharp_ms": 0.018,
         "ratio": 0.5,
         "pct_numpy": 200.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -49210,7 +49210,7 @@
         "numsharp_ms": 9.1844,
         "ratio": 0.517867,
         "pct_numpy": 193.1,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -49273,7 +49273,7 @@
         "numsharp_ms": 0.2425,
         "ratio": 0.572371,
         "pct_numpy": 174.712,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -49336,7 +49336,7 @@
         "numsharp_ms": 0.6303,
         "ratio": 0.500555,
         "pct_numpy": 199.778,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -49399,7 +49399,7 @@
         "numsharp_ms": 3.7798,
         "ratio": 0.287872,
         "pct_numpy": 347.376,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -49441,7 +49441,7 @@
         "numsharp_ms": 0.0385,
         "ratio": 0.322078,
         "pct_numpy": 310.484,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -49588,7 +49588,7 @@
         "numsharp_ms": 16.2303,
         "ratio": 0.566588,
         "pct_numpy": 176.495,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -49630,7 +49630,7 @@
         "numsharp_ms": 0.1665,
         "ratio": 0.627628,
         "pct_numpy": 159.33,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -49651,7 +49651,7 @@
         "numsharp_ms": 16.3238,
         "ratio": 0.610244,
         "pct_numpy": 163.869,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -49777,7 +49777,7 @@
         "numsharp_ms": 8.0379,
         "ratio": 0.6464,
         "pct_numpy": 154.703,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -50386,7 +50386,7 @@
         "numsharp_ms": 0.2891,
         "ratio": 0.265652,
         "pct_numpy": 376.432,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -50407,7 +50407,7 @@
         "numsharp_ms": 27.4741,
         "ratio": 0.266855,
         "pct_numpy": 374.735,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -50953,7 +50953,7 @@
         "numsharp_ms": 0.0924,
         "ratio": 0.516234,
         "pct_numpy": 193.711,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -51079,7 +51079,7 @@
         "numsharp_ms": 0.0538,
         "ratio": 0.622677,
         "pct_numpy": 160.597,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -51142,7 +51142,7 @@
         "numsharp_ms": 0.2809,
         "ratio": 0.298327,
         "pct_numpy": 335.203,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -51163,7 +51163,7 @@
         "numsharp_ms": 26.2373,
         "ratio": 0.303518,
         "pct_numpy": 329.469,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -51289,7 +51289,7 @@
         "numsharp_ms": 8.856,
         "ratio": 0.586574,
         "pct_numpy": 170.481,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -51457,7 +51457,7 @@
         "numsharp_ms": 0.0606,
         "ratio": 0.653465,
         "pct_numpy": 153.03,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -51709,7 +51709,7 @@
         "numsharp_ms": 0.0874,
         "ratio": 0.604119,
         "pct_numpy": 165.53,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -52108,7 +52108,7 @@
         "numsharp_ms": 0.4611,
         "ratio": 0.664932,
         "pct_numpy": 150.391,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -52171,7 +52171,7 @@
         "numsharp_ms": 1.9056,
         "ratio": 0.633081,
         "pct_numpy": 157.958,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -52213,7 +52213,7 @@
         "numsharp_ms": 0.0173,
         "ratio": 0.549133,
         "pct_numpy": 182.105,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -52423,7 +52423,7 @@
         "numsharp_ms": 1.7844,
         "ratio": 0.589162,
         "pct_numpy": 169.733,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -52486,7 +52486,7 @@
         "numsharp_ms": 4.7782,
         "ratio": 0.789209,
         "pct_numpy": 126.709,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -52654,7 +52654,7 @@
         "numsharp_ms": 0.119,
         "ratio": 0.237815,
         "pct_numpy": 420.495,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -52843,7 +52843,7 @@
         "numsharp_ms": 0.118,
         "ratio": 0.24322,
         "pct_numpy": 411.15,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -53032,7 +53032,7 @@
         "numsharp_ms": 0.0289,
         "ratio": 0.262976,
         "pct_numpy": 380.263,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -53347,7 +53347,7 @@
         "numsharp_ms": 1.2997,
         "ratio": 0.740556,
         "pct_numpy": 135.034,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -53473,7 +53473,7 @@
         "numsharp_ms": 0.8777,
         "ratio": 0.552695,
         "pct_numpy": 180.932,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -53599,7 +53599,7 @@
         "numsharp_ms": 0.0296,
         "ratio": 0.246622,
         "pct_numpy": 405.479,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -53788,7 +53788,7 @@
         "numsharp_ms": 0.9976,
         "ratio": 0.712711,
         "pct_numpy": 140.309,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -53872,7 +53872,7 @@
         "numsharp_ms": 94.0169,
         "ratio": 0.688229,
         "pct_numpy": 145.3,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -54166,7 +54166,7 @@
         "numsharp_ms": 0.9838,
         "ratio": 0.730026,
         "pct_numpy": 136.981,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -54250,7 +54250,7 @@
         "numsharp_ms": 96.9676,
         "ratio": 0.66182,
         "pct_numpy": 151.098,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -55783,7 +55783,7 @@
         "numsharp_ms": 0.0055,
         "ratio": 0.309091,
         "pct_numpy": 323.529,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -56371,7 +56371,7 @@
         "numsharp_ms": 0.0263,
         "ratio": 0.593156,
         "pct_numpy": 168.59,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -56581,7 +56581,7 @@
         "numsharp_ms": 11.6976,
         "ratio": 0.317997,
         "pct_numpy": 314.469,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -56770,7 +56770,7 @@
         "numsharp_ms": 9.497,
         "ratio": 0.56382,
         "pct_numpy": 177.362,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -57022,7 +57022,7 @@
         "numsharp_ms": 10.4738,
         "ratio": 0.509739,
         "pct_numpy": 196.179,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -57211,7 +57211,7 @@
         "numsharp_ms": 27.0763,
         "ratio": 0.711567,
         "pct_numpy": 140.535,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -57274,7 +57274,7 @@
         "numsharp_ms": 4.8726,
         "ratio": 0.649592,
         "pct_numpy": 153.943,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -57337,7 +57337,7 @@
         "numsharp_ms": 9.6967,
         "ratio": 0.566523,
         "pct_numpy": 176.515,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -57715,7 +57715,7 @@
         "numsharp_ms": 5.7427,
         "ratio": 0.70735,
         "pct_numpy": 141.373,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -57778,7 +57778,7 @@
         "numsharp_ms": 9.2382,
         "ratio": 0.507902,
         "pct_numpy": 196.888,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -58135,7 +58135,7 @@
         "numsharp_ms": 0.0617,
         "ratio": 0.635332,
         "pct_numpy": 157.398,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -58240,7 +58240,7 @@
         "numsharp_ms": 0.0091,
         "ratio": 0.648352,
         "pct_numpy": 154.237,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -58576,7 +58576,7 @@
         "numsharp_ms": 0.0036,
         "ratio": 0.611111,
         "pct_numpy": 163.636,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -58639,7 +58639,7 @@
         "numsharp_ms": 0.1212,
         "ratio": 0.617987,
         "pct_numpy": 161.816,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -58723,7 +58723,7 @@
         "numsharp_ms": 0.0977,
         "ratio": 0.620266,
         "pct_numpy": 161.221,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -59122,7 +59122,7 @@
         "numsharp_ms": 0.0047,
         "ratio": 0.234043,
         "pct_numpy": 427.273,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -59605,7 +59605,7 @@
         "numsharp_ms": 0.009,
         "ratio": 0.511111,
         "pct_numpy": 195.652,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -59689,7 +59689,7 @@
         "numsharp_ms": 0.0134,
         "ratio": 0.253731,
         "pct_numpy": 394.118,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -59731,7 +59731,7 @@
         "numsharp_ms": 0.0116,
         "ratio": 0.327586,
         "pct_numpy": 305.263,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -59857,7 +59857,7 @@
         "numsharp_ms": 2.183,
         "ratio": 0.652771,
         "pct_numpy": 153.193,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -59941,7 +59941,7 @@
         "numsharp_ms": 265.7193,
         "ratio": 0.780895,
         "pct_numpy": 128.058,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -59962,7 +59962,7 @@
         "numsharp_ms": 0.025,
         "ratio": 0.528,
         "pct_numpy": 189.394,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -59983,7 +59983,7 @@
         "numsharp_ms": 1.821,
         "ratio": 0.262548,
         "pct_numpy": 380.883,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60004,7 +60004,7 @@
         "numsharp_ms": 504.5494,
         "ratio": 0.650749,
         "pct_numpy": 153.669,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60109,7 +60109,7 @@
         "numsharp_ms": 0.0044,
         "ratio": 0.75,
         "pct_numpy": 133.333,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60403,7 +60403,7 @@
         "numsharp_ms": 0.0562,
         "ratio": 0.729537,
         "pct_numpy": 137.073,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60445,7 +60445,7 @@
         "numsharp_ms": 0.0548,
         "ratio": 0.762774,
         "pct_numpy": 131.1,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60529,7 +60529,7 @@
         "numsharp_ms": 0.0083,
         "ratio": 0.325301,
         "pct_numpy": 307.407,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60571,7 +60571,7 @@
         "numsharp_ms": 37.8406,
         "ratio": 0.696686,
         "pct_numpy": 143.537,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60592,7 +60592,7 @@
         "numsharp_ms": 0.0045,
         "ratio": 0.622222,
         "pct_numpy": 160.714,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60634,7 +60634,7 @@
         "numsharp_ms": 35.4112,
         "ratio": 0.784136,
         "pct_numpy": 127.529,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60655,7 +60655,7 @@
         "numsharp_ms": 0.0056,
         "ratio": 0.303571,
         "pct_numpy": 329.412,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60781,7 +60781,7 @@
         "numsharp_ms": 0.0108,
         "ratio": 0.231481,
         "pct_numpy": 432.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60907,7 +60907,7 @@
         "numsharp_ms": 0.0108,
         "ratio": 0.212963,
         "pct_numpy": 469.565,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60949,7 +60949,7 @@
         "numsharp_ms": 0.0111,
         "ratio": 0.720721,
         "pct_numpy": 138.75,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60970,7 +60970,7 @@
         "numsharp_ms": 2.7686,
         "ratio": 0.725421,
         "pct_numpy": 137.851,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -60991,7 +60991,7 @@
         "numsharp_ms": 356.6051,
         "ratio": 0.710397,
         "pct_numpy": 140.766,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -61012,7 +61012,7 @@
         "numsharp_ms": 0.011,
         "ratio": 0.690909,
         "pct_numpy": 144.737,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -61033,7 +61033,7 @@
         "numsharp_ms": 2.7222,
         "ratio": 0.760304,
         "pct_numpy": 131.526,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -61054,7 +61054,7 @@
         "numsharp_ms": 347.4465,
         "ratio": 0.709942,
         "pct_numpy": 140.857,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -61243,7 +61243,7 @@
         "numsharp_ms": 0.0151,
         "ratio": 0.251656,
         "pct_numpy": 397.368,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -61285,7 +61285,7 @@
         "numsharp_ms": 0.0119,
         "ratio": 0.201681,
         "pct_numpy": 495.833,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -61327,7 +61327,7 @@
         "numsharp_ms": 0.027,
         "ratio": 0.274074,
         "pct_numpy": 364.865,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -61348,7 +61348,7 @@
         "numsharp_ms": 1.1565,
         "ratio": 0.236662,
         "pct_numpy": 422.543,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -61369,7 +61369,7 @@
         "numsharp_ms": 0.015,
         "ratio": 0.2,
         "pct_numpy": 500.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -61411,7 +61411,7 @@
         "numsharp_ms": 0.0206,
         "ratio": 0.213592,
         "pct_numpy": 468.182,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -61432,7 +61432,7 @@
         "numsharp_ms": 1.451,
         "ratio": 0.523294,
         "pct_numpy": 191.097,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -61474,7 +61474,7 @@
         "numsharp_ms": 1.149,
         "ratio": 0.328024,
         "pct_numpy": 304.855,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -61726,7 +61726,7 @@
         "numsharp_ms": 0.0053,
         "ratio": 0.283019,
         "pct_numpy": 353.333,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -63196,7 +63196,7 @@
         "numsharp_ms": 0.0051,
         "ratio": 0.627451,
         "pct_numpy": 159.375,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -63217,7 +63217,7 @@
         "numsharp_ms": 0.4761,
         "ratio": 0.582021,
         "pct_numpy": 171.815,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -63238,7 +63238,7 @@
         "numsharp_ms": 48.9641,
         "ratio": 0.657461,
         "pct_numpy": 152.1,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -63280,7 +63280,7 @@
         "numsharp_ms": 0.0291,
         "ratio": 0.257732,
         "pct_numpy": 388.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -63343,7 +63343,7 @@
         "numsharp_ms": 0.0651,
         "ratio": 0.201229,
         "pct_numpy": 496.947,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -63406,7 +63406,7 @@
         "numsharp_ms": 1.4264,
         "ratio": 0.622967,
         "pct_numpy": 160.522,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -63427,7 +63427,7 @@
         "numsharp_ms": 133.336,
         "ratio": 0.737457,
         "pct_numpy": 135.601,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -63469,7 +63469,7 @@
         "numsharp_ms": 0.0565,
         "ratio": 0.309735,
         "pct_numpy": 322.857,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -63847,7 +63847,7 @@
         "numsharp_ms": 0.0267,
         "ratio": 0.258427,
         "pct_numpy": 386.957,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -63952,7 +63952,7 @@
         "numsharp_ms": 0.011,
         "ratio": 0.790909,
         "pct_numpy": 126.437,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -63973,7 +63973,7 @@
         "numsharp_ms": 1.0623,
         "ratio": 0.786689,
         "pct_numpy": 127.115,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -64267,7 +64267,7 @@
         "numsharp_ms": 0.0085,
         "ratio": 0.517647,
         "pct_numpy": 193.182,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -64393,7 +64393,7 @@
         "numsharp_ms": 0.006,
         "ratio": 0.583333,
         "pct_numpy": 171.429,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -64456,7 +64456,7 @@
         "numsharp_ms": 0.0066,
         "ratio": 0.606061,
         "pct_numpy": 165.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -64519,7 +64519,7 @@
         "numsharp_ms": 0.011,
         "ratio": 0.790909,
         "pct_numpy": 126.437,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -64540,7 +64540,7 @@
         "numsharp_ms": 1.0638,
         "ratio": 0.786614,
         "pct_numpy": 127.127,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -64771,7 +64771,7 @@
         "numsharp_ms": 0.0067,
         "ratio": 0.731343,
         "pct_numpy": 136.735,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -64834,7 +64834,7 @@
         "numsharp_ms": 0.0067,
         "ratio": 0.58209,
         "pct_numpy": 171.795,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -65149,7 +65149,7 @@
         "numsharp_ms": 0.0065,
         "ratio": 0.630769,
         "pct_numpy": 158.537,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -65212,7 +65212,7 @@
         "numsharp_ms": 0.0059,
         "ratio": 0.661017,
         "pct_numpy": 151.282,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -65338,7 +65338,7 @@
         "numsharp_ms": 0.0174,
         "ratio": 0.252874,
         "pct_numpy": 395.455,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -65359,7 +65359,7 @@
         "numsharp_ms": 2.2456,
         "ratio": 0.596945,
         "pct_numpy": 167.52,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -65716,7 +65716,7 @@
         "numsharp_ms": 0.0015,
         "ratio": 0.733333,
         "pct_numpy": 136.364,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -65737,7 +65737,7 @@
         "numsharp_ms": 0.0329,
         "ratio": 0.203647,
         "pct_numpy": 491.045,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -65779,7 +65779,7 @@
         "numsharp_ms": 0.0015,
         "ratio": 0.8,
         "pct_numpy": 125.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -66871,7 +66871,7 @@
         "numsharp_ms": 0.0322,
         "ratio": 0.596273,
         "pct_numpy": 167.708,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67060,7 +67060,7 @@
         "numsharp_ms": 0.0314,
         "ratio": 0.605096,
         "pct_numpy": 165.263,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67228,7 +67228,7 @@
         "numsharp_ms": 0.0021,
         "ratio": 0.571429,
         "pct_numpy": 175.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67249,7 +67249,7 @@
         "numsharp_ms": 0.2851,
         "ratio": 0.254647,
         "pct_numpy": 392.7,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67291,7 +67291,7 @@
         "numsharp_ms": 0.0069,
         "ratio": 0.753623,
         "pct_numpy": 132.692,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67312,7 +67312,7 @@
         "numsharp_ms": 1.2828,
         "ratio": 0.624649,
         "pct_numpy": 160.09,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67354,7 +67354,7 @@
         "numsharp_ms": 0.0117,
         "ratio": 0.692308,
         "pct_numpy": 144.444,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67375,7 +67375,7 @@
         "numsharp_ms": 1.1512,
         "ratio": 0.786049,
         "pct_numpy": 127.218,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67417,7 +67417,7 @@
         "numsharp_ms": 0.0059,
         "ratio": 0.711864,
         "pct_numpy": 140.476,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67480,7 +67480,7 @@
         "numsharp_ms": 0.0054,
         "ratio": 0.722222,
         "pct_numpy": 138.462,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67858,7 +67858,7 @@
         "numsharp_ms": 0.0017,
         "ratio": 0.764706,
         "pct_numpy": 130.769,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67921,7 +67921,7 @@
         "numsharp_ms": 0.0064,
         "ratio": 0.734375,
         "pct_numpy": 136.17,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67942,7 +67942,7 @@
         "numsharp_ms": 0.5945,
         "ratio": 0.693692,
         "pct_numpy": 144.156,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67963,7 +67963,7 @@
         "numsharp_ms": 58.2744,
         "ratio": 0.747483,
         "pct_numpy": 133.782,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -67984,7 +67984,7 @@
         "numsharp_ms": 0.0024,
         "ratio": 0.541667,
         "pct_numpy": 184.615,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68005,7 +68005,7 @@
         "numsharp_ms": 0.0736,
         "ratio": 0.790761,
         "pct_numpy": 126.46,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68047,7 +68047,7 @@
         "numsharp_ms": 0.0056,
         "ratio": 0.535714,
         "pct_numpy": 186.667,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68173,7 +68173,7 @@
         "numsharp_ms": 0.0097,
         "ratio": 0.216495,
         "pct_numpy": 461.905,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68215,7 +68215,7 @@
         "numsharp_ms": 87.4687,
         "ratio": 0.573383,
         "pct_numpy": 174.403,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68236,7 +68236,7 @@
         "numsharp_ms": 0.0095,
         "ratio": 0.252632,
         "pct_numpy": 395.833,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68257,7 +68257,7 @@
         "numsharp_ms": 0.8473,
         "ratio": 0.302608,
         "pct_numpy": 330.46,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68278,7 +68278,7 @@
         "numsharp_ms": 91.5751,
         "ratio": 0.72378,
         "pct_numpy": 138.164,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68299,7 +68299,7 @@
         "numsharp_ms": 0.0097,
         "ratio": 0.56701,
         "pct_numpy": 176.364,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68320,7 +68320,7 @@
         "numsharp_ms": 0.862,
         "ratio": 0.589327,
         "pct_numpy": 169.685,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68341,7 +68341,7 @@
         "numsharp_ms": 85.7992,
         "ratio": 0.612085,
         "pct_numpy": 163.376,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68362,7 +68362,7 @@
         "numsharp_ms": 0.0042,
         "ratio": 0.690476,
         "pct_numpy": 144.828,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68425,7 +68425,7 @@
         "numsharp_ms": 0.0064,
         "ratio": 0.59375,
         "pct_numpy": 168.421,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68572,7 +68572,7 @@
         "numsharp_ms": 0.0313,
         "ratio": 0.207668,
         "pct_numpy": 481.538,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68866,7 +68866,7 @@
         "numsharp_ms": 0.0064,
         "ratio": 0.765625,
         "pct_numpy": 130.612,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68887,7 +68887,7 @@
         "numsharp_ms": 0.6657,
         "ratio": 0.629262,
         "pct_numpy": 158.916,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68908,7 +68908,7 @@
         "numsharp_ms": 62.1328,
         "ratio": 0.738681,
         "pct_numpy": 135.376,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -68929,7 +68929,7 @@
         "numsharp_ms": 0.0021,
         "ratio": 0.666667,
         "pct_numpy": 150.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69055,7 +69055,7 @@
         "numsharp_ms": 0.0066,
         "ratio": 0.727273,
         "pct_numpy": 137.5,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69076,7 +69076,7 @@
         "numsharp_ms": 0.6578,
         "ratio": 0.671025,
         "pct_numpy": 149.026,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69097,7 +69097,7 @@
         "numsharp_ms": 63.7823,
         "ratio": 0.769165,
         "pct_numpy": 130.011,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69118,7 +69118,7 @@
         "numsharp_ms": 0.0038,
         "ratio": 0.631579,
         "pct_numpy": 158.333,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69181,7 +69181,7 @@
         "numsharp_ms": 0.0047,
         "ratio": 0.617021,
         "pct_numpy": 162.069,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69265,7 +69265,7 @@
         "numsharp_ms": 0.8619,
         "ratio": 0.67386,
         "pct_numpy": 148.399,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69286,7 +69286,7 @@
         "numsharp_ms": 78.2089,
         "ratio": 0.760445,
         "pct_numpy": 131.502,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69307,7 +69307,7 @@
         "numsharp_ms": 0.0042,
         "ratio": 0.785714,
         "pct_numpy": 127.273,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69433,7 +69433,7 @@
         "numsharp_ms": 0.0065,
         "ratio": 0.769231,
         "pct_numpy": 130.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69454,7 +69454,7 @@
         "numsharp_ms": 0.6743,
         "ratio": 0.67077,
         "pct_numpy": 149.082,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69475,7 +69475,7 @@
         "numsharp_ms": 63.0828,
         "ratio": 0.765741,
         "pct_numpy": 130.592,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69496,7 +69496,7 @@
         "numsharp_ms": 0.0038,
         "ratio": 0.631579,
         "pct_numpy": 158.333,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69559,7 +69559,7 @@
         "numsharp_ms": 0.0064,
         "ratio": 0.6875,
         "pct_numpy": 145.455,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69832,7 +69832,7 @@
         "numsharp_ms": 0.0287,
         "ratio": 0.226481,
         "pct_numpy": 441.538,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -69895,7 +69895,7 @@
         "numsharp_ms": 0.0558,
         "ratio": 0.215054,
         "pct_numpy": 465.0,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -70021,7 +70021,7 @@
         "numsharp_ms": 0.0297,
         "ratio": 0.73064,
         "pct_numpy": 136.866,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -70252,7 +70252,7 @@
         "numsharp_ms": 0.0031,
         "ratio": 0.580645,
         "pct_numpy": 172.222,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -70504,7 +70504,7 @@
         "numsharp_ms": 0.0183,
         "ratio": 0.644809,
         "pct_numpy": 155.085,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -70525,7 +70525,7 @@
         "numsharp_ms": 2.5142,
         "ratio": 0.587622,
         "pct_numpy": 170.177,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -70546,7 +70546,7 @@
         "numsharp_ms": 278.2987,
         "ratio": 0.564092,
         "pct_numpy": 177.276,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -70567,7 +70567,7 @@
         "numsharp_ms": 0.0085,
         "ratio": 0.670588,
         "pct_numpy": 149.123,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -70630,7 +70630,7 @@
         "numsharp_ms": 0.0142,
         "ratio": 0.690141,
         "pct_numpy": 144.898,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -70945,7 +70945,7 @@
         "numsharp_ms": 0.0014,
         "ratio": 0.785714,
         "pct_numpy": 127.273,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71260,7 +71260,7 @@
         "numsharp_ms": 0.0082,
         "ratio": 0.292683,
         "pct_numpy": 341.667,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71281,7 +71281,7 @@
         "numsharp_ms": 0.4075,
         "ratio": 0.500859,
         "pct_numpy": 199.657,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71302,7 +71302,7 @@
         "numsharp_ms": 40.3766,
         "ratio": 0.55573,
         "pct_numpy": 179.943,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71344,7 +71344,7 @@
         "numsharp_ms": 0.0275,
         "ratio": 0.596364,
         "pct_numpy": 167.683,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71407,7 +71407,7 @@
         "numsharp_ms": 0.061,
         "ratio": 0.614754,
         "pct_numpy": 162.667,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71533,7 +71533,7 @@
         "numsharp_ms": 0.026,
         "ratio": 0.219231,
         "pct_numpy": 456.14,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71596,7 +71596,7 @@
         "numsharp_ms": 0.0556,
         "ratio": 0.203237,
         "pct_numpy": 492.035,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71701,7 +71701,7 @@
         "numsharp_ms": 0.0014,
         "ratio": 0.714286,
         "pct_numpy": 140.0,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71722,7 +71722,7 @@
         "numsharp_ms": 0.0278,
         "ratio": 0.233813,
         "pct_numpy": 427.692,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71764,7 +71764,7 @@
         "numsharp_ms": 0.0018,
         "ratio": 0.611111,
         "pct_numpy": 163.636,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71785,7 +71785,7 @@
         "numsharp_ms": 0.0533,
         "ratio": 0.24015,
         "pct_numpy": 416.406,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71827,7 +71827,7 @@
         "numsharp_ms": 0.0052,
         "ratio": 0.269231,
         "pct_numpy": 371.429,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71911,7 +71911,7 @@
         "numsharp_ms": 0.4072,
         "ratio": 0.736493,
         "pct_numpy": 135.779,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -71974,7 +71974,7 @@
         "numsharp_ms": 0.407,
         "ratio": 0.72629,
         "pct_numpy": 137.686,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72058,7 +72058,7 @@
         "numsharp_ms": 125.7852,
         "ratio": 0.793231,
         "pct_numpy": 126.067,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72079,7 +72079,7 @@
         "numsharp_ms": 0.002,
         "ratio": 0.6,
         "pct_numpy": 166.667,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72100,7 +72100,7 @@
         "numsharp_ms": 0.2824,
         "ratio": 0.277975,
         "pct_numpy": 359.745,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72163,7 +72163,7 @@
         "numsharp_ms": 1.3318,
         "ratio": 0.526731,
         "pct_numpy": 189.85,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72205,7 +72205,7 @@
         "numsharp_ms": 0.0111,
         "ratio": 0.702703,
         "pct_numpy": 142.308,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72268,7 +72268,7 @@
         "numsharp_ms": 0.0057,
         "ratio": 0.684211,
         "pct_numpy": 146.154,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72331,7 +72331,7 @@
         "numsharp_ms": 0.0069,
         "ratio": 0.652174,
         "pct_numpy": 153.333,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72520,7 +72520,7 @@
         "numsharp_ms": 0.0018,
         "ratio": 0.722222,
         "pct_numpy": 138.462,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72625,7 +72625,7 @@
         "numsharp_ms": 44.204,
         "ratio": 0.506441,
         "pct_numpy": 197.457,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72667,7 +72667,7 @@
         "numsharp_ms": 0.0272,
         "ratio": 0.242647,
         "pct_numpy": 412.121,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72856,7 +72856,7 @@
         "numsharp_ms": 1.2388,
         "ratio": 0.534307,
         "pct_numpy": 187.158,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72898,7 +72898,7 @@
         "numsharp_ms": 0.0072,
         "ratio": 0.652778,
         "pct_numpy": 153.191,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -72919,7 +72919,7 @@
         "numsharp_ms": 1.6336,
         "ratio": 0.639324,
         "pct_numpy": 156.415,
-        "status": "close",
+        "status": "slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -73234,7 +73234,7 @@
         "numsharp_ms": 0.0279,
         "ratio": 0.232975,
         "pct_numpy": 429.231,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }
@@ -73297,7 +73297,7 @@
         "numsharp_ms": 0.0594,
         "ratio": 0.200337,
         "pct_numpy": 499.16,
-        "status": "slower",
+        "status": "much_slower",
         "exception_type": null,
         "exception_message": null
       }

@@ -1421,6 +1421,35 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   overflow: auto;
 }
 
+.ns-load-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 0.58rem;
+  border-top: 1px solid var(--ns-tip-border, var(--bs-border-color));
+}
+
+.ns-load-more-button {
+  border: 1px solid var(--ns-tip-border, var(--bs-border-color));
+  border-radius: 0.42rem;
+  background: var(--ns-tip-tab-bg, var(--bs-tertiary-bg));
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.42rem 0.85rem;
+}
+
+.ns-load-more-button:hover,
+.ns-load-more-button:focus-visible {
+  background: var(--ns-tip-tab-active-bg, var(--bs-secondary-bg));
+  outline: none;
+}
+
+.ns-load-more-count {
+  color: var(--ns-tip-muted, var(--bs-secondary-color));
+  font-weight: 500;
+}
+
 .ns-tip-table {
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
@@ -1734,7 +1763,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       </div>
       <div class="guide-primer-row">
         <div class="guide-primer-term">Drill-down</div>
-        <div class="guide-primer-detail">Click Status Mix segments, Suite Scoreboard rows, and Dtype Heatmap cards to open the internal top-25 best and worst benchmark rows for that grouping.</div>
+        <div class="guide-primer-detail">Click Status Mix segments, Suite Scoreboard rows, and Dtype Heatmap cards to open the first 25 best and worst benchmark rows; use Load More to reveal the rest.</div>
       </div>
     </div>
     <div class="guide-grid">
@@ -1751,9 +1780,9 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       <h3>Performance Bands</h3>
       <div class="guide-band-row" aria-label="Performance color bands">
         <span class="guide-band faster">Faster: 1.05x and above</span>
-        <span class="guide-band close">Close: 0.50x to 1.05x</span>
-        <span class="guide-band slower">Slower: 0.20x to 0.50x</span>
-        <span class="guide-band much">Much slower: below 0.20x</span>
+        <span class="guide-band close">Close: 0.80x to 1.05x</span>
+        <span class="guide-band slower">Slower: 0.33x to 0.80x</span>
+        <span class="guide-band much">Much slower: below 0.33x</span>
         <span class="guide-band nodata">No data: pending C# measurement</span>
       </div>
     </div>
@@ -1786,9 +1815,9 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     <div class="legend-grid">
       <span class="legend-item" data-status-summary="extreme"><span class="legend-swatch s-extreme"></span>4 x100+ faster</span>
       <span class="legend-item" data-status-summary="faster"><span class="legend-swatch s-faster"></span>933 faster, 1.05-100x</span>
-      <span class="legend-item" data-status-summary="close"><span class="legend-swatch s-close"></span>431 close, 0.50-1.05x</span>
-      <span class="legend-item" data-status-summary="slower"><span class="legend-swatch s-slower"></span>317 slower, 0.20-0.50x</span>
-      <span class="legend-item" data-status-summary="much"><span class="legend-swatch s-much"></span>103 much slower, &lt;0.20x</span>
+      <span class="legend-item" data-status-summary="close"><span class="legend-swatch s-close"></span>523 close, 0.80-1.05x</span>
+      <span class="legend-item" data-status-summary="slower"><span class="legend-swatch s-slower"></span>954 slower, 0.33-0.80x</span>
+      <span class="legend-item" data-status-summary="much"><span class="legend-swatch s-much"></span>516 much slower, &lt;0.33x</span>
       <span class="legend-item" data-status-summary="nodata"><span class="legend-swatch s-nodata"></span>63 no data</span>
     </div>
   </section>
@@ -2155,15 +2184,15 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     { className: "band-faster-2", title: "2x to 5x faster", min: 2, max: 5, sort: "desc" },
     { className: "band-faster-125", title: "1.25x to 2x faster", min: 1.25, max: 2, sort: "desc" },
     { className: "band-faster-100", title: "1.05x to 1.25x faster", min: 1.05, max: 1.25, sort: "desc" },
-    { className: "band-close-090", title: "0.90x to 1.05x", min: 0.9, max: 1.05, sort: "desc" },
-    { className: "band-close-075", title: "0.75x to 0.90x", min: 0.75, max: 0.9, sort: "desc" },
-    { className: "band-close-050", title: "0.50x to 0.75x", min: 0.5, max: 0.75, sort: "desc" },
-    { className: "band-slower-040", title: "0.40x to 0.50x", min: 0.4, max: 0.5, sort: "asc" },
-    { className: "band-slower-030", title: "0.30x to 0.40x", min: 0.3, max: 0.4, sort: "asc" },
-    { className: "band-slower-020", title: "0.20x to 0.30x", min: 0.2, max: 0.3, sort: "asc" },
-    { className: "band-much-010", title: "0.10x to 0.20x", min: 0.1, max: 0.2, sort: "asc" },
-    { className: "band-much-005", title: "0.05x to 0.10x", min: 0.05, max: 0.1, sort: "asc" },
-    { className: "band-much-000", title: "Below 0.05x", max: 0.05, sort: "asc" },
+    { className: "band-close-090", title: "0.95x to 1.05x", min: 0.95, max: 1.05, sort: "desc" },
+    { className: "band-close-075", title: "0.875x to 0.95x", min: 0.875, max: 0.95, sort: "desc" },
+    { className: "band-close-050", title: "0.80x to 0.875x", min: 0.8, max: 0.875, sort: "desc" },
+    { className: "band-slower-040", title: "0.60x to 0.80x", min: 0.6, max: 0.8, sort: "asc" },
+    { className: "band-slower-030", title: "0.45x to 0.60x", min: 0.45, max: 0.6, sort: "asc" },
+    { className: "band-slower-020", title: "0.33x to 0.45x", min: 0.33, max: 0.45, sort: "asc" },
+    { className: "band-much-010", title: "0.20x to 0.33x", min: 0.2, max: 0.33, sort: "asc" },
+    { className: "band-much-005", title: "0.10x to 0.20x", min: 0.1, max: 0.2, sort: "asc" },
+    { className: "band-much-000", title: "Below 0.10x", max: 0.1, sort: "asc" },
     { className: "band-nodata", title: "No data", noData: true, sort: "index" }
   ];
 
@@ -2221,15 +2250,15 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     if (ratio >= 2) return "2x to 5x faster";
     if (ratio >= 1.25) return "1.25x to 2x faster";
     if (ratio >= 1.05) return "1.05x to 1.25x faster";
-    if (ratio >= 0.9) return "0.90x to 1.05x";
-    if (ratio >= 0.75) return "0.75x to 0.90x";
-    if (ratio >= 0.5) return "0.50x to 0.75x";
-    if (ratio >= 0.4) return "0.40x to 0.50x";
-    if (ratio >= 0.3) return "0.30x to 0.40x";
-    if (ratio >= 0.2) return "0.20x to 0.30x";
+    if (ratio >= 0.95) return "0.95x to 1.05x";
+    if (ratio >= 0.875) return "0.875x to 0.95x";
+    if (ratio >= 0.8) return "0.80x to 0.875x";
+    if (ratio >= 0.6) return "0.60x to 0.80x";
+    if (ratio >= 0.45) return "0.45x to 0.60x";
+    if (ratio >= 0.33) return "0.33x to 0.45x";
+    if (ratio >= 0.2) return "0.20x to 0.33x";
     if (ratio >= 0.1) return "0.10x to 0.20x";
-    if (ratio >= 0.05) return "0.05x to 0.10x";
-    return "Below 0.05x";
+    return "Below 0.10x";
   };
 
   const performanceClass = (row) => {
@@ -2237,8 +2266,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     if (!Number.isFinite(ratio)) return "ns-perf-empty";
     if (ratio >= 2) return "ns-perf-excellent";
     if (ratio >= 1.05) return "ns-perf-good";
-    if (ratio >= 0.5) return "ns-perf-near";
-    if (ratio >= 0.2) return "ns-perf-slow";
+    if (ratio >= 0.8) return "ns-perf-near";
+    if (ratio >= 0.33) return "ns-perf-slow";
     return "ns-perf-bad";
   };
 
@@ -2261,16 +2290,39 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     });
   };
 
+  const loadMoreMarkup = (rowCount) => rowCount > topCount ? `
+    <div class="ns-load-more-wrap">
+      <button class="ns-load-more-button" type="button" data-load-more>
+        Load More <span class="ns-load-more-count">(${rowCount - topCount} remaining)</span>
+      </button>
+    </div>` : "";
+
+  const rowVisibility = (index) => index >= topCount ? " hidden data-load-more-row" : "";
+
+  const revealRemainingRows = (button) => {
+    const scope = button.closest("[data-load-more-scope]") || button.parentElement?.parentElement;
+    if (!scope) return;
+    scope.querySelectorAll("[data-load-more-row][hidden]").forEach((row) => row.removeAttribute("hidden"));
+    button.closest(".ns-load-more-wrap")?.remove();
+  };
+
+  document.addEventListener("click", (event) => {
+    const button = event.target instanceof Element ? event.target.closest("[data-load-more]") : null;
+    if (!button) return;
+    event.preventDefault();
+    revealRemainingRows(button);
+  });
+
   const buildDataTable = (visibleRows, isNoData = false) => {
     const body = visibleRows.map((row, index) => isNoData
-      ? `<tr>
+      ? `<tr${rowVisibility(index)}>
           <td class="num">${index + 1}</td>
           <td class="op">${escapeHtml(row.operation)}</td>
           <td>${escapeHtml(row.suite)}</td>
           <td>${escapeHtml(row.dtype)}</td>
           <td class="num">${formatN(row.n)}</td>
         </tr>`
-      : `<tr>
+      : `<tr${rowVisibility(index)}>
           <td class="num">${index + 1}</td>
           <td class="op">${escapeHtml(row.operation)}</td>
           <td>${escapeHtml(row.suite)}</td>
@@ -2287,11 +2339,12 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       : `<tr><th class="num">#</th><th>Operation</th><th>Suite</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th><th>Band</th></tr>`;
 
     return `
-      <div class="ns-tip-scroll">
+      <div class="ns-tip-scroll" data-load-more-scope>
         <table class="ns-tip-table">
           <thead>${header}</thead>
           <tbody>${body}</tbody>
         </table>
+        ${loadMoreMarkup(visibleRows.length)}
       </div>`;
   };
 
@@ -2311,16 +2364,16 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     }
 
     if (isNoData) {
-      const visibleRows = sortRows(rows, "index").slice(0, topCount);
+      const visibleRows = sortRows(rows, "index");
       return `
         <div class="ns-tip-backend-panel${activeClass}" id="${id}-${backend}" role="tabpanel"${hidden}>
-          <div class="ns-tip-meta">${label} · ${visibleRows.length} of ${rows.length} pending rows</div>
+          <div class="ns-tip-meta">${label} · ${Math.min(topCount, rows.length)} of ${rows.length} pending rows</div>
           ${buildDataTable(visibleRows, true)}
         </div>`;
     }
 
-    const bestRows = sortRows(rows, "desc").slice(0, topCount);
-    const worstRows = sortRows(rows, "asc").slice(0, topCount);
+    const bestRows = sortRows(rows, "desc");
+    const worstRows = sortRows(rows, "asc");
     const rankingId = `${id}-${backend}-ranking`;
     const subtitle = `${label} · ${Math.min(topCount, rows.length)} best and ${Math.min(topCount, rows.length)} worst of ${rows.length} rows · ratio = NumPy_ms / NumSharp_ms`;
 
@@ -2410,9 +2463,9 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     const summaries = {
       extreme: `${sum("band-faster-100x")} x100+ faster`,
       faster: `${sum("band-faster-20", "band-faster-10", "band-faster-5", "band-faster-2", "band-faster-125", "band-faster-100")} faster, 1.05-100x`,
-      close: `${sum("band-close-090", "band-close-075", "band-close-050")} close, 0.50-1.05x`,
-      slower: `${sum("band-slower-040", "band-slower-030", "band-slower-020")} slower, 0.20-0.50x`,
-      much: `${sum("band-much-010", "band-much-005", "band-much-000")} much slower, <0.20x`,
+      close: `${sum("band-close-090", "band-close-075", "band-close-050")} close, 0.80-1.05x`,
+      slower: `${sum("band-slower-040", "band-slower-030", "band-slower-020")} slower, 0.33-0.80x`,
+      much: `${sum("band-much-010", "band-much-005", "band-much-000")} much slower, <0.33x`,
       nodata: `${sum("band-nodata")} no data`
     };
 
@@ -2432,7 +2485,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     const suiteKey = (value) => String(value || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
     const scoreTone = (score) => !Number.isFinite(score) ? ["metric-near", "var(--quiet)"]
       : score >= 1.05 ? ["metric-good", "var(--good)"]
-      : score >= 0.5 ? ["metric-near", "var(--near)"]
+      : score >= 0.8 ? ["metric-near", "var(--near)"]
       : ["metric-slow", "var(--slow)"];
 
     document.querySelectorAll(".bar-row").forEach((bar) => {
@@ -2460,8 +2513,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     const heatClass = (score) => !Number.isFinite(score) ? "heat-empty"
       : score >= 1.25 ? "heat-best"
       : score >= 1.05 ? "heat-good"
-      : score >= 0.5 ? "heat-near"
-      : score >= 0.2 ? "heat-slow" : "heat-bad";
+      : score >= 0.8 ? "heat-near"
+      : score >= 0.33 ? "heat-slow" : "heat-bad";
     document.querySelectorAll(".dtype-panel").forEach((panel) => {
       const tier = tierByPanel[panel.id];
       panel.querySelectorAll(".dtype-cell").forEach((cell) => {
@@ -2487,8 +2540,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     if (!Number.isFinite(ratio)) return "func-tone-empty";
     if (ratio >= 100) return "func-tone-extreme";
     if (ratio >= 1.05) return "func-tone-good";
-    if (ratio >= 0.5) return "func-tone-near";
-    if (ratio >= 0.2) return "func-tone-slow";
+    if (ratio >= 0.8) return "func-tone-near";
+    if (ratio >= 0.33) return "func-tone-slow";
     return "func-tone-bad";
   };
 
@@ -2496,8 +2549,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     if (!Number.isFinite(ratio)) return "#87909a";
     if (ratio >= 100) return "#0e7490";
     if (ratio >= 1.05) return "var(--good)";
-    if (ratio >= 0.5) return "var(--near)";
-    if (ratio >= 0.2) return "var(--slow)";
+    if (ratio >= 0.8) return "var(--near)";
+    if (ratio >= 0.33) return "var(--slow)";
     return "var(--bad)";
   };
 
@@ -2553,7 +2606,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
   const buildFunctionTable = (rows) => {
     const body = rows.map((row, index) => `
-      <tr>
+      <tr${rowVisibility(index)}>
         <td class="num">${index + 1}</td>
         <td class="op">${escapeHtml(row.operation)}</td>
         <td>${escapeHtml(row.suite)}</td>
@@ -2565,7 +2618,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       </tr>`).join("");
 
     return `
-      <div class="function-table-scroll">
+      <div class="function-table-scroll" data-load-more-scope>
         <table class="function-table">
           <thead>
             <tr>
@@ -2581,6 +2634,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
           </thead>
           <tbody>${body || `<tr><td colspan="8">No matching benchmark rows.</td></tr>`}</tbody>
         </table>
+        ${loadMoreMarkup(rows.length)}
       </div>`;
   };
 
@@ -2687,15 +2741,15 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       let tableNote = note;
       if (!tableRows) {
         if (mode === "worst") {
-          tableRows = sortRows(group.measuredRows, "asc").slice(0, topCount);
-          tableNote = `${Math.min(topCount, group.measuredRows.length)} slowest measured rows for ${group.name}`;
+          tableRows = sortRows(group.measuredRows, "asc");
+          tableNote = `${Math.min(topCount, group.measuredRows.length)} of ${group.measuredRows.length} slowest measured rows for ${group.name}`;
         } else if (mode === "raw") {
           tableRows = group.rows.slice().sort((a, b) =>
             String(a.operation).localeCompare(String(b.operation)) || String(a.dtype).localeCompare(String(b.dtype)) || (a.n ?? 0) - (b.n ?? 0));
           tableNote = `${tableRows.length} raw benchmark rows for ${group.name}`;
         } else {
-          tableRows = sortRows(group.measuredRows, "desc").slice(0, topCount);
-          tableNote = `${Math.min(topCount, group.measuredRows.length)} fastest measured rows for ${group.name}`;
+          tableRows = sortRows(group.measuredRows, "desc");
+          tableNote = `${Math.min(topCount, group.measuredRows.length)} of ${group.measuredRows.length} fastest measured rows for ${group.name}`;
         }
       }
 
@@ -3435,8 +3489,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     if (!Number.isFinite(ratio)) return "func-tone-empty";
     if (ratio >= 100) return "func-tone-extreme";
     if (ratio >= 1.05) return "func-tone-good";
-    if (ratio >= .5) return "func-tone-near";
-    if (ratio >= .2) return "func-tone-slow";
+    if (ratio >= .8) return "func-tone-near";
+    if (ratio >= .33) return "func-tone-slow";
     return "func-tone-bad";
   };
 
@@ -3501,24 +3555,26 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const coreTable = (rows) => {
     const available = rows.filter((row) => row.availability === "available");
     return available.length ? `
-    <div class="function-table-scroll backend-lens-table" data-backend-table="managed">
+    <div class="function-table-scroll backend-lens-table" data-backend-table="managed" data-load-more-scope>
       <table class="function-table"><thead><tr><th>Operation</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th></tr></thead>
-      <tbody>${available.slice(0, 25).map((row) => `<tr>
+      <tbody>${available.map((row, index) => `<tr${index >= 25 ? " hidden data-load-more-row" : ""}>
         <td class="op">${escapeHtml(row.operation)}</td><td>${escapeHtml(row.dtype)}</td><td class="num">${formatN(Number(row.n))}</td>
         <td class="num">${formatRatio(Number(row.ratio))}</td><td class="num">${Number(row.numpy_ms).toFixed(4)}</td><td class="num">${Number(row.numsharp_ms).toFixed(4)}</td>
       </tr>`).join("")}</tbody></table>
+      ${available.length > 25 ? `<div class="ns-load-more-wrap"><button class="ns-load-more-button" type="button" data-load-more>Load More <span class="ns-load-more-count">(${available.length - 25} remaining)</span></button></div>` : ""}
     </div>` : `<div class="function-empty backend-lens-table" data-backend-table="managed">${escapeHtml(unavailableMessage(rows, "managed"))}</div>`;
   };
 
   const nativeTable = (rows) => {
     const available = rows.filter((row) => row.availability === "available");
     return available.length ? `
-    <div class="function-table-scroll backend-lens-table" data-backend-table="openblas" hidden>
+    <div class="function-table-scroll backend-lens-table" data-backend-table="openblas" data-load-more-scope hidden>
       <table class="function-table"><thead><tr><th>Scenario</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th></tr></thead>
-      <tbody>${available.map((row) => `<tr>
+      <tbody>${available.map((row, index) => `<tr${index >= 25 ? " hidden data-load-more-row" : ""}>
         <td class="op">${escapeHtml(row.scenario)}</td><td>${escapeHtml(row.dtype)}</td><td class="num">${formatN(row.n)}</td>
         <td class="num">${formatRatio(row.ratio)}</td><td class="num">${row.numpyMs.toFixed(4)}</td><td class="num">${row.nsMs.toFixed(4)}</td>
       </tr>`).join("")}</tbody></table>
+      ${available.length > 25 ? `<div class="ns-load-more-wrap"><button class="ns-load-more-button" type="button" data-load-more>Load More <span class="ns-load-more-count">(${available.length - 25} remaining)</span></button></div>` : ""}
     </div>` : `<div class="function-empty backend-lens-table" data-backend-table="openblas" hidden>${escapeHtml(unavailableMessage(rows, "openblas"))}</div>`;
   };
 
