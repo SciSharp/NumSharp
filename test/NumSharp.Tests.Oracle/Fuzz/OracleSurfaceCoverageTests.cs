@@ -63,6 +63,15 @@ namespace NumSharp.Tests.Fuzz
             "RandomState",
         };
 
+        // Non-stream Generator/RandomState API surface: these return a Generator, a byte[], or are a
+        // deterministic randint alias, so they have no per-draw "rnd" stream corpus entry. Each is
+        // gated by dedicated unit tests (np.random.default_rng.Test.cs / np.random.bytes.Test.cs /
+        // np.random.random_integers.Test.cs) verified byte-exact against NumPy 2.4.2.
+        private static readonly HashSet<string> GeneratorApiSurface = new()
+        {
+            "default_rng", "bytes", "random_integers",
+        };
+
         // Stream algorithms already carved and pinned under OpenBugs.Random.cs. Re-adding any one
         // to random_parity(_host).jsonl automatically moves it to direct coverage and this set entry
         // becomes stale/fails below.
@@ -125,6 +134,8 @@ namespace NumSharp.Tests.Fuzz
                     continue; // documented alias
                 if (RandomStateSurface.Contains(name))
                     continue; // dedicated state/seed tests
+                if (GeneratorApiSurface.Contains(name))
+                    continue; // Generator factory / bytes / random_integers — dedicated byte-exact tests
                 if (name == "bernoulli")
                     continue; // NumSharp extension; dedicated tests (NumPy spells it binomial(1,p))
                 if (RandomKnownGaps.Contains(name))
