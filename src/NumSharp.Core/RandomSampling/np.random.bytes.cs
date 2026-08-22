@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Generic;
 
 namespace NumSharp
 {
@@ -8,7 +9,10 @@ namespace NumSharp
         ///     Return random bytes.
         /// </summary>
         /// <param name="length">Number of random bytes.</param>
-        /// <returns>A byte array of length <paramref name="length"/>.</returns>
+        /// <returns>
+        ///     A 1-D <see cref="NDArray{T}"/> of <see cref="byte"/> (dtype <c>uint8</c>), length
+        ///     <paramref name="length"/> — the NumSharp analogue of NumPy's <c>bytes</c> object.
+        /// </returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.bytes.html
         ///     <br/>
@@ -16,27 +20,30 @@ namespace NumSharp
         ///     <c>ceil(length/4)</c> uint32 values from the MT19937 stream, packs them
         ///     little-endian, and truncates to <paramref name="length"/> bytes. The word
         ///     count follows NumPy's exact formula <c>(length - 1) / 4 + 1</c> (C integer
-        ///     division), so the same seed consumes the same amount of state — including
-        ///     the quirks that <c>bytes(0)</c> still draws one word and a negative length
-        ///     Python-slices the tail (NumPy's <c>tobytes()[:length]</c>).
+        ///     division — <c>mtrand.pyx</c> sets <c>cdivision=True</c>, so <c>//</c> truncates
+        ///     toward zero and C# integer division matches), so the same seed consumes the same
+        ///     amount of state — including the quirks that <c>bytes(0)</c> still draws one word
+        ///     and a negative length Python-slices the tail (NumPy's <c>tobytes()[:length]</c>).
         ///     <br/>
-        ///     NumPy's <c>length</c> is a 64-bit <c>npy_intp</c> and it returns a Python <c>bytes</c>
-        ///     object, so it can exceed 2 GiB. A .NET <c>byte[]</c> cannot (<see cref="Array.MaxLength"/>
-        ///     ≈ 2.0 GiB), so a request whose result would exceed that raises — the same <c>byte[]</c>
-        ///     ceiling <c>np.save</c>/<c>np.savez</c> carry. For a &gt; 2 GiB array of random bytes use
-        ///     an NDArray path such as <c>default_rng().integers(0, 256, size, np.uint8)</c>.
+        ///     NumPy's <c>length</c> is a 64-bit <c>npy_intp</c> and its <c>bytes</c> result can
+        ///     exceed 2 GiB. NumSharp returns an <see cref="NDArray{T}"/> backed by unmanaged
+        ///     memory (addressed by <c>long</c>), so it matches that capability: a request larger
+        ///     than a managed <c>byte[]</c> can hold (<see cref="Array.MaxLength"/> ≈ 2 GiB) still
+        ///     succeeds. To recover a managed array from a small result use
+        ///     <c>bytes(n).ToArray&lt;byte&gt;()</c> (itself capped at <see cref="Array.MaxLength"/>).
         /// </remarks>
-        public byte[] bytes(long length)
+        public NDArray<byte> bytes(long length)
             => BytesCore(length, static self => self.randomizer.NextUInt32(), this);
 
         // Shared byte-string builder for RandomState.bytes and Generator.bytes. Draws exactly
         // ceil(length/4) uint32 words (matching NumPy's stream consumption regardless of the final
-        // slice) and stores only the first 'end' little-endian bytes, so a length just under the
-        // byte[] ceiling never over-allocates the extra 0..3 padding bytes.
-        internal static byte[] BytesCore<TState>(long length, Func<TState, uint> nextUInt32, TState state)
+        // slice) and stores only the first 'end' little-endian bytes into a fresh unmanaged
+        // NDArray<byte> — which, unlike a byte[], can exceed 2 GiB (NumPy's npy_intp length).
+        internal static unsafe NDArray<byte> BytesCore<TState>(long length, Func<TState, uint> nextUInt32, TState state)
         {
             // NumPy: n_uint32 = ((length - 1) // 4 + 1) where '//' is C truncation-toward-zero
-            //        because 'length' is typed npy_intp. C# integer division matches.
+            //        because 'length' is typed npy_intp and the random pyx set cdivision=True.
+            //        C# integer division matches.
             long nUint32 = (length - 1) / 4 + 1;
 
             if (nUint32 < 0)
@@ -52,14 +59,11 @@ namespace NumSharp
                 ? Math.Min(length, totalBytes)
                 : Math.Max(0, totalBytes + length);
 
-            if (end > Array.MaxLength)
-                throw new OverflowException(
-                    $"np.random.bytes({length}) would produce {end} bytes, exceeding the maximum .NET " +
-                    $"byte[] length ({Array.MaxLength} ≈ 2 GiB). NumPy returns a 64-bit-length bytes object; " +
-                    "for a larger array of random bytes use an NDArray path, e.g. " +
-                    "default_rng().integers(0, 256, size, np.uint8).");
+            // A 1-D uint8 array of exactly 'end' elements. fillZeros:false — the loop below writes
+            // every one of the 'end' bytes exactly once (fullWordsStored*4 + tailBytes == end).
+            var result = new NDArray<byte>(end, false);
+            byte* p = end > 0 ? (byte*)result.Address : null;
 
-            var result = new byte[end];
             long fullWordsStored = end / 4;
             int tailBytes = (int)(end % 4);
             long pos = 0;
@@ -68,16 +72,16 @@ namespace NumSharp
                 uint r = nextUInt32(state); // every word is drawn (state consumption), some discarded
                 if (w < fullWordsStored)
                 {
-                    result[pos] = (byte)r;
-                    result[pos + 1] = (byte)(r >> 8);
-                    result[pos + 2] = (byte)(r >> 16);
-                    result[pos + 3] = (byte)(r >> 24);
+                    p[pos] = (byte)r;
+                    p[pos + 1] = (byte)(r >> 8);
+                    p[pos + 2] = (byte)(r >> 16);
+                    p[pos + 3] = (byte)(r >> 24);
                     pos += 4;
                 }
                 else if (w == fullWordsStored && tailBytes > 0)
                 {
                     for (int b = 0; b < tailBytes; b++)
-                        result[pos++] = (byte)(r >> (8 * b));
+                        p[pos++] = (byte)(r >> (8 * b));
                 }
             }
             return result;

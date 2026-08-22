@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Generic;
 
 namespace NumSharp
 {
@@ -105,16 +106,20 @@ namespace NumSharp
         ///     Return random bytes.
         /// </summary>
         /// <param name="length">Number of random bytes.</param>
+        /// <returns>
+        ///     A 1-D <see cref="NDArray{T}"/> of <see cref="byte"/> (dtype <c>uint8</c>), length
+        ///     <paramref name="length"/> — the NumSharp analogue of NumPy's <c>bytes</c> object.
+        /// </returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.bytes.html
         ///     <br/>
         ///     Byte-identical to NumPy: draws <c>ceil(length/4)</c> uint32 words from PCG64 (via the
         ///     32-bit buffered path), packs them little-endian, and truncates to <paramref name="length"/>.
-        ///     As with <see cref="NumPyRandom.bytes"/>, the result is a .NET <c>byte[]</c> and so is
-        ///     capped at <see cref="Array.MaxLength"/> (≈ 2 GiB); for more, use
-        ///     <c>integers(0, 256, size, np.uint8)</c>.
+        ///     As with <see cref="NumPyRandom.bytes"/>, the result is an unmanaged-backed
+        ///     <see cref="NDArray{T}"/>, so — matching NumPy's 64-bit <c>npy_intp</c> length — it is
+        ///     NOT capped at <see cref="Array.MaxLength"/> and a request over 2 GiB still succeeds.
         /// </remarks>
-        public byte[] bytes(long length)
+        public NDArray<byte> bytes(long length)
             => NumPyRandom.BytesCore(length, static bg => bg.NextUInt32(), _bitGenerator);
 
         // ---- off/rng computation + validation (numpy _bounded_integers.pyx.in scalar path) ----

@@ -71,7 +71,13 @@ namespace NumSharp.Tests.RandomSampling
         [TestMethod]
         public void Bytes_ByteExact()
         {
-            np.random.default_rng(42).bytes(8).Should().Equal((byte)136, 38, 217, 22, 205, 251, 33, 198);
+            // Generator.bytes returns a 1-D uint8 NDArray (NumSharp's analogue of NumPy's bytes object).
+            var b = np.random.default_rng(42).bytes(8);
+            b.typecode.Should().Be(NPTypeCode.Byte);
+            b.size.Should().Be(8);
+            var expected = new byte[] { 136, 38, 217, 22, 205, 251, 33, 198 };
+            for (int i = 0; i < expected.Length; i++)
+                Convert.ToByte(b.GetAtIndex(i)).Should().Be(expected[i]);
         }
 
         [TestMethod]

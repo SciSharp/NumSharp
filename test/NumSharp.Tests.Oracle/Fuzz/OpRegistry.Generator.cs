@@ -40,10 +40,10 @@ namespace NumSharp.Tests.Fuzz
             {
                 var rs = np.random.RandomState();
                 rs.seed((uint)seed);
-                byte[] b = null;
+                NDArray b = null; // np.random.bytes now returns a 1-D uint8 NDArray directly
                 for (int k = 0; k < draws; k++)
                     b = rs.bytes(AL(0));
-                return np.array(b);
+                return b;
             }
 
             // ---- Generator (PCG64) ----
@@ -82,7 +82,7 @@ namespace NumSharp.Tests.Fuzz
                         break;
                     }
                     case "bytes":
-                        result = np.array(rng.bytes(AL(0)));
+                        result = rng.bytes(AL(0)); // returns a 1-D uint8 NDArray directly
                         break;
                     case "standard_normal":
                         result = rng.standard_normal(S(), Dt());
