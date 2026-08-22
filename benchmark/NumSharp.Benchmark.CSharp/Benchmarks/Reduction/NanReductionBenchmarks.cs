@@ -37,4 +37,6 @@ public class NanReductionBenchmarks : TypedBenchmarkBase
     [Benchmark(Description = "np.nanmedian(a)")] public NDArray NanMedian() => np.nanmedian(_a);
     [Benchmark(Description = "np.nanpercentile(a, 50)")] public NDArray NanPercentile() => np.nanpercentile(_a, 50.0);
     [Benchmark(Description = "np.nanquantile(a, 0.5)")] public NDArray NanQuantile() => np.nanquantile(_a, 0.5);
+    [Benchmark(Description = "np.nanargmax(a)")] public long NanArgMax() => np.nanargmax(_a);
+    [Benchmark(Description = "np.nanargmin(a)")] public long NanArgMin() => np.nanargmin(_a);
 }

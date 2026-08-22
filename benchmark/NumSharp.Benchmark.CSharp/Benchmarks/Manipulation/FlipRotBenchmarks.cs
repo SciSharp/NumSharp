@@ -18,7 +18,7 @@ public class FlipRotBenchmarks : BenchmarkBase
 {
     private NDArray _arr2D = null!;
 
-    [Params(ArraySizeSource.Medium, ArraySizeSource.Large)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]

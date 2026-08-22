@@ -62,10 +62,11 @@ The benchmark suite provides fair, reproducible performance comparisons between 
 
 | Metric | Current Coverage |
 |--------|-----------------|
-| Operations | ~615 per size (**1,851** op×dtype×N cells in the official op matrix) |
+| API benchmark coverage | **456 / 456 benchmarkable compatibility APIs** (generated ledger in `benchmark/coverage/generated/`) |
 | Data Types | **15** (all NumSharp types) |
-| Comparison suites | **14** (arithmetic, unary, reduction, broadcast, creation, manipulation, slicing, comparison, bitwise, logic, statistics, sorting, linalg, selection) |
-| Matrix subsystems | **5** appended to every official run (nditer, layout, operand, cast, fusion) |
+| Comparison suites | **18** (the original 14 + fft, random, ndarray, api) |
+| Backend profiles | **2** — Managed C# and OpenBLAS, same schema, merged per exact cell |
+| Complementary subsystems | **5** appended to every official run (nditer, layout, operand, cast, fusion) |
 | Array Sizes | **3** cache tiers in the official run (1K / 100K / 10M); the C# project also defines Scalar/100 |
 | Convention | **NPY/NS** — ratio = NumPy_ms / NumSharp_ms, **>1 = NumSharp faster** |
 
@@ -92,8 +93,10 @@ benchmark/
 ├── results/                               # GITIGNORED raw per-run scratch (results/<timestamp>/)
 │
 ├── scripts/                               # Helper scripts
-│   ├── merge-results.py                   # Merges NumPy and NumSharp op-matrix results (NPY/NS + credibility gating)
+│   ├── merge-results.py                   # Merges NumPy and Managed C# op-matrix results
+│   ├── merge-backend-profiles.py          # Merges Managed/OpenBLAS JSON + effective selection
 │   ├── bench_common.py                    # Shared driver for the matrix subsystems (build/run/parse)
+│   ├── audit_coverage.py                  # Benchmark wiring/routes → generated JSON/CSV/Markdown
 │   ├── render_dashboard.py                # benchmark-report.json → benchmark-dashboard.md (ASCII sheet; NOT wired into run_benchmark.py)
 │   └── snapshot_history.py                # Builds history/<date>_<sha>/ + latest (the publish step)
 │
@@ -138,7 +141,7 @@ benchmark/
         │   ├── NumSharpAllocationBenchmarks.cs
         │   └── ZeroInitBenchmarks.cs
         │
-        │   # Comparison suites (the 14 run by run_benchmark.py, each with a NumPy twin):
+        │   # Comparison suites (the 18 run by run_benchmark.py, each with a NumPy twin):
         ├── Arithmetic/                    # +, -, *, /, % (Add/Subtract/Multiply/Divide/Modulo)
         ├── Unary/                         # MathBenchmarks, ExpLogBenchmarks, TrigBenchmarks,
         │                                  #   PowerBenchmarks, UnaryExtraBenchmarks (cbrt/reciprocal/
@@ -159,7 +162,7 @@ benchmark/
         └── MultiDim/                      # MultiDimBenchmarks (1D vs 2D vs 3D — experimental)
 ```
 
-> The **14 comparison suites** are wired into `run_benchmark.py`'s `SUITES` map (namespace filters like `*Benchmarks.Statistics.*`); the experimental/allocation classes are excluded because they have no NumPy twin. See `run_benchmark.py` for the authoritative list.
+> The **18 comparison suites** are wired into `run_benchmark.py`'s `SUITES` map (namespace filters like `*Benchmarks.Statistics.*`); the experimental/allocation classes are excluded because they have no NumPy twin. See `run_benchmark.py` for the authoritative list.
 
 > The user-facing **UI is not in this folder** — it is the hand-built DocFX page `docs/website-src/docs/benchmarks-dashboard.md` (the website's "Benchmarks" hub), which links to the raw reports under `benchmark/history/latest/`. See [Reports & UI surfaces](#reports--ui-surfaces).
 
@@ -208,7 +211,7 @@ benchmark/
 
 4. Report Phase:
    - run_benchmark.py → scripts/merge-results.py joins C# + NumPy on (op, dtype, N)
-   - Writes benchmark-report.{md,json,csv}, then appends the 5 subsystem sheets
+   - Writes benchmark-report.{md,json,csv}, then appends the 6 subsystem sheets
    - (the legacy run-benchmarks.ps1 path has its own PowerShell merge instead)
 ```
 
@@ -427,9 +430,12 @@ These suites were added on top of the original set; each has a NumPy twin in `nu
 | Unary (+) | `UnaryExtraBenchmarks.cs` | `cbrt`, `reciprocal`, `square`, `negative`, `positive`, `trunc` |
 | Allocation* | `Allocation/*.cs` | alloc / zero-init micro + size sweeps (*no NumPy twin — not in the official run) |
 
-### Matrix subsystems (appended, not categories)
+### Backend profiles and complementary subsystems
 
-Beyond the op-matrix categories, the official run appends five subsystems with their own result models (see **Running Benchmarks → Official run**): `nditer` (iterator machinery × tier), `layout` (op × 8 memory layouts × dtype), `operand` (1-D/scalar/mixed/broadcast), `cast` (full 15×15 `astype` × layout), and `fusion` (`np.evaluate`).
+Beyond the op-matrix categories, the official run measures all 39 backend-sensitive APIs under
+Managed C# and OpenBLAS (`benchmark/backends/`), records MissingBackendException and
+NotSupportedException as availability, and merges the fastest valid exact-cell result. It then
+appends five independent result models: `nditer`, `layout`, `operand`, `cast`, and `fusion`.
 
 ---
 
@@ -507,7 +513,8 @@ class BenchmarkResult:
 
 ## Report Generation
 
-> **The official report is generated by `run_benchmark.py`** (see **Running Benchmarks → Official run**): it merges the C# + NumPy op matrix via `scripts/merge-results.py`, appends the five subsystem sheets, and writes the committable `history/<date>_<sha>/` snapshot. The `run-benchmarks.ps1` flow near the end of this section is the **legacy Windows-only** path (NumPy-baseline tables, the inverse NS/NPY icon convention) — kept for reference; prefer `run_benchmark.py` for anything new.
+> **The official report is generated by `run_benchmark.py`**: it merges C# + NumPy, merges the
+> Managed/OpenBLAS profile JSON, appends five subsystem sheets, and writes the committable history snapshot.
 
 ### Reports & UI surfaces
 
@@ -516,10 +523,10 @@ refreshes it, because they drift:
 
 | Surface | Path | Tracked? | Produced / refreshed by | What it is |
 |---------|------|----------|-------------------------|------------|
-| **Op-matrix report** (canonical text) | `benchmark/benchmark-report.md` | ✅ tracked | `scripts/merge-results.py` (via `run_benchmark.py`); CI `benchmark.yml` commits it | The per-(op, dtype, N) ratio report + the five appended subsystem sections. **NPY/NS**, with the `%NumPy🕐` column and the credibility bands (see Status Bands below). |
+| **Op-matrix report** (canonical text) | `benchmark/benchmark-report.md` | ✅ tracked | both merge scripts via `run_benchmark.py`; CI commits it | Backend-aware per-(op, dtype, N, scenario) report + appended subsystem sections. |
 | **Merged data** | `benchmark/benchmark-report.{json,csv}` | ❌ gitignored at root | `merge-results.py` | Machine-readable form; the JSON also feeds `render_dashboard.py`. Only committed *inside* a `history/<date>_<sha>/` snapshot. |
 | **ASCII dashboard** | `benchmark/benchmark-dashboard.md` | ❌ gitignored | `scripts/render_dashboard.py` (run **by hand** — NOT wired into `run_benchmark.py` or CI) | A dense, fenced, ASCII-bar sheet (headline geomean, by-size / by-suite / by-dtype bars, top-12 fastest/slowest) rendered from `benchmark-report.json`. Its role is to **seed the numbers** for the rich DocFX dashboard below. |
-| **Rich DocFX dashboard** (the real UI) | `docs/website-src/docs/benchmarks-dashboard.md` | ✅ tracked | **hand-built** HTML/CSS/JS (tippy.js tooltips, dtype heatmaps, a "benchmark coach", a function explorer) — evolved through `docs:` commits, numbers embedded inline | The website's **"Benchmarks" hub page**. This is what a human sees. It is NOT auto-generated: you edit it by hand, reading fresh numbers from `benchmark-report.md` / `benchmark-dashboard.md`. |
+| **Rich DocFX dashboard** (the real UI) | `docs/website-src/docs/benchmarks-dashboard.md` | ✅ tracked | Curated HTML/CSS/JS (tippy.js tooltips, dtype heatmaps, a benchmark coach); the Function Explorer reads generated `docs/.../data/benchmark-report.json` | The website's **"Benchmarks" hub page**. Official runs refresh real timing rows; narrative cards/prose remain hand-maintained. |
 | **Raw report links** | `benchmark/history/latest/*.md` | ✅ tracked | `snapshot_history.py` | The DocFX toc (`docs/website-src/docs/toc.yml`) links the hub's "Raw Reports" node straight at `../../../benchmark/history/latest/{MANIFEST,benchmark-report,cast_results,fusion_results,layout_results,nditer_results,operand_results}.md`. |
 | **NDIter cards** | `benchmark/nditer/cards/{ops,cat}.png` | ✅ tracked | `nditer/nditer_cards.py` (committed by CI `benchmark.yml`) | Two PNG summary cards rendered from `nditer_results.tsv` — `ops.png` (operations vs NumPy: geomean + by-size-tier + by-op-class bars) and `cat.png` (the IL-generation dividends: construction vs `np.nditer`, fusion, reuse, parallel loop, chunk-width, pathology). Produced *for* the README/site; not currently embedded in either. |
 
@@ -529,8 +536,8 @@ NumSharp uses):
 
 | Icon | Status | Ratio | `%NumPy🕐` | Meaning |
 |:-:|--------|:-----:|:---------:|---------|
-| ✅ | faster | ≥ 1.0× | ≤ 100% | NumSharp ≥ NumPy speed |
-| 🟡 | close | 0.5–1.0× | 100–200% | within 2× slower |
+| ✅ | faster | ≥ 1.05× | ≤ 95.2% | NumSharp materially faster |
+| 🟡 | close | 0.5–1.05× | 95.2–200% | near parity / within 2× slower |
 | 🟠 | slower | 0.2–0.5× | 200–500% | optimization target |
 | 🔴 | much_slower | < 0.2× | > 500% | priority fix |
 | ▫ | **negligible** | < 1µs either side, or > 20× | — | too fast to be a *credible* comparison — kept in the per-suite tables but **excluded** from the geomeans and the Best/Worst rankings |
@@ -546,8 +553,8 @@ row, a view return, a lazy allocation, or a dead-code-eliminated kernel manufact
 `run_benchmark.py`, then `git add`s the refreshed `benchmark-report.md`, the subsystem `*_results.*`,
 the cards, and the whole `benchmark/history/` snapshot, and redeploys the docs. Two things it does
 **not** touch, so they can drift: it does **not** refresh `benchmark/README.md` (that file is a
-static guide, not the report), and it does **not** re-render the hand-built
-`docs/website-src/docs/benchmarks-dashboard.md`. (Historical note: the workflow's "render docs" step
+static guide, not the report), and it does **not** re-render the curated narrative cards in
+`docs/website-src/docs/benchmarks-dashboard.md` (it does refresh the Function Explorer JSON). (Historical note: the workflow's "render docs" step
 still writes `docs/website-src/docs/benchmark-matrix.md` + `benchmark-iterator.md` and references a
 `benchmarks.md`; the current site toc instead uses `benchmarks-dashboard.md` + `history/latest/*`, so
 those two emitted pages are not linked from the toc — refresh the dashboard hub by hand when numbers change.)
@@ -629,15 +636,17 @@ The C# side runs under `OfficialBenchmarkConfig` (Infrastructure/BenchmarkConfig
   still get hundreds–thousands of invocations, slow ops drop to 1/iteration. (~15× faster,
   all 50 iterations preserved.)
 
-The merge keys the join on `(op, dtype, N)` and emits a per-size geomean summary plus the full
-per-(op, dtype, N) ratio matrix in `benchmark-report.md`.
+The language merge keys on `(op, dtype, N)`. The targeted backend harness then measures all 39
+backend-sensitive APIs under Managed C# and OpenBLAS, capturing MissingBackendException and
+NotSupportedException as availability. `merge-backend-profiles.py` joins on
+`(op, dtype, N, scenario)` and publishes both profiles plus the fastest valid exact-cell result.
 
 **Op coverage** spans comparison, bitwise, logic, NaN-aware reductions, statistics,
 sorting/searching, linear algebra, selection (`where`), and unary extras (cbrt/reciprocal/
 square/negative/positive/trunc) in addition to the original arithmetic/unary/reduction/
 broadcast/creation/manipulation/slicing suites.
 
-After the op matrix, the orchestrator runs the **NDIter iterator benchmark**
+After the backend-profile merge, the orchestrator runs the **NDIter iterator benchmark**
 (`benchmark/nditer/`, via `nditer_sheet.py` + `nditer_cards.py`) and appends its sheet to
 `benchmark-report.md` as its own section (`--skip-nditer` opts out). That harness has a
 different result model — *aspect × cache-tier* (construction, traversal, reductions, selection,
@@ -649,7 +658,7 @@ than crashing the run. See `benchmark/nditer/README.md` for the harness internal
 `.github/workflows/benchmark.yml` post-release workflow and this entry point produce the same
 unified report + the two summary cards (`cards/ops.png`, `cards/cat.png`).
 
-After NDIter, the orchestrator runs four more **matrix subsystems** that fill axes the
+After NDIter, the orchestrator runs four more **complementary subsystems** that fill axes the
 op/dtype/N matrix cannot express, each appended as its own report section (and `--skip-layout`
 / `--skip-operand` / `--skip-cast` / `--skip-fusion` opt out):
 
@@ -660,7 +669,7 @@ op/dtype/N matrix cannot express, each appended as its own report section (and `
 | **Cast** | `benchmark/cast/` | full `astype` src→dst × 8 layouts at 1M — no op-matrix coverage at all | 15×15 per-layout ratio matrices |
 | **Fusion** | `benchmark/fusion/` | `np.evaluate` fused vs unfused np.* chains (+ NumPy context) | fixed-expression report (fenced) |
 
-Each subsystem mirrors NDIter's shape: a NumSharp `*_bench.cs` (fed on stdin via
+Each appended subsystem mirrors NDIter's shape: a NumSharp `*_bench.cs` (fed on stdin via
 `dotnet run -c Release -`, the author's absolute `#:project` path rewritten to the running
 checkout) + a NumPy `*_bench.py` twin emitting identical keys, merged and rendered by a
 `*_sheet.py` to a committed `*_results.md`. The shared build/run/parse plumbing lives in
@@ -675,7 +684,7 @@ reference*, distinct from the gitignored raw scratch:
 | Path | Tracked? | Contents |
 |------|----------|----------|
 | `benchmark/results/<timestamp>/` | ❌ gitignored | raw per-run scratch: per-suite NumPy JSONs, BenchmarkDotNet per-class reports, the merged json/csv. Ephemeral. |
-| `benchmark/history/<date>_<sha>/` | ✅ tracked | the snapshot: `MANIFEST.md` + `benchmark-report.{md,json,csv}` + `numpy-results.json` + every subsystem `*_results.{md,tsv}` + `cards/`. The json/csv/numpy-results are **gitignored at the benchmark root**, so the snapshot is their only committed home. |
+| `benchmark/history/<date>_<sha>/` | ✅ tracked | the snapshot: MANIFEST + combined/separate profile JSON + report/csv + NumPy input + subsystem results + cards. |
 | `benchmark/history/latest` | ✅ tracked symlink | relative symlink (git mode 120000) → the newest snapshot. The stable path for docs/CI: `benchmark/history/latest/benchmark-report.md`. |
 
 `benchmark/scripts/snapshot_history.py` assembles the snapshot, repoints `latest`, and
@@ -1258,4 +1267,4 @@ python NumSharp.Benchmark.Python/numpy_benchmark.py --suite reduction --type flo
 ---
 
 *Last updated: 2026-08-21*
-*Benchmark suite version: 3.0 — `run_benchmark.py` orchestrator: 14-suite op matrix (15 dtypes × 1K/100K/10M) + five appended subsystems (nditer/layout/operand/cast/fusion) + committable `history/` snapshots; NPY/NS convention. The [Reports & UI surfaces](#reports--ui-surfaces) section maps the report/dashboard/cards/DocFX outputs and who refreshes each.*
+*Benchmark suite version: 5.0 — `run_benchmark.py` orchestrator: 18-suite API-complete op matrix + unified Managed/OpenBLAS profiles + five complementary subsystems + committable history snapshots; NPY/NS convention.*

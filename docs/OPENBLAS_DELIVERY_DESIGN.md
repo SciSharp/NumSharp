@@ -1,6 +1,6 @@
 # OpenBLAS Dependency — Delivery & Discovery Design
 
-> **Status:** IMPLEMENTED & FINALIZED · 2026-08-13 · branch `journey3`
+> **Status:** IMPLEMENTED & FINALIZED · 2026-08-13
 > Supersedes the discovery/precedence model documented in `docs/GEMM_PARITY.md` §6.1.
 > §10.1 is RESOLVED (bundle stays above machine tooling — parity-by-default preserved). Both halves
 > are implemented: the runtime side (renames — the old spelling retired outright, no alias —

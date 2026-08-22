@@ -45,6 +45,18 @@ public class DivideBenchmarks : TypedBenchmarkBase
     [BenchmarkCategory("Elementwise")]
     public NDArray Divide_Elementwise() => _a / _b;
 
+    [Benchmark(Description = "np.divide(a, b)")]
+    [BenchmarkCategory("Elementwise", "ApiEntryPoint")]
+    public NDArray NpDivide() => np.divide(_a, _b);
+
+    [Benchmark(Description = "np.true_divide(a, b)")]
+    [BenchmarkCategory("Elementwise", "ApiEntryPoint")]
+    public NDArray NpTrueDivide() => np.true_divide(_a, _b);
+
+    [Benchmark(Description = "np.floor_divide(a, b)")]
+    [BenchmarkCategory("Elementwise", "ApiEntryPoint")]
+    public NDArray NpFloorDivide() => np.floor_divide(_a, _b);
+
     [Benchmark(Description = "a / scalar")]
     [BenchmarkCategory("Scalar")]
     public NDArray Divide_Scalar() => _a / _scalar;

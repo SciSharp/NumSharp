@@ -39,4 +39,8 @@ public class BitwiseBenchmarks : TypedBenchmarkBase
     [Benchmark(Description = "np.invert(a)")] public NDArray Invert() => np.invert(_a);
     [Benchmark(Description = "np.left_shift(a, 2)")] public NDArray LeftShift() => np.left_shift(_a, 2);
     [Benchmark(Description = "np.right_shift(a, 2)")] public NDArray RightShift() => np.right_shift(_a, 2);
+    [Benchmark(Description = "np.bitwise_and(a, b)")] public NDArray NpAnd() => np.bitwise_and(_a, _b);
+    [Benchmark(Description = "np.bitwise_or(a, b)")] public NDArray NpOr() => np.bitwise_or(_a, _b);
+    [Benchmark(Description = "np.bitwise_xor(a, b)")] public NDArray NpXor() => np.bitwise_xor(_a, _b);
+    [Benchmark(Description = "np.bitwise_not(a)")] public NDArray NpNot() => np.bitwise_not(_a);
 }

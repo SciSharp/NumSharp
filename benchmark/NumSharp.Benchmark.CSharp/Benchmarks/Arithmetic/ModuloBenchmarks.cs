@@ -51,6 +51,10 @@ public class ModuloBenchmarks : TypedBenchmarkBase
     [BenchmarkCategory("Elementwise")]
     public NDArray Modulo_Elementwise() => _a % _b;
 
+    [Benchmark(Description = "np.mod(a, b)")]
+    [BenchmarkCategory("Elementwise", "ApiEntryPoint")]
+    public NDArray NpMod() => np.mod(_a, _b);
+
     [Benchmark(Description = "a % 7 (literal)")]
     [BenchmarkCategory("Scalar")]
     public NDArray Modulo_Scalar() => _a % 7;

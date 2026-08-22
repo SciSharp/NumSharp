@@ -29,7 +29,10 @@ namespace NumSharp.Backends
             // - Float/Double: calls float.IsNaN/double.IsNaN
             // - All other types: returns false (integers cannot be NaN)
             if (@out is null && where is null)
-                return ExecuteUnaryOp(a, UnaryOp.IsNan, NPTypeCode.Boolean).MakeGeneric<bool>();
+            {
+                using var result = ExecuteUnaryOp(a, UnaryOp.IsNan, NPTypeCode.Boolean);
+                return result.MakeGeneric<bool>();
+            }
 
             // ufunc out=/where=: rides the shared unary Into-path with a
             // Boolean loop dtype (the predicate body emits bool at the INPUT

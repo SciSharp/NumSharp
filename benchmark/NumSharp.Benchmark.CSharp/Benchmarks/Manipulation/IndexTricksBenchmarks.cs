@@ -5,7 +5,7 @@ using NumSharp.Benchmark.CSharp.Infrastructure;
 namespace NumSharp.Benchmark.CSharp.Benchmarks.Manipulation;
 
 /// <summary>
-/// Benchmarks for NumPy's index-expression DSL (journey3): np.r_, np.c_ and np.ix_.
+/// Benchmarks for NumPy's index-expression DSL: np.r_, np.c_ and np.ix_.
 ///
 /// <para>
 /// Three cost classes, kept apart because a geomean across them would describe nothing:
@@ -44,7 +44,7 @@ public class IndexTricksBenchmarks : BenchmarkBase
     private string _arangeExpr = null!;
     private string _linspaceExpr = null!;
 
-    [Params(ArraySizeSource.Medium, ArraySizeSource.Large)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]

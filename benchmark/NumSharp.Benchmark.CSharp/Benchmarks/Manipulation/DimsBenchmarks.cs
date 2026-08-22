@@ -15,7 +15,7 @@ public class DimsBenchmarks : BenchmarkBase
     private NDArray _arr3D = null!;
     private NDArray _arrWithSingleton = null!;
 
-    [Params(ArraySizeSource.Medium, ArraySizeSource.Large)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]

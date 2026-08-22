@@ -2,8 +2,8 @@
 """
 Official NumSharp-vs-NumPy benchmark orchestrator (cross-platform).
 
-Runs the C# BenchmarkDotNet suite and the NumPy suite across the three cache-tier sizes
-(Small=1K / Medium=100K / Large=10M), then merges them into a single per-(op, dtype, N)
+Runs the C# BenchmarkDotNet suite and the NumPy suite across each API's applicable bounded
+size tiers (classic kernels use Small=1K / Medium=100K / Large=10M), then merges them into a per-(op, dtype, N)
 ratio report. Then appends, as dedicated sections, the complementary harnesses whose result
 models the op/dtype/N matrix cannot express:
   * NDIter iterator benchmark (benchmark/nditer)  — iterator machinery, aspect × tier
@@ -11,6 +11,7 @@ models the op/dtype/N matrix cannot express:
   * Operand layouts           (benchmark/operand)   — 1-D / scalar / mixed-operand / broadcast
   * Cast matrix               (benchmark/cast)      — astype src→dst × layout × dtype
   * Fusion gate               (benchmark/fusion)    — np.evaluate fused vs unfused chains
+  * Backend profiles         (benchmark/backends) — Managed C# / OpenBLAS, merged per exact cell
 Each owns a *_sheet.py driver+renderer; this orchestrator runs them and folds their
 *_results.md into the report. The single entry point for the whole NumSharp-vs-NumPy
 comparison.
@@ -56,8 +57,10 @@ CSHARP_DIR = HERE / "NumSharp.Benchmark.CSharp"
 CSHARP_PROJ = CSHARP_DIR / "NumSharp.Benchmark.CSharp.csproj"
 PY_BENCH = HERE / "NumSharp.Benchmark.Python" / "numpy_benchmark.py"
 MERGE = HERE / "scripts" / "merge-results.py"
+PROFILE_MERGE = HERE / "scripts" / "merge-backend-profiles.py"
 ARTIFACTS = CSHARP_DIR / "BenchmarkDotNet.Artifacts" / "results"
 TFM = "net10.0"
+DOCS_BENCHMARK_JSON = HERE.parent / "docs" / "website-src" / "docs" / "data" / "benchmark-report.json"
 
 # NDIter iterator benchmark (benchmark/nditer) — a complementary harness with a
 # different result model (aspect x tier, not op/dtype/N), appended to the report.
@@ -67,7 +70,7 @@ NPYITER_CARDS = NPYITER_DIR / "nditer_cards.py"
 NPYITER_REPORT = NPYITER_DIR / "nditer_results.md"
 NPYITER_TSV = NPYITER_DIR / "nditer_results.tsv"
 
-# Matrix subsystems — each fills an axis the op/dtype/N matrix omits and owns a
+# Complementary subsystems — each fills an axis or execution route the op/dtype/N matrix omits and owns a
 # *_sheet.py driver+renderer (mirroring nditer): a NumSharp `*_bench.cs` + its
 # NumPy `*_bench.py` twin -> a rendered `*_results.md` section appended to the
 # report. Layout = memory-layout axis (op-matrix is C-contiguous only); Cast =
@@ -81,6 +84,8 @@ MATRIX_SUBSYSTEMS = [
      "Cast matrix — astype src→dst × layout × dtype"),
     ("fusion", HERE / "fusion" / "fusion_sheet.py", HERE / "fusion" / "fusion_results.md",
      "Fusion — np.evaluate vs unfused chains"),
+    ("openblas", HERE / "backends" / "backend_profiles.py", HERE / "openblas" / "openblas_results.md",
+     "Backend profiles — Managed C# and OpenBLAS"),
 ]
 
 # Comparison suites only (the experimental Dispatch/Fusion/DynamicEmission/SimdVsScalar
@@ -102,6 +107,10 @@ SUITES = {
     "sorting":      "*Benchmarks.Sorting.*",
     "linalg":       "*Benchmarks.LinearAlgebra.*",
     "selection":    "*Benchmarks.Selection.*",
+    "fft":          "*Benchmarks.Fourier.*",
+    "random":       "*Benchmarks.Random.*",
+    "ndarray":      "*Benchmarks.NDArrayApi.*",
+    "api":          "*Benchmarks.ApiSurface.*",
 }
 
 
@@ -142,6 +151,8 @@ def run_matrix_subsystem(name, sheet, results_md, title, report_md, results_dir,
         tsv = results_md.with_suffix(".tsv")
         if tsv.exists():
             shutil.copy(tsv, results_dir / tsv.name)
+        for profile_json in results_md.parent.glob(f"{results_md.stem}.*.json"):
+            shutil.copy(profile_json, results_dir / profile_json.name)
     append_section(report_md, results_md, title)
 
 
@@ -163,6 +174,8 @@ def main():
                     help="Skip the Fusion gate (benchmark/fusion)")
     ap.add_argument("--skip-operand", action="store_true",
                     help="Skip the Operand-layout subsystem (benchmark/operand)")
+    ap.add_argument("--skip-openblas", action="store_true",
+                    help="Skip targeted Managed/OpenBLAS backend profiles (benchmark/backends)")
     ap.add_argument("--no-history", action="store_true",
                     help="Skip writing the committable benchmark/history/<date>_<sha>/ snapshot + latest symlink")
     args = ap.parse_args()
@@ -213,13 +226,13 @@ def main():
         print(f"C#: collected {len(list(csharp_out.glob('*.json')))} class reports")
 
     # 4. Merge into the unified per-(op, dtype, N) ratio report.
-    out_base = results_dir / "benchmark-report"
+    managed_matrix_base = results_dir / "benchmark-report.managed-matrix"
     run([sys.executable, str(MERGE), "--numpy", str(numpy_json),
-         "--csharp", str(csharp_out), "--output", str(out_base)], check=False)
+         "--csharp", str(csharp_out), "--output", str(managed_matrix_base)], check=False)
 
     # The unified report the op-matrix merge just wrote; the iterator + matrix
     # subsystems below each append one section to it.
-    report_md = results_dir / "benchmark-report.md"
+    report_md = results_dir / "benchmark-report.managed-matrix.md"
 
     # 4b. NDIter iterator benchmark — complementary harness (file-based, section-
     #     isolated, crash-resilient: a NumSharp AccessViolation is IGNORED and the
@@ -250,24 +263,57 @@ def main():
             report_md.write_text(existing + section + NPYITER_REPORT.read_text(encoding="utf-8"),
                                  encoding="utf-8")
 
-    # 4c. Matrix subsystems — layout / cast / fusion. Each fills an axis the
+    # 4c. Complementary subsystems — layout / operand / cast / fusion / OpenBLAS.
     #     op/dtype/N matrix cannot express and appends its own rendered section.
     skip_matrix = {"layout": args.skip_layout, "operand": args.skip_operand,
-                   "cast": args.skip_cast, "fusion": args.skip_fusion}
+                   "cast": args.skip_cast, "fusion": args.skip_fusion,
+                   "openblas": args.skip_openblas}
     for name, sheet, results, title in MATRIX_SUBSYSTEMS:
         if skip_matrix[name]:
             continue
         run_matrix_subsystem(name, sheet, results, title, report_md, results_dir, args.skip_build)
 
+    # 4d. Canonical backend-profile merge. The full Managed C# matrix and the targeted backend
+    #     harness use the SAME JSON row schema. Separate profile files remain available, while
+    #     benchmark-report.json stores both measurements and an effective fastest-valid value per
+    #     exact operation/dtype/N/scenario cell. MissingBackendException and NotSupportedException
+    #     are availability states emitted by the targeted harness, never timed failures.
+    profile_cmd = [sys.executable, str(PROFILE_MERGE),
+                   "--managed", str(Path(str(managed_matrix_base) + ".json")),
+                   "--output", str(results_dir / "benchmark-report")]
+    backend_managed = HERE / "openblas" / "openblas_results.managed.json"
+    backend_openblas = HERE / "openblas" / "openblas_results.openblas.json"
+    if backend_managed.exists() and not args.skip_openblas:
+        profile_cmd.extend(["--managed-extra", str(backend_managed)])
+    if backend_openblas.exists() and not args.skip_openblas:
+        profile_cmd.extend(["--openblas", str(backend_openblas)])
+    run(profile_cmd, check=True)
+
+    # Append the complementary subsystem sheets to the newly generated profile-aware report.
+    report_md = results_dir / "benchmark-report.md"
+    if not args.skip_nditer:
+        append_section(report_md, NPYITER_REPORT, "NDIter iterator benchmark")
+    for name, _sheet, results, title in MATRIX_SUBSYSTEMS:
+        if not skip_matrix[name]:
+            append_section(report_md, results, title)
+
     # 5. Copy the headline artifacts to the benchmark/ root for convenience.
     for name in ["benchmark-report.md", "benchmark-report.json", "benchmark-report.csv",
-                 "numpy-results.json"]:
+                 "benchmark-report.managed.json", "benchmark-report.openblas.json", "numpy-results.json"]:
         src = results_dir / name
         if src.exists():
             shutil.copy(src, HERE / name)
 
+    # The rich DocFX dashboard fetches this relative URL at runtime. Keep it generated from the
+    # exact same merge result instead of leaving the Function Explorer with a missing asset.
+    DOCS_BENCHMARK_JSON.parent.mkdir(parents=True, exist_ok=True)
+    for name in ["benchmark-report.json", "benchmark-report.managed.json", "benchmark-report.openblas.json"]:
+        src = results_dir / name
+        if src.exists():
+            shutil.copy(src, DOCS_BENCHMARK_JSON.parent / name)
+
     # 6. History snapshot + latest symlink — the committable provenance/publish step
-    #    (benchmark/scripts/snapshot_history.py): copies the report + all five subsystem
+    #    (benchmark/scripts/snapshot_history.py): copies the report + both profile JSON files and subsystem
     #    sheets + cards into benchmark/history/<date>_<sha>/, writes a MANIFEST, and
     #    repoints benchmark/history/latest at it (a git-tracked symlink). results/<ts>/
     #    stays the gitignored raw scratch; benchmark/history/ is what we commit + reference.

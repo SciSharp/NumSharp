@@ -1,8 +1,7 @@
-# The five matrix subsystems (and how to add one)
+# Backend profiles and the five complementary subsystems
 
-Beyond the op/dtype/N matrix, `run_benchmark.py` appends five subsystems that fill axes the op matrix can't
-express. Each has its OWN result model and is **appended, not merged** into the op matrix. They live in
-`benchmark/{nditer,layout,operand,cast,fusion}/`.
+`run_benchmark.py` first merges targeted Managed/OpenBLAS profile rows into the op matrix, then appends
+five subsystems whose result models cannot fit that matrix. Backend exceptions are availability states.
 
 | Subsystem | Dir | What it adds the op matrix lacks | Result model |
 |-----------|-----|----------------------------------|--------------|
@@ -11,15 +10,18 @@ express. Each has its OWN result model and is **appended, not merged** into the 
 | **operand** | `benchmark/operand/` | 1-D (contig/strided/reversed), scalar operand, mixed operand layouts (C+F, C+T), binary broadcast | case × dtype |
 | **cast** | `benchmark/cast/` | full `astype` src→dst × 8 layouts at 1M — no op-matrix coverage at all | 15×15 per-layout matrices |
 | **fusion** | `benchmark/fusion/` | `np.evaluate` fused vs unfused np.* chains (+ NumPy context) | fixed-expression report |
+| **backend profiles** | `benchmark/backends/` → `benchmark/openblas/` | all 39 backend-sensitive APIs under Managed C# and OpenBLAS; catches MissingBackendException and NotSupportedException | op × dtype × N × scenario, merged |
 
-## The shared shape (every subsystem is the same three files)
+## The shared shape (the five appended subsystems)
 
 1. **`<name>_bench.cs`** — a NumSharp file-based app fed on stdin via `dotnet run -c Release -`. Emits rows with the
    subsystem's keys. Its author-absolute `#:project` path is rewritten to the running checkout by the driver.
 2. **`<name>_bench.py`** — the NumPy twin emitting IDENTICAL keys.
 3. **`<name>_sheet.py`** — merges the two and renders `<name>_results.md` (+ `.tsv`), in the **NPY/NS** convention.
 
-The build/run/parse plumbing is shared in `benchmark/scripts/bench_common.py`. `run_benchmark.py` calls each
+The build/run/parse plumbing is shared in `benchmark/scripts/bench_common.py`. The backend driver uses it too,
+but writes same-schema `openblas_results.{managed,openblas}.json` consumed by
+`merge-backend-profiles.py`. `run_benchmark.py` calls each
 `*_sheet.py` and appends its `*_results.md` as a report section; `--skip-<name>` opts out.
 
 ## Adding a new op to an EXISTING subsystem

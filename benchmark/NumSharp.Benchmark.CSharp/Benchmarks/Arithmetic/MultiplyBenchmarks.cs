@@ -43,6 +43,10 @@ public class MultiplyBenchmarks : TypedBenchmarkBase
     [BenchmarkCategory("Elementwise")]
     public NDArray Multiply_Elementwise() => _a * _b;
 
+    [Benchmark(Description = "np.multiply(a, b)")]
+    [BenchmarkCategory("Elementwise", "ApiEntryPoint")]
+    public NDArray NpMultiply() => np.multiply(_a, _b);
+
     [Benchmark(Description = "a * a (square)")]
     [BenchmarkCategory("Elementwise")]
     public NDArray Multiply_Square() => _a * _a;

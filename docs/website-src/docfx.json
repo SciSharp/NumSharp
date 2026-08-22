@@ -23,12 +23,18 @@
     "content": [
       {
         "files": ["**/*.{md,yml}"],
-        "exclude": ["_site/**", "obj/**", "scripts/**", "filterConfig.yml", "templates/**", "api/overwrites/**"]
+        "exclude": ["_site/**", "obj/**", "scripts/**", "filterConfig.yml", "templates/**", "api/overwrites/**", "docs/data/**"]
       },
       {
         "src": "../../benchmark/history/latest",
         "files": ["*.md"],
+        "exclude": ["benchmark-report.md"],
         "dest": "docs/reports"
+      },
+      {
+        "src": "../../benchmark/coverage/generated",
+        "files": ["summary.md"],
+        "dest": "docs/reports/coverage"
       }
     ],
     "overwrite": [
@@ -41,9 +47,12 @@
         "files": ["images/**"]
       },
       {
+        "files": ["docs/data/benchmark-report*.json"]
+      },
+      {
         "src": "../../benchmark/history/latest",
-        "files": ["benchmark-report.json"],
-        "dest": "docs/data"
+        "files": ["benchmark-report.md"],
+        "dest": "docs/reports"
       },
       {
         "src": "../../coverage/generated",

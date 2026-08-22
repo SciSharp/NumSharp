@@ -6,8 +6,8 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Logic;
 
 /// <summary>
 /// Logic / predicate ufuncs on floating arrays: isnan, isinf, isfinite, maximum, minimum,
-/// array_equal. (all / any live in <see cref="BoolLogicBenchmarks"/>.) isclose/allclose are
-/// disabled — they segfault NumSharp (see the note on the benchmark methods below).
+/// array_equal. (all / any live in <see cref="BoolLogicBenchmarks"/>; isclose/allclose live in
+/// <see cref="CloseBenchmarks"/> because their multi-intermediate formula gets a bounded size tier.)
 /// </summary>
 [BenchmarkCategory("Logic")]
 public class LogicBenchmarks : TypedBenchmarkBase
@@ -47,15 +47,54 @@ public class LogicBenchmarks : TypedBenchmarkBase
     [Benchmark(Description = "np.isfinite(a)")] public NDArray IsFinite() => np.isfinite(_a);
     [Benchmark(Description = "np.maximum(a, b)")] public NDArray Maximum() => np.maximum(_a, _b);
     [Benchmark(Description = "np.minimum(a, b)")] public NDArray Minimum() => np.minimum(_a, _b);
+    [Benchmark(Description = "np.fmax(a, b)")] public NDArray FMax() => np.fmax(_a, _b);
+    [Benchmark(Description = "np.fmin(a, b)")] public NDArray FMin() => np.fmin(_a, _b);
+    [Benchmark(Description = "np.iscomplex(a)")] public NDArray IsComplex() => np.iscomplex(_a);
+    [Benchmark(Description = "np.isreal(a)")] public NDArray IsReal() => np.isreal(_a);
+    [Benchmark(Description = "np.iscomplexobj(a)")] public bool IsComplexObject() => np.iscomplexobj(_a);
+    [Benchmark(Description = "np.isrealobj(a)")] public bool IsRealObject() => np.isrealobj(_a);
+    [Benchmark(Description = "np.isscalar(a)")] public bool IsScalar() => np.isscalar(_a);
+    [Benchmark(Description = "np.isfortran(a)")] public bool IsFortran() => np.isfortran(_a);
     [Benchmark(Description = "np.array_equal(a, b)")] public bool ArrayEqual() => np.array_equal(_a, _b);
 
-    // DISABLED — np.isclose / np.allclose deterministically segfault NumSharp with the
-    // unmanaged-storage AccessViolation (each crashes even when run alone, not just under the
-    // suite's cumulative load). Left in the class, the crash kills the whole LogicBenchmarks
-    // process before BenchmarkDotNet can export ANY report — taking the six working predicates
-    // above down with it. Re-enable once the NumSharp isclose/allclose lifetime bug is fixed.
-    // [Benchmark(Description = "np.isclose(a, b)")] public NDArray IsClose() => np.isclose(_a, _b);
-    // [Benchmark(Description = "np.allclose(a, b)")] public bool AllClose() => np.allclose(_a, _b);
+}
+
+/// <summary>
+/// Tolerance comparisons allocate several simultaneous intermediates by definition. They are
+/// bounded to 100K elements; the former two-buffer deferred-release slope is now regression-gated
+/// by BufferReleaseSweepTests.
+/// </summary>
+[BenchmarkCategory("Logic", "Close")]
+public class CloseBenchmarks : TypedBenchmarkBase
+{
+    private NDArray _a = null!;
+    private NDArray _b = null!;
+
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    public override int N { get; set; }
+
+    [ParamsSource(nameof(Types))]
+    public new NPTypeCode DType { get; set; }
+
+    public static IEnumerable<NPTypeCode> Types => new[]
+    {
+        NPTypeCode.Half,
+        NPTypeCode.Single,
+        NPTypeCode.Double
+    };
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        _a = CreateRandomArray(N, DType);
+        _b = CreateRandomArray(N, DType, seed: 43);
+    }
+
+    [GlobalCleanup]
+    public void Cleanup() { _a = null!; _b = null!; GC.Collect(); }
+
+    [Benchmark(Description = "np.isclose(a, b)")] public NDArray IsClose() => np.isclose(_a, _b);
+    [Benchmark(Description = "np.allclose(a, b)")] public bool AllClose() => np.allclose(_a, _b);
 }
 
 /// <summary>
@@ -65,6 +104,7 @@ public class LogicBenchmarks : TypedBenchmarkBase
 public class BoolLogicBenchmarks : BenchmarkBase
 {
     private NDArray _mask = null!;
+    private NDArray _other = null!;
 
     [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
@@ -74,11 +114,16 @@ public class BoolLogicBenchmarks : BenchmarkBase
     {
         np.random.seed(Seed);
         _mask = (np.random.rand(N) > 0.5).astype(np.@bool);
+        _other = (np.random.rand(N) > 0.5).astype(np.@bool);
     }
 
     [GlobalCleanup]
-    public void Cleanup() { _mask = null!; GC.Collect(); }
+    public void Cleanup() { _mask = null!; _other = null!; GC.Collect(); }
 
     [Benchmark(Description = "np.all(a)")] public bool All() => (bool)np.all(_mask);
     [Benchmark(Description = "np.any(a)")] public bool Any() => (bool)np.any(_mask);
+    [Benchmark(Description = "np.logical_and(a, b)")] public NDArray LogicalAnd() => np.logical_and(_mask, _other);
+    [Benchmark(Description = "np.logical_or(a, b)")] public NDArray LogicalOr() => np.logical_or(_mask, _other);
+    [Benchmark(Description = "np.logical_xor(a, b)")] public NDArray LogicalXor() => np.logical_xor(_mask, _other);
+    [Benchmark(Description = "np.logical_not(a)")] public NDArray LogicalNot() => np.logical_not(_mask);
 }

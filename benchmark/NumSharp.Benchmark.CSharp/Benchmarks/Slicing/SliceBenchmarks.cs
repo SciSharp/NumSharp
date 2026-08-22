@@ -18,7 +18,7 @@ public class SliceBenchmarks : BenchmarkBase
     private NDArray _rowSlice = null!;
     private NDArray _colSlice = null!;
 
-    [Params(ArraySizeSource.Medium, ArraySizeSource.Large)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]

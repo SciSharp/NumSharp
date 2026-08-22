@@ -5,7 +5,7 @@ using NumSharp.Benchmark.CSharp.Infrastructure;
 namespace NumSharp.Benchmark.CSharp.Benchmarks.Manipulation;
 
 /// <summary>
-/// Benchmarks for NumPy's two-dimensional base family (journey3): diag, diagflat, tri, tril, triu,
+/// Benchmarks for NumPy's two-dimensional base family: diag, diagflat, tri, tril, triu,
 /// fill_diagonal and the tril/triu index generators.
 ///
 /// <para>
@@ -41,7 +41,7 @@ public class DiagTriBenchmarks : BenchmarkBase
     private int _rows;
     private int _cols;
 
-    [Params(ArraySizeSource.Medium, ArraySizeSource.Large)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]

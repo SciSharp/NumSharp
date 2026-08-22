@@ -43,6 +43,10 @@ public class SubtractBenchmarks : TypedBenchmarkBase
     [BenchmarkCategory("Elementwise")]
     public NDArray Subtract_Elementwise() => _a - _b;
 
+    [Benchmark(Description = "np.subtract(a, b)")]
+    [BenchmarkCategory("Elementwise", "ApiEntryPoint")]
+    public NDArray NpSubtract() => np.subtract(_a, _b);
+
     [Benchmark(Description = "a - scalar")]
     [BenchmarkCategory("Scalar")]
     public NDArray Subtract_Scalar() => _a - _scalar;
