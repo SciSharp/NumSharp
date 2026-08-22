@@ -141,6 +141,9 @@ namespace NumSharp.Tests.Fuzz
                 // Cumulative scans + finite differences (T11).
                 case "cumsum": return np.cumsum(ops[0], ParseAxis(p));
                 case "cumprod": return np.cumprod(ops[0], ParseAxis(p));
+                // NaN-aware cumulative scans (T11b, nanscan.jsonl): NaN treated as 0 (sum) / 1 (prod).
+                case "nancumsum": return np.nancumsum(ops[0], ParseAxis(p));
+                case "nancumprod": return np.nancumprod(ops[0], ParseAxis(p));
                 case "diff": return np.diff(ops[0], p["n"].GetInt32(), p["axis"].GetInt32());
 
                 // In-place out= aliasing (W11): the output buffer IS an input operand.

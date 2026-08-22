@@ -41,8 +41,17 @@ namespace NumSharp.Backends
                     axis_ == null ? Shape.Vector((int)shape.size) : new Shape(shape.dimensions), false);
             }
 
-            if (shape.IsScalar || shape.size == 1 && shape.dimensions.Length == 1)
-                return typeCode.HasValue ? Cast(arr, typeCode.Value, copy: true) : arr.Clone();
+            // 0-d scalar or single-element 1-D: cumprod is the value itself, promoted to the
+            // accumulator dtype and shaped 1-D — cumprod NEVER returns 0-d (NumPy: cumprod(0-d) -> (1,),
+            // cumprod([x]) -> [x] int64). Mirrors ReduceCumAdd; previously this returned the input dtype
+            // AND a 0-d shape for a 0-d input (NEP50-skip + missing (1,) reshape).
+            if (shape.IsScalar || (shape.size == 1 && shape.dimensions.Length == 1))
+            {
+                var single = Cast(arr, typeCode ?? arr.GetTypeCode.GetAccumulatingType(), copy: true);
+                if (single.ndim != 1)
+                    single.Storage.Reshape(Shape.Vector(1));   // 0-d -> (1,)
+                return single;
+            }
 
             if (axis_ == null)
             {

@@ -500,6 +500,19 @@ SCAN_DTYPES = list(ALL_DTYPES)         # widened: cumsum/cumprod/diff are dtype-
 SCAN_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
                 "transposed_3d", "strided_2d_cols", "one_element_1d", "negstride_1d"]
 
+# T11b — NaN-aware cumulative scans (nancumsum/nancumprod). NumPy's nancumsum/nancumprod are
+# _replace_nan(a, 0|1) then cumsum/cumprod, so the oracle rides gen_scan over the SAME layouts and
+# dtype set: the float pool front-loads nan/+-inf and the complex pool carries a NaN in BOTH the real
+# and imaginary lanes, so every float/complex slice exercises the NaN -> identity replacement (nan->0
+# for sum, nan->1 for prod; a complex element with EITHER lane NaN collapses to 0+0j / 1+0j). NumPy is
+# the oracle for value, the NEP50 accumulator dtype (nancumsum(int32)->int64), and the
+# leading-NaN/all-NaN-slice -> identity contract. Char has no NaN, so nancum(char) == cum(char) (already
+# gated by the scan tier's char cumsum) and is not re-woven here.
+NAN_SCAN_OPS = {
+    "nancumsum": lambda a, ax: np.nancumsum(a, axis=ax),
+    "nancumprod": lambda a, ax: np.nancumprod(a, axis=ax),
+}
+
 
 def gen_scan(ops, dtypes, layout_names):
     cases = []
@@ -7065,6 +7078,18 @@ def main():
         cases += gen_ediff1d(EDIFF_DTYPES, list(LAYOUTS.keys()))        # Group A: ediff1d
         cases += char_tier("scan")
         write_jsonl(os.path.join(corpus_dir, "scan.jsonl"), cases)
+    elif mode == "nanscan":
+        # nancumsum is complex ADD (portable, bit-exact); nancumprod is complex MULTIPLY, whose
+        # win-amd64 NumPy result is MSVC-FMA-contracted (numpy computes in1r*in2i + in1i*in2r and MSVC
+        # fuses one product), ~1-2 ULP off .NET's non-fused System.Numerics.Complex operator* — the same
+        # host-FMA class as the GEMM/float-kernel pins, and genuinely non-portable-bit-exact for a complex
+        # product without BLAS. complex128 is therefore CARVED from nancumprod (plain cumprod hides this by
+        # short-circuiting the NaN-laced pool to NaN; nancumprod replaces NaN->1 and exposes the real
+        # product chain) and covered by the NanCumProd_Complex unit test on exact-representable values.
+        # complex128 nancumsum and every other dtype for both ops stay bit-exact.
+        cases = gen_scan(NAN_SCAN_OPS, [d for d in SCAN_DTYPES if d != "complex128"], SCAN_LAYOUTS)
+        cases += gen_scan({"nancumsum": NAN_SCAN_OPS["nancumsum"]}, ["complex128"], SCAN_LAYOUTS)
+        write_jsonl(os.path.join(corpus_dir, "nanscan.jsonl"), cases)
     elif mode == "stat":
         cases = gen_reduce(STAT_REDUCE_OPS, STAT_DTYPES, STAT_LAYOUTS)
         cases += gen_count_nonzero(CNZ_DTYPES, STAT_LAYOUTS)
@@ -7170,7 +7195,7 @@ def main():
         cases = gen_fft()                                               # np.fft.* differential tier
         write_jsonl(os.path.join(corpus_dir, "fft.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | products | fft)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | products | fft)")
         sys.exit(2)
 
 

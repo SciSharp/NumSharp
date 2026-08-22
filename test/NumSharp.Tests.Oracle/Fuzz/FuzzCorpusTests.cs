@@ -273,6 +273,14 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Scan() => RunCorpus("scan.jsonl");
 
+        // T11b NaN-aware cumulative scans: nancumsum (NaN as 0) / nancumprod (NaN as 1) across the scan
+        // layouts, whose float pool front-loads nan/+-inf and whose complex pool carries a NaN in both
+        // lanes — so every float/complex slice exercises the NaN -> identity replacement. NEP50
+        // accumulator widening + leading-NaN/all-NaN -> identity are bit-compared against NumPy 2.4.2.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void NanScan() => RunCorpus("nanscan.jsonl");
+
         // W6 statistics (T12): median/average/ptp (axis+keepdims), count_nonzero, percentile/
         // quantile (q in {0,25,50,75,100}/{0,.25,.5,.75,1}, axis None/0/last), clip (a,min,max).
         [TestMethod]
@@ -497,6 +505,7 @@ namespace NumSharp.Tests.Fuzz
             ["modf.jsonl"] = 51,
             ["multioutput.jsonl"] = 51,
             ["nanreduce.jsonl"] = 6692,
+            ["nanscan.jsonl"] = 525,   // nancumsum all 13 dtypes; nancumprod carves complex128 (host-FMA multiply)
             ["numpy_f32_kernels.jsonl"] = 140,
             ["numpy_f64_kernels.jsonl"] = 24,
             ["out_where.jsonl"] = 3500,
