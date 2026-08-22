@@ -128,8 +128,9 @@ namespace NumSharp.Interop.OpenBLAS
                 count *= shape.dimensions[i];
 
             // W is ALWAYS the real basetype (double); the core only instantiates for T ∈ {double, Complex}.
-            var w = new NDArray(NPTypeCode.Double, MakeShape1(shape.dimensions, nb, m));
-            NDArray v = computeVectors ? new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, m, m)) : null;
+            // fillZeros:false: W and V are fully written below (the loop and Delinearize).
+            var w = new NDArray(NPTypeCode.Double, MakeShape1(shape.dimensions, nb, m), fillZeros: false);
+            NDArray v = computeVectors ? new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, m, m), fillZeros: false) : null;
 
             if (count == 0 || m == 0)
                 return (w, v); // empty batch or a 0×0 element — empty outputs, no LAPACK call
@@ -219,8 +220,8 @@ namespace NumSharp.Interop.OpenBLAS
 
             // eig ALWAYS produces complex128 at the seam (a real matrix can carry a complex-conjugate
             // eigenpair). The wrapper collapses to real when every imaginary part is zero.
-            var w = new NDArray(NPTypeCode.Complex, MakeShape1(shape.dimensions, nb, n));
-            NDArray v = computeVectors ? new NDArray(NPTypeCode.Complex, MakeShape(shape.dimensions, nb, n, n)) : null;
+            var w = new NDArray(NPTypeCode.Complex, MakeShape1(shape.dimensions, nb, n), fillZeros: false);
+            NDArray v = computeVectors ? new NDArray(NPTypeCode.Complex, MakeShape(shape.dimensions, nb, n, n), fillZeros: false) : null;
 
             if (count == 0 || n == 0)
                 return (w, v);

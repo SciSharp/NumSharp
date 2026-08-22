@@ -177,14 +177,8 @@ namespace NumSharp.Interop.OpenBLAS
             }
 
             var outShape = nd == 0 ? Shape.Scalar : new Shape(SubArray(dimensions, nd));
-            // fillZeros:false mirrors NumPy's new_array_for_sum, which returns UNINITIALISED memory
-            // (PyArray_NewLikeArray) — the single memset below is the faithful port of its lone
-            // `memset(out_buf, 0, numbytes)` (cblasfuncs.c line 373). The default-zeroing ctor made
-            // NumSharp memset TWICE per np.dot (ctor + this Zero) where NumPy does it once; on the
-            // matrix@matrix (gemm) route both are wasted anyway since gemm runs beta=0, so the extra
-            // pass was pure page-fault/bandwidth cost — the same lever as the matmul fix in
-            // Default.MatMul.2D2D.cs. A warm pooled buffer + one memset is what recovered np.dot /
-            // np.linalg.multi_dot to parity with NumPy.
+            // fillZeros:false + the single Zero below mirrors cblasfuncs.c's UNINITIALISED
+            // new_array_for_sum + its lone memset; the default ctor zeroed a redundant second time.
             var outBuf = new NDArray(typeCode, outShape, fillZeros: false);
             result = outBuf;
 

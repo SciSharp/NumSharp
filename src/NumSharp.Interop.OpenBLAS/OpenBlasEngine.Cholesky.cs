@@ -62,10 +62,7 @@ namespace NumSharp.Interop.OpenBLAS
             int nd = shape.NDim;
             long m = shape.dimensions[nd - 1]; // square: rows == cols == m (validated by AssertStackedSquare)
 
-            // fillZeros:false: DelinearizeTriangle writes EVERY cell of each m×m block (the kept
-            // triangle gets the factor, the other triangle gets default(T)), so the whole result is
-            // overwritten and a pre-zeroed buffer is wasted work — a warm pooled buffer avoids the
-            // page-fault/memset cost the default ctor pays right before the LAPACK call.
+            // fillZeros:false: DelinearizeTriangle writes every cell (factor + default), so pre-zeroing is wasted.
             var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape((long[])shape.dimensions.Clone()), fillZeros: false);
             if (result.size == 0)
                 return result; // (…,0,0) → empty factor, matching NumPy

@@ -263,7 +263,8 @@ namespace NumSharp.Interop.OpenBLAS
             long is2 = s2.strides[matchDim];
 
             var outShape = nd == 0 ? Shape.Scalar : new Shape(SubArray(dimensions, nd));
-            var outBuf = new NDArray(InfoOf<T>.NPTypeCode, outShape);
+            // fillZeros:false: the dot loop below writes every output cell (the empty-operand case has its own Zero).
+            var outBuf = new NDArray(InfoOf<T>.NPTypeCode, outShape, fillZeros: false);
             result = outBuf;
 
             T* op = (T*)outBuf.Address + outBuf.Shape.offset;

@@ -69,7 +69,8 @@ namespace NumSharp.Interop.OpenBLAS
             var bf = np.ravel(AsCommon(b, common));
             long n = af.size;
 
-            var outBuf = new NDArray(common, Shape.Scalar);
+            // fillZeros:false throughout this file: every product's dot/gemv loop writes all output cells.
+            var outBuf = new NDArray(common, Shape.Scalar, fillZeros: false);
             result = outBuf;
 
             if (common == NPTypeCode.Single)
@@ -132,7 +133,7 @@ namespace NumSharp.Interop.OpenBLAS
             long isB = b.Shape.strides[b.ndim - 1];
 
             var outShape = bshape.Length == 0 ? Shape.Scalar : new Shape(bshape);
-            var outBuf = new NDArray(common, outShape);
+            var outBuf = new NDArray(common, outShape, fillZeros: false);
 
             T* pa = (T*)a.Address + a.Shape.offset;
             T* pb = (T*)b.Address + b.Shape.offset;
@@ -197,7 +198,7 @@ namespace NumSharp.Interop.OpenBLAS
             long is2N = b.Shape.strides[b.ndim - 1];
             const long osM = 1; // the result's core (m) axis is contiguous within each batch element
 
-            var outBuf = new NDArray(common, LeadingPlusCore(bshape, dm));
+            var outBuf = new NDArray(common, LeadingPlusCore(bshape, dm), fillZeros: false);
 
             long maxSize = OpenBlasNative.BlasMaxSize;
             bool tooBig = dm > maxSize || dn > maxSize;
@@ -274,7 +275,7 @@ namespace NumSharp.Interop.OpenBLAS
             long is2M = b.Shape.strides[b.ndim - 1];
             const long osM = 1;
 
-            var outBuf = new NDArray(common, LeadingPlusCore(bshape, dm));
+            var outBuf = new NDArray(common, LeadingPlusCore(bshape, dm), fillZeros: false);
 
             long maxSize = OpenBlasNative.BlasMaxSize;
             bool tooBig = dm > maxSize || dn > maxSize;

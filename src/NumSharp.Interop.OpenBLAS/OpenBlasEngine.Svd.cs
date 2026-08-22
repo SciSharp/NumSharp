@@ -90,12 +90,14 @@ namespace NumSharp.Interop.OpenBLAS
             long vRows = !computeUv ? 0 : (fullMatrices ? n : mn); // VT is (vRows, N)
 
             // S is always the REAL basetype (double); the SvdCore only instantiates for T ∈ {double, Complex}.
-            var s = new NDArray(NPTypeCode.Double, MakeShape1(shape.dimensions, nb, mn));
+            // fillZeros:false: S is fully written by the loop, U/VT by Delinearize (or the self-zeroing
+            // FillIdentityStack for the mn==0 identity path).
+            var s = new NDArray(NPTypeCode.Double, MakeShape1(shape.dimensions, nb, mn), fillZeros: false);
             NDArray u = null, vh = null;
             if (computeUv)
             {
-                u = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, m, uCols));
-                vh = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, vRows, n));
+                u = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, m, uCols), fillZeros: false);
+                vh = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, vRows, n), fillZeros: false);
             }
 
             if (count == 0)

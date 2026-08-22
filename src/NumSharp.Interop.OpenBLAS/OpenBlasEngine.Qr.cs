@@ -92,20 +92,22 @@ namespace NumSharp.Interop.OpenBLAS
             NDArray q = null, r = null;
             switch (mode)
             {
+                // fillZeros:false: Q is fully written by Delinearize / the transpose loop (or the
+                // self-zeroing FillIdentityStack for the mn==0 identity path) and R by DelinearizeTriu.
                 case "reduced":
                 case "complete":
-                    q = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, m, qCols));
-                    r = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, qCols, n));
+                    q = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, m, qCols), fillZeros: false);
+                    r = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, qCols, n), fillZeros: false);
                     break;
                 case "r":
-                    r = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, mn, n));
+                    r = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, mn, n), fillZeros: false);
                     break;
                 case "raw":
-                    q = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, n, m)); // h
-                    r = new NDArray(InfoOf<T>.NPTypeCode, MakeShape1(shape.dimensions, nb, mn));   // tau
+                    q = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, n, m), fillZeros: false); // h
+                    r = new NDArray(InfoOf<T>.NPTypeCode, MakeShape1(shape.dimensions, nb, mn), fillZeros: false);   // tau
                     break;
                 case "economic":
-                    q = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, m, n));
+                    q = new NDArray(InfoOf<T>.NPTypeCode, MakeShape(shape.dimensions, nb, m, n), fillZeros: false);
                     break;
                 default:
                     // np.linalg.qr resolves the mode before the seam; anything else is a caller error.
@@ -247,10 +249,14 @@ namespace NumSharp.Interop.OpenBLAS
         }
 
         /// <summary>Writes a stack of leading-identity matrices — orgqr(k=0)'s result — into a C-block.</summary>
+        /// <remarks>Self-zeroing (writes the whole block, not just the diagonal) so callers can allocate
+        /// the destination <c>fillZeros:false</c> — this is the only degenerate path that would otherwise
+        /// rely on the ctor's zeros.</remarks>
         private static void FillIdentityStack<T>(T* dst, long count, long rows, long cols, T one)
             where T : unmanaged
         {
             long block = rows * cols;
+            Zero(dst, count * block);
             for (long e = 0; e < count; e++)
             {
                 T* mat = dst + e * block;

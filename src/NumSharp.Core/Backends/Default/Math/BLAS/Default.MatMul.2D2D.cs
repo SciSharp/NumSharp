@@ -40,16 +40,10 @@ namespace NumSharp.Backends
                 throw new IncorrectShapeException(
                     $"shapes {left.Shape.ToPythonTuple()} and {right.Shape.ToPythonTuple()} not aligned: {K} (dim 1) != {right.shape[0]} (dim 0)");
 
-            // Determine output type and create result array. fillZeros:false is deliberate and
-            // load-bearing for perf: EVERY route below writes all M*N cells of C before returning —
-            // the SIMD kernels clear C up front (SimdMatMul.MatMul{Float,Double}), the generic
-            // kernel clears each C block (MatMulStridedGeneric), and an installed BLAS runs gemm/gemv
-            // with beta=0 / syrk+mirror (OpenBlasEngine, full overwrite). So a pre-zeroed buffer is
-            // pure waste, and worse than waste: a freshly calloc'd/VirtualAlloc'd zero buffer hands
-            // the kernel demand-zero pages it then faults in on first write, which measured ~31 us of
-            // page-fault/TLB cost on a 128x128 f64 gemm (0.090 -> 0.059 ms). A pooled non-zeroed
-            // buffer is warm, so the native product runs at raw-dgemm speed. (The batched path in
-            // Default.MatMul.cs keeps fillZeros:true on purpose — its k==0 branch relies on it.)
+            // fillZeros:false: every route below writes all M*N cells of C (the kernels clear C; an
+            // installed BLAS runs gemm/gemv beta=0 or syrk), so pre-zeroing is wasted — and a fresh
+            // zero buffer faults its demand-zero pages during the native write (~31us on 128x128 gemm).
+            // (Default.MatMul.cs's batched path keeps fillZeros:true — its k==0 branch relies on it.)
             var resultType = np._FindCommonArrayType(left.GetTypeCode, right.GetTypeCode);
             NDArray result = @out ?? new NDArray(resultType, Shape.Matrix(M, N), fillZeros: false);
 

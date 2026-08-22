@@ -30,6 +30,11 @@ namespace NumSharp.Interop.OpenBLAS
     ///     swapped steps that puts the matrix in Fortran order. Stacks are looped element by element,
     ///     the way the gufunc's outer loop does, with the scratch buffers hoisted once per call.
     ///     </para>
+    ///     <para>
+    ///     Every result buffer is allocated <c>fillZeros:false</c>: the delinearize / per-element
+    ///     write below fills every cell, so pre-zeroing is wasted work and, before the LAPACK call,
+    ///     faults the fresh buffer's demand-zero pages (the same lever as the matmul/dot fix).
+    ///     </para>
     /// </remarks>
     public static unsafe partial class OpenBlasEngine
     {
@@ -420,9 +425,7 @@ namespace NumSharp.Interop.OpenBLAS
             int nd = shape.NDim;
             long m = shape.dimensions[nd - 1];
 
-            // fillZeros:false: Delinearize writes EVERY cell of each m×m block from the LAPACK
-            // solution, so the whole result is overwritten and pre-zeroing is wasted — a warm pooled
-            // buffer avoids the page-fault/memset cost the default ctor pays before dgesv.
+            // fillZeros:false: Delinearize writes every cell, so pre-zeroing is wasted (see the file header note).
             var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape((long[])shape.dimensions.Clone()), fillZeros: false);
             if (result.size == 0)
                 return result; // (…,0,0) → empty inverse, matching NumPy
@@ -523,7 +526,7 @@ namespace NumSharp.Interop.OpenBLAS
             for (int i = 0; i < trailing.Length; i++)
                 outDims[nb + i] = trailing[i];
 
-            var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape(outDims));
+            var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape(outDims), fillZeros: false);
             if (result.size == 0)
                 return result;
 
@@ -591,13 +594,13 @@ namespace NumSharp.Interop.OpenBLAS
             double* plog = null;
             if (wantDet)
             {
-                det = new NDArray(InfoOf<T>.NPTypeCode, batchShape);
+                det = new NDArray(InfoOf<T>.NPTypeCode, batchShape, fillZeros: false);
                 pdet = (T*)det.Address + det.Shape.offset;
             }
             else
             {
-                sign = new NDArray(InfoOf<T>.NPTypeCode, batchShape);
-                logdet = new NDArray(NPTypeCode.Double, batchShape);
+                sign = new NDArray(InfoOf<T>.NPTypeCode, batchShape, fillZeros: false);
+                logdet = new NDArray(NPTypeCode.Double, batchShape, fillZeros: false);
                 psign = (T*)sign.Address + sign.Shape.offset;
                 plog = (double*)logdet.Address + logdet.Shape.offset;
             }
