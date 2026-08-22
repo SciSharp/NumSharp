@@ -96,24 +96,40 @@ namespace NumSharp.Utilities
         //    their idx column with the keys. The value array is scratch; the indices are the answer.
 
         /// <summary>
-        ///     Index-tracking introselect: partitions <paramref name="buf"/> around every k in
-        ///     <paramref name="sortedKs"/> (sorted ascending, within <c>[0, n-1]</c>) while moving
-        ///     <paramref name="idx"/> — the elements' original indices — through the identical swaps.
-        ///     After the call <c>idx[k]</c> indexes the k-th smallest source element (NumPy
-        ///     <c>np.argpartition</c> semantics).
+        ///     Index-tracking introselect (NumPy <c>np.argpartition</c>): partitions
+        ///     <paramref name="buf"/> around every k in <paramref name="sortedKs"/> (sorted ascending,
+        ///     within <c>[0, n-1]</c>) while moving <paramref name="idx"/> — the elements' original
+        ///     indices — through the identical swaps. After the call <c>idx[k]</c> indexes the k-th
+        ///     smallest source element.
         /// </summary>
+        /// <remarks>
+        ///     The argument-tracking twin of <see cref="PartitionAtMany{T}(T*, int, int*, int)"/> —
+        ///     NumPy's single <c>introselect_&lt;Tag, arg&gt;</c> template with <c>arg = true</c>
+        ///     (<c>selection.cpp</c>), threading the <c>tosort</c> index column through the identical
+        ///     swaps and sharing the identical <b>pivot stack</b> (<see cref="StorePivot"/>). It
+        ///     therefore inherits the value path's <b>branchless block-Hoare</b> partition
+        ///     (<see cref="PartitionBlock{T}(T*, long*, int, int)"/>) — no ~50% branch-mispredict on
+        ///     random data — and its both-ends pivot narrowing across adjacent kths, the two levers
+        ///     that took the value path to 2.5–5× the old scalar Hoare. Because every comparison is on
+        ///     <paramref name="buf"/> alone, the index column is a passive passenger: the control flow,
+        ///     and hence each placed kth's final position, is bit-identical to the value path — only
+        ///     the parallel <paramref name="idx"/> permutation rides along. Any NaNs are stripped by
+        ///     the argpartition line kernel (into an encounter-order tail) before this runs, so the
+        ///     raw <see cref="LtPtr{T}"/> ordering is total here.
+        /// </remarks>
+        [SkipLocalsInit]   // pivot stack is written before read (StorePivot); skip the per-call zero
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]   // tier-1 from the first call
         public static unsafe void PartitionAtMany<T>(T* buf, long* idx, int n, int* sortedKs, int nKs)
             where T : unmanaged, IComparable<T>
         {
-            if (nKs == 0) return;
-            int lo = 0;
-            int hi = n - 1;
+            if (nKs == 0 || n <= 1) return;
+            int* pivots = stackalloc int[PivotStackMax];
+            int npiv = 0;
             for (int i = 0; i < nKs; i++)
             {
                 int k = sortedKs[i];
-                if (k < lo || k > hi) continue;
-                IntroSelect(buf, idx, lo, hi, k, 2 * Log2(hi - lo + 1));
-                lo = k + 1;
+                if (k < 0 || k >= n) continue;
+                IntroSelectBlock(buf, idx, n, k, pivots, ref npiv);
             }
         }
 
@@ -526,6 +542,157 @@ namespace NumSharp.Utilities
         }
 
         // ── index-tracking internals (values + parallel idx column swap together) ──
+        //
+        // The argument-tracking mirror of the value-only pivot-stack block select above: identical
+        // structure, with the parallel idx column carried through every Swap. All comparisons read
+        // buf alone (LtV/LtPtr), so idx never steers control flow — it is a passive passenger that
+        // records the permutation the value partition performs. StorePivot/LtV/LtPtr/Log2 and the
+        // BlockSize/PivotStackMax constants are shared with the value path.
+
+        /// <summary>
+        ///     Index-tracking single-kth introselect threading the shared pivot stack (the
+        ///     <c>arg = true</c> instantiation of NumPy <c>introselect_</c>). Mirrors the value-only
+        ///     <see cref="IntroSelectBlock{T}(T*, int, int, int*, ref int)"/> exactly, moving
+        ///     <paramref name="idx"/> through every swap.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void IntroSelectBlock<T>(T* v, long* idx, int n, int kth, int* pivots, ref int npiv)
+            where T : unmanaged, IComparable<T>
+        {
+            int low = 0, high = n - 1;
+            // Narrow from already-placed pivots: pop everything ≤ kth (raising low), stop at the
+            // first pivot > kth (lowering high). An exact hit means kth is already in place.
+            while (npiv > 0)
+            {
+                int top = pivots[npiv - 1];
+                if (top > kth) { high = top - 1; break; }
+                if (top == kth) return;
+                low = top + 1;
+                npiv--;
+            }
+
+            int depthLimit = 2 * Log2(n);
+            while (low < high)
+            {
+                int len = high - low + 1;
+                if (len <= InsertionSortThreshold)
+                {
+                    InsertionSort(v, idx, low, high);
+                    StorePivot(kth, kth, pivots, ref npiv);
+                    return;
+                }
+                if (depthLimit == 0)
+                {
+                    HeapSort(v, idx, low, high);
+                    StorePivot(kth, kth, pivots, ref npiv);
+                    return;
+                }
+                depthLimit--;
+
+                int p = PartitionBlock(v, idx, low, high);
+                if (p != kth) StorePivot(p, kth, pivots, ref npiv);
+                if (p >= kth) high = p - 1;
+                if (p <= kth) low = p + 1;
+            }
+            StorePivot(kth, kth, pivots, ref npiv);
+        }
+
+        /// <summary>
+        ///     Index-tracking median-of-3 setup (mirror of
+        ///     <see cref="Median3Swap{T}(T*, int, int, int)"/>): moves the median of
+        ///     <c>{low, mid, high}</c> to <paramref name="low"/> and the smallest to <c>low+1</c>,
+        ///     carrying <paramref name="idx"/> through each swap.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void Median3Swap<T>(T* v, long* idx, int low, int mid, int high)
+            where T : unmanaged, IComparable<T>
+        {
+            if (LtV(v[high], v[mid])) Swap(v, idx, high, mid);
+            if (LtV(v[high], v[low])) Swap(v, idx, high, low);
+            if (LtV(v[low], v[mid])) Swap(v, idx, low, mid);
+            Swap(v, idx, mid, low + 1);
+        }
+
+        /// <summary>
+        ///     Index-tracking scalar unguarded Hoare crossing (mirror of
+        ///     <see cref="ScalarPartitionFinish{T}(T*, T*, int, int)"/>). Compares against the pivot
+        ///     address (never a by-value copy) and carries <paramref name="idx"/> through each swap.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe int ScalarPartitionFinish<T>(T* v, long* idx, T* pivot, int ll, int hh)
+            where T : unmanaged, IComparable<T>
+        {
+            for (;;)
+            {
+                do { ll++; } while (LtPtr(v + ll, pivot));
+                do { hh--; } while (LtPtr(pivot, v + hh));
+                if (hh < ll) break;
+                Swap(v, idx, ll, hh);
+            }
+            return hh;
+        }
+
+        /// <summary>
+        ///     Index-tracking branchless block-Hoare partition (mirror of
+        ///     <see cref="PartitionBlock{T}(T*, int, int)"/>): identical offset-block scan and swaps,
+        ///     with <paramref name="idx"/> carried through every <see cref="Swap{T}(T*, long*, int, int)"/>.
+        ///     The pivot stays at <c>v[low]</c> for the whole partition (the scan begins at
+        ///     <c>low+2</c>, so <paramref name="idx"/> at <c>low</c> is untouched until the final
+        ///     placement swap), keeping the compares against its hoisted address in registers.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe int PartitionBlock<T>(T* v, long* idx, int low, int high)
+            where T : unmanaged, IComparable<T>
+        {
+            int mid = low + ((high - low) >> 1);
+            Median3Swap(v, idx, low, mid, high);
+
+            byte* offL = stackalloc byte[BlockSize];
+            byte* offR = stackalloc byte[BlockSize];
+            T* pivot = v + low;
+            int ll = low + 2, hh = high - 1;
+            int numL = 0, numR = 0, startL = 0, startR = 0, baseL = ll, baseR = hh;
+
+            while (hh - ll + 1 > 2 * BlockSize)
+            {
+                if (numL == 0)
+                {
+                    startL = 0; baseL = ll;
+                    for (int i = 0; i < BlockSize; i++) { offL[numL] = (byte)i; numL += LtPtr(v + ll + i, pivot) ? 0 : 1; }
+                }
+                if (numR == 0)
+                {
+                    startR = 0; baseR = hh;
+                    for (int i = 0; i < BlockSize; i++) { offR[numR] = (byte)i; numR += LtPtr(pivot, v + hh - i) ? 0 : 1; }
+                }
+                int num = Math.Min(numL, numR);
+                for (int i = 0; i < num; i++) Swap(v, idx, baseL + offL[startL + i], baseR - offR[startR + i]);
+                numL -= num; numR -= num; startL += num; startR += num;
+                if (numL == 0) ll += BlockSize;
+                if (numR == 0) hh -= BlockSize;
+            }
+
+            while (numL > 0)
+            {
+                while (LtPtr(pivot, v + hh)) hh--;
+                int li = baseL + offL[startL + numL - 1];
+                if (li >= hh) break;
+                Swap(v, idx, li, hh);
+                hh--; numL--;
+            }
+            while (numR > 0)
+            {
+                while (LtPtr(v + ll, pivot)) ll++;
+                int ri = baseR - offR[startR + numR - 1];
+                if (ri <= ll) break;
+                Swap(v, idx, ri, ll);
+                ll++; numR--;
+            }
+
+            int p = ScalarPartitionFinish(v, idx, pivot, ll - 1, hh + 1);
+            Swap(v, idx, low, p);   // move pivot from low into its final crossing position
+            return p;
+        }
 
         private static unsafe void IntroSelect<T>(T* buf, long* idx, int lo, int hi, int k, int depthLimit)
             where T : unmanaged, IComparable<T>
