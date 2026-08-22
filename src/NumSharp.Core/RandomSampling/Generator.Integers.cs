@@ -96,7 +96,7 @@ namespace NumSharp
                 case NPTypeCode.UInt64: lb = 0; ub = long.MaxValue; width = 64; break; // ub 2^64 unreachable by long
                 case NPTypeCode.Int64: lb = long.MinValue; ub = long.MaxValue; width = 64; break; // ub 2^63 unreachable
                 default:
-                    throw new TypeError($"Unsupported dtype {dtype.Name} for integers");
+                    throw new TypeError($"Unsupported dtype dtype('{tc.AsNumpyDtypeName()}') for integers");
             }
 
             if (lo < lb)

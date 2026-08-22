@@ -91,7 +91,7 @@ namespace NumSharp
         {
             var tc = dtype.GetTypeCode();
             if (tc != NPTypeCode.Double && tc != NPTypeCode.Single)
-                throw new TypeError($"Unsupported dtype {dtype.Name} for {name}");
+                throw new TypeError($"Unsupported dtype dtype('{tc.AsNumpyDtypeName()}') for {name}");
             return tc;
         }
 

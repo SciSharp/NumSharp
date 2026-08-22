@@ -163,6 +163,57 @@ namespace NumSharp
             return (float)(-Log1p(-(double)_bitGenerator.NextFloat()));
         }
 
+        // numpy random_standard_gamma_f (float32 gamma sampler).
+        internal float NextStandardGammaF(float shape)
+        {
+            if (shape == 1.0f)
+                return NextStandardExponentialF();
+            if (shape == 0.0f)
+                return 0.0f;
+            if (shape < 1.0f)
+            {
+                for (;;)
+                {
+                    float U = _bitGenerator.NextFloat();
+                    float V = NextStandardExponentialF();
+                    if (U <= 1.0f - shape)
+                    {
+                        float X = MathF.Pow(U, 1.0f / shape);
+                        if (X <= V)
+                            return X;
+                    }
+                    else
+                    {
+                        float Y = -MathF.Log((1.0f - U) / shape);
+                        float X = MathF.Pow(1.0f - shape + shape * Y, 1.0f / shape);
+                        if (X <= V + Y)
+                            return X;
+                    }
+                }
+            }
+            else
+            {
+                float b = shape - 1.0f / 3.0f;
+                float c = 1.0f / MathF.Sqrt(9.0f * b);
+                for (;;)
+                {
+                    float X, V;
+                    do
+                    {
+                        X = NextStandardNormalF();
+                        V = 1.0f + c * X;
+                    } while (V <= 0.0f);
+
+                    V = V * V * V;
+                    float U = _bitGenerator.NextFloat();
+                    if (U < 1.0f - 0.0331f * (X * X) * (X * X))
+                        return b * V;
+                    if (MathF.Log(U) < 0.5f * X * X + b * (1.0f - V + MathF.Log(V)))
+                        return b * V;
+                }
+            }
+        }
+
         // ---- standard gamma : numpy random_standard_gamma ----
 
         internal double NextStandardGamma(double shape)

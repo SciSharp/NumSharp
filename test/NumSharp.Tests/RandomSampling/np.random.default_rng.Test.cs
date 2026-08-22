@@ -123,5 +123,56 @@ namespace NumSharp.Tests.RandomSampling
             Action act = () => rng.integers(0, 300, new Shape(5), np.uint8);
             act.Should().Throw<ValueError>().WithMessage("*high is out of bounds for uint8*");
         }
+
+        [TestMethod]
+        public void Integers_BadDtype_ThrowsNumpyMessage()
+        {
+            var rng = np.random.default_rng(0);
+            Action act = () => rng.integers(0, 10, new Shape(5), np.float64);
+            act.Should().Throw<TypeError>().WithMessage("Unsupported dtype dtype('float64') for integers");
+        }
+
+        [TestMethod]
+        public void Uniform_HighLessThanLow_Throws()
+        {
+            // NumPy raises ValueError("high - low < 0") (CONS_BOUNDED_0 on the range).
+            var rng = np.random.default_rng(42);
+            Action act = () => rng.uniform(5, 1, 3);
+            act.Should().Throw<ValueError>().WithMessage("high - low < 0");
+        }
+
+        [TestMethod]
+        public void StandardGamma_Float32_IsSupported()
+        {
+            var a = np.random.default_rng(42).standard_gamma(2.0, new Shape(4), np.float32);
+            a.dtype.Should().Be(typeof(float));
+            a.size.Should().Be(4);
+        }
+
+        [TestMethod]
+        public void BitGenerator_State_RoundTrips()
+        {
+            var rng = np.random.default_rng(99);
+            rng.random(3); // advance
+            var pcg = (PCG64)rng.bit_generator;
+            var state = pcg.GetState();
+            var a = rng.random(5);
+            pcg.SetState(state);
+            var b = rng.random(5);
+            for (long i = 0; i < 5; i++)
+                Convert.ToDouble(a.GetAtIndex(i)).Should().Be(Convert.ToDouble(b.GetAtIndex(i)));
+        }
+
+        [TestMethod]
+        public void Out_Random_ReturnsSameInstance_ByteExact()
+        {
+            var rng = np.random.default_rng(42);
+            var outp = np.empty(new Shape(5), np.float64);
+            var r = rng.random(new Shape(5), @out: outp);
+            ReferenceEquals(r, outp).Should().BeTrue();
+            AssertDoubles(outp,
+                0.7739560485559633, 0.4388784397520523, 0.8585979199113825,
+                0.6973680290593639, 0.09417734788764953);
+        }
     }
 }

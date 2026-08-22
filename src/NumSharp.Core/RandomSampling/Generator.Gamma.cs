@@ -9,7 +9,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">The shape parameter (must be non-negative).</param>
         /// <param name="size">Output shape.</param>
-        /// <param name="dtype"><c>float64</c> (default). <c>float32</c> is not yet supported.</param>
+        /// <param name="dtype"><c>float64</c> (default) or <c>float32</c>.</param>
         /// <param name="out">Optional output array.</param>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.standard_gamma.html
@@ -18,22 +18,26 @@ namespace NumSharp
         {
             dtype = dtype ?? typeof(double);
             NPTypeCode tc = ResolveFloatDtype(dtype, "standard_gamma");
-            if (tc != NPTypeCode.Double)
-                throw new NotSupportedException("standard_gamma currently supports only float64 in NumSharp; float32 is not yet ported.");
             if (shape < 0)
                 throw new ValueError("shape < 0");
+
+            bool f32 = tc == NPTypeCode.Single;
+            float shapeF = (float)shape;
 
             if (@out is not null)
             {
                 ValidateOut(@out, size, tc, "standard_gamma");
-                FillDoubleDistInto(@out, () => NextStandardGamma(shape));
+                if (f32) FillFloatDistInto(@out, () => NextStandardGammaF(shapeF));
+                else FillDoubleDistInto(@out, () => NextStandardGamma(shape));
                 return @out;
             }
 
             if (IsNoSize(size))
-                return NDArray.Scalar(NextStandardGamma(shape));
+                return f32 ? NDArray.Scalar(NextStandardGammaF(shapeF)) : NDArray.Scalar(NextStandardGamma(shape));
 
-            return FillDoubleDist(size, () => NextStandardGamma(shape));
+            return f32
+                ? FillFloatDist(size, () => NextStandardGammaF(shapeF))
+                : FillDoubleDist(size, () => NextStandardGamma(shape));
         }
 
         /// <summary>

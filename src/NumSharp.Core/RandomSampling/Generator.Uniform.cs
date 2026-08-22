@@ -19,6 +19,8 @@ namespace NumSharp
             double range = high - low;
             if (double.IsInfinity(range) || double.IsNaN(range))
                 throw new OverflowException("high - low range exceeds valid bounds");
+            if (range < 0)
+                throw new ValueError("high - low < 0"); // NumPy CONS_BOUNDED_0 on 'high - low'
 
             if (IsNoSize(size))
                 return NDArray.Scalar(low + range * _bitGenerator.NextDouble());
