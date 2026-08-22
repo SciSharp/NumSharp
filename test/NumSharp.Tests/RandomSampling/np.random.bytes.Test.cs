@@ -62,5 +62,17 @@ namespace NumSharp.Tests.RandomSampling
             Action act = () => np.random.bytes(-8);
             act.Should().Throw<ValueError>().WithMessage("*negative dimensions are not allowed*");
         }
+
+        [TestMethod]
+        public void Bytes_ExceedingByteArrayLimit_ThrowsClearly()
+        {
+            // NumPy's bytes() accepts a 64-bit length; a .NET byte[] cannot exceed Array.MaxLength.
+            // The guard fires BEFORE any allocation and points at the NDArray alternative.
+            np.random.seed(42);
+            Action act = () => np.random.bytes(3_000_000_000L);
+            act.Should().Throw<OverflowException>()
+                .WithMessage("*byte[]*")
+                .WithMessage("*integers(0, 256*");
+        }
     }
 }

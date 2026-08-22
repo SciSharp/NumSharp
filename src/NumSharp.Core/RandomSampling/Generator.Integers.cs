@@ -68,32 +68,12 @@ namespace NumSharp
         ///     <br/>
         ///     Byte-identical to NumPy: draws <c>ceil(length/4)</c> uint32 words from PCG64 (via the
         ///     32-bit buffered path), packs them little-endian, and truncates to <paramref name="length"/>.
+        ///     As with <see cref="NumPyRandom.bytes"/>, the result is a .NET <c>byte[]</c> and so is
+        ///     capped at <see cref="Array.MaxLength"/> (≈ 2 GiB); for more, use
+        ///     <c>integers(0, 256, size, np.uint8)</c>.
         /// </remarks>
         public byte[] bytes(long length)
-        {
-            long nUint32 = (length - 1) / 4 + 1; // C truncation, as npy_intp
-            if (nUint32 < 0)
-                throw new ValueError("negative dimensions are not allowed");
-
-            long totalBytes = nUint32 * 4;
-            var full = new byte[totalBytes];
-            long pos = 0;
-            for (long w = 0; w < nUint32; w++)
-            {
-                uint r = _bitGenerator.NextUInt32();
-                full[pos++] = (byte)r;
-                full[pos++] = (byte)(r >> 8);
-                full[pos++] = (byte)(r >> 16);
-                full[pos++] = (byte)(r >> 24);
-            }
-
-            long end = length >= 0 ? Math.Min(length, totalBytes) : Math.Max(0, totalBytes + length);
-            if (end == totalBytes)
-                return full;
-            var result = new byte[end];
-            Array.Copy(full, result, end);
-            return result;
-        }
+            => NumPyRandom.BytesCore(length, static bg => bg.NextUInt32(), _bitGenerator);
 
         // ---- off/rng computation + validation (numpy _bounded_integers.pyx.in scalar path) ----
 
