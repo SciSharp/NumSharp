@@ -12,14 +12,14 @@
   "summary": {
     "default_scope": {
       "total": 560,
-      "available": 459,
+      "available": 472,
       "partial": 3,
       "unsupported": 0,
-      "missing": 98,
-      "exact": 426,
-      "alias": 36,
-      "coverage_percent": 82.0,
-      "addressed_percent": 82.5
+      "missing": 85,
+      "exact": 457,
+      "alias": 18,
+      "coverage_percent": 84.3,
+      "addressed_percent": 84.8
     },
     "by_surface": {
       "fft": {
@@ -46,25 +46,25 @@
       },
       "ndarray": {
         "total": 70,
-        "available": 56,
+        "available": 66,
         "partial": 1,
         "unsupported": 0,
-        "missing": 13,
-        "exact": 39,
-        "alias": 18,
-        "coverage_percent": 80.0,
-        "addressed_percent": 81.4
+        "missing": 3,
+        "exact": 67,
+        "alias": 0,
+        "coverage_percent": 94.3,
+        "addressed_percent": 95.7
       },
       "np": {
         "total": 390,
-        "available": 306,
+        "available": 309,
         "partial": 1,
         "unsupported": 0,
-        "missing": 83,
-        "exact": 292,
+        "missing": 80,
+        "exact": 295,
         "alias": 15,
-        "coverage_percent": 78.5,
-        "addressed_percent": 78.7
+        "coverage_percent": 79.2,
+        "addressed_percent": 79.5
       },
       "random": {
         "total": 51,
@@ -81,25 +81,25 @@
     "by_category": {
       "Array attributes": {
         "total": 17,
-        "available": 11,
+        "available": 15,
         "partial": 1,
         "unsupported": 0,
-        "missing": 5,
-        "exact": 10,
-        "alias": 2,
-        "coverage_percent": 64.7,
-        "addressed_percent": 70.6
+        "missing": 1,
+        "exact": 16,
+        "alias": 0,
+        "coverage_percent": 88.2,
+        "addressed_percent": 94.1
       },
       "Array creation": {
         "total": 37,
-        "available": 29,
+        "available": 30,
         "partial": 0,
         "unsupported": 0,
-        "missing": 8,
-        "exact": 29,
+        "missing": 7,
+        "exact": 30,
         "alias": 0,
-        "coverage_percent": 78.4,
-        "addressed_percent": 78.4
+        "coverage_percent": 81.1,
+        "addressed_percent": 81.1
       },
       "Array metadata & memory": {
         "total": 5,
@@ -114,14 +114,14 @@
       },
       "Array methods": {
         "total": 34,
-        "available": 26,
+        "available": 32,
         "partial": 0,
         "unsupported": 0,
-        "missing": 8,
-        "exact": 15,
-        "alias": 11,
-        "coverage_percent": 76.5,
-        "addressed_percent": 76.5
+        "missing": 2,
+        "exact": 32,
+        "alias": 0,
+        "coverage_percent": 94.1,
+        "addressed_percent": 94.1
       },
       "Date & time": {
         "total": 6,
@@ -169,14 +169,14 @@
       },
       "Indexing & selection": {
         "total": 22,
-        "available": 19,
+        "available": 20,
         "partial": 0,
         "unsupported": 0,
-        "missing": 3,
-        "exact": 19,
+        "missing": 2,
+        "exact": 20,
         "alias": 0,
-        "coverage_percent": 86.4,
-        "addressed_percent": 86.4
+        "coverage_percent": 90.9,
+        "addressed_percent": 90.9
       },
       "Input & output": {
         "total": 5,
@@ -202,14 +202,14 @@
       },
       "Logic & comparison": {
         "total": 29,
-        "available": 25,
+        "available": 26,
         "partial": 0,
         "unsupported": 0,
-        "missing": 4,
-        "exact": 25,
+        "missing": 3,
+        "exact": 26,
         "alias": 0,
-        "coverage_percent": 86.2,
-        "addressed_percent": 86.2
+        "coverage_percent": 89.7,
+        "addressed_percent": 89.7
       },
       "Math": {
         "total": 112,
@@ -250,8 +250,8 @@
         "partial": 0,
         "unsupported": 0,
         "missing": 2,
-        "exact": 43,
-        "alias": 5,
+        "exact": 46,
+        "alias": 2,
         "coverage_percent": 96.0,
         "addressed_percent": 96.0
       },
@@ -294,8 +294,8 @@
         "partial": 0,
         "unsupported": 0,
         "missing": 0,
-        "exact": 14,
-        "alias": 2,
+        "exact": 16,
+        "alias": 0,
         "coverage_percent": 100.0,
         "addressed_percent": 100.0
       },
@@ -334,8 +334,8 @@
       }
     },
     "all_numpy_exports": 677,
-    "numsharp_extensions": 126,
-    "catalog_rows": 803
+    "numsharp_extensions": 128,
+    "catalog_rows": 805
   },
   "rows": [
     {
@@ -1652,26 +1652,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.all.html",
       "in_default_scope": true,
       "category": "Reductions",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.all",
+      "numsharp_target": "NumSharp.NDArray.all",
       "numsharp_signatures": [
-        "NumSharp.Generic.NDArray<bool> all(NumSharp.NDArray nd, bool keepdims)",
-        "NumSharp.Generic.NDArray<bool> all(NumSharp.NDArray nd, int axis, bool keepdims = false)",
-        "NumSharp.Generic.NDArray<bool> all(NumSharp.NDArray nd, int[] axis, bool keepdims = false)",
-        "NumSharp.NDArray all(NumSharp.NDArray a, int? axis = null, NumSharp.NDArray out = null, bool keepdims = false, NumSharp.NDArray where = null)",
-        "NumSharp.NDArray all(NumSharp.NDArray a, int[] axis, NumSharp.NDArray out, bool keepdims = false, NumSharp.NDArray where = null)",
-        "bool all(NumSharp.NDArray a)"
+        "NumSharp.NDArray all(int? axis = null, NumSharp.NDArray out = null, bool keepdims = false, NumSharp.NDArray where = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Logic/np.all.cs"
+        "src/NumSharp.Core/Logic/NDArray.all.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Logic/np.all.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Logic/NDArray.all.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.any",
@@ -1683,26 +1678,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.any.html",
       "in_default_scope": true,
       "category": "Reductions",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.any",
+      "numsharp_target": "NumSharp.NDArray.any",
       "numsharp_signatures": [
-        "NumSharp.Generic.NDArray<bool> any(NumSharp.NDArray nd, bool keepdims)",
-        "NumSharp.Generic.NDArray<bool> any(NumSharp.NDArray nd, int axis, bool keepdims = false)",
-        "NumSharp.Generic.NDArray<bool> any(NumSharp.NDArray nd, int[] axis, bool keepdims = false)",
-        "NumSharp.NDArray any(NumSharp.NDArray a, int? axis = null, NumSharp.NDArray out = null, bool keepdims = false, NumSharp.NDArray where = null)",
-        "NumSharp.NDArray any(NumSharp.NDArray a, int[] axis, NumSharp.NDArray out, bool keepdims = false, NumSharp.NDArray where = null)",
-        "bool any(NumSharp.NDArray a)"
+        "NumSharp.NDArray any(int? axis = null, NumSharp.NDArray out = null, bool keepdims = false, NumSharp.NDArray where = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Logic/np.any.cs"
+        "src/NumSharp.Core/Logic/NDArray.any.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Logic/np.any.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Logic/NDArray.any.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.argmax",
@@ -1806,10 +1796,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Sorting_Searching_Counting/ndarray.argsort.cs"
+        "src/NumSharp.Core/Sorting_Searching_Counting/NDArray.argsort.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Sorting_Searching_Counting/ndarray.argsort.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Sorting_Searching_Counting/NDArray.argsort.cs"
       ],
       "notes": ""
     },
@@ -1878,14 +1868,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.byteswap.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.NDArray.byteswap",
+      "numsharp_signatures": [
+        "NumSharp.NDArray byteswap(bool inplace = false)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Casting/NDArray.byteswap.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NDArray.byteswap.cs"
+      ],
       "notes": ""
     },
     {
@@ -1898,14 +1894,22 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.choose.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.NDArray.choose",
+      "numsharp_signatures": [
+        "NumSharp.NDArray choose(NumSharp.NDArray choices, NumSharp.NDArray out = null, string mode = \"raise\")",
+        "NumSharp.NDArray choose(NumSharp.NDArray[] choices, NumSharp.NDArray out = null, string mode = \"raise\")",
+        "NumSharp.NDArray choose(object[] choices, NumSharp.NDArray out = null, string mode = \"raise\")"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Indexing/NDArray.choose.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/NDArray.choose.cs"
+      ],
       "notes": ""
     },
     {
@@ -1918,22 +1922,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.clip.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.clip",
+      "numsharp_target": "NumSharp.NDArray.clip",
       "numsharp_signatures": [
-        "NumSharp.NDArray clip(NumSharp.NDArray a, NumSharp.NDArray a_min = null, NumSharp.NDArray a_max = null, NumSharp.NDArray out = null, NumSharp.NPTypeCode? dtype = null, NumSharp.NDArray min = null, NumSharp.NDArray max = null)",
-        "NumSharp.NDArray clip(NumSharp.NDArray a, NumSharp.NDArray a_min, NumSharp.NDArray a_max, System.Type dtype)"
+        "NumSharp.NDArray clip(NumSharp.NDArray min = null, NumSharp.NDArray max = null, NumSharp.NDArray out = null, System.Type dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Math/np.clip.cs"
+        "src/NumSharp.Core/Math/NDArray.clip.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/np.clip.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.clip.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.compress",
@@ -1945,21 +1948,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.compress.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.compress",
+      "numsharp_target": "NumSharp.NDArray.compress",
       "numsharp_signatures": [
-        "NumSharp.NDArray compress(NumSharp.NDArray condition, NumSharp.NDArray a, int? axis = null, NumSharp.NDArray out = null)"
+        "NumSharp.NDArray compress(NumSharp.NDArray condition, int? axis = null, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Indexing/np.compress.cs"
+        "src/NumSharp.Core/Indexing/NDArray.compress.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/np.compress.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/NDArray.compress.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.conj",
@@ -1971,21 +1974,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.conj.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.conj",
+      "numsharp_target": "NumSharp.NDArray.conj",
       "numsharp_signatures": [
-        "NumSharp.NDArray conj(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray conj(NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Math/np.conjugate.cs"
+        "src/NumSharp.Core/Math/NDArray.ComplexAccessors.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/np.conjugate.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.ComplexAccessors.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.conjugate",
@@ -1997,21 +2000,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.conjugate.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.conjugate",
+      "numsharp_target": "NumSharp.NDArray.conjugate",
       "numsharp_signatures": [
-        "NumSharp.NDArray conjugate(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray conjugate(NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Math/np.conjugate.cs"
+        "src/NumSharp.Core/Math/NDArray.ComplexAccessors.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/np.conjugate.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.ComplexAccessors.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.copy",
@@ -2069,21 +2072,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.cumprod.html",
       "in_default_scope": true,
       "category": "Reductions",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.cumprod",
+      "numsharp_target": "NumSharp.NDArray.cumprod",
       "numsharp_signatures": [
-        "NumSharp.NDArray cumprod(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null)"
+        "NumSharp.NDArray cumprod(int? axis = null, System.Type dtype = null, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/APIs/np.cumprod.cs"
+        "src/NumSharp.Core/Math/NDArray.cumprod.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.cumprod.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.cumprod.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.cumsum",
@@ -2100,7 +2103,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.NDArray.cumsum",
       "numsharp_signatures": [
-        "NumSharp.NDArray cumsum(int? axis = null, System.Type dtype = null)"
+        "NumSharp.NDArray cumsum(int? axis = null, System.Type dtype = null, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -2121,21 +2124,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.data.html",
       "in_default_scope": true,
       "category": "Array attributes",
-      "availability": "alias",
+      "availability": "exact",
       "support": "partial",
       "status": "partial",
-      "numsharp_target": "NumSharp.NDArray.Data",
+      "numsharp_target": "NumSharp.NDArray.data",
       "numsharp_signatures": [
-        "NumSharp.Backends.Unmanaged.ArraySlice<T> Data()"
+        "NumSharp.np+MemoryView data { get; }"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Backends/NDArray.cs"
+        "src/NumSharp.Core/APIs/np.memoryview.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.memoryview.cs"
       ],
-      "notes": "NumSharp exposes typed unmanaged data through the generic Data<T>() method rather than NumPy's buffer-view property. Data<T>() returns a typed NumSharp ArraySlice and is not NumPy's Python buffer object."
+      "notes": "Data<T>() returns a typed NumSharp ArraySlice and is not NumPy's Python buffer object."
     },
     {
       "id": "numpy.ndarray.device",
@@ -2173,21 +2176,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.diagonal.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.diagonal",
+      "numsharp_target": "NumSharp.NDArray.diagonal",
       "numsharp_signatures": [
-        "NumSharp.NDArray diagonal(NumSharp.NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1)"
+        "NumSharp.NDArray diagonal(int offset = 0, int axis1 = 0, int axis2 = 1)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Indexing/np.diagonal.cs"
+        "src/NumSharp.Core/Indexing/NDArray.diagonal.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/np.diagonal.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/NDArray.diagonal.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.dot",
@@ -2291,14 +2294,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.fill.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.NDArray.fill",
+      "numsharp_signatures": [
+        "void fill(object value)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Manipulation/NDArray.fill.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Manipulation/NDArray.fill.cs"
+      ],
       "notes": ""
     },
     {
@@ -2311,14 +2320,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flags.html",
       "in_default_scope": true,
       "category": "Array attributes",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.NDArray.flags",
+      "numsharp_signatures": [
+        "NumSharp.NDArrayFlags flags { get; }"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Backends/NDArray.flags.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.flags.cs"
+      ],
       "notes": ""
     },
     {
@@ -2383,14 +2398,22 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.getfield.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.NDArray.getfield",
+      "numsharp_signatures": [
+        "NumSharp.Generic.NDArray<T> getfield(int offset = 0)",
+        "NumSharp.NDArray getfield(NumSharp.NPTypeCode dtype, int offset = 0)",
+        "NumSharp.NDArray getfield(System.Type dtype, int offset = 0)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Casting/NDArray.getfield.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NDArray.getfield.cs"
+      ],
       "notes": ""
     },
     {
@@ -2403,14 +2426,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.imag.html",
       "in_default_scope": true,
       "category": "Array attributes",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.NDArray.imag",
+      "numsharp_signatures": [
+        "NumSharp.NDArray imag { get; set; }"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Math/NDArray.ComplexAccessors.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.ComplexAccessors.cs"
+      ],
       "notes": ""
     },
     {
@@ -2458,21 +2487,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.itemsize.html",
       "in_default_scope": true,
       "category": "Array attributes",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.NDArray.dtypesize",
+      "numsharp_target": "NumSharp.NDArray.itemsize",
       "numsharp_signatures": [
-        "int dtypesize { get; }"
+        "int itemsize { get; }"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Backends/NDArray.cs"
+        "src/NumSharp.Core/APIs/np.memoryview.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.memoryview.cs"
       ],
-      "notes": "The element size is exposed as dtypesize in NumSharp."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.max",
@@ -2596,14 +2625,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.nbytes.html",
       "in_default_scope": true,
       "category": "Array attributes",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.NDArray.nbytes",
+      "numsharp_signatures": [
+        "long nbytes { get; }"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/APIs/np.memoryview.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.memoryview.cs"
+      ],
       "notes": ""
     },
     {
@@ -2625,10 +2660,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Backends/NDArray.cs"
+        "src/NumSharp.Core/APIs/np.memoryview.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.memoryview.cs"
       ],
       "notes": ""
     },
@@ -2642,21 +2677,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.nonzero.html",
       "in_default_scope": true,
       "category": "Sorting & searching",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.nonzero",
+      "numsharp_target": "NumSharp.NDArray.nonzero",
       "numsharp_signatures": [
-        "NumSharp.Generic.NDArray<long>[] nonzero(NumSharp.NDArray a)"
+        "NumSharp.Generic.NDArray<long>[] nonzero()"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Indexing/np.nonzero.cs"
+        "src/NumSharp.Core/Indexing/NDArray.nonzero.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/np.nonzero.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/NDArray.nonzero.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.partition",
@@ -2722,22 +2757,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.put.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.put",
+      "numsharp_target": "NumSharp.NDArray.put",
       "numsharp_signatures": [
-        "void put(NumSharp.NDArray a, NumSharp.NDArray indices, NumSharp.NDArray values, string mode = \"raise\")",
-        "void put(NumSharp.NDArray a, long index, object value, string mode = \"raise\")"
+        "void put(NumSharp.NDArray indices, NumSharp.NDArray values, string mode = \"raise\")"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Indexing/np.put.cs"
+        "src/NumSharp.Core/Indexing/NDArray.put.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/np.put.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/NDArray.put.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.ravel",
@@ -2776,14 +2810,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.real.html",
       "in_default_scope": true,
       "category": "Array attributes",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.NDArray.real",
+      "numsharp_signatures": [
+        "NumSharp.NDArray real { get; set; }"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Math/NDArray.ComplexAccessors.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.ComplexAccessors.cs"
+      ],
       "notes": ""
     },
     {
@@ -2796,25 +2836,23 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.repeat.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.repeat",
+      "numsharp_target": "NumSharp.NDArray.repeat",
       "numsharp_signatures": [
-        "NumSharp.NDArray repeat(NumSharp.NDArray a, NumSharp.NDArray repeats, int? axis = null)",
-        "NumSharp.NDArray repeat(NumSharp.NDArray a, int repeats, int? axis = null)",
-        "NumSharp.NDArray repeat(NumSharp.NDArray a, long repeats, int? axis = null)",
-        "NumSharp.NDArray repeat(T a, int repeats)",
-        "NumSharp.NDArray repeat(T a, long repeats)"
+        "NumSharp.NDArray repeat(NumSharp.NDArray repeats, int? axis = null)",
+        "NumSharp.NDArray repeat(int repeats, int? axis = null)",
+        "NumSharp.NDArray repeat(long repeats, int? axis = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Manipulation/np.repeat.cs"
+        "src/NumSharp.Core/Manipulation/NDArray.repeat.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Manipulation/np.repeat.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Manipulation/NDArray.repeat.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.reshape",
@@ -2839,10 +2877,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Creation/NdArray.ReShape.cs"
+        "src/NumSharp.Core/Creation/NDArray.ReShape.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.ReShape.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NDArray.ReShape.cs"
       ],
       "notes": ""
     },
@@ -2883,25 +2921,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.round.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.round_",
+      "numsharp_target": "NumSharp.NDArray.round",
       "numsharp_signatures": [
-        "NumSharp.NDArray round_(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray round_(NumSharp.NDArray x, System.Type dtype)",
-        "NumSharp.NDArray round_(NumSharp.NDArray x, int decimals = 0, NumSharp.NDArray out = null)",
-        "NumSharp.NDArray round_(NumSharp.NDArray x, int decimals, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray round_(NumSharp.NDArray x, int decimals, System.Type dtype)"
+        "NumSharp.NDArray round(int decimals = 0, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Math/np.round.cs"
+        "src/NumSharp.Core/Math/NDArray.round.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/np.round.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.round.cs"
       ],
-      "notes": "Use the static np.round_ API; NumSharp does not expose ndarray.round as an instance member."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.searchsorted",
@@ -2913,23 +2947,23 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.searchsorted.html",
       "in_default_scope": true,
       "category": "Sorting & searching",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.searchsorted",
+      "numsharp_target": "NumSharp.NDArray.searchsorted",
       "numsharp_signatures": [
-        "NumSharp.NDArray searchsorted(NumSharp.NDArray a, NumSharp.NDArray v, string side = \"left\", NumSharp.NDArray sorter = null)",
-        "long searchsorted(NumSharp.NDArray a, double v, string side = \"left\", NumSharp.NDArray sorter = null)",
-        "long searchsorted(NumSharp.NDArray a, int v, string side = \"left\", NumSharp.NDArray sorter = null)"
+        "NumSharp.NDArray searchsorted(NumSharp.NDArray v, string side = \"left\", NumSharp.NDArray sorter = null)",
+        "long searchsorted(double v, string side = \"left\", NumSharp.NDArray sorter = null)",
+        "long searchsorted(int v, string side = \"left\", NumSharp.NDArray sorter = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Sorting_Searching_Counting/np.searchsorted.cs"
+        "src/NumSharp.Core/Sorting_Searching_Counting/NDArray.searchsorted.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Sorting_Searching_Counting/np.searchsorted.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Sorting_Searching_Counting/NDArray.searchsorted.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.setfield",
@@ -2941,14 +2975,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.setfield.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.NDArray.setfield",
+      "numsharp_signatures": [
+        "void setfield(object value, NumSharp.NPTypeCode dtype, int offset = 0)",
+        "void setfield(object value, System.Type dtype, int offset = 0)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Casting/NDArray.getfield.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NDArray.getfield.cs"
+      ],
       "notes": ""
     },
     {
@@ -2961,14 +3002,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.setflags.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.NDArray.setflags",
+      "numsharp_signatures": [
+        "void setflags(bool? write = null, bool? align = null, bool? uic = null)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Backends/NDArray.setflags.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.setflags.cs"
+      ],
       "notes": ""
     },
     {
@@ -2990,10 +3037,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Backends/NDArray.cs"
+        "src/NumSharp.Core/APIs/np.memoryview.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.memoryview.cs"
       ],
       "notes": ""
     },
@@ -3059,23 +3106,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.squeeze.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.squeeze",
+      "numsharp_target": "NumSharp.NDArray.squeeze",
       "numsharp_signatures": [
-        "NumSharp.NDArray squeeze(NumSharp.NDArray a)",
-        "NumSharp.NDArray squeeze(NumSharp.NDArray a, int axis)",
-        "NumSharp.Shape squeeze(NumSharp.Shape shape)"
+        "NumSharp.NDArray squeeze(int? axis = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Manipulation/np.squeeze.cs"
+        "src/NumSharp.Core/Manipulation/NDArray.squeeze.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Manipulation/np.squeeze.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Manipulation/NDArray.squeeze.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.std",
@@ -3123,10 +3168,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Backends/NDArray.cs"
+        "src/NumSharp.Core/APIs/np.memoryview.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.memoryview.cs"
       ],
       "notes": ""
     },
@@ -3178,10 +3223,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Manipulation/NdArray.swapaxes.cs"
+        "src/NumSharp.Core/Manipulation/NDArray.swapaxes.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Manipulation/NdArray.swapaxes.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Manipulation/NDArray.swapaxes.cs"
       ],
       "notes": ""
     },
@@ -3221,22 +3266,22 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.take.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.take",
+      "numsharp_target": "NumSharp.NDArray.take",
       "numsharp_signatures": [
-        "NumSharp.NDArray take(NumSharp.NDArray a, NumSharp.NDArray indices, int? axis = null, NumSharp.NDArray out = null, string mode = \"raise\")",
-        "NumSharp.NDArray take(NumSharp.NDArray a, long index, int? axis = null, NumSharp.NDArray out = null, string mode = \"raise\")"
+        "NumSharp.NDArray take(NumSharp.NDArray indices, int? axis = null, NumSharp.NDArray out = null, string mode = \"raise\")",
+        "NumSharp.NDArray take(long index, int? axis = null, NumSharp.NDArray out = null, string mode = \"raise\")"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Indexing/np.take.cs"
+        "src/NumSharp.Core/Indexing/NDArray.take.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/np.take.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/NDArray.take.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.to_device",
@@ -3283,10 +3328,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Casting/NdArray.tobytes.cs"
+        "src/NumSharp.Core/Casting/NDArray.tobytes.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArray.tobytes.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NDArray.tobytes.cs"
       ],
       "notes": ""
     },
@@ -3353,21 +3398,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.ndarray.trace.html",
       "in_default_scope": true,
       "category": "Array methods",
-      "availability": "alias",
+      "availability": "exact",
       "support": "declared",
       "status": "available",
-      "numsharp_target": "NumSharp.np.trace",
+      "numsharp_target": "NumSharp.NDArray.trace",
       "numsharp_signatures": [
-        "NumSharp.NDArray trace(NumSharp.NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1, System.Type dtype = null, NumSharp.NDArray out = null)"
+        "NumSharp.NDArray trace(int offset = 0, int axis1 = 0, int axis2 = 1, System.Type dtype = null, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Indexing/np.trace.cs"
+        "src/NumSharp.Core/Indexing/NDArray.trace.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/np.trace.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/NDArray.trace.cs"
       ],
-      "notes": "Available through the static NumSharp np API instead of the NumPy instance method."
+      "notes": ""
     },
     {
       "id": "numpy.ndarray.transpose",
@@ -3388,10 +3433,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Manipulation/NdArray.Transpose.cs"
+        "src/NumSharp.Core/Manipulation/NDArray.Transpose.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Manipulation/NdArray.Transpose.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Manipulation/NDArray.Transpose.cs"
       ],
       "notes": ""
     },
@@ -4280,6 +4325,7 @@
       "numsharp_target": "NumSharp.np.array",
       "numsharp_signatures": [
         "NumSharp.NDArray array(NumSharp.NDArray nd, bool copy = true)",
+        "NumSharp.NDArray array(NumSharp.np+MemoryView buffer, bool copy = true)",
         "NumSharp.NDArray array(System.Array array, System.Type dtype = null, int ndmin = 1, bool copy = true, char order = 'C')",
         "NumSharp.NDArray array(System.Collections.Generic.IEnumerable<T> data)",
         "NumSharp.NDArray array(System.Collections.Generic.IEnumerable<T> data, int size)",
@@ -4489,6 +4535,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.asanyarray",
       "numsharp_signatures": [
+        "NumSharp.NDArray asanyarray(NumSharp.np+MemoryView buffer, System.Type dtype = null, char order = 'K', string device = null)",
         "NumSharp.NDArray asanyarray(ref object a, System.Type dtype = null, string device = null)",
         "NumSharp.NDArray asanyarray(ref object a, System.Type dtype, char order, string device = null)"
       ],
@@ -4520,6 +4567,8 @@
         "NumSharp.NDArray asarray(NumSharp.NDArray a, NumSharp.NPTypeCode dtype, char order = 'K', bool? copy = null, NumSharp.NDArray like = null, string device = null)",
         "NumSharp.NDArray asarray(NumSharp.NDArray a, System.Type dtype = null, char order = 'K', bool? copy = null, NumSharp.NDArray like = null, string device = null)",
         "NumSharp.NDArray asarray(NumSharp.NDArray a, string dtype, char order = 'K', bool? copy = null, NumSharp.NDArray like = null, string device = null)",
+        "NumSharp.NDArray asarray(NumSharp.np+MemoryView buffer, System.Type dtype = null, char order = 'K', bool? copy = null, NumSharp.NDArray like = null, string device = null)",
+        "NumSharp.NDArray asarray(NumSharp.np+MemoryView buffer, string dtype, char order = 'K', bool? copy = null, NumSharp.NDArray like = null, string device = null)",
         "NumSharp.NDArray asarray(T data)",
         "NumSharp.NDArray asarray(T[] data, int ndim = 1)",
         "NumSharp.NDArray asarray(string data)",
@@ -4577,7 +4626,8 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.ascontiguousarray",
       "numsharp_signatures": [
-        "NumSharp.NDArray ascontiguousarray(NumSharp.NDArray a, System.Type dtype = null)"
+        "NumSharp.NDArray ascontiguousarray(NumSharp.NDArray a, System.Type dtype = null)",
+        "NumSharp.NDArray ascontiguousarray(NumSharp.np+MemoryView buffer, System.Type dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -4603,7 +4653,8 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.asfortranarray",
       "numsharp_signatures": [
-        "NumSharp.NDArray asfortranarray(NumSharp.NDArray a, System.Type dtype = null)"
+        "NumSharp.NDArray asfortranarray(NumSharp.NDArray a, System.Type dtype = null)",
+        "NumSharp.NDArray asfortranarray(NumSharp.np+MemoryView buffer, System.Type dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -5758,14 +5809,22 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.choose.html",
       "in_default_scope": true,
       "category": "Indexing & selection",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.choose",
+      "numsharp_signatures": [
+        "NumSharp.NDArray choose(NumSharp.NDArray a, NumSharp.NDArray choices, NumSharp.NDArray out = null, string mode = \"raise\")",
+        "NumSharp.NDArray choose(NumSharp.NDArray a, NumSharp.NDArray[] choices, NumSharp.NDArray out = null, string mode = \"raise\")",
+        "NumSharp.NDArray choose(NumSharp.NDArray a, object[] choices, NumSharp.NDArray out = null, string mode = \"raise\")"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Indexing/np.choose.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Indexing/np.choose.cs"
+      ],
       "notes": ""
     },
     {
@@ -6457,7 +6516,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.cumprod",
       "numsharp_signatures": [
-        "NumSharp.NDArray cumprod(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null)"
+        "NumSharp.NDArray cumprod(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6483,7 +6542,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.cumsum",
       "numsharp_signatures": [
-        "NumSharp.NDArray cumsum(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null)"
+        "NumSharp.NDArray cumsum(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6509,7 +6568,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.cumprod",
       "numsharp_signatures": [
-        "NumSharp.NDArray cumprod(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null)"
+        "NumSharp.NDArray cumprod(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6535,7 +6594,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.cumsum",
       "numsharp_signatures": [
-        "NumSharp.NDArray cumsum(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null)"
+        "NumSharp.NDArray cumsum(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -8192,6 +8251,9 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.frombuffer",
       "numsharp_signatures": [
+        "NumSharp.NDArray frombuffer(NumSharp.np+MemoryView buffer, NumSharp.NPTypeCode dtype, long count = -1, long offset = 0)",
+        "NumSharp.NDArray frombuffer(NumSharp.np+MemoryView buffer, System.Type dtype = null, long count = -1, long offset = 0)",
+        "NumSharp.NDArray frombuffer(NumSharp.np+MemoryView buffer, string dtype, long count = -1, long offset = 0)",
         "NumSharp.NDArray frombuffer(System.ArraySegment<byte> segment, NumSharp.NPTypeCode dtype, long count = -1)",
         "NumSharp.NDArray frombuffer(System.ArraySegment<byte> segment, System.Type dtype = null, long count = -1)",
         "NumSharp.NDArray frombuffer(System.IntPtr address, long byteLength, NumSharp.NPTypeCode dtype, long count = -1, long offset = 0, System.Action dispose = null)",
@@ -8336,14 +8398,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.fromstring.html",
       "in_default_scope": true,
       "category": "Array creation",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.fromstring",
+      "numsharp_signatures": [
+        "NumSharp.NDArray fromstring(string string, NumSharp.NPTypeCode dtype, int count = -1, string sep = null)",
+        "NumSharp.NDArray fromstring(string string, System.Type dtype = null, int count = -1, string sep = null)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/APIs/np.fromstring.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.fromstring.cs"
+      ],
       "notes": ""
     },
     {
@@ -9631,14 +9700,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.isfortran.html",
       "in_default_scope": true,
       "category": "Logic & comparison",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.isfortran",
+      "numsharp_signatures": [
+        "bool isfortran(NumSharp.NDArray a)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Logic/np.isfortran.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Logic/np.isfortran.cs"
+      ],
       "notes": ""
     },
     {
@@ -11978,6 +12053,7 @@
         "NumSharp.NDArray ones(NumSharp.Shape shape)",
         "NumSharp.NDArray ones(NumSharp.Shape shape, NumSharp.NPTypeCode typeCode)",
         "NumSharp.NDArray ones(NumSharp.Shape shape, System.Type dtype, string device = null)",
+        "NumSharp.NDArray ones(NumSharp.Shape shape, char order, System.Type dtype = null)",
         "NumSharp.NDArray ones(int shape)",
         "NumSharp.NDArray ones(int[] shape)",
         "NumSharp.NDArray ones(int[] shape)",
@@ -16066,6 +16142,7 @@
         "NumSharp.NDArray zeros(NumSharp.Shape shape)",
         "NumSharp.NDArray zeros(NumSharp.Shape shape, NumSharp.NPTypeCode typeCode)",
         "NumSharp.NDArray zeros(NumSharp.Shape shape, System.Type dtype, string device = null)",
+        "NumSharp.NDArray zeros(NumSharp.Shape shape, char order, System.Type dtype = null)",
         "NumSharp.NDArray zeros(int shape)",
         "NumSharp.NDArray zeros(int[] shape)",
         "NumSharp.NDArray zeros(int[] shape)",
@@ -17775,10 +17852,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Creation/NdArray.MakeGeneric.cs"
+        "src/NumSharp.Core/Creation/NDArray.MakeGeneric.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.MakeGeneric.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NDArray.MakeGeneric.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -17801,10 +17878,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Creation/NdArray.MakeGeneric.cs"
+        "src/NumSharp.Core/Creation/NDArray.MakeGeneric.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.MakeGeneric.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NDArray.MakeGeneric.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -17958,10 +18035,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Math/NdArray.Convolve.cs"
+        "src/NumSharp.Core/Math/NDArray.Convolve.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/NdArray.Convolve.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.Convolve.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -18015,10 +18092,36 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Math/NdArray.Correlate.cs"
+        "src/NumSharp.Core/Math/NDArray.Correlate.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/NdArray.Correlate.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.Correlate.cs"
+      ],
+      "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
+    },
+    {
+      "id": "numsharp.ndarray.Data",
+      "origin": "numsharp",
+      "surface": "ndarray",
+      "name": "Data",
+      "kind": "method",
+      "numpy_signature": "",
+      "documentation_url": "",
+      "in_default_scope": false,
+      "category": "NumSharp-only APIs",
+      "availability": "extension",
+      "support": "extension",
+      "status": "extension",
+      "numsharp_target": "NumSharp.NDArray.Data",
+      "numsharp_signatures": [
+        "NumSharp.Backends.Unmanaged.ArraySlice<T> Data()"
+      ],
+      "numsharp_obsolete": false,
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Backends/NDArray.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -18041,10 +18144,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Manipulation/NdArray.delete.cs"
+        "src/NumSharp.Core/Manipulation/NDArray.delete.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Manipulation/NdArray.delete.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Manipulation/NDArray.delete.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -18093,10 +18196,36 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Creation/NdArray.DStack.cs"
+        "src/NumSharp.Core/Creation/NDArray.DStack.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.DStack.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NDArray.DStack.cs"
+      ],
+      "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
+    },
+    {
+      "id": "numsharp.ndarray.dtypesize",
+      "origin": "numsharp",
+      "surface": "ndarray",
+      "name": "dtypesize",
+      "kind": "property",
+      "numpy_signature": "",
+      "documentation_url": "",
+      "in_default_scope": false,
+      "category": "NumSharp-only APIs",
+      "availability": "extension",
+      "support": "extension",
+      "status": "extension",
+      "numsharp_target": "NumSharp.NDArray.dtypesize",
+      "numsharp_signatures": [
+        "int dtypesize { get; }"
+      ],
+      "numsharp_obsolete": false,
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Backends/NDArray.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -18171,10 +18300,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Casting/NdArrayFromMultiDimArr.cs"
+        "src/NumSharp.Core/Casting/NDArrayFromMultiDimArr.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArrayFromMultiDimArr.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NDArrayFromMultiDimArr.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -18869,10 +18998,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Creation/NdArray.HStack.cs"
+        "src/NumSharp.Core/Creation/NDArray.HStack.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.HStack.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NDArray.HStack.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -18926,10 +19055,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Backends/NDArray.Container.cs"
+        "src/NumSharp.Core/APIs/np.memoryview.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Backends/NDArray.Container.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.memoryview.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -18981,10 +19110,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Creation/NdArray.MakeGeneric.cs"
+        "src/NumSharp.Core/Creation/NDArray.MakeGeneric.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.MakeGeneric.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NDArray.MakeGeneric.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -19083,12 +19212,12 @@
       "numsharp_signatures": [
         "void Normalize()"
       ],
-      "numsharp_obsolete": false,
+      "numsharp_obsolete": true,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Extensions/NdArray.Normalize.cs"
+        "src/NumSharp.Core/Extensions/NDArray.Normalize.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Extensions/NdArray.Normalize.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Extensions/NDArray.Normalize.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -19197,10 +19326,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Creation/NdArray.ReShape.cs"
+        "src/NumSharp.Core/Creation/NDArray.ReShape.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.ReShape.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NDArray.ReShape.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -19256,10 +19385,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Creation/NdArray.Scalar.cs"
+        "src/NumSharp.Core/Creation/NDArray.Scalar.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.Scalar.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NDArray.Scalar.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -19877,10 +20006,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Casting/NdArrayToMultiDimArray.cs"
+        "src/NumSharp.Core/Casting/NDArrayToMultiDimArray.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArrayToMultiDimArray.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NDArrayToMultiDimArray.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -19903,10 +20032,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Casting/NdArrayToJaggedArray.cs"
+        "src/NumSharp.Core/Casting/NDArrayToJaggedArray.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArrayToJaggedArray.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NDArrayToJaggedArray.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -19929,10 +20058,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Casting/NdArrayToMultiDimArray.cs"
+        "src/NumSharp.Core/Casting/NDArrayToMultiDimArray.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArrayToMultiDimArray.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NDArrayToMultiDimArray.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -19956,10 +20085,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Casting/NdArray.ToString.cs"
+        "src/NumSharp.Core/Casting/NDArray.ToString.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArray.ToString.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Casting/NDArray.ToString.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },
@@ -20061,10 +20190,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/Creation/NdArray.VStack.cs"
+        "src/NumSharp.Core/Creation/NDArray.VStack.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.VStack.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Creation/NDArray.VStack.cs"
       ],
       "notes": "NumSharp-only public API with no matching export on the compared NumPy surface."
     },

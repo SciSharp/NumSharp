@@ -1,5 +1,3 @@
-# Benchmarks
-
 <link rel="stylesheet" href="https://unpkg.com/tippy.js@6.3.7/dist/tippy.css">
 
 <style>
@@ -46,9 +44,7 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 }
 
 .ns-bench-dashboard .bench-intro {
-  border-bottom: 1px solid var(--line);
-  padding: 0.25rem 0 1.2rem;
-  margin-bottom: 1.25rem;
+  padding: 0.25rem 0 0;
 }
 
 .ns-bench-dashboard .bench-kicker {
@@ -134,9 +130,9 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 
 .ns-bench-dashboard .section-head {
   display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 0.65rem;
   border-top: 1px solid var(--line);
   padding-top: 1.2rem;
   margin: 1.45rem 0 0.75rem;
@@ -155,9 +151,8 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 }
 
 .ns-bench-dashboard .read-guide {
-  border-top: 1px solid var(--line);
   margin: 1.45rem 0 0;
-  padding: 1rem 0 0.15rem;
+  padding: 0 0 0.15rem;
 }
 
 .ns-bench-dashboard .read-guide + section .section-head {
@@ -224,9 +219,7 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 }
 
 .ns-bench-dashboard .guide-block {
-  border-left: 3px solid color-mix(in srgb, var(--line) 70%, var(--quiet) 30%);
   min-width: 0;
-  padding-left: 0.7rem;
 }
 
 .ns-bench-dashboard .guide-block h3 {
@@ -653,6 +646,10 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
   grid-template-columns: minmax(15rem, 20rem) minmax(0, 1fr);
   min-height: 34rem;
   overflow: hidden;
+}
+
+.ns-bench-dashboard .function-explorer {
+  container-type: inline-size;
 }
 
 .ns-bench-dashboard .function-sidebar {
@@ -1164,19 +1161,29 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
   font-weight: 760;
 }
 
-.ns-bench-dashboard .link-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
+.ns-bench-dashboard .report-list {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
 }
 
-.ns-bench-dashboard .dash-link {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.45rem 0.65rem;
-  text-decoration: none;
-  font-weight: 650;
+.ns-bench-dashboard .report-list li {
+  color: var(--quiet);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  padding-left: 1rem;
+  position: relative;
+}
+
+.ns-bench-dashboard .report-list li::before {
+  color: var(--quiet);
+  content: "\2013";
+  left: 0;
+  position: absolute;
+}
+
+.ns-bench-dashboard .report-list a {
+  font-weight: 700;
 }
 
 .ns-bench-dashboard .is-coach-target {
@@ -1278,10 +1285,75 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   max-width: min(760px, calc(100vw - 24px));
 }
 
+.ns-tip-head {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.64rem 0.86rem 0.3rem;
+}
+
 .ns-tip-title {
   font-size: 0.92rem;
   font-weight: 760;
   padding: 0.76rem 0.86rem 0.3rem;
+}
+
+.ns-tip-head .ns-tip-title {
+  min-width: 0;
+  padding: 0;
+}
+
+.ns-tip-backend-switch {
+  background: color-mix(in srgb, var(--ns-tip-bg) 88%, var(--ns-tip-fg) 12%);
+  border: 1px solid color-mix(in srgb, var(--ns-tip-border) 84%, var(--ns-tip-fg) 16%);
+  border-radius: 7px;
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.ns-tip-backend-button {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--ns-tip-fg);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 760;
+  gap: 0.32rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0.42rem 0.58rem;
+  white-space: nowrap;
+}
+
+.ns-tip-backend-button + .ns-tip-backend-button {
+  border-left: 1px solid color-mix(in srgb, var(--ns-tip-border) 84%, transparent);
+}
+
+.ns-tip-backend-button:hover,
+.ns-tip-backend-button:focus-visible {
+  background: color-mix(in srgb, var(--ns-tip-fg) 8%, transparent);
+  outline: none;
+}
+
+.ns-tip-backend-button.is-active {
+  background: var(--ns-tip-fg);
+  color: var(--ns-tip-bg);
+}
+
+.ns-tip-backend-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.72;
+}
+
+.ns-tip-backend-panel[hidden] {
+  display: none;
 }
 
 .ns-tip-meta {
@@ -1418,6 +1490,25 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   display: none !important;
 }
 
+@container (max-width: 46rem) {
+  .ns-bench-dashboard .function-explorer-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .ns-bench-dashboard .function-sidebar {
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+  }
+
+  .ns-bench-dashboard .function-list {
+    max-height: 20rem;
+  }
+
+  .ns-bench-dashboard .function-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1200px) {
   .ns-bench-dashboard .metric-grid,
   .ns-bench-dashboard .story-grid {
@@ -1525,6 +1616,64 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     columns: 1;
   }
 }
+
+.ns-bench-dashboard .snapshot-strip-simple {
+  gap: 0.3rem 0;
+}
+
+.ns-bench-dashboard .snapshot-meta {
+  color: var(--quiet);
+  font-size: 0.75rem;
+}
+
+.ns-bench-dashboard .snapshot-meta + .snapshot-meta::before {
+  color: color-mix(in srgb, var(--quiet) 70%, transparent);
+  content: "\00b7";
+  margin: 0 0.55rem;
+}
+
+.ns-bench-dashboard .backend-comparison {
+  background: color-mix(in srgb, var(--panel) 94%, var(--ink) 6%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.7rem;
+}
+
+.ns-bench-dashboard .backend-comparison-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: space-between;
+}
+
+.ns-bench-dashboard .backend-comparison-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.ns-bench-dashboard .backend-comparison-note {
+  color: var(--quiet);
+  font-size: 0.72rem;
+}
+
+.ns-bench-dashboard .backend-lens-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ns-bench-dashboard .backend-lens-table[hidden] {
+  display: none !important;
+}
+
+.ns-bench-dashboard .function-list-winner {
+  color: var(--quiet);
+  font-size: 0.68rem;
+  font-weight: 700;
+  grid-column: 1 / -1;
+  text-transform: uppercase;
+}
 </style>
 
 <div class="ns-bench-dashboard">
@@ -1532,38 +1681,37 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     <div class="bench-kicker">NumSharp performance lab</div>
     <h2 class="bench-title">Benchmark Dashboard</h2>
     <p class="bench-subtitle">
-      A compact operating view of the NumSharp vs NumPy benchmark suite: 14 official op suites,
-      all supported dtypes where applicable, three cache tiers, and five subsystem scans for iterator,
-      layout, operand, cast, and fusion behavior.
+      A compact operating view of the NumSharp vs NumPy benchmark suite: 18 official op suites,
+      all supported dtypes where applicable, three cache tiers, and six complementary scans for
+      iterator, layout, operand, cast, fusion, and native OpenBLAS/LAPACK behavior.
     </p>
-    <div class="snapshot-strip" aria-label="Benchmark snapshot details">
-      <span class="snapshot-pill">Snapshot: 2026-06-23</span>
-      <span class="snapshot-pill">Commit: e3b7c268</span>
-      <span class="snapshot-pill">NumPy: 2.4.2</span>
-      <span class="snapshot-pill">Ratio: NumPy_ms / NumSharp_ms</span>
-      <span class="snapshot-pill">Higher is better</span>
+    <div class="snapshot-strip snapshot-strip-simple" aria-label="Benchmark snapshot details">
+      <span class="snapshot-meta" data-snapshot-date>Snapshot 2026-08-22</span>
+      <span class="snapshot-meta" data-snapshot-commit>Commit aaa41ef2</span>
+      <span class="snapshot-meta" data-snapshot-numpy>NumPy 2.4.2</span>
+      <span class="snapshot-meta">Ratio NumPy / NumSharp</span>
     </div>
   </section>
 
   <section class="metric-grid" aria-label="Headline benchmark metrics">
     <article class="metric-card">
-      <div class="metric-label">Operation cells</div>
-      <div class="metric-value">1,851</div>
-      <p class="metric-note">op x dtype x size rows in the official matrix</p>
+      <div class="metric-label">API coverage</div>
+      <div class="metric-value metric-good">100%</div>
+      <p class="metric-note">456 / 456 benchmarkable NumSharp-compatible APIs have benchmark evidence</p>
     </article>
     <article class="metric-card">
-      <div class="metric-label">Large arrays</div>
-      <div class="metric-value metric-good">1.26x</div>
-      <p class="metric-note">10M-element geomean, 80% of NumPy time</p>
+      <div class="metric-label">Effective geomean</div>
+      <div class="metric-value metric-good" data-effective-geomean>—</div>
+      <p class="metric-note">Best valid implementation selected per comparable cell</p>
     </article>
     <article class="metric-card">
-      <div class="metric-label">Cache tier</div>
-      <div class="metric-value metric-near">0.90x</div>
-      <p class="metric-note">100K-element geomean, current main pressure point</p>
+      <div class="metric-label">Backends Supported</div>
+      <div class="metric-value metric-good">2/2</div>
+      <p class="metric-note">Managed C# Native Backend<br>OpenBLAS Backend</p>
     </article>
     <article class="metric-card">
       <div class="metric-label">Cast subsystem</div>
-      <div class="metric-value metric-good">1,439</div>
+      <div class="metric-value metric-good">1,450</div>
       <p class="metric-note">wins out of 1,568 comparable cast cells</p>
     </article>
   </section>
@@ -1602,8 +1750,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     <div class="guide-block guide-band-block">
       <h3>Performance Bands</h3>
       <div class="guide-band-row" aria-label="Performance color bands">
-        <span class="guide-band faster">Faster: 1.00x and above</span>
-        <span class="guide-band close">Close: 0.50x to 1.00x</span>
+        <span class="guide-band faster">Faster: 1.05x and above</span>
+        <span class="guide-band close">Close: 0.50x to 1.05x</span>
         <span class="guide-band slower">Slower: 0.20x to 0.50x</span>
         <span class="guide-band much">Much slower: below 0.20x</span>
         <span class="guide-band nodata">No data: pending C# measurement</span>
@@ -1636,12 +1784,12 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       <span class="status-segment band-nodata tip-right" role="listitem" tabindex="0" style="--w:3.73%" aria-label="69 no-data rows pending C# measurements" data-tip="69 no-data rows, pending C# measurements (first 10)&#10;1. matrix + scalar | dtype=float64 | N=1K | pending C#&#10;2. matrix + row_vector (N,M)+(M,) | dtype=float64 | N=1K | pending C#&#10;3. matrix + col_vector (N,M)+(N,1) | dtype=float64 | N=1K | pending C#&#10;4. np.broadcast_to(row, (N,M)) | dtype=float64 | N=1K | pending C#&#10;5. matrix + scalar | dtype=float64 | N=100K | pending C#&#10;6. matrix + row_vector (N,M)+(M,) | dtype=float64 | N=100K | pending C#&#10;7. matrix + col_vector (N,M)+(N,1) | dtype=float64 | N=100K | pending C#&#10;8. np.broadcast_to(row, (N,M)) | dtype=float64 | N=100K | pending C#&#10;9. reshape 1D-&gt;2D | dtype=float64 | N=1K | pending C#&#10;10. reshape 2D-&gt;1D | dtype=float64 | N=1K | pending C#"></span>
     </div>
     <div class="legend-grid">
-      <span class="legend-item"><span class="legend-swatch s-extreme"></span>4 x100+ faster</span>
-      <span class="legend-item"><span class="legend-swatch s-faster"></span>925 faster, 1.00-100x</span>
-      <span class="legend-item"><span class="legend-swatch s-close"></span>434 close, 0.50-1.00x</span>
-      <span class="legend-item"><span class="legend-swatch s-slower"></span>291 slower, 0.20-0.50x</span>
-      <span class="legend-item"><span class="legend-swatch s-much"></span>128 much slower, &lt;0.20x</span>
-      <span class="legend-item"><span class="legend-swatch s-nodata"></span>69 no data</span>
+      <span class="legend-item" data-status-summary="extreme"><span class="legend-swatch s-extreme"></span>4 x100+ faster</span>
+      <span class="legend-item" data-status-summary="faster"><span class="legend-swatch s-faster"></span>933 faster, 1.05-100x</span>
+      <span class="legend-item" data-status-summary="close"><span class="legend-swatch s-close"></span>431 close, 0.50-1.05x</span>
+      <span class="legend-item" data-status-summary="slower"><span class="legend-swatch s-slower"></span>317 slower, 0.20-0.50x</span>
+      <span class="legend-item" data-status-summary="much"><span class="legend-swatch s-much"></span>103 much slower, &lt;0.20x</span>
+      <span class="legend-item" data-status-summary="nodata"><span class="legend-swatch s-nodata"></span>63 no data</span>
     </div>
   </section>
 
@@ -1677,8 +1825,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       </div>
       <div class="bar-row">
         <span class="bar-label">Creation</span>
-        <span class="bar-track"><span class="bar-fill" style="--w:41.6%; --tone:var(--good)"></span></span>
-        <span class="bar-score metric-good">1.04x</span>
+        <span class="bar-track"><span class="bar-fill" style="--w:41.6%; --tone:var(--near)"></span></span>
+        <span class="bar-score metric-near">1.04x</span>
         <span class="bar-count">23 / 21</span>
       </div>
       <div class="bar-row">
@@ -1751,8 +1899,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         <div class="dtype-cell heat-good" style="--heat-width:62%"><span class="dtype-name">int16</span><span class="dtype-score">1.39x</span><span class="dtype-count">66 rows</span><span class="dtype-meter"><span></span></span></div>
         <div class="dtype-cell heat-good" style="--heat-width:57%"><span class="dtype-name">float16</span><span class="dtype-score">1.28x</span><span class="dtype-count">224 rows</span><span class="dtype-meter"><span></span></span></div>
         <div class="dtype-cell heat-good" style="--heat-width:48%"><span class="dtype-name">uint32</span><span class="dtype-score">1.09x</span><span class="dtype-count">65 rows</span><span class="dtype-meter"><span></span></span></div>
-        <div class="dtype-cell heat-good" style="--heat-width:46%"><span class="dtype-name">complex128</span><span class="dtype-score">1.04x</span><span class="dtype-count">64 rows</span><span class="dtype-meter"><span></span></span></div>
-        <div class="dtype-cell heat-good" style="--heat-width:45%"><span class="dtype-name">float32</span><span class="dtype-score">1.01x</span><span class="dtype-count">233 rows</span><span class="dtype-meter"><span></span></span></div>
+        <div class="dtype-cell heat-near" style="--heat-width:46%"><span class="dtype-name">complex128</span><span class="dtype-score">1.04x</span><span class="dtype-count">64 rows</span><span class="dtype-meter"><span></span></span></div>
+        <div class="dtype-cell heat-near" style="--heat-width:45%"><span class="dtype-name">float32</span><span class="dtype-score">1.01x</span><span class="dtype-count">233 rows</span><span class="dtype-meter"><span></span></span></div>
         <div class="dtype-cell heat-near" style="--heat-width:42%"><span class="dtype-name">float64</span><span class="dtype-score">0.95x</span><span class="dtype-count">257 rows</span><span class="dtype-meter"><span></span></span></div>
         <div class="dtype-cell heat-near" style="--heat-width:41%"><span class="dtype-name">int32</span><span class="dtype-score">0.93x</span><span class="dtype-count">111 rows</span><span class="dtype-meter"><span></span></span></div>
         <div class="dtype-cell heat-near" style="--heat-width:33%"><span class="dtype-name">int64</span><span class="dtype-score">0.75x</span><span class="dtype-count">118 rows</span><span class="dtype-meter"><span></span></span></div>
@@ -1839,12 +1987,12 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   <section class="function-explorer" data-function-explorer aria-labelledby="function-explorer-title">
     <div class="section-head">
       <h2 id="function-explorer-title">Function Explorer</h2>
-      <p class="section-note">Search every named np.* API in the latest matrix, then inspect dtype, size, scenario, and raw timing rows</p>
+      <p class="section-note">The list shows one best-available score; backend-sensitive details expose Managed Core and OpenBLAS separately</p>
     </div>
     <div class="function-explorer-shell">
       <aside class="function-sidebar" aria-label="np function list">
         <div class="function-controls">
-          <input class="function-search" type="search" placeholder="Search np.*" aria-label="Search np functions" data-function-search>
+          <input class="function-search" type="search" placeholder="Search API" aria-label="Search benchmarked APIs" data-function-search>
           <div class="function-filter-row">
             <select class="function-select" aria-label="Filter functions by suite" data-function-suite-filter>
               <option value="">All suites</option>
@@ -1868,7 +2016,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
   <section>
     <div class="section-head">
-      <h2>Optimization Priorities</h2>
+      <h2>Optimization Priorities Recommended</h2>
       <p class="section-note">Current optimization priorities from the latest snapshot</p>
     </div>
     <div class="priority-grid priority-grid-compact">
@@ -1909,16 +2057,17 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       <h2>Full Reports</h2>
       <p class="section-note">Detailed tables remain available for traceability</p>
     </div>
-    <div class="link-strip">
-      <a class="dash-link" href="../../../benchmark/history/latest/MANIFEST.md">Snapshot manifest</a>
-      <a class="dash-link" href="../../../benchmark/history/latest/benchmark-report.md">Unified report</a>
-      <a class="dash-link" href="../../../benchmark/history/latest/cast_results.md">Cast matrix</a>
-      <a class="dash-link" href="../../../benchmark/history/latest/nditer_results.md">NDIter results</a>
-      <a class="dash-link" href="../../../benchmark/history/latest/layout_results.md">Layout matrix</a>
-      <a class="dash-link" href="../../../benchmark/history/latest/operand_results.md">Operand layouts</a>
-      <a class="dash-link" href="../../../benchmark/history/latest/fusion_results.md">Fusion results</a>
-      <a class="dash-link" href="il-generation.md">IL generation</a>
-    </div>
+    <ul class="report-list">
+      <li><a href="../../../benchmark/history/latest/MANIFEST.md">Snapshot manifest</a> — snapshot provenance, versions, commit, and artifact inventory.</li>
+      <li><a href="../../../benchmark/history/latest/benchmark-report.md">Unified report</a> — unified operation matrix and subsystem results.</li>
+      <li><a href="../../../benchmark/history/latest/cast_results.md">Cast matrix</a> — source/destination dtype and layout cast matrix.</li>
+      <li><a href="../../../benchmark/history/latest/nditer_results.md">NDIter results</a> — NDIter construction, traversal, and operation timings.</li>
+      <li><a href="../../../benchmark/history/latest/layout_results.md">Layout matrix</a> — memory-layout benchmark matrix.</li>
+      <li><a href="../../../benchmark/history/latest/operand_results.md">Operand layouts</a> — scalar, mixed, broadcast, and operand-layout results.</li>
+      <li><a href="../../../benchmark/history/latest/fusion_results.md">Fusion results</a> — fused versus unfused expression timings.</li>
+      <li><a href="../../../benchmark/history/latest/openblas_results.md">OpenBLAS results</a> — native product, sliding-dot, and LAPACK timings.</li>
+      <li><a href="il-generation.md">IL generation</a> — IL-generation implementation and performance notes.</li>
+    </ul>
   </section>
 </div>
 
@@ -1993,7 +2142,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     });
   });
 
-  const reportUrl = new URL("data/benchmark-report.json", window.location.href);
+  const reportUrl = new URL(window.NUMSHARP_BENCHMARK_REPORT_URL || "data/benchmark-report.json", window.location.href);
+  reportUrl.searchParams.set("schema", "2");
   const topCount = 25;
   const tooltipHoverDelayMs = 5000;
   let tooltipId = 0;
@@ -2004,8 +2154,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     { className: "band-faster-5", title: "5x to 10x faster", min: 5, max: 10, sort: "desc" },
     { className: "band-faster-2", title: "2x to 5x faster", min: 2, max: 5, sort: "desc" },
     { className: "band-faster-125", title: "1.25x to 2x faster", min: 1.25, max: 2, sort: "desc" },
-    { className: "band-faster-100", title: "1.00x to 1.25x faster", min: 1, max: 1.25, sort: "desc" },
-    { className: "band-close-090", title: "0.90x to 1.00x", min: 0.9, max: 1, sort: "desc" },
+    { className: "band-faster-100", title: "1.05x to 1.25x faster", min: 1.05, max: 1.25, sort: "desc" },
+    { className: "band-close-090", title: "0.90x to 1.05x", min: 0.9, max: 1.05, sort: "desc" },
     { className: "band-close-075", title: "0.75x to 0.90x", min: 0.75, max: 0.9, sort: "desc" },
     { className: "band-close-050", title: "0.50x to 0.75x", min: 0.5, max: 0.75, sort: "desc" },
     { className: "band-slower-040", title: "0.40x to 0.50x", min: 0.4, max: 0.5, sort: "asc" },
@@ -2032,13 +2182,17 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     .replace(/'/g, "&#39;");
 
   const numberOrNull = (value) => {
+    if (value === null || value === undefined || value === "") return null;
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
   };
 
   const functionNameFromOperation = (operation) => {
-    const match = String(operation || "").match(/\bnp\.[A-Za-z_][A-Za-z0-9_]*/);
-    return match ? match[0] : null;
+    const value = String(operation || "");
+    const npMatch = value.match(/\bnp(?:\.[A-Za-z_][A-Za-z0-9_]*)+/);
+    if (npMatch) return npMatch[0];
+    const ndarrayMatch = value.match(/^\s*a\.([A-Za-z_][A-Za-z0-9_]*)/);
+    return ndarrayMatch ? `ndarray.${ndarrayMatch[1]}` : null;
   };
 
   const formatRatio = (value) => Number.isFinite(value) ? `${value.toFixed(value >= 10 ? 2 : 3)}x` : "n/a";
@@ -2066,8 +2220,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     if (ratio >= 5) return "5x to 10x faster";
     if (ratio >= 2) return "2x to 5x faster";
     if (ratio >= 1.25) return "1.25x to 2x faster";
-    if (ratio >= 1) return "1.00x to 1.25x faster";
-    if (ratio >= 0.9) return "0.90x to 1.00x";
+    if (ratio >= 1.05) return "1.05x to 1.25x faster";
+    if (ratio >= 0.9) return "0.90x to 1.05x";
     if (ratio >= 0.75) return "0.75x to 0.90x";
     if (ratio >= 0.5) return "0.50x to 0.75x";
     if (ratio >= 0.4) return "0.40x to 0.50x";
@@ -2082,7 +2236,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     const ratio = row.ratio;
     if (!Number.isFinite(ratio)) return "ns-perf-empty";
     if (ratio >= 2) return "ns-perf-excellent";
-    if (ratio >= 1) return "ns-perf-good";
+    if (ratio >= 1.05) return "ns-perf-good";
     if (ratio >= 0.5) return "ns-perf-near";
     if (ratio >= 0.2) return "ns-perf-slow";
     return "ns-perf-bad";
@@ -2141,51 +2295,77 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       </div>`;
   };
 
-  const buildTooltipTable = (title, rows, options = {}) => {
+  const buildTooltipBackendPanel = (id, backend, rows, options = {}) => {
+    const isManaged = backend === "managed";
+    const label = isManaged ? "Managed Core" : "OpenBLAS";
     const isNoData = Boolean(options.noData);
-    const sortedRows = isNoData ? sortRows(rows, "index") : rows;
-    const visibleRows = sortedRows.slice(0, topCount);
-    const subtitle = isNoData
-      ? `${visibleRows.length} of ${rows.length} pending rows`
-      : `${Math.min(topCount, rows.length)} best and ${Math.min(topCount, rows.length)} worst of ${rows.length} rows · ratio = NumPy_ms / NumSharp_ms · higher is better`;
+    const hidden = isManaged ? "" : " hidden";
+    const activeClass = isManaged ? " is-active" : "";
 
-    if (visibleRows.length === 0) {
+    if (rows.length === 0) {
       return `
-        <div class="ns-tip">
-          <div class="ns-tip-title">${escapeHtml(title)}</div>
-          <div class="ns-tip-empty">No matching benchmark rows.</div>
+        <div class="ns-tip-backend-panel${activeClass}" id="${id}-${backend}" role="tabpanel"${hidden}>
+          <div class="ns-tip-meta">${label} · 0 measured rows</div>
+          <div class="ns-tip-empty">No ${label} measurements in this grouping.</div>
         </div>`;
     }
 
     if (isNoData) {
+      const visibleRows = sortRows(rows, "index").slice(0, topCount);
       return `
-        <div class="ns-tip">
-          <div class="ns-tip-title">${escapeHtml(title)}</div>
-          <div class="ns-tip-meta">${escapeHtml(subtitle)}</div>
+        <div class="ns-tip-backend-panel${activeClass}" id="${id}-${backend}" role="tabpanel"${hidden}>
+          <div class="ns-tip-meta">${label} · ${visibleRows.length} of ${rows.length} pending rows</div>
           ${buildDataTable(visibleRows, true)}
         </div>`;
     }
 
     const bestRows = sortRows(rows, "desc").slice(0, topCount);
     const worstRows = sortRows(rows, "asc").slice(0, topCount);
-    const id = `ns-tip-${++tooltipId}`;
+    const rankingId = `${id}-${backend}-ranking`;
+    const subtitle = `${label} · ${Math.min(topCount, rows.length)} best and ${Math.min(topCount, rows.length)} worst of ${rows.length} rows · ratio = NumPy_ms / NumSharp_ms`;
 
     return `
-      <div class="ns-tip">
-        <div class="ns-tip-title">${escapeHtml(title)}</div>
+      <div class="ns-tip-backend-panel${activeClass}" id="${id}-${backend}" role="tabpanel"${hidden}>
         <div class="ns-tip-meta">${escapeHtml(subtitle)}</div>
-        <div class="ns-tip-switch" role="tablist" aria-label="${escapeHtml(title)} ranking">
-          <button class="ns-tip-switch-button is-active" type="button" role="tab" aria-selected="true" aria-controls="${id}-best" data-tip-tab-target="${id}-best">Best performers</button>
-          <button class="ns-tip-switch-button" type="button" role="tab" aria-selected="false" aria-controls="${id}-worst" data-tip-tab-target="${id}-worst" tabindex="-1">Worst performers</button>
+        <div class="ns-tip-switch" role="tablist" aria-label="${label} ranking">
+          <button class="ns-tip-switch-button is-active" type="button" role="tab" aria-selected="true" aria-controls="${rankingId}-best" data-tip-tab-target="${rankingId}-best">Best performers</button>
+          <button class="ns-tip-switch-button" type="button" role="tab" aria-selected="false" aria-controls="${rankingId}-worst" data-tip-tab-target="${rankingId}-worst" tabindex="-1">Worst performers</button>
         </div>
-        <div class="ns-tip-panel is-active" id="${id}-best" role="tabpanel">
+        <div class="ns-tip-panel is-active" id="${rankingId}-best" role="tabpanel">
           <div class="ns-tip-panel-note">Highest ratio in this grouping</div>
           ${buildDataTable(bestRows)}
         </div>
-        <div class="ns-tip-panel" id="${id}-worst" role="tabpanel" hidden>
+        <div class="ns-tip-panel" id="${rankingId}-worst" role="tabpanel" hidden>
           <div class="ns-tip-panel-note">Lowest ratio in this grouping</div>
           ${buildDataTable(worstRows)}
         </div>
+      </div>`;
+  };
+
+  const tooltipFunctionKey = (row) => {
+    if (row.functionName) return row.functionName;
+    return String(row.operation || "")
+      .replace(/\s*\((?:bool|u?int\d+|float\d+|complex\d+)\)\s*$/i, "")
+      .trim();
+  };
+
+  const countTooltipFunctions = (rows) => new Set(rows.map(tooltipFunctionKey).filter(Boolean)).size;
+
+  const buildTooltipTable = (title, managedRows, openBlasRows, options = {}) => {
+    const id = `ns-tip-${++tooltipId}`;
+    const managedFunctionCount = countTooltipFunctions(managedRows);
+    const openBlasFunctionCount = countTooltipFunctions(openBlasRows);
+    return `
+      <div class="ns-tip">
+        <div class="ns-tip-head">
+          <div class="ns-tip-title">${escapeHtml(title)}</div>
+          <div class="ns-tip-backend-switch" role="tablist" aria-label="${escapeHtml(title)} backend">
+            <button class="ns-tip-backend-button is-active" type="button" role="tab" aria-selected="true" aria-controls="${id}-managed" data-tip-backend-target="${id}-managed"><span>Managed Core</span><span class="ns-tip-backend-count">${managedFunctionCount}</span></button>
+            <button class="ns-tip-backend-button" type="button" role="tab" aria-selected="false" aria-controls="${id}-openblas" data-tip-backend-target="${id}-openblas" tabindex="-1"><span>OpenBLAS</span><span class="ns-tip-backend-count">${openBlasFunctionCount}</span></button>
+          </div>
+        </div>
+        ${buildTooltipBackendPanel(id, "managed", managedRows, options)}
+        ${buildTooltipBackendPanel(id, "openblas", openBlasRows, options)}
       </div>`;
   };
 
@@ -2211,6 +2391,93 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     return true;
   };
 
+  const updateStatusMix = (rows) => {
+    const counts = new Map();
+    const total = Math.max(rows.length, 1);
+
+    bandDefinitions.forEach((band) => {
+      const count = rows.filter((row) => rowMatchesBand(row, band)).length;
+      counts.set(band.className, count);
+      const segment = document.querySelector(`.status-segment.${band.className}`);
+      if (!segment) return;
+      segment.style.setProperty("--w", `${(count / total * 100).toFixed(3)}%`);
+      segment.setAttribute("aria-label", band.noData
+        ? `${count} no-data rows pending C# measurements`
+        : `${count} rows at ${band.title}`);
+    });
+
+    const sum = (...classes) => classes.reduce((value, className) => value + (counts.get(className) || 0), 0);
+    const summaries = {
+      extreme: `${sum("band-faster-100x")} x100+ faster`,
+      faster: `${sum("band-faster-20", "band-faster-10", "band-faster-5", "band-faster-2", "band-faster-125", "band-faster-100")} faster, 1.05-100x`,
+      close: `${sum("band-close-090", "band-close-075", "band-close-050")} close, 0.50-1.05x`,
+      slower: `${sum("band-slower-040", "band-slower-030", "band-slower-020")} slower, 0.20-0.50x`,
+      much: `${sum("band-much-010", "band-much-005", "band-much-000")} much slower, <0.20x`,
+      nodata: `${sum("band-nodata")} no data`
+    };
+
+    Object.entries(summaries).forEach(([key, text]) => {
+      const item = document.querySelector(`[data-status-summary="${key}"]`);
+      const textNode = item && Array.from(item.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
+      if (textNode) textNode.nodeValue = text;
+    });
+  };
+
+  const updateEffectiveRollups = (rows) => {
+    const credible = rows.filter((row) => Number.isFinite(row.ratio) && !["no_data", "negligible"].includes(row.status));
+    const geomean = (items) => {
+      const ratios = items.map((row) => row.ratio).filter((ratio) => Number.isFinite(ratio) && ratio > 0);
+      return ratios.length ? Math.exp(ratios.reduce((sum, ratio) => sum + Math.log(ratio), 0) / ratios.length) : null;
+    };
+    const suiteKey = (value) => String(value || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+    const scoreTone = (score) => !Number.isFinite(score) ? ["metric-near", "var(--quiet)"]
+      : score >= 1.05 ? ["metric-good", "var(--good)"]
+      : score >= 0.5 ? ["metric-near", "var(--near)"]
+      : ["metric-slow", "var(--slow)"];
+
+    document.querySelectorAll(".bar-row").forEach((bar) => {
+      const key = suiteKey(bar.querySelector(".bar-label")?.textContent);
+      const suiteRows = credible.filter((row) => suiteKey(row.suite) === key);
+      const score = geomean(suiteRows);
+      const scoreNode = bar.querySelector(".bar-score");
+      const fill = bar.querySelector(".bar-fill");
+      const count = bar.querySelector(".bar-count");
+      const [toneClass, toneColor] = scoreTone(score);
+      if (scoreNode) {
+        scoreNode.textContent = formatRatio(score);
+        scoreNode.className = `bar-score ${toneClass}`;
+      }
+      if (fill) {
+        fill.style.setProperty("--w", `${Math.max(0, Math.min(100, (score || 0) / 2.5 * 100)).toFixed(1)}%`);
+        fill.style.setProperty("--tone", toneColor);
+      }
+      if (count) {
+        const wins = suiteRows.filter((row) => row.ratio >= 1.05).length;
+        count.textContent = `${wins} / ${suiteRows.length - wins}`;
+      }
+    });
+
+    const heatClass = (score) => !Number.isFinite(score) ? "heat-empty"
+      : score >= 1.25 ? "heat-best"
+      : score >= 1.05 ? "heat-good"
+      : score >= 0.5 ? "heat-near"
+      : score >= 0.2 ? "heat-slow" : "heat-bad";
+    document.querySelectorAll(".dtype-panel").forEach((panel) => {
+      const tier = tierByPanel[panel.id];
+      panel.querySelectorAll(".dtype-cell").forEach((cell) => {
+        const dtype = cell.querySelector(".dtype-name")?.textContent.trim();
+        const dtypeRows = credible.filter((row) => row.dtype === dtype && (tier === null || row.n === tier));
+        const score = geomean(dtypeRows);
+        cell.className = `dtype-cell ${heatClass(score)}`;
+        cell.style.setProperty("--heat-width", `${Math.max(0, Math.min(100, (score || 0) / 2.25 * 100)).toFixed(0)}%`);
+        const scoreNode = cell.querySelector(".dtype-score");
+        const countNode = cell.querySelector(".dtype-count");
+        if (scoreNode) scoreNode.textContent = formatRatio(score);
+        if (countNode) countNode.textContent = `${dtypeRows.length} rows`;
+      });
+    });
+  };
+
   const dtypeOrder = [
     "bool", "uint8", "int8", "int16", "uint16", "int32", "uint32",
     "int64", "uint64", "float16", "float32", "float64", "complex128"
@@ -2219,7 +2486,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const ratioToneClass = (ratio) => {
     if (!Number.isFinite(ratio)) return "func-tone-empty";
     if (ratio >= 100) return "func-tone-extreme";
-    if (ratio >= 1) return "func-tone-good";
+    if (ratio >= 1.05) return "func-tone-good";
     if (ratio >= 0.5) return "func-tone-near";
     if (ratio >= 0.2) return "func-tone-slow";
     return "func-tone-bad";
@@ -2228,7 +2495,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const ratioColor = (ratio) => {
     if (!Number.isFinite(ratio)) return "#87909a";
     if (ratio >= 100) return "#0e7490";
-    if (ratio >= 1) return "var(--good)";
+    if (ratio >= 1.05) return "var(--good)";
     if (ratio >= 0.5) return "var(--near)";
     if (ratio >= 0.2) return "var(--slow)";
     return "var(--bad)";
@@ -2436,9 +2703,9 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       tableRoot.innerHTML = buildFunctionTable(tableRows);
     };
 
-    const renderHeatmap = (group) => {
+  const renderHeatmap = (group) => {
       if (group.dtypes.length === 0 || group.sizes.length === 0) {
-        return `<div class="function-empty">No dtype x size benchmark cells for this function.</div>`;
+        return `<div class="function-empty">No measured dtype x size cells for this function.</div>`;
       }
 
       const header = group.sizes.map((size) => `<th>${formatN(size)}</th>`).join("");
@@ -2566,7 +2833,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         activeName = filtered[0]?.name || null;
       }
 
-      listMeta.textContent = `${filtered.length} of ${groups.length} np.* functions`;
+      listMeta.textContent = `${filtered.length} of ${groups.length} measured functions`;
       list.innerHTML = filtered.map((group) => {
         const isActive = group.name === activeName;
         const tone = ratioToneClass(group.score);
@@ -2595,17 +2862,47 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     renderList();
   };
 
+  const profileRows = (combinedRows, profile) => combinedRows.flatMap((row, index) => {
+    const result = row.profiles?.[profile];
+    if (!result || result.availability !== "available" || result.numsharp_ms === null) return [];
+    return [{
+      index,
+      operation: row.operation || "",
+      suite: row.suite || "",
+      category: row.category || "",
+      dtype: row.dtype || "",
+      n: numberOrNull(row.n),
+      ratio: numberOrNull(result.ratio),
+      pctNumPy: numberOrNull(result.pct_numpy),
+      numpyMs: numberOrNull(row.numpy_ms),
+      numSharpMs: numberOrNull(result.numsharp_ms),
+      status: result.status || "",
+      functionName: functionNameFromOperation(row.operation || "")
+    }];
+  });
+
   const initializeBenchmarkTooltips = async () => {
     let rawRows;
+    let nativeRows = [];
+    let managedRows = [];
+    let legacyPayload = false;
     try {
       const response = await fetch(reportUrl);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      rawRows = await response.json();
+      const payload = await response.json();
+      const metadata = payload?.metadata || {};
+      if (metadata.snapshot_date) document.querySelector("[data-snapshot-date]").textContent = `Snapshot ${metadata.snapshot_date}`;
+      if (metadata.commit) document.querySelector("[data-snapshot-commit]").textContent = `Commit ${metadata.commit}`;
+      if (metadata.numpy_version) document.querySelector("[data-snapshot-numpy]").textContent = `NumPy ${metadata.numpy_version}`;
+      legacyPayload = Array.isArray(payload);
+      rawRows = legacyPayload ? payload : (payload.rows || []);
+      managedRows = legacyPayload ? [] : profileRows(rawRows, "managed");
+      nativeRows = legacyPayload ? [] : profileRows(rawRows, "openblas");
     } catch (error) {
       document.querySelectorAll("[data-tip]").forEach((element) => {
         element.setAttribute("title", element.getAttribute("data-tip").replace(/\n/g, " | "));
       });
-      console.warn("Benchmark tooltip data could not be loaded", error);
+      console.warn("Benchmark timing data could not be loaded", error);
       return;
     }
 
@@ -2624,23 +2921,30 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       functionName: functionNameFromOperation(row.operation || "")
     }));
 
+    if (legacyPayload) managedRows = rows;
+
     const measuredRows = rows.filter((row) => row.ratio !== null);
+    updateStatusMix(rows);
+    updateEffectiveRollups(rows);
     initializeFunctionExplorer(rows);
 
     document.querySelectorAll(".status-segment").forEach((element) => {
       const band = bandForElement(element);
       if (!band) return;
-      const bandRows = rows.filter((row) => rowMatchesBand(row, band));
+      const bandRows = managedRows.filter((row) => rowMatchesBand(row, band));
+      const nativeBandRows = nativeRows.filter((row) => rowMatchesBand(row, band));
       const title = band.noData ? "No-data benchmark rows" : `${band.title} benchmark rows`;
-      attachTooltip(element, buildTooltipTable(title, bandRows, { noData: band.noData }), title);
+      attachTooltip(element, buildTooltipTable(title, bandRows, nativeBandRows, { noData: band.noData }), title);
     });
 
     document.querySelectorAll(".bar-row").forEach((element) => {
       const suite = element.querySelector(".bar-label")?.textContent.trim();
       if (!suite) return;
-      const suiteRows = measuredRows.filter((row) => row.suite === suite);
+      const suiteKey = suite.replace(/[^a-z0-9]/gi, "").toLowerCase();
+      const suiteRows = managedRows.filter((row) => row.suite.replace(/[^a-z0-9]/gi, "").toLowerCase() === suiteKey);
+      const nativeSuiteRows = nativeRows.filter((row) => row.suite.replace(/[^a-z0-9]/gi, "").toLowerCase() === suiteKey);
       const title = `${suite} benchmark rows`;
-      attachTooltip(element, buildTooltipTable(title, suiteRows), title);
+      attachTooltip(element, buildTooltipTable(title, suiteRows, nativeSuiteRows), title);
     });
 
     document.querySelectorAll(".dtype-cell").forEach((element) => {
@@ -2649,7 +2953,11 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       if (!dtype || !(panelId in tierByPanel)) return;
 
       const tier = tierByPanel[panelId];
-      const dtypeRows = measuredRows.filter((row) => {
+      const dtypeRows = managedRows.filter((row) => {
+        if (row.dtype !== dtype) return false;
+        return tier === null || row.n === tier;
+      });
+      const nativeDtypeRows = nativeRows.filter((row) => {
         if (row.dtype !== dtype) return false;
         return tier === null || row.n === tier;
       });
@@ -2657,7 +2965,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       const title = tier === null
         ? `${dtype} benchmark rows`
         : `${dtype} at ${formatN(tier)} benchmark rows`;
-      attachTooltip(element, buildTooltipTable(title, dtypeRows), title);
+      attachTooltip(element, buildTooltipTable(title, dtypeRows, nativeDtypeRows), title);
     });
 
     const targets = document.querySelectorAll("[data-benchmark-tooltip]");
@@ -2737,17 +3045,37 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
     const activateTooltipTab = (button) => {
       const tip = button.closest(".ns-tip");
+      const scope = button.closest(".ns-tip-backend-panel") || tip;
       const targetId = button.dataset.tipTabTarget;
-      if (!tip || !targetId) return;
+      if (!tip || !scope || !targetId) return;
 
-      tip.querySelectorAll(".ns-tip-switch-button").forEach((candidate) => {
+      scope.querySelectorAll(".ns-tip-switch-button").forEach((candidate) => {
         const isActive = candidate === button;
         candidate.classList.toggle("is-active", isActive);
         candidate.setAttribute("aria-selected", String(isActive));
         candidate.tabIndex = isActive ? 0 : -1;
       });
 
-      tip.querySelectorAll(".ns-tip-panel").forEach((panel) => {
+      scope.querySelectorAll(".ns-tip-panel").forEach((panel) => {
+        const isActive = panel.id === targetId;
+        panel.classList.toggle("is-active", isActive);
+        panel.hidden = !isActive;
+      });
+    };
+
+    const activateBackendTab = (button) => {
+      const tip = button.closest(".ns-tip");
+      const targetId = button.dataset.tipBackendTarget;
+      if (!tip || !targetId) return;
+
+      tip.querySelectorAll(".ns-tip-backend-button").forEach((candidate) => {
+        const isActive = candidate === button;
+        candidate.classList.toggle("is-active", isActive);
+        candidate.setAttribute("aria-selected", String(isActive));
+        candidate.tabIndex = isActive ? 0 : -1;
+      });
+
+      tip.querySelectorAll(".ns-tip-backend-panel").forEach((panel) => {
         const isActive = panel.id === targetId;
         panel.classList.toggle("is-active", isActive);
         panel.hidden = !isActive;
@@ -2756,11 +3084,14 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
     const handleTooltipTabKeydown = (event) => {
       const button = event.target instanceof Element
-        ? event.target.closest(".ns-tip-switch-button")
+        ? event.target.closest(".ns-tip-switch-button, .ns-tip-backend-button")
         : null;
       if (!button) return;
 
-      const buttons = Array.from(button.closest(".ns-tip-switch")?.querySelectorAll(".ns-tip-switch-button") || []);
+      const isBackend = button.classList.contains("ns-tip-backend-button");
+      const switchRoot = button.closest(isBackend ? ".ns-tip-backend-switch" : ".ns-tip-switch");
+      const buttonSelector = isBackend ? ".ns-tip-backend-button" : ".ns-tip-switch-button";
+      const buttons = Array.from(switchRoot?.querySelectorAll(buttonSelector) || []);
       if (buttons.length === 0) return;
 
       const currentIndex = buttons.indexOf(button);
@@ -2774,7 +3105,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       event.preventDefault();
       event.stopPropagation();
       buttons[nextIndex].focus();
-      activateTooltipTab(buttons[nextIndex]);
+      if (isBackend) activateBackendTab(buttons[nextIndex]);
+      else activateTooltipTab(buttons[nextIndex]);
     };
 
     const getTooltipScrollContainer = (target, popper) => {
@@ -2786,7 +3118,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         return directScroller;
       }
 
-      return popper.querySelector(".ns-tip-panel:not([hidden]) .ns-tip-scroll")
+      return popper.querySelector(".ns-tip-backend-panel:not([hidden]) .ns-tip-panel:not([hidden]) .ns-tip-scroll")
+        || popper.querySelector(".ns-tip-backend-panel:not([hidden]) > .ns-tip-scroll")
         || popper.querySelector(".ns-tip-scroll");
     };
 
@@ -2873,13 +3206,14 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       });
       instance.popper.addEventListener("click", (event) => {
         const button = event.target instanceof Element
-          ? event.target.closest(".ns-tip-switch-button")
+          ? event.target.closest(".ns-tip-switch-button, .ns-tip-backend-button")
           : null;
         if (!button || !containsNode(instance.popper, button)) return;
 
         event.preventDefault();
         event.stopPropagation();
-        activateTooltipTab(button);
+        if (button.classList.contains("ns-tip-backend-button")) activateBackendTab(button);
+        else activateTooltipTab(button);
         instance.popperInstance?.update?.();
       });
       instance.popper.addEventListener("keydown", handleTooltipTabKeydown);
@@ -3051,5 +3385,265 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   };
 
   initializeBenchmarkTooltips();
+})();
+</script>
+
+<script>
+(() => {
+  const dashboard = document.querySelector(".ns-bench-dashboard");
+  const list = dashboard.querySelector("[data-function-list]");
+  const detail = dashboard.querySelector("[data-function-detail]");
+  const search = dashboard.querySelector("[data-function-search]");
+  const coreUrl = new URL(window.NUMSHARP_BENCHMARK_REPORT_URL || "data/benchmark-report.json", window.location.href);
+  coreUrl.searchParams.set("schema", "2");
+  let combinedRows = [];
+  let coreRows = [];
+  let nativeRows = [];
+  let coreGroups = new Map();
+  let nativeGroups = new Map();
+  let ready = false;
+
+  const escapeHtml = (value) => String(value ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+  const functionName = (operation) => {
+    const value = String(operation || "");
+    const npMatch = value.match(/\bnp(?:\.[A-Za-z_][A-Za-z0-9_]*)+/);
+    if (npMatch) return npMatch[0];
+    const ndarrayMatch = value.match(/^\s*a\.([A-Za-z_][A-Za-z0-9_]*)/);
+    return ndarrayMatch ? `ndarray.${ndarrayMatch[1]}` : null;
+  };
+
+  const geomean = (rows) => {
+    const ratios = rows.map((row) => Number(row.ratio)).filter((ratio) => ratio > 0 && Number.isFinite(ratio));
+    return ratios.length ? Math.exp(ratios.reduce((sum, ratio) => sum + Math.log(ratio), 0) / ratios.length) : null;
+  };
+
+  const formatRatio = (ratio) => Number.isFinite(ratio)
+    ? `${ratio.toFixed(ratio >= 10 ? 2 : 3)}x`
+    : "n/a";
+
+  const formatN = (value) => {
+    if (!Number.isFinite(value)) return "n/a";
+    if (value >= 1000000 && value % 1000000 === 0) return `${value / 1000000}M`;
+    if (value >= 1000 && value % 1000 === 0) return `${value / 1000}K`;
+    return String(value);
+  };
+
+  const toneClass = (ratio) => {
+    if (!Number.isFinite(ratio)) return "func-tone-empty";
+    if (ratio >= 100) return "func-tone-extreme";
+    if (ratio >= 1.05) return "func-tone-good";
+    if (ratio >= .5) return "func-tone-near";
+    if (ratio >= .2) return "func-tone-slow";
+    return "func-tone-bad";
+  };
+
+  const rowsForProfile = (rows, profile) => rows.flatMap((row) => {
+    const result = row.profiles?.[profile];
+    if (!result) return [];
+    return [{
+      name: functionName(row.operation),
+      operation: row.operation,
+      scenario: row.scenario || "",
+      suite: row.suite,
+      category: row.category,
+      n: Number(row.n),
+      dtype: row.dtype,
+      nsMs: result.numsharp_ms === null ? null : Number(result.numsharp_ms),
+      numsharp_ms: result.numsharp_ms === null ? null : Number(result.numsharp_ms),
+      numpyMs: row.numpy_ms === null ? null : Number(row.numpy_ms),
+      numpy_ms: row.numpy_ms === null ? null : Number(row.numpy_ms),
+      ratio: result.ratio === null ? null : Number(result.ratio),
+      status: result.status,
+      availability: result.availability,
+      exceptionType: result.exception_type,
+      exceptionMessage: result.exception_message
+    }];
+  });
+
+  const groupRows = (rows, selector) => {
+    const map = new Map();
+    rows.forEach((row) => {
+      const name = selector(row);
+      if (!name) return;
+      if (!map.has(name)) map.set(name, []);
+      map.get(name).push(row);
+    });
+    return map;
+  };
+
+  const scoresFor = (name) => {
+    const managedRows = coreGroups.get(name) || [];
+    const openblasRows = nativeGroups.get(name) || [];
+    const managedAvailable = managedRows.filter((row) => row.availability === "available");
+    const openblasAvailable = openblasRows.filter((row) => row.availability === "available");
+    const managed = geomean(managedAvailable);
+    const openblas = geomean(openblasAvailable);
+    const best = Math.max(managed ?? Number.NEGATIVE_INFINITY, openblas ?? Number.NEGATIVE_INFINITY);
+    const winner = !Number.isFinite(best) ? "Unavailable"
+      : openblas !== null && (managed === null || openblas > managed) ? "OpenBLAS" : "Managed Core";
+    return { managedRows, openblasRows, managedAvailable, openblasAvailable, managed, openblas, best: Number.isFinite(best) ? best : null, winner };
+  };
+
+  const unavailableMessage = (rows, profile) => {
+    const unavailable = rows.find((row) => row.availability !== "available");
+    if (!unavailable) return profile === "managed"
+      ? "Not measured in the Managed C# profile."
+      : "Not measured in the OpenBLAS profile.";
+    const label = unavailable.availability === "missing_backend" ? "Missing backend"
+      : unavailable.availability === "not_supported" ? "Not supported"
+      : unavailable.availability.replaceAll("_", " ");
+    return `${label}${unavailable.exceptionType ? ` · ${unavailable.exceptionType}` : ""}`;
+  };
+
+  const coreTable = (rows) => {
+    const available = rows.filter((row) => row.availability === "available");
+    return available.length ? `
+    <div class="function-table-scroll backend-lens-table" data-backend-table="managed">
+      <table class="function-table"><thead><tr><th>Operation</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th></tr></thead>
+      <tbody>${available.slice(0, 25).map((row) => `<tr>
+        <td class="op">${escapeHtml(row.operation)}</td><td>${escapeHtml(row.dtype)}</td><td class="num">${formatN(Number(row.n))}</td>
+        <td class="num">${formatRatio(Number(row.ratio))}</td><td class="num">${Number(row.numpy_ms).toFixed(4)}</td><td class="num">${Number(row.numsharp_ms).toFixed(4)}</td>
+      </tr>`).join("")}</tbody></table>
+    </div>` : `<div class="function-empty backend-lens-table" data-backend-table="managed">${escapeHtml(unavailableMessage(rows, "managed"))}</div>`;
+  };
+
+  const nativeTable = (rows) => {
+    const available = rows.filter((row) => row.availability === "available");
+    return available.length ? `
+    <div class="function-table-scroll backend-lens-table" data-backend-table="openblas" hidden>
+      <table class="function-table"><thead><tr><th>Scenario</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th></tr></thead>
+      <tbody>${available.map((row) => `<tr>
+        <td class="op">${escapeHtml(row.scenario)}</td><td>${escapeHtml(row.dtype)}</td><td class="num">${formatN(row.n)}</td>
+        <td class="num">${formatRatio(row.ratio)}</td><td class="num">${row.numpyMs.toFixed(4)}</td><td class="num">${row.nsMs.toFixed(4)}</td>
+      </tr>`).join("")}</tbody></table>
+    </div>` : `<div class="function-empty backend-lens-table" data-backend-table="openblas" hidden>${escapeHtml(unavailableMessage(rows, "openblas"))}</div>`;
+  };
+
+  const comparisonHtml = (name) => {
+    const scores = scoresFor(name);
+    return `<div class="backend-comparison" data-backend-comparison="${escapeHtml(name)}">
+      <div class="backend-comparison-head">
+        <div><div class="backend-comparison-title">Backend comparison</div><div class="backend-comparison-note">Published value: ${formatRatio(scores.best)} · ${escapeHtml(scores.winner)} is faster for the measured scenario set</div></div>
+        <div class="function-tabs backend-lens-tabs" role="tablist" aria-label="${escapeHtml(name)} backend timings">
+          <button class="function-tab is-active" type="button" role="tab" aria-selected="true" data-backend-lens="managed">Managed Core ${scores.managedAvailable.length ? 1 : 0}</button>
+          <button class="function-tab" type="button" role="tab" aria-selected="false" data-backend-lens="openblas">OpenBLAS ${scores.openblasAvailable.length ? 1 : 0}</button>
+        </div>
+      </div>
+      <div class="function-stat-strip">
+        <div class="function-stat"><span>Best available</span><strong>${formatRatio(scores.best)}</strong></div>
+        <div class="function-stat"><span>Managed Core</span><strong>${formatRatio(scores.managed)}</strong></div>
+        <div class="function-stat"><span>OpenBLAS</span><strong>${formatRatio(scores.openblas)}</strong></div>
+        <div class="function-stat"><span>Winner</span><strong>${escapeHtml(scores.winner)}</strong></div>
+      </div>
+      ${coreTable(scores.managedRows)}
+      ${nativeTable(scores.openblasRows)}
+    </div>`;
+  };
+
+  const wireComparisonTabs = (container) => {
+    container.querySelectorAll("[data-backend-lens]").forEach((button) => button.addEventListener("click", () => {
+      const lens = button.dataset.backendLens;
+      container.querySelectorAll("[data-backend-lens]").forEach((candidate) => {
+        const active = candidate.dataset.backendLens === lens;
+        candidate.classList.toggle("is-active", active);
+        candidate.setAttribute("aria-selected", String(active));
+      });
+      container.querySelectorAll("[data-backend-table]").forEach((table) => { table.hidden = table.dataset.backendTable !== lens; });
+    }));
+  };
+
+  const decorateDetail = () => {
+    if (!ready || detail.querySelector("[data-backend-comparison]")) return;
+    const name = detail.querySelector(".function-title")?.textContent?.trim();
+    if (!name || !nativeGroups.has(name)) return;
+    const scores = scoresFor(name);
+    const ratioPill = detail.querySelector(".function-ratio-pill");
+    if (ratioPill) {
+      ratioPill.textContent = formatRatio(scores.best);
+      ratioPill.className = `function-ratio-pill ${toneClass(scores.best)}`;
+    }
+    const anchor = detail.querySelector(".function-stat-strip") || detail.querySelector(".function-detail-head");
+    anchor.insertAdjacentHTML("afterend", comparisonHtml(name));
+    wireComparisonTabs(detail.querySelector("[data-backend-comparison]"));
+  };
+
+  const renderNativeOnlyDetail = (name) => {
+    const scores = scoresFor(name);
+    detail.innerHTML = `
+      <div class="function-detail-head">
+        <div><div class="function-title" role="heading" aria-level="3">${escapeHtml(name)}</div><p class="function-subtitle">Backend-required operation · real OpenBLAS timings · Managed Core unavailable</p></div>
+        <span class="function-ratio-pill ${toneClass(scores.best)}">${formatRatio(scores.best)}</span>
+      </div>
+      ${comparisonHtml(name)}`;
+    wireComparisonTabs(detail.querySelector("[data-backend-comparison]"));
+  };
+
+  const decorateList = () => {
+    if (!ready) return;
+    list.querySelectorAll("[data-function-name]").forEach((button) => {
+      const name = button.dataset.functionName;
+      if (!nativeGroups.has(name) || button.dataset.backendDecorated === "true") return;
+      const scores = scoresFor(name);
+      button.dataset.backendDecorated = "true";
+      const score = button.querySelector(".function-list-score");
+      if (score) score.textContent = formatRatio(scores.best);
+      button.insertAdjacentHTML("beforeend", `<span class="function-list-winner">Best available · ${escapeHtml(scores.winner)}</span>`);
+    });
+
+    const query = search.value.trim().toLowerCase();
+    const existing = new Set([
+      ...Array.from(list.querySelectorAll("[data-function-name]")).map((button) => button.dataset.functionName),
+      ...Array.from(list.querySelectorAll("[data-native-only-name]")).map((button) => button.dataset.nativeOnlyName)
+    ]);
+    nativeGroups.forEach((rows, name) => {
+      if (existing.has(name) || (query && !name.toLowerCase().includes(query))) return;
+      const scores = scoresFor(name);
+      list.insertAdjacentHTML("beforeend", `<button class="function-list-item ${toneClass(scores.best)}" type="button" role="option" aria-selected="false" data-native-only-name="${escapeHtml(name)}">
+        <span class="function-list-name">${escapeHtml(name)}</span><span class="function-list-score">${formatRatio(scores.best)}</span>
+        <span class="function-list-detail">${rows.length} measured rows · OpenBLAS required</span><span class="function-list-winner">Best available · OpenBLAS</span>
+      </button>`);
+    });
+    dashboard.querySelector("[data-function-list-meta]").textContent = `${list.querySelectorAll(".function-list-item").length} measured functions · one effective score`;
+  };
+
+  const updateHeadline = () => {
+    const effectiveRatios = combinedRows
+      .filter((row) => Number.isFinite(Number(row.ratio)) && !["no_data", "negligible"].includes(row.status))
+      .map((row) => Number(row.ratio));
+    dashboard.querySelector("[data-effective-geomean]").textContent = formatRatio(geomean(effectiveRatios.map((ratio) => ({ ratio }))));
+  };
+
+  const listObserver = new MutationObserver(() => decorateList());
+  listObserver.observe(list, { childList: true });
+  const detailObserver = new MutationObserver(() => decorateDetail());
+  detailObserver.observe(detail, { childList: true });
+  list.addEventListener("click", (event) => {
+    const nativeOnly = event.target instanceof Element ? event.target.closest("[data-native-only-name]") : null;
+    if (!nativeOnly) return;
+    list.querySelectorAll(".function-list-item").forEach((button) => { button.classList.remove("is-active"); button.setAttribute("aria-selected", "false"); });
+    nativeOnly.classList.add("is-active");
+    nativeOnly.setAttribute("aria-selected", "true");
+    renderNativeOnlyDetail(nativeOnly.dataset.nativeOnlyName);
+  });
+
+  fetch(coreUrl).then((response) => {
+    if (!response.ok) throw new Error(`Benchmark report HTTP ${response.status}`);
+    return response.json();
+  }).then((payload) => {
+    combinedRows = Array.isArray(payload) ? payload : (payload.rows || []);
+    coreRows = Array.isArray(payload)
+      ? payload.map((row) => ({ ...row, name: functionName(row.operation), availability: row.numsharp_ms === null ? "not_measured" : "available" }))
+      : rowsForProfile(combinedRows, "managed");
+    nativeRows = Array.isArray(payload) ? [] : rowsForProfile(combinedRows, "openblas");
+    coreGroups = groupRows(coreRows, (row) => functionName(row.operation));
+    nativeGroups = groupRows(nativeRows, (row) => row.name);
+    ready = true;
+    updateHeadline();
+    decorateList();
+    decorateDetail();
+  }).catch((error) => console.warn("Backend benchmark data failed to load", error));
 })();
 </script>

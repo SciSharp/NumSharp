@@ -3,20 +3,22 @@
 ## Official run — `benchmark/run_benchmark.py` (the entry point)
 
 Builds the C# suite, runs each suite through BenchmarkDotNet (per-class JSON, resumable), sweeps warm NumPy across
-1K/100K/10M, merges on `(op, dtype, N)`, appends the five subsystems, archives raw scratch to
+the applicable size tiers, runs Managed/OpenBLAS profiles, merges on `(op, dtype, N, scenario)`,
+appends the five complementary subsystems, and archives raw scratch to
 `results/<ts>/` (gitignored), and writes the committable `history/<date>_<sha>/` snapshot.
 
 ```bash
-python run_benchmark.py                       # full official run (all 14 suites + 5 subsystems)
+python run_benchmark.py                       # full official run (18 suites + backend profiles + subsystems)
 python run_benchmark.py --suites manipulation unary   # subset of the op matrix
 python run_benchmark.py --skip-build          # reuse existing Release build
 python run_benchmark.py --skip-csharp         # NumPy only
 python run_benchmark.py --quick               # dev: fewer NumPy iterations
 python run_benchmark.py --no-history          # don't write the history snapshot
 # subsystem opt-outs: --skip-nditer --skip-layout --skip-operand --skip-cast --skip-fusion
+# backend profile opt-out: --skip-openblas
 ```
 
-**Cost:** the full matrix is long (µs–ms array ops × 15 dtypes × 3 sizes × 14 suites + subsystems). For iterating
+**Cost:** the full matrix is long (µs–ms array ops × applicable dtypes/sizes × 18 suites + subsystems). For iterating
 on one op, `--suites <that suite>` or the smoke path (`--list flat` + `numpy_benchmark.py --suite <s> --quick`) is
 usually the right scope. A full measured run + committed snapshot is the post-release `.github/workflows/
 benchmark.yml` ritual, not something to kick off casually.
@@ -37,27 +39,29 @@ The nditer subsystem reports a section that crashes all retries (the known inter
 
 ## Reading the report
 
-- **Convention is NPY/NS** (NumPy_ms / NumSharp_ms, `>1` = NumSharp faster). Bands: ✅ `≥1.0×` 🟡 `≥0.5×`
+- **Convention is NPY/NS** (NumPy_ms / NumSharp_ms, `>1` = NumSharp faster). Published bands: ✅ `≥1.05×` 🟡 `≥0.5×`
   🟠 `≥0.2×` 🔴 `<0.2×` · **▫ negligible** (sub-µs either side or >20× — excluded from geomeans & Best/Worst)
   · **⚪** (C# side unjoined). The `%NumPy🕐` column = NumSharp_ms / NumPy_ms × 100 = share of NumPy's time
   NumSharp uses (<100% = faster).
 - **Credibility gating** (`merge-results.py` `classify()`): only rows where **both sides did ≥1µs of work AND the
   speedup is within 20×** count toward the geomeans and rankings. Sub-µs call-overhead rows, view returns, lazy
   allocs and dead-code-eliminated kernels are `▫ negligible` — kept in the per-suite tables, never showcased.
-- The report has a **per-size geomean summary** + the full **per-(op, dtype, N) ratio matrix**, then the five
-  appended subsystem sections.
+- The report has the full **per-(op, dtype, N, scenario) matrix**, both profile results, one
+  fastest-valid effective value, then the five appended subsystem sections.
 - A row missing a C# or NumPy value ("C# not run" / "NumPy only") almost always means the two names didn't
   **normalize to the same join key** — check the C# `[Benchmark(Description)]` vs the NumPy `.name`.
 
 ## Reports & UI surfaces (canonical → human-facing)
 
 They drift — know which is which:
-- **`benchmark/benchmark-report.md`** — the canonical text report (merge output). Tracked; refreshed by CI. Start here.
+- **`benchmark/benchmark-report.md`** — the canonical backend-aware report. Tracked; refreshed by CI. Start here.
+- **`benchmark-report.{managed,openblas}.json`** — separate profiles using the same schema; the unsuffixed
+  JSON contains both profiles plus the effective selection.
 - **`benchmark/history/latest/*`** — the committable snapshot the docs/CI reference.
 - **`benchmark/benchmark-dashboard.md`** — a dense ASCII-bar sheet from `scripts/render_dashboard.py`. Gitignored,
   **NOT** wired into `run_benchmark.py` or CI — run it by hand to seed the DocFX dashboard's numbers.
-- **`docs/website-src/docs/benchmarks-dashboard.md`** — the **real UI**: a hand-built HTML/CSS/JS dashboard (the
-  website's "Benchmarks" hub, numbers embedded inline). Not auto-generated — edit by hand from fresh report numbers.
+- **`docs/website-src/docs/benchmarks-dashboard.md`** — the **real UI**, promoted from the backend POC. It reads
+  only the canonical combined JSON and computes effective rollups/backend drill-downs from measured rows.
 - **`benchmark/README.md`** is a static orientation guide, **not** the report — CI never refreshes it.
 
 ## History snapshots — what we commit
@@ -65,7 +69,7 @@ They drift — know which is which:
 | Path | Tracked? | Contents |
 |------|----------|----------|
 | `benchmark/results/<ts>/` | ❌ gitignored | raw per-run scratch (per-suite NumPy JSON, BDN per-class reports, merged json/csv). |
-| `benchmark/history/<date>_<sha>/` | ✅ tracked | the snapshot: `MANIFEST.md` + `benchmark-report.{md,json,csv}` + `numpy-results.json` + every subsystem `*_results.{md,tsv}` + `cards/`. |
+| `benchmark/history/<date>_<sha>/` | ✅ tracked | the snapshot: MANIFEST + combined/separate profile JSON + report/csv + NumPy input + subsystem results + cards. |
 | `benchmark/history/latest` | ✅ tracked symlink | → the newest snapshot. Stable path for docs/CI. |
 
 `benchmark/scripts/snapshot_history.py` assembles it (called by `run_benchmark.py`; `--commit` to also git-commit).

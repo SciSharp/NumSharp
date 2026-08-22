@@ -14,7 +14,7 @@
 > NumSharp reproduces NumPy's exact per-loop precision (see §7). Only the result *dtype* differs; closing
 > that is issue [#569](https://github.com/SciSharp/NumSharp/issues/569) (a complex64 dtype), not FFT work.
 
-Status date: 2026-08-14 · Branch: `journey3` · Issue:
+Status date: 2026-08-14 · Issue:
 [SciSharp/NumSharp#114](https://github.com/SciSharp/NumSharp/issues/114) · Plan:
 `docs/plans/fft-integration-plan.md`
 
@@ -304,8 +304,8 @@ flip the dtype cell automatically, values unchanged.
 
 ## 10. Not done
 
-1. **Not on `master`.** This lives on `journey3` (with `fft-integration` merged in). #114 / #560's
-   `fft` sub-item cannot be closed until it lands on master.
+1. **Release publication.** #114 / #560's `fft` sub-item remains open until this implementation
+   ships in a release.
 2. **float32 parity** is the deliberate F1 divergence above, waiting on **#569** (complex64).
 3. **Performance** is un-benchmarked — the plan's M5 tuning (in-place / non-buffered fast paths) is a
    correctness-neutral follow-up. No NPY/NS ratios are claimed here.

@@ -38,4 +38,11 @@ public class ComparisonBenchmarks : TypedBenchmarkBase
     [Benchmark(Description = "a > b")] public NDArray Greater() => _a > _b;
     [Benchmark(Description = "a <= b")] public NDArray LessEqual() => _a <= _b;
     [Benchmark(Description = "a >= b")] public NDArray GreaterEqual() => _a >= _b;
+
+    [Benchmark(Description = "np.equal(a, b)")] public NDArray NpEqual() => np.equal(_a, _b);
+    [Benchmark(Description = "np.not_equal(a, b)")] public NDArray NpNotEqual() => np.not_equal(_a, _b);
+    [Benchmark(Description = "np.less(a, b)")] public NDArray NpLess() => np.less(_a, _b);
+    [Benchmark(Description = "np.greater(a, b)")] public NDArray NpGreater() => np.greater(_a, _b);
+    [Benchmark(Description = "np.less_equal(a, b)")] public NDArray NpLessEqual() => np.less_equal(_a, _b);
+    [Benchmark(Description = "np.greater_equal(a, b)")] public NDArray NpGreaterEqual() => np.greater_equal(_a, _b);
 }

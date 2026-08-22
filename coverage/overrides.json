@@ -57,18 +57,6 @@
       "target": "NumSharp.np.vstack",
       "notes": "NumPy documents row_stack as an alias of vstack."
     },
-    "numpy.ndarray.itemsize": {
-      "target": "NumSharp.NDArray.dtypesize",
-      "notes": "The element size is exposed as dtypesize in NumSharp."
-    },
-    "numpy.ndarray.data": {
-      "target": "NumSharp.NDArray.Data",
-      "notes": "NumSharp exposes typed unmanaged data through the generic Data<T>() method rather than NumPy's buffer-view property."
-    },
-    "numpy.ndarray.round": {
-      "target": "NumSharp.np.round_",
-      "notes": "Use the static np.round_ API; NumSharp does not expose ndarray.round as an instance member."
-    },
     "numpy.random.ranf": {
       "target": "NumSharp.NumPyRandom.random_sample",
       "notes": "NumPy documents ranf as an alias of random_sample."

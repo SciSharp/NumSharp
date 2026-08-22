@@ -140,6 +140,7 @@ namespace NumSharp.Tests.Lifetime
             yield return new("logical_and", () => new[] { D1k(), D1k() }, o => np.logical_and(o[0], o[1]));
             yield return new("np.isnan", () => new[] { D1k() }, o => np.isnan(o[0]));
             yield return new("np.isfinite", () => new[] { D1k() }, o => np.isfinite(o[0]));
+            yield return new("np.isinf", () => new[] { D1k() }, o => np.isinf(o[0]));
 
             // -------------------------------------------------------------- reductions
             yield return new("np.sum", () => new[] { D1k() }, o => np.sum(o[0]));

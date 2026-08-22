@@ -2,7 +2,8 @@
 name: benchmark
 description: >-
   NumSharp's NumPy-vs-NumSharp performance harness — the op/dtype/N matrix (C# BenchmarkDotNet vs a
-  warm NumPy process) plus five appended subsystems (nditer, layout, operand, cast, fusion), all in
+  warm NumPy process), unified Managed/OpenBLAS backend profiles, and five appended subsystems
+  (nditer, layout, operand, cast, fusion), all in
   the NPY/NS convention. Use this whenever you add a benchmark for an np.* op, wire a C# benchmark to
   its NumPy twin, run the official suite or a subset, read/interpret the ratio matrix or history
   snapshots, add a whole subsystem, or debug a suspicious measurement (the Debug-taint 2x pitfall,
@@ -21,7 +22,7 @@ is the distilled map + the actionable playbooks. Read `benchmark/CLAUDE.md` when
 
 > **ratio = NumPy_ms / NumSharp_ms.** `>1` = NumSharp **faster**, `<1` = slower, `=1` = parity. **Higher is better.**
 
-Used everywhere — matrices, geomeans, commit messages, every `*_sheet.py`. Icons: ✅ `≥1.0` · 🟡 `≥0.5` · 🟠 `≥0.2`
+Used everywhere — matrices, geomeans, commit messages, every `*_sheet.py`. Dashboard/report bands: ✅ `≥1.05` · 🟡 `≥0.5` · 🟠 `≥0.2`
 · 🔴 `<0.2`. (The legacy `run-benchmarks.ps1` prints the INVERSE NS/NPY — prefer NPY/NS for anything new.)
 
 ## THE pitfall: Debug taints timings ~2×
@@ -38,7 +39,7 @@ script assembly, not Core. The BenchmarkDotNet projects are exempt (they mandate
 |------|-------|------|
 | C# | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/<Category>/*.cs` | BenchmarkDotNet classes; `[Benchmark(Description="np.foo(a)")]` methods. |
 | NumPy | `benchmark/NumSharp.Benchmark.Python/numpy_benchmark.py` | `run_<suite>_benchmarks(...)` emitting `BenchmarkResult` rows. |
-| Merge | `benchmark/scripts/merge-results.py` | Joins on `(normalize_op_name(name), dtype, N)`. |
+| Merge | `benchmark/scripts/{merge-results,merge-backend-profiles}.py` | Joins language timings, then backend profiles on the exact cell. |
 | Orchestrator | `benchmark/run_benchmark.py` | Builds C#, runs each suite (BDN) + warm NumPy across 1K/100K/10M, merges, snapshots. |
 
 The join is by **normalized op name**: `normalize_op_name` strips the dtype tag, `[annotations]`, and
@@ -47,12 +48,17 @@ names to normalize identically or the row shows as "C# not run" / "NumPy only".
 
 ## The matrix + subsystems
 
-- **Op matrix** — 14 comparison suites, each a C# namespace filter in `run_benchmark.py`'s `SUITES` map
+- **Op matrix** — 18 comparison suites, each a C# namespace filter in `run_benchmark.py`'s `SUITES` map
   (`arithmetic, unary, reduction, broadcast, creation, manipulation, slicing, comparison, bitwise, logic,
-  statistics, sorting, linalg, selection`). Swept over 1K/100K/10M × the 15 dtypes.
+  statistics, sorting, linalg, selection, fft, random, ndarray, api`). Swept over the size/dtype tiers
+  each API can exercise safely; the classic kernels retain the 1K/100K/10M sweep.
+- **Backend profiles** — `benchmark/backends/backend_profiles.py` runs every backend-sensitive API
+  under Managed C# and OpenBLAS with one schema; MissingBackendException and NotSupportedException
+  are availability outcomes. Separate profile JSON files are merged into one effective dataset.
 - **Five appended subsystems** (own result models, appended not merged): `nditer` (iterator machinery),
   `layout` (op × 8 memory layouts × dtype), `operand` (1-D/scalar/mixed/broadcast), `cast` (astype 15×15 × layout),
-  `fusion` (`np.evaluate`). Each is a `*_bench.{cs,py}` pair + a `*_sheet.py` renderer.
+  and `fusion` (`np.evaluate`). Each is a
+  `*_bench.{cs,py}` pair + a `*_sheet.py` renderer.
 
 ## Playbook — add a benchmark for a new op
 
@@ -71,8 +77,8 @@ The most common task. Full worked example in **`references/add-benchmark.md`**. 
 
 ## Other tasks → where to go
 
-- **Run the suite (official / subset), interpret the report, the reports/UI surfaces + snapshots** → `references/run-and-report.md`. (The human-facing UI is the hand-built DocFX page `docs/website-src/docs/benchmarks-dashboard.md`, not `benchmark/README.md`.)
-- **Add or edit a matrix subsystem (nditer/layout/operand/cast/fusion)** → `references/subsystems.md`.
+- **Run the suite (official / subset), interpret the report, the reports/UI surfaces + snapshots** → `references/run-and-report.md`. (The human-facing UI is the DocFX page `docs/website-src/docs/benchmarks-dashboard.md`; its Function Explorer data is generated, while narrative cards are curated.)
+- **Add or edit a matrix subsystem or backend profile case** → `references/subsystems.md`.
 - **Everything else (all suites, config internals, troubleshooting, type map)** → `benchmark/CLAUDE.md`.
 
 ## Gotchas
@@ -91,4 +97,4 @@ The most common task. Full worked example in **`references/add-benchmark.md`**. 
 
 - `references/add-benchmark.md` — the detailed add-a-benchmark playbook (C# + NumPy twin + join-key rules + smoke).
 - `references/run-and-report.md` — running the official run / subsets, the report + history snapshots, InProcessEmit.
-- `references/subsystems.md` — the five subsystems and how to add one (`*_bench.{cs,py}` + `*_sheet.py`).
+- `references/subsystems.md` — backend profiles plus the five appended subsystems.

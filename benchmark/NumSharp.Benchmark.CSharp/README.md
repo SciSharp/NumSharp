@@ -12,7 +12,7 @@ Industry-standard performance benchmarks for [NumSharp](https://github.com/SciSh
 |--------|----------|
 | **Operations** | 130+ benchmarked operations |
 | **Data Types** | All 15 NumSharp types |
-| **Suites** | 14 comparison categories (+ experimental/allocation classes with no NumPy twin) |
+| **Suites** | 18 comparison categories (+ experimental/allocation classes with no NumPy twin) |
 | **Array Sizes** | Scalar, 100, 1K, 100K, 10M elements (the official run uses 1K / 100K / 10M) |
 
 ## Quick Start

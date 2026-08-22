@@ -1,10 +1,10 @@
 # =============================================================================
 # Benchmark — decoupled, post-release, semi-manual. Runs the ENTIRE NumSharp-vs-
-# NumPy comparison via benchmark/run_benchmark.py: the official op/dtype/N matrix
-# (BenchmarkDotNet + NumPy across 1K/100K/10M), the NDIter iterator benchmark
-# (benchmark/nditer, + README cards), and the matrix subsystems that fill the
-# axes the op matrix omits — layout (benchmark/layout), cast (benchmark/cast),
-# fusion (benchmark/fusion) — each appended as its own report section.
+# NumPy comparison via benchmark/run_benchmark.py: the API-complete op/dtype/N matrix
+# (BenchmarkDotNet + NumPy across applicable bounded tiers), the NDIter iterator benchmark
+# (benchmark/nditer, + README cards), and the complementary subsystems that fill the
+# axes/routes the op matrix omits — layout, operand, cast, fusion, and isolated
+# backend profiles (Managed C# + OpenBLAS/LAPACK) — merged per exact benchmark cell.
 #
 # Trigger is the GitHub Release being published (the "after a successful release"
 # signal — 'Build and Release' creates it on a v* tag) or a manual dispatch. It
@@ -63,6 +63,9 @@ jobs:
       - name: Install Python deps (pin numpy for cross-release comparability)
         run: pip install "numpy==2.4.2" matplotlib tabulate
 
+      - name: Stage pinned OpenBLAS runtime assets
+        run: python src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py
+
       - name: Run full benchmark (official op suites + NDIter)
         # run_benchmark.py builds the CSharp bench project + Core, runs the official suites, then
         # the NDIter sheet (section-isolated, AV-ignored→NA) + cards, and appends
@@ -104,7 +107,14 @@ jobs:
                   benchmark/cast/cast_results.md \
                   benchmark/cast/cast_results.tsv \
                   benchmark/fusion/fusion_results.md \
+                  benchmark/openblas/openblas_results.md \
+                  benchmark/openblas/openblas_results.tsv \
+                  benchmark/openblas/openblas_results.managed.json \
+                  benchmark/openblas/openblas_results.openblas.json \
                   benchmark/history/ \
+                  docs/website-src/docs/data/benchmark-report.json \
+                  docs/website-src/docs/data/benchmark-report.managed.json \
+                  docs/website-src/docs/data/benchmark-report.openblas.json \
                   docs/website-src/docs/benchmark-matrix.md \
                   docs/website-src/docs/benchmark-iterator.md
           # benchmark/history/ holds the committable snapshot run_benchmark.py wrote

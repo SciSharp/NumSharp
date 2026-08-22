@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/**'
       - 'coverage/**'
+      - 'benchmark/**'
       - 'docs/website-src/**'
       - '.github/workflows/docs.yml'
   pull_request:
@@ -13,6 +14,7 @@ on:
     paths:
       - 'src/**'
       - 'coverage/**'
+      - 'benchmark/**'
       - 'docs/website-src/**'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
@@ -56,6 +58,22 @@ jobs:
 
       - name: Verify checked-in dashboard data
         run: diff --recursive --unified coverage/generated artifacts/numpy-numsharp-coverage
+
+      - name: Verify benchmark API coverage artifact
+        run: python benchmark/scripts/audit_coverage.py --check
+
+      - name: Verify benchmark NumPy twin join keys
+        run: |
+          mkdir -p benchmark/results/smoke
+          for suite in arithmetic unary reduction broadcast creation manipulation slicing comparison bitwise logic statistics sorting linalg selection fft random ndarray api; do
+            python benchmark/NumSharp.Benchmark.Python/numpy_benchmark.py \
+              --suite "$suite" --quick --size small \
+              --output "benchmark/results/smoke/$suite.json" >/dev/null
+          done
+          python benchmark/scripts/check_smoke_joins.py
+
+      - name: Execute every official C# benchmark body once
+        run: dotnet run -c Release -f net8.0 --no-cache benchmark/scripts/smoke_benchmark_bodies.cs
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4

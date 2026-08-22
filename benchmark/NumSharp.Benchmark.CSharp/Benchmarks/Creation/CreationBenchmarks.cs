@@ -74,11 +74,11 @@ public class CreationBenchmarks : TypedBenchmarkBase
 
     [Benchmark(Description = "np.arange(N)")]
     [BenchmarkCategory("Range")]
-    public void Arange() { using var _ = np.arange(N); }
+    public void Arange() { using var _ = np.arange(N, DType); }
 
     [Benchmark(Description = "np.linspace(0, N, N)")]
     [BenchmarkCategory("Range")]
-    public void Linspace() { using var _ = np.linspace(0, N, N); }
+    public void Linspace() { using var _ = np.linspace(0, N, N, typeCode: DType); }
 
     // ========================================================================
     // Copy / Conversion

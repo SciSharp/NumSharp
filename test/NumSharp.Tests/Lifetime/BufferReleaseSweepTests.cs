@@ -33,8 +33,8 @@ namespace NumSharp.Tests.Lifetime
     ///     strands one buffer per call, so its deficit grows with N. Everything else — a lazily
     ///     initialised cache, a stray finalizer from an earlier test — is O(1) and does not. The
     ///     sweep therefore measures at N and 10N and divides: the per-call rate is the assertion and
-    ///     there is no magic number to tune. <c>np.allclose</c>, for one, shows a constant ~40-buffer
-    ///     offset at both sample sizes; that is one-time setup and correctly reads as clean.
+    ///     there is no magic number to tune. One-time kernel/cache setup can add the same constant
+    ///     offset at both sample sizes and therefore correctly reads as clean.
     ///     </para>
     ///     <para><b>Sequencing.</b> The pool counters are process-wide, so the window is drained
     ///     with a full GC + finalizer pass before <c>ResetCounters</c>. A neighbouring test's
@@ -61,7 +61,7 @@ namespace NumSharp.Tests.Lifetime
         private const double MaxPerCall = 0.5;
 
         /// <summary>
-        ///     The 16 operations that defer a release today, with the rate each was measured at.
+        ///     The operations that defer a release today, with the rate each was measured at.
         ///     Every one is re-run by <see cref="KnownDeferredReleases_StillDeferring"/> so the debt
         ///     stays visible; when one is fixed that test goes green and the entry comes off this
         ///     list, at which point the main sweep guards it permanently.
@@ -69,7 +69,7 @@ namespace NumSharp.Tests.Lifetime
         /// <remarks>
         ///     <para>
         ///     These are pre-existing, not regressions — the sweep is simply the first instrument
-        ///     able to see them. All 16 were confirmed by the ground-truth discriminator: force
+        ///     able to see them. Every entry was confirmed by the ground-truth discriminator: force
         ///     finalizers and the outstanding count collapses to exactly zero, proving the buffers
         ///     really were sitting on the finalizer queue rather than freed through some path the
         ///     pool counters do not observe.
@@ -83,10 +83,10 @@ namespace NumSharp.Tests.Lifetime
         ///             which is exactly what localises the defect to the slice.</item>
         ///     </list>
         ///     <para>
-        ///     Worth noting for context: <c>np.allclose</c> is the operation whose <c>using</c> the
-        ///     deleted working-set test claimed to guard. That <c>using</c> is real and correct, and
-        ///     <c>np.isclose</c> underneath it still strands 2 buffers per call — a defect that test
-        ///     never had the resolution to see.
+        ///     The former <c>np.isclose</c>/<c>np.allclose</c> 2-buffer slope was traced to the two
+        ///     predicate calls inside isclose: IsFinite returned a typed alias while leaving the
+        ///     freshly produced untyped owner for finalization. Owning that result through the alias
+        ///     handoff fixed both APIs; the main sweep now guards them together with isnan/isfinite.
         ///     </para>
         /// </remarks>
         private static readonly HashSet<string> KnownDeferred = new()
@@ -101,11 +101,7 @@ namespace NumSharp.Tests.Lifetime
             "np.roll",          // 1/call
             "np.clip",          // 2/call
             "logical_and",      // 3/call — the heaviest in the catalogue
-            "np.isnan",         // 1/call
-            "np.isfinite",      // 1/call
             "np.extract",       // 1/call
-            "np.allclose",      // 2/call
-            "np.isclose",       // 2/call
             "np.array_equal",   // 1/call
         };
 
@@ -147,7 +143,7 @@ namespace NumSharp.Tests.Lifetime
         ///     <para><b>Why both samples are small.</b> The deficit is
         ///     <c>strandRate*N</c> minus whatever the GC finalized mid-loop, so it is linear only
         ///     until the GC first intervenes, and then bends over. Measured across N for
-        ///     np.allclose (a confirmed 2/call site):
+        ///     np.allclose before its typed-alias ownership fix (formerly a confirmed 2/call site):
         ///     </para>
         ///     <code>
         ///     N        5   10   20   40   80  160  320  640
@@ -156,7 +152,7 @@ namespace NumSharp.Tests.Lifetime
         ///     </code>
         ///     <para>
         ///     An earlier draft sampled at N=20 and N=200, straddling that knee, and so reported
-        ///     np.allclose as clean in one process and 2/call in another — the plateau flattens the
+        ///     the old np.allclose defect as clean in one process and 2/call in another — the plateau flattens the
         ///     slope and reads as innocence. N=10 and N=20 sit far below the knee for every op in
         ///     the catalogue.
         ///     </para>
@@ -218,6 +214,31 @@ namespace NumSharp.Tests.Lifetime
             offenders.Should().BeEmpty(
                 "every operation must release its intermediates before returning; these left them "
                 + "for the finalizer:\n  " + string.Join("\n  ", offenders));
+        }
+
+        /// <summary>
+        ///     Regression gate for the typed-alias ownership handoff used by the three predicates.
+        ///     isclose invokes isfinite twice, so the same fix also closes isclose/allclose's former
+        ///     two-buffer-per-call slope.
+        /// </summary>
+        [TestMethod]
+        [DoNotParallelize]
+        public void PredicateAliases_ReleaseTheirUntypedOwners()
+        {
+            var names = new HashSet<string>
+            {
+                "np.isnan", "np.isfinite", "np.isinf", "np.isclose", "np.allclose"
+            };
+
+            var offenders = LifetimeCases.All()
+                .Where(op => names.Contains(op.Name))
+                .Select(op => (op.Name, Rate: PerCallDeficit(op)))
+                .Where(result => result.Rate >= MaxPerCall)
+                .Select(result => $"{result.Name}: {result.Rate:0.##} buffers/call stranded")
+                .ToList();
+
+            offenders.Should().BeEmpty(
+                "predicate results must transfer ownership to their typed aliases synchronously");
         }
 
         /// <summary>

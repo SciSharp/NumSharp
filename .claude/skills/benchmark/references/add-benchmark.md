@@ -121,7 +121,7 @@ Only when your ops form a new category with no existing home:
 4. (legacy) optionally add the filter to `run-benchmarks.ps1`'s `ValidateSet` and Program.cs menu.
 
 Then the new suite runs in `python run_benchmark.py --suites <newsuite>` (and in the full run), joined and reported
-exactly like the built-in 14. Keep the C# `[Benchmark(Description)]` labels normalizing onto the NumPy `.name`s.
+exactly like the built-in 18. Keep the C# `[Benchmark(Description)]` labels normalizing onto the NumPy `.name`s.
 
 ## Choosing base class & size (quick reference)
 

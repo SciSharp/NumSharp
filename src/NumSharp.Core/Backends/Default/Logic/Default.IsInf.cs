@@ -27,7 +27,10 @@ namespace NumSharp.Backends
             // Plain call: keep the typed NDArray<bool> instance (TensorEngine
             // contract — operators/casts rely on it).
             if (@out is null && where is null)
-                return ExecuteUnaryOp(a, UnaryOp.IsInf, NPTypeCode.Boolean).MakeGeneric<bool>();
+            {
+                using var result = ExecuteUnaryOp(a, UnaryOp.IsInf, NPTypeCode.Boolean);
+                return result.MakeGeneric<bool>();
+            }
 
             // ufunc out=/where=: rides the shared unary Into-path with a
             // Boolean loop dtype (the predicate body emits bool at the INPUT

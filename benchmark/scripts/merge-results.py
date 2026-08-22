@@ -276,11 +276,10 @@ def normalize_op_name(name: str) -> str:
     # "C#-only" — each recovers ⚪ "C# benchmark not run" cells the merge was silently dropping:
     #   * empty "()" left by a no-arg method call must go: C# "a.flatten()" -> "a.flatten" meets NumPy's "a.flatten".
     #   * spacing around "->": C# "reshape 2d -> 1d" meets NumPy's "reshape 2d->1d".
-    #   * np.around IS np.round (NumPy alias): C# benchmarks it as np.around, NumPy emits np.round.
-    # (verified against the archive: +10 joined cells, 0 regressions, 0 new key collisions.)
+    # np.around and np.round are intentionally kept distinct: both are public API entry points and
+    # the coverage-complete matrix benchmarks each call surface explicitly.
     name = re.sub(r'\(\s*\)', '', name)
     name = re.sub(r'\s*->\s*', '->', name)
-    name = re.sub(r'\bnp\.around\b', 'np.round', name)
     name = re.sub(r'\s+', ' ', name).strip()
     return name
 

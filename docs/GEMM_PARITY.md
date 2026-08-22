@@ -15,7 +15,7 @@
 > installation. §6 explains why this is not a reversal of the "ships no native binaries" decision it
 > replaces, and §6.1 documents the discovery order.
 
-Status date: 2026-07-26 · Branch: `journey3` · Issue:
+Status date: 2026-07-26 · Issue:
 [SciSharp/NumSharp#626](https://github.com/SciSharp/NumSharp/issues/626)
 
 ---
