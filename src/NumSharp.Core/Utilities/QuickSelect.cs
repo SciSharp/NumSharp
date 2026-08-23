@@ -191,6 +191,7 @@ namespace NumSharp.Utilities
         ///     never pushed; the stack therefore stays descending and its top is the tightest
         ///     upper bound for the next (larger) kth.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void StorePivot(int pivot, int kth, int* pivots, ref int npiv)
         {
             if (pivot == kth && npiv == PivotStackMax) pivots[npiv - 1] = pivot;
@@ -356,6 +357,7 @@ namespace NumSharp.Utilities
             return p;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void IntroSelect<T>(T* buf, int lo, int hi, int k, int depthLimit)
             where T : unmanaged, IComparable<T>
         {
@@ -382,6 +384,7 @@ namespace NumSharp.Utilities
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe int Partition<T>(T* buf, int lo, int hi) where T : unmanaged, IComparable<T>
         {
             int mid = lo + ((hi - lo) >> 1);
@@ -405,6 +408,7 @@ namespace NumSharp.Utilities
             return left;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void InsertionSort<T>(T* buf, int lo, int hi) where T : unmanaged, IComparable<T>
         {
             for (int i = lo; i < hi; i++)
@@ -428,6 +432,7 @@ namespace NumSharp.Utilities
 
         // ── Comparison<T> internals ───────────────────────────────────────────────
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void IntroSelect<T>(T* buf, int lo, int hi, int k, int depthLimit, Comparison<T> cmp)
             where T : unmanaged
         {
@@ -453,6 +458,7 @@ namespace NumSharp.Utilities
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe int Partition<T>(T* buf, int lo, int hi, Comparison<T> cmp) where T : unmanaged
         {
             int mid = lo + ((hi - lo) >> 1);
@@ -476,6 +482,7 @@ namespace NumSharp.Utilities
             return left;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void InsertionSort<T>(T* buf, int lo, int hi, Comparison<T> cmp) where T : unmanaged
         {
             for (int i = lo; i < hi; i++)
@@ -499,6 +506,7 @@ namespace NumSharp.Utilities
 
         // ── heap-sort fallback (used when introselect recurses too deep) ──────────
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void HeapSort<T>(T* buf, int lo, int hi) where T : unmanaged, IComparable<T>
         {
             int n = hi - lo + 1;
@@ -506,6 +514,7 @@ namespace NumSharp.Utilities
             for (int i = n; i > 1; i--) { Swap(buf, lo, lo + i - 1); DownHeap(buf, 1, i - 1, lo); }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void DownHeap<T>(T* buf, int i, int n, int lo) where T : unmanaged, IComparable<T>
         {
             T d = buf[lo + i - 1];
@@ -520,6 +529,7 @@ namespace NumSharp.Utilities
             buf[lo + i - 1] = d;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void HeapSort<T>(T* buf, int lo, int hi, Comparison<T> cmp) where T : unmanaged
         {
             int n = hi - lo + 1;
@@ -527,6 +537,7 @@ namespace NumSharp.Utilities
             for (int i = n; i > 1; i--) { Swap(buf, lo, lo + i - 1); DownHeap(buf, 1, i - 1, lo, cmp); }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void DownHeap<T>(T* buf, int i, int n, int lo, Comparison<T> cmp) where T : unmanaged
         {
             T d = buf[lo + i - 1];
@@ -694,6 +705,7 @@ namespace NumSharp.Utilities
             return p;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void IntroSelect<T>(T* buf, long* idx, int lo, int hi, int k, int depthLimit)
             where T : unmanaged, IComparable<T>
         {
@@ -719,6 +731,7 @@ namespace NumSharp.Utilities
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe int Partition<T>(T* buf, long* idx, int lo, int hi) where T : unmanaged, IComparable<T>
         {
             int mid = lo + ((hi - lo) >> 1);
@@ -742,6 +755,7 @@ namespace NumSharp.Utilities
             return left;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void InsertionSort<T>(T* buf, long* idx, int lo, int hi) where T : unmanaged, IComparable<T>
         {
             for (int i = lo; i < hi; i++)
@@ -766,6 +780,7 @@ namespace NumSharp.Utilities
             if (LtV(buf[j], buf[i])) Swap(buf, idx, i, j);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void HeapSort<T>(T* buf, long* idx, int lo, int hi) where T : unmanaged, IComparable<T>
         {
             int n = hi - lo + 1;
@@ -773,6 +788,7 @@ namespace NumSharp.Utilities
             for (int i = n; i > 1; i--) { Swap(buf, idx, lo, lo + i - 1); DownHeap(buf, idx, 1, i - 1, lo); }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void DownHeap<T>(T* buf, long* idx, int i, int n, int lo) where T : unmanaged, IComparable<T>
         {
             T d = buf[lo + i - 1];
@@ -790,6 +806,7 @@ namespace NumSharp.Utilities
             idx[lo + i - 1] = di;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void IntroSelect<T>(T* buf, long* idx, int lo, int hi, int k, int depthLimit, Comparison<T> cmp)
             where T : unmanaged
         {
@@ -815,6 +832,7 @@ namespace NumSharp.Utilities
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe int Partition<T>(T* buf, long* idx, int lo, int hi, Comparison<T> cmp) where T : unmanaged
         {
             int mid = lo + ((hi - lo) >> 1);
@@ -838,6 +856,7 @@ namespace NumSharp.Utilities
             return left;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void InsertionSort<T>(T* buf, long* idx, int lo, int hi, Comparison<T> cmp) where T : unmanaged
         {
             for (int i = lo; i < hi; i++)
@@ -862,6 +881,7 @@ namespace NumSharp.Utilities
             if (cmp(buf[i], buf[j]) > 0) Swap(buf, idx, i, j);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void HeapSort<T>(T* buf, long* idx, int lo, int hi, Comparison<T> cmp) where T : unmanaged
         {
             int n = hi - lo + 1;
@@ -869,6 +889,7 @@ namespace NumSharp.Utilities
             for (int i = n; i > 1; i--) { Swap(buf, idx, lo, lo + i - 1); DownHeap(buf, idx, 1, i - 1, lo, cmp); }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void DownHeap<T>(T* buf, long* idx, int i, int n, int lo, Comparison<T> cmp) where T : unmanaged
         {
             T d = buf[lo + i - 1];

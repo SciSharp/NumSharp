@@ -189,6 +189,7 @@ namespace NumSharp
         //  the backend's. One backend call per output position mirrors NumPy's own per-position dotfunc
         //  call: this trades the managed SIMD speed for NumPy parity, the opt-in the backend exists for.
         // --------------------------------------------------------------------------------------
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SlidingBlas<T>(ISlidingDotBackend blas, NPTypeCode tc,
             T* a, T* k, T* o, long n2, long nLeft, long nRight, long mid)
             where T : unmanaged
@@ -321,6 +322,7 @@ namespace NumSharp
         //  they stay scalar (matching the CLAUDE.md perf-notes policy). Each reproduces NumPy's
         //  *_dot accumulator exactly.
         // --------------------------------------------------------------------------------------
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SlidingHalf(Half* a, Half* k, Half* o, long n2, long nLeft, long nRight, long mid)
         {
             // HALF_dot: products and accumulation in float32, one final round to Half.
@@ -348,6 +350,7 @@ namespace NumSharp
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SlidingComplex(Complex* a, Complex* k, Complex* o, long n2, long nLeft, long nRight, long mid)
         {
             // CDOUBLE_dot: component sums in double via the naive complex product, so NaN in either
@@ -373,6 +376,7 @@ namespace NumSharp
                 orr[j] = Dot(a + mid + j, k, n2 - 1 - j);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SlidingDecimal(decimal* a, decimal* k, decimal* o, long n2, long nLeft, long nRight, long mid)
         {
             static decimal Dot(decimal* ap, decimal* kp, long len)
@@ -391,6 +395,7 @@ namespace NumSharp
                 orr[j] = Dot(a + mid + j, k, n2 - 1 - j);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SlidingBoolean(bool* a, bool* k, bool* o, long n2, long nLeft, long nRight, long mid)
         {
             // BOOL_dot: OR of ANDs with early exit.

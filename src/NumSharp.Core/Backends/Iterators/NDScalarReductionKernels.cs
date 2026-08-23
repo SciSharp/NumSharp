@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 
 namespace NumSharp.Backends.Iteration
@@ -111,6 +112,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct HalfSumKernel : INDReducingInnerLoop<double>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref double sum)
         {
             byte* p = (byte*)dataptrs[0];
@@ -125,6 +127,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct HalfProdKernel : INDReducingInnerLoop<double>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref double prod)
         {
             byte* p = (byte*)dataptrs[0];
@@ -148,6 +151,7 @@ namespace NumSharp.Backends.Iteration
     /// </summary>
     public readonly struct ComplexSumKernel : INDReducingInnerLoop<Complex>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref Complex sum)
         {
             byte* p = (byte*)dataptrs[0];
@@ -187,6 +191,7 @@ namespace NumSharp.Backends.Iteration
     /// </summary>
     public readonly struct ComplexProdKernel : INDReducingInnerLoop<Complex>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref Complex prod)
         {
             byte* p = (byte*)dataptrs[0];
@@ -211,6 +216,7 @@ namespace NumSharp.Backends.Iteration
     /// </summary>
     public readonly struct HalfMaxKernel : INDReducingInnerLoop<HalfMinMaxAccumulator>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref HalfMinMaxAccumulator a)
         {
             byte* p = (byte*)dataptrs[0];
@@ -263,6 +269,7 @@ namespace NumSharp.Backends.Iteration
     /// </summary>
     public readonly struct HalfMinKernel : INDReducingInnerLoop<HalfMinMaxAccumulator>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref HalfMinMaxAccumulator a)
         {
             byte* p = (byte*)dataptrs[0];
@@ -316,6 +323,7 @@ namespace NumSharp.Backends.Iteration
     /// </summary>
     public readonly struct ComplexMaxKernel : INDReducingInnerLoop<ComplexMinMaxAccumulator>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref ComplexMinMaxAccumulator a)
         {
             byte* p = (byte*)dataptrs[0];
@@ -346,6 +354,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct ComplexMinKernel : INDReducingInnerLoop<ComplexMinMaxAccumulator>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref ComplexMinMaxAccumulator a)
         {
             byte* p = (byte*)dataptrs[0];
@@ -381,6 +390,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct HalfArgMaxKernel : INDReducingInnerLoop<HalfArgAccumulator>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref HalfArgAccumulator a)
         {
             byte* p = (byte*)dataptrs[0];
@@ -403,6 +413,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct HalfArgMinKernel : INDReducingInnerLoop<HalfArgAccumulator>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref HalfArgAccumulator a)
         {
             byte* p = (byte*)dataptrs[0];
@@ -439,6 +450,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct DecimalArgMaxKernel : INDReducingInnerLoop<DecimalArgAccumulator>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref DecimalArgAccumulator a)
         {
             byte* p = (byte*)dataptrs[0];
@@ -460,6 +472,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct DecimalArgMinKernel : INDReducingInnerLoop<DecimalArgAccumulator>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref DecimalArgAccumulator a)
         {
             byte* p = (byte*)dataptrs[0];
@@ -481,6 +494,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct ComplexArgMaxKernel : INDReducingInnerLoop<ComplexArgAccumulator>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref ComplexArgAccumulator a)
         {
             byte* p = (byte*)dataptrs[0];
@@ -507,6 +521,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct ComplexArgMinKernel : INDReducingInnerLoop<ComplexArgAccumulator>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref ComplexArgAccumulator a)
         {
             byte* p = (byte*)dataptrs[0];
@@ -541,6 +556,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct HalfAnyKernel : INDReducingInnerLoop<bool>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref bool found)
         {
             byte* p = (byte*)dataptrs[0];
@@ -553,6 +569,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct ComplexAnyKernel : INDReducingInnerLoop<bool>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref bool found)
         {
             byte* p = (byte*)dataptrs[0];
@@ -565,6 +582,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct HalfAllKernel : INDReducingInnerLoop<bool>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref bool allTrue)
         {
             byte* p = (byte*)dataptrs[0];
@@ -577,6 +595,7 @@ namespace NumSharp.Backends.Iteration
 
     public readonly struct ComplexAllKernel : INDReducingInnerLoop<bool>
     {
+        [MethodImpl(OptimizeAndInline)]
         public unsafe bool Execute(void** dataptrs, long* strides, long count, ref bool allTrue)
         {
             byte* p = (byte*)dataptrs[0];
