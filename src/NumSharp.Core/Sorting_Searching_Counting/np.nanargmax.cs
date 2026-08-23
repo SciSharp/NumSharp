@@ -15,6 +15,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html</remarks>
         public static long nanargmax(NDArray a)
         {
+            // Scalar return — scope only: reclaims the NaN mask and the full-size replaced copy
+            // (a NaN-free or integer input passes through NanArgReplace untracked and unharmed).
+            using var scope = NDScope.Open();
             var prepared = NanArgReplace(a, double.NegativeInfinity, axis: null);
             return (long)prepared.TensorEngine.ArgMax(prepared);
         }
@@ -38,10 +41,13 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html</remarks>
         public static NDArray nanargmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
+            // Boundary scope: reclaims the NaN mask, the all-NaN-guard reductions and the replaced
+            // copy; the result (or the caller's @out — untracked, a Returns no-op) is yielded.
+            using var scope = NDScope.Open();
             ValidateNanArgAxis(a, axis);
             var prepared = NanArgReplace(a, double.NegativeInfinity, axis);
             var res = prepared.TensorEngine.ReduceArgMax(prepared, axis, keepdims);
-            return NanArgWriteOut(res, @out, "argmax");
+            return scope.Returns(NanArgWriteOut(res, @out, "argmax"));
         }
 
         /// <summary>
@@ -55,6 +61,8 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html</remarks>
         public static long nanargmin(NDArray a)
         {
+            // Scalar return — scope only (see nanargmax(NDArray)).
+            using var scope = NDScope.Open();
             var prepared = NanArgReplace(a, double.PositiveInfinity, axis: null);
             return (long)prepared.TensorEngine.ArgMin(prepared);
         }
@@ -76,10 +84,12 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html</remarks>
         public static NDArray nanargmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
+            // Boundary scope (see nanargmax(NDArray, int?, NDArray, bool)).
+            using var scope = NDScope.Open();
             ValidateNanArgAxis(a, axis);
             var prepared = NanArgReplace(a, double.PositiveInfinity, axis);
             var res = prepared.TensorEngine.ReduceArgMin(prepared, axis, keepdims);
-            return NanArgWriteOut(res, @out, "argmin");
+            return scope.Returns(NanArgWriteOut(res, @out, "argmin"));
         }
 
         /// <summary>

@@ -177,6 +177,12 @@ namespace NumSharp
 
         protected void SetIndices(object[] indicesObjects, NDArray values)
         {
+            // Boundary scope (void method — writes land in `this`, nothing escapes): reclaims the
+            // normalization coercions, the boolean-mask MakeGeneric aliases and their nonzero()
+            // components, the slice/scalar index arrays, and the mixed-advanced grid temps built
+            // by the Try* helpers below. `this`/`values` were made outside: never touched.
+            using var scope = NDScope.Open();
+
             indicesObjects = NormalizeIndexInputs(indicesObjects);    // tuple spread + mask/sequence coercion
             var indicesLen = indicesObjects.Length;
             if (indicesLen == 1)

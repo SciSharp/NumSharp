@@ -231,6 +231,27 @@ namespace NumSharp.Tests.Lifetime
             yield return new("convolve full", () => new[] { D1k(), np.arange(16).astype(NPTypeCode.Double) }, o => o[0].convolve(o[1], "full"));
             yield return new("convolve same", () => new[] { D1k(), np.arange(16).astype(NPTypeCode.Double) }, o => o[0].convolve(o[1], "same"));
             yield return new("convolve valid", () => new[] { D1k(), np.arange(16).astype(NPTypeCode.Double) }, o => o[0].convolve(o[1], "valid"));
+
+            // ---------------------------------------------------------- scoped boundaries
+            // Ops whose NDScope boundary landed in the coverage sweep: set operations,
+            // membership, the along-axis gather, the NaN-replacing arg/scan family, the
+            // where scalar-promotion path, and the axis std/var IL cast path.
+            yield return new("np.isin", () => new[] { I2d(), np.array(new int[] { 3, 7, 11 }) }, o => np.isin(o[0], o[1]));
+            yield return new("np.union1d", () => new[] { D1k(), D1k() }, o => np.union1d(o[0], o[1]));
+            yield return new("np.intersect1d", () => new[] { D1k(), D1k() }, o => np.intersect1d(o[0], o[1]));
+            yield return new("np.setxor1d", () => new[] { D1k(), D1k() }, o => np.setxor1d(o[0], o[1]));
+            yield return new("np.setdiff1d", () => new[] { D1k(), D1k() }, o => np.setdiff1d(o[0], o[1]));
+            yield return new("np.take_along_axis", () => new[] { D2d(), np.argsort(D2d(), 1) }, o => np.take_along_axis(o[0], o[1], 1));
+            yield return new("np.unique_counts", () => new[] { I2d() }, o => (NDArray[])np.unique_counts(o[0]));
+            yield return new("np.nanargmax axis", () => new[] { D2d() }, o => np.nanargmax(o[0], 1));
+            yield return new("np.nancumsum", () => new[] { D1k() }, o => np.nancumsum(o[0]));
+            yield return new("np.nancumprod", () => new[] { D1k() }, o => np.nancumprod(o[0]));
+            // Scalar x/y promote through asanyarray inside the scoped where overloads.
+            yield return new("np.where scalar", () => new NDArray[] { I2d() > 100, I2d() }, o => np.where(o[0], o[1], 0));
+            // Axis std/var with a float32 input exercises the IL path's double->float32 cast
+            // (the pre-cast double result used to strand per call).
+            yield return new("np.std axis f32", () => new[] { D2d().astype(NPTypeCode.Single) }, o => np.std(o[0], 1, NPTypeCode.Single));
+            yield return new("np.var axis f32", () => new[] { D2d().astype(NPTypeCode.Single) }, o => np.var(o[0], 1, NPTypeCode.Single));
         }
     }
 }

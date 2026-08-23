@@ -199,7 +199,11 @@ namespace NumSharp
         ///     The Array API leaves the order unspecified.
         /// </remarks>
         public static NDArray unique_values(NDArray x)
-            => x.uniqueValuesFast();
+        {
+            // Boundary scope: the hash/sort internals' temps are reclaimed; the values are yielded.
+            using var scope = NDScope.Open();
+            return scope.Returns(x.uniqueValuesFast());
+        }
 
         /// <summary>
         ///     Find the unique elements and counts of an input array <paramref name="x"/>.<br></br>
@@ -212,7 +216,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_counts.html</remarks>
         public static UniqueCountsResult unique_counts(NDArray x)
         {
-            var r = x.uniqueCountsFast();
+            // Boundary scope: internals reclaimed; both result-struct members yielded.
+            using var scope = NDScope.Open();
+            var r = scope.Returns(x.uniqueCountsFast());
             return new UniqueCountsResult(r[0], r[1]);
         }
 
@@ -229,9 +235,13 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_inverse.html</remarks>
         public static UniqueInverseResult unique_inverse(NDArray x)
         {
+            // Boundary scope: internals reclaimed; the values and the (possibly reshaped)
+            // inverse are yielded. ReshapeInverseToInput may return r[1] itself or a fresh
+            // view of it — Returns handles both (a second yield of the same array is a no-op).
+            using var scope = NDScope.Open();
             var r = x.unique(return_index: false, return_inverse: true, return_counts: false,
                              axis: null, equal_nan: false);
-            return new UniqueInverseResult(r[0], ReshapeInverseToInput(r[1], x));
+            return new UniqueInverseResult(scope.Returns(r[0]), scope.Returns(ReshapeInverseToInput(r[1], x)));
         }
 
         /// <summary>
@@ -247,9 +257,12 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_all.html</remarks>
         public static UniqueAllResult unique_all(NDArray x)
         {
+            // Boundary scope: internals reclaimed; all four result-struct members yielded.
+            using var scope = NDScope.Open();
             var r = x.unique(return_index: true, return_inverse: true, return_counts: true,
                              axis: null, equal_nan: false);
-            return new UniqueAllResult(r[0], r[1], ReshapeInverseToInput(r[2], x), r[3]);
+            return new UniqueAllResult(scope.Returns(r[0]), scope.Returns(r[1]),
+                                       scope.Returns(ReshapeInverseToInput(r[2], x)), scope.Returns(r[3]));
         }
 
         /// <summary>

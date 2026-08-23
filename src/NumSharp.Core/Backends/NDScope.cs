@@ -156,6 +156,29 @@ namespace NumSharp
             nd.TrackingScope = null;
         }
 
+        /// <summary>
+        ///     Adopts <paramref name="nd"/> into the CURRENT (innermost) scope, so it is reclaimed
+        ///     at that scope's exit unless yielded — the inverse of <see cref="Detach"/>. For an
+        ///     array the scope did not construct: one a caller received before opening its scope
+        ///     (the hot-loop pattern — attach instead of a per-result <c>using</c>), or one built
+        ///     on another thread and handed over. Moves the array if some other scope tracked it
+        ///     (the old registration is cleared first — an array is owned by at most ONE scope).
+        ///     No-op when no scope is open or the array is already tracked here. Must run on the
+        ///     thread that owns both the current scope and any previous tracking scope.
+        /// </summary>
+        public static void Attach(NDArray nd)
+        {
+            var s = t_current;
+            if (nd is null || s is null || ReferenceEquals(nd.TrackingScope, s))
+                return;
+            var old = nd.TrackingScope;
+            if (old is not null)
+                old._tracked[nd.TrackingIndex] = null;   // clear the stale slot: one owner only
+            nd.TrackingScope = s;
+            nd.TrackingIndex = s._tracked.Count;
+            s._tracked.Add(nd);
+        }
+
         /// <summary>Disposes every tracked non-yielded array and reinstates the parent scope.</summary>
         public void Dispose()
         {

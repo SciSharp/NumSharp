@@ -203,6 +203,9 @@ namespace NumSharp.Backends
             if (nd.size == 0)
                 return 0;
 
+            // Scalar return — scope only: reclaims the per-dispatch MakeGeneric alias
+            // (a fresh wrapper over nd's storage that otherwise strands on the finalizer).
+            using var scope = NDScope.Open();
             return NpFunc.Invoke(nd.typecode, CountNonZeroDispatch<int>, nd);
         }
 
@@ -211,6 +214,9 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray CountNonZero(NDArray nd, int axis, bool keepdims = false)
         {
+            // Boundary scope: reclaims the per-dispatch MakeGeneric alias; the result is yielded.
+            using var scope = NDScope.Open();
+
             var shape = nd.Shape;
 
             // Normalize axis
@@ -237,7 +243,7 @@ namespace NumSharp.Backends
                         ks[d] = (d == axis) ? 1 : outputDims[sd++];
                     result.Storage.Reshape(new Shape(ks));
                 }
-                return result;
+                return scope.Returns(result);
             }
 
             NpFunc.Invoke(nd.typecode, CountNonZeroAxisDispatch<int>, nd, result, axis);
@@ -250,7 +256,7 @@ namespace NumSharp.Backends
                 result.Storage.Reshape(new Shape(ks));
             }
 
-            return result;
+            return scope.Returns(result);
         }
 
         /// <summary>

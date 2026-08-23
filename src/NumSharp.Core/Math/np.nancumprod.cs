@@ -21,8 +21,11 @@ namespace NumSharp
         /// </remarks>
         public static NDArray nancumprod(NDArray a, int? axis = null, NPTypeCode? typeCode = null, NDArray @out = null)
         {
+            // Boundary scope: the full-size NaN-replaced copy is reclaimed at exit; the scan
+            // result (or the caller's @out — untracked, a Returns no-op) is yielded.
+            using var scope = NDScope.Open();
             // NumPy: a, mask = _replace_nan(a, 1); return np.cumprod(a, axis, dtype, out).
-            return cumprod(_replace_nan_for_scan(a, 1), axis, typeCode, @out);
+            return scope.Returns(cumprod(_replace_nan_for_scan(a, 1), axis, typeCode, @out));
         }
     }
 }

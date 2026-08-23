@@ -216,6 +216,49 @@ namespace NumSharp.Tests.Lifetime
         }
 
         [TestMethod]
+        public void Attach_AdoptsUntrackedArray_ReclaimedAtExit()
+        {
+            var received = np.arange(6);          // constructed before any scope — untracked
+            using (var scope = NDScope.Open())
+            {
+                NDScope.Attach(received);         // the hot-loop pattern: adopt instead of using/Dispose
+                Assert.AreEqual(5L, received.GetInt64(5));
+            }
+
+            Assert.IsTrue(received.IsDisposed, "an attached array must be reclaimed at scope exit");
+        }
+
+        [TestMethod]
+        public void Attach_MovesOwnership_OldScopeNoLongerDisposes()
+        {
+            using (var outer = NDScope.Open())
+            {
+                var x = np.arange(3);             // tracked by OUTER
+                using (var inner = NDScope.Open())
+                {
+                    NDScope.Attach(x);            // current is inner -> MOVES x: outer's slot cleared
+                    Assert.IsFalse(x.IsDisposed);
+                }                                  // inner (the new owner) reclaims it
+
+                Assert.IsTrue(x.IsDisposed, "the adopting scope must reclaim the moved array");
+
+                var fresh = np.arange(4);          // tracked by outer (current again)
+                NDScope.Attach(fresh);             // already tracked by the current scope -> no-op
+                Assert.IsFalse(fresh.IsDisposed);
+            }                                      // outer's cleared slot for x is skipped; fresh reclaimed
+        }
+
+        [TestMethod]
+        public void Attach_NoOpenScope_IsNoOp()
+        {
+            var free = np.arange(3);
+            NDScope.Attach(free);                  // nothing to adopt into — must not throw or track
+            Assert.IsFalse(free.IsDisposed);
+            Assert.AreEqual(1L, free.GetInt64(1));
+            free.Dispose();
+        }
+
+        [TestMethod]
         public void ScopeDispose_IsIdempotent()
         {
             var scope = NDScope.Open();
@@ -285,9 +328,14 @@ namespace NumSharp.Tests.Lifetime
             var a = np.arange(64).astype(NPTypeCode.Int32);
             var b = np.ones(new Shape(64), NPTypeCode.Int32);
             var d = np.array(new double[] { 3, 1, 2, 5, 4 });
+            var d2 = np.array(new double[] { 2, 4, 6, 1, 3 });
+            var f2d = np.arange(24).reshape(4, 6).astype(NPTypeCode.Single);
+            var dn = np.array(new double[] { 1, double.NaN, 3, 2 });
             var idx = np.array(new int[] { 0, 2, 4 });
             var mask = np.array(new[] { true, false, true, false, true });
             var maskT = mask.MakeGeneric<bool>();   // hoisted: an in-loop MakeGeneric would itself strand
+            var cond = d > d2;                      // hoisted where-condition (operand, not measured garbage)
+            var gatherIdx = np.argsort(f2d, 1);     // hoisted take_along_axis indices
 
             void Cycle()
             {
@@ -306,6 +354,23 @@ namespace NumSharp.Tests.Lifetime
                 using (var r = d[idx]) { }
                 var tup = np.nonzero(mask);
                 foreach (var t in tup) t.Dispose();
+
+                // ---- the widened scoped surface (Phase A adoption) ----
+                using (var r = np.where(cond, d, d2)) { }
+                using (var r = np.where(cond, d, 0)) { }          // scalar y -> asanyarray under the scope
+                using (var r = np.union1d(d, d2)) { }
+                using (var r = np.intersect1d(d, d2)) { }
+                using (var r = np.setxor1d(d, d2)) { }
+                using (var r = np.setdiff1d(d, d2)) { }
+                using (var r = np.std(f2d, 1, NPTypeCode.Single)) { }   // axis IL path + f32 cast
+                using (var r = np.var(f2d, 1, NPTypeCode.Single)) { }
+                using (var r = np.average(d)) { }
+                using (var r = np.take_along_axis(f2d, gatherIdx, 1)) { }
+                using (var r = (NDArray)np.unique(d)) { }
+                foreach (var t in (NDArray[])np.unique_counts(a)) t.Dispose();
+                using (var r = np.nanargmax(dn, 0)) { }
+                using (var r = np.nancumsum(dn)) { }
+                np.count_nonzero(a);                               // long return; MakeGeneric alias scoped
             }
 
             // Warm every kernel/cache first so one-time setup is outside the measured window.
@@ -317,11 +382,12 @@ namespace NumSharp.Tests.Lifetime
             for (int i = 0; i < N; i++) Cycle();
             long deficit = Acquisitions - Releases;
 
-            // 14 ops per cycle; a single stranded buffer per call would read as >= N.
+            // 29 ops per cycle; a single stranded buffer per call would read as >= N.
             Assert.IsTrue(deficit <= 8,
                 $"scoped surface stranded {deficit} buffers over {N} cycles (acq {Acquisitions}, rel {Releases})");
 
-            a.Dispose(); b.Dispose(); d.Dispose(); idx.Dispose(); maskT.Dispose(); mask.Dispose();
+            a.Dispose(); b.Dispose(); d.Dispose(); d2.Dispose(); f2d.Dispose(); dn.Dispose();
+            idx.Dispose(); maskT.Dispose(); mask.Dispose(); cond.Dispose(); gatherIdx.Dispose();
         }
 
         [TestMethod]
@@ -449,6 +515,91 @@ namespace NumSharp.Tests.Lifetime
             }
             target.Dispose();
             where.Dispose();
+
+            // ---- the Phase A widened surface ----
+            var cond = np.array(new[] { true, false, true });
+            using (var r = np.where(cond, np.array(new double[] { 1, 2, 3 }), np.array(new double[] { 9, 8, 7 })))
+            {
+                Assert.AreEqual(1.0, r.GetDouble(0));
+                Assert.AreEqual(8.0, r.GetDouble(1));
+                Assert.AreEqual(3.0, r.GetDouble(2));
+            }
+            using (var r = np.where(cond, np.array(new double[] { 1, 2, 3 }), 0))
+            {
+                Assert.AreEqual(1.0, r.GetDouble(0));
+                Assert.AreEqual(0.0, r.GetDouble(1));
+            }
+            cond.Dispose();
+
+            using (var r = np.union1d(np.array(new[] { 3, 1 }), np.array(new[] { 2, 3 })))
+            {
+                Assert.AreEqual(3, r.size);
+                Assert.AreEqual(1, r.GetInt32(0));
+                Assert.AreEqual(2, r.GetInt32(1));
+                Assert.AreEqual(3, r.GetInt32(2));
+            }
+            using (var r = np.intersect1d(np.array(new[] { 3, 1, 2 }), np.array(new[] { 2, 3 })))
+            {
+                Assert.AreEqual(2, r.size);
+                Assert.AreEqual(2, r.GetInt32(0));
+                Assert.AreEqual(3, r.GetInt32(1));
+            }
+            using (var r = np.setxor1d(np.array(new[] { 3, 1, 2 }), np.array(new[] { 2, 3 })))
+            {
+                Assert.AreEqual(1, r.size);
+                Assert.AreEqual(1, r.GetInt32(0));
+            }
+            using (var r = np.setdiff1d(np.array(new[] { 3, 1, 2 }), np.array(new[] { 2 })))
+            {
+                Assert.AreEqual(2, r.size);
+                Assert.AreEqual(1, r.GetInt32(0));
+                Assert.AreEqual(3, r.GetInt32(1));
+            }
+
+            using (var r = np.std(np.array(new double[,] { { 1, 3 }, { 2, 4 } }), 1))
+            {
+                Assert.AreEqual(1.0, r.GetDouble(0), 1e-12);
+                Assert.AreEqual(1.0, r.GetDouble(1), 1e-12);
+            }
+            using (var r = np.var(np.array(new double[,] { { 1, 3 }, { 2, 4 } }), 1))
+                Assert.AreEqual(1.0, r.GetDouble(0), 1e-12);
+
+            using (var r = np.average(np.array(new double[] { 1, 2, 3, 4 })))
+                Assert.AreEqual(2.5, r.GetDouble(0), 1e-12);
+
+            var src2d = np.array(new double[,] { { 3, 1, 2 }, { 6, 5, 4 } });
+            var order = np.argsort(src2d, 1);
+            using (var r = np.take_along_axis(src2d, order, 1))
+            {
+                Assert.AreEqual(1.0, r.GetDouble(0, 0));
+                Assert.AreEqual(2.0, r.GetDouble(0, 1));
+                Assert.AreEqual(3.0, r.GetDouble(0, 2));
+                Assert.AreEqual(4.0, r.GetDouble(1, 0));
+            }
+            src2d.Dispose();
+            order.Dispose();
+
+            using (NDArray r = np.unique(np.array(new[] { 2, 1, 2, 3 })))
+            {
+                Assert.AreEqual(3, r.size);
+                Assert.AreEqual(1, r.GetInt32(0));
+            }
+            {
+                var uc = np.unique_counts(np.array(new[] { 2, 1, 2, 3 }));
+                Assert.AreEqual(3, uc.values.size);
+                Assert.AreEqual(2L, uc.counts.GetInt64(1));   // value 2 appears twice
+                foreach (var t in (NDArray[])uc) t.Dispose();
+            }
+
+            Assert.AreEqual(2L, np.nanargmax(np.array(new double[] { 1, double.NaN, 3, 2 })));
+            using (var r = np.nancumsum(np.array(new double[] { 1, double.NaN, 3 })))
+            {
+                Assert.AreEqual(1.0, r.GetDouble(0));
+                Assert.AreEqual(1.0, r.GetDouble(1));   // NaN treated as 0
+                Assert.AreEqual(4.0, r.GetDouble(2));
+            }
+
+            Assert.AreEqual(2L, np.count_nonzero(np.array(new[] { 0, 5, 0, 7 })));
         }
     }
 }

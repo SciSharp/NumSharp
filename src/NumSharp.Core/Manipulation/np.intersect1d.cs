@@ -46,6 +46,10 @@ namespace NumSharp
 
         private static NDArray[] IntersectCore(NDArray ar1, NDArray ar2, bool assume_unique, bool return_indices)
         {
+            // Boundary scope: the unique/ravel/concatenate/argsort/take temps and the adjacency
+            // mask are reclaimed at exit; the returned tuple's arrays are yielded.
+            using var scope = NDScope.Open();
+
             NDArray ind1 = null, ind2 = null;
             if (!assume_unique)
             {
@@ -86,7 +90,7 @@ namespace NumSharp
             NDArray int1d = auxLeft[mask];
 
             if (!return_indices)
-                return new[] { int1d };
+                return scope.Returns(new[] { int1d });
 
             NDArray ar1_indices = auxSortIndices[":-1"][mask];
             NDArray ar2_indices = auxSortIndices["1:"][mask] - (NDArray)ar1Size;
@@ -96,7 +100,7 @@ namespace NumSharp
                 ar2_indices = np.take(ind2, ar2_indices);
             }
 
-            return new[] { int1d, ar1_indices, ar2_indices };
+            return scope.Returns(new[] { int1d, ar1_indices, ar2_indices });
         }
     }
 }

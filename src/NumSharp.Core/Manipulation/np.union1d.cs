@@ -12,9 +12,12 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.union1d.html</remarks>
         public static NDArray union1d(NDArray ar1, NDArray ar2)
         {
+            // Boundary scope: the ravel views, the concatenate buffer and unique's internals are
+            // reclaimed at exit; only the final (possibly NaN-canonicalised) array is yielded.
+            using var scope = NDScope.Open();
             // NumPy: unique(concatenate((ar1, ar2), axis=None)) — axis=None flattens both operands.
             // NumPy's unique-sort canonicalises a surviving float32/float64 NaN; match it (see np.setops.cs).
-            return CanonicalizeSetOpNaN(np.unique(np.concatenate((np.ravel(ar1), np.ravel(ar2)), 0)));
+            return scope.Returns(CanonicalizeSetOpNaN(np.unique(np.concatenate((np.ravel(ar1), np.ravel(ar2)), 0))));
         }
     }
 }

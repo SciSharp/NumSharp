@@ -183,7 +183,10 @@ namespace NumSharp
             bool equal_nan = true,
             bool sorted = true)
         {
-            NDArray[] outputs = ar.unique(return_index, return_inverse, return_counts, axis, equal_nan, sorted);
+            // Boundary scope: the instance unique's sort/argsort/mask internals are reclaimed at
+            // exit; the present outputs are yielded (the UniqueResult carries only those arrays).
+            using var scope = NDScope.Open();
+            NDArray[] outputs = scope.Returns(ar.unique(return_index, return_inverse, return_counts, axis, equal_nan, sorted));
             return new UniqueResult(outputs, return_index, return_inverse, return_counts);
         }
     }

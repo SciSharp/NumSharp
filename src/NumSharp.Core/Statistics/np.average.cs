@@ -60,6 +60,11 @@ namespace NumSharp
         private static (NDArray avg, NDArray sumOfWeights) AverageCore(
             NDArray a, int[] axis, NDArray weights, bool keepdims, bool returned)
         {
+            // Boundary scope: reclaims the dtype casts, the fused-kernel numerators, the
+            // weighted products and the broadcast/scalar temps; each tuple component is
+            // yielded individually (a dropped scl on the returned:false paths is reclaimed).
+            using var scope = NDScope.Open();
+
             int ndim = a.ndim;
             int[] normalizedAxis = NormalizeAxisTuple(axis, ndim);
 
@@ -73,13 +78,13 @@ namespace NumSharp
                 if (avg.size == 0)
                     throw new DivideByZeroException("division by zero");
 
-                if (!returned) return (avg, null);
+                if (!returned) return (scope.Returns(avg), null);
 
                 double count = (double)a.size / avg.size;
                 NDArray scl = NDArray.Scalar(count).astype(avg.typecode);
                 if (!scl.shape.SequenceEqual(avg.shape))
                     scl = np.broadcast_to(scl, avg).copy();
-                return (avg, scl);
+                return (scope.Returns(avg), scope.Returns(scl));
             }
 
             NDArray wgt = WeightsAreValid(weights, a, normalizedAxis);
@@ -104,7 +109,7 @@ namespace NumSharp
                     avgScalar = KeepdimsReshape(avgScalar, a.shape, normalizedAxis);
                     sclScalar = KeepdimsReshape(sclScalar, a.shape, normalizedAxis);
                 }
-                return (avgScalar, returned ? sclScalar : null);
+                return (scope.Returns(avgScalar), returned ? scope.Returns(sclScalar) : null);
             }
 
             // Fused fast path via DirectILKernelGenerator: NDIter walks a + w in one
@@ -124,10 +129,10 @@ namespace NumSharp
                     avgFast = KeepdimsReshape(avgFast, a.shape, normalizedAxis);
                     sclFast = KeepdimsReshape(sclFast, a.shape, normalizedAxis);
                 }
-                if (!returned) return (avgFast, null);
+                if (!returned) return (scope.Returns(avgFast), null);
                 if (!sclFast.shape.SequenceEqual(avgFast.shape))
                     sclFast = np.broadcast_to(sclFast, avgFast).copy();
-                return (avgFast, sclFast);
+                return (scope.Returns(avgFast), scope.Returns(sclFast));
             }
 
             // Fallback path for dtypes the IL kernel doesn't cover.
@@ -137,10 +142,10 @@ namespace NumSharp
             NDArray prod = aCast * wgtCast;
             NDArray num = SumWithAxes(prod, normalizedAxis, resultDtype, keepdims);
             NDArray avg_ = num / scl_;
-            if (!returned) return (avg_, null);
+            if (!returned) return (scope.Returns(avg_), null);
             if (!scl_.shape.SequenceEqual(avg_.shape))
                 scl_ = np.broadcast_to(scl_, avg_).copy();
-            return (avg_, scl_);
+            return (scope.Returns(avg_), scope.Returns(scl_));
         }
 
         // Reshape (num, scl) from reduced shape back to keepdims shape.

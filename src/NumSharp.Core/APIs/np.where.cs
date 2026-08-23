@@ -39,7 +39,8 @@ namespace NumSharp
         /// </summary>
         public static NDArray where(NDArray condition, object x, NDArray y)
         {
-            return where_internal(condition, asanyarray(x), y);
+            using var scope = NDScope.Open();
+            return scope.Returns(where_internal(condition, asanyarray(x), y));
         }
 
         /// <summary>
@@ -48,7 +49,8 @@ namespace NumSharp
         /// </summary>
         public static NDArray where(NDArray condition, NDArray x, object y)
         {
-            return where_internal(condition, x, asanyarray(y));
+            using var scope = NDScope.Open();
+            return scope.Returns(where_internal(condition, x, asanyarray(y)));
         }
 
         /// <summary>
@@ -57,7 +59,8 @@ namespace NumSharp
         /// </summary>
         public static NDArray where(NDArray condition, object x, object y)
         {
-            return where_internal(condition, asanyarray(x), asanyarray(y));
+            using var scope = NDScope.Open();
+            return scope.Returns(where_internal(condition, asanyarray(x), asanyarray(y)));
         }
 
         /// <summary>
@@ -65,6 +68,10 @@ namespace NumSharp
         /// </summary>
         private static NDArray where_internal(NDArray condition, NDArray x, NDArray y)
         {
+            // Boundary scope: reclaims the broadcast_arrays wrappers, the bool/dtype astype
+            // conversions and the scalar-promotion temps at exit; only `result` is yielded.
+            using var scope = NDScope.Open();
+
             // Detect "originally scalar" on the user-supplied operands BEFORE broadcasting
             // expands them into stride-0 views. The scalar fast path below dispatches
             // specialised IL kernels that hoist the scalar into Vector.Create<T>(value) once
@@ -119,7 +126,7 @@ namespace NumSharp
 
             // Handle empty arrays - nothing to iterate
             if (result.size == 0)
-                return result;
+                return scope.Returns(result);
 
             // -----------------------------------------------------------------
             // Scalar-broadcast IL fast path
@@ -150,17 +157,17 @@ namespace NumSharp
                 if (xIsScalar && yIsScalar)
                 {
                     WhereScalarXYDispatch(cond, xScalarSrc, yScalarSrc, result, outType);
-                    return result;
+                    return scope.Returns(result);
                 }
                 if (xIsScalar && yArr.Shape.IsContiguous)
                 {
                     WhereScalarXDispatch(cond, xScalarSrc, yArr, result, outType);
-                    return result;
+                    return scope.Returns(result);
                 }
                 if (yIsScalar && xArr.Shape.IsContiguous)
                 {
                     WhereScalarYDispatch(cond, xArr, yScalarSrc, result, outType);
-                    return result;
+                    return scope.Returns(result);
                 }
             }
 
@@ -175,13 +182,13 @@ namespace NumSharp
             if (canUseKernel)
             {
                 WhereKernelDispatch(cond, xArr, yArr, result, outType);
-                return result;
+                return scope.Returns(result);
             }
 
             // Iterator fallback for non-contiguous/broadcasted arrays.
             WhereImpl(cond, xArr, yArr, result);
 
-            return result;
+            return scope.Returns(result);
         }
 
         private static unsafe void WhereImpl(NDArray cond, NDArray x, NDArray y, NDArray result)
