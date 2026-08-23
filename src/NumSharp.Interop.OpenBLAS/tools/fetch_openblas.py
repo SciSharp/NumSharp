@@ -230,6 +230,29 @@ def staged_path(rid, entry):
     return os.path.join(RUNTIMES_DIR, rid, "native", entry["file"])
 
 
+def vendored_members(zf, main_member):
+    """The vendored dependency shared libraries the main scipy-openblas library needs at load time.
+
+    A scipy-openblas wheel carries its Fortran runtime beside the main library (Linux/macOS ship
+    libgfortran + libquadmath, macOS adds libgcc_s); the Windows DLL is self-contained. auditwheel /
+    delocate rename these with a content hash and patch the main library's DT_NEEDED / LC_LOAD_DYLIB
+    to the mangled name, so a *system* libgfortran can never satisfy them — the vendored file MUST be
+    co-staged or the main dlopen()/LoadLibrary fails on a clean machine and the backend silently
+    stays uninstalled. fetch_openblas historically staged the main library alone, which is why
+    OpenBlasEngine.Enabled came up false on a fresh Linux/macOS CI runner."""
+    return [n for n in zf.namelist() if is_native_member(n) and n != main_member]
+
+
+def vendored_dest(rid, member):
+    """Where a vendored dep is staged, mirroring the wheel's own layout relative to the main library
+    so the main library's baked-in search path resolves it unchanged: Linux keeps the deps beside the
+    main in native/ (its RUNPATH is $ORIGIN), macOS keeps them in a .dylibs/ sibling of native/ (its
+    load commands are @loader_path/../.dylibs/…)."""
+    norm = member.replace("\\", "/")
+    subdir = ".dylibs" if "/.dylibs/" in norm else "native"
+    return os.path.join(RUNTIMES_DIR, rid, subdir, os.path.basename(member))
+
+
 def fetch(manifest, check_only=False):
     missing, ok = [], 0
     for rid in sorted(manifest["runtimes"]):
@@ -246,15 +269,23 @@ def fetch(manifest, check_only=False):
         download(entry["url"], entry["wheel_sha256"])
         with zipfile.ZipFile(os.path.join(CACHE_DIR, entry["wheel"])) as zf:
             payload = zf.read(entry["member"])
-        actual = sha256_bytes(payload)
-        if actual != entry["sha256"]:
-            raise SystemExit(
-                "CHECKSUM MISMATCH for the library extracted from %s\n"
-                "  member   %s\n  expected %s\n  actual   %s"
-                % (entry["wheel"], entry["member"], entry["sha256"], actual))
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-        with open(dest, "wb") as fh:
-            fh.write(payload)
+            actual = sha256_bytes(payload)
+            if actual != entry["sha256"]:
+                raise SystemExit(
+                    "CHECKSUM MISMATCH for the library extracted from %s\n"
+                    "  member   %s\n  expected %s\n  actual   %s"
+                    % (entry["wheel"], entry["member"], entry["sha256"], actual))
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, "wb") as fh:
+                fh.write(payload)
+            # Co-stage the vendored Fortran runtime (libgfortran/libquadmath/libgcc_s) from the SAME
+            # already-verified wheel, mirroring its layout so the main library loads on a clean host.
+            for dep in vendored_members(zf, entry["member"]):
+                ddest = vendored_dest(rid, dep)
+                os.makedirs(os.path.dirname(ddest), exist_ok=True)
+                with open(ddest, "wb") as fh:
+                    fh.write(zf.read(dep))
+                print("  %-18s %s (vendored dep)" % ("", os.path.basename(dep)))
         ok += 1
 
     if check_only and missing:

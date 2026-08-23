@@ -223,8 +223,14 @@ jobs:
       with:
         python-version: '3.12'
 
+    # Pinned to 2.4.2 on purpose: the interop suite's byte-exact parity tests compare NumSharp's
+    # OpenBLAS-backed LAPACK/BLAS against THIS live numpy, and NumSharp bundles scipy-openblas
+    # 0.3.31.22.0 — the exact build numpy 2.4.2 pins (numpy.libs is byte-identical). A newer numpy
+    # (e.g. 2.5.x) ships a DIFFERENT openblas build, so its results diverge by ~1 ULP and every
+    # *_ByteExact test goes red. Parity is a claim about one specific binary; the pin makes both
+    # sides call it. Keep this in lockstep with tools/openblas-manifest.json's numpy_version.
     - name: Install numpy
-      run: python -m pip install --upgrade pip "numpy>=2.0"
+      run: python -m pip install --upgrade pip "numpy==2.4.2"
 
     # Prints precisely what PythonSession.Probe consumes, so if the interop tests
     # report Inconclusive the reason is visible without reproducing locally.

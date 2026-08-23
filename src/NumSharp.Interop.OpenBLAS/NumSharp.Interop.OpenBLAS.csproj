@@ -113,6 +113,15 @@
          it flows to projects that ProjectReference this one — the unit tests need it on disk to
          prove the bundled library actually loads. -->
     <Content Include="$(OpenBlasRuntimesDir)/$(BundledOpenBlasRid)/native/*" Pack="true" PackagePath="runtimes/$(BundledOpenBlasRid)/native/%(Filename)%(Extension)" Visible="false" Link="runtimes/$(BundledOpenBlasRid)/native/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+
+    <!-- macOS carries the vendored Fortran runtime (libgfortran/libquadmath/libgcc_s) in a .dylibs/
+         SIBLING of native/, because the main dylib's load commands are @loader_path/../.dylibs/… .
+         Copy the current RID's .dylibs to the same relative place so the bundled dylib actually
+         loads. This glob is empty (a no-op) on Linux — whose deps sit beside the main in native/,
+         resolved by its $ORIGIN RUNPATH and already carried by the native item above — and on
+         Windows, whose library is self-contained. Other RIDs' .dylibs are packed by the recursive
+         None item above. -->
+    <Content Include="$(OpenBlasRuntimesDir)/$(BundledOpenBlasRid)/.dylibs/*" Pack="true" PackagePath="runtimes/$(BundledOpenBlasRid)/.dylibs/%(Filename)%(Extension)" Visible="false" Link="runtimes/$(BundledOpenBlasRid)/.dylibs/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

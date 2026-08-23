@@ -53,13 +53,21 @@ public class HalfDecimalAxisReductionTests
     [TestMethod]
     public void Half_Sum_AccumulatesInFloat32_NotFloat16()
     {
-        // NumPy accumulates float16 reductions in float32, NOT float16. np.sum(ones(4096,f16))
-        // == 4096 — an f16 accumulator would saturate at ~2048 (2048 + 1 == 2048 in float16).
-        // NumSharp routes Half sum through a Double accumulator and casts back, matching NumPy.
+        // NumPy widens each float16 to float32 on read, accumulates the reduction in float32, then
+        // NARROWS PER ORIENTATION (npy_float_to_half per inner-loop call). Two consequences, both
+        // verified against NumPy 2.4.2:
+        //   - a FLAT sum folds the whole contiguous stripe in float32, so np.sum(ones(4096,f16)) ==
+        //     4096 (an f16 accumulator would saturate at ~2048, since 2048 + 1 == 2048 in float16);
+        //   - an AXIS sum narrows each kept slot to float16 on every outer step, so it SATURATES:
+        //     np.sum(ones((4096,2),f16), axis=0) == [2048, 2048], NOT [4096, 4096].
         var b = HalfB();
         AssertHalf(np.sum(b, axis: 0), new[] { 5f, 8f, 11f, 7f }, "half sum axis0");
+        // flat: float32 accumulation does not saturate.
+        var onesFlat = np.ones(new Shape(4096), NPTypeCode.Half);
+        AssertHalf(np.sum(onesFlat), new[] { 4096f }, "half flat sum 4096 ones (float32 accumulate)");
+        // axis: per-orientation narrowing SATURATES, matching NumPy's HALF_add reduce.
         var ones = np.ones(new Shape(4096, 2), NPTypeCode.Half);
-        AssertHalf(np.sum(ones, axis: 0), new[] { 4096f, 4096f }, "half sum 4096 ones (float32 accumulate)");
+        AssertHalf(np.sum(ones, axis: 0), new[] { 2048f, 2048f }, "half sum 4096 ones axis0 (per-orientation narrow, saturates)");
     }
 
     // ---- Decimal (full-precision; no NumPy reference type) ----
