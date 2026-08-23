@@ -97,6 +97,14 @@ namespace NumSharp.Backends.Kernels
             //   - Decimal accumulates in full-precision Decimal (no NumPy reference type).
             //     CreateTypedReduceKernel can build a same-type Half kernel too; it just isn't
             //     routed here today.
+            // Half SUM: accumulate in a FLOAT32 shadow (ReduceAdd allocates Single, narrows to Half
+            // once at the end). The kernel reproduces NumPy's per-inner-loop narrow via an in-place
+            // RoundToF16 (== widen(narrow), no half↔memory round-trip): PINNED folds the stripe in
+            // float32 pairwise then RoundToF16; SLAB accumulates across outer steps with a per-step
+            // RoundToF16 (saturates, matching NumPy). See ILKernelGenerator.Reduction.Half.cs. The
+            // (Half,Double) route below stays for MEAN (its internal sum accumulates in Double).
+            if (key.InType == NPTypeCode.Half && key.AccType == NPTypeCode.Single)
+                return key.Op == ReductionOp.Sum ? (NDInnerLoopFunc)HalfSumKernel : null;
             if (key.InType == NPTypeCode.Half && key.AccType == NPTypeCode.Double)
                 return key.Op == ReductionOp.Sum ? CreateTypedReduceKernel<Half, double>(ReductionOp.Sum) : null;
             if (key.InType == NPTypeCode.Decimal && key.AccType == NPTypeCode.Decimal)

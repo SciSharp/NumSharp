@@ -890,11 +890,26 @@ namespace NumSharp.Backends
         /// </summary>
         private unsafe object SumElementwiseHalfFallback(NDArray arr)
         {
-            if (TryHalfAccumulateContiguous(arr, isProd: false, out double s))
-                return (Half)s;
+            // Flat sum is always PINNED: fold the whole array in FLOAT32 with NumPy's pairwise_sum,
+            // narrow ONCE (bit-for-bit np.add.reduce(float16)). A float32 accumulator is what NumPy
+            // uses (widen each half on read), NOT the old Double — which diverged in the last ULP.
+            if (arr.size == 0) return (Half)0.0f; // NumPy: empty float16 sum = 0
 
-            // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
-            return (Half)HalfReduceViaNDIter(arr, isProd: false);
+            var shape = arr.Shape;
+            if (shape.IsContiguous || shape.IsFContiguous)
+            {
+                // Raw buffer is linearly contiguous (C- or F-order) → fold in memory order, which
+                // is exactly the order NumPy's iterator folds a contiguous array in.
+                ushort* p = (ushort*)((byte*)arr.Address + shape.offset * 2);
+                float acc = Kernels.ILKernelGenerator.PairwiseFoldHalf(p, arr.size, 1);
+                return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.SingleToHalfBits(acc));
+            }
+            // Strided / transposed / broadcast → materialize C-contiguous (Giesen SIMD copy is exact
+            // on the values), then fold in C order.
+            var c = np.ascontiguousarray(arr);
+            ushort* cp = (ushort*)((byte*)c.Address + c.Shape.offset * 2);
+            float acc2 = Kernels.ILKernelGenerator.PairwiseFoldHalf(cp, c.size, 1);
+            return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.SingleToHalfBits(acc2));
         }
 
         /// <summary>
