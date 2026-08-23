@@ -15246,7 +15246,7 @@
       "sourcePaths": [
         "test/NumSharp.Tests/Lifetime/BufferReleaseSweepTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/BufferReleaseSweepTests.cs#L197",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/BufferReleaseSweepTests.cs#L201",
       "methodNames": [
         "KnownDeferredReleases_StillDeferring",
         "NoOperationDefersItsBufferRelease",
@@ -19738,7 +19738,7 @@
       "sourcePaths": [
         "test/NumSharp.Tests/Math/InverseHyperbolicTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Math/InverseHyperbolicTests.cs#L26",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Math/InverseHyperbolicTests.cs#L40",
       "methodNames": [
         "Aliases_MatchPrimary",
         "Complex_Arccosh",

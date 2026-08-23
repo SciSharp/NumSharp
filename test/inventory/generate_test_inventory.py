@@ -90,7 +90,9 @@ def source_index(raw: dict[str, Any]) -> dict[tuple[str, str], list[dict[str, An
     index: dict[tuple[str, str], list[dict[str, Any]]] = collections.defaultdict(list)
     for project, root in PROJECT_ROOTS.items():
         names = wanted.get(project, set())
-        for path in sorted(root.rglob("*.cs")):
+        # Sort by POSIX string, not default pathlib order (case-insensitive on Windows,
+        # case-sensitive on Linux), so a local Windows regen matches the Linux CI byte-for-byte.
+        for path in sorted(root.rglob("*.cs"), key=lambda p: p.as_posix()):
             if any(part in {"bin", "obj"} for part in path.parts):
                 continue
             text = path.read_text(encoding="utf-8-sig")
@@ -212,7 +214,7 @@ def scan_oracle() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
     all_layouts: set[str] = set()
     all_kinds: collections.Counter[str] = collections.Counter()
 
-    for path in sorted(CORPUS.glob("*.jsonl")):
+    for path in sorted(CORPUS.glob("*.jsonl"), key=lambda p: p.as_posix()):
         kind = classify_corpus_file(path.name)
         rows = errors = file_char = 0
         ops: collections.Counter[str] = collections.Counter()
