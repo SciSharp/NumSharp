@@ -485,11 +485,12 @@ namespace NumSharp.Tests.Fuzz
                 }
                 case "get_state":
                 {
-                    np.random.seed(p["seed"].GetUInt32());
+                    var random = np.random.RandomState();
+                    random.seed(p["seed"].GetUInt32());
                     int draws = p["draws"].GetInt32();
                     if (draws > 0)
-                        _ = np.random.random_sample(draws);
-                    var state = np.random.get_state();
+                        _ = random.random_sample(draws);
+                    var state = random.get_state();
                     ulong bits = unchecked((ulong)BitConverter.DoubleToInt64Bits(state.CachedGaussian));
                     return state.Algorithm + "|" + state.Pos.ToString(CultureInfo.InvariantCulture) + "|" +
                            state.HasGauss.ToString(CultureInfo.InvariantCulture) + "|" +

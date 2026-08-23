@@ -681,28 +681,32 @@ namespace NumSharp.Tests.Fuzz
 
                 // np.random byte-parity (random_parity tiers): seed -> draw -> compare the raw
                 // stream bytes against NumPy's recorded sequence. "draws" > 1 pins stream
-                // ADVANCEMENT (the recorded block is the LAST of N identical draws). The global
-                // np.random instance is safe here because the corpus runner is sequential and
-                // the tier's test method is [DoNotParallelize].
+                // ADVANCEMENT (the recorded block is the LAST of N identical draws). Use a fresh
+                // RandomState per case so replaying the oracle never mutates the global np.random
+                // stream used by other tests.
                 case "rnd":
                 {
-                    np.random.seed(p["seed"].GetUInt32());
+                    var random = np.random.RandomState();
+                    random.seed(p["seed"].GetUInt32());
                     int draws = p.TryGetValue("draws", out var dr) ? dr.GetInt32() : 1;
                     NDArray r = null;
                     for (int k = 0; k < draws; k++)
-                        r = RndDraw(p);
+                        r = RndDraw(random, p);
                     return r;
                 }
                 case "seed":
-                    np.random.seed(p["seed"].GetUInt32());
-                    return np.random.random_sample(ParseLongArray(p["size"]));
+                {
+                    var random = np.random.RandomState();
+                    random.seed(p["seed"].GetUInt32());
+                    return random.random_sample(ParseLongArray(p["size"]));
+                }
                 case "set_state":
                 {
                     var state = new NativeRandomState(
                         ops[0].ToArray<uint>(), p["pos"].GetInt32(), p["has_gauss"].GetInt32(),
                         p["cached_gaussian"].GetDouble());
-                    np.random.set_state(state);
-                    return np.random.random_sample(ParseLongArray(p["size"]));
+                    var random = np.random.RandomState(state);
+                    return random.random_sample(ParseLongArray(p["size"]));
                 }
 
                 // Array/scalar-result ops added with the result-kind upgrade (iterator traces,
@@ -759,7 +763,7 @@ namespace NumSharp.Tests.Fuzz
         /// <summary>One distribution draw for the "rnd" op — dist name + positional args in
         /// params (arrays like pvals/alpha/cov ride named keys). Pairs 1:1 with
         /// gen_oracle.gen_random_parity's `run` dispatcher.</summary>
-        private static NDArray RndDraw(IReadOnlyDictionary<string, JsonElement> p)
+        private static NDArray RndDraw(NumPyRandom random, IReadOnlyDictionary<string, JsonElement> p)
         {
             string dist = p["dist"].GetString();
             double A(int i) => p["args"][i].GetDouble();
@@ -774,56 +778,56 @@ namespace NumSharp.Tests.Fuzz
             switch (dist)
             {
                 // ---- portable: pure MT19937 bits + exactly-rounded arithmetic ----
-                case "uniform": return np.random.uniform(A(0), A(1), S());
-                case "rand": return np.random.rand(S());
-                case "random_sample": return np.random.random_sample(SL());
-                case "randint": return np.random.randint((long)A(0), (long)A(1), S());
-                case "permutation": return np.random.permutation((int)A(0));
+                case "uniform": return random.uniform(A(0), A(1), S());
+                case "rand": return random.rand(S());
+                case "random_sample": return random.random_sample(SL());
+                case "randint": return random.randint((long)A(0), (long)A(1), S());
+                case "permutation": return random.permutation((int)A(0));
                 case "shuffle":
                 {
                     var arr = np.arange((int)A(0));
-                    np.random.shuffle(arr);
+                    random.shuffle(arr);
                     return arr;
                 }
                 case "choice":
-                    return np.random.choice((int)A(0), S(), true,
+                    return random.choice((int)A(0), S(), true,
                         p.TryGetValue("p", out var pw) ? ParseDoubleArray(pw) : null);
 
                 // ---- host-libm: transform / rejection samplers ----
-                case "normal": return np.random.normal(A(0), A(1), S());
-                case "randn": return np.random.randn(SL());
-                case "standard_normal": return np.random.standard_normal(S());
-                case "standard_exponential": return np.random.standard_exponential(S());
-                case "standard_cauchy": return np.random.standard_cauchy(S());
-                case "standard_t": return np.random.standard_t(A(0), S());
-                case "standard_gamma": return np.random.standard_gamma(A(0), S());
-                case "lognormal": return np.random.lognormal(A(0), A(1), S());
-                case "exponential": return np.random.exponential(A(0), S());
-                case "gamma": return np.random.gamma(A(0), A(1), S());
-                case "beta": return np.random.beta(A(0), A(1), S());
-                case "chisquare": return np.random.chisquare(A(0), S());
-                case "f": return np.random.f(A(0), A(1), S());
-                case "gumbel": return np.random.gumbel(A(0), A(1), S());
-                case "laplace": return np.random.laplace(A(0), A(1), S());
-                case "logistic": return np.random.logistic(A(0), A(1), S());
-                case "pareto": return np.random.pareto(A(0), S());
-                case "power": return np.random.power(A(0), S());
-                case "rayleigh": return np.random.rayleigh(A(0), S());
-                case "triangular": return np.random.triangular(A(0), A(1), A(2), S());
-                case "vonmises": return np.random.vonmises(A(0), A(1), S());
-                case "wald": return np.random.wald(A(0), A(1), S());
-                case "weibull": return np.random.weibull(A(0), S());
-                case "poisson": return np.random.poisson(A(0), S());
-                case "binomial": return np.random.binomial((int)A(0), A(1), S());
-                case "negative_binomial": return np.random.negative_binomial(A(0), A(1), S());
-                case "geometric": return np.random.geometric(A(0), S());
-                case "zipf": return np.random.zipf(A(0), S());
-                case "logseries": return np.random.logseries(A(0), S());
-                case "noncentral_chisquare": return np.random.noncentral_chisquare(A(0), A(1), S());
-                case "noncentral_f": return np.random.noncentral_f(A(0), A(1), A(2), S());
-                case "hypergeometric": return np.random.hypergeometric((long)A(0), (long)A(1), (long)A(2), S());
-                case "multinomial": return np.random.multinomial((int)A(0), ParseDoubleArray(p["pvals"]), S());
-                case "dirichlet": return np.random.dirichlet(ParseDoubleArray(p["alpha"]), S());
+                case "normal": return random.normal(A(0), A(1), S());
+                case "randn": return random.randn(SL());
+                case "standard_normal": return random.standard_normal(S());
+                case "standard_exponential": return random.standard_exponential(S());
+                case "standard_cauchy": return random.standard_cauchy(S());
+                case "standard_t": return random.standard_t(A(0), S());
+                case "standard_gamma": return random.standard_gamma(A(0), S());
+                case "lognormal": return random.lognormal(A(0), A(1), S());
+                case "exponential": return random.exponential(A(0), S());
+                case "gamma": return random.gamma(A(0), A(1), S());
+                case "beta": return random.beta(A(0), A(1), S());
+                case "chisquare": return random.chisquare(A(0), S());
+                case "f": return random.f(A(0), A(1), S());
+                case "gumbel": return random.gumbel(A(0), A(1), S());
+                case "laplace": return random.laplace(A(0), A(1), S());
+                case "logistic": return random.logistic(A(0), A(1), S());
+                case "pareto": return random.pareto(A(0), S());
+                case "power": return random.power(A(0), S());
+                case "rayleigh": return random.rayleigh(A(0), S());
+                case "triangular": return random.triangular(A(0), A(1), A(2), S());
+                case "vonmises": return random.vonmises(A(0), A(1), S());
+                case "wald": return random.wald(A(0), A(1), S());
+                case "weibull": return random.weibull(A(0), S());
+                case "poisson": return random.poisson(A(0), S());
+                case "binomial": return random.binomial((int)A(0), A(1), S());
+                case "negative_binomial": return random.negative_binomial(A(0), A(1), S());
+                case "geometric": return random.geometric(A(0), S());
+                case "zipf": return random.zipf(A(0), S());
+                case "logseries": return random.logseries(A(0), S());
+                case "noncentral_chisquare": return random.noncentral_chisquare(A(0), A(1), S());
+                case "noncentral_f": return random.noncentral_f(A(0), A(1), A(2), S());
+                case "hypergeometric": return random.hypergeometric((long)A(0), (long)A(1), (long)A(2), S());
+                case "multinomial": return random.multinomial((int)A(0), ParseDoubleArray(p["pvals"]), S());
+                case "dirichlet": return random.dirichlet(ParseDoubleArray(p["alpha"]), S());
                 case "multivariate_normal":
                 {
                     var mean = ParseDoubleArray(p["mean"]);
@@ -833,7 +837,7 @@ namespace NumSharp.Tests.Fuzz
                     for (int i = 0; i < d; i++)
                         for (int j = 0; j < d; j++)
                             cov[i, j] = flat[i * d + j];
-                    return np.random.multivariate_normal(mean, cov, ParseIntArray(p["size"]));
+                    return random.multivariate_normal(mean, cov, ParseIntArray(p["size"]));
                 }
                 default:
                     throw new NotSupportedException($"rnd dist '{dist}' not wired in OpRegistry");
