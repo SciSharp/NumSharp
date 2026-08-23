@@ -249,6 +249,26 @@ jobs:
     - name: Build
       run: dotnet build test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
+    # The current-RID OpenBLAS native flows to the test output as CopyToOutputDirectory content
+    # across the ProjectReference — but on a clean runner it can be missing (RID-specific runtime
+    # assets don't always flow to a portable, no-RID build). Copy the staged runtimes into the test
+    # output as a self-heal, and log both what landed AND the .so's dynamic deps, so a genuine
+    # load failure (a missing libgfortran/libquadmath) is visible rather than a silent Enabled=false.
+    - name: Ensure + diagnose OpenBLAS native in test output
+      shell: bash
+      run: |
+        for tfm in net8.0 net10.0; do
+          out="test/NumSharp.Tests.Interop/bin/Release/$tfm"
+          mkdir -p "$out/runtimes"
+          cp -r src/NumSharp.Interop.OpenBLAS/runtimes/* "$out/runtimes/" 2>/dev/null || true
+          echo "=== $out native assets ==="
+          find "$out" -path "*native*" \( -name "*openblas*" -o -name "*scipy*" \) 2>/dev/null || echo "  (none — content did not flow)"
+        done
+        so=$(find src/NumSharp.Interop.OpenBLAS/runtimes -name "*openblas*.so" 2>/dev/null | head -1)
+        if [ -n "$so" ] && command -v ldd >/dev/null 2>&1; then
+          echo "=== ldd $so ==="; ldd "$so" 2>&1 | grep -i "not found" || echo "  (all deps resolved)"
+        fi
+
     # No category filter: the interop suite carries no OpenBugs/HighMemory tests,
     # and every test already self-asserts a LiveExports/LiveImports leak baseline.
     - name: Test (net8.0)

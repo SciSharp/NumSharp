@@ -89,15 +89,20 @@ namespace NumSharp.Tests.Math
             (0x478b9a09u, 0x3dff71bdu, "cos one ULP past it"),
         };
 
-        // A finite input past the kernel's Cody-Waite reduction limit is handed to the PLATFORM libm
-        // — exactly as NumPy does — so its last bit is host-specific. NumPy's expected bytes here were
-        // probed from the win-amd64 wheel (MSVC ucrtbase); glibc / macOS libm differ by ~1 ULP. Pin
-        // those cases on Windows only. The polynomial range (below the limit) is NumSharp's own port
-        // and stays bit-exact on every OS, as do the NaN/inf specials — so both keep asserting always.
+        // NumPy hands BOTH ±inf AND finite inputs past the kernel's Cody-Waite reduction limit to
+        // the PLATFORM libm, exactly as NumSharp does, so the result is host-specific: macOS libm
+        // returns a POSITIVE NaN for sin(±inf) where NumPy's win-amd64 wheel (MSVC ucrtbase) returns
+        // a NEGATIVE one, and the last bit of a finite past-limit result differs by ~1 ULP on
+        // glibc/macOS. NumPy's expected bytes here were probed from that MSVC wheel, so pin these
+        // libm-fallback cases on Windows only. A NaN INPUT is blanked by NumSharp's own kernel
+        // (portable), and the polynomial range below the limit is NumSharp's own port (portable), so
+        // neither is skipped — both keep asserting on every OS.
         private static bool HostLibmPast(uint inBits, uint firstLibmBits)
         {
+            if (OperatingSystem.IsWindows())
+                return false;
             float x = F(inBits);
-            return float.IsFinite(x) && MathF.Abs(x) >= F(firstLibmBits) && !OperatingSystem.IsWindows();
+            return float.IsInfinity(x) || (float.IsFinite(x) && MathF.Abs(x) >= F(firstLibmBits));
         }
 
         [TestMethod]

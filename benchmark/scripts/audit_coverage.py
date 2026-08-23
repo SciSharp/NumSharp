@@ -106,7 +106,10 @@ def discover_benchmark_evidence() -> tuple[dict[str, list[dict]], list[dict]]:
         suite_dir = BENCHMARK_ROOT / directory
         if not suite_dir.exists():
             continue
-        for path in sorted(suite_dir.rglob("*.cs")):
+        # Sort by POSIX string for cross-platform determinism: default pathlib order is
+        # case-insensitive on Windows but case-sensitive on Linux, which would make a local
+        # Windows regen diverge from the Linux CI's checked-in-artifact diff.
+        for path in sorted(suite_dir.rglob("*.cs"), key=lambda p: p.as_posix()):
             text = COMMENT_RE.sub("", path.read_text(encoding="utf-8-sig"))
             for match in DESCRIPTION_RE.finditer(text):
                 description = match.group(1)

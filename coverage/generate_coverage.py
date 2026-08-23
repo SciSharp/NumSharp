@@ -295,7 +295,11 @@ def locate_type_source(name: str) -> list[str]:
     """
     pattern = re.compile(rf"\b(?:sealed\s+|abstract\s+|partial\s+|static\s+)*class\s+{re.escape(name)}\b")
     source_root = ROOT / "src" / "NumSharp.Core"
-    for path in sorted(source_root.rglob("*.cs")):
+    # Sort by the POSIX string, not the default pathlib order: Path comparison is case-INSENSITIVE
+    # on Windows and case-SENSITIVE on Linux, so the "first declaring file" (e.g. Generator.Choice.cs
+    # vs Generator.Choice.Sampler.cs) would otherwise differ between a local Windows regen and the
+    # Linux CI, breaking the checked-in-dashboard diff.
+    for path in sorted(source_root.rglob("*.cs"), key=lambda p: p.as_posix()):
         try:
             if pattern.search(path.read_text(encoding="utf-8-sig")):
                 return [path.relative_to(ROOT).as_posix()]

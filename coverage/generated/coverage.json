@@ -16548,10 +16548,10 @@
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
-        "src/NumSharp.Core/RandomSampling/Generator.Choice.cs"
+        "src/NumSharp.Core/RandomSampling/Generator.Choice.Sampler.cs"
       ],
       "numsharp_source_urls": [
-        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/RandomSampling/Generator.Choice.cs"
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/RandomSampling/Generator.Choice.Sampler.cs"
       ],
       "notes": "NumSharp exports the Generator type (NumSharp.Generator)."
     },
