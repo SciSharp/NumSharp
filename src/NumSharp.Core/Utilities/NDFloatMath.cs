@@ -171,7 +171,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// NumPy 2.4.2's <c>float32</c> exponential, bit-for-bit (port of <c>simd_exp_FLOAT</c>).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static float Exp(float x)
         {
             // Ordered comparisons, so a NaN fails both and joins the overflow/underflow ends in the
@@ -218,7 +218,7 @@ namespace NumSharp.Utilities
         /// with a final fused multiply-add. NumPy documents a max error of 3.83 ULP here (at
         /// <c>x = 0x3f486945</c>) — reproducing NumPy means reproducing that.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static float Log(float x)
         {
             // Ordered test: NaN, negatives, zero and +inf all fail it and take the cold path, which
@@ -272,7 +272,7 @@ namespace NumSharp.Utilities
         /// NumPy's <c>fma_get_exponent</c>: the unbiased exponent as a float. Subnormals are first
         /// multiplied by 2^100 so their exponent field is meaningful, then 100 is subtracted back.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static float LogExponent(float x)
         {
             if (x < FloatMin)
@@ -287,7 +287,7 @@ namespace NumSharp.Utilities
         /// NumPy's <c>fma_get_mantissa</c>: the mantissa re-exponented into <c>[0.5, 1)</c>. Same
         /// 2^100 rescale for subnormals — which does not disturb the mantissa bits themselves.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static float LogMantissa(float x)
         {
             if (x < FloatMin)
@@ -308,7 +308,7 @@ namespace NumSharp.Utilities
         /// close that, and extending the polynomial past NumPy's own limit would move us AWAY from
         /// NumPy rather than toward it.</para>
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static float Sin(float x)
         {
             if (!(MathF.Abs(x) <= MaxCodySin))
@@ -321,7 +321,7 @@ namespace NumSharp.Utilities
         /// <c>SIMD_COMPUTE_COS</c> - the same kernel, biasing the quadrant by one). See
         /// <see cref="Sin(float)"/>; note NumPy uses a SMALLER Cody-Waite limit for cosine.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static float Cos(float x)
         {
             if (!(MathF.Abs(x) <= MaxCodyCos))
@@ -333,7 +333,7 @@ namespace NumSharp.Utilities
         /// The shared reduce-and-evaluate body. <paramref name="quadrantBias"/> is 0 for sine and 1
         /// for cosine, which is how NumPy turns one kernel into both.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static float SinCosCore(float x, int quadrantBias)
         {
             // quadrant = rint(x * 2/pi), through the magic constant. FUSED, like exp's quadrant -
@@ -634,7 +634,7 @@ namespace NumSharp.Utilities
         /// <para><b>Verified exhaustively:</b> all 2^32 float32 bit patterns agree with NumPy 2.4.2,
         /// through both this entry point and the SIMD kernel.</para>
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static float Tanh(float x)
         {
             uint bits = BitConverter.SingleToUInt32Bits(x);
@@ -700,7 +700,7 @@ namespace NumSharp.Utilities
         /// subnormals, both tails, interior) and the committed corpus tier; float64 has no exhaustive
         /// analogue.</para>
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static double Tanh(double x)
         {
             ulong bits = BitConverter.DoubleToUInt64Bits(x);

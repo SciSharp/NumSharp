@@ -95,12 +95,12 @@ namespace NumSharp.Fourier
         }
 
         // (a+ib) = conj(c+id) * (e+if):  a = c*e + d*f;  b = c*f - d*e
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static void MULPM(out double a, out double b, double c, double d, double e, double f)
         { a = c * e + d * f; b = c * f - d * e; }
 
         // a2=a+b; b2=i*(b-a) — pocketfft REARRANGE macro
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static void Rearrange(ref double rx, ref double ix, ref double ry, ref double iy)
         {
             double t1 = rx + ry, t2 = ry - rx, t3 = ix + iy, t4 = ix - iy;

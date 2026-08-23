@@ -85,26 +85,26 @@ namespace NumSharp.Fourier
 
         // ================= local rotation / butterfly helpers (operate on locals) =================
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static void ROT90(ref Cmplx a) { double t = a.r; a.r = -a.i; a.i = t; }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static void ROTX90(bool fwd, ref Cmplx a)
         { double t = fwd ? -a.r : a.r; a.r = fwd ? a.i : -a.i; a.i = t; }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static void PMINPLACE(ref Cmplx a, ref Cmplx b) { Cmplx t = a; a = a + b; b = t - b; }
 
         private const double HSQT2 = 0.707106781186547524400844362104849;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static void ROTX45(bool fwd, ref Cmplx a)
         {
             if (fwd) { double t = a.r; a.r = HSQT2 * (a.r + a.i); a.i = HSQT2 * (a.i - t); }
             else { double t = a.r; a.r = HSQT2 * (a.r - a.i); a.i = HSQT2 * (a.i + t); }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static void ROTX135(bool fwd, ref Cmplx a)
         {
             if (fwd) { double t = a.r; a.r = HSQT2 * (a.i - a.r); a.i = HSQT2 * (-t - a.i); }
@@ -113,7 +113,7 @@ namespace NumSharp.Fourier
 
         // PARTSTEP helpers: return (ca, cb). The imaginary twiddle args (twai/twbi, y*) are
         // already-signed doubles reproducing the C macro's sign-token concatenation.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static (Cmplx ca, Cmplx cb) Part3(in Cmplx t0, in Cmplx t1, in Cmplx t2, double twr, double twi)
         {
             Cmplx ca = t0 + t1 * twr;
@@ -121,7 +121,7 @@ namespace NumSharp.Fourier
             return (ca, cb);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static (Cmplx ca, Cmplx cb) Part5(in Cmplx t0, in Cmplx t1, in Cmplx t2, in Cmplx t3, in Cmplx t4,
             double twar, double twbr, double twai, double twbi)
         {
@@ -133,7 +133,7 @@ namespace NumSharp.Fourier
             return (ca, cb);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static (Cmplx ca, Cmplx cb) Part7(in Cmplx t1, in Cmplx t2, in Cmplx t3, in Cmplx t4,
             in Cmplx t5, in Cmplx t6, in Cmplx t7, double x1, double x2, double x3, double y1, double y2, double y3)
         {
@@ -145,7 +145,7 @@ namespace NumSharp.Fourier
             return (ca, cb);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static (Cmplx ca, Cmplx cb) Part11(in Cmplx t1, in Cmplx t2, in Cmplx t3, in Cmplx t4, in Cmplx t5,
             in Cmplx t6, in Cmplx t7, in Cmplx t8, in Cmplx t9, in Cmplx t10, in Cmplx t11,
             double x1, double x2, double x3, double x4, double x5,

@@ -31,23 +31,23 @@ namespace NumSharp.Fourier
     {
         public double r, i;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public Cmplx(double r_, double i_) { r = r_; i = i_; }
 
         // cmplx + cmplx  -> {r+o.r, i+o.i}
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static Cmplx operator +(in Cmplx a, in Cmplx b) => new Cmplx(a.r + b.r, a.i + b.i);
 
         // cmplx - cmplx  -> {r-o.r, i-o.i}
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static Cmplx operator -(in Cmplx a, in Cmplx b) => new Cmplx(a.r - b.r, a.i - b.i);
 
         // cmplx * scalar -> {r*s, i*s}
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static Cmplx operator *(in Cmplx a, double s) => new Cmplx(a.r * s, a.i * s);
 
         // cmplx * cmplx  -> {r*o.r - i*o.i, r*o.i + i*o.r}
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static Cmplx operator *(in Cmplx a, in Cmplx b)
             => new Cmplx(a.r * b.r - a.i * b.i, a.r * b.i + a.i * b.r);
 
@@ -55,7 +55,7 @@ namespace NumSharp.Fourier
         /// pocketfft <c>special_mul&lt;fwd&gt;</c> (twiddle multiply with direction-dependent
         /// conjugation). fwd: <c>(r*o.r+i*o.i, i*o.r-r*o.i)</c>; bwd: <c>(r*o.r-i*o.i, r*o.i+i*o.r)</c>.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static Cmplx SpecialMul(bool fwd, in Cmplx v1, in Cmplx v2)
             => fwd
                 ? new Cmplx(v1.r * v2.r + v1.i * v2.i, v1.i * v2.r - v1.r * v2.i)

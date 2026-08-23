@@ -37,23 +37,23 @@ namespace NumSharp.Fourier
     {
         public float r, i;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public CmplxF(float r_, float i_) { r = r_; i = i_; }
 
         // cmplx + cmplx  -> {r+o.r, i+o.i}
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static CmplxF operator +(in CmplxF a, in CmplxF b) => new CmplxF(a.r + b.r, a.i + b.i);
 
         // cmplx - cmplx  -> {r-o.r, i-o.i}
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static CmplxF operator -(in CmplxF a, in CmplxF b) => new CmplxF(a.r - b.r, a.i - b.i);
 
         // cmplx * scalar -> {r*s, i*s}
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static CmplxF operator *(in CmplxF a, float s) => new CmplxF(a.r * s, a.i * s);
 
         // cmplx * cmplx  -> {r*o.r - i*o.i, r*o.i + i*o.r}
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static CmplxF operator *(in CmplxF a, in CmplxF b)
             => new CmplxF(a.r * b.r - a.i * b.i, a.r * b.i + a.i * b.r);
 
@@ -62,7 +62,7 @@ namespace NumSharp.Fourier
         /// conjugation), in float. fwd: <c>(r*o.r+i*o.i, i*o.r-r*o.i)</c>; bwd: <c>(r*o.r-i*o.i,
         /// r*o.i+i*o.r)</c>.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static CmplxF SpecialMul(bool fwd, in CmplxF v1, in CmplxF v2)
             => fwd
                 ? new CmplxF(v1.r * v2.r + v1.i * v2.i, v1.i * v2.r - v1.r * v2.i)
@@ -77,7 +77,7 @@ namespace NumSharp.Fourier
     /// </summary>
     internal static class TwiddleF
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         public static CmplxF At(SinCos2PiByN tw, long idx)
         {
             Cmplx t = tw[idx];                       // combined in double, exactly as pocketfft's Thigh==double
