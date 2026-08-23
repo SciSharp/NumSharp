@@ -198,11 +198,11 @@ namespace NumSharp
         ///     order that is not portable (both contain the same set); float dtypes are sorted on both sides.
         ///     The Array API leaves the order unspecified.
         /// </remarks>
+        // NDScoped: the hash/sort internals' temps are reclaimed; the values are yielded.
+        [NDScoped]
         public static NDArray unique_values(NDArray x)
         {
-            // Boundary scope: the hash/sort internals' temps are reclaimed; the values are yielded.
-            using var scope = NDScope.Open();
-            return scope.Returns(x.uniqueValuesFast());
+            return x.uniqueValuesFast();
         }
 
         /// <summary>

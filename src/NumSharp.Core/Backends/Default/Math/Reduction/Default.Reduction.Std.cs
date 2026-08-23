@@ -7,16 +7,16 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        [NDScoped]
         public override NDArray ReduceStd(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, NPTypeCode? typeCode = null)
         {
             // Boundary scope: reclaims the fallback double-cast input and the IL path's
             // pre-cast double result; every return is yielded (the IsEmpty input
             // passthrough passes through Returns as a no-op).
-            using var scope = NDScope.Open();
 
             var shape = arr.Shape;
             if (shape.IsEmpty)
-                return scope.Returns(arr);
+                return arr;
 
             // Handle empty arrays (size == 0) with axis reduction
             // NumPy: np.std(np.zeros((0,3)), axis=0) returns array([nan, nan, nan]) (reducing along zero-size axis)
@@ -34,7 +34,7 @@ namespace NumSharp.Backends
                             keepdimsShape[i] = 1;
                         r.Storage.Reshape(new Shape(keepdimsShape));
                     }
-                    return scope.Returns(r.MarkReductionScalar());
+                    return r.MarkReductionScalar();
                 }
 
                 // Axis specified - check if reducing along zero-size axis
@@ -74,7 +74,7 @@ namespace NumSharp.Backends
                     result.Storage.Reshape(new Shape(keepdimsShape));
                 }
 
-                return scope.Returns(result);
+                return result;
             }
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
@@ -94,7 +94,7 @@ namespace NumSharp.Backends
                 }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
                     r.Storage.Reshape(Shape.Scalar);
-                return scope.Returns(r.MarkReductionScalar());
+                return r.MarkReductionScalar();
             }
 
             if (axis_ == null)
@@ -110,7 +110,7 @@ namespace NumSharp.Backends
                 }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
                     r.Storage.Reshape(Shape.Scalar);
-                return scope.Returns(r.MarkReductionScalar());
+                return r.MarkReductionScalar();
             }
             var axis = axis_.Value;
             while (axis < 0)
@@ -134,9 +134,9 @@ namespace NumSharp.Backends
                     var keepdimsShapeDims = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShapeDims[i] = (i == axis) ? 1 : shape[i];
-                    return scope.Returns(np.zeros(keepdimsShapeDims, zerosType));
+                    return np.zeros(keepdimsShapeDims, zerosType);
                 }
-                return scope.Returns(np.zeros(Shape.GetAxis(shape, axis), zerosType));
+                return np.zeros(Shape.GetAxis(shape, axis), zerosType);
             }
 
             // IL-generated axis reduction fast path - handles all numeric types
@@ -150,11 +150,11 @@ namespace NumSharp.Backends
                         : arr.GetTypeCode.GetComputingType());
                 var ilResult = ExecuteAxisStdReductionIL(arr, axis, keepdims, axisOutType, ddof ?? 0);
                 if (ilResult is not null)
-                    return scope.Returns(ilResult);
+                    return ilResult;
             }
 
             // Fallback: iterator-based axis reduction (handles non-contiguous, broadcast, edge cases)
-            return scope.Returns(ExecuteAxisStdReductionFallback(arr, axis, keepdims, typeCode, ddof));
+            return ExecuteAxisStdReductionFallback(arr, axis, keepdims, typeCode, ddof);
         }
 
         /// <summary>

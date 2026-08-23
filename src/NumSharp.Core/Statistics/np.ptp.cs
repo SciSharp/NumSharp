@@ -13,25 +13,25 @@ namespace NumSharp
         ///     (e.g. <c>ptp(uint8[0,255]) == 255</c>, <c>ptp(int8[-128,127]) == -1</c>).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ptp.html</remarks>
+        [NDScoped]
         public static NDArray ptp(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            using var scope = NDScope.Open();
 
             var maxRes = np.amax(a, axis, keepdims);
             var minRes = np.amin(a, axis, keepdims);
             var diff = maxRes - minRes;
 
             // Fresh 0-d ptp is a numpy SCALAR (read-only); out= returns the writeable out.
-            return scope.Returns(@out is null ? diff.MarkReductionScalar() : WriteOrReturn(diff, @out));
+            return @out is null ? diff.MarkReductionScalar() : WriteOrReturn(diff, @out);
         }
 
+        [NDScoped]
         public static NDArray ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (axis is null) return ptp(a, (int?)null, @out, keepdims);
             if (axis.Length == 1) return ptp(a, (int?)axis[0], @out, keepdims);
-            using var scope = NDScope.Open();
 
             int ndim = a.ndim;
             var normalized = new int[axis.Length];
@@ -75,7 +75,7 @@ namespace NumSharp
                 diff = diff.reshape(kept.ToArray());
             }
 
-            return scope.Returns(WriteOrReturn(diff, @out));
+            return WriteOrReturn(diff, @out);
         }
 
         private static NDArray WriteOrReturn(NDArray diff, NDArray @out)

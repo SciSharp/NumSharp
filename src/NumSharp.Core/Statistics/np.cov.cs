@@ -36,6 +36,7 @@ namespace NumSharp
         /// <param name="dtype">Data-type of the result. By default the result has at least float64 precision.</param>
         /// <returns>The covariance matrix of the variables.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cov.html</remarks>
+        [NDScoped]
         public static NDArray cov(NDArray m, NDArray y = null, bool rowvar = true, bool bias = false,
             int? ddof = null, NDArray fweights = null, NDArray aweights = null, NPTypeCode? dtype = null)
         {
@@ -56,7 +57,6 @@ namespace NumSharp
             // validation masks, avg and its column view, Xc/Xt and the pre-scale c — is scope-
             // tracked and reclaimed at method exit (throw paths included); only the yielded
             // result survives. Inputs were constructed before the scope opened: never touched.
-            using var scope = NDScope.Open();
 
             int mNdim = m.ndim;
 
@@ -67,7 +67,7 @@ namespace NumSharp
 
             // Empty variables => (0, 0) float64, regardless of input dtype (NumPy: np.array([]).reshape(0, 0)).
             if (X.shape[0] == 0)
-                return scope.Returns(np.zeros(new Shape(0, 0), NPTypeCode.Double));
+                return np.zeros(new Shape(0, 0), NPTypeCode.Double);
 
             if (y is not null)
             {
@@ -158,7 +158,7 @@ namespace NumSharp
 
             // squeeze returns a view of c — the view is yielded; c's tracked wrapper is released
             // at scope exit while ARC keeps the buffer alive through the view.
-            return scope.Returns(np.squeeze(c));
+            return np.squeeze(c);
         }
     }
 }

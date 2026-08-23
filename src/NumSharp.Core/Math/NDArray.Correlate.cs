@@ -22,6 +22,7 @@ namespace NumSharp
         /// (<c>_pyarray_revert</c>). The engine reads the kernel forward. Float bit-parity notes are
         /// in <c>np.correlate.cs</c>.
         /// </remarks>
+        [NDScoped]
         public NDArray correlate(NDArray v, string mode = "valid")
         {
             NDArray a = this;
@@ -47,7 +48,6 @@ namespace NumSharp
 
             // The materializations, the complex conjugate, and the inverted-path forward buffer
             // are all scope-tracked; only the yielded result survives (a/v are never tracked).
-            using var scope = NDScope.Open();
 
             // Conjugate the (common-typed) second argument for complex inputs, exactly as
             // PyArray_Correlate2 does — BEFORE the swap, so an inverted correlate uses conj(v) as
@@ -74,7 +74,7 @@ namespace NumSharp
             if (inverted)
                 result = result["::-1"].copy();
 
-            return scope.Returns(result);
+            return result;
         }
     }
 }

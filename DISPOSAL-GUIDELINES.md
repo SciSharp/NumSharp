@@ -34,10 +34,12 @@ the bug.
 
 ## 1. TL;DR
 
-- **The standard instrument is `NDScope`** (next section): open a scope at the top of a boundary
-  method, keep the ORIGINAL body, and route every egress through `scope.Returns(...)`. Every
-  NDArray constructed under the scope — however deep the helper-call tree — is reclaimed at exit;
-  inputs were constructed before the scope opened and are structurally untouchable.
+- **The standard instrument is `NDScope`** (next section), and the standard way to APPLY it is
+  the `[NDScoped]` attribute: the build-time IL weaver injects the scope (open, try/finally
+  dispose, every egress yielded) so the method keeps its 100% original body. Every NDArray
+  constructed under the scope — however deep the helper-call tree — is reclaimed at exit; inputs
+  were constructed before the scope opened and are structurally untouchable. Hand-write the
+  scope only for shapes the weaver rejects (carrier-struct returns, `ref NDArray`).
 - **The rules the scope automates** (and which still govern any hand-written dispose):
   (**R1**) never dispose what you return, (**R2**) never dispose an input you were given,
   (**R3**) dispose after the last use (through any view too).
@@ -89,6 +91,9 @@ back-pointer says "not mine"), so *"wrap every egress in `Returns`"* is a safe b
   egress for `out`-parameters: `result = scope.Returns(temp);`.
 - `NDScope.Detach(x)` — permanently un-track (for an array being cached into a static/long-lived
   field from inside a scoped call).
+- `NDScope.Attach(x)` — adopt an untracked array into the CURRENT scope (the caller-side
+  hot-loop pattern: attach a received result instead of a per-result `using`), or move one
+  between scopes; no-op with no open scope.
 
 **Threading.** The scope stack is `[ThreadStatic]`: open/use/dispose on ONE thread (debug-asserted;
 never span an `await`). Worker threads see no scope and fall back to the finalizer backstop — safe;
@@ -102,10 +107,74 @@ contract is unchanged). Where a mid-method handback genuinely matters (free a bi
 the next allocation), nest an inner block scope or keep a hand-written `Dispose()`.
 
 **Gate.** `test/NumSharp.Tests/Lifetime/NDScopeTests.cs` (contracts: tracking, yield/no-op/
-re-parenting, out-params, view-over-base ARC, exception paths, Detach, pooling, zero-strand
-counters) and `NDScopeStressTests.cs` (8-thread mixed-op load, nested scopes under concurrency,
-cross-thread hand-off, forced-GC antagonist), on top of the `BufferReleaseSweepTests` slope sweep
-and the FuzzMatrix byte-exactness gate.
+re-parenting, out-params, view-over-base ARC, exception paths, Detach, Attach, pooling,
+zero-strand counters) and `NDScopeStressTests.cs` (8-thread mixed-op load, nested scopes under
+concurrency, cross-thread hand-off, forced-GC antagonist), on top of the
+`BufferReleaseSweepTests` slope sweep and the FuzzMatrix byte-exactness gate.
+
+---
+
+## The weaver — `[NDScoped]`
+
+The scope pattern is INJECTED AT BUILD TIME, so source files keep their 100% original bodies.
+A method (or property accessor) marked `[NDScoped]` (`src/NumSharp.Core/Backends/
+NDScopedAttribute.cs`, internal) is rewritten post-compile by `tools/NumSharp.Weaver` — a
+Mono.Cecil console tool invoked by the `NDScopeWeave` target in `NumSharp.Core.csproj` after
+each per-TFM `CoreCompile` — into exactly the IL the hand-written pattern produces:
+
+```csharp
+[NDScoped]                                          // what you write: the ORIGINAL body
+public static NDArray<bool> logical_and(NDArray x1, NDArray x2)
+{
+    var b1 = x1.typecode == NPTypeCode.Boolean ? x1 : (x1 != 0);
+    var b2 = x2.typecode == NPTypeCode.Boolean ? x2 : (x2 != 0);
+    return (b1 & b2).MakeGeneric<bool>();
+}
+// what the built assembly carries: scope = NDScope.Open() prologue; the whole body as the try
+// of a try/finally whose finally is scope.Dispose(); every ret rewritten to route the value
+// through scope.Returns(value); each `out NDArray` parameter's FINAL value yielded before each
+// successful return (on a throw the finally reclaims; out contents are undefined after a throw).
+```
+
+**Why the rewrite is trivially safe:** the CLR forbids `ret` inside a protected region, so once
+the body is wrapped in try/finally every original return is forced through a rewritable seam —
+bodies that already contain try/using compile their inner returns to leave-chains ending at
+outermost `ret`s, and only those real `ret` instructions are touched (mutated IN PLACE, so
+branches and nested-handler boundaries that referenced them stay valid).
+
+**The decision table** (enforced at weave time — a violation is a BUILD ERROR):
+
+| return / signature | weaver action |
+|---|---|
+| `NDArray` / `NDArray<T>` | value routed through `Returns<T>(T)` at every ret |
+| `NDArray[]` / `NDArray<T>[]` | `Returns<T>(T[])` (tuple results — nonzero etc.) |
+| `void` / scalar (`long`, `bool`, `double`, string, enums, …) | scope only; `out NDArray`/`out NDArray[]` params still escaped |
+| `out NDArray` / `out NDArray[]` param | final-value escape before each successful return |
+| `ref NDArray`(`[]`) param | **error NDW002** — hidden egress; scope by hand |
+| carrier struct return (`UniqueResult`, ValueTuples of arrays, …) | **error NDW003** — its members would be handed back disposed; scope by hand and yield each member (`AverageCore`, `np.unique`, `unique_counts/inverse/all` stay hand-scoped for exactly this reason) |
+| iterator / async | **error NDW004** — the visible body is a state-machine stub |
+
+**Idempotence & incrementality.** A body that already opens an `NDScope` is skipped
+("already-scoped"), so re-weaving the same assembly is a no-op; the MSBuild target is
+additionally incremental via a per-TFM `NDScopeWeave.marker` in obj. Note the carrier check
+runs BEFORE the already-scoped check: `[NDScoped]` on a hand-scoped carrier method is an error,
+not a skip — the attribute would be a lie there.
+
+**Strong naming & symbols.** IL rewriting invalidates the compile-time signature, so the weaver
+re-signs with the repo `Open.snk` (`sn -vf` valid; `StrongNameTests` gates identity) and
+rewrites the portable PDB — original sequence points survive (instructions are only inserted or
+mutated in place), so source stepping still lands on the right lines.
+
+**Escape hatches.** `-p:SkipNDScopeWeave=true` builds without weaving (attributed methods then
+simply run unscoped — the finalizer backstop, the pre-migration status quo);
+`-p:NDScopeWeaveILVerify=true` additionally runs the `dotnet-ilverify` global tool on the woven
+output (kept opt-in so machines without the tool still build; measured: the weave adds ZERO
+ILVerify findings over the unwoven baseline in both configurations).
+
+**When to hand-scope instead of the attribute:** carrier-struct returns (yield each member),
+`ref NDArray` flows, a mid-method handback that genuinely must free before a later allocation
+(nest an inner block scope), or any body where the egress isn't expressible as
+return-value + out-params.
 
 ---
 
@@ -338,9 +407,12 @@ is why §12's UAF audit is mandatory.
 
 ## 9. Worked examples
 
-Real backend sites as they ship today — the boundary methods use `NDScope`; the hand-written forms
-below them remain the tool for engine internals and mid-method handback. (All proven byte-neutral:
-FuzzMatrix bit-exact + the Lifetime slope sweep at zero strands.)
+Real backend sites — the boundary methods now carry `[NDScoped]` and the weaver injects what
+these examples spell out by hand (each example shows the SEMANTICS the woven IL carries; only the
+carrier-struct sites — `AverageCore`, the `unique` result-struct wrappers — still write the scope
+in source). The hand-written forms below them remain the tool for engine internals and mid-method
+handback. (All proven byte-neutral: FuzzMatrix bit-exact + the Lifetime slope sweep at zero
+strands.)
 
 **A) The scope default — original body + two lines** — `np.ptp` overload 1:
 ```csharp

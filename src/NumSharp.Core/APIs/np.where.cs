@@ -37,40 +37,40 @@ namespace NumSharp
         ///     Return elements chosen from `x` or `y` depending on `condition`.
         ///     Scalar overload for x.
         /// </summary>
+        [NDScoped]
         public static NDArray where(NDArray condition, object x, NDArray y)
         {
-            using var scope = NDScope.Open();
-            return scope.Returns(where_internal(condition, asanyarray(x), y));
+            return where_internal(condition, asanyarray(x), y);
         }
 
         /// <summary>
         ///     Return elements chosen from `x` or `y` depending on `condition`.
         ///     Scalar overload for y.
         /// </summary>
+        [NDScoped]
         public static NDArray where(NDArray condition, NDArray x, object y)
         {
-            using var scope = NDScope.Open();
-            return scope.Returns(where_internal(condition, x, asanyarray(y)));
+            return where_internal(condition, x, asanyarray(y));
         }
 
         /// <summary>
         ///     Return elements chosen from `x` or `y` depending on `condition`.
         ///     Scalar overload for both x and y.
         /// </summary>
+        [NDScoped]
         public static NDArray where(NDArray condition, object x, object y)
         {
-            using var scope = NDScope.Open();
-            return scope.Returns(where_internal(condition, asanyarray(x), asanyarray(y)));
+            return where_internal(condition, asanyarray(x), asanyarray(y));
         }
 
         /// <summary>
         /// Internal implementation of np.where.
         /// </summary>
+        [NDScoped]
         private static NDArray where_internal(NDArray condition, NDArray x, NDArray y)
         {
             // Boundary scope: reclaims the broadcast_arrays wrappers, the bool/dtype astype
             // conversions and the scalar-promotion temps at exit; only `result` is yielded.
-            using var scope = NDScope.Open();
 
             // Detect "originally scalar" on the user-supplied operands BEFORE broadcasting
             // expands them into stride-0 views. The scalar fast path below dispatches
@@ -126,7 +126,7 @@ namespace NumSharp
 
             // Handle empty arrays - nothing to iterate
             if (result.size == 0)
-                return scope.Returns(result);
+                return result;
 
             // -----------------------------------------------------------------
             // Scalar-broadcast IL fast path
@@ -157,17 +157,17 @@ namespace NumSharp
                 if (xIsScalar && yIsScalar)
                 {
                     WhereScalarXYDispatch(cond, xScalarSrc, yScalarSrc, result, outType);
-                    return scope.Returns(result);
+                    return result;
                 }
                 if (xIsScalar && yArr.Shape.IsContiguous)
                 {
                     WhereScalarXDispatch(cond, xScalarSrc, yArr, result, outType);
-                    return scope.Returns(result);
+                    return result;
                 }
                 if (yIsScalar && xArr.Shape.IsContiguous)
                 {
                     WhereScalarYDispatch(cond, xArr, yScalarSrc, result, outType);
-                    return scope.Returns(result);
+                    return result;
                 }
             }
 
@@ -182,13 +182,13 @@ namespace NumSharp
             if (canUseKernel)
             {
                 WhereKernelDispatch(cond, xArr, yArr, result, outType);
-                return scope.Returns(result);
+                return result;
             }
 
             // Iterator fallback for non-contiguous/broadcasted arrays.
             WhereImpl(cond, xArr, yArr, result);
 
-            return scope.Returns(result);
+            return result;
         }
 
         private static unsafe void WhereImpl(NDArray cond, NDArray x, NDArray y, NDArray result)

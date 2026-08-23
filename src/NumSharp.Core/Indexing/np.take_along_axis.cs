@@ -32,6 +32,7 @@ namespace NumSharp
         ///     <paramref name="arr"/>.
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.take_along_axis.html</remarks>
+        [NDScoped]
         public static unsafe NDArray take_along_axis(NDArray arr, NDArray indices, int? axis = -1)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -41,7 +42,6 @@ namespace NumSharp
             // int64 index cast at exit. The scope's tracked list also strong-roots those temps
             // through the raw-pointer kernel call below (the ARC/JIT dead-local hazard NonZero
             // documents cannot arise under a scope).
-            using var scope = NDScope.Open();
 
             // ── normalize inputs (NumPy _shape_base_impl.take_along_axis) ─────────────
             int ax;
@@ -99,7 +99,7 @@ namespace NumSharp
 
             long totalSize = result.size;
             if (totalSize == 0)
-                return scope.Returns(result);   // empty result — nothing to gather (arr may even be empty)
+                return result;   // empty result — nothing to gather (arr may even be empty)
 
             // int64 view of the indices. When already int64 we keep the ORIGINAL layout (any
             // strides, offset, or broadcast dims) and read through it; otherwise astype yields a
@@ -152,7 +152,7 @@ namespace NumSharp
                 throw new IndexError(
                     $"index {badIdx} is out of bounds for axis {ax} with size {axisLen}");
 
-            return scope.Returns(result);
+            return result;
         }
 
         /// <summary>True for the eight integer NPTypeCodes NumPy accepts as index arrays (<c>np.issubdtype(dt, np.integer)</c>).</summary>

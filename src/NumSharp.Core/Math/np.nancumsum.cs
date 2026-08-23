@@ -20,14 +20,14 @@ namespace NumSharp
         /// Port of numpy/lib/_nanfunctions_impl.py::nancumsum: <c>_replace_nan(a, 0)</c> then <c>np.cumsum</c>.
         /// Only float-family dtypes can contain NaN, so integer/bool/decimal inputs are equivalent to <see cref="cumsum"/>.
         /// </remarks>
+        [NDScoped]
         public static NDArray nancumsum(NDArray a, int? axis = null, NPTypeCode? typeCode = null, NDArray @out = null)
         {
             // Boundary scope: the full-size NaN-replaced copy is reclaimed at exit; the scan
             // result (or the caller's @out — untracked, a Returns no-op) is yielded.
-            using var scope = NDScope.Open();
             // NumPy: a, mask = _replace_nan(a, 0); return np.cumsum(a, axis, dtype, out). The mask is
             // discarded by nancumsum (unlike nanmean/nanvar), so we only need the NaN-replaced copy.
-            return scope.Returns(cumsum(_replace_nan_for_scan(a, 0), axis, typeCode, @out));
+            return cumsum(_replace_nan_for_scan(a, 0), axis, typeCode, @out);
         }
 
         /// <summary>

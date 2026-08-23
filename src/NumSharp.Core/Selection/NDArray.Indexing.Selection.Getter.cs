@@ -111,14 +111,13 @@ namespace NumSharp
             return np.array(longs, copy: false);
         }
 
+        // NDScoped: reclaims the normalization coercions, the mask MakeGeneric aliases, the
+        // slice/scalar index arrays, the mixed-advanced grid and the premature-slicing views
+        // built below; every return is yielded (an input passthrough — e.g. a view over `this` —
+        // passes through as a no-op).
+        [NDScoped]
         private NDArray FetchIndices(object[] indicesObjects)
         {
-            // Boundary scope: reclaims the normalization coercions, the mask MakeGeneric aliases,
-            // the slice/scalar index arrays, the mixed-advanced grid and the premature-slicing
-            // views built below; every return is yielded through scope.Returns (an input
-            // passthrough — e.g. a view over `this` — passes through as a no-op).
-            using var scope = NDScope.Open();
-
             indicesObjects = NormalizeIndexInputs(indicesObjects);    // tuple spread + mask/sequence coercion
             var indicesLen = indicesObjects.Length;
             if (indicesLen == 1)
@@ -140,24 +139,24 @@ namespace NumSharp
                         // single empty fancy (which matches only by coincidence for a 1-D mask) gives
                         // the wrong rank for a multi-dim empty mask.
                         if (nd.size == 0 && nd.ndim >= 1 && nd.typecode != NPTypeCode.Boolean)
-                            return scope.Returns(FetchIndices(this, new NDArray[] { nd }, null, true));
+                            return FetchIndices(this, new NDArray[] { nd }, null, true);
                         // Boolean mask indexing: delegate to the specialized NDArray<bool> indexer
                         if (nd.typecode == NPTypeCode.Boolean)
-                            return scope.Returns(this[nd.MakeGeneric<bool>()]);
-                        return scope.Returns(FetchIndices(this, new NDArray[] {nd}, null, true));
+                            return this[nd.MakeGeneric<bool>()];
+                        return FetchIndices(this, new NDArray[] {nd}, null, true);
                     case int i:
-                        return scope.Returns(new NDArray(Storage.GetData(i)));
+                        return new NDArray(Storage.GetData(i));
                     case ulong ui:
                         // ulong is the only integer scalar with no implicit conversion to
                         // int/long, so it can't bind to the Slice indexer (where byte/short/
                         // int/uint/long land) and arrives here instead. NumPy indexes with a
                         // uint64 scalar like any other integer: a[np.uint64(1)] == a[1].
-                        return scope.Returns(new NDArray(Storage.GetData((int)ui)));
+                        return new NDArray(Storage.GetData((int)ui));
                     case bool boolean:
                         if (boolean == false)
-                            return scope.Returns(new NDArray(dtype)); //return empty
+                            return new NDArray(dtype); //return empty
 
-                        return scope.Returns(np.expand_dims(this, 0)); //equivalent to [np.newaxis]
+                        return np.expand_dims(this, 0); //equivalent to [np.newaxis]
 
                     case int[] coords:
                         // A raw int[]/long[] as the SOLE index is FANCY indexing — NumPy
@@ -167,18 +166,18 @@ namespace NumSharp
                         // treats int[]/long[] as fancy via the _NDArrayFound scan below.)
                         if (this.ndim == 0)
                             throw new IndexError("too many indices for array: array is 0-dimensional, but 1 were indexed");
-                        return scope.Returns(FetchIndices(this, new NDArray[] { np.array(coords, copy: false) }, null, true));
+                        return FetchIndices(this, new NDArray[] { np.array(coords, copy: false) }, null, true);
                     case long[] coords:
                         if (this.ndim == 0)
                             throw new IndexError("too many indices for array: array is 0-dimensional, but 1 were indexed");
-                        return scope.Returns(FetchIndices(this, new NDArray[] { np.array(coords, copy: false) }, null, true));
+                        return FetchIndices(this, new NDArray[] { np.array(coords, copy: false) }, null, true);
                     case NDArray[] nds:
-                        return scope.Returns(this[nds]);
+                        return this[nds];
                     case object[] objs:
-                        return scope.Returns(this[objs]);
+                        return this[objs];
                     case string slicesStr:
                     {
-                        return scope.Returns(new NDArray(Storage.GetView(Slice.ParseSlices(slicesStr))));
+                        return new NDArray(Storage.GetView(Slice.ParseSlices(slicesStr)));
                     }
                     case null: throw new ArgumentNullException($"The 1th dimension in given indices is null.");
                     //no default
@@ -201,12 +200,12 @@ namespace NumSharp
             {
                 var boolResult = this[boolBasic];               // size-1 axis (NewAxis) at boolAxis
                 if (boolVal)
-                    return scope.Returns(boolResult);
+                    return boolResult;
                 // any-False -> that axis is empty; slice it to length 0 (keeps all other axes).
                 var emptySlices = new Slice[boolResult.ndim];
                 for (int i = 0; i < emptySlices.Length; i++) emptySlices[i] = Slice.All;
                 emptySlices[boolAxis] = new Slice(0, 0);
-                return scope.Returns(boolResult[emptySlices]);
+                return boolResult[emptySlices];
             }
 
             // A LEADING boolean mask (any ndim) followed only by basic indices —
@@ -214,7 +213,7 @@ namespace NumSharp
             // axes, then apply the (now-leading) partial boolean mask. Reuses the
             // unified BooleanMask, so it also covers multi-dimensional masks.
             if (TryFetchLeadingMaskWithBasic(indicesObjects, out var leadResult))
-                return scope.Returns(leadResult);
+                return leadResult;
 
             // Mixed basic (slice / newaxis / int) + ANY number of advanced indices (integer arrays,
             // or boolean masks via their nonzero() components). NumPy keeps each slice/newaxis as its
@@ -226,7 +225,7 @@ namespace NumSharp
             // np.take fast path mishandled for newaxis / negative slices / non-contiguous sources) as
             // well as multi-advanced.
             if (TryBuildMultiAdvancedGrid(indicesObjects, out var multiGrid))
-                return scope.Returns(FetchIndices(this, multiGrid, null, true));
+                return FetchIndices(this, multiGrid, null, true);
 
             int ints = 0;
             int bools = 0;
@@ -255,11 +254,11 @@ namespace NumSharp
 
             //handle all ints
             if (ints == indicesLen)
-                return scope.Returns(new NDArray(Storage.GetData(indicesObjects.Cast<int>().ToArray())));
+                return new NDArray(Storage.GetData(indicesObjects.Cast<int>().ToArray()));
 
             //handle all booleans
             if (bools == indicesLen)
-                return scope.Returns(this[np.array(indicesObjects.Cast<bool>().ToArray(), false).MakeGeneric<bool>()]);
+                return this[np.array(indicesObjects.Cast<bool>().ToArray(), false).MakeGeneric<bool>()];
 
             Slice[] slices;
             //handle regular slices
@@ -283,11 +282,11 @@ namespace NumSharp
             catch (NumSharpException e) when (e.Message.Contains("false bool detected"))
             {
                 //handle rare case of false bool
-                return scope.Returns(new NDArray(dtype));
+                return new NDArray(dtype);
             }
 
             {
-                return scope.Returns(new NDArray(Storage.GetView(slices)));
+                return new NDArray(Storage.GetView(slices));
             }
 
             //handle complex ndarrays indexing
@@ -337,7 +336,7 @@ namespace NumSharp
                             goto _recuse;
                         }
                         else
-                            return scope.Returns(new NDArray<int>()); //false bool causes nullification of return.
+                            return new NDArray<int>(); //false bool causes nullification of return.
                     case Half h:
                         indices.Add(NDArray.Scalar<int>(Converts.ToInt32(h)));
                         continue;
@@ -428,7 +427,7 @@ namespace NumSharp
                 ret = ret.reshape(retShape);
             }
 
-            return scope.Returns(ret);
+            return ret;
         }
 
         /// <summary>
@@ -1070,6 +1069,7 @@ namespace NumSharp
             return true;
         }
 
+        [NDScoped]
         protected static NDArray FetchIndices(NDArray src, NDArray[] indices, NDArray @out, bool extraDim)
         {
             // #region Compute
@@ -1085,28 +1085,27 @@ namespace NumSharp
 
 #region Compute
 
-            // Boundary scope: reclaims the per-dispatch MakeGeneric alias, the computed-offsets
+            // NDScoped: reclaims the per-dispatch MakeGeneric alias, the computed-offsets
             // buffer, and every gather temp inside FetchIndices<T>; the yielded result (or the
             // caller's untracked @out) is the only survivor.
-            using var scope = NDScope.Open();
 
             switch (src.typecode)
             {
-                case NPTypeCode.Boolean: return scope.Returns(FetchIndices<bool>(src.MakeGeneric<bool>(), indices, @out, extraDim));
-                case NPTypeCode.Byte:    return scope.Returns(FetchIndices<byte>(src.MakeGeneric<byte>(), indices, @out, extraDim));
-                case NPTypeCode.SByte:   return scope.Returns(FetchIndices<sbyte>(src.MakeGeneric<sbyte>(), indices, @out, extraDim));
-                case NPTypeCode.Int16:   return scope.Returns(FetchIndices<short>(src.MakeGeneric<short>(), indices, @out, extraDim));
-                case NPTypeCode.UInt16:  return scope.Returns(FetchIndices<ushort>(src.MakeGeneric<ushort>(), indices, @out, extraDim));
-                case NPTypeCode.Int32:   return scope.Returns(FetchIndices<int>(src.MakeGeneric<int>(), indices, @out, extraDim));
-                case NPTypeCode.UInt32:  return scope.Returns(FetchIndices<uint>(src.MakeGeneric<uint>(), indices, @out, extraDim));
-                case NPTypeCode.Int64:   return scope.Returns(FetchIndices<long>(src.MakeGeneric<long>(), indices, @out, extraDim));
-                case NPTypeCode.UInt64:  return scope.Returns(FetchIndices<ulong>(src.MakeGeneric<ulong>(), indices, @out, extraDim));
-                case NPTypeCode.Char:    return scope.Returns(FetchIndices<char>(src.MakeGeneric<char>(), indices, @out, extraDim));
-                case NPTypeCode.Half:    return scope.Returns(FetchIndices<Half>(src.MakeGeneric<Half>(), indices, @out, extraDim));
-                case NPTypeCode.Double:  return scope.Returns(FetchIndices<double>(src.MakeGeneric<double>(), indices, @out, extraDim));
-                case NPTypeCode.Single:  return scope.Returns(FetchIndices<float>(src.MakeGeneric<float>(), indices, @out, extraDim));
-                case NPTypeCode.Decimal: return scope.Returns(FetchIndices<decimal>(src.MakeGeneric<decimal>(), indices, @out, extraDim));
-                case NPTypeCode.Complex: return scope.Returns(FetchIndices<System.Numerics.Complex>(src.MakeGeneric<System.Numerics.Complex>(), indices, @out, extraDim));
+                case NPTypeCode.Boolean: return FetchIndices<bool>(src.MakeGeneric<bool>(), indices, @out, extraDim);
+                case NPTypeCode.Byte:    return FetchIndices<byte>(src.MakeGeneric<byte>(), indices, @out, extraDim);
+                case NPTypeCode.SByte:   return FetchIndices<sbyte>(src.MakeGeneric<sbyte>(), indices, @out, extraDim);
+                case NPTypeCode.Int16:   return FetchIndices<short>(src.MakeGeneric<short>(), indices, @out, extraDim);
+                case NPTypeCode.UInt16:  return FetchIndices<ushort>(src.MakeGeneric<ushort>(), indices, @out, extraDim);
+                case NPTypeCode.Int32:   return FetchIndices<int>(src.MakeGeneric<int>(), indices, @out, extraDim);
+                case NPTypeCode.UInt32:  return FetchIndices<uint>(src.MakeGeneric<uint>(), indices, @out, extraDim);
+                case NPTypeCode.Int64:   return FetchIndices<long>(src.MakeGeneric<long>(), indices, @out, extraDim);
+                case NPTypeCode.UInt64:  return FetchIndices<ulong>(src.MakeGeneric<ulong>(), indices, @out, extraDim);
+                case NPTypeCode.Char:    return FetchIndices<char>(src.MakeGeneric<char>(), indices, @out, extraDim);
+                case NPTypeCode.Half:    return FetchIndices<Half>(src.MakeGeneric<Half>(), indices, @out, extraDim);
+                case NPTypeCode.Double:  return FetchIndices<double>(src.MakeGeneric<double>(), indices, @out, extraDim);
+                case NPTypeCode.Single:  return FetchIndices<float>(src.MakeGeneric<float>(), indices, @out, extraDim);
+                case NPTypeCode.Decimal: return FetchIndices<decimal>(src.MakeGeneric<decimal>(), indices, @out, extraDim);
+                case NPTypeCode.Complex: return FetchIndices<System.Numerics.Complex>(src.MakeGeneric<System.Numerics.Complex>(), indices, @out, extraDim);
                 default:
                     throw new NotSupportedException();
             }

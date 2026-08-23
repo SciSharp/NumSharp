@@ -13,11 +13,11 @@ namespace NumSharp
         /// <returns>1-D array of values in <paramref name="ar1"/> that are not in <paramref name="ar2"/>. Sorted
         ///     when <paramref name="assume_unique"/> is False.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.setdiff1d.html</remarks>
+        [NDScoped]
         public static NDArray setdiff1d(NDArray ar1, NDArray ar2, bool assume_unique = false)
         {
             // Boundary scope: the unique/ravel temps and the isin membership mask are reclaimed
             // at exit; only the selected-values array is yielded.
-            using var scope = NDScope.Open();
 
             if (assume_unique)
             {
@@ -32,7 +32,7 @@ namespace NumSharp
             // ar1[isin(ar1, ar2, assume_unique=True, invert=True)] — keep only the values absent from ar2.
             NDArray mask = np.isin(ar1, ar2, assume_unique: true, invert: true);
             // ar1 came from np.unique; NumPy canonicalises a surviving float32/float64 NaN (see np.setops.cs).
-            return scope.Returns(CanonicalizeSetOpNaN(ar1[mask]));
+            return CanonicalizeSetOpNaN(ar1[mask]);
         }
     }
 }

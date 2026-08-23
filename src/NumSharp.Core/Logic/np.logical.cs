@@ -11,13 +11,13 @@ namespace NumSharp
         /// <param name="x2">Input array.</param>
         /// <returns>Boolean result of the logical AND operation applied to the elements of x1 and x2; the shape is determined by broadcasting.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_and.html</remarks>
+        [NDScoped]
         public static NDArray<bool> logical_and(NDArray x1, NDArray x2)
         {
-            using var scope = NDScope.Open();
             // Convert to boolean (nonzero = true) then AND
             var b1 = x1.typecode == NPTypeCode.Boolean ? x1 : (x1 != 0);
             var b2 = x2.typecode == NPTypeCode.Boolean ? x2 : (x2 != 0);
-            return scope.Returns((b1 & b2).MakeGeneric<bool>());
+            return (b1 & b2).MakeGeneric<bool>();
         }
 
         /// <summary>
@@ -27,13 +27,13 @@ namespace NumSharp
         /// <param name="x2">Input array.</param>
         /// <returns>Boolean result of the logical OR operation applied to the elements of x1 and x2; the shape is determined by broadcasting.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_or.html</remarks>
+        [NDScoped]
         public static NDArray<bool> logical_or(NDArray x1, NDArray x2)
         {
-            using var scope = NDScope.Open();
             // Convert to boolean (nonzero = true) then OR
             var b1 = x1.typecode == NPTypeCode.Boolean ? x1 : (x1 != 0);
             var b2 = x2.typecode == NPTypeCode.Boolean ? x2 : (x2 != 0);
-            return scope.Returns((b1 | b2).MakeGeneric<bool>());
+            return (b1 | b2).MakeGeneric<bool>();
         }
 
         /// <summary>
@@ -42,18 +42,18 @@ namespace NumSharp
         /// <param name="x">Logical NOT is applied to the elements of x.</param>
         /// <returns>Boolean result with the same shape as x.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_not.html</remarks>
+        [NDScoped]
         public static NDArray<bool> logical_not(NDArray x)
         {
             // For boolean arrays, logical_not == bitwise invert (~True == False).
             // Route through np.invert rather than Negate: NumPy rejects boolean
             // negation (np.negative(bool) raises a TypeError), so Negate(bool)
             // now throws to match. For other types, nonzero -> False, zero -> True.
-            using var scope = NDScope.Open();
             if (x.typecode == NPTypeCode.Boolean)
             {
-                return scope.Returns(np.invert(x).MakeGeneric<bool>());
+                return np.invert(x).MakeGeneric<bool>();
             }
-            return scope.Returns((x == 0).MakeGeneric<bool>());
+            return (x == 0).MakeGeneric<bool>();
         }
 
         /// <summary>
@@ -63,13 +63,13 @@ namespace NumSharp
         /// <param name="x2">Input array.</param>
         /// <returns>Boolean result of the logical XOR operation applied to the elements of x1 and x2; the shape is determined by broadcasting.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_xor.html</remarks>
+        [NDScoped]
         public static NDArray<bool> logical_xor(NDArray x1, NDArray x2)
         {
-            using var scope = NDScope.Open();
             // Convert to boolean (nonzero = true) then XOR
             NDArray b1 = x1.typecode == NPTypeCode.Boolean ? x1 : (x1 != 0);
             NDArray b2 = x2.typecode == NPTypeCode.Boolean ? x2 : (x2 != 0);
-            return scope.Returns(b1.TensorEngine.BitwiseXor(b1, b2).MakeGeneric<bool>());
+            return b1.TensorEngine.BitwiseXor(b1, b2).MakeGeneric<bool>();
         }
     }
 }

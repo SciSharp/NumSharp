@@ -32,6 +32,7 @@ namespace NumSharp.Backends
         public override NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, Type dtype, NDArray @out = null)
             => ClipNDArray(lhs, min, max, dtype?.GetTypeCode(), @out);
 
+        [NDScoped]
         public override unsafe NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, NPTypeCode? typeCode = null, NDArray @out = null)
         {
             // ---- Output dtype (explicit `dtype=` wins; otherwise NEP-50 weak-scalar promote)
@@ -59,16 +60,15 @@ namespace NumSharp.Backends
             // Boundary scope: the bound casts, dtype-converted source, NaN fill and any relay
             // buffer are reclaimed at exit; the yielded result (or the caller's untracked @out)
             // is the only survivor.
-            using var scope = NDScope.Open();
 
             // ---- Empty input — bypass the kernel entirely
             if (lhs.size == 0)
-                return scope.Returns(@out ?? Cast(lhs, outType, copy: true));
+                return @out ?? Cast(lhs, outType, copy: true);
 
             // ---- Both bounds null — clip is a typed copy
             if (min is null && max is null)
             {
-                if (@out is null) return scope.Returns(Cast(lhs, outType, copy: true));
+                if (@out is null) return Cast(lhs, outType, copy: true);
                 np.copyto(@out, Cast(lhs, outType, copy: false));
                 return @out;
             }
@@ -83,7 +83,7 @@ namespace NumSharp.Backends
                 var nan = outType == NPTypeCode.Double
                     ? np.full(lhs.Shape, double.NaN)
                     : np.full(lhs.Shape, float.NaN);
-                if (@out is null) return scope.Returns(nan);
+                if (@out is null) return nan;
                 np.copyto(@out, nan);
                 return @out;
             }
@@ -157,7 +157,7 @@ namespace NumSharp.Backends
                 }
                 var dstFast = @out ?? np.empty(cShape, outType);
                 RunClipKernel(srcArr, dstFast, loCast, hiCast, outType, mode, kind);
-                return scope.Returns(dstFast);
+                return dstFast;
             }
 
             // ---- Strided / F-order src or array bounds: read every operand through its own
@@ -172,7 +172,7 @@ namespace NumSharp.Backends
                 np.copyto(@out, outBuf);
                 return @out;
             }
-            return scope.Returns(outBuf);
+            return outBuf;
         }
 
         // Extract pointers and invoke the flat IL clip kernel. src/dst (and array bounds) must

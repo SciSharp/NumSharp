@@ -12,11 +12,11 @@ namespace NumSharp
         ///     the calculation. Default is False.</param>
         /// <returns>Sorted 1-D array of unique values that are in only one of the input arrays.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.setxor1d.html</remarks>
+        [NDScoped]
         public static NDArray setxor1d(NDArray ar1, NDArray ar2, bool assume_unique = false)
         {
             // Boundary scope: the unique/ravel/concatenate/sort temps and the flag masks are
             // reclaimed at exit; only the surviving-values array is yielded.
-            using var scope = NDScope.Open();
 
             if (!assume_unique)
             {
@@ -27,7 +27,7 @@ namespace NumSharp
             // concatenate((ar1, ar2), axis=None) — flattens both.
             NDArray aux = np.concatenate((np.ravel(ar1), np.ravel(ar2)), 0);
             if (aux.size == 0)
-                return scope.Returns(aux);
+                return aux;
 
             aux = np.sort(aux);
 
@@ -39,7 +39,7 @@ namespace NumSharp
             // return aux[flag[1:] & flag[:-1]]  — values appearing exactly once survive
             NDArray sel = flag["1:"] & flag[":-1"];
             // aux came from np.sort; NumPy's sort canonicalises a surviving float32/float64 NaN (see np.setops.cs).
-            return scope.Returns(CanonicalizeSetOpNaN(aux[sel]));
+            return CanonicalizeSetOpNaN(aux[sel]);
         }
     }
 }

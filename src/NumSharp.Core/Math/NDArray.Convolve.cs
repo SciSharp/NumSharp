@@ -24,6 +24,7 @@ namespace NumSharp
         /// "swap if v longer" below needs no output reversal. See <c>np.correlate.cs</c> for the
         /// float bit-parity notes (both share the same kernel).
         /// </remarks>
+        [NDScoped]
         public NDArray convolve(NDArray v, string mode = "full")
         {
             NDArray a = this;
@@ -56,11 +57,10 @@ namespace NumSharp
             // convolve(a, v) == correlate(a, v[::-1]): reverse the kernel, then the shared engine
             // reads it forward. The reversed view is materialized to a contiguous, retType buffer;
             // the view and both materializations are scope-tracked and die with the call.
-            using var scope = NDScope.Open();
             NDArray data = MaterializeForSliding(a, retType);
             NDArray kernel = MaterializeForSliding(v["::-1"], retType);
 
-            return scope.Returns(SlidingCorrelate(data, kernel, retType, m));
+            return SlidingCorrelate(data, kernel, retType, m);
         }
     }
 }

@@ -52,6 +52,71 @@
     <Message Text="Building for $(TargetFramework) on $(OS)" Importance="High" />
   </Target>
 
+  <!-- ==================================================================================
+       NDScope IL weaving (see DISPOSAL-GUIDELINES.md → "The weaver — [NDScoped]").
+
+       After each inner (per-TargetFramework) compile, tools/NumSharp.Weaver rewrites the
+       intermediate assembly: every [NDScoped] method gets the ambient-reclamation-scope
+       pattern injected (scope = NDScope.Open() prologue, body wrapped in try/finally with
+       scope.Dispose(), every ret routed through scope.Returns, out-NDArray params yielded)
+       so the SOURCE keeps its 100% original body. The weaver re-signs with the repo key
+       (IL rewriting invalidates the compile-time strong-name signature — StrongNameTests
+       gates this) and rewrites the portable PDB in place.
+
+       Incremental: Inputs/Outputs on a per-TFM marker file — when CoreCompile was skipped
+       the weave is skipped too; when it reran, the fresh (unwoven) dll is newer than the
+       marker and the weave reruns. The weaver itself is additionally idempotent (a method
+       whose body already opens an NDScope is skipped), so double-weaving is impossible
+       even if the marker is deleted by hand.
+
+       The weaver project is restored+built on demand via two separate MSBuild task calls
+       with DIFFERENT global-property sets — a Restore and Build sharing one property set
+       would reuse the pre-restore project evaluation and fail the first clean build.
+
+       Escape hatches: -p:SkipNDScopeWeave=true skips entirely (the hand-written scope
+       sites keep working — weaving only ADDS scopes to attributed methods);
+       -p:NDScopeWeaveILVerify=true additionally runs the dotnet-ilverify global tool on
+       the woven assembly (kept opt-in so machines without the tool still build).
+       ================================================================================== -->
+  <PropertyGroup>
+    <NumSharpWeaverProject>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Weaver\NumSharp.Weaver.csproj</NumSharpWeaverProject>
+  </PropertyGroup>
+
+  <!-- The marker path is spelled inline (not via a body-level property): IntermediateOutputPath
+       is assigned by the SDK's .targets, which import AFTER the project body — a body-level
+       property would capture it EMPTY. Target Inputs/Outputs expand at target-execution time,
+       where the per-TFM obj path is final. -->
+  <Target Name="NDScopeWeave"
+          AfterTargets="CoreCompile"
+          BeforeTargets="CopyFilesToOutputDirectory"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipNDScopeWeave)' != 'true'"
+          Inputs="@(IntermediateAssembly)"
+          Outputs="$(IntermediateOutputPath)NDScopeWeave.marker">
+
+    <!-- RemoveProperties: the parent inner build's TargetFramework/RID globals must not leak
+         into the single-TFM weaver project (they mis-key its restore/build). -->
+    <MSBuild Projects="$(NumSharpWeaverProject)" Targets="Restore" Properties="Configuration=Release"
+             RemoveProperties="TargetFramework;TargetFrameworks;RuntimeIdentifier;Platform;Platforms" />
+    <MSBuild Projects="$(NumSharpWeaverProject)" Targets="Build" Properties="Configuration=Release;NDScopeWeaverInner=true"
+             RemoveProperties="TargetFramework;TargetFrameworks;RuntimeIdentifier;Platform;Platforms">
+      <Output TaskParameter="TargetOutputs" ItemName="NumSharpWeaverAssembly" />
+    </MSBuild>
+
+    <Exec Command="dotnet exec &quot;@(NumSharpWeaverAssembly)&quot; &quot;@(IntermediateAssembly)&quot; --snk &quot;$(AssemblyOriginatorKeyFile)&quot;" />
+
+    <!-- Opt-in IL verification of the woven output (dotnet tool install -g dotnet-ilverify). -->
+    <ItemGroup Condition="'$(NDScopeWeaveILVerify)' == 'true'">
+      <_NDScopeILVerifyRefDir Include="@(ReferencePathWithRefAssemblies->'%(RootDir)%(Directory)'->Distinct())" />
+    </ItemGroup>
+    <Exec Condition="'$(NDScopeWeaveILVerify)' == 'true'"
+          Command="ilverify &quot;@(IntermediateAssembly)&quot; @(_NDScopeILVerifyRefDir->'-r &quot;%(Identity)*.dll&quot;', ' ')" />
+
+    <Touch Files="$(IntermediateOutputPath)NDScopeWeave.marker" AlwaysCreate="true" />
+    <ItemGroup>
+      <FileWrites Include="$(IntermediateOutputPath)NDScopeWeave.marker" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
   </ItemGroup>

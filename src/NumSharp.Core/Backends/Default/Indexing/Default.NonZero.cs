@@ -50,19 +50,19 @@ namespace NumSharp.Backends
         ///     </list>
         ///     </para>
         /// </summary>
+        [NDScoped]
         public override unsafe NDArray<long>[] NonZero(NDArray nd)
         {
             // Boundary scope: the yielded tuple is the column VIEWS; the shared multi-index base
             // matrix (and the 0-d promotion view) are reclaimed at exit — ARC keeps the buffer
             // alive through the yielded views until the caller releases them.
-            using var scope = NDScope.Open();
 
             // 0-d: NumPy 2.4 raises ValueError, but its own error message suggests
             // `np.atleast_1d(scalar).nonzero()`, which is exactly the result our
             // historical implementation has always produced. Preserve that semantic
             // (otherwise this becomes a breaking-change PR for downstream callers).
             if (nd.ndim == 0)
-                return scope.Returns(NonZero(np.atleast_1d(nd)));
+                return NonZero(np.atleast_1d(nd));
 
             int ndim = nd.ndim;
             long size = nd.size;
@@ -70,7 +70,7 @@ namespace NumSharp.Backends
             // Empty input → tuple of `ndim` empty int64 arrays.
             // Covers shape (0,), (0, 3), (2, 0, 4), ….
             if (size == 0)
-                return scope.Returns(MakeEmptyNonZeroResult(ndim));
+                return MakeEmptyNonZeroResult(ndim);
 
             // Materialize non-contig to C-contig. For contig inputs we read from `nd`
             // directly (no copy); the local `materialized` is only set on the non-contig
@@ -96,7 +96,7 @@ namespace NumSharp.Backends
             {
                 long count = countKernel(basePtr, size);
                 if (count == 0)
-                    return scope.Returns(MakeEmptyNonZeroResult(ndim));
+                    return MakeEmptyNonZeroResult(ndim);
 
                 // NumPy's PyArray_Nonzero fills ONE (count, ndim) C-order multi-index buffer and
                 // the tuple entries are its COLUMNS — strided views (shape (count,), byte stride
@@ -113,7 +113,7 @@ namespace NumSharp.Backends
                 if (ndim == 1)
                 {
                     flatKernel(basePtr, size, resPtr);
-                    return scope.Returns(MakeNonZeroColumnViews(multiIndex, count, ndim));
+                    return MakeNonZeroColumnViews(multiIndex, count, ndim);
                 }
 
                 // ndim > 1: scan into a temp flat buffer then row-expand into the shared matrix.
@@ -142,7 +142,7 @@ namespace NumSharp.Backends
                     }
                 }
 
-                return scope.Returns(MakeNonZeroColumnViews(multiIndex, count, ndim));
+                return MakeNonZeroColumnViews(multiIndex, count, ndim);
             }
             finally
             {
@@ -198,6 +198,7 @@ namespace NumSharp.Backends
         /// <remarks>
         /// NumPy-aligned: np.count_nonzero([0, 1, 0, 2]) = 2
         /// </remarks>
+        [NDScoped]
         public override long CountNonZero(NDArray nd)
         {
             if (nd.size == 0)
@@ -205,17 +206,16 @@ namespace NumSharp.Backends
 
             // Scalar return — scope only: reclaims the per-dispatch MakeGeneric alias
             // (a fresh wrapper over nd's storage that otherwise strands on the finalizer).
-            using var scope = NDScope.Open();
             return NpFunc.Invoke(nd.typecode, CountNonZeroDispatch<int>, nd);
         }
 
         /// <summary>
         /// Count non-zero elements along a specific axis.
         /// </summary>
+        [NDScoped]
         public override NDArray CountNonZero(NDArray nd, int axis, bool keepdims = false)
         {
             // Boundary scope: reclaims the per-dispatch MakeGeneric alias; the result is yielded.
-            using var scope = NDScope.Open();
 
             var shape = nd.Shape;
 
@@ -243,7 +243,7 @@ namespace NumSharp.Backends
                         ks[d] = (d == axis) ? 1 : outputDims[sd++];
                     result.Storage.Reshape(new Shape(ks));
                 }
-                return scope.Returns(result);
+                return result;
             }
 
             NpFunc.Invoke(nd.typecode, CountNonZeroAxisDispatch<int>, nd, result, axis);
@@ -256,7 +256,7 @@ namespace NumSharp.Backends
                 result.Storage.Reshape(new Shape(ks));
             }
 
-            return scope.Returns(result);
+            return result;
         }
 
         /// <summary>

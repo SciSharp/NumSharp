@@ -36,10 +36,10 @@ namespace NumSharp
         ///     input, imaginary) parts are therefore clipped to <c>[-1, 1]</c>, exactly as NumPy does.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.corrcoef.html
         /// </remarks>
+        [NDScoped]
         public static NDArray corrcoef(NDArray x, NDArray y = null, bool rowvar = true, NPTypeCode? dtype = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var scope = NDScope.Open();
 
             // c = cov(x, y, rowvar, dtype=dtype). Delegating here also inherits cov's validation and
             // its verbatim error taxonomy (e.g. ValueError "m has more than 2 dimensions").
@@ -55,7 +55,7 @@ namespace NumSharp
             }
             catch (ArgumentException)
             {
-                return scope.Returns(c / c);
+                return c / c;
             }
 
             // stddev = sqrt(d.real). The diagonal holds the variances, which are real even for complex
@@ -76,7 +76,7 @@ namespace NumSharp
             if (np.iscomplexobj(c))
                 ClipToUnit(np.imag(c));
 
-            return scope.Returns(c);
+            return c;
 
             // Clip a float lane to [-1, 1] in place. The bounds are cast to the lane's dtype so clipping
             // stays in that precision: a C# `-1`/`1` literal is a STRONG int32 scalar, which under NEP50
