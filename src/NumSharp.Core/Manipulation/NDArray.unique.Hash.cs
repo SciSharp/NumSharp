@@ -193,7 +193,7 @@ namespace NumSharp
         ///     4.0 …) carry their discriminating bits high and have ZERO low bits, so a low-bits table
         ///     index off a single multiply collapsed them all into one bucket (~500 probes/element).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static ulong HashKey<T>(T v) where T : unmanaged
         {
             ulong k;
@@ -205,7 +205,7 @@ namespace NumSharp
         }
 
         /// <summary>splitmix64 finalizer — avalanches every input bit into the low bits used as the table index.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static ulong Splitmix(ulong k)
         {
             k = (k ^ (k >> 30)) * 0xBF58476D1CE4E5B9UL;
@@ -338,12 +338,12 @@ namespace NumSharp
         }
 
         /// <summary>Collapses signed zeros (-0.0→+0.0) per component so ±0 variants share a hash bucket.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static Complex NormalizeZeros(Complex c)
             => new Complex(c.Real == 0.0 ? 0.0 : c.Real, c.Imaginary == 0.0 ? 0.0 : c.Imaginary);
 
         /// <summary>Hashes a normalized (-0.0→+0.0, non-NaN) complex value by its two components' raw bits.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static ulong HashKeyComplex(Complex v)
         {
             ulong r = (ulong)BitConverter.DoubleToInt64Bits(v.Real);

@@ -454,6 +454,7 @@ namespace NumSharp.Backends.Kernels
         /// was the worst cell in the elementwise matrix at ~0.14× NumPy). Bit-exact with NumPy's
         /// npy_half negate across normals, ±0, ±inf, and NaN (sign flips, payload preserved).
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static Half NegateHalf(Half value)
         {
             ushort bits = BitConverter.HalfToUInt16Bits(value);

@@ -808,15 +808,15 @@ namespace NumSharp.Utilities
         // The scalar fallbacks keep every overload callable (and therefore testable) on a host whose
         // width is not accelerated; IsExpVectorAccelerated is what keeps them off the hot path.
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static Vector128<float> MulAdd(Vector128<float> a, Vector128<float> b, Vector128<float> c)
             => Fma.IsSupported ? Fma.MultiplyAdd(a, b, c) : SoftwareMulAdd(a, b, c);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static Vector256<float> MulAdd(Vector256<float> a, Vector256<float> b, Vector256<float> c)
             => Fma.IsSupported ? Fma.MultiplyAdd(a, b, c) : SoftwareMulAdd(a, b, c);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static Vector512<float> MulAdd(Vector512<float> a, Vector512<float> b, Vector512<float> c)
             => Avx512F.IsSupported ? Avx512F.FusedMultiplyAdd(a, b, c) : SoftwareMulAdd(a, b, c);
 

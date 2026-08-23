@@ -46,7 +46,7 @@ namespace NumSharp.Backends.Kernels
         // =====================================================================
 
         // 4 doubles -> 4 u32 (returned as int128; bits ARE the u32 values).
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static Vector128<int> DoubleToU32x4(Vector256<double> x)
         {
             var two32   = Vector256.Create(4294967296.0);
@@ -65,7 +65,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 8 floats -> 8 u32 (widen each half to f64, convert, recombine).
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static Vector256<int> SingleToU32x8(Vector256<float> f)
         {
             var lo = DoubleToU32x4(Avx.ConvertToVector256Double(f.GetLower()));
@@ -78,7 +78,7 @@ namespace NumSharp.Backends.Kernels
         // half with the f64->u32 kernel (which wraps negatives), then recombine (hi<<32)|lo. The
         // hi half of a negative t wraps to the right high dword (e.g. -1 -> hi=0xFFFFFFFF,
         // lo=0xFFFFFFFF -> 2^64-1). Bit-exact with Converts.ToUInt64 (proven 0 diffs / 500K).
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static Vector256<long> DoubleToU64x4(Vector256<double> x)
         {
             var two32 = Vector256.Create(4294967296.0);
@@ -95,6 +95,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // ---- u64 contig bulks ----
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkDoubleToUInt64(void* s, void* d, long n)
         {
             double* src = (double*)s; ulong* dst = (ulong*)d; long i = 0;
@@ -103,6 +104,7 @@ namespace NumSharp.Backends.Kernels
                     Vector256.Store(DoubleToU64x4(Vector256.Load(src + i)).AsUInt64(), dst + i);
             return i;
         }
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkSingleToUInt64(void* s, void* d, long n)
         {
             float* src = (float*)s; ulong* dst = (ulong*)d; long i = 0;
@@ -125,6 +127,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // ---- u64 strided (f64 gathers 4 inline; f32 stages gather->contig buf then converts) ----
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe void CastDoubleToUInt64Strided(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
@@ -185,6 +188,7 @@ namespace NumSharp.Backends.Kernels
                 for (int ax = outer - 1; ax >= 0; ax--) { coord[ax]++; srcOff += srcStrides[ax]; dstOff += dstStrides[ax]; if (coord[ax] < shape[ax]) break; coord[ax] = 0; srcOff -= srcStrides[ax] * shape[ax]; dstOff -= dstStrides[ax] * shape[ax]; }
             }
         }
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe void CastSingleToUInt64Strided(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
@@ -251,6 +255,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // ---- contig bulks (return count consumed by the SIMD body) ----
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkDoubleToUInt32(void* s, void* d, long n)
         {
             double* src = (double*)s; uint* dst = (uint*)d; long i = 0;
@@ -260,6 +265,7 @@ namespace NumSharp.Backends.Kernels
             return i;
         }
 
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkSingleToUInt32(void* s, void* d, long n)
         {
             float* src = (float*)s; uint* dst = (uint*)d; long i = 0;
@@ -286,6 +292,7 @@ namespace NumSharp.Backends.Kernels
 
         // ---- strided kernels (mirror CastSingleToInt32Strided: ss==1 contig bulk,
         //      ss!=1 VPGATHER + convert, ds!=1 / tail scalar Converts) ----
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe void CastDoubleToUInt32Strided(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
@@ -327,6 +334,7 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe void CastSingleToUInt32Strided(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {

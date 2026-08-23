@@ -53,6 +53,7 @@ namespace NumSharp.Backends.Kernels
 
         // ---- bulk loops: write 0/1 bytes, return elements consumed ----
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkSingleToBool(float* src, byte* dst, long n)
         {
             long i = 0; var z = Vector256<float>.Zero; var one = Vector256.Create(1);
@@ -68,6 +69,7 @@ namespace NumSharp.Backends.Kernels
             return i;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkDoubleToBool(double* src, byte* dst, long n)
         {
             long i = 0; var z = Vector256<double>.Zero; var one = Vector256.Create(1L);
@@ -91,6 +93,7 @@ namespace NumSharp.Backends.Kernels
             return i;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkInt32ToBool(int* src, byte* dst, long n)
         {
             long i = 0; var z = Vector256<int>.Zero; var one = Vector256.Create(1);
@@ -106,6 +109,7 @@ namespace NumSharp.Backends.Kernels
             return i;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkInt64ToBool(long* src, byte* dst, long n)
         {
             long i = 0; var z = Vector256<long>.Zero; var one = Vector256.Create(1L);
@@ -128,6 +132,7 @@ namespace NumSharp.Backends.Kernels
             return i;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkInt16ToBool(short* src, byte* dst, long n)
         {
             long i = 0; var z = Vector256<short>.Zero; var one = Vector256.Create((short)1);
@@ -140,6 +145,7 @@ namespace NumSharp.Backends.Kernels
             return i;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkByteToBool(byte* src, byte* dst, long n)
         {
             long i = 0; var z = Vector256<byte>.Zero; var one = Vector256.Create((byte)1);
@@ -148,6 +154,7 @@ namespace NumSharp.Backends.Kernels
             return i;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkHalfToBool(ushort* src, byte* dst, long n)
         {
             long i = 0; var z = Vector256<short>.Zero; var one = Vector256.Create((short)1);
@@ -199,6 +206,7 @@ namespace NumSharp.Backends.Kernels
         // =====================================================================
 
         // f32 -> bool: 32-wide (4x VPGATHERDD, OrderedEqual !=0) + 8-wide mop-up + scalar tail.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedGatherSingleToBool(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -244,6 +252,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // f64 -> bool: 32-wide (8x VPGATHERQQ of 4, sequential Narrow pairing) + 4-wide mop-up + tail.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedGatherDoubleToBool(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -289,6 +298,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // i32/u32 -> bool: 32-wide (4x VPGATHERDD, vpcmpeqd !=0) + 8-wide mop-up + scalar tail.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedGatherInt32ToBool(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -334,6 +344,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // i64/u64 -> bool: 32-wide (8x VPGATHERQQ of 4, sequential Narrow pairing) + 4-wide mop-up + tail.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedGatherInt64ToBool(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -416,6 +427,7 @@ namespace NumSharp.Backends.Kernels
         // -> False, NaN/inf -> True). Inner ss==1 rows (sliced/negrow/bcast) run the contiguous
         // magnitude compare; arbitrary strides (F/T column-gather) and the tail keep the scalar
         // test. Inlined inner loops (a per-row helper costs ~6x — see the SubwordCopy PERF NOTE).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void StridedHalfToBool(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             short* src = (short*)srcV;

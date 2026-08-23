@@ -86,6 +86,7 @@ namespace NumSharp.Backends.Kernels
         // Outer-dim odometer (innermost-first incremental offset, element strides) — same
         // shape as InnerCastDoubleToInt32's driver, but the inner SIMD loop is INLINED in
         // the body (see PERF NOTE above). ss/ds dispatch is per-row, predictable.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void SubwordCopyStrided1B(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
@@ -149,6 +150,7 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void SubwordCopyStrided2B(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {

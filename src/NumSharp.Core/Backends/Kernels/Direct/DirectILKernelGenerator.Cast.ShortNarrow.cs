@@ -28,6 +28,7 @@ namespace NumSharp.Backends.Kernels
         // =====================================================================
 
         // 32 contiguous u16 -> 32 contiguous bytes (truncate low byte), 32-wide.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkShortToByte(void* s, void* d, long n)
         {
             ushort* src = (ushort*)s; byte* dst = (byte*)d; long i = 0;

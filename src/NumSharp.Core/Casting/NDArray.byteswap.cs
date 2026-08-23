@@ -231,7 +231,7 @@ namespace NumSharp
                 }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static Vector256<byte> MaskFor(int unit) => unit switch
         {
             2 => _bswapRev2,

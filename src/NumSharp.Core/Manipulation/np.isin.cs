@@ -238,7 +238,7 @@ namespace NumSharp
 
         /// <summary>Normalized bit key: raw zero-extended bits for integers; for floats, -0.0→+0.0
         /// collapses to 0 so signed zeros share a bucket (NaN is filtered by the caller).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static ulong KeyBits<T>(T v, bool floatSem) where T : unmanaged
         {
             if (floatSem)
@@ -262,7 +262,7 @@ namespace NumSharp
         }
 
         /// <summary>splitmix64 finalizer — avalanches every bit into the low bits used as the table index.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static ulong Splitmix(ulong k)
         {
             k = (k ^ (k >> 30)) * 0xBF58476D1CE4E5B9UL;

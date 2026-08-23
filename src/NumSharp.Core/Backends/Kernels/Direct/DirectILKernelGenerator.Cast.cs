@@ -285,6 +285,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 4M f64->i32 (warm): ~1.48 ms vs NumPy 1.87 ms; vs 5.17 ms for the scalar Converts loop.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void CastDoubleToInt32Contig(void* srcV, void* dstV, long count)
         {
             double* src = (double*)srcV;
@@ -308,6 +309,7 @@ namespace NumSharp.Backends.Kernels
             for (; i < count; i++) dst[i] = Converts.ToInt32(src[i]);
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void CastSingleToInt32Contig(void* srcV, void* dstV, long count)
         {
             float* src = (float*)srcV;
@@ -372,6 +374,7 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void InnerCastDoubleToInt32(double* s, int* d, long n, long ss, long ds)
         {
             long i = 0;

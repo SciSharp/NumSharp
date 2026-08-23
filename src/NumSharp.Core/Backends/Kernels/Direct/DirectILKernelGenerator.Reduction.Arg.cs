@@ -83,6 +83,7 @@ namespace NumSharp.Backends.Kernels
         /// Returns the index of the maximum element.
         /// Uses SIMD to find candidates then scalar to resolve exact index.
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe long ArgMaxSimdHelper<T>(void* input, long totalSize) where T : unmanaged, IComparable<T>
         {
             if (totalSize == 0)
@@ -215,6 +216,7 @@ namespace NumSharp.Backends.Kernels
         /// Returns the index of the minimum element.
         /// Uses SIMD to find candidates then scalar to resolve exact index.
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe long ArgMinSimdHelper<T>(void* input, long totalSize) where T : unmanaged, IComparable<T>
         {
             if (totalSize == 0)

@@ -182,7 +182,7 @@ namespace NumSharp
             throw new NotSupportedException($"RadixKeyBytes: {typeof(T)} has no monotonic radix key.");
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static uint ToKey32<T>(T v) where T : unmanaged
         {
             if (typeof(T) == typeof(byte) || typeof(T) == typeof(bool)) return SysUnsafe.As<T, byte>(ref v);
@@ -196,7 +196,7 @@ namespace NumSharp
             throw new NotSupportedException();
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static ulong ToKey64<T>(T v) where T : unmanaged
         {
             if (typeof(T) == typeof(long)) { long s = SysUnsafe.As<T, long>(ref v); return (ulong)s ^ 0x8000000000000000UL; }
@@ -205,7 +205,7 @@ namespace NumSharp
             throw new NotSupportedException();
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static T FromKey32<T>(uint k) where T : unmanaged
         {
             if (typeof(T) == typeof(byte) || typeof(T) == typeof(bool)) { byte x = (byte)k; return SysUnsafe.As<byte, T>(ref x); }
@@ -219,7 +219,7 @@ namespace NumSharp
             throw new NotSupportedException();
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(OptimizeAndInline)]
         private static T FromKey64<T>(ulong k) where T : unmanaged
         {
             if (typeof(T) == typeof(long)) { long x = (long)(k ^ 0x8000000000000000UL); return SysUnsafe.As<long, T>(ref x); }

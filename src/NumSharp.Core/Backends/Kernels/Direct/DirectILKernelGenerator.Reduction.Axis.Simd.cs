@@ -553,6 +553,7 @@ namespace NumSharp.Backends.Kernels
         /// Reduce contiguous axis using Vector256 SIMD with 4x unrolling.
         /// Uses 4 independent accumulators to break dependency chains.
         /// </summary>
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe T ReduceContiguousAxisSimd256<T>(T* data, long size, ReductionOp op)
             where T : unmanaged
         {
@@ -611,6 +612,7 @@ namespace NumSharp.Backends.Kernels
         /// Reduce contiguous axis using Vector128 SIMD with 4x unrolling.
         /// Uses 4 independent accumulators to break dependency chains.
         /// </summary>
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe T ReduceContiguousAxisSimd128<T>(T* data, long size, ReductionOp op)
             where T : unmanaged
         {
@@ -717,6 +719,7 @@ namespace NumSharp.Backends.Kernels
         /// Strided reduction using AVX2 gather for float.
         /// Uses Vector256 gather to load 8 floats at once from strided positions.
         /// </summary>
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe float ReduceStridedAxisGatherFloat(float* data, long size, long stride, ReductionOp op)
         {
             // Create index vector: [0, stride, 2*stride, ..., 7*stride]
@@ -758,6 +761,7 @@ namespace NumSharp.Backends.Kernels
         /// Strided reduction using AVX2 gather for double.
         /// Uses Vector256 gather to load 4 doubles at once from strided positions.
         /// </summary>
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe double ReduceStridedAxisGatherDouble(double* data, long size, long stride, ReductionOp op)
         {
             // Create index vector: [0, stride, 2*stride, 3*stride]

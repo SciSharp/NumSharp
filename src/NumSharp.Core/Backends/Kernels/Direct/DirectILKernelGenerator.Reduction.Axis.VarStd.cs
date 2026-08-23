@@ -452,6 +452,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Sum contiguous axis as double (for mean computation in Var/Std).
         /// </summary>
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe double SumContiguousAxisDouble<T>(T* data, long size)
             where T : unmanaged
         {
@@ -622,6 +623,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Sum squared differences from mean for contiguous axis.
         /// </summary>
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe double SumSquaredDiffContiguous<T>(T* data, long size, double mean)
             where T : unmanaged
         {

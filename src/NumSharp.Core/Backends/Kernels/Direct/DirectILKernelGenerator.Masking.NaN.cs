@@ -30,6 +30,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="src">Pointer to contiguous float data</param>
         /// <param name="size">Number of elements</param>
         /// <returns>Sum of non-NaN elements</returns>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe float NanSumSimdHelperFloat(float* src, long size)
         {
             if (size == 0)
@@ -102,6 +103,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware sum of a contiguous double array.
         /// NaN values are treated as 0 (ignored in the sum).
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe double NanSumSimdHelperDouble(double* src, long size)
         {
             if (size == 0)
@@ -171,6 +173,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware product of a contiguous float array.
         /// NaN values are treated as 1 (ignored in the product).
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe float NanProdSimdHelperFloat(float* src, long size)
         {
             if (size == 0)
@@ -249,6 +252,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware product of a contiguous double array.
         /// NaN values are treated as 1 (ignored in the product).
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe double NanProdSimdHelperDouble(double* src, long size)
         {
             if (size == 0)
@@ -324,6 +328,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware minimum of a contiguous float array.
         /// NaN values are ignored; returns NaN if all values are NaN.
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe float NanMinSimdHelperFloat(float* src, long size)
         {
             if (size == 0)
@@ -417,6 +422,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware minimum of a contiguous double array.
         /// NaN values are ignored; returns NaN if all values are NaN.
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe double NanMinSimdHelperDouble(double* src, long size)
         {
             if (size == 0)
@@ -507,6 +513,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware maximum of a contiguous float array.
         /// NaN values are ignored; returns NaN if all values are NaN.
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe float NanMaxSimdHelperFloat(float* src, long size)
         {
             if (size == 0)
@@ -600,6 +607,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware maximum of a contiguous double array.
         /// NaN values are ignored; returns NaN if all values are NaN.
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe double NanMaxSimdHelperDouble(double* src, long size)
         {
             if (size == 0)
@@ -693,6 +701,7 @@ namespace NumSharp.Backends.Kernels
         /// Returns NaN if all values are NaN or count <= ddof.
         /// Two-pass algorithm: (1) compute mean with count, (2) compute squared differences.
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe float NanVarSimdHelperFloat(float* src, long size, int ddof = 0)
         {
             if (size == 0)
@@ -862,6 +871,7 @@ namespace NumSharp.Backends.Kernels
         /// Returns NaN if all values are NaN or count <= ddof.
         /// Two-pass algorithm: (1) compute mean with count, (2) compute squared differences.
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe double NanVarSimdHelperDouble(double* src, long size, int ddof = 0)
         {
             if (size == 0)

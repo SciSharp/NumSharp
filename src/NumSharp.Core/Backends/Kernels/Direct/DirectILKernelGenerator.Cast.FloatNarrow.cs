@@ -85,6 +85,7 @@ namespace NumSharp.Backends.Kernels
         // -----------------------------------------------------------------
 
         // 32 floats -> 4x VCVTTPS2DQ (8xi32) -> 2x Narrow(i32->i16) -> 1x Narrow(i16->i8) -> 32 bytes.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkSingleToByte(float* src, byte* dst, long count)
         {
             long i = 0;
@@ -118,6 +119,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 16 floats -> 2x VCVTTPS2DQ (8xi32) -> 1x Narrow(i32->i16) -> 16 shorts.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkSingleToShort(float* src, short* dst, long count)
         {
             long i = 0;
@@ -145,6 +147,7 @@ namespace NumSharp.Backends.Kernels
         // 16 doubles -> 4x VCVTTPD2DQ (ymm->xmm, 4xi32) -> 2x Narrow(i32->i16) -> 1x Narrow(i16->i8)
         // -> 16 bytes. Stays in Vector128 lanes — cvttpd2dq yields a 4-wide Vector128<int> directly,
         // so no Vector256.Create (vinsertf128) combine is needed (that stalled the memory pipeline).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkDoubleToByte(double* src, byte* dst, long count)
         {
             long i = 0;
@@ -165,6 +168,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 8 doubles -> 2x VCVTTPD2DQ (4xi32) -> 1x Narrow(i32->i16) -> 8 shorts. Vector128 lanes only.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkDoubleToShort(double* src, short* dst, long count)
         {
             long i = 0;
@@ -328,6 +332,7 @@ namespace NumSharp.Backends.Kernels
         // =====================================================================
 
         // f32 -> i8/u8: 32-wide (4x VPGATHERDD+cvtt -> 2-level Narrow) + 8-wide mop-up + cvtt tail.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedGatherSingleToByte(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -377,6 +382,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // f32 -> i16/u16/char: 16-wide (2x VPGATHERDD+cvtt -> 1x Narrow) + 8-wide mop-up + cvtt tail.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedGatherSingleToShort(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -424,6 +430,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // f64 -> i8/u8: 16-wide (4x VPGATHERQQ+cvttpd -> 2-level Narrow) + 4-wide mop-up + cvtt tail.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedGatherDoubleToByte(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -467,6 +474,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // f64 -> i16/u16/char: 8-wide (2x VPGATHERQQ+cvttpd -> 1x Narrow) + 4-wide mop-up + cvtt tail.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedGatherDoubleToShort(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;

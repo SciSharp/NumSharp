@@ -55,6 +55,7 @@ namespace NumSharp.Backends.Kernels
 
         // {i16,u16,char} -> {i8,u8}: low-byte truncate. Odometer with inline inner (see the
         // SubwordCopy PERF NOTE — a per-row helper costs ~6x).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void SubwordNarrowInt2to1(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
@@ -127,6 +128,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // {i16,u16,char} -> bool: (v != 0) ? 1 : 0.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void SubwordNarrowBool2to1(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {

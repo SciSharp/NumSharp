@@ -294,10 +294,10 @@ namespace NumSharp.Backends.Sorting
             int q = m; for (int i = 0; i < n; i++) if (double.IsNaN(*(double*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] private static uint FKey32(float v) { uint b = BitConverter.SingleToUInt32Bits(v); return b ^ ((uint)((int)b >> 31) | 0x80000000u); }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] private static float FVal32(uint k) { uint b = k ^ (((k >> 31) - 1) | 0x80000000u); return BitConverter.UInt32BitsToSingle(b); }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] private static ulong FKey64(double v) { ulong b = BitConverter.DoubleToUInt64Bits(v); return b ^ ((ulong)((long)b >> 63) | 0x8000000000000000UL); }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] private static double FVal64(ulong k) { ulong b = k ^ (((k >> 63) - 1) | 0x8000000000000000UL); return BitConverter.UInt64BitsToDouble(b); }
+        [MethodImpl(OptimizeAndInline)] private static uint FKey32(float v) { uint b = BitConverter.SingleToUInt32Bits(v); return b ^ ((uint)((int)b >> 31) | 0x80000000u); }
+        [MethodImpl(OptimizeAndInline)] private static float FVal32(uint k) { uint b = k ^ (((k >> 31) - 1) | 0x80000000u); return BitConverter.UInt32BitsToSingle(b); }
+        [MethodImpl(OptimizeAndInline)] private static ulong FKey64(double v) { ulong b = BitConverter.DoubleToUInt64Bits(v); return b ^ ((ulong)((long)b >> 63) | 0x8000000000000000UL); }
+        [MethodImpl(OptimizeAndInline)] private static double FVal64(ulong k) { ulong b = k ^ (((k >> 63) - 1) | 0x8000000000000000UL); return BitConverter.UInt64BitsToDouble(b); }
 
         // ----- scalar BCL introsort + exact NumPy comparators (Half / Complex / Decimal) -----
         private static void SortLineScalar<T, TCmp>(byte* line, LineCtx* c) where T : unmanaged where TCmp : struct, IComparer<T>

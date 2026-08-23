@@ -67,6 +67,7 @@ namespace NumSharp.Backends.Kernels
         // f16 -> u32: Giesen widen (exact for finite; inf/nan -> f32 inf/nan) then the AVX2
         // f32->u32 kernel (SingleToU32x8 widens to f64 and folds inf/nan/overflow -> 0).
         // Bit-exact with Converts.ToUInt32(Half) (real f16 max 65504, so only negatives wrap).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe Vector256<int> HalfToUInt32x8(ushort* p, long ci)
         {
             var hbits = Avx2.ConvertToVector256Int32(Sse2.LoadVector128(p + ci));
@@ -93,7 +94,8 @@ namespace NumSharp.Backends.Kernels
         // with the IEEE widen sign | 0x7f800000 | (mant<<13) (preserves the NaN payload AND sNaN,
         // which the BCL (float)Half cast QUIETS — the same latent bug the X->Half wave fixed, here
         // for the widen direction). Was the reason f16->f32 stayed on the scalar path.
-        private static Vector256<float> HalfBitsToFloatExact(Vector256<int> h)
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
+        internal static Vector256<float> HalfBitsToFloatExact(Vector256<int> h)
         {
             var giesen = HalfBitsToFloat(h);
             var isInfNan = Avx2.CompareGreaterThan(Avx2.And(Vector256.Create(0x7fff), h), Vector256.Create(0x7bff));
@@ -103,12 +105,14 @@ namespace NumSharp.Backends.Kernels
             return Avx2.BlendVariable(giesen.AsInt32(), nanv, isInfNan).AsSingle();
         }
         // Scalar widen matching the SIMD path (finite via BCL; inf/nan via the bit formula).
-        private static float HalfToFloatScalarExact(ushort h)
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
+        internal static float HalfToFloatScalarExact(ushort h)
         {
             if ((h & 0x7fff) > 0x7bff)
                 return BitConverter.UInt32BitsToSingle(((uint)(h & 0x8000) << 16) | 0x7f800000u | ((uint)(h & 0x3ff) << 13));
             return (float)BitConverter.UInt16BitsToHalf(h);
         }
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkHalfToFloat(ushort* p, float* dst, long count)
         {
             long i = 0;
@@ -127,6 +131,7 @@ namespace NumSharp.Backends.Kernels
 
         // f16 -> u64: Giesen widen (NaN payload irrelevant: inf/nan -> 2^63 regardless) then the
         // AVX2 f64->u64 kernel. Bit-exact with Converts.ToUInt64(Half).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkHalfToUInt64(ushort* p, ulong* dst, long count)
         {
             long i = 0;
@@ -151,6 +156,7 @@ namespace NumSharp.Backends.Kernels
         // f16 -> i64: every finite f16 (|v| <= 65504) fits in i32, so Giesen widen -> cvttps2dq ->
         // sign-extend i32->i64 is exact; inf/nan (cvtt -> 0x80000000, would sign-extend wrong) is
         // blended to int64.MinValue, matching NumPy / Converts.ToInt64(Half).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkHalfToInt64(ushort* p, long* dst, long count)
         {
             long i = 0;
@@ -178,7 +184,8 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void StridedHalfToInt64(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 8, &BulkHalfToInt64V, &ConvHalfToInt64);
 
         // Giesen branchless half->float over 8 widened half-bit-patterns (Vector256<int>).
-        private static Vector256<float> HalfBitsToFloat(Vector256<int> h)
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
+        internal static Vector256<float> HalfBitsToFloat(Vector256<int> h)
         {
             var maskNoSign = Vector256.Create(0x7fff);
             var magic = Vector256.Create((254 - 15) << 23).AsSingle();
@@ -193,6 +200,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 8 halves at p+ci -> widen (vpmovzxwd) -> Giesen -> cvttps2dq -> 8x i32.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe Vector256<int> HalfToInt32x8(ushort* p, long ci)
         {
             var hbits = Avx2.ConvertToVector256Int32(Sse2.LoadVector128(p + ci)); // zero-extend 8 u16 -> 8 i32
@@ -209,6 +217,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 16 halves -> 2x (8xi32) -> Narrow -> 16 i16.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkHalfToShort(ushort* p, short* dst, long count)
         {
             long i = 0;
@@ -222,6 +231,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 32 halves -> 4x (8xi32) -> 2x Narrow(i32->i16) -> 1x Narrow(i16->i8) -> 32 i8.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkHalfToByte(ushort* p, byte* dst, long count)
         {
             long i = 0;

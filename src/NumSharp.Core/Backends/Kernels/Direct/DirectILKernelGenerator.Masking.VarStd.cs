@@ -33,6 +33,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="size">Number of elements</param>
         /// <param name="ddof">Delta degrees of freedom (0 for population variance, 1 for sample variance)</param>
         /// <returns>The variance as double</returns>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe double VarSimdHelper<T>(T* src, long size, int ddof = 0)
             where T : unmanaged
         {
