@@ -548,6 +548,11 @@ namespace NumSharp
 
             #region Compute
 
+            // Boundary scope (void method — nothing escapes): reclaims the per-dispatch
+            // MakeGeneric alias, the computed-offsets buffer, and the broadcast/materialized
+            // value temps inside SetIndices<T>. src/values were made outside: never touched.
+            using var scope = NDScope.Open();
+
             switch (src.typecode)
             {
                 case NPTypeCode.Boolean:

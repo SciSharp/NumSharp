@@ -43,15 +43,16 @@ namespace NumSharp.Backends.Sorting
         /// layout-agnostic.</summary>
         public static NDArray Sort(NDArray a, int? axis)
         {
+            using var scope = NDScope.Open();
             if (axis == null)
             {
                 var flat = a.ravel().copy('C');
                 SortInPlace(flat, 0);
-                return flat;
+                return scope.Returns(flat);
             }
             var res = a.copy('K');
             SortInPlace(res, NormalizeAxis(axis.Value, a.ndim));
-            return res;
+            return scope.Returns(res);
         }
 
         /// <summary>ndarray.sort: sorts <paramref name="a"/> in place along the axis.</summary>
@@ -62,6 +63,8 @@ namespace NumSharp.Backends.Sorting
             if (axis == null)
             {
                 // In-place flatten-sort only well-defined for contiguous; NumPy raises otherwise.
+                // The flatten view is a transient wrapper — scope-reclaimed once the sort lands.
+                using var scope = NDScope.Open();
                 SortInPlace(a.reshape(a.size), 0);
                 return;
             }
@@ -71,18 +74,19 @@ namespace NumSharp.Backends.Sorting
         /// <summary>np.argsort: returns int64 indices (same shape; axis=null flattens).</summary>
         public static NDArray ArgSort(NDArray a, int? axis)
         {
+            using var scope = NDScope.Open();
             if (axis == null)
             {
                 var flat = a.Shape.IsContiguous ? a.reshape(a.size) : a.ravel().copy('C');
                 var outFlat = new NDArray(NPTypeCode.Int64, new Shape((int)a.size), false);
                 ArgSortInto(flat, outFlat, 0);
-                return outFlat;
+                return scope.Returns(outFlat);
             }
             int ax = NormalizeAxis(axis.Value, a.ndim);
             var src = a.Shape.IsContiguous ? a : a.copy('C');
             var ret = new NDArray(NPTypeCode.Int64, new Shape((long[])a.Shape.dimensions.Clone()), false);
             ArgSortInto(src, ret, ax);
-            return ret;
+            return scope.Returns(ret);
         }
 
         internal static int NormalizeAxis(int axis, int ndim)
@@ -185,6 +189,10 @@ namespace NumSharp.Backends.Sorting
         /// the same loop (NumPy routes _new_sortlike AND _new_partitionlike through one drive too).</summary>
         internal static void DriveAllButAxis(NDArray[] ops, NDIterPerOpFlags[] flags, int axis, NDInnerLoopFunc kern, void* aux)
         {
+            // Scope: the 1-D (1, N) promotion views below are pure iteration aids over the caller's
+            // operands — without eager reclamation a dropped view held the result buffer's last
+            // extra ref until the finalizer, pinning every 1-D sort/argsort/partition result.
+            using var scope = NDScope.Open();
             int ndim = ops[0].ndim;
 
             // 1-D input drops its only axis -> a 0-dimensional all-but-axis iterator. Our NDIter

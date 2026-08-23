@@ -39,6 +39,11 @@ namespace NumSharp.Backends
             if (mask.typecode != NPTypeCode.Boolean)
                 throw new ArgumentException("Mask must be boolean array", nameof(mask));
 
+            // Boundary scope: the typed mask aliases, the broadcast gather-mask and the flat
+            // gather buffer behind the reshaped result are reclaimed at exit; only the yielded
+            // result survives (arr/mask are the caller's — never tracked).
+            using var scope = NDScope.Open();
+
             int leadNdim = mask.ndim;
 
             // Trailing block size B = prod(arr.shape[leadNdim:]) (1 for a full element mask).
@@ -49,7 +54,7 @@ namespace NumSharp.Backends
             long trueCount = CountMaskTrue(mask.MakeGeneric<bool>());
 
             if (trueCount == 0)
-                return new NDArray(arr.dtype, BooleanMaskResultShape(0, arr, leadNdim));
+                return scope.Returns(new NDArray(arr.dtype, BooleanMaskResultShape(0, arr, leadNdim)));
 
             // An EMPTY trailing block (blockSize == 0 — a mask on an array with a 0-length
             // trailing axis, e.g. arr[:, 6:-4][mask] where the slice emptied the last axis)
@@ -59,7 +64,7 @@ namespace NumSharp.Backends
             // zero-length buffer, an out-of-bounds heap write. (NumPy: arr shaped (3,0), mask
             // (3,) -> result (3,0), empty.)
             if (blockSize == 0)
-                return new NDArray(arr.dtype, BooleanMaskResultShape(trueCount, arr, leadNdim));
+                return scope.Returns(new NDArray(arr.dtype, BooleanMaskResultShape(trueCount, arr, leadNdim)));
 
             // Flat gather buffer of trueCount*B elements, reshaped to (count,)+trailing below.
             var result = new NDArray(arr.dtype, new Shape(trueCount * blockSize));
@@ -78,9 +83,9 @@ namespace NumSharp.Backends
                 BooleanMaskGather(arr, gatherMask, result);
             }
 
-            return leadNdim == arr.ndim
+            return scope.Returns(leadNdim == arr.ndim
                 ? result
-                : result.reshape(BooleanMaskResultShape(trueCount, arr, leadNdim));
+                : result.reshape(BooleanMaskResultShape(trueCount, arr, leadNdim)));
         }
 
         // =====================================================================
@@ -101,6 +106,10 @@ namespace NumSharp.Backends
         {
             if (mask.typecode != NPTypeCode.Boolean)
                 throw new ArgumentException("Mask must be boolean array", nameof(mask));
+
+            // Boundary scope (void — nothing escapes): typed mask aliases and the materialized
+            // value buffer are reclaimed once the scatter lands.
+            using var scope = NDScope.Open();
 
             int leadNdim = mask.ndim;
 

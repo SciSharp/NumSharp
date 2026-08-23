@@ -395,6 +395,7 @@ namespace NumSharp.Backends.Kernels
         private const long ComplexBytes = 16; // sizeof(System.Numerics.Complex)
 
         // out += sum(in)  — double-pair SIMD for the contiguous fast path.
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe void ComplexSumKernel(void** dataptrs, long* strides, long count, void* auxdata)
         {
             byte* inp = (byte*)dataptrs[0]; long inS = strides[0];

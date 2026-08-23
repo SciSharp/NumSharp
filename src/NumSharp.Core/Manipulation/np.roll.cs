@@ -20,8 +20,9 @@ namespace NumSharp
         /// </remarks>
         public static NDArray roll(NDArray a, long shift, int? axis = null)
         {
+            using var scope = NDScope.Open();
             if (axis == null)
-                return roll(a.ravel(), shift, 0).reshape(a.shape);
+                return scope.Returns(roll(a.ravel(), shift, 0).reshape(a.shape));
 
             int ax = axis.Value;
             if (ax < 0) ax += a.ndim;
@@ -36,7 +37,7 @@ namespace NumSharp
             long offset = n == 0 ? 0 : ((shift % n) + n) % n;
 
             if (offset == 0)
-                return a.copy();
+                return scope.Returns(a.copy());
 
             var result = np.empty_like(a);
 
@@ -69,7 +70,7 @@ namespace NumSharp
             result[dstBody] = a[srcBody];
             result[dstTail] = a[srcTail];
 
-            return result;
+            return scope.Returns(result);
         }
 
         /// <inheritdoc cref="roll(NDArray, long, int?)"/>

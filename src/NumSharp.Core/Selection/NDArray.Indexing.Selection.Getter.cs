@@ -1079,23 +1079,28 @@ namespace NumSharp
 
 #region Compute
 
+            // Boundary scope: reclaims the per-dispatch MakeGeneric alias, the computed-offsets
+            // buffer, and every gather temp inside FetchIndices<T>; the yielded result (or the
+            // caller's untracked @out) is the only survivor.
+            using var scope = NDScope.Open();
+
             switch (src.typecode)
             {
-                case NPTypeCode.Boolean: return FetchIndices<bool>(src.MakeGeneric<bool>(), indices, @out, extraDim);
-                case NPTypeCode.Byte:    return FetchIndices<byte>(src.MakeGeneric<byte>(), indices, @out, extraDim);
-                case NPTypeCode.SByte:   return FetchIndices<sbyte>(src.MakeGeneric<sbyte>(), indices, @out, extraDim);
-                case NPTypeCode.Int16:   return FetchIndices<short>(src.MakeGeneric<short>(), indices, @out, extraDim);
-                case NPTypeCode.UInt16:  return FetchIndices<ushort>(src.MakeGeneric<ushort>(), indices, @out, extraDim);
-                case NPTypeCode.Int32:   return FetchIndices<int>(src.MakeGeneric<int>(), indices, @out, extraDim);
-                case NPTypeCode.UInt32:  return FetchIndices<uint>(src.MakeGeneric<uint>(), indices, @out, extraDim);
-                case NPTypeCode.Int64:   return FetchIndices<long>(src.MakeGeneric<long>(), indices, @out, extraDim);
-                case NPTypeCode.UInt64:  return FetchIndices<ulong>(src.MakeGeneric<ulong>(), indices, @out, extraDim);
-                case NPTypeCode.Char:    return FetchIndices<char>(src.MakeGeneric<char>(), indices, @out, extraDim);
-                case NPTypeCode.Half:    return FetchIndices<Half>(src.MakeGeneric<Half>(), indices, @out, extraDim);
-                case NPTypeCode.Double:  return FetchIndices<double>(src.MakeGeneric<double>(), indices, @out, extraDim);
-                case NPTypeCode.Single:  return FetchIndices<float>(src.MakeGeneric<float>(), indices, @out, extraDim);
-                case NPTypeCode.Decimal: return FetchIndices<decimal>(src.MakeGeneric<decimal>(), indices, @out, extraDim);
-                case NPTypeCode.Complex: return FetchIndices<System.Numerics.Complex>(src.MakeGeneric<System.Numerics.Complex>(), indices, @out, extraDim);
+                case NPTypeCode.Boolean: return scope.Returns(FetchIndices<bool>(src.MakeGeneric<bool>(), indices, @out, extraDim));
+                case NPTypeCode.Byte:    return scope.Returns(FetchIndices<byte>(src.MakeGeneric<byte>(), indices, @out, extraDim));
+                case NPTypeCode.SByte:   return scope.Returns(FetchIndices<sbyte>(src.MakeGeneric<sbyte>(), indices, @out, extraDim));
+                case NPTypeCode.Int16:   return scope.Returns(FetchIndices<short>(src.MakeGeneric<short>(), indices, @out, extraDim));
+                case NPTypeCode.UInt16:  return scope.Returns(FetchIndices<ushort>(src.MakeGeneric<ushort>(), indices, @out, extraDim));
+                case NPTypeCode.Int32:   return scope.Returns(FetchIndices<int>(src.MakeGeneric<int>(), indices, @out, extraDim));
+                case NPTypeCode.UInt32:  return scope.Returns(FetchIndices<uint>(src.MakeGeneric<uint>(), indices, @out, extraDim));
+                case NPTypeCode.Int64:   return scope.Returns(FetchIndices<long>(src.MakeGeneric<long>(), indices, @out, extraDim));
+                case NPTypeCode.UInt64:  return scope.Returns(FetchIndices<ulong>(src.MakeGeneric<ulong>(), indices, @out, extraDim));
+                case NPTypeCode.Char:    return scope.Returns(FetchIndices<char>(src.MakeGeneric<char>(), indices, @out, extraDim));
+                case NPTypeCode.Half:    return scope.Returns(FetchIndices<Half>(src.MakeGeneric<Half>(), indices, @out, extraDim));
+                case NPTypeCode.Double:  return scope.Returns(FetchIndices<double>(src.MakeGeneric<double>(), indices, @out, extraDim));
+                case NPTypeCode.Single:  return scope.Returns(FetchIndices<float>(src.MakeGeneric<float>(), indices, @out, extraDim));
+                case NPTypeCode.Decimal: return scope.Returns(FetchIndices<decimal>(src.MakeGeneric<decimal>(), indices, @out, extraDim));
+                case NPTypeCode.Complex: return scope.Returns(FetchIndices<System.Numerics.Complex>(src.MakeGeneric<System.Numerics.Complex>(), indices, @out, extraDim));
                 default:
                     throw new NotSupportedException();
             }

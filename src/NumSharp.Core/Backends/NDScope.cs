@@ -1,0 +1,187 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+
+namespace NumSharp
+{
+    /// <summary>
+    ///     Ambient reclamation scope for transient <see cref="NDArray"/> intermediates — the
+    ///     library's standard way to make a composition method eagerly return its temporaries'
+    ///     pooled buffers instead of waiting on the finalizer (see <c>DISPOSAL-GUIDELINES.md</c>).
+    ///     Every <see cref="NDArray"/> constructed on the current thread while a scope is open is
+    ///     tracked by it; disposing the scope disposes every tracked array that was not yielded
+    ///     via <see cref="Returns{T}(T)"/>. Tracked disposal is ordinary ARC release (the buffer
+    ///     frees only at refcount 0), so releasing a base whose view was yielded never corrupts —
+    ///     the same safety as a hand-written <c>Dispose</c>, with the bookkeeping automated.
+    /// </summary>
+    /// <remarks>
+    ///     <para><b>Usage.</b> Open at the top of a boundary method, keep the original body, and
+    ///     route every egress through <see cref="Returns{T}(T)"/>:</para>
+    ///     <code>
+    ///     using var scope = NDScope.Open();
+    ///     var b1 = x1.typecode == NPTypeCode.Boolean ? x1 : (x1 != 0);
+    ///     var b2 = x2.typecode == NPTypeCode.Boolean ? x2 : (x2 != 0);
+    ///     return scope.Returns((b1 &amp; b2).MakeGeneric&lt;bool&gt;());
+    ///     </code>
+    ///     <para><b>Ownership rules become structural.</b> Inputs were constructed BEFORE the
+    ///     scope opened, so they are never tracked — a passthrough (<c>ravel()</c>/
+    ///     <c>atleast_2d()</c> returning its operand, a caller-supplied <c>@out</c>) needs no
+    ///     guard, and <see cref="Returns{T}(T)"/> on such an array is a provable no-op (rule R2
+    ///     for free). The return value is the one egress and is yielded (rule R1); an
+    ///     <c>out</c>-parameter egress is written as <c>result = scope.Returns(temp);</c>.
+    ///     Everything else — however deep the helper-call tree below the scope — is reclaimed,
+    ///     on exception paths included.</para>
+    ///     <para><b>Nesting.</b> Scopes nest per thread; <see cref="Returns{T}(T)"/> re-tracks the
+    ///     yielded array into the parent scope, so an enclosing scope still reclaims an inner
+    ///     call's result if the caller drops it.</para>
+    ///     <para><b>Threading.</b> The current scope is <c>[ThreadStatic]</c>: a scope is opened,
+    ///     used and disposed on ONE thread (asserted in debug builds; NumSharp's API is
+    ///     synchronous, so a scope must not span <c>await</c>). Arrays constructed on other
+    ///     threads (parallel kernel workers) see no scope and fall back to the finalizer
+    ///     backstop — safe, just not eagerly reclaimed; a parallel region that wants eager
+    ///     reclamation opens its own scope inside each worker body.</para>
+    ///     <para><b>Granularity.</b> Scope a CALL, not a caller loop: temps a scope holds are all
+    ///     alive simultaneously, and batch-disposing thousands of same-size buffers overflows
+    ///     their pool bucket (the excess is freed, not pooled). Hot loops should still
+    ///     <c>using</c> the results they receive — the two-audience contract is unchanged.</para>
+    /// </remarks>
+    public sealed class NDScope : IDisposable
+    {
+        [ThreadStatic] private static NDScope t_current;
+        [ThreadStatic] private static NDScope t_pool;   // single-slot per-thread free list
+
+        /// <summary>Tracked-list capacity above which a pooled scope trims before reuse.</summary>
+        private const int TrimCapacity = 512;
+
+        private NDScope _parent;
+        private List<NDArray> _tracked;
+        private bool _disposed;
+        private int _threadId;
+
+        private NDScope()
+        {
+            _tracked = new List<NDArray>(16);
+        }
+
+        /// <summary>The innermost open scope on the current thread, or <c>null</c>.</summary>
+        internal static NDScope Current => t_current;
+
+        /// <summary>Opens a scope on the current thread; nests (the previous scope resumes on dispose).</summary>
+        public static NDScope Open()
+        {
+            var s = t_pool;
+            if (s is null)
+                s = new NDScope();
+            else
+            {
+                t_pool = null;
+                s._disposed = false;
+            }
+
+            s._threadId = Environment.CurrentManagedThreadId;
+            s._parent = t_current;
+            t_current = s;
+            return s;
+        }
+
+        /// <summary>
+        ///     Constructor hook (called from <c>NDArray.InitializeArc</c>, the single funnel every
+        ///     concrete ctor passes): tracks a freshly constructed array into the innermost open
+        ///     scope, if any. No scope open — no cost beyond one thread-static read.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static void Track(NDArray nd)
+        {
+            var s = t_current;
+            if (s is null)
+                return;
+            nd.TrackingScope = s;
+            nd.TrackingIndex = s._tracked.Count;
+            s._tracked.Add(nd);
+        }
+
+        /// <summary>
+        ///     Marks <paramref name="nd"/> as this scope's yielded result (rule R1: never dispose
+        ///     what you return): unregisters it here and re-tracks it into the parent scope, so an
+        ///     enclosing scope still reclaims it if the caller drops it. An array this scope never
+        ///     tracked — an input passthrough, a caller-owned <c>@out</c> — passes through as a
+        ///     no-op, which is what makes "wrap every egress" a safe blanket rule. Also the egress
+        ///     call for <c>out</c>-parameter assignments: <c>result = scope.Returns(temp);</c>.
+        /// </summary>
+        /// <returns><paramref name="nd"/>, with its static type preserved.</returns>
+        public T Returns<T>(T nd) where T : NDArray
+        {
+            if (nd is null || !ReferenceEquals(nd.TrackingScope, this))
+                return nd;   // not ours (never tracked, or owned elsewhere): pass through
+
+            _tracked[nd.TrackingIndex] = null;   // O(1) unregister; Dispose skips holes
+            var parent = _parent;
+            if (parent is null)
+            {
+                nd.TrackingScope = null;
+            }
+            else
+            {
+                nd.TrackingScope = parent;
+                nd.TrackingIndex = parent._tracked.Count;
+                parent._tracked.Add(nd);
+            }
+
+            return nd;
+        }
+
+        /// <summary>Yields every element of a tuple-style result (nonzero, meshgrid, split, …).</summary>
+        public T[] Returns<T>(T[] nds) where T : NDArray
+        {
+            if (nds is not null)
+                for (int i = 0; i < nds.Length; i++)
+                    Returns(nds[i]);
+            return nds;
+        }
+
+        /// <summary>
+        ///     Permanently removes <paramref name="nd"/> from whatever scope tracks it WITHOUT
+        ///     re-tracking into a parent — for arrays that must outlive every scope (an array
+        ///     being cached into a static / long-lived field from inside a scoped call). Must run
+        ///     on the scope's owning thread (it always does: detachment happens at the caching
+        ///     site, on the constructing thread). No-op for untracked arrays.
+        /// </summary>
+        public static void Detach(NDArray nd)
+        {
+            var s = nd?.TrackingScope;
+            if (s is null)
+                return;
+            s._tracked[nd.TrackingIndex] = null;
+            nd.TrackingScope = null;
+        }
+
+        /// <summary>Disposes every tracked non-yielded array and reinstates the parent scope.</summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            Debug.Assert(_threadId == Environment.CurrentManagedThreadId,
+                "NDScope must be disposed on the thread that opened it.");
+            t_current = _parent;   // new constructions during the sweep (there are none in
+            _parent = null;        // Dispose paths) would track into the parent, never into us
+
+            var list = _tracked;
+            for (int i = 0; i < list.Count; i++)
+            {
+                var nd = list[i];
+                if (nd is null)
+                    continue;          // yielded via Returns / Detach
+                nd.TrackingScope = null;
+                nd.Dispose();
+            }
+
+            list.Clear();
+            if (list.Capacity > TrimCapacity)
+                _tracked = new List<NDArray>(16);   // don't let one giant call pin a huge list
+
+            if (t_pool is null)
+                t_pool = this;
+        }
+    }
+}

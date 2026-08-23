@@ -52,12 +52,17 @@ namespace NumSharp.Backends
         /// </summary>
         public override unsafe NDArray<long>[] NonZero(NDArray nd)
         {
+            // Boundary scope: the yielded tuple is the column VIEWS; the shared multi-index base
+            // matrix (and the 0-d promotion view) are reclaimed at exit — ARC keeps the buffer
+            // alive through the yielded views until the caller releases them.
+            using var scope = NDScope.Open();
+
             // 0-d: NumPy 2.4 raises ValueError, but its own error message suggests
             // `np.atleast_1d(scalar).nonzero()`, which is exactly the result our
             // historical implementation has always produced. Preserve that semantic
             // (otherwise this becomes a breaking-change PR for downstream callers).
             if (nd.ndim == 0)
-                return NonZero(np.atleast_1d(nd));
+                return scope.Returns(NonZero(np.atleast_1d(nd)));
 
             int ndim = nd.ndim;
             long size = nd.size;
@@ -65,7 +70,7 @@ namespace NumSharp.Backends
             // Empty input → tuple of `ndim` empty int64 arrays.
             // Covers shape (0,), (0, 3), (2, 0, 4), ….
             if (size == 0)
-                return MakeEmptyNonZeroResult(ndim);
+                return scope.Returns(MakeEmptyNonZeroResult(ndim));
 
             // Materialize non-contig to C-contig. For contig inputs we read from `nd`
             // directly (no copy); the local `materialized` is only set on the non-contig
@@ -91,7 +96,7 @@ namespace NumSharp.Backends
             {
                 long count = countKernel(basePtr, size);
                 if (count == 0)
-                    return MakeEmptyNonZeroResult(ndim);
+                    return scope.Returns(MakeEmptyNonZeroResult(ndim));
 
                 // NumPy's PyArray_Nonzero fills ONE (count, ndim) C-order multi-index buffer and
                 // the tuple entries are its COLUMNS — strided views (shape (count,), byte stride
@@ -108,7 +113,7 @@ namespace NumSharp.Backends
                 if (ndim == 1)
                 {
                     flatKernel(basePtr, size, resPtr);
-                    return MakeNonZeroColumnViews(multiIndex, count, ndim);
+                    return scope.Returns(MakeNonZeroColumnViews(multiIndex, count, ndim));
                 }
 
                 // ndim > 1: scan into a temp flat buffer then row-expand into the shared matrix.
@@ -137,7 +142,7 @@ namespace NumSharp.Backends
                     }
                 }
 
-                return MakeNonZeroColumnViews(multiIndex, count, ndim);
+                return scope.Returns(MakeNonZeroColumnViews(multiIndex, count, ndim));
             }
             finally
             {

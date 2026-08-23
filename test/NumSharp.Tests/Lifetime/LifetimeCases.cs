@@ -193,12 +193,16 @@ namespace NumSharp.Tests.Lifetime
             yield return new("slice view", () => new[] { D2d() }, o => o[0]["1:10"]);
             yield return new("boolean mask", () => new[] { I2d(), RowMask(50) }, o => o[0][o[1].MakeGeneric<bool>()]);
             yield return new("fancy index", () => new[] { I2d(), np.array(new int[] { 0, 5, 10, 20 }) }, o => o[0][o[1]]);
-            yield return new("np.where 3-arg", () => new[] { I2d(), I2d() }, o => np.where(o[0] > 100, o[0], o[1]));
+            // The condition mask is an OPERAND (built here, not inside Run — the inline `o[0] > 100`
+            // used to strand ITS OWN mask per call and the sweep attributed that caller-side garbage
+            // to np.where; the library path itself measures clean).
+            yield return new("np.where 3-arg", () => new NDArray[] { I2d() > 100, I2d(), I2d() }, o => np.where(o[0], o[1], o[2]));
             yield return new("np.nonzero", () => new[] { I2d() }, o => np.nonzero(o[0]));
             yield return new("np.argwhere", () => new[] { I2d() }, o => np.argwhere(o[0]));
             yield return new("np.flatnonzero", () => new[] { I2d() }, o => np.flatnonzero(o[0]));
             yield return new("np.take", () => new[] { D1k(), np.array(new int[] { 1, 3, 5 }) }, o => np.take(o[0], o[1]));
-            yield return new("np.extract", () => new[] { I2d() }, o => np.extract(o[0] > 100, o[0]));
+            // Same operand rule as np.where above: the mask is built in MakeOperands.
+            yield return new("np.extract", () => new NDArray[] { I2d() > 100, I2d() }, o => np.extract(o[0], o[1]));
 
             // ---------------------------------------------------------- linear algebra
             yield return new("np.matmul", () => new[] { Sq(), Sq() }, o => np.matmul(o[0], o[1]));

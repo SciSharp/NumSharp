@@ -8,7 +8,10 @@ namespace NumSharp.Generic
         /// </summary>
         public static NDArray<TDType> operator &(NDArray<TDType> lhs, NDArray<TDType> rhs)
         {
-            return ((NDArray)lhs).TensorEngine.BitwiseAnd(lhs, rhs).MakeGeneric<TDType>();
+            // Scope: the engine result's untyped wrapper is reclaimed once the typed alias
+            // (which holds its own ARC ref) is yielded — otherwise every typed & strands it.
+            using var scope = NDScope.Open();
+            return scope.Returns(((NDArray)lhs).TensorEngine.BitwiseAnd(lhs, rhs).MakeGeneric<TDType>());
         }
 
         /// <summary>
@@ -17,7 +20,8 @@ namespace NumSharp.Generic
         /// </summary>
         public static NDArray<TDType> operator |(NDArray<TDType> lhs, NDArray<TDType> rhs)
         {
-            return ((NDArray)lhs).TensorEngine.BitwiseOr(lhs, rhs).MakeGeneric<TDType>();
+            using var scope = NDScope.Open();
+            return scope.Returns(((NDArray)lhs).TensorEngine.BitwiseOr(lhs, rhs).MakeGeneric<TDType>());
         }
 
         /// <summary>
@@ -25,7 +29,8 @@ namespace NumSharp.Generic
         /// </summary>
         public static NDArray<TDType> operator ^(NDArray<TDType> lhs, NDArray<TDType> rhs)
         {
-            return ((NDArray)lhs).TensorEngine.BitwiseXor(lhs, rhs).MakeGeneric<TDType>();
+            using var scope = NDScope.Open();
+            return scope.Returns(((NDArray)lhs).TensorEngine.BitwiseXor(lhs, rhs).MakeGeneric<TDType>());
         }
     }
 }

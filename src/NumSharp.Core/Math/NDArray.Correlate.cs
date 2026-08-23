@@ -45,6 +45,10 @@ namespace NumSharp
 
             var retType = np._FindCommonType(a, v);
 
+            // The materializations, the complex conjugate, and the inverted-path forward buffer
+            // are all scope-tracked; only the yielded result survives (a/v are never tracked).
+            using var scope = NDScope.Open();
+
             // Conjugate the (common-typed) second argument for complex inputs, exactly as
             // PyArray_Correlate2 does — BEFORE the swap, so an inverted correlate uses conj(v) as
             // the data and the untouched a as the kernel.
@@ -70,7 +74,7 @@ namespace NumSharp
             if (inverted)
                 result = result["::-1"].copy();
 
-            return result;
+            return scope.Returns(result);
         }
     }
 }

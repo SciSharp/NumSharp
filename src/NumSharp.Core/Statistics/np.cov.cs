@@ -52,6 +52,12 @@ namespace NumSharp
                 ? np.result_type(m, NPTypeCode.Double)
                 : np.result_type(m, y, NPTypeCode.Double));
 
+            // Every intermediate below — atleast_2d/astype/T/concatenate, the weight casts and
+            // validation masks, avg and its column view, Xc/Xt and the pre-scale c — is scope-
+            // tracked and reclaimed at method exit (throw paths included); only the yielded
+            // result survives. Inputs were constructed before the scope opened: never touched.
+            using var scope = NDScope.Open();
+
             int mNdim = m.ndim;
 
             // X = array(m, ndmin=2, dtype=dtype): a fresh 2-D array in the result dtype.
@@ -61,7 +67,7 @@ namespace NumSharp
 
             // Empty variables => (0, 0) float64, regardless of input dtype (NumPy: np.array([]).reshape(0, 0)).
             if (X.shape[0] == 0)
-                return np.zeros(new Shape(0, 0), NPTypeCode.Double);
+                return scope.Returns(np.zeros(new Shape(0, 0), NPTypeCode.Double));
 
             if (y is not null)
             {
@@ -150,7 +156,9 @@ namespace NumSharp
             if (c.typecode != cType) // NumPy's in-place `c *= ...` preserves c's dtype.
                 c = c.astype(cType);
 
-            return np.squeeze(c);
+            // squeeze returns a view of c — the view is yielded; c's tracked wrapper is released
+            // at scope exit while ARC keeps the buffer alive through the view.
+            return scope.Returns(np.squeeze(c));
         }
     }
 }

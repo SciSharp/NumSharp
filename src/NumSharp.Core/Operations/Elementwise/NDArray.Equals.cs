@@ -123,7 +123,7 @@ namespace NumSharp
                     return false;
 
                 //compare all values
-                var cmp = (this == rhs);
+                using var cmp = (this == rhs);
                 var len = cmp.size;
                 var ptr = cmp.Address; //this never a slice so we can use unmanaged memory.
                 for (long i = 0; i < len; i++)

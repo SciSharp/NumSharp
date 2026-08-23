@@ -68,21 +68,19 @@ namespace NumSharp.Tests.Lifetime
         /// </summary>
         /// <remarks>
         ///     <para>
-        ///     These are pre-existing, not regressions — the sweep is simply the first instrument
-        ///     able to see them. Every entry was confirmed by the ground-truth discriminator: force
-        ///     finalizers and the outstanding count collapses to exactly zero, proving the buffers
-        ///     really were sitting on the finalizer queue rather than freed through some path the
-        ///     pool counters do not observe.
+        ///     EMPTY as of the 2026-08-23 disposal sweep, since carried by <see cref="NDScope"/>
+        ///     boundary scopes (see <c>DISPOSAL-GUIDELINES.md</c> → "The standard instrument"): all
+        ///     15 tracked sites reclaim eagerly — convolve's materialized reversed kernel,
+        ///     the fancy get/set <c>computedOffsets</c> buffer, the 15-way
+        ///     <c>MakeGeneric&lt;T&gt;()</c> alias drops in the getter/setter dispatch and the typed
+        ///     <c>&amp;</c>/<c>|</c>/<c>^</c> operators, nonzero's column-view base matrix, the sort
+        ///     driver's 1-D <c>expand_dims</c> promotion views, roll's flat-path handoff, clip's
+        ///     bound casts, logical_*'s conversion temps, array_equal's comparison buffer, and the
+        ///     quantile engine's staging copies. <c>np.where 3-arg</c> / <c>np.extract</c> were
+        ///     HARNESS artifacts — their catalogue entries built the mask inside <c>Run</c>
+        ///     (violating the operand rule above), now fixed in <see cref="LifetimeCases"/>;
+        ///     <c>np.linspace</c> had already gone clean. The main sweep guards all of them now.
         ///     </para>
-        ///     <para>One is diagnosed to a line:</para>
-        ///     <list type="bullet">
-        ///       <item><b>convolve (all modes)</b> — since convolve/correlate moved onto the shared
-        ///             sliding-dot engine, <c>NDArray.Convolve.cs</c> builds its reversed kernel with
-        ///             <c>MaterializeForSliding(v["::-1"], retType)</c>, whose sliced-view branch does
-        ///             <c>t.copy()</c> into a buffer that is never disposed. It strands 1/call in every
-        ///             mode (full included), so all three are tracked here; same/valid add the centre
-        ///             slice on top.</item>
-        ///     </list>
         ///     <para>
         ///     The former <c>np.isclose</c>/<c>np.allclose</c> 2-buffer slope was traced to the two
         ///     predicate calls inside isclose: IsFinite returned a typed alias while leaving the
@@ -90,24 +88,7 @@ namespace NumSharp.Tests.Lifetime
         ///     handoff fixed both APIs; the main sweep now guards them together with isnan/isfinite.
         ///     </para>
         /// </remarks>
-        private static readonly HashSet<string> KnownDeferred = new()
-        {
-            "convolve full",    // 1/call — the materialized reversed kernel, see above
-            "convolve same",    // 1/call — same materialized kernel (+ the centre slice)
-            "convolve valid",   // 1/call — same shape of defect
-            "np.linspace",      // 1/call
-            "np.nonzero",       // 1/call
-            "boolean mask",     // 1/call
-            "fancy index",      // 2/call
-            "np.where 3-arg",   // 1/call
-            "np.sort",          // 1/call
-            "np.argsort",       // 1/call
-            "np.roll",          // 1/call
-            "np.clip",          // 2/call
-            "logical_and",      // 3/call — the heaviest in the catalogue
-            "np.extract",       // 1/call
-            "np.array_equal",   // 1/call
-        };
+        private static readonly HashSet<string> KnownDeferred = new();
 
         /// <summary>
         ///     Buffers acquired but not released across <paramref name="iterations"/> runs, with no

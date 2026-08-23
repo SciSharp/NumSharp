@@ -83,6 +83,11 @@ namespace NumSharp.Statistics
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (q is null) throw new ArgumentNullException(nameof(q));
 
+            // Boundary scope: the staging views/copies, the raw result behind the keepdims view,
+            // and every helper temp are reclaimed at exit; the yielded result (or the caller's
+            // untracked @out) is the only survivor.
+            using var scope = NDScope.Open();
+
             // np.nan* short-circuit a totally-empty input (some dimension is 0) to
             // np.nanmean(a, axis, keepdims) BEFORE any method/q dispatch. NumPy does this
             // in _nanquantile_unchecked / nanmedian, so the q dimension is dropped and the
@@ -90,7 +95,7 @@ namespace NumSharp.Statistics
             // This runs before the boolean-continuous guard so that, like NumPy, an empty
             // boolean nanquantile returns nan instead of raising.
             if (ignoreNaN && a.size == 0)
-                return BuildEmptyNanResult(a, axisArr, keepdims, @out);
+                return scope.Returns(BuildEmptyNanResult(a, axisArr, keepdims, @out));
 
             // NumPy raises TypeError for boolean input with a continuous (interpolating)
             // method: the underlying lerp performs `b - a` and boolean subtraction is
@@ -199,10 +204,10 @@ namespace NumSharp.Statistics
                     throw new IndexOutOfRangeException(
                         "index -1 is out of bounds for axis 0 with size 0");
                 FillWithNaN(resultRaw, outTypeCode);
-                return FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out);
+                return scope.Returns(FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out));
             }
             if (outerSize == 0)
-                return FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out);
+                return scope.Returns(FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out));
 
             // ── Pre-compute the sorted list of buffer indices the partition needs to touch. ──
             // For continuous methods that's (floor, ceil) per q; discrete methods touch one
@@ -272,7 +277,7 @@ namespace NumSharp.Statistics
                 if (rowKManaged != null) ArrayPool<int>.Shared.Return(rowKManaged);
             }
 
-            return FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out);
+            return scope.Returns(FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out));
         }
 
         /// <summary>keepdims / out= plumbing shared by the normal and empty-axis paths.</summary>

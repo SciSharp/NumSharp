@@ -56,14 +56,19 @@ namespace NumSharp.Backends
                         $"Cannot cast ufunc 'clip' output from dtype('{outType.AsNumpyDtypeName()}') to dtype('{@out.GetTypeCode.AsNumpyDtypeName()}') with casting rule 'same_kind'.");
             }
 
+            // Boundary scope: the bound casts, dtype-converted source, NaN fill and any relay
+            // buffer are reclaimed at exit; the yielded result (or the caller's untracked @out)
+            // is the only survivor.
+            using var scope = NDScope.Open();
+
             // ---- Empty input — bypass the kernel entirely
             if (lhs.size == 0)
-                return @out ?? Cast(lhs, outType, copy: true);
+                return scope.Returns(@out ?? Cast(lhs, outType, copy: true));
 
             // ---- Both bounds null — clip is a typed copy
             if (min is null && max is null)
             {
-                if (@out is null) return Cast(lhs, outType, copy: true);
+                if (@out is null) return scope.Returns(Cast(lhs, outType, copy: true));
                 np.copyto(@out, Cast(lhs, outType, copy: false));
                 return @out;
             }
@@ -78,7 +83,7 @@ namespace NumSharp.Backends
                 var nan = outType == NPTypeCode.Double
                     ? np.full(lhs.Shape, double.NaN)
                     : np.full(lhs.Shape, float.NaN);
-                if (@out is null) return nan;
+                if (@out is null) return scope.Returns(nan);
                 np.copyto(@out, nan);
                 return @out;
             }
@@ -152,7 +157,7 @@ namespace NumSharp.Backends
                 }
                 var dstFast = @out ?? np.empty(cShape, outType);
                 RunClipKernel(srcArr, dstFast, loCast, hiCast, outType, mode, kind);
-                return dstFast;
+                return scope.Returns(dstFast);
             }
 
             // ---- Strided / F-order src or array bounds: read every operand through its own
@@ -167,7 +172,7 @@ namespace NumSharp.Backends
                 np.copyto(@out, outBuf);
                 return @out;
             }
-            return outBuf;
+            return scope.Returns(outBuf);
         }
 
         // Extract pointers and invoke the flat IL clip kernel. src/dst (and array bounds) must

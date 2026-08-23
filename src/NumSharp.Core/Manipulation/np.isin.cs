@@ -29,6 +29,11 @@ namespace NumSharp
             if (kind != null && kind != "sort" && kind != "table")
                 throw new ValueError($"Invalid kind: '{kind}'. Please use None, 'sort' or 'table'.");
 
+            // One boundary scope reclaims every intermediate this call tree creates — the ravels,
+            // the promoted casts, the sort/table/hash machinery inside the helpers below — and the
+            // yielded reshape view is the only survivor. The helpers stay scope-free on purpose.
+            using var scope = NDScope.Open();
+
             // Result is shaped like element in C-order. Build the shape from the DIMENSIONS (a fresh
             // C-contiguous shape) — reusing element.Shape would carry a view's strides and scramble the
             // contiguous membership buffer on reshape (transposed/strided/negative-stride element).
@@ -50,18 +55,18 @@ namespace NumSharp
 
             // Empty element -> empty boolean result shaped like element (value irrelevant).
             if (ar1.size == 0)
-                return np.zeros(outShape, NPTypeCode.Boolean);
+                return scope.Returns(np.zeros(outShape, NPTypeCode.Boolean));
 
             // Empty test set -> nothing is a member (all invert).
             if (ar2.size == 0)
-                return np.full(outShape, invert, NPTypeCode.Boolean);
+                return scope.Returns(np.full(outShape, invert, NPTypeCode.Boolean));
 
             // assume_unique is a NumPy speed hint that skips deduplication; our sort/table paths need no
             // dedup, so it changes nothing here and the result is ALWAYS the correct membership (see the
             // documented divergence for assume_unique=true on genuinely non-unique inputs).
             NDArray member = ComputeMembership(ar1, ar2);
             NDArray result = invert ? np.logical_not(member) : member;
-            return result.reshape(outShape);
+            return scope.Returns(result.reshape(outShape));
         }
 
         /// <summary>

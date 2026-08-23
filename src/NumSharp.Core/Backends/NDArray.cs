@@ -59,6 +59,13 @@ namespace NumSharp
         // ---------------------------------------------------------------
         private int _disposed;
 
+        // Ambient-scope back-pointer: the NDScope currently responsible for reclaiming this
+        // array (null when untracked or yielded to the caller). Written by NDScope.Track /
+        // Returns / Detach on the constructing thread only; makes Returns O(1) and makes
+        // yielding an untracked array (an input passthrough, a caller's @out) a provable no-op.
+        internal NDScope TrackingScope;
+        internal int TrackingIndex;
+
         /// <summary>
         ///     <c>true</c> if <see cref="Dispose"/> has been called on this
         ///     <see cref="NDArray"/>. Views and shared storage may still be
@@ -81,6 +88,7 @@ namespace NumSharp
         /// </remarks>
         private void InitializeArc()
         {
+            NDScope.Track(this);   // ambient-scope registration (a thread-static read when no scope is open)
             var arr = Storage?.InternalArray;
             if (arr is null) return;
             arr.TryAddRef();
