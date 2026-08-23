@@ -89,13 +89,28 @@ namespace NumSharp.Tests.Math
             (0x478b9a09u, 0x3dff71bdu, "cos one ULP past it"),
         };
 
+        // A finite input past the kernel's Cody-Waite reduction limit is handed to the PLATFORM libm
+        // — exactly as NumPy does — so its last bit is host-specific. NumPy's expected bytes here were
+        // probed from the win-amd64 wheel (MSVC ucrtbase); glibc / macOS libm differ by ~1 ULP. Pin
+        // those cases on Windows only. The polynomial range (below the limit) is NumSharp's own port
+        // and stays bit-exact on every OS, as do the NaN/inf specials — so both keep asserting always.
+        private static bool HostLibmPast(uint inBits, uint firstLibmBits)
+        {
+            float x = F(inBits);
+            return float.IsFinite(x) && MathF.Abs(x) >= F(firstLibmBits) && !OperatingSystem.IsWindows();
+        }
+
         [TestMethod]
         public void Sin_Float32_MatchesNumPyBitForBit()
         {
             var result = np.sin(np.array(SinProbed.Select(p => F(p.In)).ToArray()));
             result.dtype.Should().Be(typeof(float));
             for (int i = 0; i < SinProbed.Length; i++)
+            {
+                if (HostLibmPast(SinProbed[i].In, 0x47e55e00u))   // sine's first libc input
+                    continue;
                 B(result.GetSingle(i)).Should().Be(SinProbed[i].Out, SinProbed[i].What);
+            }
         }
 
         [TestMethod]
@@ -104,7 +119,11 @@ namespace NumSharp.Tests.Math
             var result = np.cos(np.array(CosProbed.Select(p => F(p.In)).ToArray()));
             result.dtype.Should().Be(typeof(float));
             for (int i = 0; i < CosProbed.Length; i++)
+            {
+                if (HostLibmPast(CosProbed[i].In, 0x478b9a09u))   // cosine's first libc input
+                    continue;
                 B(result.GetSingle(i)).Should().Be(CosProbed[i].Out, CosProbed[i].What);
+            }
         }
 
         // -------------------------------------------------------- rad2deg/deg2rad

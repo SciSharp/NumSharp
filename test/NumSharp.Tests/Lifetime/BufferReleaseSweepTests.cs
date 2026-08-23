@@ -76,11 +76,12 @@ namespace NumSharp.Tests.Lifetime
         ///     </para>
         ///     <para>One is diagnosed to a line:</para>
         ///     <list type="bullet">
-        ///       <item><b>convolve same / valid</b> — <c>NDArray.Convolve.cs</c> ends with
-        ///             <c>return full["a:b"].copy();</c>. That slice is a VIEW, it is never disposed,
-        ///             and it holds an ARC ref to <c>full</c>, so the <c>using var full</c> directly
-        ///             above it cannot free the buffer. Mode 'full' takes no slice and measures 0 —
-        ///             which is exactly what localises the defect to the slice.</item>
+        ///       <item><b>convolve (all modes)</b> — since convolve/correlate moved onto the shared
+        ///             sliding-dot engine, <c>NDArray.Convolve.cs</c> builds its reversed kernel with
+        ///             <c>MaterializeForSliding(v["::-1"], retType)</c>, whose sliced-view branch does
+        ///             <c>t.copy()</c> into a buffer that is never disposed. It strands 1/call in every
+        ///             mode (full included), so all three are tracked here; same/valid add the centre
+        ///             slice on top.</item>
         ///     </list>
         ///     <para>
         ///     The former <c>np.isclose</c>/<c>np.allclose</c> 2-buffer slope was traced to the two
@@ -91,8 +92,11 @@ namespace NumSharp.Tests.Lifetime
         /// </remarks>
         private static readonly HashSet<string> KnownDeferred = new()
         {
-            "convolve same",    // 1/call — the undisposed centre slice, see above
+            "convolve full",    // 1/call — the materialized reversed kernel, see above
+            "convolve same",    // 1/call — same materialized kernel (+ the centre slice)
             "convolve valid",   // 1/call — same shape of defect
+            "np.linspace",      // 1/call
+            "np.nonzero",       // 1/call
             "boolean mask",     // 1/call
             "fancy index",      // 2/call
             "np.where 3-arg",   // 1/call

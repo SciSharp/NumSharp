@@ -156,9 +156,11 @@ public class AuditV2_CastingRandomUtilities
     [TestMethod]
     public void T1_33_AsNumpyDtypeName_Char_MisreportsSize()
     {
+        // AsNumpyDtypeName is a public static extension method (it moved from internal to public);
+        // bind Public|NonPublic so the reflection lookup survives either visibility.
         var mi = typeof(NPTypeCodeExtensions).GetMethod(
             "AsNumpyDtypeName",
-            BindingFlags.NonPublic | BindingFlags.Static);
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
         mi.Should().NotBeNull();
 
         var charName = (string)mi!.Invoke(null, new object[] { NPTypeCode.Char })!;

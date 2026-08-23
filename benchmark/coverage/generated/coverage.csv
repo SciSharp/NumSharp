@@ -56,6 +56,7 @@ numpy.bitwise_or,np,bitwise_or,ufunc,Math,available,op_matrix,managed,benchmark/
 numpy.bitwise_right_shift,np,bitwise_right_shift,ufunc,Math,available,covered_alias,managed,numpy.right_shift,Shares the exact compiled NumSharp target with a directly covered API.
 numpy.bitwise_xor,np,bitwise_xor,ufunc,Math,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Bitwise/BitwiseBenchmarks.cs,
 numpy.block,np,block,function,Shape manipulation,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Manipulation/ExtendedShapeBenchmarks.cs,
+numpy.bmat,np,bmat,function,Linear algebra,available,missing,managed,,
 numpy.broadcast_arrays,np,broadcast_arrays,function,Shape manipulation,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Manipulation/ExtendedShapeBenchmarks.cs,
 numpy.broadcast_to,np,broadcast_to,function,Shape manipulation,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Broadcasting/BroadcastBenchmarks.cs; benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Broadcasting/BroadcastBenchmarks.cs,
 numpy.can_cast,np,can_cast,function,Dtype & promotion,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/ApiSurface/UtilityBenchmarks.cs,
@@ -237,6 +238,8 @@ numpy.moveaxis,np,moveaxis,function,Shape manipulation,available,op_matrix,manag
 numpy.multiply,np,multiply,ufunc,Math,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Arithmetic/MultiplyBenchmarks.cs,
 numpy.nanargmax,np,nanargmax,function,Reductions,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/NanReductionBenchmarks.cs,
 numpy.nanargmin,np,nanargmin,function,Reductions,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/NanReductionBenchmarks.cs,
+numpy.nancumprod,np,nancumprod,function,Reductions,available,missing,managed,,
+numpy.nancumsum,np,nancumsum,function,Reductions,available,missing,managed,,
 numpy.nanmax,np,nanmax,function,Reductions,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/NanReductionBenchmarks.cs,
 numpy.nanmean,np,nanmean,function,Reductions,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/NanReductionBenchmarks.cs,
 numpy.nanmedian,np,nanmedian,function,Reductions,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/NanReductionBenchmarks.cs,
@@ -348,8 +351,10 @@ numpy.rad2deg,np,rad2deg,ufunc,Math,available,op_matrix,managed,benchmark/NumSha
 numpy.radians,np,radians,ufunc,Math,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Unary/UnaryFamilyBenchmarks.cs,
 numpy.random.beta,random,beta,function,Random,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs,
 numpy.random.binomial,random,binomial,function,Random,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs,
+numpy.random.bytes,random,bytes,function,Random,available,missing,managed,,
 numpy.random.chisquare,random,chisquare,function,Random,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs,
 numpy.random.choice,random,choice,function,Random,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs,
+numpy.random.default_rng,random,default_rng,function,Random,available,missing,managed,,
 numpy.random.dirichlet,random,dirichlet,function,Random,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs,
 numpy.random.exponential,random,exponential,function,Random,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs,
 numpy.random.f,random,f,function,Random,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs,
@@ -376,7 +381,7 @@ numpy.random.rand,random,rand,function,Random,available,op_matrix,managed,benchm
 numpy.random.randint,random,randint,function,Random,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs,
 numpy.random.randn,random,randn,function,Random,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs,
 numpy.random.random,random,random,function,Random,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs,
-numpy.random.random_integers,random,random_integers,function,Random,partial,covered_alias,managed,numpy.random.randint,Shares the exact compiled NumSharp target with a directly covered API.
+numpy.random.random_integers,random,random_integers,function,Random,available,missing,managed,,
 numpy.random.random_sample,random,random_sample,function,Random,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs,
 numpy.random.ranf,random,ranf,function,Random,available,covered_alias,managed,numpy.random.random_sample,Shares the exact compiled NumSharp target with a directly covered API.
 numpy.random.rayleigh,random,rayleigh,function,Random,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs,

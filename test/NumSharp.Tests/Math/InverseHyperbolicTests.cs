@@ -22,6 +22,20 @@ namespace NumSharp.Tests.Math
             actual.Imaginary.Should().BeApproximately(im, tol);
         }
 
+        /// <summary>
+        /// arcsinh/arccosh/arctanh delegate to the platform CRT (Math.Asinh/Acosh/Atanh). NumPy's
+        /// expected bytes were probed from the MSVC win-amd64 wheel, whose ucrtbase matches .NET's on
+        /// Windows bit-for-bit; glibc / macOS libm can differ by ~1 ULP (e.g. atanh(0.5)). Assert
+        /// exact on the pinned host, correctly-rounded elsewhere.
+        /// </summary>
+        private static void ShouldMatchCrt(double actual, double expected)
+        {
+            if (OperatingSystem.IsWindows())
+                actual.Should().Be(expected);
+            else
+                actual.Should().BeApproximately(expected, 1e-12);
+        }
+
         // ---------------------------------------------------------------- real float64
 
         [TestMethod]
@@ -58,8 +72,8 @@ namespace NumSharp.Tests.Math
             var x = np.array(new[] { 0.0, 0.5, -0.5 });
             var r = np.arctanh(x);
             r.GetAtIndex<double>(0).Should().Be(0.0);
-            r.GetAtIndex<double>(1).Should().Be(0.5493061443340549);
-            r.GetAtIndex<double>(2).Should().Be(-0.5493061443340549);
+            ShouldMatchCrt(r.GetAtIndex<double>(1), 0.5493061443340549);
+            ShouldMatchCrt(r.GetAtIndex<double>(2), -0.5493061443340549);
 
             // |x| == 1 -> +-inf ; |x| > 1 -> NaN (matches NumPy)
             np.arctanh(np.array(new[] { 1.0 })).GetAtIndex<double>(0).Should().Be(double.PositiveInfinity);
@@ -243,10 +257,10 @@ namespace NumSharp.Tests.Math
             var dst = np.full(4, -1.0, NPTypeCode.Double);
             var mask = np.array(new[] { true, false, true, false });
             np.arctanh(np.array(new[] { 0.5, 0.5, 0.25, 0.25 }), @out: dst, where: mask);
-            dst.GetAtIndex<double>(0).Should().Be(0.5493061443340549);   // computed
-            dst.GetAtIndex<double>(1).Should().Be(-1.0);                 // masked off, kept prior
-            dst.GetAtIndex<double>(2).Should().Be(0.25541281188299536);  // computed
-            dst.GetAtIndex<double>(3).Should().Be(-1.0);                 // masked off, kept prior
+            ShouldMatchCrt(dst.GetAtIndex<double>(0), 0.5493061443340549);   // computed
+            dst.GetAtIndex<double>(1).Should().Be(-1.0);                     // masked off, kept prior
+            ShouldMatchCrt(dst.GetAtIndex<double>(2), 0.25541281188299536);  // computed
+            dst.GetAtIndex<double>(3).Should().Be(-1.0);                     // masked off, kept prior
         }
 
         [TestMethod]

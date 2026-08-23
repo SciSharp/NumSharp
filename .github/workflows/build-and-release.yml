@@ -166,7 +166,11 @@ jobs:
           # Tolerate absence: the interop packages do not exist on every branch.
           [ -f "$proj" ] || { echo "skip (absent): $proj"; continue; }
           echo "::group::pack $proj"
+          # GeneratePackageOnBuild=true (set in each csproj) + `dotnet pack` + multi-targeting
+          # yields NU5026 — the outer Pack runs before the per-TFM DLLs stage. Overriding it to
+          # false here restores the normal restore→build→pack ordering.
           dotnet pack "$proj" --configuration Release --output artifacts/signing-check \
+            -p:GeneratePackageOnBuild=false \
             -p:NoWarn=${{ env.DOTNET_NOWARN }}
           echo "::endgroup::"
         done
@@ -233,6 +237,14 @@ jobs:
         print('base_prefix ', sys.base_prefix); \
         print('INSTSONAME  ', sysconfig.get_config_var('INSTSONAME')); \
         print('LIBDIR      ', sysconfig.get_config_var('LIBDIR'))"
+
+    # The bundled OpenBLAS binaries are gitignored, so a clean checkout has none. This suite runs
+    # with OpenBLAS as its DEFAULT backend (PythonSession.Start calls OpenBlasEngine.TryEnable), and
+    # the Backend_IsOpenBlas* tests hard-assert OpenBlasEngine.Enabled. Stage the pinned per-RID
+    # assets before the build so the current RID's native library is copied into the test output.
+    # (fetch_openblas.py is stdlib-only; Python is already set up above.)
+    - name: Stage OpenBLAS native assets
+      run: python src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py
 
     - name: Build
       run: dotnet build test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}

@@ -3,20 +3,21 @@
   "summary": {
     "schema_version": 1,
     "api_inventory": "coverage/generated/coverage.json",
-    "total_available_or_partial": 475,
-    "measured_or_aliased": 456,
+    "total_available_or_partial": 480,
+    "measured_or_aliased": 455,
     "excluded": 19,
-    "missing": 0,
+    "missing": 6,
     "blocked": 0,
-    "coverage_percent": 100.0,
+    "coverage_percent": 98.7,
     "by_status": {
-      "covered_alias": 15,
+      "covered_alias": 14,
       "excluded": 19,
+      "missing": 6,
       "op_matrix": 419,
       "subsystem": 22
     },
     "by_backend_route": {
-      "managed": 436,
+      "managed": 441,
       "openblas_hybrid": 3,
       "openblas_optional": 10,
       "openblas_optional_composed": 4,
@@ -50,20 +51,20 @@
         "coverage_percent": 100.0
       },
       "np": {
-        "total": 310,
+        "total": 313,
         "measured_or_aliased": 309,
         "excluded": 1,
-        "missing": 0,
+        "missing": 3,
         "blocked": 0,
-        "coverage_percent": 100.0
+        "coverage_percent": 99.0
       },
       "random": {
-        "total": 49,
-        "measured_or_aliased": 46,
+        "total": 51,
+        "measured_or_aliased": 45,
         "excluded": 3,
-        "missing": 0,
+        "missing": 3,
         "blocked": 0,
-        "coverage_percent": 100.0
+        "coverage_percent": 93.8
       }
     },
     "unmatched_benchmark_descriptions": 52
@@ -1144,6 +1145,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Manipulation/ExtendedShapeBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.bmat",
+      "surface": "np",
+      "name": "bmat",
+      "kind": "function",
+      "category": "Linear algebra",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -4601,6 +4615,32 @@
       "notes": ""
     },
     {
+      "id": "numpy.nancumprod",
+      "surface": "np",
+      "name": "nancumprod",
+      "kind": "function",
+      "category": "Reductions",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.nancumsum",
+      "surface": "np",
+      "name": "nancumsum",
+      "kind": "function",
+      "category": "Reductions",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.nanmax",
       "surface": "np",
       "name": "nanmax",
@@ -6632,6 +6672,19 @@
       "notes": ""
     },
     {
+      "id": "numpy.random.bytes",
+      "surface": "random",
+      "name": "bytes",
+      "kind": "function",
+      "category": "Random",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.random.chisquare",
       "surface": "random",
       "name": "chisquare",
@@ -6667,6 +6720,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Random/RandomBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.random.default_rng",
+      "surface": "random",
+      "name": "default_rng",
+      "kind": "function",
+      "category": "Random",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -7163,16 +7229,12 @@
       "name": "random_integers",
       "kind": "function",
       "category": "Random",
-      "api_status": "partial",
-      "coverage_status": "covered_alias",
+      "api_status": "available",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.random.randint"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.random.random_sample",

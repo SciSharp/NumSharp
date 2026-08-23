@@ -16320,7 +16320,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.NumPyRandom.bytes",
       "numsharp_signatures": [
-        "byte[] bytes(long length)"
+        "NumSharp.Generic.NDArray<byte> bytes(long length)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
