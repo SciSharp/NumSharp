@@ -5,6 +5,8 @@
   href: api/
 - name: Benchmarks
   href: docs/benchmarks-dashboard.md
+- name: Tests & Oracle
+  href: docs/tests-oracle-dashboard.md
 - name: NumPy API Coverage & Support
   href: docs/coverage-support-dashboard.md
 - name: Source Code

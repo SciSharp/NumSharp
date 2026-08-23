@@ -7,6 +7,7 @@ on:
       - 'src/**'
       - 'coverage/**'
       - 'benchmark/**'
+      - 'test/**'
       - 'docs/website-src/**'
       - '.github/workflows/docs.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
       - 'src/**'
       - 'coverage/**'
       - 'benchmark/**'
+      - 'test/**'
       - 'docs/website-src/**'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
@@ -30,7 +32,7 @@ concurrency:
 
 jobs:
   api-coverage:
-    name: NumPy ↔ NumSharp API coverage
+    name: NumPy API + Tests & Oracle inventories
     runs-on: ubuntu-latest
 
     steps:
@@ -59,6 +61,12 @@ jobs:
       - name: Verify checked-in dashboard data
         run: diff --recursive --unified coverage/generated artifacts/numpy-numsharp-coverage
 
+      - name: Generate Tests & Oracle inventory
+        run: python test/inventory/generate_test_inventory.py --output artifacts/tests-oracle-inventory
+
+      - name: Verify checked-in Tests & Oracle dashboard data
+        run: diff --recursive --unified test/inventory/generated artifacts/tests-oracle-inventory
+
       - name: Verify benchmark API coverage artifact
         run: python benchmark/scripts/audit_coverage.py --check
 
@@ -84,6 +92,15 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload Tests & Oracle inventory artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: numsharp-tests-oracle-inventory
+          path: artifacts/tests-oracle-inventory/
+          if-no-files-found: error
+          retention-days: 14
+
   build-and-deploy:
     needs: api-coverage
     if: github.event_name != 'pull_request'
@@ -100,6 +117,12 @@ jobs:
         with:
           name: numpy-numsharp-api-coverage
           path: coverage/generated
+
+      - name: Use generated Tests & Oracle inventory artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: numsharp-tests-oracle-inventory
+          path: test/inventory/generated
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4

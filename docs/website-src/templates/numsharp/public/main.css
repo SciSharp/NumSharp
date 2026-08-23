@@ -167,6 +167,11 @@ pre code {
   font-weight: 650;
 }
 
+.ns-home-button-label {
+  text-align: center;
+  line-height: 1.15;
+}
+
 .ns-home-button:hover,
 .ns-home-button:focus-visible {
   border-color: var(--ns-blue);

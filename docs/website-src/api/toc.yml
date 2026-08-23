@@ -19,6 +19,9 @@ items:
   - uid: NumSharp.BackendType
     name: BackendType
     type: Enum
+  - uid: NumSharp.BitGenerator
+    name: BitGenerator
+    type: Class
   - uid: NumSharp.Char8
     name: Char8
     type: Struct
@@ -39,6 +42,9 @@ items:
     type: Class
   - uid: NumSharp.FourierModule
     name: FourierModule
+    type: Class
+  - uid: NumSharp.Generator
+    name: Generator
     type: Class
   - uid: NumSharp.IIndex
     name: IIndex
@@ -103,6 +109,9 @@ items:
   - uid: NumSharp.NPY_TYPECHAR
     name: NPY_TYPECHAR
     type: Enum
+  - uid: NumSharp.NameError
+    name: NameError
+    type: Class
   - uid: NumSharp.NativeRandomState
     name: NativeRandomState
     type: Struct
@@ -115,6 +124,12 @@ items:
   - uid: NumSharp.OpenBlasMissingBackendException
     name: OpenBlasMissingBackendException
     type: Class
+  - uid: NumSharp.PCG64
+    name: PCG64
+    type: Class
+  - uid: NumSharp.PCG64.Pcg64StateData
+    name: PCG64.Pcg64StateData
+    type: Struct
   - uid: NumSharp.PocketFFTDriver
     name: PocketFFTDriver
     type: Class
@@ -123,6 +138,9 @@ items:
     type: Struct
   - uid: NumSharp.RuntimeError
     name: RuntimeError
+    type: Class
+  - uid: NumSharp.SeedSequence
+    name: SeedSequence
     type: Class
   - uid: NumSharp.Shape
     name: Shape

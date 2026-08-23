@@ -22,6 +22,14 @@
   href: array-api-standard.md
 - name: IL Generation
   href: il-generation.md
+- name: Tests & Oracle
+  href: tests-oracle-dashboard.md
+  expanded: true
+  items:
+  - name: Dashboard
+    href: tests-oracle-dashboard.md
+  - name: Generated Summary
+    href: ../../../test/inventory/generated/summary.md
 - name: Benchmarks
   href: benchmarks-dashboard.md
   expanded: true

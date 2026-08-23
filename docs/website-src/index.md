@@ -9,7 +9,9 @@
     </p>
     <div class="ns-home-actions" aria-label="Primary documentation links">
       <a class="ns-home-button ns-home-button-primary" href="docs/intro.md">Start with NDArray</a>
-      <a class="ns-home-button" href="docs/benchmarks-dashboard.md">View benchmarks</a>
+      <a class="ns-home-button" href="docs/benchmarks-dashboard.md"><span class="ns-home-button-label">Benchmark<br>Dashboard</span></a>
+      <a class="ns-home-button" href="docs/coverage-support-dashboard.md"><span class="ns-home-button-label">Supported Features<br>Dashboard</span></a>
+      <a class="ns-home-button" href="docs/tests-oracle-dashboard.md"><span class="ns-home-button-label">Testing &amp; Oracle<br>Dashboard</span></a>
       <a class="ns-home-button" href="api/index.md">API reference</a>
     </div>
   </section>
@@ -82,6 +84,11 @@ Console.WriteLine(a + b);  // [1 3 5 7 9]</code></pre>
         <span>Performance</span>
         <strong>Benchmarks</strong>
         <p>Current NumSharp-vs-NumPy results with drill-down reports by subsystem.</p>
+      </a>
+      <a class="ns-doc-card" href="docs/tests-oracle-dashboard.md">
+        <span>Correctness</span>
+        <strong>Tests &amp; Oracle</strong>
+        <p>Reflected test inventory, differential corpus strength, known bugs, dtypes, layouts, and evidence drill-down.</p>
       </a>
     </div>
   </section>
