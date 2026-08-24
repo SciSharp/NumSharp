@@ -10,16 +10,16 @@
   },
   "summary": {
     "tests": {
-      "methods": 13760,
-      "declaredInvocations": 14396,
+      "methods": 13782,
+      "declaredInvocations": 14418,
       "dataRows": 716,
       "dynamicMethods": 34,
-      "sourceLocated": 13760,
+      "sourceLocated": 13782,
       "oracleMethods": 657,
       "fuzzMatrixMethods": 91,
       "npyOracleMethods": 13,
       "statuses": {
-        "active": 13465,
+        "active": 13487,
         "ignored": 11,
         "manual": 5,
         "open_bug": 215,
@@ -37,7 +37,7 @@
         "WindowsOnly": 75
       },
       "projects": {
-        "NumSharp.Tests": 13157,
+        "NumSharp.Tests": 13179,
         "NumSharp.Tests.Interop": 444,
         "NumSharp.Tests.Oracle": 159
       },
@@ -181,13 +181,13 @@
       "id": "NumSharp.Tests::Backends & kernels",
       "project": "NumSharp.Tests",
       "area": "Backends & kernels",
-      "methods": 3340,
-      "declaredInvocations": 3704,
+      "methods": 3346,
+      "declaredInvocations": 3710,
       "dataRows": 409,
       "dynamicMethods": 3,
       "oracleMethods": 38,
       "statuses": {
-        "active": 3306,
+        "active": 3312,
         "open_bug": 34
       },
       "categories": {
@@ -318,6 +318,7 @@
         "test/NumSharp.Tests/Backends/Unmanaged/StackedMemoryPoolTests.cs",
         "test/NumSharp.Tests/Backends/Unmanaged/StringApiTests.cs",
         "test/NumSharp.Tests/Backends/Unmanaged/StringArrayApiTests.cs",
+        "test/NumSharp.Tests/Backends/Unmanaged/TypedSlicesUnionTests.cs",
         "test/NumSharp.Tests/Backends/Unmanaged/UnmanagedMemoryBlockAllocateTests.cs",
         "test/NumSharp.Tests/Backends/Unmanaged/UnmanagedStorageTests.cs"
       ]
@@ -641,13 +642,13 @@
       "id": "NumSharp.Tests::Lifetime",
       "project": "NumSharp.Tests",
       "area": "Lifetime",
-      "methods": 62,
-      "declaredInvocations": 62,
+      "methods": 78,
+      "declaredInvocations": 78,
       "dataRows": 0,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 61,
+        "active": 77,
         "open_bug": 1
       },
       "categories": {
@@ -655,10 +656,12 @@
       },
       "sourceFiles": [
         "test/NumSharp.Tests/Lifetime/BufferReleaseSweepTests.cs",
+        "test/NumSharp.Tests/Lifetime/NDScopeDoubleDisposeTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeManualDisposeTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeStressTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeThreadSafetyTests.cs",
+        "test/NumSharp.Tests/Lifetime/NDScopeWeaveCarrierTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeWeaveNestingTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs",
         "test/NumSharp.Tests/Lifetime/NpFunctionAllocationVerificationTests.cs",
@@ -9216,6 +9219,35 @@
       ]
     },
     {
+      "id": "NumSharp.Tests::NumSharp.Tests.Backends.Unmanaged.TypedSlicesUnionTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Backends.Unmanaged.TypedSlicesUnionTests",
+      "class": "TypedSlicesUnionTests",
+      "area": "Backends & kernels",
+      "methods": 6,
+      "declaredInvocations": 6,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 6
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Backends/Unmanaged/TypedSlicesUnionTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/Unmanaged/TypedSlicesUnionTests.cs#L78",
+      "methodNames": [
+        "Alias_StructCopy_CarriesTheLiveLane_AllDtypes",
+        "AllDtypes_LaneAgreesWithAddress_OnOwnedAndSlicedStorage",
+        "Clone_IsIndependent_WidestLanesIncluded",
+        "DisposeBase_ViewLaneStillReads",
+        "Union_TypeLoads_And_IsOneSliceWide",
+        "View_WriteThrough_IsVisibleThroughTheLane"
+      ]
+    },
+    {
       "id": "NumSharp.Tests::NumSharp.Tests.Backends.Unmanaged.UnmanagedMemoryBlockAllocateTests",
       "project": "NumSharp.Tests",
       "type": "NumSharp.Tests.Backends.Unmanaged.UnmanagedMemoryBlockAllocateTests",
@@ -15263,6 +15295,32 @@
       ]
     },
     {
+      "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NDScopeDoubleDisposeTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Lifetime.NDScopeDoubleDisposeTests",
+      "class": "NDScopeDoubleDisposeTests",
+      "area": "Lifetime",
+      "methods": 3,
+      "declaredInvocations": 3,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 3
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Lifetime/NDScopeDoubleDisposeTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeDoubleDisposeTests.cs#L36",
+      "methodNames": [
+        "ExplicitTransientDispose_PlusScopeDispose_ReleasesBufferExactlyOnce",
+        "WovenStorageMethods_UnderGCPressure_NoDoubleFree",
+        "YieldedViewOntoDisposedBase_SurvivesBothDisposes"
+      ]
+    },
+    {
       "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NDScopeManualDisposeTests",
       "project": "NumSharp.Tests",
       "type": "NumSharp.Tests.Lifetime.NDScopeManualDisposeTests",
@@ -15390,6 +15448,42 @@
         "ManyThreads_NestedWoven_Concurrent_ZeroErrors_BoundedStrands",
         "SharedReadOnlyInput_ConcurrentScopedOps_UntouchedAndCorrect",
         "ThreadLocalIsolation_WorkerDoesNotSeeMainScope_NorIsReclaimed"
+      ]
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NDScopeWeaveCarrierTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Lifetime.NDScopeWeaveCarrierTests",
+      "class": "NDScopeWeaveCarrierTests",
+      "area": "Lifetime",
+      "methods": 13,
+      "declaredInvocations": 13,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 13
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Lifetime/NDScopeWeaveCarrierTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveCarrierTests.cs#L40",
+      "methodNames": [
+        "ITupleEgress_DroppedUnderEnclosingScope_Reparented",
+        "ITupleEgress_HighArityMixed_EveryNDArrayYielded_NonArraySkipped",
+        "ITupleEgress_ReferenceTuple_AndNull_AreHandled",
+        "StorageEgress_ReturnedSlice_CountedRefSurvivesScopeReclamation",
+        "StorageEgress_ReturnedUnmanagedStorage_CountedRefSurvives",
+        "StorageEgress_WithoutProtection_ScopeReleaseFreesTheBareAlias",
+        "StructCarrier_UniqueAll_AllFourMembers_DroppedUnderEnclosingScope_Reparented",
+        "StructCarrier_UniqueCounts_BothMembersSurvive_ValueCorrect",
+        "StructCarrier_UniqueCounts_ZeroStrands",
+        "StructCarrier_UniqueInverse_ReshapedInverseView_SurvivesBaseReclamation",
+        "TupleCarrier_Polydiv_BothMembersSurvive_ValueCorrect_InputsUntouched",
+        "TupleCarrier_Polydiv_DroppedUnderEnclosingScope_BothReparentedAndReclaimed",
+        "TupleCarrier_Polydiv_ZeroStrands"
       ]
     },
     {

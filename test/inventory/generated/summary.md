@@ -6,9 +6,9 @@ Deterministic inventory of MSTest declarations and committed oracle evidence. It
 
 | Measure | Count |
 |---|---:|
-| Test methods | 13,760 |
-| Declared invocations | 14,396 |
-| Active methods | 13,465 |
+| Test methods | 13,782 |
+| Declared invocations | 14,418 |
+| Active methods | 13,487 |
 | Open-bug methods | 215 |
 | Oracle-owned methods | 657 |
 | FuzzMatrix methods | 91 |
@@ -20,7 +20,7 @@ Deterministic inventory of MSTest declarations and committed oracle evidence. It
 
 | Project | Methods |
 |---|---:|
-| `NumSharp.Tests` | 13,157 |
+| `NumSharp.Tests` | 13,179 |
 | `NumSharp.Tests.Interop` | 444 |
 | `NumSharp.Tests.Oracle` | 159 |
 
