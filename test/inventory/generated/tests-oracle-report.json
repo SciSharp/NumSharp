@@ -10,16 +10,16 @@
   },
   "summary": {
     "tests": {
-      "methods": 13759,
-      "declaredInvocations": 14395,
+      "methods": 13760,
+      "declaredInvocations": 14396,
       "dataRows": 716,
       "dynamicMethods": 34,
-      "sourceLocated": 13759,
+      "sourceLocated": 13760,
       "oracleMethods": 657,
       "fuzzMatrixMethods": 91,
       "npyOracleMethods": 13,
       "statuses": {
-        "active": 13464,
+        "active": 13465,
         "ignored": 11,
         "manual": 5,
         "open_bug": 215,
@@ -37,7 +37,7 @@
         "WindowsOnly": 75
       },
       "projects": {
-        "NumSharp.Tests": 13156,
+        "NumSharp.Tests": 13157,
         "NumSharp.Tests.Interop": 444,
         "NumSharp.Tests.Oracle": 159
       },
@@ -181,13 +181,13 @@
       "id": "NumSharp.Tests::Backends & kernels",
       "project": "NumSharp.Tests",
       "area": "Backends & kernels",
-      "methods": 3339,
-      "declaredInvocations": 3703,
+      "methods": 3340,
+      "declaredInvocations": 3704,
       "dataRows": 409,
       "dynamicMethods": 3,
       "oracleMethods": 38,
       "statuses": {
-        "active": 3305,
+        "active": 3306,
         "open_bug": 34
       },
       "categories": {
@@ -8116,12 +8116,12 @@
       "type": "NumSharp.Tests.Backends.Unmanaged.ArcLifecycleTests",
       "class": "ArcLifecycleTests",
       "area": "Backends & kernels",
-      "methods": 35,
-      "declaredInvocations": 49,
+      "methods": 36,
+      "declaredInvocations": 50,
       "dataRows": 15,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 35
+        "active": 36
       },
       "categories": {},
       "oracleKinds": {},
@@ -8129,8 +8129,9 @@
       "sourcePaths": [
         "test/NumSharp.Tests/Backends/Unmanaged/ArcLifecycleTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/Unmanaged/ArcLifecycleTests.cs#L39",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/Unmanaged/ArcLifecycleTests.cs#L55",
       "methodNames": [
+        "AliasedBaseBuffer_SurvivesFinalizerOfItsLastNDArray",
         "AllocAndDispose_TenThousandTimes_ReleasesEveryBuffer",
         "ConcurrentAddRefRelease_PreservesCount",
         "Copy_AllocatesIndependentBuffer",
@@ -8140,7 +8141,7 @@
         "Dispose_OnTypeOnlyConstructed_NDArray_DoesNotThrow",
         "DisposedNDArray_BecomesCollectable",
         "DtypeCoverage_AllParticipateInRefCount",
-        "Finalizer_ReleasesUnmanaged_WhenDisposeMissed",
+        "Finalizer_AbandonsRef_ButNeverFreesUnderALiveAlias",
         "GCHandleAllocation_DisposeFreesPin_NotManagedArray",
         "ManyAddRefs_AccumulateCorrectly",
         "MultipleNDArrays_SameStorageReference_EachBumpsRefCount",
@@ -28870,7 +28871,7 @@
       "sourcePaths": [
         "test/NumSharp.Tests.Interop/SlidingDotLiveParityTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/SlidingDotLiveParityTests.cs#L108",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/SlidingDotLiveParityTests.cs#L166",
       "methodNames": [
         "Backend_IsOpenBlasEnabled",
         "Convolve_Complex128_Long_Full_ByteExact",

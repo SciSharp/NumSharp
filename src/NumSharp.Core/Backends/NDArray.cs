@@ -113,13 +113,21 @@ namespace NumSharp
 
         /// <summary>
         ///     Finalizer safety net: runs only when the user never called
-        ///     <see cref="Dispose"/>. Drops this NDArray's reference so the
-        ///     refcount can still reach zero even without explicit cleanup.
+        ///     <see cref="Dispose"/>. Drops this NDArray's reference via
+        ///     <see cref="IArraySlice.Abandon"/> — decrement WITHOUT the eager
+        ///     free-at-zero that <see cref="Dispose"/> performs. This NDArray
+        ///     being unreachable proves nothing about OTHER reachable aliases
+        ///     of the same buffer (a bare <see cref="UnmanagedStorage"/> /
+        ///     <see cref="IArraySlice"/> obtained via <see cref="GetData()"/>
+        ///     holds no counted reference), so freeing here read as a
+        ///     use-after-free through such aliases. The memory block's own
+        ///     finalizer frees (and pools) the buffer in the GC cycle after
+        ///     the last alias dies.
         /// </summary>
         ~NDArray()
         {
             if (Volatile.Read(ref _disposed) == 0)
-                Storage?.InternalArray?.Release();
+                Storage?.InternalArray?.Abandon();
         }
 
         /// <summary>
