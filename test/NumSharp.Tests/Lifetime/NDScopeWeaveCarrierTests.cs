@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends.Unmanaged.Pooling;
 
 namespace NumSharp.Tests.Lifetime
@@ -185,6 +186,75 @@ namespace NumSharp.Tests.Lifetime
                 $"woven unique_counts stranded {deficit} buffers over {N} cycles (acq {Acquisitions}, rel {Releases})");
             Assert.IsFalse(x.IsDisposed);
             x.Dispose();
+        }
+
+        // ------------------------------------------- 3) the general ITuple egress (up to 8, mixed)
+        //
+        // A ValueTuple of 2..4 NDArrays takes the strongly-typed Returns overload; ANY other tuple —
+        // arity 5..8, a non-NDArray component, or a reference-type Tuple — takes Returns(ITuple). No
+        // in-tree [NDScoped] method returns such a tuple today, so (exactly like the weaver's
+        // out-NDArray[] egress branch) its runtime semantics are pinned here on the underlying NDScope
+        // method, called in the EXACT box+callvirt shape the weaver emits: `scope.Returns((ITuple)t)`.
+
+        [TestMethod]
+        public void ITupleEgress_HighArityMixed_EveryNDArrayYielded_NonArraySkipped()
+        {
+            NDArray a, b, c, dropped;
+            using (var scope = NDScope.Open())
+            {
+                a = np.arange(3); b = np.arange(3); c = np.arange(3);   // tracked by scope
+                dropped = np.arange(3);                                 // tracked, NOT yielded (control)
+
+                // A 5-element mixed tuple (NDArray, int, NDArray, string, NDArray) — the shape the weaver
+                // boxes and hands to Returns(ITuple). The non-NDArray components must be skipped, not crash.
+                ITuple t = (a, 42, b, "x", c);
+                ITuple ret = scope.Returns(t);
+                Assert.AreSame(t, ret, "Returns(ITuple) returns the same tuple");
+            }
+
+            Assert.IsFalse(a.IsDisposed, "NDArray component 0 was yielded → survives the scope");
+            Assert.IsFalse(b.IsDisposed, "NDArray component 2 was yielded → survives");
+            Assert.IsFalse(c.IsDisposed, "NDArray component 4 was yielded → survives");
+            Assert.IsTrue(dropped.IsDisposed, "an un-yielded array in the same scope is still reclaimed (the scope worked)");
+
+            a.Dispose(); b.Dispose(); c.Dispose();
+        }
+
+        [TestMethod]
+        public void ITupleEgress_DroppedUnderEnclosingScope_Reparented()
+        {
+            NDArray a, b;
+            using (var outer = NDScope.Open())
+            {
+                using (var inner = NDScope.Open())
+                {
+                    a = np.arange(4); b = np.arange(4);   // tracked by inner
+                    inner.Returns((ITuple)(a, 7L, b));    // re-parents the two NDArrays up into `outer`
+                }
+                Assert.IsFalse(a.IsDisposed, "re-parented into the enclosing scope, survives inner's close");
+                Assert.IsFalse(b.IsDisposed);
+            }
+
+            Assert.IsTrue(a.IsDisposed, "the enclosing scope reclaims the re-parented arrays on close");
+            Assert.IsTrue(b.IsDisposed);
+        }
+
+        [TestMethod]
+        public void ITupleEgress_ReferenceTuple_AndNull_AreHandled()
+        {
+            // A reference-type System.Tuple also implements ITuple (the weaver passes it without boxing).
+            NDArray a, b;
+            using (var scope = NDScope.Open())
+            {
+                a = np.arange(2); b = np.arange(2);
+                ITuple ret = scope.Returns((ITuple)Tuple.Create(a, b));
+                Assert.IsNotNull(ret);
+
+                Assert.AreSame(null, scope.Returns((ITuple)null), "a null tuple is a safe no-op");
+            }
+            Assert.IsFalse(a.IsDisposed, "reference-Tuple components are yielded too");
+            Assert.IsFalse(b.IsDisposed);
+            a.Dispose(); b.Dispose();
         }
     }
 }

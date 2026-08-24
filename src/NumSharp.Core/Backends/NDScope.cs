@@ -186,6 +186,24 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Yields every <see cref="NDArray"/> in a tuple result of ANY arity (up to 8) and ANY mix —
+        ///     the general <see cref="ITuple"/> egress that also covers a reference-type <see cref="System.Tuple"/>.
+        ///     Components that are NOT an <see cref="NDArray"/> (a scalar, a count, …) are skipped; a null
+        ///     tuple is a no-op. This is the weaver's egress for a tuple the strongly-typed overloads above
+        ///     don't cover (arity 5–8, a non-NDArray component, or a boxed/reference tuple). It indexes
+        ///     through <see cref="ITuple"/>, so value-type components box — negligible on the once-per-call
+        ///     return path; hand-scope a hot all-NDArray tuple through the typed overloads to avoid it.
+        /// </summary>
+        public ITuple Returns(ITuple tuple)
+        {
+            if (tuple is not null)
+                for (int i = 0; i < tuple.Length; i++)
+                    if (tuple[i] is NDArray nd)
+                        Returns(nd);
+            return tuple;
+        }
+
+        /// <summary>
         ///     Permanently removes <paramref name="nd"/> from whatever scope tracks it WITHOUT
         ///     re-tracking into a parent — for arrays that must outlive every scope (an array
         ///     being cached into a static / long-lived field from inside a scoped call). Must run

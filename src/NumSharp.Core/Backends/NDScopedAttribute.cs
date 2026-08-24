@@ -19,14 +19,15 @@ namespace NumSharp
     ///     instruction; the whole original body wrapped in try/finally with
     ///     <see cref="NDScope.Dispose"/> in the finally; every <c>ret</c> routed through
     ///     <see cref="NDScope.Returns{T}(T)"/> for <see cref="NDArray"/>-like returns
-    ///     (<see cref="NDScope.Returns{T}(T[])"/> for array returns, the <c>Returns</c> tuple overloads
-    ///     for a <c>ValueTuple</c> of NDArrays, and <see cref="INDArrayCarrier.YieldTo"/> for a
-    ///     result-struct carrier), and every <c>out NDArray</c> parameter's final value yielded before
-    ///     each successful return.</para>
+    ///     (<see cref="NDScope.Returns{T}(T[])"/> for array returns, the typed <c>Returns</c> tuple
+    ///     overloads for a small all-NDArray <c>ValueTuple</c> and <c>Returns(ITuple)</c> for any other
+    ///     <c>ValueTuple</c>/<c>Tuple</c> — any arity up to 8, mixed components — and
+    ///     <see cref="INDArrayCarrier.YieldTo"/> for a result-struct carrier), and every
+    ///     <c>out NDArray</c> parameter's final value yielded before each successful return.</para>
     ///     <para>The weaver REJECTS (build error NDW003) only shapes whose egress it cannot see:
-    ///     <c>ref NDArray</c> parameters, an UNSUPPORTED carrier return (an object/collection member, a
-    ///     <c>&gt;4</c>-arity or mixed tuple, or a result struct that does NOT implement
-    ///     <see cref="INDArrayCarrier"/>), iterators and async methods — scope those by hand.</para>
+    ///     <c>ref NDArray</c> parameters, an UNSUPPORTED carrier return (a bespoke reference type, a
+    ///     collection, or a result struct that does NOT implement <see cref="INDArrayCarrier"/>),
+    ///     iterators and async methods — scope those by hand.</para>
     ///     <para>A method whose body already opens an <see cref="NDScope"/> is skipped
     ///     (idempotence), so hand-scoped code may carry the attribute without double-wrapping.</para>
     /// </remarks>

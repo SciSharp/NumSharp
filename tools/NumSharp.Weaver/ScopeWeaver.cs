@@ -32,7 +32,9 @@ internal static class ScopeWeaver
     private const string NDScopeFullName = "NumSharp.NDScope";
     private const string NDArrayFullName = "NumSharp.NDArray";
     private const string CarrierInterfaceFullName = "NumSharp.INDArrayCarrier";
+    private const string ITupleFullName = "System.Runtime.CompilerServices.ITuple";
     private const string ValueTuplePrefix = "System.ValueTuple`";
+    private const string TuplePrefix = "System.Tuple`";
 
     private sealed class Refs
     {
@@ -44,6 +46,7 @@ internal static class ScopeWeaver
         public MethodDefinition ReturnsTuple2; // (T1,T2) Returns<T1,T2>((T1,T2))
         public MethodDefinition ReturnsTuple3; // (T1,T2,T3) Returns<T1,T2,T3>((T1,T2,T3))
         public MethodDefinition ReturnsTuple4; // (T1,T2,T3,T4) Returns<T1,T2,T3,T4>((T1,T2,T3,T4))
+        public MethodDefinition ReturnsITuple; // ITuple Returns(ITuple) — any arity/mix, boxed
         public MethodDefinition CarrierYieldTo; // void INDArrayCarrier.YieldTo(NDScope)
 
         /// <summary>The <c>Returns</c> tuple overload for the given arity (2..4), or null if unsupported.</summary>
@@ -62,8 +65,9 @@ internal static class ScopeWeaver
         Scalar,           // primitives / enums / decimal / Half / Complex / string — scope only
         NDArrayLike,      // NDArray or a subclass (NDArray<T>) — Returns<T>(T)
         NDArrayLikeArray, // NDArray-like[] — Returns<T>(T[])
-        NDArrayTuple,     // ValueTuple<..> of NDArray-likes — Returns<T..>((T..)) tuple overload
-        Carrier           // in-module result struct — each NDArray/NDArray[] field yielded in place
+        NDArrayTuple,     // ValueTuple<..> of 2..4 NDArray-likes — Returns<T..>((T..)) overload (no box)
+        Tuple,            // any OTHER ValueTuple/Tuple (arity 5..8, a non-NDArray component, Tuple<>) — Returns(ITuple)
+        Carrier           // in-module result struct — INDArrayCarrier.YieldTo(scope)
     }
 
     public static WeaveResult WeaveAssembly(string assemblyPath, byte[] snkBlob, bool verbose, TextWriter stdout, TextWriter stderr)
@@ -221,10 +225,11 @@ internal static class ScopeWeaver
         {
             stderr.WriteLine(
                 $"NumSharp.Weaver : error NDW003: [NDScoped] method '{m.FullName}' returns '{m.ReturnType.FullName}' — " +
-                "an unsupported carrier the weaver cannot see every NDArray through (an object/collection field, a " +
-                "nested carrier, a mixed or >4-arity tuple), so its NDArray members would be reclaimed and handed to " +
-                "the caller disposed; scope this method by hand and yield each member. (NDArray, NDArray[], ValueTuples " +
-                "of 2..4 NDArrays, and result structs whose fields are all NDArray/NDArray[]/scalar ARE woven.)");
+                "an unsupported carrier the weaver cannot see every NDArray through (a bespoke reference type, a " +
+                "collection, or a result struct that does NOT implement INDArrayCarrier), so its NDArray members would " +
+                "be reclaimed and handed to the caller disposed; add INDArrayCarrier to the struct, or scope this " +
+                "method by hand. (NDArray, NDArray[], any ValueTuple/Tuple of NDArrays, and INDArrayCarrier result " +
+                "structs ARE woven.)");
             return ValidationOutcome.Error;
         }
 
@@ -274,10 +279,13 @@ internal static class ScopeWeaver
                     break;
                 // The Returns family is keyed by GENERIC arity, not by inspecting the parameter shape:
                 // Returns<T>(T) and Returns<T>(T[]) both have one type parameter (split on ArrayType);
-                // the tuple overloads have 2/3/4 type parameters, one per component.
+                // the typed tuple overloads have 2/3/4 type parameters; Returns(ITuple) has none.
                 case "Returns" when m.Parameters.Count == 1:
                     switch (m.GenericParameters.Count)
                     {
+                        case 0 when m.Parameters[0].ParameterType.FullName == ITupleFullName:
+                            refs.ReturnsITuple = m;
+                            break;
                         case 1 when m.Parameters[0].ParameterType is ArrayType:
                             refs.ReturnsMany = m;
                             break;
@@ -309,11 +317,11 @@ internal static class ScopeWeaver
 
         if (refs.Open is null || refs.Dispose is null || refs.ReturnsOne is null || refs.ReturnsMany is null ||
             refs.ReturnsTuple2 is null || refs.ReturnsTuple3 is null || refs.ReturnsTuple4 is null ||
-            refs.CarrierYieldTo is null)
+            refs.ReturnsITuple is null || refs.CarrierYieldTo is null)
             throw new InvalidOperationException(
                 $"{NDScopeFullName}/{CarrierInterfaceFullName} is missing one of Open/Dispose/Returns<T>(T)/" +
-                "Returns<T>(T[])/Returns<T1,T2>/Returns<T1,T2,T3>/Returns<T1,T2,T3,T4>/YieldTo(NDScope) — " +
-                "weaver and library out of sync");
+                "Returns<T>(T[])/Returns<T1,T2>/Returns<T1,T2,T3>/Returns<T1,T2,T3,T4>/Returns(ITuple)/" +
+                "YieldTo(NDScope) — weaver and library out of sync");
 
         return refs;
     }
@@ -377,16 +385,42 @@ internal static class ScopeWeaver
         if (IsScalar(ret))
             return RetKind.Scalar;
 
-        // A ValueTuple of NDArray-likes (svd/qr/eig/lstsq/modf/average/polydiv) is yielded through the
-        // matching Returns tuple overload; a result-struct carrier (UniqueResult, MeshgridResult,
-        // PolyfitResult, …) yields its members through its own INDArrayCarrier.YieldTo.
+        // A small all-NDArray ValueTuple (svd/qr/eig/lstsq/modf/average/polydiv) takes the strongly-typed
+        // Returns overload (no box); any OTHER tuple — arity 5..8, a non-NDArray component, or a
+        // reference-type Tuple — takes the general Returns(ITuple). A result-struct carrier
+        // (UniqueResult, MeshgridResult, PolyfitResult, …) yields through its own INDArrayCarrier.YieldTo.
         if (TryGetNDArrayTuple(ret, out _))
             return RetKind.NDArrayTuple;
+
+        if (IsGeneralTuple(ret, out _))
+            return RetKind.Tuple;
 
         if (ImplementsCarrierInterface(ret))
             return RetKind.Carrier;
 
         return null;
+    }
+
+    /// <summary>
+    ///     True for ANY <see cref="System.ValueTuple"/> or <see cref="System.Tuple"/> instantiation — the
+    ///     types that implement <c>ITuple</c>, whatever the arity or component mix. <paramref name="isValueType"/>
+    ///     distinguishes a ValueTuple (a value type — must be boxed to pass as ITuple) from a reference-type
+    ///     Tuple. Detected by name so no external assembly resolver is needed.
+    /// </summary>
+    private static bool IsGeneralTuple(TypeReference t, out bool isValueType)
+    {
+        isValueType = false;
+        if (t is not GenericInstanceType git)
+            return false;
+
+        var name = git.ElementType.FullName;
+        if (name.StartsWith(ValueTuplePrefix, StringComparison.Ordinal))
+        {
+            isValueType = true;
+            return true;
+        }
+
+        return name.StartsWith(TuplePrefix, StringComparison.Ordinal);
     }
 
     /// <summary>A value that holds no NDArray — primitives, enums, string, decimal/Half/Complex, native ints.</summary>
@@ -587,6 +621,19 @@ internal static class ScopeWeaver
                         cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, retVar));
                         cursor = InsertAfter(il, cursor, il.Create(OpCodes.Callvirt, tupleRef));
                         cursor = InsertAfter(il, cursor, il.Create(OpCodes.Stloc, retVar));
+                        break;
+
+                    case RetKind.Tuple:
+                        // scope.Returns((ITuple)retVar) — yields each NDArray component of any arity/mix.
+                        // A ValueTuple boxes to ITuple; a reference Tuple passes straight through. The tuple's
+                        // NDArray references are re-parented in place, so the (unboxed) retVar is returned as-is.
+                        IsGeneralTuple(m.ReturnType, out var tupleIsValueType);
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, scopeVar));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, retVar));
+                        if (tupleIsValueType)
+                            cursor = InsertAfter(il, cursor, il.Create(OpCodes.Box, m.ReturnType));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Callvirt, refs.ReturnsITuple));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Pop));
                         break;
 
                     case RetKind.Carrier:

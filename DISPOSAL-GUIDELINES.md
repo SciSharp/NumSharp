@@ -161,7 +161,8 @@ branches and nested-handler boundaries that referenced them stay valid).
 |---|---|
 | `NDArray` / `NDArray<T>` | value routed through `Returns<T>(T)` at every ret |
 | `NDArray[]` / `NDArray<T>[]` | `Returns<T>(T[])` (tuple results — nonzero etc.) |
-| `ValueTuple` of 2..4 NDArrays (`(NDArray, NDArray)` — `modf`/`polydiv`/`qr`/`eig`/`svd`/`lstsq`/…) | each component yielded through the matching `Returns<T1,…>` tuple overload |
+| `ValueTuple` of 2..4 NDArrays (`(NDArray, NDArray)` — `modf`/`polydiv`/`qr`/`eig`/`svd`/`lstsq`/…) | each component yielded through the matching `Returns<T1,…>` tuple overload (no box) |
+| any OTHER `ValueTuple`/`Tuple` (arity 5..8, a non-NDArray component, or a reference `Tuple`) | `Returns(ITuple)` — yields every NDArray component, skips the rest (boxed on the boundary; negligible off the hot path) |
 | result-struct carrier implementing `INDArrayCarrier` (`UniqueResult`, `MeshgridResult`, `PolyfitResult`, …) | `retVar.YieldTo(scope)` via boxing-free `constrained.callvirt` — the struct's own method re-parents each NDArray it holds (so private fields are reached from INSIDE the struct) |
 | `void` / scalar (`long`, `bool`, `double`, string, enums, …) | scope only; `out NDArray`/`out NDArray[]` params still escaped |
 | `out NDArray` / `out NDArray[]` param | final-value escape before each successful return |
