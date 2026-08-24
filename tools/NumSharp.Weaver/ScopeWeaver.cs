@@ -15,9 +15,12 @@ internal readonly record struct WeaveResult(int Woven, int Skipped, int Errors, 
 ///           original return is forced through a rewritable seam;</item>
 ///     <item>each original <c>ret</c> is rewritten IN PLACE (the ret instruction object is mutated into
 ///           the first replacement instruction, so branches that targeted it stay valid): the return
-///           value lands in a local, NDArray-like values are routed through <c>scope.Returns(value)</c>,
-///           each <c>out NDArray</c> parameter's FINAL value is yielded (success path only — on a throw
-///           the finally reclaims, and out contents are undefined after a throw anyway), then
+///           value lands in a local, then its NDArray content is yielded through <c>scope.Returns</c> —
+///           a bare <c>NDArray</c> / <c>NDArray[]</c> directly; a <c>ValueTuple</c> of NDArrays through
+///           the matching tuple overload; a result-struct carrier (<c>UniqueResult</c>,
+///           <c>MeshgridResult</c>, <c>PolyfitResult</c>, …) by yielding each of its NDArray/NDArray[]
+///           fields in place — plus each <c>out NDArray</c> parameter's FINAL value (success path only —
+///           on a throw the finally reclaims, and out contents are undefined after a throw anyway), then
 ///           <c>leave</c> to a single epilogue (<c>[ldloc ret;] ret</c>) after the handler.</item>
 ///     </list>
 ///     Existing try/using blocks in the body nest inside the new outer handler; the handler-table
@@ -28,22 +31,39 @@ internal static class ScopeWeaver
     private const string AttributeFullName = "NumSharp.NDScopedAttribute";
     private const string NDScopeFullName = "NumSharp.NDScope";
     private const string NDArrayFullName = "NumSharp.NDArray";
+    private const string CarrierInterfaceFullName = "NumSharp.INDArrayCarrier";
+    private const string ValueTuplePrefix = "System.ValueTuple`";
 
     private sealed class Refs
     {
         public TypeDefinition NDScope;
-        public MethodDefinition Open;        // static NDScope Open()
-        public MethodDefinition Dispose;     // void Dispose()
-        public MethodDefinition ReturnsOne;  // T Returns<T>(T)     where T : NDArray
-        public MethodDefinition ReturnsMany; // T[] Returns<T>(T[]) where T : NDArray
+        public MethodDefinition Open;         // static NDScope Open()
+        public MethodDefinition Dispose;      // void Dispose()
+        public MethodDefinition ReturnsOne;   // T Returns<T>(T)     where T : NDArray
+        public MethodDefinition ReturnsMany;  // T[] Returns<T>(T[]) where T : NDArray
+        public MethodDefinition ReturnsTuple2; // (T1,T2) Returns<T1,T2>((T1,T2))
+        public MethodDefinition ReturnsTuple3; // (T1,T2,T3) Returns<T1,T2,T3>((T1,T2,T3))
+        public MethodDefinition ReturnsTuple4; // (T1,T2,T3,T4) Returns<T1,T2,T3,T4>((T1,T2,T3,T4))
+        public MethodDefinition CarrierYieldTo; // void INDArrayCarrier.YieldTo(NDScope)
+
+        /// <summary>The <c>Returns</c> tuple overload for the given arity (2..4), or null if unsupported.</summary>
+        public MethodDefinition ReturnsTuple(int arity) => arity switch
+        {
+            2 => ReturnsTuple2,
+            3 => ReturnsTuple3,
+            4 => ReturnsTuple4,
+            _ => null
+        };
     }
 
     private enum RetKind
     {
         Void,
-        Scalar,          // primitives / enums / decimal / Half / Complex / string — scope only
-        NDArrayLike,     // NDArray or a subclass (NDArray<T>) — Returns<T>(T)
-        NDArrayLikeArray // NDArray-like[] — Returns<T>(T[])
+        Scalar,           // primitives / enums / decimal / Half / Complex / string — scope only
+        NDArrayLike,      // NDArray or a subclass (NDArray<T>) — Returns<T>(T)
+        NDArrayLikeArray, // NDArray-like[] — Returns<T>(T[])
+        NDArrayTuple,     // ValueTuple<..> of NDArray-likes — Returns<T..>((T..)) tuple overload
+        Carrier           // in-module result struct — each NDArray/NDArray[] field yielded in place
     }
 
     public static WeaveResult WeaveAssembly(string assemblyPath, byte[] snkBlob, bool verbose, TextWriter stdout, TextWriter stderr)
@@ -201,8 +221,10 @@ internal static class ScopeWeaver
         {
             stderr.WriteLine(
                 $"NumSharp.Weaver : error NDW003: [NDScoped] method '{m.FullName}' returns '{m.ReturnType.FullName}' — " +
-                "a carrier type the weaver cannot yield through scope.Returns (its NDArray members would be " +
-                "reclaimed and handed to the caller disposed); scope this method by hand and yield each member");
+                "an unsupported carrier the weaver cannot see every NDArray through (an object/collection field, a " +
+                "nested carrier, a mixed or >4-arity tuple), so its NDArray members would be reclaimed and handed to " +
+                "the caller disposed; scope this method by hand and yield each member. (NDArray, NDArray[], ValueTuples " +
+                "of 2..4 NDArrays, and result structs whose fields are all NDArray/NDArray[]/scalar ARE woven.)");
             return ValidationOutcome.Error;
         }
 
@@ -250,18 +272,48 @@ internal static class ScopeWeaver
                 case "Dispose" when !m.IsStatic && !m.HasParameters:
                     refs.Dispose = m;
                     break;
-                case "Returns" when m.HasGenericParameters && m.Parameters.Count == 1:
-                    if (m.Parameters[0].ParameterType is ArrayType)
-                        refs.ReturnsMany = m;
-                    else
-                        refs.ReturnsOne = m;
+                // The Returns family is keyed by GENERIC arity, not by inspecting the parameter shape:
+                // Returns<T>(T) and Returns<T>(T[]) both have one type parameter (split on ArrayType);
+                // the tuple overloads have 2/3/4 type parameters, one per component.
+                case "Returns" when m.Parameters.Count == 1:
+                    switch (m.GenericParameters.Count)
+                    {
+                        case 1 when m.Parameters[0].ParameterType is ArrayType:
+                            refs.ReturnsMany = m;
+                            break;
+                        case 1:
+                            refs.ReturnsOne = m;
+                            break;
+                        case 2:
+                            refs.ReturnsTuple2 = m;
+                            break;
+                        case 3:
+                            refs.ReturnsTuple3 = m;
+                            break;
+                        case 4:
+                            refs.ReturnsTuple4 = m;
+                            break;
+                    }
+
                     break;
             }
         }
 
-        if (refs.Open is null || refs.Dispose is null || refs.ReturnsOne is null || refs.ReturnsMany is null)
+        // The carrier seam: INDArrayCarrier.YieldTo(NDScope) — the boundary a result struct exposes so
+        // the weaver can hand every NDArray it holds back through the scope (a struct's own method can
+        // reach its private fields; the enclosing type's woven method cannot).
+        var carrierType = module.GetType(CarrierInterfaceFullName);
+        refs.CarrierYieldTo = carrierType?.Methods.FirstOrDefault(
+            m => m.Name == "YieldTo" && m.Parameters.Count == 1 &&
+                 m.Parameters[0].ParameterType.FullName == NDScopeFullName);
+
+        if (refs.Open is null || refs.Dispose is null || refs.ReturnsOne is null || refs.ReturnsMany is null ||
+            refs.ReturnsTuple2 is null || refs.ReturnsTuple3 is null || refs.ReturnsTuple4 is null ||
+            refs.CarrierYieldTo is null)
             throw new InvalidOperationException(
-                $"{NDScopeFullName} is missing one of Open/Dispose/Returns<T>(T)/Returns<T>(T[]) — weaver and library out of sync");
+                $"{NDScopeFullName}/{CarrierInterfaceFullName} is missing one of Open/Dispose/Returns<T>(T)/" +
+                "Returns<T>(T[])/Returns<T1,T2>/Returns<T1,T2,T3>/Returns<T1,T2,T3,T4>/YieldTo(NDScope) — " +
+                "weaver and library out of sync");
 
         return refs;
     }
@@ -310,7 +362,7 @@ internal static class ScopeWeaver
         return false;
     }
 
-    /// <summary>Null = rejected (carrier struct / unsupported): the caller reports NDW003.</summary>
+    /// <summary>Null = rejected (unsupported carrier / hidden egress): the caller reports NDW003.</summary>
     private static RetKind? Classify(TypeReference ret)
     {
         if (ret.MetadataType == MetadataType.Void)
@@ -322,7 +374,25 @@ internal static class ScopeWeaver
         if (ret is ArrayType { Rank: 1 } arr && IsNDArrayLike(arr.ElementType))
             return RetKind.NDArrayLikeArray;
 
-        switch (ret.MetadataType)
+        if (IsScalar(ret))
+            return RetKind.Scalar;
+
+        // A ValueTuple of NDArray-likes (svd/qr/eig/lstsq/modf/average/polydiv) is yielded through the
+        // matching Returns tuple overload; a result-struct carrier (UniqueResult, MeshgridResult,
+        // PolyfitResult, …) yields its members through its own INDArrayCarrier.YieldTo.
+        if (TryGetNDArrayTuple(ret, out _))
+            return RetKind.NDArrayTuple;
+
+        if (ImplementsCarrierInterface(ret))
+            return RetKind.Carrier;
+
+        return null;
+    }
+
+    /// <summary>A value that holds no NDArray — primitives, enums, string, decimal/Half/Complex, native ints.</summary>
+    private static bool IsScalar(TypeReference t)
+    {
+        switch (t.MetadataType)
         {
             case MetadataType.Boolean:
             case MetadataType.Char:
@@ -339,33 +409,92 @@ internal static class ScopeWeaver
             case MetadataType.String:
             case MetadataType.IntPtr:
             case MetadataType.UIntPtr:
-                return RetKind.Scalar;
+                return true;
         }
 
-        switch (ret.FullName)
+        switch (t.FullName)
         {
             case "System.Decimal":
             case "System.Half":
             case "System.Numerics.Complex":
-                return RetKind.Scalar;
+                return true;
         }
 
-        // In-module enums (NPTypeCode etc.) are scalars; anything else — value tuples, result
-        // structs, object, collections — is a carrier the weaver must not guess about.
-        if (ret.FullName.StartsWith("NumSharp", StringComparison.Ordinal))
+        // In-module enums (NPTypeCode etc.) are scalars.
+        if (t.FullName.StartsWith("NumSharp", StringComparison.Ordinal))
         {
             try
             {
-                if (ret.Resolve() is { IsEnum: true })
-                    return RetKind.Scalar;
+                if (t.Resolve() is { IsEnum: true })
+                    return true;
             }
             catch
             {
-                // fall through to rejection
+                // not resolvable here — treat as non-scalar
             }
         }
 
-        return null;
+        return false;
+    }
+
+    /// <summary>
+    ///     True for <c>System.ValueTuple&lt;…&gt;</c> of arity 2..4 whose every component is NDArray-like
+    ///     — the shapes NumPy's factorisations and <c>modf</c>/<c>average</c>/<c>polydiv</c> return, yielded
+    ///     through a <c>Returns</c> tuple overload. A mixed tuple, a 1-tuple, or arity &gt; 4 (no overload)
+    ///     is declined and — being a <c>System.*</c> type — falls through to NDW003.
+    /// </summary>
+    private static bool TryGetNDArrayTuple(TypeReference t, out GenericInstanceType tuple)
+    {
+        tuple = null;
+        if (t is not GenericInstanceType git ||
+            !git.ElementType.FullName.StartsWith(ValueTuplePrefix, StringComparison.Ordinal))
+            return false;
+
+        int arity = git.GenericArguments.Count;
+        if (arity < 2 || arity > 4)
+            return false;
+
+        foreach (var arg in git.GenericArguments)
+            if (!IsNDArrayLike(arg))
+                return false;
+
+        tuple = git;
+        return true;
+    }
+
+    /// <summary>
+    ///     True for a result-struct carrier that opts into weaving by implementing
+    ///     <c>NumSharp.INDArrayCarrier</c> — its <c>YieldTo(NDScope)</c> hands every NDArray it holds back
+    ///     through the scope. The opt-in is what lets the weaver reach members behind PRIVATE fields
+    ///     (auto-property backing fields, <c>_grids</c>, …): a struct's own method can read them, but the
+    ///     enclosing type's woven method cannot (the CLR grants nested→enclosing private access, not the
+    ///     reverse). A struct without the interface reports NDW003 and is hand-scoped.
+    /// </summary>
+    private static bool ImplementsCarrierInterface(TypeReference t)
+    {
+        if (t is null || t.IsByReference || t.IsPointer || t is ArrayType || t.IsGenericParameter)
+            return false;
+        if (!t.FullName.StartsWith("NumSharp", StringComparison.Ordinal))
+            return false; // ValueTuples are handled above; external structs are never chased
+
+        TypeDefinition def;
+        try
+        {
+            def = t.Resolve();
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (def is null || !def.IsValueType || def.IsEnum)
+            return false;
+
+        foreach (var i in def.Interfaces)
+            if (i.InterfaceType.FullName == CarrierInterfaceFullName)
+                return true;
+
+        return false;
     }
 
     // ----------------------------------------------------------------- the transform
@@ -437,13 +566,37 @@ internal static class ScopeWeaver
                 ret.Operand = retVar;
                 cursor = ret;
 
-                if (retKind is RetKind.NDArrayLike or RetKind.NDArrayLikeArray)
+                switch (retKind)
                 {
-                    var returnsRef = InstantiateReturns(m.ReturnType, retKind, refs);
-                    cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, scopeVar));
-                    cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, retVar));
-                    cursor = InsertAfter(il, cursor, il.Create(OpCodes.Callvirt, returnsRef));
-                    cursor = InsertAfter(il, cursor, il.Create(OpCodes.Stloc, retVar));
+                    case RetKind.NDArrayLike:
+                    case RetKind.NDArrayLikeArray:
+                        // scope.Returns(retVar) — the value is re-parented and re-stored (same reference).
+                        var returnsRef = InstantiateReturns(m.ReturnType, retKind, refs);
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, scopeVar));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, retVar));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Callvirt, returnsRef));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Stloc, retVar));
+                        break;
+
+                    case RetKind.NDArrayTuple:
+                        // scope.Returns((a, b[, …])) — the matching-arity overload yields each component;
+                        // the tuple's references are unchanged, so re-storing it is a no-op keep for shape.
+                        TryGetNDArrayTuple(m.ReturnType, out var tupleType);
+                        var tupleRef = InstantiateReturnsTuple(tupleType, refs);
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, scopeVar));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, retVar));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Callvirt, tupleRef));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Stloc, retVar));
+                        break;
+
+                    case RetKind.Carrier:
+                        // retVar.YieldTo(scope) via constrained callvirt (no box): the struct's own method
+                        // re-parents each NDArray it holds. The struct value is unchanged, returned as-is.
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloca, retVar));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, scopeVar));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Constrained, m.ReturnType));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Callvirt, refs.CarrierYieldTo));
+                        break;
                 }
             }
             else if (outNdParams.Count > 0)
@@ -526,6 +679,15 @@ internal static class ScopeWeaver
         var many = new GenericInstanceMethod(refs.ReturnsMany);
         many.GenericArguments.Add(elem);
         return many;
+    }
+
+    /// <summary><c>Returns&lt;T1,…&gt;</c> instantiated for a ValueTuple return, one type argument per component.</summary>
+    private static MethodReference InstantiateReturnsTuple(GenericInstanceType tuple, Refs refs)
+    {
+        var g = new GenericInstanceMethod(refs.ReturnsTuple(tuple.GenericArguments.Count));
+        foreach (var arg in tuple.GenericArguments)
+            g.GenericArguments.Add(arg);
+        return g;
     }
 
     private static Instruction InsertAfter(ILProcessor il, Instruction anchor, Instruction instruction)

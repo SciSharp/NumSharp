@@ -107,7 +107,7 @@ namespace NumSharp
     ///     <c>(coeffs, residuals, rank, singular_values, rcond)</c> or the <c>cov</c> two-tuple
     ///     <c>(coeffs, covariance)</c>.
     /// </summary>
-    public readonly struct PolyfitResult
+    public readonly struct PolyfitResult : INDArrayCarrier
     {
         /// <summary>Polynomial coefficients, highest power first — <c>(deg+1,)</c> or <c>(deg+1, K)</c>.</summary>
         public readonly NDArray coeffs;
@@ -157,6 +157,15 @@ namespace NumSharp
         {
             coeffs = this.coeffs;
             covariance = this.covariance;
+        }
+
+        void INDArrayCarrier.YieldTo(NDScope scope)
+        {
+            scope.Returns(coeffs);
+            scope.Returns(residuals);
+            scope.Returns(rank);
+            scope.Returns(singular_values);
+            scope.Returns(covariance);
         }
     }
 }

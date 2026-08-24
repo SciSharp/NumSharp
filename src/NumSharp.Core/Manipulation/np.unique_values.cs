@@ -44,7 +44,7 @@ namespace NumSharp
         ///     implicitly to <see cref="NDArray"/><c>[]</c>, <c>Deconstruct</c>s
         ///     (<c>var (values, indices, inv, counts) = np.unique_all(x);</c>) and indexes (<c>[k]</c>).
         /// </summary>
-        public readonly struct UniqueAllResult
+        public readonly struct UniqueAllResult : INDArrayCarrier
         {
             /// <summary>The sorted unique values of the input.</summary>
             public NDArray values { get; }
@@ -93,6 +93,14 @@ namespace NumSharp
                 inverseIndices = this.inverse_indices;
                 counts = this.counts;
             }
+
+            void INDArrayCarrier.YieldTo(NDScope scope)
+            {
+                scope.Returns(values);
+                scope.Returns(indices);
+                scope.Returns(inverse_indices);
+                scope.Returns(counts);
+            }
         }
 
         /// <summary>
@@ -100,7 +108,7 @@ namespace NumSharp
         ///     (<c>values</c>, <c>counts</c>). Converts implicitly to <see cref="NDArray"/><c>[]</c>,
         ///     <c>Deconstruct</c>s (<c>var (values, counts) = np.unique_counts(x);</c>) and indexes.
         /// </summary>
-        public readonly struct UniqueCountsResult
+        public readonly struct UniqueCountsResult : INDArrayCarrier
         {
             /// <summary>The sorted unique values of the input.</summary>
             public NDArray values { get; }
@@ -137,6 +145,12 @@ namespace NumSharp
                 values = this.values;
                 counts = this.counts;
             }
+
+            void INDArrayCarrier.YieldTo(NDScope scope)
+            {
+                scope.Returns(values);
+                scope.Returns(counts);
+            }
         }
 
         /// <summary>
@@ -144,7 +158,7 @@ namespace NumSharp
         ///     (<c>values</c>, <c>inverse_indices</c>). Converts implicitly to <see cref="NDArray"/><c>[]</c>,
         ///     <c>Deconstruct</c>s (<c>var (values, inv) = np.unique_inverse(x);</c>) and indexes.
         /// </summary>
-        public readonly struct UniqueInverseResult
+        public readonly struct UniqueInverseResult : INDArrayCarrier
         {
             /// <summary>The sorted unique values of the input.</summary>
             public NDArray values { get; }
@@ -181,6 +195,12 @@ namespace NumSharp
                 values = this.values;
                 inverseIndices = this.inverse_indices;
             }
+
+            void INDArrayCarrier.YieldTo(NDScope scope)
+            {
+                scope.Returns(values);
+                scope.Returns(inverse_indices);
+            }
         }
 
         /// <summary>
@@ -214,11 +234,12 @@ namespace NumSharp
         /// <param name="x">Input array. Flattened if it is not already 1-D.</param>
         /// <returns>A <see cref="UniqueCountsResult"/>: (values, counts).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_counts.html</remarks>
+        // NDScoped: the hash/sort internals are reclaimed; the weaver yields both result-struct
+        // members (values, counts) by decomposing the returned UniqueCountsResult's fields.
+        [NDScoped]
         public static UniqueCountsResult unique_counts(NDArray x)
         {
-            // Boundary scope: internals reclaimed; both result-struct members yielded.
-            using var scope = NDScope.Open();
-            var r = scope.Returns(x.uniqueCountsFast());
+            var r = x.uniqueCountsFast();
             return new UniqueCountsResult(r[0], r[1]);
         }
 
@@ -233,15 +254,16 @@ namespace NumSharp
         ///     has the same shape as <paramref name="x"/>, so <c>np.take(values, inverse_indices)</c>
         ///     reconstructs the input.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_inverse.html</remarks>
+        // NDScoped: internals reclaimed; the weaver yields the values and the (possibly reshaped)
+        // inverse — the two UniqueInverseResult fields. ReshapeInverseToInput returns a view of r[1]
+        // (or r[1] itself for 0-d); the un-yielded r[1] base is reclaimed, its buffer kept alive by
+        // the yielded view's ARC reference.
+        [NDScoped]
         public static UniqueInverseResult unique_inverse(NDArray x)
         {
-            // Boundary scope: internals reclaimed; the values and the (possibly reshaped)
-            // inverse are yielded. ReshapeInverseToInput may return r[1] itself or a fresh
-            // view of it — Returns handles both (a second yield of the same array is a no-op).
-            using var scope = NDScope.Open();
             var r = x.unique(return_index: false, return_inverse: true, return_counts: false,
                              axis: null, equal_nan: false);
-            return new UniqueInverseResult(scope.Returns(r[0]), scope.Returns(ReshapeInverseToInput(r[1], x)));
+            return new UniqueInverseResult(r[0], ReshapeInverseToInput(r[1], x));
         }
 
         /// <summary>
@@ -255,14 +277,14 @@ namespace NumSharp
         /// <param name="x">Input array. Flattened if it is not already 1-D.</param>
         /// <returns>A <see cref="UniqueAllResult"/>: (values, indices, inverse_indices, counts).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_all.html</remarks>
+        // NDScoped: internals reclaimed; the weaver yields all four UniqueAllResult members (values,
+        // indices, inverse_indices, counts) by decomposing the struct's fields.
+        [NDScoped]
         public static UniqueAllResult unique_all(NDArray x)
         {
-            // Boundary scope: internals reclaimed; all four result-struct members yielded.
-            using var scope = NDScope.Open();
             var r = x.unique(return_index: true, return_inverse: true, return_counts: true,
                              axis: null, equal_nan: false);
-            return new UniqueAllResult(scope.Returns(r[0]), scope.Returns(r[1]),
-                                       scope.Returns(ReshapeInverseToInput(r[2], x)), scope.Returns(r[3]));
+            return new UniqueAllResult(r[0], r[1], ReshapeInverseToInput(r[2], x), r[3]);
         }
 
         /// <summary>

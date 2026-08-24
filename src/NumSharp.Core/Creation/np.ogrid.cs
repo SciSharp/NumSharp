@@ -22,7 +22,7 @@ namespace NumSharp
         ///     <c>ogrid[0:5,]</c>): both spell <c>np.ogrid["0:5"]</c> here, and the single stored array is
         ///     reachable as an <see cref="NDArray"/> or as a length-1 <see cref="NDArray"/><c>[]</c>.
         /// </remarks>
-        public readonly struct OGridResult
+        public readonly struct OGridResult : INDArrayCarrier
         {
             private readonly NDArray[] _arrays;
 
@@ -93,6 +93,8 @@ namespace NumSharp
                         $"np.ogrid produced {have} arrays; cannot deconstruct into {n}. Use indexing or the " +
                         "NDArray[] conversion.");
             }
+
+            void INDArrayCarrier.YieldTo(NDScope scope) => scope.Returns(_arrays);
         }
 
         /// <summary>

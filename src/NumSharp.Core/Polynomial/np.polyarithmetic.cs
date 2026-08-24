@@ -58,6 +58,9 @@ namespace NumSharp
         ///     type); the <c>poly1d</c> <c>/</c> operator performs that wrapping instead.
         ///     </para>
         /// </remarks>
+        // NDScoped: the floated inputs, per-iteration scaled quotient/remainder products and the
+        // leading-zero-strip view chain are reclaimed; both tuple components (q, r) are yielded.
+        [NDScoped]
         public static (NDArray q, NDArray r) polydiv(NDArray u, NDArray v)
         {
             u = np.atleast_1d(u) + 0.0;   // floated, exactly like NumPy's `+ 0.0`

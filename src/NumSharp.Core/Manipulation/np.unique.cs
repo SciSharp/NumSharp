@@ -30,7 +30,7 @@ namespace NumSharp
         ///     <see cref="NDArray.unique(int?, bool, bool)"/> / <see cref="NDArray.unique(bool, bool, bool, int?, bool, bool)"/>
         ///     still return <see cref="NDArray"/>/<see cref="NDArray"/><c>[]</c> unchanged.
         /// </remarks>
-        public readonly struct UniqueResult
+        public readonly struct UniqueResult : INDArrayCarrier
         {
             private readonly NDArray[] _outputs;   // present outputs, NumPy field order: [values, index?, inverse?, counts?]
 
@@ -147,6 +147,16 @@ namespace NumSharp
                 index = _outputs[1];
                 inverse = _outputs[2];
                 counts = _outputs[3];
+            }
+
+            // Yields every present output (absent ones are null — a safe no-op); the four named fields
+            // alias the _outputs entries, so this covers exactly the NDArrays this result carries.
+            void INDArrayCarrier.YieldTo(NDScope scope)
+            {
+                scope.Returns(values);
+                scope.Returns(indices);
+                scope.Returns(inverse_indices);
+                scope.Returns(counts);
             }
         }
 

@@ -89,6 +89,10 @@ back-pointer says "not mine"), so *"wrap every egress in `Returns`"* is a safe b
 - `scope.Returns(x)` / `scope.Returns(x[])` — yield the result (or a tuple of views); re-tracks
   into the PARENT scope, so an enclosing scope still reclaims a dropped inner result. Also the
   egress for `out`-parameters: `result = scope.Returns(temp);`.
+- `scope.Returns((a, b))` / `Returns((a, b, c))` / `Returns((a, b, c, d))` — the ValueTuple egress
+  (yields each component). A result-struct carrier instead implements `INDArrayCarrier.YieldTo(scope)`
+  (calling `scope.Returns` on each member). Both are what the weaver targets for a tuple / struct
+  return — see "The decision table" below.
 - `NDScope.Detach(x)` — permanently un-track (for an array being cached into a static/long-lived
   field from inside a scoped call).
 - `NDScope.Attach(x)` — adopt an untracked array into the CURRENT scope (the caller-side
@@ -157,17 +161,21 @@ branches and nested-handler boundaries that referenced them stay valid).
 |---|---|
 | `NDArray` / `NDArray<T>` | value routed through `Returns<T>(T)` at every ret |
 | `NDArray[]` / `NDArray<T>[]` | `Returns<T>(T[])` (tuple results — nonzero etc.) |
+| `ValueTuple` of 2..4 NDArrays (`(NDArray, NDArray)` — `modf`/`polydiv`/`qr`/`eig`/`svd`/`lstsq`/…) | each component yielded through the matching `Returns<T1,…>` tuple overload |
+| result-struct carrier implementing `INDArrayCarrier` (`UniqueResult`, `MeshgridResult`, `PolyfitResult`, …) | `retVar.YieldTo(scope)` via boxing-free `constrained.callvirt` — the struct's own method re-parents each NDArray it holds (so private fields are reached from INSIDE the struct) |
 | `void` / scalar (`long`, `bool`, `double`, string, enums, …) | scope only; `out NDArray`/`out NDArray[]` params still escaped |
 | `out NDArray` / `out NDArray[]` param | final-value escape before each successful return |
 | `ref NDArray`(`[]`) param | **error NDW002** — hidden egress; scope by hand |
-| carrier struct return (`UniqueResult`, ValueTuples of arrays, …) | **error NDW003** — its members would be handed back disposed; scope by hand and yield each member (`AverageCore`, `np.unique`, `unique_counts/inverse/all` stay hand-scoped for exactly this reason) |
+| unsupported carrier (object/collection field, a `>4`-arity or mixed tuple, a result struct WITHOUT `INDArrayCarrier`) | **error NDW003** — the weaver cannot see every NDArray, so members would be handed back disposed; add `INDArrayCarrier` to the struct, or scope by hand |
 | iterator / async | **error NDW004** — the visible body is a state-machine stub |
 
 **Idempotence & incrementality.** A body that already opens an `NDScope` is skipped
 ("already-scoped"), so re-weaving the same assembly is a no-op; the MSBuild target is
-additionally incremental via a per-TFM `NDScopeWeave.marker` in obj. Note the carrier check
-runs BEFORE the already-scoped check: `[NDScoped]` on a hand-scoped carrier method is an error,
-not a skip — the attribute would be a lie there.
+additionally incremental via a per-TFM `NDScopeWeave.marker` in obj. Note the return-shape check
+runs BEFORE the already-scoped check: `[NDScoped]` on a hand-scoped method whose return is an
+UNSUPPORTED carrier (NDW003) is an error, not a skip — the attribute would be a lie there — while a
+hand-scoped method with a supported return (incl. a tuple or an `INDArrayCarrier` struct) is simply
+skipped.
 
 **Strong naming & symbols.** IL rewriting invalidates the compile-time signature, so the weaver
 re-signs with the repo `Open.snk` (`sn -vf` valid; `StrongNameTests` gates identity) and
@@ -179,11 +187,14 @@ assembly and asserts every `[NDScoped]` method (and property accessor) carries a
 `NDScope` — a necessary consequence of scoping, whether woven or hand-written. It turns a silently
 un-run weave (a broken `NDScopeWeave` target, or a `-p:SkipNDScopeWeave=true` build) red instead of
 letting those methods quietly revert to the finalizer backstop, and a non-vacuity floor guards against
-the attribute being stripped. As of the audit it finds 78/78 woven. The `out NDArray`/`out NDArray[]`
-egress row above is the one transform branch with **no in-tree consumer** (no `[NDScoped]` method
-currently takes an out-array param); its runtime semantics are pinned by `NDScopeTests.
-OutParameter_Egress_ViaReturns` (hand-written scope) and its emitted IL is a structural twin of the
-return-value `Returns` path — correct by construction, kept for the shape's completeness.
+the attribute being stripped. The tuple and `INDArrayCarrier` rows have in-tree consumers —
+`np.polydiv` (tuple) and `np.unique_counts`/`unique_inverse`/`unique_all` (result structs), pinned
+behaviorally by `NDScopeWeaveCarrierTests` (members survive, dropped results re-parent into an
+enclosing scope, internal temps leave zero strands). The `out NDArray`/`out NDArray[]` egress row is
+now the one transform branch with **no in-tree consumer** (no `[NDScoped]` method currently takes an
+out-array param); its runtime semantics are pinned by `NDScopeTests.OutParameter_Egress_ViaReturns`
+(hand-written scope) and its emitted IL is a structural twin of the return-value `Returns` path —
+correct by construction, kept for the shape's completeness.
 
 **Escape hatches.** `-p:SkipNDScopeWeave=true` builds without weaving (attributed methods then
 simply run unscoped — the finalizer backstop, the pre-migration status quo);
@@ -191,10 +202,11 @@ simply run unscoped — the finalizer backstop, the pre-migration status quo);
 output (kept opt-in so machines without the tool still build; measured: the weave adds ZERO
 ILVerify findings over the unwoven baseline in both configurations).
 
-**When to hand-scope instead of the attribute:** carrier-struct returns (yield each member),
-`ref NDArray` flows, a mid-method handback that genuinely must free before a later allocation
-(nest an inner block scope), or any body where the egress isn't expressible as
-return-value + out-params.
+**When to hand-scope instead of the attribute:** an UNSUPPORTED carrier return the weaver rejects
+with NDW003 (an object/collection member, a `>4`-arity or mixed tuple — a supported carrier struct
+instead just implements `INDArrayCarrier` and stays woven), `ref NDArray` flows, a mid-method
+handback that genuinely must free before a later allocation (nest an inner block scope), or any body
+where the egress isn't expressible as return-value + out-params.
 
 ---
 
@@ -533,13 +545,17 @@ polynomial family (`poly`, `polyval`, `polyder`, `polyint`, `polyadd`/`polysub` 
 — each a per-axis 1-D composition; byte-exactness re-confirmed by the `fft.jsonl` fuzz tier).
 Deliberately NOT scoped (documented non-targets): single-kernel ufuncs and views/passthroughs (no
 owned transients), the kernel-driven `nanmean`/`nanstd`/`nanvar`, and the THIN product wrappers
-`inner`/`vdot`/`vecdot`/`matvec`/`vecmat` (≈1 `dot` + a reshape — marginal). Two categories are
-DEFERRED, not forgotten: (a) **carrier-return** compositions the weaver can't weave — `meshgrid`/
-`mgrid`/`ogrid` (grid result structs), `polydiv`/`polyfit` (tuple/`PolyfitResult`), and the
-factorization tuples `svd`/`qr`/`eig`/`eigh`/`lstsq`/`slogdet` (also backend-only) — which need
-hand-scoping if a profile shows them hot; and (b) the **one-shot structural** array ops `pad`/
-`insert`/`delete`/`block` and the `r_`/`c_` construction indexers, which §11 rates low-priority
-(not hot-loop / small-N) — migrate opportunistically.
+`inner`/`vdot`/`vecdot`/`matvec`/`vecmat` (≈1 `dot` + a reshape — marginal). **Carrier returns are
+now WEAVABLE** — the weaver yields a `ValueTuple` of NDArrays through the `Returns` tuple overloads
+and a result struct through its `INDArrayCarrier.YieldTo`, so `[NDScoped]` works on them exactly like
+a bare `NDArray` return: `np.polydiv` (tuple) and the `unique_counts`/`unique_inverse`/`unique_all`
+result-struct wrappers are woven (the hand-scoped `AverageCore`/`np.unique` are equivalent and may be
+converted opportunistically). The remaining carrier compositions — `meshgrid`/`mgrid`/`ogrid` (grid
+result structs, all of which already implement `INDArrayCarrier`), `polyfit` (`PolyfitResult`), and
+the factorization tuples `svd`/`qr`/`eig`/`eigh`/`lstsq`/`slogdet` (also backend-only) — need only
+the `[NDScoped]` attribute added if a profile shows them hot. Still DEFERRED (low-priority per §11):
+the **one-shot structural** array ops `pad`/`insert`/`delete`/`block` and the `r_`/`c_` construction
+indexers (not hot-loop / small-N) — migrate opportunistically.
 
 ---
 

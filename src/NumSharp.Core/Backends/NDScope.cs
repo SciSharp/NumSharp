@@ -142,6 +142,49 @@ namespace NumSharp
             return nds;
         }
 
+        // ---- ValueTuple egress (the shape NumPy's factorisations and modf/average/polydiv return) ----
+        // A method returning `(NDArray, NDArray[, …])` has more than one egress, so the weaver (and a
+        // hand-written scope) yields EACH component. A null component — an omitted `returned`/`compute_uv`
+        // output — is a safe no-op. The tuple is returned unchanged (its references are re-parented, not
+        // rewritten), so `return scope.Returns((q, r));` reads exactly like the single-array form. The
+        // [NDScoped] weaver targets these overloads by generic arity (see ScopeWeaver.ResolveRefs).
+
+        /// <summary>Yields both components of a two-array tuple result (e.g. <c>modf</c>, <c>polydiv</c>, <c>qr</c>, <c>eig</c>, <c>slogdet</c>, <c>average(returned)</c>).</summary>
+        public (T1, T2) Returns<T1, T2>((T1, T2) tuple)
+            where T1 : NDArray
+            where T2 : NDArray
+        {
+            Returns(tuple.Item1);
+            Returns(tuple.Item2);
+            return tuple;
+        }
+
+        /// <summary>Yields all three components of a three-array tuple result (e.g. <c>svd</c>).</summary>
+        public (T1, T2, T3) Returns<T1, T2, T3>((T1, T2, T3) tuple)
+            where T1 : NDArray
+            where T2 : NDArray
+            where T3 : NDArray
+        {
+            Returns(tuple.Item1);
+            Returns(tuple.Item2);
+            Returns(tuple.Item3);
+            return tuple;
+        }
+
+        /// <summary>Yields all four components of a four-array tuple result (e.g. <c>lstsq</c>).</summary>
+        public (T1, T2, T3, T4) Returns<T1, T2, T3, T4>((T1, T2, T3, T4) tuple)
+            where T1 : NDArray
+            where T2 : NDArray
+            where T3 : NDArray
+            where T4 : NDArray
+        {
+            Returns(tuple.Item1);
+            Returns(tuple.Item2);
+            Returns(tuple.Item3);
+            Returns(tuple.Item4);
+            return tuple;
+        }
+
         /// <summary>
         ///     Permanently removes <paramref name="nd"/> from whatever scope tracks it WITHOUT
         ///     re-tracking into a parent — for arrays that must outlive every scope (an array
@@ -236,5 +279,27 @@ namespace NumSharp
             if (t_pool is null)
                 t_pool = this;
         }
+    }
+
+    /// <summary>
+    ///     Opt-in seam a tuple-standin result struct (<see cref="np.UniqueResult"/>,
+    ///     <see cref="np.MeshgridResult"/>, <see cref="PolyfitResult"/>, …) implements so the
+    ///     <see cref="NDScopedAttribute"/> weaver can weave a boundary method that RETURNS it:
+    ///     <see cref="YieldTo"/> hands every <see cref="NDArray"/> the struct carries back to the ambient
+    ///     scope (via <see cref="NDScope.Returns{T}(T)"/>), so the method's temporaries are reclaimed
+    ///     while its results survive.
+    /// </summary>
+    /// <remarks>
+    ///     Implemented EXPLICITLY (the member stays off the struct's public API); the weaver calls it
+    ///     through a boxing-free constrained call at each return. The members are yielded from INSIDE the
+    ///     struct rather than decomposed by the weaver because a struct's own method can read its private
+    ///     fields (auto-property backing fields, <c>_grids</c>, …) while the enclosing type's woven method
+    ///     cannot — the CLR grants nested→enclosing private access, not the reverse. A carrier struct
+    ///     WITHOUT this interface reports build error NDW003 and must be hand-scoped.
+    /// </remarks>
+    internal interface INDArrayCarrier
+    {
+        /// <summary>Yields every <see cref="NDArray"/> this carrier holds into <paramref name="scope"/>.</summary>
+        void YieldTo(NDScope scope);
     }
 }

@@ -11,7 +11,7 @@ namespace NumSharp
         ///     in for it — it converts implicitly to <see cref="NDArray"/><c>[]</c>, <c>Deconstruct</c>s
         ///     (<c>var (xx, yy) = np.meshgrid(x, y);</c>) and indexes (<c>[k]</c>).
         /// </summary>
-        public readonly struct MeshgridResult
+        public readonly struct MeshgridResult : INDArrayCarrier
         {
             private readonly NDArray[] _grids;
 
@@ -64,6 +64,8 @@ namespace NumSharp
                         $"np.meshgrid produced {have} grids; cannot deconstruct into {n}. Use indexing or the " +
                         "NDArray[] conversion.");
             }
+
+            void INDArrayCarrier.YieldTo(NDScope scope) => scope.Returns(_grids);
         }
 
         /// <summary>

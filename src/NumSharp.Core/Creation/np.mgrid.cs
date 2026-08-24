@@ -14,7 +14,7 @@ namespace NumSharp
         ///     (<c>var (x, y) = np.mgrid["0:5", "0:3"];</c>) or indexes (<c>[k]</c>) into the per-axis grids
         ///     along that first axis.
         /// </summary>
-        public readonly struct MGridResult
+        public readonly struct MGridResult : INDArrayCarrier
         {
             private readonly NDArray _grid;
 
@@ -67,6 +67,8 @@ namespace NumSharp
                         $"np.mgrid produced a grid of {have} axes; cannot deconstruct into {n}. A single-slice " +
                         "mgrid is a bare 1-D array — use it as an NDArray, not a tuple.");
             }
+
+            void INDArrayCarrier.YieldTo(NDScope scope) => scope.Returns(_grid);
         }
 
         /// <summary>
