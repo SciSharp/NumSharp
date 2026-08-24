@@ -223,14 +223,34 @@ jobs:
       with:
         python-version: '3.12'
 
-    # Pinned to 2.4.2 on purpose: the interop suite's byte-exact parity tests compare NumSharp's
-    # OpenBLAS-backed LAPACK/BLAS against THIS live numpy, and NumSharp bundles scipy-openblas
-    # 0.3.31.22.0 — the exact build numpy 2.4.2 pins (numpy.libs is byte-identical). A newer numpy
-    # (e.g. 2.5.x) ships a DIFFERENT openblas build, so its results diverge by ~1 ULP and every
-    # *_ByteExact test goes red. Parity is a claim about one specific binary; the pin makes both
-    # sides call it. Keep this in lockstep with tools/openblas-manifest.json's numpy_version.
+    # The interop suite's byte-exact parity tests compare NumSharp's OpenBLAS-backed LAPACK/BLAS
+    # against THIS live numpy, so both MUST call the identical binary. Two things pin that:
+    #
+    #   (1) VERSION — numpy==2.4.2. NumSharp bundles scipy-openblas 0.3.31.22.0, the exact build
+    #       numpy 2.4.2 pins (numpy.libs is byte-identical). A newer numpy (e.g. 2.5.x) ships a
+    #       DIFFERENT openblas build, so its results diverge ~1 ULP and every *_ByteExact test reds.
+    #       Keep in lockstep with tools/openblas-manifest.json's numpy_version.
+    #
+    #   (2) BLAS FLAVOUR on macOS — numpy 2.4.2 ships TWO Apple-silicon wheels: macosx_14_0_arm64
+    #       links Apple **Accelerate**, macosx_11_0_arm64 bundles **scipy-openblas**. On a macOS 14+
+    #       runner (ours is macos-26) pip prefers the newer tag, so a plain `pip install numpy` links
+    #       Accelerate — a WHOLLY DIFFERENT BLAS than NumSharp's bundle, which no version pin or
+    #       OpenBLAS bump can reconcile (Accelerate is not OpenBLAS). Force the OpenBLAS wheel so both
+    #       sides call scipy-openblas 0.3.31.22.0, exactly as Windows/Linux already do. (Windows and
+    #       Linux numpy wheels are OpenBLAS by default, so they just take the version pin.)
     - name: Install numpy
-      run: python -m pip install --upgrade pip "numpy==2.4.2"
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        if [ "$RUNNER_OS" = "macOS" ] && [ "$(uname -m)" = "arm64" ]; then
+          python -m pip download --only-binary=:all: --platform macosx_11_0_arm64 \
+            --python-version 312 --implementation cp --abi cp312 --no-deps \
+            -d "$RUNNER_TEMP/np" "numpy==2.4.2"
+          python -m pip install "$RUNNER_TEMP"/np/numpy-*.whl
+        else
+          python -m pip install "numpy==2.4.2"
+        fi
+        python -c "import numpy; print('numpy', numpy.__version__); numpy.show_config()"
 
     # Prints precisely what PythonSession.Probe consumes, so if the interop tests
     # report Inconclusive the reason is visible without reproducing locally.
