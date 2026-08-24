@@ -67,6 +67,59 @@ namespace NumSharp.Tests.Interop
             }
         }
 
+        /// <summary>
+        ///     Like <see cref="AssertSliding"/> but tolerant of a bounded per-element ULP difference,
+        ///     for the ONE case that cannot be strict-byte-exact across heterogeneous hosts: a MANAGED
+        ///     <see cref="System.Numerics.Vector{T}"/> sliding-dot compared to LIVE numpy's own SIMD dot.
+        ///     Both sides dispatch their reduction kernel at runtime by CPU (x64 AVX2 vs AVX-512 lane
+        ///     width, arm64 NEON FMA-contraction), so the two last bits agree on some GitHub runners and
+        ///     differ by 1 ULP on others — a genuine cross-microarchitecture rounding artifact, not a
+        ///     logic error. The backend-routed sliding tests stay STRICT byte-exact (scipy-openblas at
+        ///     threads=1 is deterministic); only this managed-vs-live-numpy cell needs the tolerance.
+        /// </summary>
+        private void AssertSlidingWithinUlp(NDArray ns, string npExpr, NDArray a, NDArray b, long maxUlp, string because)
+        {
+            using (ns)
+            using (Gil())
+            {
+                using PyObject va = a.ToNumpy();
+                using PyObject vb = b.ToNumpy();
+                using PyObject np_ = Python.np.with(npExpr, ("a", va), ("b", vb));
+
+                byte[] nsB = ByteContract.NsBytes(ns);
+                byte[] npB = np_.bytes_c();
+                nsB.Length.Should().Be(npB.Length, "result byte-length must match; " + because);
+
+                int n = nsB.Length / sizeof(double);
+                long worst = 0; int worstAt = -1;
+                for (int i = 0; i < n; i++)
+                {
+                    double x = BitConverter.ToDouble(nsB, i * sizeof(double));
+                    double y = BitConverter.ToDouble(npB, i * sizeof(double));
+                    long u = UlpDistance(x, y);
+                    if (u > worst) { worst = u; worstAt = i; }
+                }
+
+                worst.Should().BeLessThanOrEqualTo(maxUlp,
+                    $"{because}: managed Vector<T> convolve vs live numpy SIMD may differ by <= {maxUlp} ULP " +
+                    $"across heterogeneous-SIMD hosts (worst {worst} ULP at element {worstAt}) — but any larger " +
+                    "gap is a real divergence");
+            }
+        }
+
+        /// <summary>Ordered ULP distance between two float64s (0 for +0.0/-0.0 and equal values; long.MaxValue for a sign straddle or a non-equal special).</summary>
+        private static long UlpDistance(double x, double y)
+        {
+            if (x == y) return 0;                                              // exact, incl. +0.0 == -0.0
+            if (double.IsNaN(x) || double.IsNaN(y) || double.IsInfinity(x) || double.IsInfinity(y))
+                return long.MaxValue;                                          // a non-equal special is "far"
+            long lx = BitConverter.DoubleToInt64Bits(x);
+            long ly = BitConverter.DoubleToInt64Bits(y);
+            if ((lx < 0) != (ly < 0)) return long.MaxValue;                    // opposite signs (not both zero)
+            long d = lx - ly;                                                  // same sign => monotonic in value
+            return d < 0 ? -d : d;
+        }
+
         // ---- operand builders: LONG (n2 = 64), mixed-magnitude so the sum order is observable --------
 
         private const int N1 = 300;
@@ -194,15 +247,18 @@ namespace NumSharp.Tests.Interop
         public void Convolve_SmallRealKernel_StaysManaged_ByteExact()
         {
             RequireBackend();
-            // Managed Vector<T> sliding-dot: on arm64 the NEON 128-bit reduction coalesces the outer-vec
-            // sum in a different lane width than x64 AVX2 (256-bit), so this MANAGED cell drifts 1 ULP on
-            // Apple silicon — a cross-arch artifact, not a routing bug (x64 stays strict byte-exact).
-            SkipByteExactOnArm64("Convolve_SmallRealKernel_StaysManaged");
-            // A length-5 real kernel is NumPy's small_correlate regime: the managed outer-vec middle and
-            // the <= 11 ramps are already byte-identical to NumPy, so the engine keeps it managed — and it
-            // must STILL be byte-exact. This pins the boundary the backend gate sits on (n2 > 11).
-            AssertSliding(RSignal().convolve(RKernel(N2Small), "full"), "np.convolve(a,b,'full')",
-                RSignal(), RKernel(N2Small), "convolve float64 SMALL full — stays managed, still byte-exact");
+            // A length-5 real kernel is NumPy's small_correlate regime: the engine keeps it on the
+            // MANAGED Vector<T> path (n2 <= 11), NOT the backend. That managed reduction is compared to
+            // LIVE numpy's own SIMD dot — and BOTH pick their kernel at runtime by CPU: x64 AVX2 vs
+            // AVX-512 lane width, arm64 NEON FMA-contraction. So the last bit agrees on some GitHub
+            // runners and differs by 1 ULP on others (observed: byte[8] 0x55 vs 0x56, both x64 and
+            // arm64) — a genuine cross-microarchitecture rounding artifact, not a routing/logic bug.
+            // Assert <= 1 ULP instead of strict bytes: still fails on any real divergence, and this
+            // subsumes the former arm64-only skip (the divergence was never arm64-specific). The
+            // backend-routed sliding tests above stay STRICT byte-exact — scipy-openblas at threads=1
+            // is deterministic; only this managed-vs-live-numpy cell is SIMD-dispatch-fragile.
+            AssertSlidingWithinUlp(RSignal().convolve(RKernel(N2Small), "full"), "np.convolve(a,b,'full')",
+                RSignal(), RKernel(N2Small), maxUlp: 1, "convolve float64 SMALL full — stays managed, within 1 ULP of live numpy");
         }
 
         // =====================================  non-vacuity  =====================================
