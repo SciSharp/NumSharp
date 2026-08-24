@@ -26,6 +26,7 @@ namespace NumSharp
             ///     work.
             ///     </para>
             /// </remarks>
+            [NDScoped]
             public static NDArray matrix_power(NDArray a, int n)
             {
                 AssertStackedSquare(a);

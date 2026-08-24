@@ -18,6 +18,7 @@
         /// </param>
         /// <returns>out[i, j] = a[i] * b[j]</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.outer.html</remarks>
+        [NDScoped]
         public static NDArray outer(NDArray a, NDArray b, NDArray @out = null)
         {
             //multiply(a.ravel()[:, newaxis], b.ravel()[newaxis, :], out)

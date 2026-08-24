@@ -51,6 +51,7 @@ namespace NumSharp
         ///     mismatch. A mismatched extent found earlier in the list settles as the shape mismatch
         ///     first, hiding a later out-of-range axis.
         /// </exception>
+        [NDScoped]
         public static NDArray tensordot(NDArray a, NDArray b, int[] axesA, int[] axesB)
         {
             // Port of numpy/_core/numeric.py :: tensordot.

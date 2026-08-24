@@ -40,6 +40,7 @@ namespace NumSharp
         ///     When either input has zero dimensions, or a vector's length is neither 2 nor 3.
         /// </exception>
         /// <exception cref="AxisError">When an axis is out of bounds for its operand.</exception>
+        [NDScoped]
         public static NDArray cross(NDArray a, NDArray b, int axisa = -1, int axisb = -1, int axisc = -1,
             int? axis = null)
         {

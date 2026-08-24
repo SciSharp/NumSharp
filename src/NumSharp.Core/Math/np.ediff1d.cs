@@ -44,6 +44,7 @@ namespace NumSharp
         ///     bracketed by <paramref name="to_begin"/> and <paramref name="to_end"/>.
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ediff1d.html</remarks>
+        [NDScoped]
         public static NDArray ediff1d(NDArray ary, object to_end = null, object to_begin = null)
         {
             if (ary is null) throw new ArgumentNullException(nameof(ary));

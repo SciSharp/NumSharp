@@ -179,7 +179,7 @@ assembly and asserts every `[NDScoped]` method (and property accessor) carries a
 `NDScope` — a necessary consequence of scoping, whether woven or hand-written. It turns a silently
 un-run weave (a broken `NDScopeWeave` target, or a `-p:SkipNDScopeWeave=true` build) red instead of
 letting those methods quietly revert to the finalizer backstop, and a non-vacuity floor guards against
-the attribute being stripped. As of the audit it finds 53/53 woven. The `out NDArray`/`out NDArray[]`
+the attribute being stripped. As of the audit it finds 61/61 woven. The `out NDArray`/`out NDArray[]`
 egress row above is the one transform branch with **no in-tree consumer** (no `[NDScoped]` method
 currently takes an out-array param); its runtime semantics are pinned by `NDScopeTests.
 OutParameter_Egress_ViaReturns` (hand-written scope) and its emitted IL is a structural twin of the
@@ -519,6 +519,20 @@ Reclamation is a contract between the library and its callers:
 **Priority sites:** composition-heavy reductions/statistics called in loops — `ptp`, `cov`,
 `corrcoef`, `std`/`var` engine internals, `median`/`percentile`, norm/reduction compositions.
 **Migrate incrementally** — one method per change.
+
+**Coverage note (audited).** The hot reduction/statistics surface is covered directly OR
+transitively: `std`/`var` delegate to the scoped `ReduceStd`/`ReduceVar`, and
+`median`/`percentile`/`quantile` plus their `nan*` twins delegate to the scoped
+`QuantileEngine.Compute`, so they own no transients of their own. The linear-algebra and
+core-math COMPOSITIONS that DO own transients are now scoped too: `einsum` (its `EinsumContract`
+core — the writeable single-operand view path stays writeable and writes through under the scope,
+pinned by `EinsumContractionTests.ViewPath_*`), `cross`, `kron`, `outer`, `tensordot`,
+`linalg.matrix_power`, `diff`, `ediff1d`. Deliberately NOT scoped (documented non-targets):
+single-kernel ufuncs and views/passthroughs (no owned transients), the kernel-driven
+`nanmean`/`nanstd`/`nanvar`, and the THIN product wrappers `inner`/`vdot`/`vecdot`/`matvec`/`vecmat`
+(≈1 `dot` + a reshape — marginal). Remaining opportunistic tail not yet swept: grid/creation
+(`meshgrid`/`mgrid`/`r_`/`c_`), N-D FFT, and the polynomial family — migrate when a profile shows
+them hot.
 
 ---
 

@@ -45,6 +45,7 @@ namespace NumSharp
         ///     iterator; the results stay <c>allclose</c>.
         ///     </para>
         /// </remarks>
+        [NDScoped]
         private static NDArray EinsumContract(string subscripts, NDArray[] operands, NDArray @out,
             NPTypeCode? dtype, char order, string casting, object optimize)
         {

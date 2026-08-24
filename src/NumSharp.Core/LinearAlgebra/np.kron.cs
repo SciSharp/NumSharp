@@ -23,6 +23,7 @@ namespace NumSharp
         ///     <c>a * b</c> (which is itself the degenerate Kronecker product).
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.kron.html</remarks>
+        [NDScoped]
         public static NDArray kron(NDArray a, NDArray b)
         {
             int nda = a.ndim, ndb = b.ndim;
