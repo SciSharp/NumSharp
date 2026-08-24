@@ -19,6 +19,14 @@ behavior change, zero public-API change.
 > also referenced `_storageAliasFieldCopiers` — its count/clear entries were removed with the file —
 > and the grep's 4th hit (`test/NumSharp.Benchmark/ArrayAssignmentUnspecifiedType.cs`) is a false
 > positive (its `_arrayBoolean` is an unrelated local `Boolean[]` field).
+> §5.7 CI matrix: GREEN — Build and Release succeeded on the union merge commit `793949f6`
+> (run 32761521466) and on the branch tip `8a039e8f` (run 32762118299, incl. the refreshed
+> test-inventory dashboard the Deploy Docs gate requires for the 6 new tests). §5.8 ILVerify:
+> woven-vs-unwoven delta **0** (4194 = 4194, normalized per-method sets identical), and
+> pre-union-vs-post-union delta **0** modulo one compiler-generated closure renumbering
+> (`<>c__1110`→`<>c__1106`, from deleting StorageAlias.cs). Post-merge with the `~NDArray`
+> abandon fix (09b47a49 — methods only, no lane-struct field changes, layout proof intact):
+> union/ARC/lifetime/weave gates 110/0 + a fresh-build GC-stress leg (600K arrays, 0 corruption).
 
 ---
 
