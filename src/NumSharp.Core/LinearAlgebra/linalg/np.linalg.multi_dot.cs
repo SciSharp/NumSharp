@@ -38,6 +38,7 @@ namespace NumSharp
             ///     behave like <c>np.dot</c>'s.
             ///     </para>
             /// </remarks>
+            [NDScoped]
             public static NDArray multi_dot(NDArray[] arrays, NDArray @out = null)
             {
                 if (arrays is null || arrays.Length < 2)

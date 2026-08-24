@@ -15,6 +15,7 @@ namespace NumSharp
         /// </param>
         /// <returns>The antiderivative — always floating (or complex) because of the term-wise division.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polyint.html</remarks>
+        [NDScoped]
         public static NDArray polyint(NDArray p, int m = 1, NDArray k = null)
         {
             if (m < 0)

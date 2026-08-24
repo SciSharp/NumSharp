@@ -13,6 +13,7 @@ namespace NumSharp
         /// <param name="x">A number, or an array of numbers, at which to evaluate <paramref name="p"/>.</param>
         /// <returns>The evaluated values, of dtype <c>result_type(p, x)</c> and the shape of <paramref name="x"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polyval.html</remarks>
+        [NDScoped]
         public static NDArray polyval(NDArray p, NDArray x)
         {
             p = np.asarray(p);

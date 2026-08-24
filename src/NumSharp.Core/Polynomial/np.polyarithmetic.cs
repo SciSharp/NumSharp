@@ -16,6 +16,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polysub.html</remarks>
         public static NDArray polysub(NDArray a1, NDArray a2) => PolyAddSub(a1, a2, subtract: true);
 
+        [NDScoped]
         private static NDArray PolyAddSub(NDArray a1, NDArray a2, bool subtract)
         {
             a1 = np.atleast_1d(a1);
@@ -35,6 +36,7 @@ namespace NumSharp
         ///     Leading zeros of each input are dropped first (NumPy wraps each in <c>poly1d</c>).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polymul.html</remarks>
+        [NDScoped]
         public static NDArray polymul(NDArray a1, NDArray a2)
         {
             // poly1d normalisation trims leading zeros (and maps an all-zero input to [0]).

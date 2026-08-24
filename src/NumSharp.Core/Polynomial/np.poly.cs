@@ -15,6 +15,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/generated/numpy.poly.html
         ///     <para>An empty input returns the 0-d scalar <c>1.0</c> (NumPy's Python float <c>1.0</c>).</para>
         /// </remarks>
+        [NDScoped]
         public static NDArray poly(NDArray seq_of_zeros)
         {
             seq_of_zeros = np.atleast_1d(seq_of_zeros);

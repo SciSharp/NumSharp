@@ -18,6 +18,7 @@ namespace NumSharp
         /// </param>
         /// <returns>The Vandermonde matrix, shape <c>(len(x), N)</c>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.vander.html</remarks>
+        [NDScoped]
         public static NDArray vander(NDArray x, int? N = null, bool increasing = false)
         {
             x = np.asarray(x);

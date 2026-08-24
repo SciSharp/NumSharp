@@ -48,6 +48,7 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated complex output.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fft2.html</remarks>
+        [NDScoped]
         public NDArray fft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
         {
             bool floatPrec = IsSinglePrecision(a); // float-precision source: every 1-D leaf reproduces its own numpy loop
@@ -65,6 +66,7 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Accepted for signature parity; NumPy passes <c>out=None</c> internally.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ifft2.html</remarks>
+        [NDScoped]
         public NDArray ifft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
         {
             bool floatPrec = IsSinglePrecision(a);
@@ -83,6 +85,7 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated complex output.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fftn.html</remarks>
+        [NDScoped]
         public NDArray fftn(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
         {
             bool floatPrec = IsSinglePrecision(a);
@@ -99,6 +102,7 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated complex output.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ifftn.html</remarks>
+        [NDScoped]
         public NDArray ifftn(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
         {
             bool floatPrec = IsSinglePrecision(a);

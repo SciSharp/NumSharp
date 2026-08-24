@@ -11,6 +11,7 @@ namespace NumSharp
         /// <param name="m">Order of differentiation (default 1).</param>
         /// <returns>A new polynomial representing the derivative.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polyder.html</remarks>
+        [NDScoped]
         public static NDArray polyder(NDArray p, int m = 1)
         {
             if (m < 0)
