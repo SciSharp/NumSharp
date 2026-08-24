@@ -11,9 +11,13 @@ namespace NumSharp.Weaver;
 ///     ...original body...
 ///     return scope.Returns(result);     // and out-NDArray params escape before each return
 ///     </code>
-///     Invoked by the <c>NDScopeWeave</c> target in NumSharp.Core.csproj after CoreCompile,
-///     for each TargetFramework, on the intermediate assembly. Re-signs with the repo's
-///     strong-name key (IL rewriting invalidates the compile-time signature) and preserves
+///     Invoked by the <c>NDScopeWeave</c> target after CoreCompile, for each TargetFramework,
+///     on the intermediate assembly — from NumSharp.Core.csproj for the library's self-weave,
+///     and from the packaged <c>build/NumSharp.Weaver.targets</c> for any project that installs
+///     the <c>NumSharp.Weaver</c> NuGet package (there NDScope lives in the REFERENCED NumSharp
+///     assembly, resolved through the compile's reference list passed via <c>--refs</c>).
+///     Re-signs a strong-named assembly with its key (IL rewriting invalidates the compile-time
+///     signature; unsigned consumer projects are simply written unsigned) and preserves
 ///     the portable PDB (instructions are only inserted/mutated in place, so original
 ///     sequence points survive and source stepping still lands on the right lines).
 /// </summary>
@@ -23,6 +27,7 @@ internal static class Program
     {
         string assemblyPath = null;
         string snkPath = null;
+        string refsPath = null;
         var verbose = false;
 
         for (int i = 0; i < args.Length; i++)
@@ -32,6 +37,10 @@ internal static class Program
                 case "--snk":
                     if (++i >= args.Length) return Usage("missing value for --snk");
                     snkPath = args[i];
+                    break;
+                case "--refs":
+                    if (++i >= args.Length) return Usage("missing value for --refs");
+                    refsPath = args[i];
                     break;
                 case "--verbose":
                 case "-v":
@@ -55,6 +64,11 @@ internal static class Program
             return 2;
         }
 
+        // An EMPTY --snk value is "no key": the packaged MSBuild target expands the project's key
+        // property, which an unsigned consumer legitimately leaves blank.
+        if (string.IsNullOrWhiteSpace(snkPath))
+            snkPath = null;
+
         byte[] snkBlob = null;
         if (snkPath != null)
         {
@@ -67,16 +81,36 @@ internal static class Program
             snkBlob = File.ReadAllBytes(snkPath);
         }
 
+        // The reference list: one assembly path per line (@(ReferencePathWithRefAssemblies) written
+        // by the MSBuild target) — a response file, so a big dependency graph cannot overflow the
+        // command line. Consumer weaves resolve NDScope/NDArray through it; the self-weave passes none.
+        string[] referencePaths = Array.Empty<string>();
+        if (refsPath != null)
+        {
+            if (!File.Exists(refsPath))
+            {
+                Console.Error.WriteLine($"NumSharp.Weaver : error NDW000: reference list not found: {refsPath}");
+                return 2;
+            }
+
+            referencePaths = File.ReadAllLines(refsPath)
+                                 .Where(l => !string.IsNullOrWhiteSpace(l))
+                                 .Select(l => l.Trim())
+                                 .ToArray();
+        }
+
         try
         {
-            var result = ScopeWeaver.WeaveAssembly(assemblyPath, snkBlob, verbose, Console.Out, Console.Error);
+            var result = ScopeWeaver.WeaveAssembly(assemblyPath, snkBlob, referencePaths, verbose, Console.Out, Console.Error);
             if (result.Errors > 0)
                 return 1;
 
             Console.Out.WriteLine(
                 $"NumSharp.Weaver: {Path.GetFileName(assemblyPath)} — woven {result.Woven}, " +
-                $"already-scoped {result.Skipped}{(snkBlob != null ? ", re-signed" : "")}" +
-                $"{(result.SymbolsWritten ? ", symbols updated" : "")}");
+                $"already-scoped {result.Skipped}" +
+                (result.Wrote
+                    ? $"{(snkBlob != null ? ", re-signed" : "")}{(result.SymbolsWritten ? ", symbols updated" : "")}"
+                    : ", assembly unchanged"));
             return 0;
         }
         catch (Exception e)
@@ -90,7 +124,7 @@ internal static class Program
     {
         if (problem != null)
             Console.Error.WriteLine($"NumSharp.Weaver : error NDW000: {problem}");
-        Console.Error.WriteLine("usage: NumSharp.Weaver <assembly.dll> [--snk <keyfile.snk>] [--verbose]");
+        Console.Error.WriteLine("usage: NumSharp.Weaver <assembly.dll> [--snk <keyfile.snk>] [--refs <list-of-reference-paths.rsp>] [--verbose]");
         return problem is null ? 0 : 2;
     }
 }

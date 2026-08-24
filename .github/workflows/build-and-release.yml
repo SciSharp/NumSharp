@@ -162,7 +162,8 @@ jobs:
         for proj in src/NumSharp.Core/NumSharp.Core.csproj \
                     src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
                     src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
-                    src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj; do
+                    src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj \
+                    tools/NumSharp.Weaver/NumSharp.Weaver.csproj; do
           # Tolerate absence: the interop packages do not exist on every branch.
           [ -f "$proj" ] || { echo "skip (absent): $proj"; continue; }
           echo "::group::pack $proj"
@@ -445,6 +446,19 @@ jobs:
           -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
           -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
 
+        # The weaver: a tools-only build-time package (no lib/, no dependencies — see
+        # tools/verify_weaver_package.sh). Its pack target publishes the tool into tools/,
+        # which under --no-build below stages the outputs this Rebuild produced.
+        dotnet build tools/NumSharp.Weaver/NumSharp.Weaver.csproj \
+          --configuration Release \
+          -t:Rebuild \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
+
     - name: Pack
       run: |
         mkdir -p artifacts/nuget
@@ -485,6 +499,16 @@ jobs:
           --output artifacts/nuget \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:RequireOpenBlasAssets=true \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+
+        dotnet pack tools/NumSharp.Weaver/NumSharp.Weaver.csproj \
+          --configuration Release \
+          --no-build \
+          --output artifacts/nuget \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
           -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
           -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
@@ -559,6 +583,7 @@ jobs:
           echo "dotnet add package NumSharp.Bitmap --version ${VERSION}"
           echo "dotnet add package NumSharp.Interop.pythonnet --version ${VERSION}"
           echo "dotnet add package NumSharp.Interop.OpenBLAS --version ${VERSION}"
+          echo "dotnet add package NumSharp.Weaver --version ${VERSION}"
           echo '```'
           echo ""
           echo "### Packages"
@@ -569,6 +594,7 @@ jobs:
           echo "| NumSharp.Bitmap | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Bitmap.svg)](https://www.nuget.org/packages/NumSharp.Bitmap/${VERSION}) |"
           echo "| NumSharp.Interop.pythonnet | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.pythonnet.svg)](https://www.nuget.org/packages/NumSharp.Interop.pythonnet/${VERSION}) |"
           echo "| NumSharp.Interop.OpenBLAS | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.OpenBLAS.svg)](https://www.nuget.org/packages/NumSharp.Interop.OpenBLAS/${VERSION}) |"
+          echo "| NumSharp.Weaver | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Weaver.svg)](https://www.nuget.org/packages/NumSharp.Weaver/${VERSION}) |"
         } > RELEASE_BODY.md
         if [ -f "$NOTES_FILE" ]; then
           { echo ""; echo "---"; echo ""; cat "$NOTES_FILE"; } >> RELEASE_BODY.md

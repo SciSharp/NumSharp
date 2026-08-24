@@ -4,7 +4,8 @@ namespace NumSharp
 {
     /// <summary>
     ///     Marks a method (or a property accessor) as an <see cref="NDScope"/> boundary: at build
-    ///     time the NumSharp IL weaver (<c>tools/NumSharp.Weaver</c>) injects the exact code the
+    ///     time the NumSharp IL weaver (<c>tools/NumSharp.Weaver</c>, shipped to consumer projects
+    ///     as the <c>NumSharp.Weaver</c> NuGet package) injects the exact code the
     ///     hand-written pattern spells —
     ///     <code>
     ///     using var scope = NDScope.Open();
@@ -31,9 +32,13 @@ namespace NumSharp
     ///     iterators and async methods — scope those by hand.</para>
     ///     <para>A method whose body already opens an <see cref="NDScope"/> is skipped
     ///     (idempotence), so hand-scoped code may carry the attribute without double-wrapping.</para>
+    ///     <para>PUBLIC because the attribute is consumer-facing: a project that installs the
+    ///     <c>NumSharp.Weaver</c> package marks its own composition methods with it. Without the
+    ///     package the attribute is inert metadata — the method runs unscoped, the pre-weave
+    ///     finalizer-backstop behaviour.</para>
     /// </remarks>
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
-    internal sealed class NDScopedAttribute : Attribute
+    public sealed class NDScopedAttribute : Attribute
     {
     }
 }

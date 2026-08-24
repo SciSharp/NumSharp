@@ -49,7 +49,10 @@ This is the same lever NumSharp.Core pulls internally. The package lets you pull
 dotnet add package NumSharp.Weaver
 ```
 
-Referencing the package is the whole opt-in: it wires the weave step into your build. Now mark any
+Referencing the package is the whole opt-in: it wires the weave step into your build, and it is
+**not a dependency** — the package ships MSBuild targets plus a build tool only (no `lib/`, no
+dependency entries), and `dotnet add package` installs it with `PrivateAssets="all"` automatically,
+so it never appears in your own package's dependency graph. Now mark any
 method that owns `NDArray` transients `[NDScoped]` and keep the body exactly as you wrote it —
 
 ```csharp
@@ -216,9 +219,16 @@ assembly, before it is copied to the output:
 - **A Mono.Cecil transform** rewrites every `[NDScoped]` method into the IL above. Instructions are
   only inserted or mutated in place, so the original sequence points survive and source stepping
   still lands on the right lines — the rewritten portable **PDB** is preserved.
-- **Re-signing.** IL rewriting invalidates the compile-time strong-name signature, so the weaver
-  **re-signs** the assembly with the project key. Identity (public-key token, version binding) is
-  unchanged — [`StrongNameTests`][gate-sign] gates it.
+- **Cross-assembly resolution.** In your project `NDScope` and the attribute live in the
+  *referenced* NumSharp assembly, so the target hands the weaver the compiler's own reference list
+  (a response file of `@(ReferencePathWithRefAssemblies)`); the weaver resolves the types through
+  it and emits cross-assembly member references. NumSharp.Core's self-weave needs none of this —
+  there the types are in-module.
+- **Re-signing.** IL rewriting invalidates a compile-time strong-name signature, so on a
+  strong-named project the weaver **re-signs** the assembly with the project's own key; identity
+  (public-key token, version binding) is unchanged — [`StrongNameTests`][gate-sign] gates it for
+  NumSharp itself. An unsigned project is simply written unsigned; delay- and public-signed
+  projects are left as-is (they carry no valid signature to restore).
 - **Idempotent & incremental.** A body that already opens an `NDScope` is skipped, so re-weaving is a
   no-op; the target is incremental on a per-`TargetFramework` marker, so an unchanged assembly is not
   re-woven.
@@ -259,6 +269,7 @@ mis-weave:
 
 | code | meaning | fix |
 |---|---|---|
+| `NDW001` | the project has `[NDScoped]` methods but `NumSharp.NDScope` could not be resolved from the assembly or its references | reference the `NumSharp` package (the attribute and the scope live there); if you invoke the weaver by hand, pass `--refs` with the compile's reference list |
 | `NDW002` | a `ref NDArray`(`[]`) parameter — a hidden egress | [hand-scope](#hand-scoping) and yield it explicitly |
 | `NDW003` | an unsupported carrier return (a bespoke reference type, a collection, or a struct without `INDArrayCarrier`) | implement `INDArrayCarrier` on the struct, or hand-scope |
 | `NDW004` | an iterator (`yield`) or `async` method — the body is a state-machine stub | hand-scope inside the real body, or don't scope it |

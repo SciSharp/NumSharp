@@ -4,7 +4,7 @@ using Mono.Cecil.Rocks;
 
 namespace NumSharp.Weaver;
 
-internal readonly record struct WeaveResult(int Woven, int Skipped, int Errors, bool SymbolsWritten);
+internal readonly record struct WeaveResult(int Woven, int Skipped, int Errors, bool SymbolsWritten, bool Wrote);
 
 /// <summary>
 ///     The transform. Per <c>[NDScoped]</c> method:
@@ -38,23 +38,30 @@ internal static class ScopeWeaver
     private const string IArraySliceFullName = "NumSharp.Backends.Unmanaged.IArraySlice";
     private const string UnmanagedStorageFullName = "NumSharp.Backends.UnmanagedStorage";
 
+    /// <summary>
+    ///     The NDScope surface the transform emits calls to. Every member is held as a reference
+    ///     ALREADY IMPORTED into the module being woven: for the self-weave (NumSharp.Core, where
+    ///     NDScope is in-module) <c>ImportReference</c> is an identity pass-through, and for a
+    ///     consumer weave it mints the cross-assembly <c>MemberRef</c>s targeting the referenced
+    ///     NumSharp assembly.
+    /// </summary>
     private sealed class Refs
     {
-        public TypeDefinition NDScope;
-        public MethodDefinition Open;         // static NDScope Open()
-        public MethodDefinition Dispose;      // void Dispose()
-        public MethodDefinition ReturnsOne;   // T Returns<T>(T)     where T : NDArray
-        public MethodDefinition ReturnsMany;  // T[] Returns<T>(T[]) where T : NDArray
-        public MethodDefinition ReturnsTuple2; // (T1,T2) Returns<T1,T2>((T1,T2))
-        public MethodDefinition ReturnsTuple3; // (T1,T2,T3) Returns<T1,T2,T3>((T1,T2,T3))
-        public MethodDefinition ReturnsTuple4; // (T1,T2,T3,T4) Returns<T1,T2,T3,T4>((T1,T2,T3,T4))
-        public MethodDefinition ReturnsITuple; // ITuple Returns(ITuple) — any arity/mix, boxed
-        public MethodDefinition ReturnsSlice;   // IArraySlice Returns(IArraySlice) — counted-ref protection
-        public MethodDefinition ReturnsStorage; // UnmanagedStorage Returns(UnmanagedStorage)
-        public MethodDefinition CarrierYieldTo; // void INDArrayCarrier.YieldTo(NDScope)
+        public TypeReference NDScope;
+        public MethodReference Open;         // static NDScope Open()
+        public MethodReference Dispose;      // void Dispose()
+        public MethodReference ReturnsOne;   // T Returns<T>(T)     where T : NDArray
+        public MethodReference ReturnsMany;  // T[] Returns<T>(T[]) where T : NDArray
+        public MethodReference ReturnsTuple2; // (T1,T2) Returns<T1,T2>((T1,T2))
+        public MethodReference ReturnsTuple3; // (T1,T2,T3) Returns<T1,T2,T3>((T1,T2,T3))
+        public MethodReference ReturnsTuple4; // (T1,T2,T3,T4) Returns<T1,T2,T3,T4>((T1,T2,T3,T4))
+        public MethodReference ReturnsITuple; // ITuple Returns(ITuple) — any arity/mix, boxed
+        public MethodReference ReturnsSlice;   // IArraySlice Returns(IArraySlice) — counted-ref protection
+        public MethodReference ReturnsStorage; // UnmanagedStorage Returns(UnmanagedStorage)
+        public MethodReference CarrierYieldTo; // void INDArrayCarrier.YieldTo(NDScope)
 
         /// <summary>The <c>Returns</c> tuple overload for the given arity (2..4), or null if unsupported.</summary>
-        public MethodDefinition ReturnsTuple(int arity) => arity switch
+        public MethodReference ReturnsTuple(int arity) => arity switch
         {
             2 => ReturnsTuple2,
             3 => ReturnsTuple3,
@@ -75,31 +82,56 @@ internal static class ScopeWeaver
         Storage           // bare IArraySlice / UnmanagedStorage — Returns(slice/storage) counted-ref protection
     }
 
-    public static WeaveResult WeaveAssembly(string assemblyPath, byte[] snkBlob, bool verbose, TextWriter stdout, TextWriter stderr)
+    public static WeaveResult WeaveAssembly(string assemblyPath, byte[] snkBlob, IReadOnlyList<string> referencePaths,
+                                            bool verbose, TextWriter stdout, TextWriter stderr)
     {
+        // The resolver serves BOTH weave shapes: the self-weave (NumSharp.Core — everything
+        // in-module, resolver only probes the assembly's own directory) and the consumer weave
+        // (the NumSharp.Weaver package — NDScope/NDArray live in the REFERENCED NumSharp assembly,
+        // located through the compile's own reference list passed via --refs).
+        using var resolver = new WeaverAssemblyResolver(
+            Path.GetDirectoryName(Path.GetFullPath(assemblyPath)), referencePaths ?? Array.Empty<string>());
+
         var readerParameters = new ReaderParameters
         {
             ReadSymbols = true,
             SymbolReaderProvider = new DefaultSymbolReaderProvider(throwIfNoSymbol: false),
             InMemory = true, // fully load, release the file handle: we write back to the same path
+            AssemblyResolver = resolver,
         };
 
         using var assembly = AssemblyDefinition.ReadAssembly(assemblyPath, readerParameters);
         var module = assembly.MainModule;
         bool hasSymbols = module.HasSymbols;
 
+        int woven = 0, skipped = 0, errors = 0;
+
+        // Targets FIRST (a pure name match, no resolution): a consumer assembly with no [NDScoped]
+        // methods exits without resolving anything and — crucially — without rewriting the file,
+        // so its compile-time signature, determinism id and timestamps stay untouched.
+        var targets = CollectTargets(module, stderr, ref errors);
+        if (targets.Count == 0)
+        {
+            if (errors > 0)
+                return new WeaveResult(0, 0, errors, false, false);
+            stdout.WriteLine($"NumSharp.Weaver: {Path.GetFileName(assemblyPath)} — no [NDScoped] methods; nothing to do");
+            return new WeaveResult(0, 0, 0, false, false);
+        }
+
         var refs = ResolveRefs(module);
         if (refs is null)
         {
-            // No NDScope in this module: nothing can be woven. Attributed methods would be a
-            // configuration error, but without the scope type there is nothing to look for either.
-            stdout.WriteLine($"NumSharp.Weaver: {Path.GetFileName(assemblyPath)} — no {NDScopeFullName} type; nothing to do");
-            return new WeaveResult(0, 0, 0, false);
+            // Attributed methods with no reachable NDScope is a CONFIGURATION error, not a no-op:
+            // silently skipping would ship those methods unwoven while the build reads green.
+            stderr.WriteLine(
+                $"NumSharp.Weaver : error NDW001: {targets.Count} [NDScoped] method(s) found but type '{NDScopeFullName}' " +
+                $"could not be resolved from '{Path.GetFileName(assemblyPath)}' or its references — ensure the project " +
+                "references NumSharp (the attribute and the scope live there) and that the invocation passed --refs " +
+                "with the compile's reference list");
+            return new WeaveResult(0, 0, errors + 1, false, false);
         }
 
-        int woven = 0, skipped = 0, errors = 0;
-
-        foreach (var method in CollectTargets(module, stderr, ref errors))
+        foreach (var method in targets)
         {
             switch (Validate(method, stderr))
             {
@@ -120,7 +152,13 @@ internal static class ScopeWeaver
         }
 
         if (errors > 0)
-            return new WeaveResult(woven, skipped, errors, false);
+            return new WeaveResult(woven, skipped, errors, false, false);
+
+        // Every target already scoped by hand → the module was not modified; skip the rewrite so
+        // the compile-time signature and determinism id survive (a write would invalidate both for
+        // zero IL change).
+        if (woven == 0)
+            return new WeaveResult(0, skipped, 0, false, false);
 
         var writerParameters = new WriterParameters
         {
@@ -130,12 +168,12 @@ internal static class ScopeWeaver
             writerParameters.StrongNameKeyBlob = snkBlob;
 
         assembly.Write(assemblyPath, writerParameters);
-        return new WeaveResult(woven, skipped, 0, hasSymbols);
+        return new WeaveResult(woven, skipped, 0, hasSymbols, true);
     }
 
     // ----------------------------------------------------------------- target collection
 
-    private static IEnumerable<MethodDefinition> CollectTargets(ModuleDefinition module, TextWriter stderr, ref int errors)
+    private static List<MethodDefinition> CollectTargets(ModuleDefinition module, TextWriter stderr, ref int errors)
     {
         var targets = new List<MethodDefinition>();
         foreach (var type in AllTypes(module))
@@ -267,20 +305,24 @@ internal static class ScopeWeaver
 
     private static Refs ResolveRefs(ModuleDefinition module)
     {
-        var scopeType = module.GetType(NDScopeFullName);
+        // In-module first (the self-weave — NumSharp.Core carries NDScope itself), then the
+        // assembly references (the consumer weave — the NumSharp.Weaver package's target hands the
+        // reference list via --refs). Every located member is imported into the module being woven:
+        // an identity pass-through in-module, a cross-assembly MemberRef otherwise.
+        var scopeType = module.GetType(NDScopeFullName) ?? FindExternalType(module, NDScopeFullName);
         if (scopeType is null)
             return null;
 
-        var refs = new Refs { NDScope = scopeType };
+        var refs = new Refs { NDScope = module.ImportReference(scopeType) };
         foreach (var m in scopeType.Methods)
         {
             switch (m.Name)
             {
                 case "Open" when m.IsStatic && !m.HasParameters:
-                    refs.Open = m;
+                    refs.Open = module.ImportReference(m);
                     break;
                 case "Dispose" when !m.IsStatic && !m.HasParameters:
-                    refs.Dispose = m;
+                    refs.Dispose = module.ImportReference(m);
                     break;
                 // The Returns family is keyed by GENERIC arity, not by inspecting the parameter shape:
                 // Returns<T>(T) and Returns<T>(T[]) both have one type parameter (split on ArrayType);
@@ -289,28 +331,28 @@ internal static class ScopeWeaver
                     switch (m.GenericParameters.Count)
                     {
                         case 0 when m.Parameters[0].ParameterType.FullName == ITupleFullName:
-                            refs.ReturnsITuple = m;
+                            refs.ReturnsITuple = module.ImportReference(m);
                             break;
                         case 0 when m.Parameters[0].ParameterType.FullName == IArraySliceFullName:
-                            refs.ReturnsSlice = m;
+                            refs.ReturnsSlice = module.ImportReference(m);
                             break;
                         case 0 when m.Parameters[0].ParameterType.FullName == UnmanagedStorageFullName:
-                            refs.ReturnsStorage = m;
+                            refs.ReturnsStorage = module.ImportReference(m);
                             break;
                         case 1 when m.Parameters[0].ParameterType is ArrayType:
-                            refs.ReturnsMany = m;
+                            refs.ReturnsMany = module.ImportReference(m);
                             break;
                         case 1:
-                            refs.ReturnsOne = m;
+                            refs.ReturnsOne = module.ImportReference(m);
                             break;
                         case 2:
-                            refs.ReturnsTuple2 = m;
+                            refs.ReturnsTuple2 = module.ImportReference(m);
                             break;
                         case 3:
-                            refs.ReturnsTuple3 = m;
+                            refs.ReturnsTuple3 = module.ImportReference(m);
                             break;
                         case 4:
-                            refs.ReturnsTuple4 = m;
+                            refs.ReturnsTuple4 = module.ImportReference(m);
                             break;
                     }
 
@@ -320,11 +362,15 @@ internal static class ScopeWeaver
 
         // The carrier seam: INDArrayCarrier.YieldTo(NDScope) — the boundary a result struct exposes so
         // the weaver can hand every NDArray it holds back through the scope (a struct's own method can
-        // reach its private fields; the enclosing type's woven method cannot).
-        var carrierType = module.GetType(CarrierInterfaceFullName);
-        refs.CarrierYieldTo = carrierType?.Methods.FirstOrDefault(
+        // reach its private fields; the enclosing type's woven method cannot). It lives beside NDScope,
+        // so when the scope came from a REFERENCE the interface is looked up in that same module first.
+        var carrierType = module.GetType(CarrierInterfaceFullName)
+                          ?? scopeType.Module.GetType(CarrierInterfaceFullName)
+                          ?? FindExternalType(module, CarrierInterfaceFullName);
+        var carrierYieldTo = carrierType?.Methods.FirstOrDefault(
             m => m.Name == "YieldTo" && m.Parameters.Count == 1 &&
                  m.Parameters[0].ParameterType.FullName == NDScopeFullName);
+        refs.CarrierYieldTo = carrierYieldTo is null ? null : module.ImportReference(carrierYieldTo);
 
         if (refs.Open is null || refs.Dispose is null || refs.ReturnsOne is null || refs.ReturnsMany is null ||
             refs.ReturnsTuple2 is null || refs.ReturnsTuple3 is null || refs.ReturnsTuple4 is null ||
@@ -338,19 +384,87 @@ internal static class ScopeWeaver
         return refs;
     }
 
+    /// <summary>
+    ///     Locates a type through the module's ASSEMBLY REFERENCES — the consumer-weave path, where
+    ///     NDScope/INDArrayCarrier live in the referenced NumSharp assembly rather than the module
+    ///     being woven. NumSharp-named references are tried first (the overwhelmingly common case);
+    ///     the full reference list is the fallback for a merged/renamed host. Type forwarders are
+    ///     honoured so a future facade split cannot silently break the lookup.
+    /// </summary>
+    private static TypeDefinition FindExternalType(ModuleDefinition module, string fullName)
+    {
+        foreach (var numSharpNamedPass in new[] { true, false })
+        {
+            foreach (var reference in module.AssemblyReferences)
+            {
+                if (reference.Name.StartsWith("NumSharp", StringComparison.OrdinalIgnoreCase) != numSharpNamedPass)
+                    continue;
+
+                AssemblyDefinition referenced;
+                try
+                {
+                    referenced = module.AssemblyResolver.Resolve(reference);
+                }
+                catch
+                {
+                    continue; // an unresolvable reference just cannot be the host
+                }
+
+                var direct = referenced?.MainModule.GetType(fullName);
+                if (direct != null)
+                    return direct;
+
+                if (referenced is null)
+                    continue;
+                foreach (var exported in referenced.MainModule.ExportedTypes)
+                {
+                    if (exported.FullName != fullName)
+                        continue;
+                    try
+                    {
+                        return exported.Resolve();
+                    }
+                    catch
+                    {
+                        // forwarder target unresolvable — keep scanning
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    ///     Framework namespaces that can never derive from NDArray or opt into INDArrayCarrier —
+    ///     skipped before any resolution so the classifier does not open BCL reference assemblies
+    ///     for answers it already knows.
+    /// </summary>
+    private static bool IsFrameworkType(TypeReference t)
+    {
+        var name = t.FullName;
+        return name.StartsWith("System.", StringComparison.Ordinal)
+               || name.StartsWith("Microsoft.", StringComparison.Ordinal);
+    }
+
     /// <summary>NDArray-like, or a rank-1 array of NDArray-like — the two shapes Returns can yield.</summary>
     private static bool IsNDArrayCarrying(TypeReference t)
         => IsNDArrayLike(t) || (t is ArrayType { Rank: 1 } arr && IsNDArrayLike(arr.ElementType));
 
-    /// <summary>NDArray or any subclass (NDArray&lt;T&gt; open or instantiated). Never resolves outside the NumSharp module.</summary>
+    /// <summary>
+    ///     NDArray or any subclass (NDArray&lt;T&gt; open or instantiated). Resolution runs through the
+    ///     module's <see cref="WeaverAssemblyResolver"/>, so the base-type chain is chased across the
+    ///     assembly boundary too — a consumer weave classifies <c>NumSharp.Generic.NDArray&lt;T&gt;</c>
+    ///     (or the consumer's own subclass) exactly as the self-weave does in-module.
+    /// </summary>
     private static bool IsNDArrayLike(TypeReference t)
     {
         if (t is null || t.IsByReference || t.IsPointer || t is ArrayType || t.IsGenericParameter)
             return false;
         if (t.FullName == NDArrayFullName)
             return true;
-        if (!t.FullName.StartsWith("NumSharp", StringComparison.Ordinal))
-            return false; // never chase external types (no assembly resolver is configured)
+        if (IsFrameworkType(t))
+            return false;
 
         TypeDefinition def;
         try
@@ -367,7 +481,7 @@ internal static class ScopeWeaver
             if (def.FullName == NDArrayFullName)
                 return true;
             var baseRef = def.BaseType;
-            if (baseRef is null || !baseRef.FullName.StartsWith("NumSharp", StringComparison.Ordinal))
+            if (baseRef is null || baseRef.FullName == "System.Object")
                 return false;
             try
             {
@@ -471,18 +585,17 @@ internal static class ScopeWeaver
                 return true;
         }
 
-        // In-module enums (NPTypeCode etc.) are scalars.
-        if (t.FullName.StartsWith("NumSharp", StringComparison.Ordinal))
+        // Any resolvable enum is a scalar — NumSharp's (NPTypeCode), the consumer's own, or a
+        // framework one; a type that cannot be resolved is not PROVABLY scalar and falls through
+        // to NDW003 rather than being silently trusted.
+        try
         {
-            try
-            {
-                if (t.Resolve() is { IsEnum: true })
-                    return true;
-            }
-            catch
-            {
-                // not resolvable here — treat as non-scalar
-            }
+            if (t.Resolve() is { IsEnum: true })
+                return true;
+        }
+        catch
+        {
+            // not resolvable here — treat as non-scalar
         }
 
         return false;
@@ -519,14 +632,15 @@ internal static class ScopeWeaver
     ///     through the scope. The opt-in is what lets the weaver reach members behind PRIVATE fields
     ///     (auto-property backing fields, <c>_grids</c>, …): a struct's own method can read them, but the
     ///     enclosing type's woven method cannot (the CLR grants nested→enclosing private access, not the
-    ///     reverse). A struct without the interface reports NDW003 and is hand-scoped.
+    ///     reverse). A struct without the interface reports NDW003 and is hand-scoped. The interface is
+    ///     public, so a CONSUMER's own result structs opt in the same way NumSharp's do.
     /// </summary>
     private static bool ImplementsCarrierInterface(TypeReference t)
     {
         if (t is null || t.IsByReference || t.IsPointer || t is ArrayType || t.IsGenericParameter)
             return false;
-        if (!t.FullName.StartsWith("NumSharp", StringComparison.Ordinal))
-            return false; // ValueTuples are handled above; external structs are never chased
+        if (IsFrameworkType(t))
+            return false; // ValueTuples/Tuples are handled above; no framework struct is a carrier
 
         TypeDefinition def;
         try

@@ -342,8 +342,12 @@ namespace NumSharp
     ///     fields (auto-property backing fields, <c>_grids</c>, …) while the enclosing type's woven method
     ///     cannot — the CLR grants nested→enclosing private access, not the reverse. A carrier struct
     ///     WITHOUT this interface reports build error NDW003 and must be hand-scoped.
+    ///     PUBLIC because the opt-in is consumer-facing too: a project that installs the
+    ///     <c>NumSharp.Weaver</c> package implements it on its own result structs so its
+    ///     <see cref="NDScopedAttribute"/> methods can return them (and the woven cross-assembly
+    ///     <c>YieldTo</c> call must pass the CLR's accessibility check).
     /// </remarks>
-    internal interface INDArrayCarrier
+    public interface INDArrayCarrier
     {
         /// <summary>Yields every <see cref="NDArray"/> this carrier holds into <paramref name="scope"/>.</summary>
         void YieldTo(NDScope scope);

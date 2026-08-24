@@ -62,6 +62,33 @@ foreach (var pkg in packages)
     Console.WriteLine($"{Path.GetFileName(pkg)}");
     using var zip = ZipFile.OpenRead(pkg);
 
+    // NumSharp.Weaver is a TOOLS-ONLY package BY DESIGN: build/ targets + a tools/ payload, no lib/
+    // and no dependency entries — installing it changes the consumer's BUILD, never its dependency
+    // graph (gate: tools/verify_weaver_package.sh). Its payload is exempt from the key check — the
+    // tool never loads into a user's app (tools/ assemblies are neither referenced nor copied), and
+    // Mono.Cecil beside it carries Cecil's key, not NumSharp's. What IS asserted is the payload
+    // itself, so a mis-pack cannot ride the exemption and ship an empty shell.
+    if (Path.GetFileName(pkg).StartsWith("NumSharp.Weaver.", StringComparison.OrdinalIgnoreCase))
+    {
+        bool hasTool = zip.Entries.Any(e => e.FullName.Equals("tools/net8.0/any/NumSharp.Weaver.dll", StringComparison.OrdinalIgnoreCase));
+        bool hasCecil = zip.Entries.Any(e => e.FullName.Equals("tools/net8.0/any/Mono.Cecil.dll", StringComparison.OrdinalIgnoreCase));
+        bool hasTargets = zip.Entries.Any(e => e.FullName.Equals("build/NumSharp.Weaver.targets", StringComparison.OrdinalIgnoreCase));
+        bool hasLib = zip.Entries.Any(e => e.FullName.StartsWith("lib/", StringComparison.OrdinalIgnoreCase));
+
+        checkedCount++;
+        if (hasTool && hasCecil && hasTargets && !hasLib)
+        {
+            Console.WriteLine("  OK   tools-only weaver package (build/ + tools/ payload verified; key check n/a)");
+        }
+        else
+        {
+            Console.Error.WriteLine($"  ::error::FAIL {Path.GetFileName(pkg)} — tools-only package malformed " +
+                                    $"(tool={hasTool}, cecil={hasCecil}, targets={hasTargets}, lib-present={hasLib})");
+            failures++;
+        }
+        continue;
+    }
+
     // Only lib/ — a package may also carry runtimes/<rid>/native/*.dll (NumSharp.Interop.OpenBLAS ships
     // OpenBLAS), which are unmanaged and have no assembly identity to check.
     var libDlls = zip.Entries
