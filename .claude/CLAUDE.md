@@ -269,7 +269,7 @@ Carries the bulk of NumSharp's elementwise, reduction, scan, cast, and selection
 | Cast & Copy | `.Cast.cs`, `.Cast.Masked.cs`, `.Cast.Scalar.cs`, `.Cast.Half.cs`, `.Cast.ToHalf.cs`, `.Cast.FloatNarrow.cs`, `.Cast.FloatWideInt.cs`, `.Cast.FloatToUInt.cs`, `.Cast.IntNarrow.cs`, `.Cast.ShortNarrow.cs`, `.Cast.SubwordCopy.cs`, `.Cast.SubwordNarrow.cs`, `.Cast.SubwordWiden.cs`, `.Cast.ToBool.cs`, `.Cast.Complex.cs`, `.Copy.cs` |
 | Selection | `.Where.cs`, `.Where.Scalar.cs`, `.Place.cs`, `.Put.cs`, `.Take.cs`, `.NonZero.cs`, `.Argwhere.cs`, `.Indices.cs`, `.Filter.cs`, `.Search.cs` |
 | Linear algebra | `.MatMul.cs`, `.Trace.cs` |
-| Other | `.Clip.cs`, `.Modf.cs`, `.Repeat.cs`, `.Quantile.cs`, `.WeightedSum.cs`, `.RavelMultiIndex.cs`, `.UnravelIndex.cs`, `.InnerLoop.cs`, `.StorageAlias.cs` |
+| Other | `.Clip.cs`, `.Modf.cs`, `.Repeat.cs`, `.Quantile.cs`, `.WeightedSum.cs`, `.RavelMultiIndex.cs`, `.UnravelIndex.cs`, `.InnerLoop.cs` |
 
 ### `ILKernelGenerator` — NDIter-driven per-chunk kernels
 

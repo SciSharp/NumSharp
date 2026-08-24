@@ -27,23 +27,40 @@ namespace NumSharp.Backends
     /// </remarks>
     public partial class UnmanagedStorage : ICloneable
     {
-        // %foreach supported_dtypes,supported_dtypes_lowercase%
-        // protected ArraySlice<#2> _array#1;
-        protected ArraySlice<bool> _arrayBoolean;
-        protected ArraySlice<sbyte> _arraySByte;
-        protected ArraySlice<byte> _arrayByte;
-        protected ArraySlice<short> _arrayInt16;
-        protected ArraySlice<ushort> _arrayUInt16;
-        protected ArraySlice<int> _arrayInt32;
-        protected ArraySlice<uint> _arrayUInt32;
-        protected ArraySlice<long> _arrayInt64;
-        protected ArraySlice<ulong> _arrayUInt64;
-        protected ArraySlice<char> _arrayChar;
-        protected ArraySlice<Half> _arrayHalf;
-        protected ArraySlice<double> _arrayDouble;
-        protected ArraySlice<float> _arraySingle;
-        protected ArraySlice<decimal> _arrayDecimal;
-        protected ArraySlice<System.Numerics.Complex> _arrayComplex;
+        /// <summary>
+        ///     The 15 per-dtype <see cref="ArraySlice{T}"/> lanes overlapped at offset 0 — exactly one
+        ///     lane (the one matching <see cref="_typecode"/>) is ever written or read over a storage's
+        ///     lifetime, so the union holds the single live typed slice in 64 B instead of 15 separate
+        ///     64 B fields (−896 B per storage instance). The overlap is CLR-legal because every lane
+        ///     has the identical layout for any T (T occurs only behind pointers: T*/void*/long/bool)
+        ///     and the single managed reference — the non-generic <c>Disposer</c> inside
+        ///     <see cref="UnmanagedMemoryBlock{T}"/> — sits at the same offset with the same type in
+        ///     all lanes, so the GC ref map is well-formed (the type loader rejects the layout
+        ///     otherwise). See docs/UNMANAGED_STORAGE_UNION_DESIGN.md.
+        /// </summary>
+        [StructLayout(LayoutKind.Explicit)]
+        private struct TypedSlices
+        {
+            // %foreach supported_dtypes,supported_dtypes_lowercase%
+            // [FieldOffset(0)] public ArraySlice<#2> #1;
+            [FieldOffset(0)] public ArraySlice<bool> Boolean;
+            [FieldOffset(0)] public ArraySlice<sbyte> SByte;
+            [FieldOffset(0)] public ArraySlice<byte> Byte;
+            [FieldOffset(0)] public ArraySlice<short> Int16;
+            [FieldOffset(0)] public ArraySlice<ushort> UInt16;
+            [FieldOffset(0)] public ArraySlice<int> Int32;
+            [FieldOffset(0)] public ArraySlice<uint> UInt32;
+            [FieldOffset(0)] public ArraySlice<long> Int64;
+            [FieldOffset(0)] public ArraySlice<ulong> UInt64;
+            [FieldOffset(0)] public ArraySlice<char> Char;
+            [FieldOffset(0)] public ArraySlice<Half> Half;
+            [FieldOffset(0)] public ArraySlice<double> Double;
+            [FieldOffset(0)] public ArraySlice<float> Single;
+            [FieldOffset(0)] public ArraySlice<decimal> Decimal;
+            [FieldOffset(0)] public ArraySlice<System.Numerics.Complex> Complex;
+        }
+
+        private TypedSlices _slices;
         public IArraySlice InternalArray;
         public unsafe byte* Address;
         public long Count;
@@ -405,11 +422,11 @@ namespace NumSharp.Backends
             // _dtype = typeof(#1);
             // _typecode = InfoOf<#2>.NPTypeCode;
             // _shape = Shape.Scalar;
-            // InternalArray = _array#1 = ArraySlice.Scalar<#2>(scalar);
+            // InternalArray = _slices.#1 = ArraySlice.Scalar<#2>(scalar);
             // unsafe
             // {
-                // Address = (byte*)_array#1.Address;
-                // Count = _array#1.Count;
+                // Address = (byte*)_slices.#1.Address;
+                // Count = _slices.#1.Count;
             // }
         // }
 
@@ -419,11 +436,11 @@ namespace NumSharp.Backends
             _dtype = typeof(Boolean);
             _typecode = InfoOf<bool>.NPTypeCode;
             _shape = Shape.Scalar;
-            InternalArray = _arrayBoolean = ArraySlice.Scalar<bool>(scalar);
+            InternalArray = _slices.Boolean = ArraySlice.Scalar<bool>(scalar);
             unsafe
             {
-                Address = (byte*)_arrayBoolean.Address;
-                Count = _arrayBoolean.Count;
+                Address = (byte*)_slices.Boolean.Address;
+                Count = _slices.Boolean.Count;
             }
         }
 
@@ -432,11 +449,11 @@ namespace NumSharp.Backends
             _dtype = typeof(Byte);
             _typecode = InfoOf<byte>.NPTypeCode;
             _shape = Shape.Scalar;
-            InternalArray = _arrayByte = ArraySlice.Scalar<byte>(scalar);
+            InternalArray = _slices.Byte = ArraySlice.Scalar<byte>(scalar);
             unsafe
             {
-                Address = (byte*)_arrayByte.Address;
-                Count = _arrayByte.Count;
+                Address = (byte*)_slices.Byte.Address;
+                Count = _slices.Byte.Count;
             }
         }
 
@@ -445,11 +462,11 @@ namespace NumSharp.Backends
             _dtype = typeof(Int16);
             _typecode = InfoOf<short>.NPTypeCode;
             _shape = Shape.Scalar;
-            InternalArray = _arrayInt16 = ArraySlice.Scalar<short>(scalar);
+            InternalArray = _slices.Int16 = ArraySlice.Scalar<short>(scalar);
             unsafe
             {
-                Address = (byte*)_arrayInt16.Address;
-                Count = _arrayInt16.Count;
+                Address = (byte*)_slices.Int16.Address;
+                Count = _slices.Int16.Count;
             }
         }
 
@@ -458,11 +475,11 @@ namespace NumSharp.Backends
             _dtype = typeof(UInt16);
             _typecode = InfoOf<ushort>.NPTypeCode;
             _shape = Shape.Scalar;
-            InternalArray = _arrayUInt16 = ArraySlice.Scalar<ushort>(scalar);
+            InternalArray = _slices.UInt16 = ArraySlice.Scalar<ushort>(scalar);
             unsafe
             {
-                Address = (byte*)_arrayUInt16.Address;
-                Count = _arrayUInt16.Count;
+                Address = (byte*)_slices.UInt16.Address;
+                Count = _slices.UInt16.Count;
             }
         }
 
@@ -471,11 +488,11 @@ namespace NumSharp.Backends
             _dtype = typeof(Int32);
             _typecode = InfoOf<int>.NPTypeCode;
             _shape = Shape.Scalar;
-            InternalArray = _arrayInt32 = ArraySlice.Scalar<int>(scalar);
+            InternalArray = _slices.Int32 = ArraySlice.Scalar<int>(scalar);
             unsafe
             {
-                Address = (byte*)_arrayInt32.Address;
-                Count = _arrayInt32.Count;
+                Address = (byte*)_slices.Int32.Address;
+                Count = _slices.Int32.Count;
             }
         }
 
@@ -484,11 +501,11 @@ namespace NumSharp.Backends
             _dtype = typeof(UInt32);
             _typecode = InfoOf<uint>.NPTypeCode;
             _shape = Shape.Scalar;
-            InternalArray = _arrayUInt32 = ArraySlice.Scalar<uint>(scalar);
+            InternalArray = _slices.UInt32 = ArraySlice.Scalar<uint>(scalar);
             unsafe
             {
-                Address = (byte*)_arrayUInt32.Address;
-                Count = _arrayUInt32.Count;
+                Address = (byte*)_slices.UInt32.Address;
+                Count = _slices.UInt32.Count;
             }
         }
 
@@ -497,11 +514,11 @@ namespace NumSharp.Backends
             _dtype = typeof(Int64);
             _typecode = InfoOf<long>.NPTypeCode;
             _shape = Shape.Scalar;
-            InternalArray = _arrayInt64 = ArraySlice.Scalar<long>(scalar);
+            InternalArray = _slices.Int64 = ArraySlice.Scalar<long>(scalar);
             unsafe
             {
-                Address = (byte*)_arrayInt64.Address;
-                Count = _arrayInt64.Count;
+                Address = (byte*)_slices.Int64.Address;
+                Count = _slices.Int64.Count;
             }
         }
 
@@ -510,11 +527,11 @@ namespace NumSharp.Backends
             _dtype = typeof(UInt64);
             _typecode = InfoOf<ulong>.NPTypeCode;
             _shape = Shape.Scalar;
-            InternalArray = _arrayUInt64 = ArraySlice.Scalar<ulong>(scalar);
+            InternalArray = _slices.UInt64 = ArraySlice.Scalar<ulong>(scalar);
             unsafe
             {
-                Address = (byte*)_arrayUInt64.Address;
-                Count = _arrayUInt64.Count;
+                Address = (byte*)_slices.UInt64.Address;
+                Count = _slices.UInt64.Count;
             }
         }
 
@@ -523,11 +540,11 @@ namespace NumSharp.Backends
             _dtype = typeof(Char);
             _typecode = InfoOf<char>.NPTypeCode;
             _shape = Shape.Scalar;
-            InternalArray = _arrayChar = ArraySlice.Scalar<char>(scalar);
+            InternalArray = _slices.Char = ArraySlice.Scalar<char>(scalar);
             unsafe
             {
-                Address = (byte*)_arrayChar.Address;
-                Count = _arrayChar.Count;
+                Address = (byte*)_slices.Char.Address;
+                Count = _slices.Char.Count;
             }
         }
 
@@ -536,11 +553,11 @@ namespace NumSharp.Backends
             _dtype = typeof(Double);
             _typecode = InfoOf<double>.NPTypeCode;
             _shape = Shape.Scalar;
-            InternalArray = _arrayDouble = ArraySlice.Scalar<double>(scalar);
+            InternalArray = _slices.Double = ArraySlice.Scalar<double>(scalar);
             unsafe
             {
-                Address = (byte*)_arrayDouble.Address;
-                Count = _arrayDouble.Count;
+                Address = (byte*)_slices.Double.Address;
+                Count = _slices.Double.Count;
             }
         }
 
@@ -549,11 +566,11 @@ namespace NumSharp.Backends
             _dtype = typeof(Single);
             _typecode = InfoOf<float>.NPTypeCode;
             _shape = Shape.Scalar;
-            InternalArray = _arraySingle = ArraySlice.Scalar<float>(scalar);
+            InternalArray = _slices.Single = ArraySlice.Scalar<float>(scalar);
             unsafe
             {
-                Address = (byte*)_arraySingle.Address;
-                Count = _arraySingle.Count;
+                Address = (byte*)_slices.Single.Address;
+                Count = _slices.Single.Count;
             }
         }
 
@@ -562,11 +579,11 @@ namespace NumSharp.Backends
             _dtype = typeof(Decimal);
             _typecode = InfoOf<decimal>.NPTypeCode;
             _shape = Shape.Scalar;
-            InternalArray = _arrayDecimal = ArraySlice.Scalar<decimal>(scalar);
+            InternalArray = _slices.Decimal = ArraySlice.Scalar<decimal>(scalar);
             unsafe
             {
-                Address = (byte*)_arrayDecimal.Address;
-                Count = _arrayDecimal.Count;
+                Address = (byte*)_slices.Decimal.Address;
+                Count = _slices.Decimal.Count;
             }
         }
         // %foreach supported_dtypes,supported_dtypes_lowercase%
@@ -577,10 +594,10 @@ namespace NumSharp.Backends
             // _dtype = typeof(#1);
             // _typecode = _dtype.GetTypeCode();
             // _shape = new Shape(values.Length);
-            // InternalArray = _array#1 = new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(values));
+            // InternalArray = _slices.#1 = new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(values));
             // unsafe
             // {
-                // Address = (byte*)_array#1.Address;
+                // Address = (byte*)_slices.#1.Address;
                 // Count = values.Length;
             // }
         // }
@@ -592,10 +609,10 @@ namespace NumSharp.Backends
             _dtype = typeof(Boolean);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            InternalArray = _arrayBoolean = new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromArray(values));
+            InternalArray = _slices.Boolean = new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromArray(values));
             unsafe
             {
-                Address = (byte*)_arrayBoolean.Address;
+                Address = (byte*)_slices.Boolean.Address;
                 Count = values.Length;
             }
         }
@@ -607,10 +624,10 @@ namespace NumSharp.Backends
             _dtype = typeof(Byte);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            InternalArray = _arrayByte = new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromArray(values));
+            InternalArray = _slices.Byte = new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromArray(values));
             unsafe
             {
-                Address = (byte*)_arrayByte.Address;
+                Address = (byte*)_slices.Byte.Address;
                 Count = values.Length;
             }
         }
@@ -622,10 +639,10 @@ namespace NumSharp.Backends
             _dtype = typeof(Int16);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            InternalArray = _arrayInt16 = new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromArray(values));
+            InternalArray = _slices.Int16 = new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromArray(values));
             unsafe
             {
-                Address = (byte*)_arrayInt16.Address;
+                Address = (byte*)_slices.Int16.Address;
                 Count = values.Length;
             }
         }
@@ -637,10 +654,10 @@ namespace NumSharp.Backends
             _dtype = typeof(UInt16);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            InternalArray = _arrayUInt16 = new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromArray(values));
+            InternalArray = _slices.UInt16 = new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromArray(values));
             unsafe
             {
-                Address = (byte*)_arrayUInt16.Address;
+                Address = (byte*)_slices.UInt16.Address;
                 Count = values.Length;
             }
         }
@@ -652,10 +669,10 @@ namespace NumSharp.Backends
             _dtype = typeof(Int32);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            InternalArray = _arrayInt32 = new ArraySlice<int>(UnmanagedMemoryBlock<int>.FromArray(values));
+            InternalArray = _slices.Int32 = new ArraySlice<int>(UnmanagedMemoryBlock<int>.FromArray(values));
             unsafe
             {
-                Address = (byte*)_arrayInt32.Address;
+                Address = (byte*)_slices.Int32.Address;
                 Count = values.Length;
             }
         }
@@ -667,10 +684,10 @@ namespace NumSharp.Backends
             _dtype = typeof(UInt32);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            InternalArray = _arrayUInt32 = new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.FromArray(values));
+            InternalArray = _slices.UInt32 = new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.FromArray(values));
             unsafe
             {
-                Address = (byte*)_arrayUInt32.Address;
+                Address = (byte*)_slices.UInt32.Address;
                 Count = values.Length;
             }
         }
@@ -682,10 +699,10 @@ namespace NumSharp.Backends
             _dtype = typeof(Int64);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            InternalArray = _arrayInt64 = new ArraySlice<long>(UnmanagedMemoryBlock<long>.FromArray(values));
+            InternalArray = _slices.Int64 = new ArraySlice<long>(UnmanagedMemoryBlock<long>.FromArray(values));
             unsafe
             {
-                Address = (byte*)_arrayInt64.Address;
+                Address = (byte*)_slices.Int64.Address;
                 Count = values.Length;
             }
         }
@@ -697,10 +714,10 @@ namespace NumSharp.Backends
             _dtype = typeof(UInt64);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            InternalArray = _arrayUInt64 = new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromArray(values));
+            InternalArray = _slices.UInt64 = new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromArray(values));
             unsafe
             {
-                Address = (byte*)_arrayUInt64.Address;
+                Address = (byte*)_slices.UInt64.Address;
                 Count = values.Length;
             }
         }
@@ -712,10 +729,10 @@ namespace NumSharp.Backends
             _dtype = typeof(Char);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            InternalArray = _arrayChar = new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromArray(values));
+            InternalArray = _slices.Char = new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromArray(values));
             unsafe
             {
-                Address = (byte*)_arrayChar.Address;
+                Address = (byte*)_slices.Char.Address;
                 Count = values.Length;
             }
         }
@@ -727,10 +744,10 @@ namespace NumSharp.Backends
             _dtype = typeof(Double);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            InternalArray = _arrayDouble = new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromArray(values));
+            InternalArray = _slices.Double = new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromArray(values));
             unsafe
             {
-                Address = (byte*)_arrayDouble.Address;
+                Address = (byte*)_slices.Double.Address;
                 Count = values.Length;
             }
         }
@@ -742,10 +759,10 @@ namespace NumSharp.Backends
             _dtype = typeof(Single);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            InternalArray = _arraySingle = new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromArray(values));
+            InternalArray = _slices.Single = new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromArray(values));
             unsafe
             {
-                Address = (byte*)_arraySingle.Address;
+                Address = (byte*)_slices.Single.Address;
                 Count = values.Length;
             }
         }
@@ -757,10 +774,10 @@ namespace NumSharp.Backends
             _dtype = typeof(Decimal);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            InternalArray = _arrayDecimal = new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromArray(values));
+            InternalArray = _slices.Decimal = new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromArray(values));
             unsafe
             {
-                Address = (byte*)_arrayDecimal.Address;
+                Address = (byte*)_slices.Decimal.Address;
                 Count = values.Length;
             }
         }
@@ -780,9 +797,9 @@ namespace NumSharp.Backends
                 // %foreach supported_dtypes,supported_dtypes_lowercase%
                 // case NPTypeCode.#1:
                 // {
-                    // InternalArray = _array#1 = ArraySlice.FromArray<#2>((#2[])array);
-                    // Address = (byte*) _array#1.Address;
-                    // Count = _array#1.Count;
+                    // InternalArray = _slices.#1 = ArraySlice.FromArray<#2>((#2[])array);
+                    // Address = (byte*) _slices.#1.Address;
+                    // Count = _slices.#1.Count;
                     // break;
                 // }
                 // %
@@ -791,121 +808,121 @@ namespace NumSharp.Backends
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
                 {
-                    InternalArray = _arrayBoolean = ArraySlice.FromArray<bool>((bool[])array);
-                    Address = (byte*)_arrayBoolean.Address;
-                    Count = _arrayBoolean.Count;
+                    InternalArray = _slices.Boolean = ArraySlice.FromArray<bool>((bool[])array);
+                    Address = (byte*)_slices.Boolean.Address;
+                    Count = _slices.Boolean.Count;
                     break;
                 }
 
                 case NPTypeCode.SByte:
                 {
-                    InternalArray = _arraySByte = ArraySlice.FromArray<sbyte>((sbyte[])array);
-                    Address = (byte*)_arraySByte.Address;
-                    Count = _arraySByte.Count;
+                    InternalArray = _slices.SByte = ArraySlice.FromArray<sbyte>((sbyte[])array);
+                    Address = (byte*)_slices.SByte.Address;
+                    Count = _slices.SByte.Count;
                     break;
                 }
 
                 case NPTypeCode.Byte:
                 {
-                    InternalArray = _arrayByte = ArraySlice.FromArray<byte>((byte[])array);
-                    Address = (byte*)_arrayByte.Address;
-                    Count = _arrayByte.Count;
+                    InternalArray = _slices.Byte = ArraySlice.FromArray<byte>((byte[])array);
+                    Address = (byte*)_slices.Byte.Address;
+                    Count = _slices.Byte.Count;
                     break;
                 }
 
                 case NPTypeCode.Int16:
                 {
-                    InternalArray = _arrayInt16 = ArraySlice.FromArray<short>((short[])array);
-                    Address = (byte*)_arrayInt16.Address;
-                    Count = _arrayInt16.Count;
+                    InternalArray = _slices.Int16 = ArraySlice.FromArray<short>((short[])array);
+                    Address = (byte*)_slices.Int16.Address;
+                    Count = _slices.Int16.Count;
                     break;
                 }
 
                 case NPTypeCode.UInt16:
                 {
-                    InternalArray = _arrayUInt16 = ArraySlice.FromArray<ushort>((ushort[])array);
-                    Address = (byte*)_arrayUInt16.Address;
-                    Count = _arrayUInt16.Count;
+                    InternalArray = _slices.UInt16 = ArraySlice.FromArray<ushort>((ushort[])array);
+                    Address = (byte*)_slices.UInt16.Address;
+                    Count = _slices.UInt16.Count;
                     break;
                 }
 
                 case NPTypeCode.Int32:
                 {
-                    InternalArray = _arrayInt32 = ArraySlice.FromArray<int>((int[])array);
-                    Address = (byte*)_arrayInt32.Address;
-                    Count = _arrayInt32.Count;
+                    InternalArray = _slices.Int32 = ArraySlice.FromArray<int>((int[])array);
+                    Address = (byte*)_slices.Int32.Address;
+                    Count = _slices.Int32.Count;
                     break;
                 }
 
                 case NPTypeCode.UInt32:
                 {
-                    InternalArray = _arrayUInt32 = ArraySlice.FromArray<uint>((uint[])array);
-                    Address = (byte*)_arrayUInt32.Address;
-                    Count = _arrayUInt32.Count;
+                    InternalArray = _slices.UInt32 = ArraySlice.FromArray<uint>((uint[])array);
+                    Address = (byte*)_slices.UInt32.Address;
+                    Count = _slices.UInt32.Count;
                     break;
                 }
 
                 case NPTypeCode.Int64:
                 {
-                    InternalArray = _arrayInt64 = ArraySlice.FromArray<long>((long[])array);
-                    Address = (byte*)_arrayInt64.Address;
-                    Count = _arrayInt64.Count;
+                    InternalArray = _slices.Int64 = ArraySlice.FromArray<long>((long[])array);
+                    Address = (byte*)_slices.Int64.Address;
+                    Count = _slices.Int64.Count;
                     break;
                 }
 
                 case NPTypeCode.UInt64:
                 {
-                    InternalArray = _arrayUInt64 = ArraySlice.FromArray<ulong>((ulong[])array);
-                    Address = (byte*)_arrayUInt64.Address;
-                    Count = _arrayUInt64.Count;
+                    InternalArray = _slices.UInt64 = ArraySlice.FromArray<ulong>((ulong[])array);
+                    Address = (byte*)_slices.UInt64.Address;
+                    Count = _slices.UInt64.Count;
                     break;
                 }
 
                 case NPTypeCode.Char:
                 {
-                    InternalArray = _arrayChar = ArraySlice.FromArray<char>((char[])array);
-                    Address = (byte*)_arrayChar.Address;
-                    Count = _arrayChar.Count;
+                    InternalArray = _slices.Char = ArraySlice.FromArray<char>((char[])array);
+                    Address = (byte*)_slices.Char.Address;
+                    Count = _slices.Char.Count;
                     break;
                 }
 
                 case NPTypeCode.Half:
                 {
-                    InternalArray = _arrayHalf = ArraySlice.FromArray<Half>((Half[])array);
-                    Address = (byte*)_arrayHalf.Address;
-                    Count = _arrayHalf.Count;
+                    InternalArray = _slices.Half = ArraySlice.FromArray<Half>((Half[])array);
+                    Address = (byte*)_slices.Half.Address;
+                    Count = _slices.Half.Count;
                     break;
                 }
 
                 case NPTypeCode.Double:
                 {
-                    InternalArray = _arrayDouble = ArraySlice.FromArray<double>((double[])array);
-                    Address = (byte*)_arrayDouble.Address;
-                    Count = _arrayDouble.Count;
+                    InternalArray = _slices.Double = ArraySlice.FromArray<double>((double[])array);
+                    Address = (byte*)_slices.Double.Address;
+                    Count = _slices.Double.Count;
                     break;
                 }
 
                 case NPTypeCode.Single:
                 {
-                    InternalArray = _arraySingle = ArraySlice.FromArray<float>((float[])array);
-                    Address = (byte*)_arraySingle.Address;
-                    Count = _arraySingle.Count;
+                    InternalArray = _slices.Single = ArraySlice.FromArray<float>((float[])array);
+                    Address = (byte*)_slices.Single.Address;
+                    Count = _slices.Single.Count;
                     break;
                 }
 
                 case NPTypeCode.Decimal:
                 {
-                    InternalArray = _arrayDecimal = ArraySlice.FromArray<decimal>((decimal[])array);
-                    Address = (byte*)_arrayDecimal.Address;
-                    Count = _arrayDecimal.Count;
+                    InternalArray = _slices.Decimal = ArraySlice.FromArray<decimal>((decimal[])array);
+                    Address = (byte*)_slices.Decimal.Address;
+                    Count = _slices.Decimal.Count;
                     break;
                 }
 
                 case NPTypeCode.Complex:
                 {
-                    InternalArray = _arrayComplex = ArraySlice.FromArray<System.Numerics.Complex>((System.Numerics.Complex[])array);
-                    Address = (byte*)_arrayComplex.Address;
-                    Count = _arrayComplex.Count;
+                    InternalArray = _slices.Complex = ArraySlice.FromArray<System.Numerics.Complex>((System.Numerics.Complex[])array);
+                    Address = (byte*)_slices.Complex.Address;
+                    Count = _slices.Complex.Count;
                     break;
                 }
 
@@ -927,9 +944,9 @@ namespace NumSharp.Backends
                 // %foreach supported_dtypes,supported_dtypes_lowercase%
                 // case NPTypeCode.#1:
                 // {
-                    // InternalArray = _array#1 = (ArraySlice<#2>)array;
-                    // Address = (byte*) _array#1.Address;
-                    // Count = _array#1.Count;
+                    // InternalArray = _slices.#1 = (ArraySlice<#2>)array;
+                    // Address = (byte*) _slices.#1.Address;
+                    // Count = _slices.#1.Count;
                     // break;
                 // }
                 // %
@@ -938,121 +955,121 @@ namespace NumSharp.Backends
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
                 {
-                    InternalArray = _arrayBoolean = (ArraySlice<bool>)array;
-                    Address = (byte*)_arrayBoolean.Address;
-                    Count = _arrayBoolean.Count;
+                    InternalArray = _slices.Boolean = (ArraySlice<bool>)array;
+                    Address = (byte*)_slices.Boolean.Address;
+                    Count = _slices.Boolean.Count;
                     break;
                 }
 
                 case NPTypeCode.SByte:
                 {
-                    InternalArray = _arraySByte = (ArraySlice<sbyte>)array;
-                    Address = (byte*)_arraySByte.Address;
-                    Count = _arraySByte.Count;
+                    InternalArray = _slices.SByte = (ArraySlice<sbyte>)array;
+                    Address = (byte*)_slices.SByte.Address;
+                    Count = _slices.SByte.Count;
                     break;
                 }
 
                 case NPTypeCode.Byte:
                 {
-                    InternalArray = _arrayByte = (ArraySlice<byte>)array;
-                    Address = _arrayByte.Address;
-                    Count = _arrayByte.Count;
+                    InternalArray = _slices.Byte = (ArraySlice<byte>)array;
+                    Address = _slices.Byte.Address;
+                    Count = _slices.Byte.Count;
                     break;
                 }
 
                 case NPTypeCode.Int16:
                 {
-                    InternalArray = _arrayInt16 = (ArraySlice<short>)array;
-                    Address = (byte*)_arrayInt16.Address;
-                    Count = _arrayInt16.Count;
+                    InternalArray = _slices.Int16 = (ArraySlice<short>)array;
+                    Address = (byte*)_slices.Int16.Address;
+                    Count = _slices.Int16.Count;
                     break;
                 }
 
                 case NPTypeCode.UInt16:
                 {
-                    InternalArray = _arrayUInt16 = (ArraySlice<ushort>)array;
-                    Address = (byte*)_arrayUInt16.Address;
-                    Count = _arrayUInt16.Count;
+                    InternalArray = _slices.UInt16 = (ArraySlice<ushort>)array;
+                    Address = (byte*)_slices.UInt16.Address;
+                    Count = _slices.UInt16.Count;
                     break;
                 }
 
                 case NPTypeCode.Int32:
                 {
-                    InternalArray = _arrayInt32 = (ArraySlice<int>)array;
-                    Address = (byte*)_arrayInt32.Address;
-                    Count = _arrayInt32.Count;
+                    InternalArray = _slices.Int32 = (ArraySlice<int>)array;
+                    Address = (byte*)_slices.Int32.Address;
+                    Count = _slices.Int32.Count;
                     break;
                 }
 
                 case NPTypeCode.UInt32:
                 {
-                    InternalArray = _arrayUInt32 = (ArraySlice<uint>)array;
-                    Address = (byte*)_arrayUInt32.Address;
-                    Count = _arrayUInt32.Count;
+                    InternalArray = _slices.UInt32 = (ArraySlice<uint>)array;
+                    Address = (byte*)_slices.UInt32.Address;
+                    Count = _slices.UInt32.Count;
                     break;
                 }
 
                 case NPTypeCode.Int64:
                 {
-                    InternalArray = _arrayInt64 = (ArraySlice<long>)array;
-                    Address = (byte*)_arrayInt64.Address;
-                    Count = _arrayInt64.Count;
+                    InternalArray = _slices.Int64 = (ArraySlice<long>)array;
+                    Address = (byte*)_slices.Int64.Address;
+                    Count = _slices.Int64.Count;
                     break;
                 }
 
                 case NPTypeCode.UInt64:
                 {
-                    InternalArray = _arrayUInt64 = (ArraySlice<ulong>)array;
-                    Address = (byte*)_arrayUInt64.Address;
-                    Count = _arrayUInt64.Count;
+                    InternalArray = _slices.UInt64 = (ArraySlice<ulong>)array;
+                    Address = (byte*)_slices.UInt64.Address;
+                    Count = _slices.UInt64.Count;
                     break;
                 }
 
                 case NPTypeCode.Char:
                 {
-                    InternalArray = _arrayChar = (ArraySlice<char>)array;
-                    Address = (byte*)_arrayChar.Address;
-                    Count = _arrayChar.Count;
+                    InternalArray = _slices.Char = (ArraySlice<char>)array;
+                    Address = (byte*)_slices.Char.Address;
+                    Count = _slices.Char.Count;
                     break;
                 }
 
                 case NPTypeCode.Half:
                 {
-                    InternalArray = _arrayHalf = (ArraySlice<Half>)array;
-                    Address = (byte*)_arrayHalf.Address;
-                    Count = _arrayHalf.Count;
+                    InternalArray = _slices.Half = (ArraySlice<Half>)array;
+                    Address = (byte*)_slices.Half.Address;
+                    Count = _slices.Half.Count;
                     break;
                 }
 
                 case NPTypeCode.Double:
                 {
-                    InternalArray = _arrayDouble = (ArraySlice<double>)array;
-                    Address = (byte*)_arrayDouble.Address;
-                    Count = _arrayDouble.Count;
+                    InternalArray = _slices.Double = (ArraySlice<double>)array;
+                    Address = (byte*)_slices.Double.Address;
+                    Count = _slices.Double.Count;
                     break;
                 }
 
                 case NPTypeCode.Single:
                 {
-                    InternalArray = _arraySingle = (ArraySlice<float>)array;
-                    Address = (byte*)_arraySingle.Address;
-                    Count = _arraySingle.Count;
+                    InternalArray = _slices.Single = (ArraySlice<float>)array;
+                    Address = (byte*)_slices.Single.Address;
+                    Count = _slices.Single.Count;
                     break;
                 }
 
                 case NPTypeCode.Decimal:
                 {
-                    InternalArray = _arrayDecimal = (ArraySlice<decimal>)array;
-                    Address = (byte*)_arrayDecimal.Address;
-                    Count = _arrayDecimal.Count;
+                    InternalArray = _slices.Decimal = (ArraySlice<decimal>)array;
+                    Address = (byte*)_slices.Decimal.Address;
+                    Count = _slices.Decimal.Count;
                     break;
                 }
 
                 case NPTypeCode.Complex:
                 {
-                    InternalArray = _arrayComplex = (ArraySlice<System.Numerics.Complex>)array;
-                    Address = (byte*)_arrayComplex.Address;
-                    Count = _arrayComplex.Count;
+                    InternalArray = _slices.Complex = (ArraySlice<System.Numerics.Complex>)array;
+                    Address = (byte*)_slices.Complex.Address;
+                    Count = _slices.Complex.Count;
                     break;
                 }
 

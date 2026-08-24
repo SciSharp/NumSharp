@@ -102,9 +102,6 @@ namespace NumSharp.Backends.Kernels
         // DirectILKernelGenerator.Shift.cs
         /// <summary>Cached kernels in <c>DirectILKernelGenerator._shiftKernelCache</c>.</summary>
         public static int ShiftKernelCount => DirectILKernelGenerator._shiftKernelCache.Count;
-        // DirectILKernelGenerator.StorageAlias.cs
-        /// <summary>Cached kernels in <c>DirectILKernelGenerator._storageAliasFieldCopiers</c>.</summary>
-        public static int StorageAliasFieldCopiersCount => DirectILKernelGenerator._storageAliasFieldCopiers.Count;
         // DirectILKernelGenerator.Trace.cs
         /// <summary>Cached kernels in <c>DirectILKernelGenerator._trace</c>.</summary>
         public static int TraceCount => DirectILKernelGenerator._trace.Count;
@@ -150,7 +147,7 @@ namespace NumSharp.Backends.Kernels
             NanAxisReductionCount + AxisReductionCount + NanElementReductionCount +
             ElementReductionCount + RepeatBroadcastCount + RepeatPerJCount + BinaryScalarCount +
             UnaryScalarCount + AxisScanCount + ScanCount + SearchCount + ShiftKernelCount +
-            StorageAliasFieldCopiersCount + TraceCount + StridedUnaryCount + UnaryCount +
+            TraceCount + StridedUnaryCount + UnaryCount +
             WeightedSumCount + WhereScalarXCount + WhereScalarXYCount + WhereScalarYCount +
             WhereKernelCount + PwFoldsCount + ReduceCount + CumSumCount + WhereInnerCount;
 
@@ -188,7 +185,6 @@ namespace NumSharp.Backends.Kernels
         internal static void ClearScan() => DirectILKernelGenerator._scanCache.Clear();
         internal static void ClearSearch() => DirectILKernelGenerator._searchCache.Clear();
         internal static void ClearShiftKernel() => DirectILKernelGenerator._shiftKernelCache.Clear();
-        internal static void ClearStorageAliasFieldCopiers() => DirectILKernelGenerator._storageAliasFieldCopiers.Clear();
         internal static void ClearTrace() => DirectILKernelGenerator._trace.Clear();
         internal static void ClearStridedUnary() => DirectILKernelGenerator._stridedUnaryCache.Clear();
         internal static void ClearUnary() => DirectILKernelGenerator._unaryCache.Clear();
@@ -237,7 +233,6 @@ namespace NumSharp.Backends.Kernels
             ClearScan();
             ClearSearch();
             ClearShiftKernel();
-            ClearStorageAliasFieldCopiers();
             ClearTrace();
             ClearStridedUnary();
             ClearUnary();

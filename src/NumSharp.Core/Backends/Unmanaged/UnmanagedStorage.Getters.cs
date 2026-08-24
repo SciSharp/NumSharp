@@ -474,7 +474,7 @@ namespace NumSharp.Backends
         // /// <returns></returns>
         // /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="#2"/></exception>
         // public #2 Get#1(int[] indices)
-            // => _array#1[_shape.GetOffset(indices)];
+            // => _slices.#1[_shape.GetOffset(indices)];
 
         // %
         // #endregion
@@ -488,7 +488,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
         public bool GetBoolean(int[] indices)
-            => _arrayBoolean[_shape.GetOffset(indices)];
+            => _slices.Boolean[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="sbyte"/> from internal storage.
@@ -497,7 +497,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="sbyte"/></exception>
         public sbyte GetSByte(int[] indices)
-            => _arraySByte[_shape.GetOffset(indices)];
+            => _slices.SByte[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="byte"/> from internal storage.
@@ -506,7 +506,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
         public byte GetByte(int[] indices)
-            => _arrayByte[_shape.GetOffset(indices)];
+            => _slices.Byte[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="short"/> from internal storage.
@@ -515,7 +515,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
         public short GetInt16(int[] indices)
-            => _arrayInt16[_shape.GetOffset(indices)];
+            => _slices.Int16[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="ushort"/> from internal storage.
@@ -524,7 +524,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
         public ushort GetUInt16(int[] indices)
-            => _arrayUInt16[_shape.GetOffset(indices)];
+            => _slices.UInt16[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="int"/> from internal storage.
@@ -533,7 +533,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
         public int GetInt32(int[] indices)
-            => _arrayInt32[_shape.GetOffset(indices)];
+            => _slices.Int32[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="uint"/> from internal storage.
@@ -542,7 +542,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
         public uint GetUInt32(int[] indices)
-            => _arrayUInt32[_shape.GetOffset(indices)];
+            => _slices.UInt32[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="long"/> from internal storage.
@@ -551,7 +551,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
         public long GetInt64(int[] indices)
-            => _arrayInt64[_shape.GetOffset(indices)];
+            => _slices.Int64[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="ulong"/> from internal storage.
@@ -560,7 +560,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
         public ulong GetUInt64(int[] indices)
-            => _arrayUInt64[_shape.GetOffset(indices)];
+            => _slices.UInt64[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="char"/> from internal storage.
@@ -569,7 +569,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
         public char GetChar(int[] indices)
-            => _arrayChar[_shape.GetOffset(indices)];
+            => _slices.Char[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="Half"/> from internal storage.
@@ -578,7 +578,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="Half"/></exception>
         public Half GetHalf(int[] indices)
-            => _arrayHalf[_shape.GetOffset(indices)];
+            => _slices.Half[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="double"/> from internal storage.
@@ -587,7 +587,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
         public double GetDouble(int[] indices)
-            => _arrayDouble[_shape.GetOffset(indices)];
+            => _slices.Double[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="float"/> from internal storage.
@@ -596,7 +596,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
         public float GetSingle(int[] indices)
-            => _arraySingle[_shape.GetOffset(indices)];
+            => _slices.Single[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="decimal"/> from internal storage.
@@ -605,7 +605,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
         public decimal GetDecimal(int[] indices)
-            => _arrayDecimal[_shape.GetOffset(indices)];
+            => _slices.Decimal[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="System.Numerics.Complex"/> from internal storage.
@@ -614,7 +614,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="System.Numerics.Complex"/></exception>
         public System.Numerics.Complex GetComplex(int[] indices)
-            => _arrayComplex[_shape.GetOffset(indices)];
+            => _slices.Complex[_shape.GetOffset(indices)];
 
         #endregion
 
@@ -627,7 +627,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
         public bool GetBoolean(params long[] indices)
-            => _arrayBoolean[_shape.GetOffset(indices)];
+            => _slices.Boolean[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="sbyte"/> from internal storage.
@@ -636,7 +636,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="sbyte"/></exception>
         public sbyte GetSByte(params long[] indices)
-            => _arraySByte[_shape.GetOffset(indices)];
+            => _slices.SByte[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="byte"/> from internal storage.
@@ -645,7 +645,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
         public byte GetByte(params long[] indices)
-            => _arrayByte[_shape.GetOffset(indices)];
+            => _slices.Byte[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="short"/> from internal storage.
@@ -654,7 +654,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
         public short GetInt16(params long[] indices)
-            => _arrayInt16[_shape.GetOffset(indices)];
+            => _slices.Int16[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="ushort"/> from internal storage.
@@ -663,7 +663,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
         public ushort GetUInt16(params long[] indices)
-            => _arrayUInt16[_shape.GetOffset(indices)];
+            => _slices.UInt16[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="int"/> from internal storage.
@@ -672,7 +672,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
         public int GetInt32(params long[] indices)
-            => _arrayInt32[_shape.GetOffset(indices)];
+            => _slices.Int32[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="uint"/> from internal storage.
@@ -681,7 +681,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
         public uint GetUInt32(params long[] indices)
-            => _arrayUInt32[_shape.GetOffset(indices)];
+            => _slices.UInt32[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="long"/> from internal storage.
@@ -690,7 +690,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
         public long GetInt64(params long[] indices)
-            => _arrayInt64[_shape.GetOffset(indices)];
+            => _slices.Int64[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="ulong"/> from internal storage.
@@ -699,7 +699,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
         public ulong GetUInt64(params long[] indices)
-            => _arrayUInt64[_shape.GetOffset(indices)];
+            => _slices.UInt64[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="char"/> from internal storage.
@@ -708,7 +708,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
         public char GetChar(params long[] indices)
-            => _arrayChar[_shape.GetOffset(indices)];
+            => _slices.Char[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="Half"/> from internal storage.
@@ -717,7 +717,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="Half"/></exception>
         public Half GetHalf(params long[] indices)
-            => _arrayHalf[_shape.GetOffset(indices)];
+            => _slices.Half[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="double"/> from internal storage.
@@ -726,7 +726,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
         public double GetDouble(params long[] indices)
-            => _arrayDouble[_shape.GetOffset(indices)];
+            => _slices.Double[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="float"/> from internal storage.
@@ -735,7 +735,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
         public float GetSingle(params long[] indices)
-            => _arraySingle[_shape.GetOffset(indices)];
+            => _slices.Single[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="decimal"/> from internal storage.
@@ -744,7 +744,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
         public decimal GetDecimal(params long[] indices)
-            => _arrayDecimal[_shape.GetOffset(indices)];
+            => _slices.Decimal[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="System.Numerics.Complex"/> from internal storage.
@@ -753,7 +753,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="System.Numerics.Complex"/></exception>
         public System.Numerics.Complex GetComplex(params long[] indices)
-            => _arrayComplex[_shape.GetOffset(indices)];
+            => _slices.Complex[_shape.GetOffset(indices)];
 
         #endregion
 

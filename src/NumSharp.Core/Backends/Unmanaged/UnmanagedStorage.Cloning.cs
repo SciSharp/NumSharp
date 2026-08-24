@@ -1,6 +1,5 @@
 ﻿using System;
 using NumSharp.Backends.Iteration;
-using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -80,17 +79,15 @@ namespace NumSharp.Backends
             r._typecode = _typecode;
             r._dtype = _dtype;
             // Hot path: when this storage is already wired (InternalArray + Address
-            // set), copy the IArraySlice surface and the *single* live type-specific
-            // field directly instead of routing through SetInternalArray's full
-            // 15-case typecode dispatch. The aliased storage exposes the same
-            // backing buffer; the type-specific field is still needed for typed
-            // accessors elsewhere in UnmanagedStorage, so we mirror parent's slot
-            // via an IL-emitted delegate cached per dtype (no switch in hot path).
+            // set), copy the IArraySlice surface and the typed-slice union directly
+            // instead of routing through SetInternalArray's full 15-case typecode
+            // dispatch. The union holds the single live lane, so one 64 B struct
+            // assignment mirrors the parent's typed slice whatever the dtype.
             if (InternalArray != null)
             {
                 r.InternalArray = InternalArray;
                 r.Address = Address;
-                DirectILKernelGenerator.GetStorageAliasFieldCopier(_typecode)(r, this);
+                r._slices = _slices;
             }
 
             // A view inherits writeability from what it aliases: any view of a read-only array (a
