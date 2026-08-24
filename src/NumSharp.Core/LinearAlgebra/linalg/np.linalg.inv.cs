@@ -42,6 +42,7 @@ namespace NumSharp
             /// </param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.pinv.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            [NDScoped]
             public static NDArray pinv(NDArray a, double? rcond = null, bool hermitian = false, double? rtol = null)
             {
                 if (rcond is not null && rtol is not null)
@@ -90,6 +91,7 @@ namespace NumSharp
             /// </param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.tensorinv.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            [NDScoped]
             public static NDArray tensorinv(NDArray a, int ind = 2)
             {
                 if (ind <= 0)

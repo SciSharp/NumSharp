@@ -59,6 +59,7 @@ namespace NumSharp
             /// <param name="rtol">Relative threshold; supplying it together with <paramref name="tol"/> is an error.</param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_rank.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            [NDScoped]
             public static NDArray matrix_rank(NDArray A, double? tol = null, bool hermitian = false,
                 double? rtol = null)
             {
@@ -114,6 +115,7 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            [NDScoped]
             public static NDArray cond(NDArray x, object p = null)
             {
                 if (IsEmpty2d(x))

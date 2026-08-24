@@ -41,6 +41,7 @@ namespace NumSharp
             ///     Matrix or vector norm reduced over an explicit axis tuple.
             /// </summary>
             /// <inheritdoc cref="norm(NDArray, object, int?, bool)"/>
+            [NDScoped]
             public static NDArray norm(NDArray x, object ord, int[] axis, bool keepdims = false)
             {
                 var a = ToFloating(x);

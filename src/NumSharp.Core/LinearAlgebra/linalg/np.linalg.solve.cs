@@ -57,6 +57,7 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            [NDScoped]
             public static NDArray tensorsolve(NDArray a, NDArray b, int[] axes = null)
             {
                 var work = a;

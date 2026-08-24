@@ -16,6 +16,7 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Accepted for signature parity; NumPy passes <c>out=None</c> into irfft.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.hfft.html</remarks>
+        [NDScoped]
         public NDArray hfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             int nn = n ?? (ShapeAt(a, axis) - 1) * 2;
@@ -35,6 +36,7 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated complex output (threaded into rfft and the conjugate).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ihfft.html</remarks>
+        [NDScoped]
         public NDArray ihfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             int nn = n ?? ShapeAt(a, axis);
