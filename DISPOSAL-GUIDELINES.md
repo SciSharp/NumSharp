@@ -131,9 +131,15 @@ nested scopes under concurrency, cross-thread hand-off, forced-GC antagonist), o
 
 The scope pattern is INJECTED AT BUILD TIME, so source files keep their 100% original bodies.
 A method (or property accessor) marked `[NDScoped]` (`src/NumSharp.Core/Backends/
-NDScopedAttribute.cs`, internal) is rewritten post-compile by `tools/NumSharp.Weaver` — a
-Mono.Cecil console tool invoked by the `NDScopeWeave` target in `NumSharp.Core.csproj` after
-each per-TFM `CoreCompile` — into exactly the IL the hand-written pattern produces:
+NDScopedAttribute.cs`, public — the attribute is consumer-facing) is rewritten post-compile by
+`tools/NumSharp.Weaver` — a Mono.Cecil console tool invoked by the `NDScopeWeave` target in
+`NumSharp.Core.csproj` after each per-TFM `CoreCompile` — into exactly the IL the hand-written
+pattern produces. The SAME transform ships to consumer projects as the **`NumSharp.Weaver`
+NuGet package** (tools + MSBuild targets only, `PrivateAssets="all"` on install — a weaver on
+the project it is installed on, never a runtime dependency; gate:
+`tools/verify_weaver_package.sh`, docs: `docs/website-src/docs/ndscoped.md`); there the weaver
+resolves `NDScope`/`INDArrayCarrier` out of the REFERENCED NumSharp assembly via the compile's
+reference list:
 
 ```csharp
 [NDScoped]                                          // what you write: the ORIGINAL body

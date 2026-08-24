@@ -75,8 +75,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="build\**" Pack="true" PackagePath="build/" />
-    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="build/**" Pack="true" PackagePath="build/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="\" Visible="false" />
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
@@ -85,7 +85,7 @@
        from beside the tool. Runs per packed TFM (there is one: net8.0). -->
   <Target Name="_NumSharpWeaverPackTool" DependsOnTargets="Publish">
     <ItemGroup>
-      <TfmSpecificPackageFile Include="$(PublishDir)**\*" PackagePath="tools/net8.0/any/" />
+      <TfmSpecificPackageFile Include="$(PublishDir)**/*" PackagePath="tools/net8.0/any/" />
     </ItemGroup>
   </Target>
 

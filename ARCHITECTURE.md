@@ -42,6 +42,7 @@ flowchart LR
     OpenBLAS["optional NumSharp.Interop.OpenBLAS"] -. "assigns IBlasBackend" .-> Engine
     Python["optional NumSharp.Interop.pythonnet"] <--> Model
     Bitmap["optional NumSharp.Bitmap"] <--> Model
+    Weaver["optional NumSharp.Weaver (build-time)"] -. "weaves [NDScoped] scopes into the compile" .-> App
     Oracle["NumPy 2.4.2 submodule + committed corpora"] -. "reference and tests" .-> API
 ```
 
@@ -55,6 +56,7 @@ There is no server, persistence tier, or background service. Process-local state
 | [`NumSharp.Interop.OpenBLAS`](src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj) | NumPy-route-compatible float32/float64 `dot` and `matmul` backend | Core plus RID-native OpenBLAS assets | Optional native boundary installed through `IBlasBackend` |
 | [`NumSharp.Interop.pythonnet`](src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj) | Copy and zero-copy exchange with NumPy and PEP 3118 exporters | Core plus `pythonnet` | Optional embedded-CPython boundary |
 | [`NumSharp.Bitmap`](src/NumSharp.Bitmap/NumSharp.Bitmap.csproj) | `System.Drawing` conversion extensions | Core plus `System.Drawing.Common` | Optional platform-sensitive imaging boundary |
+| [`NumSharp.Weaver`](tools/NumSharp.Weaver/NumSharp.Weaver.csproj) | Build-time IL weaver for `[NDScoped]` deterministic reclamation (Core self-weave + the tools-only consumer package) | Mono.Cecil (packed into `tools/`, expressed to consumers as nothing) | Build-time only: no `lib/`, no dependency entries, installed with `PrivateAssets="all"` — never a runtime boundary |
 | [`NumSharp.Tests`](test/NumSharp.Tests/NumSharp.Tests.csproj) | Main parity, kernel, layout, lifetime, IO, OpenBLAS, and corpus gates | Core, Bitmap, OpenBLAS | Runs managed-by-default; enables OpenBLAS only in scoped tests |
 | [`NumSharp.Tests.Interop`](test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj) | Live Python/NumPy interop and lifetime gates | Core, pythonnet, Python, NumPy | Sequential because CPython and lifetime counters are process-global |
 

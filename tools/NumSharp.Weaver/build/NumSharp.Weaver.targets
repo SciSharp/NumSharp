@@ -34,8 +34,11 @@
          $(NumSharpWeaverToolDll)      override the tool path (e.g. a locally built
                                        weaver) — set it in the project file body.
        ================================================================================== -->
+  <!-- Forward slashes + NormalizePath: the path reaches Exec's SHELL (cmd on Windows, sh on
+       Linux/macOS), and a raw backslash path breaks the Unix side — same convention as the
+       NumSharp.Interop.OpenBLAS buildTransitive files. -->
   <PropertyGroup>
-    <NumSharpWeaverToolDll Condition="'$(NumSharpWeaverToolDll)' == ''">$(MSBuildThisFileDirectory)..\tools\net8.0\any\NumSharp.Weaver.dll</NumSharpWeaverToolDll>
+    <NumSharpWeaverToolDll Condition="'$(NumSharpWeaverToolDll)' == ''">$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)../tools/net8.0/any/NumSharp.Weaver.dll'))</NumSharpWeaverToolDll>
   </PropertyGroup>
 
   <Target Name="NDScopeWeave"

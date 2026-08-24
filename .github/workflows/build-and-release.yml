@@ -16,7 +16,10 @@ env:
   # XML doc warnings (CS15xx, CS17xx): ~7,200 of ~8,700 total — malformed/missing doc comments
   # CS8981: 'np' only contains lowercase chars — intentional for NumPy API compat
   # NU5048: PackageIconUrl deprecated — cosmetic NuGet warning
-  DOTNET_NOWARN: CS1570%3BCS1571%3BCS1572%3BCS1573%3BCS1574%3BCS1587%3BCS1591%3BCS1711%3BCS1734%3BCS8981%3BNU5048
+  # NU5100/NU5128 are BY-DESIGN for the tools-only NumSharp.Weaver package (assemblies under
+  # tools/, no lib/ per TFM) — a global -p:NoWarn OVERRIDES the csproj's own NoWarn accumulation,
+  # so they must ride here like NU5048 does.
+  DOTNET_NOWARN: CS1570%3BCS1571%3BCS1572%3BCS1573%3BCS1574%3BCS1587%3BCS1591%3BCS1711%3BCS1734%3BCS8981%3BNU5048%3BNU5100%3BNU5128
 
 jobs:
   test:
