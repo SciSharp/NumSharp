@@ -269,6 +269,67 @@ namespace NumSharp.Tests.Lifetime
         }
 
         [TestMethod]
+        public void Dispose_OutOfOrder_OuterBeforeInner_StackStaysConsistent()
+        {
+            Assert.IsNull(NDScope.Current, "no scope must be open at test start");
+
+            var outer = NDScope.Open();
+            var inner = NDScope.Open();
+            var t = np.arange(4);                  // tracked by inner
+            NDArray r = null;
+            try
+            {
+                Assert.AreSame(inner, NDScope.Current);
+
+                outer.Dispose();                   // OUT OF ORDER: splice outer; current stays inner
+                Assert.AreSame(inner, NDScope.Current,
+                    "disposing the outer scope must leave the innermost scope current");
+                Assert.IsFalse(t.IsDisposed, "inner's temp must survive the outer's out-of-order dispose");
+
+                r = inner.Returns(t + 1);          // inner is now parentless -> r fully detached
+            }
+            finally
+            {
+                inner.Dispose();
+                outer.Dispose();                   // idempotent no-op
+            }
+
+            Assert.IsNull(NDScope.Current, "the scope stack must be empty and uncorrupted");
+            Assert.IsTrue(t.IsDisposed, "inner's non-yielded temp must be reclaimed");
+            Assert.IsFalse(r.IsDisposed, "the yielded, detached result must survive");
+            Assert.AreEqual(4L, r.GetInt64(3));
+            r.Dispose();
+        }
+
+        [TestMethod]
+        public void Dispose_MiddleScope_SplicedOut_InnerPopsToOuter()
+        {
+            Assert.IsNull(NDScope.Current, "no scope must be open at test start");
+
+            var a = NDScope.Open();   // outer
+            var b = NDScope.Open();   // middle
+            var c = NDScope.Open();   // inner
+            try
+            {
+                Assert.AreSame(c, NDScope.Current);
+
+                b.Dispose();          // splice the MIDDLE out; current stays c; c re-parents onto a
+                Assert.AreSame(c, NDScope.Current, "disposing a middle scope must not change the innermost");
+
+                c.Dispose();          // must pop to a (the spliced-out b must not resurface)
+                Assert.AreSame(a, NDScope.Current, "inner must pop to the outer, skipping the spliced-out middle");
+            }
+            finally
+            {
+                c.Dispose();
+                b.Dispose();
+                a.Dispose();
+            }
+
+            Assert.IsNull(NDScope.Current, "the stack must be fully unwound and uncorrupted");
+        }
+
+        [TestMethod]
         public void ScopePooling_ManyOpenClose_NoCorruption()
         {
             for (int i = 0; i < 10_000; i++)

@@ -112,6 +112,8 @@ namespace NumSharp
         /// <returns><paramref name="nd"/>, with its static type preserved.</returns>
         public T Returns<T>(T nd) where T : NDArray
         {
+            Debug.Assert(_threadId == Environment.CurrentManagedThreadId,
+                "NDScope.Returns must run on the thread that opened the scope.");
             if (nd is null || !ReferenceEquals(nd.TrackingScope, this))
                 return nd;   // not ours (never tracked, or owned elsewhere): pass through
 
@@ -152,6 +154,8 @@ namespace NumSharp
             var s = nd?.TrackingScope;
             if (s is null)
                 return;
+            Debug.Assert(s._threadId == Environment.CurrentManagedThreadId,
+                "NDScope.Detach must run on the thread that owns the array's scope.");
             s._tracked[nd.TrackingIndex] = null;
             nd.TrackingScope = null;
         }
@@ -173,7 +177,11 @@ namespace NumSharp
                 return;
             var old = nd.TrackingScope;
             if (old is not null)
+            {
+                Debug.Assert(old._threadId == Environment.CurrentManagedThreadId,
+                    "NDScope.Attach must move an array on the thread that owns its current scope.");
                 old._tracked[nd.TrackingIndex] = null;   // clear the stale slot: one owner only
+            }
             nd.TrackingScope = s;
             nd.TrackingIndex = s._tracked.Count;
             s._tracked.Add(nd);
@@ -186,8 +194,30 @@ namespace NumSharp
             _disposed = true;
             Debug.Assert(_threadId == Environment.CurrentManagedThreadId,
                 "NDScope must be disposed on the thread that opened it.");
-            t_current = _parent;   // new constructions during the sweep (there are none in
-            _parent = null;        // Dispose paths) would track into the parent, never into us
+
+            // Unlink from the thread's scope stack. In-order disposal — the weaver's
+            // try/finally and every `using` — is the fast path: this IS the innermost
+            // scope, so pop to the parent (new constructions during the sweep, of which
+            // there are none in Dispose paths, then track into the parent, never into us).
+            // A hand-managed scope disposed OUT OF ORDER (a public IDisposable can be) is
+            // spliced out of the middle of the chain instead, so t_current is never left
+            // pointing at — or through — a disposed scope.
+            if (ReferenceEquals(t_current, this))
+            {
+                t_current = _parent;
+            }
+            else
+            {
+                for (var s = t_current; s != null; s = s._parent)
+                {
+                    if (ReferenceEquals(s._parent, this))
+                    {
+                        s._parent = _parent;
+                        break;
+                    }
+                }
+            }
+            _parent = null;
 
             var list = _tracked;
             for (int i = 0; i < list.Count; i++)

@@ -95,10 +95,19 @@ back-pointer says "not mine"), so *"wrap every egress in `Returns`"* is a safe b
   hot-loop pattern: attach a received result instead of a per-result `using`), or move one
   between scopes; no-op with no open scope.
 
-**Threading.** The scope stack is `[ThreadStatic]`: open/use/dispose on ONE thread (debug-asserted;
-never span an `await`). Worker threads see no scope and fall back to the finalizer backstop — safe;
-a parallel region wanting eager reclaim opens a scope inside each worker body. A result yielded on
-a thread with no parent scope is fully detached and can be handed to any other thread.
+**Threading.** The scope stack is `[ThreadStatic]`: open/use/dispose on ONE thread (debug-asserted
+on `Dispose` AND on the mutating `Returns`/`Attach`/`Detach`, so a cross-thread scope touch trips in
+Debug rather than racing a `List`; never span an `await`). Worker threads see no scope and fall back
+to the finalizer backstop — safe; a parallel region wanting eager reclaim opens a scope inside each
+worker body. A result yielded on a thread with no parent scope is fully detached and can be handed
+to any other thread.
+
+**Disposal ordering.** The weaver's try/finally and every `using` dispose LIFO — the fast path, where
+the disposed scope IS the innermost and pops straight to its parent. `Open()` returns a raw
+`IDisposable`, though, so a hand-managed scope CAN be disposed out of order; `Dispose` tolerates it by
+splicing the scope out of the middle of the thread's chain, so `t_current` is never left pointing at —
+or through — a disposed scope. (Correctness of the reclamation is unaffected either way; this only
+keeps the ambient stack coherent under misuse.)
 
 **Granularity.** Scope a CALL, not a caller loop: a scope holds its temps alive until exit, and
 batch-disposing thousands of same-size buffers overflows their pool bucket (the excess is freed,
@@ -108,8 +117,8 @@ the next allocation), nest an inner block scope or keep a hand-written `Dispose(
 
 **Gate.** `test/NumSharp.Tests/Lifetime/NDScopeTests.cs` (contracts: tracking, yield/no-op/
 re-parenting, out-params, view-over-base ARC, exception paths, Detach, Attach, pooling,
-zero-strand counters) and `NDScopeStressTests.cs` (8-thread mixed-op load, nested scopes under
-concurrency, cross-thread hand-off, forced-GC antagonist), on top of the
+out-of-order dispose, zero-strand counters) and `NDScopeStressTests.cs` (8-thread mixed-op load,
+nested scopes under concurrency, cross-thread hand-off, forced-GC antagonist), on top of the
 `BufferReleaseSweepTests` slope sweep and the FuzzMatrix byte-exactness gate.
 
 ---
@@ -164,6 +173,17 @@ not a skip — the attribute would be a lie there.
 re-signs with the repo `Open.snk` (`sn -vf` valid; `StrongNameTests` gates identity) and
 rewrites the portable PDB — original sequence points survive (instructions are only inserted or
 mutated in place), so source stepping still lands on the right lines.
+
+**Coverage gate.** `test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs` reflects over the SHIPPED
+assembly and asserts every `[NDScoped]` method (and property accessor) carries a local of type
+`NDScope` — a necessary consequence of scoping, whether woven or hand-written. It turns a silently
+un-run weave (a broken `NDScopeWeave` target, or a `-p:SkipNDScopeWeave=true` build) red instead of
+letting those methods quietly revert to the finalizer backstop, and a non-vacuity floor guards against
+the attribute being stripped. As of the audit it finds 53/53 woven. The `out NDArray`/`out NDArray[]`
+egress row above is the one transform branch with **no in-tree consumer** (no `[NDScoped]` method
+currently takes an out-array param); its runtime semantics are pinned by `NDScopeTests.
+OutParameter_Egress_ViaReturns` (hand-written scope) and its emitted IL is a structural twin of the
+return-value `Returns` path — correct by construction, kept for the shape's completeness.
 
 **Escape hatches.** `-p:SkipNDScopeWeave=true` builds without weaving (attributed methods then
 simply run unscoped — the finalizer backstop, the pre-migration status quo);
