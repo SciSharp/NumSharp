@@ -96,6 +96,16 @@ namespace NumSharp.Backends.Unmanaged
         void Release();
 
         /// <summary>
+        ///     Atomically decrement the reference count WITHOUT freeing the buffer
+        ///     when the count reaches zero — the finalizer-path counterpart of
+        ///     <see cref="Release"/>. A finalizer proves only that one wrapper became
+        ///     unreachable, not that no other reachable alias (a bare storage/slice)
+        ///     still reads the buffer; the block's own finalizer frees it once the
+        ///     whole alias graph is unreachable.
+        /// </summary>
+        void Abandon();
+
+        /// <summary>
         ///     Diagnostic: <c>true</c> once the underlying buffer has been freed.
         /// </summary>
         bool IsReleased { get; }

@@ -585,6 +585,9 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(OptimizeAndInline)]
         public void Release() => MemoryBlock.Release();
 
+        [MethodImpl(OptimizeAndInline)]
+        public void Abandon() => MemoryBlock.Abandon();
+
         public bool IsReleased => MemoryBlock.IsReleased;
 
         public bool IsUniquelyReferenced => MemoryBlock.IsUniquelyReferenced;

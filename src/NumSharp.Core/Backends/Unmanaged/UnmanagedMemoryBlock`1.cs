@@ -878,6 +878,9 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(OptimizeAndInline)]
         public void Release() => _disposer.Release();
 
+        [MethodImpl(OptimizeAndInline)]
+        public void Abandon() => _disposer.Abandon();
+
         public bool IsReleased => _disposer.IsReleased;
 
         /// <summary>
@@ -1305,6 +1308,37 @@ namespace NumSharp.Backends.Unmanaged
                     // sentinel back to -1 so future TryAddRef still rejects.
                     // Each thread's Decrement is paired with this Increment,
                     // so concurrent strays self-balance one-for-one.
+                    Interlocked.Increment(ref _refCount);
+                }
+            }
+
+            /// <summary>
+            /// Drop a logical reference WITHOUT claiming the eager free when the count
+            /// reaches zero — the finalizer-path counterpart of <see cref="Release"/>.
+            ///
+            /// An <see cref="NDArray"/> finalizer proves only that THAT wrapper became
+            /// unreachable; it proves nothing about other reachable aliases of the same
+            /// buffer (a bare <c>UnmanagedStorage</c>/<c>IArraySlice</c> handed out via
+            /// <c>GetData()</c> holds no counted reference). Claiming the 0 → -1 free
+            /// transition from a finalizer therefore freed memory such an alias still
+            /// reads — the <c>SlicingWithNegativeIndex1</c> use-after-free. Leaving the
+            /// count at 0 keeps the block alive for exactly as long as it stays
+            /// reachable: this Disposer's own finalizer frees (and pools) it in the GC
+            /// cycle after the LAST alias dies, and a later <see cref="TryAddRef"/>
+            /// (a new NDArray wrapping a live alias) legitimately revives 0 → 1.
+            /// Deterministic <see cref="Release"/> (Dispose / NDScope) keeps the eager
+            /// free — there the caller asserts no alias outlives.
+            /// </summary>
+            [MethodImpl(OptimizeAndInline)]
+            public void Abandon()
+            {
+                if (_type == AllocationType.Wrap) return;
+
+                long n = Interlocked.Decrement(ref _refCount);
+                if (n < 0)
+                {
+                    // Stray Abandon on an already-released block (same as Release's
+                    // stray handling): restore the -1 sentinel so TryAddRef rejects.
                     Interlocked.Increment(ref _refCount);
                 }
             }

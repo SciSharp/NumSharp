@@ -1,7 +1,9 @@
 using System;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
+using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Tests.Backends.Unmanaged
@@ -33,6 +35,20 @@ namespace NumSharp.Tests.Backends.Unmanaged
             var rcField = disp!.GetType()
                 .GetField("_refCount", BindingFlags.NonPublic | BindingFlags.Instance);
             return (long)rcField!.GetValue(disp)!;
+        }
+
+        /// <summary>
+        ///     The block's inner Disposer object — the entity whose own finalizer frees the
+        ///     buffer once the whole alias graph is unreachable. A <see cref="WeakReference"/>
+        ///     to it is the only way to observe "reclaimed after the last alias died":
+        ///     any probe that can still ask <c>IsReleased</c> IS a reachable alias.
+        /// </summary>
+        private static object GetDisposer(IArraySlice slice)
+        {
+            var mb = slice.MemoryBlock;
+            var dispField = mb.GetType()
+                .GetField("_disposer", BindingFlags.NonPublic | BindingFlags.Instance);
+            return dispField!.GetValue(mb)!;
         }
 
         // ----- atomic release ------------------------------------------------
@@ -102,25 +118,62 @@ namespace NumSharp.Tests.Backends.Unmanaged
         // ----- finalizer safety net ------------------------------------------
 
         [TestMethod]
-        public void Finalizer_ReleasesUnmanaged_WhenDisposeMissed()
+        public void Finalizer_AbandonsRef_ButNeverFreesUnderALiveAlias()
         {
-            // Helper isolates the variable so the eval-stack temp doesn't keep
-            // the array rooted past the call.
-            static (IArraySlice slice, WeakReference weak) MakeAndDrop()
-            {
-                var a = new NDArray(NPTypeCode.Double, new Shape(10_000), fillZeros: true);
-                return (a.Storage.InternalArray, new WeakReference(a));
-            }
+            // The NDArray finalizer proves only that THAT wrapper died — it proves
+            // nothing about other reachable aliases of the same buffer (the boxed
+            // slice held here is exactly such an alias). It therefore ABANDONS its
+            // ref (count drops, no free): freeing here was the
+            // SlicingWithNegativeIndex1 use-after-free. The buffer is reclaimed by
+            // the block's own finalizer in the GC cycle after the LAST alias dies —
+            // proven via a WeakReference to the inner Disposer, since any probe that
+            // can still ask IsReleased is itself a reachable alias.
+            //
+            // Frame discipline: a single-shot test method JITs at tier-0, whose
+            // untracked eval-stack temps root everything they ever held until
+            // method end — so the slice box must NEVER appear on THIS frame's
+            // stack. Every touch happens inside the NoInlining helper, whose frame
+            // dies at return; the alias is dropped there before returning.
+            var (weak, holder) = MakeAndDrop();
+            var (ndAlive, released, refCount, firstValue, weakDisposer) = ObserveWhileAliasHeld_ThenDropAlias(weak, holder);
 
-            var (slice, weak) = MakeAndDrop();
-            slice.IsReleased.Should().BeFalse();
+            ndAlive.Should().BeFalse("NDArray should be collected after GC");
+            released.Should().BeFalse(
+                "the finalizer must ABANDON its ref, not free — the slice alias could still read the buffer");
+            refCount.Should().Be(0, "the NDArray's counted reference was dropped by the finalizer");
+            firstValue.Should().Be(0d, "the abandoned-but-aliased buffer stays readable");
 
+            // The alias was dropped inside the helper: the block's own finalizer
+            // must now reclaim the buffer (abandoned refs never leak).
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
 
-            weak.IsAlive.Should().BeFalse("NDArray should be collected after GC");
-            slice.IsReleased.Should().BeTrue("finalizer chain must release unmanaged buffer");
+            weakDisposer.IsAlive.Should().BeFalse(
+                "once the last alias dies the Disposer finalizes — freeing (and pooling) the buffer");
+            GC.KeepAlive(holder);
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            static (WeakReference weak, IArraySlice[] holder) MakeAndDrop()
+            {
+                var a = new NDArray(NPTypeCode.Double, new Shape(10_000), fillZeros: true);
+                return (new WeakReference(a), new[] { a.Storage.InternalArray });
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            static (bool ndAlive, bool released, long refCount, double firstValue, WeakReference weakDisposer)
+                ObserveWhileAliasHeld_ThenDropAlias(WeakReference weak, IArraySlice[] holder)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                var slice = holder[0];
+                var result = (weak.IsAlive, slice.IsReleased, GetRefCount(slice),
+                    slice.GetIndex<double>(0), new WeakReference(GetDisposer(slice)));
+                holder[0] = null;   // drop the last alias before this frame dies
+                return result;
+            }
         }
 
         // ----- concurrency ---------------------------------------------------
@@ -458,12 +511,15 @@ namespace NumSharp.Tests.Backends.Unmanaged
 
             c.Dispose();
             // c_slice's refcount may still be > 0 from the orphan intermediate
-            // pinned in Debug builds; force-drain to verify the copy buffer is
-            // eventually reclaimable.
+            // pinned until its finalizer runs; force-drain so the orphan ABANDONS
+            // its ref. The count drains to 0, but the buffer is NOT freed while
+            // c_slice — a reachable alias this test still holds — can read it;
+            // the block's own finalizer reclaims it once c_slice dies.
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
-            c_slice.IsReleased.Should().BeTrue("copy reclaimed after Dispose + GC");
+            GetRefCount(c_slice).Should().Be(0, "all counted references drained after Dispose + finalizer drain");
+            c_slice.IsReleased.Should().BeFalse("a reachable alias still exists — the free happens only after it dies");
         }
 
         // ----- transpose / negative-stride / strided views -------------------
@@ -756,7 +812,10 @@ namespace NumSharp.Tests.Backends.Unmanaged
             GC.Collect();
 
             w.IsAlive.Should().BeFalse("NDArray should be reclaimed");
-            slice.IsReleased.Should().BeTrue("finalizer must release the buffer");
+            slice.IsReleased.Should().BeFalse(
+                "the finalizer ABANDONS its ref — this reachable slice alias can still read the buffer; " +
+                "the block's own finalizer frees it only after the alias dies");
+            GetRefCount(slice).Should().Be(0, "the NDArray's counted reference was dropped by the finalizer");
         }
 
         // ----- multi-NDArray same Storage (manual sharing) -------------------
@@ -781,6 +840,39 @@ namespace NumSharp.Tests.Backends.Unmanaged
 
             alias.Dispose();
             slice.IsReleased.Should().BeTrue();
+        }
+
+        // ----- bare-storage alias survives finalizer reclaim ------------------
+
+        /// <summary>
+        ///     The <c>SlicingWithNegativeIndex1</c> macOS-CI use-after-free, made
+        ///     deterministic: the <c>np.arange</c> NDArray temp dies immediately while its
+        ///     buffer is aliased by a bare <see cref="UnmanagedStorage"/> (which holds no
+        ///     counted ARC reference). The NDArray finalizer must ABANDON its ref, not free
+        ///     — a free here returned the buffer to the pool under the live alias, so the
+        ///     next same-size allocation overwrote it (CI read 0 where 8 was stored).
+        /// </summary>
+        [TestMethod]
+        public void AliasedBaseBuffer_SurvivesFinalizerOfItsLastNDArray()
+        {
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            static UnmanagedStorage Make() => new UnmanagedStorage(np.arange(10).GetData(), new Shape(1, 10));
+
+            for (int i = 0; i < 200; i++)
+            {
+                var a = Make();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                a.InternalArray.IsReleased.Should().BeFalse(
+                    "iteration {0}: the aliased base buffer must survive the arange temp's finalizer", i);
+                // A same-size allocation would steal a wrongly-pooled buffer and
+                // overwrite it — with the abandon contract it gets fresh memory.
+                using var thief = np.full(new Shape(10), 7777L, np.int64);
+                a.GetView(":, 1:").GetView("-1, -2").GetValue<long>(0, 0).Should().Be(8L,
+                    "iteration {0}: the alias must still read the arange data", i);
+            }
         }
     }
 }
