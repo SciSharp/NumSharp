@@ -10,16 +10,16 @@
   },
   "summary": {
     "tests": {
-      "methods": 13703,
-      "declaredInvocations": 14339,
+      "methods": 13759,
+      "declaredInvocations": 14395,
       "dataRows": 716,
       "dynamicMethods": 34,
-      "sourceLocated": 13703,
+      "sourceLocated": 13759,
       "oracleMethods": 657,
       "fuzzMatrixMethods": 91,
       "npyOracleMethods": 13,
       "statuses": {
-        "active": 13408,
+        "active": 13464,
         "ignored": 11,
         "manual": 5,
         "open_bug": 215,
@@ -37,7 +37,7 @@
         "WindowsOnly": 75
       },
       "projects": {
-        "NumSharp.Tests": 13100,
+        "NumSharp.Tests": 13156,
         "NumSharp.Tests.Interop": 444,
         "NumSharp.Tests.Oracle": 159
       },
@@ -641,13 +641,13 @@
       "id": "NumSharp.Tests::Lifetime",
       "project": "NumSharp.Tests",
       "area": "Lifetime",
-      "methods": 6,
-      "declaredInvocations": 6,
+      "methods": 62,
+      "declaredInvocations": 62,
       "dataRows": 0,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 5,
+        "active": 61,
         "open_bug": 1
       },
       "categories": {
@@ -655,6 +655,13 @@
       },
       "sourceFiles": [
         "test/NumSharp.Tests/Lifetime/BufferReleaseSweepTests.cs",
+        "test/NumSharp.Tests/Lifetime/NDScopeManualDisposeTests.cs",
+        "test/NumSharp.Tests/Lifetime/NDScopeStressTests.cs",
+        "test/NumSharp.Tests/Lifetime/NDScopeTests.cs",
+        "test/NumSharp.Tests/Lifetime/NDScopeThreadSafetyTests.cs",
+        "test/NumSharp.Tests/Lifetime/NDScopeWeaveNestingTests.cs",
+        "test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs",
+        "test/NumSharp.Tests/Lifetime/NpFunctionAllocationVerificationTests.cs",
         "test/NumSharp.Tests/Lifetime/OverDisposeSweepTests.cs"
       ]
     },
@@ -15246,12 +15253,229 @@
       "sourcePaths": [
         "test/NumSharp.Tests/Lifetime/BufferReleaseSweepTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/BufferReleaseSweepTests.cs#L201",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/BufferReleaseSweepTests.cs#L182",
       "methodNames": [
         "KnownDeferredReleases_StillDeferring",
         "NoOperationDefersItsBufferRelease",
         "PredicateAliases_ReleaseTheirUntypedOwners",
         "Sweep_IsNotVacuous"
+      ]
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NDScopeManualDisposeTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Lifetime.NDScopeManualDisposeTests",
+      "class": "NDScopeManualDisposeTests",
+      "area": "Lifetime",
+      "methods": 7,
+      "declaredInvocations": 7,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 7
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Lifetime/NDScopeManualDisposeTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeManualDisposeTests.cs#L30",
+      "methodNames": [
+        "DoubleManualDispose_ThenScopeSweep_FreedOnce",
+        "ExceptionAfterManualDispose_ScopeFinallySweep_FreedOnce_InputUntouched",
+        "ManualDisposeBase_YieldedView_StaysValid_FreedOnceAtViewDispose",
+        "ManualDisposeOfTrackedTemp_ScopeSweepIsNoOp_FreedExactlyOnce",
+        "ManualDisposeThenReturnsSame_Graceful_NoCorruption",
+        "ManualDisposeThenScopeSweep_NoAliasing_HostileProbe",
+        "MixedManualAndScopeReclaim_Balanced_NoDoubleFree_NoLeak"
+      ]
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NDScopeStressTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Lifetime.NDScopeStressTests",
+      "class": "NDScopeStressTests",
+      "area": "Lifetime",
+      "methods": 4,
+      "declaredInvocations": 4,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 4
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Lifetime/NDScopeStressTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeStressTests.cs#L86",
+      "methodNames": [
+        "EightThreads_MixedOps_ZeroErrors_ZeroStrandSlope",
+        "EightThreads_NestedScopes_DropThroughParent_AllReclaimed",
+        "MixedOps_UnderForcedGCChurn_StayCorrect",
+        "ProducersAndConsumers_CrossThreadHandoff"
+      ]
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NDScopeTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Lifetime.NDScopeTests",
+      "class": "NDScopeTests",
+      "area": "Lifetime",
+      "methods": 22,
+      "declaredInvocations": 22,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 22
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Lifetime/NDScopeTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeTests.cs#L32",
+      "methodNames": [
+        "Attach_AdoptsUntrackedArray_ReclaimedAtExit",
+        "Attach_MovesOwnership_OldScopeNoLongerDisposes",
+        "Attach_NoOpenScope_IsNoOp",
+        "BroadcastReadOnlyInput_Unharmed",
+        "CallerOut_RelayedBack_NeedsNoYield",
+        "CrossThread_YieldedResult_UsableOnAnotherThread",
+        "Detach_ArraySurvivesEveryScope",
+        "Dispose_MiddleScope_SplicedOut_InnerPopsToOuter",
+        "Dispose_OutOfOrder_OuterBeforeInner_StackStaysConsistent",
+        "ExceptionPath_ReclaimsTemps_InputsUnharmed",
+        "NestedDrop_ParentReclaimsEverything",
+        "OutParameter_Egress_ViaReturns",
+        "Returns_ArrayOverload_YieldsWholeTuple",
+        "Returns_Reparents_DroppedInnerResult_ReclaimedByOuter",
+        "Returns_UntrackedArray_IsNoOp_AndNotAdoptedByParent",
+        "Returns_WithNoParent_FullyDetaches",
+        "ScopeDispose_IsIdempotent",
+        "ScopePooling_ManyOpenClose_NoCorruption",
+        "ScopedOps_ValuesCorrect",
+        "ScopedSurface_ZeroStrandsPerCall",
+        "TempsReclaimed_ResultSurvives",
+        "YieldedView_OverTrackedBase_KeepsDataAlive"
+      ]
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NDScopeThreadSafetyTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Lifetime.NDScopeThreadSafetyTests",
+      "class": "NDScopeThreadSafetyTests",
+      "area": "Lifetime",
+      "methods": 5,
+      "declaredInvocations": 5,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 5
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Lifetime/NDScopeThreadSafetyTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeThreadSafetyTests.cs#L42",
+      "methodNames": [
+        "ConcurrentScopes_EachThreadSeesOnlyItsOwnStack",
+        "CrossThreadHandoff_ReceiverAttachesIntoScope_Reclaims",
+        "ManyThreads_NestedWoven_Concurrent_ZeroErrors_BoundedStrands",
+        "SharedReadOnlyInput_ConcurrentScopedOps_UntouchedAndCorrect",
+        "ThreadLocalIsolation_WorkerDoesNotSeeMainScope_NorIsReclaimed"
+      ]
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NDScopeWeaveNestingTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Lifetime.NDScopeWeaveNestingTests",
+      "class": "NDScopeWeaveNestingTests",
+      "area": "Lifetime",
+      "methods": 7,
+      "declaredInvocations": 7,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 7
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Lifetime/NDScopeWeaveNestingTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveNestingTests.cs#L41",
+      "methodNames": [
+        "DeepNestedFunctions_MixHandAndWoven_ValueCorrect_InputUntouched",
+        "DeepNestedFunctions_ZeroStrands",
+        "EnclosingScope_ManyNestedWovenCalls_AllReparentAndReclaim",
+        "ExceptionInNestedWovenChain_ReclaimsAtEveryLevel_InputsUntouched",
+        "RollAxisNull_WovenCallsWoven_ValueCorrect_InputUntouched",
+        "RollAxisNull_WovenNesting_ZeroStrands",
+        "WovenResultsFlowBetweenWovenFunctions_UnderScope_ValueCorrect"
+      ]
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NDScopeWeaveTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Lifetime.NDScopeWeaveTests",
+      "class": "NDScopeWeaveTests",
+      "area": "Lifetime",
+      "methods": 1,
+      "declaredInvocations": 1,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 1
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs#L83",
+      "methodNames": [
+        "EveryScopedMethod_WasWoven"
+      ]
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NpFunctionAllocationVerificationTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Lifetime.NpFunctionAllocationVerificationTests",
+      "class": "NpFunctionAllocationVerificationTests",
+      "area": "Lifetime",
+      "methods": 10,
+      "declaredInvocations": 10,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 10
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Lifetime/NpFunctionAllocationVerificationTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NpFunctionAllocationVerificationTests.cs#L73",
+      "methodNames": [
+        "Composition_Corrcoef",
+        "Composition_Cross",
+        "Composition_Kron",
+        "Composition_Union1d",
+        "Composition_Vander",
+        "Kernel_Clip",
+        "Kernel_Roll",
+        "Kernel_Sort",
+        "Kernel_TakeAlongAxis",
+        "Kernel_Where"
       ]
     },
     {
@@ -28919,7 +29143,6 @@
         "einsum.jsonl",
         "errors.jsonl",
         "errors_full.jsonl",
-        "fft.jsonl",
         "generator_parity.jsonl",
         "generator_parity_host.jsonl",
         "groupa.jsonl",
@@ -28933,13 +29156,11 @@
         "multioutput.jsonl",
         "nanreduce.jsonl",
         "nanscan.jsonl",
-        "numpy_f32_kernels.jsonl",
         "numpy_f64_kernels.jsonl",
         "out_where.jsonl",
         "params.jsonl",
         "place.jsonl",
         "poly.jsonl",
-        "precision.jsonl",
         "products.jsonl",
         "random_parity.jsonl",
         "random_parity_host.jsonl",
@@ -28951,7 +29172,6 @@
         "specials.jsonl",
         "stat.jsonl",
         "tail.jsonl",
-        "unary.jsonl",
         "unary_extra.jsonl",
         "where.jsonl"
       ],

@@ -16,16 +16,16 @@
   ],
   "summary": {
     "tests": {
-      "methods": 13703,
-      "declaredInvocations": 14339,
+      "methods": 13759,
+      "declaredInvocations": 14395,
       "dataRows": 716,
       "dynamicMethods": 34,
-      "sourceLocated": 13703,
+      "sourceLocated": 13759,
       "oracleMethods": 657,
       "fuzzMatrixMethods": 91,
       "npyOracleMethods": 13,
       "statuses": {
-        "active": 13408,
+        "active": 13464,
         "ignored": 11,
         "manual": 5,
         "open_bug": 215,
@@ -43,7 +43,7 @@
         "WindowsOnly": 75
       },
       "projects": {
-        "NumSharp.Tests": 13100,
+        "NumSharp.Tests": 13156,
         "NumSharp.Tests.Interop": 444,
         "NumSharp.Tests.Oracle": 159
       },
