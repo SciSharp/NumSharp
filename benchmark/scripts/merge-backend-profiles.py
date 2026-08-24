@@ -319,7 +319,18 @@ def write_markdown(path: Path, payload: dict[str, Any]) -> None:
         def cell(result: dict[str, Any]) -> str:
             if result.get("availability") != AVAILABLE:
                 return result.get("availability", NOT_MEASURED)
-            return f"{result['numsharp_ms']:.4f} ms"
+            v = result["numsharp_ms"]
+            if v is None:
+                return "—"
+            # Adaptive precision: a sub-µs stable mean (the 250x-batched average of an
+            # O(1)/scalar/view op) collapses to "0.0000 ms" at 4 decimals. Show ns
+            # resolution (data is already retained at 6 decimals) so it reads as a real
+            # measurement rather than a zero.
+            if v >= 0.1:
+                return f"{v:.4f} ms"
+            if v >= 0.001:
+                return f"{v:.5f} ms"
+            return f"{v:.6f} ms"
         ratio = "—" if row["ratio"] is None else f"{row['ratio']:.3f}x"
         lines.append(f"| `{row['operation']}` | {row['dtype']} | {row['n']:,} | {cell(managed)} | {cell(openblas)} | {row['effective_profile'] or '—'} | {ratio} |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

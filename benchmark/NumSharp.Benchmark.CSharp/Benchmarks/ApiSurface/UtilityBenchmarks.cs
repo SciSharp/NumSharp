@@ -10,7 +10,9 @@ public class DTypeUtilityBenchmarks : BenchmarkBase
     private NDArray _a = null!;
     private NDArray _b = null!;
 
-    [Params(ArraySizeSource.Small)]
+    // Scalar (N=1) is the pure dispatch/call-overhead tier ("scalar x scalar"); Small is the
+    // standard size. These ops are dtype/metadata only, so the two sizes isolate call cost.
+    [Params(ArraySizeSource.Scalar, ArraySizeSource.Small)]
     public override int N { get; set; }
 
     [GlobalSetup]
@@ -35,7 +37,8 @@ public class DTypeUtilityBenchmarks : BenchmarkBase
     [Benchmark(Description = "np.copyto(dst, src)")] public void CopyTo() => np.copyto(_b, _a, casting: "unsafe");
     [Benchmark(Description = "np.nested_iters(a, axes)")] public void NestedIters()
     {
-        var iterators = np.nested_iters(_b.reshape(10, N / 10), new[] { new[] { 0 }, new[] { 1 } });
+        int mrows = N >= 10 ? 10 : 1;   // keep the reshape valid at the N=1 tier
+        var iterators = np.nested_iters(_b.reshape(mrows, N / mrows), new[] { new[] { 0 }, new[] { 1 } });
         foreach (var iterator in iterators) iterator.Dispose();
     }
 }
@@ -45,7 +48,8 @@ public class TextFormattingBenchmarks : BenchmarkBase
 {
     private NDArray _a = null!;
 
-    [Params(ArraySizeSource.Small)]
+    // Scalar (N=1) = pure dispatch overhead for the format/print ops; Small is the standard size.
+    [Params(ArraySizeSource.Scalar, ArraySizeSource.Small)]
     public override int N { get; set; }
 
     [GlobalSetup]

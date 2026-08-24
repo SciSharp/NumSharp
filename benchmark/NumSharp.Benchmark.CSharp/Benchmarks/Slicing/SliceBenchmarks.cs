@@ -17,6 +17,8 @@ public class SliceBenchmarks : BenchmarkBase
     private NDArray _stridedSlice = null!;
     private NDArray _rowSlice = null!;
     private NDArray _colSlice = null!;
+    // Proportional slice range so copy/multiply work scales with N (see below).
+    private string _sliceRange = null!;
 
     [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
@@ -27,6 +29,10 @@ public class SliceBenchmarks : BenchmarkBase
         np.random.seed(Seed);
 
         _arr1D = np.random.rand(N) * 100;
+
+        // Middle 80% of the array ([N/10 : 9N/10]) — a real O(N) span, unlike the fixed
+        // "100:1000" that did the same ~900 elements at every N (non-comparable across sizes).
+        _sliceRange = $"{N / 10}:{N / 10 * 9}";
 
         var rows = (int)Math.Sqrt(N);
         var cols = N / rows;
@@ -99,9 +105,9 @@ public class SliceBenchmarks : BenchmarkBase
     // Slice + Operation (combined)
     // ========================================================================
 
-    [Benchmark(Description = "a[100:1000] * 2")]
+    [Benchmark(Description = "a[N/10:9N/10] * 2")]
     [BenchmarkCategory("SliceOp")]
-    public NDArray SliceAndOp_Contiguous() => _arr1D["100:1000"] * 2;
+    public NDArray SliceAndOp_Contiguous() => _arr1D[_sliceRange] * 2;
 
     [Benchmark(Description = "a[::2] * 2")]
     [BenchmarkCategory("SliceOp")]
@@ -111,11 +117,11 @@ public class SliceBenchmarks : BenchmarkBase
     // Copy vs View
     // ========================================================================
 
-    [Benchmark(Description = "a[100:1000].copy()")]
+    [Benchmark(Description = "a[N/10:9N/10].copy()")]
     [BenchmarkCategory("Copy")]
-    public NDArray SliceCopy() => _arr1D["100:1000"].copy();
+    public NDArray SliceCopy() => _arr1D[_sliceRange].copy();
 
-    [Benchmark(Description = "np.copy(a[100:1000])")]
+    [Benchmark(Description = "np.copy(a[N/10:9N/10])")]
     [BenchmarkCategory("Copy")]
-    public NDArray NpCopy() => np.copy(_arr1D["100:1000"]);
+    public NDArray NpCopy() => np.copy(_arr1D[_sliceRange]);
 }

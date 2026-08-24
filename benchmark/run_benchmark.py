@@ -201,6 +201,11 @@ def main():
         for s in args.suites:
             tmp = results_dir / f"numpy-{s}.json"
             cmd = [sys.executable, str(PY_BENCH), "--suite", s, "--cache-sizes", "--output", str(tmp)]
+            # The api suite carries the scalar/dtype/text dispatch ops — also sweep the N=1
+            # (Scalar) pure-dispatch tier there (the "scalar x scalar" point). Scoped to this
+            # suite so no other suite emits unmatched N=1 rows.
+            if s == "api":
+                cmd.append("--with-scalar")
             if args.quick:
                 cmd.append("--quick")
             run(cmd, check=True)

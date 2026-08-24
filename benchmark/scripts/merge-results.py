@@ -322,8 +322,11 @@ def merge_results(numpy_results: List[dict], csharp_results: List[dict]) -> List
             category=category,
             dtype=dtype,
             n=n,
-            numpy_ms=round(numpy_ms, 4),
-            numsharp_ms=round(numsharp_ms, 4) if numsharp_ms is not None else None,
+            # 6 decimals (ns resolution): the adaptive 250x-batched averages of O(1)/scalar/
+            # view ops land in the sub-µs range and must survive rounding — at 4 decimals a
+            # sub-100ns op collapsed to 0.0000 and its ratio became undefined ("—").
+            numpy_ms=round(numpy_ms, 6),
+            numsharp_ms=round(numsharp_ms, 6) if numsharp_ms is not None else None,
             ratio=round(ratio, 3) if ratio is not None else None,
             pct_numpy=round(pct, 1) if pct is not None else None,
             status=status

@@ -26,6 +26,7 @@ import sys
 from dataclasses import dataclass, asdict
 from typing import Callable, List, Optional, Dict, Any
 import statistics
+import math
 
 # =============================================================================
 # Configuration
@@ -86,19 +87,57 @@ class BenchmarkResult:
     ops_per_sec: float
     allocated_mb: float = 0.0
 
-def benchmark(func: Callable, n: int, warmup: int = 10, iterations: int = 50) -> BenchmarkResult:
-    """Run a benchmark with proper warmup and statistical analysis."""
+def benchmark(func: Callable, n: int, warmup: int = 10, iterations: int = 50,
+              min_measure_ms: float = 1.0, pilot_ms: float = 0.3) -> BenchmarkResult:
+    """Run a benchmark with warmup, per-test adaptive batching, and statistical analysis.
+
+    Fixed methodology (across the fast-vs-slow op spectrum):
+      * ALWAYS >= ``iterations`` (50) timed samples — never fewer, and never a single one,
+        even for a >1 ms/call op (which under a raw time budget used to collapse toward one
+        measurement).
+      * Each sample batches ``inner`` calls — a count computed PER TEST (never fixed) — so the
+        TOTAL measurement window spans >= ``min_measure_ms`` (~1 ms). A sub-µs op therefore
+        runs tens of thousands of times (batched) instead of 50 timer-dominated single calls
+        that would total far under 1 ms; a >1 ms/call op does ``inner`` == 1, i.e. exactly
+        ``iterations`` real calls.
+    Per-call cost is first estimated with a GROWING PILOT batch — a single calibration call is
+    too noisy for a sub-µs op (its lone perf_counter pair is mostly timer overhead). Reported
+    ``iterations`` is the TOTAL calls executed (samples x inner): 50 for a slow op, large for
+    a fast one ("enough to reach 1 ms").
+    """
     # Warmup
     for _ in range(warmup):
         func()
 
+    # Pilot: grow a batch until it takes >= pilot_ms, then estimate per-call cost from it.
+    pilot_n, dt = 1, 0.0
+    while True:
+        t0 = time.perf_counter()
+        for _ in range(pilot_n):
+            func()
+        dt = (time.perf_counter() - t0) * 1000.0
+        if dt >= pilot_ms or pilot_n >= (1 << 24):
+            break
+        pilot_n *= 4
+    one_ms = dt / pilot_n if (pilot_n and dt > 0) else 1e-9
+
+    samples = max(1, iterations)                                    # >= 50 timed samples (never 1)
+    # inner calls/sample so the `samples` samples span >= min_measure_ms total. Per test:
+    #   fast op -> inner >> 1 (batched to ~min_measure_ms/samples per sample);
+    #   slow op (>~min_measure_ms/samples per call) -> inner == 1 (each sample is one real call).
+    # SAFETY (>1) aims a bit above the target: the pilot slightly OVER-estimates per-call cost
+    # (its early small batches aren't fully warm), which would shrink inner and land the ACTUAL
+    # window just under 1 ms — the margin makes ">= min_measure_ms" hold in practice.
+    SAFETY = 1.5
+    inner = max(1, math.ceil((min_measure_ms * SAFETY / samples) / one_ms))
+
     # Timed runs
     times = []
-    for _ in range(iterations):
+    for _ in range(samples):
         start = time.perf_counter()
-        func()
-        elapsed = (time.perf_counter() - start) * 1000  # ms
-        times.append(elapsed)
+        for _ in range(inner):
+            func()
+        times.append((time.perf_counter() - start) * 1000.0 / inner)  # per-call ms
 
     mean = statistics.mean(times)
     stddev = statistics.stdev(times) if len(times) > 1 else 0
@@ -113,7 +152,7 @@ def benchmark(func: Callable, n: int, warmup: int = 10, iterations: int = 50) ->
         stddev_ms=stddev,
         min_ms=min(times),
         max_ms=max(times),
-        iterations=iterations,
+        iterations=samples * inner,   # total op calls executed (50 for a slow op, many for fast)
         ops_per_sec=1000.0 / mean if mean > 0 else 0
     )
 
@@ -1178,9 +1217,13 @@ def run_slicing_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.name, r.category, r.suite, r.dtype = "np.sum(col_slice)", "SumSlice", "Slicing", dtype_name
     results.append(r)
 
-    def slice_op_contiguous(): return arr_1d[100:1000] * 2
+    # Middle 80% ([n/10 : 9n/10]) so the copy/multiply work scales with N — the fixed
+    # "100:1000" did the same ~900 elements at every size (non-comparable across N).
+    lo, hi = n // 10, n // 10 * 9
+
+    def slice_op_contiguous(): return arr_1d[lo:hi] * 2
     r = benchmark(slice_op_contiguous, n, iterations=iterations)
-    r.name, r.category, r.suite, r.dtype = "a[100:1000] * 2", "SliceOp", "Slicing", dtype_name
+    r.name, r.category, r.suite, r.dtype = "a[N/10:9N/10] * 2", "SliceOp", "Slicing", dtype_name
     results.append(r)
 
     def slice_op_strided(): return arr_1d[::2] * 2
@@ -1188,14 +1231,14 @@ def run_slicing_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.name, r.category, r.suite, r.dtype = "a[::2] * 2", "SliceOp", "Slicing", dtype_name
     results.append(r)
 
-    def slice_copy(): return arr_1d[100:1000].copy()
+    def slice_copy(): return arr_1d[lo:hi].copy()
     r = benchmark(slice_copy, n, iterations=iterations)
-    r.name, r.category, r.suite, r.dtype = "a[100:1000].copy()", "Copy", "Slicing", dtype_name
+    r.name, r.category, r.suite, r.dtype = "a[N/10:9N/10].copy()", "Copy", "Slicing", dtype_name
     results.append(r)
 
-    def np_slice_copy(): return np.copy(arr_1d[100:1000])
+    def np_slice_copy(): return np.copy(arr_1d[lo:hi])
     r = benchmark(np_slice_copy, n, iterations=iterations)
-    r.name, r.category, r.suite, r.dtype = "np.copy(a[100:1000])", "Copy", "Slicing", dtype_name
+    r.name, r.category, r.suite, r.dtype = "np.copy(a[N/10:9N/10])", "Copy", "Slicing", dtype_name
     results.append(r)
 
     return results
@@ -1816,14 +1859,17 @@ def run_ndarray_benchmarks(n, iterations):
 
 
 def run_api_surface_benchmarks(n, iterations):
-    if n != ARRAY_SIZES["small"]:
+    # N=1 (Scalar) is the pure dispatch/call-overhead tier for the scalar/dtype/text ops —
+    # "scalar x scalar"; the real-work poly/IO ops are emitted only at the standard size.
+    if n not in (1, ARRAY_SIZES["small"]):
         return []
     import os
     import tempfile
 
     a_int = np.arange(n, dtype=np.int32)
     a_float = np.arange(n, dtype=np.float64)
-    matrix = a_float.reshape(10, n // 10)
+    mrows = 10 if n >= 10 else 1          # keep reshape valid at the N=1 tier
+    matrix = a_float.reshape(mrows, n // mrows)
     dtype_cases = [
         ("np.can_cast(from, to)", lambda: np.can_cast(np.int32, np.float64)),
         ("np.common_type(a, b)", lambda: np.common_type(a_int, a_float)),
@@ -1871,6 +1917,12 @@ def run_api_surface_benchmarks(n, iterations):
 
     rows = [_b(func, n, iterations, name, "ApiSurface", "float64", "DType") for name, func in dtype_cases]
     rows.extend(_b(func, n, iterations, name, "ApiSurface", "float64", "Text") for name, func in text_cases)
+
+    # The real-work families (Polynomial, IO) only make sense at the standard size — at the
+    # N=1 dispatch tier they would produce no-op cells with no matching C# benchmark.
+    if n != ARRAY_SIZES["small"]:
+        return rows
+
     rows.extend(_b(func, n, iterations, name, "ApiSurface", "float64", "Polynomial") for name, func in polynomial_cases)
 
     with tempfile.TemporaryDirectory(prefix="numsharp-api-benchmark-") as directory:
@@ -2090,6 +2142,8 @@ def main():
                         help="Array size preset ('all' sweeps small+medium+large in one run)")
     parser.add_argument("--cache-sizes", action="store_true",
                         help="Sweep all three cache-tier sizes (small, medium, large) in one invocation")
+    parser.add_argument("--with-scalar", action="store_true",
+                        help="Also sweep the N=1 (Scalar) dispatch-overhead tier — the 'scalar x scalar' point")
     parser.add_argument("--type", type=str, default=None, help="Specific dtype (e.g., int32, float64)")
     parser.add_argument("--iterations", type=int, default=50, help="Benchmark iterations")
     parser.add_argument("--quick", action="store_true", help="Quick run (10 iterations, common types only)")
@@ -2120,6 +2174,10 @@ def main():
         sizes_to_run = [ARRAY_SIZES["small"], ARRAY_SIZES["medium"], ARRAY_SIZES["large"]]
     else:
         sizes_to_run = [args.n]
+
+    # The N=1 (Scalar) tier measures pure dispatch/call overhead — prepended so it runs first.
+    if args.with_scalar and 1 not in sizes_to_run:
+        sizes_to_run = [1] + sizes_to_run
 
     print(f"Sizes to run: {[f'{n:,}' for n in sizes_to_run]}")
 
