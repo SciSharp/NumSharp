@@ -728,23 +728,15 @@ namespace NumSharp.Tests.Fuzz
                 return "complex ufunc rejection SKIPPED on a zero-size operand (NumPy validates the "
                      + "loop, not the data) [known bug]";
 
-            // (K6) power with a bool base and a negative integer exponent: the integer-power guard
-            // ("Integers to negative integer powers are not allowed.") is missing on the bool loop.
-            if (kind == DivergenceKind.Value && c.Op == "power"
-                && c.Operands.Any(o => o.Dtype == "bool"))
-                return "power(bool, negative int): missing the 'Integers to negative integer powers' "
-                     + "guard on the bool loop [known bug]";
-
-            // (K8) power(int, NEGATIVE int) does not raise NumPy's clean
-            // ValueError("Integers to negative integer powers are not allowed."). It runs into an
-            // internal bounds assertion instead — Debug.Fail("index < Count, Memory corruption
-            // expected") — which a Debug test host converts to an exception but a RELEASE build
-            // does not: there the same path reads out of bounds. Worth treating as a memory-safety
-            // bug, not merely a message mismatch.
-            if (kind == DivergenceKind.ErrorText && c.Op == "power"
-                && c.Operands.All(o => o.Dtype.StartsWith("int") || o.Dtype.StartsWith("uint")))
-                return "power(int, negative int): trips the internal 'index < Count, Memory corruption "
-                     + "expected' assert instead of raising NumPy's ValueError [known bug]";
+            // (K6/K8 RETIRED) power with a negative integer exponent — for BOTH an integer base and
+            // a bool base (which promotes to an integer loop) — now raises NumPy's clean
+            // ValueError("Integers to negative integer powers are not allowed.") exactly. The former
+            // bugs (bool loop missing the guard; the int path tripping Debug.Fail("index < Count,
+            // Memory corruption expected") and reading out of bounds in RELEASE) were fixed in
+            // Default.Power.cs: the guard keys off the PROMOTED loop type (ResolvePowerResultType, so
+            // a bool base counts) and the negative-exponent pre-scan reads by flat index through
+            // Storage.GetAtIndex<T> (layout-correct for strided/broadcast/(N,M) exponents) instead of
+            // the coordinate GetXxx(long) overload that walked off axis 0. No excuse needed.
 
             // (K9) np.result_type over a mixed signed/unsigned pair where one operand is 0-D THROWS
             // (ArgumentException 'Destination array was not long enough' / OverflowException)

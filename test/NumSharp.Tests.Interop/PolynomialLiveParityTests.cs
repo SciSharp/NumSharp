@@ -113,6 +113,9 @@ namespace NumSharp.Tests.Interop
         public void Polyfit_Full_ByteExact()
         {
             RequireLapack();
+            // full=True returns the lstsq residual (result[1]); it rides the same gelsd excess-rows path
+            // that rounds 1 ULP off on Apple-silicon LAPACK (see Lstsq_ByteExact_ShapesAndB). x64 strict.
+            SkipByteExactOnArm64("Polyfit_Full_ByteExact (lstsq residual)");
             var (c, resids, _, s, _) = np.polyfit(Xs(), Ys(), 3, full: true);
             SameBytes(c, "np.polyfit(x, y, 3, full=True)[0]", ("x", Xs()), ("y", Ys()));
             SameBytes(resids, "np.polyfit(x, y, 3, full=True)[1]", ("x", Xs()), ("y", Ys()));

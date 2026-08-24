@@ -93,6 +93,26 @@ namespace NumSharp.Tests.Interop
                 Assert.Inconclusive($"python package '{module}' is not installed");
         }
 
+        /// <summary>
+        ///     Report Inconclusive on arm64 for a byte-exact cell that hits a genuine
+        ///     cross-ARCHITECTURE last-bit difference no numpy pin or OpenBLAS version can remove:
+        ///     NumSharp's managed <see cref="System.Numerics.Vector{T}"/> sliding-dot reduces at
+        ///     NEON's 128-bit width where x64 uses AVX2's 256-bit, and Apple-silicon LAPACK gelsd
+        ///     rounds the lstsq residual excess-rows 1 ULP off the x64 build. The byte-exact interop
+        ///     gate is implicitly pinned to the x64 reference architecture — the same "Inconclusive
+        ///     off the pinned host" model the offline matmul_parity / linalg_parity corpus tiers use.
+        ///     x64 (Windows + Linux) stays STRICT byte-exact.
+        /// </summary>
+        protected static void SkipByteExactOnArm64(string cell)
+        {
+            if (System.Runtime.InteropServices.RuntimeInformation.OSArchitecture ==
+                System.Runtime.InteropServices.Architecture.Arm64)
+                Assert.Inconclusive(
+                    $"{cell}: 1-ULP cross-architecture difference on arm64 (managed NEON reduction " +
+                    "width / Apple-silicon LAPACK residual rounding); the byte-exact interop gate is " +
+                    "pinned to the x64 reference architecture.");
+        }
+
         protected void PyExec(string code)
         {
             using (Py.GIL()) Scope.Exec(code);

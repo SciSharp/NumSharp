@@ -107,9 +107,19 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void NotACBlasProvider_Throws()
         {
-            // The running test assembly is a perfectly loadable PE that exports no cblas_sgemm.
+            // A managed .NET assembly is a PE that exports no cblas_sgemm. On Windows, LoadLibrary
+            // accepts the PE and Enable then fails to BIND the missing symbol
+            // (EntryPointNotFoundException). On Linux/macOS, dlopen rejects a PE outright — it is not
+            // an ELF / Mach-O image — so Enable fails to LOAD it at all (DllNotFoundException, the same
+            // failure mode as a nonexistent path; cf. OpenBlasNative's two documented throws). Either
+            // way the invariant that matters holds identically on every platform: a file that is not a
+            // CBLAS provider must never leave the backend installed.
             var self = typeof(MatmulParityBackendTests).Assembly.Location;
-            Assert.ThrowsException<EntryPointNotFoundException>(() => OpenBlasEngine.Enable(self));
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows))
+                Assert.ThrowsException<EntryPointNotFoundException>(() => OpenBlasEngine.Enable(self));
+            else
+                Assert.ThrowsException<DllNotFoundException>(() => OpenBlasEngine.Enable(self));
             Assert.IsFalse(OpenBlasEngine.Enabled);
         }
 
