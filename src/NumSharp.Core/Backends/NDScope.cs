@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -201,6 +203,32 @@ namespace NumSharp
                     if (tuple[i] is NDArray nd)
                         Returns(nd);
             return tuple;
+        }
+
+        // ---- Lower-layer buffer egress (a returned IArraySlice / UnmanagedStorage NOT wrapped in an NDArray) ----
+        //
+        // The scope's reclamation unit is the NDArray, which owns the ONE counted ARC reference on its
+        // buffer; a bare IArraySlice / UnmanagedStorage (e.g. from GetData(), or an intermediate NDArray's
+        // Storage) is an UNCOUNTED alias (see the ARC contract: ~NDArray ABANDONS, only deterministic
+        // Dispose/NDScope Release eagerly frees at refcount 0, "asserting no alias outlives"). So a boundary
+        // method that RETURNS a bare buffer would have it freed out from under the caller the moment the
+        // scope Releases the intermediate NDArray that shares it. Yielding it here takes a counted reference
+        // (TryAddRef) so the scope's Release can no longer reach 0 — the buffer survives — and that reference
+        // is deliberately abandoned (never Released), so the block's finalizer reclaims it on unreachability,
+        // the same non-deterministic backstop a bare buffer already relies on. A null buffer is a no-op.
+
+        /// <summary>Protects a returned bare <see cref="IArraySlice"/> from this scope's reclamation of an NDArray that shares its buffer.</summary>
+        public IArraySlice Returns(IArraySlice slice)
+        {
+            slice?.TryAddRef();
+            return slice;
+        }
+
+        /// <summary>Protects a returned bare <see cref="UnmanagedStorage"/> from this scope's reclamation of an NDArray that shares its buffer.</summary>
+        public UnmanagedStorage Returns(UnmanagedStorage storage)
+        {
+            storage?.InternalArray?.TryAddRef();
+            return storage;
         }
 
         /// <summary>

@@ -164,11 +164,22 @@ branches and nested-handler boundaries that referenced them stay valid).
 | `ValueTuple` of 2..4 NDArrays (`(NDArray, NDArray)` — `modf`/`polydiv`/`qr`/`eig`/`svd`/`lstsq`/…) | each component yielded through the matching `Returns<T1,…>` tuple overload (no box) |
 | any OTHER `ValueTuple`/`Tuple` (arity 5..8, a non-NDArray component, or a reference `Tuple`) | `Returns(ITuple)` — yields every NDArray component, skips the rest (boxed on the boundary; negligible off the hot path) |
 | result-struct carrier implementing `INDArrayCarrier` (`UniqueResult`, `MeshgridResult`, `PolyfitResult`, …) | `retVar.YieldTo(scope)` via boxing-free `constrained.callvirt` — the struct's own method re-parents each NDArray it holds (so private fields are reached from INSIDE the struct) |
+| bare `IArraySlice` / `UnmanagedStorage` return (a lower-layer buffer NOT wrapped in an NDArray) | `Returns(slice)`/`Returns(storage)` takes a **counted ARC reference** (`TryAddRef`) so the scope's deterministic `Release` of an intermediate NDArray sharing the buffer can't free it under the caller (a bare buffer is otherwise an UNCOUNTED alias); the ref is abandoned, so the block's finalizer reclaims it on unreachability |
 | `void` / scalar (`long`, `bool`, `double`, string, enums, …) | scope only; `out NDArray`/`out NDArray[]` params still escaped |
 | `out NDArray` / `out NDArray[]` param | final-value escape before each successful return |
 | `ref NDArray`(`[]`) param | **error NDW002** — hidden egress; scope by hand |
 | unsupported carrier (object/collection field, a `>4`-arity or mixed tuple, a result struct WITHOUT `INDArrayCarrier`) | **error NDW003** — the weaver cannot see every NDArray, so members would be handed back disposed; add `INDArrayCarrier` to the struct, or scope by hand |
 | iterator / async | **error NDW004** — the visible body is a state-machine stub |
+
+**Lower-layer buffer returns — scope of support.** The `IArraySlice`/`UnmanagedStorage` row above
+covers a method that RETURNS a bare buffer (the return is protected). What is deliberately NOT done is
+auto-TRACKING intermediate bare buffers for eager reclamation: the scope's reclamation unit is the
+NDArray, which owns the single counted ARC reference on its buffer, and a bare buffer takes no counted
+reference of its own (an "uncounted alias" — see the `~NDArray` ABANDON contract). Hooking bare-buffer
+CONSTRUCTION to track them would double-count against the NDArray's reference, so intermediate bare
+buffers stay finalizer-managed (their block's `~Disposer` reclaims on unreachability) — which is what
+they already are. In practice compositions own NDArrays, not bare buffers, so their transients are
+already reclaimed transitively when the scope releases the owning NDArrays.
 
 **Idempotence & incrementality.** A body that already opens an `NDScope` is skipped
 ("already-scoped"), so re-weaving the same assembly is a no-op; the MSBuild target is

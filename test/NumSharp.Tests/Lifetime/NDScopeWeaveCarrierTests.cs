@@ -1,5 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Backends.Unmanaged.Pooling;
 
 namespace NumSharp.Tests.Lifetime
@@ -255,6 +257,60 @@ namespace NumSharp.Tests.Lifetime
             Assert.IsFalse(a.IsDisposed, "reference-Tuple components are yielded too");
             Assert.IsFalse(b.IsDisposed);
             a.Dispose(); b.Dispose();
+        }
+
+        // ------------------------------------- 4) bare lower-layer buffer egress (IArraySlice/UnmanagedStorage)
+        //
+        // The scope reclaims NDArrays via the DETERMINISTIC Release path (eager free at refcount 0). A bare
+        // IArraySlice / UnmanagedStorage returned from a scoped method is an UNCOUNTED alias — the scope's
+        // Release of the intermediate NDArray that shares its buffer would free it out from under the caller.
+        // Returns(slice)/Returns(storage) take a counted reference (TryAddRef) so the buffer survives. As with
+        // the ITuple path there is no woven consumer today, so these pin the underlying NDScope method the
+        // weaver targets. NOTE: this depends on the ARC contract (see the ndarray-finalizer memory) — the
+        // deterministic Release path is stable, but the finalizer path is under active rework in a worktree.
+
+        [TestMethod]
+        public void StorageEgress_ReturnedSlice_CountedRefSurvivesScopeReclamation()
+        {
+            IArraySlice slice;
+            using (var scope = NDScope.Open())
+            {
+                var nd = np.arange(4);                                 // int64 [0,1,2,3]; tracked; refcount 1
+                slice = scope.Returns(nd.Storage.InternalArray);       // TryAddRef → 2 (nd NOT yielded)
+            }                                                          // scope Releases nd → 1; buffer survives
+
+            Assert.IsFalse(slice.IsReleased, "the yielded slice's buffer survives the scope's deterministic Release of its NDArray");
+            Assert.AreEqual(0L, slice.GetIndex<long>(0), "the surviving buffer is still readable");
+            Assert.AreEqual(3L, slice.GetIndex<long>(3));
+        }
+
+        [TestMethod]
+        public void StorageEgress_WithoutProtection_ScopeReleaseFreesTheBareAlias()
+        {
+            // The control that gives the protection above its meaning: an un-yielded bare alias IS freed by
+            // the scope's deterministic Release (this is the Release contract — "no alias outlives").
+            IArraySlice slice;
+            using (var scope = NDScope.Open())
+            {
+                var nd = np.arange(4);
+                slice = nd.Storage.InternalArray;   // bare uncounted alias — NOT protected
+            }                                       // scope Releases nd → refcount 0 → eager free
+
+            Assert.IsTrue(slice.IsReleased, "without Returns' counted-ref protection the scope frees the buffer under the bare alias");
+        }
+
+        [TestMethod]
+        public void StorageEgress_ReturnedUnmanagedStorage_CountedRefSurvives()
+        {
+            UnmanagedStorage storage;
+            using (var scope = NDScope.Open())
+            {
+                var nd = np.arange(5);                 // int64 [0,1,2,3,4]
+                storage = scope.Returns(nd.Storage);   // TryAddRef's the storage's InternalArray
+            }
+
+            Assert.IsFalse(storage.InternalArray.IsReleased, "the yielded storage's buffer survives the scope");
+            Assert.AreEqual(4L, storage.InternalArray.GetIndex<long>(4), "the surviving buffer is still readable");
         }
     }
 }

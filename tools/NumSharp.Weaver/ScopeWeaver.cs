@@ -35,6 +35,8 @@ internal static class ScopeWeaver
     private const string ITupleFullName = "System.Runtime.CompilerServices.ITuple";
     private const string ValueTuplePrefix = "System.ValueTuple`";
     private const string TuplePrefix = "System.Tuple`";
+    private const string IArraySliceFullName = "NumSharp.Backends.Unmanaged.IArraySlice";
+    private const string UnmanagedStorageFullName = "NumSharp.Backends.UnmanagedStorage";
 
     private sealed class Refs
     {
@@ -47,6 +49,8 @@ internal static class ScopeWeaver
         public MethodDefinition ReturnsTuple3; // (T1,T2,T3) Returns<T1,T2,T3>((T1,T2,T3))
         public MethodDefinition ReturnsTuple4; // (T1,T2,T3,T4) Returns<T1,T2,T3,T4>((T1,T2,T3,T4))
         public MethodDefinition ReturnsITuple; // ITuple Returns(ITuple) — any arity/mix, boxed
+        public MethodDefinition ReturnsSlice;   // IArraySlice Returns(IArraySlice) — counted-ref protection
+        public MethodDefinition ReturnsStorage; // UnmanagedStorage Returns(UnmanagedStorage)
         public MethodDefinition CarrierYieldTo; // void INDArrayCarrier.YieldTo(NDScope)
 
         /// <summary>The <c>Returns</c> tuple overload for the given arity (2..4), or null if unsupported.</summary>
@@ -67,7 +71,8 @@ internal static class ScopeWeaver
         NDArrayLikeArray, // NDArray-like[] — Returns<T>(T[])
         NDArrayTuple,     // ValueTuple<..> of 2..4 NDArray-likes — Returns<T..>((T..)) overload (no box)
         Tuple,            // any OTHER ValueTuple/Tuple (arity 5..8, a non-NDArray component, Tuple<>) — Returns(ITuple)
-        Carrier           // in-module result struct — INDArrayCarrier.YieldTo(scope)
+        Carrier,          // in-module result struct — INDArrayCarrier.YieldTo(scope)
+        Storage           // bare IArraySlice / UnmanagedStorage — Returns(slice/storage) counted-ref protection
     }
 
     public static WeaveResult WeaveAssembly(string assemblyPath, byte[] snkBlob, bool verbose, TextWriter stdout, TextWriter stderr)
@@ -228,8 +233,8 @@ internal static class ScopeWeaver
                 "an unsupported carrier the weaver cannot see every NDArray through (a bespoke reference type, a " +
                 "collection, or a result struct that does NOT implement INDArrayCarrier), so its NDArray members would " +
                 "be reclaimed and handed to the caller disposed; add INDArrayCarrier to the struct, or scope this " +
-                "method by hand. (NDArray, NDArray[], any ValueTuple/Tuple of NDArrays, and INDArrayCarrier result " +
-                "structs ARE woven.)");
+                "method by hand. (NDArray, NDArray[], any ValueTuple/Tuple of NDArrays, INDArrayCarrier result " +
+                "structs, and bare IArraySlice/UnmanagedStorage ARE woven.)");
             return ValidationOutcome.Error;
         }
 
@@ -286,6 +291,12 @@ internal static class ScopeWeaver
                         case 0 when m.Parameters[0].ParameterType.FullName == ITupleFullName:
                             refs.ReturnsITuple = m;
                             break;
+                        case 0 when m.Parameters[0].ParameterType.FullName == IArraySliceFullName:
+                            refs.ReturnsSlice = m;
+                            break;
+                        case 0 when m.Parameters[0].ParameterType.FullName == UnmanagedStorageFullName:
+                            refs.ReturnsStorage = m;
+                            break;
                         case 1 when m.Parameters[0].ParameterType is ArrayType:
                             refs.ReturnsMany = m;
                             break;
@@ -317,11 +328,12 @@ internal static class ScopeWeaver
 
         if (refs.Open is null || refs.Dispose is null || refs.ReturnsOne is null || refs.ReturnsMany is null ||
             refs.ReturnsTuple2 is null || refs.ReturnsTuple3 is null || refs.ReturnsTuple4 is null ||
-            refs.ReturnsITuple is null || refs.CarrierYieldTo is null)
+            refs.ReturnsITuple is null || refs.ReturnsSlice is null || refs.ReturnsStorage is null ||
+            refs.CarrierYieldTo is null)
             throw new InvalidOperationException(
                 $"{NDScopeFullName}/{CarrierInterfaceFullName} is missing one of Open/Dispose/Returns<T>(T)/" +
                 "Returns<T>(T[])/Returns<T1,T2>/Returns<T1,T2,T3>/Returns<T1,T2,T3,T4>/Returns(ITuple)/" +
-                "YieldTo(NDScope) — weaver and library out of sync");
+                "Returns(IArraySlice)/Returns(UnmanagedStorage)/YieldTo(NDScope) — weaver and library out of sync");
 
         return refs;
     }
@@ -397,6 +409,11 @@ internal static class ScopeWeaver
 
         if (ImplementsCarrierInterface(ret))
             return RetKind.Carrier;
+
+        // A bare lower-layer buffer (IArraySlice / UnmanagedStorage), NOT wrapped in an NDArray — the
+        // return is given a counted reference so the scope's Release of intermediate NDArrays can't free it.
+        if (ret.FullName is IArraySliceFullName or UnmanagedStorageFullName)
+            return RetKind.Storage;
 
         return null;
     }
@@ -643,6 +660,18 @@ internal static class ScopeWeaver
                         cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, scopeVar));
                         cursor = InsertAfter(il, cursor, il.Create(OpCodes.Constrained, m.ReturnType));
                         cursor = InsertAfter(il, cursor, il.Create(OpCodes.Callvirt, refs.CarrierYieldTo));
+                        break;
+
+                    case RetKind.Storage:
+                        // scope.Returns(retVar) — takes a counted reference on the bare buffer so the scope's
+                        // Release of an intermediate NDArray sharing it cannot free it (same reference, re-stored).
+                        var storageRef = m.ReturnType.FullName == UnmanagedStorageFullName
+                            ? refs.ReturnsStorage
+                            : refs.ReturnsSlice;
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, scopeVar));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, retVar));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Callvirt, storageRef));
+                        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Stloc, retVar));
                         break;
                 }
             }
