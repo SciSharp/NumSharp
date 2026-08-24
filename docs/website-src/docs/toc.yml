@@ -10,6 +10,8 @@
   href: broadcasting.md
 - name: Buffering & Memory
   href: buffering.md
+- name: Scope Reclamation ([NDScoped])
+  href: ndscoped.md
 - name: NumPy Compliance & Compatibility
   href: compliance.md
 - name: NumPy API Coverage & Support
