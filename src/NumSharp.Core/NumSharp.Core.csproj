@@ -80,15 +80,25 @@
        ================================================================================== -->
   <PropertyGroup>
     <NumSharpWeaverProject>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Weaver\NumSharp.Weaver.csproj</NumSharpWeaverProject>
+    <!-- Host selection, same ladder as the packaged build/NumSharp.Weaver.targets: prefer
+         DOTNET_HOST_PATH (set by the dotnet CLI / .NET-Core MSBuild for exactly this
+         hand-off) over a bare PATH 'dotnet', so a VS devenv build of the solution does not
+         depend on PATH hygiene. -->
+    <NumSharpWeaverDotnetHost Condition="'$(NumSharpWeaverDotnetHost)' == '' and '$(DOTNET_HOST_PATH)' != ''">$(DOTNET_HOST_PATH)</NumSharpWeaverDotnetHost>
+    <NumSharpWeaverDotnetHost Condition="'$(NumSharpWeaverDotnetHost)' == ''">dotnet</NumSharpWeaverDotnetHost>
   </PropertyGroup>
 
   <!-- The marker path is spelled inline (not via a body-level property): IntermediateOutputPath
        is assigned by the SDK's .targets, which import AFTER the project body — a body-level
        property would capture it EMPTY. Target Inputs/Outputs expand at target-execution time,
        where the per-TFM obj path is final. -->
+  <!-- BeforeTargets mirrors the packaged build/NumSharp.Weaver.targets anchor set:
+       _TimeStampAfterCompile keeps the SDK's post-compile timestamping consistent with the
+       rewritten assembly, AfterCompile lets AfterCompile-hooked rewriters see the woven IL;
+       MSBuild ignores anchors naming targets a project never defines. -->
   <Target Name="NDScopeWeave"
           AfterTargets="CoreCompile"
-          BeforeTargets="CopyFilesToOutputDirectory"
+          BeforeTargets="_TimeStampAfterCompile;AfterCompile;CopyFilesToOutputDirectory"
           Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipNDScopeWeave)' != 'true'"
           Inputs="@(IntermediateAssembly)"
           Outputs="$(IntermediateOutputPath)NDScopeWeave.marker">
@@ -102,7 +112,7 @@
       <Output TaskParameter="TargetOutputs" ItemName="NumSharpWeaverAssembly" />
     </MSBuild>
 
-    <Exec Command="dotnet exec &quot;@(NumSharpWeaverAssembly)&quot; &quot;@(IntermediateAssembly)&quot; --snk &quot;$(AssemblyOriginatorKeyFile)&quot;" />
+    <Exec Command="&quot;$(NumSharpWeaverDotnetHost)&quot; exec &quot;@(NumSharpWeaverAssembly)&quot; &quot;@(IntermediateAssembly)&quot; --snk &quot;$(AssemblyOriginatorKeyFile)&quot;" />
 
     <!-- Opt-in IL verification of the woven output (dotnet tool install -g dotnet-ilverify). -->
     <ItemGroup Condition="'$(NDScopeWeaveILVerify)' == 'true'">

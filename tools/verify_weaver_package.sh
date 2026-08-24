@@ -371,7 +371,11 @@ internal static class Program
 EOF
 (cd "$ND" && dotnet build -c Release -v n > build.log 2>&1) \
   || { tail -30 "$ND/build.log"; fail "attribute-free consumer build failed"; }
-grep -q "no \[NDScoped\] methods; nothing to do" "$ND/build.log" || fail "expected the nothing-to-do no-op report"
+# The targets' content pre-scan skips the tool spawn entirely for an attribute-free assembly
+# (the ASCII metadata scan); the tool's own "no [NDScoped] methods; nothing to do" line is the
+# fallback wording if the pre-scan is ever bypassed. Accept either — reject only silence.
+grep -Eq "no \[NDScoped\] usage detected|no \[NDScoped\] methods; nothing to do" "$ND/build.log" \
+  || fail "expected the no-op report (pre-scan skip or tool nothing-to-do)"
 (cd "$ND" && dotnet run --no-build -c Release > run.log 2>&1) && grep -q "PLAIN-OK 4" "$ND/run.log" \
   || { cat "$ND/run.log"; fail "attribute-free consumer run failed"; }
 echo "no-op verified (assembly left unwritten)"
