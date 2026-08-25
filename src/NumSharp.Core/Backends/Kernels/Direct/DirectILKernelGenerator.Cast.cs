@@ -101,9 +101,13 @@ namespace NumSharp.Backends.Kernels
             // Boolean SOURCE: a bool's numeric value is exactly 0 or 1, never its raw storage byte. The
             // SIMD subword/widen/xToHalf paths below reinterpret the byte, which corrupts bool buffers
             // holding non-0/1 bytes (np.frombuffer is a zero-copy VIEW; interop wraps foreign buffers) —
-            // e.g. bool[byte=255]->uint8 must be 1, not 255. Route every bool cast to the scalar
+            // e.g. bool[byte=255]->uint8 must be 1, not 255. The dedicated bool-source kernels
+            // (Cast.FromBool.cs) NORMALIZE first (min(v,1)) and then widen/convert, so they are the
+            // one SIMD family a bool source may take; every other destination falls to the scalar
             // NDIterCasting.ConvertValue path, which normalizes via '!= 0' (ReadAsInt64). bool->bool
             // same-type copies never reach here (TryCopySameType handles them first).
+            var fromBool = TryGetBoolSourceKernel(srcType, dstType);
+            if (fromBool != null) return fromBool;
             if (srcType == NPTypeCode.Boolean) return null;
             // NumPy-faithful cvtt fast path for the common float->int32 downcast (beats NumPy).
             var floatToInt32 = TryGetFloatToInt32Kernel(srcType, dstType);

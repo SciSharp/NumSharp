@@ -518,55 +518,72 @@ namespace NumSharp.Backends.Kernels
         #region Boolean ArgMax/ArgMin Helpers
 
         /// <summary>
-        /// ArgMax helper for boolean arrays.
-        /// Boolean: True=1, False=0, so argmax finds first True.
+        /// ArgMax helper for boolean arrays: the index of the FIRST True (any nonzero byte counts,
+        /// matching NumPy — a frombuffer 0x80 is True), 0 when all False. Port of NumPy's
+        /// <c>BOOL_argmax</c> (argfunc.dispatch.c.src): a 4×-vector block scan skips all-zero
+        /// prefixes (OR the 4 loads — any nonzero byte breaks), then a scalar finish pins the
+        /// exact index. Early exit makes the common case O(first-True), not O(n).
         /// </summary>
         internal static unsafe long ArgMaxBoolHelper(void* input, long totalSize)
         {
             if (totalSize == 0) return -1;
-            if (totalSize == 1) return 0;
 
-            bool* src = (bool*)input;
-            bool bestValue = src[0];
-            long bestIndex = 0;
+            byte* src = (byte*)input;
+            long i = 0;
 
-            // If first is already True, we can't do better
-            if (bestValue) return 0;
-
-            for (long i = 1; i < totalSize; i++)
+            if (Vector256.IsHardwareAccelerated)
             {
-                if (src[i]) // True > False
+                const long wstep = 32 * 4;
+                var zero = Vector256<byte>.Zero;
+                for (long n = totalSize & -wstep; i < n; i += wstep)
                 {
-                    return i; // First True found
+                    var a = Vector256.Load(src + i);
+                    var b = Vector256.Load(src + i + 32);
+                    var c = Vector256.Load(src + i + 64);
+                    var d = Vector256.Load(src + i + 96);
+                    if (((a | b) | (c | d)) != zero)
+                        break;
                 }
             }
-            return bestIndex; // All False, return 0
+
+            for (; i < totalSize; i++)
+                if (src[i] != 0)
+                    return i;
+            return 0; // All False
         }
 
         /// <summary>
-        /// ArgMin helper for boolean arrays.
-        /// Boolean: True=1, False=0, so argmin finds first False.
+        /// ArgMin helper for boolean arrays: the index of the FIRST False (zero byte), 0 when all
+        /// True. NumPy's <c>BOOL_argmin</c> is literally <c>memchr(ip, 0, n)</c>
+        /// (arraytypes.c.src); the SIMD block scan here is the same find-first-zero — a block
+        /// contains a zero byte iff the Min of its 4 vectors has a zero lane.
         /// </summary>
         internal static unsafe long ArgMinBoolHelper(void* input, long totalSize)
         {
             if (totalSize == 0) return -1;
-            if (totalSize == 1) return 0;
 
-            bool* src = (bool*)input;
-            bool bestValue = src[0];
-            long bestIndex = 0;
+            byte* src = (byte*)input;
+            long i = 0;
 
-            // If first is already False, we can't do better
-            if (!bestValue) return 0;
-
-            for (long i = 1; i < totalSize; i++)
+            if (Vector256.IsHardwareAccelerated)
             {
-                if (!src[i]) // False < True
+                const long wstep = 32 * 4;
+                var zero = Vector256<byte>.Zero;
+                for (long n = totalSize & -wstep; i < n; i += wstep)
                 {
-                    return i; // First False found
+                    var a = Vector256.Load(src + i);
+                    var b = Vector256.Load(src + i + 32);
+                    var c = Vector256.Load(src + i + 64);
+                    var d = Vector256.Load(src + i + 96);
+                    if (Vector256.EqualsAny(Vector256.Min(Vector256.Min(a, b), Vector256.Min(c, d)), zero))
+                        break;
                 }
             }
-            return bestIndex; // All True, return 0
+
+            for (; i < totalSize; i++)
+                if (src[i] == 0)
+                    return i;
+            return 0; // All True
         }
 
         #endregion

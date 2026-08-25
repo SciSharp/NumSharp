@@ -118,7 +118,11 @@ namespace NumSharp.Backends.Kernels
         private static bool CanUseComparisonSimd(ComparisonKernelKey key)
         {
             if (VectorBits == 0) return false;
-            if (!CanUseSimd(key.ComparisonType)) return false;
+            // Boolean rides the byte lanes: EmitVectorComparison's Boolean branch computes the
+            // normalized truth-value comparison directly as 0/1 result bytes (NumPy's b8
+            // comparison loops), stored whole by EmitMaskToBoolExtraction's Boolean branch.
+            if (!CanUseSimd(key.ComparisonType) && key.ComparisonType != NPTypeCode.Boolean)
+                return false;
 
             // SIMD comparison only works when both operands have the same type.
             // Mixed-type comparisons require scalar conversion before comparison,
@@ -285,8 +289,8 @@ namespace NumSharp.Backends.Kernels
             long vectorCount = GetVectorCount(comparisonType);
             int unrollFactor = 4;
             long unrollStep = vectorCount * unrollFactor;
-            var clrType = GetClrType(comparisonType);
-            var vectorType = GetVectorType(clrType);
+            // Mask LOCALS take the lane type (Boolean -> byte; Vector256<bool> is not a type).
+            var vectorType = GetVectorType(GetSimdLaneType(comparisonType));
 
             // Args: void* lhs (0), void* rhs (1), bool* result (2),
             //       long* lhsStrides (3), long* rhsStrides (4), long* shape (5),
@@ -492,6 +496,15 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitVectorComparison(ILGenerator il, ComparisonOp op, NPTypeCode type)
         {
+            // Boolean compares by TRUTH VALUE, not raw byte (NumPy loops_comparison b8 loops:
+            // both operands are cmpeq-normalized first, so frombuffer 0x01 == 0x80). Produces
+            // 0/1 RESULT bytes directly — no 0xFF mask, no extraction step needed.
+            if (type == NPTypeCode.Boolean)
+            {
+                EmitBoolVectorComparison(il, op);
+                return;
+            }
+
             var clrType = GetClrType(type);
 
             string methodName = op switch
@@ -515,6 +528,69 @@ namespace NumSharp.Backends.Kernels
 
             if (op == ComparisonOp.NotEqual)
                 il.EmitCall(OpCodes.Call, VectorMethodCache.OnesComplement(VectorBits, clrType), null);
+        }
+
+        /// <summary>
+        /// Boolean comparison over byte lanes with NumPy's normalized semantics
+        /// (loops_comparison.dispatch.c.src b8 loops: VOP = xnor/xor/andc/orc over the ==0 masks).
+        /// Stack: [a(V&lt;byte&gt;), b(V&lt;byte&gt;)] -> [result(V&lt;byte&gt;)], every lane 0 or 1.
+        /// With na = min(a,1), nb = min(b,1) (byte_to_true — one pminub):
+        ///   eq: (na ^ nb) ^ 1     ne: na ^ nb
+        ///   lt: (na ^ 1) &amp; nb     le: (na &amp; (nb ^ 1)) ^ 1
+        ///   gt: na &amp; (nb ^ 1)     ge: ((na ^ 1) &amp; nb) ^ 1
+        /// </summary>
+        private static void EmitBoolVectorComparison(ILGenerator il, ComparisonOp op)
+        {
+            var laneType = typeof(byte);
+            var vecType = VectorMethodCache.V(VectorBits, laneType);
+            var xor = VectorMethodCache.BinaryX86(VectorBits, "Xor", laneType)
+                      ?? VectorMethodCache.Generic(VectorBits, "Xor", laneType, paramCount: 2);
+            var and = VectorMethodCache.BinaryX86(VectorBits, "BitwiseAnd", laneType)
+                      ?? VectorMethodCache.Generic(VectorBits, "BitwiseAnd", laneType, paramCount: 2);
+
+            void PushOnes()
+            {
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, laneType), null);
+            }
+
+            // Normalize both operands: [a, b] -> locNa, locNb (0/1 bytes).
+            var locNb = il.DeclareLocal(vecType);
+            var locNa = il.DeclareLocal(vecType);
+            PushOnes();                                          // [a, b, 1]
+            EmitRawVectorMinOrMax(il, "Min", laneType);          // [a, nb]
+            il.Emit(OpCodes.Stloc, locNb);                       // [a]
+            PushOnes();                                          // [a, 1]
+            EmitRawVectorMinOrMax(il, "Min", laneType);          // [na]
+            il.Emit(OpCodes.Stloc, locNa);                       // []
+
+            void LoadNa() => il.Emit(OpCodes.Ldloc, locNa);
+            void LoadNb() => il.Emit(OpCodes.Ldloc, locNb);
+            void NotBit() { PushOnes(); il.EmitCall(OpCodes.Call, xor, null); }   // v ^ 1 (0/1 lanes)
+
+            switch (op)
+            {
+                case ComparisonOp.Equal:
+                    LoadNa(); LoadNb(); il.EmitCall(OpCodes.Call, xor, null); NotBit();
+                    return;
+                case ComparisonOp.NotEqual:
+                    LoadNa(); LoadNb(); il.EmitCall(OpCodes.Call, xor, null);
+                    return;
+                case ComparisonOp.Less:
+                    LoadNa(); NotBit(); LoadNb(); il.EmitCall(OpCodes.Call, and, null);
+                    return;
+                case ComparisonOp.LessEqual:
+                    LoadNa(); LoadNb(); NotBit(); il.EmitCall(OpCodes.Call, and, null); NotBit();
+                    return;
+                case ComparisonOp.Greater:
+                    LoadNa(); LoadNb(); NotBit(); il.EmitCall(OpCodes.Call, and, null);
+                    return;
+                case ComparisonOp.GreaterEqual:
+                    LoadNa(); NotBit(); LoadNb(); il.EmitCall(OpCodes.Call, and, null); NotBit();
+                    return;
+                default:
+                    throw new NotSupportedException($"Comparison op {op} not supported for Boolean SIMD");
+            }
         }
 
         // BMI2 PDEP method handle — resolved once at static init so the
@@ -557,6 +633,18 @@ namespace NumSharp.Backends.Kernels
         private static void EmitMaskToBoolExtraction(ILGenerator il, NPTypeCode type,
             int vectorCount, LocalBuilder locI, LocalBuilder locMask)
         {
+            // Boolean: EmitBoolVectorComparison already produced 0/1 RESULT bytes — the "mask"
+            // IS the answer. One whole-vector store to result + i replaces the extraction.
+            if (type == NPTypeCode.Boolean)
+            {
+                il.Emit(OpCodes.Ldloc, locMask);   // [vec]
+                il.Emit(OpCodes.Ldarg_2);          // [vec, result(bool*)]
+                il.Emit(OpCodes.Ldloc, locI);      // [vec, result, i]
+                il.Emit(OpCodes.Add);              // [vec, ptr]
+                EmitVectorStore(il, NPTypeCode.Boolean);
+                return;
+            }
+
             var clrType = GetClrType(type);
 
             // ExtractMostSignificantBits gives us a uint where each bit is the MSB of each lane.
@@ -1000,6 +1088,52 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static void EmitComparisonOperation(ILGenerator il, ComparisonOp op, NPTypeCode comparisonType)
         {
+            // Boolean compares by TRUTH VALUE (NumPy loops_comparison b8 scalar tails:
+            // `a = *src1 != 0; b = *src2 != 0; *dst = a OP b`) — a raw byte Ceq would call
+            // frombuffer 0x01 == 0x80 False where NumPy says True. Normalize both to 0/1
+            // first; the SIMD body (EmitBoolVectorComparison) uses the same semantics, so
+            // body and tail agree on every byte value. Stack in: [a(u1-as-i4), b(u1-as-i4)].
+            if (comparisonType == NPTypeCode.Boolean)
+            {
+                var locB = il.DeclareLocal(typeof(int));
+                il.Emit(OpCodes.Stloc, locB);       // [a]
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Cgt_Un);            // [na]
+                il.Emit(OpCodes.Ldloc, locB);
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Cgt_Un);            // [na, nb]
+                switch (op)
+                {
+                    case ComparisonOp.Equal:
+                        il.Emit(OpCodes.Ceq);
+                        break;
+                    case ComparisonOp.NotEqual:
+                        il.Emit(OpCodes.Ceq);
+                        il.Emit(OpCodes.Ldc_I4_0);
+                        il.Emit(OpCodes.Ceq);
+                        break;
+                    case ComparisonOp.Less:
+                        il.Emit(OpCodes.Clt);
+                        break;
+                    case ComparisonOp.LessEqual:
+                        il.Emit(OpCodes.Cgt);
+                        il.Emit(OpCodes.Ldc_I4_0);
+                        il.Emit(OpCodes.Ceq);
+                        break;
+                    case ComparisonOp.Greater:
+                        il.Emit(OpCodes.Cgt);
+                        break;
+                    case ComparisonOp.GreaterEqual:
+                        il.Emit(OpCodes.Clt);
+                        il.Emit(OpCodes.Ldc_I4_0);
+                        il.Emit(OpCodes.Ceq);
+                        break;
+                    default:
+                        throw new NotSupportedException($"Comparison operation {op} not supported");
+                }
+                return;
+            }
+
             // Special handling for decimal comparisons
             if (comparisonType == NPTypeCode.Decimal)
             {
