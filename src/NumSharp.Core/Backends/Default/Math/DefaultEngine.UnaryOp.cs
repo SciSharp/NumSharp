@@ -100,12 +100,24 @@ namespace NumSharp.Backends
             // from the strided source (lane-count scalar loads -> Vector.Create),
             // applies the op, and stores contiguously — one pass, no scratch tile,
             // no per-chunk delegate dispatch (cf. the gather-to-scratch buffered
-            // path below). Same-width SIMD only; promoting (sqrt(int32)->double),
-            // integer, and predicate cases fall through to the buffered/NDIter
-            // routes. Measured ~4x the buffered path and beats NumPy on strided sqrt.
+            // path below). Same-width SIMD only; promoting (sqrt(int32)->double)
+            // and integer cases fall through to the buffered/NDIter routes.
+            // Measured ~4x the buffered path and beats NumPy on strided sqrt.
             {
                 var fused = TryStridedSimdUnaryOp(nd, op, inputType, outputType);
                 if (fused is not null) return fused;
+            }
+
+            // -------- Fused strided predicate path (float→bool) ------------
+            // IsNan/IsInf/IsFinite over a 1-D strided Single/Double view take
+            // their own fused kernel (NumPy's NCONTIG predicate loops): the
+            // same strided vector-assembly as above, with the predicate mask +
+            // packed bool store. Cross-dtype, so the same-width gate above can
+            // never serve them, and the scalar gather tile of the buffered
+            // route paid more than the whole NumPy loop.
+            {
+                var pred = TryStridedPredicateOp(nd, op, inputType, outputType);
+                if (pred is not null) return pred;
             }
 
             // -------- Buffered-SIMD path for 1-D strided inputs ------------
@@ -199,11 +211,19 @@ namespace NumSharp.Backends
                 return null;   // strided/transposed → NDIter
 
             // Contiguous kernel variant (4th arg = isContiguous): linear input[i] -> output[i].
+            // Float-classification predicates (IsNan/IsInf/IsFinite over Single/Double →
+            // bool) take their dedicated SIMD kernel — the generic unary SIMD gate is
+            // same-dtype-only, so without this they fall to the scalar per-element body
+            // (NumPy vectorizes exactly these in loops_unary_fp_le). Every other
+            // (op, dtype) resolves through the general kernel as before.
             var key = new UnaryKernelKey(inputType, outputType, op, true);
             UnaryKernel kernel;
             try
             {
-                kernel = DirectILKernelGenerator.GetUnaryKernel(key);
+                kernel = (outputType == NPTypeCode.Boolean
+                             ? DirectILKernelGenerator.GetPredicateContiguousKernel(op, inputType)
+                             : null)
+                         ?? DirectILKernelGenerator.GetUnaryKernel(key);
             }
             catch (NotSupportedException)
             {
@@ -290,6 +310,44 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     Fused strided execution for the float-classification predicates
+        ///     (IsNan/IsInf/IsFinite) over a 1-D non-contiguous Single/Double input —
+        ///     the predicate twin of <see cref="TryStridedSimdUnaryOp"/> (same 1-D
+        ///     strided gate, output dtype Boolean). One
+        ///     <see cref="StridedUnaryKernel"/> assembles each vector from strided
+        ///     scalar loads, applies the predicate mask and stores packed bools; the
+        ///     result is a fresh contiguous 1-D bool array. Returns null (→ buffered /
+        ///     NDIter routes) outside the kernel's scope.
+        /// </summary>
+        private unsafe NDArray? TryStridedPredicateOp(
+            NDArray nd, UnaryOp op, NPTypeCode inputType, NPTypeCode outputType)
+        {
+            var s = nd.Shape;
+            if (s.NDim != 1 || s.IsContiguous || s.IsBroadcasted)
+                return null;
+            if (outputType != NPTypeCode.Boolean)
+                return null;
+
+            var kernel = DirectILKernelGenerator.GetPredicateStridedKernel(op, inputType);
+            if (kernel == null)
+                return null;
+
+            long n = s.size;
+            var result = new NDArray(outputType, new Shape(n), false);
+            if (n == 0)
+                return result;
+
+            // In-memory element size via NPTypeCode.SizeOf() — NOT dtypesize (Marshal-based).
+            // strides[0] is an element stride; the kernel works in BYTE strides.
+            int inElem = inputType.SizeOf();
+            long inByteStride = s.strides[0] * (long)inElem;
+            byte* inBase = (byte*)nd.Address + s.offset * (long)inElem;
+
+            kernel((void*)inBase, inByteStride, (void*)result.Address, n);
+            return result;
+        }
+
+        /// <summary>
         ///     Buffered-SIMD execution for a 1-D non-contiguous (strided / reversed)
         ///     unary input. Gathers the strided source into a contiguous stack tile
         ///     and runs the SIMD contiguous unary kernel on the tile, chunk by chunk —
@@ -316,15 +374,23 @@ namespace NumSharp.Backends
             // Gate to ops whose contiguous kernel vectorizes: the point is to convert a
             // scalar strided walk into a SIMD contiguous one. For scalar-only ops
             // (exp/sin/... — no Vector intrinsic) the gather would only add cost.
+            // The float→bool predicates have their own SIMD kernel (the generic gate is
+            // same-dtype-only and would reject them) — same tile-gather flow, the
+            // contiguous predicate kernel runs over each gathered tile.
             var key = new UnaryKernelKey(inputType, outputType, op, IsContiguous: true);
-            if (!DirectILKernelGenerator.CanUseUnarySimd(key))
-                return null;
-
-            UnaryKernel kernel;
-            try { kernel = DirectILKernelGenerator.GetUnaryKernel(key); }
-            catch (NotSupportedException) { return null; }
+            UnaryKernel kernel = outputType == NPTypeCode.Boolean
+                ? DirectILKernelGenerator.GetPredicateContiguousKernel(op, inputType)
+                : null;
             if (kernel == null)
-                return null;
+            {
+                if (!DirectILKernelGenerator.CanUseUnarySimd(key))
+                    return null;
+
+                try { kernel = DirectILKernelGenerator.GetUnaryKernel(key); }
+                catch (NotSupportedException) { return null; }
+                if (kernel == null)
+                    return null;
+            }
 
             long n = s.size;
             var result = new NDArray(outputType, new Shape(n), false);
