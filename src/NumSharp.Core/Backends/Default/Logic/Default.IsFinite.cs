@@ -27,10 +27,15 @@ namespace NumSharp.Backends
             // contract). The IL kernel handles:
             // - Float/Double: calls float.IsFinite/double.IsFinite
             // - All other types: returns true (integers are always finite)
+            //
+            // AsGeneric (NOT MakeGeneric): the engine result is a freshly-produced
+            // array we own, so we wrap its storage in place rather than aliasing it
+            // — the same cheap bool-return the sibling comparison ops use. See
+            // Default.IsNan.cs for the measured per-call saving.
             if (@out is null && where is null)
             {
                 using var result = ExecuteUnaryOp(a, UnaryOp.IsFinite, NPTypeCode.Boolean);
-                return result.MakeGeneric<bool>();
+                return result.AsGeneric<bool>();
             }
 
             // ufunc out=/where=: rides the shared unary Into-path with a
