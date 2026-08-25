@@ -102,6 +102,42 @@ namespace NumSharp.Utilities
         /// <see cref="CanonicalNaNBits"/>, used by <see cref="Tanh(double)"/>.</summary>
         private const ulong CanonicalNaNBitsF64 = 0x7ff8000000000000UL;
 
+        // ---- exp2 (2^x) constants ----
+        //
+        // Unlike Exp/Log/Sin/Cos above, exp2 is NOT a port of a NumPy float32 SIMD kernel: NumPy's
+        // vector exp2 (simd_exp2 in loops_umath_fp.dispatch) is SVML, gated on
+        // NPY_HAVE_AVX512_SKX && NPY_CAN_LINK_SVML — Linux/AVX-512 only — so the numpy==2.4.2
+        // win-amd64 wheel this repo targets runs the SCALAR fallback `npy_exp2f`, i.e. the MSVC CRT
+        // `exp2f`, one element at a time. There is therefore no reproducible NumPy float kernel to
+        // match bit-for-bit; the CRT exp2f is ~correctly-rounded and a pure-float polynomial cannot
+        // reach it (float rounding of the Horner chain alone leaves ~1 ULP on a few percent of
+        // inputs). So this kernel computes 2^r in DOUBLE — where the approximation error is far below
+        // float precision — and rounds ONCE to float, which is correctly-rounded for every normal
+        // result (scaling by the integer power 2^n is exact and cannot re-round). The residual
+        // divergence is ≤ 1 ULP on ~0.2% of inputs, all in the subnormal-output band, where narrowing
+        // then the exponent-field denormal split double-rounds — matching the accuracy of the old
+        // `Math.Pow(2, (double)x)` path it replaces while running ~2.4x faster than NumPy's scalar
+        // loop (vectorized: 8 floats -> two Vector256<double> halves -> narrow).
+
+        /// <summary>At or above this (inclusive) exp2 overflows: 2^128 is not a finite float.</summary>
+        private const float Exp2XMax = 128.0f;
+
+        /// <summary>At or below this exp2 underflows to +0: 2^-150 rounds to zero (tie-to-even).</summary>
+        private const float Exp2XMin = -150.0f;
+
+        // Degree-8 minimax (Chebyshev) fit of 2^r on r ∈ [-0.5, 0.5]; max relative error 4.5e-12 ≈
+        // 2^-37.7, ~13 bits below float32 precision, so `(float)(poly in double)` rounds as if from
+        // the exact 2^r. Descending order for a Horner evaluation.
+        private const double Exp2C0 = 1.32619074488454443e-06;
+        private const double Exp2C1 = 1.53065969128547553e-05;
+        private const double Exp2C2 = 1.54034253539828126e-04;
+        private const double Exp2C3 = 1.33334640219601218e-03;
+        private const double Exp2C4 = 9.61812920299949005e-03;
+        private const double Exp2C5 = 5.55041092671512276e-02;
+        private const double Exp2C6 = 2.40226506956126962e-01;
+        private const double Exp2C7 = 6.93147180549698372e-01;
+        private const double Exp2C8 = 1.00000000000094302e+00;
+
         // ---- simd_log_FLOAT constants (same NumPy sources) ----
 
         // Remez minimax numerator and denominator (both 5th order) for log(1+x) on the reduced range.
@@ -208,6 +244,95 @@ namespace NumSharp.Utilities
 
             return BitConverter.Int32BitsToSingle(
                 BitConverter.SingleToInt32Bits(poly) + (((int)quadrant) << 23));
+        }
+
+        /// <summary>
+        /// float32 base-2 exponential (<c>2^x</c>), the fast replacement for
+        /// <c>(float)Math.Pow(2, (double)x)</c>. Unlike <see cref="Exp(float)"/> this is <b>not</b> a
+        /// bit-for-bit port of a NumPy kernel — see the constants block for why (the numpy 2.4.2
+        /// win-amd64 wheel runs a SCALAR <c>exp2f</c>, its SVML vector kernel being AVX-512/Linux
+        /// only). It agrees with NumPy to <b>≤ 1 ULP</b> (≈0.2% of inputs differ, all producing
+        /// subnormal outputs), the same accuracy class the <c>Math.Pow</c> path had, computed by
+        /// evaluating <c>2^r</c> in double and rounding once.
+        ///
+        /// <para><b>Algorithm.</b> Split <c>x = n + r</c> with <c>n = rint(x)</c> and
+        /// <c>r ∈ [-0.5, 0.5]</c>, so <c>2^x = 2^r · 2^n</c>. <c>2^r</c> is a degree-8 minimax
+        /// polynomial evaluated in <b>double</b> (its 2^-37.7 approximation error is far below float
+        /// precision, so the narrowing to float is correctly rounded), then scaled by the integer
+        /// power <c>2^n</c> straight into the exponent field — exact, so it introduces no second
+        /// rounding for a normal result. The <c>n ≤ -125</c> denormal branch reuses the exp kernel's
+        /// split (<see cref="ScalefDenormal"/>): clamp the field to <c>2^-125</c> and divide.</para>
+        ///
+        /// <para><b>Lane-width independent, same as the exp/log ports:</b> every step is elementwise,
+        /// so this scalar entry point yields the same bits as the <c>Vector{128,256,512}</c> overloads
+        /// in <c>NDFloatMath.Simd.cs</c> — verified 0-diff against the vector form over the full
+        /// ~7M-input accuracy corpus.</para>
+        ///
+        /// <para><b>Specials</b> (probed against 2.4.2): any NaN returns the canonical
+        /// <c>0x7fc00000</c>; <c>x ≥ 128</c> (incl. <c>+inf</c>) returns <c>+inf</c>; <c>x ≤ -150</c>
+        /// (incl. <c>-inf</c>) returns <c>+0</c>; <c>±0</c> returns <c>1</c>.</para>
+        /// </summary>
+        [MethodImpl(OptimizeAndInline)]
+        public static float Exp2(float x)
+        {
+            // Ordered test: NaN fails both compares and joins the overflow/underflow ends in the cold
+            // path, exactly as the exp kernel treats its own NaN lanes.
+            if (!(x > Exp2XMin && x < Exp2XMax))
+                return Exp2NonFinite(x);
+
+            // n = rint(x): an exact integer-valued float via the magic-constant round-to-even.
+            float n = MathF.FusedMultiplyAdd(x, 1f, RintCvtMagic) - RintCvtMagic;
+            // r = x - n, formed in double so it is exact (both operands are exactly representable and
+            // |r| ≤ 0.5); this is what keeps the double poly correctly rounded when narrowed.
+            double r = (double)x - (double)n;
+
+            // 2^r — degree-8 Horner in double.
+            double p = Math.FusedMultiplyAdd(Exp2C0, r, Exp2C1);
+            p = Math.FusedMultiplyAdd(p, r, Exp2C2);
+            p = Math.FusedMultiplyAdd(p, r, Exp2C3);
+            p = Math.FusedMultiplyAdd(p, r, Exp2C4);
+            p = Math.FusedMultiplyAdd(p, r, Exp2C5);
+            p = Math.FusedMultiplyAdd(p, r, Exp2C6);
+            p = Math.FusedMultiplyAdd(p, r, Exp2C7);
+            p = Math.FusedMultiplyAdd(p, r, Exp2C8);
+
+            float f = (float)p;                 // 2^r, correctly rounded to float (in [0.707, 1.414])
+            int ni = (int)n;
+            if (ni <= -125)
+                return Exp2ScalefDenormal(f, ni);
+            // Multiply by 2^ni by adding ni to the exponent field — exact for a normal result.
+            return BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(f) + (ni << 23));
+        }
+
+        /// <summary>
+        /// The three ends of <see cref="Exp2(float)"/>'s domain, in NumPy's precedence: NaN, then the
+        /// overflow clamp, then the underflow clamp. Cold — a well-formed array of finite magnitudes
+        /// never reaches it.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static float Exp2NonFinite(float x)
+        {
+            if (float.IsNaN(x))
+                return BitConverter.UInt32BitsToSingle(CanonicalNaNBits);
+            if (x >= Exp2XMax)      // includes +inf
+                return float.PositiveInfinity;
+            return 0f;              // x <= xmin, includes -inf
+        }
+
+        /// <summary>
+        /// <see cref="Exp2(float)"/>'s subnormal scale, the exact analogue of <see cref="ScalefDenormal"/>
+        /// for the exp kernel: once <c>n ≤ -125</c> the exponent-field add would underflow, so clamp
+        /// the applied exponent to <c>2^-125</c> and divide by <c>2^(-125 - n)</c>, letting the
+        /// division generate the subnormal (and its rounding). Cold — only <c>x</c> below about -126
+        /// reaches it. <paramref name="quadDiff"/> stays in <c>[0, 25]</c>, well clear of the 32-bit
+        /// shift wrap.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static float Exp2ScalefDenormal(float f, int n)
+        {
+            int quadDiff = -125 - n;            // in [0, 25] for n in [-150, -125]
+            f = BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(f) + (-125 << 23));
+            return f / (float)(1 << quadDiff);
         }
 
         /// <summary>

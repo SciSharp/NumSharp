@@ -264,7 +264,8 @@ namespace NumSharp.Backends.Kernels
             // exp is float32-only here and needs hardware FMA (the rounding of the fused
             // multiply-add is part of NumPy's answer, not an optimization) — see
             // ExpVectorSimdAvailable. Double keeps the scalar Math.Exp loop.
-            if (key.Op == UnaryOp.Exp || key.Op == UnaryOp.Log ||
+            if (key.Op == UnaryOp.Exp || key.Op == UnaryOp.Exp2 ||
+                key.Op == UnaryOp.Log ||
                 key.Op == UnaryOp.Sin || key.Op == UnaryOp.Cos ||
                 key.Op == UnaryOp.Tanh)
                 return NumPyFloatKernelSimdAvailable(key.Op, key.InputType);
@@ -289,6 +290,7 @@ namespace NumSharp.Backends.Kernels
             if (VectorBits == 0) return false;
             if (t != NPTypeCode.Single) return false;
             var m = op == UnaryOp.Exp ? CachedMethods.SingleExpVector
+                  : op == UnaryOp.Exp2 ? CachedMethods.SingleExp2Vector
                   : op == UnaryOp.Log ? CachedMethods.SingleLogVector
                   : op == UnaryOp.Sin ? CachedMethods.SingleSinVector
                   : op == UnaryOp.Cos ? CachedMethods.SingleCosVector

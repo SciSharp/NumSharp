@@ -75,6 +75,9 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.Exp when clrType == typeof(float):
                     il.EmitCall(OpCodes.Call, CachedMethods.SingleExpVector, null);
                     return;
+                case UnaryOp.Exp2 when clrType == typeof(float):
+                    il.EmitCall(OpCodes.Call, CachedMethods.SingleExp2Vector, null);
+                    return;
                 case UnaryOp.Log when clrType == typeof(float):
                     il.EmitCall(OpCodes.Call, CachedMethods.SingleLogVector, null);
                     return;

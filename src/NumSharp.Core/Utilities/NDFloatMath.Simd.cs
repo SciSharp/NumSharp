@@ -204,6 +204,170 @@ namespace NumSharp.Utilities
         }
 
 
+        // ---- exp2 (2^x): 2^r evaluated in double, then scaled by the integer power 2^n in float. See
+        // NDFloatMath.Exp2(float) for the algorithm and why this is not a NumPy-kernel port. Each float
+        // vector is widened to two double halves (WidenLower/WidenUpper), the poly runs per half, and
+        // Narrow packs the two 2^r results back — so lane i is bit-identical to Exp2(x[i]).
+
+        /// <summary>float32 <c>2^x</c>, 4 lanes at a time. See <see cref="Exp2(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        public static Vector128<float> Exp2(Vector128<float> x)
+        {
+            var zero = Vector128<float>.Zero;
+            var nan = ~Vector128.Equals(x, x);
+            var ovf = Vector128.GreaterThanOrEqual(x, Vector128.Create(Exp2XMax));
+            var unf = Vector128.LessThanOrEqual(x, Vector128.Create(Exp2XMin));
+            var xb = Vector128.ConditionalSelect(nan | ovf | unf, zero, x);
+
+            var magic = Vector128.Create(RintCvtMagic);
+            var n = MulAdd(xb, Vector128.Create(1f), magic) - magic;     // rint(x)
+
+            var f = Vector128.Narrow(
+                Exp2Poly(Vector128.WidenLower(xb) - Vector128.WidenLower(n)),
+                Exp2Poly(Vector128.WidenUpper(xb) - Vector128.WidenUpper(n)));   // 2^r
+
+            var minN = Vector128.Create(-125f);
+            var denorm = Vector128.LessThanOrEqual(n, minN);
+            Vector128<float> res;
+            if (Vector128.ExtractMostSignificantBits(denorm) != 0)
+            {
+                var quadDiff = Vector128.ConditionalSelect(denorm, zero - (n - minN), zero);
+                var scaled = (f.AsInt32() + Vector128.ShiftLeft(
+                    Vector128.ConvertToInt32(Vector128.Max(n, minN)), 23)).AsSingle();
+                var twoPow = Vector128.ShiftLeft(
+                    Vector128.ConvertToInt32(quadDiff) + Vector128.Create(127), 23).AsSingle();
+                res = scaled / twoPow;    // non-denormal lanes divide by exactly 1.0 — an identity
+            }
+            else
+            {
+                res = (f.AsInt32() + Vector128.ShiftLeft(Vector128.ConvertToInt32(n), 23)).AsSingle();
+            }
+
+            res = Vector128.ConditionalSelect(nan, Vector128.Create(CanonicalNaN), res);
+            res = Vector128.ConditionalSelect(ovf, Vector128.Create(float.PositiveInfinity), res);
+            return Vector128.ConditionalSelect(unf, zero, res);
+        }
+
+        /// <summary>float32 <c>2^x</c>, 8 lanes at a time. See <see cref="Exp2(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        public static Vector256<float> Exp2(Vector256<float> x)
+        {
+            var zero = Vector256<float>.Zero;
+            var nan = ~Vector256.Equals(x, x);
+            var ovf = Vector256.GreaterThanOrEqual(x, Vector256.Create(Exp2XMax));
+            var unf = Vector256.LessThanOrEqual(x, Vector256.Create(Exp2XMin));
+            var xb = Vector256.ConditionalSelect(nan | ovf | unf, zero, x);
+
+            var magic = Vector256.Create(RintCvtMagic);
+            var n = MulAdd(xb, Vector256.Create(1f), magic) - magic;
+
+            var f = Vector256.Narrow(
+                Exp2Poly(Vector256.WidenLower(xb) - Vector256.WidenLower(n)),
+                Exp2Poly(Vector256.WidenUpper(xb) - Vector256.WidenUpper(n)));
+
+            var minN = Vector256.Create(-125f);
+            var denorm = Vector256.LessThanOrEqual(n, minN);
+            Vector256<float> res;
+            if (Vector256.ExtractMostSignificantBits(denorm) != 0)
+            {
+                var quadDiff = Vector256.ConditionalSelect(denorm, zero - (n - minN), zero);
+                var scaled = (f.AsInt32() + Vector256.ShiftLeft(
+                    Vector256.ConvertToInt32(Vector256.Max(n, minN)), 23)).AsSingle();
+                var twoPow = Vector256.ShiftLeft(
+                    Vector256.ConvertToInt32(quadDiff) + Vector256.Create(127), 23).AsSingle();
+                res = scaled / twoPow;
+            }
+            else
+            {
+                res = (f.AsInt32() + Vector256.ShiftLeft(Vector256.ConvertToInt32(n), 23)).AsSingle();
+            }
+
+            res = Vector256.ConditionalSelect(nan, Vector256.Create(CanonicalNaN), res);
+            res = Vector256.ConditionalSelect(ovf, Vector256.Create(float.PositiveInfinity), res);
+            return Vector256.ConditionalSelect(unf, zero, res);
+        }
+
+        /// <summary>float32 <c>2^x</c>, 16 lanes at a time. See <see cref="Exp2(float)"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        public static Vector512<float> Exp2(Vector512<float> x)
+        {
+            var zero = Vector512<float>.Zero;
+            var nan = ~Vector512.Equals(x, x);
+            var ovf = Vector512.GreaterThanOrEqual(x, Vector512.Create(Exp2XMax));
+            var unf = Vector512.LessThanOrEqual(x, Vector512.Create(Exp2XMin));
+            var xb = Vector512.ConditionalSelect(nan | ovf | unf, zero, x);
+
+            var magic = Vector512.Create(RintCvtMagic);
+            var n = MulAdd(xb, Vector512.Create(1f), magic) - magic;
+
+            var f = Vector512.Narrow(
+                Exp2Poly(Vector512.WidenLower(xb) - Vector512.WidenLower(n)),
+                Exp2Poly(Vector512.WidenUpper(xb) - Vector512.WidenUpper(n)));
+
+            var minN = Vector512.Create(-125f);
+            var denorm = Vector512.LessThanOrEqual(n, minN);
+            Vector512<float> res;
+            if (Vector512.ExtractMostSignificantBits(denorm) != 0)
+            {
+                var quadDiff = Vector512.ConditionalSelect(denorm, zero - (n - minN), zero);
+                var scaled = (f.AsInt32() + Vector512.ShiftLeft(
+                    Vector512.ConvertToInt32(Vector512.Max(n, minN)), 23)).AsSingle();
+                var twoPow = Vector512.ShiftLeft(
+                    Vector512.ConvertToInt32(quadDiff) + Vector512.Create(127), 23).AsSingle();
+                res = scaled / twoPow;
+            }
+            else
+            {
+                res = (f.AsInt32() + Vector512.ShiftLeft(Vector512.ConvertToInt32(n), 23)).AsSingle();
+            }
+
+            res = Vector512.ConditionalSelect(nan, Vector512.Create(CanonicalNaN), res);
+            res = Vector512.ConditionalSelect(ovf, Vector512.Create(float.PositiveInfinity), res);
+            return Vector512.ConditionalSelect(unf, zero, res);
+        }
+
+        // Degree-8 Horner for 2^r in double (r in [-0.5, 0.5]), per double width. Same coefficients
+        // as the scalar Exp2, so each lane matches NDFloatMath.Exp2(x[i]) bit-for-bit.
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        private static Vector128<double> Exp2Poly(Vector128<double> r)
+        {
+            var p = MulAdd(Vector128.Create(Exp2C0), r, Vector128.Create(Exp2C1));
+            p = MulAdd(p, r, Vector128.Create(Exp2C2));
+            p = MulAdd(p, r, Vector128.Create(Exp2C3));
+            p = MulAdd(p, r, Vector128.Create(Exp2C4));
+            p = MulAdd(p, r, Vector128.Create(Exp2C5));
+            p = MulAdd(p, r, Vector128.Create(Exp2C6));
+            p = MulAdd(p, r, Vector128.Create(Exp2C7));
+            return MulAdd(p, r, Vector128.Create(Exp2C8));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        private static Vector256<double> Exp2Poly(Vector256<double> r)
+        {
+            var p = MulAdd(Vector256.Create(Exp2C0), r, Vector256.Create(Exp2C1));
+            p = MulAdd(p, r, Vector256.Create(Exp2C2));
+            p = MulAdd(p, r, Vector256.Create(Exp2C3));
+            p = MulAdd(p, r, Vector256.Create(Exp2C4));
+            p = MulAdd(p, r, Vector256.Create(Exp2C5));
+            p = MulAdd(p, r, Vector256.Create(Exp2C6));
+            p = MulAdd(p, r, Vector256.Create(Exp2C7));
+            return MulAdd(p, r, Vector256.Create(Exp2C8));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+        private static Vector512<double> Exp2Poly(Vector512<double> r)
+        {
+            var p = MulAdd(Vector512.Create(Exp2C0), r, Vector512.Create(Exp2C1));
+            p = MulAdd(p, r, Vector512.Create(Exp2C2));
+            p = MulAdd(p, r, Vector512.Create(Exp2C3));
+            p = MulAdd(p, r, Vector512.Create(Exp2C4));
+            p = MulAdd(p, r, Vector512.Create(Exp2C5));
+            p = MulAdd(p, r, Vector512.Create(Exp2C6));
+            p = MulAdd(p, r, Vector512.Create(Exp2C7));
+            return MulAdd(p, r, Vector512.Create(Exp2C8));
+        }
+
+
         /// <summary>NumPy 2.4.2's float32 natural logarithm, 4 lanes at a time. See <see cref="Log(float)"/>.</summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
         public static Vector128<float> Log(Vector128<float> x)
@@ -845,6 +1009,49 @@ namespace NumSharp.Utilities
             for (int i = 0; i < r.Length; i++)
                 r[i] = MathF.FusedMultiplyAdd(a[i], b[i], c[i]);
             return Vector512.Create<float>(r);
+        }
+
+        // Double-precision FMA per width, for the Exp2 poly (2^r is evaluated in double). Same
+        // shape as the float overloads above — hardware where present, a scalar fallback otherwise so
+        // every width stays callable/testable off the accelerated path.
+
+        [MethodImpl(OptimizeAndInline)]
+        private static Vector128<double> MulAdd(Vector128<double> a, Vector128<double> b, Vector128<double> c)
+            => Fma.IsSupported ? Fma.MultiplyAdd(a, b, c) : SoftwareMulAdd(a, b, c);
+
+        [MethodImpl(OptimizeAndInline)]
+        private static Vector256<double> MulAdd(Vector256<double> a, Vector256<double> b, Vector256<double> c)
+            => Fma.IsSupported ? Fma.MultiplyAdd(a, b, c) : SoftwareMulAdd(a, b, c);
+
+        [MethodImpl(OptimizeAndInline)]
+        private static Vector512<double> MulAdd(Vector512<double> a, Vector512<double> b, Vector512<double> c)
+            => Avx512F.IsSupported ? Avx512F.FusedMultiplyAdd(a, b, c) : SoftwareMulAdd(a, b, c);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static Vector128<double> SoftwareMulAdd(Vector128<double> a, Vector128<double> b, Vector128<double> c)
+        {
+            Span<double> r = stackalloc double[Vector128<double>.Count];
+            for (int i = 0; i < r.Length; i++)
+                r[i] = Math.FusedMultiplyAdd(a[i], b[i], c[i]);
+            return Vector128.Create<double>(r);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static Vector256<double> SoftwareMulAdd(Vector256<double> a, Vector256<double> b, Vector256<double> c)
+        {
+            Span<double> r = stackalloc double[Vector256<double>.Count];
+            for (int i = 0; i < r.Length; i++)
+                r[i] = Math.FusedMultiplyAdd(a[i], b[i], c[i]);
+            return Vector256.Create<double>(r);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static Vector512<double> SoftwareMulAdd(Vector512<double> a, Vector512<double> b, Vector512<double> c)
+        {
+            Span<double> r = stackalloc double[Vector512<double>.Count];
+            for (int i = 0; i < r.Length; i++)
+                r[i] = Math.FusedMultiplyAdd(a[i], b[i], c[i]);
+            return Vector512.Create<double>(r);
         }
     }
 }

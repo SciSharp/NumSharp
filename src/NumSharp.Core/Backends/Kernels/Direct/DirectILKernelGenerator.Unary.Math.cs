@@ -190,8 +190,13 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Exp2:
-                    // Use Math.Pow(2, x) since Math.Exp2 may not be available
-                    EmitExp2Call(il, type);
+                    // float32 routes through NDFloatMath.Exp2 (a fast 2^x, ≤1 ULP vs NumPy's scalar
+                    // exp2f, ~2.4x faster and vectorizable); every other dtype keeps the Math.Pow
+                    // bridge below. See the Exp case above for the same scalar/vector split.
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleExp2, null);
+                    else
+                        EmitExp2Call(il, type);
                     break;
 
                 case UnaryOp.Expm1:

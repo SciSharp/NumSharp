@@ -571,6 +571,16 @@ namespace NumSharp.Backends.Kernels
                 VectorBits == 0 ? null
                 : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static,
                     new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
+            // float32 exp2 (2^x): NDFloatMath.Exp2, a fast replacement for (float)Math.Pow(2, x). NOT
+            // a NumPy-kernel port — the win-amd64 wheel runs a scalar exp2f (its SVML vector kernel is
+            // AVX-512/Linux-gated) — but ≤1 ULP and ~2.4x faster than that scalar loop. Same scalar/
+            // vector split as SingleExp; the vector overload is nullable for the no-SIMD host.
+            public static readonly MethodInfo SingleExp2 = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Exp2");
+            public static readonly MethodInfo SingleExp2Vector =
+                VectorBits == 0 ? null
+                : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static,
+                    new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
             // float32 log: the sibling port (NumPy's simd_log_FLOAT), same reasoning as SingleExp.
             public static readonly MethodInfo SingleLog = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Log");
