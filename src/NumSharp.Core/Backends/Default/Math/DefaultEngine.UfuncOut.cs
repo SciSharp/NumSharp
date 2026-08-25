@@ -347,8 +347,7 @@ namespace NumSharp.Backends
             // Kernel bodies — exactly the Tier-3B route's (shared cache).
             bool sameDtype = lhsType == rhsType && lhsType == resultType;
             bool simdViable = sameDtype
-                              && DirectILKernelGenerator.CanUseSimd(resultType)
-                              && DirectILKernelGenerator.CanUseSimdForOp(op);
+                              && DirectILKernelGenerator.CanUseSimdBinary(op, resultType);
 
             Action<ILGenerator> scalarBody;
             if (sameDtype)

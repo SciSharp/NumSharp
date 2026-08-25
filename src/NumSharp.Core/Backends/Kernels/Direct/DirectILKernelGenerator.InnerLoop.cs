@@ -417,7 +417,11 @@ namespace NumSharp.Backends.Kernels
         {
             if (VectorBits == 0) return false;
             NPTypeCode first = types[0];
-            if (!CanUseSimd(first)) return false;
+            // Boolean is admitted here even though CanUseSimd(Boolean) is false: bool loads/stores
+            // ride the byte lanes (GetSimdLaneType), and a bool vectorBody only ever EXISTS when
+            // the engine's op-aware gate (CanUseSimdBinary / CanUseUnarySimd) already approved the
+            // (op, bool) pairing — this shell activates a supplied body, it never invents one.
+            if (!CanUseSimd(first) && first != NPTypeCode.Boolean) return false;
             for (int i = 1; i < types.Length; i++)
                 if (types[i] != first) return false;
             return true;
@@ -579,7 +583,9 @@ namespace NumSharp.Backends.Kernels
             long unrollStep = vectorCount * 4;
 
             var clrType = GetClrType(dtype);
-            var vecType = VectorMethodCache.V(VectorBits, clrType);
+            // Vector LOCALS take the lane type (Boolean -> byte; Vector256<bool> is not a type);
+            // the scalar-tail local keeps the CLR type.
+            var vecType = VectorMethodCache.V(VectorBits, GetSimdLaneType(dtype));
 
             LocalBuilder scalarPtr = ptrLocals[scalarSide];
             LocalBuilder contigPtr = ptrLocals[1 - scalarSide];

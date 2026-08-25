@@ -363,8 +363,7 @@ namespace NumSharp.Backends
             // scalar-only via CanUseSimdForOp.
             bool sameDtype = lhsType == rhsType && lhsType == resultType;
             bool simdViable = sameDtype
-                              && DirectILKernelGenerator.CanUseSimd(resultType)
-                              && DirectILKernelGenerator.CanUseSimdForOp(op);
+                              && DirectILKernelGenerator.CanUseSimdBinary(op, resultType);
 
             // NOTE (Wave 4, measured): the buffered-cast route (NumPy's ufunc
             // config — cast inputs to the computation dtype in 8192-element

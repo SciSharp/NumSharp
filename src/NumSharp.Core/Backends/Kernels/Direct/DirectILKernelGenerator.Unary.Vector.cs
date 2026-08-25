@@ -46,6 +46,25 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.BitwiseNot:
                     il.EmitCall(OpCodes.Call, VectorMethodCache.OnesComplement(VectorBits, clrType), null);
                     return;
+                // Boolean logical not over byte lanes: min(v,1) ^ 1. min normalizes any nonzero
+                // byte to 1 (NumPy's byte_to_true), xor 1 flips it — output always canonical 0/1,
+                // identical to the scalar `v == 0` tail (EmitUnaryScalarOperation) on every byte
+                // value. Gated to Boolean input by CanUseUnarySimd.
+                case UnaryOp.LogicalNot:
+                {
+                    var byteOnes = VectorMethodCache.CreateBroadcast(VectorBits, typeof(byte));
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.EmitCall(OpCodes.Call, byteOnes, null);                       // [v, 1]
+                    var min = VectorMethodCache.BinaryX86(VectorBits, "Min", typeof(byte))
+                              ?? VectorMethodCache.Generic(VectorBits, "Min", typeof(byte), paramCount: 2);
+                    il.EmitCall(OpCodes.Call, min, null);                            // [n]
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.EmitCall(OpCodes.Call, byteOnes, null);                       // [n, 1]
+                    var xor = VectorMethodCache.BinaryX86(VectorBits, "Xor", typeof(byte))
+                              ?? VectorMethodCache.Generic(VectorBits, "Xor", typeof(byte), paramCount: 2);
+                    il.EmitCall(OpCodes.Call, xor, null);                            // [r]
+                    return;
+                }
                 case UnaryOp.Negate when clrType == typeof(double) || clrType == typeof(float):
                     EmitVectorSignFlip(il, clrType);
                     return;

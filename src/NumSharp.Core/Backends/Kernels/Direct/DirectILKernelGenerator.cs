@@ -1333,11 +1333,33 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            // Special handling for boolean
-            if (resultType == NPTypeCode.Boolean)
+            // Boolean and/or/xor use NumPy's LOGICAL loops (loops.h.src aliases the bool bitwise
+            // ufuncs onto logical_and / logical_or / not_equal): any nonzero byte is True, output
+            // always canonical 0/1. Must mirror EmitBoolVectorLogicalOp exactly, or the SIMD body
+            // and the scalar tail of one array would disagree on a non-canonical (frombuffer) bool.
+            // Stack in: [a(u1-as-i4), b(u1-as-i4)].
+            if (resultType == NPTypeCode.Boolean &&
+                (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor))
             {
-                // For bool, only meaningful ops are probably logical, but we'll support arithmetic
-                // Treat as byte arithmetic
+                if (op == BinaryOp.BitwiseOr)
+                {
+                    // (a | b) != 0
+                    il.Emit(OpCodes.Or);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Cgt_Un);
+                    return;
+                }
+
+                // (a != 0) and/xor (b != 0)
+                var locB = il.DeclareLocal(typeof(int));
+                il.Emit(OpCodes.Stloc, locB);       // [a]
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Cgt_Un);            // [na]
+                il.Emit(OpCodes.Ldloc, locB);
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Cgt_Un);            // [na, nb]
+                il.Emit(op == BinaryOp.BitwiseAnd ? OpCodes.And : OpCodes.Xor);
+                return;
             }
 
             var opcode = op switch
@@ -1812,6 +1834,17 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// SIMD lane type for NPTypeCode. Boolean maps to <c>byte</c> — there is no
+        /// <c>Vector{N}&lt;bool&gt;</c> in the BCL, and a NumSharp bool is stored as one byte, so
+        /// bool kernels ride the byte lanes (NumPy's own BOOL loops do the same: its
+        /// <c>loops_logical</c> SIMD operates on <c>u8</c> vectors). Every other type is its CLR
+        /// type. Only the vector load/store/create helpers consult this; scalar loads keep
+        /// <see cref="GetClrType"/>.
+        /// </summary>
+        internal static Type GetSimdLaneType(NPTypeCode type)
+            => type == NPTypeCode.Boolean ? typeof(byte) : GetClrType(type);
+
+        /// <summary>
         /// Emit Vector.Load for NPTypeCode (adapts to V128/V256/V512).
         /// Prefers <c>Avx.LoadVector256</c> / <c>Sse.LoadVector128</c> / <c>Avx512F.LoadVector512</c>
         /// when running on x86 — the JIT generates ~1.8x faster code than the cross-platform
@@ -1819,7 +1852,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static void EmitVectorLoad(ILGenerator il, NPTypeCode type)
         {
-            var clrType = GetClrType(type);
+            var clrType = GetSimdLaneType(type);
             var x86 = VectorMethodCache.LoadX86(VectorBits, clrType);
             if (x86 != null)
             {
@@ -1832,9 +1865,11 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Emit Vector.Create for NPTypeCode (broadcasts scalar to all vector elements).
         /// Stack must have scalar value on top; result is Vector on stack.
+        /// (Boolean broadcasts through the byte lanes — the bool scalar sits on the IL stack as
+        /// its 0/1 byte value, which is exactly the <c>Vector.Create(byte)</c> argument.)
         /// </summary>
         internal static void EmitVectorCreate(ILGenerator il, NPTypeCode type)
-            => il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, GetClrType(type)), null);
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, GetSimdLaneType(type)), null);
 
         /// <summary>
         /// Emit Vector.Store for NPTypeCode (adapts to V128/V256/V512).
@@ -1844,7 +1879,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static void EmitVectorStore(ILGenerator il, NPTypeCode type)
         {
-            var clrType = GetClrType(type);
+            var clrType = GetSimdLaneType(type);
             var x86 = VectorMethodCache.StoreX86(VectorBits, clrType);
             if (x86 != null)
             {
@@ -2039,6 +2074,19 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static void EmitVectorOperation(ILGenerator il, BinaryOp op, NPTypeCode type)
         {
+            // Boolean rides the byte lanes with NumPy's LOGICAL semantics (loops.h.src aliases
+            // BOOL_bitwise_and -> BOOL_logical_and, _or -> logical_or, _xor -> not_equal): any
+            // nonzero byte counts as True and the output is always canonical 0/1 — a plain
+            // bytewise AND would call 0x01 & 0x80 False where NumPy says True. Normalization is
+            // one unsigned-byte Min against 1 (min(v,1): 0 -> 0, nonzero -> 1), NumPy's own
+            // byte_to_true reshaped for pminub.
+            if (type == NPTypeCode.Boolean &&
+                (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor))
+            {
+                EmitBoolVectorLogicalOp(il, op);
+                return;
+            }
+
             var clrType = GetClrType(type);
 
             if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
@@ -2101,6 +2149,61 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"Operation {op} not supported for SIMD")
             };
             il.EmitCall(OpCodes.Call, VectorMethodCache.Operator(VectorBits, clrType, operatorName), null);
+        }
+
+        /// <summary>
+        /// Boolean and/or/xor over byte lanes, NumPy-normalized (see <see cref="EmitVectorOperation"/>).
+        /// Stack: [a(V&lt;byte&gt;), b(V&lt;byte&gt;)] -> [result(V&lt;byte&gt;)], every result lane 0 or 1.
+        ///   and: min(min(a,b), 1)      — min(a,b) nonzero iff both nonzero (NumPy simd_logical_and_u8)
+        ///   or : min(a|b, 1)           — a|b nonzero iff either nonzero (NumPy simd_logical_or_u8)
+        ///   xor: min(a,1) ^ min(b,1)   — normalize each, then xor (NumPy BOOL_not_equal's cmpeq+xor)
+        /// </summary>
+        private static void EmitBoolVectorLogicalOp(ILGenerator il, BinaryOp op)
+        {
+            var laneType = typeof(byte);
+
+            void PushOnes()
+            {
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, laneType), null);
+            }
+
+            switch (op)
+            {
+                case BinaryOp.BitwiseAnd:
+                    EmitRawVectorMinOrMax(il, "Min", laneType);   // [min(a,b)]
+                    PushOnes();                                   // [min, 1]
+                    EmitRawVectorMinOrMax(il, "Min", laneType);   // [r]
+                    return;
+
+                case BinaryOp.BitwiseOr:
+                {
+                    var or = VectorMethodCache.BinaryX86(VectorBits, "BitwiseOr", laneType)
+                             ?? VectorMethodCache.Generic(VectorBits, "BitwiseOr", laneType, paramCount: 2);
+                    il.EmitCall(OpCodes.Call, or, null);          // [a|b]
+                    PushOnes();                                   // [a|b, 1]
+                    EmitRawVectorMinOrMax(il, "Min", laneType);   // [r]
+                    return;
+                }
+
+                case BinaryOp.BitwiseXor:
+                {
+                    var xor = VectorMethodCache.BinaryX86(VectorBits, "Xor", laneType)
+                              ?? VectorMethodCache.Generic(VectorBits, "Xor", laneType, paramCount: 2);
+                    var locNb = il.DeclareLocal(VectorMethodCache.V(VectorBits, laneType));
+                    PushOnes();                                   // [a, b, 1]
+                    EmitRawVectorMinOrMax(il, "Min", laneType);   // [a, nb]
+                    il.Emit(OpCodes.Stloc, locNb);                // [a]
+                    PushOnes();                                   // [a, 1]
+                    EmitRawVectorMinOrMax(il, "Min", laneType);   // [na]
+                    il.Emit(OpCodes.Ldloc, locNb);                // [na, nb]
+                    il.EmitCall(OpCodes.Call, xor, null);         // [r]
+                    return;
+                }
+
+                default:
+                    throw new NotSupportedException($"Operation {op} not supported for Boolean SIMD");
+            }
         }
 
         #endregion

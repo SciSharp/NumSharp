@@ -157,7 +157,7 @@ namespace NumSharp.Backends.Kernels
 
             // Can only use SIMD for same-type, supported types, and supported operations
             // Mod doesn't have SIMD support (no Vector256 modulo operator)
-            bool canSimd = CanUseSimd(key.ResultType) && key.IsSameType && CanUseSimdForOp(key.Op);
+            bool canSimd = key.IsSameType && CanUseSimdBinary(key.Op, key.ResultType);
 
             if (canSimd)
             {
@@ -190,6 +190,24 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Combined (op, loop-dtype) SIMD gate for the binary kernels. On top of
+        /// <see cref="CanUseSimd"/> × <see cref="CanUseSimdForOp"/>, Boolean is admitted for the
+        /// bitwise/logical family only: bool has no <c>Vector&lt;bool&gt;</c> (so the general
+        /// <see cref="CanUseSimd"/> stays false — bool arithmetic like Add would produce non-bool
+        /// lane values), but and/or/xor ride the byte lanes with NumPy's normalized logical
+        /// semantics via <see cref="EmitVectorOperation"/>'s Boolean branch.
+        /// </summary>
+        internal static bool CanUseSimdBinary(BinaryOp op, NPTypeCode type)
+        {
+            if (!CanUseSimdForOp(op))
+                return false;
+            if (CanUseSimd(type))
+                return true;
+            return type == NPTypeCode.Boolean && VectorBits != 0 &&
+                   (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor);
+        }
+
+        /// <summary>
         /// Generate a SimdScalarRight kernel (right operand is scalar).
         /// Uses SIMD when LHS type equals result type (no per-element conversion needed).
         /// </summary>
@@ -217,8 +235,7 @@ namespace NumSharp.Backends.Kernels
             // Use SIMD when: LHS type == Result type (no per-element conversion needed),
             // result type supports SIMD, and operation has SIMD support
             bool canUseSimd = key.LhsType == key.ResultType &&
-                              CanUseSimd(key.ResultType) &&
-                              CanUseSimdForOp(key.Op);
+                              CanUseSimdBinary(key.Op, key.ResultType);
 
             if (canUseSimd)
             {
@@ -261,8 +278,7 @@ namespace NumSharp.Backends.Kernels
             // Use SIMD when: RHS type == Result type (no per-element conversion needed),
             // result type supports SIMD, and operation has SIMD support
             bool canUseSimd = key.RhsType == key.ResultType &&
-                              CanUseSimd(key.ResultType) &&
-                              CanUseSimdForOp(key.Op);
+                              CanUseSimdBinary(key.Op, key.ResultType);
 
             if (canUseSimd)
             {
@@ -747,7 +763,8 @@ namespace NumSharp.Backends.Kernels
 
             long vectorCount = GetVectorCount(key.ResultType);
             var clrType = GetClrType(key.ResultType);
-            var vectorType = VectorMethodCache.V(VectorBits, clrType);
+            // Vector LOCALS take the lane type (Boolean -> byte; Vector256<bool> is not a type).
+            var vectorType = VectorMethodCache.V(VectorBits, GetSimdLaneType(key.ResultType));
 
             var locI = il.DeclareLocal(typeof(long));           // loop counter
             var locVectorEnd = il.DeclareLocal(typeof(long));   // totalSize - vectorCount
@@ -883,7 +900,8 @@ namespace NumSharp.Backends.Kernels
 
             long vectorCount = GetVectorCount(key.ResultType);
             var clrType = GetClrType(key.ResultType);
-            var vectorType = VectorMethodCache.V(VectorBits, clrType);
+            // Vector LOCALS take the lane type (Boolean -> byte; Vector256<bool> is not a type).
+            var vectorType = VectorMethodCache.V(VectorBits, GetSimdLaneType(key.ResultType));
 
             var locI = il.DeclareLocal(typeof(long));           // loop counter
             var locVectorEnd = il.DeclareLocal(typeof(long));   // totalSize - vectorCount
@@ -1221,7 +1239,7 @@ namespace NumSharp.Backends.Kernels
             // emit-time mismatch.
             bool canSimdInner =
                 key.LhsType == key.RhsType && key.LhsType == key.ResultType &&
-                CanUseSimd(key.ResultType) && CanUseSimdForOp(key.Op);
+                CanUseSimdBinary(key.Op, key.ResultType);
 
             var lblSimdInner    = il.DefineLabel(); // contig+contig
             var lblSimdScalarL  = il.DefineLabel(); // lhs broadcast (inner=0), rhs contig
@@ -1498,7 +1516,8 @@ namespace NumSharp.Backends.Kernels
             bool scalarIsLhs, long vectorCount)
         {
             var clrType = GetClrType(key.ResultType);
-            var vecType = VectorMethodCache.V(VectorBits, clrType);
+            // Vector LOCALS take the lane type (Boolean -> byte; Vector256<bool> is not a type).
+            var vecType = VectorMethodCache.V(VectorBits, GetSimdLaneType(key.ResultType));
             var locVScalar = il.DeclareLocal(vecType);
 
             // ── vecEnd = innerSize - vectorCount (shared with CC block; re-set here) ──

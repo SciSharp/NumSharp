@@ -65,6 +65,15 @@ namespace NumSharp.Backends
         /// </summary>
         private unsafe NDArray ExecuteShift(NDArray lhs, NDArray rhs, bool isLeftShift)
         {
+            // Algebraic fast path: `bool_array >> scalar` with a nonzero count is ALL ZEROS —
+            // the loop dtype's value set is {0, 1} (NumPy casts bool normalized, probed 2.4.2),
+            // so 1 >> s == 0 for s in [1, bits-1] and every overflow count (s < 0, s >= bits)
+            // fills with the sign bit of a non-negative value, also 0. One zeroed allocation
+            // replaces a full cast-shift-write pass (10M: ~0.001 ms vs NumPy's 14.9 ms).
+            var boolZero = TryBoolScalarRightShiftZeros(lhs, rhs, isLeftShift);
+            if (boolZero is not null)
+                return boolZero;
+
             // Fast path: contiguous `array << scalar` — the dedicated uniform-count SIMD kernel
             // (covers every width incl. 8/16-bit via Vector{N}.ShiftLeft).
             var fast = TrySimdScalarShift(lhs, rhs, isLeftShift);
@@ -108,8 +117,14 @@ namespace NumSharp.Backends
             // Cast inputs to the loop dtype (NumPy casts to the loop signature). Same-dtype
             // operands keep their view (possibly strided) — the gather SIMD path reads them in
             // place; a differing dtype materializes to a contiguous copy at the loop dtype.
-            var value = lhs.GetTypeCode == resultType ? lhs : lhs.astype(resultType);
+            // EXCEPT a bool value operand: it always promotes (int64/int8), and materializing the
+            // widened copy costs a full extra pass over the wide buffer. Keep it as bool and fuse
+            // the normalize-convert into the kernel's per-element load (EmitMixedScalarBody), the
+            // same one-pass structure the unified mixed-dtype binary path uses.
+            bool fusedBoolValue = lhs.GetTypeCode == NPTypeCode.Boolean;
+            var value = fusedBoolValue || lhs.GetTypeCode == resultType ? lhs : lhs.astype(resultType);
             var count = rhs.GetTypeCode == resultType ? rhs : rhs.astype(resultType);
+            var valueLoopType = fusedBoolValue ? NPTypeCode.Boolean : resultType;
 
             var (valueShape, countShape) = Broadcast(value.Shape, count.Shape);
             var cleanShape = valueShape.Clean();
@@ -133,18 +148,26 @@ namespace NumSharp.Backends
 
             var capType = resultType;
             bool capLeft = isLeftShift;
-            Action<ILGenerator> scalarBody = il => DirectILKernelGenerator.EmitShiftFromStack(il, capType, capLeft);
-            Action<ILGenerator>? vectorBody = DirectILKernelGenerator.ShiftVariableSupported(resultType, isLeftShift)
+            // Fused bool value: the scalar body converts the raw bool byte to the loop dtype
+            // (EmitConvertTo's `!= 0` normalize — NumPy's bool cast) before the shift; the vector
+            // body needs same-dtype operands (CanSimdAllOperands) so it is dropped. Non-bool keeps
+            // the pre-cast same-dtype operands and the per-lane variable-shift SIMD body.
+            Action<ILGenerator> scalarBody = fusedBoolValue
+                ? il => EmitMixedScalarBody(il, NPTypeCode.Boolean, capType, capType,
+                                            capLeft ? BinaryOp.LeftShift : BinaryOp.RightShift)
+                : il => DirectILKernelGenerator.EmitShiftFromStack(il, capType, capLeft);
+            Action<ILGenerator>? vectorBody = !fusedBoolValue &&
+                                              DirectILKernelGenerator.ShiftVariableSupported(resultType, isLeftShift)
                 ? il => DirectILKernelGenerator.EmitShiftVectorBody(il, capType, capLeft)
                 : null;
-            string cacheKey = $"npy_shift_{(isLeftShift ? "L" : "R")}_{resultType}";
+            string cacheKey = $"npy_shift_{(isLeftShift ? "L" : "R")}_{valueLoopType}_{resultType}";
 
             using (var iter = NDIterRef.MultiNew(
                 3, new[] { value, count, result },
                 NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP,
                 order, NPY_CASTING.NPY_SAFE_CASTING, s_binaryIterFlags))
             {
-                iter.ExecuteElementWiseBinary(resultType, resultType, resultType, scalarBody, vectorBody, cacheKey);
+                iter.ExecuteElementWiseBinary(valueLoopType, resultType, resultType, scalarBody, vectorBody, cacheKey);
             }
 
             if (!allStrictFContig && ShouldProduceFContigOutput(value, count, result.Shape))
@@ -165,6 +188,37 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        /// <c>bool_array &gt;&gt; scalar</c> with any count except 0 yields all zeros (see
+        /// <see cref="ExecuteShift"/>): return a zero-filled result of the promoted dtype without
+        /// running a kernel. The shape/order mirror the NDIter route exactly — broadcast with the
+        /// count operand, F-allocated when the value operand is strictly F. A count of 0 keeps the
+        /// fused cast-copy path (result == astype), and left shifts never take this route.
+        /// </summary>
+        private NDArray? TryBoolScalarRightShiftZeros(NDArray lhs, NDArray rhs, bool isLeftShift)
+        {
+            if (isLeftShift || lhs.GetTypeCode != NPTypeCode.Boolean)
+                return null;
+            bool rhsScalar = rhs.Shape.IsScalar || rhs.size == 1;
+            bool lhsArray = !(lhs.Shape.IsScalar || lhs.size <= 1);
+            if (!rhsScalar || !lhsArray)
+                return null;
+
+            var resultType = ShiftResultType(lhs, rhs);
+            int bitWidth = resultType.SizeOf() * 8;
+            int s = ReadSaturatedShiftCount(rhs, bitWidth);
+            if (s == 0)
+                return null;
+
+            var (valueShape, _) = Broadcast(lhs.Shape, rhs.Shape);
+            var cleanShape = valueShape.Clean();
+            bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
+            Shape resultShape = allStrictFContig
+                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                : cleanShape;
+            return new NDArray(resultType, resultShape, fillZeros: true);
+        }
+
+        /// <summary>
         /// SIMD fast path for <c>contiguous array &lt;&lt; scalar</c>. The shift amount is uniform,
         /// so the overflow check is resolved once and the 4×-unrolled <c>Vector{N}.Shift*</c>
         /// kernel runs over the whole buffer. Returns null (→ <see cref="ExecuteBinaryOp"/>) when
@@ -177,6 +231,14 @@ namespace NumSharp.Backends
             bool rhsScalar = rhs.Shape.IsScalar || rhs.size == 1;
             bool lhsArray = !(lhs.Shape.IsScalar || lhs.size <= 1);
             if (!rhsScalar || !lhsArray)
+                return null;
+
+            // A bool value operand always promotes (int64 against a weak int count, int8 against
+            // bool) — taking this path would materialize the whole promoted array via astype and
+            // then re-read it (two passes over the widened buffer: bool<<2 at 10M = ~11 ms astype
+            // + shift). The NDIter route below fuses the bool->loop-dtype conversion into the
+            // shift kernel's load — one pass, measured ~2x faster end to end.
+            if (lhs.GetTypeCode == NPTypeCode.Boolean)
                 return null;
 
             var resultType = ShiftResultType(lhs, rhs);

@@ -211,9 +211,12 @@ namespace NumSharp.Backends.Kernels
                        key.InputType != NPTypeCode.Char;
             }
 
-            // LogicalNot is boolean-only, no SIMD (uses scalar comparison)
+            // LogicalNot is boolean-only. It rides the byte lanes (there is no Vector<bool>):
+            // min(v,1) ^ 1 gives NumPy's BOOL_logical_not exactly — any nonzero byte is True,
+            // output canonical 0/1 (matches the scalar `ceq 0` tail bit-for-bit, non-canonical
+            // frombuffer bools included).
             if (key.Op == UnaryOp.LogicalNot)
-                return false;
+                return key.InputType == NPTypeCode.Boolean && VectorBits != 0;
 
             // Negate / Abs SIMD also works on signed/unsigned integer types in .NET 8+.
             // Vector.Negate on unsigned does two's-complement wrap (matches NumPy scalar
