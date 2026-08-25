@@ -46,6 +46,20 @@ namespace NumSharp
             };
         }
 
+        /// <summary>
+        ///     Shared integer reader: returns <paramref name="defaultValue"/> when the variable is unset,
+        ///     blank, or not a valid invariant-culture integer.
+        /// </summary>
+        private static int GetInt(string name, int defaultValue)
+        {
+            string v = Get(name);
+            if (v is null) return defaultValue;
+            return int.TryParse(v, System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out int parsed)
+                ? parsed
+                : defaultValue;
+        }
+
         #region Core — runtime
 
         /// <summary>
@@ -56,6 +70,27 @@ namespace NumSharp
         ///     elsewhere).
         /// </summary>
         public static bool DebugGuardPages => GetBool("NUMSHARP_DEBUG_GUARD_PAGES", false);
+
+        /// <summary>
+        ///     Whether the unmanaged buffer pool may PACE the GC — request a forced gen-0 collection when
+        ///     the pool is starving (a Take misses while enough bytes have been handed out since the last
+        ///     paced collection). This is NumSharp's stand-in for CPython's refcount-prompt free: dropped,
+        ///     undisposed result arrays return their native buffers only via finalizers, which run only
+        ///     after a GC — without pacing a tight allocating loop starves the pool for thousands of calls
+        ///     and pays a cold alloc + first-touch page faults per op. Env <c>NUMSHARP_POOL_GC_PACING</c>.
+        ///     <b>Default:</b> <c>true</c>; set <c>=0</c> to never trigger collections from the pool
+        ///     (deterministic <c>Dispose</c>/<c>NDScope</c> workloads don't need pacing — they also never
+        ///     starve, so pacing self-disables there anyway).
+        /// </summary>
+        public static bool PoolGcPacing => GetBool("NUMSHARP_POOL_GC_PACING", true);
+
+        /// <summary>
+        ///     The pool-pacing window in MiB — how many bytes the pool hands out between pool-initiated
+        ///     gen-0 collections (and, equally, the per-bucket resident budget for pooled warm buffers).
+        ///     Larger = fewer forced collections but a larger warm set and longer starvation bursts.
+        ///     Env <c>NUMSHARP_POOL_GC_PACING_MB</c>. <b>Default:</b> <c>16</c> (clamped to 1..1024).
+        /// </summary>
+        public static int PoolGcPacingMB => GetInt("NUMSHARP_POOL_GC_PACING_MB", 16);
 
         #endregion
 
