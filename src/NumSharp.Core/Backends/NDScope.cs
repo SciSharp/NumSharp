@@ -500,24 +500,55 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Task egress without a result (weaver seam for <c>[NDScoped]</c> NON-async methods
-        ///     returning bare <see cref="Task"/>): defers this scope's disposal to the task's
-        ///     completion when it is still running — the in-flight work may hold tracked temps.
+        ///     Task egress without a DECLARED result (weaver seam for <c>[NDScoped]</c> NON-async
+        ///     methods returning bare <see cref="Task"/>): defers this scope's disposal to the
+        ///     task's completion when it is still running — the in-flight work may hold tracked
+        ///     temps. The runtime task may still be a <see cref="Task{TResult}"/> UP-CAST to
+        ///     <c>Task</c> (<c>Task&lt;T&gt; : Task</c> is implicit, so
+        ///     <c>[NDScoped] Task M() =&gt; ComputeAsync();</c> compiles) — a caller can recover
+        ///     that result by casting back, so a carried result is sniffed and yielded rather than
+        ///     handed back disposed.
         /// </summary>
         public Task ReturnsTask(Task task)
         {
-            if (task is null || task.IsCompleted)
+            if (task is null)
+                return null;
+            if (task.IsCompleted)
+            {
+                if (task.Status == TaskStatus.RanToCompletion)
+                    YieldCarriedResult(task);
                 return task;
+            }
 
             _deferred = true;
             Suspend(this);
-            task.ContinueWith(static (_, state) =>
+            task.ContinueWith(static (t, state) =>
             {
                 var scope = (NDScope)state;
                 scope._threadId = Environment.CurrentManagedThreadId;
+                if (t.Status == TaskStatus.RanToCompletion)
+                    scope.YieldCarriedResult(t);
                 scope.Dispose();
             }, this, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             return task;
+        }
+
+        /// <summary>
+        ///     Yields the result hiding inside a <see cref="Task{TResult}"/> that reached this
+        ///     scope up-cast to plain <see cref="Task"/>. The result type is erased at the
+        ///     call-site, so it is recovered reflectively — acceptable because this runs at most
+        ///     once per plain-<c>Task</c>-declared call, and only for a generic runtime task (an
+        ///     <c>async Task</c> method's internal <c>Task&lt;VoidTaskResult&gt;</c> passes through
+        ///     <see cref="YieldBoxed"/> with nothing to match).
+        /// </summary>
+        private void YieldCarriedResult(Task task)
+        {
+            var t = task.GetType();
+            if (!t.IsGenericType)
+                return;
+            var result = t.GetProperty(nameof(Task<object>.Result))?.GetValue(task);
+            if (result is not null)
+                YieldBoxed(result);
         }
 
         /// <summary>

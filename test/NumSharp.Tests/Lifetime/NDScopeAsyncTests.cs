@@ -301,6 +301,125 @@ namespace NumSharp.Tests.Lifetime
         }
 
         [TestMethod]
+        public void ReturnsTask_Plain_CarryingAnUpcastResult_SniffsAndYieldsIt()
+        {
+            // Task<T> : Task is an implicit conversion, so `[NDScoped] Task M() => ComputeAsync();`
+            // compiles — the caller can cast the task back and read Result, which must therefore
+            // never be handed back disposed. Completed path:
+            var scope = NDScope.Open();
+            var temp = np.arange(3);
+            var result = temp + 1.0;
+            var task = scope.ReturnsTask((Task)Task.FromResult(result));
+            NDScope.CloseUnlessDeferred(scope);
+
+            Assert.IsTrue(temp.IsDisposed, "the non-result temp is still reclaimed eagerly");
+            Assert.IsFalse(result.IsDisposed, "the up-cast task's result must be sniffed and yielded");
+            Assert.AreSame(result, ((Task<NDArray>)task).Result);
+            result.Dispose();
+        }
+
+        [TestMethod]
+        public void ReturnsTask_Plain_UpcastSniff_CoversGenericSubtypesAndTuples()
+        {
+            // The sniff recovers the result REFLECTIVELY, so it must also catch shapes no pattern
+            // match could: Task<NDArray<bool>> (Task<T> is invariant — `task is Task<NDArray>` is
+            // FALSE for it) and a boxed ValueTuple of arrays.
+            var scope = NDScope.Open();
+            NumSharp.Generic.NDArray<bool> typed = np.arange(3) > 0;
+            _ = scope.ReturnsTask((Task)Task.FromResult(typed));
+            NDScope.CloseUnlessDeferred(scope);
+            Assert.IsFalse(typed.IsDisposed, "a generic-subtype result must survive the sniff path");
+            typed.Dispose();
+
+            var scope2 = NDScope.Open();
+            var a = np.arange(2);
+            var b = np.arange(3);
+            _ = scope2.ReturnsTask((Task)Task.FromResult((a, b)));
+            NDScope.CloseUnlessDeferred(scope2);
+            Assert.IsFalse(a.IsDisposed, "tuple component must survive the boxed-ITuple sniff");
+            Assert.IsFalse(b.IsDisposed);
+            a.Dispose();
+            b.Dispose();
+        }
+
+        [TestMethod]
+        public void ReturnsTask_Plain_UpcastSniff_Deferred_YieldsAtCompletion()
+        {
+            var tcs = new TaskCompletionSource<NDArray>();
+            var scope = NDScope.Open();
+            var trackedResult = np.arange(4) * 2.0;
+            var otherTemp = np.zeros(2);
+            _ = scope.ReturnsTask((Task)tcs.Task);
+            NDScope.CloseUnlessDeferred(scope);
+
+            tcs.SetResult(trackedResult);
+            PollUntil(() => otherTemp.IsDisposed, "deferred sweep at upcast completion");
+            Assert.IsFalse(trackedResult.IsDisposed, "the deferred up-cast result must be yielded before the sweep");
+            trackedResult.Dispose();
+        }
+
+        [TestMethod]
+        public void SuspendedInvocations_InterleavedOnOneThread_StayIsolated()
+        {
+            // Two state machines' segments alternating on the SAME thread — the chain must
+            // push/pop each invocation's scope independently.
+            NDScope slotA = null, slotB = null;
+            var a1 = NDScope.OpenOrResume(ref slotA);
+            var tempA = np.arange(3);
+            NDScope.Suspend(a1);
+
+            var b1 = NDScope.OpenOrResume(ref slotB);
+            Assert.AreNotSame(a1, b1);
+            var tempB = np.arange(4);
+            NDScope.Suspend(b1);
+
+            var a2 = NDScope.OpenOrResume(ref slotA);
+            Assert.AreSame(a1, a2);
+            var resultA = a2.Returns(tempA + 1.0);
+            NDScope.DisposeSlot(ref slotA);
+
+            var b2 = NDScope.OpenOrResume(ref slotB);
+            Assert.AreSame(b1, b2);
+            var resultB = b2.Returns(tempB + 1.0);
+            NDScope.DisposeSlot(ref slotB);
+
+            Assert.IsTrue(tempA.IsDisposed, "invocation A's temp reclaimed at A's completion");
+            Assert.IsTrue(tempB.IsDisposed, "invocation B's temp reclaimed at B's completion");
+            Assert.IsFalse(resultA.IsDisposed);
+            Assert.IsFalse(resultB.IsDisposed);
+            Assert.AreEqual(1.0, resultA.GetDouble(0));
+            Assert.AreEqual(1.0, resultB.GetDouble(0));
+            resultA.Dispose();
+            resultB.Dispose();
+        }
+
+        [TestMethod]
+        public void GcPressure_WhileSuspended_TrackedArraysSurvive()
+        {
+            NDScope slot = null;
+            var scope = NDScope.OpenOrResume(ref slot);
+            var hoisted = np.arange(5) * 3.0;
+            NDScope.Suspend(scope);
+
+            for (int i = 0; i < 3; i++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            }
+
+            Assert.IsFalse(hoisted.IsDisposed, "a suspended scope strongly roots its tracked arrays");
+            Assert.AreEqual(6.0, hoisted.GetDouble(2), "buffer must be intact after full GCs");
+
+            var resumed = NDScope.OpenOrResume(ref slot);
+            var result = resumed.Returns(hoisted + 1.0);
+            NDScope.DisposeSlot(ref slot);
+            Assert.IsTrue(hoisted.IsDisposed);
+            Assert.IsFalse(result.IsDisposed);
+            result.Dispose();
+        }
+
+        [TestMethod]
         public void ReturnsValueTask_PlainValue_YieldsNow()
         {
             var scope = NDScope.Open();
