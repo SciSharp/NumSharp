@@ -31,6 +31,7 @@ namespace NumSharp
         ///     <c>np.argpartition</c> with a kth sequence). Returns int64 indices; the input is only read.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argpartition.html</remarks>
+        [NDScoped]
         public static NDArray argpartition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
             => AxisPartition.ArgPartition(a, kth, axis, kind, order);
 

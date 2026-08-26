@@ -28,6 +28,7 @@ namespace NumSharp
         ///     <paramref name="dst"/>'s dtype is not allowed under the chosen rule (NumPy raises
         ///     <c>TypeError</c>).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.copyto.html</remarks>
+        [NDScoped]
         public static void copyto(NDArray dst, NDArray src, string casting = "same_kind", NDArray @where = null)
         {
             if (dst is null)

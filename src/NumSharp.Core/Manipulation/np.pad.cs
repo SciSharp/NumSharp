@@ -40,6 +40,7 @@ namespace NumSharp
         ///     to every axis.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.pad.html</remarks>
+        [NDScoped]
         public static NDArray pad(NDArray array, int pad_width, string mode = "constant",
             object constant_values = null, object end_values = null,
             object stat_length = null, string reflect_type = "even")

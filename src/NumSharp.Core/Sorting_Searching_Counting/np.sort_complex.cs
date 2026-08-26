@@ -21,6 +21,7 @@ namespace NumSharp
         ///     any-NaN-part-last ordering. A 0-d input leaks <c>ndarray.sort()</c>'s own
         ///     "axis -1 is out of bounds for array of dimension 0" — exactly as NumPy leaks it.
         /// </remarks>
+        [NDScoped]
         public static NDArray sort_complex(NDArray a)
         {
             // np.sort == array(a, copy=True) + in-place sort along the default last axis; the sort

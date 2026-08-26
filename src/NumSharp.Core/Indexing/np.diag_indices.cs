@@ -29,6 +29,7 @@ namespace NumSharp
         ///     <c>(idx,) * 0</c>; a negative <paramref name="n"/> yields empty index arrays.
         ///     </para>
         /// </remarks>
+        [NDScoped]
         public static NDArray<long>[] diag_indices(int n, int ndim = 2)
         {
             if (ndim <= 0)
@@ -54,6 +55,7 @@ namespace NumSharp
         ///     hyper-cubic (both NumPy <c>ValueError</c>s, verbatim).
         /// </exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.diag_indices_from.html</remarks>
+        [NDScoped]
         public static NDArray<long>[] diag_indices_from(NDArray arr)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));

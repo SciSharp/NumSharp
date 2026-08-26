@@ -18,6 +18,7 @@ namespace NumSharp
         ///     resolves to the <c>int8</c> loop (values 0/1); for Complex the imaginary sign is flipped.
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.conjugate.html</remarks>
+        [NDScoped]
         public static NDArray conjugate(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
         {
             // NumPy's `conjugate` ufunc has NO bool loop: a plain bool input resolves to the smallest
@@ -38,6 +39,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): selects the loop and its output dtype.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.conj.html</remarks>
+        [NDScoped]
         public static NDArray conj(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
             => conjugate(x, @out, where, dtype);
     }

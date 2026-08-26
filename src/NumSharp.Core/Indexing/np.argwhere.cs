@@ -21,6 +21,7 @@ namespace NumSharp
         ///     Equivalent to <c>np.transpose(np.nonzero(a))</c> with a special case for 0-d input.
         ///     Distinct from <see cref="nonzero"/> which returns a tuple of column arrays.
         /// </remarks>
+        [NDScoped]
         public static NDArray argwhere(NDArray a)
             => a.TensorEngine.Argwhere(a);
     }

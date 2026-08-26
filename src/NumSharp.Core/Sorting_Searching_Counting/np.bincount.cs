@@ -54,6 +54,7 @@ namespace NumSharp
         ///     <c>float64</c> weighted sums.
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bincount.html</remarks>
+        [NDScoped]
         public static NDArray bincount(NDArray x, NDArray weights = null, int minlength = 0)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));

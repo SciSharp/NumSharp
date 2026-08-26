@@ -33,6 +33,7 @@ namespace NumSharp
         ///     &gt;= product of <paramref name="shape"/>.
         /// </exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unravel_index.html</remarks>
+        [NDScoped]
         public static NDArray<long>[] unravel_index(NDArray indices, int[] shape, char order = 'C')
         {
             ValidateOrder(order, nameof(order));

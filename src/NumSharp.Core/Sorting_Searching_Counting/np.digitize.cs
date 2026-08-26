@@ -24,6 +24,7 @@ namespace NumSharp
         /// <param name="right">Whether the intervals include the right or the left bin edge. Default is left-closed (false).</param>
         /// <returns>Array of int64 indices, of the same shape as <paramref name="x"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.digitize.html</remarks>
+        [NDScoped]
         public static NDArray digitize(NDArray x, NDArray bins, bool right = false)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));

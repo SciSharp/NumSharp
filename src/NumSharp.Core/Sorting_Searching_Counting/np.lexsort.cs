@@ -26,6 +26,7 @@ namespace NumSharp
         ///     (a 0-filled int64 array of the keys' shape). NaN keys sort last (stable argsort policy);
         ///     ties across ALL keys keep ascending index order.
         /// </remarks>
+        [NDScoped]
         public static NDArray lexsort(NDArray[] keys, int axis = -1)
         {
             if (keys is null || keys.Length == 0)

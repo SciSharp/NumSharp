@@ -32,6 +32,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/generated/numpy.ix_.html
         /// </remarks>
         /// <exception cref="ValueError">A sequence is not 1-D ("Cross index must be 1 dimensional").</exception>
+        [NDScoped]
         public static NDArray[] ix_(params object[] args)
         {
             if (args is null || args.Length == 0)

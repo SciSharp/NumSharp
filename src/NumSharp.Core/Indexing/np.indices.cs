@@ -24,6 +24,7 @@ namespace NumSharp
         ///     clearer than throwing from a shared signature.
         ///     </para>
         /// </remarks>
+        [NDScoped]
         public static NDArray indices(int[] dimensions, NPTypeCode dtype = NPTypeCode.Int64)
         {
             if (dimensions == null) throw new ArgumentNullException(nameof(dimensions));
@@ -41,6 +42,7 @@ namespace NumSharp
         ///     <c>(1, …, 1, dimensions[d], 1, …, 1)</c>. Equivalent to NumPy's
         ///     <c>np.indices(dimensions, sparse=True)</c>.
         /// </summary>
+        [NDScoped]
         public static NDArray[] indices_sparse(int[] dimensions, NPTypeCode dtype = NPTypeCode.Int64)
         {
             if (dimensions == null) throw new ArgumentNullException(nameof(dimensions));

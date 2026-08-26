@@ -51,6 +51,7 @@ namespace NumSharp
         /// <param name="sorter">Optional indices that sort <paramref name="a"/> into ascending order (typically <c>argsort(a)</c>).</param>
         /// <returns>Array of insertion points with the same shape as <paramref name="v"/>, or a scalar if <paramref name="v"/> is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
+        [NDScoped]
         public static NDArray searchsorted(NDArray a, NDArray v, string side = "left", NDArray sorter = null)
         {
             ValidateSearchSorted(a, side, sorter);

@@ -41,6 +41,7 @@ namespace NumSharp
         /// <param name="kind">Selection algorithm — only 'introselect' exists.</param>
         /// <param name="order">Must stay null (no structured dtypes).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.partition.html</remarks>
+        [NDScoped]
         public static NDArray partition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
             => AxisPartition.Partition(a, kth, axis, kind, order);
 

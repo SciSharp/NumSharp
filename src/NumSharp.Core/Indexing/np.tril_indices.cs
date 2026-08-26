@@ -14,6 +14,7 @@ namespace NumSharp
         /// <param name="m">The column dimension. By default <paramref name="m"/> is taken equal to <paramref name="n"/>.</param>
         /// <returns>The row and column indices of the lower triangle, in C (row-major) order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tril_indices.html</remarks>
+        [NDScoped]
         public static NDArray<long>[] tril_indices(int n, int k = 0, int? m = null)
             => TriangleIndices(n, k, m, lower: true);
 
@@ -25,6 +26,7 @@ namespace NumSharp
         /// <param name="m">The column dimension. By default <paramref name="m"/> is taken equal to <paramref name="n"/>.</param>
         /// <returns>The row and column indices of the upper triangle, in C (row-major) order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.triu_indices.html</remarks>
+        [NDScoped]
         public static NDArray<long>[] triu_indices(int n, int k = 0, int? m = null)
             => TriangleIndices(n, k, m, lower: false);
 
@@ -35,6 +37,7 @@ namespace NumSharp
         /// <param name="k">Diagonal offset.</param>
         /// <exception cref="ArgumentException"><c>input array must be 2-d</c> (NumPy <c>ValueError</c>, verbatim).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tril_indices_from.html</remarks>
+        [NDScoped]
         public static NDArray<long>[] tril_indices_from(NDArray arr, int k = 0)
         {
             RequireTwoDimensional(arr);
@@ -48,6 +51,7 @@ namespace NumSharp
         /// <param name="k">Diagonal offset.</param>
         /// <exception cref="ArgumentException"><c>input array must be 2-d</c> (NumPy <c>ValueError</c>, verbatim).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.triu_indices_from.html</remarks>
+        [NDScoped]
         public static NDArray<long>[] triu_indices_from(NDArray arr, int k = 0)
         {
             RequireTwoDimensional(arr);
@@ -162,6 +166,7 @@ namespace NumSharp
         ///     diagonal — yields a <b>single</b> index array, matching NumPy (probed).
         ///     </para>
         /// </remarks>
+        [NDScoped]
         public static NDArray<long>[] mask_indices(int n, Func<NDArray, int, NDArray> mask_func, int k = 0)
         {
             if (mask_func is null) throw new ArgumentNullException(nameof(mask_func));
