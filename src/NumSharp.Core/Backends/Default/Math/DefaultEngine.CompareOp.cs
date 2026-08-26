@@ -103,7 +103,15 @@ namespace NumSharp.Backends
             {
                 var fResult = result.copy('F');
                 result.Dispose();   // C-contig kernel output now dead (mechanism-3 leak)
-                return fResult.AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
+                var fGeneric = fResult.AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
+                // AsGeneric wraps fResult's storage in a NEW NDArray<bool> (fResult is a base NDArray,
+                // so `this as NDArray<bool>` misses the zero-alloc branch) — orphaning fResult itself,
+                // whose ARC reference on the shared buffer then leaks to the finalizer. Drop it: the
+                // returned wrapper holds the surviving reference, so the caller's Dispose frees the
+                // buffer to the pool. This is the residual copy('F')-path drop the scope gate flagged.
+                if (!ReferenceEquals(fGeneric, fResult))
+                    fResult.Dispose();
+                return fGeneric;
             }
 
             return result;
@@ -489,7 +497,15 @@ namespace NumSharp.Backends
             {
                 var fResult = result.copy('F');
                 result.Dispose();   // C-contig kernel output now dead (mechanism-3 leak)
-                return fResult.AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
+                var fGeneric = fResult.AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
+                // AsGeneric wraps fResult's storage in a NEW NDArray<bool> (fResult is a base NDArray,
+                // so `this as NDArray<bool>` misses the zero-alloc branch) — orphaning fResult itself,
+                // whose ARC reference on the shared buffer then leaks to the finalizer. Drop it: the
+                // returned wrapper holds the surviving reference, so the caller's Dispose frees the
+                // buffer to the pool. This is the residual copy('F')-path drop the scope gate flagged.
+                if (!ReferenceEquals(fGeneric, fResult))
+                    fResult.Dispose();
+                return fGeneric;
             }
 
             return result;

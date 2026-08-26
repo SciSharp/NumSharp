@@ -311,10 +311,12 @@ namespace NumSharp.Tests.Fuzz
                 //   * poly1d_fromroots — the ctor's np.poly→trim_zeros(view) chain dropped np.poly's
                 //     base; a hand-written NDScope yields the field via Returns and reclaims the rest
                 //     (the [NDScoped] weaver can't express a ctor's field egress).
+                //   * less / less_equal / greater_equal / not_equal — the residual copy('F')-path drop
+                //     (mixed-dtype + mixed-layout operands force an F-contig result): the engine's
+                //     `fResult.AsGeneric<bool>()` wraps the copy('F') output in a NEW NDArray<bool>,
+                //     orphaning fResult's own ARC reference. Now ReferenceEquals-gate-disposed at both
+                //     compare sites (ExecuteComparisonOp + TryExecuteComparisonOpViaNDIter).
                 //
-                // comparison residual — the copy('F') C-contig drop is fixed (was 2/call); a SECOND
-                // layout-specific drop on a single dtype-pair per op survives (still 1/call)
-                ["less"] = 1, ["less_equal"] = 1, ["greater_equal"] = 1, ["not_equal"] = 1,
                 // random samplers — per-draw state buffers
                 ["rnd"] = 4, ["grnd"] = 7, ["get_state"] = 1,
             };
