@@ -25,6 +25,7 @@ namespace NumSharp
         ///     shape (sometimes designated "k") and scale (sometimes designated "theta"),
         ///     where both parameters are > 0.
         /// </remarks>
+        [NDScoped]
         public NDArray gamma(double shape, double scale, Shape size)
         {
             if (size.IsScalar || size.IsEmpty)

@@ -28,6 +28,7 @@ namespace NumSharp
         ///     <br/>
         ///     For dfden > 2, mean = dfden / (dfden - 2).
         /// </remarks>
+        [NDScoped]
         public NDArray f(double dfnum, double dfden, Shape size)
         {
             if (dfnum <= 0)

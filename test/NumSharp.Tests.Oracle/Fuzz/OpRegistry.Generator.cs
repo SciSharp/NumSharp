@@ -33,7 +33,10 @@ namespace NumSharp.Tests.Fuzz
                 long? high = p["args"].GetArrayLength() < 2 ? (long?)null : AL(1);
                 NDArray r = null;
                 for (int k = 0; k < draws; k++)
+                {
+                    r?.Dispose();   // draws>1 pins advancement — dispose each superseded draw
                     r = rs.random_integers(AL(0), high, S());
+                }
                 return r;
             }
             if (method == "rs_bytes")
@@ -42,7 +45,10 @@ namespace NumSharp.Tests.Fuzz
                 rs.seed((uint)seed);
                 NDArray b = null; // np.random.bytes now returns a 1-D uint8 NDArray directly
                 for (int k = 0; k < draws; k++)
+                {
+                    b?.Dispose();   // draws>1 pins advancement — dispose each superseded draw
                     b = rs.bytes(AL(0));
+                }
                 return b;
             }
 
@@ -51,6 +57,7 @@ namespace NumSharp.Tests.Fuzz
             NDArray result = null;
             for (int k = 0; k < draws; k++)
             {
+                result?.Dispose();   // draws>1 pins advancement — dispose each superseded draw
                 switch (method)
                 {
                     case "random":
@@ -79,6 +86,7 @@ namespace NumSharp.Tests.Fuzz
                         bool replace = !p.TryGetValue("replace", out var rp) || rp.GetBoolean();
                         bool cshuffle = !p.TryGetValue("cshuffle", out var cs) || cs.GetBoolean();
                         result = rng.choice(AL(0), S(), replace, pv, cshuffle);
+                        pv?.Dispose();   // harness-built probability array; choice reads it, never retains it
                         break;
                     }
                     case "bytes":

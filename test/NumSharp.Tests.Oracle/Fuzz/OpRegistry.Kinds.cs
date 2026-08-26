@@ -489,7 +489,7 @@ namespace NumSharp.Tests.Fuzz
                     random.seed(p["seed"].GetUInt32());
                     int draws = p["draws"].GetInt32();
                     if (draws > 0)
-                        _ = random.random_sample(draws);
+                        random.random_sample(draws).Dispose();   // warm-up advances the stream; the samples themselves are discarded, so dispose them
                     var state = random.get_state();
                     ulong bits = unchecked((ulong)BitConverter.DoubleToInt64Bits(state.CachedGaussian));
                     return state.Algorithm + "|" + state.Pos.ToString(CultureInfo.InvariantCulture) + "|" +

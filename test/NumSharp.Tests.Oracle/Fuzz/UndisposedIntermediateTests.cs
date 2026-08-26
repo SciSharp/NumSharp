@@ -23,11 +23,11 @@ namespace NumSharp.Tests.Fuzz
     ///     ~9,900 of 102,785 measured cases — the whole axis-reduction family (all/any/sum/mean/
     ///     nan*/cum*), the product family (matmul/dot/vecdot/matvec/vecmat/vdot), fft, tri/tril/
     ///     triu/diag*, trim_zeros (up to 19 buffers per call), np.empty itself, ufunc out= paths,
-    ///     and the NEP50 scalar-operand binary/comparison cells. Those are documented in
+    ///     and the NEP50 scalar-operand binary/comparison cells. Those were documented in
     ///     <see cref="KnownEscapes"/> (surfaced green, per-op leak CEILING enforced — a worsening
-    ///     leak still fails) and tracked red by the [OpenBugs] pin
-    ///     <see cref="KnownEscapeFamilies_AreFixed"/>; every op NOT in the registry is gated at
-    ///     zero from day one.
+    ///     leak still fails) and worked down to ZERO across four fix waves (see the ledger on
+    ///     <see cref="KnownEscapes"/>); the registry is now EMPTY, so every op is gated at zero and
+    ///     the former tracking pin has been retired.
     /// </summary>
     [TestClass]
     [DoNotParallelize]   // ScopeAudit reads process-global pool counters; nothing may run beside it.
@@ -96,8 +96,8 @@ namespace NumSharp.Tests.Fuzz
 
             if (documented.Count > 0)
                 Console.WriteLine($"[scope-audit] documented known escapes ({documentedCases} cases across " +
-                                  $"{documented.Count} families; tracked by the KnownEscapeFamilies_AreFixed " +
-                                  $"[OpenBugs] pin — remove KnownEscapes entries as leaks get fixed):\n  " +
+                                  $"{documented.Count} families still in the KnownEscapes registry — " +
+                                  $"remove each op's entry as its leak is fixed):\n  " +
                                   string.Join("\n  ", documented.Take(20)) +
                                   (documented.Count > 20 ? $"\n  … {documented.Count - 20} more families" : ""));
             if (bypassDocumented.Count > 0)
@@ -197,34 +197,12 @@ namespace NumSharp.Tests.Fuzz
         }
 
         // ---------------------------------------------------------------------------------
-        // Known escapes, pinned. [TestCategory("OpenBugs")] = known-failing repro, excluded in
-        // CI, delete the category when fixed (house convention).
+        // Mechanism regression pins. The whole KnownEscapes inventory has now been worked down to
+        // ZERO across four fix waves (see KnownEscapes below), so its tracking pin
+        // KnownEscapeFamilies_AreFixed has been RETIRED — Corpus_AllOps gates every op at zero, and
+        // the registry is empty. What remains is the one root-caused MECHANISM pin, kept as a live
+        // regression guard now that its leak is fixed.
         // ---------------------------------------------------------------------------------
-
-        /// <summary>
-        ///     The tracking pin for the WHOLE <see cref="KnownEscapes"/> inventory: re-sweeps only
-        ///     the corpus cases of registered ops and demands ZERO escapes — red until every
-        ///     documented leak is fixed. Working the list down: fix an op, remove its
-        ///     KnownEscapes entry (the FuzzMatrix sweep then gates it at zero forever), and when
-        ///     the registry empties delete this pin.
-        /// </summary>
-        [TestMethod]
-        [TestCategory("OpenBugs")]
-        [TestCategory("ScopeAudit")]
-        public void KnownEscapeFamilies_AreFixed()
-        {
-            var r = RunSweep(includeOp: op => KnownEscapes.Contains(op) || KnownBypassDebt.ContainsKey(op));
-            PrintPerOpRollup(r.Groups);
-            PrintBypassRollup(r.Bypasses);
-            Assert.IsTrue(r.Measured > 5_000,
-                $"known-escape pin measured only {r.Measured} cases — did the corpus or registry shrink?");
-            long escapedCases = r.Groups.Sum(g => g.Value.count);
-            long bypassCases = r.Bypasses.Sum(b => b.Value.count);
-            Assert.AreEqual(0L, escapedCases + bypassCases,
-                $"{r.Groups.Count} known escape families ({escapedCases} cases) and " +
-                $"{r.Bypasses.Count} bypass families ({bypassCases} cases) remain — see the rollups " +
-                "above; remove fixed ops from KnownEscapes/KnownBypass as they land");
-        }
 
         /// <summary>
         ///     The engine's NEP50 scalar fast path drops its dtype-cast temp:
@@ -238,7 +216,7 @@ namespace NumSharp.Tests.Fuzz
         ///     implicit int→NDArray wrapper, which no library fix can dispose.
         /// </summary>
         [TestMethod]
-        [TestCategory("OpenBugs")]
+        [TestCategory("FuzzMatrix")]
         [TestCategory("ScopeAudit")]
         public void BinaryScalarCastTemp_IsDisposed()
         {
@@ -253,7 +231,7 @@ namespace NumSharp.Tests.Fuzz
                     using var r = np.add(a, five);
                 });
                 Assert.AreEqual(0L, escaped,
-                    "the binary scalar fast path drops its dtype-cast 0-d temp (currently escaped=+1)");
+                    "the binary scalar fast path must dispose its dtype-cast 0-d temp (regression pin)");
             }
             finally
             {
@@ -266,9 +244,10 @@ namespace NumSharp.Tests.Fuzz
         // ---------------------------------------------------------------------------------
         // Known escape families. Each op below LEAKED at gate landing (2026-08-26, full-corpus
         // sweep; per-op ceiling = the worst confirmed buffers-escaped-per-call observed then).
-        // Entries are surfaced green by the sweep and held red by KnownEscapeFamilies_AreFixed.
-        // Remove an op's entry when its leak is fixed — from then on the sweep gates it at zero,
-        // and an op leaking ABOVE its recorded ceiling fails immediately even while listed.
+        // Entries are surfaced green by the sweep while listed. Remove an op's entry when its leak
+        // is fixed — from then on the sweep gates it at zero, and an op leaking ABOVE its recorded
+        // ceiling fails immediately even while listed. The registry has been worked down to EMPTY
+        // (four fix waves, ledger below), so Corpus_AllOps now gates every op at zero.
         // ---------------------------------------------------------------------------------
 
         private static class KnownEscapes
@@ -317,8 +296,21 @@ namespace NumSharp.Tests.Fuzz
                 //     orphaning fResult's own ARC reference. Now ReferenceEquals-gate-disposed at both
                 //     compare sites (ExecuteComparisonOp + TryExecuteComparisonOpViaNDIter).
                 //
-                // random samplers — per-draw state buffers
-                ["rnd"] = 4, ["grnd"] = 7, ["get_state"] = 1,
+                // FOURTH fix wave (2026-08-26): the random samplers cleared — the last families.
+                //   * rnd / grnd — the leaking distributions are LIBRARY compositions: gamma
+                //     (scale*Marsaglia), lognormal (exp(normal)), f, and RandomState+Generator choice
+                //     (cumsum/searchsorted chain) are now woven [NDScoped]; dirichlet's alpha copy is a
+                //     RAW UnmanagedMemoryBlock (a bare pooled buffer no [NDScoped] scope can track),
+                //     freed in a finally. The HARNESS scaffolding — the draws>1 multi-draw loops and
+                //     grnd's per-iteration probability array — is disposed in OpRegistry (NDScope is a
+                //     LIBRARY mechanism and cannot reach the test harness's own loop; the modf/partition
+                //     precedent).
+                //   * get_state — the harness discards a warm-up random_sample(draws); now disposed in
+                //     OpRegistry.
+                //
+                // The registry is now EMPTY: every op is gated at zero by Corpus_AllOps
+                // (KnownEscapes.Classify returns null for all, so any surviving escape fails as an
+                // undocumented NEW leak).
             };
 
             public static bool Contains(string op) => CeilingByOp.ContainsKey(op);
@@ -326,7 +318,7 @@ namespace NumSharp.Tests.Fuzz
             public static string Classify(string op, long escaped)
                 => CeilingByOp.TryGetValue(op, out var ceiling) && escaped > 0 && escaped <= ceiling
                     ? $"pre-existing leak at gate landing (2026-08-26), ceiling {ceiling}/call — " +
-                      "tracked by KnownEscapeFamilies_AreFixed"
+                      "still in the KnownEscapes registry (fix and remove its entry)"
                     : null;
         }
 
@@ -336,8 +328,8 @@ namespace NumSharp.Tests.Fuzz
         //   BY DESIGN — the result wraps caller memory or a parsed managed array, so no native
         //   allocation exists to route through a pool; documented green, never pin-tracked.
         //   DEBT — a real native alloc outside the pool (cold alloc + first-touch faults per
-        //   call, no warm reuse); documented green in the sweep AND held red by the
-        //   KnownEscapeFamilies_AreFixed pin until routed through the pool.
+        //   call, no warm reuse); documented green in the sweep until routed through the pool (a
+        //   non-empty KnownBypassDebt would fail Corpus_AllOps as an undocumented bypass).
         // Unlisted ops are gated at zero-bypass from day one. The landing sweep found ONLY the
         // by-design I/O wrap class (their source files carry zero raw-alloc sites — see
         // NativeAllocationChokepointTests — so by elimination the results are managed-backed);
@@ -358,9 +350,10 @@ namespace NumSharp.Tests.Fuzz
         };
 
         // ---------------------------------------------------------------------------------
-        // The sweep core, shared by the FuzzMatrix gate (includeOp: null = everything;
-        // KnownEscapes families excused) and the OpenBugs pin (includeOp: KnownEscapes.Contains;
-        // nothing excused).
+        // The sweep core. Driven by the FuzzMatrix gate with includeOp: null (everything;
+        // KnownEscapes families excused within their ceiling). The includeOp filter is retained for
+        // a future focused re-sweep; the KnownEscapes-only tracking pin that used it has been retired
+        // now that the registry is empty.
         // ---------------------------------------------------------------------------------
 
         private sealed record SweepResult(

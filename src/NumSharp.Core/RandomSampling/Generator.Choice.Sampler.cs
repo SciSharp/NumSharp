@@ -15,6 +15,7 @@ namespace NumSharp
         ///     <paramref name="p"/>-weighted) and without-replacement uniform (Floyd's algorithm +
         ///     optional shuffle). Without-replacement WITH weights is not yet ported.
         /// </remarks>
+        [NDScoped]
         public NDArray choice(NDArray a, Shape? size = null, bool replace = true, NDArray p = null, int axis = 0, bool shuffle = true)
         {
             // ---- resolve population size ----
@@ -109,6 +110,7 @@ namespace NumSharp
         }
 
         /// <summary>choice(int population, ...) convenience: draws from <c>arange(a)</c>.</summary>
+        [NDScoped]
         public NDArray choice(long a, Shape? size = null, bool replace = true, NDArray p = null, bool shuffle = true)
             => choice(NDArray.Scalar(a), size, replace, p, 0, shuffle);
 

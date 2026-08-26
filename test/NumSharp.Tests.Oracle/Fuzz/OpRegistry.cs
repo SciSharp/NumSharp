@@ -703,7 +703,13 @@ namespace NumSharp.Tests.Fuzz
                     int draws = p.TryGetValue("draws", out var dr) ? dr.GetInt32() : 1;
                     NDArray r = null;
                     for (int k = 0; k < draws; k++)
+                    {
+                        // draws>1 pins stream ADVANCEMENT: only the LAST draw is the recorded value.
+                        // Dispose each superseded draw so the harness's own multi-draw scaffolding is
+                        // not counted as a library escape (the modf/partition dispose-intermediate pattern).
+                        r?.Dispose();
                         r = RndDraw(random, p);
+                    }
                     return r;
                 }
                 case "seed":

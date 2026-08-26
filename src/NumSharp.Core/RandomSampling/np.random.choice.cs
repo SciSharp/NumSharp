@@ -15,6 +15,7 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html
         /// </remarks>
+        [NDScoped]
         public NDArray choice(NDArray a, Shape size = default, bool replace = true, double[] p = null)
         {
             long arrSize = a.size;
@@ -33,6 +34,7 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html
         /// </remarks>
+        [NDScoped]
         public NDArray choice(long a, Shape size = default, bool replace = true, double[] p = null)
         {
             if (size.IsEmpty)
