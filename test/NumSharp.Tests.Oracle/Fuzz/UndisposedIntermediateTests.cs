@@ -275,40 +275,40 @@ namespace NumSharp.Tests.Fuzz
         {
             private static readonly Dictionary<string, long> CeilingByOp = new(StringComparer.Ordinal)
             {
-                // reductions / scans (axis + nan + flat-with-out variants)
-                ["all"] = 1, ["any"] = 1, ["sum"] = 1, ["mean"] = 1, ["nanmean"] = 1,
-                ["nanstd"] = 1, ["nanvar"] = 1, ["cumsum"] = 1, ["cumprod"] = 1,
-                // products
-                ["matmul"] = 1, ["dot"] = 1, ["vdot"] = 2, ["vecdot"] = 3, ["matvec"] = 1,
-                ["vecmat"] = 2, ["vector_norm"] = 1,
-                // fft family
-                ["fft"] = 1, ["ifft"] = 1, ["rfft"] = 1, ["irfft"] = 1,
-                ["fftshift"] = 2, ["ifftshift"] = 2, ["fftfreq"] = 3, ["rfftfreq"] = 1,
-                // diagonal / triangular / index generators
-                ["tri"] = 1, ["tril"] = 3, ["triu"] = 3, ["diag"] = 1, ["diagflat"] = 2,
-                ["fill_diagonal"] = 2, ["diag_indices"] = 1, ["diag_indices_from"] = 1,
+                // NOTE (2026-08-26, fix wave): the composition families whose intermediates the
+                // [NDScoped] weaver now reclaims have been REMOVED as they landed at zero (verified by
+                // the full-corpus sweep, which from then gates each at zero forever): the whole
+                // reduction/scan family (all/any/sum/mean/nan*/cum*), the product family
+                // (matmul/dot/vdot/vecdot/matvec/vecmat/vector_norm), the FULL fft family
+                // (fft/ifft/rfft/irfft — the 1-D transforms simply weren't marked — plus the
+                // fft*shift/*freq helpers), the diagonal/triangular constructors (tri/tril/triu/diag/
+                // diagflat/fill_diagonal), r_/c_, trim_zeros, angle/angle_deg, poly1d_coeffs, and the
+                // NEP50 scalar-operand elementwise cells (add/subtract/multiply/divide/floor_divide/
+                // mod/power/bitwise_*/maximum/minimum/fmax/fmin/clip — the engine now disposes the
+                // reassigned scalar-cast temp AND the copy('F') C-contig original, mechanisms 1 & 3).
+                // What remains below is the still-leaking inventory.
+                //
+                // index generators (build coordinate arrays then discard scratch)
+                ["diag_indices"] = 1, ["diag_indices_from"] = 1,
                 ["tril_indices"] = 3, ["triu_indices"] = 3, ["tril_indices_from"] = 3,
                 ["triu_indices_from"] = 3, ["mask_indices"] = 5,
-                ["indices"] = 1, ["indices_sparse"] = 3, ["ix_"] = 2, ["r_"] = 3, ["c_"] = 2,
+                ["indices"] = 1, ["indices_sparse"] = 3, ["ix_"] = 2,
                 // manipulation
-                ["trim_zeros"] = 19, ["repeat"] = 1, ["reshape"] = 1, ["rot90"] = 1, ["pad"] = 2,
+                ["repeat"] = 1, ["reshape"] = 1, ["rot90"] = 1, ["pad"] = 2,
                 ["unravel_index"] = 2, ["argwhere"] = 1,
                 // sorting / searching
                 ["partition"] = 2, ["argpartition"] = 3, ["lexsort"] = 3, ["sort_complex"] = 1,
                 ["searchsorted"] = 2, ["digitize"] = 1 + 2, ["bincount"] = 1,
-                // elementwise with NEP50 scalar operands (0-d second operand casts dropped)
-                ["add"] = 1, ["subtract"] = 1, ["multiply"] = 1, ["divide"] = 1,
-                ["floor_divide"] = 1, ["mod"] = 1, ["power"] = 1,
-                ["bitwise_and"] = 1, ["bitwise_or"] = 1, ["bitwise_xor"] = 1,
-                ["maximum"] = 1, ["minimum"] = 1, ["fmax"] = 1, ["fmin"] = 1, ["clip"] = 1,
-                ["less"] = 2, ["less_equal"] = 2, ["greater_equal"] = 2, ["not_equal"] = 2,
+                // comparison residual: the copy('F') C-contig drop is now disposed (was 2/call), but a
+                // SECOND layout-specific drop remains on a single dtype-pair per op (still 1/call).
+                ["less"] = 1, ["less_equal"] = 1, ["greater_equal"] = 1, ["not_equal"] = 1,
                 // unary odds and ends
-                ["reciprocal"] = 1, ["conj"] = 1, ["conjugate"] = 1, ["angle"] = 2, ["angle_deg"] = 3,
+                ["reciprocal"] = 1, ["conj"] = 1, ["conjugate"] = 1,
                 ["modf_frac"] = 1, ["modf_int"] = 1, ["out_unary"] = 1, ["copyto_overlap"] = 1,
                 // creation
                 ["empty"] = 2, ["empty_like"] = 2,
                 // polynomial / random
-                ["poly1d_coeffs"] = 1, ["poly1d_fromroots"] = 2,
+                ["poly1d_fromroots"] = 2,
                 ["rnd"] = 4, ["grnd"] = 7, ["get_state"] = 1,
             };
 
