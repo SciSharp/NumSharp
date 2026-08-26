@@ -54,27 +54,40 @@ namespace NumSharp.Tests.Fuzz
             GC.WaitForPendingFinalizers();
         }
 
+        /// <summary>The pool traffic one region execution produced. <see cref="Escaped"/> is the
+        /// undisposed-intermediate count; <see cref="Takes"/> == 0 with a fresh non-scalar result
+        /// disposed is the FULL-BYPASS signature (allocated AND freed outside the bucketed pool —
+        /// invisible to the balance alone, which is why callers get both sides).</summary>
+        public readonly record struct Traffic(long Takes, long Returns)
+        {
+            public long Escaped => Takes - Returns;
+        }
+
         /// <summary>
-        ///     Escaped-buffer count of one execution of <paramref name="region"/>, or null when a
+        ///     Pool traffic of one execution of <paramref name="region"/>, or null when a
         ///     collection landed inside the region on every attempt (escapes indistinguishable —
         ///     reported as inconclusive by callers, never as a failure). The region must be
         ///     re-executable: attempts after an interfered one re-run it post-settle, so a region
-        ///     must produce the SAME escape count on every execution (true for op-invocations and
+        ///     must produce the SAME traffic on every execution (true for op-invocations and
         ///     for the deliberate-escape teeth tests, which escape per execution).
         /// </summary>
-        public static long? Measure(Action region, int attempts = 3)
+        public static Traffic? MeasureTraffic(Action region, int attempts = 3)
         {
             for (int attempt = 0; attempt < attempts; attempt++)
             {
                 long t0 = Takes, r0 = Returns;
                 int g0 = Collections;
                 region();
-                long escaped = (Takes - t0) - (Returns - r0);
+                var traffic = new Traffic(Takes - t0, Returns - r0);
                 if (Collections == g0)
-                    return escaped;
+                    return traffic;
                 Settle();
             }
             return null;
         }
+
+        /// <summary>Escaped-buffer count of one region execution (see <see cref="MeasureTraffic"/>).</summary>
+        public static long? Measure(Action region, int attempts = 3)
+            => MeasureTraffic(region, attempts)?.Escaped;
     }
 }

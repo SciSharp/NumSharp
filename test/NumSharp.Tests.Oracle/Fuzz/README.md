@@ -151,6 +151,27 @@ its recorded worst still fails) — and held red by the `KnownEscapeFamilies_Are
 fix an op, remove its `KnownEscapes` entry (the sweep then gates it at zero forever); when the
 registry empties, delete the pin. Every op NOT in the registry is gated at zero from day one.
 
+**Outside-pool allocation detection** rides the same sweep plus a static gate, because the two
+halves of the bypass class need different instruments. The RUNTIME half: a result that is fresh
+(not an operand instance, its data pointer outside every operand's base-buffer byte range, larger
+than a `StackedMemoryPool` scalar slot — 16 B, the second pool these counters cannot see) while
+the region shows **zero** bucketed-pool takes was allocated AND freed outside the pool — paying a
+cold alloc + first-touch faults per call with no warm reuse. That verdict needs no drain-confirm
+(drain adds returns, which turns the balance negative and routes down the escape path; takes==0
+with escaped==0 is arithmetically drain-free), and its teeth is `np.frombuffer` — a bypass BY
+DESIGN (zero-copy wrap), which is also what the landing sweep found: only the I/O wrap class
+(`frombuffer`/`fromfile`/`loadtxt`, results wrapping caller memory or parsed managed arrays — no
+native alloc exists to route), recorded in `KnownBypassByDesign` (documented, never pin-tracked)
+vs `KnownBypassDebt` (pin-tracked; empty at landing). The STATIC half —
+`NativeAllocationChokepointTests` — covers what the runtime check cannot see by construction: an
+internal scratch buffer allocated raw and freed raw inside an op never reaches a result. It scans
+`src/NumSharp.Core` for raw `NativeMemory.Alloc*`/`Marshal.AllocHGlobal`/`VirtualAlloc*` call
+sites (comment lines excluded) and pins an exact file→count allowlist: the two pools + the
+guard-page allocator ARE the chokepoints, NDIter's buffered-mode scratch (7 sites) and
+`np.bincount`'s counting table (1) are carried as routed-through-the-pool audit debt, and ANY new
+raw site — new file or count growth in an allowed file — is red until pooled or consciously
+allowlisted. Inconclusive (never false-green) without a source checkout.
+
 ## Regenerating the corpus
 
 ```bash

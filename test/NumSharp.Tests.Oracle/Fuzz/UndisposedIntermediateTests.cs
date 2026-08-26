@@ -48,6 +48,7 @@ namespace NumSharp.Tests.Fuzz
                               $"threwSkipped={r.ThrewSkipped} errorParitySkipped={r.ErrorParitySkipped} " +
                               $"files={r.Files}");
             PrintPerOpRollup(r.Groups);
+            PrintBypassRollup(r.Bypasses);
 
             // Non-vacuity: a schema/skip regression must not silently gate nothing.
             Assert.IsTrue(r.Measured > 50_000,
@@ -74,16 +75,40 @@ namespace NumSharp.Tests.Fuzz
                     undocumented.Add(line);
             }
 
+            // Bypass families: fresh result, zero bucketed-pool traffic — allocated and freed
+            // outside the pool. Same classify-or-fail treatment via KnownBypass.
+            long bypassCases = r.Bypasses.Sum(b => b.Value.count), bypassDocumentedCases = 0;
+            var bypassDocumented = new List<string>();
+            foreach (var kv in r.Bypasses.OrderByDescending(k => k.Value.count))
+            {
+                string line = $"{kv.Value.count}x {kv.Key.op} [{kv.Key.layout}] POOL-BYPASS " +
+                              $"({kv.Value.sampleBytes} B fresh result, zero pool traffic)  " +
+                              $"e.g. {kv.Value.file}/{kv.Value.sampleId}";
+                if (KnownBypassByDesign.TryGetValue(kv.Key.op, out var why) ||
+                    KnownBypassDebt.TryGetValue(kv.Key.op, out why))
+                {
+                    bypassDocumentedCases += kv.Value.count;
+                    bypassDocumented.Add($"{line}  — {why}");
+                }
+                else
+                    undocumented.Add(line);
+            }
+
             if (documented.Count > 0)
                 Console.WriteLine($"[scope-audit] documented known escapes ({documentedCases} cases across " +
                                   $"{documented.Count} families; tracked by the KnownEscapeFamilies_AreFixed " +
                                   $"[OpenBugs] pin — remove KnownEscapes entries as leaks get fixed):\n  " +
                                   string.Join("\n  ", documented.Take(20)) +
                                   (documented.Count > 20 ? $"\n  … {documented.Count - 20} more families" : ""));
+            if (bypassDocumented.Count > 0)
+                Console.WriteLine($"[scope-audit] documented known pool bypasses ({bypassDocumentedCases} cases):\n  " +
+                                  string.Join("\n  ", bypassDocumented.Take(20)) +
+                                  (bypassDocumented.Count > 20 ? $"\n  … {bypassDocumented.Count - 20} more families" : ""));
 
             if (undocumented.Count > 0)
-                Assert.Fail($"{undocumented.Count} escape families ({escapedCases - documentedCases} cases) " +
-                            $"not covered by KnownEscapes — NEW undisposed intermediates:\n  " +
+                Assert.Fail($"{undocumented.Count} families " +
+                            $"({escapedCases - documentedCases + bypassCases - bypassDocumentedCases} cases) not covered " +
+                            $"by KnownEscapes/KnownBypass — NEW undisposed intermediates or pool bypasses:\n  " +
                             string.Join("\n  ", undocumented.Take(40)));
         }
 
@@ -119,6 +144,31 @@ namespace NumSharp.Tests.Fuzz
                 SizeBucketedBufferPool.Return(p, 1024);
             });
             Assert.AreEqual(-1L, escaped, "a Return with no Take inside the region must read as escaped=-1");
+        }
+
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [TestCategory("ScopeAudit")]
+        public void Harness_Detects_FullPoolBypass()
+        {
+            // np.frombuffer wraps caller-owned managed memory: a fresh (non-operand) NDArray with
+            // ZERO bucketed-pool traffic — bypass BY DESIGN, which makes it the deterministic
+            // teeth for the bypass signature (takes==0, returns==0, fresh result > a scalar slot).
+            ScopeAudit.Settle();
+            var buf = new byte[8192];
+            long freshBytes = 0;
+            var traffic = ScopeAudit.MeasureTraffic(() =>
+            {
+                freshBytes = 0;
+                var r = np.frombuffer(buf, NumSharp.NPTypeCode.Double);
+                freshBytes = FreshResultBytes(r, Array.Empty<NumSharp.NDArray>(),
+                                              new List<(ulong, ulong)>());
+                r.Dispose();
+            });
+            Assert.IsNotNull(traffic, "GC interfered on every attempt — rerun");
+            Assert.AreEqual(0L, traffic.Value.Takes, "frombuffer must not touch the bucketed pool");
+            Assert.AreEqual(0L, traffic.Value.Returns, "frombuffer must not return into the bucketed pool");
+            Assert.AreEqual(8192L, freshBytes, "the wrap must read as a fresh non-pool result");
         }
 
         [TestMethod]
@@ -163,14 +213,17 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("ScopeAudit")]
         public void KnownEscapeFamilies_AreFixed()
         {
-            var r = RunSweep(includeOp: KnownEscapes.Contains);
+            var r = RunSweep(includeOp: op => KnownEscapes.Contains(op) || KnownBypassDebt.ContainsKey(op));
             PrintPerOpRollup(r.Groups);
+            PrintBypassRollup(r.Bypasses);
             Assert.IsTrue(r.Measured > 5_000,
                 $"known-escape pin measured only {r.Measured} cases — did the corpus or registry shrink?");
             long escapedCases = r.Groups.Sum(g => g.Value.count);
-            Assert.AreEqual(0L, escapedCases,
-                $"{r.Groups.Count} known escape families ({escapedCases} cases) still leak — " +
-                "see the per-op rollup above; remove fixed ops from KnownEscapes as they land");
+            long bypassCases = r.Bypasses.Sum(b => b.Value.count);
+            Assert.AreEqual(0L, escapedCases + bypassCases,
+                $"{r.Groups.Count} known escape families ({escapedCases} cases) and " +
+                $"{r.Bypasses.Count} bypass families ({bypassCases} cases) remain — see the rollups " +
+                "above; remove fixed ops from KnownEscapes/KnownBypass as they land");
         }
 
         /// <summary>
@@ -269,6 +322,33 @@ namespace NumSharp.Tests.Fuzz
         }
 
         // ---------------------------------------------------------------------------------
+        // Known pool-BYPASS families: ops whose fresh result reaches the caller with zero
+        // bucketed-pool traffic. Two classes with different lifecycles:
+        //   BY DESIGN — the result wraps caller memory or a parsed managed array, so no native
+        //   allocation exists to route through a pool; documented green, never pin-tracked.
+        //   DEBT — a real native alloc outside the pool (cold alloc + first-touch faults per
+        //   call, no warm reuse); documented green in the sweep AND held red by the
+        //   KnownEscapeFamilies_AreFixed pin until routed through the pool.
+        // Unlisted ops are gated at zero-bypass from day one. The landing sweep found ONLY the
+        // by-design I/O wrap class (their source files carry zero raw-alloc sites — see
+        // NativeAllocationChokepointTests — so by elimination the results are managed-backed);
+        // internal alloc+free scratch (NDIter buffers, bincount's table) is invisible to this
+        // runtime check by construction and is gated statically instead.
+        // ---------------------------------------------------------------------------------
+
+        private static readonly Dictionary<string, string> KnownBypassByDesign = new(StringComparer.Ordinal)
+        {
+            ["frombuffer"] = "by design — zero-copy wrap of the caller's buffer; no allocation occurs",
+            ["fromfile"] = "by design — result constructed from the parsed managed array (no native alloc)",
+            ["loadtxt"] = "by design — result constructed from the parsed managed array (no native alloc)",
+        };
+
+        private static readonly Dictionary<string, string> KnownBypassDebt = new(StringComparer.Ordinal)
+        {
+            // none at landing — the runtime sweep found no native-allocating bypass reaching a result
+        };
+
+        // ---------------------------------------------------------------------------------
         // The sweep core, shared by the FuzzMatrix gate (includeOp: null = everything;
         // KnownEscapes families excused) and the OpenBugs pin (includeOp: KnownEscapes.Contains;
         // nothing excused).
@@ -276,7 +356,8 @@ namespace NumSharp.Tests.Fuzz
 
         private sealed record SweepResult(
             long Measured, long GcInconclusive, long ThrewSkipped, long ErrorParitySkipped, int Files,
-            Dictionary<(string op, string layout, long escaped), (long count, string sampleId, string file)> Groups);
+            Dictionary<(string op, string layout, long escaped), (long count, string sampleId, string file)> Groups,
+            Dictionary<(string op, string layout), (long count, string sampleId, string file, long sampleBytes)> Bypasses);
 
         private static SweepResult RunSweep(Func<string, bool> includeOp)
         {
@@ -292,6 +373,8 @@ namespace NumSharp.Tests.Fuzz
             long measured = 0, gcInconclusive = 0, threwSkipped = 0, errorParitySkipped = 0;
             var groups = new Dictionary<(string op, string layout, long escaped),
                                         (long count, string sampleId, string file)>();
+            var bypasses = new Dictionary<(string op, string layout),
+                                          (long count, string sampleId, string file, long sampleBytes)>();
 
             ScopeAudit.Settle();   // drain finalizer backlog left by earlier (undisposing) test classes
 
@@ -311,10 +394,23 @@ namespace NumSharp.Tests.Fuzz
                 }
 
                 var operands = new NumSharp.NDArray[c.Operands.Length];
+                var ranges = new List<(ulong lo, ulong hi)>(c.Operands.Length);
                 try
                 {
                     for (int i = 0; i < operands.Length; i++)
+                    {
                         operands[i] = FuzzCorpus.Reconstruct(c.Operands[i]);
+                        // The operand's whole base-buffer byte range, for result-freshness checks:
+                        // a result whose data pointer lands inside any of these is a VIEW, not a
+                        // fresh allocation.
+                        var o = c.Operands[i];
+                        if (operands[i].size > 0 && o.BufferSize > 0)
+                        {
+                            int isz = FuzzCorpus.DtypeToTC(o.Dtype).SizeOf();
+                            ulong lo = Addr(operands[i]) - (ulong)(o.Offset * isz);
+                            ranges.Add((lo, lo + (ulong)(o.BufferSize * isz)));
+                        }
+                    }
                 }
                 catch
                 {
@@ -346,15 +442,25 @@ namespace NumSharp.Tests.Fuzz
                     // invisible to GC-count detection (a drain is not a collection) and capable
                     // of huge spurious negatives / masked positives. A non-zero screen is
                     // therefore re-measured after a Settle: with the queue drained and no GC
-                    // inside the confirming region, that verdict is trustworthy.
-                    void Region() => DisposeResult(Invoke(c, operands), operands);
-                    long? escaped = ScopeAudit.Measure(Region);
-                    if (escaped is not null && escaped != 0)
+                    // inside the confirming region, that verdict is trustworthy. (The bypass
+                    // verdict needs no confirm: drain interference adds RETURNS, which makes
+                    // escaped negative and routes through the confirm path; takes==0 && escaped==0
+                    // implies returns==0 — arithmetically drain-free.)
+                    long freshBytes = 0;
+                    void Region()
+                    {
+                        freshBytes = 0;   // re-executed on retry — recompute, don't accumulate
+                        object res = Invoke(c, operands);
+                        freshBytes = FreshResultBytes(res, operands, ranges);
+                        DisposeResult(res, operands);
+                    }
+                    var traffic = ScopeAudit.MeasureTraffic(Region);
+                    if (traffic is not null && traffic.Value.Escaped != 0)
                     {
                         ScopeAudit.Settle();
-                        escaped = ScopeAudit.Measure(Region);
+                        traffic = ScopeAudit.MeasureTraffic(Region);
                     }
-                    if (escaped == null)
+                    if (traffic == null)
                     {
                         gcInconclusive++;   // a GC landed inside every attempt — indistinguishable, never red
                         continue;
@@ -365,12 +471,25 @@ namespace NumSharp.Tests.Fuzz
                     if (measured % 1024 == 0)
                         ScopeAudit.Settle();
 
+                    long escaped = traffic.Value.Escaped;
                     if (escaped != 0)
                     {
-                        var key = (c.Op, c.Layout ?? "?", escaped.Value);
+                        var key = (c.Op, c.Layout ?? "?", escaped);
                         groups[key] = groups.TryGetValue(key, out var g)
                             ? (g.count + 1, g.sampleId, g.file)
                             : (1, c.Id, file);
+                    }
+                    else if (traffic.Value.Takes == 0 && freshBytes > 0)
+                    {
+                        // FULL POOL BYPASS: the op handed back a fresh result (not a view of any
+                        // operand, larger than a scalar-pool slot) yet the bucketed pool saw
+                        // ZERO traffic — the buffer was allocated AND freed outside it, paying a
+                        // cold NativeMemory alloc + first-touch faults on every call with no
+                        // warm reuse (the allocator tax the pool exists to remove).
+                        var key = (c.Op, c.Layout ?? "?");
+                        bypasses[key] = bypasses.TryGetValue(key, out var b)
+                            ? (b.count + 1, b.sampleId, b.file, b.sampleBytes)
+                            : (1, c.Id, file, freshBytes);
                     }
                 }
                 finally
@@ -380,7 +499,7 @@ namespace NumSharp.Tests.Fuzz
             }
 
             return new SweepResult(measured, gcInconclusive, threwSkipped, errorParitySkipped,
-                                   files.Length, groups);
+                                   files.Length, groups, bypasses);
         }
 
         /// <summary>Layout multiplies families, but a leak is a property of an op's code path —
@@ -396,6 +515,73 @@ namespace NumSharp.Tests.Fuzz
                       .Select(g => $"{g.Key}: {g.Sum(x => x.Value.count)} cases / {g.Count()} families / " +
                                    $"escaped {g.Min(x => x.Key.escaped)}..{g.Max(x => x.Key.escaped)}")));
         }
+
+        private static void PrintBypassRollup(
+            Dictionary<(string op, string layout), (long count, string sampleId, string file, long sampleBytes)> bypasses)
+        {
+            if (bypasses.Count == 0)
+                return;
+            Console.WriteLine("[scope-audit] pool bypasses by op:\n  " + string.Join("\n  ",
+                bypasses.GroupBy(g => g.Key.op)
+                        .OrderByDescending(g => g.Sum(x => x.Value.count))
+                        .Select(g => $"{g.Key}: {g.Sum(x => x.Value.count)} cases / {g.Count()} families / " +
+                                     $"e.g. {g.First().Value.sampleBytes} B fresh result")));
+        }
+
+        // ---------------------------------------------------------------------------------
+        // Result-freshness inspection (the pool-bypass side).
+        // ---------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Total bytes of result arrays that are FRESH allocations: not an operand instance,
+        ///     not a view into any operand's base buffer (data pointer inside its byte range), and
+        ///     larger than a scalar-pool slot (<see cref="ScalarSlotBytes"/> — 0-d/tiny results
+        ///     ride the separate StackedMemoryPool, which these counters cannot see and which IS
+        ///     a pool). Fresh bytes with zero bucketed-pool takes = the full-bypass signature.
+        /// </summary>
+        private static long FreshResultBytes(object result, NumSharp.NDArray[] operands,
+                                             List<(ulong lo, ulong hi)> operandRanges)
+        {
+            switch (result)
+            {
+                case null:
+                    return 0;
+                case NumSharp.NDArray nd:
+                    return FreshBytesOf(nd, operands, operandRanges);
+                case NumSharp.NDArray[] tuple:
+                {
+                    long total = 0;
+                    var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
+                    foreach (var slot in tuple)
+                        if (slot is not null && seen.Add(slot))
+                            total += FreshBytesOf(slot, operands, operandRanges);
+                    return total;
+                }
+                default:
+                    return 0;
+            }
+        }
+
+        /// <summary>StackedMemoryPool.SingleSize — the max dtype width (Complex/Decimal, 16 B).</summary>
+        private const int ScalarSlotBytes = 16;
+
+        private static long FreshBytesOf(NumSharp.NDArray nd, NumSharp.NDArray[] operands,
+                                         List<(ulong lo, ulong hi)> operandRanges)
+        {
+            foreach (var op in operands)
+                if (ReferenceEquals(op, nd))
+                    return 0;
+            long bytes = nd.size * nd.typecode.SizeOf();
+            if (bytes <= ScalarSlotBytes)
+                return 0;
+            ulong a = Addr(nd);
+            foreach (var (lo, hi) in operandRanges)
+                if (a >= lo && a < hi)
+                    return 0;   // a view into an operand's buffer — took nothing
+            return bytes;
+        }
+
+        private static unsafe ulong Addr(NumSharp.NDArray nd) => (ulong)(byte*)nd.Address;
 
         // ---------------------------------------------------------------------------------
         // Plumbing.
