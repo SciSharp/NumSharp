@@ -100,7 +100,11 @@ namespace NumSharp.Backends
             // copy('F') returns an NDArray; wrap its storage in place as NDArray<bool> via
             // AsGeneric (the copy is a fresh bool array we own — no need for MakeGeneric's alias).
             if (ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-                return result.copy('F').AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
+            {
+                var fResult = result.copy('F');
+                result.Dispose();   // C-contig kernel output now dead (mechanism-3 leak)
+                return fResult.AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
+            }
 
             return result;
         }
@@ -482,7 +486,11 @@ namespace NumSharp.Backends
             }
 
             if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-                return result.copy('F').AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
+            {
+                var fResult = result.copy('F');
+                result.Dispose();   // C-contig kernel output now dead (mechanism-3 leak)
+                return fResult.AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
+            }
 
             return result;
         }

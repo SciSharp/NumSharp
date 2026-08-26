@@ -146,18 +146,30 @@ namespace NumSharp.Backends
             // (e.g. int32[] * 2.5 -> float64) we leave it: the array genuinely needs a cast, which is
             // the mixed path's job. (scalar×scalar already returned above; value is identical either
             // way — the mixed path converts the same scalar to resultType per element.)
+            // NEP50 scalar-cast temp. Cast(..., copy:true) mints a FRESH 0-d/size-1 array and we
+            // REASSIGN the operand parameter to it, so the temp is unreachable once the op returns
+            // — an undisposed intermediate (a pooled buffer + a finalizable graph) reclaimable only
+            // by a future GC + finalizer pass. It is captured here and disposed at every exit below.
+            // Deliberately NOT an [NDScoped] boundary: ExecuteBinaryOp is the library's hottest path
+            // (every +,-,*,/,%,… on arrays), so a method scope would impose Open/Track/Dispose on ALL
+            // binary ops merely to reclaim a temp that ONLY this narrow array-op-scalar-needing-cast
+            // sub-path ever mints — the targeted dispose costs nothing on the common (same-dtype /
+            // array-array) path. Result buffers are always fresh (a kernel writes a new output from
+            // the operands), never an alias of this scalar temp, so disposing it at return is safe.
+            // Gate: UndisposedIntermediateTests.BinaryScalarCastTemp_IsDisposed.
+            NDArray scalarCastTemp = null;
             if (lhsType != rhsType)
             {
                 bool lhsScalarLike = lhs.Shape.IsScalar || lhs.Shape.size == 1;
                 bool rhsScalarLike = rhs.Shape.IsScalar || rhs.Shape.size == 1;
                 if (rhsScalarLike && !lhsScalarLike && lhsType == resultType)
                 {
-                    rhs = Cast(rhs, resultType, copy: true);
+                    scalarCastTemp = rhs = Cast(rhs, resultType, copy: true);
                     rhsType = resultType;
                 }
                 else if (lhsScalarLike && !rhsScalarLike && rhsType == resultType)
                 {
-                    lhs = Cast(lhs, resultType, copy: true);
+                    scalarCastTemp = lhs = Cast(lhs, resultType, copy: true);
                     lhsType = resultType;
                 }
             }
@@ -178,7 +190,7 @@ namespace NumSharp.Backends
             // below with behaviour unchanged.
             {
                 var trivial = TryTrivialContiguousBinaryOp(lhs, rhs, op, lhsType, rhsType, resultType);
-                if (trivial is not null) return trivial;
+                if (trivial is not null) { scalarCastTemp?.Dispose(); return trivial; }
             }
 
             // -------- NDIter Tier 3B fast path (all binary ops) -----------
@@ -198,7 +210,7 @@ namespace NumSharp.Backends
             // for the mixed-dtype cases the direct path used to handle.
             {
                 var routed = TryExecuteBinaryOpViaNDIter(lhs, rhs, op, lhsType, rhsType, resultType);
-                if (routed is not null) return routed;
+                if (routed is not null) { scalarCastTemp?.Dispose(); return routed; }
             }
 
             // Broadcast shapes
@@ -230,7 +242,10 @@ namespace NumSharp.Backends
             // memory when a sibling dim is 0 (e.g. (3,1,1) op (1,0,2) -> (3,0,2)).
             // (The NDIter fast path above returns early for the same reason.)
             if (result.size == 0)
+            {
+                scalarCastTemp?.Dispose();
                 return result;
+            }
 
             // L3-a: pre-coalesce adjacent dims with compatible strides for BOTH operands
             // (and the result). This collapses F-contig N-D to 1-D contig, so the path
@@ -277,8 +292,16 @@ namespace NumSharp.Backends
             // to match NumPy. The strict-all-F case skipped this branch by allocating F up
             // front and the equality below short-circuits.
             if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-                return result.copy('F');
+            {
+                scalarCastTemp?.Dispose();
+                // copy('F') mints a fresh F-contig array; the C-contig `result` the kernel wrote
+                // is now dead — dispose it rather than drop it to the finalizer (mechanism-3 leak).
+                var fResult = result.copy('F');
+                result.Dispose();
+                return fResult;
+            }
 
+            scalarCastTemp?.Dispose();
             return result;
         }
 
@@ -434,7 +457,11 @@ namespace NumSharp.Backends
             // the NumPy rule says it should be F because at least one input
             // is strict-F and no input is strict-C.
             if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-                return result.copy('F');
+            {
+                var fResult = result.copy('F');
+                result.Dispose();   // C-contig kernel output now dead (mechanism-3 leak)
+                return fResult;
+            }
 
             return result;
         }
