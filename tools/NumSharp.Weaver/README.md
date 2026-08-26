@@ -30,6 +30,15 @@ At build time the method is rewritten to open an `NDScope` — the transients ar
 the method exits (exception paths included) while the result survives. Your source keeps its 100 %
 original body; the scope exists only in the compiled IL.
 
+**Async and iterator methods work too.** An `async Task<NDArray>` / `async ValueTask<NDArray>`
+method, an `IEnumerable<NDArray>` iterator, or an `IAsyncEnumerable<NDArray>` async iterator is
+woven through its compiler state machine: one scope spans the whole logical invocation (suspended
+across `await`s, resumed on whatever thread continues), so temps handed to an in-flight awaited
+callee stay alive, results and `yield return`ed elements survive, and everything else is reclaimed
+when the invocation completes — including on exception paths and when a `foreach` breaks out early.
+A non-`async` method returning `Task`/`ValueTask` yields a completed task's result immediately and
+defers reclamation to an incomplete task's completion.
+
 With the package **absent**, `[NDScoped]` (which ships in NumSharp itself) is inert metadata: the
 method runs unscoped and transients fall back to the finalizer. Adding or removing the package never
 changes results — only *when* buffers are reclaimed.

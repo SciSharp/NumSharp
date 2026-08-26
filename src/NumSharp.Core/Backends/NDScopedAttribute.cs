@@ -26,10 +26,24 @@ namespace NumSharp
     ///     <c>Returns(UnmanagedStorage)</c> for a bare lower-layer buffer return, and
     ///     <see cref="INDArrayCarrier.YieldTo"/> for a result-struct carrier), and every
     ///     <c>out NDArray</c> parameter's final value yielded before each successful return.</para>
+    ///     <para><b>Async and iterator methods are woven too</b> — through their compiler state
+    ///     machines. The stub keeps only the attribute; <c>MoveNext</c> gets ONE scope for the whole
+    ///     logical invocation (held in a weaver-added state-machine field), UNINSTALLED before each
+    ///     await's continuation is scheduled and re-installed on whatever thread resumes — so temps
+    ///     stay alive while an awaited callee still uses them, and everything is reclaimed at
+    ///     SetResult/SetException (async), at the final <c>MoveNext</c>/<c>Dispose()</c> (iterators,
+    ///     early <c>break</c> included), with results and <c>yield return</c>ed elements routed
+    ///     through the same <c>Returns</c>/<c>YieldTo</c> egress. A NON-async method returning
+    ///     <c>Task</c>/<c>ValueTask</c>[<c>&lt;T&gt;</c>] yields a completed task's result
+    ///     immediately and DEFERS the scope's disposal to an incomplete task's completion (the
+    ///     in-flight callee may still hold tracked temps); an incomplete <c>ValueTask</c> is
+    ///     <c>Preserve()</c>d — the caller receives the multi-observable form.</para>
     ///     <para>The weaver REJECTS (build error NDW003) only shapes whose egress it cannot see:
-    ///     <c>ref NDArray</c> parameters, an UNSUPPORTED carrier return (a bespoke reference type, a
-    ///     collection, or a result struct that does NOT implement <see cref="INDArrayCarrier"/>),
-    ///     iterators and async methods — scope those by hand.</para>
+    ///     <c>ref NDArray</c> parameters, and an UNSUPPORTED carrier — a bespoke reference type, a
+    ///     collection, or a result struct that does NOT implement <see cref="INDArrayCarrier"/> —
+    ///     whether returned directly, inside a <c>Task&lt;T&gt;</c>, produced by an async method, or
+    ///     <c>yield return</c>ed; scope those by hand (NDW004 = an unrecognized, non-C# state-machine
+    ///     shape; NDW008 = the referenced NumSharp predates the async seam).</para>
     ///     <para>A method whose body already opens an <see cref="NDScope"/> is skipped
     ///     (idempotence), so hand-scoped code may carry the attribute without double-wrapping.</para>
     ///     <para>PUBLIC because the attribute is consumer-facing: a project that installs the

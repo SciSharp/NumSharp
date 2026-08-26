@@ -72,6 +72,22 @@ namespace NumSharp.Tests.Lifetime
 
         private static bool HasScopeLocal(MethodInfo m)
         {
+            // An async/iterator [NDScoped] method is a STUB — the weave lands in the compiler's
+            // state machine, so the scope local (and the weaver-added slot field) live in ITS
+            // MoveNext. Follow the StateMachineAttribute indirection the weaver itself follows.
+            var smType = m.GetCustomAttributes<System.Runtime.CompilerServices.StateMachineAttribute>(inherit: false)
+                          .FirstOrDefault()?.StateMachineType;
+            if (smType != null)
+            {
+                var moveNext = smType.GetMethod("MoveNext", AllDeclared);
+                return moveNext != null && HasScopeLocalDirect(moveNext);
+            }
+
+            return HasScopeLocalDirect(m);
+        }
+
+        private static bool HasScopeLocalDirect(MethodBase m)
+        {
             var body = m.GetMethodBody();
             if (body is null)
                 return false;

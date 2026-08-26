@@ -173,9 +173,52 @@ branches and nested-handler boundaries that referenced them stay valid).
 | bare `IArraySlice` / `UnmanagedStorage` return (a lower-layer buffer NOT wrapped in an NDArray) | `Returns(slice)`/`Returns(storage)` takes a **counted ARC reference** (`TryAddRef`) so the scope's deterministic `Release` of an intermediate NDArray sharing the buffer can't free it under the caller (a bare buffer is otherwise an UNCOUNTED alias); the ref is abandoned, so the block's finalizer reclaims it on unreachability |
 | `void` / scalar (`long`, `bool`, `double`, string, enums, …) | scope only; `out NDArray`/`out NDArray[]` params still escaped |
 | `out NDArray` / `out NDArray[]` param | final-value escape before each successful return |
+| NON-async `Task`/`ValueTask`[`<T>`] (T = any supported row above, or none) | `ReturnsTask`/`ReturnsValueTask` at every ret + `CloseUnlessDeferred` in the finally: a COMPLETED task's result is yielded immediately; an INCOMPLETE one **defers the scope's disposal to the task's completion** (the in-flight callee may still be using tracked temps handed to it) and yields the result there; an incomplete `ValueTask` is `Preserve()`d first (single-consumption — the caller receives the multi-observable form) |
+| `async` method (`Task`, `Task<T>`, `ValueTask`[`<T>`], `void`, custom task-like) | woven through the STATE MACHINE — see "Async & iterators" below |
+| iterator (`IEnumerable`[`<T>`]/`IEnumerator`[`<T>`]) / async iterator (`IAsyncEnumerable<T>`) | woven through the state machine; `yield return`ed elements routed through `Returns` (the consumer owns them) |
 | `ref NDArray`(`[]`) param | **error NDW002** — hidden egress; scope by hand |
-| unsupported carrier (object/collection field, a `>4`-arity or mixed tuple, a result struct WITHOUT `INDArrayCarrier`) | **error NDW003** — the weaver cannot see every NDArray, so members would be handed back disposed; add `INDArrayCarrier` to the struct, or scope by hand |
-| iterator / async | **error NDW004** — the visible body is a state-machine stub |
+| unsupported carrier (object/collection field, a `>4`-arity or mixed tuple, a result struct WITHOUT `INDArrayCarrier`) — returned directly, inside a `Task<T>`, as an async result, or `yield return`ed | **error NDW003** — the weaver cannot see every NDArray, so members would be handed back disposed; add `INDArrayCarrier` to the struct, or scope by hand |
+| a state machine not compiled by Roslyn/C# (missing `MoveNext`/`<>t__builder`/`<>2__current`) | **error NDW004** — refused loudly, never mis-woven |
+| async/iterator/Task-shaped target against a NumSharp predating the seam | **error NDW008** — update the NumSharp package |
+
+**Async & iterators — the state-machine weave.** An async or iterator method's visible body is a
+stub; the real code — and every egress — lives in the compiler state machine's `MoveNext`, which
+runs once per synchronous SEGMENT, each possibly on a different thread. A `[ThreadStatic]` scope
+cannot simply span that, and a scope-per-segment is UNSOUND (it would reclaim temps an in-flight
+awaited callee still uses — `await Bar(t)` holds `t` across the suspension). So the weave gives the
+state machine **one scope per logical invocation**, held in a weaver-added field (`<>ndscope`):
+
+- `MoveNext` prologue: `scope = NDScope.OpenOrResume(ref this.<>ndscope)` — opens on the first
+  segment, RE-INSTALLS the suspended scope (re-stamping its owning thread) on every resumption.
+- Immediately BEFORE each `Await[Unsafe]OnCompleted`: `suspended = true; NDScope.Suspend(scope)` —
+  the scope must be off this thread's chain BEFORE the builder has the continuation, because after
+  that call the continuation may already be resuming on another thread (suspending in the finally
+  would race it; `suspended` is a LOCAL for the same reason — the finally must not read scope state
+  a concurrent resumption mutates).
+- Immediately BEFORE the builder's `SetResult`/`SetException`: the result (if any) is yielded
+  through the ordinary `Returns`/`YieldTo` egress, then `NDScope.DisposeSlot(ref slot)` — disposal
+  happens BEFORE the completion signal because the signal can run the CALLER's continuation inline
+  on this very thread, and that code must not execute under (and track into) a dying scope. The
+  finally (`if (!suspended) DisposeSlot`) remains as the backstop.
+- Iterators: suspension IS `return true`, and the consumer only regains control after `MoveNext`
+  returns, so the finally decides single-threadedly (`retVar ? Suspend : DisposeSlot`); every
+  `stfld <>2__current` is routed through `Returns` (the consumer owns yielded elements); the
+  enumerator's `Dispose()` gets `DisposeSlot` before each ret — `foreach { break; }` reclaims
+  deterministically. Async iterators additionally run `ExitIterator(ref slot, hasMore)` BEFORE
+  `promise.SetResult(hasMore)` (the consumer can re-enter `MoveNext` the instant that signal lands).
+
+Consequences: hoisted locals and parameters need NO special handling (parameters were constructed
+before the scope opened and are never tracked; hoisted locals stay correctly tracked because the
+scope spans the whole invocation); temps live until the METHOD completes, not the segment — a
+long-lived async loop that wants per-iteration reclamation opens an inner `using var s =
+NDScope.Open()` WITHIN a segment (a hand scope must still never span an `await`); results/yielded
+elements re-parent into whatever scope is ambient at the completion/yield point (the sync-nesting
+chain works when completion is inline; a genuinely cross-thread completion leaves the result
+untracked — finalizer backstop if dropped). An abandoned-without-Dispose enumerator or a
+never-completing async invocation falls to the ordinary GC/finalizer backstop. Verified end-to-end
+(struct AND class state machines, generic ones included, 200-way concurrent stress, ILVerify clean)
+by the async consumer battery in `tools/verify_weaver_package.sh`; the seam's runtime contracts are
+pinned by `NDScopeAsyncTests`.
 
 **Lower-layer buffer returns — scope of support.** The `IArraySlice`/`UnmanagedStorage` row above
 covers a method that RETURNS a bare buffer (the return is protected). What is deliberately NOT done is

@@ -140,9 +140,11 @@ handled; a shape whose egress it cannot see is a **build error**, not a silent m
 | a result-struct carrier implementing `INDArrayCarrier` (`UniqueResult`, `MeshgridResult`, `PolyfitResult`, …) | `retVar.YieldTo(scope)` via a boxing-free `constrained.callvirt` — the struct's own method re-parents each `NDArray` it holds |
 | bare `IArraySlice` / `UnmanagedStorage` (a lower-layer buffer, not wrapped in an `NDArray`) | `scope.Returns(slice/storage)` takes a **counted ARC reference** so the scope's reclamation of an intermediate `NDArray` sharing the buffer can't free it under the caller |
 | `void` / scalar (`long`, `bool`, `double`, `string`, enums, …) | scope only; `out NDArray` / `out NDArray[]` params still escaped |
+| non-`async` `Task` / `ValueTask`[`<T>`] (`T` any supported shape above, or none) | `scope.ReturnsTask` / `ReturnsValueTask` — a completed task's result is yielded immediately; an incomplete task **defers reclamation to its completion** (the in-flight callee may still hold tracked temps); an incomplete `ValueTask` is `Preserve()`d and the caller receives the multi-observable form |
+| `async` method (`Task`, `Task<T>`, `ValueTask`[`<T>`], `void`, custom task-like) | woven through the compiler **state machine**: one scope spans the logical invocation — suspended before every `await`'s continuation is scheduled, resumed on the thread that continues — so temps survive awaits and everything is reclaimed at `SetResult` / `SetException`, the result routed through `Returns` first |
+| iterator (`IEnumerable`[`<T>`] / `IEnumerator`[`<T>`]) / async iterator (`IAsyncEnumerable<T>`) | state-machine weave; every `yield return`ed element is routed through `Returns` (the **consumer** owns it), hoisted state is reclaimed at the end of iteration or at the enumerator's `Dispose()` (early `break` included) |
 | `ref NDArray`(`[]`) parameter | **error NDW002** — a hidden egress the weaver can't see; scope by hand |
-| an unsupported carrier (a bespoke reference type, a collection, or a struct that does NOT implement `INDArrayCarrier`) | **error NDW003** — its members would be handed back disposed; add `INDArrayCarrier`, or scope by hand |
-| iterator (`yield`) / `async` | **error NDW004** — the visible body is a state-machine stub whose real egress lives in `MoveNext` |
+| an unsupported carrier (a bespoke reference type, a collection, or a struct that does NOT implement `INDArrayCarrier`) — returned directly, inside a `Task<T>`, produced by an `async` method, or `yield return`ed | **error NDW003** — its members would be handed back disposed; add `INDArrayCarrier`, or scope by hand |
 
 A result struct opts in by implementing the `INDArrayCarrier` interface — one explicit method that
 yields each `NDArray` it holds:
@@ -189,7 +191,9 @@ Two properties are load-bearing:
   base whose *view* was yielded never corrupts: the yielded view keeps the buffer alive. It is the
   same safety a hand-written `Dispose` gives, with the bookkeeping automated.
 - **Scopes are `[ThreadStatic]` and nest per thread.** A scope is opened, used and disposed on **one**
-  thread (NumSharp's API is synchronous — a scope must not span `await`). Arrays constructed on other
+  thread — a **hand-written** scope must not span `await`; only the weaver's state-machine seam may
+  carry a scope across suspensions (it uninstalls the scope before each continuation is scheduled
+  and re-installs it on the resuming thread). Arrays constructed on other
   threads (parallel kernel workers) see no scope and fall back to the finalizer; a parallel region
   that wants eager reclamation opens its own scope inside each worker body.
 
@@ -272,10 +276,11 @@ mis-weave:
 | `NDW001` | the project has `[NDScoped]` methods but `NumSharp.NDScope` could not be resolved from the assembly or its references | reference the `NumSharp` package (the attribute and the scope live there); if you invoke the weaver by hand, pass `--refs` with the compile's reference list |
 | `NDW002` | a `ref NDArray`(`[]`) parameter — a hidden egress | [hand-scope](#hand-scoping) and yield it explicitly |
 | `NDW003` | an unsupported carrier return (a bespoke reference type, a collection, or a struct without `INDArrayCarrier`) | implement `INDArrayCarrier` on the struct, or hand-scope |
-| `NDW004` | an iterator (`yield`) or `async` method — the body is a state-machine stub | hand-scope inside the real body, or don't scope it |
+| `NDW004` | an async/iterator state machine the weaver does not recognize (not compiled by Roslyn/C#: no `MoveNext`, no `<>t__builder` / `<>2__current`) | compile the method with the C# compiler, or don't scope it (real C# async/iterator methods weave fine) |
 | `NDW005` | the method has no body (abstract / extern) | remove the attribute |
 | `NDW006` | `[NDScoped]` on a setter-only property | put the attribute on the getter accessor |
 | `NDW007` | the body contains a tail-call prefix | (the C# compiler does not emit these; refuse rather than mis-weave) |
+| `NDW008` | an async/iterator/Task-shaped target, but the referenced NumSharp predates the async scope seam | update the `NumSharp` package |
 
 **An `[NDScoped]` method still allocates cold buffers in a loop.** Check the coverage gate — a method
 that carries the attribute but no `NDScope` local was not woven (a `-p:SkipNDScopeWeave=true` build,

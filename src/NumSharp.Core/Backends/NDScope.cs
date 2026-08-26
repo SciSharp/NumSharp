@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 
@@ -38,8 +40,11 @@ namespace NumSharp
     ///     yielded array into the parent scope, so an enclosing scope still reclaims an inner
     ///     call's result if the caller drops it.</para>
     ///     <para><b>Threading.</b> The current scope is <c>[ThreadStatic]</c>: a scope is opened,
-    ///     used and disposed on ONE thread (asserted in debug builds; NumSharp's API is
-    ///     synchronous, so a scope must not span <c>await</c>). Arrays constructed on other
+    ///     used and disposed on ONE thread (asserted in debug builds; a HAND-WRITTEN scope must not
+    ///     span <c>await</c> — the <c>[NDScoped]</c> weaver's state-machine seam is the one thing
+    ///     that may carry a scope across suspensions, because it uninstalls the scope before each
+    ///     continuation is scheduled and re-installs it on the resuming thread via
+    ///     <see cref="OpenOrResume"/>/<see cref="Suspend"/>). Arrays constructed on other
     ///     threads (parallel kernel workers) see no scope and fall back to the finalizer
     ///     backstop — safe, just not eagerly reclaimed; a parallel region that wants eager
     ///     reclamation opens its own scope inside each worker body.</para>
@@ -60,6 +65,13 @@ namespace NumSharp
         private List<NDArray> _tracked;
         private bool _disposed;
         private int _threadId;
+
+        // Set by ReturnsTask/ReturnsValueTask when the returned task is INCOMPLETE: disposal is
+        // handed to a completion continuation instead of the method's finally, so tracked temps a
+        // still-running awaited callee holds are not reclaimed under it. Read only by
+        // CloseUnlessDeferred on the OPENING thread (written earlier on that same thread — the
+        // completion continuation never writes it), so the flag is race-free by construction.
+        private bool _deferred;
 
         private NDScope()
         {
@@ -82,6 +94,7 @@ namespace NumSharp
             }
 
             s._threadId = Environment.CurrentManagedThreadId;
+            s._deferred = false;
             s._parent = t_current;
             t_current = s;
             return s;
@@ -290,22 +303,10 @@ namespace NumSharp
             // there are none in Dispose paths, then track into the parent, never into us).
             // A hand-managed scope disposed OUT OF ORDER (a public IDisposable can be) is
             // spliced out of the middle of the chain instead, so t_current is never left
-            // pointing at — or through — a disposed scope.
-            if (ReferenceEquals(t_current, this))
-            {
-                t_current = _parent;
-            }
-            else
-            {
-                for (var s = t_current; s != null; s = s._parent)
-                {
-                    if (ReferenceEquals(s._parent, this))
-                    {
-                        s._parent = _parent;
-                        break;
-                    }
-                }
-            }
+            // pointing at — or through — a disposed scope. A SUSPENDED scope (async
+            // state-machine seam) was already unlinked, so the splice walk finds nothing
+            // and the chain is untouched.
+            UnlinkFromChain();
             _parent = null;
 
             var list = _tracked;
@@ -324,6 +325,262 @@ namespace NumSharp
 
             if (t_pool is null)
                 t_pool = this;
+        }
+
+        /// <summary>
+        ///     Removes this scope from the CURRENT thread's scope chain (innermost pop, or an
+        ///     out-of-order splice), leaving <c>t_current</c> never pointing at — or through — it.
+        ///     Shared by <see cref="Dispose"/> and <see cref="Suspend"/>; a scope that is not in
+        ///     this thread's chain at all (already suspended) is a no-op walk.
+        /// </summary>
+        private void UnlinkFromChain()
+        {
+            if (ReferenceEquals(t_current, this))
+            {
+                t_current = _parent;
+            }
+            else
+            {
+                for (var s = t_current; s != null; s = s._parent)
+                {
+                    if (ReferenceEquals(s._parent, this))
+                    {
+                        s._parent = _parent;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ---- State-machine seam (the [NDScoped] weaver's async/iterator egress) --------------------
+        //
+        // An async method compiles to a state machine whose MoveNext runs once per synchronous
+        // SEGMENT, each possibly on a different thread — so a thread-static scope cannot simply span
+        // the method. The weaver therefore gives the state machine ONE scope for the WHOLE logical
+        // invocation, held in a weaver-added field (the "slot"): OpenOrResume installs it at every
+        // MoveNext entry, Suspend UNINSTALLS it right before the builder schedules a continuation
+        // (after that call the continuation may already be running on another thread — suspending in
+        // the finally would race it, which is why the seam is a pre-schedule call), and
+        // DisposeSlot/ExitIterator reclaim at completion. Tracked temps thus stay ALIVE across an
+        // await — an in-flight awaited callee may still be using them — and are reclaimed when the
+        // async method (not the segment) finishes. These members are PUBLIC because woven consumer
+        // assemblies call them cross-assembly (the same reason INDArrayCarrier is public); they are
+        // weaver infrastructure, not an API to call by hand.
+
+        /// <summary>
+        ///     State-machine prologue (weaver seam): installs the invocation's scope on the current
+        ///     thread — opening a fresh one into <paramref name="slot"/> on the first MoveNext, and
+        ///     RE-INSTALLING the suspended one (re-stamping its owning thread; segments of one state
+        ///     machine are sequenced, so the handoff is race-free) on every resumption.
+        /// </summary>
+        public static NDScope OpenOrResume(ref NDScope slot)
+        {
+            var s = slot;
+            if (s is null || s._disposed)
+            {
+                s = Open();
+                slot = s;
+            }
+            else
+                Resume(s);
+
+            return s;
+        }
+
+        private static void Resume(NDScope s)
+        {
+            s._threadId = Environment.CurrentManagedThreadId;
+            s._parent = t_current;
+            t_current = s;
+        }
+
+        /// <summary>
+        ///     Uninstalls <paramref name="scope"/> from the current thread WITHOUT disposing it
+        ///     (weaver seam): emitted immediately BEFORE the builder's
+        ///     <c>Await[Unsafe]OnCompleted</c> — once that call is made the continuation may already
+        ///     be resuming on another thread, so the scope must be off this thread's chain first.
+        ///     Everything tracked stays alive until the state machine completes. Also the deferral
+        ///     seam of <see cref="ReturnsTask{TResult}(Task{TResult})"/>. No-op for null/disposed.
+        /// </summary>
+        public static void Suspend(NDScope scope)
+        {
+            if (scope is null || scope._disposed)
+                return;
+            Debug.Assert(scope._threadId == Environment.CurrentManagedThreadId,
+                "NDScope.Suspend must run on the thread the scope is installed on.");
+            scope.UnlinkFromChain();
+            scope._parent = null;
+        }
+
+        /// <summary>
+        ///     State-machine completion (weaver seam): disposes the slot's scope and clears the slot
+        ///     — the async SetResult/SetException exit, the iterator's final <c>false</c>, and the
+        ///     iterator enumerator's <c>Dispose()</c> (mid-iteration abandonment, which may land on
+        ///     a different thread than the last MoveNext; that call is sequenced after it, so the
+        ///     thread stamp is re-taken rather than asserted). No-op for an empty slot.
+        /// </summary>
+        public static void DisposeSlot(ref NDScope slot)
+        {
+            var s = slot;
+            if (s is null)
+                return;
+            slot = null;
+            s._threadId = Environment.CurrentManagedThreadId;
+            s.Dispose();
+        }
+
+        /// <summary>
+        ///     Iterator-yield exit (weaver seam): a <c>MoveNext</c> that produced a value
+        ///     (<paramref name="hasMore"/>) suspends the invocation scope for the next resumption; a
+        ///     finished one disposes it. For async iterators the weaver emits this BEFORE the
+        ///     promise's <c>SetResult(hasMore)</c> — the consumer can re-enter MoveNext the instant
+        ///     that signal lands, so the scope must already be off this thread.
+        /// </summary>
+        public static void ExitIterator(ref NDScope slot, bool hasMore)
+        {
+            if (hasMore)
+                Suspend(slot);
+            else
+                DisposeSlot(ref slot);
+        }
+
+        /// <summary>
+        ///     Task-returning-method epilogue (weaver seam): the finally of a woven method whose
+        ///     return is <c>Task</c>-like — disposes unless <see cref="ReturnsTask{TResult}(Task{TResult})"/>/
+        ///     <see cref="ReturnsValueTask{TResult}(ValueTask{TResult})"/> deferred disposal to the
+        ///     task's completion (the exception path never defers, so a throw still reclaims eagerly).
+        /// </summary>
+        public static void CloseUnlessDeferred(NDScope scope)
+        {
+            if (scope is not null && !scope._deferred)
+                scope.Dispose();
+        }
+
+        // ---- Task-shaped egress (a NON-async method returning Task/ValueTask) ----------------------
+        //
+        // A synchronous method returning a task has TWO reclamation moments to reconcile: its own
+        // return (where the scope would normally dispose) and the task's completion (until which an
+        // in-flight callee may still be USING tracked temps passed to it — `return BarAsync(t)`).
+        // A task already completed at the return is the synchronous case: yield its result now, let
+        // the finally dispose. An INCOMPLETE task defers: the scope is suspended off the thread and
+        // a completion continuation yields the result (so the caller never receives a reclaimed
+        // array) and only then disposes — after the in-flight work is done with the temps. The
+        // continuation is the only writer after the method returns, so there is no concurrent access
+        // to the tracked list; a task that never completes pins the scope until the task itself is
+        // collectable, whereupon the arrays fall to the ordinary finalizer backstop.
+
+        /// <summary>
+        ///     Yields a task-shaped result (weaver seam for <c>[NDScoped]</c> NON-async methods
+        ///     returning <see cref="Task{TResult}"/>): a completed task's result is yielded
+        ///     immediately; an incomplete one defers BOTH the yield and this scope's disposal to the
+        ///     task's completion. Returns the task unchanged.
+        /// </summary>
+        public Task<TResult> ReturnsTask<TResult>(Task<TResult> task)
+        {
+            if (task is null)
+                return null;
+            if (task.IsCompleted)
+            {
+                if (task.Status == TaskStatus.RanToCompletion)
+                    YieldBoxed(task.Result);
+                return task;
+            }
+
+            _deferred = true;
+            Suspend(this);
+            task.ContinueWith(static (t, state) =>
+            {
+                var scope = (NDScope)state;
+                scope._threadId = Environment.CurrentManagedThreadId;
+                if (t.Status == TaskStatus.RanToCompletion)
+                    scope.YieldBoxed(t.Result);
+                scope.Dispose();
+            }, this, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            return task;
+        }
+
+        /// <summary>
+        ///     Task egress without a result (weaver seam for <c>[NDScoped]</c> NON-async methods
+        ///     returning bare <see cref="Task"/>): defers this scope's disposal to the task's
+        ///     completion when it is still running — the in-flight work may hold tracked temps.
+        /// </summary>
+        public Task ReturnsTask(Task task)
+        {
+            if (task is null || task.IsCompleted)
+                return task;
+
+            _deferred = true;
+            Suspend(this);
+            task.ContinueWith(static (_, state) =>
+            {
+                var scope = (NDScope)state;
+                scope._threadId = Environment.CurrentManagedThreadId;
+                scope.Dispose();
+            }, this, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            return task;
+        }
+
+        /// <summary>
+        ///     <see cref="ValueTask{TResult}"/> egress (weaver seam). A ValueTask is single-consumption
+        ///     — observing its result or registering a continuation would corrupt the caller's own
+        ///     await — so the scope first <see cref="ValueTask{TResult}.Preserve"/>s it and RETURNS
+        ///     THE PRESERVED task (multi-observable by contract; a plain-value or Task-backed
+        ///     ValueTask preserves to itself at no cost). The preserved form is then handled exactly
+        ///     like <see cref="ReturnsTask{TResult}(Task{TResult})"/>.
+        /// </summary>
+        public ValueTask<TResult> ReturnsValueTask<TResult>(ValueTask<TResult> task)
+        {
+            var preserved = task.Preserve();
+            if (preserved.IsCompleted)
+            {
+                if (preserved.IsCompletedSuccessfully)
+                    YieldBoxed(preserved.Result);
+                return preserved;
+            }
+
+            ReturnsTask<TResult>(preserved.AsTask());
+            return preserved;
+        }
+
+        /// <summary>Bare <see cref="ValueTask"/> egress (weaver seam) — the resultless twin of <see cref="ReturnsValueTask{TResult}(ValueTask{TResult})"/>.</summary>
+        public ValueTask ReturnsValueTask(ValueTask task)
+        {
+            var preserved = task.Preserve();
+            if (!preserved.IsCompleted)
+                ReturnsTask(preserved.AsTask());
+            return preserved;
+        }
+
+        /// <summary>
+        ///     Late-bound egress dispatch for a task's completed result, whose static type is erased
+        ///     by the time it is observable: routes to the same <c>Returns</c>/<c>YieldTo</c> family
+        ///     the weaver emits for direct returns. Boxing is once-per-call on a completion path.
+        /// </summary>
+        private void YieldBoxed(object value)
+        {
+            switch (value)
+            {
+                case null:
+                    break;
+                case NDArray nd:
+                    Returns(nd);
+                    break;
+                case NDArray[] arr:
+                    Returns(arr);
+                    break;
+                case INDArrayCarrier carrier:
+                    carrier.YieldTo(this);
+                    break;
+                case ITuple tuple:
+                    Returns(tuple);
+                    break;
+                case IArraySlice slice:
+                    Returns(slice);
+                    break;
+                case UnmanagedStorage storage:
+                    Returns(storage);
+                    break;
+            }
         }
     }
 

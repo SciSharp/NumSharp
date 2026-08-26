@@ -24,10 +24,15 @@
 #  10  the REAL product path: a consumer taking NumSharp itself as a PackageReference (lib/
 #      resolution, not the P2P ref-assembly path) weaves and runs
 #  11  the NDW002/NDW003/NDW004 shapes surface as MSBuild ERRORS and FAIL the build
+#      (NDW004 via a hand-rolled bogus [AsyncStateMachine] — REAL async methods now weave;
+#      the async NDW003 shape is an async method producing an unsupported result)
 #  12  a consumer with NumSharp but no [NDScoped] methods no-ops — assembly left untouched
 #  13  transitive isolation: AppB references woven LibA but does NOT install the weaver —
 #      LibA stays woven, AppB's own [NDScoped] method stays inert (never woven, never an error)
 #  14  a strong-named consumer is re-signed with its own key and still runs
+#  15  the STATE-MACHINE weave: async / iterator / non-async-Task [NDScoped] methods are woven
+#      through their compiler state machines and behave (temps reclaimed at completion, results
+#      and yielded elements survive, in-flight operands protected by deferral)
 #
 # Usage:  tools/verify_weaver_package.sh [workdir]     (workdir kept on failure, or with KEEP=1)
 # Needs:  dotnet SDK (net8 + net10 targeting), python (zip inspection; no unzip dependency).
@@ -51,7 +56,7 @@ fail() { echo "FAIL: $*" >&2; echo "(work dir kept for inspection: $WORK)" >&2; 
 command -v dotnet >/dev/null 2>&1 || fail "dotnet not on PATH"
 command -v python >/dev/null 2>&1 || fail "python not on PATH (used for zip inspection)"
 
-step "1/14 pack NumSharp.Weaver the way CI does (build -t:Rebuild, then pack --no-build)"
+step "1/15 pack NumSharp.Weaver the way CI does (build -t:Rebuild, then pack --no-build)"
 dotnet build "$ROOTW/tools/NumSharp.Weaver/NumSharp.Weaver.csproj" -c Release -t:Rebuild -v q --nologo
 dotnet pack  "$ROOTW/tools/NumSharp.Weaver/NumSharp.Weaver.csproj" -c Release --no-build -o "$FEEDW" -v q --nologo
 PKG="$(ls "$FEED"/NumSharp.Weaver.*.nupkg 2>/dev/null | head -1)"
@@ -70,7 +75,7 @@ CPKG="$(ls "$FEED"/NumSharp.[0-9]*.nupkg 2>/dev/null | head -1)"
 CVER="$(basename "$CPKG" .nupkg | sed 's/^NumSharp\.//')"
 echo "packed: $(basename "$CPKG")"
 
-step "2/14 package shape: developmentDependency, no dependencies, no lib/, tools+targets payload"
+step "2/15 package shape: developmentDependency, no dependencies, no lib/, tools+targets payload"
 python - "$(winpath "$PKG")" <<'PY'
 import sys, zipfile
 z = zipfile.ZipFile(sys.argv[1]); names = set(z.namelist())
@@ -91,7 +96,7 @@ for required in ("build/NumSharp.Weaver.targets",
 print("package shape OK")
 PY
 
-step "3/14 scaffold the consumer (net8.0;net10.0, ProjectReference to NumSharp.Core)"
+step "3/15 scaffold the consumer (net8.0;net10.0, ProjectReference to NumSharp.Core)"
 cat > "$CONSUMER/nuget.config" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>
@@ -224,7 +229,7 @@ EOF
 # The id exists only for this gate, so evicting it is safe and makes the run hermetic.
 rm -rf "$HOME/.nuget/packages/numsharp.weaver" "$HOME/.nuget/packages/numsharp/$CVER"
 
-step "4/14 dotnet add package → PrivateAssets=all written automatically (not-a-dependency UX)"
+step "4/15 dotnet add package → PrivateAssets=all written automatically (not-a-dependency UX)"
 (cd "$CONSUMER" && dotnet add Consumer.csproj package NumSharp.Weaver --source "$FEEDW" > "$WORK/add.log" 2>&1) \
   || { tail -20 "$WORK/add.log"; fail "dotnet add package NumSharp.Weaver failed"; }
 grep -qi "PrivateAssets" "$CONSUMER/Consumer.csproj" \
@@ -232,14 +237,14 @@ grep -qi "PrivateAssets" "$CONSUMER/Consumer.csproj" \
 echo "PrivateAssets written by NuGet itself:"
 grep -i -A2 "NumSharp.Weaver" "$CONSUMER/Consumer.csproj" | sed 's/^/    /'
 
-step "5/14 build → the packaged NDScopeWeave target weaves per TFM"
+step "5/15 build → the packaged NDScopeWeave target weaves per TFM"
 (cd "$CONSUMER" && dotnet build -c Release -v n > "$WORK/build1.log" 2>&1) \
   || { tail -40 "$WORK/build1.log"; fail "consumer build failed"; }
 WOVEN=$(grep -c "woven 3, already-scoped 0" "$WORK/build1.log" || true)
 [ "$WOVEN" -eq 2 ] || { grep -i "NumSharp.Weaver" "$WORK/build1.log" || true; fail "expected 'woven 3' for both TFMs, saw $WOVEN"; }
 echo "woven 3 methods on net8.0 AND net10.0"
 
-step "6/14 run the woven consumer on both TFMs"
+step "6/15 run the woven consumer on both TFMs"
 for tfm in net8.0 net10.0; do
   (cd "$CONSUMER" && dotnet run --no-build -c Release -f "$tfm" > "$WORK/run.$tfm.log" 2>&1) \
     || { cat "$WORK/run.$tfm.log"; fail "consumer run failed on $tfm"; }
@@ -247,7 +252,7 @@ for tfm in net8.0 net10.0; do
   echo "$tfm: CONSUMER-OK"
 done
 
-step "7/14 incremental rebuild → weave skipped via the per-TFM marker"
+step "7/15 incremental rebuild → weave skipped via the per-TFM marker"
 # One settling build first: the P2P chain (Core self-weave + its weaver bootstrap) can legitimately
 # recompile ONCE after the surrounding property-set context changes; the invariant under test is
 # that a build in which CoreCompile is up to date does not re-weave.
@@ -260,7 +265,7 @@ if grep -q "woven 3" "$WORK/build2.log"; then
 fi
 echo "up-to-date build did not re-weave"
 
-step "8/14 -p:SkipNDScopeWeave=true → no weave, and the consumer's own gate goes red (non-vacuous)"
+step "8/15 -p:SkipNDScopeWeave=true → no weave, and the consumer's own gate goes red (non-vacuous)"
 (cd "$CONSUMER" && dotnet build -c Release -t:Rebuild -p:SkipNDScopeWeave=true -v n > "$WORK/build3.log" 2>&1) \
   || { tail -40 "$WORK/build3.log"; fail "SkipNDScopeWeave build failed"; }
 if grep -qi "NumSharp.Weaver:" "$WORK/build3.log"; then
@@ -272,7 +277,7 @@ fi
 grep -q "UNWOVEN" "$WORK/run.skip.log" || { cat "$WORK/run.skip.log"; fail "expected UNWOVEN report from the skipped build"; }
 echo "escape hatch works; step-6 gate proven non-vacuous"
 
-step "9/14 pack the consumer → depends on NumSharp, NOT on NumSharp.Weaver"
+step "9/15 pack the consumer → depends on NumSharp, NOT on NumSharp.Weaver"
 (cd "$CONSUMER" && dotnet build -c Release -t:Rebuild -v q --nologo > "$WORK/build4.log" 2>&1) \
   || { tail -40 "$WORK/build4.log"; fail "re-weave rebuild failed"; }
 (cd "$CONSUMER" && dotnet pack -c Release --no-build -o "$WORK/out" -v q --nologo > "$WORK/pack.log" 2>&1) \
@@ -313,7 +318,7 @@ scaffold_pkgref() { # <dir> <extra-propertygroup-xml>
 EOF
 }
 
-step "10/14 PackageReference-NumSharp consumer (lib/ resolution, the real product path)"
+step "10/15 PackageReference-NumSharp consumer (lib/ resolution, the real product path)"
 PD="$WORK/pkgref"
 scaffold_pkgref "$PD" ""
 cp "$CONSUMER/Program.cs" "$PD/Program.cs"
@@ -324,24 +329,35 @@ grep -q "woven 3, already-scoped 0" "$PD/build.log" || fail "PackageReference co
 grep -q "CONSUMER-OK" "$PD/run.log" || { cat "$PD/run.log"; fail "no CONSUMER-OK from the PackageReference consumer"; }
 echo "PackageReference consumer woven and green"
 
-step "11/14 NDW002/NDW003/NDW004 surface as MSBuild ERRORS and fail the build"
+step "11/15 NDW002/NDW003/NDW004 surface as MSBuild ERRORS and fail the build"
 ED="$WORK/errors"
 scaffold_pkgref "$ED" ""
 cat > "$ED/Program.cs" <<'EOF'
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using NumSharp;
 
 internal static class BadShapes
 {
-    [NDScoped]
-    public static async Task<NDArray> Async(NDArray a) { await Task.Yield(); return a + 1; }
-
+    // NDW003 — an unsupported carrier, in BOTH spellings: returned directly and produced by async
     [NDScoped]
     public static List<NDArray> Carrier(NDArray a) => new List<NDArray> { a + 1 };
 
     [NDScoped]
+    public static async Task<List<NDArray>> AsyncCarrier(NDArray a) { await Task.Yield(); return new List<NDArray> { a + 1 }; }
+
+    // NDW002 — hidden ref egress
+    [NDScoped]
     public static void RefEgress(ref NDArray a) { a = a + 1; }
+
+    // NDW004 — a state machine the weaver cannot recognize (hand-rolled attribute, no MoveNext);
+    // real C# async methods weave fine and are exercised in step 15
+    [NDScoped]
+    [AsyncStateMachine(typeof(BogusStateMachine))]
+    public static Task NotReallyAsync() => Task.CompletedTask;
+
+    private struct BogusStateMachine { }
 }
 
 internal static class Program { private static int Main() => 0; }
@@ -354,7 +370,7 @@ for code in NDW002 NDW003 NDW004; do
 done
 echo "all three rejection codes reported; build failed as required"
 
-step "12/14 attribute-free consumer no-ops (assembly untouched)"
+step "12/15 attribute-free consumer no-ops (assembly untouched)"
 ND="$WORK/noattr"
 scaffold_pkgref "$ND" ""
 cat > "$ND/Program.cs" <<'EOF'
@@ -380,7 +396,7 @@ grep -Eq "no \[NDScoped\] usage detected|no \[NDScoped\] methods; nothing to do"
   || { cat "$ND/run.log"; fail "attribute-free consumer run failed"; }
 echo "no-op verified (assembly left unwritten)"
 
-step "13/14 transitive isolation: AppB references woven LibA, is NOT woven itself"
+step "13/15 transitive isolation: AppB references woven LibA, is NOT woven itself"
 TD="$WORK/transitive"
 mkdir -p "$TD/liba" "$TD/appb"
 cp "$CONSUMER/nuget.config" "$TD/nuget.config"
@@ -447,7 +463,7 @@ fi
   || { cat "$TD/appb/run.log" 2>/dev/null; fail "transitive isolation assertion failed"; }
 echo "LibA woven, AppB untouched (attribute inert without the package)"
 
-step "14/14 strong-named consumer is re-signed with its own key and runs"
+step "14/15 strong-named consumer is re-signed with its own key and runs"
 SD="$WORK/signed"
 scaffold_pkgref "$SD" "<SignAssembly>true</SignAssembly><AssemblyOriginatorKeyFile>consumer.snk</AssemblyOriginatorKeyFile>"
 cp "$ROOT/Open.snk" "$SD/consumer.snk"
@@ -486,6 +502,136 @@ PY
 [ $? -eq 0 ] || fail "re-signed consumer lacks the StrongNameSigned flag"
 echo "re-signed with the consumer's key; signature flag set; runs green"
 
+step "15/15 state-machine weave: async / iterator / non-async-Task methods woven and behaving"
+AD="$WORK/asyncsm"
+scaffold_pkgref "$AD" ""
+cat > "$AD/Program.cs" <<'EOF'
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
+using NumSharp;
+
+internal static class Subjects
+{
+    [NDScoped]
+    public static async Task<NDArray> AsyncCompute(NDArray input, List<NDArray> temps)
+    {
+        var t1 = input + 1.0;                        // hoisted across the await
+        temps.Add(t1);
+        var t2 = t1 * 2.0;                           // held by the awaited callee IN FLIGHT
+        temps.Add(t2);
+        var v = await SlowReadAsync(t2);             // real suspension; resumes on the pool
+        var t3 = t1 + v;
+        temps.Add(t3);
+        await Task.Yield();
+        return t3 + 0.5;
+    }
+
+    private static async Task<double> SlowReadAsync(NDArray operand)
+    {
+        await Task.Delay(25).ConfigureAwait(false);
+        return operand.GetDouble(0);                 // UAF probe: reads after the caller suspended
+    }
+
+    [NDScoped]
+    public static IEnumerable<NDArray> Yields(int n, List<NDArray> temps)
+    {
+        var acc = np.zeros(3);
+        temps.Add(acc);
+        for (int i = 0; i < n; i++)
+        {
+            var step = acc + i;
+            temps.Add(step);
+            yield return step * 10.0;
+        }
+    }
+
+    [NDScoped]
+    public static Task<NDArray> Forwarding(SemaphoreSlim release, List<NDArray> temps)
+    {
+        var t = np.arange(6.0) + 1.0;
+        temps.Add(t);
+        return UseLaterAsync(release, t);
+    }
+
+    private static async Task<NDArray> UseLaterAsync(SemaphoreSlim release, NDArray operand)
+    {
+        await release.WaitAsync().ConfigureAwait(false);
+        return operand + 10.0;                       // reads the tracked temp AFTER the caller returned
+    }
+}
+
+internal static class Program
+{
+    private static int _failures;
+    private static void Check(bool ok, string what) { if (!ok) { _failures++; Console.Error.WriteLine("FAIL: " + what); } }
+
+    private static int Main()
+    {
+        // structure: state machines carry the slot field + a woven MoveNext
+        foreach (var name in new[] { "AsyncCompute", "Yields" })
+        {
+            var m = typeof(Subjects).GetMethod(name, BindingFlags.Public | BindingFlags.Static);
+            var sm = m.GetCustomAttributes<StateMachineAttribute>().First().StateMachineType;
+            Check(sm.GetField("<>ndscope", BindingFlags.NonPublic | BindingFlags.Instance) != null, name + ": no <>ndscope slot");
+            var mn = sm.GetMethod("MoveNext", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            Check(mn.GetMethodBody().LocalVariables.Any(v => v.LocalType == typeof(NDScope)), name + ": MoveNext not woven");
+        }
+
+        // async: temps reclaimed AT completion (deterministically — before the awaiter observes it)
+        {
+            var temps = new List<NDArray>();
+            var r = Subjects.AsyncCompute(np.arange(4.0), temps).GetAwaiter().GetResult();
+            Check(Math.Abs(r.GetDouble(1) - 4.5) < 1e-9, "async: wrong value");
+            Check(!r.IsDisposed, "async: result reclaimed");
+            Check(temps.All(t => t.IsDisposed), "async: temps not reclaimed at completion");
+        }
+
+        // iterator: yielded elements owned by the consumer; early break reclaims via Dispose
+        {
+            var temps = new List<NDArray>();
+            var yielded = Subjects.Yields(3, temps).ToList();
+            Check(yielded.All(y => !y.IsDisposed) && yielded[2].GetDouble(0) == 20.0, "iterator: yields wrong/reclaimed");
+            Check(temps.All(t => t.IsDisposed), "iterator: temps not reclaimed at end");
+
+            temps.Clear();
+            NDArray first = null;
+            foreach (var y in Subjects.Yields(5, temps)) { first = y; break; }
+            Check(first is not null && !first.IsDisposed, "iterator(abandon): yield reclaimed");
+            Check(temps.All(t => t.IsDisposed), "iterator(abandon): temps not reclaimed by Dispose");
+        }
+
+        // non-async incomplete Task: deferral protects the in-flight operand, sweeps at completion
+        {
+            var temps = new List<NDArray>();
+            using var release = new SemaphoreSlim(0);
+            var task = Subjects.Forwarding(release, temps);
+            Thread.Sleep(30);
+            Check(temps.All(t => !t.IsDisposed), "deferral: temp reclaimed while in flight");
+            release.Release();
+            var r = task.GetAwaiter().GetResult();
+            Check(r.GetDouble(0) == 11.0, "deferral: operand corrupted");
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (temps.Any(t => !t.IsDisposed) && DateTime.UtcNow < deadline) Thread.Sleep(10);
+            Check(temps.All(t => t.IsDisposed), "deferral: temps never reclaimed after completion");
+        }
+
+        Console.WriteLine(_failures == 0 ? "ASYNC-SM-OK" : "ASYNC-SM-FAILURES " + _failures);
+        return _failures == 0 ? 0 : 1;
+    }
+}
+EOF
+(cd "$AD" && dotnet build -c Release -v n > build.log 2>&1)   || { tail -30 "$AD/build.log"; fail "async state-machine consumer build failed"; }
+grep -q "woven 3, already-scoped 0" "$AD/build.log" || fail "async consumer did not weave all 3 subjects"
+(cd "$AD" && dotnet run --no-build -c Release > run.log 2>&1) || { cat "$AD/run.log"; fail "async consumer run failed"; }
+grep -q "ASYNC-SM-OK" "$AD/run.log" || { cat "$AD/run.log"; fail "async state-machine behaviors failed"; }
+echo "async/iterator/deferred-task consumers woven and green"
+
+
 echo
-echo "verify_weaver_package: ALL 14 STEPS OK"
+echo "verify_weaver_package: ALL 15 STEPS OK"
 if [ "${KEEP:-0}" != "1" ]; then rm -rf "$WORK"; else echo "(KEEP=1: work dir kept at $WORK)"; fi

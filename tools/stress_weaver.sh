@@ -27,8 +27,9 @@
 # Generated shapes (cycled): S1 bare NDArray; S2 ValueTuple; S3 NDArray[]; S4 INDArrayCarrier
 # struct; S5 [NDScoped] PROPERTY; S6 bool+out NDArray; S7 void+out NDArray; S8 return inside
 # try/finally; S9 scalar return (scope-only); S10 hand-scoped + attributed (idempotence at
-# scale); S11 multi-return switch; specials: SB 40-statement bodies, SD 4-deep nested
-# try/finally.
+# scale); S11 multi-return switch; S12 ASYNC Task<NDArray> (state-machine weave); S13 ITERATOR
+# IEnumerable<NDArray> (yield egress + Dispose seam); S14 non-async Task<NDArray>
+# (completed-task egress); specials: SB 40-statement bodies, SD 4-deep nested try/finally.
 #
 # Usage:  tools/stress_weaver.sh [workdir]     (workdir kept on failure, or with KEEP=1)
 # =================================================================================================
@@ -90,6 +91,15 @@ def method(shape, mid):
     if shape == 10:
         return ("    [NDScoped]\n    public static NDArray S10_%s(NDArray a)\n"
                 "    { using var scope = NDScope.Open(); var t = a + 1.0; return scope.Returns(t * 1.0); }\n" % mid)
+    if shape == 12:
+        return ("    [NDScoped]\n    public static async System.Threading.Tasks.Task<NDArray> S12_%s(NDArray a)\n"
+                "    { var t = a + 1.0; await System.Threading.Tasks.Task.Yield(); return t * 2.0; }\n" % mid)
+    if shape == 13:
+        return ("    [NDScoped]\n    public static System.Collections.Generic.IEnumerable<NDArray> S13_%s(NDArray a)\n"
+                "    { var t = a + 1.0; yield return t + 1.0; yield return t * 3.0; }\n" % mid)
+    if shape == 14:
+        return ("    [NDScoped]\n    public static System.Threading.Tasks.Task<NDArray> S14_%s(NDArray a)\n"
+                "    { var t = a + 2.0; return System.Threading.Tasks.Task.FromResult(t - 1.0); }\n" % mid)
     # shape 11: multi-return switch (t.GetDouble(0)=2 for a=[1..5] -> case 2), every branch == 2
     return ("    [NDScoped]\n    public static NDArray S11_%s(NDArray a)\n"
             "    {\n        var t = a + 1.0;\n        switch ((int)t.GetDouble(0) %% 4)\n        {\n"
@@ -111,7 +121,7 @@ idx = 0
 for c in range(n_classes):
     body = [HEAD, "public static class GenC%d\n{\n" % c]
     for k in range(per_class):
-        shape = idx % 11 + 1
+        shape = idx % 14 + 1
         idx += 1
         total += 1
         if shape == 10:
@@ -171,7 +181,13 @@ public static class StressRunner
             {
                 if (mm.GetCustomAttribute<NDScopedAttribute>() == null) continue;
                 attributed++;
-                if (mm.GetMethodBody().LocalVariables.Any(v => v.LocalType == typeof(NDScope))) woven++;
+                // async/iterator stubs weave through their state machine: the scope local lives in MoveNext
+                MethodBase bodyOwner = mm;
+                var smAttr = mm.GetCustomAttributes<StateMachineAttribute>(false).FirstOrDefault();
+                if (smAttr != null)
+                    bodyOwner = smAttr.StateMachineType.GetMethod("MoveNext",
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance) ?? (MethodBase)mm;
+                if (bodyOwner.GetMethodBody().LocalVariables.Any(v => v.LocalType == typeof(NDScope))) woven++;
                 else Bad("UNWOVEN " + type.Name + "." + mm.Name);
                 var mi = mm;
                 switch (mm.Name.Split('_')[0])
@@ -221,6 +237,20 @@ public static class StressRunner
                         break;
                     case "S9":
                         checks.Add(() => Eq((double)mi.Invoke(null, new object[] { a }), 2, mi.Name)); break;
+                    case "S12":
+                        checks.Add(() => Eq(((System.Threading.Tasks.Task<NDArray>)mi.Invoke(null, new object[] { a }))
+                            .GetAwaiter().GetResult().GetDouble(0), 4, mi.Name)); break;
+                    case "S13":
+                        checks.Add(() =>
+                        {
+                            var seq = ((IEnumerable<NDArray>)mi.Invoke(null, new object[] { a })).ToList();
+                            Eq(seq[0].GetDouble(0), 3, mi.Name);
+                            Eq(seq[1].GetDouble(0), 6, mi.Name);
+                        });
+                        break;
+                    case "S14":
+                        checks.Add(() => Eq(((System.Threading.Tasks.Task<NDArray>)mi.Invoke(null, new object[] { a }))
+                            .GetAwaiter().GetResult().GetDouble(0), 2, mi.Name)); break;
                     case "S8":
                     case "S10":
                     case "S11":
