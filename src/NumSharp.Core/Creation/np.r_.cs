@@ -97,6 +97,7 @@ namespace NumSharp
             /// </remarks>
             private static NDArray AtLeastNdmin(NDArray a, int ndmin) => AtLeastNdView(a, ndmin);
 
+            [NDScoped]
             private NDArray Build(object[] key)
             {
                 if (key is null)

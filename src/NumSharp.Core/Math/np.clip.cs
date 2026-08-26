@@ -19,6 +19,7 @@ namespace NumSharp
         /// <param name="max">NumPy 2.x keyword alias for <paramref name="a_max"/>. Cannot be combined with <paramref name="a_max"/>.</param>
         /// <returns>An array with the elements of a, but where values &lt; min are replaced with min, and those &gt; max with max.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.clip.html</remarks>
+        [NDScoped]
         public static NDArray clip(
             NDArray a,
             NDArray a_min = null,

@@ -46,6 +46,7 @@ namespace NumSharp
         ///     absent here too. See <see cref="vecdot"/>.
         ///     </para>
         /// </remarks>
+        [NDScoped]
         public static NDArray matvec(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,
             int? axis = null, bool keepdims = false, NPTypeCode? dtype = null)
         {

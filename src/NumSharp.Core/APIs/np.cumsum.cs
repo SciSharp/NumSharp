@@ -13,6 +13,7 @@ namespace NumSharp
         /// <param name="out">Alternate output array in which to place the result. It must have the same shape and buffer length as the expected output, but its dtype may differ (the result is cast into it with NumPy's unsafe casting) and a reference to <paramref name="out"/> is returned.</param>
         /// <returns>A new array holding the result is returned unless out is specified, in which case a reference to out is returned. The result has the same size as a, and the same shape as a if axis is not None or a is a 1-d array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html</remarks>
+        [NDScoped]
         public static NDArray cumsum(NDArray arr, int? axis = null, NPTypeCode? typeCode = null, NDArray @out = null)
         {
             // np.cumsum == np.add.accumulate. With an axis argument it preserves the source

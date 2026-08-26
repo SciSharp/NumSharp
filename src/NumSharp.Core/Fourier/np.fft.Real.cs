@@ -16,6 +16,7 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated complex output of shape <c>(..., n//2+1, ...)</c>.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft.html</remarks>
+        [NDScoped]
         public NDArray rfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             int nn = n ?? ShapeAt(a, axis);
@@ -33,6 +34,7 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated real (float64) output of length <c>n</c> on the axis.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfft.html</remarks>
+        [NDScoped]
         public NDArray irfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             int nn = n ?? (ShapeAt(a, axis) - 1) * 2;

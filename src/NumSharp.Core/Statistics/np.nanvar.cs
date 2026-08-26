@@ -17,6 +17,7 @@ namespace NumSharp
         /// <param name="ddof">Means Delta Degrees of Freedom. The divisor used in calculations is N - ddof, where N represents the number of non-NaN elements. By default ddof is zero.</param>
         /// <returns>A new array containing the variance. If all values along an axis are NaN, returns NaN for that slice.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanvar.html</remarks>
+        [NDScoped]
         public static NDArray nanvar(NDArray a, int? axis = null, bool keepdims = false, int ddof = 0)
         {
             var arr = a;

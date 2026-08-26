@@ -34,6 +34,7 @@ namespace NumSharp
         ///     <c>flags.writeable</c> is False).
         ///     </para>
         /// </remarks>
+        [NDScoped]
         public static NDArray diag(NDArray v, int k = 0)
         {
             if (v is null) throw new ArgumentNullException(nameof(v));
@@ -73,6 +74,7 @@ namespace NumSharp
         ///     (probed against NumPy 2.4.2).
         ///     </para>
         /// </remarks>
+        [NDScoped]
         public static NDArray diagflat(NDArray v, int k = 0)
         {
             if (v is null) throw new ArgumentNullException(nameof(v));

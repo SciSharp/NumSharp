@@ -21,6 +21,7 @@ namespace NumSharp.Backends
         public NDArray<bool> Any(NDArray nd, int[] axis, bool keepdims)
             => ReduceLogicalMultiAxis(nd, axis, keepdims, reduceAll: false);
 
+        [NDScoped]
         private NDArray<bool> ReduceLogicalAxis(NDArray nd, int axis, bool keepdims, bool reduceAll)
         {
             if (nd is null)
@@ -97,6 +98,7 @@ namespace NumSharp.Backends
         //   2. Adjacent axes on a C-contig input → reshape to fuse them, then a single
         //      axis reduction. Saves N-1 redundant kernel invocations.
         //   3. Otherwise → chain single-axis reductions with keepdims=true.
+        [NDScoped]
         private NDArray<bool> ReduceLogicalMultiAxis(NDArray nd, int[] axis, bool keepdims, bool reduceAll)
         {
             if (nd is null)

@@ -60,6 +60,7 @@ namespace NumSharp
         ///     back to the literal <c>where</c> composition, which is always correct.
         ///     </para>
         /// </remarks>
+        [NDScoped]
         private static NDArray Triangle(NDArray m, int k, bool lower)
         {
             if (m is null) throw new ArgumentNullException(nameof(m));

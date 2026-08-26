@@ -50,6 +50,7 @@ namespace NumSharp
         /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array. If the default value is passed, then keepdims will not be passed through to the sum method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.</param>
         /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
+        [NDScoped]
         public static NDArray sum(NDArray a, int? axis, bool keepdims)
             => a.TensorEngine.Sum(a, axis: axis, typeCode: null, keepdims: keepdims);
 

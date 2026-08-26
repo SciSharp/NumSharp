@@ -45,6 +45,7 @@ namespace NumSharp
         ///     it writes through exactly as NumPy does.
         ///     </para>
         /// </remarks>
+        [NDScoped]
         public static void fill_diagonal(NDArray a, object val, bool wrap = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));

@@ -63,6 +63,7 @@ namespace NumSharp
         ///     latitude the siblings take).
         ///     </para>
         /// </remarks>
+        [NDScoped]
         public static NDArray matmul(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,
             int? axis = null, bool? keepdims = null, NPTypeCode? dtype = null, string casting = "same_kind",
             char order = 'K')

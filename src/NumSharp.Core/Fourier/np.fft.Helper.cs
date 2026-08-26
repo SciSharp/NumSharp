@@ -14,6 +14,7 @@ namespace NumSharp
         /// <param name="x">Input array.</param>
         /// <param name="axes">Axes over which to shift; <c>null</c> shifts all axes.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fftshift.html</remarks>
+        [NDScoped]
         public NDArray fftshift(NDArray x, int[] axes = null)
             => Shift(x, axes, negate: false);
 
@@ -34,6 +35,7 @@ namespace NumSharp
         /// <param name="x">Input array.</param>
         /// <param name="axes">Axes over which to shift; <c>null</c> shifts all axes.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ifftshift.html</remarks>
+        [NDScoped]
         public NDArray ifftshift(NDArray x, int[] axes = null)
             => Shift(x, axes, negate: true);
 
@@ -115,6 +117,7 @@ namespace NumSharp
         ///     integer type (Python <c>int</c> / <c>np.integer</c>), so a C# <c>long</c> must compute
         ///     rather than fall to the float-rejecting overload.
         /// </summary>
+        [NDScoped]
         public NDArray fftfreq(long n, double d = 1.0, string device = null)
         {
             // NumPy's error ORDER (probed 2.4.2): val = 1.0/(n*d) FIRST — ZeroDivisionError when
@@ -163,6 +166,7 @@ namespace NumSharp
         ///     <see cref="rfftfreq(int, double, string)"/> for a 64-bit window length (see the
         ///     <c>long</c> rationale on <see cref="fftfreq(long, double, string)"/>).
         /// </summary>
+        [NDScoped]
         public NDArray rfftfreq(long n, double d = 1.0, string device = null)
         {
             // NumPy: val = 1.0/(n*d) FIRST (ZeroDivisionError when n*d == 0), THEN arange(0, n//2+1,

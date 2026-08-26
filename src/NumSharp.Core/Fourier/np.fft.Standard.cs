@@ -16,6 +16,7 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated complex output of the appropriate shape.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fft.html</remarks>
+        [NDScoped]
         public NDArray fft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             int nn = n ?? ShapeAt(a, axis);
@@ -31,6 +32,7 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated complex output of the appropriate shape.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ifft.html</remarks>
+        [NDScoped]
         public NDArray ifft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             int nn = n ?? ShapeAt(a, axis);

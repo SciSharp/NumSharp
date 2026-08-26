@@ -44,6 +44,7 @@ namespace NumSharp
         ///     An array with ones at and below the given diagonal and zeros elsewhere.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tri.html</remarks>
+        [NDScoped]
         public static unsafe NDArray tri(int N, int? M, int k, NPTypeCode dtype)
         {
             // NumPy builds the row/column axes with arange, so a negative extent simply

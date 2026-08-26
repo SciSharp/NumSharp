@@ -88,6 +88,7 @@ namespace NumSharp
             ///     non-null default for an <c>object</c> parameter, so the sentinel carries it.
             /// </param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.vector_norm.html</remarks>
+            [NDScoped]
             public static NDArray vector_norm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null)
             {
                 object order = ord ?? 2;
