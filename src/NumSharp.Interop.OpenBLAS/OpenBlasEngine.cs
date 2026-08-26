@@ -1,6 +1,7 @@
 using System;
 using NumSharp;
 using NumSharp.Backends;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -470,17 +471,108 @@ namespace NumSharp.Interop.OpenBLAS
             }
         }
 
-        /// <summary>Allocates a native scratch buffer for <paramref name="count"/> elements.</summary>
+        // ----------------------------------------------------------------------------------------
+        //  Native scratch allocator — a thread-local RETAINED pool.
+        //
+        //  Every LAPACK core needs several native scratch buffers per call (the column-major copy of
+        //  the operand, the LAPACK workspace, the U/VT/eigenvector temporaries). Allocating each with
+        //  a fresh NativeMemory.Alloc per call demand-zero-faults its pages on first write — and
+        //  because LAPACK itself does that first write, the fault lands INSIDE the timed native call.
+        //  Under real heap pressure (a program that has already run other large-workspace ops — the
+        //  linalg benchmark sequence is exactly this) the CRT stops keeping these blocks resident, so
+        //  every call re-faults its scratch and a small factorisation ~doubles: measured 96x96 f64
+        //  svd/eigh/inv/det all ~0.44-0.50x NumPy, the fault cost ~= the whole native compute. NumPy
+        //  never pays this — its process keeps the same-sized malloc blocks hot across calls, so a
+        //  freshly-malloc'd workspace of a size it has used before is already resident. Coalescing the
+        //  scratch into one malloc does NOT help (measured: a single 450 KB alloc faults just the same
+        //  post-churn); only RETAINING the pages across calls does.
+        //
+        //  This pool retains freed blocks (never releasing them to the OS below a cap), so the pages
+        //  are touched once and every later call of the same size hits warm memory — restoring
+        //  parity-or-better with ZERO change to any core's numerics: a pooled block is uninitialised
+        //  exactly as a fresh malloc is, and every core already fully writes its scratch before
+        //  reading it (Linearize fills the column-major copy; LAPACK fills the workspace/outputs;
+        //  IdentityColMajor zeroes what it needs). Buckets are power-of-two-rounded byte sizes; each
+        //  block carries a 16-byte header (which keeps the returned pointer 16-aligned for Complex/
+        //  SIMD) recording its bucket, so Free — which only gets the pointer — returns it to the right
+        //  stack. The pool is per-thread (a core allocs and frees its scratch on one thread and never
+        //  hands it across threads, so concurrent linalg calls each get their own pool with no lock).
+        //  Idle retention is capped: a Free that would push the pool past ScratchRetainCap releases the
+        //  block to the OS instead, so a one-off large factorisation — whose O(n^3) compute dwarfs the
+        //  page-fault — is not retained (and the per-thread footprint stays bounded).
+        //
+        //  Known residual (a benchmark-measurement artifact, NOT an op cost): a gen2 GC on a large
+        //  managed heap issues an OS working-set trim (EmptyWorkingSet) that evicts even these retained
+        //  pages — proven by a forced GC + WaitForPendingFinalizers making a warm block re-fault, and by
+        //  SetProcessWorkingSetSizeEx / VirtualLock removing it. In a single long-lived process that runs
+        //  many linalg ops back-to-back (the openblas_bench harness), the LAST ops measured pay this trim
+        //  mid-timing while the first ~14 do not — the same gesdd is fast at op #2 (cond) and slow at
+        //  op #16 (svdvals). Each op measured in isolation, or under a GC-isolated harness (BenchmarkDotNet),
+        //  is at parity — so this is left to the harness rather than pinning process pages from the library
+        //  (VirtualLock is capped by the process min working set and regresses under churn; a hard
+        //  min-working-set floor is too intrusive for a library and is anyway overridden by EmptyWorkingSet).
+        // ----------------------------------------------------------------------------------------
+
+        private const nuint ScratchHeader = 16;                    // 16-aligns the returned pointer (Complex/SIMD)
+        private const nuint ScratchRetainCap = 32 * 1024 * 1024;   // ≤32 MiB retained idle per thread
+
+        private sealed class ScratchPool
+        {
+            internal readonly Dictionary<nuint, Stack<IntPtr>> Free = new Dictionary<nuint, Stack<IntPtr>>();
+            internal nuint IdleBytes; // total bytes currently parked in the Free stacks
+        }
+
+        [ThreadStatic] private static ScratchPool _scratch;
+
+        /// <summary>Allocates a native scratch buffer for <paramref name="count"/> elements from the thread pool.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static T* Alloc<T>(long count) where T : unmanaged
-            => count <= 0 ? null : (T*)NativeMemory.Alloc((nuint)count, (nuint)sizeof(T));
+            => count <= 0 ? null : (T*)ScratchTake((nuint)count * (nuint)sizeof(T));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static void Free<T>(T* p) where T : unmanaged
         {
             if (p != null)
-                NativeMemory.Free(p);
+                ScratchReturn((byte*)p);
         }
+
+        private static byte* ScratchTake(nuint bytes)
+        {
+            nuint bucket = ScratchBucket(bytes);
+            ScratchPool pool = _scratch ??= new ScratchPool();
+            if (pool.Free.TryGetValue(bucket, out Stack<IntPtr> stack) && stack.Count > 0)
+            {
+                byte* reused = (byte*)stack.Pop();
+                pool.IdleBytes -= bucket;
+                return reused + ScratchHeader; // header already carries `bucket`
+            }
+
+            byte* fresh = (byte*)NativeMemory.Alloc(ScratchHeader + bucket);
+            *(nuint*)fresh = bucket;
+            return fresh + ScratchHeader;
+        }
+
+        private static void ScratchReturn(byte* p)
+        {
+            byte* block = p - ScratchHeader;
+            nuint bucket = *(nuint*)block;
+            ScratchPool pool = _scratch ??= new ScratchPool();
+            if (pool.IdleBytes + bucket > ScratchRetainCap)
+            {
+                NativeMemory.Free(block); // over the retention cap — hand it back to the OS
+                return;
+            }
+
+            if (!pool.Free.TryGetValue(bucket, out Stack<IntPtr> stack))
+                pool.Free[bucket] = stack = new Stack<IntPtr>();
+            stack.Push((IntPtr)block);
+            pool.IdleBytes += bucket;
+        }
+
+        /// <summary>Rounds a byte request up to a power-of-two bucket (min 64 B) so nearby sizes share a stack.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static nuint ScratchBucket(nuint bytes)
+            => bytes <= 64 ? 64 : (nuint)BitOperations.RoundUpToPowerOf2((ulong)bytes);
 
         /// <summary>Zeroes <paramref name="count"/> elements — NumPy's output <c>memset</c>.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
