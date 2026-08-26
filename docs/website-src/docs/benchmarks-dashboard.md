@@ -1715,8 +1715,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       iterator, layout, operand, cast, fusion, and native OpenBLAS/LAPACK behavior.
     </p>
     <div class="snapshot-strip snapshot-strip-simple" aria-label="Benchmark snapshot details">
-      <span class="snapshot-meta" data-snapshot-date>Snapshot 2026-08-22</span>
-      <span class="snapshot-meta" data-snapshot-commit>Commit aaa41ef2</span>
+      <span class="snapshot-meta" data-snapshot-date>Snapshot 2026-08-24</span>
+      <span class="snapshot-meta" data-snapshot-commit>Commit 938d0449</span>
       <span class="snapshot-meta" data-snapshot-numpy>NumPy 2.4.2</span>
       <span class="snapshot-meta">Ratio NumPy / NumSharp</span>
     </div>
@@ -1725,8 +1725,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   <section class="metric-grid" aria-label="Headline benchmark metrics">
     <article class="metric-card">
       <div class="metric-label">API coverage</div>
-      <div class="metric-value metric-good">100%</div>
-      <p class="metric-note">456 / 456 benchmarkable NumSharp-compatible APIs have benchmark evidence</p>
+      <div class="metric-value metric-good">98.7%</div>
+      <p class="metric-note">455 / 461 benchmarkable NumSharp-compatible APIs have benchmark evidence</p>
     </article>
     <article class="metric-card">
       <div class="metric-label">Effective geomean</div>
@@ -1740,7 +1740,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     </article>
     <article class="metric-card">
       <div class="metric-label">Cast subsystem</div>
-      <div class="metric-value metric-good">1,450</div>
+      <div class="metric-value metric-good">1,202</div>
       <p class="metric-note">wins out of 1,568 comparable cast cells</p>
     </article>
   </section>
@@ -1992,23 +1992,23 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     <div class="story-grid">
       <article class="story-card">
         <h3>NDIter</h3>
-        <strong class="metric-good">1.18x</strong>
-        <p>Iterator operation geomean. Strong reductions and dtype loops, with copy/cast and index math still visible as overhead canaries.</p>
+        <strong class="metric-good">1.45x</strong>
+        <p>Iterator operation geomean across 165 comparable cells: 106 wins and 59 losses, with no sections excluded by the access-violation policy.</p>
       </article>
       <article class="story-card">
         <h3>Layout</h3>
-        <strong class="metric-near">0.50-1.80x</strong>
-        <p>Layout scans expose the real split: large elementwise wins, while strided/broadcast reductions and decimal sums trail.</p>
+        <strong class="metric-near">0.37-3.81x</strong>
+        <p>Published geomeans by layout span 0.37x to 3.81x: large copy and elementwise paths win, while strided/broadcast reductions and decimal sums trail.</p>
       </article>
       <article class="story-card">
         <h3>Cast</h3>
-        <strong class="metric-good">1,439 wins</strong>
+        <strong class="metric-good">1,202 wins</strong>
         <p>The full src-to-dst astype grid is broadly ahead. Remaining lag clusters around same-type diagonal copy and bool conversion cases.</p>
       </article>
       <article class="story-card">
         <h3>Fusion</h3>
-        <strong class="metric-good">4.16x</strong>
-        <p>The best fixed expression speedup for fused <code>np.evaluate</code> over NumSharp's unfused chain; broadcast fusion reaches 3.60x.</p>
+        <strong class="metric-good">4.78x</strong>
+        <p>The best fixed expression speedup for fused <code>np.evaluate</code> over NumSharp's unfused chain; broadcast fusion reaches 3.27x.</p>
       </article>
     </div>
   </section>
