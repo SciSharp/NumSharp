@@ -118,6 +118,39 @@ against cast kernels that reproduce the MSVC answer, so ~950/200000 cases "diver
 `(uint64)(1.0/0)`, the same undefined conversion. No implementation can satisfy both hosts; the fix
 was to stop asserting undefined values, not to chase one host's.
 
+## Scope gate — undisposed-intermediate detection (oracle-free)
+
+`UndisposedIntermediateTests` (`[FuzzMatrix]` + `[ScopeAudit]`, `[DoNotParallelize]`) replays the
+same corpus through `OpRegistry` with **every result disposed** and asserts the buffer pool's
+takes/returns balance via `ScopeAudit` (`SizeBucketedBufferPool`'s public counters; the takes side
+includes `ZeroedAllocs` — the calloc path counts there, not in Hits/Misses). In a fully-disposed
+region with no GC inside it, `takes − returns` is exactly the number of buffers an op took,
+dropped, and left for a future GC + finalizer pass — an **undisposed intermediate** the
+[NDScoped] weaver / library scoping failed to cover (the traffic class behind the pre-160ecbba
+benchmark collapse). A negative balance is the mirror defect (a result buffer allocated outside
+the pool, returned into it). Values are NOT compared here — that is FuzzCorpusTests' job.
+
+Validity rules, each encoded in the harness: a GC inside a region masks escapes (finalizers
+Return them mid-window), so regions observing a collection are retried after a settle and a
+persistent interference is inconclusive, never red; a **non-zero screen is re-measured after a
+settle** because the sweep runs over a library with known leaks — escaped buffers accumulate,
+GCs collect them, and the finalizer thread drains returns *asynchronously* across later regions,
+invisible to GC-count detection (first landing showed phantom escapes of −262 from exactly this);
+each case gets one un-measured **warm invocation** so one-time caches (FFT plans, emitted
+kernels) don't read as escapes; and the teeth tests (`Harness_Detects_*`) prove the detector
+fires in both directions, so a counters-accounting bug cannot read as "everything clean".
+
+**Landing inventory (2026-08-26):** the first full sweep found pre-existing leaks in **91 ops /
+~9,900 of 102,785 measured cases** — the axis/nan/cumulative reduction family, the product family
+(matmul/dot/vecdot/matvec/vecmat/vdot), fft, the tri/tril/triu/diag* family, `trim_zeros` (up to
+19 buffers per call), `np.empty` itself, ufunc `out=` paths, and the NEP50 scalar-operand binary
+cells (the engine's `Cast(rhs, resultType, copy: true)` parameter-reassign drop). These are
+documented in `KnownEscapes` — surfaced green with a per-op **ceiling** (an op leaking more than
+its recorded worst still fails) — and held red by the `KnownEscapeFamilies_AreFixed`
+`[OpenBugs]` pin plus the mechanism pin `BinaryScalarCastTemp_IsDisposed`. Working the list down:
+fix an op, remove its `KnownEscapes` entry (the sweep then gates it at zero forever); when the
+registry empties, delete the pin. Every op NOT in the registry is gated at zero from day one.
+
 ## Regenerating the corpus
 
 ```bash
