@@ -11,12 +11,16 @@ import numpy as np
 
 def best(fn, rounds=5):
     fn()
-    # best-of-21 floor, symmetric with the C# twin (which also warms JIT to steady-state first): a min
-    # over only 3-7 samples of a ~60 us-1.5 ms op is noisy enough to swing a cell run-to-run. NumPy is
-    # native and low-variance, so this only stabilises the reported minimum, it does not shift it.
-    rounds = max(rounds, 21)
-    value = float("inf")
-    for _ in range(rounds):
+    # Sample rule, symmetric with the C# twin (which also warms JIT to steady-state first): >=50
+    # timed rounds, relaxed to >=20 when one round (a single call) exceeds 10 ms — a min over only
+    # 3-7 samples of a ~60 us-1.5 ms op is noisy enough to swing a cell run-to-run. The first timed
+    # round doubles as the pilot; the caller's count survives as a floor only. NumPy is native and
+    # low-variance, so this only stabilises the reported minimum, it does not shift it.
+    start = time.perf_counter()
+    fn()
+    value = (time.perf_counter() - start) * 1000
+    rounds = max(rounds, 20 if value > 10.0 else 50)
+    for _ in range(rounds - 1):
         start = time.perf_counter()
         fn()
         value = min(value, (time.perf_counter() - start) * 1000)

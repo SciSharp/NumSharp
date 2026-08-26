@@ -122,6 +122,11 @@ def benchmark(func: Callable, n: int, warmup: int = 10, iterations: int = 50,
     one_ms = dt / pilot_n if (pilot_n and dt > 0) else 1e-9
 
     samples = max(1, iterations)                                    # >= 50 timed samples (never 1)
+    # Sample-count rule: >=50 timed samples ALWAYS; when a single call exceeds 10 ms (the inner==1
+    # regime, where each sample is one real call) the floor relaxes to >=20. The official run already
+    # passes iterations=50; this floors --quick and any other caller below the rule so min_ms — the
+    # statistic merge-results.py publishes — always rests on enough windows to catch a clean one.
+    samples = max(samples, 20 if one_ms > 10.0 else 50)
     # inner calls/sample so the `samples` samples span >= min_measure_ms total. Per test:
     #   fast op -> inner >> 1 (batched to ~min_measure_ms/samples per sample);
     #   slow op (>~min_measure_ms/samples per call) -> inner == 1 (each sample is one real call).

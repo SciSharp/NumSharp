@@ -27,14 +27,25 @@ if (dbgCore?.IsJITOptimizerDisabled ?? false)
 
 double BestMs(Action body, int iters, int warm, int rounds)
 {
-    for (int i = 0; i < warm; i++) body();
+    // Warmup; its timed tail (first call excluded — JIT/pool-cold) doubles as a per-call pilot.
+    body();
+    var pilot = Stopwatch.StartNew();
+    for (int i = 1; i < Math.Max(2, warm); i++) body();
+    pilot.Stop();
+    double perCall = pilot.Elapsed.TotalMilliseconds / Math.Max(1, Math.Max(2, warm) - 1);
+    // Sample rule: >=50 timed rounds, relaxed to >=20 when one round exceeds 10 ms (i.e. a single
+    // call already does). Rounds auto-size to ~1 ms so 50 of them stay cheap; the caller's tuned
+    // (iters, rounds) survive as floors/hints only — `rounds` floors the count, `iters` is
+    // superseded by the pilot-derived batch (kept in the signature for call-site stability).
+    int it = perCall > 10.0 ? 1 : Math.Clamp((int)Math.Round(1.0 / Math.Max(perCall, 1e-6)), 1, 1_000_000);
+    int rds = Math.Max(rounds, perCall > 10.0 ? 20 : 50);
     double best = double.MaxValue;
-    for (int r = 0; r < rounds; r++)
+    for (int r = 0; r < rds; r++)
     {
         var sw = Stopwatch.StartNew();
-        for (int i = 0; i < iters; i++) body();
+        for (int i = 0; i < it; i++) body();
         sw.Stop();
-        best = Math.Min(best, sw.Elapsed.TotalMilliseconds / iters);
+        best = Math.Min(best, sw.Elapsed.TotalMilliseconds / it);
     }
     return best;
 }

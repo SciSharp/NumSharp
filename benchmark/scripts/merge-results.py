@@ -2,6 +2,12 @@
 """
 Merge NumPy and NumSharp benchmark results into a unified comparison table.
 
+Timing basis: each side's BEST WINDOW — the min of its >=50 recorded samples per case (>=20 when a
+round exceeds 10 ms) — not the mean. Interference (GC pauses, page-fault storms, ambient machine
+load) only ever adds time, and it lands almost entirely in the NumSharp side's right tail, so
+comparing means turned machine state into fake ratio regressions. Per-case means are retained as
+`numpy_mean_ms`/`numsharp_mean_ms` for tail diagnostics.
+
 Outputs:
   - benchmark-report.json: Machine-readable merged data with ratios
   - benchmark-report.md: Markdown table for documentation
@@ -37,6 +43,12 @@ class UnifiedResult:
     ratio: Optional[float]  # NumPy / NumSharp  (>1.0× = NumSharp faster)
     pct_numpy: Optional[float]  # NumSharp/NumPy × 100 = share of NumPy's time NumSharp uses
     status: str  # "faster", "close", "slower", "much_slower", "negligible", "no_data"
+    # Timing basis: numpy_ms/numsharp_ms above are each side's BEST WINDOW (min of its >=50
+    # samples; >=20 when a round exceeds 10 ms). The per-case arithmetic means are retained
+    # below as provenance — a large mean/min gap on one side flags interference (GC pauses,
+    # page-fault storms, machine load) during that case's measurement window.
+    numpy_mean_ms: Optional[float] = None
+    numsharp_mean_ms: Optional[float] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -109,6 +121,12 @@ def parse_bdn_benchmark(bench: dict) -> Optional[dict]:
         stddev_ns = stats.get('StandardDeviation', stats.get('StdDev', 0))
         stddev_ms = stddev_ns / 1_000_000
 
+        # Best window (min of the >=50 BenchmarkDotNet iterations) — the statistic the report
+        # publishes (see merge_results): interference only ever ADDS time, so the fastest window
+        # is the closest estimate of the op's intrinsic cost. The mean rides along as provenance.
+        min_ns = stats.get('Min', 0)
+        min_ms = min_ns / 1_000_000
+
         # Map dtype to numpy names
         dtype_map = {
             'int32': 'int32', 'int64': 'int64', 'single': 'float32', 'double': 'float64',
@@ -127,6 +145,7 @@ def parse_bdn_benchmark(bench: dict) -> Optional[dict]:
             'dtype': dtype,
             'n': n,
             'mean_ms': mean_ms,
+            'min_ms': min_ms,
             'stddev_ms': stddev_ms
         }
     except Exception as e:
@@ -304,14 +323,23 @@ def merge_results(numpy_results: List[dict], csharp_results: List[dict]) -> List
         n = np_result.get('n', 10_000_000)
         suite = np_result.get('suite', 'General')
         category = np_result.get('category', '')
-        numpy_ms = np_result.get('mean_ms', 0)
+        # Timing basis = best window (min): both harnesses record >=50 samples per case (>=20 when
+        # a round exceeds 10 ms), and interference only ever ADDS time, so each side's fastest
+        # window is the closest estimate of intrinsic cost. The mean is fat-tailed on the NumSharp
+        # side under GC/page-fault/machine interference (measured: mean/min p75 = 1.68 vs NumPy's
+        # 1.08 in a full run — enough to move the credible-row geomean 0.86 -> 0.99), so comparing
+        # means turned machine state into fake ratio regressions. The `or` fallback keeps legacy
+        # result JSONs without min fields mergeable.
+        numpy_mean_ms = np_result.get('mean_ms', 0)
+        numpy_ms = np_result.get('min_ms') or numpy_mean_ms
 
         # Look for matching C# result at the SAME size (op, dtype, N)
         norm_name = normalize_op_name(name)
         key = (norm_name, dtype.lower(), n)
         cs_result = csharp_index.get(key)
 
-        numsharp_ms = cs_result['mean_ms'] if cs_result else None
+        numsharp_mean_ms = cs_result['mean_ms'] if cs_result else None
+        numsharp_ms = (cs_result.get('min_ms') or numsharp_mean_ms) if cs_result else None
         ratio = numpy_ms / numsharp_ms if (numsharp_ms and numsharp_ms > 0) else None         # NP/NS, >1 = faster
         pct = numsharp_ms / numpy_ms * 100 if (numsharp_ms is not None and numpy_ms > 0) else None  # share of NumPy time
         status = classify(numpy_ms, numsharp_ms, ratio)
@@ -329,7 +357,9 @@ def merge_results(numpy_results: List[dict], csharp_results: List[dict]) -> List
             numsharp_ms=round(numsharp_ms, 6) if numsharp_ms is not None else None,
             ratio=round(ratio, 3) if ratio is not None else None,
             pct_numpy=round(pct, 1) if pct is not None else None,
-            status=status
+            status=status,
+            numpy_mean_ms=round(numpy_mean_ms, 6) if numpy_mean_ms is not None else None,
+            numsharp_mean_ms=round(numsharp_mean_ms, 6) if numsharp_mean_ms is not None else None
         ))
 
     return unified
@@ -349,7 +379,8 @@ def generate_csv(results: List[UnifiedResult], output_path: str):
     with open(output_path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['Operation', 'Suite', 'Category', 'DType', 'N',
-                        'NumPy (ms)', 'NumSharp (ms)', 'Ratio (NumPy/NumSharp)', '%NumPy', 'Status'])
+                        'NumPy (ms)', 'NumSharp (ms)', 'Ratio (NumPy/NumSharp)', '%NumPy', 'Status',
+                        'NumPy mean (ms)', 'NumSharp mean (ms)'])
         for r in results:
             writer.writerow([
                 r.operation, r.suite, r.category, r.dtype, r.n,
@@ -357,7 +388,9 @@ def generate_csv(results: List[UnifiedResult], output_path: str):
                 '' if r.numsharp_ms is None else r.numsharp_ms,
                 '' if r.ratio is None else r.ratio,
                 '' if r.pct_numpy is None else r.pct_numpy,
-                r.status
+                r.status,
+                '' if r.numpy_mean_ms is None else r.numpy_mean_ms,
+                '' if r.numsharp_mean_ms is None else r.numsharp_mean_ms
             ])
     print(f"CSV written to: {output_path}")
 
@@ -378,6 +411,10 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
         "# NumSharp vs NumPy Performance",
         "",
         "**Baseline:** NumPy · measured across all array sizes (per-(op, dtype, N))",
+        "",
+        "**Timing basis:** best window (min) of each side's ≥50 samples per case (≥20 when a round "
+        "exceeds 10 ms) — interference only adds time, so the fastest window estimates intrinsic cost; "
+        "per-case means are retained in the JSON (`numpy_mean_ms`/`numsharp_mean_ms`) as tail diagnostics.",
         "",
         "**Ratio** = NumPy ÷ NumSharp → Higher is better (>1.0× = NumSharp faster)",
         "",

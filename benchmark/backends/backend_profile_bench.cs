@@ -54,11 +54,13 @@ double Best(Action body, int rounds)
         warmIters++;
     }
 
-    // best-of-21 (the repo's perf-convention floor): the small-N products/LAPACK calls are ~60 us-1.5 ms
+    // Sample rule (the repo's perf-convention floor): the small-N products/LAPACK calls are ~60 us-1.5 ms
     // with ~15-20% run-to-run jitter, so a min over only 3-7 samples is unstable enough to swing a single
-    // cell 0.7x<->1.3x between runs. Take the min over at least 21 timed rounds so the reported number is
-    // the steady-state minimum rather than one noisy draw. Applied symmetrically on the NumPy twin.
-    rounds = Math.Max(rounds, 21);
+    // cell 0.7x<->1.3x between runs. Take the min over at least 50 timed rounds — relaxed to 20 when one
+    // round (a single call) exceeds 10 ms, estimated from the warmup loop above — so the reported number
+    // is the steady-state minimum rather than one noisy draw. Applied symmetrically on the NumPy twin.
+    double perCall = warm.Elapsed.TotalMilliseconds / Math.Max(1, warmIters);
+    rounds = Math.Max(rounds, perCall > 10.0 ? 20 : 50);
     double best = double.MaxValue;
     for (int i = 0; i < rounds; i++)
     {

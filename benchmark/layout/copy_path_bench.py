@@ -1,7 +1,14 @@
 import numpy as np, time, sys
 
 def best_ms(f, it, wm, rd):
-    for _ in range(wm): f()
+    # Warmup; its timed tail (first call excluded — cache/alloc-cold) doubles as a per-call pilot.
+    f()
+    t = time.perf_counter()
+    for _ in range(max(2, wm) - 1): f()
+    per_call = (time.perf_counter() - t) * 1000.0 / max(1, max(2, wm) - 1)
+    # Sample rule: >=50 timed rounds (>=20 when one round exceeds 10 ms); rounds auto-size to ~1 ms.
+    it = 1 if per_call > 10.0 else max(1, min(1_000_000, int(round(1.0 / max(per_call, 1e-6)))))
+    rd = max(rd, 20 if per_call > 10.0 else 50)
     best=float('inf')
     for _ in range(rd):
         t=time.perf_counter()

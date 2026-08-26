@@ -13,8 +13,13 @@ ai = np.arange(N, dtype=np.int32)
 
 
 def best(fn, rounds=9):
-    out = float("inf")
-    for _ in range(rounds):
+    # First round doubles as the pilot for the sample rule: >=50 timed rounds, relaxed to >=20
+    # when one round exceeds 10 ms. The caller's count survives as a floor only.
+    t0 = time.perf_counter()
+    fn()
+    out = (time.perf_counter() - t0) * 1000
+    rounds = max(rounds, 20 if out > 10.0 else 50)
+    for _ in range(rounds - 1):
         t0 = time.perf_counter()
         fn()
         out = min(out, (time.perf_counter() - t0) * 1000)

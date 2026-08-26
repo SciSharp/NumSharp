@@ -21,6 +21,9 @@ is the distilled map + the actionable playbooks. Read `benchmark/CLAUDE.md` when
 ## THE convention: NPY/NS (memorize this)
 
 > **ratio = NumPy_ms / NumSharp_ms.** `>1` = NumSharp **faster**, `<1` = slower, `=1` = parity. **Higher is better.**
+> **Timing basis: best window (min)** — ratios compare each side's per-case min of ≥50 samples (≥20 when a
+> round exceeds 10 ms), never the mean (NS-side GC/page-fault/machine tails made means lie ~15% geomean-wide);
+> per-case means stay in the JSON (`numpy_mean_ms`/`numsharp_mean_ms`) as tail diagnostics.
 
 Used everywhere — matrices, geomeans, commit messages, every `*_sheet.py`. Dashboard/report bands: ✅ `≥1.05` · 🟡 `≥0.5` · 🟠 `≥0.2`
 · 🔴 `<0.2`. (The legacy `run-benchmarks.ps1` prints the INVERSE NS/NPY — prefer NPY/NS for anything new.)

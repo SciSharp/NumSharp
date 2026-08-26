@@ -38,8 +38,13 @@ var bf = b.astype(np.float32);
 
 double Best(Func<double> run, int rounds = 9)
 {
-    double best = double.MaxValue;
-    for (int i = 0; i < rounds; i++)
+    // First round doubles as the pilot for the sample rule: >=50 timed rounds, relaxed to >=20
+    // when one round exceeds 10 ms. The caller's count survives as a floor only.
+    GC.Collect();
+    GC.WaitForPendingFinalizers();
+    double best = run();
+    rounds = Math.Max(rounds, best > 10.0 ? 20 : 50);
+    for (int i = 1; i < rounds; i++)
     {
         GC.Collect();
         GC.WaitForPendingFinalizers();

@@ -69,6 +69,7 @@ The benchmark suite provides fair, reproducible performance comparisons between 
 | Complementary subsystems | **5** appended to every official run (nditer, layout, operand, cast, fusion) |
 | Array Sizes | **3** cache tiers in the official run (1K / 100K / 10M); the C# project also defines Scalar/100 |
 | Convention | **NPY/NS** — ratio = NumPy_ms / NumSharp_ms, **>1 = NumSharp faster** |
+| Timing basis | **best window (min)** — each side's fastest of its ≥50 samples per case (≥20 when a round exceeds 10 ms); per-case means retained in the JSON as tail diagnostics |
 
 ---
 
@@ -635,6 +636,21 @@ The C# side runs under `OfficialBenchmarkConfig` (Infrastructure/BenchmarkConfig
   iteration time lets the pilot pick a per-op invocation count that fits 25 ms — fast ops
   still get hundreds–thousands of invocations, slow ops drop to 1/iteration. (~15× faster,
   all 50 iterations preserved.)
+- **Timing basis: best window (min), not the mean.** `merge-results.py` compares each side's
+  per-case MINIMUM (BDN `Statistics.Min` / NumPy `min_ms`): interference — GC pauses, page-fault
+  storms, ambient machine load — only ever *adds* time, and it lands almost entirely in the
+  NumSharp side's right tail (measured on a full run: NS mean/min p75 = 1.68 vs NumPy's 1.08,
+  enough to move the credible-row geomean **0.86 → 0.99 from the same raw data**), so comparing
+  means turned machine state into fake ratio regressions. Per-case means are retained in the JSON
+  (`numpy_mean_ms`/`numsharp_mean_ms`) — a large mean/min gap on one side flags a contaminated
+  measurement window. The **sample-count rule** backing the min — ≥50 timed rounds per case,
+  relaxed to ≥20 when one round exceeds 10 ms — is enforced across every harness: the BDN job
+  (50 iterations), `numpy_benchmark.benchmark()` (floors even `--quick`), and the subsystem /
+  backend best-of helpers (layout / operand / cast / fusion / nditer / backends), whose rounds
+  auto-size to ~1 ms windows with the callers' tuned counts surviving as floors. Note min cannot
+  rescue stress that outlasts a whole case (~seconds) — a uniformly slow window inflates the min
+  too; that regime is only catchable by re-measuring against a reference (see the contamination
+  notes in `benchmark/history/` MANIFESTs).
 
 The language merge keys on `(op, dtype, N)`. The targeted backend harness then measures all 39
 backend-sensitive APIs under Managed C# and OpenBLAS, capturing MissingBackendException and
