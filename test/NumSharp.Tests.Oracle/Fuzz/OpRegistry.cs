@@ -129,8 +129,10 @@ namespace NumSharp.Tests.Fuzz
                 case "pad": return np.pad(ops[0], p["pad_width"].GetInt32(), p["mode"].GetString());
 
                 // Multi-output (T15): modf split into its two outputs (fractional / integral).
-                case "modf_frac": return np.modf(ops[0]).Item1;
-                case "modf_int": return np.modf(ops[0]).Item2;
+                // modf returns BOTH outputs; each corpus op tests one. Dispose the other so the
+                // un-tested half isn't counted as an escape (it's the harness's choice, not a leak).
+                case "modf_frac": { var (frac, whole) = np.modf(ops[0]); whole.Dispose(); return frac; }
+                case "modf_int": { var (frac, whole) = np.modf(ops[0]); frac.Dispose(); return whole; }
                 case "conjugate": return np.conjugate(ops[0]);
                 case "conj": return np.conj(ops[0]);
                 case "real": return np.real(ops[0]);
@@ -260,24 +262,35 @@ namespace NumSharp.Tests.Fuzz
                 // and the two-sided invariant are contractual; the invariant is unit-test-pinned).
                 case "partition":
                 {
+                    // Multi-step DERIVATION of the tested value: partition, then gather the kth
+                    // positions. `part` and the kth index array are the harness's own
+                    // intermediates (not np.partition's) — dispose them so the scope audit
+                    // measures the LIBRARY op's cleanliness, not this composition's litter.
                     var ks = ParseIntArray(p["kth"]);
                     int? ax = ParseAxis(p);
-                    var part = np.partition(ops[0], ks, ax);
+                    using var part = np.partition(ops[0], ks, ax);
+                    using var ksArr = np.array(ks);
                     if (ax is null)
-                        return np.take(part, np.array(ks));
+                        return np.take(part, ksArr);
                     int axv = ax.Value < 0 ? ax.Value + part.ndim : ax.Value;
-                    return np.take(part, np.array(ks), axv);
+                    return np.take(part, ksArr, axv);
                 }
                 case "argpartition":
                 {
                     var ks = ParseIntArray(p["kth"]);
                     int? ax = ParseAxis(p);
+                    using var ksArr = np.array(ks);
                     if (ax is null)
-                        return np.take(np.take(ops[0].ravel(), np.argpartition(ops[0], ks, null)), np.array(ks));
-                    var g = np.argpartition(ops[0], ks, ax.Value);
-                    var vals = np.take_along_axis(ops[0], g, ax.Value);
+                    {
+                        // ops[0].ravel() is a view (no pooled buffer); g0 and picked are fresh.
+                        using var g0 = np.argpartition(ops[0], ks, null);
+                        using var picked = np.take(ops[0].ravel(), g0);
+                        return np.take(picked, ksArr);
+                    }
+                    using var g = np.argpartition(ops[0], ks, ax.Value);
+                    using var vals = np.take_along_axis(ops[0], g, ax.Value);
                     int axv = ax.Value < 0 ? ax.Value + vals.ndim : ax.Value;
-                    return np.take(vals, np.array(ks), axv);
+                    return np.take(vals, ksArr, axv);
                 }
                 case "lexsort": return np.lexsort(ops, p["axis"].GetInt32());       // all operands are keys
                 case "sort_complex": return np.sort_complex(ops[0]);
@@ -321,9 +334,8 @@ namespace NumSharp.Tests.Fuzz
                         p.TryGetValue("mode", out var rmiMode) ? rmiMode.GetString() : "raise",
                         p.TryGetValue("order", out var rmiOrder) ? rmiOrder.GetString()[0] : 'C');
                 case "unravel_index":
-                    return np.unravel_index(ops[0], ParseIntArray(p["shape"]),
-                        p.TryGetValue("order", out var uriOrder) ? uriOrder.GetString()[0] : 'C')
-                        [p["piece"].GetInt32()];
+                    return PickAndDisposeRest(np.unravel_index(ops[0], ParseIntArray(p["shape"]),
+                        p.TryGetValue("order", out var uriOrder) ? uriOrder.GetString()[0] : 'C'), p["piece"].GetInt32());
 
                 // ---- isin / set operations (arraysetops). ops[0]=element/ar1, ops[1]=test/ar2.
                 // Value-dependent membership: fixtures overlap so each op bites. intersect1d's
@@ -567,15 +579,15 @@ namespace NumSharp.Tests.Fuzz
                 case "diag_indices":
                     return np.diag_indices(p["n"].GetInt32(), p["ndim"].GetInt32())[p["which"].GetInt32()];
                 case "tril_indices":
-                    return np.tril_indices(p["n"].GetInt32(), p["k"].GetInt32(), ParseNullableInt(p, "m"))[p["which"].GetInt32()];
+                    return PickAndDisposeRest(np.tril_indices(p["n"].GetInt32(), p["k"].GetInt32(), ParseNullableInt(p, "m")), p["which"].GetInt32());
                 case "triu_indices":
-                    return np.triu_indices(p["n"].GetInt32(), p["k"].GetInt32(), ParseNullableInt(p, "m"))[p["which"].GetInt32()];
+                    return PickAndDisposeRest(np.triu_indices(p["n"].GetInt32(), p["k"].GetInt32(), ParseNullableInt(p, "m")), p["which"].GetInt32());
                 case "diag_indices_from":
                     return np.diag_indices_from(ops[0])[p["which"].GetInt32()];
                 case "tril_indices_from":
-                    return np.tril_indices_from(ops[0], p["k"].GetInt32())[p["which"].GetInt32()];
+                    return PickAndDisposeRest(np.tril_indices_from(ops[0], p["k"].GetInt32()), p["which"].GetInt32());
                 case "triu_indices_from":
-                    return np.triu_indices_from(ops[0], p["k"].GetInt32())[p["which"].GetInt32()];
+                    return PickAndDisposeRest(np.triu_indices_from(ops[0], p["k"].GetInt32()), p["which"].GetInt32());
                 case "mask_indices":
                 {
                     // The corpus serialises the mask FUNCTION by name; re-bind it here.
@@ -587,7 +599,7 @@ namespace NumSharp.Tests.Fuzz
                         "diag" => (a, kk) => np.diag(a, kk),
                         _ => throw new NotSupportedException($"mask_indices func '{fname}'")
                     };
-                    return np.mask_indices(p["n"].GetInt32(), mask, p["k"].GetInt32())[p["which"].GetInt32()];
+                    return PickAndDisposeRest(np.mask_indices(p["n"].GetInt32(), mask, p["k"].GetInt32()), p["which"].GetInt32());
                 }
 
                 // ---- index-expression DSL (r_ / c_ / ix_) ---------------------------------
@@ -631,7 +643,7 @@ namespace NumSharp.Tests.Fuzz
                     var seqs = new object[ops.Length];
                     for (int i = 0; i < ops.Length; i++)
                         seqs[i] = ops[i];
-                    return np.ix_(seqs)[p["which"].GetInt32()];
+                    return PickAndDisposeRest(np.ix_(seqs), p["which"].GetInt32());
                 }
 
                 // Group A: rounding + flattened diff + nan order-statistics.
@@ -735,6 +747,22 @@ namespace NumSharp.Tests.Fuzz
             NPTypeCode.Complex => np.argsort<System.Numerics.Complex>(a, axis),
             _ => throw new NotSupportedException($"argsort<{a.typecode}> not wired in OpRegistry")
         };
+
+        // Index-tuple generators return N fresh coordinate arrays; each corpus op tests ONE via
+        // [which]. Dispose the DISTINCT un-picked arrays so the harness's selection isn't counted
+        // as a leak (the un-tested arrays are the harness's choice, not a library escape). Aliased
+        // tuples (diag_indices returns one instance in every slot) dispose nothing — the kept one
+        // is the only distinct instance — and view tuples (ix_) dispose harmlessly (a view took no
+        // pooled buffer). Mirrors the modf_frac/int and partition dispose-the-intermediate pattern.
+        private static NDArray PickAndDisposeRest(NDArray[] tuple, int which)
+        {
+            var keep = tuple[which];
+            var seen = new HashSet<object>(ReferenceEqualityComparer.Instance) { keep };
+            foreach (var x in tuple)
+                if (x is not null && seen.Add(x))
+                    x.Dispose();
+            return keep;
+        }
 
         private static int[] ParseIntArray(JsonElement arr)
         {

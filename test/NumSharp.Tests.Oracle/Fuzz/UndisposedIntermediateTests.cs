@@ -288,27 +288,29 @@ namespace NumSharp.Tests.Fuzz
                 // reassigned scalar-cast temp AND the copy('F') C-contig original, mechanisms 1 & 3).
                 // What remains below is the still-leaking inventory.
                 //
-                // index generators (build coordinate arrays then discard scratch)
-                ["diag_indices"] = 1, ["diag_indices_from"] = 1,
-                ["tril_indices"] = 3, ["triu_indices"] = 3, ["tril_indices_from"] = 3,
-                ["triu_indices_from"] = 3, ["mask_indices"] = 5,
-                ["indices"] = 1, ["indices_sparse"] = 3, ["ix_"] = 2,
-                // manipulation
-                ["repeat"] = 1, ["reshape"] = 1, ["rot90"] = 1, ["pad"] = 2,
-                ["unravel_index"] = 2, ["argwhere"] = 1,
-                // sorting / searching
-                ["partition"] = 2, ["argpartition"] = 3, ["lexsort"] = 3, ["sort_complex"] = 1,
-                ["searchsorted"] = 2, ["digitize"] = 1 + 2, ["bincount"] = 1,
-                // comparison residual: the copy('F') C-contig drop is now disposed (was 2/call), but a
-                // SECOND layout-specific drop remains on a single dtype-pair per op (still 1/call).
-                ["less"] = 1, ["less_equal"] = 1, ["greater_equal"] = 1, ["not_equal"] = 1,
-                // unary odds and ends
-                ["reciprocal"] = 1, ["conj"] = 1, ["conjugate"] = 1,
-                ["modf_frac"] = 1, ["modf_int"] = 1, ["out_unary"] = 1, ["copyto_overlap"] = 1,
-                // creation
+                // SECOND fix wave (2026-08-26): the sorting/manipulation/index-generator families
+                // cleared. The MULTI-OUTPUT ones were HARNESS compositions dropping un-tested
+                // intermediates, disposed in OpRegistry — partition/argpartition (the `part`/kth-index
+                // gather litter), modf_frac/int (the un-selected tuple half), and the tuple-selection
+                // generators tril/triu_indices(_from)/mask_indices/unravel_index/ix_ (the un-picked
+                // coordinate arrays, via PickAndDisposeRest). The SINGLE-CALL ones are woven
+                // [NDScoped]: repeat/reshape/rot90/sort_complex/searchsorted/digitize/bincount/indices/
+                // indices_sparse/argwhere/lexsort/diag_indices(_from)/reciprocal/conj/conjugate, and
+                // out_unary cleared collaterally. What remains needs deeper per-op forensics — the
+                // ambient scope cannot see it (raw kernel scratch, or a dtype/shape-specific temp), or
+                // it is a caller-side lifetime the library op does not own:
+                //
+                // engine/kernel raw scratch — NOT an NDArray the ambient scope can track
+                ["copyto_overlap"] = 1, ["pad"] = 2,
+                // creation — a dtype/shape-specific temp the simple cases don't reproduce
                 ["empty"] = 2, ["empty_like"] = 2,
-                // polynomial / random
+                // comparison residual — the copy('F') C-contig drop is fixed (was 2/call); a SECOND
+                // layout-specific drop on a single dtype-pair per op survives (still 1/call)
+                ["less"] = 1, ["less_equal"] = 1, ["greater_equal"] = 1, ["not_equal"] = 1,
+                // polynomial — poly1d's ctor stores coeffs in a field, so an [NDScoped] ctor would
+                // reclaim the RESULT; needs NDScope.Detach or targeted disposal of roots->coeffs temps
                 ["poly1d_fromroots"] = 2,
+                // random samplers — per-draw state buffers
                 ["rnd"] = 4, ["grnd"] = 7, ["get_state"] = 1,
             };
 
