@@ -300,16 +300,21 @@ namespace NumSharp.Tests.Fuzz
                 // ambient scope cannot see it (raw kernel scratch, or a dtype/shape-specific temp), or
                 // it is a caller-side lifetime the library op does not own:
                 //
-                // engine/kernel raw scratch — NOT an NDArray the ambient scope can track
-                ["copyto_overlap"] = 1, ["pad"] = 2,
-                // creation — a dtype/shape-specific temp the simple cases don't reproduce
-                ["empty"] = 2, ["empty_like"] = 2,
+                // THIRD fix wave (2026-08-26): the raw-scratch and field-egress families cleared where
+                // NDScope provably could not reach, via targeted disposal (and one hand-written scope):
+                //   * copyto_overlap + pad — the shared NDIter.Copy(UnmanagedStorage) overlap clone
+                //     (`src = src.Clone()`) is a bare storage no [NDScoped] scope tracks; its buffer is
+                //     now returned to the pool in a finally (pad's reflect/wrap/edge modes copy
+                //     padded[dst]=padded[src], so they hit the same clone).
+                //   * empty + empty_like — the leak was in ndarray.fill: CoerceFillValue's integer path
+                //     dropped the 1-element source + its astype cast; both now disposed.
+                //   * poly1d_fromroots — the ctor's np.poly→trim_zeros(view) chain dropped np.poly's
+                //     base; a hand-written NDScope yields the field via Returns and reclaims the rest
+                //     (the [NDScoped] weaver can't express a ctor's field egress).
+                //
                 // comparison residual — the copy('F') C-contig drop is fixed (was 2/call); a SECOND
                 // layout-specific drop on a single dtype-pair per op survives (still 1/call)
                 ["less"] = 1, ["less_equal"] = 1, ["greater_equal"] = 1, ["not_equal"] = 1,
-                // polynomial — poly1d's ctor stores coeffs in a field, so an [NDScoped] ctor would
-                // reclaim the RESULT; needs NDScope.Detach or targeted disposal of roots->coeffs temps
-                ["poly1d_fromroots"] = 2,
                 // random samplers — per-draw state buffers
                 ["rnd"] = 4, ["grnd"] = 7, ["get_state"] = 1,
             };

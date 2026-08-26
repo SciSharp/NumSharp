@@ -4189,93 +4189,118 @@ namespace NumSharp.Backends.Iteration
             // (NDMemOverlap = NumPy solve_may_share_memory) directly on the storages — NOT via
             // throwaway NDArray wrappers, which under ARC would retain the buffers. A cross-dtype
             // copy targets a distinct buffer, so the bounds test short-circuits to No for free.
+            UnmanagedStorage overlapTemp = null;
             if (NeedsAssignmentTemp(dst.Shape, src.Shape)
                 && NDMemOverlap.StoragesMayShareMemory(src, dst))
             {
+                // Reassigning the parameter here drops the clone on method exit, leaking its pooled
+                // buffer to a future GC + finalizer pass. The clone is a bare UnmanagedStorage — NOT
+                // an NDArray — so NO [NDScoped] ambient scope reclaims it (NDScope.Track fires only
+                // from NDArray.InitializeArc); capture it so the finally returns its buffer to the
+                // pool. The buffer is a fresh, private copy this method owns outright.
                 src = src.Clone();
+                overlapTemp = src;
             }
 
-            // Same-dtype fast path: SIMD copy kernel, broadcast + stride aware.
-            if (TryCopySameType(dst, src))
-                return;
-
-            // Cross-dtype: per-element cast via NDIterCasting.ConvertValue,
-            // driven by the same coalesced broadcast state used by TryCopySameType.
-            NumSharpException.ThrowIfNotWriteable(dst.Shape);
-
-            // Scalar-broadcast cross-dtype fast path: the source is a single value (ALL strides 0),
-            // so convert it ONCE with the same NumPy-faithful NDIterCasting.ConvertValue the scalar
-            // fallback below uses, then typed-fill the whole contiguous dst — instead of casting the
-            // identical value per element. Whole-buffer C/F-contiguous dst only (offset 0, size ==
-            // Count); the fill is order-independent. dst[0] is written first (offset 0 ⇒ buffer[0]),
-            // then read back boxed as dst's dtype and replicated across every slot via IArraySlice.Fill.
-            if (src.Shape.IsScalarBroadcast
-                && (dst.Shape.IsContiguous || dst.Shape.IsFContiguous)
-                && dst.Shape.offset == 0
-                && dst.Shape.size > 0
-                && dst.Shape.size == dst.InternalArray.Count)
-            {
-                byte* sp = src.Address + src.Shape.offset * src.InternalArray.ItemLength;
-                NDIterCasting.ConvertValue(sp, (void*)dst.Address, src.TypeCode, dst.TypeCode);
-                dst.InternalArray.Fill(dst.GetValue(0));
-                return;
-            }
-
-            var state = CreateCopyState(src, dst);
             try
             {
-                if (state.Size == 0)
+                // Same-dtype fast path: SIMD copy kernel, broadcast + stride aware.
+                if (TryCopySameType(dst, src))
                     return;
 
-                // SIMD fast path 1: both src and dst contiguous, no broadcast.
-                // IL-generated contig cast kernel — minimal overhead for the common case.
-                if (state.IsContiguousCopy && state.Size > 0)
+                // Cross-dtype: per-element cast via NDIterCasting.ConvertValue,
+                // driven by the same coalesced broadcast state used by TryCopySameType.
+                NumSharpException.ThrowIfNotWriteable(dst.Shape);
+
+                // Scalar-broadcast cross-dtype fast path: the source is a single value (ALL strides 0),
+                // so convert it ONCE with the same NumPy-faithful NDIterCasting.ConvertValue the scalar
+                // fallback below uses, then typed-fill the whole contiguous dst — instead of casting the
+                // identical value per element. Whole-buffer C/F-contiguous dst only (offset 0, size ==
+                // Count); the fill is order-independent. dst[0] is written first (offset 0 ⇒ buffer[0]),
+                // then read back boxed as dst's dtype and replicated across every slot via IArraySlice.Fill.
+                if (src.Shape.IsScalarBroadcast
+                    && (dst.Shape.IsContiguous || dst.Shape.IsFContiguous)
+                    && dst.Shape.offset == 0
+                    && dst.Shape.size > 0
+                    && dst.Shape.size == dst.InternalArray.Count)
                 {
-                    var castKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
-                        .TryGetCastKernel(src.TypeCode, dst.TypeCode);
-                    if (castKernel != null)
-                    {
-                        castKernel((void*)state.GetDataPointer(0), (void*)state.GetDataPointer(1), state.Size);
-                        return;
-                    }
+                    byte* sp = src.Address + src.Shape.offset * src.InternalArray.ItemLength;
+                    NDIterCasting.ConvertValue(sp, (void*)dst.Address, src.TypeCode, dst.TypeCode);
+                    dst.InternalArray.Fill(dst.GetValue(0));
+                    return;
                 }
 
-                // SIMD fast path 2: strided/broadcast cast. IL kernel walks outer dims via incremental
-                // coord advance and uses the same SIMD body as the contig kernel for any inner axis
-                // with stride==1 for both src and dst. Falls back internally to scalar strided inner
-                // loop when the innermost axis has non-unit stride for either side.
-                if (state.Size > 0)
+                var state = CreateCopyState(src, dst);
+                try
                 {
-                    var stridedKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
-                        .TryGetStridedCastKernel(src.TypeCode, dst.TypeCode);
-                    if (stridedKernel != null)
-                    {
-                        stridedKernel(
-                            (void*)state.GetDataPointer(0),
-                            (void*)state.GetDataPointer(1),
-                            state.GetStridesPointer(0),
-                            state.GetStridesPointer(1),
-                            state.GetShapePointer(),
-                            state.NDim);
+                    if (state.Size == 0)
                         return;
-                    }
-                }
 
-                // Scalar dispatch: Decimal/Complex/Half/Char/Boolean involved.
-                NDIterCasting.CopyStridedToStridedWithCast(
-                    (void*)state.GetDataPointer(0),
-                    state.GetStridesPointer(0),
-                    src.TypeCode,
-                    (void*)state.GetDataPointer(1),
-                    state.GetStridesPointer(1),
-                    dst.TypeCode,
-                    state.GetShapePointer(),
-                    state.NDim,
-                    state.Size);
+                    // SIMD fast path 1: both src and dst contiguous, no broadcast.
+                    // IL-generated contig cast kernel — minimal overhead for the common case.
+                    if (state.IsContiguousCopy && state.Size > 0)
+                    {
+                        var castKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
+                            .TryGetCastKernel(src.TypeCode, dst.TypeCode);
+                        if (castKernel != null)
+                        {
+                            castKernel((void*)state.GetDataPointer(0), (void*)state.GetDataPointer(1), state.Size);
+                            return;
+                        }
+                    }
+
+                    // SIMD fast path 2: strided/broadcast cast. IL kernel walks outer dims via incremental
+                    // coord advance and uses the same SIMD body as the contig kernel for any inner axis
+                    // with stride==1 for both src and dst. Falls back internally to scalar strided inner
+                    // loop when the innermost axis has non-unit stride for either side.
+                    if (state.Size > 0)
+                    {
+                        var stridedKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
+                            .TryGetStridedCastKernel(src.TypeCode, dst.TypeCode);
+                        if (stridedKernel != null)
+                        {
+                            stridedKernel(
+                                (void*)state.GetDataPointer(0),
+                                (void*)state.GetDataPointer(1),
+                                state.GetStridesPointer(0),
+                                state.GetStridesPointer(1),
+                                state.GetShapePointer(),
+                                state.NDim);
+                            return;
+                        }
+                    }
+
+                    // Scalar dispatch: Decimal/Complex/Half/Char/Boolean involved.
+                    NDIterCasting.CopyStridedToStridedWithCast(
+                        (void*)state.GetDataPointer(0),
+                        state.GetStridesPointer(0),
+                        src.TypeCode,
+                        (void*)state.GetDataPointer(1),
+                        state.GetStridesPointer(1),
+                        dst.TypeCode,
+                        state.GetShapePointer(),
+                        state.NDim,
+                        state.Size);
+                }
+                finally
+                {
+                    state.FreeDimArrays();
+                }
             }
             finally
             {
-                state.FreeDimArrays();
+                // Return the overlap-copy clone's pooled buffer (see the capture above). The clone was
+                // never InitializeArc'd — a bare UnmanagedStorage carries no counted reference — so its
+                // block sits at refcount 0 and a lone Release() is a no-op stray. Take the one owning
+                // reference the clone implicitly holds, then release it: the 0 → 1 → 0 transition frees
+                // the buffer straight back to SizeBucketedBufferPool (the finalizer would eventually do
+                // the same via Abandon, but eagerly here reclaims the pool slot for warm reuse).
+                var overlapBlock = overlapTemp?.InternalArray;
+                if (overlapBlock is not null)
+                {
+                    overlapBlock.TryAddRef();
+                    overlapBlock.Release();
+                }
             }
         }
 

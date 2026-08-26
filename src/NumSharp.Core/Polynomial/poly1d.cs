@@ -29,6 +29,17 @@ namespace NumSharp
         /// <param name="variable">Variable name used when printing (default <c>"x"</c>).</param>
         public poly1d(NDArray c_or_r, bool r = false, string variable = null)
         {
+            // Reclaim the transient coefficient arrays this chain builds. The from-roots branch's
+            // np.poly returns a FRESH vector that np.trim_zeros then aliases as a VIEW — dropping
+            // the base, whose buffer would dangle behind the view to a future GC. A hand-written
+            // NDScope tracks every array constructed here and disposes all but the one yielded via
+            // Returns; the ctor's egress is a FIELD (not a return), which the [NDScoped] weaver can't
+            // express, so the scope is spelled out. Reclamation is ARC release, so yielding the
+            // trim_zeros view keeps its base alive (the view holds the surviving ref). On the
+            // from-coeffs path trim_zeros aliases the untracked operand, so nothing is reclaimed —
+            // matching that path's already-clean balance.
+            using var scope = NDScope.Open();
+
             if (r)
                 c_or_r = np.poly(c_or_r);
 
@@ -40,7 +51,7 @@ namespace NumSharp
             if (c_or_r.size == 0)
                 c_or_r = np.zeros(new Shape(1), c_or_r.typecode);
 
-            _coeffs = c_or_r;
+            _coeffs = scope.Returns(c_or_r);
             _variable = variable ?? "x";
         }
 

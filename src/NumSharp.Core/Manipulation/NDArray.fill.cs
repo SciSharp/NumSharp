@@ -207,9 +207,16 @@ namespace NumSharp
                 if (tc != NPTypeCode.Boolean)
                     CheckWeakScalarFitsInteger(value, tc);
 
-                var src = new NDArray(value.GetType(), 1);
+                // Dispose the two scratch arrays this astype-based cast builds (a 1-element source and
+                // its cast result): the coerced value is extracted as a boxed primitive, so both are
+                // pure internal temporaries that would otherwise leak their pooled buffers. This narrow
+                // allocating sub-path runs only for a type-mismatched scalar into a non-int32 integer /
+                // bool / char dtype — the exact-dtype and float/decimal/complex paths never reach here —
+                // so it is freed here rather than by an [NDScoped] scope taxing fill()'s alloc-free path.
+                using var src = new NDArray(value.GetType(), 1);
                 src.SetAtIndex(value, 0);
-                return src.astype(dtype).GetAtIndex(0); // astype WRAPS — the bounds check above already gated overflow
+                using var casted = src.astype(dtype);
+                return casted.GetAtIndex(0); // astype WRAPS — the bounds check above already gated overflow
             }
 
             if (tc == NPTypeCode.Complex)
