@@ -68,7 +68,7 @@ def main():
             and r.get("numsharp_ms") is not None and r.get("numpy_ms") is not None]
     for r in cred:
         # Consume the merge's CANONICAL ratio/pct (merge-results.py computes them from the
-        # full-precision means, BEFORE rounding numpy_ms/numsharp_ms to 4dp for storage).
+        # full-precision best-window (min) values, BEFORE rounding numpy_ms/numsharp_ms for storage).
         # Re-deriving them here by dividing the rounded ms drifts from benchmark-report.md by
         # up to a few % on ~1/6 of rows (e.g. nansum read 12.63× here vs 12.65× there; zeros
         # 88087% vs 87957%). Reading the stored fields makes the dashboard and the report agree

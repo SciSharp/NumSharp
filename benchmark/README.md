@@ -19,6 +19,11 @@ axes the matrix cannot express.
 Bands used by the report: ✅ `≥1.05×` · 🟡 `≥0.5×` · 🟠 `≥0.2×` · 🔴 `<0.2×` · ▫ negligible
 (sub-µs / >20× — excluded from geomeans & rankings) · ⚪ C# side not run.
 
+**Timing basis:** every ratio compares the two sides' per-case **min** (best window of ≥50 samples;
+≥20 when a round exceeds 10 ms) — never the mean, whose NumSharp-side GC/page-fault/machine-load
+tails turned host state into fake regressions; per-case means stay in the report JSON
+(`numpy_mean_ms`/`numsharp_mean_ms`) as tail diagnostics.
+
 > ⚠️ The legacy `run-benchmarks.ps1` prints the **inverse** (NS/NPY, lower is better). Everything else
 > — the op-matrix report, the dashboards, every `*_sheet.py` — is NPY/NS. Prefer NPY/NS.
 

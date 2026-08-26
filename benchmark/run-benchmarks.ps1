@@ -433,11 +433,14 @@ if ($pythonResults.Count -gt 0) {
     foreach ($suiteGroup in $suiteGroups) {
         $suiteName = if ($suiteGroup.Name) { $suiteGroup.Name } else { "General" }
         $report += "`n### $suiteName`n`n"
-        $report += "| Operation | Type | Mean (ms) | StdDev |`n"
-        $report += "|-----------|------|----------:|-------:|`n"
+        $report += "| Operation | Type | Min (ms) | StdDev |`n"
+        $report += "|-----------|------|---------:|-------:|`n"
 
         foreach ($r in $suiteGroup.Group) {
-            $report += "| $($r.name) | $($r.dtype) | $([math]::Round($r.mean_ms, 3)) | $([math]::Round($r.stddev_ms, 3)) |`n"
+            # Best window (min) — same timing basis as the canonical merge-results.py report;
+            # legacy JSONs without min_ms fall back to the mean.
+            $ms = if ($null -ne $r.min_ms) { $r.min_ms } else { $r.mean_ms }
+            $report += "| $($r.name) | $($r.dtype) | $([math]::Round($ms, 3)) | $([math]::Round($r.stddev_ms, 3)) |`n"
         }
     }
 }

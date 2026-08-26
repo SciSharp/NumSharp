@@ -158,6 +158,11 @@ def base_row(raw: dict[str, Any]) -> dict[str, Any]:
         "n": int(raw.get("n") or 0),
         "scenario": str(raw.get("scenario", "")),
         "numpy_ms": number(raw.get("numpy_ms")),
+        # Best-window (min) provenance from merge-results.py: the per-case MEANS ride along so a
+        # large mean/min gap on one side keeps flagging a contaminated measurement window in the
+        # final report JSON. Backend-profile harness rows have no mean fields -> None.
+        "numpy_mean_ms": number(raw.get("numpy_mean_ms")),
+        "numsharp_mean_ms": number(raw.get("numsharp_mean_ms")),
         "backend_route": str(raw.get("backend_route", "managed")),
     }
 
@@ -251,11 +256,19 @@ def combine(managed: dict[str, Any], openblas: dict[str, Any]) -> dict[str, Any]
                 "operation": source["operation"], "suite": source["suite"],
                 "category": source["category"], "dtype": source["dtype"], "n": source["n"],
                 "scenario": source["scenario"], "numpy_ms": source["numpy_ms"],
+                "numpy_mean_ms": source.get("numpy_mean_ms"),
+                "numsharp_mean_ms": source.get("numsharp_mean_ms"),
                 "backend_route": source["backend_route"], "profiles": {},
             })
             target["profiles"][profile] = source["result"]
             if target["numpy_ms"] is None:
                 target["numpy_ms"] = source["numpy_ms"]
+            # Mean provenance comes from the managed op-matrix rows only (the backend harness is
+            # best-of already); backfill so whichever source carries it wins, whatever the order.
+            if target.get("numpy_mean_ms") is None:
+                target["numpy_mean_ms"] = source.get("numpy_mean_ms")
+            if target.get("numsharp_mean_ms") is None:
+                target["numsharp_mean_ms"] = source.get("numsharp_mean_ms")
 
     combined_rows = []
     for row in all_rows.values():
@@ -306,6 +319,9 @@ def write_markdown(path: Path, payload: dict[str, Any]) -> None:
         "# NumSharp vs NumPy Performance — backend profiles", "",
         "One canonical cell model with separate Managed C# and OpenBLAS measurements.",
         "**Effective** selects the faster valid NumSharp timing for the exact same operation/dtype/N/scenario cell.", "",
+        "**Timing basis:** best window (min) of each side's ≥50 samples per case (≥20 when a round exceeds "
+        "10 ms) — interference only adds time, so the fastest window estimates intrinsic cost; per-case "
+        "means are retained in the JSON (`numpy_mean_ms`/`numsharp_mean_ms`) as tail diagnostics.", "",
         f"- Managed effective cells: **{counts['managed']:,}**",
         f"- OpenBLAS effective cells: **{counts['openblas']:,}**",
         f"- Missing backend records: **{counts['missing_backend']:,}**",

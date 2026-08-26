@@ -227,14 +227,24 @@ unsafe
 
                 var add3 = new[] { a, b, o };
                 var ru = NDIterRef.MultiNew(3, add3, EXL, KO, SAFE, RO_RO_WO);
-                for (int i = 0; i < warm; i++) { ru.Reset(); ru.ForEach(K.AddF64); }
+                // Hand-rolled (the row reuses ONE iterator across all calls, so the body can't be
+                // handed to BestMs as a fresh-state lambda) but under the SAME sample rule: warmup's
+                // timed tail (first call excluded) is the per-call pilot; >=50 rounds auto-sized to
+                // ~1 ms windows, relaxed to >=20 when one round exceeds 10 ms.
+                ru.Reset(); ru.ForEach(K.AddF64);
+                var pilotRu = Stopwatch.StartNew();
+                for (int i = 1; i < Math.Max(2, warm); i++) { ru.Reset(); ru.ForEach(K.AddF64); }
+                pilotRu.Stop();
+                double perCallRu = pilotRu.Elapsed.TotalMilliseconds / Math.Max(1, Math.Max(2, warm) - 1);
+                int itRu = perCallRu > 10.0 ? 1 : Math.Clamp((int)Math.Round(1.0 / Math.Max(perCallRu, 1e-6)), 1, 1_000_000);
+                int rdsRu = Math.Max(rounds, perCallRu > 10.0 ? 20 : 50);
                 double best = double.MaxValue;
-                for (int r = 0; r < rounds; r++)
+                for (int r = 0; r < rdsRu; r++)
                 {
                     var sw = Stopwatch.StartNew();
-                    for (int i = 0; i < iters; i++) { ru.Reset(); ru.ForEach(K.AddF64); }
+                    for (int i = 0; i < itRu; i++) { ru.Reset(); ru.ForEach(K.AddF64); }
                     sw.Stop();
-                    best = Math.Min(best, sw.Elapsed.TotalMilliseconds / iters);
+                    best = Math.Min(best, sw.Elapsed.TotalMilliseconds / itRu);
                 }
                 ru.Dispose();
                 Row($"reuse@{tag}", best);
