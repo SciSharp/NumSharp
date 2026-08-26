@@ -24,7 +24,7 @@
   href: array-api-standard.md
 - name: IL Generation
   href: il-generation.md
-- name: Tests & Oracle
+- name: Unit Tests & Oracle
   href: tests-oracle-dashboard.md
   expanded: true
   items:

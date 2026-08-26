@@ -6,27 +6,32 @@ Deterministic inventory of MSTest declarations and committed oracle evidence. It
 
 | Measure | Count |
 |---|---:|
-| Test methods | 13,782 |
-| Declared invocations | 14,418 |
-| Active methods | 13,487 |
+| MSTest method declarations | 13,804 |
+| DataRow cases / methods | 716 / 80 |
+| DynamicData methods (not expanded) | 34 |
+| Default-run declarations | 13,509 |
 | Open-bug methods | 215 |
-| Oracle-owned methods | 657 |
+| Oracle-tagged methods | 657 |
+| Oracle test classes | 16 |
 | FuzzMatrix methods | 91 |
-| Committed op-corpus rows | 116,971 |
-| Corpus op keys | 366 |
-| Specialized flags/layout/NPY cases | 1,600 |
+| Corpus Oracle test cases | 116,969 |
+| Specialized flags/layout/NPY test cases | 1,600 |
+| Total Oracle test cases | 118,569 |
+| Oracle operation keys | 367 |
+| Host-pin metadata records (not cases) | 2 |
 
 ## Test projects
 
 | Project | Methods |
 |---|---:|
-| `NumSharp.Tests` | 13,179 |
+| `NumSharp.Tests` | 13,201 |
 | `NumSharp.Tests.Interop` | 444 |
 | `NumSharp.Tests.Oracle` | 159 |
 
-## Oracle strength queue
+## Oracle evidence review
 
-- Ops below 10 cases: **64**
-- Ops with one/no serialized layout: **77**
-- Ops with one/no dtype: **20**
-- Ops without a recorded error row: **329**
+- Oracle operations below 10 test cases: **64**
+- Oracle operations recording exactly one layout: **75**
+- Oracle operations recording exactly one dtype: **12**
+- Oracle operations with explicit error test cases: **37** (1,338 test cases)
+- Absence of an error test case is neutral unless the API defines invalid inputs.

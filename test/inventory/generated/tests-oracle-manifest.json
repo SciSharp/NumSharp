@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "generator": "test/inventory/generate_test_inventory.py",
-  "generator_version": "1.0.0",
+  "generator_version": "1.2.0",
   "numpy_version": "2.4.2",
   "assembly_versions": {
     "NumSharp.Tests": "1.0.0.0",
@@ -16,16 +16,17 @@
   ],
   "summary": {
     "tests": {
-      "methods": 13782,
-      "declaredInvocations": 14418,
+      "methods": 13804,
+      "declaredInvocations": 14440,
       "dataRows": 716,
+      "dataRowMethods": 80,
       "dynamicMethods": 34,
-      "sourceLocated": 13782,
+      "sourceLocated": 13804,
       "oracleMethods": 657,
       "fuzzMatrixMethods": 91,
       "npyOracleMethods": 13,
       "statuses": {
-        "active": 13487,
+        "active": 13509,
         "ignored": 11,
         "manual": 5,
         "open_bug": 215,
@@ -43,26 +44,31 @@
         "WindowsOnly": 75
       },
       "projects": {
-        "NumSharp.Tests": 13179,
+        "NumSharp.Tests": 13201,
         "NumSharp.Tests.Interop": 444,
         "NumSharp.Tests.Oracle": 159
       },
-      "suites": 39
+      "suites": 39,
+      "oracleTestClasses": 16
     },
     "oracle": {
       "corpusFiles": 67,
-      "corpusRows": 116971,
+      "serializedRows": 116971,
+      "corpusRows": 116969,
+      "metadataRows": 2,
+      "unmappedContractRows": 0,
+      "opMappedContractRows": 116969,
       "numpyRows": 103143,
       "hostSensitiveRows": 697,
       "advancedIndexRows": 12426,
       "decimalRows": 703,
-      "hostPinRows": 2,
+      "hostPinRecords": 2,
       "charRows": 5506,
-      "opKeys": 366,
+      "opKeys": 367,
       "layouts": 2215,
       "errorRows": 1338,
       "resultKinds": {
-        "array": 108318,
+        "array": 108316,
         "dtype": 561,
         "scalar": 1727,
         "text": 245,
@@ -86,14 +92,17 @@
         "uint64": 8241,
         "uint8": 7504
       },
+      "dtypeContractLinks": 155600,
       "flagsOracleRows": 1104,
       "layoutOracleRows": 210,
       "npyOracleCases": 286,
       "specializedOracleCases": 1600,
-      "underTenOps": 64,
-      "oneLayoutOps": 77,
-      "oneDtypeOps": 20,
-      "noErrorOps": 329
+      "totalSerializedContracts": 118569,
+      "thinOpLabels": 64,
+      "singleLayoutOpLabels": 75,
+      "singleDtypeOpLabels": 12,
+      "opLabelsWithErrors": 37,
+      "opLabelsWithoutErrors": 330
     }
   }
 }

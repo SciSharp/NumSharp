@@ -26,7 +26,8 @@ DEFAULT_OUTPUT = HERE / "generated"
 TOOL = HERE / "NumSharp.Tools.TestInventory" / "NumSharp.Tools.TestInventory.csproj"
 TOOL_DLL = HERE / "NumSharp.Tools.TestInventory" / "bin" / "Release" / "net8.0" / "NumSharp.Tools.TestInventory.dll"
 CORPUS = ROOT / "test" / "NumSharp.Tests.Oracle" / "Fuzz" / "corpus"
-GENERATOR_VERSION = "1.0.0"
+SCHEMA_VERSION = 2
+GENERATOR_VERSION = "1.2.0"
 OUTPUT_FILES = ("tests-oracle-report.json", "tests-oracle-report.csv", "summary.md", "tests-oracle-manifest.json")
 
 PROJECT_ROOTS = {
@@ -206,17 +207,30 @@ def classify_corpus_file(name: str) -> str:
     return "numpy"
 
 
+def corpus_op(path: Path, case: dict[str, Any]) -> str | None:
+    """Return the dashboard op label for every replayable contract schema."""
+    op = case.get("op")
+    if op:
+        return op
+    # The dtype-index corpus predates the common FuzzMatrix schema. Its id/tag/tokens fields
+    # still describe real replay contracts, but it intentionally has no `op` property.
+    if path.name == "index_dtype.jsonl":
+        return "dtype_index_get"
+    return None
+
+
 def scan_oracle() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     files: list[dict[str, Any]] = []
     op_stats: dict[str, dict[str, Any]] = {}
-    total_rows = char_rows = error_rows = 0
+    serialized_rows = contract_rows = metadata_rows = unmapped_contract_rows = 0
+    char_rows = error_rows = 0
     dtype_rows: collections.Counter[str] = collections.Counter()
     all_layouts: set[str] = set()
     all_kinds: collections.Counter[str] = collections.Counter()
 
     for path in sorted(CORPUS.glob("*.jsonl"), key=lambda p: p.as_posix()):
         kind = classify_corpus_file(path.name)
-        rows = errors = file_char = 0
+        rows = contracts = metadata = errors = file_char = 0
         ops: collections.Counter[str] = collections.Counter()
         dtypes: set[str] = set()
         layouts: set[str] = set()
@@ -228,10 +242,21 @@ def scan_oracle() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
                     continue
                 case = json.loads(line)
                 rows += 1
-                total_rows += 1
-                op = case.get("op")
+                serialized_rows += 1
+                # *.host.jsonl files pin BLAS/platform provenance. They are required replay
+                # metadata, not executable test contracts, and must not inflate case counts.
+                if kind == "host_pin":
+                    metadata += 1
+                    metadata_rows += 1
+                    continue
+
+                contracts += 1
+                contract_rows += 1
+                op = corpus_op(path, case)
                 if op:
                     ops[op] += 1
+                else:
+                    unmapped_contract_rows += 1
                 layout = case.get("layout")
                 if layout:
                     layouts.add(layout)
@@ -279,6 +304,8 @@ def scan_oracle() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
             "name": path.name,
             "family": kind,
             "rows": rows,
+            "contractRows": contracts,
+            "metadataRows": metadata,
             "opKeys": sorted(ops),
             "opCount": len(ops),
             "dtypes": sorted(dtypes),
@@ -302,17 +329,21 @@ def scan_oracle() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
             "families": sorted(stat["families"]),
         }
         rendered["strength"] = {
-            "underTen": rendered["cases"] < 10,
-            "oneLayout": len(rendered["layouts"]) <= 1,
-            "oneDtype": len(rendered["dtypes"]) <= 1,
-            "noErrors": rendered["errorCases"] == 0,
+            "thinContracts": rendered["cases"] < 10,
+            # Zero layout/dtype labels usually mean a schema where that dimension does not
+            # apply. Only exactly-one observations are review candidates.
+            "singleLayout": len(rendered["layouts"]) == 1,
+            "singleDtype": len(rendered["dtypes"]) == 1,
+            "hasErrorContracts": rendered["errorCases"] > 0,
         }
         ops_rendered.append(rendered)
     ops_rendered.sort(key=lambda row: (row["cases"], row["op"]))
 
     family_rows = collections.Counter()
+    family_metadata = collections.Counter()
     for file in files:
-        family_rows[file["family"]] += file["rows"]
+        family_rows[file["family"]] += file["contractRows"]
+        family_metadata[file["family"]] += file["metadataRows"]
 
     flags_path = ROOT / "test" / "NumSharp.Tests" / "Backends" / "corpus" / "flags_oracle.jsonl"
     layout_path = ROOT / "test" / "NumSharp.Tests" / "Backends" / "corpus" / "layout_parity_oracle.jsonl"
@@ -323,28 +354,37 @@ def scan_oracle() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
         npy_manifest = json.loads(archive.read("manifest.json"))
     npy_cases = len(npy_manifest.get("cases", []))
 
+    specialized_cases = flags_rows + layout_rows + npy_cases
+    op_mapped_contract_rows = sum(row["cases"] for row in ops_rendered)
     summary = {
         "corpusFiles": len(files),
-        "corpusRows": total_rows,
+        "serializedRows": serialized_rows,
+        "corpusRows": contract_rows,
+        "metadataRows": metadata_rows,
+        "unmappedContractRows": unmapped_contract_rows,
+        "opMappedContractRows": op_mapped_contract_rows,
         "numpyRows": family_rows["numpy"],
         "hostSensitiveRows": family_rows["host_sensitive_values"],
         "advancedIndexRows": family_rows["advanced_indexing"],
         "decimalRows": family_rows["decimal"],
-        "hostPinRows": family_rows["host_pin"],
+        "hostPinRecords": family_metadata["host_pin"],
         "charRows": char_rows,
         "opKeys": len(op_stats),
         "layouts": len(all_layouts),
         "errorRows": error_rows,
         "resultKinds": dict(sorted(all_kinds.items())),
         "dtypeRows": dict(sorted(dtype_rows.items())),
+        "dtypeContractLinks": sum(dtype_rows.values()),
         "flagsOracleRows": flags_rows,
         "layoutOracleRows": layout_rows,
         "npyOracleCases": npy_cases,
-        "specializedOracleCases": flags_rows + layout_rows + npy_cases,
-        "underTenOps": sum(row["strength"]["underTen"] for row in ops_rendered),
-        "oneLayoutOps": sum(row["strength"]["oneLayout"] for row in ops_rendered),
-        "oneDtypeOps": sum(row["strength"]["oneDtype"] for row in ops_rendered),
-        "noErrorOps": sum(row["strength"]["noErrors"] for row in ops_rendered),
+        "specializedOracleCases": specialized_cases,
+        "totalSerializedContracts": contract_rows + specialized_cases,
+        "thinOpLabels": sum(row["strength"]["thinContracts"] for row in ops_rendered),
+        "singleLayoutOpLabels": sum(row["strength"]["singleLayout"] for row in ops_rendered),
+        "singleDtypeOpLabels": sum(row["strength"]["singleDtype"] for row in ops_rendered),
+        "opLabelsWithErrors": sum(row["strength"]["hasErrorContracts"] for row in ops_rendered),
+        "opLabelsWithoutErrors": sum(not row["strength"]["hasErrorContracts"] for row in ops_rendered),
     }
     return files, ops_rendered, summary
 
@@ -379,6 +419,7 @@ def rollup_tests(tests: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dic
         "methods": len(tests),
         "declaredInvocations": sum(test["declaredInvocations"] for test in tests),
         "dataRows": sum(test["dataRows"] for test in tests),
+        "dataRowMethods": sum(test["dataRows"] > 0 for test in tests),
         "dynamicMethods": sum(test["dynamicData"] for test in tests),
         "sourceLocated": sum(test["sourcePath"] is not None for test in tests),
         "oracleMethods": sum(test["oracleKind"] is not None for test in tests),
@@ -403,6 +444,7 @@ def rollup_classes(tests: list[dict[str, Any]]) -> list[dict[str, Any]]:
         oracle_kinds = collections.Counter(row["oracleKind"] for row in rows if row["oracleKind"])
         source_paths = sorted({row["sourcePath"] for row in rows if row["sourcePath"]})
         source_lines = [row["sourceLine"] for row in rows if row["sourceLine"] is not None]
+        sorted_rows = sorted(rows, key=lambda row: row["method"])
         rendered.append({
             "id": f"{project}::{type_name}",
             "project": project,
@@ -420,7 +462,9 @@ def rollup_classes(tests: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "sourcePaths": source_paths,
             "sourceUrl": (f"https://github.com/SciSharp/NumSharp/blob/master/{source_paths[0]}"
                           f"#L{min(source_lines)}" if source_paths and source_lines else None),
-            "methodNames": [row["method"] for row in sorted(rows, key=lambda row: row["method"])],
+            "methodNames": [row["method"] for row in sorted_rows],
+            # Compact exception map: only non-default execution policies need serialization.
+            "methodPolicies": {row["method"]: row["status"] for row in sorted_rows if row["status"] != "active"},
         })
     return rendered
 
@@ -453,24 +497,30 @@ def summary_text(report: dict[str, Any]) -> str:
         "Deterministic inventory of MSTest declarations and committed oracle evidence. It is not a runtime pass rate.", "",
         "## Headline", "",
         "| Measure | Count |", "|---|---:|",
-        f"| Test methods | {tests['methods']:,} |",
-        f"| Declared invocations | {tests['declaredInvocations']:,} |",
-        f"| Active methods | {tests['statuses'].get('active', 0):,} |",
+        f"| MSTest method declarations | {tests['methods']:,} |",
+        f"| DataRow cases / methods | {tests['dataRows']:,} / {tests['dataRowMethods']:,} |",
+        f"| DynamicData methods (not expanded) | {tests['dynamicMethods']:,} |",
+        f"| Default-run declarations | {tests['statuses'].get('active', 0):,} |",
         f"| Open-bug methods | {tests['statuses'].get('open_bug', 0):,} |",
-        f"| Oracle-owned methods | {tests['oracleMethods']:,} |",
+        f"| Oracle-tagged methods | {tests['oracleMethods']:,} |",
+        f"| Oracle test classes | {tests['oracleTestClasses']:,} |",
         f"| FuzzMatrix methods | {tests['fuzzMatrixMethods']:,} |",
-        f"| Committed op-corpus rows | {oracle['corpusRows']:,} |",
-        f"| Corpus op keys | {oracle['opKeys']:,} |",
-        f"| Specialized flags/layout/NPY cases | {oracle['specializedOracleCases']:,} |", "",
+        f"| Corpus Oracle test cases | {oracle['corpusRows']:,} |",
+        f"| Specialized flags/layout/NPY test cases | {oracle['specializedOracleCases']:,} |",
+        f"| Total Oracle test cases | {oracle['totalSerializedContracts']:,} |",
+        f"| Oracle operation keys | {oracle['opKeys']:,} |",
+        f"| Host-pin metadata records (not cases) | {oracle['hostPinRecords']:,} |", "",
         "## Test projects", "", "| Project | Methods |", "|---|---:|",
     ]
     for project, count in tests["projects"].items():
         lines.append(f"| `{project}` | {count:,} |")
-    lines += ["", "## Oracle strength queue", "",
-              f"- Ops below 10 cases: **{oracle['underTenOps']}**",
-              f"- Ops with one/no serialized layout: **{oracle['oneLayoutOps']}**",
-              f"- Ops with one/no dtype: **{oracle['oneDtypeOps']}**",
-              f"- Ops without a recorded error row: **{oracle['noErrorOps']}**", ""]
+    lines += ["", "## Oracle evidence review", "",
+              f"- Oracle operations below 10 test cases: **{oracle['thinOpLabels']}**",
+              f"- Oracle operations recording exactly one layout: **{oracle['singleLayoutOpLabels']}**",
+              f"- Oracle operations recording exactly one dtype: **{oracle['singleDtypeOpLabels']}**",
+              f"- Oracle operations with explicit error test cases: **{oracle['opLabelsWithErrors']}** "
+              f"({oracle['errorRows']:,} test cases)",
+              "- Absence of an error test case is neutral unless the API defines invalid inputs.", ""]
     return "\n".join(lines)
 
 
@@ -479,6 +529,10 @@ def render() -> dict[str, str]:
     tests, versions = enrich_tests(raw)
     suites, test_summary = rollup_tests(tests)
     test_classes = rollup_classes(tests)
+    test_summary["oracleTestClasses"] = sum(
+        any(kind != "Live NumPy interop" for kind in row["oracleKinds"])
+        for row in test_classes
+    )
     oracle_files, oracle_ops, oracle_summary = scan_oracle()
     expected_projects = set(PROJECT_ROOTS)
     if set(versions) != expected_projects:
@@ -491,8 +545,14 @@ def render() -> dict[str, str]:
         raise SystemExit(f"{len(unlocated)} reflected tests have no source location; first: " + ", ".join(unlocated[:20]))
     if not oracle_files or not oracle_ops or oracle_summary["corpusRows"] == 0:
         raise SystemExit("Oracle scan is empty; refusing to generate a vacuous dashboard artifact.")
+    if oracle_summary["unmappedContractRows"]:
+        raise SystemExit(f"{oracle_summary['unmappedContractRows']} replay contracts have no dashboard op label.")
+    if oracle_summary["opMappedContractRows"] != oracle_summary["corpusRows"]:
+        raise SystemExit("Oracle op-label totals do not reconcile with replay contract rows.")
+    if sum(oracle_summary["resultKinds"].values()) != oracle_summary["corpusRows"]:
+        raise SystemExit("Oracle result-kind totals do not reconcile with replay contract rows.")
     report = {
-        "schemaVersion": 1,
+        "schemaVersion": SCHEMA_VERSION,
         "generator": "test/inventory/generate_test_inventory.py",
         "generatorVersion": GENERATOR_VERSION,
         "numpyVersion": "2.4.2",
@@ -504,7 +564,7 @@ def render() -> dict[str, str]:
         "oracleOps": oracle_ops,
     }
     manifest = {
-        "schema_version": 1,
+        "schema_version": SCHEMA_VERSION,
         "generator": report["generator"],
         "generator_version": GENERATOR_VERSION,
         "numpy_version": report["numpyVersion"],
@@ -541,9 +601,9 @@ def main() -> None:
     for name, content in rendered.items():
         (args.output / name).write_text(content, encoding="utf-8", newline="\n")
     report = json.loads(rendered["tests-oracle-report.json"])
-    print(f"Wrote {args.output}: {report['summary']['tests']['methods']} test methods, "
-          f"{report['summary']['oracle']['corpusRows']} corpus rows, "
-          f"{report['summary']['oracle']['opKeys']} op keys.")
+    print(f"Wrote {args.output}: {report['summary']['tests']['methods']} unit tests, "
+          f"{report['summary']['oracle']['totalSerializedContracts']} Oracle test cases, "
+          f"{report['summary']['oracle']['opKeys']} Oracle operations.")
 
 
 if __name__ == "__main__":

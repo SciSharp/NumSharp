@@ -179,6 +179,10 @@ html[data-bs-theme="dark"] .ns-bench-dashboard {
 .ns-bench-dashboard .dtype-tab.is-active {
   background: var(--heat-text); border-color: var(--heat-text); color: var(--panel) !important;
 }
+.ns-bench-dashboard .dtype-lens-note {
+  color: var(--quiet); font-size: 0.84rem; line-height: 1.45; margin: -0.1rem 0 0.05rem;
+  max-width: 58rem;
+}
 .ns-bench-dashboard .dtype-panel {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(6.6rem, 1fr)); gap: 0.55rem; min-width: 0;
 }
@@ -322,109 +326,104 @@ html[data-bs-theme="dark"] .ns-bench-dashboard {
 <div class="ns-bench-dashboard" data-tests-oracle-dashboard>
   <section class="bench-intro">
     <div class="bench-kicker">NumSharp verification lab</div>
-    <h2 class="bench-title">Tests &amp; Oracle Dashboard</h2>
+    <h2 class="bench-title">Unit Tests &amp; Oracle Dashboard</h2>
     <p class="bench-subtitle">
-      The benchmark dashboard's operating view, applied to correctness: every reflected MSTest
-      declaration, the committed NumPy 2.4.2 differential corpus, independent Decimal evidence,
-      advanced indexing, format oracles, known-bug gates, and live interop suites.
+      A correctness inventory with unlike units kept separate: reflected unit tests and unit-test
+      classes, committed NumPy 2.4.2 Oracle test cases, specialized flags/layout/format cases,
+      execution gates, and live interoperability suites.
     </p>
     <div class="snapshot-strip" aria-label="Inventory details">
       <span class="snapshot-meta">Committed generated inventory</span>
       <span class="snapshot-meta" data-numpy-version>NumPy —</span>
       <span class="snapshot-meta" data-schema-version>Schema —</span>
-      <span class="snapshot-meta">net8.0 + net10.0</span>
+      <span class="snapshot-meta">Reflected net8.0 assemblies</span>
     </div>
   </section>
 
   <section class="metric-grid" aria-label="Headline test and oracle metrics">
     <article class="metric-card">
-      <div class="metric-label">Test methods</div>
-      <div class="metric-value metric-good" data-test-methods>—</div>
-      <p class="metric-note" data-test-note>Reflected from the three real MSTest assemblies</p>
+      <div class="metric-label">Unit tests</div>
+      <div class="metric-value metric-good" data-test-declarations>—</div>
+      <p class="metric-note" data-test-note>One reflected method declaration; not an executed result</p>
     </article>
     <article class="metric-card">
-      <div class="metric-label">Active methods</div>
-      <div class="metric-value metric-good" data-active-methods>—</div>
-      <p class="metric-note" data-active-note>Known bugs and manual/platform gates remain visible</p>
+      <div class="metric-label">Unit test classes</div>
+      <div class="metric-value metric-good" data-test-classes>—</div>
+      <p class="metric-note" data-class-note>Grouped ownership surface across the reflected assemblies</p>
     </article>
     <article class="metric-card">
       <div class="metric-label">Oracle test cases</div>
-      <div class="metric-value metric-good" data-oracle-rows>—</div>
-      <p class="metric-note" data-oracle-note>Committed bytes; no Python required in CI replay</p>
+      <div class="metric-value metric-good" data-oracle-test-cases>—</div>
+      <p class="metric-note" data-oracle-case-note>Corpus plus specialized flags, layout, and NPY/NPZ cases</p>
     </article>
     <article class="metric-card">
-      <div class="metric-label">Oracle op keys</div>
-      <div class="metric-value metric-good" data-oracle-ops>—</div>
-      <p class="metric-note" data-op-note>Plus flags, layout and NPY/NPZ artifact oracles</p>
+      <div class="metric-label">Oracle test classes</div>
+      <div class="metric-value metric-good" data-oracle-test-classes>—</div>
+      <p class="metric-note" data-oracle-class-note>Classes that run committed Oracle cases and harness checks</p>
     </article>
   </section>
 
   <section class="read-guide" aria-labelledby="tests-guide-title">
     <div class="read-guide-head"><div><div class="guide-kicker">Correctness evidence</div><h2 id="tests-guide-title">Legend &amp; How To Read</h2></div></div>
     <div class="guide-primer">
-      <div class="guide-primer-row"><div class="guide-primer-term">Test method</div><div class="guide-primer-detail">A reflected MSTest method. DataRow declarations contribute explicit invocations; DynamicData remains marked dynamic instead of inventing a case count.</div></div>
-      <div class="guide-primer-row"><div class="guide-primer-term">Oracle test case</div><div class="guide-primer-detail">One committed input/result contract: operands, dtype, shape, layout, parameters, result kind, bytes or verbatim error. It replays without Python.</div></div>
+      <div class="guide-primer-row"><div class="guide-primer-term">Unit test</div><div class="guide-primer-detail">One reflected unit-test method. DataRow and DynamicData metadata is retained, but the dashboard does not invent or headline an execution count.</div></div>
+      <div class="guide-primer-row"><div class="guide-primer-term">Oracle test case</div><div class="guide-primer-detail">One committed input/expected-result case: operands, dtype, shape, layout, parameters, result kind, bytes, or verbatim error. Two BLAS host-pin records are metadata and are explicitly excluded.</div></div>
       <div class="guide-primer-row"><div class="guide-primer-term">Not a pass rate</div><div class="guide-primer-detail">This is a deterministic inventory and evidence-strength view. Runtime pass/fail belongs to dotnet test; exclusions and open bugs are shown directly rather than counted as passes.</div></div>
     </div>
     <div class="guide-grid">
-      <div class="guide-block"><h3>Tests lens</h3><p>Browse 600+ test classes by project, area, category and declared method count, with direct source links.</p></div>
-      <div class="guide-block"><h3>Oracle lens</h3><p>Browse every corpus op by cases, files, layouts, dtypes, parameters, result kinds and recorded errors.</p></div>
+      <div class="guide-block"><h3>Unit test inventory</h3><p>Unit tests remain summarized by execution policy and capability group; they are intentionally kept out of the Oracle explorer.</p></div>
+      <div class="guide-block"><h3>Oracle explorer</h3><p>Browse every Oracle operation by test cases, files, recorded layout labels, dtypes, parameters, result kinds, and explicit errors.</p></div>
     </div>
     <div class="guide-block guide-band-block">
       <h3>Status bands</h3>
       <div class="guide-band-row">
-        <span class="guide-band faster">Active: default verification surface</span>
-        <span class="guide-band close">Platform: conditional runner</span>
-        <span class="guide-band slower">Manual: explicit or high-memory</span>
-        <span class="guide-band much">Open bug: intentionally excluded</span>
+        <span class="guide-band faster">Default run: ordinary unit-test execution</span>
+        <span class="guide-band close">Platform gated: conditional runner</span>
+        <span class="guide-band slower">Manual gated: explicit or high-memory</span>
+        <span class="guide-band much">Known bug gate: intentionally excluded</span>
         <span class="guide-band nodata">Ignored: no runtime execution</span>
       </div>
     </div>
   </section>
 
   <section>
-    <div class="section-head"><h2>Status Mix</h2><p class="section-note">Declared test methods by execution policy; hover or focus for counts</p></div>
+    <div class="section-head"><h2>Unit Test Execution Policy</h2><p class="section-note">Unit-test methods by runner policy; these are inventory counts, not pass/fail results</p></div>
     <div class="status-bar" data-status-bar></div>
     <div class="legend-grid" data-status-legend></div>
   </section>
 
   <section>
-    <div class="section-head"><h2>Suite Scoreboard</h2><p class="section-note">Test ownership areas ranked by reflected methods; oracle-owned methods remain visible</p></div>
+    <div class="section-head"><h2>Unit Test Groups</h2><p class="section-note">Source-folder suites deduplicated into broad capability groups; rows show unit tests and classes</p></div>
     <div class="bar-table" data-suite-scoreboard></div>
   </section>
 
   <section>
-    <div class="section-head"><h2>Oracle Families</h2><p class="section-note">Committed evidence test cases by generator/reference model</p></div>
-    <div class="bar-table" data-oracle-families></div>
-  </section>
-
-  <section>
-    <div class="section-head"><h2>Dtype Heatmap</h2><p class="section-note">Serialized dtype reach across cases, operations, and corpus files</p></div>
+    <div class="section-head"><h2>Dtype Coverage</h2><p class="section-note">Non-exclusive Oracle test case↔dtype links; mixed-dtype cases can contribute to several dtypes</p></div>
     <div class="dtype-carousel" data-dtype-carousel>
       <div class="dtype-tabs" role="tablist">
-        <button class="dtype-tab is-active" type="button" role="tab" aria-selected="true" data-panel="cases">Cases</button>
-        <button class="dtype-tab" type="button" role="tab" aria-selected="false" data-panel="ops">Operations</button>
-        <button class="dtype-tab" type="button" role="tab" aria-selected="false" data-panel="files">Files</button>
+        <button class="dtype-tab is-active" type="button" role="tab" aria-selected="true" data-panel="links">Test case links</button>
+        <button class="dtype-tab" type="button" role="tab" aria-selected="false" data-panel="labels">Oracle operations</button>
+        <button class="dtype-tab" type="button" role="tab" aria-selected="false" data-panel="files">Corpus files</button>
       </div>
+      <p class="dtype-lens-note" data-dtype-lens-note aria-live="polite"></p>
       <div data-dtype-panels></div>
     </div>
   </section>
 
   <section>
-    <div class="section-head"><h2>Subsystem Signals</h2><p class="section-note">Verification models the ordinary unit-test count cannot express</p></div>
+    <div class="section-head"><h2>Specialized Oracle Tests</h2><p class="section-note">Oracle test cases outside the common operation/index corpus schema</p></div>
     <div class="story-grid" data-subsystem-signals></div>
   </section>
 
   <section class="function-explorer" aria-labelledby="evidence-explorer-title">
-    <div class="section-head"><h2 id="evidence-explorer-title">Evidence Explorer</h2><p class="section-note">The same benchmark Function Explorer interaction, switching between test classes and oracle operations</p></div>
+    <div class="section-head"><h2 id="evidence-explorer-title">Oracle Evidence Explorer</h2><p class="section-note">Oracle operations and their committed test cases; unit tests stay in the aggregate inventory above</p></div>
     <div class="function-explorer-shell">
       <aside class="function-sidebar">
         <div class="function-controls">
-          <select class="function-select" aria-label="Evidence type" data-evidence-mode><option value="tests">Test classes</option><option value="oracle">Oracle operations</option></select>
-          <input class="function-search" type="search" placeholder="Search evidence" aria-label="Search evidence" data-evidence-search>
+          <input class="function-search" type="search" placeholder="Search Oracle operations" aria-label="Search Oracle operations" data-evidence-search>
           <div class="function-filter-row">
             <select class="function-select" aria-label="Filter evidence group" data-evidence-filter><option value="">All groups</option></select>
-            <select class="function-select" aria-label="Sort evidence" data-evidence-sort><option value="largest">Largest first</option><option value="weakest">Weakest first</option><option value="name">Name</option></select>
+            <select class="function-select" aria-label="Sort evidence" data-evidence-sort><option value="largest">Largest first</option><option value="review">Coverage review first</option><option value="name">Name</option></select>
           </div>
           <div class="function-list-meta" data-evidence-meta>Loading inventory...</div>
         </div>
@@ -435,14 +434,14 @@ html[data-bs-theme="dark"] .ns-bench-dashboard {
   </section>
 
   <section>
-    <div class="section-head"><h2>Coverage Priorities Recommended</h2><p class="section-note">Automatically derived strength gaps plus the next orthogonal coverage axes</p></div>
+    <div class="section-head"><h2>Coverage Review Queue</h2><p class="section-note">Factual evidence counts first; applicability-aware expansion techniques second</p></div>
     <div class="priority-grid"><article class="priority-card"><ol class="priority-list" data-priorities></ol></article></div>
   </section>
 
   <section>
     <div class="section-head"><h2>Full Reports</h2><p class="section-note">Generated data and the human-maintained oracle ledgers</p></div>
     <ul class="report-list">
-      <li><a href="../../../test/inventory/generated/tests-oracle-report.csv">Full test inventory CSV</a> — one row per reflected MSTest method.</li>
+      <li><a href="../../../test/inventory/generated/tests-oracle-report.csv">Full unit test inventory CSV</a> — one row per reflected unit-test method.</li>
       <li><a href="../../../test/inventory/generated/summary.md">Generated inventory summary</a> — headline counts and strength queue.</li>
       <li><a href="https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/README.md">Oracle architecture and divergence ledger</a>.</li>
       <li><a href="https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/COVERAGE_GAPS.md">Coverage map and expansion techniques</a>.</li>
@@ -462,13 +461,12 @@ html[data-bs-theme="dark"] .ns-bench-dashboard {
   const number = (value) => new Intl.NumberFormat("en-US").format(Number(value || 0));
   const pct = (part, total) => total ? Math.max(0.4, part * 100 / total) : 0;
   const statusMeta = {
-    active: { label: "Active", tone: "s-faster", func: "func-tone-good", color: "var(--good)" },
-    platform: { label: "Platform", tone: "s-extreme", func: "func-tone-extreme", color: "#0e7490" },
-    manual: { label: "Manual", tone: "s-close", func: "func-tone-near", color: "var(--near)" },
-    open_bug: { label: "Open bug", tone: "s-much", func: "func-tone-bad", color: "var(--bad)" },
+    active: { label: "Default run", tone: "s-faster", func: "func-tone-good", color: "var(--good)" },
+    platform: { label: "Platform gated", tone: "s-extreme", func: "func-tone-extreme", color: "#0e7490" },
+    manual: { label: "Manual gated", tone: "s-close", func: "func-tone-near", color: "var(--near)" },
+    open_bug: { label: "Known bug gate", tone: "s-much", func: "func-tone-bad", color: "var(--bad)" },
     ignored: { label: "Ignored", tone: "s-nodata", func: "func-tone-empty", color: "#87909a" }
   };
-  const dominantStatus = (statuses) => ["open_bug", "manual", "platform", "ignored", "active"].find((key) => Number(statuses?.[key] || 0) > 0) || "active";
   const heatClass = (value, max) => {
     const ratio = max ? value / max : 0;
     return ratio >= 0.75 ? "heat-best" : ratio >= 0.45 ? "heat-good" : ratio >= 0.2 ? "heat-near" : ratio >= 0.08 ? "heat-slow" : "heat-bad";
@@ -483,138 +481,154 @@ html[data-bs-theme="dark"] .ns-bench-dashboard {
   };
 
   fetch(reportUrl, { cache: "no-store" }).then((response) => {
-    if (!response.ok) throw new Error(`Tests & Oracle report HTTP ${response.status}`);
+    if (!response.ok) throw new Error(`Unit Tests & Oracle report HTTP ${response.status}`);
     return response.json();
   }).then((data) => {
     const tests = data.summary.tests;
     const oracle = data.summary.oracle;
     root.querySelector("[data-numpy-version]").textContent = `NumPy ${data.numpyVersion}`;
     root.querySelector("[data-schema-version]").textContent = `Schema ${data.schemaVersion}`;
-    root.querySelector("[data-test-methods]").textContent = number(tests.methods);
-    root.querySelector("[data-test-note]").textContent = `${number(tests.declaredInvocations)} declared invocations · ${number(data.testClasses.length)} classes`;
-    root.querySelector("[data-active-methods]").textContent = number(tests.statuses.active);
-    root.querySelector("[data-active-note]").textContent = `${number(tests.statuses.open_bug)} open-bug · ${number((tests.statuses.manual || 0) + (tests.statuses.platform || 0))} conditional`;
-    root.querySelector("[data-oracle-rows]").textContent = number(oracle.corpusRows);
-    root.querySelector("[data-oracle-note]").textContent = `${number(oracle.corpusFiles)} JSONL files · ${number(oracle.errorRows)} error test cases`;
-    root.querySelector("[data-oracle-ops]").textContent = number(oracle.opKeys);
-    root.querySelector("[data-op-note]").textContent = `${number(oracle.specializedOracleCases)} specialized flags/layout/NPY cases`;
+    root.querySelector("[data-test-declarations]").textContent = number(tests.methods);
+    root.querySelector("[data-test-note]").textContent = `${number(tests.statuses.active)} default run · ${number(tests.methods - tests.statuses.active)} gated`;
+    root.querySelector("[data-test-classes]").textContent = number(data.testClasses.length);
+    root.querySelector("[data-class-note]").textContent = `${number(Object.keys(tests.projects).length)} reflected assemblies · ${number(tests.dynamicMethods)} DynamicData methods`;
+    root.querySelector("[data-oracle-test-cases]").textContent = number(oracle.totalSerializedContracts);
+    root.querySelector("[data-oracle-case-note]").textContent = `${number(oracle.corpusRows)} corpus · ${number(oracle.specializedOracleCases)} specialized`;
+    root.querySelector("[data-oracle-test-classes]").textContent = number(tests.oracleTestClasses);
+    root.querySelector("[data-oracle-class-note]").textContent = "Corpus and specialized runners; live Python interop excluded";
 
     const totalMethods = Object.values(tests.statuses).reduce((a, b) => a + Number(b), 0);
     const statusOrder = ["active", "platform", "manual", "open_bug", "ignored"];
     root.querySelector("[data-status-bar]").innerHTML = statusOrder.filter((key) => tests.statuses[key]).map((key) => {
       const count = Number(tests.statuses[key]); const meta = statusMeta[key];
-      return `<span class="status-segment ${meta.tone}" tabindex="0" style="--w:${pct(count, totalMethods)}%" title="${meta.label}: ${number(count)} methods (${(count * 100 / totalMethods).toFixed(2)}%)"></span>`;
+      return `<span class="status-segment ${meta.tone}" tabindex="0" style="--w:${pct(count, totalMethods)}%" title="${meta.label}: ${number(count)} unit tests (${(count * 100 / totalMethods).toFixed(2)}%)"></span>`;
     }).join("");
     root.querySelector("[data-status-legend]").innerHTML = statusOrder.filter((key) => tests.statuses[key]).map((key) => {
       const meta = statusMeta[key];
       return `<span class="legend-item"><i class="legend-swatch" style="background:${meta.color}"></i>${meta.label}: ${number(tests.statuses[key])}</span>`;
     }).join("");
 
-    const suiteRows = [...data.suites].sort((a, b) => b.methods - a.methods);
-    const maxSuite = Math.max(...suiteRows.map((row) => row.methods));
-    root.querySelector("[data-suite-scoreboard]").innerHTML = suiteRows.map((row) => {
-      const openRatio = Number(row.statuses.open_bug || 0) / Math.max(1, row.methods);
-      const status = openRatio > 0.20 ? "open_bug" : openRatio > 0 ? "manual"
-        : Number(row.statuses.platform || 0) > 0 && Number(row.statuses.active || 0) === 0 ? "platform"
-        : "active";
+    const suiteGroupRules = [
+      ["Engine, storage & views", ["Backends & kernels", "Shape & views", "Lifetime"]],
+      ["Creation, casting & dtypes", ["Creation", "Casting", "NewDtypes", "Generic"]],
+      ["Manipulation & indexing", ["Manipulation", "Indexing", "LongIndexing"]],
+      ["Math, logic & statistics", ["Math", "Logic", "Statistics", "Operations"]],
+      ["Linear algebra, FFT & polynomials", ["Linear algebra", "Fourier", "Polynomials"]],
+      ["Selection, sorting & searching", ["Selection", "Sorting & searching", "Sorting Searching Counting"]],
+      ["API surface & utilities", ["API & iteration", "API audit", "NpApiOverloads", "Utilities", "General", "Documentation", "Extensions", "Assembly"]],
+      ["I/O & interoperability", ["I/O & formats", "Interop", "Python interoperability", "NumSharp.Bitmap"]],
+      ["Random", ["Random"]],
+      ["Oracle, parity & regressions", ["Differential oracle", "NumPy port regressions", "Open bugs", "Issues"]]
+    ];
+    const suiteGroupName = (area) => suiteGroupRules.find(([, areas]) => areas.includes(area))?.[0] || "Other";
+    const suiteGroups = [...data.testClasses.reduce((groups, row) => {
+      const name = suiteGroupName(row.area);
+      if (!groups.has(name)) groups.set(name, { name, methods: 0, classes: 0, active: 0, openBugs: 0, oracleTagged: 0, projects: new Set(), areas: new Set() });
+      const group = groups.get(name);
+      group.methods += Number(row.methods);
+      group.classes += 1;
+      group.active += Number(row.statuses.active || 0);
+      group.openBugs += Number(row.statuses.open_bug || 0);
+      group.oracleTagged += Object.values(row.oracleKinds).reduce((sum, value) => sum + Number(value), 0);
+      group.projects.add(row.project);
+      group.areas.add(row.area);
+      return groups;
+    }, new Map()).values()].sort((a, b) => b.methods - a.methods);
+    const maxSuite = Math.max(...suiteGroups.map((row) => row.methods));
+    const suiteBoard = root.querySelector("[data-suite-scoreboard]");
+    suiteBoard.innerHTML = suiteGroups.map((row) => {
+      const openRatio = row.openBugs / Math.max(1, row.methods);
+      const gated = row.methods - row.active;
+      const status = openRatio > 0.20 ? "open_bug" : gated > 0 ? "manual" : "active";
       const meta = statusMeta[status];
-      return `<div class="bar-row" title="${escapeHtml(row.project)} · ${number(row.declaredInvocations)} declared invocations">
-        <span class="bar-label">${escapeHtml(row.area)}</span><span class="bar-track"><i class="bar-fill" style="--w:${row.methods * 100 / maxSuite}%;--tone:${meta.color}"></i></span>
-        <span class="bar-score">${number(row.methods)}</span><span class="bar-count">${number(row.oracleMethods)} oracle</span></div>`;
+      const projectText = [...row.projects].map((project) => project.replace("NumSharp.Tests.", "")).join(" + ");
+      const oracleSuffix = row.oracleTagged ? ` · ${number(row.oracleTagged)} oracle-tagged` : "";
+      const title = `${projectText} · ${number(row.active)} default · ${number(gated)} gated${oracleSuffix} · areas: ${[...row.areas].join(", ")}`;
+      return `<div class="bar-row" title="${escapeHtml(title)}">
+        <span class="bar-label">${escapeHtml(row.name)}</span><span class="bar-track"><i class="bar-fill" style="--w:${row.methods * 100 / maxSuite}%;--tone:${meta.color}"></i></span>
+        <span class="bar-score">${number(row.methods)}</span><span class="bar-count">${number(row.classes)} classes</span></div>`;
     }).join("");
-
-    const familyLabels = {
-      numpy: "NumPy portable", host_sensitive_values: "Host-sensitive values",
-      advanced_indexing: "Advanced indexing", decimal: "Independent Decimal", host_pin: "Host pins"
-    };
-    const familyRows = Object.entries(data.oracleFiles.reduce((acc, file) => {
-      acc[file.family] = (acc[file.family] || 0) + file.rows; return acc;
-    }, {})).sort((a, b) => b[1] - a[1]);
-    const maxFamily = Math.max(...familyRows.map(([, rows]) => rows));
-    root.querySelector("[data-oracle-families]").innerHTML = familyRows.map(([family, rows], index) =>
-      `<div class="bar-row"><span class="bar-label">${escapeHtml(familyLabels[family] || family)}</span><span class="bar-track"><i class="bar-fill" style="--w:${rows * 100 / maxFamily}%;--tone:${index === 0 ? 'var(--good)' : index === 1 ? '#0e7490' : 'var(--near)'}"></i></span><span class="bar-score">${number(rows)}</span><span class="bar-count">test cases</span></div>`
-    ).join("");
 
     const dtypeNames = Object.keys(oracle.dtypeRows).sort((a, b) => oracle.dtypeRows[b] - oracle.dtypeRows[a]);
     const dtypeOps = Object.fromEntries(dtypeNames.map((dtype) => [dtype, data.oracleOps.filter((op) => op.dtypes.includes(dtype)).length]));
-    const dtypeFiles = Object.fromEntries(dtypeNames.map((dtype) => [dtype, data.oracleFiles.filter((file) => file.dtypes.includes(dtype)).length]));
-    const lenses = { cases: oracle.dtypeRows, ops: dtypeOps, files: dtypeFiles };
+    const dtypeFiles = Object.fromEntries(dtypeNames.map((dtype) => [dtype, data.oracleFiles.filter((file) => file.contractRows > 0 && file.dtypes.includes(dtype)).length]));
+    const lenses = { links: oracle.dtypeRows, labels: dtypeOps, files: dtypeFiles };
+    const lensLabels = { links: "test case links", labels: "Oracle operations", files: "corpus files" };
+    const lensDescriptions = {
+      links: "A test case link means one Oracle test case references this dtype as an input, requested dtype, or expected output. Mixed-dtype cases can appear under several dtypes, so these columns are not additive.",
+      labels: "The number of distinct Oracle operations with at least one test case referencing this dtype.",
+      files: "The number of committed JSONL corpus files containing at least one Oracle test case that references this dtype."
+    };
     const panels = root.querySelector("[data-dtype-panels]");
+    const lensNote = root.querySelector("[data-dtype-lens-note]");
+    lensNote.textContent = lensDescriptions.links;
     panels.innerHTML = Object.entries(lenses).map(([lens, values], panelIndex) => {
       const max = Math.max(...Object.values(values));
       return `<div class="dtype-panel" id="dtype-panel-${lens}" role="tabpanel" ${panelIndex ? "hidden" : ""}>${dtypeNames.map((dtype) => {
         const value = Number(values[dtype] || 0); const width = max ? value * 100 / max : 0;
-        return `<div class="dtype-cell ${heatClass(value, max)}" style="--heat-width:${width}%"><span class="dtype-name">${escapeHtml(dtype)}</span><span class="dtype-score">${number(value)}</span><span class="dtype-count">${lens}</span><span class="dtype-meter"><span></span></span></div>`;
+        return `<div class="dtype-cell ${heatClass(value, max)}" style="--heat-width:${width}%"><span class="dtype-name">${escapeHtml(dtype)}</span><span class="dtype-score">${number(value)}</span><span class="dtype-count">${lensLabels[lens]}</span><span class="dtype-meter"><span></span></span></div>`;
       }).join("")}</div>`;
     }).join("");
     root.querySelectorAll(".dtype-tab").forEach((tab) => tab.addEventListener("click", () => {
       root.querySelectorAll(".dtype-tab").forEach((candidate) => { const active = candidate === tab; candidate.classList.toggle("is-active", active); candidate.setAttribute("aria-selected", String(active)); });
       root.querySelectorAll(".dtype-panel").forEach((panel) => panel.hidden = panel.id !== `dtype-panel-${tab.dataset.panel}`);
+      lensNote.textContent = lensDescriptions[tab.dataset.panel];
     }));
 
     root.querySelector("[data-subsystem-signals]").innerHTML = `
-      <article class="story-card"><h3>Core tests</h3><strong class="metric-good">${number(tests.projects["NumSharp.Tests"])}</strong><p>Managed kernels, APIs, views, dtypes, I/O, regression and edge-case methods.</p></article>
-      <article class="story-card"><h3>FuzzMatrix</h3><strong class="metric-good">${number(tests.fuzzMatrixMethods)}</strong><p>CI methods replaying committed differential, metamorphic, harness and backend evidence.</p></article>
-      <article class="story-card"><h3>Specialized artifacts</h3><strong class="metric-good">${number(oracle.specializedOracleCases)}</strong><p>Flags, layout-parity, and byte-identical NPY/NPZ cases outside the op schema.</p></article>
-      <article class="story-card"><h3>Live interop</h3><strong class="metric-good">${number(tests.projects["NumSharp.Tests.Interop"])}</strong><p>Python buffer, dtype, lifetime, NumPy compute, OpenBLAS and Numpy.NET methods.</p></article>`;
+      <article class="story-card"><h3>Flags test cases</h3><strong class="metric-good">${number(oracle.flagsOracleRows)}</strong><p>Serialized ndarray flag expectations outside the common operation schema.</p></article>
+      <article class="story-card"><h3>Layout test cases</h3><strong class="metric-good">${number(oracle.layoutOracleRows)}</strong><p>Dedicated layout-parity cases outside the common operation schema.</p></article>
+      <article class="story-card"><h3>NPY/NPZ test cases</h3><strong class="metric-good">${number(oracle.npyOracleCases)}</strong><p>Byte and file-format test cases from the committed archive manifest.</p></article>
+      <article class="story-card"><h3>Host-pin metadata</h3><strong class="metric-good">${number(oracle.hostPinRecords)}</strong><p>BLAS/platform provenance records; explicitly not counted as replay cases.</p></article>`;
 
     const explorer = {
-      mode: root.querySelector("[data-evidence-mode]"), search: root.querySelector("[data-evidence-search]"),
-      filter: root.querySelector("[data-evidence-filter]"), sort: root.querySelector("[data-evidence-sort]"),
-      meta: root.querySelector("[data-evidence-meta]"), list: root.querySelector("[data-evidence-list]"),
-      detail: root.querySelector("[data-evidence-detail]"), active: null
+      search: root.querySelector("[data-evidence-search]"), filter: root.querySelector("[data-evidence-filter]"),
+      sort: root.querySelector("[data-evidence-sort]"), meta: root.querySelector("[data-evidence-meta]"),
+      list: root.querySelector("[data-evidence-list]"), detail: root.querySelector("[data-evidence-detail]"), active: null
     };
-    const testItems = data.testClasses.map((row) => ({ ...row, name: row.class, group: row.project, size: row.methods, weak: row.statuses.open_bug || 0, kind: "test" }));
-    const opItems = data.oracleOps.map((row) => ({ ...row, name: row.op, group: row.families.join(" + "), size: row.cases, weak: Number(row.strength.underTen) + Number(row.strength.oneLayout) + Number(row.strength.oneDtype) + Number(row.strength.noErrors), kind: "oracle" }));
-    const items = () => explorer.mode.value === "tests" ? testItems : opItems;
-    const itemTone = (item) => item.kind === "test"
-      ? statusMeta[dominantStatus(item.statuses)].func
-      : item.cases < 10 ? "func-tone-bad" : item.errorCases === 0 ? "func-tone-near" : "func-tone-good";
-    const renderTestDetail = (item) => {
-      const status = dominantStatus(item.statuses); const meta = statusMeta[status];
-      const methods = item.methodNames;
-      explorer.detail.innerHTML = `<div class="function-detail-head"><div><div class="function-title">${escapeHtml(item.type)}</div><p class="function-subtitle">${escapeHtml(item.project)} · ${escapeHtml(item.area)}</p></div><span class="function-ratio-pill ${meta.func}">${meta.label}</span></div>
-        <div class="function-stat-strip"><div class="function-stat"><span>Methods</span><strong>${number(item.methods)}</strong></div><div class="function-stat"><span>Invocations</span><strong>${number(item.declaredInvocations)}</strong></div><div class="function-stat"><span>Data rows</span><strong>${number(item.dataRows)}</strong></div><div class="function-stat"><span>Oracle methods</span><strong>${number(Object.values(item.oracleKinds).reduce((a,b)=>a+b,0))}</strong></div></div>
-        <div><div class="function-block-title">Categories &amp; ownership</div><p class="function-subtitle">${escapeHtml(Object.keys(item.categories).join(" · ") || "Default active suite")}${item.corpusFiles.length ? ` · corpus: ${escapeHtml(item.corpusFiles.join(", "))}` : ""}</p>${item.sourceUrl ? `<p><a href="${escapeHtml(item.sourceUrl)}">Open source</a></p>` : ""}</div>
-        <div class="function-table-scroll" data-load-more-scope><table class="function-table"><thead><tr><th>Declared test method</th><th class="num">Class</th></tr></thead><tbody>${methods.map((name,index)=>`<tr ${index>=25?'hidden data-load-more-row':''}><td><code>${escapeHtml(name)}</code></td><td class="num">${escapeHtml(item.class)}</td></tr>`).join("")}</tbody></table>${methods.length>25?`<div class="ns-load-more-wrap"><button class="ns-load-more-button" data-load-more>Load More <span>(${methods.length-25} remaining)</span></button></div>`:""}</div>`;
-      loadMore(explorer.detail);
-    };
+    const opItems = data.oracleOps.map((row) => ({
+      ...row, name: row.op, group: row.families.join(" + "), size: row.cases,
+      review: Number(row.strength.thinContracts) + Number(row.strength.singleLayout) + Number(row.strength.singleDtype)
+    }));
+    const itemTone = (item) => item.strength.thinContracts ? "func-tone-bad"
+      : item.strength.singleLayout || item.strength.singleDtype ? "func-tone-near" : "func-tone-good";
     const renderOpDetail = (item) => {
-      const tone = item.cases < 10 ? "func-tone-bad" : item.errorCases === 0 ? "func-tone-near" : "func-tone-good";
-      explorer.detail.innerHTML = `<div class="function-detail-head"><div><div class="function-title">${escapeHtml(item.op)}</div><p class="function-subtitle">${escapeHtml(item.families.join(" + "))} oracle operation</p></div><span class="function-ratio-pill ${tone}">${number(item.cases)} cases</span></div>
-        <div class="function-stat-strip"><div class="function-stat"><span>Files</span><strong>${number(item.files.length)}</strong></div><div class="function-stat"><span>Layouts</span><strong>${number(item.layouts.length)}</strong></div><div class="function-stat"><span>Dtypes</span><strong>${number(item.dtypes.length)}</strong></div><div class="function-stat"><span>Error test cases</span><strong>${number(item.errorCases)}</strong></div></div>
-        <div><div class="function-block-title">Coverage dimensions</div><p class="function-subtitle">${number(item.parameterSignatures)} parameter signatures · ${escapeHtml(item.resultKinds.join(", "))} result kinds · ${escapeHtml(item.valueClasses.join(", ") || "unclassified values")}</p></div>
+      const tone = item.strength.thinContracts ? "func-tone-bad" : item.strength.singleLayout || item.strength.singleDtype ? "func-tone-near" : "func-tone-good";
+      const reviewFlags = [item.strength.thinContracts && "below 10 test cases", item.strength.singleLayout && "one layout label", item.strength.singleDtype && "one dtype label"].filter(Boolean);
+      explorer.detail.innerHTML = `<div class="function-detail-head"><div><div class="function-title">${escapeHtml(item.op)}</div><p class="function-subtitle">${escapeHtml(item.families.join(" + "))} Oracle operation</p></div><span class="function-ratio-pill ${tone}">${number(item.cases)} test cases</span></div>
+        <div class="function-stat-strip"><div class="function-stat"><span>Corpus files</span><strong>${number(item.files.length)}</strong></div><div class="function-stat"><span>Layout labels</span><strong>${number(item.layouts.length)}</strong></div><div class="function-stat"><span>Dtypes</span><strong>${number(item.dtypes.length)}</strong></div><div class="function-stat"><span>Error test cases</span><strong>${number(item.errorCases)}</strong></div></div>
+        <div><div class="function-block-title">Coverage dimensions</div><p class="function-subtitle">${number(item.parameterSignatures)} parameter signatures · ${escapeHtml(item.resultKinds.join(", "))} result kinds · ${escapeHtml(item.valueClasses.join(", ") || "unclassified values")} · review: ${escapeHtml(reviewFlags.join(", ") || "no count-based flag")}</p></div>
         <div class="function-table-scroll"><table class="function-table"><thead><tr><th>Corpus file</th><th>Dtypes</th></tr></thead><tbody>${item.files.map((file)=>`<tr><td><a href="https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/corpus/${escapeHtml(file)}">${escapeHtml(file)}</a></td><td>${escapeHtml(item.dtypes.join(", ") || "schema-specific")}</td></tr>`).join("")}</tbody></table></div>`;
     };
     const selectItem = (item) => {
-      explorer.active = item.id || item.op;
+      explorer.active = item.op;
       explorer.list.querySelectorAll(".function-list-item").forEach((button) => { const active = button.dataset.id === explorer.active; button.classList.toggle("is-active", active); button.setAttribute("aria-selected", String(active)); });
-      item.kind === "test" ? renderTestDetail(item) : renderOpDetail(item);
+      renderOpDetail(item);
     };
     const refreshFilters = () => {
-      const groups = [...new Set(items().map((item) => item.group))].sort();
+      const groups = [...new Set(opItems.map((item) => item.group))].sort();
       explorer.filter.innerHTML = `<option value="">All groups</option>${groups.map((group)=>`<option value="${escapeHtml(group)}">${escapeHtml(group)}</option>`).join("")}`;
     };
     const renderList = () => {
       const query = explorer.search.value.trim().toLowerCase(); const group = explorer.filter.value;
-      let rows = items().filter((item) => (!query || `${item.name} ${item.area||""} ${item.group}`.toLowerCase().includes(query)) && (!group || item.group === group));
+      let rows = opItems.filter((item) => (!query || `${item.name} ${item.group}`.toLowerCase().includes(query)) && (!group || item.group === group));
       const sort = explorer.sort.value;
-      rows.sort(sort === "name" ? (a,b)=>a.name.localeCompare(b.name) : sort === "weakest" ? (a,b)=>b.weak-a.weak || a.size-b.size : (a,b)=>b.size-a.size || a.name.localeCompare(b.name));
-      explorer.meta.textContent = `${number(rows.length)} ${explorer.mode.value === "tests" ? "test classes" : "oracle operations"}`;
-      explorer.list.innerHTML = rows.map((item) => `<button class="function-list-item ${itemTone(item)}" role="option" aria-selected="false" data-id="${escapeHtml(item.id || item.op)}"><span class="function-list-name">${escapeHtml(item.name)}</span><span class="function-list-score">${number(item.size)}</span><span class="function-list-detail">${escapeHtml(item.kind === "test" ? `${item.area} · ${item.declaredInvocations} invocations` : `${item.layouts.length} layouts · ${item.dtypes.length} dtypes · ${item.errorCases} errors`)}</span></button>`).join("");
+      rows.sort(sort === "name" ? (a,b)=>a.name.localeCompare(b.name) : sort === "review" ? (a,b)=>b.review-a.review || a.size-b.size : (a,b)=>b.size-a.size || a.name.localeCompare(b.name));
+      explorer.meta.textContent = `${number(rows.length)} Oracle operations`;
+      explorer.list.innerHTML = rows.map((item) => `<button class="function-list-item ${itemTone(item)}" role="option" aria-selected="false" data-id="${escapeHtml(item.op)}"><span class="function-list-name">${escapeHtml(item.name)}</span><span class="function-list-score">${number(item.size)}</span><span class="function-list-detail">${escapeHtml(`${item.layouts.length} layout labels · ${item.dtypes.length} dtypes · ${item.errorCases} error test cases`)}</span></button>`).join("");
       explorer.list.querySelectorAll(".function-list-item").forEach((button, index) => button.addEventListener("click", () => selectItem(rows[index])));
-      if (rows.length) selectItem(rows.find((item)=> (item.id||item.op)===explorer.active) || rows[0]); else explorer.detail.innerHTML = `<div class="function-empty">No evidence matches these filters.</div>`;
+      if (rows.length) selectItem(rows.find((item)=> item.op===explorer.active) || rows[0]); else explorer.detail.innerHTML = `<div class="function-empty">No Oracle evidence matches these filters.</div>`;
     };
-    explorer.mode.addEventListener("change", () => { explorer.active = null; refreshFilters(); renderList(); });
     explorer.search.addEventListener("input", renderList); explorer.filter.addEventListener("change", renderList); explorer.sort.addEventListener("change", renderList);
     refreshFilters(); renderList();
 
-    const thin = data.oracleOps.filter((op) => op.strength.underTen).slice(0, 8).map((op) => `<code>${escapeHtml(op.op)}</code>`).join(", ");
+    const thin = data.oracleOps.filter((op) => op.strength.thinContracts).slice(0, 8).map((op) => `<code>${escapeHtml(op.op)}</code>`).join(", ");
     root.querySelector("[data-priorities]").innerHTML = `
-      <li><strong>Error inversion:</strong> add invalid neighbours to ${number(oracle.noErrorOps)} ops with no recorded error test case.</li>
-      <li><strong>Layout multiplication:</strong> widen ${number(oracle.oneLayoutOps)} ops with one or no serialized layout.</li>
-      <li><strong>Dtype multiplication:</strong> widen ${number(oracle.oneDtypeOps)} ops with one or no serialized dtype.</li>
-      <li><strong>Thin operations:</strong> raise ${number(oracle.underTenOps)} ops below ten cases; first queue: ${thin}.</li>
+      <li><strong>Reconciliation:</strong> all ${number(oracle.corpusRows)} corpus test cases map to ${number(oracle.opKeys)} Oracle operations; ${number(oracle.hostPinRecords)} host-pin metadata records are excluded from test-case totals.</li>
+      <li><strong>Thin operations:</strong> ${number(oracle.thinOpLabels)} operations have fewer than ten test cases; first queue: ${thin}.</li>
+      <li><strong>Layout review:</strong> ${number(oracle.singleLayoutOpLabels)} operations record exactly one layout. Expand only APIs whose semantics can vary by memory layout.</li>
+      <li><strong>Dtype review:</strong> ${number(oracle.singleDtypeOpLabels)} operations record exactly one dtype. Schema-specific zero-dtype operations are not falsely counted as gaps.</li>
+      <li><strong>Exception evidence:</strong> ${number(oracle.opLabelsWithErrors)} operations contain ${number(oracle.errorRows)} error test cases. Absence elsewhere is neutral unless the API specifies invalid inputs.</li>
       <li><strong>Parameter covering arrays:</strong> combine axis/order/mode/casting/out/where branches pairwise.</li>
       <li><strong>Boundary values:</strong> force NaN, signed zero, subnormal, wrap seams, singular matrices and empty contraction axes.</li>
       <li><strong>Protocol traces:</strong> materialize iterators, state objects, flags and planners into canonical arrays/tuples/text.</li>
