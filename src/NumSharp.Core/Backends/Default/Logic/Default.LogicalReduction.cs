@@ -29,7 +29,7 @@ namespace NumSharp.Backends
             if (nd.ndim == 0)
             {
                 if (axis == 0 || axis == -1)
-                    return np.array(reduceAll ? All(nd) : Any(nd)).MakeGeneric<bool>();
+                    return np.array(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
 
                 throw new AxisError(axis, 0);
             }
@@ -115,7 +115,7 @@ namespace NumSharp.Backends
                 if (axis.Length != 1 || (axis[0] != 0 && axis[0] != -1))
                     throw new AxisError(axis.Length > 0 ? axis[0] : 0, 0);
 
-                return np.array(reduceAll ? All(nd) : Any(nd)).MakeGeneric<bool>();
+                return np.array(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
             }
 
             int ndim = nd.ndim;
@@ -127,7 +127,7 @@ namespace NumSharp.Backends
             if (normalized.Length == ndim)
             {
                 bool scalar = reduceAll ? All(nd) : Any(nd);
-                var result = np.array(scalar).MakeGeneric<bool>();
+                var result = np.array(scalar).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
                 if (keepdims)
                 {
                     var dims = new long[ndim];
@@ -227,7 +227,7 @@ namespace NumSharp.Backends
             if (nd.GetTypeCode == NPTypeCode.Boolean)
             {
                 // Already bool — return a copy so callers can't mutate the input.
-                return nd.copy().MakeGeneric<bool>();
+                return nd.copy().AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
             }
 
             // (nd != 0) returns an NDArray<bool> with element-wise non-zero check,
@@ -257,7 +257,7 @@ namespace NumSharp.Backends
                 ? np.ones(resultShape, NPTypeCode.Boolean)
                 : np.zeros(resultShape, NPTypeCode.Boolean);
 
-            return result.MakeGeneric<bool>();
+            return result.AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
         }
 
         private static void ExecuteLogicalAxis<T>(NDArray nd, NDArray<bool> result, int axis, bool reduceAll)

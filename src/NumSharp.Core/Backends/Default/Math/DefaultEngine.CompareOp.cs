@@ -97,9 +97,10 @@ namespace NumSharp.Backends
             }
 
             // NumPy-aligned layout preservation: comparisons preserve F-contig.
-            // copy('F') returns an NDArray; wrap it back as NDArray<bool> via MakeGeneric.
+            // copy('F') returns an NDArray; wrap its storage in place as NDArray<bool> via
+            // AsGeneric (the copy is a fresh bool array we own — no need for MakeGeneric's alias).
             if (ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-                return result.copy('F').MakeGeneric<bool>();
+                return result.copy('F').AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
 
             return result;
         }
@@ -225,21 +226,21 @@ namespace NumSharp.Backends
             // Dispatch based on rhs type
             return rhsType switch
             {
-                NPTypeCode.Boolean => NDArray.Scalar(((Func<TLhs, bool, bool>)func)(lhsVal, rhs.GetBoolean(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.SByte => NDArray.Scalar(((Func<TLhs, sbyte, bool>)func)(lhsVal, rhs.GetSByte(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Byte => NDArray.Scalar(((Func<TLhs, byte, bool>)func)(lhsVal, rhs.GetByte(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Int16 => NDArray.Scalar(((Func<TLhs, short, bool>)func)(lhsVal, rhs.GetInt16(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.UInt16 => NDArray.Scalar(((Func<TLhs, ushort, bool>)func)(lhsVal, rhs.GetUInt16(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Int32 => NDArray.Scalar(((Func<TLhs, int, bool>)func)(lhsVal, rhs.GetInt32(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.UInt32 => NDArray.Scalar(((Func<TLhs, uint, bool>)func)(lhsVal, rhs.GetUInt32(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Int64 => NDArray.Scalar(((Func<TLhs, long, bool>)func)(lhsVal, rhs.GetInt64(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.UInt64 => NDArray.Scalar(((Func<TLhs, ulong, bool>)func)(lhsVal, rhs.GetUInt64(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Char => NDArray.Scalar(((Func<TLhs, char, bool>)func)(lhsVal, rhs.GetChar(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Half => NDArray.Scalar(((Func<TLhs, Half, bool>)func)(lhsVal, rhs.GetHalf(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Single => NDArray.Scalar(((Func<TLhs, float, bool>)func)(lhsVal, rhs.GetSingle(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Double => NDArray.Scalar(((Func<TLhs, double, bool>)func)(lhsVal, rhs.GetDouble(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Decimal => NDArray.Scalar(((Func<TLhs, decimal, bool>)func)(lhsVal, rhs.GetDecimal(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Complex => NDArray.Scalar(((Func<TLhs, System.Numerics.Complex, bool>)func)(lhsVal, rhs.GetComplex(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.Boolean => NDArray.Scalar(((Func<TLhs, bool, bool>)func)(lhsVal, rhs.GetBoolean(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.SByte => NDArray.Scalar(((Func<TLhs, sbyte, bool>)func)(lhsVal, rhs.GetSByte(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Byte => NDArray.Scalar(((Func<TLhs, byte, bool>)func)(lhsVal, rhs.GetByte(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Int16 => NDArray.Scalar(((Func<TLhs, short, bool>)func)(lhsVal, rhs.GetInt16(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.UInt16 => NDArray.Scalar(((Func<TLhs, ushort, bool>)func)(lhsVal, rhs.GetUInt16(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Int32 => NDArray.Scalar(((Func<TLhs, int, bool>)func)(lhsVal, rhs.GetInt32(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.UInt32 => NDArray.Scalar(((Func<TLhs, uint, bool>)func)(lhsVal, rhs.GetUInt32(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Int64 => NDArray.Scalar(((Func<TLhs, long, bool>)func)(lhsVal, rhs.GetInt64(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.UInt64 => NDArray.Scalar(((Func<TLhs, ulong, bool>)func)(lhsVal, rhs.GetUInt64(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Char => NDArray.Scalar(((Func<TLhs, char, bool>)func)(lhsVal, rhs.GetChar(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Half => NDArray.Scalar(((Func<TLhs, Half, bool>)func)(lhsVal, rhs.GetHalf(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Single => NDArray.Scalar(((Func<TLhs, float, bool>)func)(lhsVal, rhs.GetSingle(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Double => NDArray.Scalar(((Func<TLhs, double, bool>)func)(lhsVal, rhs.GetDouble(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Decimal => NDArray.Scalar(((Func<TLhs, decimal, bool>)func)(lhsVal, rhs.GetDecimal(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Complex => NDArray.Scalar(((Func<TLhs, System.Numerics.Complex, bool>)func)(lhsVal, rhs.GetComplex(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
                 _ => throw new NotSupportedException($"RHS type {rhsType} not supported")
             };
         }
@@ -481,7 +482,7 @@ namespace NumSharp.Backends
             }
 
             if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-                return result.copy('F').MakeGeneric<bool>();
+                return result.copy('F').AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
 
             return result;
         }
