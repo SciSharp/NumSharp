@@ -18,6 +18,21 @@ Requirements:
     pip install numpy tabulate
 """
 
+import os
+
+# Single-threaded BLAS baseline (must be set BEFORE `import numpy`). NumSharp is measured
+# single-threaded everywhere — its managed kernels have no thread pool and its optional OpenBLAS
+# backend is enabled with threads=1 (byte-parity with NumPy requires a fixed thread count) — so an
+# apples-to-apples matrix has to pin NumPy's BLAS/OpenMP pools to 1 as well. Without this, the
+# BLAS-backed cells (matmul / dot / linalg / tensordot / the product gufuncs) compared NumSharp's
+# single-thread OpenBLAS against a multi-threaded NumPy, understating those ratios by the core count
+# (e.g. matmul 316x316 / 384x384 read ~0.3-0.5x purely from the thread gap). Elementwise NumPy is
+# single-threaded regardless, so only the matrix-product cells are affected. Matches the backend
+# profile twin (benchmark/backends/backend_profile_bench.py), which already pins these.
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
 import numpy as np
 import time
 import argparse
@@ -1660,7 +1675,12 @@ def run_linalg_benchmarks(n, iterations):
         rows.extend([
             _b(lambda: np.linalg.cross(vectors_a, vectors_b), n, iterations, "np.linalg.cross(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
             _b(lambda: np.linalg.diagonal(matrix_a), n, iterations, "np.linalg.diagonal(a)", "LinearAlgebra", "float64", "LinalgApi"),
-            _b(lambda: np.linalg.matmul(matrix_a, matrix_b), n, iterations, "np.linalg.matmul(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
+            # linalg.matmul IS np.matmul (a pure Array-API alias), so measure it on the SAME operands
+            # as np.matmul above (matA/matB, side = min(sqrt(n), 384)). Using the 128-capped matrix_a
+            # here made it a different shape at the same N, which then collided on the merge key with
+            # the backend-profile bench's 316x316 linalg.matmul and produced an impossible cross-paired
+            # ratio (single-thread OpenBLAS time / a 128x128 NumPy time).
+            _b(lambda: np.linalg.matmul(matA, matB), n, iterations, "np.linalg.matmul(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
             _b(lambda: np.linalg.matrix_norm(matrix_a), n, iterations, "np.linalg.matrix_norm(a)", "LinearAlgebra", "float64", "LinalgApi"),
             _b(lambda: np.linalg.matrix_power(matrix_a, 3), n, iterations, "np.linalg.matrix_power(a, 3)", "LinearAlgebra", "float64", "LinalgApi"),
             _b(lambda: np.linalg.matrix_transpose(matrix_a), n, iterations, "np.linalg.matrix_transpose(a)", "LinearAlgebra", "float64", "LinalgApi"),
