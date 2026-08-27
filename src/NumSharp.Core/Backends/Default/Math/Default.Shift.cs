@@ -22,6 +22,24 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
+        /// Element-count cutoff below which a <c>bool_array &lt;&lt; scalar</c> shift is served by
+        /// widening the bool to the promoted dtype (existing SIMD <c>astype</c>) and running the
+        /// vectorized uniform-count shift kernel, instead of the single-pass fused-SCALAR NDIter
+        /// route. The fused-scalar route has no per-lane SIMD body (the bool value operand is not
+        /// the same dtype as the wide count/result, so <c>CanSimdAllOperands</c> drops the vector
+        /// body), so its scalar inner loop loses to astype+SIMD for small/medium arrays — measured
+        /// 100K <c>bool&lt;&lt;2</c> ≈ 65 µs (fused-scalar) vs ≈ 44 µs (astype+SIMD), where NumPy's
+        /// own bool shift is ≈ 42.5 µs (so the scalar route is ~0.65× while astype+SIMD reaches
+        /// ~0.97×). The cutoff keeps the widened int64 buffer L2-resident (256K × 8 B = 2 MB), so
+        /// the two-pass traffic stays in cache; above it the second pass spills to RAM and the
+        /// single-pass fused-scalar route wins (10M <c>bool&lt;&lt;2</c> ≈ 13.9 ms vs ≈ 27 ms for
+        /// two passes over the 80 MB int64 buffer). Env override NS_BOOL_SHIFT_SIMD_MAX for tuning.
+        /// </summary>
+        internal static readonly long BoolSimdScalarShiftMaxElements =
+            long.TryParse(Environment.GetEnvironmentVariable("NS_BOOL_SHIFT_SIMD_MAX"), out var t) && t >= 0
+                ? t : 262144;
+
+        /// <summary>
         /// Bitwise left shift (x1 &lt;&lt; x2).
         /// </summary>
         public override NDArray LeftShift(NDArray lhs, NDArray rhs)
@@ -234,11 +252,16 @@ namespace NumSharp.Backends
                 return null;
 
             // A bool value operand always promotes (int64 against a weak int count, int8 against
-            // bool) — taking this path would materialize the whole promoted array via astype and
-            // then re-read it (two passes over the widened buffer: bool<<2 at 10M = ~11 ms astype
-            // + shift). The NDIter route below fuses the bool->loop-dtype conversion into the
-            // shift kernel's load — one pass, measured ~2x faster end to end.
-            if (lhs.GetTypeCode == NPTypeCode.Boolean)
+            // bool). Taking this path materializes the whole promoted array via astype and then
+            // re-reads it (two passes over the widened buffer). For a LARGE array that costs twice
+            // the wide-buffer write wall (bool<<2 at 10M ≈ 27 ms astype+SIMD vs ≈ 13.9 ms for the
+            // single-pass fused-scalar NDIter route below, which fuses the bool->loop-dtype convert
+            // into the shift's per-element load), so large bool shifts stay on that route. But for a
+            // SMALL/MEDIUM array the fused-scalar route's per-element SCALAR inner loop (no per-lane
+            // SIMD body — see BoolSimdScalarShiftMaxElements) is far slower than astype + the
+            // vectorized uniform-count shift kernel, so route those here (astype widens below, then
+            // the SIMD scalar-shift kernel runs). Cutoff keeps the int64 temp L2-resident.
+            if (lhs.GetTypeCode == NPTypeCode.Boolean && lhs.size > BoolSimdScalarShiftMaxElements)
                 return null;
 
             var resultType = ShiftResultType(lhs, rhs);
@@ -261,11 +284,23 @@ namespace NumSharp.Backends
             int bitWidth = resultType.SizeOf() * 8;
             int shiftArg = ReadSaturatedShiftCount(rhs, bitWidth);
 
+            // A widened value (astype produced a fresh copy at the loop dtype) is a transient the
+            // kernel only reads: return its buffer to the pool the instant the kernel finishes,
+            // rather than leaving it for a lagging GC/finalizer pass. The bool path always widens,
+            // so this is one vs two discarded buffers per call (it is what keeps the small-N
+            // astype+SIMD route at parity with NumPy). The result is a separate fresh allocation,
+            // never an alias of value, so disposing value here is safe.
+            bool valueIsTemp = !ReferenceEquals(value, lhs);
+
             var result = new NDArray(resultType, new Shape((long[])value.shape.Clone()), false);
             if (result.size == 0)
+            {
+                if (valueIsTemp) value.Dispose();
                 return result;
+            }
 
             NpFunc.Invoke(resultType, SimdScalarShiftDispatch<int>, value, result, shiftArg, isLeftShift);
+            if (valueIsTemp) value.Dispose();
             return result;
         }
 
