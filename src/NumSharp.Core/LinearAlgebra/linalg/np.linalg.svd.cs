@@ -128,8 +128,14 @@ namespace NumSharp
                     // largest to the smallest (2/None), or its reciprocal (-2). Division by a zero
                     // singular value gives inf/nan here rather than raising, matching NumPy's errstate.
                     var s = svdvals(x);
-                    var sMax = s["..., 0"];
-                    var sMin = s["..., -1"];
+                    // NumPy's `s[..., 0]` / `s[..., -1]`. Built as Slice[] rather than the "..., 0"
+                    // STRING form, whose per-call Regex.Split+Regex.Match parse (Slice.ParseSlices)
+                    // costs ~1.7µs EACH — the dominant managed overhead of this tiny wrapper, on top
+                    // of an already parity-or-faster gesdd. The Slice[] path resolves identically
+                    // (`Slice.Index` is index-reduction on the last axis after Ellipsis fills the
+                    // leading ones), so the extracted first/last singular values are byte-identical.
+                    var sMax = s[new[] {Slice.Ellipsis, Slice.Index(0)}];
+                    var sMin = s[new[] {Slice.Ellipsis, Slice.Index(-1)}];
                     r = IsOrder(p, -2) ? np.divide(sMin, sMax) : np.divide(sMax, sMin);
                 }
                 else

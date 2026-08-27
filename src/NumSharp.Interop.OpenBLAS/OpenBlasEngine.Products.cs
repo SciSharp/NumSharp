@@ -65,8 +65,15 @@ namespace NumSharp.Interop.OpenBLAS
                 return false;
 
             // FromAny(common) + Newshape({-1}, CORDER): a fresh C-contiguous 1-D read in logical order.
-            var af = np.ravel(AsCommon(a, common));
-            var bf = np.ravel(AsCommon(b, common));
+            // A C-contiguous operand's C-order flatten IS (Address+offset, stride 1, size) — precisely
+            // what Vdot1D reads through strides[ndim-1]==1, so ravel is needed ONLY to materialise a
+            // non-contiguous operand into that layout (or to give a 0-d one a last axis to stride).
+            // Skipping the ravel view-allocation on the common contiguous path keeps this byte-identical
+            // (same bytes, same C-order, same unit stride) while dropping ~0.5µs of the wrapper.
+            var ac = AsCommon(a, common);
+            var bc = AsCommon(b, common);
+            var af = ac.ndim > 0 && ac.Shape.IsContiguous ? ac : np.ravel(ac);
+            var bf = bc.ndim > 0 && bc.Shape.IsContiguous ? bc : np.ravel(bc);
             long n = af.size;
 
             // fillZeros:false throughout this file: every product's dot/gemv loop writes all output cells.
@@ -140,7 +147,7 @@ namespace NumSharp.Interop.OpenBLAS
             T* po = (T*)outBuf.Address + outBuf.Shape.offset;
 
             long count = ProductOf(bshape);
-            var coord = new long[bshape.Length];
+            var coord = bshape.Length == 0 ? Array.Empty<long>() : new long[bshape.Length];
             for (long e = 0; e < count; e++)
             {
                 long oa = 0, ob = 0;
@@ -211,7 +218,7 @@ namespace NumSharp.Interop.OpenBLAS
             T* po = (T*)outBuf.Address + outBuf.Shape.offset;
 
             long count = ProductOf(bshape);
-            var coord = new long[bshape.Length];
+            var coord = bshape.Length == 0 ? Array.Empty<long>() : new long[bshape.Length];
             for (long e = 0; e < count; e++)
             {
                 long oa = 0, ob = 0;
@@ -289,7 +296,7 @@ namespace NumSharp.Interop.OpenBLAS
             T* po = (T*)outBuf.Address + outBuf.Shape.offset;
 
             long count = ProductOf(bshape);
-            var coord = new long[bshape.Length];
+            var coord = bshape.Length == 0 ? Array.Empty<long>() : new long[bshape.Length];
             for (long e = 0; e < count; e++)
             {
                 long oa = 0, ob = 0;
@@ -377,6 +384,17 @@ namespace NumSharp.Interop.OpenBLAS
             int na = a.ndim - cra;
             int nb = b.ndim - crb;
             int nl = Math.Max(na, nb);
+
+            // The common no-batch case (a bare vector·matrix / matrix·vector, e.g. np.vecmat((n),(n,m))):
+            // no leading axes, so the broadcast is one element. Hand back the cached empty arrays rather
+            // than allocating three zero-length ones per call — the callers' loops key off `.Length` so
+            // the shared instances are only ever read (never advanced), and `count == 1` runs the single
+            // gemv/dot with zero coordinate offsets. Byte-identical, just alloc-free.
+            if (nl == 0)
+            {
+                bshape = sa = sb = Array.Empty<long>();
+                return true;
+            }
 
             var shape = new long[nl];
             var stra = new long[nl];

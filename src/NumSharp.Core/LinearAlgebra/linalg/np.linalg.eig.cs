@@ -55,7 +55,13 @@ namespace NumSharp
             private static (NDArray eigenvalues, NDArray eigenvectors) CollapseEig(NDArray w, NDArray v, NPTypeCode common)
             {
                 NPTypeCode resultType;
-                if (common != NPTypeCode.Complex && np.all(np.equal(np.imag(w), NDArray.Scalar(0.0))))
+                // NumPy's `all(w.imag == 0)`. Expressed as `!any(imag)` — for a float array `np.any`
+                // is "any truthy", and a NaN is truthy (`np.any([nan])` is True) exactly as a nonzero
+                // is, so `!any(imag)` is True iff every imaginary part is 0 AND none is NaN — bit-for-bit
+                // the same predicate as `all(equal(imag, 0))` (verified on zero/nonzero/NaN), but a single
+                // reduction over the strided imaginary view instead of `equal` (which allocates a bool
+                // array) followed by `all`.
+                if (common != NPTypeCode.Complex && !np.any(np.imag(w)))
                 {
                     // Every eigenvalue is real — drop the (zero) imaginary part and take the real dtype.
                     w = np.real(w);
