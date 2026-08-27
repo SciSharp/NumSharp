@@ -25,6 +25,19 @@ namespace NumSharp.Backends
             NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
         };
 
+        // Element-count cutoff below which a SAME-DTYPE single-broadcast op skips
+        // the NDIter route in favour of the lighter direct SimdChunk kernel (see
+        // the gate in TryExecuteBinaryOpViaNDIter). NDIter's multi-operand
+        // construction costs a fixed ~0.5 µs that dominates a tiny broadcast:
+        // measured 1.8-2.3× faster on 1K row/col/3-D float64 broadcasts. The
+        // direct SimdChunk kernel matches or beats NDIter up to ~16K elements;
+        // above that NDIter's coalescing + vectorization pulls ahead, so the
+        // cutoff sits safely below the crossover (with margin for host-regime
+        // measurement noise). Env override NS_BROADCAST_DIRECT_MAX for tuning.
+        internal static readonly long DirectBroadcastMaxElements =
+            long.TryParse(Environment.GetEnvironmentVariable("NS_BROADCAST_DIRECT_MAX"), out var t) && t >= 0
+                ? t : 8192;
+
         /// <summary>
         /// Execute a binary operation using IL-generated kernels.
         /// Handles type promotion, broadcasting, and kernel dispatch.
@@ -355,6 +368,40 @@ namespace NumSharp.Backends
             for (int i = 0; i < cleanShape.NDim; i++)
                 if (cleanShape.dimensions[i] > int.MaxValue) return null;
 
+            // Small SAME-DTYPE single-broadcast fast path: for a tiny result the
+            // NDIter multi-operand construction (~0.5 µs) dominates, and the direct
+            // SimdChunk kernel (reached by falling through to the direct route below)
+            // is measurably faster there — 1.8-2.3× on 1K row/col/3-D float64
+            // broadcasts, bringing them from ~0.55× NumPy to faster-than-NumPy.
+            // Returning null hands the op to the direct path in ExecuteBinaryOp.
+            //
+            // The route is gated to exactly the cases the direct SimdChunk kernel is
+            // proven BIT-IDENTICAL to NDIter on (verified by the oracle FuzzMatrix
+            // AND the layout-parity integration gates):
+            //   • identical dtypes — the direct path's mixed-dtype convert loop
+            //     diverges from NDIter on some NEP50 promotions;
+            //   • a SIMD-capable op+dtype — Half/Decimal/Complex (and the scalar-only
+            //     ops Mod/Power/FloorDivide/ATan2) take a scalar path whose specials
+            //     diverge (e.g. float16  256 − inf);
+            //   • EXACTLY ONE operand broadcast (XOR) — a genuine single-operand
+            //     broadcast (row/col/N-D, one operand carries the full result shape).
+            //     A kron-style DOUBLE broadcast (both stretched on complementary axes)
+            //     leaves outputs unwritten in SimdChunk; a same-shape non-broadcast op
+            //     is either contiguous (already handled by the trivial bypass) or a
+            //     strided view SimdChunk mishandles — both must stay on NDIter;
+            //   • both operands C- or F-contiguous — SimdChunk mishandles a strided /
+            //     trailing-size-1 / negative-stride operand that NDIter absorbs
+            //     (the (N,1)-strided-view and reshape-view integration gates), so
+            //     only clean-layout inputs take this route.
+            // Above DirectBroadcastMaxElements NDIter's coalescing/vectorization wins,
+            // so the op stays here.
+            if (lhsType == rhsType && lhsType == resultType
+                && cleanShape.size < DirectBroadcastMaxElements
+                && (leftShape.IsBroadcasted ^ rightShape.IsBroadcasted)
+                && IsContiguousCorF(lhs.Shape) && IsContiguousCorF(rhs.Shape)
+                && DirectILKernelGenerator.CanUseSimdBinary(op, resultType))
+                return null;
+
             // Mirror the direct path: F-allocate output when every non-scalar
             // operand is strict-F. Otherwise default to C and let the
             // post-kernel "looser-F" copy step rectify when needed.
@@ -654,6 +701,18 @@ namespace NumSharp.Backends
 
             DirectILKernelGenerator.EmitScalarOperation(il, op, resultType);
         }
+
+        /// <summary>
+        ///     True when <paramref name="s"/> presents a clean C- or F-contiguous
+        ///     layout (or is scalar/size-1, trivially contiguous). Gate for the
+        ///     small-broadcast direct-path route: the direct SimdChunk kernel is only
+        ///     verified bit-identical to NDIter when both operands are contiguous —
+        ///     a strided / trailing-size-1 / negative-stride operand (which NDIter
+        ///     absorbs but SimdChunk mishandles) must stay on the NDIter route.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static bool IsContiguousCorF(Shape s)
+            => s.size <= 1 || s.IsContiguous || s.IsFContiguous;
 
         /// <summary>
         /// NumPy-aligned rule: the output is F-contiguous when every non-scalar operand
