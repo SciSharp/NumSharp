@@ -130,6 +130,20 @@ namespace NumSharp.Backends
 
             if (kernel != null)
             {
+                // Parallel fast path for large contiguous integer min/max. max/min are associative
+                // AND commutative, and here (reached only for integer dtypes — f64/f32 min/max are
+                // intercepted by the Avx branch above, and inputType==accumType so no widening) the
+                // operands carry no NaN/-0, so reducing per-chunk and combining the partials is
+                // BIT-IDENTICAL to the single-threaded kernel regardless of thread count. NumPy's
+                // reduction is single-threaded, so this spends the socket's otherwise-idle DRAM
+                // bandwidth (measured ~5x a single core). Gated on a large-array threshold; every
+                // other op/size/dtype falls straight through to the single-threaded kernel.
+                if (isContiguous && (op == ReductionOp.Min || op == ReductionOp.Max) && inputType == accumType)
+                {
+                    int par = MultiThread.DegreeOfParallelismUnordered(arr.size);
+                    if (par > 1)
+                        return CombineWithCount(ParallelFlatMinMax<TResult>(kernel, arr, par), bcastMult, op);
+                }
                 return CombineWithCount(ExecuteTypedReductionKernel<TResult>(kernel, arr), bcastMult, op);
             }
             else
@@ -139,6 +153,64 @@ namespace NumSharp.Backends
                     $"IL kernel not available for {op}({inputType}) -> {accumType}. " +
                     "Please report this as a bug.");
             }
+        }
+
+        /// <summary>
+        ///     Split a large contiguous min/max reduction across <paramref name="par"/> workers: each
+        ///     runs the SAME single-threaded IL kernel over its chunk, then the per-chunk partials are
+        ///     combined by one more run of that kernel (order-independent, so bit-identical to the
+        ///     whole-array reduction). Partials are padded to a cache line to avoid false sharing.
+        ///     Only reached for large integer min/max (see the gate in <see cref="ExecuteElementReduction"/>).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe TResult ParallelFlatMinMax<TResult>(
+            TypedElementReductionKernel<TResult> kernel, NDArray arr, int par)
+            where TResult : unmanaged
+        {
+            int elemSize = arr.dtypesize;
+            long n = arr.size;
+            long chunk = (n + par - 1) / par;
+            nint baseAddr = (nint)((byte*)arr.Address + arr.Shape.offset * elemSize);
+
+            // 64-byte-padded slot per worker so adjacent partials never share a cache line.
+            int slot = 64 / sizeof(TResult); if (slot < 1) slot = 1;
+            var partials = new TResult[par * slot];
+
+            System.Threading.Tasks.Parallel.For(0, par, t =>
+            {
+                long start = (long)t * chunk;
+                long len = System.Math.Min(chunk, n - start);
+                if (len > 0)
+                {
+                    void* p = (void*)(baseAddr + (nint)(start * elemSize));
+                    partials[t * slot] = InvokeContiguousChunk(kernel, p, len);
+                }
+            });
+
+            // Pack the live partials contiguously (the last chunk may be empty if par doesn't divide n)
+            // and reduce them with the same kernel — the associative/commutative combine.
+            var packed = new TResult[par];
+            int valid = 0;
+            for (int t = 0; t < par; t++)
+                if ((long)t * chunk < n) packed[valid++] = partials[t * slot];
+
+            fixed (TResult* pp = packed)
+                return InvokeContiguousChunk(kernel, (void*)pp, valid);
+        }
+
+        /// <summary>
+        ///     Invoke a contiguous element-reduction kernel over a raw pointer + length. The contiguous
+        ///     kernel reads only the input pointer and the element count; the stride/shape/ndim args are
+        ///     unused there, so unit dummies suffice.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static unsafe TResult InvokeContiguousChunk<TResult>(
+            TypedElementReductionKernel<TResult> kernel, void* input, long len)
+            where TResult : unmanaged
+        {
+            long* strides = stackalloc long[1]; strides[0] = 1;
+            long* shape = stackalloc long[1]; shape[0] = len;
+            return kernel(input, strides, shape, 1, len);
         }
 
         /// <summary>
