@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ==================================================================================
+       NumSharp.Weaver.Analyzer — a Roslyn DiagnosticAnalyzer that reports a build ERROR when
+       [NDScoped] / [NDScopedAsync] is placed on a target the IL weaver could not weave (the
+       same NDW diagnostics the post-compile weaver produces, surfaced in the editor and at
+       CoreCompile so the mistake is caught BEFORE the weave runs).
+
+       It is NOT packed as its own package: the NumSharp.Weaver csproj stages this DLL into that
+       package's `analyzers/dotnet/cs/` folder (see NumSharp.Weaver.csproj → _NumSharpWeaverPackTool),
+       so installing NumSharp.Weaver applies BOTH the analyzer (compile-time) and the weaver
+       (post-compile). Targets netstandard2.0 — the Roslyn analyzer contract.
+       ================================================================================== -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>NumSharp.Weaver.Analyzer</AssemblyName>
+    <RootNamespace>NumSharp.Weaver.Analyzer</RootNamespace>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+
+    <!-- A Roslyn analyzer loaded by the compiler host: like the weaver tool its own assembly
+         identity is irrelevant, and Microsoft.CodeAnalysis beside it carries its own key. -->
+    <SignAssembly>false</SignAssembly>
+
+    <!-- Not its own package; the build output is staged into the NumSharp.Weaver package by hand. -->
+    <IsPackable>false</IsPackable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+
+    <!-- RS2008 wants an AnalyzerReleases tracking file (release-notes tooling we don't ship here). -->
+    <NoWarn>$(NoWarn);RS2008</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The analyzing APIs are provided by the compiler host at run time; the reference is
+         compile-time only (PrivateAssets=all) and never ships in the package. 4.8.0 is the
+         Roslyn that ships with the .NET 8 SDK — the floor this repo's consumers build on. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

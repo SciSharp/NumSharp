@@ -1,0 +1,19 @@
+# NumSharp.Core-only analyzer configuration (nested; the repo-root .editorconfig still applies).
+#
+# The NumSharp.Weaver.Analyzer runs on Core's own compile to surface NDArray leaks (NDW012). The
+# same assembly also carries the [NDScoped]-TARGET gate (NDW002/003/005/006/009/010/011), but on
+# Core those are redundant with the self-weave — the NDScopeWeave target validates every [NDScoped]
+# method post-compile and already fails the build on a bad target — and they have never been run
+# over Core's full attributed surface. Turn them off here so wiring the analyzer into Core's build
+# cannot regress it on a first-run analyzer/weaver disagreement; the NDW012 leak warning stays on.
+[*.cs]
+dotnet_diagnostic.NDW002.severity = none
+dotnet_diagnostic.NDW003.severity = none
+dotnet_diagnostic.NDW005.severity = none
+dotnet_diagnostic.NDW006.severity = none
+dotnet_diagnostic.NDW009.severity = none
+dotnet_diagnostic.NDW010.severity = none
+dotnet_diagnostic.NDW011.severity = none
+
+# The leak analyzer — kept explicit so its intent (and how to tune it) is discoverable here.
+dotnet_diagnostic.NDW012.severity = warning

@@ -46,6 +46,34 @@
       <PackagePath></PackagePath>
     </None>
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <!-- Ships into the NumSharp package so a downstream consumer imports the NDW013 guard: a build
+         warning when [NDScoped]/[NDScopedAsync] is used but the NumSharp.Weaver package is not
+         installed (the attributes are then inert and the temporaries leak). See build/NumSharp.targets. -->
+    <None Include="build/NumSharp.targets" Pack="true" PackagePath="build/" />
+  </ItemGroup>
+
+  <!-- ==================================================================================
+       Compile-time leak analyzer (NDW012) for NumSharp.Core's OWN build.
+
+       The NumSharp.Weaver.Analyzer flags an NDArray a method creates but never returns, out/ref's,
+       stores, disposes, or yields to an NDScope — a transient left to the finalizer. Referencing it
+       with OutputItemType="Analyzer" (ReferenceOutputAssembly=false, so netstandard2.0 is never a
+       runtime ref) runs it during Core's compile, so `dotnet build` on NumSharp captures leaks in
+       np.* code, not just in downstream consumers of the NumSharp.Weaver package.
+
+       The analyzer ALSO carries the [NDScoped]-target gate (NDW002/003/005/006/009/010/011), but on
+       Core those are REDUNDANT with the self-weave (which validates every [NDScoped] method
+       post-compile) and have never run over Core's full attributed surface — so they are turned off
+       for Core's own build in src/NumSharp.Core/.editorconfig, leaving only the NDW012 leak warning.
+
+       Toggle: -p:EnableNDArrayLeakAnalyzer=false removes the analyzer from Core's compile entirely.
+       ================================================================================== -->
+  <PropertyGroup>
+    <EnableNDArrayLeakAnalyzer Condition="'$(EnableNDArrayLeakAnalyzer)' == ''">true</EnableNDArrayLeakAnalyzer>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(EnableNDArrayLeakAnalyzer)' == 'true'">
+    <ProjectReference Include="..\..\tools\NumSharp.Weaver.Analyzer\NumSharp.Weaver.Analyzer.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
 
   <Target Name="LogDebugInfo">
