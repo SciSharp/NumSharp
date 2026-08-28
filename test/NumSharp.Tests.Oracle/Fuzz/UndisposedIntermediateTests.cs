@@ -241,6 +241,38 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
+        /// <summary>
+        ///     The <c>!</c> (logical-not) operator builds an untyped bool <c>result</c> then returns
+        ///     <c>result.MakeGeneric&lt;bool&gt;()</c> — a typed ALIAS that takes its own ARC ref on the
+        ///     shared block. The untyped <c>result</c> wrapper is then a strand reclaimable only by a
+        ///     future GC + finalizer pass: one bucketed buffer escaped per <c>!arr</c> call (measured).
+        ///     <c>operator !</c> is now [NDScoped], so the weaver disposes <c>result</c> at exit while
+        ///     yielding the alias — the corpus sweep never invokes the operators (it drives np.* funcs),
+        ///     so this is their dedicated pin. Sibling: the typed NDArray&lt;T&gt; &amp;/|/^ operators,
+        ///     which carry the same MakeGeneric strand and the same [NDScoped] fix.
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [TestCategory("ScopeAudit")]
+        public void OperatorNot_ReclaimsUntypedMakeGenericWrapper()
+        {
+            ScopeAudit.Settle();
+            var a = np.arange(1000).astype(np.int32);   // 1000-elem bool result => a bucketed buffer
+            try
+            {
+                long? escaped = ScopeAudit.Measure(() =>
+                {
+                    using var r = !a;
+                });
+                Assert.AreEqual(0L, escaped,
+                    "operator ! must reclaim its untyped MakeGeneric strand ([NDScoped] regression pin)");
+            }
+            finally
+            {
+                a.Dispose();
+            }
+        }
+
         // ---------------------------------------------------------------------------------
         // Known escape families. Each op below LEAKED at gate landing (2026-08-26, full-corpus
         // sweep; per-op ceiling = the worst confirmed buffers-escaped-per-call observed then).
