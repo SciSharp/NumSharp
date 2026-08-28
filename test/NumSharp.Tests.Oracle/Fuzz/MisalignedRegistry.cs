@@ -304,13 +304,13 @@ namespace NumSharp.Tests.Fuzz
             // minimum PROPAGATE NaN; fmax/fmin IGNORE NaN (return the finite operand, first-operand
             // on both-NaN) — bit-exact with NumPy 2.4.2 across every dtype pair and layout in
             // LOGIC_BIN_PAIRS, so NO extrema value excuse remains and the matrix verifies them all.
-            // isclose on an F-contiguous complex operand diverges — its own comparison kernel (NOT the
-            // now-fixed clip-routed extrema path) still pairs a strided complex operand by buffer order.
-            // Scoped to cases with a complex128 operand present (B6/F14) — a real-dtype isclose
-            // divergence is a real bug and fails the gate.
-            if (c.Op == "isclose" && kind == DivergenceKind.Value
-                && c.Operands.Any(o => o.Dtype == "complex128"))
-                return "isclose: F-contiguous/complex strided pairing divergence [known bug]";
+            // (FIXED) isclose complex128 no longer diverges — the excuse here is removed. isclose used
+            // to cast BOTH operands to float64 up front, which for a complex operand dropped the
+            // imaginary part (and paired an F-contiguous/strided complex operand by buffer order), so
+            // every discriminating complex case failed. IsClose now computes in NumPy's exact
+            // result_type(x, result_type(y, 1.0)) — complex stays complex, float32 stays float32 — so
+            // the whole complex128 tier (contig/F/strided/broadcast/negstride) is bit-exact with NumPy
+            // 2.4.2 and needs no excuse (verified with this branch disabled).
 
             // (S2) fmax/fmin ±0-tie sign on a negative-stride float32 view. NumPy's OWN fmax/fmin
             //      pick which zero to return on a (+0,-0) tie by SIMD path: its array loop returns

@@ -50,20 +50,28 @@ namespace NumSharp.Backends
             // if equal_nan:
             //     result |= isnan(x) & isnan(y)
 
-            // Convert to double for comparison (NumPy casts to inexact type). astype(copy:false)
-            // returns the input itself when no conversion is needed and a FRESH array otherwise —
-            // it never mutates a/b (NumPy semantics). So x/y are caller-owned when they alias a/b
-            // and method-owned temps when a conversion happened; the finally block below disposes
-            // exactly the converted case. Every other local is a FRESH allocation owned by this
-            // method (each elementwise operator/ufunc returns a new array), so each is wrapped in
-            // `using`: its unmanaged buffer is released synchronously instead of riding the
-            // finalizer queue. In a tight isclose/allclose loop the un-disposed temps (≈5 float64
-            // + several bool arrays per call) accumulated as live allocations until GC, ballooning
-            // the process working set (the np.allclose / np.isclose leak guards).
-            // MakeGeneric<bool>() takes its own refcount on the final buffer, so disposing the
-            // backing temp leaves it alive.
-            var x = a.astype(NPTypeCode.Double, copy: false);
-            var y = b.astype(NPTypeCode.Double, copy: false);
+            // Compute in NumPy's exact dtype, not blanket float64. NumPy's isclose forces the
+            // REFERENCE operand inexact via result_type(b, 1.0) and then evaluates the whole formula
+            // in result_type(x, y): so (f32,f32)->float32, (f16,f16)->float16, (complex,complex)->
+            // complex128, while bool + every integer -> float64. Casting both operands through
+            // InexactPromote and letting the elementwise operators do the NEP50 promotion reproduces
+            // that (mixed pairs too, verified bit-exact vs NumPy 2.4.2). The prior code cast BOTH to
+            // Double unconditionally, which (a) did 2x the memory work NumPy does for float32/float16
+            // — the isclose/allclose float32 perf gap — and (b) was WRONG for complex, dropping the
+            // imaginary part (isclose([1+0j],[1+100j]) returned True where NumPy returns False).
+            // float64/int/bool/char/decimal still map to Double, so their cast is byte-identical to
+            // before. astype(copy:false) returns the input itself when no conversion is needed and a
+            // FRESH array otherwise — it never mutates a/b (NumPy semantics). So x/y are caller-owned
+            // when they alias a/b and method-owned temps when a conversion happened; the finally
+            // block below disposes exactly the converted case. Every other local is a FRESH
+            // allocation owned by this method (each elementwise operator/ufunc returns a new array),
+            // so each is wrapped in `using`: its unmanaged buffer is released synchronously instead
+            // of riding the finalizer queue. In a tight isclose/allclose loop the un-disposed temps
+            // accumulated as live allocations until GC, ballooning the process working set (the
+            // np.allclose / np.isclose leak guards). MakeGeneric<bool>() takes its own refcount on
+            // the final buffer, so disposing the backing temp leaves it alive.
+            var x = a.astype(InexactPromote(a.typecode), copy: false);
+            var y = b.astype(InexactPromote(b.typecode), copy: false);
             try
             {
                 // Vectorized computation using existing np operations
@@ -112,5 +120,20 @@ namespace NumSharp.Backends
                     y.Dispose();
             }
         }
+
+        /// <summary>
+        /// NumPy's <c>result_type(dtype, 1.0)</c> — the "make the reference operand inexact" step of
+        /// <c>np.isclose</c>. A float or complex dtype keeps itself; bool and every integer promote to
+        /// float64. NumSharp's non-NumPy dtypes (Char/Decimal) also fall through to float64, preserving
+        /// the pre-change behaviour for them. Casting BOTH operands through this (and letting the
+        /// elementwise operators promote) reproduces isclose's exact computation dtype
+        /// <c>result_type(x, result_type(y, 1.0))</c> — so float32/float16/complex compute at native
+        /// precision instead of being widened to float64.
+        /// </summary>
+        private static NPTypeCode InexactPromote(NPTypeCode tc) => tc switch
+        {
+            NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex => tc,
+            _ => NPTypeCode.Double,
+        };
     }
 }
