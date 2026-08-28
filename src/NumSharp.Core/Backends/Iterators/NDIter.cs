@@ -800,7 +800,9 @@ namespace NumSharp.Backends.Iteration
             if ((flags & NDIterGlobalFlags.BUFFERED) != 0)
             {
                 _state->ItFlags |= (uint)NDIterFlags.BUFFER;
-                _state->BufferSize = bufferSize > 0 ? bufferSize : NDIterBufferManager.DefaultBufferSize;
+                // An explicit buffersize wins; otherwise use the per-thread ufunc default
+                // (np.getbufsize()/np.setbufsize()), which is 8192 unless the caller changed it.
+                _state->BufferSize = bufferSize > 0 ? bufferSize : NDIterBufferManager.CurrentBufferSize;
 
                 bool isReduce = (_state->ItFlags & (uint)NDIterFlags.REDUCE) != 0;
 

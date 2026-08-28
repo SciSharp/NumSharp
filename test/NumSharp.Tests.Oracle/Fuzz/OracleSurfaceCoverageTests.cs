@@ -39,6 +39,13 @@ namespace NumSharp.Tests.Fuzz
         private static readonly HashSet<string> SiblingOwned = new()
         {
             "array2string",
+            // getbufsize/setbufsize configure the ufunc/NDIter default buffer size (NumPy's
+            // NPY_BUFSIZE, 8192). They are a thread-local config getter/setter with no array
+            // result and no deterministic value bytes — buffering only changes internal chunking,
+            // never a computed value — so there is nothing for an operand/result corpus to
+            // bit-compare (same rationale as get_printoptions/set_printoptions). Gated by the
+            // dedicated np.bufsize.Test.cs suite, verified against NumPy 2.4.2.
+            "getbufsize", "setbufsize",
             // bmat is pure block-assembly (concatenation) over the already-fuzzed concatenate +
             // asmatrix — its nested-block ([[A,B],[C,D]]) and string+dict inputs have no single-operand
             // corpus representation (the same reason block needs a bespoke multi-operand oracle path);

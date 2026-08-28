@@ -13,9 +13,44 @@ namespace NumSharp.Backends.Iteration
     public static unsafe class NDIterBufferManager
     {
         /// <summary>
-        /// Default buffer size (number of elements).
+        /// Built-in default buffer size (number of elements) — NumPy's <c>NPY_BUFSIZE</c>.
+        /// Used whenever neither an explicit nditer <c>buffersize</c> nor a per-thread
+        /// override (<see cref="NumSharp.np.setbufsize(long)"/>) applies.
         /// </summary>
         public const long DefaultBufferSize = 8192;
+
+        /// <summary>
+        /// Smallest valid ufunc buffer size (NumPy: must be ≥ 5 AND a multiple of 16, so the
+        /// effective minimum is 16). See <c>extobj.c</c>'s <c>extobj_make_extobj</c>.
+        /// </summary>
+        internal const long MinBufferSize = 16;
+
+        /// <summary>
+        /// Largest valid ufunc buffer size (NumPy's <c>10e6</c>, inclusive).
+        /// </summary>
+        internal const long MaxBufferSize = 10_000_000;
+
+        /// <summary>
+        /// Per-thread override for the ufunc/NDIter default buffer size, set through
+        /// <see cref="NumSharp.np.setbufsize(long)"/>. Zero means "unset" — the thread then
+        /// falls back to <see cref="DefaultBufferSize"/>. Thread-local to mirror NumPy 2.x's
+        /// context-local extobj (a <c>setbufsize</c> on one thread never leaks into another).
+        /// </summary>
+        [ThreadStatic] private static long _userBufferSize;
+
+        /// <summary>
+        /// The current default NDIter/ufunc buffer size for the calling thread — exactly the
+        /// value <see cref="NumSharp.np.getbufsize"/> returns. Equals the last
+        /// <see cref="NumSharp.np.setbufsize(long)"/> value on this thread, or
+        /// <see cref="DefaultBufferSize"/> (8192) when none was set. Changing it alters only the
+        /// buffer/chunk size of buffered iteration, never any computed result.
+        /// </summary>
+        public static long CurrentBufferSize
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { long v = _userBufferSize; return v > 0 ? v : DefaultBufferSize; }
+            internal set => _userBufferSize = value; // validated by np.setbufsize before it reaches here
+        }
 
         /// <summary>
         /// Required alignment for SIMD operations.
