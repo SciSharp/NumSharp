@@ -10,6 +10,7 @@ namespace NumSharp
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have three or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
+        [NDScoped] // reclaims the inner expand_dims alias of the 1-D arm (and asanyarray's fresh conversion when superseded)
         public static NDArray atleast_3d(object arys)
         {
             if (arys == null)
@@ -34,6 +35,7 @@ namespace NumSharp
         /// </summary>
         /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
+        [NDScoped] // reclaims the inner expand_dims alias of the 1-D arm; the ndim>=3 passthrough is an untracked input
         public static NDArray atleast_3d(NDArray arr)
         {
             if (arr is null)
@@ -58,6 +60,7 @@ namespace NumSharp
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have three or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
+        [NDScoped] // per-element inner expand_dims aliases are reclaimed; every ret[i] is yielded via the NDArray[] egress
         public static NDArray[] atleast_3d(params object[] arys)
         {
             if (arys == null)
@@ -96,6 +99,7 @@ namespace NumSharp
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have three or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
+        [NDScoped] // per-element inner expand_dims aliases are reclaimed; input passthroughs stay untracked
         public static NDArray[] atleast_3d(params NDArray[] arys)
         {
             if (arys == null)

@@ -189,6 +189,7 @@ namespace NumSharp.Backends
 
         // Fuse a contiguous run of reduced axes into a single axis via reshape, then
         // run one single-axis reduction. Caller has verified C-contiguous storage.
+        [NDScopedCovered] // engine multi-axis All/Any is reached only from the [NDScoped] np.all/np.any entries (the fused reshape view is scope-reclaimed)
         private NDArray<bool> ReduceContiguousAxisRun(NDArray nd, int[] sortedAxes, bool keepdims, bool reduceAll)
         {
             int ndim = nd.ndim;

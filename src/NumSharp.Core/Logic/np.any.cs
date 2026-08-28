@@ -28,6 +28,7 @@ namespace NumSharp
         /// <param name="keepdims">If True, the reduced axes are left in the result as dimensions with size one.</param>
         /// <returns>A new boolean ndarray is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
+        [NDScoped] // boundary for the engine reduction tree (reshape/chained-axis temps); the reduced result is yielded
         public static NDArray<bool> any(NDArray nd, int axis, bool keepdims = false)
         {
             if (nd is null)
@@ -62,6 +63,7 @@ namespace NumSharp
         /// <param name="keepdims">If True, the reduced axes are left in the result as dimensions with size one.</param>
         /// <returns>A new boolean ndarray is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
+        [NDScoped] // boundary for the engine multi-axis tree (axis-run reshape view, chained single-axis intermediates)
         public static NDArray<bool> any(NDArray nd, int[] axis, bool keepdims = false)
         {
             if (nd is null)
@@ -135,6 +137,7 @@ namespace NumSharp
         ///     and contribute the identity value (False for <c>any</c>). Pass <c>null</c> for no mask.</param>
         /// <returns>The reduced array, or <paramref name="out"/> when supplied.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
+        [NDScoped] // reclaims the where-mask effective array and the reduced temp on the out= path
         public static NDArray any(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
         {
             if (a is null)
@@ -156,6 +159,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask, broadcastable against <paramref name="a"/>.</param>
         /// <returns>The reduced array, or <paramref name="out"/> when supplied.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
+        [NDScoped] // reclaims the where-mask effective array and the reduced temp on the out= path
         public static NDArray any(NDArray a, int[] axis, NDArray @out, bool keepdims = false, NDArray @where = null)
         {
             if (a is null)

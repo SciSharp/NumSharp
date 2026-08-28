@@ -46,6 +46,7 @@ namespace NumSharp
         /// <summary>
         ///     Long-index overload of <see cref="insert(NDArray, int, NDArray, int?)"/>.
         /// </summary>
+        [NDScoped] // reclaims PrepareAxisContext's ravel work array and the pre-order intermediate WithSourceOrder supersedes (np.delete's exact pattern)
         public static NDArray insert(NDArray arr, long obj, NDArray values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -78,6 +79,7 @@ namespace NumSharp
         ///     Python <c>slice.indices(N)</c> into an indices array, then the
         ///     multi-index branch runs.
         /// </summary>
+        [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, Slice obj, NDArray values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -109,6 +111,7 @@ namespace NumSharp
         ///     (NumPy parity: <c>np.insert(arr, [1], v) != np.insert(arr, 1, v)</c>
         ///     when v has multiple axes, even though both have one insertion point).
         /// </summary>
+        [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, int[] obj, NDArray values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -136,6 +139,7 @@ namespace NumSharp
         /// <summary>
         ///     long[]-obj overload.
         /// </summary>
+        [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, long[] obj, NDArray values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -178,6 +182,7 @@ namespace NumSharp
         ///             "index array argument obj to insert must be one dimensional or scalar".</item>
         ///     </list>
         /// </summary>
+        [NDScoped] // same transient set as the long-obj overload, plus the bool-mask flatnonzero temp
         public static NDArray insert(NDArray arr, NDArray obj, NDArray values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));

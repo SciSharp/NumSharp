@@ -84,6 +84,13 @@ namespace NumSharp
 
         // ---------------------------- top-level dispatcher ----------------------------
 
+        // Scoped here (not per-overload): every value-mode pad overload funnels through this
+        // dispatcher, so one ambient scope reclaims the whole mode-body call tree (the
+        // `2 * edge` temps in _SetReflectBoth, BuildLinearRamp's reshape, …) for all of them.
+        // PadCallableImpl is deliberately NOT scoped: its tree disposes everything it creates,
+        // and an ambient scope there would reach into the user's PadFunc callback and dispose
+        // arrays the callback creates for its own use.
+        [NDScoped]
         private static NDArray PadImpl(NDArray array, object pad_width, string mode,
             object constant_values, object end_values, object stat_length, string reflect_type)
         {
@@ -321,6 +328,7 @@ namespace NumSharp
         ///
         ///     Mirrors <c>_set_reflect_both</c> in <c>numpy/lib/_arraypad_impl.py</c>.
         /// </summary>
+        [NDScopedCovered] // only caller: PadReflectOrSymmetric ← [NDScoped] PadImpl (the `2 * edge` odd-mode temp)
         private static (long left, long right) _SetReflectBoth(
             NDArray padded, int axis, (long left, long right) width, string method, long originalPeriod, bool includeEdge)
         {
@@ -691,6 +699,7 @@ namespace NumSharp
         ///     <c>np.linspace</c> with array bounds; ours is scalar so we
         ///     express the same formula as one broadcast multiply + add).
         /// </summary>
+        [NDScopedCovered] // only caller: PadLinearRamp ← [NDScoped] PadImpl (coefReshaped view is scope-reclaimed)
         private static NDArray BuildLinearRamp(NDArray edge, int axis, long width, object endValue,
             NPTypeCode dtype, bool reverse)
         {

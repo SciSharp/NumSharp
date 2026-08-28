@@ -439,6 +439,7 @@ namespace NumSharp
         ///     between deleted positions. Equivalent to the bool-mask + compress
         ///     path but skips the O(N) mask scan.
         /// </summary>
+        [NDScopedCovered] // only caller: DeleteIndexArray ← the [NDScoped] delete overloads
         private static NDArray DeleteChunkConcat(NDArray arr, long[] indices, int axis)
         {
             long N = arr.shape[axis];
