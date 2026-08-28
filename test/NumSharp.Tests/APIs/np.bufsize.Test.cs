@@ -48,12 +48,35 @@ namespace NumSharp.Tests.APIs
         [DataTestMethod]
         [DataRow(16L)]           // smallest valid (>=5 AND multiple of 16)
         [DataRow(32L)]
+        [DataRow(48L)]           // arbitrary multiple of 16 round-trips EXACTLY (not rounded)
+        [DataRow(160L)]
         [DataRow(4096L)]
+        [DataRow(9_999_984L)]    // 624999*16 — near the top boundary, still a multiple of 16
         [DataRow(10_000_000L)]   // largest valid (10e6, inclusive)
         public void SetBufsize_ValidValues_Accepted(long v)
         {
             np.setbufsize(v).Should().Be(8192L);  // returns the previous (default) size
-            np.getbufsize().Should().Be(v);
+            np.getbufsize().Should().Be(v);       // stored verbatim, no rounding
+        }
+
+        [TestMethod]
+        public void SetBufsize_Chained_ReturnsEachPreviousValue()
+        {
+            // numpy: setbufsize returns the value in effect BEFORE the call, not always the default.
+            np.setbufsize(16).Should().Be(8192L);   // was default
+            np.setbufsize(32).Should().Be(16L);     // was 16
+            np.setbufsize(4096).Should().Be(32L);   // was 32
+            np.getbufsize().Should().Be(4096L);
+        }
+
+        [TestMethod]
+        public void FailedSet_ReturnsNothing_AndKeepsPreviousOnNextSet()
+        {
+            // A rejected set must not become the "previous" value reported by the next successful set.
+            np.setbufsize(160);
+            Action bad = () => np.setbufsize(9);
+            bad.Should().Throw<ValueError>();
+            np.setbufsize(320).Should().Be(160L);   // previous is still 160, not 9
         }
 
         // ------------------------------------------------------------------- validation (verbatim)
