@@ -69,14 +69,24 @@ namespace NumSharp
                         "use the bitwise_xor, the `^` operator, or the logical_xor function instead.");
 
                 long L = flat.size;
-                long m = L > 0 ? L - 1 : 0;
-                var hi = SliceAlongAxis(flat, 0, L - m, L); // flat[1:]
-                var lo = SliceAlongAxis(flat, 0, 0, m);     // flat[:-1]
-                // Same lean NDIter subtract as np.diff (uninitialised output,
-                // no promotion/broadcast re-derivation); `-` operator as fallback.
-                middle = DiffSubtractViaNDIter(hi, lo) ?? (hi - lo);
-                hi.Dispose();
-                lo.Dispose();
+                // Fast path: the flattened input is always C-contiguous 1-D, so the middle
+                // differences are the same adjacent-difference stencil np.diff uses — one
+                // fused kernel over the source, no slice views, no NDIter. dt is non-boolean
+                // here (boolean threw above). Falls back to the slice-subtract for L<2 or an
+                // unavailable dtype kernel.
+                if (L >= 2)
+                    middle = DiffAdjacentContiguous(flat, 0);
+                if (middle is null)
+                {
+                    long m = L > 0 ? L - 1 : 0;
+                    var hi = SliceAlongAxis(flat, 0, L - m, L); // flat[1:]
+                    var lo = SliceAlongAxis(flat, 0, 0, m);     // flat[:-1]
+                    // Same lean NDIter subtract as np.diff (uninitialised output,
+                    // no promotion/broadcast re-derivation); `-` operator as fallback.
+                    middle = DiffSubtractViaNDIter(hi, lo) ?? (hi - lo);
+                    hi.Dispose();
+                    lo.Dispose();
+                }
 
                 // Fast path: nothing to bracket — return the middle directly.
                 if (begin is null && end is null)
