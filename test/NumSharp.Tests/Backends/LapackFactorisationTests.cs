@@ -496,20 +496,23 @@ namespace NumSharp.Tests.Backends
         #region the seam: the backend is what enables these
 
         [TestMethod]
-        public void WithoutTheBackend_TheseRaiseNotSupported_WithIt_TheyCompute()
+        public void TheLuFamily_ComputesManagedWithoutTheBackend_AndThroughLapackWithIt()
         {
-            // With no backend the factorisations have no managed fallback and raise; installing the
-            // backend is exactly what turns each of them on. (This is the seam LinAlgEngineSeamTests
-            // documents, exercised from the other side.)
+            // The LU family — inv/det/solve/slogdet — has a managed fallback (ManagedLu), so unlike the
+            // Cholesky/QR/SVD/eigen factorisations it computes WITH OR WITHOUT a backend: without one it
+            // takes the managed path, installing the backend routes it through LAPACK, and both agree
+            // with NumPy. (The seam LinAlgEngineSeamTests documents, exercised from the other side.)
             OpenBlasEngine.Disable();
             var c = np.array(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 } });
-            new Action(() => np.linalg.inv(c)).Should().Throw<NotSupportedException>();
-            new Action(() => np.linalg.det(c)).Should().Throw<NotSupportedException>();
-            new Action(() => np.linalg.solve(c, np.arange(2.0))).Should().Throw<NotSupportedException>();
+            c.TensorEngine.Blas.Should().BeNull("no backend is installed at this point");
+            AssertClose(np.linalg.inv(c), Tol, -2.0, 1.0, 1.5, -0.5);        // managed
+            AssertClose(np.linalg.det(c), Tol, -2.0);
+            AssertClose(np.linalg.solve(c, np.arange(2.0)), Tol, 1.0, -0.5);
 
             RequireLapack();
-            AssertClose(np.linalg.inv(c), Tol, -2.0, 1.0, 1.5, -0.5);
+            AssertClose(np.linalg.inv(c), Tol, -2.0, 1.0, 1.5, -0.5);        // through LAPACK
             AssertClose(np.linalg.det(c), Tol, -2.0);
+            AssertClose(np.linalg.solve(c, np.arange(2.0)), Tol, 1.0, -0.5);
         }
 
         [TestMethod]

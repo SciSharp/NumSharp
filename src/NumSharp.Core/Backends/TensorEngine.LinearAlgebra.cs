@@ -6,7 +6,9 @@ namespace NumSharp
 {
     /// <summary>
     ///     The linear-algebra entry points beyond <c>dot</c>/<c>matmul</c>: the matrix products (managed
-    ///     fallback, backend optional) and the matrix factorisations (backend required, no fallback).
+    ///     fallback, backend optional), the LU-based factorisations <c>det</c>/<c>slogdet</c>/
+    ///     <c>solve</c>/<c>inv</c> (managed fallback via <see cref="Backends.ManagedLu"/>, backend
+    ///     optional), and the remaining factorisations (backend required, no fallback).
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -17,11 +19,14 @@ namespace NumSharp
     ///     <para>
     ///     <b>Two behaviours live here and the difference matters to callers.</b> The product family
     ///     falls back to NumSharp's own managed kernels, so a backend changes which implementation
-    ///     runs and nothing else. The factorisation family has no managed fallback — NumSharp.Core
-    ///     carries no LU, QR, SVD or eigensolver — so it raises
-    ///     <see cref="OpenBlasMissingBackendException"/> when no backend serves the operands. The
-    ///     members are <c>virtual</c> rather than <c>abstract</c> so an alternative engine overrides
-    ///     only what it actually implements.
+    ///     runs and nothing else. The factorisation family splits: the LU-based four — <c>det</c>,
+    ///     <c>slogdet</c>, <c>solve</c>, <c>inv</c> — fall back to <see cref="Backends.ManagedLu"/>, a
+    ///     pure-managed unblocked LU that computes them (allclose to NumPy, since NumSharp.Core carries
+    ///     no BLOCKED LU to reproduce LAPACK's exact accumulation) rather than raising. The remaining
+    ///     factorisations — Cholesky, QR, SVD, the eigensolvers, <c>lstsq</c> — still have no managed
+    ///     numerics and raise <see cref="OpenBlasMissingBackendException"/> when no backend serves the
+    ///     operands. The members are <c>virtual</c> rather than <c>abstract</c> so an alternative
+    ///     engine overrides only what it actually implements.
     ///     </para>
     /// </remarks>
     public abstract partial class TensorEngine
@@ -115,7 +120,7 @@ namespace NumSharp
 
         #endregion
 
-        #region Factorisations — backend required, no managed fallback
+        #region Factorisations — LU family has a managed fallback; the rest need a backend
 
         /// <summary><c>np.linalg.cholesky</c> — OpenBLAS <c>potrf</c>.</summary>
         public virtual NDArray Cholesky(NDArray a, bool upper)
@@ -126,22 +131,28 @@ namespace NumSharp
             throw MissingBackend("np.linalg.cholesky", nameof(Backends.IBlasBackend.TryCholesky));
         }
 
-        /// <summary><c>np.linalg.det</c> — OpenBLAS <c>getrf</c>.</summary>
+        /// <summary>
+        ///     <c>np.linalg.det</c> — OpenBLAS <c>getrf</c>, or NumSharp's managed LU
+        ///     (<see cref="Backends.ManagedLu"/>) when no backend serves the operand.
+        /// </summary>
         public virtual NDArray Det(NDArray a)
         {
             var blas = Blas;
             if (blas != null && blas.TryDet(a, out var result))
                 return result;
-            throw MissingBackend("np.linalg.det", nameof(Backends.IBlasBackend.TryDet));
+            return Backends.ManagedLu.Det(a);
         }
 
-        /// <summary><c>np.linalg.slogdet</c> — OpenBLAS <c>getrf</c>.</summary>
+        /// <summary>
+        ///     <c>np.linalg.slogdet</c> — OpenBLAS <c>getrf</c>, or NumSharp's managed LU
+        ///     (<see cref="Backends.ManagedLu"/>) when no backend serves the operand.
+        /// </summary>
         public virtual (NDArray sign, NDArray logabsdet) Slogdet(NDArray a)
         {
             var blas = Blas;
             if (blas != null && blas.TrySlogdet(a, out var sign, out var logabsdet))
                 return (sign, logabsdet);
-            throw MissingBackend("np.linalg.slogdet", nameof(Backends.IBlasBackend.TrySlogdet));
+            return Backends.ManagedLu.Slogdet(a);
         }
 
         /// <summary><c>np.linalg.eig</c> / <c>np.linalg.eigvals</c> — OpenBLAS <c>geev</c>.</summary>
@@ -167,13 +178,18 @@ namespace NumSharp
                 nameof(Backends.IBlasBackend.TryEigh));
         }
 
-        /// <summary><c>np.linalg.inv</c> — OpenBLAS <c>gesv</c> against the identity.</summary>
+        /// <summary>
+        ///     <c>np.linalg.inv</c> — OpenBLAS <c>gesv</c> against the identity, or NumSharp's managed
+        ///     LU (<see cref="Backends.ManagedLu"/>) when no backend serves the operand. A singular
+        ///     operand surfaces as <c>LinAlgError("Singular matrix")</c> from the factorisation either
+        ///     way, exactly as NumPy's does.
+        /// </summary>
         public virtual NDArray Inv(NDArray a)
         {
             var blas = Blas;
             if (blas != null && blas.TryInv(a, out var result))
                 return result;
-            throw MissingBackend("np.linalg.inv", nameof(Backends.IBlasBackend.TryInv));
+            return Backends.ManagedLu.Inv(a);
         }
 
         /// <summary><c>np.linalg.lstsq</c> — OpenBLAS <c>gelsd</c>.</summary>
@@ -197,13 +213,16 @@ namespace NumSharp
             throw MissingBackend("np.linalg.qr", nameof(Backends.IBlasBackend.TryQr));
         }
 
-        /// <summary><c>np.linalg.solve</c> — OpenBLAS <c>gesv</c>.</summary>
+        /// <summary>
+        ///     <c>np.linalg.solve</c> — OpenBLAS <c>gesv</c>, or NumSharp's managed LU
+        ///     (<see cref="Backends.ManagedLu"/>) when no backend serves the operands.
+        /// </summary>
         public virtual NDArray Solve(NDArray a, NDArray b, bool oneDimensionalRhs)
         {
             var blas = Blas;
             if (blas != null && blas.TrySolve(a, b, oneDimensionalRhs, out var result))
                 return result;
-            throw MissingBackend("np.linalg.solve", nameof(Backends.IBlasBackend.TrySolve));
+            return Backends.ManagedLu.Solve(a, b, oneDimensionalRhs);
         }
 
         /// <summary>

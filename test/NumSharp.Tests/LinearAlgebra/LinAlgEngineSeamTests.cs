@@ -29,14 +29,16 @@ namespace NumSharp.Tests.LinearAlgebra
         #region pending numerics — remove a case when its implementation lands
 
         [TestMethod]
-        public void EveryFactorisation_RaisesNotSupported_UntilABackendIsInstalled()
+        public void EveryFactorisationWithoutManagedNumerics_RaisesNotSupported_UntilABackendIsInstalled()
         {
             var sq = Sq2;
             var m = M23;
 
-            new Action(() => np.linalg.inv(sq)).Should().Throw<NotSupportedException>();
-            new Action(() => np.linalg.det(sq)).Should().Throw<NotSupportedException>();
-            new Action(() => np.linalg.slogdet(sq)).Should().Throw<NotSupportedException>();
+            // The LU family — inv/det/slogdet/solve and the tensor* / matrix_power(-n) that compose on
+            // them — is DELIBERATELY ABSENT: it now has a managed fallback (ManagedLu), asserted in the
+            // "LU family computes without a backend" region below. Everything still listed here has no
+            // managed numerics (Core carries no Cholesky/QR/SVD/eigensolver) and raises until a backend
+            // is installed. Delete a case when its managed implementation lands.
             new Action(() => np.linalg.cholesky(sq)).Should().Throw<NotSupportedException>();
             new Action(() => np.linalg.eig(sq)).Should().Throw<NotSupportedException>();
             new Action(() => np.linalg.eigvals(sq)).Should().Throw<NotSupportedException>();
@@ -46,13 +48,9 @@ namespace NumSharp.Tests.LinearAlgebra
             new Action(() => np.linalg.svd(m)).Should().Throw<NotSupportedException>();
             new Action(() => np.linalg.svdvals(m)).Should().Throw<NotSupportedException>();
             new Action(() => np.linalg.pinv(m)).Should().Throw<NotSupportedException>();
-            new Action(() => np.linalg.solve(sq, np.arange(2.0))).Should().Throw<NotSupportedException>();
             new Action(() => np.linalg.lstsq(m, np.arange(2.0))).Should().Throw<NotSupportedException>();
             new Action(() => np.linalg.cond(sq)).Should().Throw<NotSupportedException>();
             new Action(() => np.linalg.matrix_rank(sq)).Should().Throw<NotSupportedException>();
-            new Action(() => np.linalg.tensorinv(np.eye(4).reshape(2, 2, 2, 2))).Should().Throw<NotSupportedException>();
-            new Action(() => np.linalg.tensorsolve(np.eye(4).reshape(2, 2, 2, 2), np.ones(new Shape(2, 2))))
-                .Should().Throw<NotSupportedException>();
         }
 
         [TestMethod]
@@ -61,10 +59,11 @@ namespace NumSharp.Tests.LinearAlgebra
             // An exception that only says "not supported" leaves the reader nowhere; this one has
             // to say what to install. There is no separate LAPACK seam — the one Blas property is
             // filled by NumSharp.Interop.OpenBLAS — so the message names that package and never LAPACK.
-            new Action(() => np.linalg.inv(Sq2))
+            // Cholesky stands in for the LU family here, which now computes managed.
+            new Action(() => np.linalg.cholesky(Sq2))
                 .Should().Throw<NotSupportedException>()
-                .Which.Message.Should().Contain("np.linalg.inv")
-                .And.Contain(nameof(IBlasBackend.TryInv))
+                .Which.Message.Should().Contain("np.linalg.cholesky")
+                .And.Contain(nameof(IBlasBackend.TryCholesky))
                 .And.Contain("TensorEngine.Blas")
                 .And.Contain(OpenBlasMissingBackendException.PackageId)
                 .And.NotContain("LAPACK");
@@ -76,7 +75,7 @@ namespace NumSharp.Tests.LinearAlgebra
             // The concrete type is new, but it derives from NotSupportedException so every existing
             // `catch (NotSupportedException)` keeps working, and it carries the house marker interface
             // like the rest of NumSharp's exceptions.
-            new Action(() => np.linalg.inv(Sq2)).Should().Throw<OpenBlasMissingBackendException>()
+            new Action(() => np.linalg.cholesky(Sq2)).Should().Throw<OpenBlasMissingBackendException>()
                 .Which.Should().BeAssignableTo<MissingBackendException>()
                 .And.BeAssignableTo<NotSupportedException>()
                 .And.BeAssignableTo<INumSharpException>();
@@ -91,10 +90,12 @@ namespace NumSharp.Tests.LinearAlgebra
         }
 
         [TestMethod]
-        public void MatrixPower_StopsOnlyOnANegativeExponent()
+        public void MatrixPower_NegativeExponent_ComputesThroughTheManagedInverse()
         {
-            // a**-n is inv(a)**n, so this is the one power that needs a backend.
-            new Action(() => np.linalg.matrix_power(Sq2, -1)).Should().Throw<NotSupportedException>();
+            // a**-n is inv(a)**n, the one power that reaches a factorisation — and inv now has a managed
+            // fallback, so a negative power computes without a backend. inv([[0,1],[2,3]]) = [[-1.5,0.5],[1,0]].
+            np.linalg.matrix_power(Sq2, -1).Should().BeShaped(2, 2)
+                .And.BeOfValuesApproximately(1e-12, -1.5, 0.5, 1, 0);
         }
 
         #endregion
@@ -123,9 +124,10 @@ namespace NumSharp.Tests.LinearAlgebra
         public void NDArrayMatrixPower_NoLongerRejectsNegativePowersOutright()
         {
             // It used to raise a bare Exception("matrix_power just work with int >= 0"), which was
-            // never NumPy's rule. It now takes the inv() route — and so reports a MISSING BACKEND.
-            new Action(() => np.arange(4.0).reshape(2, 2).matrix_power(-1))
-                .Should().Throw<NotSupportedException>();
+            // never NumPy's rule. It now takes the inv() route, which has a managed fallback, so a
+            // negative power computes: inv([[0,1],[2,3]]) = [[-1.5,0.5],[1,0]].
+            np.arange(4.0).reshape(2, 2).matrix_power(-1)
+                .Should().BeShaped(2, 2).And.BeOfValuesApproximately(1e-12, -1.5, 0.5, 1, 0);
 
             np.arange(4.0).reshape(2, 2).matrix_power(2).Should().BeOfValues(2, 3, 6, 11);
         }
@@ -320,7 +322,8 @@ namespace NumSharp.Tests.LinearAlgebra
             np.matvec(M23, np.arange(3.0)).Should().BeOfValues(5, 14);
             np.vecmat(np.arange(2.0), M23).Should().BeOfValues(3, 4, 5);
 
-            new Action(() => np.linalg.inv(Sq2)).Should().Throw<NotSupportedException>();
+            // The LU family also computes now (managed fallback); Cholesky still needs a backend.
+            new Action(() => np.linalg.cholesky(Sq2)).Should().Throw<NotSupportedException>();
         }
 
         [TestMethod]
