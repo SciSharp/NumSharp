@@ -33,6 +33,24 @@
     <AssemblyName>NumSharp</AssemblyName>
     <PackageVersion>0.60.0</PackageVersion>
 	<GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- GenerateDocumentationFile turns on the whole XML-doc-comment validation family. NumSharp
+         mirrors NumPy's API surface rather than curating per-member XML docs, so these are pure
+         noise here; we still EMIT the .xml doc file (for IntelliSense), we just don't validate it.
+         Every code below is exclusively an XML-documentation diagnostic — none overlaps a
+         code-correctness warning:
+           CS0419 ambiguous cref            CS1570 badly-formed XML          CS1571 dup param tag
+           CS1572 param tag, no param       CS1573 param, no param tag       CS1574 unresolved cref
+           CS1580 bad cref param type       CS1581 bad cref return type      CS1584 malformed cref
+           CS1587 comment not on element    CS1589/1590/1592/1598 <include>  CS1591 missing comment
+           CS1658 keyword in cref           CS1710/1712 typeparam tag        CS1711 typeparam, none
+           CS1723 cref to type param        CS1734 paramref, no param -->
+    <NoWarn>$(NoWarn);CS0419;CS1570;CS1571;CS1572;CS1573;CS1574;CS1580;CS1581;CS1584;CS1587;CS1589;CS1590;CS1591;CS1592;CS1598;CS1658;CS1710;CS1711;CS1712;CS1723;CS1734</NoWarn>
+    <!-- Two non-doc warnings on INTENTIONAL design choices, not fixable noise:
+           CS8981 the lowercase API type names (np, linalg, fft, …) that mirror NumPy's surface —
+                  the "may become reserved for the language" note is future-proofing we accept.
+           CS8500 address-of / pointer-to a managed type T in the unmanaged-storage unsafe kernels —
+                  inherent to NumSharp's raw-pointer memory model. -->
+    <NoWarn>$(NoWarn);CS8981;CS8500</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
@@ -47,7 +65,7 @@
     </None>
     <None Include="README.md" Pack="true" PackagePath="\" />
     <!-- Ships into the NumSharp package so a downstream consumer imports the NDW013 guard: a build
-         warning when [NDScoped]/[NDScopedAsync] is used but the NumSharp.Weaver package is not
+         warning when [NDScoped]/[NDScopedAsync] is used but the NumSharp.Build package is not
          installed (the attributes are then inert and the temporaries leak). See build/NumSharp.targets. -->
     <None Include="build/NumSharp.targets" Pack="true" PackagePath="build/" />
   </ItemGroup>
@@ -55,11 +73,11 @@
   <!-- ==================================================================================
        Compile-time leak analyzer (NDW012) for NumSharp.Core's OWN build.
 
-       The NumSharp.Weaver.Analyzer flags an NDArray a method creates but never returns, out/ref's,
+       The NumSharp.Build.Analyzer flags an NDArray a method creates but never returns, out/ref's,
        stores, disposes, or yields to an NDScope — a transient left to the finalizer. Referencing it
        with OutputItemType="Analyzer" (ReferenceOutputAssembly=false, so netstandard2.0 is never a
        runtime ref) runs it during Core's compile, so `dotnet build` on NumSharp captures leaks in
-       np.* code, not just in downstream consumers of the NumSharp.Weaver package.
+       np.* code, not just in downstream consumers of the NumSharp.Build package.
 
        The analyzer ALSO carries the [NDScoped]-target gate (NDW002/003/005/006/009/010/011), but on
        Core those are REDUNDANT with the self-weave (which validates every [NDScoped] method
@@ -76,8 +94,7 @@
     <WarningsNotAsErrors Condition="'$(EnableNDArrayLeakAnalyzer)' == 'true'">$(WarningsNotAsErrors);NDW012</WarningsNotAsErrors>
   </PropertyGroup>
   <ItemGroup Condition="'$(EnableNDArrayLeakAnalyzer)' == 'true'">
-    <ProjectReference Include="..\..\tools\NumSharp.Weaver.Analyzer\NumSharp.Weaver.Analyzer.csproj"
-                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
 
   <Target Name="LogDebugInfo">
@@ -87,7 +104,7 @@
   <!-- ==================================================================================
        NDScope IL weaving (see DISPOSAL-GUIDELINES.md → "The weaver — [NDScoped]").
 
-       After each inner (per-TargetFramework) compile, tools/NumSharp.Weaver rewrites the
+       After each inner (per-TargetFramework) compile, tools/NumSharp.Build rewrites the
        intermediate assembly: every [NDScoped] method gets the ambient-reclamation-scope
        pattern injected (scope = NDScope.Open() prologue, body wrapped in try/finally with
        scope.Dispose(), every ret routed through scope.Returns, out-NDArray params yielded)
@@ -111,20 +128,20 @@
        the woven assembly (kept opt-in so machines without the tool still build).
        ================================================================================== -->
   <PropertyGroup>
-    <NumSharpWeaverProject>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Weaver\NumSharp.Weaver.csproj</NumSharpWeaverProject>
-    <!-- Host selection, same ladder as the packaged build/NumSharp.Weaver.targets: prefer
+    <NumSharpBuildProject>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\NumSharp.Build.csproj</NumSharpBuildProject>
+    <!-- Host selection, same ladder as the packaged build/NumSharp.Build.targets: prefer
          DOTNET_HOST_PATH (set by the dotnet CLI / .NET-Core MSBuild for exactly this
          hand-off) over a bare PATH 'dotnet', so a VS devenv build of the solution does not
          depend on PATH hygiene. -->
-    <NumSharpWeaverDotnetHost Condition="'$(NumSharpWeaverDotnetHost)' == '' and '$(DOTNET_HOST_PATH)' != ''">$(DOTNET_HOST_PATH)</NumSharpWeaverDotnetHost>
-    <NumSharpWeaverDotnetHost Condition="'$(NumSharpWeaverDotnetHost)' == ''">dotnet</NumSharpWeaverDotnetHost>
+    <NumSharpBuildDotnetHost Condition="'$(NumSharpBuildDotnetHost)' == '' and '$(DOTNET_HOST_PATH)' != ''">$(DOTNET_HOST_PATH)</NumSharpBuildDotnetHost>
+    <NumSharpBuildDotnetHost Condition="'$(NumSharpBuildDotnetHost)' == ''">dotnet</NumSharpBuildDotnetHost>
   </PropertyGroup>
 
   <!-- The marker path is spelled inline (not via a body-level property): IntermediateOutputPath
        is assigned by the SDK's .targets, which import AFTER the project body — a body-level
        property would capture it EMPTY. Target Inputs/Outputs expand at target-execution time,
        where the per-TFM obj path is final. -->
-  <!-- BeforeTargets mirrors the packaged build/NumSharp.Weaver.targets anchor set:
+  <!-- BeforeTargets mirrors the packaged build/NumSharp.Build.targets anchor set:
        _TimeStampAfterCompile keeps the SDK's post-compile timestamping consistent with the
        rewritten assembly, AfterCompile lets AfterCompile-hooked rewriters see the woven IL;
        MSBuild ignores anchors naming targets a project never defines. -->
@@ -137,14 +154,14 @@
 
     <!-- RemoveProperties: the parent inner build's TargetFramework/RID globals must not leak
          into the single-TFM weaver project (they mis-key its restore/build). -->
-    <MSBuild Projects="$(NumSharpWeaverProject)" Targets="Restore" Properties="Configuration=Release"
+    <MSBuild Projects="$(NumSharpBuildProject)" Targets="Restore" Properties="Configuration=Release"
              RemoveProperties="TargetFramework;TargetFrameworks;RuntimeIdentifier;Platform;Platforms" />
-    <MSBuild Projects="$(NumSharpWeaverProject)" Targets="Build" Properties="Configuration=Release;NDScopeWeaverInner=true"
+    <MSBuild Projects="$(NumSharpBuildProject)" Targets="Build" Properties="Configuration=Release;NDScopeWeaverInner=true"
              RemoveProperties="TargetFramework;TargetFrameworks;RuntimeIdentifier;Platform;Platforms">
-      <Output TaskParameter="TargetOutputs" ItemName="NumSharpWeaverAssembly" />
+      <Output TaskParameter="TargetOutputs" ItemName="NumSharpBuildAssembly" />
     </MSBuild>
 
-    <Exec Command="&quot;$(NumSharpWeaverDotnetHost)&quot; exec &quot;@(NumSharpWeaverAssembly)&quot; &quot;@(IntermediateAssembly)&quot; --snk &quot;$(AssemblyOriginatorKeyFile)&quot;" />
+    <Exec Command="&quot;$(NumSharpBuildDotnetHost)&quot; exec &quot;@(NumSharpBuildAssembly)&quot; &quot;@(IntermediateAssembly)&quot; --snk &quot;$(AssemblyOriginatorKeyFile)&quot;" />
 
     <!-- Opt-in IL verification of the woven output (dotnet tool install -g dotnet-ilverify). -->
     <ItemGroup Condition="'$(NDScopeWeaveILVerify)' == 'true'">

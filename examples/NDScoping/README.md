@@ -73,7 +73,7 @@ A normal consumer installs one package — the weaver AND the analyzer come with
 automatic:
 
 ```xml
-<PackageReference Include="NumSharp.Weaver" Version="…" PrivateAssets="all" />
+<PackageReference Include="NumSharp.Build" Version="…" PrivateAssets="all" />
 ```
 
 Either way, `[NDScoped]` is inert without the weaver (the method just runs unscoped, the pre-weave

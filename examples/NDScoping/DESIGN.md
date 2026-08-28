@@ -10,8 +10,8 @@ output is evidence, not narration.
 > prints ALL GREEN, `dotnet run -- --stress` too, and `CounterExamples/show-analyzer.sh` prints
 > ANALYZER-OK). Nothing here changes library behaviour — it only exercises the existing public
 > surface (`src/NumSharp.Core/Backends/NDScope.cs`, `NDScopedAttribute`, `NDScopedAsyncAttribute`,
-> `INDArrayCarrier`) plus the source-mode weaver/analyzer wiring (`tools/NumSharp.Weaver`,
-> `tools/NumSharp.Weaver.Analyzer`).
+> `INDArrayCarrier`) plus the source-mode weaver/analyzer wiring (`tools/NumSharp.Build`,
+> `tools/NumSharp.Build.Analyzer`).
 >
 > Two small deltas from the spec below, both forced by the environment: a `.editorconfig` silences
 > NDW012/NDW013 (the newer NDArray-leak analyzer would otherwise flag Level 0's deliberate baseline
@@ -160,21 +160,21 @@ instructive (it shows the machinery a real project gets from the NuGet package).
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <!-- source-mode weaver: point the imported target at the freshly built tool -->
-    <NumSharpWeaverToolDll>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Weaver\bin\$(Configuration)\net8.0\NumSharp.Weaver.dll</NumSharpWeaverToolDll>
+    <NumSharpBuildToolDll>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\bin\$(Configuration)\net8.0\NumSharp.Build.dll</NumSharpBuildToolDll>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
-    <!-- build the weaver TOOL (do not link it) so $(NumSharpWeaverToolDll) exists at weave time -->
-    <ProjectReference Include="..\..\tools\NumSharp.Weaver\NumSharp.Weaver.csproj"
+    <!-- build the weaver TOOL (do not link it) so $(NumSharpBuildToolDll) exists at weave time -->
+    <ProjectReference Include="..\..\tools\NumSharp.Build\NumSharp.Build.csproj"
                       ReferenceOutputAssembly="false" Private="false" />
     <!-- apply the compile-time ANALYZER (the standard source-mode analyzer reference) -->
-    <ProjectReference Include="..\..\tools\NumSharp.Weaver.Analyzer\NumSharp.Weaver.Analyzer.csproj"
+    <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj"
                       ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
   </ItemGroup>
 
   <!-- the packaged weave target, imported directly (the source-mode recipe) -->
-  <Import Project="..\..\tools\NumSharp.Weaver\build\NumSharp.Weaver.targets" />
+  <Import Project="..\..\tools\NumSharp.Build\build\NumSharp.Build.targets" />
 </Project>
 ```
 
@@ -182,7 +182,7 @@ instructive (it shows the machinery a real project gets from the NuGet package).
 
 ```xml
 <!-- A normal consumer just installs the package — the weaver AND the analyzer come with it: -->
-<PackageReference Include="NumSharp.Weaver" Version="…" PrivateAssets="all" />
+<PackageReference Include="NumSharp.Build" Version="…" PrivateAssets="all" />
 ```
 
 `NDScopeWeaveTests`' invariant applies to the example too: every `[NDScoped]`/`[NDScopedAsync]`
@@ -395,6 +395,6 @@ The example uses only the **public** surface (`NDScope`, the two attributes, `IN
 
 Cross-references: `src/NumSharp.Core/Backends/NDScope.cs` (the API + its XML doc, which this example
 makes executable), `DISPOSAL-GUIDELINES.md`, `docs/website-src/docs/ndscoped.md`,
-`tools/NumSharp.Weaver` + `tools/NumSharp.Weaver.Analyzer`, and the formal gates `NDScopeTests` /
+`tools/NumSharp.Build` + `tools/NumSharp.Build.Analyzer`, and the formal gates `NDScopeTests` /
 `NDScopeWeaveTests` / `NDScopeAsyncTests` / `verify_weaver_package.sh`.
 ```

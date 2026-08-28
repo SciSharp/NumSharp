@@ -5,17 +5,17 @@
        Imported into any project that references the NumSharp package (NuGet places
        build/<id>.targets — here build/NumSharp.targets — at the end of the import chain, per
        TargetFramework). It fires a BUILD WARNING when a project USES [NDScoped]/[NDScopedAsync]
-       but the NumSharp.Weaver package is NOT installed (or weaving is turned off), because in
+       but the NumSharp.Build package is NOT installed (or weaving is turned off), because in
        that state the attributes are INERT: the method keeps its original body, no scope is
        injected, and every transient it drops is left to the finalizer — a silent leak the
        author almost certainly did not intend.
 
-       WHY THIS LIVES IN NumSharp (not in NumSharp.Weaver). The whole point is to warn when the
+       WHY THIS LIVES IN NumSharp (not in NumSharp.Build). The whole point is to warn when the
        weaver package is ABSENT, so the check must ship in something that is ALWAYS present when
        the attributes could be used. The [NDScoped]/[NDScopedAsync] attributes live in
        NumSharp.Core, so a project can only use them if it references NumSharp — which means this
-       target is imported exactly when it is needed. The weaver's own build/NumSharp.Weaver.targets
-       sets $(NumSharpWeaverActive)=true when it is installed and weaving (see that file), so this
+       target is imported exactly when it is needed. The weaver's own build/NumSharp.Build.targets
+       sets $(NumSharpBuildActive)=true when it is installed and weaving (see that file), so this
        warning stays silent whenever the weaver will actually run.
 
        Detection is the same ASCII metadata scan the weaver uses: compiling with either attribute
@@ -29,14 +29,14 @@
        user string literal) only prints an advisory warning; a false negative does not happen on real
        compiler output.
 
-       Opting out: install NumSharp.Weaver (the intended fix), set $(NumSharpWeaverActive)=true by
+       Opting out: install NumSharp.Build (the intended fix), set $(NumSharpBuildActive)=true by
        hand (you are weaving some other way), set $(NumSharpDisableWeaverMissingWarning)=true, or
        add NDW013 to $(MSBuildWarningsAsMessages).
        ================================================================================== -->
   <Target Name="_NumSharpWarnWeaverMissing"
           AfterTargets="CoreCompile"
           Condition="'$(DesignTimeBuild)' != 'true'
-                     and '$(NumSharpWeaverActive)' != 'true'
+                     and '$(NumSharpBuildActive)' != 'true'
                      and '$(NumSharpDisableWeaverMissingWarning)' != 'true'
                      and '@(IntermediateAssembly)' != ''">
 
@@ -50,6 +50,6 @@
 
     <Warning Condition="'$(_NumSharpUsesScoped)' == 'true'"
              Code="NDW013"
-             Text="$(MSBuildProjectName) uses [NDScoped]/[NDScopedAsync] but the NumSharp.Weaver package is not installed (or weaving is disabled), so the attributes are INERT — no NDScope is injected and the methods' NDArray temporaries are left to the finalizer instead of being reclaimed. Install the weaver with 'dotnet add package NumSharp.Weaver' (it is a build-time development dependency, not a runtime dependency), or remove the attributes and dispose the temporaries by hand. See https://scisharp.github.io/NumSharp/docs/ndscoped.html#ndw013" />
+             Text="$(MSBuildProjectName) uses [NDScoped]/[NDScopedAsync] but the NumSharp.Build package is not installed (or weaving is disabled), so the attributes are INERT — no NDScope is injected and the methods' NDArray temporaries are left to the finalizer instead of being reclaimed. Install the weaver with 'dotnet add package NumSharp.Build' (it is a build-time development dependency, not a runtime dependency), or remove the attributes and dispose the temporaries by hand. See https://scisharp.github.io/NumSharp/docs/ndscoped.html#ndw013" />
   </Target>
 </Project>

@@ -3,7 +3,7 @@
 The compile-time guardrails cannot live in a runnable project, because their whole point is that the
 **build fails**. This sibling project is therefore *deliberately un-buildable*: every method in
 [`BadShapes.cs`](BadShapes.cs) places `[NDScoped]` / `[NDScopedAsync]` on a target the weaver cannot
-weave, so the bundled Roslyn analyzer (`NumSharp.Weaver.Analyzer`) reports a build **error** at
+weave, so the bundled Roslyn analyzer (`NumSharp.Build.Analyzer`) reports a build **error** at
 `CoreCompile` — in the editor and before the weave.
 
 It is **excluded from `SciSharp.NumSharp.sln` and from CI** (it would break the build). Exercise it

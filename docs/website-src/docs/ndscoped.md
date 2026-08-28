@@ -1,6 +1,6 @@
-# `NumSharp.Weaver` — build-time `[NDScoped]` memory reclamation
+# `NumSharp.Build` — build-time `[NDScoped]` memory reclamation
 
-`NumSharp.Weaver` is the optional build-time package that makes a composition method eagerly return
+`NumSharp.Build` is the optional build-time package that makes a composition method eagerly return
 its transients' pooled buffers instead of waiting on the finalizer. Mark a method `[NDScoped]` and,
 at build time, the weaver rewrites it to open an `NDScope` — an ambient reclamation scope that tracks
 every `NDArray` the method constructs and disposes the ones it does not return the moment the method
@@ -13,10 +13,18 @@ methods, and `NumSharp.Core` stays 100 % managed with nothing to install: with t
 `[NDScoped]` method simply runs unscoped and its transients fall back to the finalizer — the exact
 pre-weave behaviour.
 
+`[NDScoped]` covers **synchronous** methods and **synchronous iterators** (`yield return`). For a
+method that suspends across `await` — an `async` method, an async iterator, or a non-`async` method
+returning `Task`/`ValueTask` — use the companion **`[NDScopedAsync]`** attribute instead: it weaves
+the compiler state machine (or the deferral egress) so temps survive awaits and are reclaimed at the
+invocation's completion. Choosing the wrong attribute is a build error, not a silent miss — see
+[Which returns are woven](#which-returns-are-woven).
+
 **On this page:** [Why it exists](#why-this-package-exists) · [Quick start](#quick-start) ·
 [What the weaver injects](#what-the-weaver-injects) · [Which returns are woven](#which-returns-are-woven) ·
 [The `NDScope` API](#the-ndscope-api) · [Hand-scoping](#hand-scoping) ·
 [How the build step works](#how-the-build-step-works) · [When to use it](#when-to-use-it) ·
+[Leak detection (NDW012 / NDW013)](#leak-detection--ndw012--ndw013) ·
 [Escape hatches](#escape-hatches) · [Troubleshooting](#troubleshooting)
 
 > Mono.Cecil transform, invoked after each per-`TargetFramework` compile · net8.0 / net10.0.
@@ -46,13 +54,15 @@ This is the same lever NumSharp.Core pulls internally. The package lets you pull
 ## Quick start
 
 ```bash
-dotnet add package NumSharp.Weaver
+dotnet add package NumSharp.Build
 ```
 
 Referencing the package is the whole opt-in: it wires the weave step into your build, and it is
-**not a dependency** — the package ships MSBuild targets plus a build tool only (no `lib/`, no
-dependency entries), and `dotnet add package` installs it with `PrivateAssets="all"` automatically,
-so it never appears in your own package's dependency graph. Now mark any
+**not a dependency** — the package ships MSBuild targets, a build tool, and a Roslyn analyzer only
+(no `lib/`, no dependency entries), and `dotnet add package` installs it with `PrivateAssets="all"`
+automatically, so it never appears in your own package's dependency graph. The **analyzer** flags a
+wrong or unsupported target (an `async` method under `[NDScoped]`, an unsupported return, …) as a
+build error in the editor — before the weave runs — so mistakes surface immediately. Now mark any
 method that owns `NDArray` transients `[NDScoped]` and keep the body exactly as you wrote it —
 
 ```csharp
@@ -74,7 +84,7 @@ top, the whole body wrapped in `try`/`finally`, the result routed through `scope
 [What the weaver injects](#what-the-weaver-injects)). The *input* `a` is never touched: it was
 constructed before the scope opened, so it is never tracked.
 
-If the `NumSharp.Weaver` package is **absent**, the `[NDScoped]` attribute is inert and `Normalize`
+If the `NumSharp.Build` package is **absent**, the `[NDScoped]` attribute is inert and `Normalize`
 runs exactly as its source reads — unscoped, the finalizer backstop. Adding or removing the package
 never changes results, only *when* the transients' buffers come back.
 
@@ -131,6 +141,15 @@ Three properties make the rewrite trivially safe:
 The weaver dispatches on the method's return shape. Every carrier of `NDArray`s NumSharp returns is
 handled; a shape whose egress it cannot see is a **build error**, not a silent miss.
 
+> **Two attributes, one per scoping model.** `[NDScoped]` weaves **synchronous** methods (every row
+> below except the `[NDScopedAsync]`-tagged ones) **and synchronous iterators** (`yield return`).
+> `[NDScopedAsync]` weaves the shapes that suspend across `await` or defer disposal to a task's
+> completion: **`async` methods, async iterators, and non-`async` `Task`/`ValueTask` returns**. A
+> method has exactly one scoping model — marking it with the wrong attribute is a build **error**
+> (NDW009 = an async/Task shape under `[NDScoped]`; NDW010 = a plain synchronous method or
+> synchronous iterator under `[NDScopedAsync]`; NDW011 = both attributes on one method), never a
+> silent unwoven ship.
+
 | return / signature | weaver action |
 |---|---|
 | `NDArray` / `NDArray<T>` | value routed through `scope.Returns<T>(T)` at every `ret` |
@@ -140,9 +159,9 @@ handled; a shape whose egress it cannot see is a **build error**, not a silent m
 | a result-struct carrier implementing `INDArrayCarrier` (`UniqueResult`, `MeshgridResult`, `PolyfitResult`, …) | `retVar.YieldTo(scope)` via a boxing-free `constrained.callvirt` — the struct's own method re-parents each `NDArray` it holds |
 | bare `IArraySlice` / `UnmanagedStorage` (a lower-layer buffer, not wrapped in an `NDArray`) | `scope.Returns(slice/storage)` takes a **counted ARC reference** so the scope's reclamation of an intermediate `NDArray` sharing the buffer can't free it under the caller |
 | `void` / scalar (`long`, `bool`, `double`, `string`, enums, …) | scope only; `out NDArray` / `out NDArray[]` params still escaped |
-| non-`async` `Task` / `ValueTask`[`<T>`] (`T` any supported shape above, or none) | `scope.ReturnsTask` / `ReturnsValueTask` — a completed task's result is yielded immediately; an incomplete task **defers reclamation to its completion** (the in-flight callee may still hold tracked temps); an incomplete `ValueTask` is `Preserve()`d and the caller receives the multi-observable form |
-| `async` method (`Task`, `Task<T>`, `ValueTask`[`<T>`], `void`, custom task-like) | woven through the compiler **state machine**: one scope spans the logical invocation — suspended before every `await`'s continuation is scheduled, resumed on the thread that continues — so temps survive awaits and everything is reclaimed at `SetResult` / `SetException`, the result routed through `Returns` first |
-| iterator (`IEnumerable`[`<T>`] / `IEnumerator`[`<T>`]) / async iterator (`IAsyncEnumerable<T>`) | state-machine weave; every `yield return`ed element is routed through `Returns` (the **consumer** owns it), hoisted state is reclaimed at the end of iteration or at the enumerator's `Dispose()` (early `break` included) |
+| **`[NDScopedAsync]`** — non-`async` `Task` / `ValueTask`[`<T>`] (`T` any supported shape above, or none) | `scope.ReturnsTask` / `ReturnsValueTask` — a completed task's result is yielded immediately; an incomplete task **defers reclamation to its completion** (the in-flight callee may still hold tracked temps); an incomplete `ValueTask` is `Preserve()`d and the caller receives the multi-observable form |
+| **`[NDScopedAsync]`** — `async` method (`Task`, `Task<T>`, `ValueTask`[`<T>`], `void`, custom task-like) | woven through the compiler **state machine**: one scope spans the logical invocation — suspended before every `await`'s continuation is scheduled, resumed on the thread that continues — so temps survive awaits and everything is reclaimed at `SetResult` / `SetException`, the result routed through `Returns` first |
+| **`[NDScoped]`** synchronous iterator (`IEnumerable`[`<T>`] / `IEnumerator`[`<T>`]) / **`[NDScopedAsync]`** async iterator (`IAsyncEnumerable<T>`) | state-machine weave; every `yield return`ed element is routed through `Returns` (the **consumer** owns it), hoisted state is reclaimed at the end of iteration or at the enumerator's `Dispose()` (early `break` included) |
 | `ref NDArray`(`[]`) parameter | **error NDW002** — a hidden egress the weaver can't see; scope by hand |
 | an unsupported carrier (a bespoke reference type, a collection, or a struct that does NOT implement `INDArrayCarrier`) — returned directly, inside a `Task<T>`, produced by an `async` method, or `yield return`ed | **error NDW003** — its members would be handed back disposed; add `INDArrayCarrier`, or scope by hand |
 
@@ -259,6 +278,74 @@ This mirrors [buffer ownership](buffering.md#ownership-who-frees-the-memory): th
 deterministic-reclamation layer above the raw ARC-refcounted buffers that page describes, and it is
 woven with the same [IL-emission machinery](il-generation.md) NumSharp uses for its kernels.
 
+## Leak detection — NDW012 &amp; NDW013
+
+Two diagnostics catch the two ways an `NDArray` transient can go unreclaimed at build time, so a leak
+surfaces in the editor and on every build instead of only as a runtime finalizer cost.
+
+<a id="ndw012"></a>
+
+### NDW012 — an NDArray is created but never disposed or scoped
+
+Installing `NumSharp.Build` turns on a Roslyn analyzer that **warns** when a method creates an
+`NDArray` (or any carrier of one — `NDArray[]`, a `ValueTuple`/`Tuple` of NDArrays, an
+`INDArrayCarrier` result struct) and then never returns it, assigns it to an `out`/`ref` parameter,
+stores it, disposes it, or yields it through an `NDScope` — so its pooled buffer is left to the
+finalizer. NumSharp.Core runs the same analyzer on its own build.
+
+```csharp
+public NDArray Bad(NDArray a, NDArray b)
+{
+    var t = a + b;              // ⚠ NDW012: 't' is created but only read, never disposed/returned
+    np.add(a, b);               // ⚠ NDW012: the result is dropped on the floor
+    return np.sum(a * b);       // ⚠ NDW012: the 'a * b' temporary is handed to np.sum and never reclaimed
+}
+```
+
+**The fixes the message points at** — any one of them clears the warning:
+
+- mark the method **`[NDScoped]`** (or **`[NDScopedAsync]`**) — the weaver reclaims every transient it
+  constructs, and a passthrough/aliased input is a provable no-op, so this is the safe blanket fix;
+- open an **`NDScope`** by hand and yield the result through `scope.Returns(...)`;
+- **dispose** the value with a `using` declaration or `.Dispose()`;
+- hand it to an `out`/`ref` parameter, a field, or another API (a legitimate egress).
+
+A method that is already `[NDScoped]`/`[NDScopedAsync]`, or that opens an `NDScope` itself, is
+**exempt** — nothing it constructs leaks. Returning the value, storing it, or passing it to a
+non-NumSharp API are all egress and never flagged.
+
+**Two limits, by design.** The analysis is per-method: a private helper whose temporaries are actually
+reclaimed by a **caller's ambient `[NDScoped]` scope** (the "scope the boundary, not the helpers"
+pattern) is still flagged in isolation — scope the boundary (which covers the helper), or suppress
+NDW012 on the helper. And it deliberately does **not** flag a temporary that is only ever read through
+a member call (`var t = a + b; return t.sum();`): so much of NumSharp is fluent reinterpret/view chains
+(`x.MakeGeneric<T>()`, `x.reshape(...)`, `x[...]`) whose result shares the receiver's buffer that
+telling a view apart from a fresh result syntactically is impossible, and following the receiver is the
+choice that keeps those chains from flooding with false positives. Tune it per project in
+`.editorconfig` (`dotnet_diagnostic.NDW012.severity = none|suggestion|warning|error`); on NumSharp.Core
+turn it off entirely with `-p:EnableNDArrayLeakAnalyzer=false`.
+
+<a id="ndw013"></a>
+
+### NDW013 — [NDScoped] used, but the weaver is not installed
+
+`[NDScoped]`/`[NDScopedAsync]` are **inert without the `NumSharp.Build` package**: the method keeps its
+original body, no scope is injected, and every transient it drops is left to the finalizer — a silent
+leak. NDW013 catches exactly that. It ships in **NumSharp itself** (a `build/NumSharp.targets` warning),
+not in the weaver package, precisely so it can fire when the weaver is **absent** — the attributes live
+in NumSharp, so the guard is present whenever they could be used:
+
+```
+warning NDW013: MyProject uses [NDScoped]/[NDScopedAsync] but the NumSharp.Build package is not
+installed (or weaving is disabled), so the attributes are INERT ... Install the weaver with
+'dotnet add package NumSharp.Build' ...
+```
+
+It stays silent the moment the weaver is installed and weaving (the weaver's targets set
+`$(NumSharpBuildActive)=true`; under `-p:SkipNDScopeWeave=true` the attributes really are inert, so the
+warning correctly fires). Opt out with `-p:NumSharpDisableWeaverMissingWarning=true`, by adding `NDW013`
+to `$(MSBuildWarningsAsMessages)`, or — the intended fix — by installing the weaver.
+
 ## Escape hatches
 
 | flag | effect |
@@ -268,19 +355,41 @@ woven with the same [IL-emission machinery](il-generation.md) NumSharp uses for 
 
 ## Troubleshooting
 
-**A `[NDScoped]` build error.** The weaver refuses a shape whose egress it cannot see, rather than
-mis-weave:
+**A `[NDScoped]` / `[NDScopedAsync]` build error.** A shape whose egress cannot be seen is refused
+rather than mis-woven. Two layers report it: the package ships a **Roslyn analyzer** that flags the
+SOURCE-detectable mistakes at **compile time** — in the editor, with a red squiggle, and as a build
+error that runs before (and preempts) the weave — and the **IL weaver** reports the rest post-compile.
+The analyzer covers **NDW002, NDW003, NDW005, NDW006, NDW009, NDW010, NDW011** (the `[NDScoped]`-target
+gate) plus **NDW012** (the [leak warning](#ndw012), a separate always-on analyzer); the weaver covers the
+IL-only **NDW001, NDW004, NDW007, NDW008** (a resolution failure, an unrecognized state machine, a
+tail-call, or a NumSharp too old for the async seam). Separately, **NDW013** ships in NumSharp itself
+(not this package) so it can warn when `[NDScoped]` is used [without the weaver installed](#ndw013).
+Same code, same fix, whichever layer fires.
+
+> **A `PackageReference` consumer gets the analyzer automatically** (NuGet applies it from
+> `analyzers/dotnet/cs/`). A **source-mode consumer** — one that references the weaver by
+> `ProjectReference` and `<Import>`s `build/NumSharp.Build.targets` directly — turns it on the same
+> way it points the tool at a built weaver: either reference the analyzer project with
+> `<ProjectReference "…/NumSharp.Build.Analyzer.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />`,
+> or set `<NumSharpBuildAnalyzerDll>…/NumSharp.Build.Analyzer.dll</NumSharpBuildAnalyzerDll>` at a
+> built analyzer DLL (the parallel to `<NumSharpBuildToolDll>`). Without either, a source-mode build
+> still fails on a bad target — via the **weaver** post-compile — just not in the editor.
 
 | code | meaning | fix |
 |---|---|---|
-| `NDW001` | the project has `[NDScoped]` methods but `NumSharp.NDScope` could not be resolved from the assembly or its references | reference the `NumSharp` package (the attribute and the scope live there); if you invoke the weaver by hand, pass `--refs` with the compile's reference list |
+| `NDW001` | the project has `[NDScoped]`/`[NDScopedAsync]` methods but `NumSharp.NDScope` could not be resolved from the assembly or its references | reference the `NumSharp` package (the attributes and the scope live there); if you invoke the weaver by hand, pass `--refs` with the compile's reference list |
 | `NDW002` | a `ref NDArray`(`[]`) parameter — a hidden egress | [hand-scope](#hand-scoping) and yield it explicitly |
 | `NDW003` | an unsupported carrier return (a bespoke reference type, a collection, or a struct without `INDArrayCarrier`) | implement `INDArrayCarrier` on the struct, or hand-scope |
 | `NDW004` | an async/iterator state machine the weaver does not recognize (not compiled by Roslyn/C#: no `MoveNext`, no `<>t__builder` / `<>2__current`) | compile the method with the C# compiler, or don't scope it (real C# async/iterator methods weave fine) |
 | `NDW005` | the method has no body (abstract / extern) | remove the attribute |
-| `NDW006` | `[NDScoped]` on a setter-only property | put the attribute on the getter accessor |
+| `NDW006` | `[NDScoped]`/`[NDScopedAsync]` on a setter-only property | put the attribute on the getter accessor |
 | `NDW007` | the body contains a tail-call prefix | (the C# compiler does not emit these; refuse rather than mis-weave) |
 | `NDW008` | an async/iterator/Task-shaped target, but the referenced NumSharp predates the async scope seam | update the `NumSharp` package |
+| `NDW009` | an `async` method, async iterator, or `Task`/`ValueTask`-returning method marked `[NDScoped]` | mark it `[NDScopedAsync]` (that attribute owns the shapes that suspend across `await`) |
+| `NDW010` | a plain synchronous method or a **synchronous** iterator marked `[NDScopedAsync]` | mark it `[NDScoped]` (synchronous bodies and synchronous iterators are its job) |
+| `NDW011` | a method carries BOTH `[NDScoped]` and `[NDScopedAsync]` | keep only the one that matches the method's scoping model |
+| [`NDW012`](#ndw012) | an NDArray is created but never returned, out/ref'd, stored, disposed, or yielded to an `NDScope` — a transient left to the finalizer | mark the method `[NDScoped]`/`[NDScopedAsync]`, dispose it (`using`/`.Dispose()`), yield it via `scope.Returns(...)`, or hand it to an egress; tune via `.editorconfig` (`dotnet_diagnostic.NDW012.severity`) |
+| [`NDW013`](#ndw013) | `[NDScoped]`/`[NDScopedAsync]` used but the `NumSharp.Build` package is not installed (or `-p:SkipNDScopeWeave=true`) — the attributes are inert and the temporaries leak | install `NumSharp.Build`, or remove the attributes and dispose by hand; suppress with `-p:NumSharpDisableWeaverMissingWarning=true` |
 
 **An `[NDScoped]` method still allocates cold buffers in a loop.** Check the coverage gate — a method
 that carries the attribute but no `NDScope` local was not woven (a `-p:SkipNDScopeWeave=true` build,

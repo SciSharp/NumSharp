@@ -41,9 +41,10 @@ namespace NumSharp
     ///     call's result if the caller drops it.</para>
     ///     <para><b>Threading.</b> The current scope is <c>[ThreadStatic]</c>: a scope is opened,
     ///     used and disposed on ONE thread (asserted in debug builds; a HAND-WRITTEN scope must not
-    ///     span <c>await</c> — the <c>[NDScoped]</c> weaver's state-machine seam is the one thing
-    ///     that may carry a scope across suspensions, because it uninstalls the scope before each
-    ///     continuation is scheduled and re-installs it on the resuming thread via
+    ///     span <c>await</c> — the weaver's state-machine seam (driven by <c>[NDScopedAsync]</c> for
+    ///     async methods/iterators and by <c>[NDScoped]</c> for synchronous iterators) is the one
+    ///     thing that may carry a scope across suspensions, because it uninstalls the scope before
+    ///     each continuation is scheduled and re-installs it on the resuming thread via
     ///     <see cref="OpenOrResume"/>/<see cref="Suspend"/>). Arrays constructed on other
     ///     threads (parallel kernel workers) see no scope and fall back to the finalizer
     ///     backstop — safe, just not eagerly reclaimed; a parallel region that wants eager
@@ -249,7 +250,10 @@ namespace NumSharp
         ///     re-tracking into a parent — for arrays that must outlive every scope (an array
         ///     being cached into a static / long-lived field from inside a scoped call). Must run
         ///     on the scope's owning thread (it always does: detachment happens at the caching
-        ///     site, on the constructing thread). No-op for untracked arrays.
+        ///     site, on the constructing thread). No-op for untracked arrays. Also the runtime egress
+        ///     the <see cref="NDScopedExitAttribute"/> weaves at the entry of a method that RETAINS an
+        ///     <see cref="NDArray"/> parameter (the callee runs inside the caller's ambient scope, so
+        ///     this reaches into that scope with no call-site re-plumbing).
         /// </summary>
         public static void Detach(NDArray nd)
         {
@@ -260,6 +264,36 @@ namespace NumSharp
                 "NDScope.Detach must run on the thread that owns the array's scope.");
             s._tracked[nd.TrackingIndex] = null;
             nd.TrackingScope = null;
+        }
+
+        /// <summary>
+        ///     Detaches every element of an <see cref="NDArray"/> array — the <c>NDArray[]</c> egress of
+        ///     an <see cref="NDScopedExitAttribute"/> parameter (a callee that retains a whole tuple/list
+        ///     of arrays). A null array and null elements are skipped; each element is detached exactly as
+        ///     <see cref="Detach(NDArray)"/>.
+        /// </summary>
+        public static void Detach(NDArray[] nds)
+        {
+            if (nds is null)
+                return;
+            for (int i = 0; i < nds.Length; i++)
+                Detach(nds[i]);
+        }
+
+        /// <summary>
+        ///     Detaches every <see cref="NDArray"/> a tuple carries — the <c>ValueTuple</c>/<c>Tuple</c>
+        ///     egress of an <see cref="NDScopedExitAttribute"/> parameter, any arity up to 8 and any
+        ///     component mix (non-<see cref="NDArray"/> components are skipped, a null tuple is a no-op).
+        ///     Indexing through <see cref="ITuple"/> boxes value-type components, negligible on the
+        ///     once-per-call escape path; it mirrors <see cref="Returns(ITuple)"/>.
+        /// </summary>
+        public static void Detach(ITuple tuple)
+        {
+            if (tuple is null)
+                return;
+            for (int i = 0; i < tuple.Length; i++)
+                if (tuple[i] is NDArray nd)
+                    Detach(nd);
         }
 
         /// <summary>
@@ -352,7 +386,8 @@ namespace NumSharp
             }
         }
 
-        // ---- State-machine seam (the [NDScoped] weaver's async/iterator egress) --------------------
+        // ---- State-machine seam (the weaver's async/iterator egress: [NDScopedAsync] for async
+        //      methods + async iterators, [NDScoped] for synchronous iterators) --------------------
         //
         // An async method compiles to a state machine whose MoveNext runs once per synchronous
         // SEGMENT, each possibly on a different thread — so a thread-static scope cannot simply span
@@ -470,7 +505,7 @@ namespace NumSharp
         // collectable, whereupon the arrays fall to the ordinary finalizer backstop.
 
         /// <summary>
-        ///     Yields a task-shaped result (weaver seam for <c>[NDScoped]</c> NON-async methods
+        ///     Yields a task-shaped result (weaver seam for <c>[NDScopedAsync]</c> NON-async methods
         ///     returning <see cref="Task{TResult}"/>): a completed task's result is yielded
         ///     immediately; an incomplete one defers BOTH the yield and this scope's disposal to the
         ///     task's completion. Returns the task unchanged.
@@ -500,12 +535,12 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Task egress without a DECLARED result (weaver seam for <c>[NDScoped]</c> NON-async
+        ///     Task egress without a DECLARED result (weaver seam for <c>[NDScopedAsync]</c> NON-async
         ///     methods returning bare <see cref="Task"/>): defers this scope's disposal to the
         ///     task's completion when it is still running — the in-flight work may hold tracked
         ///     temps. The runtime task may still be a <see cref="Task{TResult}"/> UP-CAST to
         ///     <c>Task</c> (<c>Task&lt;T&gt; : Task</c> is implicit, so
-        ///     <c>[NDScoped] Task M() =&gt; ComputeAsync();</c> compiles) — a caller can recover
+        ///     <c>[NDScopedAsync] Task M() =&gt; ComputeAsync();</c> compiles) — a caller can recover
         ///     that result by casting back, so a carried result is sniffed and yielded rather than
         ///     handed back disposed.
         /// </summary>
@@ -631,7 +666,7 @@ namespace NumSharp
     ///     cannot — the CLR grants nested→enclosing private access, not the reverse. A carrier struct
     ///     WITHOUT this interface reports build error NDW003 and must be hand-scoped.
     ///     PUBLIC because the opt-in is consumer-facing too: a project that installs the
-    ///     <c>NumSharp.Weaver</c> package implements it on its own result structs so its
+    ///     <c>NumSharp.Build</c> package implements it on its own result structs so its
     ///     <see cref="NDScopedAttribute"/> methods can return them (and the woven cross-assembly
     ///     <c>YieldTo</c> call must pass the CLR's accessibility check).
     /// </remarks>

@@ -1,0 +1,113 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- A build TOOL: it never loads into a user's app, so its own assembly identity is
+         irrelevant (and Mono.Cecil beside it carries Cecil's key, not NumSharp's). -->
+    <SignAssembly>false</SignAssembly>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- The tool must run on whatever runtime the consumer's machine has (an SDK-10-only box
+         carries no .NET 8 runtime): bake roll-forward into runtimeconfig.json. -->
+    <RollForward>Major</RollForward>
+    <!-- `dotnet exec <dll>` is the invocation on every OS; a platform-specific apphost.exe
+         would only bloat tools/ and bind the package to one RID. -->
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
+  <!-- ==================================================================================
+       Packaging — a BUILD-TIME WEAVER package, not a library dependency:
+
+         tools/net8.0/any/    the weaver + Mono.Cecil (the PUBLISH output — the closed
+                              set `dotnet exec` needs), expressed to NuGet as NOTHING:
+                              no lib/, no dependency entries
+         build/               NumSharp.Build.targets — wires the NDScopeWeave target
+                              into the consuming project's build (after each per-TFM
+                              CoreCompile, on the intermediate assembly)
+
+       DevelopmentDependency=true makes `dotnet add package NumSharp.Build` write
+       PrivateAssets="all" on the consumer's PackageReference, so installing it changes
+       the consumer's BUILD, never the consumer's dependency graph — the weaver does not
+       appear as a dependency of the consumer's own package. build/ (and deliberately
+       NOT buildTransitive/) scopes the weave to exactly the project the package is
+       installed on: a project that merely references a woven library is never woven.
+       The [NDScoped] attribute itself ships in NumSharp.Core and is inert without this
+       package, so adding/removing the package never changes results — only WHEN the
+       transients' buffers are reclaimed. Gate: tools/verify_weaver_package.sh.
+       ================================================================================== -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>NumSharp.Build</PackageId>
+    <Version>0.60.0</Version>
+    <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
+    <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
+    <Company>SciSharp STACK</Company>
+    <Product>NumSharp</Product>
+    <Copyright>2021 © SciSharp STACK Team</Copyright>
+    <Description>Build-time IL weaver + Roslyn analyzer for NumSharp's [NDScoped]/[NDScopedAsync] deterministic memory reclamation. Installing this package wires a post-compile step into your project's build: every method you mark [NDScoped] (synchronous) or [NDScopedAsync] (async/Task) is rewritten to open an NDScope, so the NDArray temporaries it drops are returned to NumSharp's buffer pool the moment the method exits instead of waiting on the finalizer. A bundled analyzer reports a wrong or unsupported target as a build error at compile time. Ships as MSBuild targets + a tool + an analyzer only — it never becomes a runtime dependency of your project (`dotnet add package` installs it with PrivateAssets="all" automatically).</Description>
+    <PackageProjectUrl>https://scisharp.github.io/NumSharp/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>NumSharp, NDScope, NDScoped, NDScopedAsync, weaver, analyzer, Roslyn, IL, Mono.Cecil, MSBuild, memory, pooling, NumPy, SciSharp</PackageTags>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PackageOutputPath>../../packages</PackageOutputPath>
+
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <!-- NU5100 (assemblies outside lib/ — that IS the design) / NU5128 (no lib per TFM). -->
+    <NoWarn>$(NoWarn);NU5100;NU5128</NoWarn>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_NumSharpBuildPackTool</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- NO PrivateAssets="all" here, deliberately: the SDK excludes PrivateAssets=all packages
+         from the PUBLISH output, and publish is exactly what lands in tools/ — Cecil must ride
+         along. Keeping Cecil out of the consumer's graph is SuppressDependenciesWhenPacking's
+         job (the packed nuspec carries no dependency entries at all). -->
+    <PackageReference Include="Mono.Cecil" Version="0.11.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The compile-time Roslyn analyzer that gates [NDScoped]/[NDScopedAsync] targets. Built
+         alongside the tool for ordering; ReferenceOutputAssembly=false because the tool never LINKS
+         it (its DLL is staged into the package's analyzers/dotnet/cs/ folder by _NumSharpBuildPackTool,
+         where NuGet auto-applies it to the consumer's compile), and PrivateAssets=all so it — and its
+         Microsoft.CodeAnalysis reference — never becomes a dependency of anything. -->
+    <ProjectReference Include="..\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build/**" Pack="true" PackagePath="build/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- The tool payload is the PUBLISH output (dll + runtimeconfig + deps + Mono.Cecil), not the
+       bare build output — publish is the blessed closed set `dotnet exec` needs to resolve Cecil
+       from beside the tool. Runs per packed TFM (there is one: net8.0). -->
+  <Target Name="_NumSharpBuildPackTool" DependsOnTargets="Publish">
+    <!-- The analyzer's build output is the ONLY analyzer asset that ships (Microsoft.CodeAnalysis is
+         provided by the compiler host at run time). It is built by the ProjectReference above;
+         GetTargetPath resolves its DLL WITHOUT a rebuild, so this works under a no-build pack (the
+         way CI packs: build -t:Rebuild, then pack with no rebuild). It lands in analyzers/dotnet/cs/,
+         the folder NuGet applies to a consumer's C# compile — so installing the package turns on the
+         analyzer AND the weaver together. -->
+    <!-- RemoveProperties="TargetFramework": during pack the weaver's own net8.0 is a GLOBAL property
+         that would otherwise flow in and make GetTargetPath look under the analyzer's non-existent
+         net8.0 output — strip it so the analyzer resolves its own netstandard2.0. -->
+    <MSBuild Projects="$(MSBuildThisFileDirectory)../NumSharp.Build.Analyzer/NumSharp.Build.Analyzer.csproj"
+             Targets="GetTargetPath" Properties="Configuration=$(Configuration)" RemoveProperties="TargetFramework">
+      <Output TaskParameter="TargetOutputs" ItemName="_NumSharpBuildAnalyzer" />
+    </MSBuild>
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(PublishDir)**/*" PackagePath="tools/net8.0/any/" />
+      <TfmSpecificPackageFile Include="@(_NumSharpBuildAnalyzer)" PackagePath="analyzers/dotnet/cs/" />
+    </ItemGroup>
+  </Target>
+
+</Project>

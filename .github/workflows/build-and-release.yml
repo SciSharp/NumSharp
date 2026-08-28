@@ -16,7 +16,7 @@ env:
   # XML doc warnings (CS15xx, CS17xx): ~7,200 of ~8,700 total — malformed/missing doc comments
   # CS8981: 'np' only contains lowercase chars — intentional for NumPy API compat
   # NU5048: PackageIconUrl deprecated — cosmetic NuGet warning
-  # NU5100/NU5128 are BY-DESIGN for the tools-only NumSharp.Weaver package (assemblies under
+  # NU5100/NU5128 are BY-DESIGN for the tools-only NumSharp.Build package (assemblies under
   # tools/, no lib/ per TFM) — a global -p:NoWarn OVERRIDES the csproj's own NoWarn accumulation,
   # so they must ride here like NU5048 does.
   DOTNET_NOWARN: CS1570%3BCS1571%3BCS1572%3BCS1573%3BCS1574%3BCS1587%3BCS1591%3BCS1711%3BCS1734%3BCS8981%3BNU5048%3BNU5100%3BNU5128
@@ -50,11 +50,11 @@ jobs:
     - name: Build Oracle (differential-fuzz gate)
       run: dotnet build test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
-    # The analyzer gate: NumSharp.Tests.Analyzer runs the NDW012 leak analyzer + the [NDScoped]-target
-    # gate (NDW002/003/005/006/009/010/011) in-process over the NumSharp.Analyzer.Fixtures files and
+    # The analyzer gate: NumSharp.Tests.Build.Analyzer runs the NDW012 leak analyzer + the [NDScoped]-target
+    # gate (NDW002/003/005/006/009/010/011) in-process over the NumSharp.Tests.Build.Analyzer.Fixtures files and
     # asserts the diagnostics land on exactly the tagged lines.
     - name: Build Analyzer tests
-      run: dotnet build test/NumSharp.Tests.Analyzer/NumSharp.Tests.Analyzer.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+      run: dotnet build test/NumSharp.Tests.Build.Analyzer/NumSharp.Tests.Build.Analyzer.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # Test filtering:
     #   - OpenBugs: excluded (known-failing bug reproductions)
@@ -128,7 +128,7 @@ jobs:
       shell: bash
       timeout-minutes: 10
       run: |
-        dotnet test test/NumSharp.Tests.Analyzer/NumSharp.Tests.Analyzer.csproj \
+        dotnet test test/NumSharp.Tests.Build.Analyzer/NumSharp.Tests.Build.Analyzer.csproj \
           --configuration Release --no-build --framework net8.0 \
           --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=AnalyzerBuild" --logger "trx"
 
@@ -136,7 +136,7 @@ jobs:
       shell: bash
       timeout-minutes: 10
       run: |
-        dotnet test test/NumSharp.Tests.Analyzer/NumSharp.Tests.Analyzer.csproj \
+        dotnet test test/NumSharp.Tests.Build.Analyzer/NumSharp.Tests.Build.Analyzer.csproj \
           --configuration Release --no-build --framework net10.0 \
           --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=AnalyzerBuild" --logger "trx"
 
@@ -191,7 +191,7 @@ jobs:
                     src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
                     src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
                     src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj \
-                    tools/NumSharp.Weaver/NumSharp.Weaver.csproj; do
+                    tools/NumSharp.Build/NumSharp.Build.csproj; do
           # Tolerate absence: the interop packages do not exist on every branch.
           [ -f "$proj" ] || { echo "skip (absent): $proj"; continue; }
           echo "::group::pack $proj"
@@ -477,7 +477,7 @@ jobs:
         # The weaver: a tools-only build-time package (no lib/, no dependencies — see
         # tools/verify_weaver_package.sh). Its pack target publishes the tool into tools/,
         # which under --no-build below stages the outputs this Rebuild produced.
-        dotnet build tools/NumSharp.Weaver/NumSharp.Weaver.csproj \
+        dotnet build tools/NumSharp.Build/NumSharp.Build.csproj \
           --configuration Release \
           -t:Rebuild \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
@@ -532,7 +532,7 @@ jobs:
           -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
           -p:PackageVersion=${{ steps.version.outputs.VERSION }}
 
-        dotnet pack tools/NumSharp.Weaver/NumSharp.Weaver.csproj \
+        dotnet pack tools/NumSharp.Build/NumSharp.Build.csproj \
           --configuration Release \
           --no-build \
           --output artifacts/nuget \
@@ -611,7 +611,7 @@ jobs:
           echo "dotnet add package NumSharp.Bitmap --version ${VERSION}"
           echo "dotnet add package NumSharp.Interop.pythonnet --version ${VERSION}"
           echo "dotnet add package NumSharp.Interop.OpenBLAS --version ${VERSION}"
-          echo "dotnet add package NumSharp.Weaver --version ${VERSION}"
+          echo "dotnet add package NumSharp.Build --version ${VERSION}"
           echo '```'
           echo ""
           echo "### Packages"
@@ -622,7 +622,7 @@ jobs:
           echo "| NumSharp.Bitmap | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Bitmap.svg)](https://www.nuget.org/packages/NumSharp.Bitmap/${VERSION}) |"
           echo "| NumSharp.Interop.pythonnet | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.pythonnet.svg)](https://www.nuget.org/packages/NumSharp.Interop.pythonnet/${VERSION}) |"
           echo "| NumSharp.Interop.OpenBLAS | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.OpenBLAS.svg)](https://www.nuget.org/packages/NumSharp.Interop.OpenBLAS/${VERSION}) |"
-          echo "| NumSharp.Weaver | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Weaver.svg)](https://www.nuget.org/packages/NumSharp.Weaver/${VERSION}) |"
+          echo "| NumSharp.Build | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Build.svg)](https://www.nuget.org/packages/NumSharp.Build/${VERSION}) |"
         } > RELEASE_BODY.md
         if [ -f "$NOTES_FILE" ]; then
           { echo ""; echo "---"; echo ""; cat "$NOTES_FILE"; } >> RELEASE_BODY.md

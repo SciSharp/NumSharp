@@ -94,7 +94,9 @@ back-pointer says "not mine"), so *"wrap every egress in `Returns`"* is a safe b
   (calling `scope.Returns` on each member). Both are what the weaver targets for a tuple / struct
   return — see "The decision table" below.
 - `NDScope.Detach(x)` — permanently un-track (for an array being cached into a static/long-lived
-  field from inside a scoped call).
+  field from inside a scoped call). Overloads `Detach(x[])` / `Detach(ITuple)` un-track a whole
+  array/tuple of results, and are the runtime the **`[NDScopedExit]`** parameter attribute weaves —
+  see "Retained arguments" below.
 - `NDScope.Attach(x)` — adopt an untracked array into the CURRENT scope (the caller-side
   hot-loop pattern: attach a received result instead of a per-result `using`), or move one
   between scopes; no-op with no open scope.
@@ -132,9 +134,9 @@ nested scopes under concurrency, cross-thread hand-off, forced-GC antagonist), o
 The scope pattern is INJECTED AT BUILD TIME, so source files keep their 100% original bodies.
 A method (or property accessor) marked `[NDScoped]` (`src/NumSharp.Core/Backends/
 NDScopedAttribute.cs`, public — the attribute is consumer-facing) is rewritten post-compile by
-`tools/NumSharp.Weaver` — a Mono.Cecil console tool invoked by the `NDScopeWeave` target in
+`tools/NumSharp.Build` — a Mono.Cecil console tool invoked by the `NDScopeWeave` target in
 `NumSharp.Core.csproj` after each per-TFM `CoreCompile` — into exactly the IL the hand-written
-pattern produces. The SAME transform ships to consumer projects as the **`NumSharp.Weaver`
+pattern produces. The SAME transform ships to consumer projects as the **`NumSharp.Build`
 NuGet package** (tools + MSBuild targets only, `PrivateAssets="all"` on install — a weaver on
 the project it is installed on, never a runtime dependency; gate:
 `tools/verify_weaver_package.sh`, docs: `docs/website-src/docs/ndscoped.md`); there the weaver
@@ -173,13 +175,34 @@ branches and nested-handler boundaries that referenced them stay valid).
 | bare `IArraySlice` / `UnmanagedStorage` return (a lower-layer buffer NOT wrapped in an NDArray) | `Returns(slice)`/`Returns(storage)` takes a **counted ARC reference** (`TryAddRef`) so the scope's deterministic `Release` of an intermediate NDArray sharing the buffer can't free it under the caller (a bare buffer is otherwise an UNCOUNTED alias); the ref is abandoned, so the block's finalizer reclaims it on unreachability |
 | `void` / scalar (`long`, `bool`, `double`, string, enums, …) | scope only; `out NDArray`/`out NDArray[]` params still escaped |
 | `out NDArray` / `out NDArray[]` param | final-value escape before each successful return |
-| NON-async `Task`/`ValueTask`[`<T>`] (T = any supported row above, or none) | `ReturnsTask`/`ReturnsValueTask` at every ret + `CloseUnlessDeferred` in the finally: a COMPLETED task's result is yielded immediately; an INCOMPLETE one **defers the scope's disposal to the task's completion** (the in-flight callee may still be using tracked temps handed to it) and yields the result there; an incomplete `ValueTask` is `Preserve()`d first (single-consumption — the caller receives the multi-observable form) |
-| `async` method (`Task`, `Task<T>`, `ValueTask`[`<T>`], `void`, custom task-like) | woven through the STATE MACHINE — see "Async & iterators" below |
-| iterator (`IEnumerable`[`<T>`]/`IEnumerator`[`<T>`]) / async iterator (`IAsyncEnumerable<T>`) | woven through the state machine; `yield return`ed elements routed through `Returns` (the consumer owns them) |
+| **`[NDScopedExit]`** on a by-value `NDArray`/`NDArray[]`/tuple-of-NDArrays PARAMETER — an argument the callee RETAINS | `NDScope.Detach(param)` injected at the method's ENTRY (the compiler stub, for async/iterator), so the CALLER's ambient scope will not dispose the argument. Independent of the method's own scope model (works with or without `[NDScoped]`). Covers property setters (`[param: NDScopedExit]` on `value`) and any method/ctor parameter you own; a raw public-field store (`obj.field = a`) has no parameter to annotate — use a property setter or a hand `NDScope.Detach`. An unsupported parameter type (a `ref`/`out`/`in`, a scalar, a bare buffer, an `INDArrayCarrier` struct) is **error NDW014** |
+| **`[NDScopedAsync]`** NON-async `Task`/`ValueTask`[`<T>`] (T = any supported row above, or none) | `ReturnsTask`/`ReturnsValueTask` at every ret + `CloseUnlessDeferred` in the finally: a COMPLETED task's result is yielded immediately; an INCOMPLETE one **defers the scope's disposal to the task's completion** (the in-flight callee may still be using tracked temps handed to it) and yields the result there; an incomplete `ValueTask` is `Preserve()`d first (single-consumption — the caller receives the multi-observable form) |
+| **`[NDScopedAsync]`** `async` method (`Task`, `Task<T>`, `ValueTask`[`<T>`], `void`, custom task-like) | woven through the STATE MACHINE — see "Async & iterators" below |
+| **`[NDScoped]`** synchronous iterator (`IEnumerable`[`<T>`]/`IEnumerator`[`<T>`]) / **`[NDScopedAsync]`** async iterator (`IAsyncEnumerable<T>`) | woven through the state machine; `yield return`ed elements routed through `Returns` (the consumer owns them) |
 | `ref NDArray`(`[]`) param | **error NDW002** — hidden egress; scope by hand |
 | unsupported carrier (object/collection field, a `>4`-arity or mixed tuple, a result struct WITHOUT `INDArrayCarrier`) — returned directly, inside a `Task<T>`, as an async result, or `yield return`ed | **error NDW003** — the weaver cannot see every NDArray, so members would be handed back disposed; add `INDArrayCarrier` to the struct, or scope by hand |
 | a state machine not compiled by Roslyn/C# (missing `MoveNext`/`<>t__builder`/`<>2__current`) | **error NDW004** — refused loudly, never mis-woven |
 | async/iterator/Task-shaped target against a NumSharp predating the seam | **error NDW008** — update the NumSharp package |
+| an `async`/iterator/`Task`-shaped method marked `[NDScoped]`, or a plain synchronous method / synchronous iterator marked `[NDScopedAsync]`, or a method carrying BOTH | **error NDW009 / NDW010 / NDW011** — the WRONG attribute (or both); each error names the correct one |
+
+**Two attributes.** `[NDScoped]` weaves synchronous methods and synchronous iterators;
+`[NDScopedAsync]` weaves the shapes that suspend across `await` or defer to a task's completion —
+`async` methods, async iterators, and non-`async` `Task`/`ValueTask` returns. Both drive the SAME
+state-machine/deferral machinery below (a synchronous iterator uses the invocation-scope seam exactly
+as an async method does); the split is which attribute the method carries, and choosing the wrong one
+is a loud build error (NDW009/NDW010/NDW011), never a silent unwoven ship.
+
+**Two layers report a bad target.** The `NumSharp.Build` package ships a Roslyn analyzer
+(`tools/NumSharp.Build.Analyzer`, staged into the package's `analyzers/dotnet/cs/`) beside the IL
+weaver. The analyzer reports every SOURCE-detectable rejection at COMPILE time — in the editor and
+before the weave — and preempts the weaver: NDW002 (ref egress), NDW003 (unsupported carrier), NDW005
+(no body), NDW006 (setter-only property), NDW009/NDW010/NDW011 (wrong attribute / both). The IL-only
+rejections stay with the weaver post-compile: NDW001 (NDScope unresolved), NDW004 (an unrecognized
+state-machine shape), NDW007 (a tail-call), NDW008 (a NumSharp too old for the async seam). The
+analyzer mirrors the weaver's `Classify` exactly, so the two never disagree; where they cannot cheaply
+agree — a real iterator vs a method merely returning a bare `IEnumerable` — the analyzer defers to the
+weaver rather than risk a false positive. Gate: `tools/verify_weaver_package.sh` step 11 (11a analyzer,
+11b weaver).
 
 **Async & iterators — the state-machine weave.** An async or iterator method's visible body is a
 stub; the real code — and every egress — lives in the compiler state machine's `MoveNext`, which
@@ -268,6 +291,25 @@ with NDW003 (an object/collection member, a `>4`-arity or mixed tuple — a supp
 instead just implements `INDArrayCarrier` and stays woven), `ref NDArray` flows, a mid-method
 handback that genuinely must free before a later allocation (nest an inner block scope), or any body
 where the egress isn't expressible as return-value + out-params.
+
+**Retained arguments — `[NDScopedExit]`.** The scope auto-protects only two egresses — the return
+value and `out` params. A tracked array handed to something that **keeps** it (a field/property
+store, a long-lived collection, a closure/task outliving the call) is otherwise STILL disposed at
+scope exit, dangling the retained reference — a use-after-free. (Passing to something that only
+*reads* the array — every `np.*` op, the overwhelming case — is safe: the scope disposes it after,
+which is the whole point of "one scope covers the helper tree.") Mark the RETAINING parameter
+`[NDScopedExit]` and the weaver injects `NDScope.Detach(param)` at the callee's entry; because the
+scope is `[ThreadStatic]` and the callee runs inside the caller's scope, the detach reaches the
+caller's scope with no call-site plumbing, so the argument survives (falling to the finalizer
+backstop unless the retainer disposes it — **survival, not eager reclamation**). It is a no-op with
+no ambient scope, so an `[NDScopedExit]` method is always safe to call. It composes with any method
+shape (with or without `[NDScoped]`/`[NDScopedAsync]`), covers `NDArray`/`NDArray[]`/tuple-of-NDArrays
+parameters, and covers property setters (a setter's `value` is a parameter). What it does NOT cover:
+a raw public-field store (`obj.field = a` — no parameter to annotate; use a property or a hand
+`NDScope.Detach`), a parameter you cannot annotate (a BCL sink like `List<NDArray>.Add` — hand-detach
+the temp), and a hand-scoped body (the weaver leaves those untouched, so their retained params are
+the author's to detach). The alternative to the attribute is what it automates: `NDScope.Detach(x)`
+at the retention site, or building the retained array BEFORE the scope opens (never tracked).
 
 ---
 

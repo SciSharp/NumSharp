@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =================================================================================================
-# stress_weaver.sh — scale/concurrency stress harness for the NumSharp.Weaver package.
+# stress_weaver.sh — scale/concurrency stress harness for the NumSharp.Build package.
 #
 # Complements tools/verify_weaver_package.sh (the correctness gate): where the gate proves each
 # claim once, this generates ~1,000 [NDScoped] methods across every weave shape and pushes them
@@ -8,9 +8,9 @@
 #
 #   A  SOURCE MODE ("referencing as a project"): ProjectReference to NumSharp.Core + a
 #      ProjectReference to the weaver csproj (ReferenceOutputAssembly=false, builds the tool) +
-#      a direct <Import> of build/NumSharp.Weaver.targets with $(NumSharpWeaverToolDll) pointed
+#      a direct <Import> of build/NumSharp.Build.targets with $(NumSharpBuildToolDll) pointed
 #      at the tool's bin output — the in-repo consumption recipe. Multi-TFM (net8.0;net10.0).
-#   B  NUPKG MODE: NumSharp AND NumSharp.Weaver restored from a local feed as PackageReferences.
+#   B  NUPKG MODE: NumSharp AND NumSharp.Build restored from a local feed as PackageReferences.
 #      Multi-TFM, plus a weave-cost measurement (Rebuild with vs without SkipNDScopeWeave).
 #   P  PARALLEL MODE: 8 independent libs (120 [NDScoped] methods each, nupkg mode) built with
 #      -m:8 so up to 8 weaver processes run CONCURRENTLY, plus an app referencing all 8 that
@@ -27,9 +27,10 @@
 # Generated shapes (cycled): S1 bare NDArray; S2 ValueTuple; S3 NDArray[]; S4 INDArrayCarrier
 # struct; S5 [NDScoped] PROPERTY; S6 bool+out NDArray; S7 void+out NDArray; S8 return inside
 # try/finally; S9 scalar return (scope-only); S10 hand-scoped + attributed (idempotence at
-# scale); S11 multi-return switch; S12 ASYNC Task<NDArray> (state-machine weave); S13 ITERATOR
-# IEnumerable<NDArray> (yield egress + Dispose seam); S14 non-async Task<NDArray>
-# (completed-task egress); specials: SB 40-statement bodies, SD 4-deep nested try/finally.
+# scale); S11 multi-return switch; S12 [NDScopedAsync] ASYNC Task<NDArray> (state-machine weave);
+# S13 [NDScoped] ITERATOR IEnumerable<NDArray> (SYNC yield egress + Dispose seam); S14
+# [NDScopedAsync] non-async Task<NDArray> (completed-task egress); specials: SB 40-statement
+# bodies, SD 4-deep nested try/finally.
 #
 # Usage:  tools/stress_weaver.sh [workdir]     (workdir kept on failure, or with KEEP=1)
 # =================================================================================================
@@ -92,13 +93,13 @@ def method(shape, mid):
         return ("    [NDScoped]\n    public static NDArray S10_%s(NDArray a)\n"
                 "    { using var scope = NDScope.Open(); var t = a + 1.0; return scope.Returns(t * 1.0); }\n" % mid)
     if shape == 12:
-        return ("    [NDScoped]\n    public static async System.Threading.Tasks.Task<NDArray> S12_%s(NDArray a)\n"
+        return ("    [NDScopedAsync]\n    public static async System.Threading.Tasks.Task<NDArray> S12_%s(NDArray a)\n"
                 "    { var t = a + 1.0; await System.Threading.Tasks.Task.Yield(); return t * 2.0; }\n" % mid)
     if shape == 13:
         return ("    [NDScoped]\n    public static System.Collections.Generic.IEnumerable<NDArray> S13_%s(NDArray a)\n"
                 "    { var t = a + 1.0; yield return t + 1.0; yield return t * 3.0; }\n" % mid)
     if shape == 14:
-        return ("    [NDScoped]\n    public static System.Threading.Tasks.Task<NDArray> S14_%s(NDArray a)\n"
+        return ("    [NDScopedAsync]\n    public static System.Threading.Tasks.Task<NDArray> S14_%s(NDArray a)\n"
                 "    { var t = a + 2.0; return System.Threading.Tasks.Task.FromResult(t - 1.0); }\n" % mid)
     # shape 11: multi-return switch (t.GetDouble(0)=2 for a=[1..5] -> case 2), every branch == 2
     return ("    [NDScoped]\n    public static NDArray S11_%s(NDArray a)\n"
@@ -179,7 +180,7 @@ public static class StressRunner
         {
             foreach (var mm in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly))
             {
-                if (mm.GetCustomAttribute<NDScopedAttribute>() == null) continue;
+                if (mm.GetCustomAttribute<NDScopedAttribute>() == null && mm.GetCustomAttribute<NDScopedAsyncAttribute>() == null) continue;
                 attributed++;
                 // async/iterator stubs weave through their state machine: the scope local lives in MoveNext
                 MethodBase bodyOwner = mm;
@@ -262,7 +263,7 @@ public static class StressRunner
 
             foreach (var pp in type.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly))
             {
-                if (pp.GetCustomAttribute<NDScopedAttribute>() == null) continue;
+                if (pp.GetCustomAttribute<NDScopedAttribute>() == null && pp.GetCustomAttribute<NDScopedAsyncAttribute>() == null) continue;
                 attributed++;
                 if (pp.GetMethod.GetMethodBody().LocalVariables.Any(v => v.LocalType == typeof(NDScope))) woven++;
                 else Bad("UNWOVEN property " + pp.Name);
@@ -303,15 +304,15 @@ EOF
 
 # ------------------------------------------------------------------ stage 0: tool + feed
 step "0  build the weaver, pack weaver + NumSharp into the local feed"
-dotnet build "$ROOTW/tools/NumSharp.Weaver/NumSharp.Weaver.csproj" -c Release -v q --nologo
-dotnet pack  "$ROOTW/tools/NumSharp.Weaver/NumSharp.Weaver.csproj" -c Release --no-build -o "$FEEDW" -v q --nologo
+dotnet build "$ROOTW/tools/NumSharp.Build/NumSharp.Build.csproj" -c Release -v q --nologo
+dotnet pack  "$ROOTW/tools/NumSharp.Build/NumSharp.Build.csproj" -c Release --no-build -o "$FEEDW" -v q --nologo
 dotnet pack  "$ROOTW/src/NumSharp.Core/NumSharp.Core.csproj" -c Release -o "$FEEDW" \
   -p:GeneratePackageOnBuild=false -v q --nologo > "$WORK/corepack.log" 2>&1 \
   || { tail -20 "$WORK/corepack.log"; fail "NumSharp.Core pack failed"; }
-WVER="$(basename "$(ls "$FEED"/NumSharp.Weaver.*.nupkg | head -1)" .nupkg | sed 's/^NumSharp\.Weaver\.//')"
+WVER="$(basename "$(ls "$FEED"/NumSharp.Build.*.nupkg | head -1)" .nupkg | sed 's/^NumSharp\.Weaver\.//')"
 CVER="$(basename "$(ls "$FEED"/NumSharp.[0-9]*.nupkg | head -1)" .nupkg | sed 's/^NumSharp\.//')"
 rm -rf "$HOME/.nuget/packages/numsharp.weaver" "$HOME/.nuget/packages/numsharp/$CVER"
-echo "feed: NumSharp.Weaver $WVER + NumSharp $CVER"
+echo "feed: NumSharp.Build $WVER + NumSharp $CVER"
 
 # ------------------------------------------------------------------ stage A: source mode
 step "A  SOURCE MODE — 20x50+15 [NDScoped] members, ProjectReference + imported targets, net8.0;net10.0"
@@ -333,14 +334,14 @@ cat > "$A/StressA.csproj" <<EOF
     <AssemblyName>StressA</AssemblyName>
     <!-- Source-mode consumption: the packaged targets imported straight from the repo, the tool
          taken from its build output (built by the ReferenceOutputAssembly=false P2P below). -->
-    <NumSharpWeaverToolDll>$ROOTW/tools/NumSharp.Weaver/bin/Release/net8.0/NumSharp.Weaver.dll</NumSharpWeaverToolDll>
+    <NumSharpBuildToolDll>$ROOTW/tools/NumSharp.Build/bin/Release/net8.0/NumSharp.Build.dll</NumSharpBuildToolDll>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="$ROOTW/src/NumSharp.Core/NumSharp.Core.csproj" />
-    <ProjectReference Include="$ROOTW/tools/NumSharp.Weaver/NumSharp.Weaver.csproj"
+    <ProjectReference Include="$ROOTW/tools/NumSharp.Build/NumSharp.Build.csproj"
                       ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
-  <Import Project="$ROOTW/tools/NumSharp.Weaver/build/NumSharp.Weaver.targets" />
+  <Import Project="$ROOTW/tools/NumSharp.Build/build/NumSharp.Build.targets" />
 </Project>
 EOF
 (cd "$A" && dotnet build -c Release -v n > build.log 2>&1) || { tail -30 "$A/build.log"; fail "A: build failed"; }
@@ -361,7 +362,7 @@ CNT=$(grep -c "woven 0, already-scoped $TOTAL, assembly unchanged" "$A/build3.lo
 echo "A idempotence at scale: woven dlls re-scanned, 0 rewoven, files unwritten"
 
 # ------------------------------------------------------------------ stage B: nupkg mode
-step "B  NUPKG MODE — same $TOTAL members, NumSharp + NumSharp.Weaver from the local feed"
+step "B  NUPKG MODE — same $TOTAL members, NumSharp + NumSharp.Build from the local feed"
 B="$WORK/pkgmode"; mkdir -p "$B"; nugetcfg "$B"
 python "$WORK/gen.py" "$B" 20 50 StressGen AnchorMain 1 > /dev/null
 cp "$WORK/RunnerMain.cs" "$A/Program.cs" "$B/"
@@ -374,7 +375,7 @@ cat > "$B/StressB.csproj" <<EOF
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NumSharp" Version="$CVER" />
-    <PackageReference Include="NumSharp.Weaver" Version="$WVER">
+    <PackageReference Include="NumSharp.Build" Version="$WVER">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
@@ -412,7 +413,7 @@ for i in 0 1 2 3 4 5 6 7; do
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NumSharp" Version="$CVER" />
-    <PackageReference Include="NumSharp.Weaver" Version="$WVER"><PrivateAssets>all</PrivateAssets></PackageReference>
+    <PackageReference Include="NumSharp.Build" Version="$WVER"><PrivateAssets>all</PrivateAssets></PackageReference>
   </ItemGroup>
 </Project>
 EOF
@@ -442,7 +443,7 @@ EOF
 (cd "$P/app" && dotnet build -c Release -m:8 -v n > build.log 2>&1) || { tail -30 "$P/app/build.log"; fail "P: parallel build failed"; }
 CNT=$(grep -c "woven $LWOVEN, already-scoped $LHAND" "$P/app/build.log" || true)
 [ "$CNT" -eq 8 ] || { grep -i "weaver" "$P/app/build.log" | head -10; fail "P: expected 8 concurrent lib weaves of 'woven $LWOVEN', saw $CNT"; }
-if grep "NumSharp.Weaver:" "$P/app/build.log" | grep -q "StressPar.dll"; then
+if grep "NumSharp.Build:" "$P/app/build.log" | grep -q "StressPar.dll"; then
   fail "P: the weaver ran on the app — it does not install the package"
 fi
 (cd "$P/app" && dotnet run --no-build -c Release > run.log 2>&1) || { cat "$P/app/run.log"; fail "P: app run failed"; }

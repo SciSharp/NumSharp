@@ -1,0 +1,162 @@
+<Project>
+  <!-- ==================================================================================
+       NumSharp.Build — the consumer-side NDScopeWeave target.
+
+       Imported into any project that references the NumSharp.Build package (NuGet places
+       build/<id>.targets at the end of the project's import chain, per TargetFramework).
+       After each per-TFM compile it rewrites the INTERMEDIATE assembly: every [NDScoped]
+       method gets the ambient-reclamation-scope pattern injected (scope = NDScope.Open()
+       prologue, body wrapped in try/finally with scope.Dispose(), every ret routed through
+       scope.Returns, out-NDArray params yielded) so the SOURCE keeps its 100% original
+       body. NDScope and the attribute live in the REFERENCED NumSharp assembly, so the
+       compiler's own reference list is handed to the tool (the refs response file written
+       below, one path per line) for cross-assembly resolution. A project with no [NDScoped] methods is left byte-for-byte
+       untouched.
+
+       Incremental: Inputs/Outputs on a per-TFM marker file — when CoreCompile was skipped
+       the weave is skipped too; when it reran, the fresh (unwoven) dll is newer than the
+       marker and the weave reruns. The weaver itself is additionally idempotent (a method
+       whose body already opens an NDScope is skipped), so double-weaving is impossible
+       even if the marker is deleted by hand.
+
+       Strong naming: IL rewriting invalidates a compile-time signature, so a genuinely
+       full-signed project is re-signed with its own key ($(KeyOriginatorFile)); unsigned,
+       delay-signed and public-signed projects are written as-is (they carry no valid
+       signature to restore).
+
+       Escape hatches (same as NumSharp.Core's own self-weave):
+         -p:SkipNDScopeWeave=true      build without weaving — [NDScoped] methods run
+                                       unscoped (the finalizer backstop); nothing else
+                                       changes, the attribute is inert.
+         -p:NDScopeWeaveILVerify=true  additionally run the dotnet-ilverify global tool
+                                       on the woven assembly (opt-in so machines without
+                                       the tool still build).
+         $(NumSharpBuildToolDll)      override the tool path (e.g. a locally built
+                                       weaver) — set it in the project file body.
+       ================================================================================== -->
+  <!-- Forward slashes + NormalizePath: the path reaches Exec's SHELL (cmd on Windows, sh on
+       Linux/macOS), and a raw backslash path breaks the Unix side — same convention as the
+       NumSharp.Interop.OpenBLAS buildTransitive files. -->
+  <!-- Signals to NumSharp.Core's build/NumSharp.targets that a weaver IS installed and will run,
+       so its "you marked [NDScoped] but nothing weaves it" warning (NDW013) stays silent. Set only
+       when weaving is actually enabled: under -p:SkipNDScopeWeave=true the attributes ARE inert, so
+       the NDW013 nudge SHOULD fire, exactly as it does with no weaver package at all. A top-level
+       property (not inside a target) so it is evaluated before NumSharp.Core's post-compile check. -->
+  <PropertyGroup Condition="'$(SkipNDScopeWeave)' != 'true'">
+    <NumSharpBuildActive>true</NumSharpBuildActive>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <NumSharpBuildToolDll Condition="'$(NumSharpBuildToolDll)' == ''">$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)../tools/net8.0/any/NumSharp.Build.dll'))</NumSharpBuildToolDll>
+
+    <!-- Host selection — no bare PATH assumption where a better answer exists (the
+         Nucs.JsonSettings.Autosave lesson: a build step that shells 'dotnet' dies on hosts
+         that never put it on PATH). DOTNET_HOST_PATH is set by the dotnet CLI / .NET-Core
+         MSBuild for exactly this hand-off and is the SDK-documented way for a build step to
+         find its own host. Full-framework MSBuild (VS devenv) does not set it; there the
+         PATH fallback holds because the .NET SDK installer registers dotnet machine-wide.
+         Overridable, like the tool path. -->
+    <NumSharpBuildDotnetHost Condition="'$(NumSharpBuildDotnetHost)' == '' and '$(DOTNET_HOST_PATH)' != ''">$(DOTNET_HOST_PATH)</NumSharpBuildDotnetHost>
+    <NumSharpBuildDotnetHost Condition="'$(NumSharpBuildDotnetHost)' == ''">dotnet</NumSharpBuildDotnetHost>
+  </PropertyGroup>
+
+  <!-- ==================================================================================
+       Compile-time analyzer — the SOURCE-mode half of the story.
+
+       When this package is installed as a PackageReference, NuGet AUTO-APPLIES the analyzer
+       from `analyzers/dotnet/cs/` (and honours `ExcludeAssets="analyzers"`), so nothing here is
+       needed and this stays inert. A SOURCE-mode consumer — one that IMPORTS these targets
+       directly (referencing the weaver by ProjectReference instead of a package, the in-repo
+       recipe) — gets NO such auto-apply, so it opts in by pointing $(NumSharpBuildAnalyzerDll)
+       at the built analyzer DLL, EXACTLY as it already points $(NumSharpBuildToolDll) at the
+       built tool. That makes the same NDW002/003/005/006/009/010/011 diagnostics fail the build
+       at CoreCompile (and squiggle in the IDE) for a csproj consumer too, not just the weaver's
+       post-compile pass.
+
+       Deliberately NO DEFAULT: an unset property adds nothing, so a real PackageReference build
+       never double-applies the analyzer and a consumer's `ExcludeAssets="analyzers"` opt-out is
+       never overridden. A top-level ItemGroup (not a target) so the analyzer is present for the
+       IDE's design-time analysis as well as the command-line build. -->
+  <ItemGroup Condition="'$(NumSharpBuildAnalyzerDll)' != '' and Exists('$(NumSharpBuildAnalyzerDll)')">
+    <Analyzer Include="$(NumSharpBuildAnalyzerDll)"
+              Condition="'@(Analyzer->WithMetadataValue('Filename','NumSharp.Build.Analyzer'))' == ''" />
+  </ItemGroup>
+
+  <!-- BeforeTargets carries the battle-tested anchor set alongside the copy: running before
+       _TimeStampAfterCompile keeps the SDK's own post-compile timestamping consistent with
+       the rewritten assembly, and running before AfterCompile means AfterCompile-hooked IL
+       rewriters (MAUI's XamlC and friends) see the WOVEN assembly rather than racing it.
+       MSBuild ignores Before/AfterTargets naming targets a project never defines, so the
+       extra anchors are inert where those targets do not exist. Foreign rewriters that bump
+       the assembly's timestamp WITHOUT recompiling only re-trigger this target into a cheap
+       no-op: the weave is per-method idempotent (a body already opening an NDScope is
+       skipped) and a nothing-woven pass does not rewrite the file at all. -->
+  <Target Name="NDScopeWeave"
+          AfterTargets="CoreCompile"
+          BeforeTargets="_TimeStampAfterCompile;AfterCompile;CopyFilesToOutputDirectory"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipNDScopeWeave)' != 'true' and '@(IntermediateAssembly)' != ''"
+          Inputs="@(IntermediateAssembly)"
+          Outputs="$(IntermediateOutputPath)NDScopeWeave.marker">
+
+    <Error Condition="!Exists('$(NumSharpBuildToolDll)')"
+           Code="NDW000"
+           Text="NumSharp.Build: tool not found at '$(NumSharpBuildToolDll)' — the NumSharp.Build package is incomplete or a NumSharpBuildToolDll override points nowhere. Restore the package, or build with -p:SkipNDScopeWeave=true to skip weaving." />
+
+    <!-- Content pre-scan: spawn the tool only when the assembly can possibly need it. Using
+         either attribute compiles a TypeRef whose name lands as an ASCII run in the metadata
+         #Strings heap, and ASCII runs survive lossy UTF-8 decoding of arbitrary binary
+         intact — so a plain text scan is a reliable "was [NDScoped]/[NDScopedAsync] used?"
+         probe on a fresh compiler output (the Nucs.JsonSettings.Autosave marker-scan
+         technique). The probe matches the two WEAVABLE type names exactly — 'NDScopedAttribute'
+         and 'NDScopedAsyncAttribute' — rather than the bare shared prefix 'NDScoped'. Both must
+         be checked (the async name does NOT contain 'NDScopedAttribute' as a substring, so probing
+         the sync name alone would skip an async-only consumer), and matching the full names — not
+         the prefix — keeps [NDScopedCovered] (the analyzer-only hint attribute, inert at runtime and
+         needing NO weaver) from spawning the tool: 'NDScopedCoveredAttribute' contains neither
+         weavable name. A false POSITIVE (a matched name in a user string literal) merely spawns the
+         tool, which no-ops; there is no false negative on CoreCompile output. This keeps
+         attribute-free consumers — and rebuilds where a foreign rewriter bumped the timestamp —
+         free of a per-build process spawn. -->
+    <PropertyGroup>
+      <_NDScopeWeaveAssembly>@(IntermediateAssembly->'%(FullPath)')</_NDScopeWeaveAssembly>
+      <_NDScopeWeaveHasUsage>false</_NDScopeWeaveHasUsage>
+      <_NDScopeWeaveHasUsage Condition="Exists('$(_NDScopeWeaveAssembly)') and ($([System.IO.File]::ReadAllText('$(_NDScopeWeaveAssembly)').Contains('NDScopedAttribute')) or $([System.IO.File]::ReadAllText('$(_NDScopeWeaveAssembly)').Contains('NDScopedAsyncAttribute')))">true</_NDScopeWeaveHasUsage>
+    </PropertyGroup>
+    <Message Condition="'$(_NDScopeWeaveHasUsage)' != 'true'"
+             Importance="normal"
+             Text="NumSharp.Build: no [NDScoped]/[NDScopedAsync] usage detected in $(MSBuildProjectName); weave skipped" />
+
+    <!-- The compile's reference list, one path per line: how the tool resolves NDScope /
+         NDArray / INDArrayCarrier out of the referenced NumSharp assembly (reference
+         assemblies are fine — the weaver imports member signatures, never bodies). A
+         response file, so a large dependency graph cannot overflow the command line. -->
+    <WriteLinesToFile Condition="'$(_NDScopeWeaveHasUsage)' == 'true'"
+                      File="$(IntermediateOutputPath)NDScopeWeave.refs.rsp"
+                      Lines="@(ReferencePathWithRefAssemblies)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+
+    <!-- Re-sign only a genuinely full-signed assembly. KeyOriginatorFile is the project's
+         resolved key; Exec runs in the project directory, so a relative path resolves. -->
+    <PropertyGroup>
+      <_NDScopeWeaveSnkArg></_NDScopeWeaveSnkArg>
+      <_NDScopeWeaveSnkArg Condition="'$(SignAssembly)' == 'true' and '$(DelaySign)' != 'true' and '$(PublicSign)' != 'true' and '$(KeyOriginatorFile)' != '' and Exists('$(KeyOriginatorFile)')">--snk "$(KeyOriginatorFile)"</_NDScopeWeaveSnkArg>
+    </PropertyGroup>
+
+    <Exec Condition="'$(_NDScopeWeaveHasUsage)' == 'true'"
+          Command="&quot;$(NumSharpBuildDotnetHost)&quot; exec &quot;$(NumSharpBuildToolDll)&quot; &quot;@(IntermediateAssembly)&quot; --refs &quot;$(IntermediateOutputPath)NDScopeWeave.refs.rsp&quot; $(_NDScopeWeaveSnkArg)" />
+
+    <!-- Opt-in IL verification of the woven output (dotnet tool install -g dotnet-ilverify). -->
+    <ItemGroup Condition="'$(NDScopeWeaveILVerify)' == 'true'">
+      <_NDScopeILVerifyRefDir Include="@(ReferencePathWithRefAssemblies->'%(RootDir)%(Directory)'->Distinct())" />
+    </ItemGroup>
+    <Exec Condition="'$(NDScopeWeaveILVerify)' == 'true'"
+          Command="ilverify &quot;@(IntermediateAssembly)&quot; @(_NDScopeILVerifyRefDir->'-r &quot;%(Identity)*.dll&quot;', ' ')" />
+
+    <Touch Files="$(IntermediateOutputPath)NDScopeWeave.marker" AlwaysCreate="true" />
+    <ItemGroup>
+      <FileWrites Include="$(IntermediateOutputPath)NDScopeWeave.marker" />
+      <FileWrites Include="$(IntermediateOutputPath)NDScopeWeave.refs.rsp" />
+    </ItemGroup>
+  </Target>
+</Project>

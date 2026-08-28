@@ -113,7 +113,7 @@ namespace NDScoping
 
         // -------------------------------------------------------------------------------------
         // 4) PREVENTED WITH [NDScoped].  Now the body is 100% the ORIGINAL leaky code — no scope
-        //    anywhere in the source. The build-time weaver (the NumSharp.Weaver package) injects
+        //    anywhere in the source. The build-time weaver (the NumSharp.Build package) injects
         //    exactly what section 3 wrote: it opens the scope, wraps the body in try/finally, and
         //    routes each return through Returns. You write the attribute; the build writes the rest.
         // -------------------------------------------------------------------------------------
@@ -219,7 +219,7 @@ namespace NDScoping
             Console.WriteLine("  • A CALLER disposes the RESULTS it RECEIVES (the `using var result` above, or");
             Console.WriteLine("    its own NDScope around a hot loop).");
             Console.WriteLine("  • Prefer [NDScoped]/[NDScopedAsync]: same result, zero boilerplate. They need");
-            Console.WriteLine("    the NumSharp.Weaver package; without it the attributes are inert and the");
+            Console.WriteLine("    the NumSharp.Build package; without it the attributes are inert and the");
             Console.WriteLine("    method just runs unscoped (the pre-weave finalizer backstop) — never wrong,");
             Console.WriteLine("    only slower.");
         }

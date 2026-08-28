@@ -1,6 +1,6 @@
 # NumSharp.Core-only analyzer configuration (nested; the repo-root .editorconfig still applies).
 #
-# The NumSharp.Weaver.Analyzer runs on Core's own compile to surface NDArray leaks (NDW012). The
+# The NumSharp.Build.Analyzer runs on Core's own compile to surface NDArray leaks (NDW012). The
 # same assembly also carries the [NDScoped]-TARGET gate (NDW002/003/005/006/009/010/011), but on
 # Core those are redundant with the self-weave — the NDScopeWeave target validates every [NDScoped]
 # method post-compile and already fails the build on a bad target — and they have never been run

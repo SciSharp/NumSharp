@@ -4,7 +4,7 @@
        LEVEL D — the analyzer, shown by a project that MUST NOT COMPILE.
 
        Each method in BadShapes.cs places [NDScoped] / [NDScopedAsync] on a target the weaver
-       cannot weave, so the bundled Roslyn analyzer (NumSharp.Weaver.Analyzer) reports a build
+       cannot weave, so the bundled Roslyn analyzer (NumSharp.Build.Analyzer) reports a build
        ERROR (NDW002/003/005/006/009/010/011) at CoreCompile — before any weave. Because the
        whole point is that the build fails, this project is DELIBERATELY EXCLUDED from
        SciSharp.NumSharp.sln and from CI. Exercise it with show-analyzer.sh, which asserts each
@@ -26,7 +26,7 @@
     <ProjectReference Include="..\..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
 
     <!-- The compile-time analyzer — the ONLY piece needed to demonstrate the gate. -->
-    <ProjectReference Include="..\..\..\tools\NumSharp.Weaver.Analyzer\NumSharp.Weaver.Analyzer.csproj"
+    <ProjectReference Include="..\..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj"
                       ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
   </ItemGroup>
 

@@ -5,15 +5,16 @@ using System.Reflection;
 namespace NumSharp.Tests.Lifetime
 {
     /// <summary>
-    ///     Proves the build-time <c>[NDScoped]</c> IL weaver (<c>tools/NumSharp.Weaver</c>) actually
-    ///     ran over the SHIPPED assembly. Every method — or property accessor — marked
-    ///     <see cref="NDScopedAttribute"/> must, after weaving, carry a local of type
-    ///     <see cref="NDScope"/>: the scope the weaver opens. A <c>[NDScoped]</c> method that still
-    ///     lacks it was NOT woven — a broken <c>NDScopeWeave</c> target, or a build with
+    ///     Proves the build-time IL weaver (<c>tools/NumSharp.Build</c>) actually ran over the
+    ///     SHIPPED assembly. Every method — or property accessor — marked <see cref="NDScopedAttribute"/>
+    ///     OR <see cref="NDScopedAsyncAttribute"/> must, after weaving, carry a local of type
+    ///     <see cref="NDScope"/>: the scope the weaver opens. A scoped method that still lacks it was
+    ///     NOT woven — a broken <c>NDScopeWeave</c> target, or a build with
     ///     <c>-p:SkipNDScopeWeave=true</c> — which silently drops eager reclamation on that method
     ///     back to the finalizer backstop (the pre-migration status quo). The <see cref="NDScopeTests"/>
     ///     zero-strand counters would eventually notice for the ops they exercise; this gate is the
-    ///     direct, total proof that the transform covered the whole attributed surface.
+    ///     direct, total proof that the transform covered the whole attributed surface (both the
+    ///     synchronous <c>[NDScoped]</c> weaver and the <c>[NDScopedAsync]</c> weaver).
     /// </summary>
     /// <remarks>
     ///     The signal — an <see cref="NDScope"/> local — is a NECESSARY consequence of scoping,
@@ -48,20 +49,28 @@ namespace NumSharp.Tests.Lifetime
             }
         }
 
+        // A method/property is scoped by EITHER attribute — [NDScoped] (synchronous bodies +
+        // synchronous iterators) or [NDScopedAsync] (async / async-iterator / non-async Task) — and
+        // both leave the same signal: an NDScope local (in the method, or in the state machine's
+        // MoveNext for an async/iterator body).
+        private static bool IsScoped(MemberInfo m) =>
+            m.GetCustomAttribute<NDScopedAttribute>(inherit: false) != null ||
+            m.GetCustomAttribute<NDScopedAsyncAttribute>(inherit: false) != null;
+
         private static IEnumerable<MethodInfo> AllScopedMethods()
         {
             var seen = new HashSet<MethodInfo>();
             foreach (var type in AllTypes())
             {
                 foreach (var m in type.GetMethods(AllDeclared))
-                    if (m.GetCustomAttribute<NDScopedAttribute>(inherit: false) != null && seen.Add(m))
+                    if (IsScoped(m) && seen.Add(m))
                         yield return m;
 
                 // A property-LEVEL attribute resolves to the getter (mirrors the weaver's
                 // CollectTargets); accessor-level attributes are already covered by the method loop.
                 foreach (var p in type.GetProperties(AllDeclared))
                 {
-                    if (p.GetCustomAttribute<NDScopedAttribute>(inherit: false) is null)
+                    if (!IsScoped(p))
                         continue;
                     var getter = p.GetGetMethod(nonPublic: true);
                     if (getter != null && seen.Add(getter))
@@ -72,7 +81,7 @@ namespace NumSharp.Tests.Lifetime
 
         private static bool HasScopeLocal(MethodInfo m)
         {
-            // An async/iterator [NDScoped] method is a STUB — the weave lands in the compiler's
+            // An async/iterator scoped method is a STUB — the weave lands in the compiler's
             // state machine, so the scope local (and the weaver-added slot field) live in ITS
             // MoveNext. Follow the StateMachineAttribute indirection the weaver itself follows.
             var smType = m.GetCustomAttributes<System.Runtime.CompilerServices.StateMachineAttribute>(inherit: false)
@@ -103,7 +112,7 @@ namespace NumSharp.Tests.Lifetime
             var scoped = AllScopedMethods().ToList();
 
             Assert.IsTrue(scoped.Count >= MinScopedMethods,
-                $"found only {scoped.Count} [NDScoped] methods (expected >= {MinScopedMethods}); " +
+                $"found only {scoped.Count} [NDScoped]/[NDScopedAsync] methods (expected >= {MinScopedMethods}); " +
                 "the attribute may have been stripped, or reflection did not reach the attributed types");
 
             var unwoven = scoped
@@ -113,7 +122,7 @@ namespace NumSharp.Tests.Lifetime
                 .ToList();
 
             Assert.AreEqual(0, unwoven.Count,
-                "these [NDScoped] methods carry no NDScope local, so the weaver did not scope them " +
+                "these [NDScoped]/[NDScopedAsync] methods carry no NDScope local, so the weaver did not scope them " +
                 "(a broken NDScopeWeave target, or a build with -p:SkipNDScopeWeave=true):\n  " +
                 string.Join("\n  ", unwoven));
         }

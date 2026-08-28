@@ -6,7 +6,7 @@ namespace NumSharp
     ///     The ASYNC counterpart of <see cref="NDScopedAttribute"/>: marks an <b>async</b> method, an
     ///     <b>async iterator</b>, or a <b>non-async method returning <c>Task</c>/<c>ValueTask</c></b>[<c>&lt;T&gt;</c>]
     ///     as an <see cref="NDScope"/> boundary. At build time the NumSharp IL weaver
-    ///     (<c>tools/NumSharp.Weaver</c>, shipped to consumer projects as the <c>NumSharp.Weaver</c>
+    ///     (<c>tools/NumSharp.Build</c>, shipped to consumer projects as the <c>NumSharp.Build</c>
     ///     NuGet package) weaves the method's compiler STATE MACHINE — or, for a non-async
     ///     Task-returning body, its DEFERRAL egress — so the <see cref="NDArray"/> temporaries it
     ///     drops are reclaimed at the invocation's completion instead of waiting on the finalizer,
@@ -50,7 +50,7 @@ namespace NumSharp
     ///     shape; NDW008 = the referenced NumSharp predates the async seam).</para>
     ///     <para>A method whose body already opens an <see cref="NDScope"/> is skipped (idempotence).</para>
     ///     <para>PUBLIC because the attribute is consumer-facing: a project that installs the
-    ///     <c>NumSharp.Weaver</c> package marks its own async/Task composition methods with it. Without
+    ///     <c>NumSharp.Build</c> package marks its own async/Task composition methods with it. Without
     ///     the package the attribute is inert metadata — the method runs unscoped, the pre-weave
     ///     finalizer-backstop behaviour.</para>
     /// </remarks>

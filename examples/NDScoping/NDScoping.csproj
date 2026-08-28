@@ -6,7 +6,7 @@
 
        This project consumes the weaver + analyzer in SOURCE MODE (ProjectReference +
        an explicit <Import> of the packaged .targets), which is itself instructive: it
-       shows the exact machinery a real project gets for free from the NumSharp.Weaver
+       shows the exact machinery a real project gets for free from the NumSharp.Build
        NuGet package. README.md puts the one-line package-mode form beside it.
        ================================================================================== -->
   <PropertyGroup>
@@ -24,7 +24,7 @@
     <!-- Source-mode weaver: point the imported NDScopeWeave target at the freshly built tool
          (the package would place it under tools/net8.0/any/ and this property would be unset). The
          weaver project is net8.0, so this path is stable across the consumer's own TargetFrameworks. -->
-    <NumSharpWeaverToolDll>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Weaver\bin\$(Configuration)\net8.0\NumSharp.Weaver.dll</NumSharpWeaverToolDll>
+    <NumSharpBuildToolDll>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\bin\$(Configuration)\net8.0\NumSharp.Build.dll</NumSharpBuildToolDll>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,22 +36,19 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
 
-    <!-- Build the weaver TOOL (do not link it) so $(NumSharpWeaverToolDll) exists at weave time.
+    <!-- Build the weaver TOOL (do not link it) so $(NumSharpBuildToolDll) exists at weave time.
          SetTargetFramework pins its single net8.0 output regardless of which of THIS project's
          TargetFrameworks is currently building. -->
-    <ProjectReference Include="..\..\tools\NumSharp.Weaver\NumSharp.Weaver.csproj"
-                      ReferenceOutputAssembly="false" Private="false"
-                      SetTargetFramework="TargetFramework=net8.0" />
+    <ProjectReference Include="..\..\tools\NumSharp.Build\NumSharp.Build.csproj" ReferenceOutputAssembly="false" Private="false" SetTargetFramework="TargetFramework=net8.0" />
 
     <!-- Apply the compile-time ANALYZER (the standard source-mode analyzer reference). It reports
          a wrong / unsupported [NDScoped] target as a build error BEFORE the weave — the same NDW
          codes the CounterExamples project deliberately trips. -->
-    <ProjectReference Include="..\..\tools\NumSharp.Weaver.Analyzer\NumSharp.Weaver.Analyzer.csproj"
-                      ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
+    <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
   </ItemGroup>
 
   <!-- The packaged weave target, imported directly (the source-mode recipe). In package mode this
-       import — and the analyzer — arrive automatically from the NumSharp.Weaver NuGet. -->
-  <Import Project="..\..\tools\NumSharp.Weaver\build\NumSharp.Weaver.targets" />
+       import — and the analyzer — arrive automatically from the NumSharp.Build NuGet. -->
+  <Import Project="..\..\tools\NumSharp.Build\build\NumSharp.Build.targets" />
 
 </Project>

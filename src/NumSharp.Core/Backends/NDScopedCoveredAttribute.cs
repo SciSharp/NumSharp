@@ -14,7 +14,7 @@ namespace NumSharp
     ///     <see cref="NDScopedAsyncAttribute"/>, this attribute is <b>NOT a scope boundary</b>: the IL
     ///     weaver never weaves it, no <see cref="NDScope"/> is opened here, and it is completely inert at
     ///     runtime. It exists ONLY to inform the compile-time leak analyzer
-    ///     (<c>NumSharp.Weaver.Analyzer</c>): <c>NDW012</c> is a per-method dataflow pass with no
+    ///     (<c>NumSharp.Build.Analyzer</c>): <c>NDW012</c> is a per-method dataflow pass with no
     ///     call-graph, so it cannot see that a helper's transients are reclaimed by a
     ///     <c>[NDScoped]</c>/<c>[NDScopedAsync]</c> (or hand-scoped) CALLER's ambient scope — the
     ///     documented "scope the boundary, helpers ride the ambient scope" pattern
