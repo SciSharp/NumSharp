@@ -80,8 +80,13 @@ namespace NumSharp.Backends.Kernels
             if (M == 0 || N == 0 || K == 0)
                 return;
 
-            if (M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD
-                && (bStride1 == 1 || M * N * K < SCALAR_FALLBACK_MAX_WORK))
+            // gevm (M == 1): route the single-output-row product to the per-k SIMD daxpy
+            // (SimpleStrided) instead of packing panels; needs B's inner axis contiguous for
+            // the vectorised daxpy. Small M == 1 already lands here, so only large M == 1 moves
+            // off the blocked path — same kernel, identical bytes.
+            if ((M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD
+                 && (bStride1 == 1 || M * N * K < SCALAR_FALLBACK_MAX_WORK))
+                || (M == 1 && bStride1 == 1))
             {
                 MatMulDoubleSimpleStrided(A, aStride0, aStride1, B, bStride0, bStride1, C, M, N, K);
                 return;

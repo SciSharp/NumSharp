@@ -101,6 +101,26 @@ namespace NumSharp.Backends
             long bStride0 = rShape.strides[0];
             long bStride1 = rShape.strides[1];
 
+            // gemv: matrix @ column-vector (N == 1) with the contraction axis contiguous in
+            // both operands (A's rows and x). The general GEMM degenerates here — a length-1
+            // inner loop plus pointless packing — so route to a dedicated SIMD dot-per-row
+            // kernel (~6-7x). Non-contiguous K (e.g. a transposed A) falls through to the
+            // stride-aware GEMM below. Byte-identical to the general path for the small K the
+            // matmul oracle pins (both are a sequential scalar dot there).
+            if (N == 1 && aStride1 == 1 && bStride0 == 1)
+            {
+                var gemv = DirectILKernelGenerator.GetGemvKernel(typeCode);
+                if (gemv != null)
+                {
+                    int es = result.dtypesize;
+                    void* aBase = (byte*)left.Address + lShape.offset * es;
+                    void* xBase = (byte*)right.Address + rShape.offset * es;
+                    void* yBase = (byte*)result.Address + result.Shape.offset * es;
+                    gemv(aBase, aStride0, xBase, yBase, M, K);
+                    return true;
+                }
+            }
+
             switch (typeCode)
             {
                 case NPTypeCode.Single:

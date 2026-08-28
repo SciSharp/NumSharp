@@ -102,6 +102,72 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
+        // ------------------------------------------------------------------ gemv --
+        // Matrix @ column-vector, y[i] = dot(A[i], x). Routing this through the general
+        // GEMM is the same degenerate case cov's Gram hit from the other side: the output
+        // has N = 1 column, so the GEMM's inner SIMD loop (over N) collapses to a scalar
+        // accumulate per (i, k) and the packing/blocking machinery is pure overhead.
+        // This kernel instead does one 4×-unrolled SIMD dot over K per row (reusing GramDot),
+        // and is BYTE-IDENTICAL to the general path's sequential scalar accumulate for the
+        // small K the matmul oracle pins (there K < one unrolled step, so GramDot is only its
+        // sequential scalar tail — and the N == 1 GEMM path never enters its FMA j-loop, so
+        // both sides are a plain left-to-right mul+add).
+
+        /// <summary>
+        ///     Matrix·vector kernel: <c>y[i] = dot(A[i], x)</c> for row-major <c>A</c> whose
+        ///     rows are contiguous (<c>K</c> along stride 1) and start <paramref name="aRowStride"/>
+        ///     elements apart, and contiguous <c>x</c>/<c>y</c>.
+        /// </summary>
+        public unsafe delegate void GemvKernel(void* a, long aRowStride, void* x, void* y, long m, long k);
+
+        /// <summary>Cache of gemv kernels keyed by element dtype (Single / Double only).</summary>
+        internal static readonly ConcurrentDictionary<NPTypeCode, GemvKernel> _gemvCache = new();
+
+        /// <summary>
+        ///     Get the matrix·vector (gemv) kernel for <paramref name="dt"/>, or <c>null</c>
+        ///     when out of scope (only Single / Double — the dtypes NumPy routes through cblas
+        ///     gemv), IL/SIMD unavailable, or Vector256 not hardware accelerated. A <c>null</c>
+        ///     return routes the caller back to the general GEMM.
+        /// </summary>
+        public static GemvKernel GetGemvKernel(NPTypeCode dt)
+        {
+            if (!Enabled)
+                return null;
+            if (dt != NPTypeCode.Single && dt != NPTypeCode.Double)
+                return null;
+            if (!Vector256.IsHardwareAccelerated)
+                return null;
+
+            try
+            {
+                return _gemvCache.GetOrAdd(dt, static d =>
+                    GetGenericHelper(nameof(GemvHelperSameType), GetClrType(d))
+                        .CreateDelegate<GemvKernel>());
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[ILKernel] GetGemvKernel({dt}): {ex.GetType().Name}: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        ///     Generic gemv driver — one SIMD dot per output row. Bound to
+        ///     <see cref="GemvKernel"/> via <c>CreateDelegate</c> per element type; the
+        ///     <c>void*</c> parameters keep the closed signature dtype-independent.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static unsafe void GemvHelperSameType<T>(void* ap, long aRowStride, void* xp, void* yp, long m, long k)
+            where T : unmanaged, INumber<T>
+        {
+            T* a = (T*)ap;
+            T* x = (T*)xp;
+            T* y = (T*)yp;
+            for (long i = 0; i < m; i++)
+                y[i] = GramDot<T>(a + i * aRowStride, x, k);
+        }
+
         /// <summary>
         ///     Fused 4×-unrolled SIMD dot of two contiguous vectors — the same shape as
         ///     <see cref="SimdDot"/> but generic over the (SIMD-capable) element type.
