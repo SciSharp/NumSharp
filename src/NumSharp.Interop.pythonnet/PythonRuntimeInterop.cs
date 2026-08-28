@@ -31,7 +31,7 @@ namespace NumSharp.Interop.PythonNet
         private static readonly object _sessionGate = new object();
         private static int _sessionLive; // 1 once wired to the CURRENT engine session
 
-        private static PyObject _numpy, _ctypes, _builtins, _weakref;
+        private static PyObject _numpy, _ctypes, _builtins, _weakref, _torch;
 
         /// <summary>
         ///     Set by <see cref="NDArrayPythonInterop.RegisterCodec()"/>; reset at engine shutdown because
@@ -161,6 +161,9 @@ namespace NumSharp.Interop.PythonNet
         /// <summary>Cached <c>weakref</c> module (per engine session). Call under the GIL.</summary>
         internal static PyObject Weakref => GetModule(ref _weakref, "weakref");
 
+        /// <summary>Cached optional <c>torch</c> module (per engine session). Call under the GIL.</summary>
+        internal static PyObject Torch => GetModule(ref _torch, "torch");
+
         private static PyObject GetModule(ref PyObject cache, string name)
         {
             var module = Volatile.Read(ref cache);
@@ -183,7 +186,7 @@ namespace NumSharp.Interop.PythonNet
         // handler touch them). Losing racers dispose their instance immediately (safe under the
         // GIL); winners are owned by the session and swept by OnEngineShutdown.
 
-        private static PyObject _npEmpty, _npFrombuffer, _npArray, _npAsarray, _npAsStrided;
+        private static PyObject _npEmpty, _npFrombuffer, _npArray, _npAsarray, _npAsStrided, _torchFromNumpy;
         private static PyObject _ctypesCCharMul, _weakrefFinalize, _builtinsMemoryview;
         private static PyObject _trueLiteral, _falseLiteral, _strC, _strB;
         private static PyObject _nameFromAddress, _nameReshape, _nameSetflags, _nameCast, _nameTobytes,
@@ -228,6 +231,9 @@ namespace NumSharp.Interop.PythonNet
 
         /// <summary>Cached <c>builtins.memoryview</c>. Call under the GIL.</summary>
         internal static PyObject BuiltinsMemoryview => GetCached(ref _builtinsMemoryview, static () => Builtins.GetAttr("memoryview"));
+
+        /// <summary>Cached optional <c>torch.from_numpy</c>. Call under the GIL.</summary>
+        internal static PyObject TorchFromNumpy => GetCached(ref _torchFromNumpy, static () => Torch.GetAttr("from_numpy"));
 
         /// <summary>Cached Python <c>True</c> (counterpart of <see cref="FalseLiteral"/> for <c>setflags</c>).</summary>
         internal static PyObject TrueLiteral => GetCached(ref _trueLiteral, static () => true.ToPython());
@@ -295,6 +301,7 @@ namespace NumSharp.Interop.PythonNet
             DisposeModule(ref _npArray);
             DisposeModule(ref _npAsarray);
             DisposeModule(ref _npAsStrided);
+            DisposeModule(ref _torchFromNumpy);
             DisposeModule(ref _ctypesCCharMul);
             DisposeModule(ref _weakrefFinalize);
             DisposeModule(ref _builtinsMemoryview);
@@ -564,6 +571,7 @@ namespace NumSharp.Interop.PythonNet
                     DisposeModule(ref _ctypes);
                     DisposeModule(ref _builtins);
                     DisposeModule(ref _weakref);
+                    DisposeModule(ref _torch);
                 }
             }
 

@@ -146,7 +146,8 @@ own gates.
 | Bridge | Ships in | Zero-copy | Page |
 |---|---|---|---|
 | **numpy, in process** — `NDArray` ⇄ `numpy.ndarray`, every layout, both directions | `NumSharp.Interop.pythonnet` | ✅ views both ways | [Python & numpy (pythonnet)](pythonnet-numpy.md) |
-| **Any Python library** — PyTorch, Pillow, Arrow, OpenCV, stdlib — via the buffer protocol | `NumSharp.Interop.pythonnet` | ✅ `memoryview` / PEP 3118 | [Any library via np.frombuffer](np-frombuffer.md) |
+| **PyTorch CPU tensors** — NumSharp ⇄ Torch through PyTorch's official NumPy adapters | `NumSharp.Interop.pythonnet` | ✅ compatible views both ways | [PyTorch](pytorch.md) |
+| **Python buffer consumers** — `torch.frombuffer`, Pillow, Arrow, OpenCV, stdlib | `NumSharp.Interop.pythonnet` | ✅ `memoryview` / PEP 3118 | [Any library via np.frombuffer](np-frombuffer.md) |
 | **Numpy.NET coexistence** — drive real numpy's C# API over NumSharp buffers | + `Numpy.Bare` | ✅ `PyObject` handoff | [Numpy.NET](numpy-net.md) |
 | **`.npy` / `.npz` files** — `np.save` / `np.load`, byte-for-byte identical to NumPy's own writer | `NumSharp` (core) | — files, not memory | [NumPy compliance](../compliance.md#file-format-interoperability) |
 
@@ -184,6 +185,7 @@ above applies to it; it has [its own page](openblas.md).
 
 - [Python & numpy (pythonnet)](pythonnet-numpy.md) — the reference bridge: four verbs, layouts,
   lifetime, codec, GIL, dtypes, versions
+- [PyTorch](pytorch.md) — shared CPU tensors, autograd, all 15 dtypes, layout/device copy boundaries
 - [Any library via np.frombuffer](np-frombuffer.md) — the buffer protocol route to libraries that
   never touch numpy
 - [Numpy.NET](numpy-net.md) — running SciSharp's numpy binding over NumSharp memory

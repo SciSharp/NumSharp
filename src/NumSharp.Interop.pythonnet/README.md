@@ -1,6 +1,6 @@
 # NumSharp.Interop.pythonnet
 
-Zero-copy interop between NumSharp `NDArray` and the Python ecosystem via [Python.NET (pythonnet)](https://github.com/pythonnet/pythonnet) — with **no Numpy.NET dependency**, so it works with any numpy, any Python, and any object implementing the PEP 3118 buffer protocol (numpy, `memoryview`, `bytes`, `bytearray`, `array.array`, PIL, torch, ...).
+Zero-copy interop between NumSharp `NDArray` and the Python ecosystem via [Python.NET (pythonnet)](https://github.com/pythonnet/pythonnet) — with **no Numpy.NET dependency**, so it works with any numpy, any Python, and any object implementing the PEP 3118 buffer protocol (numpy, `memoryview`, `bytes`, `bytearray`, `array.array`, PyArrow buffers, ...). PyTorch tensors use their official numpy interchange APIs through the optional `TorchInterop` helpers; `torch.Tensor` itself is not a PEP 3118 exporter.
 
 ```csharp
 using NumSharp;
@@ -25,6 +25,29 @@ Everything is packaging over four operations on the static `NDArrayPythonInterop
 The lease buffer is always acquired **through the exporter's `memoryview`**, never the raw object: the memoryview is CPython's canonical, uniformly-behaved buffer exporter, so this sidesteps pythonnet 3.0.x's per-exporter `GetBuffer` bugs — a raw `ctypes` array hard-crashes `obj.GetBuffer` on *every* flag, while the memoryview over the same memory leases cleanly. Measured coverage across 50 exporter varieties: **47 view, 2 copy** (`complex64` widens, sub-item strides linearize). Big-endian multi-byte data is a **third copy** — the view path declines it (a native-endian shared view is impossible), but `ToNDArray` byte-reverses each element on copy — so the only refusals left are element types with no NumSharp dtype at all (`datetime64`, structured, object, void).
 
 Plus `ToMemoryView(nd)` (a writable Python `memoryview` of raw bytes for non-numpy consumers) and the dtype maps `ToNumpyDtypeStr` / `FromNumpyDtypeStr` / `ToBufferFormat` / `FromBufferFormat`.
+
+## PyTorch (optional runtime bridge)
+
+PyTorch is imported only when these helpers are called; there is no TorchSharp or compile-time
+PyTorch dependency:
+
+```csharp
+using (Py.GIL())
+{
+    using PyObject tensor = nd.ToTorch();                  // shared CPU tensor
+    using PyObject owned = nd.ToTorch(copy: true);         // independent tensor
+    using NDArray view = tensor.AsTorchNDArray();          // shared CPU view
+    using NDArray copy = tensor.ToTorchNDArray();          // independent NumSharp copy
+    using NDArray forced = tensor.ToTorchNDArray(force: true); // detach + CPU transfer, then copy
+}
+```
+
+The sharing path preserves positive strides and roots the owner on both sides. `Decimal` is the
+documented exception: neither NumPy nor PyTorch has that dtype, so it converts to float64.
+Negative-stride and non-writeable NumSharp arrays require `copy:true`; this avoids PyTorch's
+documented undefined behavior for tensors over read-only NumPy memory. A Tensor requiring gradients
+or living on CUDA/MPS cannot be shared directly with CPU NumSharp memory — use an explicit detach or
+`force:true` copy.
 
 ## Extension methods (the ergonomic default)
 

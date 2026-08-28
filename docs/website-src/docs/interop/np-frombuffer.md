@@ -358,7 +358,7 @@ Every row below was executed on the stack in the banner. Where a library wants a
 
 | Library | Entry point | Verified |
 |---|---|---|
-| **PyTorch** 2.12.1 | `torch.frombuffer(mv, dtype=torch.float32)` | same `data_ptr` as `np.frombuffer`; a tensor write lands in the `NDArray` |
+| **PyTorch** 2.13.0 | `torch.frombuffer(mv, dtype=torch.float32)` | same `data_ptr` as `np.frombuffer`; a tensor write lands in the `NDArray` |
 | **Pillow** 11.3.0 | `Image.frombuffer('RGB', (w,h), mv, 'raw', 'RGB', 0, 1)` | `getpixel` reads NumSharp's bytes |
 | **PyArrow** 23.0.1 | `pa.py_buffer(mv)` → `pa.Array.from_buffers` | `to_numpy(zero_copy_only=True)` returns our address |
 | **pandas** 2.3.3 | `pd.DataFrame(nd.ToNumpy(), copy=False)` | `np.shares_memory(df.to_numpy(), x)` is `True` |
@@ -367,6 +367,9 @@ Every row below was executed on the stack in the banner. Where a library wants a
 | **stdlib** | `struct` · `hashlib` · `zlib` · `memoryview.cast` | all read the memoryview directly |
 
 ### PyTorch
+
+For shaped and strided arrays, prefer the dedicated [`ToTorch` / `AsTorchNDArray` bridge](pytorch.md).
+This raw-buffer form is useful when the consuming API is explicitly buffer-oriented.
 
 ```csharp
 var nd = np.arange(6).astype(NPTypeCode.Single);

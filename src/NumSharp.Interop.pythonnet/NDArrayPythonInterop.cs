@@ -10,7 +10,9 @@ namespace NumSharp.Interop.PythonNet
     ///
     ///     <para>Binds only to pythonnet's <see cref="PyObject"/> and Python's PEP 3118 buffer protocol —
     ///     NO Numpy.NET dependency, so it works with any numpy, any Python, and with ANY buffer-protocol
-    ///     exporter (numpy, memoryview, array.array, bytes, PIL, torch, ...), not just numpy.</para>
+    ///     exporter (numpy, memoryview, array.array, bytes, PyArrow buffers, ...), not just numpy.
+    ///     Libraries whose own objects do not export PEP 3118 — notably <c>torch.Tensor</c> — cross
+    ///     through their official numpy adapter; see <see cref="TorchInterop"/>.</para>
     ///
     ///     <para><b>The four verbs</b> (everything else is packaging over these):</para>
     ///     <list type="bullet">

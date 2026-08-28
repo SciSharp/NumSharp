@@ -12,7 +12,7 @@ namespace NumSharp.Interop.PythonNet
 
         /// <summary>
         ///     Copy any PEP 3118 buffer object (numpy array, memoryview, bytes, bytearray, array.array,
-        ///     PIL image, torch tensor, ...) into a fresh C-contiguous NumSharp array. Honors strides /
+        ///     PyArrow buffer, ...) into a fresh C-contiguous NumSharp array. Honors strides /
         ///     Fortran order (non-contiguous sources are linearized by CPython's
         ///     <c>memoryview.tobytes('C')</c>). numpy-agnostic; the result owns its memory — no lifetime
         ///     coupling to the source.
