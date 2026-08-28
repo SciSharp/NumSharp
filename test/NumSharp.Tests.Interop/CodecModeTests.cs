@@ -45,6 +45,18 @@ namespace NumSharp.Tests.Interop
             NumpyCodecOptions.Default.DecodeArrayAdapters.Should().BeTrue();
         }
 
+        [TestMethod]
+        public void PythonArrayAdapterRegistry_AndRegisterMethod_ArePublicExtensionPoints()
+        {
+            Type registry = typeof(PythonArrayAdapterRegistry);
+            registry.IsPublic.Should().BeTrue();
+            registry.GetMethod(
+                    nameof(PythonArrayAdapterRegistry.Register),
+                    new[] { typeof(IPythonArrayAdapter) })
+                .Should().NotBeNull()
+                .And.Match<System.Reflection.MethodInfo>(method => method.IsPublic && method.IsStatic);
+        }
+
         // ---- decode: Auto = view-first, copy-fallback ----------------------------------------------
 
         [TestMethod]

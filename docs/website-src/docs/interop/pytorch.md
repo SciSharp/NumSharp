@@ -110,7 +110,7 @@ direction pythonnet does know the requested CLR type, so both `As<NDArray>()` an
 ### Other libraries use the same extension point
 
 An integration for another buffer-less array library implements `IPythonArrayAdapter` and registers
-it once with `NDArrayPythonInterop.RegisterArrayAdapter(adapter)`. Its only job is to return the
+it once with `PythonArrayAdapterRegistry.Register(adapter)`. Its only job is to return the
 library's canonical buffer or NumPy interchange object. The established bridge still owns dtype,
 shape, offset, strides, writeability, leases, copying, GIL and shutdown behavior. Registration is
 thread-safe, process-wide and idempotent by the adapter's stable `Name`.

@@ -164,9 +164,10 @@ namespace NumSharp.Interop.PythonNet
         }
 
         /// <summary>
-        ///     Register a library-specific adapter that feeds the existing Python memory bridge.
-        ///     Registration is process-wide, thread-safe and idempotent by <see cref="IPythonArrayAdapter.Name"/>.
-        ///     The built-in <see cref="TorchPythonArrayAdapter"/> is already registered.
+        ///     Convenience alias for <see cref="PythonArrayAdapterRegistry.Register"/>. Registers a
+        ///     library-specific adapter that feeds the existing Python memory bridge. Registration is
+        ///     process-wide, thread-safe and idempotent by <see cref="IPythonArrayAdapter.Name"/>. The
+        ///     built-in <see cref="TorchPythonArrayAdapter"/> is already registered.
         /// </summary>
         /// <returns><c>true</c> when added; <c>false</c> when an adapter with the same name already exists.</returns>
         public static bool RegisterArrayAdapter(IPythonArrayAdapter adapter)

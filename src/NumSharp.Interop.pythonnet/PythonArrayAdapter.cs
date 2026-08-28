@@ -37,72 +37,24 @@ namespace NumSharp.Interop.PythonNet
     }
 
     /// <summary>
-    ///     Built-in adapter from <c>torch.Tensor</c> to its official NumPy interchange object. It is
-    ///     registered automatically and imports no Torch assembly or NuGet dependency.
+    ///     Thread-safe, process-wide registry for library-specific Python array adapters. Applications
+    ///     can implement <see cref="IPythonArrayAdapter"/> and call <see cref="Register"/> once; the
+    ///     ordinary <see cref="NDArrayPythonInterop"/> verbs and registered <see cref="NumpyCodec"/>
+    ///     then discover the adapter automatically. Adapter objects must be managed and Python-session
+    ///     neutral because registrations survive interpreter restarts.
     /// </summary>
-    public sealed class TorchPythonArrayAdapter : IPythonArrayAdapter
-    {
-        /// <summary>The process-wide stateless adapter instance.</summary>
-        public static TorchPythonArrayAdapter Instance { get; } = new TorchPythonArrayAdapter();
-
-        private TorchPythonArrayAdapter() { }
-
-        /// <inheritdoc/>
-        public string Name => "torch.Tensor";
-
-        /// <inheritdoc/>
-        public bool CanAdapt(PyType objectType)
-        {
-            if (objectType is null)
-                return false;
-
-            try
-            {
-                // Walk the MRO so torch.nn.Parameter and user Tensor subclasses are accepted too.
-                using PyObject mro = objectType.GetAttr("__mro__");
-                using var types = PyTuple.AsTuple(mro);
-                long count = types.Length();
-                for (int i = 0; i < count; i++)
-                {
-                    using PyObject type = types[i];
-                    using PyObject module = type.GetAttr("__module__");
-                    using PyObject name = type.GetAttr("__name__");
-                    if (module.As<string>() == "torch" && name.As<string>() == "Tensor")
-                        return true;
-                }
-            }
-            catch
-            {
-                // CanAdapt participates in pythonnet's global conversion search and must never throw.
-            }
-
-            return false;
-        }
-
-        /// <inheritdoc/>
-        public PyObject Adapt(PyObject source, bool allowCopy)
-        {
-            if (source is null) throw new ArgumentNullException(nameof(source));
-            if (!allowCopy)
-                return source.InvokeMethod("numpy");
-
-            // Tensor.numpy(force=True), spelled as its documented expansion so this compiles against
-            // every supported pythonnet v3 without relying on keyword-argument Invoke overload details.
-            using PyObject detached = source.InvokeMethod("detach");
-            using PyObject cpu = detached.InvokeMethod("cpu");
-            using PyObject resolvedConjugate = cpu.InvokeMethod("resolve_conj");
-            using PyObject resolvedNegative = resolvedConjugate.InvokeMethod("resolve_neg");
-            return resolvedNegative.InvokeMethod("numpy");
-        }
-    }
-
-    /// <summary>Thread-safe process-wide adapter registry. Adapter objects are managed and session-neutral.</summary>
-    internal static class PythonArrayAdapterRegistry
+    public static class PythonArrayAdapterRegistry
     {
         private static readonly object Gate = new object();
         private static IPythonArrayAdapter[] _adapters = { TorchPythonArrayAdapter.Instance };
 
-        internal static bool Register(IPythonArrayAdapter adapter)
+        /// <summary>
+        ///     Register an adapter process-wide. Registration is thread-safe and idempotent by
+        ///     <see cref="IPythonArrayAdapter.Name"/>; the built-in Torch adapter is already present.
+        /// </summary>
+        /// <param name="adapter">The session-neutral adapter to add.</param>
+        /// <returns><c>true</c> when added; <c>false</c> when the same name was already registered.</returns>
+        public static bool Register(IPythonArrayAdapter adapter)
         {
             if (adapter is null) throw new ArgumentNullException(nameof(adapter));
             if (string.IsNullOrWhiteSpace(adapter.Name))

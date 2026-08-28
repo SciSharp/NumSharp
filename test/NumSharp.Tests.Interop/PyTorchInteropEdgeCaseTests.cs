@@ -650,9 +650,9 @@ namespace NumSharp.Tests.Interop
         [TestMethod]
         public void CustomAdapter_AlsoFeedsDirectVerbsAndCodecWithoutNewMemoryCode()
         {
-            NDArrayPythonInterop.RegisterArrayAdapter(DecliningArrayAdapter.Instance).Should().BeTrue();
-            NDArrayPythonInterop.RegisterArrayAdapter(CustomArrayAdapter.Instance).Should().BeTrue();
-            NDArrayPythonInterop.RegisterArrayAdapter(CustomArrayAdapter.Instance).Should().BeFalse(
+            PythonArrayAdapterRegistry.Register(DecliningArrayAdapter.Instance).Should().BeTrue();
+            PythonArrayAdapterRegistry.Register(CustomArrayAdapter.Instance).Should().BeTrue();
+            PythonArrayAdapterRegistry.Register(CustomArrayAdapter.Instance).Should().BeFalse(
                 "adapter registration is idempotent by name");
             PyExec(
                 "class NumSharpAdapterProbe:\n" +

@@ -81,7 +81,7 @@ the callable receives the implicitly encoded NumPy view. On return, `As<NDArray>
 Other libraries can register the same kind of front door without writing memory code:
 
 ```csharp
-NDArrayPythonInterop.RegisterArrayAdapter(myAdapter); // implements IPythonArrayAdapter
+PythonArrayAdapterRegistry.Register(myAdapter); // implements IPythonArrayAdapter
 ```
 
 The adapter returns a canonical buffer/NumPy object. `NDArrayPythonInterop` still owns dtype, shape,
