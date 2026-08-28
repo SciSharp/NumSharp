@@ -123,8 +123,19 @@ asymptotically + a micro-check that no hidden copy sneaks in):
   `bench.cs` after a rebuild reuses the STALE old DLL.
 - **git-stash before/after in the SAME session** — the only reliable improvement number; machine regime
   drifts hourly and cross-run ratios lie.
-- **Pin NumPy to one thread** (`OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1`) — NumPy
-  multi-threads BLAS by default (an unpinned dgemv hit 171 GB/s = impossible single-core).
+- **Pin EVERY threading backend to 1 — on BOTH sides — or the comparison is meaningless.** NumPy
+  multi-threads BLAS by default (an unpinned dgemv hit 171 GB/s = impossible single-core → your kernel
+  looks ~5× worse than it is), and the NumSharp OpenBLAS backend threads too (its result BITS depend on
+  the thread count, so >1 also breaks byte-parity gates). The full env set, exported **in the shell
+  before the process starts** (not via C# `Environment.SetEnvironmentVariable` — that never reaches a
+  native `getenv`): `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 BLIS_NUM_THREADS=1
+  NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 OMP_DYNAMIC=FALSE MKL_DYNAMIC=FALSE`. NumSharp-side:
+  leave `np.multithreading` OFF (default) and `OpenBlasEngine.Enable(threads: 1)` if the backend is on.
+  Full recipe: `references/measure-verify.md` → "Single-thread pinning".
+- **`#:property PublishAot=false` in every kernel-touching script** — without it `dotnet run` disables
+  `DynamicMethod`, so EVERY IL kernel (`GetPutKernel`, NDIter.Copy, casts, …) returns null and silently
+  falls back to a 10–17× slower scalar path — a "SetData bottleneck" that vanishes with the flag. Any
+  kernel-vs-scalar conclusion from an AOT script is invalid.
 - **SHORT benches, `GC.Collect()` between cases** — long combined benches contaminate later cases ~2×.
 
 Full playbook + harness: `references/measure-verify.md`.
