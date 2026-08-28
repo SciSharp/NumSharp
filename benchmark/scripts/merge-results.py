@@ -27,8 +27,10 @@ import sys
 import argparse
 import glob
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
+
+UNIVERSAL_TIERS = {1_000, 100_000, 10_000_000}
 
 @dataclass
 class UnifiedResult:
@@ -42,7 +44,7 @@ class UnifiedResult:
     numsharp_ms: Optional[float]
     ratio: Optional[float]  # NumPy / NumSharp  (>1.0× = NumSharp faster)
     pct_numpy: Optional[float]  # NumSharp/NumPy × 100 = share of NumPy's time NumSharp uses
-    status: str  # "faster", "close", "slower", "much_slower", "negligible", "no_data"
+    status: str  # "faster", "close", "slower", "much_slower", "negligible", "no_data", "failed"
     # Timing basis: numpy_ms/numsharp_ms above are each side's BEST WINDOW (min of its >=50
     # samples; >=20 when a round exceeds 10 ms). The per-case arithmetic means are retained
     # below as provenance — a large mean/min gap on one side flags interference (GC pauses,
@@ -63,12 +65,19 @@ def load_numpy_results(path: str) -> List[dict]:
         return json.load(f)
 
 
-def load_csharp_results(artifacts_dir: str) -> List[dict]:
-    """Load BenchmarkDotNet results from artifacts directory."""
+def load_csharp_results(artifacts_dir: str) -> Tuple[List[dict], List[dict]]:
+    """Load BenchmarkDotNet results from artifacts directory.
+
+    Returns ``(results, failures)``. ``failures`` are benchmarks that RAN but produced
+    no measurement — BenchmarkDotNet writes ``"Statistics": null`` when a benchmark
+    threw (OutOfMemory / exception) during its workload. Those are collected separately
+    so the caller can surface them (a crash is NOT the same as a benchmark that was
+    never run, and must never be silently dropped into a ⚪ "not run" cell)."""
     results = []
+    failures: List[dict] = []
     if not os.path.exists(artifacts_dir):
         print(f"Warning: C# artifacts not found at {artifacts_dir}")
-        return []
+        return results, failures
 
     # Find all *-report*.json files (including -full-compressed.json)
     for pattern in ["*-report.json", "*-report-full-compressed.json"]:
@@ -79,22 +88,65 @@ def load_csharp_results(artifacts_dir: str) -> List[dict]:
                     data = json.load(f)
                     if 'Benchmarks' in data:
                         for bench in data['Benchmarks']:
-                            result = parse_bdn_benchmark(bench)
+                            result = parse_bdn_benchmark(bench, failures)
                             if result:
                                 results.append(result)
             except Exception as e:
                 print(f"Warning: Failed to parse {json_file}: {e}")
 
-    return results
+    return results, failures
 
 
-def parse_bdn_benchmark(bench: dict) -> Optional[dict]:
-    """Parse a single BenchmarkDotNet benchmark result."""
+def validate_universal_tier_coverage(rows: List[dict], source: str) -> None:
+    """Reject the asymmetric 1K+100K-without-10M pattern in an official run.
+
+    A benchmark may deliberately publish only a scalar/1K tier, but once it publishes both Small
+    and Medium it is part of the universal cache-tier matrix and must also schedule Large. C#
+    failures are passed in as identity rows too, so a scheduled 10M crash remains a loud failure
+    rather than being misdiagnosed as a missing configuration.
+    """
+    groups: Dict[Tuple[str, str], set[int]] = {}
+    display: Dict[Tuple[str, str], str] = {}
+    for row in rows:
+        raw_name = str(row.get('name') or row.get('operation') or '')
+        dtype = str(row.get('dtype') or '').lower()
+        n = row.get('n')
+        if not raw_name or not dtype or n is None:
+            continue
+        identity = str(row.get('coverage_id') or
+                       f"{row.get('suite', '')}|{row.get('category', '')}|{raw_name}")
+        key = (identity, dtype)
+        groups.setdefault(key, set()).add(int(n))
+        display.setdefault(key, raw_name)
+
+    missing = sorted(
+        (display[key], key[1])
+        for key, tiers in groups.items()
+        if {1_000, 100_000}.issubset(tiers) and 10_000_000 not in tiers
+    )
+    if missing:
+        preview = ', '.join(f"{name} ({dtype})" for name, dtype in missing[:25])
+        suffix = '' if len(missing) <= 25 else f" (+{len(missing) - 25} more)"
+        raise RuntimeError(
+            f"{source} violates universal tier coverage: {len(missing)} operation/dtype group(s) "
+            f"have 1K and 100K but no 10M row: {preview}{suffix}")
+
+
+def parse_bdn_benchmark(bench: dict, failures: Optional[list] = None) -> Optional[dict]:
+    """Parse a single BenchmarkDotNet benchmark result.
+
+    A benchmark that CRASHED during its workload (OutOfMemory / exception) is emitted by
+    BenchmarkDotNet with ``"Statistics": null`` — it RAN but produced no timing. Detect that
+    explicitly and, when a ``failures`` list is supplied, record the benchmark's identity
+    (ident / op / dtype / N) so the caller can surface it. This replaces the old behaviour
+    where the null value tripped the generic ``except`` with a cryptic
+    "'NoneType' object has no attribute 'get'" warning and the row was silently dropped —
+    which then masqueraded as a ⚪ "C# benchmark not run" cell, indistinguishable from a
+    benchmark that was genuinely never run."""
     try:
         method = bench.get('Method', '')
         method_title = bench.get('MethodTitle', method)
         params = bench.get('Parameters', '')
-        stats = bench.get('Statistics', {})
 
         # Extract N and DType from parameters (format: "N=1000&DType=UInt16" or "N=1000, DType=UInt16")
         n = 10_000_000
@@ -109,6 +161,34 @@ def parse_bdn_benchmark(bench: dict) -> Optional[dict]:
                     n = int(part[2:])
                 elif part.startswith('DType='):
                     dtype = part[6:].lower()
+
+        # Map dtype to numpy names
+        dtype_map = {
+            'int32': 'int32', 'int64': 'int64', 'single': 'float32', 'double': 'float64',
+            'byte': 'uint8', 'uint16': 'uint16', 'uint32': 'uint32', 'uint64': 'uint64',
+            'int16': 'int16', 'boolean': 'bool', 'decimal': 'decimal',
+            'sbyte': 'int8', 'half': 'float16', 'complex': 'complex128'
+        }
+        dtype = dtype_map.get(dtype.lower(), dtype.lower())
+
+        # Clean up method title
+        operation = method_title.strip("'")
+
+        # A crashed / OOM'd benchmark: BenchmarkDotNet writes "Statistics": null (the workload
+        # threw, so there is no measurement). Record it as a FAILURE — a benchmark that RAN and
+        # failed is a real error, not a missing benchmark — and drop the row. The identity is
+        # captured here (op/dtype/N + BDN FullName) because the null Statistics carries no timing.
+        stats = bench.get('Statistics')
+        if not stats:
+            if failures is not None:
+                failures.append({
+                    'ident': bench.get('FullName') or f"{operation} [{params}]",
+                    'coverage_id': f"{bench.get('Type', '')}|{operation}",
+                    'name': operation,
+                    'dtype': dtype,
+                    'n': n,
+                })
+            return None
 
         # Keep ALL sizes (Small/Medium/Large) — the comparison is per-(op, dtype, N).
         # (Historically this dropped everything but N=10M, collapsing the report to a
@@ -127,19 +207,8 @@ def parse_bdn_benchmark(bench: dict) -> Optional[dict]:
         min_ns = stats.get('Min', 0)
         min_ms = min_ns / 1_000_000
 
-        # Map dtype to numpy names
-        dtype_map = {
-            'int32': 'int32', 'int64': 'int64', 'single': 'float32', 'double': 'float64',
-            'byte': 'uint8', 'uint16': 'uint16', 'uint32': 'uint32', 'uint64': 'uint64',
-            'int16': 'int16', 'boolean': 'bool', 'decimal': 'decimal',
-            'sbyte': 'int8', 'half': 'float16', 'complex': 'complex128'
-        }
-        dtype = dtype_map.get(dtype.lower(), dtype.lower())
-
-        # Clean up method title
-        operation = method_title.strip("'")
-
         return {
+            'coverage_id': f"{bench.get('Type', '')}|{operation}",
             'name': operation,
             'method': method,
             'dtype': dtype,
@@ -252,7 +321,8 @@ def get_status_icon(status: str) -> str:
         "slower": "🟠",
         "much_slower": "🔴",
         "negligible": "▫",
-        "no_data": "⚪"
+        "no_data": "⚪",
+        "failed": "❌"      # C# benchmark RAN but crashed/OOM'd (no measurement) — not "not run"
     }
     return icons.get(status, "⚪")
 
@@ -303,9 +373,21 @@ def normalize_op_name(name: str) -> str:
     return name
 
 
-def merge_results(numpy_results: List[dict], csharp_results: List[dict]) -> List[UnifiedResult]:
-    """Merge NumPy and C# results into unified comparison."""
+def merge_results(numpy_results: List[dict], csharp_results: List[dict],
+                  failures: Optional[List[dict]] = None) -> List[UnifiedResult]:
+    """Merge NumPy and C# results into unified comparison.
+
+    ``failures`` are C# benchmarks that RAN but crashed (no Statistics — see
+    load_csharp_results). A NumPy row whose matching C# cell crashed is marked
+    ``failed`` (❌) rather than ``no_data`` (⚪), so the report distinguishes a
+    benchmark that errored from one that was never run."""
     unified = []
+
+    # Index the crashed C# benchmarks by the SAME (op, dtype, N) key the join uses, so a
+    # NumPy row that lines up with a crash is labelled "failed" instead of "not run".
+    failed_index = set()
+    for f in (failures or []):
+        failed_index.add((normalize_op_name(f['name']), f['dtype'].lower(), f['n']))
 
     # Index C# results by (normalized_operation, dtype)
     csharp_index: Dict[tuple, dict] = {}
@@ -343,6 +425,10 @@ def merge_results(numpy_results: List[dict], csharp_results: List[dict]) -> List
         ratio = numpy_ms / numsharp_ms if (numsharp_ms and numsharp_ms > 0) else None         # NP/NS, >1 = faster
         pct = numsharp_ms / numpy_ms * 100 if (numsharp_ms is not None and numpy_ms > 0) else None  # share of NumPy time
         status = classify(numpy_ms, numsharp_ms, ratio)
+        # A crashed C# cell has no result (status == no_data), but it is a FAILURE, not a
+        # never-run cell — relabel so ❌ is never rendered as ⚪ "not run".
+        if status == "no_data" and key in failed_index:
+            status = "failed"
 
         unified.append(UnifiedResult(
             operation=name,
@@ -405,6 +491,7 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
     much_slower = sum(1 for r in results if r.status == 'much_slower')
     negligible = sum(1 for r in results if r.status == 'negligible')
     no_data = sum(1 for r in results if r.status == 'no_data')
+    failed = sum(1 for r in results if r.status == 'failed')
     total = len(results)
 
     lines = [
@@ -412,9 +499,11 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
         "",
         "**Baseline:** NumPy · measured across all array sizes (per-(op, dtype, N))",
         "",
-        "**Timing basis:** best window (min) of each side's ≥50 samples per case (≥20 when a round "
-        "exceeds 10 ms) — interference only adds time, so the fastest window estimates intrinsic cost; "
-        "per-case means are retained in the JSON (`numpy_mean_ms`/`numsharp_mean_ms`) as tail diagnostics.",
+        "**Timing basis:** best window (min) of each side's per-case sweep. Min-based harnesses (NumPy "
+        "op-matrix, subsystems, backends) run each case to a ~200 ms time budget — a >20 ms/call op runs "
+        "exactly 100 times — while the C# op-matrix keeps BenchmarkDotNet's 50 iterations; interference "
+        "only adds time, so the fastest window estimates intrinsic cost; per-case means are retained in "
+        "the JSON (`numpy_mean_ms`/`numsharp_mean_ms`) as tail diagnostics.",
         "",
         "**Ratio** = NumPy ÷ NumSharp → Higher is better (>1.0× = NumSharp faster)",
         "",
@@ -429,10 +518,12 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
         "|🔴| Slow | <0.2× | >500% | priority fix |",
         "|▫| Negligible | <1µs / >20× | — | too fast to compare — excluded from rankings |",
         "|⚪| Pending | - | — | C# benchmark not run |",
+        "|❌| Failed | - | — | C# benchmark ran but crashed/OOM'd (no measurement) |",
         "",
         "---",
         "",
-        f"**Summary:** {total} ops | ✅ {faster} | 🟡 {close} | 🟠 {slower} | 🔴 {much_slower} | ▫ {negligible} | ⚪ {no_data}",
+        f"**Summary:** {total} ops | ✅ {faster} | 🟡 {close} | 🟠 {slower} | 🔴 {much_slower} | ▫ {negligible} | ⚪ {no_data}"
+        + (f" | ❌ {failed}" if failed else ""),
         "",
     ]
 
@@ -447,13 +538,18 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
 
     lines.append("## Summary by size")
     lines.append("")
-    lines.append("| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ▫ negl | ⚪ n/a | geomean | %NP🕐 |")
-    lines.append("|---:|----:|--------:|--------:|---------:|------:|-----:|-----:|--------:|------:|")
+    # The ❌ fail column only appears when a benchmark crashed, so an ordinary clean run keeps
+    # the historical table shape (no permanent column of zeros).
+    fail_hdr = " ❌ fail |" if failed else ""
+    fail_sep = "-----:|" if failed else ""
+    lines.append("| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ▫ negl | ⚪ n/a |" + fail_hdr + " geomean | %NP🕐 |")
+    lines.append("|---:|----:|--------:|--------:|---------:|------:|-----:|-----:|" + fail_sep + "--------:|------:|")
     for n in sizes:
         rs = [r for r in results if r.n == n]
         gz = _geo([r.ratio for r in rs if r.status in CREDIBLE])   # credible rows only, NP/NS
         gz_s = f"{gz:.2f}x" if gz else "-"
         pz_s = pct_fmt(100.0 / gz) if gz else "-"
+        fail_cell = f" {sum(1 for r in rs if r.status == 'failed')} |" if failed else ""
         lines.append(
             f"| {n:,} | {len(rs)} "
             f"| {sum(1 for r in rs if r.status == 'faster')} "
@@ -461,7 +557,7 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
             f"| {sum(1 for r in rs if r.status == 'slower')} "
             f"| {sum(1 for r in rs if r.status == 'much_slower')} "
             f"| {sum(1 for r in rs if r.status == 'negligible')} "
-            f"| {sum(1 for r in rs if r.status == 'no_data')} | {gz_s} | {pz_s} |")
+            f"| {sum(1 for r in rs if r.status == 'no_data')} |" + fail_cell + f" {gz_s} | {pz_s} |")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -538,6 +634,8 @@ def main():
     parser.add_argument('--output', default='benchmark-report', help='Output file base name (without extension)')
     parser.add_argument('--format', choices=['all', 'json', 'csv', 'md'], default='all',
                        help='Output format(s)')
+    parser.add_argument('--require-universal-tiers', action='store_true',
+                        help='Fail when an operation/dtype has 1K and 100K rows but no 10M row')
     args = parser.parse_args()
 
     # Load results
@@ -546,12 +644,32 @@ def main():
     print(f"  Found {len(numpy_results)} NumPy results")
 
     print("Loading C# results...")
-    csharp_results = load_csharp_results(args.csharp)
+    csharp_results, csharp_failures = load_csharp_results(args.csharp)
     print(f"  Found {len(csharp_results)} C# results")
+
+    if args.require_universal_tiers:
+        validate_universal_tier_coverage(numpy_results, "NumPy profile")
+        validate_universal_tier_coverage(
+            csharp_results + [
+                {'coverage_id': row.get('coverage_id'), 'name': row['name'],
+                 'dtype': row['dtype'], 'n': row['n']}
+                for row in csharp_failures
+            ],
+            "C# profile")
+
+    # Surface crashed benchmarks LOUDLY. BenchmarkDotNet emits "Statistics": null for a
+    # benchmark whose workload threw (OutOfMemory / exception); those must never be silently
+    # dropped into a ⚪ "not run" cell — they are real errors and mask genuine coverage holes.
+    if csharp_failures:
+        print(f"\n  ❌ {len(csharp_failures)} C# benchmark(s) RAN BUT FAILED to measure "
+              f"(no Statistics — OOM/crash; NOT the same as 'not run'):")
+        for f in csharp_failures:
+            print(f"     ✗ {f['ident']}")
+        print()
 
     # Merge
     print("Merging results...")
-    unified = merge_results(numpy_results, csharp_results)
+    unified = merge_results(numpy_results, csharp_results, csharp_failures)
     print(f"  Generated {len(unified)} unified results")
 
     # Coverage check (P3): C# benchmarks that found NO NumPy counterpart at the same
@@ -583,7 +701,10 @@ def main():
     print(f"  🟠 Slower: {sum(1 for r in unified if r.status == 'slower')}")
     print(f"  🔴 Much slower: {sum(1 for r in unified if r.status == 'much_slower')}")
     print(f"  ▫  Negligible (excluded from rankings): {sum(1 for r in unified if r.status == 'negligible')}")
-    print(f"  ⚪ No data: {sum(1 for r in unified if r.status == 'no_data')}")
+    print(f"  ⚪ No data (C# not run): {sum(1 for r in unified if r.status == 'no_data')}")
+    failed_n = sum(1 for r in unified if r.status == 'failed')
+    if failed_n:
+        print(f"  ❌ Failed (C# ran but crashed/OOM'd): {failed_n}")
     print("=" * 60)
 
 

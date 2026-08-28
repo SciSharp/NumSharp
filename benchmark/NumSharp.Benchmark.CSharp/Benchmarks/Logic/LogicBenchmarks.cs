@@ -69,17 +69,18 @@ public class LogicBenchmarks : TypedBenchmarkBase
 }
 
 /// <summary>
-/// Tolerance comparisons allocate several simultaneous intermediates by definition. They are
-/// bounded to 100K elements; the former two-buffer deferred-release slope is now regression-gated
-/// by BufferReleaseSweepTests.
+/// Tolerance comparisons allocate several simultaneous intermediates by definition. They run at
+/// all universal tiers; the former two-buffer deferred-release slope is regression-gated by
+/// BufferReleaseSweepTests.
 /// </summary>
 [BenchmarkCategory("Logic", "Close")]
 public class CloseBenchmarks : TypedBenchmarkBase
 {
     private NDArray _a = null!;
     private NDArray _b = null!;
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [ParamsSource(nameof(Types))]
@@ -95,8 +96,8 @@ public class CloseBenchmarks : TypedBenchmarkBase
     [GlobalSetup]
     public void Setup()
     {
-        _a = CreateRandomArray(N, DType);
-        _b = CreateRandomArray(N, DType, seed: 43);
+        _a = CreateRandomArray(WorkN, DType);
+        _b = CreateRandomArray(WorkN, DType, seed: 43);
     }
 
     [GlobalCleanup]

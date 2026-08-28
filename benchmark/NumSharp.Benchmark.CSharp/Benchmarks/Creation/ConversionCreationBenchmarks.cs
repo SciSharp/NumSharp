@@ -6,8 +6,8 @@ using NumSharp.Benchmark.CSharp.Infrastructure;
 namespace NumSharp.Benchmark.CSharp.Benchmarks.Creation;
 
 /// <summary>
-/// Array conversion and structured creation APIs. Uses float64 and caps at 100K elements because
-/// text parsing, meshgrid, and Vandermonde construction are intentionally allocation-heavy.
+/// Array conversion and structured creation APIs. Uses float64 across the universal
+/// 1K / 100K / 10M workload tiers.
 /// </summary>
 [BenchmarkCategory("Creation", "Conversion")]
 public class ConversionCreationBenchmarks : BenchmarkBase
@@ -19,21 +19,22 @@ public class ConversionCreationBenchmarks : BenchmarkBase
     private byte[] _bytes = null!;
     private string _text = null!;
     private int _side;
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _source = np.random.rand(N) * 100;
-        _side = (int)Math.Sqrt(N);
+        _source = np.random.rand(WorkN) * 100;
+        _side = (int)Math.Sqrt(WorkN);
         _matrix = np.random.rand(_side * _side).reshape(_side, _side);
         _strided = _source["::2"];
         _axis = np.arange(_side).astype(np.float64);
-        _bytes = new byte[checked(N * sizeof(double))];
-        _text = string.Join(" ", Enumerable.Range(0, N)
+        _bytes = new byte[checked(WorkN * sizeof(double))];
+        _text = string.Join(" ", Enumerable.Range(0, WorkN)
             .Select(i => (i % 100).ToString(CultureInfo.InvariantCulture)));
     }
 

@@ -65,11 +65,11 @@ The benchmark suite provides fair, reproducible performance comparisons between 
 | API benchmark coverage | **456 / 456 benchmarkable compatibility APIs** (generated ledger in `benchmark/coverage/generated/`) |
 | Data Types | **15** (all NumSharp types) |
 | Comparison suites | **18** (the original 14 + fft, random, ndarray, api) |
-| Backend profiles | **2** — Managed C# and OpenBLAS, same schema, merged per exact cell |
+| Backend profiles | **2** — Managed C# and OpenBLAS; the complete official LinearAlgebra BDN suite runs in both, then targeted backend-only routes supplement it |
 | Complementary subsystems | **5** appended to every official run (nditer, layout, operand, cast, fusion) |
 | Array Sizes | **3** cache tiers in the official run (1K / 100K / 10M); the C# project also defines Scalar/100 |
 | Convention | **NPY/NS** — ratio = NumPy_ms / NumSharp_ms, **>1 = NumSharp faster** |
-| Timing basis | **best window (min)** — each side's fastest of its ≥50 samples per case (≥20 when a round exceeds 10 ms); per-case means retained in the JSON as tail diagnostics |
+| Timing basis | **best window (min)** — each side's fastest sample per case. Min-based harnesses (NumPy op-matrix, subsystems, backends) run each case to a ~200 ms time budget (a >20 ms/call op runs exactly 100 times); the C# op-matrix keeps BenchmarkDotNet's 50 iterations. Per-case means retained in the JSON as tail diagnostics |
 
 ---
 
@@ -118,7 +118,10 @@ benchmark/
 ├── NumSharp.Benchmark.Python/             # Python/NumPy benchmarks
 │   └── numpy_benchmark.py                 # NumPy benchmark implementation
 │
-└── NumSharp.Benchmark.CSharp/        # C# BenchmarkDotNet project
+├── NumSharp.Benchmark.OpenBLAS/            # OpenBLAS official LinearAlgebra BDN runner
+│   └── Program.cs                          # Enables one-thread OpenBLAS, reuses shared classes/config
+│
+└── NumSharp.Benchmark.CSharp/              # Core-only C# BenchmarkDotNet project + shared benchmark assembly
     ├── README.md                          # C# benchmark documentation
     ├── Program.cs                         # Entry point with interactive menu
     ├── NumSharp.Benchmark.CSharp.csproj
@@ -313,6 +316,13 @@ public static class ArraySizeSource
 }
 ```
 
+**Universal-tier contract:** any operation/dtype group that schedules both `Small` and `Medium`
+must also schedule `Large`. `merge-results.py --require-universal-tiers` enforces this independently
+for the NumPy and C# profiles; a scalar/Small-only dispatch case is allowed, while the historical
+`Small, Medium` shortcut is not. The formerly capped allocation-heavy classes use
+`ArraySizeSource.ResolveMemoryHeavyWorkload`: their `Large` parameter/report key stays 10M, but both
+language bodies operate on 1M physical elements. Do not add 1M as a dashboard tier.
+
 ---
 
 ## Benchmark Categories
@@ -433,9 +443,15 @@ These suites were added on top of the original set; each has a NumPy twin in `nu
 
 ### Backend profiles and complementary subsystems
 
-Beyond the op-matrix categories, the official run measures all 39 backend-sensitive APIs under
-Managed C# and OpenBLAS (`benchmark/backends/`), records MissingBackendException and
-NotSupportedException as availability, and merges the fastest valid exact-cell result. It then
+The official LinearAlgebra BenchmarkDotNet classes execute twice: the Core-only project is the Managed
+profile, while `NumSharp.Benchmark.OpenBLAS` enables one-thread OpenBLAS and discovers the same shared
+classes with the same `OfficialBenchmarkConfig`. `merge-backend-profiles.py` refuses publication when
+any measured Managed LinearAlgebra exact cell lacks an available OpenBLAS-profile peer. The targeted
+`benchmark/backends/` harness then supplements product/LAPACK routes outside the official op matrix,
+records MissingBackendException and NotSupportedException as availability, and merges the fastest valid
+exact-cell result. Every profile publishes `1K / 100K / 10M`; physical work remains operation-specific
+and bounded (LAPACK maps those tiers to matrix sides `32 / 96 / 128`). Controls that never dispatch to
+`TensorEngine.Blas` retain `actual_backend: managed` even in the OpenBLAS process. The run finally
 appends five independent result models: `nditer`, `layout`, `operand`, `cast`, and `fusion`.
 
 ---
@@ -643,11 +659,12 @@ The C# side runs under `OfficialBenchmarkConfig` (Infrastructure/BenchmarkConfig
   enough to move the credible-row geomean **0.86 → 0.99 from the same raw data**), so comparing
   means turned machine state into fake ratio regressions. Per-case means are retained in the JSON
   (`numpy_mean_ms`/`numsharp_mean_ms`) — a large mean/min gap on one side flags a contaminated
-  measurement window. The **sample-count rule** backing the min — ≥50 timed rounds per case,
-  relaxed to ≥20 when one round exceeds 10 ms — is enforced across every harness: the BDN job
-  (50 iterations), `numpy_benchmark.benchmark()` (floors even `--quick`), and the subsystem /
-  backend best-of helpers (layout / operand / cast / fusion / nditer / backends), whose rounds
-  auto-size to ~1 ms windows with the callers' tuned counts surviving as floors. Note min cannot
+  measurement window. The **min-time rule** backing the min is time-budgeted, not a fixed sample
+  count: every min-based harness — `numpy_benchmark.benchmark()` and the subsystem / backend
+  best-of helpers (layout / operand / cast / fusion / nditer / backends) — runs each case to a
+  ~200 ms total window, auto-sizing ~1 ms batched windows for fast ops (a call >20 ms/call runs
+  EXACTLY 100 times instead). The C# op-matrix keeps BenchmarkDotNet's fixed 50 iterations / 25 ms
+  cap (`OfficialBenchmarkConfig`, unchanged). Note min cannot
   rescue stress that outlasts a whole case (~seconds) — a uniformly slow window inflates the min
   too; that regime is only catchable by re-measuring against a reference (see the contamination
   notes in `benchmark/history/` MANIFESTs).

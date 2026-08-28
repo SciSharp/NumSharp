@@ -5,8 +5,7 @@ using NumSharp.Benchmark.CSharp.Infrastructure;
 namespace NumSharp.Benchmark.CSharp.Benchmarks.Selection;
 
 /// <summary>
-/// The public indexing/selection family beyond where(). Expensive materialization cases stop at
-/// 100K elements so this coverage does not turn the official suite into a multi-hour copy loop.
+/// The public indexing/selection family beyond where(), measured at all universal workload tiers.
 /// </summary>
 [BenchmarkCategory("Selection", "Indexing")]
 public class IndexingSelectionBenchmarks : BenchmarkBase
@@ -22,21 +21,22 @@ public class IndexingSelectionBenchmarks : BenchmarkBase
     private NDArray _placeTarget = null!;
     private NDArray _placeValues = null!;
     private int _side;
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _a = np.random.rand(N) * 100 - 50;
-        _b = np.random.rand(N) * 100 - 50;
+        _a = np.random.rand(WorkN) * 100 - 50;
+        _b = np.random.rand(WorkN) * 100 - 50;
         _mask = _a > 0.0;
         _negativeMask = _a < 0.0;
-        _indices = np.arange(0, N, 2);
-        _selector = np.random.randint(0, 2, new Shape(N));
-        _side = (int)Math.Sqrt(N);
+        _indices = np.arange(0, WorkN, 2);
+        _selector = np.random.randint(0, 2, new Shape(WorkN));
+        _side = (int)Math.Sqrt(WorkN);
         _matrix = np.arange(_side * _side).reshape(_side, _side);
         _putTarget = _a.copy();
         _placeTarget = _a.copy();
@@ -73,6 +73,6 @@ public class IndexingSelectionBenchmarks : BenchmarkBase
     [Benchmark(Description = "np.triu_indices_from(a)")] public object TriuIndicesFrom() => np.triu_indices_from(_matrix);
     [Benchmark(Description = "np.mask_indices(n, triu)")] public object MaskIndices() => np.mask_indices(_side, (x, k) => np.triu(x, k));
     [Benchmark(Description = "np.indices(shape)")] public NDArray Indices() => np.indices(new[] { _side, _side });
-    [Benchmark(Description = "np.ravel_multi_index(coords, dims)")] public NDArray RavelMultiIndex() => np.ravel_multi_index(new[] { _indices }, new[] { N });
-    [Benchmark(Description = "np.unravel_index(indices, shape)")] public object UnravelIndex() => np.unravel_index(_indices, new[] { N });
+    [Benchmark(Description = "np.ravel_multi_index(coords, dims)")] public NDArray RavelMultiIndex() => np.ravel_multi_index(new[] { _indices }, new[] { WorkN });
+    [Benchmark(Description = "np.unravel_index(indices, shape)")] public object UnravelIndex() => np.unravel_index(_indices, new[] { WorkN });
 }

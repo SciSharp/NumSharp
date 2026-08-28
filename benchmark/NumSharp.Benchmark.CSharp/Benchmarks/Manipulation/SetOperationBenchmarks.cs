@@ -10,8 +10,9 @@ public class SetOperationBenchmarks : TypedBenchmarkBase
 {
     private NDArray _a = null!;
     private NDArray _b = null!;
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [ParamsSource(nameof(Types))]
@@ -23,8 +24,8 @@ public class SetOperationBenchmarks : TypedBenchmarkBase
     public void Setup()
     {
         np.random.seed(Seed);
-        _a = np.random.randint(0, Math.Max(2, N / 2), new Shape(N));
-        _b = np.random.randint(0, Math.Max(2, N / 2), new Shape(N));
+        _a = np.random.randint(0, Math.Max(2, WorkN / 2), new Shape(WorkN));
+        _b = np.random.randint(0, Math.Max(2, WorkN / 2), new Shape(WorkN));
     }
 
     [GlobalCleanup]

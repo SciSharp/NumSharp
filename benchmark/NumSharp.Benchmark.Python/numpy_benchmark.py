@@ -55,6 +55,13 @@ ARRAY_SIZES = {
     'large': 10_000_000    # Memory-bound, throughput measurement
 }
 
+# Physical cap for allocation-heavy families that still publish under the universal 10M tier.
+# The reported/join key remains n=10_000_000; this helper changes only the arrays used by the body.
+MEMORY_HEAVY_LARGE_WORKLOAD = 1_000_000
+
+def memory_heavy_work_n(tier_n: int) -> int:
+    return MEMORY_HEAVY_LARGE_WORKLOAD if tier_n == ARRAY_SIZES['large'] else tier_n
+
 # NumPy dtypes matching NumSharp's 12 supported types
 DTYPES = {
     'bool': np.bool_,
@@ -104,21 +111,19 @@ class BenchmarkResult:
 
 def benchmark(func: Callable, n: int, warmup: int = 10, iterations: int = 50,
               min_measure_ms: float = 1.0, pilot_ms: float = 0.3) -> BenchmarkResult:
-    """Run a benchmark with warmup, per-test adaptive batching, and statistical analysis.
+    """Run a benchmark with warmup, per-test adaptive batching, and a MIN-TIME budget.
 
-    Fixed methodology (across the fast-vs-slow op spectrum):
-      * ALWAYS >= ``iterations`` (50) timed samples — never fewer, and never a single one,
-        even for a >1 ms/call op (which under a raw time budget used to collapse toward one
-        measurement).
-      * Each sample batches ``inner`` calls — a count computed PER TEST (never fixed) — so the
-        TOTAL measurement window spans >= ``min_measure_ms`` (~1 ms). A sub-µs op therefore
-        runs tens of thousands of times (batched) instead of 50 timer-dominated single calls
-        that would total far under 1 ms; a >1 ms/call op does ``inner`` == 1, i.e. exactly
-        ``iterations`` real calls.
-    Per-call cost is first estimated with a GROWING PILOT batch — a single calibration call is
-    too noisy for a sub-µs op (its lone perf_counter pair is mostly timer overhead). Reported
-    ``iterations`` is the TOTAL calls executed (samples x inner): 50 for a slow op, large for
-    a fast one ("enough to reach 1 ms").
+    Min-time methodology (time-bound, NOT a fixed iteration count):
+      * A slow op (>20 ms/call) runs EXACTLY ``slow_samples`` real calls (min over them).
+      * Every other op batches ``inner`` calls per sample — a count computed PER TEST — so each
+        sample spans >= ``min_measure_ms`` (~1 ms), and takes as many samples as needed for the
+        TOTAL measurement window to span ``total_ms``. A sub-µs op therefore runs hundreds of
+        thousands of times (batched); a ~5 ms/call op does ``inner`` == 1 for ~40 real calls.
+    ``total_ms`` and ``slow_samples`` scale off ``iterations`` (50 -> 200 ms / 100 samples ;
+    10 -> 40 ms / 20), so the official run hits the 200 ms / 100-sample floor while --quick stays
+    a fast dev sweep. Per-call cost is first estimated with a GROWING PILOT batch — a single
+    calibration call is too noisy for a sub-µs op (its lone perf_counter pair is mostly timer
+    overhead). Reported ``iterations`` is the TOTAL calls executed (samples x inner).
     """
     # Warmup
     for _ in range(warmup):
@@ -136,20 +141,18 @@ def benchmark(func: Callable, n: int, warmup: int = 10, iterations: int = 50,
         pilot_n *= 4
     one_ms = dt / pilot_n if (pilot_n and dt > 0) else 1e-9
 
-    samples = max(1, iterations)                                    # >= 50 timed samples (never 1)
-    # Sample-count rule: >=50 timed samples ALWAYS; when a single call exceeds 10 ms (the inner==1
-    # regime, where each sample is one real call) the floor relaxes to >=20. The official run already
-    # passes iterations=50; this floors --quick and any other caller below the rule so min_ms — the
-    # statistic merge-results.py publishes — always rests on enough windows to catch a clean one.
-    samples = max(samples, 20 if one_ms > 10.0 else 50)
-    # inner calls/sample so the `samples` samples span >= min_measure_ms total. Per test:
-    #   fast op -> inner >> 1 (batched to ~min_measure_ms/samples per sample);
-    #   slow op (>~min_measure_ms/samples per call) -> inner == 1 (each sample is one real call).
-    # SAFETY (>1) aims a bit above the target: the pilot slightly OVER-estimates per-call cost
-    # (its early small batches aren't fully warm), which would shrink inner and land the ACTUAL
-    # window just under 1 ms — the margin makes ">= min_measure_ms" hold in practice.
-    SAFETY = 1.5
-    inner = max(1, math.ceil((min_measure_ms * SAFETY / samples) / one_ms))
+    # Min-time policy (repo perf convention): a call >20 ms/call runs EXACTLY `slow_samples` times
+    # (each sample is one real call); everything else batches ~min_measure_ms (>=1 ms) windows and
+    # accumulates enough of them for the TOTAL window to span `total_ms` — time-bound, not a fixed
+    # sample count. Both budgets scale off `iterations` so the official run (iterations=50) lands on
+    # the 200 ms / 100-sample floor while --quick (iterations=10) stays a fast 40 ms / 20-sample sweep.
+    total_ms = max(1.0, iterations * 4.0)              # 50 -> 200 ms ; 10 -> 40 ms
+    slow_samples = max(2, iterations * 2)              # 50 -> 100    ; 10 -> 20
+    if one_ms > 20.0:
+        inner, samples = 1, slow_samples
+    else:
+        inner = max(1, math.ceil(min_measure_ms / one_ms))          # ~min_measure_ms (>=1 ms) window
+        samples = max(2, math.ceil(total_ms / (inner * one_ms)))    # enough windows to span total_ms
 
     # Timed runs
     times = []
@@ -595,25 +598,31 @@ def run_reduction_benchmarks(n: int, dtype_name: str, iterations: int) -> List[B
 
     # Var/Std (float only for accuracy)
     if np.issubdtype(DTYPES[dtype_name], np.floating):
-        def np_var(): return np.var(a)
-        r = benchmark(np_var, n, iterations=iterations)
-        r.name, r.category, r.suite, r.dtype = f"np.var ({dtype_name})", "VarStd", "Reduction", dtype_name
-        results.append(r)
+        # float16 var/std sum SQUARED deviations — all positive, so (unlike the mean, whose terms
+        # cancel) the float16 accumulator (max 65504) saturates to +inf for these [-50,50) magnitudes
+        # at every N (sum-of-squares ~= 833*N). NumSharp widens Half reductions to f32 and stays finite
+        # (~833); the kernel streams all N either way, so the TIMING is identical — we only silence
+        # NumPy's benign overflow RuntimeWarning. (float32/float64 never overflow; nothing else does.)
+        with np.errstate(over='ignore'):
+            def np_var(): return np.var(a)
+            r = benchmark(np_var, n, iterations=iterations)
+            r.name, r.category, r.suite, r.dtype = f"np.var ({dtype_name})", "VarStd", "Reduction", dtype_name
+            results.append(r)
 
-        def method_var(): return a.var()
-        r = benchmark(method_var, n, iterations=iterations)
-        r.name, r.category, r.suite, r.dtype = f"a.var() [method] ({dtype_name})", "VarStd", "Reduction", dtype_name
-        results.append(r)
+            def method_var(): return a.var()
+            r = benchmark(method_var, n, iterations=iterations)
+            r.name, r.category, r.suite, r.dtype = f"a.var() [method] ({dtype_name})", "VarStd", "Reduction", dtype_name
+            results.append(r)
 
-        def np_std(): return np.std(a)
-        r = benchmark(np_std, n, iterations=iterations)
-        r.name, r.category, r.suite, r.dtype = f"np.std ({dtype_name})", "VarStd", "Reduction", dtype_name
-        results.append(r)
+            def np_std(): return np.std(a)
+            r = benchmark(np_std, n, iterations=iterations)
+            r.name, r.category, r.suite, r.dtype = f"np.std ({dtype_name})", "VarStd", "Reduction", dtype_name
+            results.append(r)
 
-        def method_std(): return a.std()
-        r = benchmark(method_std, n, iterations=iterations)
-        r.name, r.category, r.suite, r.dtype = f"a.std() [method] ({dtype_name})", "VarStd", "Reduction", dtype_name
-        results.append(r)
+            def method_std(): return a.std()
+            r = benchmark(method_std, n, iterations=iterations)
+            r.name, r.category, r.suite, r.dtype = f"a.std() [method] ({dtype_name})", "VarStd", "Reduction", dtype_name
+            results.append(r)
 
     # Min/Max
     def np_amin(): return np.amin(a)
@@ -686,15 +695,18 @@ def run_reduction_benchmarks(n: int, dtype_name: str, iterations: int) -> List[B
 
     # Axis var/std (mirror C# VarStdBenchmarks axis variants) — float only.
     if np.issubdtype(DTYPES[dtype_name], np.floating):
-        def np_var_axis0(): return np.var(a_2d, axis=0)
-        r = benchmark(np_var_axis0, n, iterations=iterations)
-        r.name, r.category, r.suite, r.dtype = f"np.var axis=0 ({dtype_name})", "VarStd", "Reduction", dtype_name
-        results.append(r)
+        # Same float16 sum-of-squares saturation as the flat var/std above — silence the benign
+        # overflow; the per-column reductions still time identically (see note above).
+        with np.errstate(over='ignore'):
+            def np_var_axis0(): return np.var(a_2d, axis=0)
+            r = benchmark(np_var_axis0, n, iterations=iterations)
+            r.name, r.category, r.suite, r.dtype = f"np.var axis=0 ({dtype_name})", "VarStd", "Reduction", dtype_name
+            results.append(r)
 
-        def np_std_axis0(): return np.std(a_2d, axis=0)
-        r = benchmark(np_std_axis0, n, iterations=iterations)
-        r.name, r.category, r.suite, r.dtype = f"np.std axis=0 ({dtype_name})", "VarStd", "Reduction", dtype_name
-        results.append(r)
+            def np_std_axis0(): return np.std(a_2d, axis=0)
+            r = benchmark(np_std_axis0, n, iterations=iterations)
+            r.name, r.category, r.suite, r.dtype = f"np.std axis=0 ({dtype_name})", "VarStd", "Reduction", dtype_name
+            results.append(r)
 
     return results
 
@@ -841,21 +853,23 @@ def run_creation_benchmarks(n: int, dtype_name: str, iterations: int) -> List[Be
     r.name, r.category, r.suite, r.dtype = f"np.full_like(a, 42) ({dtype_name})", "Like", "Creation", dtype_name
     results.append(r)
 
-    if dtype_name == "float64" and n <= ARRAY_SIZES["medium"]:
-        side = int(n ** 0.5)
+    if dtype_name == "float64" and n <= ARRAY_SIZES["large"]:
+        work_n = memory_heavy_work_n(n)
+        conversion_source = create_random_array(work_n, dtype_name)
+        side = int(work_n ** 0.5)
         matrix = np.random.random(side * side).reshape(side, side)
-        strided = source[::2]
+        strided = conversion_source[::2]
         axis = np.arange(side, dtype=np.float64)
-        buffer = bytearray(n * np.dtype(np.float64).itemsize)
-        text = " ".join(str(i % 100) for i in range(n))
+        buffer = bytearray(work_n * np.dtype(np.float64).itemsize)
+        text = " ".join(str(i % 100) for i in range(work_n))
         conversion_cases = [
-            ("np.array(a)", lambda: np.array(source)),
-            ("np.asarray(a)", lambda: np.asarray(source)),
-            ("np.asanyarray(a)", lambda: np.asanyarray(source)),
-            ("np.asarray_chkfinite(a)", lambda: np.asarray_chkfinite(source)),
+            ("np.array(a)", lambda: np.array(conversion_source)),
+            ("np.asarray(a)", lambda: np.asarray(conversion_source)),
+            ("np.asanyarray(a)", lambda: np.asanyarray(conversion_source)),
+            ("np.asarray_chkfinite(a)", lambda: np.asarray_chkfinite(conversion_source)),
             ("np.ascontiguousarray(a)", lambda: np.ascontiguousarray(strided)),
             ("np.asfortranarray(a)", lambda: np.asfortranarray(matrix)),
-            ("np.asmatrix(a)", lambda: np.asmatrix(source)),
+            ("np.asmatrix(a)", lambda: np.asmatrix(conversion_source)),
             ("np.require(a, requirements=C)", lambda: np.require(strided, requirements=["C"])),
             ("np.frombuffer(buffer)", lambda: np.frombuffer(buffer, dtype=np.float64)),
             ("np.fromstring(text)", lambda: np.fromstring(text, dtype=np.float64, sep=" ")),
@@ -956,20 +970,25 @@ def run_manipulation_benchmarks(n: int, iterations: int) -> List[BenchmarkResult
     for name, func in dim_cases:
         results.append(_b(func, n, iterations, name, "Manipulation", dtype_name, "Dims"))
 
-    # Stack
-    arr_1d_b = np.random.random(actual_n) * 100  # Same size as arr_1d
-
-    if n <= ARRAY_SIZES["medium"]:
+    # Stack — the universal 10M tier uses 1M physical elements for this allocation-heavy family.
+    if n <= ARRAY_SIZES["large"]:
+        stack_n = memory_heavy_work_n(n)
+        stack_rows = int(np.sqrt(stack_n))
+        stack_cols = stack_n // stack_rows
+        stack_actual_n = stack_rows * stack_cols
+        stack_1d_a = np.random.random(stack_actual_n) * 100
+        stack_1d_b = np.random.random(stack_actual_n) * 100
+        stack_2d = np.random.random((stack_rows, stack_cols)) * 100
         stack_cases = [
-            ("np.concatenate([a, b])", lambda: np.concatenate([arr_1d, arr_1d_b])),
-            ("np.concatenate([a, b, c])", lambda: np.concatenate([arr_1d, arr_1d_b, arr_1d])),
-            ("np.concatenate([a, b], axis=0)", lambda: np.concatenate([arr_2d, arr_2d], axis=0)),
-            ("np.concatenate([a, b], axis=1)", lambda: np.concatenate([arr_2d, arr_2d], axis=1)),
-            ("np.stack([a, b])", lambda: np.stack([arr_1d, arr_1d_b])),
-            ("np.stack([a, b], axis=1)", lambda: np.stack([arr_1d, arr_1d_b], axis=1)),
-            ("np.hstack([a, b])", lambda: np.hstack([arr_1d, arr_1d_b])),
-            ("np.vstack([a, b])", lambda: np.vstack([arr_1d, arr_1d_b])),
-            ("np.dstack([a, b])", lambda: np.dstack([arr_2d, arr_2d])),
+            ("np.concatenate([a, b])", lambda: np.concatenate([stack_1d_a, stack_1d_b])),
+            ("np.concatenate([a, b, c])", lambda: np.concatenate([stack_1d_a, stack_1d_b, stack_1d_a])),
+            ("np.concatenate([a, b], axis=0)", lambda: np.concatenate([stack_2d, stack_2d], axis=0)),
+            ("np.concatenate([a, b], axis=1)", lambda: np.concatenate([stack_2d, stack_2d], axis=1)),
+            ("np.stack([a, b])", lambda: np.stack([stack_1d_a, stack_1d_b])),
+            ("np.stack([a, b], axis=1)", lambda: np.stack([stack_1d_a, stack_1d_b], axis=1)),
+            ("np.hstack([a, b])", lambda: np.hstack([stack_1d_a, stack_1d_b])),
+            ("np.vstack([a, b])", lambda: np.vstack([stack_1d_a, stack_1d_b])),
+            ("np.dstack([a, b])", lambda: np.dstack([stack_2d, stack_2d])),
         ]
         for name, func in stack_cases:
             results.append(_b(func, n, iterations, name, "Manipulation", dtype_name, "Stack"))
@@ -1115,10 +1134,11 @@ def run_manipulation_benchmarks(n: int, iterations: int) -> List[BenchmarkResult
     r.name, r.category, r.suite, r.dtype = "np.ix_", "IndexTricks", "Manipulation", dtype_name
     results.append(r)
 
-    if n <= ARRAY_SIZES["medium"]:
+    if n <= ARRAY_SIZES["large"]:
+        work_n = memory_heavy_work_n(n)
         np.random.seed(42)
-        set_a = np.random.randint(0, max(2, n // 2), n, dtype=np.int32)
-        set_b = np.random.randint(0, max(2, n // 2), n, dtype=np.int32)
+        set_a = np.random.randint(0, max(2, work_n // 2), work_n, dtype=np.int32)
+        set_b = np.random.randint(0, max(2, work_n // 2), work_n, dtype=np.int32)
         set_cases = [
             ("np.intersect1d(a, b)", lambda: np.intersect1d(set_a, set_b)),
             ("np.isin(a, b)", lambda: np.isin(set_a, set_b)),
@@ -1134,11 +1154,11 @@ def run_manipulation_benchmarks(n: int, iterations: int) -> List[BenchmarkResult
         for name, func in set_cases:
             results.append(_b(func, n, iterations, name, "Manipulation", "int32", "SetOperations"))
 
-        shape_a = np.random.random(n)
-        shape_b = np.random.random(n)
-        shape_matrix = np.random.random(n).reshape(10, n // 10)
-        shape_cube = np.random.random(n).reshape(10, 10, n // 100)
-        shape_row = np.arange(n // 10, dtype=np.float64)
+        shape_a = np.random.random(work_n)
+        shape_b = np.random.random(work_n)
+        shape_matrix = np.random.random(work_n).reshape(10, work_n // 10)
+        shape_cube = np.random.random(work_n).reshape(10, 10, work_n // 100)
+        shape_row = np.arange(work_n // 10, dtype=np.float64)
         shape_cases = [
             ("np.append(a, b)", lambda: np.append(shape_a, shape_b)),
             ("np.array_split(a, sections)", lambda: np.array_split(shape_a, 7)),
@@ -1149,16 +1169,16 @@ def run_manipulation_benchmarks(n: int, iterations: int) -> List[BenchmarkResult
             ("np.broadcast_arrays(a, b)", lambda: np.broadcast_arrays(shape_matrix, shape_row)),
             ("np.column_stack((a, b))", lambda: np.column_stack((shape_a, shape_b))),
             ("np.concat((a, b))", lambda: np.concat((shape_a, shape_b))),
-            ("np.delete(a, index)", lambda: np.delete(shape_a, n // 2)),
-            ("np.insert(a, index, value)", lambda: np.insert(shape_a, n // 2, 0.0)),
+            ("np.delete(a, index)", lambda: np.delete(shape_a, work_n // 2)),
+            ("np.insert(a, index, value)", lambda: np.insert(shape_a, work_n // 2, 0.0)),
             ("np.dsplit(a, sections)", lambda: np.dsplit(shape_cube, 10)),
             ("np.hsplit(a, sections)", lambda: np.hsplit(shape_matrix, 10)),
             ("np.vsplit(a, sections)", lambda: np.vsplit(shape_matrix, 10)),
             ("np.split(a, sections)", lambda: np.split(shape_a, 10)),
             ("np.pad(a, width)", lambda: np.pad(shape_a, 16)),
             ("np.repeat(a, repeats)", lambda: np.repeat(shape_a, 2)),
-            ("np.resize(a, shape)", lambda: np.resize(shape_a, n * 2)),
-            ("np.roll(a, shift)", lambda: np.roll(shape_a, n // 2)),
+            ("np.resize(a, shape)", lambda: np.resize(shape_a, work_n * 2)),
+            ("np.roll(a, shift)", lambda: np.roll(shape_a, work_n // 2)),
             ("np.size(a)", lambda: np.size(shape_a)),
             ("np.tile(a, reps)", lambda: np.tile(shape_a, 2)),
             ("np.unstack(a)", lambda: np.unstack(shape_matrix)),
@@ -1290,7 +1310,7 @@ def run_dispatch_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.suite = "Dispatch"
     r.dtype = "int32"
     results.append(r)
-    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms (±{r.stddev_ms:.3f})")
+    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms (±{r.stddev_ms:.3f})")
 
     # Operator syntax (allocates new array)
     def numpy_operator():
@@ -1301,7 +1321,7 @@ def run_dispatch_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.suite = "Dispatch"
     r.dtype = "int32"
     results.append(r)
-    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms (±{r.stddev_ms:.3f})")
+    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms (±{r.stddev_ms:.3f})")
 
     # Scalar broadcast
     scalar = b[0]
@@ -1313,7 +1333,7 @@ def run_dispatch_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.suite = "Dispatch"
     r.dtype = "int32"
     results.append(r)
-    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms (±{r.stddev_ms:.3f})")
+    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms (±{r.stddev_ms:.3f})")
 
     return results
 
@@ -1345,7 +1365,7 @@ def run_fusion_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.suite = "Fusion"
     r.dtype = "float64"
     results.append(r)
-    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
 
     # Pattern 2: c = a*a + 2*b
     print("\n  --- Pattern 2: c = a*a + 2*b ---")
@@ -1357,7 +1377,7 @@ def run_fusion_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.suite = "Fusion"
     r.dtype = "float64"
     results.append(r)
-    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
 
     # Pattern 3: variance
     print("\n  --- Pattern 3: variance ---")
@@ -1369,7 +1389,7 @@ def run_fusion_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.suite = "Fusion"
     r.dtype = "float64"
     results.append(r)
-    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
 
     def p3_optimized():
         return np.var(a)
@@ -1379,7 +1399,7 @@ def run_fusion_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.suite = "Fusion"
     r.dtype = "float64"
     results.append(r)
-    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
 
     # Pattern 4: polynomial a³ + a² + a
     print("\n  --- Pattern 4: c = a³ + a² + a ---")
@@ -1391,7 +1411,7 @@ def run_fusion_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.suite = "Fusion"
     r.dtype = "float64"
     results.append(r)
-    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
 
     def p4_multiply():
         return a*a*a + a*a + a
@@ -1401,7 +1421,7 @@ def run_fusion_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.suite = "Fusion"
     r.dtype = "float64"
     results.append(r)
-    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
 
     # Pattern 5: euclidean sqrt(a² + b²)
     print("\n  --- Pattern 5: c = sqrt(a² + b²) ---")
@@ -1413,7 +1433,7 @@ def run_fusion_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.suite = "Fusion"
     r.dtype = "float64"
     results.append(r)
-    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
 
     def p5_hypot():
         return np.hypot(a, b)
@@ -1423,7 +1443,7 @@ def run_fusion_benchmarks(n: int, iterations: int) -> List[BenchmarkResult]:
     r.suite = "Fusion"
     r.dtype = "float64"
     results.append(r)
-    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
 
     return results
 
@@ -1533,10 +1553,13 @@ def run_logic_benchmarks(n, dtype_name, iterations):
         _b(lambda: np.isfortran(a), n, iterations, "np.isfortran(a)", "Logic", dtype_name),
         _b(lambda: np.array_equal(a, b), n, iterations, "np.array_equal(a, b)", "Logic", dtype_name),
     ]
-    if n <= ARRAY_SIZES["medium"]:
+    if n <= ARRAY_SIZES["large"]:
+        close_n = memory_heavy_work_n(n)
+        close_a = a[:close_n]
+        close_b = b[:close_n]
         rows.extend([
-            _b(lambda: np.isclose(a, b), n, iterations, "np.isclose(a, b)", "Logic", dtype_name, "Close"),
-            _b(lambda: np.allclose(a, b), n, iterations, "np.allclose(a, b)", "Logic", dtype_name, "Close"),
+            _b(lambda: np.isclose(close_a, close_b), n, iterations, "np.isclose(a, b)", "Logic", dtype_name, "Close"),
+            _b(lambda: np.allclose(close_a, close_b), n, iterations, "np.allclose(a, b)", "Logic", dtype_name, "Close"),
         ])
     return rows
 
@@ -1562,20 +1585,25 @@ def run_nan_reduction_benchmarks(n, dtype_name, iterations):
     # so the product stays finite, mirroring the C# NanReductionBenchmarks._aProd (and ProdBenchmarks).
     np.random.seed(42)
     a_prod = (np.random.rand(n) * 0.5 + 0.5).astype(DTYPES[dtype_name])
-    return [
-        _b(lambda: np.nansum(a), n, iterations, "np.nansum(a)", "Reduction", dtype_name),
-        _b(lambda: np.nanmean(a), n, iterations, "np.nanmean(a)", "Reduction", dtype_name),
-        _b(lambda: np.nanmax(a), n, iterations, "np.nanmax(a)", "Reduction", dtype_name),
-        _b(lambda: np.nanmin(a), n, iterations, "np.nanmin(a)", "Reduction", dtype_name),
-        _b(lambda: np.nanstd(a), n, iterations, "np.nanstd(a)", "Reduction", dtype_name),
-        _b(lambda: np.nanvar(a), n, iterations, "np.nanvar(a)", "Reduction", dtype_name),
-        _b(lambda: np.nanprod(a_prod), n, iterations, "np.nanprod(a)", "Reduction", dtype_name),
-        _b(lambda: np.nanmedian(a), n, iterations, "np.nanmedian(a)", "Reduction", dtype_name),
-        _b(lambda: np.nanpercentile(a, 50), n, iterations, "np.nanpercentile(a, 50)", "Reduction", dtype_name),
-        _b(lambda: np.nanquantile(a, 0.5), n, iterations, "np.nanquantile(a, 0.5)", "Reduction", dtype_name),
-        _b(lambda: np.nanargmax(a), n, iterations, "np.nanargmax(a)", "Reduction", dtype_name),
-        _b(lambda: np.nanargmin(a), n, iterations, "np.nanargmin(a)", "Reduction", dtype_name),
-    ]
+    # float16 nanvar/nanstd saturate the f16 sum-of-squares accumulator to +inf (positive terms, no
+    # cancellation like the mean) at every N; NumSharp widens Half and stays finite. The kernels stream
+    # all N either way, so silencing NumPy's benign overflow RuntimeWarning leaves the timing unchanged.
+    # (nanprod uses the bounded a_prod above; nansum/nanmean cancel — neither overflows. See run_reduction.)
+    with np.errstate(over='ignore'):
+        return [
+            _b(lambda: np.nansum(a), n, iterations, "np.nansum(a)", "Reduction", dtype_name),
+            _b(lambda: np.nanmean(a), n, iterations, "np.nanmean(a)", "Reduction", dtype_name),
+            _b(lambda: np.nanmax(a), n, iterations, "np.nanmax(a)", "Reduction", dtype_name),
+            _b(lambda: np.nanmin(a), n, iterations, "np.nanmin(a)", "Reduction", dtype_name),
+            _b(lambda: np.nanstd(a), n, iterations, "np.nanstd(a)", "Reduction", dtype_name),
+            _b(lambda: np.nanvar(a), n, iterations, "np.nanvar(a)", "Reduction", dtype_name),
+            _b(lambda: np.nanprod(a_prod), n, iterations, "np.nanprod(a)", "Reduction", dtype_name),
+            _b(lambda: np.nanmedian(a), n, iterations, "np.nanmedian(a)", "Reduction", dtype_name),
+            _b(lambda: np.nanpercentile(a, 50), n, iterations, "np.nanpercentile(a, 50)", "Reduction", dtype_name),
+            _b(lambda: np.nanquantile(a, 0.5), n, iterations, "np.nanquantile(a, 0.5)", "Reduction", dtype_name),
+            _b(lambda: np.nanargmax(a), n, iterations, "np.nanargmax(a)", "Reduction", dtype_name),
+            _b(lambda: np.nanargmin(a), n, iterations, "np.nanargmin(a)", "Reduction", dtype_name),
+        ]
 
 
 def run_statistics_benchmarks(n, dtype_name, iterations):
@@ -1588,30 +1616,32 @@ def run_statistics_benchmarks(n, dtype_name, iterations):
         _b(lambda: np.ptp(a), n, iterations, "np.ptp(a)", "Statistics", dtype_name),
         _b(lambda: np.count_nonzero(a), n, iterations, "np.count_nonzero(a)", "Statistics", dtype_name),
     ]
-    if dtype_name == "float64" and n <= ARRAY_SIZES["medium"]:
-        b = create_random_array(n, dtype_name, seed=43)
+    if dtype_name == "float64" and n <= ARRAY_SIZES["large"]:
+        work_n = memory_heavy_work_n(n)
+        signal_a = a[:work_n]
+        b = create_random_array(work_n, dtype_name, seed=43)
         kernel = np.random.random(31) * 2 - 1
-        vector_rows = n // 3
+        vector_rows = work_n // 3
         vectors = np.random.random(vector_rows * 3).reshape(vector_rows, 3)
         other_vectors = np.random.random(vector_rows * 3).reshape(vector_rows, 3)
-        side = int(n ** 0.5)
+        side = int(work_n ** 0.5)
         kron_a = np.random.random(side)
         kron_b = np.random.random(side)
         matrix = np.random.random(side * side).reshape(side, side)
         bins = np.linspace(-50, 50, 257)
-        values = np.random.randint(0, max(2, n // 10), n, dtype=np.int32)
+        values = np.random.randint(0, max(2, work_n // 10), work_n, dtype=np.int32)
         rows.extend([
-            _b(lambda: np.convolve(a, kernel, mode="same"), n, iterations, "np.convolve(a, kernel)", "Statistics", "float64", "Signal"),
-            _b(lambda: np.correlate(a, kernel, mode="same"), n, iterations, "np.correlate(a, kernel)", "Statistics", "float64", "Signal"),
-            _b(lambda: np.diff(a), n, iterations, "np.diff(a)", "Statistics", "float64", "Signal"),
-            _b(lambda: np.ediff1d(a), n, iterations, "np.ediff1d(a)", "Statistics", "float64", "Signal"),
+            _b(lambda: np.convolve(signal_a, kernel, mode="same"), n, iterations, "np.convolve(a, kernel)", "Statistics", "float64", "Signal"),
+            _b(lambda: np.correlate(signal_a, kernel, mode="same"), n, iterations, "np.correlate(a, kernel)", "Statistics", "float64", "Signal"),
+            _b(lambda: np.diff(signal_a), n, iterations, "np.diff(a)", "Statistics", "float64", "Signal"),
+            _b(lambda: np.ediff1d(signal_a), n, iterations, "np.ediff1d(a)", "Statistics", "float64", "Signal"),
             _b(lambda: np.cross(vectors, other_vectors), n, iterations, "np.cross(a, b)", "Statistics", "float64", "Signal"),
-            _b(lambda: np.inner(a, b), n, iterations, "np.inner(a, b)", "Statistics", "float64", "Signal"),
+            _b(lambda: np.inner(signal_a, b), n, iterations, "np.inner(a, b)", "Statistics", "float64", "Signal"),
             _b(lambda: np.kron(kron_a, kron_b), n, iterations, "np.kron(a, b)", "Statistics", "float64", "Signal"),
             _b(lambda: np.trace(matrix), n, iterations, "np.trace(a)", "Statistics", "float64", "Signal"),
-            _b(lambda: np.cov(a, b), n, iterations, "np.cov(a, b)", "Statistics", "float64", "Signal"),
-            _b(lambda: np.corrcoef(a, b), n, iterations, "np.corrcoef(a, b)", "Statistics", "float64", "Signal"),
-            _b(lambda: np.digitize(a, bins), n, iterations, "np.digitize(a, bins)", "Statistics", "float64", "Signal"),
+            _b(lambda: np.cov(signal_a, b), n, iterations, "np.cov(a, b)", "Statistics", "float64", "Signal"),
+            _b(lambda: np.corrcoef(signal_a, b), n, iterations, "np.corrcoef(a, b)", "Statistics", "float64", "Signal"),
+            _b(lambda: np.digitize(signal_a, bins), n, iterations, "np.digitize(a, bins)", "Statistics", "float64", "Signal"),
             _b(lambda: np.bincount(values), n, iterations, "np.bincount(a)", "Statistics", "int32", "Histogram"),
         ])
     return rows
@@ -1628,16 +1658,18 @@ def run_sorting_benchmarks(n, dtype_name, iterations):
         # overhead, not a throughput comparison.
         _b(lambda: np.searchsorted(srt, a), n, iterations, "np.searchsorted(a, v)", "Sorting", dtype_name),
     ]
-    if n <= ARRAY_SIZES["medium"]:
-        b = create_random_array(n, dtype_name, seed=43)
+    if n <= ARRAY_SIZES["large"]:
+        work_n = memory_heavy_work_n(n)
+        extended_a = a[:work_n]
+        b = create_random_array(work_n, dtype_name, seed=43)
         rows.extend([
-            _b(lambda: np.sort(a), n, iterations, "np.sort(a)", "Sorting", dtype_name),
-            _b(lambda: np.sort_complex(a), n, iterations, "np.sort_complex(a)", "Sorting", dtype_name),
-            _b(lambda: np.partition(a, n // 2), n, iterations, "np.partition(a, kth)", "Sorting", dtype_name),
-            _b(lambda: np.argpartition(a, n // 2), n, iterations, "np.argpartition(a, kth)", "Sorting", dtype_name),
-            _b(lambda: np.lexsort((b, a)), n, iterations, "np.lexsort((b, a))", "Sorting", dtype_name),
-            _b(lambda: np.argwhere(a), n, iterations, "np.argwhere(a)", "Sorting", dtype_name),
-            _b(lambda: np.flatnonzero(a), n, iterations, "np.flatnonzero(a)", "Sorting", dtype_name),
+            _b(lambda: np.sort(extended_a), n, iterations, "np.sort(a)", "Sorting", dtype_name),
+            _b(lambda: np.sort_complex(extended_a), n, iterations, "np.sort_complex(a)", "Sorting", dtype_name),
+            _b(lambda: np.partition(extended_a, work_n // 2), n, iterations, "np.partition(a, kth)", "Sorting", dtype_name),
+            _b(lambda: np.argpartition(extended_a, work_n // 2), n, iterations, "np.argpartition(a, kth)", "Sorting", dtype_name),
+            _b(lambda: np.lexsort((b, extended_a)), n, iterations, "np.lexsort((b, a))", "Sorting", dtype_name),
+            _b(lambda: np.argwhere(extended_a), n, iterations, "np.argwhere(a)", "Sorting", dtype_name),
+            _b(lambda: np.flatnonzero(extended_a), n, iterations, "np.flatnonzero(a)", "Sorting", dtype_name),
         ])
     return rows
 
@@ -1664,47 +1696,47 @@ def run_linalg_benchmarks(n, iterations):
         _b(lambda: np.vecdot(v, v), n, iterations, "np.vecdot(a, b)", "LinearAlgebra", "float64"),
         _b(lambda: np.vecmat(v_mc, matA), n, iterations, "np.vecmat(a, b)", "LinearAlgebra", "float64"),
     ]
-    if n <= ARRAY_SIZES["medium"]:
-        vector_rows = n // 3
-        short_vector = np.random.random(int(n ** 0.5))
-        vectors_a = np.random.random(vector_rows * 3).reshape(vector_rows, 3)
-        vectors_b = np.random.random(vector_rows * 3).reshape(vector_rows, 3)
-        side = min(int(n ** 0.5), 128)
-        matrix_a = np.random.random((side, side))
-        matrix_b = np.random.random((side, side))
-        rows.extend([
-            _b(lambda: np.linalg.cross(vectors_a, vectors_b), n, iterations, "np.linalg.cross(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
-            _b(lambda: np.linalg.diagonal(matrix_a), n, iterations, "np.linalg.diagonal(a)", "LinearAlgebra", "float64", "LinalgApi"),
-            # linalg.matmul IS np.matmul (a pure Array-API alias), so measure it on the SAME operands
-            # as np.matmul above (matA/matB, side = min(sqrt(n), 384)). Using the 128-capped matrix_a
-            # here made it a different shape at the same N, which then collided on the merge key with
-            # the backend-profile bench's 316x316 linalg.matmul and produced an impossible cross-paired
-            # ratio (single-thread OpenBLAS time / a 128x128 NumPy time).
-            _b(lambda: np.linalg.matmul(matA, matB), n, iterations, "np.linalg.matmul(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
-            _b(lambda: np.linalg.matrix_norm(matrix_a), n, iterations, "np.linalg.matrix_norm(a)", "LinearAlgebra", "float64", "LinalgApi"),
-            _b(lambda: np.linalg.matrix_power(matrix_a, 3), n, iterations, "np.linalg.matrix_power(a, 3)", "LinearAlgebra", "float64", "LinalgApi"),
-            _b(lambda: np.linalg.matrix_transpose(matrix_a), n, iterations, "np.linalg.matrix_transpose(a)", "LinearAlgebra", "float64", "LinalgApi"),
-            _b(lambda: np.linalg.multi_dot((matrix_a, matrix_b, matrix_a)), n, iterations, "np.linalg.multi_dot(arrays)", "LinearAlgebra", "float64", "LinalgApi"),
-            _b(lambda: np.linalg.norm(v), n, iterations, "np.linalg.norm(a)", "LinearAlgebra", "float64", "LinalgApi"),
-            _b(lambda: np.linalg.outer(short_vector, short_vector), n, iterations, "np.linalg.outer(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
-            _b(lambda: np.linalg.tensordot(matrix_a, matrix_b, axes=1), n, iterations, "np.linalg.tensordot(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
-            _b(lambda: np.linalg.trace(matrix_a), n, iterations, "np.linalg.trace(a)", "LinearAlgebra", "float64", "LinalgApi"),
-            _b(lambda: np.linalg.vecdot(v, v), n, iterations, "np.linalg.vecdot(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
-            _b(lambda: np.linalg.vector_norm(v), n, iterations, "np.linalg.vector_norm(a)", "LinearAlgebra", "float64", "LinalgApi"),
-        ])
+    vector_rows = n // 3
+    short_vector = np.random.random(int(n ** 0.5))
+    vectors_a = np.random.random(vector_rows * 3).reshape(vector_rows, 3)
+    vectors_b = np.random.random(vector_rows * 3).reshape(vector_rows, 3)
+    side = min(int(n ** 0.5), 128)
+    matrix_a = np.random.random((side, side))
+    matrix_b = np.random.random((side, side))
+    rows.extend([
+        _b(lambda: np.linalg.cross(vectors_a, vectors_b), n, iterations, "np.linalg.cross(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
+        _b(lambda: np.linalg.diagonal(matrix_a), n, iterations, "np.linalg.diagonal(a)", "LinearAlgebra", "float64", "LinalgApi"),
+        # linalg.matmul IS np.matmul (a pure Array-API alias), so measure it on the SAME operands
+        # as np.matmul above (matA/matB, side = min(sqrt(n), 384)). Using the 128-capped matrix_a
+        # here made it a different shape at the same N, which then collided on the merge key with
+        # the backend-profile bench's 316x316 linalg.matmul and produced an impossible cross-paired
+        # ratio (single-thread OpenBLAS time / a 128x128 NumPy time).
+        _b(lambda: np.linalg.matmul(matA, matB), n, iterations, "np.linalg.matmul(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
+        _b(lambda: np.linalg.matrix_norm(matrix_a), n, iterations, "np.linalg.matrix_norm(a)", "LinearAlgebra", "float64", "LinalgApi"),
+        _b(lambda: np.linalg.matrix_power(matrix_a, 3), n, iterations, "np.linalg.matrix_power(a, 3)", "LinearAlgebra", "float64", "LinalgApi"),
+        _b(lambda: np.linalg.matrix_transpose(matrix_a), n, iterations, "np.linalg.matrix_transpose(a)", "LinearAlgebra", "float64", "LinalgApi"),
+        _b(lambda: np.linalg.multi_dot((matrix_a, matrix_b, matrix_a)), n, iterations, "np.linalg.multi_dot(arrays)", "LinearAlgebra", "float64", "LinalgApi"),
+        _b(lambda: np.linalg.norm(v), n, iterations, "np.linalg.norm(a)", "LinearAlgebra", "float64", "LinalgApi"),
+        _b(lambda: np.linalg.outer(short_vector, short_vector), n, iterations, "np.linalg.outer(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
+        _b(lambda: np.linalg.tensordot(matrix_a, matrix_b, axes=1), n, iterations, "np.linalg.tensordot(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
+        _b(lambda: np.linalg.trace(matrix_a), n, iterations, "np.linalg.trace(a)", "LinearAlgebra", "float64", "LinalgApi"),
+        _b(lambda: np.linalg.vecdot(v, v), n, iterations, "np.linalg.vecdot(a, b)", "LinearAlgebra", "float64", "LinalgApi"),
+        _b(lambda: np.linalg.vector_norm(v), n, iterations, "np.linalg.vector_norm(a)", "LinearAlgebra", "float64", "LinalgApi"),
+    ])
     return rows
 
 
 def run_fft_benchmarks(n, iterations):
-    if n > ARRAY_SIZES["medium"]:
+    if n > ARRAY_SIZES["large"]:
         return []
+    work_n = memory_heavy_work_n(n)
     np.random.seed(42)
-    vector = np.random.random(n).astype(np.complex128)
+    vector = np.random.random(work_n).astype(np.complex128)
     spectrum = np.fft.fft(vector)
-    side = int(n ** 0.5)
+    side = int(work_n ** 0.5)
     matrix = np.random.random(side * side).reshape(side, side).astype(np.complex128)
     matrix_spectrum = np.fft.fft2(matrix)
-    real_vector = np.random.random(n)
+    real_vector = np.random.random(work_n)
     real_spectrum = np.fft.rfft(real_vector)
     real_matrix = np.random.random(side * side).reshape(side, side)
     real_matrix_spectrum = np.fft.rfft2(real_matrix)
@@ -1718,24 +1750,25 @@ def run_fft_benchmarks(n, iterations):
         _b(lambda: np.fft.fftshift(vector), n, iterations, "np.fft.fftshift(a)", "Fourier", "complex128", "Helpers"),
         _b(lambda: np.fft.ifftshift(vector), n, iterations, "np.fft.ifftshift(a)", "Fourier", "complex128", "Helpers"),
         _b(lambda: np.fft.rfft(real_vector), n, iterations, "np.fft.rfft(a)", "Fourier", "float64", "Real"),
-        _b(lambda: np.fft.irfft(real_spectrum, n=n), n, iterations, "np.fft.irfft(a)", "Fourier", "float64", "Real"),
-        _b(lambda: np.fft.hfft(real_spectrum, n=n), n, iterations, "np.fft.hfft(a)", "Fourier", "float64", "Real"),
+        _b(lambda: np.fft.irfft(real_spectrum, n=work_n), n, iterations, "np.fft.irfft(a)", "Fourier", "float64", "Real"),
+        _b(lambda: np.fft.hfft(real_spectrum, n=work_n), n, iterations, "np.fft.hfft(a)", "Fourier", "float64", "Real"),
         _b(lambda: np.fft.ihfft(real_vector), n, iterations, "np.fft.ihfft(a)", "Fourier", "float64", "Real"),
         _b(lambda: np.fft.rfft2(real_matrix), n, iterations, "np.fft.rfft2(a)", "Fourier", "float64", "Real"),
         _b(lambda: np.fft.irfft2(real_matrix_spectrum, s=(side, side)), n, iterations, "np.fft.irfft2(a)", "Fourier", "float64", "Real"),
         _b(lambda: np.fft.rfftn(real_matrix), n, iterations, "np.fft.rfftn(a)", "Fourier", "float64", "Real"),
         _b(lambda: np.fft.irfftn(real_matrix_spectrum, s=(side, side)), n, iterations, "np.fft.irfftn(a)", "Fourier", "float64", "Real"),
-        _b(lambda: np.fft.fftfreq(n), n, iterations, "np.fft.fftfreq(n)", "Fourier", "float64", "Helpers"),
-        _b(lambda: np.fft.rfftfreq(n), n, iterations, "np.fft.rfftfreq(n)", "Fourier", "float64", "Helpers"),
+        _b(lambda: np.fft.fftfreq(work_n), n, iterations, "np.fft.fftfreq(n)", "Fourier", "float64", "Helpers"),
+        _b(lambda: np.fft.rfftfreq(work_n), n, iterations, "np.fft.rfftfreq(n)", "Fourier", "float64", "Helpers"),
     ]
 
 
 def run_random_benchmarks(n, iterations):
-    if n > ARRAY_SIZES["medium"]:
+    if n > ARRAY_SIZES["large"]:
         return []
+    work_n = memory_heavy_work_n(n)
     np.random.seed(42)
-    size = n
-    source = np.arange(n, dtype=np.float64)
+    size = work_n
+    source = np.arange(work_n, dtype=np.float64)
     shuffle_target = source.copy()
     alpha = np.array([1.0, 2.0, 3.0])
     probabilities = np.array([0.2, 0.3, 0.5])
@@ -1756,10 +1789,10 @@ def run_random_benchmarks(n, iterations):
         ("np.random.normal(loc, scale)", lambda: np.random.normal(0.0, 1.0, size)),
         ("np.random.pareto(a)", lambda: np.random.pareto(3.0, size)),
         ("np.random.power(a)", lambda: np.random.power(3.0, size)),
-        ("np.random.rand(n)", lambda: np.random.rand(n)),
-        ("np.random.randn(n)", lambda: np.random.randn(n)),
-        ("np.random.random(n)", lambda: np.random.random(n)),
-        ("np.random.random_sample(n)", lambda: np.random.random_sample(n)),
+        ("np.random.rand(n)", lambda: np.random.rand(work_n)),
+        ("np.random.randn(n)", lambda: np.random.randn(work_n)),
+        ("np.random.random(n)", lambda: np.random.random(work_n)),
+        ("np.random.random_sample(n)", lambda: np.random.random_sample(work_n)),
         ("np.random.rayleigh(scale)", lambda: np.random.rayleigh(2.0, size)),
         ("np.random.standard_cauchy(n)", lambda: np.random.standard_cauchy(size)),
         ("np.random.standard_exponential(n)", lambda: np.random.standard_exponential(size)),
@@ -1797,20 +1830,21 @@ def run_random_benchmarks(n, iterations):
 
 
 def run_ndarray_benchmarks(n, iterations):
-    if n > ARRAY_SIZES["medium"]:
+    if n > ARRAY_SIZES["large"]:
         return []
     import os
     import tempfile
 
+    work_n = memory_heavy_work_n(n)
     np.random.seed(42)
-    a = np.random.random(n) * 100 - 50
-    b = np.random.random(n) * 100 - 50
-    matrix = a.reshape(10, n // 10)
-    with_singletons = a.reshape(1, n, 1)
+    a = np.random.random(work_n) * 100 - 50
+    b = np.random.random(work_n) * 100 - 50
+    matrix = a.reshape(10, work_n // 10)
+    with_singletons = a.reshape(1, work_n, 1)
     mask = a > 0.0
-    indices = np.arange(0, n, 2)
-    selector = np.random.randint(0, 2, n)
-    sorted_a = np.arange(n, dtype=np.float64)
+    indices = np.arange(0, work_n, 2)
+    selector = np.random.randint(0, 2, work_n)
+    sorted_a = np.arange(work_n, dtype=np.float64)
     put_target = a.copy()
     fill_target = a.copy()
     field_target = a.copy()
@@ -1819,12 +1853,12 @@ def run_ndarray_benchmarks(n, iterations):
 
     def resize_copy():
         copy = a.copy()
-        copy.resize(n + 1, refcheck=False)
+        copy.resize(work_n + 1, refcheck=False)
         return copy
 
     def partition_copy():
         copy = a.copy()
-        copy.partition(n // 2)
+        copy.partition(work_n // 2)
         return copy
 
     def sort_copy():
@@ -1851,10 +1885,10 @@ def run_ndarray_benchmarks(n, iterations):
         ("a.dot(b) [ndarray]", lambda: a.dot(b)),
         ("a.fill(value) [ndarray]", lambda: fill_target.fill(3.25)),
         ("a.getfield(dtype) [ndarray]", lambda: a.getfield(np.float64)),
-        ("a.item(index) [ndarray]", lambda: a.item(n // 2)),
+        ("a.item(index) [ndarray]", lambda: a.item(work_n // 2)),
         ("a.put(indices, values) [ndarray]", lambda: put_target.put(indices, b[::2])),
         ("a.repeat(repeats) [ndarray]", lambda: a.repeat(2)),
-        ("a.reshape(shape) [ndarray]", lambda: a.reshape(10, n // 10)),
+        ("a.reshape(shape) [ndarray]", lambda: a.reshape(10, work_n // 10)),
         ("a.resize(shape) [ndarray]", resize_copy),
         ("a.round() [ndarray]", lambda: a.round()),
         ("a.setfield(value, dtype) [ndarray]", lambda: field_target.setfield(1.0, np.float64)),
@@ -1869,7 +1903,7 @@ def run_ndarray_benchmarks(n, iterations):
         ("a.trace() [ndarray]", lambda: matrix.trace()),
         ("a.transpose() [ndarray]", lambda: matrix.transpose()),
         ("a.view() [ndarray]", lambda: a.view()),
-        ("a.argpartition(kth) [ndarray]", lambda: a.argpartition(n // 2)),
+        ("a.argpartition(kth) [ndarray]", lambda: a.argpartition(work_n // 2)),
         ("a.argsort() [ndarray]", lambda: a.argsort()),
         ("a.nonzero() [ndarray]", lambda: a.nonzero()),
         ("a.partition(kth) [ndarray]", partition_copy),
@@ -1985,31 +2019,36 @@ def run_where_benchmarks(n, iterations):
         _b(lambda: np.where(cond, a, b), n, iterations, "np.where(cond, a, b)", "Selection", "float64"),
         _b(lambda: np.where(cond), n, iterations, "np.where(cond)", "Selection", "float64"),
     ]
-    if n <= ARRAY_SIZES["medium"]:
-        indices = np.arange(0, n, 2)
-        selector = np.random.randint(0, 2, n)
-        side = int(n ** 0.5)
+    if n <= ARRAY_SIZES["large"]:
+        work_n = memory_heavy_work_n(n)
+        select_a = a[:work_n]
+        select_b = b[:work_n]
+        select_cond = cond[:work_n]
+        select_negative = negative[:work_n]
+        indices = np.arange(0, work_n, 2)
+        selector = np.random.randint(0, 2, work_n)
+        side = int(work_n ** 0.5)
         matrix = np.arange(side * side).reshape(side, side)
-        put_target = a.copy()
-        place_target = a.copy()
+        put_target = select_a.copy()
+        place_target = select_a.copy()
         place_values = np.array([1.0, 2.0, 3.0])
         rows.extend([
-            _b(lambda: np.choose(selector, (a, b)), n, iterations, "np.choose(selector, choices)", "Selection", "float64"),
-            _b(lambda: np.compress(cond, a), n, iterations, "np.compress(mask, a)", "Selection", "float64"),
-            _b(lambda: np.extract(cond, a), n, iterations, "np.extract(mask, a)", "Selection", "float64"),
-            _b(lambda: np.take(a, indices), n, iterations, "np.take(a, indices)", "Selection", "float64"),
-            _b(lambda: np.take_along_axis(a, indices, 0), n, iterations, "np.take_along_axis(a, indices)", "Selection", "float64"),
-            _b(lambda: np.select((negative, cond), (a, b), 0.0), n, iterations, "np.select(condlist, choicelist)", "Selection", "float64"),
-            _b(lambda: np.put(put_target, indices, b[::2]), n, iterations, "np.put(a, indices, values)", "Selection", "float64"),
-            _b(lambda: np.place(place_target, cond, place_values), n, iterations, "np.place(a, mask, values)", "Selection", "float64"),
+            _b(lambda: np.choose(selector, (select_a, select_b)), n, iterations, "np.choose(selector, choices)", "Selection", "float64"),
+            _b(lambda: np.compress(select_cond, select_a), n, iterations, "np.compress(mask, a)", "Selection", "float64"),
+            _b(lambda: np.extract(select_cond, select_a), n, iterations, "np.extract(mask, a)", "Selection", "float64"),
+            _b(lambda: np.take(select_a, indices), n, iterations, "np.take(a, indices)", "Selection", "float64"),
+            _b(lambda: np.take_along_axis(select_a, indices, 0), n, iterations, "np.take_along_axis(a, indices)", "Selection", "float64"),
+            _b(lambda: np.select((select_negative, select_cond), (select_a, select_b), 0.0), n, iterations, "np.select(condlist, choicelist)", "Selection", "float64"),
+            _b(lambda: np.put(put_target, indices, select_b[::2]), n, iterations, "np.put(a, indices, values)", "Selection", "float64"),
+            _b(lambda: np.place(place_target, select_cond, place_values), n, iterations, "np.place(a, mask, values)", "Selection", "float64"),
             _b(lambda: np.diag_indices(side), n, iterations, "np.diag_indices(n)", "Selection", "float64"),
             _b(lambda: np.diag_indices_from(matrix), n, iterations, "np.diag_indices_from(a)", "Selection", "float64"),
             _b(lambda: np.tril_indices_from(matrix), n, iterations, "np.tril_indices_from(a)", "Selection", "float64"),
             _b(lambda: np.triu_indices_from(matrix), n, iterations, "np.triu_indices_from(a)", "Selection", "float64"),
             _b(lambda: np.mask_indices(side, np.triu), n, iterations, "np.mask_indices(n, triu)", "Selection", "float64"),
             _b(lambda: np.indices((side, side)), n, iterations, "np.indices(shape)", "Selection", "float64"),
-            _b(lambda: np.ravel_multi_index((indices,), (n,)), n, iterations, "np.ravel_multi_index(coords, dims)", "Selection", "float64"),
-            _b(lambda: np.unravel_index(indices, (n,)), n, iterations, "np.unravel_index(indices, shape)", "Selection", "float64"),
+            _b(lambda: np.ravel_multi_index((indices,), (work_n,)), n, iterations, "np.ravel_multi_index(coords, dims)", "Selection", "float64"),
+            _b(lambda: np.unravel_index(indices, (work_n,)), n, iterations, "np.unravel_index(indices, shape)", "Selection", "float64"),
         ])
     return rows
 
@@ -2063,7 +2102,7 @@ def run_suites(n: int, suite: str, dtypes_to_run: List[str], iterations: int) ->
                 results = run_arithmetic_benchmarks(n, dtype, iterations)
                 results_all.extend(results)
                 for r in results:
-                    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+                    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
 
     if suite in ["unary", "all"]:
         print(f"\n{'='*60}\n  Unary Benchmarks (N={n:,})\n{'='*60}")
@@ -2073,7 +2112,7 @@ def run_suites(n: int, suite: str, dtypes_to_run: List[str], iterations: int) ->
                 results = run_unary_benchmarks(n, dtype, iterations)
                 results_all.extend(results)
                 for r in results:
-                    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+                    print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
         # Extra unary math (cbrt/reciprocal/square/negative/positive/trunc) — mirrors
         # the C# UnaryExtraBenchmarks class (also under the Unary namespace).
         for dtype in FLOAT_DTYPES:
@@ -2086,7 +2125,7 @@ def run_suites(n: int, suite: str, dtypes_to_run: List[str], iterations: int) ->
             results = run_reduction_benchmarks(n, dtype, iterations)
             results_all.extend(results)
             for r in results:
-                print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+                print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
         # NaN-aware reductions + cumprod — mirror C# NanReductionBenchmarks / CumulativeBenchmarks.
         for dtype in FLOAT_DTYPES:
             results_all.extend(run_nan_reduction_benchmarks(n, dtype, iterations))
@@ -2105,7 +2144,7 @@ def run_suites(n: int, suite: str, dtypes_to_run: List[str], iterations: int) ->
             results = run_creation_benchmarks(n, dtype, iterations)
             results_all.extend(results)
             for r in results:
-                print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+                print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
 
     if suite in ["manipulation", "all"]:
         results_all.extend(run_manipulation_benchmarks(n, iterations))

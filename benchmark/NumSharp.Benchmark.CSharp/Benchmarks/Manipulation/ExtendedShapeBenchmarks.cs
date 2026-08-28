@@ -13,19 +13,20 @@ public class ExtendedShapeBenchmarks : BenchmarkBase
     private NDArray _matrix = null!;
     private NDArray _cube = null!;
     private NDArray _row = null!;
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _a = np.random.rand(N);
-        _b = np.random.rand(N);
-        _matrix = np.random.rand(N).reshape(10, N / 10);
-        _cube = np.random.rand(N).reshape(10, 10, N / 100);
-        _row = np.arange(N / 10).astype(np.float64);
+        _a = np.random.rand(WorkN);
+        _b = np.random.rand(WorkN);
+        _matrix = np.random.rand(WorkN).reshape(10, WorkN / 10);
+        _cube = np.random.rand(WorkN).reshape(10, 10, WorkN / 100);
+        _row = np.arange(WorkN / 10).astype(np.float64);
     }
 
     [GlobalCleanup]
@@ -48,16 +49,16 @@ public class ExtendedShapeBenchmarks : BenchmarkBase
     [Benchmark(Description = "np.broadcast_arrays(a, b)")] public object BroadcastArrays() => np.broadcast_arrays(_matrix, _row);
     [Benchmark(Description = "np.column_stack((a, b))")] public NDArray ColumnStack() => np.column_stack(_a, _b);
     [Benchmark(Description = "np.concat((a, b))")] public NDArray Concat() => np.concat((_a, _b));
-    [Benchmark(Description = "np.delete(a, index)")] public NDArray Delete() => np.delete(_a, N / 2);
-    [Benchmark(Description = "np.insert(a, index, value)")] public NDArray Insert() => np.insert(_a, N / 2, 0.0);
+    [Benchmark(Description = "np.delete(a, index)")] public NDArray Delete() => np.delete(_a, WorkN / 2);
+    [Benchmark(Description = "np.insert(a, index, value)")] public NDArray Insert() => np.insert(_a, WorkN / 2, 0.0);
     [Benchmark(Description = "np.dsplit(a, sections)")] public object DSplit() => np.dsplit(_cube, 10);
     [Benchmark(Description = "np.hsplit(a, sections)")] public object HSplit() => np.hsplit(_matrix, 10);
     [Benchmark(Description = "np.vsplit(a, sections)")] public object VSplit() => np.vsplit(_matrix, 10);
     [Benchmark(Description = "np.split(a, sections)")] public object Split() => np.split(_a, 10);
     [Benchmark(Description = "np.pad(a, width)")] public NDArray Pad() => np.pad(_a, 16);
     [Benchmark(Description = "np.repeat(a, repeats)")] public NDArray Repeat() => np.repeat(_a, 2);
-    [Benchmark(Description = "np.resize(a, shape)")] public NDArray Resize() => np.resize(_a, new Shape(N * 2L));
-    [Benchmark(Description = "np.roll(a, shift)")] public NDArray Roll() => np.roll(_a, N / 2);
+    [Benchmark(Description = "np.resize(a, shape)")] public NDArray Resize() => np.resize(_a, new Shape(WorkN * 2L));
+    [Benchmark(Description = "np.roll(a, shift)")] public NDArray Roll() => np.roll(_a, WorkN / 2);
     [Benchmark(Description = "np.size(a)")] public long Size() => np.size(_a);
     [Benchmark(Description = "np.tile(a, reps)")] public NDArray Tile() => np.tile(_a, 2);
     [Benchmark(Description = "np.unstack(a)")] public object Unstack() => np.unstack(_matrix);

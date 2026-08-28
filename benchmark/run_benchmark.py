@@ -44,6 +44,7 @@ Usage
 """
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -55,10 +56,13 @@ HERE = Path(__file__).resolve().parent
 HISTORY_DIR = HERE / "history"
 CSHARP_DIR = HERE / "NumSharp.Benchmark.CSharp"
 CSHARP_PROJ = CSHARP_DIR / "NumSharp.Benchmark.CSharp.csproj"
+OPENBLAS_CSHARP_DIR = HERE / "NumSharp.Benchmark.OpenBLAS"
+OPENBLAS_CSHARP_PROJ = OPENBLAS_CSHARP_DIR / "NumSharp.Benchmark.OpenBLAS.csproj"
 PY_BENCH = HERE / "NumSharp.Benchmark.Python" / "numpy_benchmark.py"
 MERGE = HERE / "scripts" / "merge-results.py"
 PROFILE_MERGE = HERE / "scripts" / "merge-backend-profiles.py"
 ARTIFACTS = CSHARP_DIR / "BenchmarkDotNet.Artifacts" / "results"
+OPENBLAS_ARTIFACTS = OPENBLAS_CSHARP_DIR / "BenchmarkDotNet.Artifacts" / "results"
 TFM = "net10.0"
 DOCS_BENCHMARK_JSON = HERE.parent / "docs" / "website-src" / "docs" / "data" / "benchmark-report.json"
 
@@ -114,9 +118,9 @@ SUITES = {
 }
 
 
-def run(cmd, cwd=None, check=False):
+def run(cmd, cwd=None, check=False, env=None):
     print(f"\n$ {' '.join(str(c) for c in cmd)}", flush=True)
-    return subprocess.run([str(c) for c in cmd], cwd=str(cwd) if cwd else None, check=check)
+    return subprocess.run([str(c) for c in cmd], cwd=str(cwd) if cwd else None, check=check, env=env)
 
 
 def append_section(report_md, src_md, title):
@@ -175,7 +179,7 @@ def main():
     ap.add_argument("--skip-operand", action="store_true",
                     help="Skip the Operand-layout subsystem (benchmark/operand)")
     ap.add_argument("--skip-openblas", action="store_true",
-                    help="Skip targeted Managed/OpenBLAS backend profiles (benchmark/backends)")
+                    help="Skip the full LinearAlgebra OpenBLAS profile and targeted backend extras")
     ap.add_argument("--no-history", action="store_true",
                     help="Skip writing the committable benchmark/history/<date>_<sha>/ snapshot + latest symlink")
     args = ap.parse_args()
@@ -185,6 +189,8 @@ def main():
     results_dir.mkdir(parents=True, exist_ok=True)
     csharp_out = results_dir / "csharp"
     csharp_out.mkdir(exist_ok=True)
+    openblas_csharp_out = results_dir / "csharp-openblas"
+    openblas_csharp_out.mkdir(exist_ok=True)
     numpy_json = results_dir / "numpy-results.json"
     print(f"Results -> {results_dir}")
 
@@ -194,6 +200,10 @@ def main():
     if not args.skip_csharp and not args.skip_build:
         run(["dotnet", "build", "-c", "Release", "-f", TFM, str(CSHARP_PROJ),
              "-v", "q", "--nologo", "-clp:NoSummary;ErrorsOnly", "-p:WarningLevel=0"], check=True)
+        if "linalg" in args.suites and not args.skip_openblas:
+            run(["dotnet", "build", "-c", "Release", str(OPENBLAS_CSHARP_PROJ),
+                 "-v", "q", "--nologo", "-clp:NoSummary;ErrorsOnly", "-p:WarningLevel=0",
+                 "-p:GeneratePackageOnBuild=false"], check=True)
 
     # 2. NumPy: sweep all three sizes per suite, concatenate into one JSON.
     if not args.skip_python:
@@ -230,10 +240,41 @@ def main():
                     shutil.copy(f, csharp_out / f.name)
         print(f"C#: collected {len(list(csharp_out.glob('*.json')))} class reports")
 
+    # 3b. The COMPLETE official LinearAlgebra suite under OpenBLAS. This is a separate executable,
+    #     not a hand-copied case list: it discovers the same LinAlgBenchmarks/LinalgApiBenchmarks
+    #     classes and uses the same OfficialBenchmarkConfig as the Managed run. The process boundary
+    #     keeps Core-only Managed runs unable to load a native backend by construction.
+    openblas_matrix_base = results_dir / "benchmark-report.openblas-matrix"
+    merge_env = {**os.environ, "PYTHONUTF8": "1"}
+    if not args.skip_csharp and not args.skip_openblas and "linalg" in args.suites:
+        if OPENBLAS_ARTIFACTS.exists():
+            shutil.rmtree(OPENBLAS_ARTIFACTS, ignore_errors=True)
+        print("\n=== C# suite: linalg (OpenBLAS profile; complete official suite) ===", flush=True)
+        openblas_env = {
+            **os.environ,
+            "NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL": "0",
+            "OPENBLAS_NUM_THREADS": "1",
+            "OMP_NUM_THREADS": "1",
+        }
+        run(["dotnet", "run", "-c", "Release", "--no-build", "-f", TFM,
+             "--project", str(OPENBLAS_CSHARP_PROJ), "--", "--filter", SUITES["linalg"]],
+            cwd=OPENBLAS_CSHARP_DIR, check=False, env=openblas_env)
+        if OPENBLAS_ARTIFACTS.exists():
+            for f in OPENBLAS_ARTIFACTS.glob("*-report-full-compressed.json"):
+                shutil.copy(f, openblas_csharp_out / f.name)
+        numpy_linalg = results_dir / "numpy-linalg.json"
+        if numpy_linalg.exists() and any(openblas_csharp_out.glob("*.json")):
+            run([sys.executable, str(MERGE), "--numpy", str(numpy_linalg),
+                 "--csharp", str(openblas_csharp_out), "--output", str(openblas_matrix_base),
+                 "--require-universal-tiers"],
+                check=True, env=merge_env)
+        print(f"OpenBLAS C#: collected {len(list(openblas_csharp_out.glob('*.json')))} class reports")
+
     # 4. Merge into the unified per-(op, dtype, N) ratio report.
     managed_matrix_base = results_dir / "benchmark-report.managed-matrix"
     run([sys.executable, str(MERGE), "--numpy", str(numpy_json),
-         "--csharp", str(csharp_out), "--output", str(managed_matrix_base)], check=False)
+         "--csharp", str(csharp_out), "--output", str(managed_matrix_base),
+         "--require-universal-tiers"], check=True, env=merge_env)
 
     # The unified report the op-matrix merge just wrote; the iterator + matrix
     # subsystems below each append one section to it.
@@ -290,7 +331,12 @@ def main():
     backend_openblas = HERE / "openblas" / "openblas_results.openblas.json"
     if backend_managed.exists() and not args.skip_openblas:
         profile_cmd.extend(["--managed-extra", str(backend_managed)])
-    if backend_openblas.exists() and not args.skip_openblas:
+    official_openblas = Path(str(openblas_matrix_base) + ".json")
+    if official_openblas.exists() and not args.skip_openblas:
+        profile_cmd.extend(["--openblas", str(official_openblas)])
+        if backend_openblas.exists():
+            profile_cmd.extend(["--openblas-extra", str(backend_openblas)])
+    elif backend_openblas.exists() and not args.skip_openblas:
         profile_cmd.extend(["--openblas", str(backend_openblas)])
     run(profile_cmd, check=True)
 

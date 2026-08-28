@@ -26,6 +26,15 @@ NOT_MEASURED = "not_measured"
 WORK_FLOOR_MS = 0.001
 MAX_CREDIBLE_SPEEDUP = 20.0
 
+# Operations in the official LinearAlgebra suite that do not consult TensorEngine.Blas. They still
+# run in the OpenBLAS PROFILE so the complete suite is symmetric, but provenance must say the actual
+# implementation remained Managed Core rather than crediting an uninvolved native library.
+MANAGED_CONTROL_LINEAR_ALGEBRA = {
+    "np.outer", "np.diagonal", "np.einsum_path", "np.linalg.cross",
+    "np.linalg.diagonal", "np.linalg.matrix_norm", "np.linalg.matrix_transpose",
+    "np.linalg.norm", "np.linalg.outer", "np.linalg.trace", "np.linalg.vector_norm",
+}
+
 
 def report_metadata(output: Path) -> dict[str, str]:
     """Return provenance for the canonical report without requiring extra runner formats."""
@@ -43,7 +52,13 @@ def report_metadata(output: Path) -> dict[str, str]:
         numpy_version = np.__version__
     except ImportError:
         numpy_version = ""
-    return {"snapshot_date": snapshot_date, "commit": commit, "numpy_version": numpy_version}
+    return {
+        "snapshot_date": snapshot_date,
+        "commit": commit,
+        "numpy_version": numpy_version,
+        "memory_heavy_large_workload_n": "1000000",
+        "memory_heavy_large_tier_label": "10000000",
+    }
 
 
 def number(value: Any) -> float | None:
@@ -178,12 +193,19 @@ def load_json_profile(path: Path, profile: str) -> list[dict[str, Any]]:
         numsharp_ms = number(raw.get("numsharp_ms") if existing is None else existing.get("numsharp_ms"))
         if numsharp_ms is None and availability == AVAILABLE:
             availability = NOT_MEASURED
+        explicit_backend = raw.get("actual_backend") or (existing or {}).get("actual_backend")
+        normalized = normalize_operation(row["operation"])
+        is_managed_control = row["suite"] == "LinearAlgebra" and normalized in MANAGED_CONTROL_LINEAR_ALGEBRA
+        actual_backend = str(explicit_backend or (
+            "managed" if profile == "managed" or is_managed_control else "openblas"))
+        if "backend_route" not in raw and existing is None:
+            row["backend_route"] = "managed_control" if is_managed_control else profile
         row["result"] = profile_result(
             profile,
             row["numpy_ms"],
             numsharp_ms,
             availability,
-            actual_backend=str(raw.get("actual_backend") or (existing or {}).get("actual_backend") or profile),
+            actual_backend=actual_backend,
             exception_type=raw.get("exception_type") or (existing or {}).get("exception_type"),
             exception_message=raw.get("exception_message") or (existing or {}).get("exception_message"),
         )
@@ -247,7 +269,30 @@ def profile_envelope(profile: str, rows: list[dict[str, Any]], metadata: dict[st
             "availability_counts": counts, "rows": rows}
 
 
+def validate_linear_algebra_profile_coverage(managed: dict[str, Any], openblas: dict[str, Any]) -> None:
+    """Require every measured Managed LinearAlgebra cell in the complete OpenBLAS profile."""
+    if not openblas.get("rows"):
+        return
+
+    openblas_index = {cell_key(row): row for row in openblas["rows"]}
+    missing = []
+    for row in managed["rows"]:
+        if row["suite"] != "LinearAlgebra" or row["result"]["availability"] != AVAILABLE:
+            continue
+        peer = openblas_index.get(cell_key(row))
+        if peer is None or peer["result"]["availability"] != AVAILABLE:
+            missing.append((row["operation"], row["dtype"], row["n"], row["scenario"]))
+
+    if missing:
+        preview = missing[:20]
+        suffix = "" if len(missing) <= len(preview) else f" (+{len(missing) - len(preview)} more)"
+        raise RuntimeError(
+            "OpenBLAS profile does not cover the complete measured LinearAlgebra suite: "
+            f"{preview}{suffix}")
+
+
 def combine(managed: dict[str, Any], openblas: dict[str, Any]) -> dict[str, Any]:
+    validate_linear_algebra_profile_coverage(managed, openblas)
     all_rows: dict[tuple[str, str, int, str], dict[str, Any]] = {}
     for profile, envelope in (("managed", managed), ("openblas", openblas)):
         for source in envelope["rows"]:
@@ -260,7 +305,10 @@ def combine(managed: dict[str, Any], openblas: dict[str, Any]) -> dict[str, Any]
                 "numsharp_mean_ms": source.get("numsharp_mean_ms"),
                 "backend_route": source["backend_route"], "profiles": {},
             })
-            target["profiles"][profile] = source["result"]
+            # Keep the combined report independent of the per-profile envelopes: exact cells can
+            # arrive from two benchmark runs with slightly different NumPy timing samples, and the
+            # canonical row must rebase both backend ratios onto ONE NumPy baseline below.
+            target["profiles"][profile] = dict(source["result"])
             if target["numpy_ms"] is None:
                 target["numpy_ms"] = source["numpy_ms"]
             # Mean provenance comes from the managed op-matrix rows only (the backend harness is
@@ -272,10 +320,25 @@ def combine(managed: dict[str, Any], openblas: dict[str, Any]) -> dict[str, Any]
 
     combined_rows = []
     for row in all_rows.values():
+        # A joined cell has one published NumPy timing (the Managed op-matrix baseline when that
+        # row exists). Recompute every backend's ratio against it so Managed/OpenBLAS are directly
+        # comparable and the displayed effective ratio agrees with numpy_ms / numsharp_ms.
+        for result in row["profiles"].values():
+            if result["availability"] != AVAILABLE or result["numsharp_ms"] is None:
+                continue
+            ratio, pct_numpy, status = performance_status(row["numpy_ms"], result["numsharp_ms"])
+            result["ratio"] = round(ratio, 6) if ratio is not None else None
+            result["pct_numpy"] = round(pct_numpy, 3) if pct_numpy is not None else None
+            result["status"] = status
+
         valid = [result for result in row["profiles"].values()
                  if result["availability"] == AVAILABLE and result["numsharp_ms"] is not None]
         effective = min(valid, key=lambda result: result["numsharp_ms"]) if valid else None
         row["effective_profile"] = effective["profile"] if effective else None
+        # Profile = process/configuration that produced the timing. Backend = implementation that
+        # actually executed. They differ for controls measured in the OpenBLAS process that never
+        # consult TensorEngine.Blas; winner labels must not credit OpenBLAS for managed work.
+        row["effective_backend"] = effective["actual_backend"] if effective else None
         row["numsharp_ms"] = effective["numsharp_ms"] if effective else None
         row["ratio"] = effective["ratio"] if effective else None
         row["pct_numpy"] = effective["pct_numpy"] if effective else None
@@ -304,24 +367,27 @@ def write_csv(path: Path, payload: dict[str, Any]) -> None:
             writer.writerow([row["operation"], row["suite"], row["dtype"], row["n"], row["scenario"], row["numpy_ms"],
                              managed.get("numsharp_ms"), managed.get("availability", NOT_MEASURED),
                              openblas.get("numsharp_ms"), openblas.get("availability", NOT_MEASURED),
-                             row["effective_profile"], row["numsharp_ms"], row["ratio"], row["status"]])
+                             row["effective_backend"], row["numsharp_ms"], row["ratio"], row["status"]])
 
 
 def write_markdown(path: Path, payload: dict[str, Any]) -> None:
     counts = {"managed": 0, "openblas": 0, "missing_backend": 0, "not_supported": 0}
     for row in payload["rows"]:
-        if row["effective_profile"]:
-            counts[row["effective_profile"]] += 1
+        if row["effective_backend"]:
+            counts[row["effective_backend"]] += 1
         for result in row["profiles"].values():
             if result["availability"] in counts:
                 counts[result["availability"]] += 1
     lines = [
         "# NumSharp vs NumPy Performance — backend profiles", "",
         "One canonical cell model with separate Managed C# and OpenBLAS measurements.",
-        "**Effective** selects the faster valid NumSharp timing for the exact same operation/dtype/N/scenario cell.", "",
-        "**Timing basis:** best window (min) of each side's ≥50 samples per case (≥20 when a round exceeds "
-        "10 ms) — interference only adds time, so the fastest window estimates intrinsic cost; per-case "
-        "means are retained in the JSON (`numpy_mean_ms`/`numsharp_mean_ms`) as tail diagnostics.", "",
+        "**Effective** selects the faster valid NumSharp timing for the exact same operation/dtype/N/scenario cell; "
+        "the winner names the implementation that actually executed, not merely the process profile.", "",
+        "**Timing basis:** best window (min) of each side's per-case sweep — min-based harnesses run each "
+        "case to a ~200 ms time budget (a >20 ms/call op runs exactly 100 times), while the C# op-matrix "
+        "keeps BenchmarkDotNet's 50 iterations; interference only adds time, so the fastest window "
+        "estimates intrinsic cost; per-case means are retained in the JSON "
+        "(`numpy_mean_ms`/`numsharp_mean_ms`) as tail diagnostics.", "",
         f"- Managed effective cells: **{counts['managed']:,}**",
         f"- OpenBLAS effective cells: **{counts['openblas']:,}**",
         f"- Missing backend records: **{counts['missing_backend']:,}**",
@@ -348,7 +414,7 @@ def write_markdown(path: Path, payload: dict[str, Any]) -> None:
                 return f"{v:.5f} ms"
             return f"{v:.6f} ms"
         ratio = "—" if row["ratio"] is None else f"{row['ratio']:.3f}x"
-        lines.append(f"| `{row['operation']}` | {row['dtype']} | {row['n']:,} | {cell(managed)} | {cell(openblas)} | {row['effective_profile'] or '—'} | {ratio} |")
+        lines.append(f"| `{row['operation']}` | {row['dtype']} | {row['n']:,} | {cell(managed)} | {cell(openblas)} | {row['effective_backend'] or '—'} | {ratio} |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -357,6 +423,7 @@ def main() -> None:
     parser.add_argument("--managed", required=True, type=Path, help="Managed profile JSON (legacy list or profile envelope)")
     parser.add_argument("--managed-extra", type=Path, help="Additional Managed availability/timing profile envelope")
     parser.add_argument("--openblas", type=Path, help="OpenBLAS profile JSON or legacy openblas_results.tsv")
+    parser.add_argument("--openblas-extra", type=Path, help="Additional OpenBLAS profile envelope")
     parser.add_argument("--output", required=True, type=Path, help="Output base path, without extension")
     parser.add_argument("--snapshot-date", help="Override the report provenance date (YYYY-MM-DD)")
     parser.add_argument("--commit", help="Override the benchmarked commit hash")
@@ -373,6 +440,8 @@ def main() -> None:
             managed_rows.extend(managed_supplement)
         else:
             openblas_rows = load_json_profile(args.openblas, "openblas")
+    if args.openblas_extra and args.openblas_extra.exists():
+        openblas_rows.extend(load_json_profile(args.openblas_extra, "openblas"))
 
     metadata = report_metadata(args.output)
     if args.snapshot_date:

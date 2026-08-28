@@ -13,12 +13,12 @@ ai = np.arange(N, dtype=np.int32)
 
 
 def best(fn, rounds=9):
-    # First round doubles as the pilot for the sample rule: >=50 timed rounds, relaxed to >=20
-    # when one round exceeds 10 ms. The caller's count survives as a floor only.
+    # First round doubles as the pilot for the min-time policy: a call >20 ms runs EXACTLY 100 times,
+    # else enough single-call rounds to span ~200 ms total (min over them; capped defensively).
     t0 = time.perf_counter()
     fn()
     out = (time.perf_counter() - t0) * 1000
-    rounds = max(rounds, 20 if out > 10.0 else 50)
+    rounds = 100 if out > 20.0 else min(100_000, max(2, int(200.0 / max(out, 1e-9)) + 1))
     for _ in range(rounds - 1):
         t0 = time.perf_counter()
         fn()
@@ -31,7 +31,7 @@ _ = a * b + c
 _ = (a - b) / (a + b)
 _ = np.sum(a * b)
 
-print(f"numpy {np.__version__}, 4M float64, best of 9:")
+print(f"numpy {np.__version__}, 4M float64, best window (min over ~200 ms):")
 print(f"  a*b+c       {best(lambda: a * b + c):7.2f} ms")
 print(f"  (a-b)/(a+b) {best(lambda: (a - b) / (a + b)):7.2f} ms")
 print(f"  sum(a*b)    {best(lambda: np.sum(a * b)):7.2f} ms")

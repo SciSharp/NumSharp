@@ -28,7 +28,7 @@ NumPy is the source of truth and if NumPy does A, we do A but in NumSharp's C# w
     - Do not implement struct kernel.
 ## 2. Implement np method/s
 - Implement np methods to the fullest, integrating into our existing infrastructure and patterns.
-- Our implementation might differ from NumPy's because NumPy uses C++ macros while we generate IL methods during runtime to achieve peak performance and cpu acceleration. But any input given to NumPy will produce same output with complete parity.
+- Our implementation might differ from NumPy's because NumPy uses C++ macros while we generate IL methods during runtime to achieve peak performance and cpu acceleration on 1k, 100k, 1m/10m length (1m on large dtypes). But any input given to NumPy will produce same output with complete parity.
 - Our implementation must provide same parameters as the NumPy function and support all dtypes NumSharp currently supports.
 - Do not create a function per dtype/NPTypeCode or if-else/switch-case per dtype/NPTypeCode to call a specialized path.
 - Do not use struct kernel pattern.

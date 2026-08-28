@@ -20,7 +20,7 @@ public class LinalgApiBenchmarks : BenchmarkBase
     private NDArray _matmulA = null!;
     private NDArray _matmulB = null!;
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]

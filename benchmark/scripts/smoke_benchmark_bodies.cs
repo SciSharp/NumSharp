@@ -21,6 +21,17 @@ return;
 
 np.multithreading(false);
 
+bool universalTierSmoke = args.Contains("--universal-tier", StringComparer.OrdinalIgnoreCase);
+int representativeN = universalTierSmoke ? ArraySizeSource.Large : ArraySizeSource.Small;
+var universalTierClasses = new HashSet<string>
+{
+    "ConversionCreationBenchmarks", "ComplexFftBenchmarks", "RealFftBenchmarks", "FftHelperBenchmarks",
+    "CloseBenchmarks", "ExtendedShapeBenchmarks", "SetOperationBenchmarks", "StackBenchmarks",
+    "NDArrayMethodBenchmarks", "ContinuousRandomBenchmarks", "DiscreteRandomBenchmarks",
+    "StructuredRandomBenchmarks", "MultinomialRandomBenchmarks", "IndexingSelectionBenchmarks",
+    "ExtendedSortingBenchmarks", "SignalStatisticsBenchmarks", "BincountBenchmarks"
+};
+
 var officialNamespaces = new HashSet<string>
 {
     "Arithmetic", "Unary", "Reduction", "Broadcasting", "Creation", "Manipulation",
@@ -35,6 +46,7 @@ var classes = assembly.GetTypes()
     .Where(type => type is { IsClass: true, IsAbstract: false }
         && type.Namespace?.StartsWith("NumSharp.Benchmark.CSharp.Benchmarks.") == true
         && officialNamespaces.Contains(type.Namespace.Split('.').Last())
+        && (!universalTierSmoke || universalTierClasses.Contains(type.Name))
         && type.GetMethods().Any(method => method.GetCustomAttribute<BenchmarkAttribute>() != null))
     .OrderBy(type => type.FullName)
     .ToArray();
@@ -45,16 +57,20 @@ foreach (var type in classes)
     try
     {
         instance = Activator.CreateInstance(type)!;
-        SetRepresentativeParameters(type, instance);
+        SetRepresentativeParameters(type, instance, representativeN);
         foreach (var setup in type.GetMethods().Where(method => method.GetCustomAttribute<GlobalSetupAttribute>() != null))
             setup.Invoke(instance, null);
+        var fixtureObjects = type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            .Select(field => field.GetValue(instance))
+            .Where(value => value is not null)
+            .ToHashSet(ReferenceEqualityComparer.Instance);
 
         foreach (var benchmark in type.GetMethods().Where(method => method.GetCustomAttribute<BenchmarkAttribute>() != null))
         {
             try
             {
                 var result = benchmark.Invoke(instance, null);
-                DisposeResult(result);
+                DisposeResult(result, fixtureObjects);
                 calls++;
             }
             catch (Exception error)
@@ -85,7 +101,7 @@ foreach (var type in classes)
 
 if (failures.Count == 0)
 {
-    Console.WriteLine($"OK: invoked {calls} benchmark bodies across {classes.Length} official classes.");
+    Console.WriteLine($"OK: invoked {calls} benchmark bodies across {classes.Length} official classes at N={representativeN:N0}.");
     return;
 }
 
@@ -93,11 +109,11 @@ Console.WriteLine($"FAIL: {failures.Count} benchmark bodies/setups failed ({call
 foreach (var failure in failures) Console.WriteLine("  " + failure);
 Environment.ExitCode = 1;
 
-static void SetRepresentativeParameters(Type type, object instance)
+static void SetRepresentativeParameters(Type type, object instance, int n)
 {
     foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                  .Where(property => property.CanWrite && property.Name == "N"))
-        property.SetValue(instance, ArraySizeSource.Small);
+        property.SetValue(instance, n);
 
     var typesProperty = type.GetProperty("Types", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
     NPTypeCode representative = NPTypeCode.Double;
@@ -115,9 +131,13 @@ static void SetRepresentativeParameters(Type type, object instance)
         property.SetValue(instance, representative);
 }
 
-static void DisposeResult(object? result)
+static void DisposeResult(object? result, HashSet<object> fixtureObjects)
 {
     if (result is null || result is string) return;
+    // Some NumPy-style identity/view APIs legally return the exact input wrapper (atleast_1d,
+    // asarray, require, ...). Disposing that result would destroy the benchmark fixture and make
+    // later smoke bodies read freed unmanaged memory.
+    if (fixtureObjects.Contains(result)) return;
     if (result is IDisposable disposable)
     {
         disposable.Dispose();
@@ -125,9 +145,12 @@ static void DisposeResult(object? result)
     }
     if (result is ITuple tuple)
     {
-        for (int i = 0; i < tuple.Length; i++) DisposeResult(tuple[i]);
+        for (int i = 0; i < tuple.Length; i++) DisposeResult(tuple[i], fixtureObjects);
         return;
     }
+    // Managed result arrays/lists own no NDArray buffers; walking tens of millions of scalar
+    // entries adds a second fake workload to the Large-tier smoke.
+    if (result is Array) return;
     if (result is IEnumerable sequence)
-        foreach (var item in sequence) DisposeResult(item);
+        foreach (var item in sequence) DisposeResult(item, fixtureObjects);
 }

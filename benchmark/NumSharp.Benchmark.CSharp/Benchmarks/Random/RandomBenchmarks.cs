@@ -7,10 +7,11 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Random;
 [BenchmarkCategory("Random", "Continuous")]
 public class ContinuousRandomBenchmarks : BenchmarkBase
 {
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
-    private Shape Size => new(N);
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
+    private Shape Size => new(WorkN);
 
     [GlobalSetup]
     public void Setup() => np.random.seed(Seed);
@@ -29,10 +30,10 @@ public class ContinuousRandomBenchmarks : BenchmarkBase
     [Benchmark(Description = "np.random.normal(loc, scale)")] public NDArray Normal() => np.random.normal(0.0, 1.0, Size);
     [Benchmark(Description = "np.random.pareto(a)")] public NDArray Pareto() => np.random.pareto(3.0, Size);
     [Benchmark(Description = "np.random.power(a)")] public NDArray Power() => np.random.power(3.0, Size);
-    [Benchmark(Description = "np.random.rand(n)")] public NDArray Rand() => np.random.rand(N);
-    [Benchmark(Description = "np.random.randn(n)")] public NDArray RandN() => np.random.randn(N);
-    [Benchmark(Description = "np.random.random(n)")] public NDArray Random() => np.random.random(N);
-    [Benchmark(Description = "np.random.random_sample(n)")] public NDArray RandomSample() => np.random.random_sample(N);
+    [Benchmark(Description = "np.random.rand(n)")] public NDArray Rand() => np.random.rand(WorkN);
+    [Benchmark(Description = "np.random.randn(n)")] public NDArray RandN() => np.random.randn(WorkN);
+    [Benchmark(Description = "np.random.random(n)")] public NDArray Random() => np.random.random(WorkN);
+    [Benchmark(Description = "np.random.random_sample(n)")] public NDArray RandomSample() => np.random.random_sample(WorkN);
     [Benchmark(Description = "np.random.rayleigh(scale)")] public NDArray Rayleigh() => np.random.rayleigh(2.0, Size);
     [Benchmark(Description = "np.random.standard_cauchy(n)")] public NDArray StandardCauchy() => np.random.standard_cauchy(Size);
     [Benchmark(Description = "np.random.standard_exponential(n)")] public NDArray StandardExponential() => np.random.standard_exponential(Size);
@@ -49,14 +50,15 @@ public class ContinuousRandomBenchmarks : BenchmarkBase
 [BenchmarkCategory("Random", "Discrete")]
 public class DiscreteRandomBenchmarks : TypedBenchmarkBase
 {
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
     public static IEnumerable<NPTypeCode> Types => new[] { NPTypeCode.Int64 };
-    private Shape Size => new(N);
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
+    private Shape Size => new(WorkN);
 
     [GlobalSetup]
     public void Setup() => np.random.seed(Seed);
@@ -80,24 +82,25 @@ public class StructuredRandomBenchmarks : BenchmarkBase
     private readonly double[] _probabilities = { 0.2, 0.3, 0.5 };
     private readonly double[] _mean = { 0.0, 1.0, -1.0 };
     private readonly double[,] _covariance = { { 1.0, 0.2, 0.1 }, { 0.2, 1.5, 0.3 }, { 0.1, 0.3, 2.0 } };
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _source = np.arange(N).astype(np.float64);
+        _source = np.arange(WorkN).astype(np.float64);
         _shuffleTarget = _source.copy();
     }
 
     [GlobalCleanup]
     public void Cleanup() { _source = null!; _shuffleTarget = null!; GC.Collect(); }
 
-    [Benchmark(Description = "np.random.choice(a, size)")] public NDArray Choice() => np.random.choice(_source, new Shape(N));
-    [Benchmark(Description = "np.random.dirichlet(alpha, size)")] public NDArray Dirichlet() => np.random.dirichlet(_alpha, N);
-    [Benchmark(Description = "np.random.multivariate_normal(mean, cov, size)")] public NDArray MultivariateNormal() => np.random.multivariate_normal(_mean, _covariance, N);
+    [Benchmark(Description = "np.random.choice(a, size)")] public NDArray Choice() => np.random.choice(_source, new Shape(WorkN));
+    [Benchmark(Description = "np.random.dirichlet(alpha, size)")] public NDArray Dirichlet() => np.random.dirichlet(_alpha, WorkN);
+    [Benchmark(Description = "np.random.multivariate_normal(mean, cov, size)")] public NDArray MultivariateNormal() => np.random.multivariate_normal(_mean, _covariance, WorkN);
     [Benchmark(Description = "np.random.permutation(a)")] public NDArray Permutation() => np.random.permutation(_source);
     [Benchmark(Description = "np.random.shuffle(a)")] public void Shuffle() => np.random.shuffle(_shuffleTarget);
 }
@@ -106,8 +109,9 @@ public class StructuredRandomBenchmarks : BenchmarkBase
 public class MultinomialRandomBenchmarks : TypedBenchmarkBase
 {
     private readonly double[] _probabilities = { 0.2, 0.3, 0.5 };
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [ParamsSource(nameof(Types))]
@@ -118,5 +122,5 @@ public class MultinomialRandomBenchmarks : TypedBenchmarkBase
     [GlobalSetup]
     public void Setup() => np.random.seed(Seed);
 
-    [Benchmark(Description = "np.random.multinomial(n, pvals, size)")] public NDArray Multinomial() => np.random.multinomial(10, _probabilities, N);
+    [Benchmark(Description = "np.random.multinomial(n, pvals, size)")] public NDArray Multinomial() => np.random.multinomial(10, _probabilities, WorkN);
 }

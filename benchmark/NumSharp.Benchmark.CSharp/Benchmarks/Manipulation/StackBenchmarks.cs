@@ -15,20 +15,21 @@ public class StackBenchmarks : BenchmarkBase
     private NDArray _arr1D_c = null!;
     private NDArray _arr2D_a = null!;
     private NDArray _arr2D_b = null!;
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _arr1D_a = np.random.rand(N) * 100;
-        _arr1D_b = np.random.rand(N) * 100;
-        _arr1D_c = np.random.rand(N) * 100;
+        _arr1D_a = np.random.rand(WorkN) * 100;
+        _arr1D_b = np.random.rand(WorkN) * 100;
+        _arr1D_c = np.random.rand(WorkN) * 100;
 
-        var rows = (int)Math.Sqrt(N);
-        var cols = N / rows;
+        var rows = (int)Math.Sqrt(WorkN);
+        var cols = WorkN / rows;
         _arr2D_a = np.random.rand(rows, cols) * 100;
         _arr2D_b = np.random.rand(rows, cols) * 100;
     }

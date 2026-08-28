@@ -447,6 +447,15 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
   gap: 0.5rem;
 }
 
+.ns-bench-dashboard .suite-scoreboard {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.ns-bench-dashboard .suite-tabs {
+  margin-bottom: 0.15rem;
+}
+
 .ns-bench-dashboard .bar-row {
   display: grid;
   grid-template-columns: minmax(8rem, 12rem) minmax(12rem, 1fr) 4.2rem 5.8rem;
@@ -1769,7 +1778,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     <div class="guide-grid">
       <div class="guide-block">
         <h3>Cell</h3>
-        <p>One benchmark row: operation, dtype, and size tier. The dashboard uses best timed runs after warmup.</p>
+      <p>One benchmark row: operation, dtype, and size tier. The dashboard uses best timed runs after warmup. Allocation-heavy families retain the 10M tier label while both NumPy and NumSharp use a symmetric 1M physical-work cap; 1M is not a separate dashboard tier.</p>
       </div>
       <div class="guide-block">
         <h3>Reading Ratios</h3>
@@ -1825,9 +1834,16 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   <section>
     <div class="section-head">
       <h2>Suite Scoreboard</h2>
-      <p class="section-note">Geomean across credible rows. Parity marker is 1.0x.</p>
+      <p class="section-note" data-suite-scoreboard-note>Geomean across credible rows. Parity marker is 1.0x.</p>
     </div>
-    <div class="bar-table">
+    <div class="suite-scoreboard" data-suite-scoreboard>
+      <div class="dtype-tabs suite-tabs" role="tablist" aria-label="Suite scoreboard views">
+        <button class="dtype-tab suite-tab is-active" type="button" role="tab" id="suite-tab-overall" aria-controls="suite-scoreboard-table" aria-selected="true" data-suite-tier="overall">Geomean</button>
+        <button class="dtype-tab suite-tab" type="button" role="tab" id="suite-tab-n1k" aria-controls="suite-scoreboard-table" aria-selected="false" tabindex="-1" data-suite-tier="n1k">1K</button>
+        <button class="dtype-tab suite-tab" type="button" role="tab" id="suite-tab-n100k" aria-controls="suite-scoreboard-table" aria-selected="false" tabindex="-1" data-suite-tier="n100k">100K</button>
+        <button class="dtype-tab suite-tab" type="button" role="tab" id="suite-tab-n10m" aria-controls="suite-scoreboard-table" aria-selected="false" tabindex="-1" data-suite-tier="n10m">10M</button>
+      </div>
+      <div class="bar-table" id="suite-scoreboard-table" role="tabpanel" aria-labelledby="suite-tab-overall">
       <div class="bar-row">
         <span class="bar-label">Statistics</span>
         <span class="bar-track"><span class="bar-fill" style="--w:89.6%; --tone:var(--good)"></span></span>
@@ -1905,6 +1921,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         <span class="bar-track"><span class="bar-fill" style="--w:16.0%; --tone:var(--slow)"></span></span>
         <span class="bar-score metric-slow">0.40x</span>
         <span class="bar-count">1 / 1</span>
+      </div>
       </div>
     </div>
   </section>
@@ -2484,7 +2501,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     });
   };
 
-  const updateEffectiveRollups = (rows) => {
+  const updateEffectiveRollups = (rows, suiteTier = null) => {
     const credible = rows.filter((row) => Number.isFinite(row.ratio) && !["no_data", "negligible"].includes(row.status));
     const geomean = (items) => {
       const ratios = items.map((row) => row.ratio).filter((ratio) => Number.isFinite(ratio) && ratio > 0);
@@ -2498,7 +2515,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
     document.querySelectorAll(".bar-row").forEach((bar) => {
       const key = suiteKey(bar.querySelector(".bar-label")?.textContent);
-      const suiteRows = credible.filter((row) => suiteKey(row.suite) === key);
+      const suiteRows = credible.filter((row) => suiteKey(row.suite) === key && (suiteTier === null || row.n === suiteTier));
       const score = geomean(suiteRows);
       const scoreNode = bar.querySelector(".bar-score");
       const fill = bar.querySelector(".bar-fill");
@@ -2537,6 +2554,79 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         if (countNode) countNode.textContent = `${dtypeRows.length} rows`;
       });
     });
+  };
+
+  const initializeSuiteScoreboard = (rows, managedRows, openBlasRows) => {
+    const root = document.querySelector("[data-suite-scoreboard]");
+    if (!root) return;
+
+    const tabs = Array.from(root.querySelectorAll("[data-suite-tier]"));
+    const panel = root.querySelector(".bar-table");
+    const note = document.querySelector("[data-suite-scoreboard-note]");
+    const tierByName = { overall: null, n1k: 1_000, n100k: 100_000, n10m: 10_000_000 };
+    const suiteKey = (value) => String(value || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+
+    const refreshTooltip = (element, tier) => {
+      const suite = element.querySelector(".bar-label")?.textContent.trim();
+      if (!suite) return;
+      const key = suiteKey(suite);
+      const matchesTier = (row) => tier === null || row.n === tier;
+      const suiteRows = managedRows.filter((row) => suiteKey(row.suite) === key && matchesTier(row));
+      const nativeSuiteRows = openBlasRows.filter((row) => suiteKey(row.suite) === key && matchesTier(row));
+      const title = tier === null ? `${suite} benchmark rows` : `${suite} at ${formatN(tier)} benchmark rows`;
+      const html = buildTooltipTable(title, suiteRows, nativeSuiteRows);
+      attachTooltip(element, html, title);
+
+      if (element._tippy) {
+        element.dataset.tooltipPinned = "false";
+        element.classList.remove("is-tooltip-open");
+        element._tippy.hide();
+        element._tippy.setContent(html);
+      }
+    };
+
+    const showTier = (name, focusTab = false) => {
+      const tier = tierByName[name];
+      if (tier === undefined) return;
+
+      tabs.forEach((tab) => {
+        const isActive = tab.dataset.suiteTier === name;
+        tab.classList.toggle("is-active", isActive);
+        tab.setAttribute("aria-selected", String(isActive));
+        tab.tabIndex = isActive ? 0 : -1;
+        if (isActive && focusTab) tab.focus();
+      });
+
+      root.dataset.activeSuiteTier = name;
+      if (panel) panel.setAttribute("aria-labelledby", `suite-tab-${name}`);
+      if (note) note.textContent = tier === null
+        ? "Geomean across credible rows. Parity marker is 1.0x."
+        : `Geomean across credible rows at ${formatN(tier)}. Parity marker is 1.0x.`;
+
+      updateEffectiveRollups(rows, tier);
+      root.querySelectorAll(".bar-row").forEach((element) => refreshTooltip(element, tier));
+    };
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => showTier(tab.dataset.suiteTier));
+      tab.addEventListener("keydown", (event) => {
+        const isForward = event.key === "ArrowRight" || event.key === "ArrowDown";
+        const isBackward = event.key === "ArrowLeft" || event.key === "ArrowUp";
+        const isHome = event.key === "Home";
+        const isEnd = event.key === "End";
+        if (!isForward && !isBackward && !isHome && !isEnd) return;
+
+        event.preventDefault();
+        let nextIndex = index;
+        if (isForward) nextIndex = (index + 1) % tabs.length;
+        if (isBackward) nextIndex = (index - 1 + tabs.length) % tabs.length;
+        if (isHome) nextIndex = 0;
+        if (isEnd) nextIndex = tabs.length - 1;
+        showTier(tabs[nextIndex].dataset.suiteTier, true);
+      });
+    });
+
+    showTier("overall");
   };
 
   const dtypeOrder = [
@@ -3013,7 +3103,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
     const measuredRows = rows.filter((row) => row.ratio !== null);
     updateStatusMix(rows);
-    updateEffectiveRollups(rows);
+    initializeSuiteScoreboard(rows, managedRows, nativeRows);
     initializeFunctionExplorer(rows);
 
     document.querySelectorAll(".status-segment").forEach((element) => {
@@ -3027,16 +3117,6 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         : nativeRows.filter((row) => rowMatchesBand(row, band));
       const title = band.noData ? "No-data benchmark rows" : `${band.title} benchmark rows`;
       attachTooltip(element, buildTooltipTable(title, bandRows, nativeBandRows, { noData: band.noData }), title);
-    });
-
-    document.querySelectorAll(".bar-row").forEach((element) => {
-      const suite = element.querySelector(".bar-label")?.textContent.trim();
-      if (!suite) return;
-      const suiteKey = suite.replace(/[^a-z0-9]/gi, "").toLowerCase();
-      const suiteRows = managedRows.filter((row) => row.suite.replace(/[^a-z0-9]/gi, "").toLowerCase() === suiteKey);
-      const nativeSuiteRows = nativeRows.filter((row) => row.suite.replace(/[^a-z0-9]/gi, "").toLowerCase() === suiteKey);
-      const title = `${suite} benchmark rows`;
-      attachTooltip(element, buildTooltipTable(title, suiteRows, nativeSuiteRows), title);
     });
 
     document.querySelectorAll(".dtype-cell").forEach((element) => {
@@ -3506,8 +3586,10 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   let combinedRows = [];
   let coreRows = [];
   let nativeRows = [];
+  let effectiveRows = [];
   let coreGroups = new Map();
   let nativeGroups = new Map();
+  let effectiveGroups = new Map();
   let ready = false;
 
   const escapeHtml = (value) => String(value ?? "")
@@ -3570,6 +3652,28 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     }];
   });
 
+  const rowsForEffectiveProfile = (rows) => rows.flatMap((row) => {
+    if (!row.effective_profile || row.numsharp_ms === null || row.ratio === null) return [];
+    return [{
+      name: functionName(row.operation),
+      operation: row.operation,
+      scenario: row.scenario || "",
+      suite: row.suite,
+      category: row.category,
+      n: Number(row.n),
+      dtype: row.dtype,
+      nsMs: Number(row.numsharp_ms),
+      numsharp_ms: Number(row.numsharp_ms),
+      numpyMs: row.numpy_ms === null ? null : Number(row.numpy_ms),
+      numpy_ms: row.numpy_ms === null ? null : Number(row.numpy_ms),
+      ratio: Number(row.ratio),
+      status: row.status,
+      availability: "available",
+      effectiveProfile: row.effective_profile,
+      effectiveBackend: row.effective_backend || row.effective_profile
+    }];
+  });
+
   const groupRows = (rows, selector) => {
     const map = new Map();
     rows.forEach((row) => {
@@ -3584,14 +3688,19 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const scoresFor = (name) => {
     const managedRows = coreGroups.get(name) || [];
     const openblasRows = nativeGroups.get(name) || [];
+    const bestRows = effectiveGroups.get(name) || [];
     const managedAvailable = managedRows.filter((row) => row.availability === "available");
     const openblasAvailable = openblasRows.filter((row) => row.availability === "available");
     const managed = geomean(managedAvailable);
     const openblas = geomean(openblasAvailable);
-    const best = Math.max(managed ?? Number.NEGATIVE_INFINITY, openblas ?? Number.NEGATIVE_INFINITY);
-    const winner = !Number.isFinite(best) ? "Unavailable"
-      : openblas !== null && (managed === null || openblas > managed) ? "OpenBLAS" : "Managed Core";
-    return { managedRows, openblasRows, managedAvailable, openblasAvailable, managed, openblas, best: Number.isFinite(best) ? best : null, winner };
+    const best = geomean(bestRows);
+    const managedWins = bestRows.filter((row) => row.effectiveBackend === "managed").length;
+    const openblasWins = bestRows.filter((row) => row.effectiveBackend === "openblas").length;
+    const winner = best === null ? "Unavailable"
+      : managedWins && openblasWins ? `Mixed · Core ${managedWins} / OpenBLAS ${openblasWins}`
+      : openblasWins ? "OpenBLAS"
+      : "Managed Core";
+    return { managedRows, openblasRows, bestRows, managedAvailable, openblasAvailable, managed, openblas, best, winner };
   };
 
   const unavailableMessage = (rows, profile) => {
@@ -3622,9 +3731,9 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     const available = rows.filter((row) => row.availability === "available");
     return available.length ? `
     <div class="function-table-scroll backend-lens-table" data-backend-table="openblas" data-load-more-scope hidden>
-      <table class="function-table"><thead><tr><th>Scenario</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th></tr></thead>
+      <table class="function-table"><thead><tr><th>Operation / scenario</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th></tr></thead>
       <tbody>${available.map((row, index) => `<tr${index >= 25 ? " hidden data-load-more-row" : ""}>
-        <td class="op">${escapeHtml(row.scenario)}</td><td>${escapeHtml(row.dtype)}</td><td class="num">${formatN(row.n)}</td>
+        <td class="op">${escapeHtml(row.scenario || row.operation)}</td><td>${escapeHtml(row.dtype)}</td><td class="num">${formatN(row.n)}</td>
         <td class="num">${formatRatio(row.ratio)}</td><td class="num">${row.numpyMs.toFixed(4)}</td><td class="num">${row.nsMs.toFixed(4)}</td>
       </tr>`).join("")}</tbody></table>
       ${available.length > 25 ? `<div class="ns-load-more-wrap"><button class="ns-load-more-button" type="button" data-load-more>Load More <span class="ns-load-more-count">(${available.length - 25} remaining)</span></button></div>` : ""}
@@ -3635,17 +3744,17 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     const scores = scoresFor(name);
     return `<div class="backend-comparison" data-backend-comparison="${escapeHtml(name)}">
       <div class="backend-comparison-head">
-        <div><div class="backend-comparison-title">Backend comparison</div><div class="backend-comparison-note">Published value: ${formatRatio(scores.best)} · ${escapeHtml(scores.winner)} is faster for the measured scenario set</div></div>
+        <div><div class="backend-comparison-title">Backend comparison</div><div class="backend-comparison-note">Published value: ${formatRatio(scores.best)} · fastest backend selected independently for each matching scenario</div></div>
         <div class="function-tabs backend-lens-tabs" role="tablist" aria-label="${escapeHtml(name)} backend timings">
-          <button class="function-tab is-active" type="button" role="tab" aria-selected="true" data-backend-lens="managed">Managed Core ${scores.managedAvailable.length ? 1 : 0}</button>
-          <button class="function-tab" type="button" role="tab" aria-selected="false" data-backend-lens="openblas">OpenBLAS ${scores.openblasAvailable.length ? 1 : 0}</button>
+          <button class="function-tab is-active" type="button" role="tab" aria-selected="true" data-backend-lens="managed">Managed Core ${scores.managedAvailable.length}</button>
+          <button class="function-tab" type="button" role="tab" aria-selected="false" data-backend-lens="openblas">OpenBLAS ${scores.openblasAvailable.length}</button>
         </div>
       </div>
       <div class="function-stat-strip">
-        <div class="function-stat"><span>Best available</span><strong>${formatRatio(scores.best)}</strong></div>
+        <div class="function-stat"><span>Best per scenario</span><strong>${formatRatio(scores.best)}</strong></div>
         <div class="function-stat"><span>Managed Core</span><strong>${formatRatio(scores.managed)}</strong></div>
         <div class="function-stat"><span>OpenBLAS</span><strong>${formatRatio(scores.openblas)}</strong></div>
-        <div class="function-stat"><span>Winner</span><strong>${escapeHtml(scores.winner)}</strong></div>
+        <div class="function-stat"><span>Cells won</span><strong>${escapeHtml(scores.winner)}</strong></div>
       </div>
       ${coreTable(scores.managedRows)}
       ${nativeTable(scores.openblasRows)}
@@ -3747,8 +3856,10 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       ? payload.map((row) => ({ ...row, name: functionName(row.operation), availability: row.numsharp_ms === null ? "not_measured" : "available" }))
       : rowsForProfile(combinedRows, "managed");
     nativeRows = Array.isArray(payload) ? [] : rowsForProfile(combinedRows, "openblas");
+    effectiveRows = Array.isArray(payload) ? coreRows : rowsForEffectiveProfile(combinedRows);
     coreGroups = groupRows(coreRows, (row) => functionName(row.operation));
     nativeGroups = groupRows(nativeRows, (row) => row.name);
+    effectiveGroups = groupRows(effectiveRows, (row) => row.name);
     ready = true;
     updateHeadline();
     decorateList();

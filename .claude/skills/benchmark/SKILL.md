@@ -21,8 +21,8 @@ is the distilled map + the actionable playbooks. Read `benchmark/CLAUDE.md` when
 ## THE convention: NPY/NS (memorize this)
 
 > **ratio = NumPy_ms / NumSharp_ms.** `>1` = NumSharp **faster**, `<1` = slower, `=1` = parity. **Higher is better.**
-> **Timing basis: best window (min)** — ratios compare each side's per-case min of ≥50 samples (≥20 when a
-> round exceeds 10 ms), never the mean (NS-side GC/page-fault/machine tails made means lie ~15% geomean-wide);
+> **Timing basis: best window (min)** — ratios compare each side's per-case min over a ~200 ms time-budgeted
+> sweep (a >20 ms/call op runs exactly 100 times; the C# op-matrix keeps 50 BDN iterations), never the mean (NS-side GC/page-fault/machine tails made means lie ~15% geomean-wide);
 > per-case means stay in the JSON (`numpy_mean_ms`/`numsharp_mean_ms`) as tail diagnostics.
 
 Used everywhere — matrices, geomeans, commit messages, every `*_sheet.py`. Dashboard/report bands: ✅ `≥1.05` · 🟡 `≥0.5` · 🟠 `≥0.2`
@@ -40,7 +40,8 @@ script assembly, not Core. The BenchmarkDotNet projects are exempt (they mandate
 
 | Side | Where | What |
 |------|-------|------|
-| C# | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/<Category>/*.cs` | BenchmarkDotNet classes; `[Benchmark(Description="np.foo(a)")]` methods. |
+| C# | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/<Category>/*.cs` | Core-only BenchmarkDotNet project plus shared benchmark classes; `[Benchmark(Description="np.foo(a)")]` methods. |
+| OpenBLAS C# | `benchmark/NumSharp.Benchmark.OpenBLAS/` | Enables one-thread OpenBLAS and reruns the shared official LinearAlgebra classes/config. |
 | NumPy | `benchmark/NumSharp.Benchmark.Python/numpy_benchmark.py` | `run_<suite>_benchmarks(...)` emitting `BenchmarkResult` rows. |
 | Merge | `benchmark/scripts/{merge-results,merge-backend-profiles}.py` | Joins language timings, then backend profiles on the exact cell. |
 | Orchestrator | `benchmark/run_benchmark.py` | Builds C#, runs each suite (BDN) + warm NumPy across 1K/100K/10M, merges, snapshots. |
@@ -53,11 +54,18 @@ names to normalize identically or the row shows as "C# not run" / "NumPy only".
 
 - **Op matrix** — 18 comparison suites, each a C# namespace filter in `run_benchmark.py`'s `SUITES` map
   (`arithmetic, unary, reduction, broadcast, creation, manipulation, slicing, comparison, bitwise, logic,
-  statistics, sorting, linalg, selection, fft, random, ndarray, api`). Swept over the size/dtype tiers
-  each API can exercise safely; the classic kernels retain the 1K/100K/10M sweep.
-- **Backend profiles** — `benchmark/backends/backend_profiles.py` runs every backend-sensitive API
-  under Managed C# and OpenBLAS with one schema; MissingBackendException and NotSupportedException
-  are availability outcomes. Separate profile JSON files are merged into one effective dataset.
+  statistics, sorting, linalg, selection, fft, random, ndarray, api`). Universal-tier rule: an
+  operation/dtype with both 1K and 100K must also schedule 10M; the official merge checks NumPy and C#
+  independently. Scalar/1K-only dispatch cases are the only intentional non-throughput exception.
+  Allocation-heavy families map the 10M label to 1M physical elements symmetrically on both sides;
+  1M is not a separate report/dashboard tier.
+- **Backend profiles** — the complete official LinearAlgebra BDN classes run under both the Core-only
+  executable and `NumSharp.Benchmark.OpenBLAS`; a merge gate rejects any missing exact-cell OpenBLAS
+  peer. `benchmark/backends/backend_profiles.py` supplements backend-only product/LAPACK routes with
+  the same schema; MissingBackendException and NotSupportedException are availability outcomes. Every
+  profile publishes `1K / 100K / 10M`; operation-specific physical work remains bounded (LAPACK maps
+  those tiers to matrix sides `32 / 96 / 128`). Separate profile JSON files are merged into one
+  effective dataset, with `actual_backend: managed` retained for controls that never dispatch to BLAS.
 - **Five appended subsystems** (own result models, appended not merged): `nditer` (iterator machinery),
   `layout` (op × 8 memory layouts × dtype), `operand` (1-D/scalar/mixed/broadcast), `cast` (astype 15×15 × layout),
   and `fusion` (`np.evaluate`). Each is a

@@ -17,21 +17,22 @@ public class SignalStatisticsBenchmarks : BenchmarkBase
     private NDArray _kronB = null!;
     private NDArray _matrix = null!;
     private NDArray _bins = null!;
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _a = np.random.rand(N) * 100 - 50;
-        _b = np.random.rand(N) * 100 - 50;
+        _a = np.random.rand(WorkN) * 100 - 50;
+        _b = np.random.rand(WorkN) * 100 - 50;
         _kernel = np.random.rand(31) * 2 - 1;
-        int vectorRows = N / 3;
+        int vectorRows = WorkN / 3;
         _vectors = np.random.rand(vectorRows * 3).reshape(vectorRows, 3);
         _otherVectors = np.random.rand(vectorRows * 3).reshape(vectorRows, 3);
-        int side = (int)Math.Sqrt(N);
+        int side = (int)Math.Sqrt(WorkN);
         _kronA = np.random.rand(side);
         _kronB = np.random.rand(side);
         _matrix = np.random.rand(side * side).reshape(side, side);
@@ -71,8 +72,9 @@ public class SignalStatisticsBenchmarks : BenchmarkBase
 public class BincountBenchmarks : TypedBenchmarkBase
 {
     private NDArray _values = null!;
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [ParamsSource(nameof(Types))]
@@ -84,7 +86,7 @@ public class BincountBenchmarks : TypedBenchmarkBase
     public void Setup()
     {
         np.random.seed(Seed);
-        _values = np.random.randint(0, Math.Max(2, N / 10), new Shape(N));
+        _values = np.random.randint(0, Math.Max(2, WorkN / 10), new Shape(WorkN));
     }
 
     [GlobalCleanup]

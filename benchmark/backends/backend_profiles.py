@@ -24,6 +24,51 @@ OPENBLAS_JSON = OUTPUT_DIR / "openblas_results.openblas.json"
 REPORT_MD = OUTPUT_DIR / "openblas_results.md"
 EXPORT_TSV = OUTPUT_DIR / "openblas_results.tsv"
 
+WORKLOAD_TIERS = {1_000, 100_000, 10_000_000}
+PRODUCT_TIERS = WORKLOAD_TIERS
+SLIDING_TIERS = WORKLOAD_TIERS
+LAPACK_TIERS = WORKLOAD_TIERS
+
+# This is a coverage CONTRACT, not a rendering hint. If either twin silently drops one of these
+# rows, the benchmark run must fail instead of publishing another asymmetric backend comparison.
+EXPECTED_COVERAGE = {
+    ("np.dot(a, b)", ""): PRODUCT_TIERS,
+    ("a.dot(b) [ndarray]", ""): PRODUCT_TIERS,
+    ("np.inner(a, b)", ""): PRODUCT_TIERS,
+    ("np.vdot(a, b)", ""): PRODUCT_TIERS,
+    ("np.vecdot(a, b)", ""): PRODUCT_TIERS,
+    ("np.linalg.vecdot(a, b)", ""): PRODUCT_TIERS,
+    ("np.matmul(a, b)", ""): PRODUCT_TIERS,
+    ("np.linalg.matmul(a, b)", ""): PRODUCT_TIERS,
+    ("np.matvec(a, b)", ""): PRODUCT_TIERS,
+    ("np.vecmat(a, b)", ""): PRODUCT_TIERS,
+    ("np.einsum(subscripts, operands)", ""): PRODUCT_TIERS,
+    ("np.einsum('ij,jk->ik', a, b)", "ij,jk->ik"): PRODUCT_TIERS,
+    ("np.tensordot(a, b)", ""): PRODUCT_TIERS,
+    ("np.tensordot(a, b, axes=1)", "axes=1,matrix"): PRODUCT_TIERS,
+    ("np.linalg.tensordot(a, b)", ""): PRODUCT_TIERS,
+    ("np.linalg.multi_dot(arrays)", ""): PRODUCT_TIERS,
+    ("np.linalg.matrix_power(a, 3)", ""): PRODUCT_TIERS,
+    ("np.correlate(a, kernel)", ""): SLIDING_TIERS,
+    ("np.convolve(a, kernel)", ""): SLIDING_TIERS,
+}
+
+for operation in (
+    "np.linalg.cholesky(a)", "np.linalg.cond(a)", "np.linalg.det(a)",
+    "np.linalg.eig(a)", "np.linalg.eigh(a)", "np.linalg.eigvals(a)",
+    "np.linalg.eigvalsh(a)", "np.linalg.inv(a)", "np.linalg.lstsq(a, b)",
+    "np.linalg.matrix_rank(a)", "np.linalg.pinv(a)", "np.linalg.qr(a)",
+    "np.linalg.slogdet(a)", "np.linalg.solve(a, b)", "np.linalg.svd(a)",
+    "np.linalg.svdvals(a)", "np.linalg.tensorinv(a)", "np.linalg.tensorsolve(a, b)",
+):
+    EXPECTED_COVERAGE[(operation, "")] = LAPACK_TIERS
+
+EXPECTED_COVERAGE[("np.linalg.matrix_power(a, -1)", "n=-1")] = LAPACK_TIERS
+EXPECTED_COVERAGE[("np.linalg.matrix_norm(a, ord=2)", "ord=2")] = LAPACK_TIERS
+EXPECTED_COVERAGE[("np.linalg.norm(a, ord=2)", "ord=2")] = LAPACK_TIERS
+EXPECTED_COVERAGE[("np.polyfit(x, y, 3)", "")] = WORKLOAD_TIERS
+EXPECTED_COVERAGE[("np.roots(p)", "")] = WORKLOAD_TIERS
+
 
 def json_lines(text: str) -> list[dict]:
     rows = []
@@ -97,6 +142,34 @@ def build_envelope(profile: str, cs_rows: list[dict], numpy_by_key: dict[str, di
     }
 
 
+def validate_coverage(managed: dict, openblas: dict) -> None:
+    """Reject asymmetric or incomplete backend-profile output before it reaches the dashboard."""
+    def identities(envelope: dict) -> set[tuple[str, str, int, str]]:
+        return {(row["operation"], row["dtype"], row["n"], row["scenario"])
+                for row in envelope["rows"]}
+
+    managed_ids = identities(managed)
+    openblas_ids = identities(openblas)
+    if managed_ids != openblas_ids:
+        only_managed = sorted(managed_ids - openblas_ids)[:10]
+        only_openblas = sorted(openblas_ids - managed_ids)[:10]
+        raise RuntimeError(
+            "Backend profile twins emitted different cells: "
+            f"managed-only={only_managed}; openblas-only={only_openblas}")
+
+    sizes_by_case: dict[tuple[str, str], set[int]] = {}
+    for operation, _dtype, n, scenario in managed_ids:
+        sizes_by_case.setdefault((operation, scenario), set()).add(n)
+
+    missing = []
+    for case, expected_sizes in EXPECTED_COVERAGE.items():
+        absent = expected_sizes - sizes_by_case.get(case, set())
+        if absent:
+            missing.append((case[0], case[1], sorted(absent)))
+    if missing:
+        raise RuntimeError(f"Backend profile coverage contract failed: {missing}")
+
+
 def render(managed: dict, openblas: dict, backend_info: str) -> None:
     managed_by_key = {(r["operation"], r["dtype"], r["n"], r["scenario"]): r for r in managed["rows"]}
     openblas_by_key = {(r["operation"], r["dtype"], r["n"], r["scenario"]): r for r in openblas["rows"]}
@@ -160,6 +233,7 @@ def main() -> None:
     })
     managed = build_envelope("managed", json_lines(managed_text), numpy_by_key)
     openblas = build_envelope("openblas", json_lines(openblas_text), numpy_by_key)
+    validate_coverage(managed, openblas)
     MANAGED_JSON.write_text(json.dumps(managed, indent=2), encoding="utf-8")
     OPENBLAS_JSON.write_text(json.dumps(openblas, indent=2), encoding="utf-8")
     backend_info = openblas.get("backend_info") or ""

@@ -25,23 +25,24 @@ public class NDArrayMethodBenchmarks : BenchmarkBase
     private NDArray _clipMin = null!;
     private NDArray _clipMax = null!;
     private string _toFilePath = null!;
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _a = np.random.rand(N) * 100 - 50;
-        _b = np.random.rand(N) * 100 - 50;
+        _a = np.random.rand(WorkN) * 100 - 50;
+        _b = np.random.rand(WorkN) * 100 - 50;
         int rows = 10;
-        _matrix = _a.reshape(rows, N / rows);
-        _withSingletons = _a.reshape(1, N, 1);
+        _matrix = _a.reshape(rows, WorkN / rows);
+        _withSingletons = _a.reshape(1, WorkN, 1);
         _mask = _a > 0.0;
-        _indices = np.arange(0, N, 2);
-        _selector = np.random.randint(0, 2, new Shape(N));
-        _sorted = np.arange(N).astype(np.float64);
+        _indices = np.arange(0, WorkN, 2);
+        _selector = np.random.randint(0, 2, new Shape(WorkN));
+        _sorted = np.arange(WorkN).astype(np.float64);
         _putTarget = _a.copy();
         _fillTarget = _a.copy();
         _fieldTarget = _a.copy();
@@ -89,14 +90,14 @@ public class NDArrayMethodBenchmarks : BenchmarkBase
     [Benchmark(Description = "a.dot(b) [ndarray]")] public NDArray Dot() => _a.dot(_b);
     [Benchmark(Description = "a.fill(value) [ndarray]")] public void Fill() => _fillTarget.fill(3.25);
     [Benchmark(Description = "a.getfield(dtype) [ndarray]")] public NDArray GetField() => _a.getfield(np.float64);
-    [Benchmark(Description = "a.item(index) [ndarray]")] public object Item() => _a.item(N / 2);
+    [Benchmark(Description = "a.item(index) [ndarray]")] public object Item() => _a.item(WorkN / 2);
     [Benchmark(Description = "a.put(indices, values) [ndarray]")] public void Put() => _putTarget.put(_indices, _b["::2"]);
     [Benchmark(Description = "a.repeat(repeats) [ndarray]")] public NDArray Repeat() => _a.repeat(2);
-    [Benchmark(Description = "a.reshape(shape) [ndarray]")] public NDArray Reshape() => _a.reshape(10, N / 10);
+    [Benchmark(Description = "a.reshape(shape) [ndarray]")] public NDArray Reshape() => _a.reshape(10, WorkN / 10);
     [Benchmark(Description = "a.resize(shape) [ndarray]")] public NDArray Resize()
     {
         var copy = _a.copy();
-        copy.resize(new Shape(N + 1L), refcheck: false);
+        copy.resize(new Shape(WorkN + 1L), refcheck: false);
         return copy;
     }
     [Benchmark(Description = "a.round() [ndarray]")] public NDArray Round() => _a.round();
@@ -112,13 +113,13 @@ public class NDArrayMethodBenchmarks : BenchmarkBase
     [Benchmark(Description = "a.trace() [ndarray]")] public NDArray Trace() => _matrix.trace();
     [Benchmark(Description = "a.transpose() [ndarray]")] public NDArray Transpose() => _matrix.transpose();
     [Benchmark(Description = "a.view() [ndarray]")] public NDArray View() => _a.view();
-    [Benchmark(Description = "a.argpartition(kth) [ndarray]")] public NDArray ArgPartition() => _a.argpartition(N / 2);
+    [Benchmark(Description = "a.argpartition(kth) [ndarray]")] public NDArray ArgPartition() => _a.argpartition(WorkN / 2);
     [Benchmark(Description = "a.argsort() [ndarray]")] public NDArray ArgSort() => _a.argsort();
     [Benchmark(Description = "a.nonzero() [ndarray]")] public object NonZero() => _a.nonzero();
     [Benchmark(Description = "a.partition(kth) [ndarray]")] public NDArray Partition()
     {
         var copy = _a.copy();
-        copy.partition(N / 2);
+        copy.partition(WorkN / 2);
         return copy;
     }
     [Benchmark(Description = "a.searchsorted(v) [ndarray]")] public NDArray SearchSorted() => _sorted.searchsorted(_a);

@@ -52,11 +52,12 @@ double BestMs(Action body, int iters, int warm, int rounds)
     for (int i = 1; i < Math.Max(2, warm); i++) body();
     pilot.Stop();
     double perCall = pilot.Elapsed.TotalMilliseconds / Math.Max(1, Math.Max(2, warm) - 1);
-    // Sample rule: >=50 timed rounds (>=20 when one round exceeds 10 ms); rounds auto-size to ~1 ms.
-    // Caller's (iters, rounds) from Pick survive as floors/hints only — iters is superseded by the
-    // pilot-derived batch (kept in the signature for call-site stability).
-    int it = perCall > 10.0 ? 1 : Math.Clamp((int)Math.Round(1.0 / Math.Max(perCall, 1e-6)), 1, 1_000_000);
-    int rds = Math.Max(rounds, perCall > 10.0 ? 20 : 50);
+    // Min-time policy: a call >20 ms/call runs EXACTLY 100 times (min over 100); everything else
+    // batches ~1 ms windows and accumulates enough of them to span ~200 ms total (time-bound, not a
+    // fixed round count — the caller's iters/rounds hints are superseded).
+    bool slow = perCall > 20.0;
+    int it = slow ? 1 : Math.Clamp((int)Math.Round(1.0 / Math.Max(perCall, 1e-6)), 1, 1_000_000);
+    int rds = slow ? 100 : Math.Max(2, (int)Math.Ceiling(200.0 / Math.Max(it * perCall, 1e-9)));
     double best = double.MaxValue;
     for (int r = 0; r < rds; r++)
     {
@@ -229,15 +230,16 @@ unsafe
                 var ru = NDIterRef.MultiNew(3, add3, EXL, KO, SAFE, RO_RO_WO);
                 // Hand-rolled (the row reuses ONE iterator across all calls, so the body can't be
                 // handed to BestMs as a fresh-state lambda) but under the SAME sample rule: warmup's
-                // timed tail (first call excluded) is the per-call pilot; >=50 rounds auto-sized to
-                // ~1 ms windows, relaxed to >=20 when one round exceeds 10 ms.
+                // timed tail (first call excluded) is the per-call pilot; min-time policy: >20 ms/call
+                // runs EXACTLY 100 times, else enough ~1 ms windows to span ~200 ms total.
                 ru.Reset(); ru.ForEach(K.AddF64);
                 var pilotRu = Stopwatch.StartNew();
                 for (int i = 1; i < Math.Max(2, warm); i++) { ru.Reset(); ru.ForEach(K.AddF64); }
                 pilotRu.Stop();
                 double perCallRu = pilotRu.Elapsed.TotalMilliseconds / Math.Max(1, Math.Max(2, warm) - 1);
-                int itRu = perCallRu > 10.0 ? 1 : Math.Clamp((int)Math.Round(1.0 / Math.Max(perCallRu, 1e-6)), 1, 1_000_000);
-                int rdsRu = Math.Max(rounds, perCallRu > 10.0 ? 20 : 50);
+                bool slowRu = perCallRu > 20.0;
+                int itRu = slowRu ? 1 : Math.Clamp((int)Math.Round(1.0 / Math.Max(perCallRu, 1e-6)), 1, 1_000_000);
+                int rdsRu = slowRu ? 100 : Math.Max(2, (int)Math.Ceiling(200.0 / Math.Max(itRu * perCallRu, 1e-9)));
                 double best = double.MaxValue;
                 for (int r = 0; r < rdsRu; r++)
                 {
