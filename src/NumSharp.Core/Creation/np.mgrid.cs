@@ -120,6 +120,7 @@ namespace NumSharp
             /// </param>
             public MGridResult this[params object[] key] => new MGridResult(Build(key));
 
+            [NDScoped] // reclaims each rescale pass's line/astype/reshape/broadcast temps and the grid[k] layer views
             private static NDArray Build(object[] key)
             {
                 // Shared nd_grid parsing (same grammar/errors as ogrid).

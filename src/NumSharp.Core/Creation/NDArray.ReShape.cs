@@ -162,7 +162,9 @@ namespace NumSharp
 
             // ---- copy in the requested order, then hand back a VIEW of that internal copy ----
             var copy = NDIter.CopyAs(this.typecode, this, order, TensorEngine);
-            return MakeReshapeView(copy, resolvedDims, order);
+            var reshaped = MakeReshapeView(copy, resolvedDims, order);
+            copy.Dispose(); // release the wrapper's counted ref — the returned view holds its own, so the buffer stays alive
+            return reshaped;
         }
 
         /// <summary>

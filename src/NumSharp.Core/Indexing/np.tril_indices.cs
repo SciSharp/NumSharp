@@ -86,6 +86,7 @@ namespace NumSharp
         ///     Cost is <c>O(output)</c>, never <c>O(n·m)</c>.
         ///     </para>
         /// </remarks>
+        [NDScopedCovered] // only callers: the [NDScoped] tril/triu_indices(_from) entries (the iota ladder is scope-reclaimed)
         private static unsafe NDArray<long>[] TriangleIndices(int n, int k, int? m, bool lower)
         {
             // NumPy reaches these extents through tri()/arange(), where a negative count is an

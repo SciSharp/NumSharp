@@ -36,6 +36,7 @@ namespace NumSharp
         ///     when <paramref name="out"/> is supplied).
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.take.html</remarks>
+        [NDScoped] // reclaims the 0-d reshape alias and the natural-result temp on the out= path
         public static NDArray take(NDArray a, NDArray indices, int? axis = null, NDArray @out = null, string mode = "raise")
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
@@ -102,6 +103,7 @@ namespace NumSharp
         /// <summary>
         ///     Scalar convenience overload — take a single element by flat index.
         /// </summary>
+        [NDScoped] // the 0-d index wrapper is built in THIS frame, before the array overload's scope opens
         public static NDArray take(NDArray a, long index, int? axis = null, NDArray @out = null, string mode = "raise")
         {
             // Wrap the scalar in a 0-d NDArray so the array overload's shape-preserving

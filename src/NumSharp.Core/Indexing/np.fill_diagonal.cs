@@ -170,6 +170,7 @@ namespace NumSharp
         ///     buffer (the sequence fill) both feed it without materialising a slice. When the
         ///     kernel is unavailable the code falls back to the original alias + <c>SetData</c>.
         /// </remarks>
+        [NDScopedCovered] // only reached from [NDScoped] fill_diagonal (the AOT-fallback alias + value slice are scope-reclaimed)
         private static void WriteDiagonalBlock(
             NDArray a, NDArray values, long valueStart, long len, long offset, long stride, long bufferSize)
         {

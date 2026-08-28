@@ -38,6 +38,7 @@ namespace NumSharp
         /// present, not exactly one advanced index, a multi-dim advanced index / k-D
         /// mask, or a newaxis mixed in (not modelled for assignment).
         /// </summary>
+        [NDScopedCovered] // only caller: the [NDScoped] SetIndices(object[], values) dispatch
         private bool TrySetSliceWithSingleAdvanced(object[] indicesObjects, NDArray values)
         {
             var normalized = new object[indicesObjects.Length];

@@ -355,7 +355,7 @@ namespace NumSharp.Backends
                     if (value.size != 1)
                     {
                         string TupE(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
-                        try { np.broadcast_to(value, targetView.Shape); }
+                        try { np.broadcast_to(value, targetView.Shape).Dispose(); } // validate-only view — reclaim it
                         catch (IncorrectShapeException)
                         {
                             throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(targetView.Shape.dimensions)}");
@@ -408,7 +408,7 @@ namespace NumSharp.Backends
                 string TupE(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                 if (subShape.size == 0)
                 {
-                    try { np.broadcast_to(value, subShape); }
+                    try { np.broadcast_to(value, subShape).Dispose(); } // validate-only view — reclaim it
                     catch (IncorrectShapeException)
                     {
                         throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(subShape.dimensions)}");

@@ -95,6 +95,7 @@ namespace NumSharp
         ///     never escapes — it is a write target, not a result — which is why it does not carry
         ///     <see cref="diagonal"/>'s read-only contract.
         /// </remarks>
+        [NDScopedCovered] // only callers: [NDScoped] diag / diagflat (the AOT-fallback alias view is scope-reclaimed)
         private static NDArray DiagonalEmbed(NDArray v1d, int k)
         {
             long s = v1d.size;

@@ -87,6 +87,7 @@ namespace NumSharp
         ///     op list + <see cref="IndexType"/> for valid ones. No bounds checking of integer index VALUES
         ///     (NumPy defers that to the gather), and no gather is performed here.
         /// </summary>
+        [NDScopedCovered] // only callers: the [NDScoped] FetchIndices(object[]) / SetIndices(object[], values) dispatches (mask nonzero components + aliases are scope-reclaimed)
         internal static PreparedIndex PrepareIndex(Shape shape, object[] raw)
         {
             int arrayNdim = shape.NDim;

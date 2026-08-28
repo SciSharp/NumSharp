@@ -485,10 +485,11 @@ namespace NumSharp.Tests.Backends.Unmanaged
         {
             // Non-contig reshape (e.g. of a transposed array) returns a COPY —
             // the copy has its own MemoryBlock, independent of the parent's
-            // MemoryBlock. We verify the semantic, not strict refcount math
-            // (reshape's non-contig path creates an unreachable intermediate
-            // NDArray that Debug builds keep alive until method exit, so the
-            // returned NDArray's refcount = 2, not 1).
+            // MemoryBlock. ReshapeCore disposes its internal copy wrapper
+            // eagerly (the returned view holds the ONE remaining counted ref),
+            // so the returned NDArray is the sole owner and the last Dispose
+            // frees deterministically — no orphan intermediate, no finalizer
+            // drain.
             var raw = np.arange(12);
             var a = raw.reshape(3, 4);
             var b = a.T;                  // 4x3 transposed view
@@ -510,16 +511,13 @@ namespace NumSharp.Tests.Backends.Unmanaged
             b_slice.IsReleased.Should().BeTrue("parent chain released — sources gone");
 
             c.Dispose();
-            // c_slice's refcount may still be > 0 from the orphan intermediate
-            // pinned until its finalizer runs; force-drain so the orphan ABANDONS
-            // its ref. The count drains to 0, but the buffer is NOT freed while
-            // c_slice — a reachable alias this test still holds — can read it;
-            // the block's own finalizer reclaims it once c_slice dies.
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            GetRefCount(c_slice).Should().Be(0, "all counted references drained after Dispose + finalizer drain");
-            c_slice.IsReleased.Should().BeFalse("a reachable alias still exists — the free happens only after it dies");
+            // c held the ONE counted reference (ReshapeCore disposed its internal copy
+            // wrapper eagerly), so this LAST deterministic Dispose frees at refcount 0 —
+            // the ARC contract's eager-free path, previously blocked by the orphan
+            // intermediate whose abandoned ref only drained via the finalizer. (The raw
+            // _refCount of a released disposer is a sentinel, so only the release state
+            // is asserted — the same shape as ReshapeContiguous_SharesRefCount.)
+            c_slice.IsReleased.Should().BeTrue("last counted ref disposed — the copy's buffer frees eagerly");
         }
 
         // ----- transpose / negative-stride / strided views -------------------

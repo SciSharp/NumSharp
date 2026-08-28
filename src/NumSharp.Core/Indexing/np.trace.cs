@@ -44,6 +44,7 @@ namespace NumSharp
         ///     reduction that goes through NumSharp's IL reduction kernels.
         ///     </para>
         /// </remarks>
+        [NDScoped] // reclaims the diagonal view, its contig copy and the natural result on the out= path
         public static NDArray trace(
             NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1,
             Type dtype = null, NDArray @out = null)

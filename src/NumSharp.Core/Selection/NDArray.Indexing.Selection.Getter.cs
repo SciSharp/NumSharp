@@ -680,6 +680,7 @@ namespace NumSharp
         /// applicable: no slice/newaxis present, not exactly one advanced index, or a
         /// multi-dimensional advanced index / k-D boolean mask (multiple advanced axes).
         /// </summary>
+        [NDScopedCovered] // designed to run under the [NDScoped] FetchIndices(object[]) dispatch (currently unreferenced — superseded by TryBuildMultiAdvancedGrid)
         private bool TryFetchSliceWithSingleAdvanced(object[] indicesObjects, out NDArray result)
         {
             result = null;
@@ -816,6 +817,7 @@ namespace NumSharp
         /// (caller falls back) when there is no explicit slice/newaxis, fewer than two
         /// advanced axes, the tuple over-indexes the rank, or an item is unrecognized.
         /// </summary>
+        [NDScopedCovered] // only callers: the [NDScoped] FetchIndices(object[]) / SetIndices(object[], values) dispatches
         private bool TryBuildMultiAdvancedGrid(object[] indicesObjects, out NDArray[] grid)
         {
             grid = null;
