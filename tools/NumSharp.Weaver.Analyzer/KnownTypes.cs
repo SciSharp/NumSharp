@@ -13,6 +13,7 @@ namespace NumSharp.Weaver.Analyzer
     {
         public INamedTypeSymbol SyncAttr;
         public INamedTypeSymbol AsyncAttr;
+        public INamedTypeSymbol HelperAttr;
         public INamedTypeSymbol NDArray;
         public INamedTypeSymbol NDScope;
         public INamedTypeSymbol INDArrayCarrier;
@@ -50,6 +51,7 @@ namespace NumSharp.Weaver.Analyzer
             {
                 SyncAttr = sync,
                 AsyncAttr = asyncAttr,
+                HelperAttr = c.GetTypeByMetadataName("NumSharp.NDScopedHelperAttribute"),
                 NDArray = ndArray,
                 NDScope = c.GetTypeByMetadataName("NumSharp.NDScope"),
                 INDArrayCarrier = c.GetTypeByMetadataName("NumSharp.INDArrayCarrier"),

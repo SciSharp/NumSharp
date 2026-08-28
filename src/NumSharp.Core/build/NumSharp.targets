@@ -21,9 +21,13 @@
        Detection is the same ASCII metadata scan the weaver uses: compiling with either attribute
        lands its TypeRef name as an ASCII run in the assembly's #Strings heap, and ASCII runs
        survive a lossy UTF-8 read of arbitrary binary intact — so a plain text scan of the fresh
-       CoreCompile output is a reliable "was [NDScoped]/[NDScopedAsync] used?" probe. A false
-       POSITIVE (the token appearing in a user string literal) only prints an advisory warning; a
-       false negative does not happen on real compiler output.
+       CoreCompile output is a reliable "was [NDScoped]/[NDScopedAsync] used?" probe. It matches the
+       two WEAVABLE type names exactly — 'NDScopedAttribute' and 'NDScopedAsyncAttribute' — rather
+       than the bare shared prefix 'NDScoped', so [NDScopedHelper] (the analyzer-only hint attribute,
+       which needs NO weaver and is inert at runtime) does NOT trip this guard: 'NDScopedHelperAttribute'
+       contains neither weavable name as a substring. A false POSITIVE (a matched name appearing in a
+       user string literal) only prints an advisory warning; a false negative does not happen on real
+       compiler output.
 
        Opting out: install NumSharp.Weaver (the intended fix), set $(NumSharpWeaverActive)=true by
        hand (you are weaving some other way), set $(NumSharpDisableWeaverMissingWarning)=true, or
@@ -41,7 +45,7 @@
     <PropertyGroup>
       <_NumSharpScopedAssembly>@(IntermediateAssembly->'%(FullPath)')</_NumSharpScopedAssembly>
       <_NumSharpUsesScoped>false</_NumSharpUsesScoped>
-      <_NumSharpUsesScoped Condition="Exists('$(_NumSharpScopedAssembly)') and $([System.IO.File]::ReadAllText('$(_NumSharpScopedAssembly)').Contains('NDScoped'))">true</_NumSharpUsesScoped>
+      <_NumSharpUsesScoped Condition="Exists('$(_NumSharpScopedAssembly)') and ($([System.IO.File]::ReadAllText('$(_NumSharpScopedAssembly)').Contains('NDScopedAttribute')) or $([System.IO.File]::ReadAllText('$(_NumSharpScopedAssembly)').Contains('NDScopedAsyncAttribute')))">true</_NumSharpUsesScoped>
     </PropertyGroup>
 
     <Warning Condition="'$(_NumSharpUsesScoped)' == 'true'"

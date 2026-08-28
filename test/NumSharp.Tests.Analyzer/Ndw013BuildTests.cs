@@ -62,6 +62,49 @@ namespace NumSharp.Tests.Analyzer
             }
         }
 
+        [TestMethod]
+        public void Ndw013_DoesNotFire_ForHelperAttributeOnly()
+        {
+            // [NDScopedHelper] is an analyzer-only hint that needs NO weaver (it is inert at runtime),
+            // so the "you used [NDScoped] but the weaver is absent" guard must stay silent for a
+            // consumer that uses ONLY it — even though 'NDScopedHelperAttribute' shares the 'NDScoped'
+            // prefix. This pins the precise-name scan (NDScopedAttribute / NDScopedAsyncAttribute).
+            var dotnet = FindDotnet();
+            if (dotnet == null)
+                Assert.Inconclusive("dotnet CLI not found on PATH — skipping the NDW013 helper test");
+
+            var targets = RepoFile("src/NumSharp.Core/build/NumSharp.targets");
+            var numsharpDll = typeof(NumSharp.NDArray).Assembly.Location;
+
+            var work = Path.Combine(Path.GetTempPath(), "ndw013h_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            Directory.CreateDirectory(work);
+            try
+            {
+                File.WriteAllText(Path.Combine(work, "T.csproj"), $@"<Project Sdk=""Microsoft.NET.Sdk"">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <SignAssembly>false</SignAssembly>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include=""NumSharp""><HintPath>{numsharpDll}</HintPath></Reference>
+  </ItemGroup>
+  <Import Project=""{targets.Replace("\\", "/")}"" />
+</Project>");
+                File.WriteAllText(Path.Combine(work, "S.cs"),
+                    "using NumSharp;\npublic static class S { [NDScopedHelper] public static NDArray F(NDArray a) => a + 1.0; }\n");
+
+                var output = Build(dotnet, work, "");
+                Assert.IsFalse(output.Contains("NDW013"),
+                    "[NDScopedHelper] needs no weaver, so NDW013 must NOT fire for a helper-only consumer");
+            }
+            finally
+            {
+                try { Directory.Delete(work, recursive: true); } catch { /* best effort */ }
+            }
+        }
+
         private static string Build(string dotnet, string work, string extraArgs)
         {
             var psi = new ProcessStartInfo(dotnet,

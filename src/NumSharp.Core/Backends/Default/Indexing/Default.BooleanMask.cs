@@ -192,6 +192,7 @@ namespace NumSharp.Backends
         /// it to arr.shape — a read-only stride-0 trailing view that turns a
         /// partial/axis-0 mask into a full element mask over arr.
         /// </summary>
+        [NDScopedHelper] // only reached from the [NDScoped] boolean-mask get/set kernels; rides their scope
         private static NDArray BroadcastMaskAcrossBlock(NDArray mask, NDArray arr)
         {
             int trailing = arr.ndim - mask.ndim;

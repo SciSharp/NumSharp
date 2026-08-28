@@ -16,10 +16,13 @@ namespace NumSharp.Weaver.Analyzer
     ///     — so its pooled buffer is left to the finalizer instead of being reclaimed promptly (the
     ///     perf gap <c>[NDScoped]</c> exists to close; see <c>DISPOSAL-GUIDELINES.md</c>).
     ///     <para>
-    ///     A method that is already <c>[NDScoped]</c> / <c>[NDScopedAsync]</c>, or that opens an
-    ///     <see cref="NDScope"/> by hand, is EXEMPT: the weaver (or the hand-written scope) reclaims
-    ///     every transient it constructs, so nothing there leaks. That is the primary fix the message
-    ///     suggests, alongside a <c>using</c> / <c>.Dispose()</c> / <c>scope.Returns(...)</c>.
+    ///     A method that is already <c>[NDScoped]</c> / <c>[NDScopedAsync]</c>, that opens an
+    ///     <see cref="NDScope"/> by hand, or that is marked <c>[NDScopedHelper]</c> is EXEMPT: the
+    ///     weaver (or the hand-written scope) reclaims every transient the first two construct, and
+    ///     <c>[NDScopedHelper]</c> is the author's assertion that this helper always runs under a
+    ///     caller's ambient scope (the per-method analysis has no call-graph to see that on its own).
+    ///     Those are the fixes the message suggests, alongside a <c>using</c> / <c>.Dispose()</c> /
+    ///     <c>scope.Returns(...)</c>.
     ///     </para>
     ///     <para>
     ///     The analysis is deliberately comprehensive ("all scenarios"): it catches a result dropped on
@@ -102,8 +105,11 @@ namespace NumSharp.Weaver.Analyzer
                 if (!(_ctx.OwningSymbol is IMethodSymbol method) || method.IsImplicitlyDeclared)
                     return;
 
-                // Exempt: a scoped method — the weaver reclaims every transient it constructs.
-                if (HasScopedAttribute(method))
+                // Exempt: a method the author has already marked scope-covered — a
+                // [NDScoped]/[NDScopedAsync] boundary (the weaver reclaims every transient it
+                // constructs), or an [NDScopedHelper] (an analyzer-only assertion that this helper
+                // always runs under a caller's ambient scope, so that scope reclaims its transients).
+                if (IsScopeExemptByAttribute(method))
                     return;
 
                 var blocks = _ctx.OperationBlocks;
@@ -367,14 +373,18 @@ namespace NumSharp.Weaver.Analyzer
 
             // -------------------------------------------------------------- predicates
 
-            private bool HasScopedAttribute(IMethodSymbol method)
+            private bool IsScopeExemptByAttribute(IMethodSymbol method)
             {
                 ISymbol carrier = method.AssociatedSymbol ?? (ISymbol)method; // property accessor → property
                 foreach (var s in new[] { method, carrier })
                     foreach (var a in s.GetAttributes())
-                        if (SymbolEqualityComparer.Default.Equals(a.AttributeClass, _k.SyncAttr) ||
-                            SymbolEqualityComparer.Default.Equals(a.AttributeClass, _k.AsyncAttr))
+                    {
+                        var cls = a.AttributeClass;
+                        if (SymbolEqualityComparer.Default.Equals(cls, _k.SyncAttr) ||
+                            SymbolEqualityComparer.Default.Equals(cls, _k.AsyncAttr) ||
+                            SymbolEqualityComparer.Default.Equals(cls, _k.HelperAttr))
                             return true;
+                    }
                 return false;
             }
 

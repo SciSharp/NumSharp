@@ -112,5 +112,12 @@ namespace NumSharp.Analyzer.Fixtures
             var t = a + b;                                  // [NDScoped] -> the weaver reclaims it -> exempt
             return t.copy();
         }
+
+        [NDScopedHelper]
+        public static NDArray AmbientHelper(NDArray a, NDArray b)
+        {
+            var t = a + b;                                  // [NDScopedHelper] -> exempt though 't' is a dead local
+            return a.copy();                                // (the assertion: this helper always runs under a caller's scope)
+        }
     }
 }

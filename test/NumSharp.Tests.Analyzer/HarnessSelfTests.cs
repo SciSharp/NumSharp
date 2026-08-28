@@ -50,6 +50,23 @@ namespace NumSharp.Tests.Analyzer
             Assert.AreEqual(0, r.CountOf("NDW012"), "a [NDScoped] method must be exempt from NDW012");
         }
 
+        [TestMethod]
+        public async Task Harness_ExemptsNDScopedHelperMethod()
+        {
+            // Metamorphic pair — the SAME dead-local leak, and the ONLY difference is the attribute:
+            // [NDScopedHelper] asserts the method always runs under a caller's ambient scope, so the
+            // leak analyzer must exempt it (nothing is woven; the caller's scope reclaims the temp).
+            const string body = "public static NDArray H(NDArray a, NDArray b) { var t = a + b; return a.copy(); }";
+
+            var bare = await AnalyzerTestHarness.RunAsync(Header + "  " + body + Footer, "inline_helper_bare.cs");
+            Assert.IsTrue(bare.CompileErrors.IsEmpty, "control source must compile");
+            Assert.AreEqual(1, bare.CountOf("NDW012"), "control: the dead local 't' must leak without the attribute");
+
+            var helped = await AnalyzerTestHarness.RunAsync(Header + "  [NDScopedHelper] " + body + Footer, "inline_helper.cs");
+            Assert.IsTrue(helped.CompileErrors.IsEmpty, "helper source must compile");
+            Assert.AreEqual(0, helped.CountOf("NDW012"), "a [NDScopedHelper] method must be exempt from NDW012");
+        }
+
         [DataTestMethod]
         [DataRow("LeakScenarios.cs", 6)]
         [DataRow("CarrierScenarios.cs", 4)]
