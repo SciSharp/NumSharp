@@ -4022,6 +4022,27 @@ namespace NumSharp.Backends.Iteration
                 return true;
             }
 
+            // Trivial flat copy — SKIP the iterator state build. When src and dst share an identical
+            // gap-free layout (same dims AND strides, C- or F-contiguous), the i-th logical element
+            // sits at the same buffer offset on both sides, so the whole copy is a single
+            // Buffer.MemoryCopy on the offset-adjusted raw pointers. This is the SAME block copy the
+            // post-state Contiguous CopyKernel does (IsSameFlatLayout is already trusted for that
+            // tier below), but it bypasses CreateCopyState — the dimension-array allocation + broadcast/
+            // stride analysis that otherwise runs even here, measured at ~330ns and ~97% of a small
+            // (n<=1000) copyto/astype (that fixed cost is what put copy/cast at 0.32-0.80x vs NumPy
+            // below 10K elements). Overlap is already resolved by the caller — Copy(UnmanagedStorage,…)
+            // clones an aliasing src that needs a temp before reaching here — and Buffer.MemoryCopy is
+            // the identical primitive the cpblk kernel emits, so this is byte- and overlap-identical.
+            if (IsSameFlatLayout(src.Shape, dst.Shape) && dst.Shape.size > 0)
+            {
+                int itemLen = dst.InternalArray.ItemLength;
+                byte* sp = src.Address + src.Shape.offset * itemLen;
+                byte* dp = dst.Address + dst.Shape.offset * itemLen;
+                long bytes = dst.Shape.size * itemLen;
+                Buffer.MemoryCopy(sp, dp, bytes, bytes);
+                return true;
+            }
+
             var state = CreateCopyState(src, dst);
             try
             {
