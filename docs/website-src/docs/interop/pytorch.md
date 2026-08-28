@@ -10,12 +10,14 @@ imported from the CPython environment only when a Torch helper is called.
 **On this page:** [Setup](#setup) · [The four operations](#the-four-operations) ·
 [NumSharp → PyTorch](#numsharp--pytorch) · [PyTorch → NumSharp](#pytorch--numsharp) ·
 [Autograd](#autograd) · [Dtypes](#dtype-map) · [Layouts and devices](#layouts-devices-and-copies) ·
+[Rare scenarios](#rare-scenario-matrix) ·
 [Other Python libraries](#what-pythonnet-supports) · [Claims](#claims-ledger)
 
 > Verified live on CPython 3.12.12 · numpy 2.4.2 · pythonnet 3.0.5 ·
 > **PyTorch 2.13.0+cpu** · net8.0/net10.0. PyTorch 2.13.0 was the latest stable release when this
 > page was validated; 2.14 was still a release candidate. Every compatibility claim below is
-> reproduced against the real installed PyTorch by `PyTorchInteropTests`.
+> reproduced against the real installed PyTorch by 24 live tests in `PyTorchInteropTests` and
+> `PyTorchInteropEdgeCaseTests` (the accelerator cell runs conditionally when CUDA or MPS exists).
 
 ---
 
@@ -237,6 +239,49 @@ arrays; use `frombuffer` when integrating an API that is explicitly buffer-orien
 
 ---
 
+## Rare-scenario matrix
+
+The bridge's boundary behavior is tested explicitly rather than inferred from the ordinary 2-D
+case:
+
+| Scenario | Observed PyTorch 2.13 / NumSharp behavior |
+|---|---|
+| 0-D NumSharp scalar | shared tensor with `shape == ()`; `fill_` writes through |
+| Empty `(0,3)` in either direction | shape and dtype survive; no lease/pin is needed because there are no bytes |
+| Non-zero storage offset | first-element pointers agree; logical shape and positive strides survive |
+| F-order / transpose | zero-copy; Torch and NumSharp retain `(1,M)`-style strides |
+| Singleton dimensions | rank and their legal repeated strides survive |
+| All 15 dtype boundary values | min/max integers, unsigned maxima, UTF-16 surrogates, signed zero, infinities and NaN payloads round-trip byte-exact; only `Decimal` converts |
+| PyTorch `complex64` | cannot be a NumSharp view; `ToTorchNDArray()` copy-widens to `Complex`/complex128 |
+| PyTorch `bfloat16` / float8 | PyTorch's NumPy adapter rejects them; the bridge preserves that directed error |
+| Sparse tensor | rejected with PyTorch's instruction to call `to_dense()` first |
+| Quantized tensor | rejected because NumPy has no matching quantized scalar type |
+| Meta tensor | even `force:true` fails: a meta tensor has no data to copy |
+| Conjugate / negative view bits | sharing call is rejected; `force:true` resolves the bit and returns exact detached values |
+| `expand()` / stride-0 Torch tensor | imports as a readable, **non-writeable** NumSharp broadcast; copying makes ordinary Torch storage |
+| Tensor requiring gradients | direct shared import rejected by PyTorch; `force:true` detaches and copies |
+| CUDA/MPS tensor | direct CPU view rejected; conditional gate verifies `force:true` device→CPU copy on equipped hosts |
+| Null / disposed / non-Tensor object | directed managed/Python exception; live conversion counters remain balanced |
+| Resize while shared | NumSharp refcheck and PyTorch non-resizable storage both refuse; owned copies resize |
+| Explicit/process-wide no-GIL mode | all Torch verbs work under one caller-owned outer GIL |
+| Four-thread conversion churn | no deadlock/data error; every export/import counter returns to baseline |
+
+### The original Tensor wrapper may die while storage remains valid
+
+`Tensor.numpy()` does not retain the exact original Python Tensor wrapper. PyTorch gives the NumPy
+array a separate Tensor base object that owns the same storage. Consequently a weak reference to the
+original wrapper can become dead while `AsTorchNDArray()` is still safely reading and writing the
+bytes. The lifetime contract is storage identity, not Python-wrapper identity; the live import lease
+tracks that storage-owning NumPy chain until the last NumSharp-derived view dies.
+
+### Owned copies leave no hidden pins
+
+`ToTorch(copy:true)` briefly uses a NumPy view to copy logical values, but the returned tensor owns
+its memory and does not retain a NumSharp export pin. Tests wait for `LiveExports` to return to its
+baseline while the copied tensor is still alive, then mutate both sides independently.
+
+---
+
 ## What pythonnet supports
 
 pythonnet does not maintain an allowlist of scientific libraries. It embeds real CPython, so any
@@ -275,4 +320,27 @@ direction-specific protocol instead of pretending those are the same capability.
 | 8 | Real autograd output returns exactly to NumSharp | `(x*x).sum().backward()` gives `[-4,3,6]` | [`NumSharpToTorch_AutogradCompute_GradientReturnsToNumSharp`][gate] |
 | 9 | Tensor is not a buffer exporter | `memoryview(tensor)` raises; `__array__` exists | [`TorchTensor_IsNotABufferExporter_TheNumpyAdapterIsIntentional`][gate] |
 
+### Edge-case ledger
+
+| # | Area | Evidence | Gate |
+|---|---|---|---|
+| 10 | Degenerate and rare NumSharp layouts | scalar, empty, offset, F-order, singleton axes | [`NumSharpShapes_ScalarEmptyOffsetFortranAndSingletonAxes`][gate-edge] |
+| 11 | Degenerate and rare Torch layouts | scalar, empty, transpose, offset, expanded/broadcast | [`TorchShapes_ScalarEmptyTransposeOffsetAndExpanded`][gate-edge] |
+| 12 | Boundary values for all 15 dtypes | byte-exact round-trip including NaN payloads and unsigned maxima | [`All15Dtypes_BoundaryValuesRoundTripThroughTorch`][gate-edge] |
+| 13 | Reverse dtype surface | 13 native views; complex64 directed copy-widen | [`TorchDtypes_AllNativelyViewableTypesShare_Complex64CopiesAndWidens`][gate-edge] |
+| 14 | Lazy conjugate/negative state | sharing rejects, force resolves exact values | [`ConjugateAndNegativeBits_RequireForce_ThenResolveExactly`][gate-edge] |
+| 15 | Unsupported tensor families | bfloat16, float8, sparse, quantized, meta directed errors | [`UnsupportedTorchDtypesLayoutsAndDevices_FailWithDirectedPyTorchErrors`][gate-edge] |
+| 16 | Broadcast safety | expanded Torch tensor is a non-writeable NumSharp view | [`ExpandedTensor_IsReadOnlyInNumSharp_AndRequiresCopyBackToTorch`][gate-edge] |
+| 17 | Python-side derived lifetime | sliced tensor keeps NumSharp export alive | [`TorchDerivedViews_KeepNumSharpExportAliveUntilTheLastTensorDies`][gate-edge] |
+| 18 | NumSharp-side derived lifetime | original Tensor wrapper dies; derived NumSharp view retains storage | [`NumSharpDerivedViews_KeepTorchStorageAliveAfterTheOriginalTensorWrapperDies`][gate-edge] |
+| 19 | Resize ownership | both shared owners refuse, both copies may resize | [`SharedStorage_CannotResizeOnEitherSide_CopyStorageCan`][gate-edge] |
+| 20 | Bad inputs | null, disposed and non-Tensor paths fail without leaked counters | [`NullDisposedAndNonTensorInputs_FailCleanlyWithoutLeaking`][gate-edge] |
+| 21 | GIL policy | per-call and process-wide opt-out under an outer GIL | [`ExplicitNoGilPolicy_WorksUnderOneOuterGil_ForEveryTorchVerb`][gate-edge] |
+| 22 | Copy ownership | detached both ways and no retained export pin | [`ToTorchCopy_IsDetachedBothWays_AndDoesNotKeepAnExportPin`][gate-edge] |
+| 23 | Concurrency | four-thread round-trips drain every counter | [`ConcurrentTorchRoundTrips_AreThreadSafeAndReturnCountersToBaseline`][gate-edge] |
+| 24 | Accelerator transfer | direct sharing rejected; force copies CUDA/MPS to CPU when present | [`AcceleratorTensor_ForceCopiesToCpu_WhenAnAcceleratorIsAvailable`][gate-edge] † |
+
+† Conditional: Inconclusive on a CPU-only host, strict on a host exposing CUDA or MPS.
+
 [gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PyTorchInteropTests.cs
+[gate-edge]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PyTorchInteropEdgeCaseTests.cs

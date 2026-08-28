@@ -16,13 +16,11 @@ namespace NumSharp.Tests.Interop
     [TestClass]
     public class PyTorchInteropTests : InteropTestBase
     {
-        private const string ValidatedTorchLine = "2.13.";
-
         [TestMethod]
         public void Runtime_IsLatestStablePyTorch213()
         {
             RequireValidatedPyTorch();
-            PyStr("torch.__version__").Should().StartWith(ValidatedTorchLine);
+            PyStr("torch.__version__").Should().StartWith(PyTorchTestGate.ValidatedTorchLine);
         }
 
         [TestMethod]
@@ -253,18 +251,6 @@ namespace NumSharp.Tests.Interop
         }
 
         private void RequireValidatedPyTorch()
-        {
-            SkipUnless("torch");
-            using (Gil())
-            {
-                Scope.Exec("import torch");
-                using PyObject versionObject = Scope.Eval("str(torch.__version__)");
-                string version = versionObject.As<string>();
-                if (!version.StartsWith(ValidatedTorchLine, StringComparison.Ordinal))
-                    Assert.Inconclusive(
-                        $"PyTorch {version} is installed; this live compatibility gate is pinned to the " +
-                        "latest stable 2.13.x line validated by this change.");
-            }
-        }
+            => PyTorchTestGate.Require(Scope);
     }
 }

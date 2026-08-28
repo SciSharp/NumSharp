@@ -49,6 +49,13 @@ documented undefined behavior for tensors over read-only NumPy memory. A Tensor 
 or living on CUDA/MPS cannot be shared directly with CPU NumSharp memory — use an explicit detach or
 `force:true` copy.
 
+Rare tensor families follow PyTorch's NumPy compatibility boundary: `complex64` copy-widens to
+NumSharp `Complex`; `bfloat16`, float8, sparse and quantized tensors cannot cross through NumPy;
+meta tensors have no data even for `force:true`. PyTorch `expand()` tensors import safely as
+non-writeable NumSharp broadcasts. Scalars, empty arrays, storage offsets, F-order/transposes,
+conjugate/negative view bits, derived-view lifetimes, resize refusal, all dtype boundary values,
+caller-owned GIL mode and concurrent churn are pinned by the live interop test matrix.
+
 ## Extension methods (the ergonomic default)
 
 The verbs above double as extension methods — `NDArrayPythonInterop` provides them, so importing its
