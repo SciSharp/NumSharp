@@ -70,6 +70,10 @@
        ================================================================================== -->
   <PropertyGroup>
     <EnableNDArrayLeakAnalyzer Condition="'$(EnableNDArrayLeakAnalyzer)' == ''">true</EnableNDArrayLeakAnalyzer>
+    <!-- NDW012 is a non-breaking NUDGE, never a build-breaker. Keep it a WARNING even if this build
+         ever turns on TreatWarningsAsErrors, so a detected leak (Core has hundreds, mostly ambient-
+         scope-covered helpers) can never fail Core's own build. -->
+    <WarningsNotAsErrors Condition="'$(EnableNDArrayLeakAnalyzer)' == 'true'">$(WarningsNotAsErrors);NDW012</WarningsNotAsErrors>
   </PropertyGroup>
   <ItemGroup Condition="'$(EnableNDArrayLeakAnalyzer)' == 'true'">
     <ProjectReference Include="..\..\tools\NumSharp.Weaver.Analyzer\NumSharp.Weaver.Analyzer.csproj"
