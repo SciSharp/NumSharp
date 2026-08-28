@@ -23,8 +23,8 @@
        survive a lossy UTF-8 read of arbitrary binary intact — so a plain text scan of the fresh
        CoreCompile output is a reliable "was [NDScoped]/[NDScopedAsync] used?" probe. It matches the
        two WEAVABLE type names exactly — 'NDScopedAttribute' and 'NDScopedAsyncAttribute' — rather
-       than the bare shared prefix 'NDScoped', so [NDScopedHelper] (the analyzer-only hint attribute,
-       which needs NO weaver and is inert at runtime) does NOT trip this guard: 'NDScopedHelperAttribute'
+       than the bare shared prefix 'NDScoped', so [NDScopedCovered] (the analyzer-only hint attribute,
+       which needs NO weaver and is inert at runtime) does NOT trip this guard: 'NDScopedCoveredAttribute'
        contains neither weavable name as a substring. A false POSITIVE (a matched name appearing in a
        user string literal) only prints an advisory warning; a false negative does not happen on real
        compiler output.

@@ -63,11 +63,11 @@ namespace NumSharp.Tests.Analyzer
         }
 
         [TestMethod]
-        public void Ndw013_DoesNotFire_ForHelperAttributeOnly()
+        public void Ndw013_DoesNotFire_ForCoveredAttributeOnly()
         {
-            // [NDScopedHelper] is an analyzer-only hint that needs NO weaver (it is inert at runtime),
+            // [NDScopedCovered] is an analyzer-only hint that needs NO weaver (it is inert at runtime),
             // so the "you used [NDScoped] but the weaver is absent" guard must stay silent for a
-            // consumer that uses ONLY it — even though 'NDScopedHelperAttribute' shares the 'NDScoped'
+            // consumer that uses ONLY it — even though 'NDScopedCoveredAttribute' shares the 'NDScoped'
             // prefix. This pins the precise-name scan (NDScopedAttribute / NDScopedAsyncAttribute).
             var dotnet = FindDotnet();
             if (dotnet == null)
@@ -93,11 +93,11 @@ namespace NumSharp.Tests.Analyzer
   <Import Project=""{targets.Replace("\\", "/")}"" />
 </Project>");
                 File.WriteAllText(Path.Combine(work, "S.cs"),
-                    "using NumSharp;\npublic static class S { [NDScopedHelper] public static NDArray F(NDArray a) => a + 1.0; }\n");
+                    "using NumSharp;\npublic static class S { [NDScopedCovered] public static NDArray F(NDArray a) => a + 1.0; }\n");
 
                 var output = Build(dotnet, work, "");
                 Assert.IsFalse(output.Contains("NDW013"),
-                    "[NDScopedHelper] needs no weaver, so NDW013 must NOT fire for a helper-only consumer");
+                    "[NDScopedCovered] needs no weaver, so NDW013 must NOT fire for a helper-only consumer");
             }
             finally
             {

@@ -17,9 +17,9 @@ namespace NumSharp.Weaver.Analyzer
     ///     perf gap <c>[NDScoped]</c> exists to close; see <c>DISPOSAL-GUIDELINES.md</c>).
     ///     <para>
     ///     A method that is already <c>[NDScoped]</c> / <c>[NDScopedAsync]</c>, that opens an
-    ///     <see cref="NDScope"/> by hand, or that is marked <c>[NDScopedHelper]</c> is EXEMPT: the
+    ///     <see cref="NDScope"/> by hand, or that is marked <c>[NDScopedCovered]</c> is EXEMPT: the
     ///     weaver (or the hand-written scope) reclaims every transient the first two construct, and
-    ///     <c>[NDScopedHelper]</c> is the author's assertion that this helper always runs under a
+    ///     <c>[NDScopedCovered]</c> is the author's assertion that this helper always runs under a
     ///     caller's ambient scope (the per-method analysis has no call-graph to see that on its own).
     ///     Those are the fixes the message suggests, alongside a <c>using</c> / <c>.Dispose()</c> /
     ///     <c>scope.Returns(...)</c>.
@@ -107,7 +107,7 @@ namespace NumSharp.Weaver.Analyzer
 
                 // Exempt: a method the author has already marked scope-covered — a
                 // [NDScoped]/[NDScopedAsync] boundary (the weaver reclaims every transient it
-                // constructs), or an [NDScopedHelper] (an analyzer-only assertion that this helper
+                // constructs), or an [NDScopedCovered] (an analyzer-only assertion that this helper
                 // always runs under a caller's ambient scope, so that scope reclaims its transients).
                 if (IsScopeExemptByAttribute(method))
                     return;
@@ -382,7 +382,7 @@ namespace NumSharp.Weaver.Analyzer
                         var cls = a.AttributeClass;
                         if (SymbolEqualityComparer.Default.Equals(cls, _k.SyncAttr) ||
                             SymbolEqualityComparer.Default.Equals(cls, _k.AsyncAttr) ||
-                            SymbolEqualityComparer.Default.Equals(cls, _k.HelperAttr))
+                            SymbolEqualityComparer.Default.Equals(cls, _k.CoveredAttr))
                             return true;
                     }
                 return false;

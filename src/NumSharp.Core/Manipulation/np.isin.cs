@@ -107,7 +107,7 @@ namespace NumSharp
         ///     6×(|element|+|test|) — NumPy's own below-memory heuristic — leaving the sort path to run.
         ///     Both operands are the same exact integer dtype (not uint64), so int64 offset math is exact.
         /// </summary>
-        [NDScopedHelper] // only reached via ComputeMembership, under the [NDScoped] isin scope
+        [NDScopedCovered] // only reached via ComputeMembership, under the [NDScoped] isin scope
         private static NDArray TryTableMembership(NDArray elemT, NDArray testT)
         {
             // Booleans have no arithmetic; NumPy promotes them to uint8 for the table (the result is
@@ -141,7 +141,7 @@ namespace NumSharp
         ///     searchsorted + equality probe answers membership. Duplicates are harmless (side='left' finds
         ///     the first equal slot); NaN never equals itself, so a NaN element is never a member.
         /// </summary>
-        [NDScopedHelper] // only reached via ComputeMembership / MembershipUInt64Signed, under the [NDScoped] isin scope
+        [NDScopedCovered] // only reached via ComputeMembership / MembershipUInt64Signed, under the [NDScoped] isin scope
         private static NDArray SortedSearchMembership(NDArray elemT, NDArray testT)
         {
             // Hash-set membership (O(n+m)) replaces the sort + n·searchsorted below for hashable
@@ -282,7 +282,7 @@ namespace NumSharp
         ///     uint64 above int64.max never equals a signed value. Reduce to a uint64 comparison and mask
         ///     the signed operand's negatives out.
         /// </summary>
-        [NDScopedHelper] // only reached via ComputeMembership, under the [NDScoped] isin scope
+        [NDScopedCovered] // only reached via ComputeMembership, under the [NDScoped] isin scope
         private static NDArray MembershipUInt64Signed(NDArray ar1, NDArray ar2)
         {
             if (ar1.typecode == NPTypeCode.UInt64)

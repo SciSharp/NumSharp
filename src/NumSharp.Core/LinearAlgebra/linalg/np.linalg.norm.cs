@@ -115,7 +115,7 @@ namespace NumSharp
 
             #region internals
 
-            [NDScopedHelper] // always dispatched from the [NDScoped] norm overloads; rides their scope
+            [NDScopedCovered] // always dispatched from the [NDScoped] norm overloads; rides their scope
             private static NDArray VectorNorm(NDArray a, object ord, int axis, bool keepdims)
             {
                 if (ord is null || (IsNumber(ord, out double n) && n == 2d))
@@ -146,7 +146,7 @@ namespace NumSharp
                 return np.power(reduced, NDArray.Scalar(1d / order));
             }
 
-            [NDScopedHelper] // always dispatched from the [NDScoped] norm overloads; rides their scope
+            [NDScopedCovered] // always dispatched from the [NDScoped] norm overloads; rides their scope
             private static NDArray MatrixNorm(NDArray a, object ord, int[] axes, int nd, bool keepdims)
             {
                 int rowAxis = NormalizeAxis(axes[0], nd);
@@ -205,7 +205,7 @@ namespace NumSharp
                 return np.expand_dims(np.expand_dims(result, first), second);
             }
 
-            [NDScopedHelper] // only reached via MatrixNorm, itself under the [NDScoped] norm scope
+            [NDScopedCovered] // only reached via MatrixNorm, itself under the [NDScoped] norm scope
             private static NDArray FrobeniusOverBoth(NDArray a, int rowAxis, int colAxis)
             {
                 var squared = AbsSquared(a);
@@ -216,7 +216,7 @@ namespace NumSharp
             /// <summary>An axis index after a LOWER-numbered axis has been reduced away.</summary>
             private static int Shift(int axis, int removed) => axis > removed ? axis - 1 : axis;
 
-            [NDScopedHelper] // only reached via MatrixNorm, itself under the [NDScoped] norm scope
+            [NDScopedCovered] // only reached via MatrixNorm, itself under the [NDScoped] norm scope
             private static NDArray SingularValueNorm(NDArray a, int rowAxis, int colAxis, string which)
             {
                 // NumPy's _multi_svd_norm: move the two matrix axes to the end, take the singular values

@@ -51,10 +51,10 @@ namespace NumSharp.Tests.Analyzer
         }
 
         [TestMethod]
-        public async Task Harness_ExemptsNDScopedHelperMethod()
+        public async Task Harness_ExemptsNDScopedCoveredMethod()
         {
             // Metamorphic pair — the SAME dead-local leak, and the ONLY difference is the attribute:
-            // [NDScopedHelper] asserts the method always runs under a caller's ambient scope, so the
+            // [NDScopedCovered] asserts the method always runs under a caller's ambient scope, so the
             // leak analyzer must exempt it (nothing is woven; the caller's scope reclaims the temp).
             const string body = "public static NDArray H(NDArray a, NDArray b) { var t = a + b; return a.copy(); }";
 
@@ -62,9 +62,29 @@ namespace NumSharp.Tests.Analyzer
             Assert.IsTrue(bare.CompileErrors.IsEmpty, "control source must compile");
             Assert.AreEqual(1, bare.CountOf("NDW012"), "control: the dead local 't' must leak without the attribute");
 
-            var helped = await AnalyzerTestHarness.RunAsync(Header + "  [NDScopedHelper] " + body + Footer, "inline_helper.cs");
-            Assert.IsTrue(helped.CompileErrors.IsEmpty, "helper source must compile");
-            Assert.AreEqual(0, helped.CountOf("NDW012"), "a [NDScopedHelper] method must be exempt from NDW012");
+            var covered = await AnalyzerTestHarness.RunAsync(Header + "  [NDScopedCovered] " + body + Footer, "inline_covered.cs");
+            Assert.IsTrue(covered.CompileErrors.IsEmpty, "covered source must compile");
+            Assert.AreEqual(0, covered.CountOf("NDW012"), "a [NDScopedCovered] method must be exempt from NDW012");
+        }
+
+        [TestMethod]
+        public async Task Covered_IsHonored_UnderNDScopedAsyncBoundary()
+        {
+            // "Supported by [NDScopedAsync]": a [NDScopedCovered] helper riding an ASYNC boundary's
+            // ambient scope. The async method is exempt (its own attribute) and the covered helper is
+            // exempt (its attribute), so a helper leak under an async boundary draws nothing. Dropping
+            // [NDScopedCovered] surfaces the dead-local leak, so the pair is non-vacuous.
+            const string helper = "static NDArray Helper(NDArray a, NDArray b) { var t = a + b; return a.copy(); }";
+            const string boundary = "[NDScopedAsync] public static async System.Threading.Tasks.Task<NDArray> " +
+                                    "Boundary(NDArray a, NDArray b) { await System.Threading.Tasks.Task.Yield(); return Helper(a, b); }";
+
+            var bare = await AnalyzerTestHarness.RunAsync(Header + "  " + helper + "\n  " + boundary + Footer, "inline_covered_async_bare.cs");
+            Assert.IsTrue(bare.CompileErrors.IsEmpty, "control source must compile");
+            Assert.AreEqual(1, bare.CountOf("NDW012"), "control: the helper's dead local leaks without [NDScopedCovered]");
+
+            var covered = await AnalyzerTestHarness.RunAsync(Header + "  [NDScopedCovered] " + helper + "\n  " + boundary + Footer, "inline_covered_async.cs");
+            Assert.IsTrue(covered.CompileErrors.IsEmpty, "covered source must compile");
+            Assert.AreEqual(0, covered.CountOf("NDW012"), "[NDScopedCovered] helper under an [NDScopedAsync] boundary must be exempt");
         }
 
         [DataTestMethod]
