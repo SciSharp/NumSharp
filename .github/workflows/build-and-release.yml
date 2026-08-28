@@ -50,6 +50,12 @@ jobs:
     - name: Build Oracle (differential-fuzz gate)
       run: dotnet build test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
+    # The analyzer gate: NumSharp.Tests.Analyzer runs the NDW012 leak analyzer + the [NDScoped]-target
+    # gate (NDW002/003/005/006/009/010/011) in-process over the NumSharp.Analyzer.Fixtures files and
+    # asserts the diagnostics land on exactly the tagged lines.
+    - name: Build Analyzer tests
+      run: dotnet build test/NumSharp.Tests.Analyzer/NumSharp.Tests.Analyzer.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
     # Test filtering:
     #   - OpenBugs: excluded (known-failing bug reproductions)
     #   - HighMemory: excluded (requires 8GB+ RAM, too much for CI runners)
@@ -114,6 +120,25 @@ jobs:
         dotnet test test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj \
           --configuration Release --no-build --framework net10.0 \
           --filter "$FILTER" --logger "trx"
+
+    # The analyzer gate. AnalyzerBuild is excluded: that one test spawns `dotnet build` to exercise the
+    # MSBuild NDW013 warning (also covered by tools/verify_weaver_package.sh step 17); the in-process
+    # Roslyn-analyzer assertions here are the cross-platform gate.
+    - name: Test Analyzer (net8.0)
+      shell: bash
+      timeout-minutes: 10
+      run: |
+        dotnet test test/NumSharp.Tests.Analyzer/NumSharp.Tests.Analyzer.csproj \
+          --configuration Release --no-build --framework net8.0 \
+          --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=AnalyzerBuild" --logger "trx"
+
+    - name: Test Analyzer (net10.0)
+      shell: bash
+      timeout-minutes: 10
+      run: |
+        dotnet test test/NumSharp.Tests.Analyzer/NumSharp.Tests.Analyzer.csproj \
+          --configuration Release --no-build --framework net10.0 \
+          --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=AnalyzerBuild" --logger "trx"
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4

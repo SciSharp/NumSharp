@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ==================================================================================
+       NumSharp.Analyzer.Fixtures — the INNER fixture project for the NumSharp analyzers.
+
+       Every .cs file here is crafted to trigger (or deliberately NOT trigger) a specific NDW
+       diagnostic; the expected line carries a `// [NDWxxx]` tag. Two consumers read these files:
+
+         • NumSharp.Tests.Analyzer runs the analyzers over them IN-PROCESS and asserts the
+           diagnostics land on exactly the tagged lines (the authoritative gate — it applies no
+           editorconfig, so it sees the gate ERRORS too).
+         • Building THIS project on demand (`dotnet build NumSharp.Analyzer.Fixtures.csproj`)
+           genuinely emits the NDW012 leak WARNINGS — "files that on purpose produce warnings" —
+           because it applies the leak analyzer. The gate diagnostics (NDW002/003/005/006/009/010/
+           011) are ERRORS, so this project's own `.editorconfig` turns them to `none` HERE so the
+           build stays green; the test still asserts them in-process.
+
+       It is deliberately NOT in SciSharp.NumSharp.sln (so a solution build is not spammed with the
+       intentional warnings) and not packable. The test copies these .cs files via a glob — it does
+       not build this project — so CI runs only the test project.
+       ================================================================================== -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <Configurations>Debug;Release;Publish</Configurations>
+    <!-- The whole point is to emit warnings; never let them fail this build. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- Async fixtures have no await on some paths, write-only property, unused temps: all expected. -->
+    <NoWarn>$(NoWarn);CS1998;CS0169;CS0649;CS0219</NoWarn>
+    <RootNamespace>NumSharp.Analyzer.Fixtures</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+    <!-- Apply the leak analyzer so a manual build of this project really does surface NDW012. -->
+    <ProjectReference Include="..\..\tools\NumSharp.Weaver.Analyzer\NumSharp.Weaver.Analyzer.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
