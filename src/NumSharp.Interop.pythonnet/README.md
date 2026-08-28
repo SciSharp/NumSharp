@@ -1,6 +1,6 @@
 # NumSharp.Interop.pythonnet
 
-Zero-copy interop between NumSharp `NDArray` and the Python ecosystem via [Python.NET (pythonnet)](https://github.com/pythonnet/pythonnet) — with **no Numpy.NET dependency**, so it works with any numpy, any Python, and any object implementing the PEP 3118 buffer protocol (numpy, `memoryview`, `bytes`, `bytearray`, `array.array`, PyArrow buffers, ...). PyTorch tensors use their official numpy interchange APIs through the optional `TorchInterop` helpers; `torch.Tensor` itself is not a PEP 3118 exporter.
+Zero-copy interop between NumSharp `NDArray` and the Python ecosystem via [Python.NET (pythonnet)](https://github.com/pythonnet/pythonnet) — with **no Numpy.NET dependency**. NumPy and PEP 3118 buffers enter the memory bridge directly; registered `IPythonArrayAdapter` instances feed library objects such as `torch.Tensor` through that same bridge. Torch is built in—`TorchInterop` remains an ergonomic façade, not a second memory implementation.
 
 ```csharp
 using NumSharp;
@@ -19,25 +19,29 @@ Everything is packaging over four operations on the static `NDArrayPythonInterop
 |---|---|---|
 | NumSharp → Python | `ToNumpy(nd)` | **zero-copy numpy view** of NumSharp's buffer — shared mutation, source rooted; full layout fidelity (slices, transposes, Fortran order, negative strides; broadcasts become read-only; scalars become 0-d) |
 | NumSharp → Python | `ToNumpyCopy(nd)` | independent numpy array (no shared memory, no lifetime coupling) |
-| Python → NumSharp | `ToNDArray(py)` | **copy** any PEP 3118 exporter into a fresh C-contiguous `NDArray` (honors strides / Fortran order; complex64 widens to complex128; UCS-4 text narrows to `Char`, BMP only; 0-d becomes a scalar) |
-| Python → NumSharp | `ToNDArrayView(py[, allowReadonly])` | **zero-copy NDArray view** over Python memory — shared mutation, via three routes: C-contiguous buffers through a locked `PyBuffer` lease; non-contiguous **numpy** arrays through `__array_interface__`; and non-contiguous **non-numpy** exporters (a sliced / offset / reversed `memoryview`, a strided `array.array` memoryview) through a `PyBUF.STRIDED` pointer + the memoryview's own shape/strides. Only genuinely irreducible layouts (complex64, UCS-4 text, big-endian, non-element strides) decline |
+| Python → NumSharp | `ToNDArray(py)` | **copy** any PEP 3118 exporter or registered-adapter source into a fresh C-contiguous `NDArray` (honors logical strides/order; complex64 widens; adapter Copy may detach/transfer) |
+| Python → NumSharp | `ToNDArrayView(py[, allowReadonly])` | **zero-copy NDArray view** over Python memory — adapters only select a canonical shareable object; the existing locked-buffer / `__array_interface__` / strided-buffer routes make every memory and lifetime decision |
 
 The lease buffer is always acquired **through the exporter's `memoryview`**, never the raw object: the memoryview is CPython's canonical, uniformly-behaved buffer exporter, so this sidesteps pythonnet 3.0.x's per-exporter `GetBuffer` bugs — a raw `ctypes` array hard-crashes `obj.GetBuffer` on *every* flag, while the memoryview over the same memory leases cleanly. Measured coverage across 50 exporter varieties: **47 view, 2 copy** (`complex64` widens, sub-item strides linearize). Big-endian multi-byte data is a **third copy** — the view path declines it (a native-endian shared view is impossible), but `ToNDArray` byte-reverses each element on copy — so the only refusals left are element types with no NumSharp dtype at all (`datetime64`, structured, object, void).
 
 Plus `ToMemoryView(nd)` (a writable Python `memoryview` of raw bytes for non-numpy consumers) and the dtype maps `ToNumpyDtypeStr` / `FromNumpyDtypeStr` / `ToBufferFormat` / `FromBufferFormat`.
 
-## PyTorch (optional runtime bridge)
+## PyTorch through the existing bridge
 
-PyTorch is imported only when these helpers are called; there is no TorchSharp or compile-time
-PyTorch dependency:
+The built-in `TorchPythonArrayAdapter` makes the ordinary verbs work directly; there is no TorchSharp
+or compile-time PyTorch dependency:
 
 ```csharp
 using (Py.GIL())
 {
     using PyObject tensor = nd.ToTorch();                  // shared CPU tensor
     using PyObject owned = nd.ToTorch(copy: true);         // independent tensor
-    using NDArray view = tensor.AsTorchNDArray();          // shared CPU view
-    using NDArray copy = tensor.ToTorchNDArray();          // independent NumSharp copy
+    using NDArray view = tensor.AsNDArray();               // existing shared bridge
+    using NDArray copy = tensor.ToNDArray();               // existing copy bridge (force permitted)
+
+    // Torch-specific aliases/policy controls remain available:
+    using NDArray sameView = tensor.AsTorchNDArray();
+    using NDArray strictCopy = tensor.ToTorchNDArray();     // no detach/device transfer
     using NDArray forced = tensor.ToTorchNDArray(force: true); // detach + CPU transfer, then copy
 }
 ```
@@ -55,6 +59,35 @@ meta tensors have no data even for `force:true`. PyTorch `expand()` tensors impo
 non-writeable NumSharp broadcasts. Scalars, empty arrays, storage offsets, F-order/transposes,
 conjugate/negative view bits, derived-view lifetimes, resize refusal, all dtype boundary values,
 caller-owned GIL mode and concurrent churn are pinned by the live interop test matrix.
+
+After `NDArrayPythonInterop.RegisterCodec()`, pythonnet uses the same adapter registry implicitly:
+
+```csharp
+dynamic torch = Py.Import("torch");
+using PyObject tensor = (PyObject)torch.from_numpy(nd); // registered encoder: NDArray → NumPy
+using NDArray a = tensor.As<NDArray>();                 // registered decoder: Torch → shared bridge
+using NDArray b = (NDArray)tensor.AsManagedObject(typeof(NDArray));
+```
+
+`NumpyCodecOptions.DecodeArrayAdapters` is on by default and independent of `DecodeAnyBuffer` and
+`DecodeArrayLike`. View permits only share-preserving adaptation; Copy permits detach/device transfer;
+Auto tries View and falls back to Copy.
+
+`nd.ToPython()` itself produces the bridge's NumPy view because pythonnet's encoder sees the managed
+source type, not the eventual Python library target. That is also why `torch.from_numpy(nd)` works:
+the callable receives the implicitly encoded NumPy view. On return, `As<NDArray>()` and
+`AsManagedObject(typeof(NDArray))` do carry an explicit CLR target and select the adapter-aware decoder.
+
+Other libraries can register the same kind of front door without writing memory code:
+
+```csharp
+NDArrayPythonInterop.RegisterArrayAdapter(myAdapter); // implements IPythonArrayAdapter
+```
+
+The adapter returns a canonical buffer/NumPy object. `NDArrayPythonInterop` still owns dtype, shape,
+strides, writeability, leases, copy fallback, GIL and shutdown behavior. Adapters may decline an
+instance by returning `null`; the registry then tries the next adapter. Disabling codec adapters does
+not suppress a recognized object's independent NumPy/buffer capability.
 
 ## Extension methods (the ergonomic default)
 
@@ -91,7 +124,7 @@ using (Py.GIL())
 | `View` | Always share; **decline** the conversion (return no value) if a view is impossible — a loud failure for callers who depend on shared memory. |
 | `Copy` | Always an independent copy — no shared memory, no Py_buffer lock, total coverage. |
 
-Plus `DecodeAnyBuffer` (default `true` — `memoryview`/`bytes`/`bytearray`/`array.array` also decode; `false` = numpy arrays only). numpy `ndarray` subclasses (`matrix`, `memmap`) decode via an `__mro__` walk. Arrays with no numpy dtype (`decimal`) fall back to pythonnet's default CLR wrapping instead of failing.
+Plus `DecodeArrayAdapters` (default `true`, including Torch), `DecodeAnyBuffer` (default `true`) and `DecodeArrayLike` (default `true` for numeric builtin containers). NumPy `ndarray` subclasses decode via an `__mro__` walk.
 
 > **`Auto` decode shares memory.** Under the default, `pyObj.As<NDArray>()` on a contiguous/strided-numpy source is a zero-copy view: mutations flow both ways, read-only sources decode as non-writeable views, and the view holds a `Py_buffer` lock on the source (a `bytearray` cannot be resized while it lives). Use `DecodeMode = Copy` when you want a detached snapshot that never touches the Python object.
 

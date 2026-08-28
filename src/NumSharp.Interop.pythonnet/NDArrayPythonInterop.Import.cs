@@ -11,11 +11,14 @@ namespace NumSharp.Interop.PythonNet
         // ===========================  Python  ->  NumSharp  ==================================
 
         /// <summary>
-        ///     Copy any PEP 3118 buffer object (numpy array, memoryview, bytes, bytearray, array.array,
-        ///     PyArrow buffer, ...) into a fresh C-contiguous NumSharp array. Honors strides /
+        ///     Copy any supported Python array object into a fresh C-contiguous NumSharp array. Native
+        ///     inputs are PEP 3118 buffers (numpy, memoryview, bytes, bytearray, array.array, PyArrow,
+        ///     ...); registered <see cref="IPythonArrayAdapter"/> instances first expose library arrays
+        ///     such as <c>torch.Tensor</c> through their official buffer/NumPy adapter. Honors strides /
         ///     Fortran order (non-contiguous sources are linearized by CPython's
-        ///     <c>memoryview.tobytes('C')</c>). numpy-agnostic; the result owns its memory — no lifetime
-        ///     coupling to the source.
+        ///     <c>memoryview.tobytes('C')</c>). The native buffer route is numpy-agnostic; an adapter may
+        ///     use its library's official NumPy interchange object. The result owns its memory — no
+        ///     lifetime coupling to the source.
         ///
         ///     <para>0-d exporters produce scalar NDArrays. complex64 buffers (format 'Zf') are widened
         ///     to <see cref="NPTypeCode.Complex"/> (complex128) during the copy. UCS-4 text buffers
@@ -23,13 +26,20 @@ namespace NumSharp.Interop.PythonNet
         ///     to <see cref="NPTypeCode.Char"/> (UTF-16) during the copy; non-BMP code points throw, as a
         ///     single <see cref="char"/> cannot hold a surrogate pair.</para>
         /// </summary>
-        /// <param name="obj">The buffer-protocol exporter to copy.</param>
+        /// <param name="obj">The buffer exporter or registered-adapter source to copy.</param>
         /// <param name="requireGIL">
         ///     <c>true</c>: acquire the GIL for this call (re-entrant under an outer <see cref="Py.GIL"/>);
         ///     <c>false</c>: no GIL management — the calling thread must ALREADY hold the GIL;
         ///     <c>null</c> (default): follow <see cref="RequireGIL"/>.
         /// </param>
-        public static unsafe NDArray ToNDArray(this PyObject obj, bool? requireGIL = null)
+        public static NDArray ToNDArray(this PyObject obj, bool? requireGIL = null)
+            => ToNDArrayCore(obj, requireGIL, useAdapters: true);
+
+        /// <summary>Codec-only route used when adapter decoding is disabled but native buffers remain enabled.</summary>
+        internal static NDArray ToNDArrayWithoutAdapters(PyObject obj, bool? requireGIL = null)
+            => ToNDArrayCore(obj, requireGIL, useAdapters: false);
+
+        private static unsafe NDArray ToNDArrayCore(PyObject obj, bool? requireGIL, bool useAdapters)
         {
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             PythonRuntimeInterop.EnsureEngine();
@@ -37,7 +47,13 @@ namespace NumSharp.Interop.PythonNet
 
             using (AcquireGil(requireGIL))
             {
-                using PyObject mv = OpenMemoryView(obj);
+                // Copy semantics permit an adapter to detach/transfer/materialize. The adapted object is
+                // only a front door: every byte/dtype/layout decision below remains the existing bridge.
+                using PyObject adapted = useAdapters
+                    ? PythonArrayAdapterRegistry.TryAdapt(obj, allowCopy: true)
+                    : null;
+                PyObject source = adapted ?? obj;
+                using PyObject mv = OpenMemoryView(source);
 
                 string format = mv.format;
                 long itemsize = mv.itemsize;
@@ -80,9 +96,9 @@ namespace NumSharp.Interop.PythonNet
         ///     exporter — into a fresh, independent NumSharp array by routing it through
         ///     <c>numpy.asarray</c> first.
         ///
-        ///     <para>This is the numpy-dependent companion of <see cref="ToNDArray(PyObject, bool?)"/>:
-        ///     <see cref="ToNDArray"/> accepts only PEP 3118 buffer exporters and stays numpy-agnostic,
-        ///     whereas this also accepts the everyday Python containers a numpy call or plain Python code
+        ///     <para>This is the general array-like companion of <see cref="ToNDArray(PyObject, bool?)"/>:
+        ///     <see cref="ToNDArray"/> accepts PEP 3118 exporters plus registered adapter sources,
+        ///     whereas this also accepts everyday Python containers a numpy call or plain Python code
         ///     hands back — at the cost of requiring numpy and one extra materialization (<c>numpy.asarray</c>
         ///     builds the ndarray, then <see cref="ToNDArray"/> copies it into NumSharp). The result owns
         ///     its memory — no lifetime coupling to the source. dtype follows numpy's own inference
@@ -107,7 +123,9 @@ namespace NumSharp.Interop.PythonNet
 
         /// <summary>
         ///     Zero-copy NumSharp view over Python memory: NumSharp SHARES the exporter's buffer
-        ///     (mutations visible both ways).
+        ///     (mutations visible both ways). A registered <see cref="IPythonArrayAdapter"/> may first
+        ///     expose a library object such as a CPU <c>torch.Tensor</c> through its official shareable
+        ///     array adapter; all memory decisions below remain unchanged.
         ///
         ///     <para><b>Three zero-copy routes:</b></para>
         ///     <list type="bullet">
@@ -155,7 +173,21 @@ namespace NumSharp.Interop.PythonNet
         ///     array: it does not own its data" instead of silently reallocating away from the
         ///     shared Python memory, and <c>np.require(..., "O")</c> produces an owning copy.
         /// </remarks>
-        public static unsafe NDArray ToNDArrayView(PyObject obj, bool allowReadonly = false, bool? requireGIL = null)
+        public static NDArray ToNDArrayView(PyObject obj, bool allowReadonly = false, bool? requireGIL = null)
+            => ToNDArrayViewCore(obj, allowReadonly, requireGIL, useAdapters: true);
+
+        /// <summary>Codec-only route used when adapter decoding is disabled but native buffers remain enabled.</summary>
+        internal static NDArray ToNDArrayViewWithoutAdapters(
+            PyObject obj,
+            bool allowReadonly = false,
+            bool? requireGIL = null)
+            => ToNDArrayViewCore(obj, allowReadonly, requireGIL, useAdapters: false);
+
+        private static unsafe NDArray ToNDArrayViewCore(
+            PyObject obj,
+            bool allowReadonly,
+            bool? requireGIL,
+            bool useAdapters)
         {
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             PythonRuntimeInterop.EnsureEngine();
@@ -163,26 +195,33 @@ namespace NumSharp.Interop.PythonNet
 
             using (AcquireGil(requireGIL))
             {
+                // View semantics forbid adapter-side materialization. For Torch this is Tensor.numpy()
+                // without force; CPU/grad/layout failures propagate here and Auto codec mode can then
+                // choose the ordinary copy fallback through ToNDArray.
+                using PyObject adapted = useAdapters
+                    ? PythonArrayAdapterRegistry.TryAdapt(obj, allowCopy: false)
+                    : null;
+                PyObject source = adapted ?? obj;
                 PyObject mv = null;
                 try
                 {
                     try
                     {
-                        mv = OpenMemoryView(obj);
+                        mv = OpenMemoryView(source);
                     }
-                    catch (NotSupportedException) when (obj.HasAttr("__array_interface__"))
+                    catch (NotSupportedException) when (source.HasAttr("__array_interface__"))
                     {
                         // No buffer protocol but numpy-interface metadata exists (e.g. exotic dtypes
                         // fail memoryview with a numpy-side error) — let the interface path decide.
-                        return ViewViaArrayInterface(obj, allowReadonly);
+                        return ViewViaArrayInterface(source, allowReadonly);
                     }
 
                     if (!mv.c_contiguous)
                     {
                         // numpy arrays carry the richest layout metadata (F-order, >1-D strides,
                         // broadcasts) in __array_interface__ — prefer it.
-                        if (obj.HasAttr("__array_interface__"))
-                            return ViewViaArrayInterface(obj, allowReadonly);
+                        if (source.HasAttr("__array_interface__"))
+                            return ViewViaArrayInterface(source, allowReadonly);
 
                         // ANY other buffer-protocol exporter (a sliced / offset / reversed memoryview,
                         // a strided memoryview of an array.array, ...) is STILL viewable: the buffer
@@ -200,7 +239,7 @@ namespace NumSharp.Interop.PythonNet
                         bool sReadonly = GetBool(mv, PythonRuntimeInterop.NameReadonly);
                         mv.Dispose();
                         mv = null;
-                        return ViewViaBufferStrides(obj, sFormat, sItemsize, sDims, sByteStrides, sReadonly, allowReadonly);
+                        return ViewViaBufferStrides(source, sFormat, sItemsize, sDims, sByteStrides, sReadonly, allowReadonly);
                     }
 
                     string format = mv.format;
@@ -289,7 +328,8 @@ namespace NumSharp.Interop.PythonNet
             {
                 throw new NotSupportedException(
                     $"the object does not export a PEP 3118 buffer ({e.Message}). " +
-                    "Only buffer-protocol objects (numpy arrays, memoryview, bytes, bytearray, array.array, ...) can be converted.", e);
+                    "Only buffer-protocol objects (numpy arrays, memoryview, bytes, bytearray, array.array, ...) " +
+                    "or objects handled by a registered IPythonArrayAdapter can be converted.", e);
             }
         }
 

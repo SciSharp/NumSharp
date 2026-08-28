@@ -42,6 +42,7 @@ namespace NumSharp.Tests.Interop
             NumpyCodecOptions.Default.EncodeMode.Should().Be(NumpyCodecMode.Auto);
             NumpyCodecOptions.Default.DecodeMode.Should().Be(NumpyCodecMode.Auto);
             NumpyCodecOptions.Default.DecodeAnyBuffer.Should().BeTrue();
+            NumpyCodecOptions.Default.DecodeArrayAdapters.Should().BeTrue();
         }
 
         // ---- decode: Auto = view-first, copy-fallback ----------------------------------------------

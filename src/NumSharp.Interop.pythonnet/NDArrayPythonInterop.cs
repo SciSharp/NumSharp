@@ -8,11 +8,11 @@ namespace NumSharp.Interop.PythonNet
     /// <summary>
     ///     Converts between NumSharp <see cref="NDArray"/> and Python objects via Python.NET (pythonnet).
     ///
-    ///     <para>Binds only to pythonnet's <see cref="PyObject"/> and Python's PEP 3118 buffer protocol —
-    ///     NO Numpy.NET dependency, so it works with any numpy, any Python, and with ANY buffer-protocol
-    ///     exporter (numpy, memoryview, array.array, bytes, PyArrow buffers, ...), not just numpy.
-    ///     Libraries whose own objects do not export PEP 3118 — notably <c>torch.Tensor</c> — cross
-    ///     through their official numpy adapter; see <see cref="TorchInterop"/>.</para>
+    ///     <para>Binds only to pythonnet's <see cref="PyObject"/> and Python memory protocols — NO
+    ///     Numpy.NET dependency. PEP 3118 exporters (numpy, memoryview, array.array, bytes, PyArrow,
+    ///     ...) enter directly; registered <see cref="IPythonArrayAdapter"/> instances expose library
+    ///     objects that lack a buffer, notably <c>torch.Tensor</c>, through their official shareable
+    ///     array adapter. Every source then follows the same pointer/layout/lifetime pipeline.</para>
     ///
     ///     <para><b>The four verbs</b> (everything else is packaging over these):</para>
     ///     <list type="bullet">
@@ -20,11 +20,11 @@ namespace NumSharp.Interop.PythonNet
     ///         mutation; source rooted for the lifetime of ALL Python-side views; full strided fidelity
     ///         including slices, transposes, Fortran order, negative strides and read-only broadcasts).</item>
     ///       <item><see cref="ToNumpyCopy(NDArray, bool?)"/> — independent numpy array (no shared memory).</item>
-    ///       <item><see cref="ToNDArray(PyObject, bool?)"/> — copy ANY PEP 3118 buffer object into a fresh
-    ///         C-contiguous NumSharp array (honors strides / Fortran order; numpy-agnostic).</item>
-    ///       <item><see cref="ToNDArrayView(PyObject, bool, bool?)"/> — zero-copy NumSharp view over Python
-    ///         memory (shared mutation; the exporter is leased for the lifetime of ALL NumSharp-side
-    ///         views, including derived slices).</item>
+    ///       <item><see cref="ToNDArray(PyObject, bool?)"/> — copy any native buffer or registered-adapter
+    ///         source into a fresh C-contiguous NumSharp array (honors logical strides/order).</item>
+    ///       <item><see cref="ToNDArrayView(PyObject, bool, bool?)"/> — zero-copy NumSharp view over a native
+    ///         buffer or share-preserving adapter result (shared mutation; the exporter is leased for the
+    ///         lifetime of ALL NumSharp-side views, including derived slices).</item>
     ///     </list>
     ///
     ///     <para><b>Lifetime safety:</b> exports take their own atomic reference on the NumSharp buffer
@@ -135,8 +135,9 @@ namespace NumSharp.Interop.PythonNet
         /// <summary>
         ///     Registers <see cref="NumpyCodec"/> with pythonnet's conversion pipeline
         ///     (<c>PyObjectConversions</c>) with default options: <see cref="NDArray"/> arguments and
-        ///     return values are auto-encoded as zero-copy numpy views, and <c>PyObject.As&lt;NDArray&gt;()</c>
-        ///     decodes numpy arrays (and other buffer exporters) as copies.
+        ///     return values are auto-encoded as zero-copy numpy views, and
+        ///     <c>PyObject.As&lt;NDArray&gt;()</c> decodes numpy arrays, other buffer exporters and
+        ///     registered adapter sources through the view-first <see cref="NumpyCodecMode.Auto"/> policy.
         /// </summary>
         /// <returns><c>true</c> if the codec was registered by this call; <c>false</c> if it was already
         /// registered for the current engine session.</returns>
@@ -161,6 +162,15 @@ namespace NumSharp.Interop.PythonNet
             PyObjectConversions.RegisterDecoder(codec);
             return true;
         }
+
+        /// <summary>
+        ///     Register a library-specific adapter that feeds the existing Python memory bridge.
+        ///     Registration is process-wide, thread-safe and idempotent by <see cref="IPythonArrayAdapter.Name"/>.
+        ///     The built-in <see cref="TorchPythonArrayAdapter"/> is already registered.
+        /// </summary>
+        /// <returns><c>true</c> when added; <c>false</c> when an adapter with the same name already exists.</returns>
+        public static bool RegisterArrayAdapter(IPythonArrayAdapter adapter)
+            => PythonArrayAdapterRegistry.Register(adapter);
 
         // ===========================  dtype maps  ============================================
 

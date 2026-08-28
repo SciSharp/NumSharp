@@ -5,7 +5,8 @@ without copying it. The bridge follows PyTorch's own supported interchange path:
 [`torch.from_numpy`](https://docs.pytorch.org/docs/stable/generated/torch.from_numpy.html) in one
 direction and [`Tensor.numpy`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.numpy.html)
 in the other. There is no TorchSharp dependency and no compile-time PyTorch dependency — `torch` is
-imported from the CPython environment only when a Torch helper is called.
+adapted dynamically from the CPython environment. Torch is a built-in front door to the existing
+`NDArrayPythonInterop` memory bridge, not a separate pointer/lifetime implementation.
 
 **On this page:** [Setup](#setup) · [The four operations](#the-four-operations) ·
 [NumSharp → PyTorch](#numsharp--pytorch) · [PyTorch → NumSharp](#pytorch--numsharp) ·
@@ -16,7 +17,7 @@ imported from the CPython environment only when a Torch helper is called.
 > Verified live on CPython 3.12.12 · numpy 2.4.2 · pythonnet 3.0.5 ·
 > **PyTorch 2.13.0+cpu** · net8.0/net10.0. PyTorch 2.13.0 was the latest stable release when this
 > page was validated; 2.14 was still a release candidate. Every compatibility claim below is
-> reproduced against the real installed PyTorch by 24 live tests in `PyTorchInteropTests` and
+> reproduced against the real installed PyTorch by 28 live tests in `PyTorchInteropTests` and
 > `PyTorchInteropEdgeCaseTests` (the accelerator cell runs conditionally when CUDA or MPS exists).
 
 ---
@@ -56,7 +57,9 @@ the surrounding `PyObject` work still belongs inside `using (Py.GIL())`.
 |---|---|---|---|
 | NumSharp → PyTorch | `nd.ToTorch()` | CPU `torch.Tensor` | **shared where representable** (`Decimal` converts) |
 | NumSharp → PyTorch | `nd.ToTorch(copy: true)` | CPU `torch.Tensor` | independent C-contiguous copy |
-| PyTorch → NumSharp | `tensor.AsTorchNDArray()` | `NDArray` view | **shared** |
+| PyTorch → NumSharp | `tensor.AsNDArray()` | `NDArray` view | **shared through the existing bridge** |
+| PyTorch → NumSharp | `tensor.ToNDArray()` | owning `NDArray` | existing copy bridge; detach/device transfer permitted |
+| PyTorch → NumSharp | `tensor.AsTorchNDArray()` | `NDArray` view | convenience alias of the shared bridge |
 | PyTorch → NumSharp | `tensor.ToTorchNDArray(force: false)` | owning `NDArray` | independent copy |
 | PyTorch → NumSharp | `tensor.ToTorchNDArray(force: true)` | owning `NDArray` | detach + CPU transfer if needed, then copy |
 
@@ -68,13 +71,49 @@ Internally these are deliberately small compositions of the existing interop:
 ```text
 nd.ToTorch()              = torch.from_numpy(nd.ToNumpy())
 nd.ToTorch(copy: true)    = torch.from_numpy(nd.ToNumpyCopy())
-tensor.AsTorchNDArray()   = tensor.numpy().AsNDArray()
-tensor.ToTorchNDArray()   = tensor.numpy().ToNDArray()
+tensor.AsNDArray()        = Torch adapter (share only) → ToNDArrayView()
+tensor.ToNDArray()        = Torch adapter (copy allowed) → ToNDArray()
+tensor.AsTorchNDArray()   = tensor.AsNDArray()
+tensor.ToTorchNDArray()   = Torch adapter (strict numpy()) → ToNDArray()
 ```
 
 That structure matters: NumPy is not an accidental middle format. These are the public APIs PyTorch
 documents for sharing CPU storage, and the NumSharp↔NumPy bridge already owns the layout and lifetime
-contract.
+contract. The adapter chooses `Tensor.numpy()` versus its force expansion; it never reads a pointer,
+constructs a `Shape`, owns a lease or copies an element.
+
+### Pythonnet implicit conversion uses the same path
+
+```csharp
+NDArrayPythonInterop.RegisterCodec();
+
+using (Py.GIL())
+{
+    dynamic torch = Py.Import("torch");
+    using PyObject tensor = (PyObject)torch.from_numpy(nd); // NDArray implicitly encodes as NumPy
+    using NDArray a = tensor.As<NDArray>();                 // Torch adapter → shared bridge
+    using NDArray b = (NDArray)tensor.AsManagedObject(typeof(NDArray));
+}
+```
+
+`NumpyCodecMode.View` only calls the adapter's share-preserving route. `Copy` permits detach, CPU
+transfer and lazy-bit resolution. `Auto` tries View, then Copy. Set
+`NumpyCodecOptions.DecodeArrayAdapters = false` to exclude registered adapters while leaving NumPy,
+buffer and builtin-array-like policies independent.
+
+`nd.ToPython()` by itself still produces the codec's NumPy object: a pythonnet encoder is told the
+managed source type, not which Python library will eventually consume it. This is exactly what makes
+the implicit call above work — `torch.from_numpy` receives that encoded NumPy view. In the reverse
+direction pythonnet does know the requested CLR type, so both `As<NDArray>()` and
+`AsManagedObject(typeof(NDArray))` select the adapter-aware decoder.
+
+### Other libraries use the same extension point
+
+An integration for another buffer-less array library implements `IPythonArrayAdapter` and registers
+it once with `NDArrayPythonInterop.RegisterArrayAdapter(adapter)`. Its only job is to return the
+library's canonical buffer or NumPy interchange object. The established bridge still owns dtype,
+shape, offset, strides, writeability, leases, copying, GIL and shutdown behavior. Registration is
+thread-safe, process-wide and idempotent by the adapter's stable `Name`.
 
 ---
 
@@ -292,7 +331,7 @@ package's data protocol:
 |---|---|---|
 | NumPy/SciPy/scikit-learn code accepting `ndarray` | `nd.ToNumpy()` | input view is zero-copy; the operation decides its output |
 | Buffer consumers such as `torch.frombuffer`, `pa.py_buffer`, `PIL.Image.frombuffer` | `nd.ToMemoryView()` | zero-copy for compatible contiguous CPU buffers |
-| PyTorch CPU tensors | `ToTorch` / `AsTorchNDArray` | zero-copy where the table above allows |
+| PyTorch CPU tensors | built-in adapter → ordinary `AsNDArray` / `ToNDArray`; `TorchInterop` aliases remain | zero-copy view or explicit copy according to the ordinary bridge verb |
 | pandas/polars/OpenCV APIs accepting NumPy | pass `nd.ToNumpy()` | library may retain, view, or copy according to its own API |
 | GPU/device arrays (PyTorch CUDA, CuPy, JAX, TensorFlow) | device-specific transfer or DLPack | NumSharp currently has no device-memory/DLPack object; a CPU crossing copies |
 
@@ -339,6 +378,10 @@ direction-specific protocol instead of pretending those are the same capability.
 | 22 | Copy ownership | detached both ways and no retained export pin | [`ToTorchCopy_IsDetachedBothWays_AndDoesNotKeepAnExportPin`][gate-edge] |
 | 23 | Concurrency | four-thread round-trips drain every counter | [`ConcurrentTorchRoundTrips_AreThreadSafeAndReturnCountersToBaseline`][gate-edge] |
 | 24 | Accelerator transfer | direct sharing rejected; force copies CUDA/MPS to CPU when present | [`AcceleratorTensor_ForceCopiesToCpu_WhenAnAcceleratorIsAvailable`][gate-edge] † |
+| 25 | Existing bridge integration | ordinary `AsNDArray` shares and ordinary `ToNDArray` copies a Tensor | [`ExistingMemoryBridge_DirectVerbsAdaptTorchTensor_ViewAndCopySemantics`][gate] |
+| 26 | pythonnet implicit conversion | `torch.from_numpy(nd)`, `As<NDArray>` and `AsManagedObject` use the registered codec/adapter | [`PythonnetImplicitEncoderAndDecoder_WorkAcrossTorchFromNumpyAndTensorReturn`][gate] |
+| 27 | Codec policy and subclasses | View/Copy/Auto, explicit adapter disable, autograd and `torch.nn.Parameter` MRO behavior | [`CodecModes_UseTheTorchAdapterForViewCopyAutoAndExplicitDisable`][gate-edge] |
+| 28 | Extensible shared infrastructure | custom buffer-less and dual-capability objects prove adapter chaining, native-policy independence and reuse of the same memory implementation | [`CustomAdapter_AlsoFeedsDirectVerbsAndCodecWithoutNewMemoryCode`][gate-edge] |
 
 † Conditional: Inconclusive on a CPU-only host, strict on a host exposing CUDA or MPS.
 

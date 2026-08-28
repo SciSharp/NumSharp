@@ -47,7 +47,8 @@ namespace NumSharp.Interop.PythonNet
     /// </summary>
     public sealed class NumpyCodecOptions
     {
-        /// <summary>The defaults: <see cref="NumpyCodecMode.Auto"/> both ways, decode any buffer exporter.</summary>
+        /// <summary>The defaults: <see cref="NumpyCodecMode.Auto"/> both ways, decode registered
+        /// adapters, any buffer exporter, and numeric builtin array-likes.</summary>
         public static readonly NumpyCodecOptions Default = new();
 
         /// <summary>
@@ -93,12 +94,30 @@ namespace NumSharp.Interop.PythonNet
         public bool DecodeAnyBuffer { get; init; } = true;
 
         /// <summary>
-        ///     <c>true</c> (default): besides PEP 3118 buffer exporters, everyday array-like Python objects
-        ///     that export NO buffer — a <c>list</c>, <c>tuple</c>, nested sequence, or a Python scalar
+        ///     <c>true</c> (default): objects recognized by the process-wide
+        ///     <see cref="IPythonArrayAdapter"/> registry participate in implicit
+        ///     <c>PyObject.As&lt;NDArray&gt;()</c> / <c>AsManagedObject(typeof(NDArray))</c> conversion.
+        ///     The built-in adapter covers <c>torch.Tensor</c> and its subclasses.
+        ///     <c>false</c>: registered adapters are ignored by this codec; NumPy/buffer/builtin options
+        ///     remain independent.
+        /// </summary>
+        /// <remarks>
+        ///     Adapter conversion obeys <see cref="DecodeMode"/>. View invokes only a share-preserving
+        ///     adapter route; Copy permits detach/device transfer/materialization; Auto tries the view
+        ///     and then the copy route. Thus default Auto can copy a CUDA or gradient-tracking Torch
+        ///     tensor to CPU when an implicit NDArray conversion is explicitly requested.
+        /// </remarks>
+        public bool DecodeArrayAdapters { get; init; } = true;
+
+        /// <summary>
+        ///     <c>true</c> (default): besides registered adapters and PEP 3118 buffer exporters,
+        ///     everyday array-like Python objects that export NO buffer — a <c>list</c>, <c>tuple</c>,
+        ///     nested sequence, or a Python scalar
         ///     (<c>int</c>/<c>float</c>/<c>bool</c>/<c>complex</c>) — also decode to <see cref="NDArray"/>,
         ///     materialized through <c>numpy.asarray</c> (<see cref="NDArrayPythonInterop.FromArrayLike"/>),
         ///     so a numpy call or plain Python code that hands back a list crosses without a manual
-        ///     conversion. <c>false</c>: only buffer exporters decode.
+        ///     conversion. <c>false</c>: builtin array-likes are disabled; registered adapters and
+        ///     buffer exporters remain controlled by their own independent options.
         /// </summary>
         /// <remarks>
         ///     Two consequences worth knowing (both benign, neither a reason to turn it off in practice):
@@ -113,10 +132,12 @@ namespace NumSharp.Interop.PythonNet
 
     /// <summary>
     ///     pythonnet auto-marshaling codec: once registered (see
-    ///     <see cref="NDArrayPythonInterop.RegisterCodec()"/>), <see cref="NDArray"/> ⇄ numpy conversion happens
-    ///     automatically at every pythonnet boundary — <c>nd.ToPython()</c>, <c>scope.Set("x", nd)</c>,
-    ///     passing an <see cref="NDArray"/> to a Python callable, and <c>pyObj.As&lt;NDArray&gt;()</c> on
-    ///     the way back — with no explicit conversion calls.
+    ///     <see cref="NDArrayPythonInterop.RegisterCodec()"/>), <see cref="NDArray"/> → numpy and
+    ///     supported Python array → <see cref="NDArray"/> conversion happens automatically at every
+    ///     pythonnet boundary — <c>nd.ToPython()</c>, <c>scope.Set("x", nd)</c>, passing an
+    ///     <see cref="NDArray"/> to a Python callable, and <c>pyObj.As&lt;NDArray&gt;()</c> /
+    ///     <c>AsManagedObject(typeof(NDArray))</c> on the way back. Registered adapters make the reverse
+    ///     path include library arrays such as <c>torch.Tensor</c> without duplicating memory code.
     ///
     ///     <para>Encoding falls back to pythonnet's default CLR-object wrapping for arrays it cannot
     ///     express as numpy (<see cref="NPTypeCode.Decimal"/>), instead of failing the conversion.</para>
@@ -180,6 +201,8 @@ namespace NumSharp.Interop.PythonNet
                 string name = objectType.Name;   // tp_name: "numpy.ndarray", "memoryview", "array.array", ...
                 if (name == "numpy.ndarray")
                     return true;
+                if (_options.DecodeArrayAdapters && PythonArrayAdapterRegistry.CanAdapt(objectType))
+                    return true;
                 if (_options.DecodeAnyBuffer)
                 {
                     if (name == "memoryview" || name == "bytes" || name == "bytearray" || name == "array.array")
@@ -217,9 +240,10 @@ namespace NumSharp.Interop.PythonNet
 
             NDArray nd = _options.DecodeMode switch
             {
-                NumpyCodecMode.Copy => TryDecodeCopy(pyObj),
-                NumpyCodecMode.View => TryDecodeView(pyObj),
-                _                    => TryDecodeView(pyObj) ?? TryDecodeCopy(pyObj),   // Auto
+                NumpyCodecMode.Copy => TryDecodeCopy(pyObj, _options.DecodeArrayAdapters),
+                NumpyCodecMode.View => TryDecodeView(pyObj, _options.DecodeArrayAdapters),
+                _                    => TryDecodeView(pyObj, _options.DecodeArrayAdapters) ??
+                                        TryDecodeCopy(pyObj, _options.DecodeArrayAdapters),   // Auto
             };
 
             // Array-like fallback: a non-buffer list/tuple/scalar reaches here with nd == null because the
@@ -243,16 +267,26 @@ namespace NumSharp.Interop.PythonNet
         ///     multiple). Any failure is treated as "not viewable" — the Auto path then copies, the View
         ///     path declines the decode.
         /// </summary>
-        private static NDArray TryDecodeView(PyObject pyObj)
+        private static NDArray TryDecodeView(PyObject pyObj, bool useAdapters)
         {
-            try { return NDArrayPythonInterop.ToNDArrayView(pyObj, allowReadonly: true); }
+            try
+            {
+                return useAdapters
+                    ? NDArrayPythonInterop.ToNDArrayView(pyObj, allowReadonly: true)
+                    : NDArrayPythonInterop.ToNDArrayViewWithoutAdapters(pyObj, allowReadonly: true);
+            }
             catch { return null; }
         }
 
         /// <summary>An independent copy, or <c>null</c> if the source cannot be copied either (no NumSharp dtype).</summary>
-        private static NDArray TryDecodeCopy(PyObject pyObj)
+        private static NDArray TryDecodeCopy(PyObject pyObj, bool useAdapters)
         {
-            try { return NDArrayPythonInterop.ToNDArray(pyObj); }
+            try
+            {
+                return useAdapters
+                    ? NDArrayPythonInterop.ToNDArray(pyObj)
+                    : NDArrayPythonInterop.ToNDArrayWithoutAdapters(pyObj);
+            }
             catch { return null; }
         }
 
@@ -287,7 +321,8 @@ namespace NumSharp.Interop.PythonNet
         private static bool IsArrayLikeObject(PyObject obj)
         {
             using PyObject type = obj.GetPythonType();
-            return IsArrayLikeBuiltin(new PyType(type).Name);
+            using var pyType = new PyType(type);
+            return IsArrayLikeBuiltin(pyType.Name);
         }
 
         /// <summary>Walks <c>__mro__</c> so numpy.matrix / numpy.memmap / user ndarray subclasses decode too.</summary>

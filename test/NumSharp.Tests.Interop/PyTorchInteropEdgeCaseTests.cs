@@ -451,7 +451,7 @@ namespace NumSharp.Tests.Interop
             using (PyObject list = Scope.Eval("[1, 2, 3]"))
             {
                 new Action(() => { using var _ = list.AsTorchNDArray(requireGIL: false); })
-                    .Should().Throw<PythonException>().WithMessage("*list*object has no attribute*numpy*");
+                    .Should().Throw<NotSupportedException>().WithMessage("*does not export a PEP 3118 buffer*IPythonArrayAdapter*");
                 new Action(() => { using var _ = list.ToTorchNDArray(requireGIL: false); })
                     .Should().Throw<PythonException>().WithMessage("*list*object has no attribute*numpy*");
             }
@@ -576,6 +576,133 @@ namespace NumSharp.Tests.Interop
         }
 
         [TestMethod]
+        public void CodecModes_UseTheTorchAdapterForViewCopyAutoAndExplicitDisable()
+        {
+            RequirePyTorch();
+            var auto = new NumpyCodec(NumpyCodecOptions.Default);
+            var viewOnly = new NumpyCodec(new NumpyCodecOptions { DecodeMode = NumpyCodecMode.View });
+            var copyOnly = new NumpyCodec(new NumpyCodecOptions { DecodeMode = NumpyCodecMode.Copy });
+            var disabled = new NumpyCodec(new NumpyCodecOptions { DecodeArrayAdapters = false });
+
+            PyExec(
+                "codec_tensor = torch.arange(5, dtype=torch.float64)\n" +
+                "codec_grad = torch.arange(5, dtype=torch.float64, requires_grad=True)");
+
+            using (Gil())
+            using (PyObject tensor = Scope.Get("codec_tensor"))
+            using (PyObject grad = Scope.Get("codec_grad"))
+            {
+                using PyObject typeObject = tensor.GetPythonType();
+                using var tensorType = new PyType(typeObject);
+                auto.CanDecode(tensorType, typeof(NDArray)).Should().BeTrue();
+                disabled.CanDecode(tensorType, typeof(NDArray)).Should().BeFalse();
+                disabled.TryDecode(tensor, out NDArray declined).Should().BeFalse();
+                declined.Should().BeNull();
+
+                auto.TryDecode(tensor, out NDArray autoView).Should().BeTrue();
+                viewOnly.TryDecode(tensor, out NDArray strictView).Should().BeTrue();
+                copyOnly.TryDecode(tensor, out NDArray snapshot).Should().BeTrue();
+                using (autoView)
+                using (strictView)
+                using (snapshot)
+                {
+                    WriteAt(autoView, 55.0, 1);
+                    ReadAt<double>(strictView, 1).Should().Be(55.0);
+                    PyFloat("codec_tensor[1].item()").Should().Be(55.0);
+                    WriteAt(snapshot, -7.0, 2);
+                    PyFloat("codec_tensor[2].item()").Should().Be(2.0,
+                        "Copy mode must remain detached even for a viewable CPU Tensor");
+                }
+
+                viewOnly.TryDecode(grad, out NDArray impossibleView).Should().BeFalse(
+                    "View mode may not detach a gradient-tracking Tensor");
+                impossibleView.Should().BeNull();
+
+                auto.TryDecode(grad, out NDArray autoCopy).Should().BeTrue(
+                    "Auto falls back through the adapter's allow-copy route");
+                copyOnly.TryDecode(grad, out NDArray explicitCopy).Should().BeTrue();
+                using (autoCopy)
+                using (explicitCopy)
+                {
+                    WriteAt(autoCopy, 900.0, 0);
+                    WriteAt(explicitCopy, 800.0, 1);
+                    PyStr("codec_grad.detach().tolist()").Should().Be("[0.0, 1.0, 2.0, 3.0, 4.0]",
+                        "implicit copy modes must not mutate autograd storage");
+                }
+
+                using PyObject parameter = Scope.Eval(
+                    "torch.nn.Parameter(torch.arange(3, dtype=torch.float64))");
+                using PyObject parameterTypeObject = parameter.GetPythonType();
+                using var parameterType = new PyType(parameterTypeObject);
+                auto.CanDecode(parameterType, typeof(NDArray)).Should().BeTrue(
+                    "the Torch adapter walks MRO and recognizes Tensor subclasses");
+                auto.TryDecode(parameter, out NDArray parameterCopy).Should().BeTrue();
+                using (parameterCopy)
+                {
+                    parameterCopy.typecode.Should().Be(NPTypeCode.Double);
+                    WriteAt(parameterCopy, -1.0, 0);
+                    Scope.Set("codec_parameter", parameter);
+                    PyFloat("codec_parameter.detach()[0].item()").Should().Be(0.0);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void CustomAdapter_AlsoFeedsDirectVerbsAndCodecWithoutNewMemoryCode()
+        {
+            NDArrayPythonInterop.RegisterArrayAdapter(DecliningArrayAdapter.Instance).Should().BeTrue();
+            NDArrayPythonInterop.RegisterArrayAdapter(CustomArrayAdapter.Instance).Should().BeTrue();
+            NDArrayPythonInterop.RegisterArrayAdapter(CustomArrayAdapter.Instance).Should().BeFalse(
+                "adapter registration is idempotent by name");
+            PyExec(
+                "class NumSharpAdapterProbe:\n" +
+                "    def __init__(self):\n" +
+                "        self.payload = np.arange(6, dtype='f8')\n" +
+                "class NumSharpAdapterBufferProbe(np.ndarray):\n" +
+                "    pass\n" +
+                "custom_adapter_source = NumSharpAdapterProbe()\n" +
+                "custom_buffer_source = np.arange(4, dtype='f8').view(NumSharpAdapterBufferProbe)\n" +
+                "custom_buffer_source.payload = np.arange(100, 104, dtype='f8')");
+
+            using (Gil())
+            using (PyObject wrapper = Scope.Get("custom_adapter_source"))
+            using (NDArray view = wrapper.AsNDArray())
+            using (NDArray copy = wrapper.ToNDArray())
+            {
+                var codec = new NumpyCodec();
+                using PyObject typeObject = wrapper.GetPythonType();
+                using var wrapperType = new PyType(typeObject);
+                codec.CanDecode(wrapperType, typeof(NDArray)).Should().BeTrue();
+
+                WriteAt(view, 71.0, 4);
+                PyFloat("custom_adapter_source.payload[4]").Should().Be(71.0,
+                    "the custom adapter only selected payload; the standard bridge owns sharing");
+                WriteAt(copy, -8.0, 5);
+                PyFloat("custom_adapter_source.payload[5]").Should().Be(5.0,
+                    "the standard copy bridge remains detached");
+            }
+
+            using (Gil())
+            using (PyObject bufferSource = Scope.Get("custom_buffer_source"))
+            {
+                var disabled = new NumpyCodec(new NumpyCodecOptions { DecodeArrayAdapters = false });
+                using PyObject typeObject = bufferSource.GetPythonType();
+                using var bufferType = new PyType(typeObject);
+                disabled.CanDecode(bufferType, typeof(NDArray)).Should().BeTrue(
+                    "disabling adapters must not disable a source's own ndarray/buffer capability");
+                disabled.TryDecode(bufferSource, out NDArray nativeView).Should().BeTrue();
+                using (nativeView)
+                {
+                    ReadAt<double>(nativeView, 0).Should().Be(0.0,
+                        "the adapter's different payload must be bypassed when adapters are disabled");
+                    WriteAt(nativeView, 77.0, 1);
+                    PyFloat("custom_buffer_source[1]").Should().Be(77.0);
+                    PyFloat("custom_buffer_source.payload[1]").Should().Be(101.0);
+                }
+            }
+        }
+
+        [TestMethod]
         public void AcceleratorTensor_ForceCopiesToCpu_WhenAnAcceleratorIsAvailable()
         {
             RequirePyTorch();
@@ -610,6 +737,45 @@ namespace NumSharp.Tests.Interop
                 .Should().Throw<PythonException>().WithMessage(message);
             new Action(() => { using var _ = tensor.ToTorchNDArray(force: true, requireGIL: false); })
                 .Should().Throw<PythonException>().WithMessage(message);
+        }
+
+        private sealed class CustomArrayAdapter : IPythonArrayAdapter
+        {
+            internal static CustomArrayAdapter Instance { get; } = new CustomArrayAdapter();
+
+            public string Name => "NumSharp.Tests.Interop.NumSharpAdapterProbe";
+
+            public bool CanAdapt(PyType objectType)
+            {
+                try
+                {
+                    using PyObject name = objectType.GetAttr("__name__");
+                    string value = name.As<string>();
+                    return value == "NumSharpAdapterProbe" || value == "NumSharpAdapterBufferProbe";
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            public PyObject Adapt(PyObject source, bool allowCopy)
+                => source.GetAttr("payload");
+        }
+
+        private sealed class DecliningArrayAdapter : IPythonArrayAdapter
+        {
+            internal static DecliningArrayAdapter Instance { get; } = new DecliningArrayAdapter();
+
+            public string Name => "NumSharp.Tests.Interop.DecliningProbe";
+
+            public bool CanAdapt(PyType objectType)
+            {
+                using PyObject name = objectType.GetAttr("__name__");
+                return name.As<string>() == "NumSharpAdapterProbe";
+            }
+
+            public PyObject Adapt(PyObject source, bool allowCopy) => null;
         }
     }
 

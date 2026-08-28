@@ -15,7 +15,7 @@
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <Copyright>2021 © SciSharp STACK Team</Copyright>
-    <Description>Zero-copy interop between NumSharp NDArray and the Python ecosystem via Python.NET (pythonnet). Converts NumSharp arrays to/from numpy and PEP 3118 buffers, with an optional PyTorch bridge built on torch.from_numpy/Tensor.numpy — no Numpy.NET or compile-time PyTorch dependency.</Description>
+    <Description>Zero-copy interop between NumSharp NDArray and the Python ecosystem via Python.NET (pythonnet). Converts NumSharp arrays to/from NumPy and PEP 3118 buffers; a built-in PyTorch adapter feeds torch.Tensor through the same memory bridge using torch.from_numpy/Tensor.numpy — no Numpy.NET or compile-time PyTorch dependency.</Description>
     <PackageTags>NumSharp;NumPy;PyTorch;Torch;pythonnet;Python.NET;interop;buffer-protocol;scientific-computing;PEP3118</PackageTags>
     <PackageProjectUrl>https://scisharp.github.io/NumSharp/docs/interop/pythonnet.html</PackageProjectUrl>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>

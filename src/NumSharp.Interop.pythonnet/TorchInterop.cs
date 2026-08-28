@@ -73,15 +73,7 @@ namespace NumSharp.Interop.PythonNet
         ///     independent CPU copy is acceptable instead.
         /// </remarks>
         public static NDArray AsTorchNDArray(this PyObject tensor, bool? requireGIL = null)
-        {
-            if (tensor is null) throw new ArgumentNullException(nameof(tensor));
-            PythonRuntimeInterop.EnsureEngine();
-            PythonRuntimeInterop.DrainPending();
-
-            using (NDArrayPythonInterop.AcquireGil(requireGIL))
-            using (PyObject array = tensor.InvokeMethod("numpy"))
-                return NDArrayPythonInterop.ToNDArrayView(array, allowReadonly: false, requireGIL: false);
-        }
+            => NDArrayPythonInterop.ToNDArrayView(tensor, allowReadonly: false, requireGIL);
 
         /// <summary>
         ///     Copy a <c>torch.Tensor</c> into an independent C-contiguous NumSharp array. With
@@ -104,17 +96,8 @@ namespace NumSharp.Interop.PythonNet
             PythonRuntimeInterop.DrainPending();
 
             using (NDArrayPythonInterop.AcquireGil(requireGIL))
-            using (PyObject array = force ? NumpyForce(tensor) : tensor.InvokeMethod("numpy"))
+            using (PyObject array = TorchPythonArrayAdapter.Instance.Adapt(tensor, allowCopy: force))
                 return NDArrayPythonInterop.ToNDArray(array, requireGIL: false);
-        }
-
-        private static PyObject NumpyForce(PyObject tensor)
-        {
-            using PyObject detached = tensor.InvokeMethod("detach");
-            using PyObject cpu = detached.InvokeMethod("cpu");
-            using PyObject resolvedConjugate = cpu.InvokeMethod("resolve_conj");
-            using PyObject resolvedNegative = resolvedConjugate.InvokeMethod("resolve_neg");
-            return resolvedNegative.InvokeMethod("numpy");
         }
     }
 }

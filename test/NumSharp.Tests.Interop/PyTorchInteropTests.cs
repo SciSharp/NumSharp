@@ -250,6 +250,65 @@ namespace NumSharp.Tests.Interop
             }
         }
 
+        [TestMethod]
+        public void ExistingMemoryBridge_DirectVerbsAdaptTorchTensor_ViewAndCopySemantics()
+        {
+            RequireValidatedPyTorch();
+            PyExec("adapter_direct = torch.arange(6, dtype=torch.float64)");
+
+            using (Gil())
+            using (PyObject tensor = Scope.Get("adapter_direct"))
+            using (NDArray view = tensor.AsNDArray())
+            using (NDArray copy = tensor.ToNDArray())
+            {
+                WriteAt(view, 41.5, 2);
+                PyFloat("adapter_direct[2].item()").Should().Be(41.5,
+                    "AsNDArray must route the Tensor adapter into the existing shared-memory bridge");
+
+                WriteAt(copy, -9.0, 3);
+                PyFloat("adapter_direct[3].item()").Should().Be(3.0,
+                    "ToNDArray must route the Tensor adapter into the existing owning-copy bridge");
+            }
+        }
+
+        [TestMethod]
+        public unsafe void PythonnetImplicitEncoderAndDecoder_WorkAcrossTorchFromNumpyAndTensorReturn()
+        {
+            RequireValidatedPyTorch();
+            CodecTests.EnsureCodec();
+            using NDArray source = np.arange(5).astype(NPTypeCode.Double);
+
+            using (Gil())
+            {
+                dynamic torch = Py.Import("torch");
+
+                // pythonnet asks the registered encoder for a Python object; it receives NumPy, and
+                // torch.from_numpy consumes that object without an explicit ToNumpy call here.
+                using PyObject tensor = (PyObject)torch.from_numpy(source);
+                using PyObject pointer = tensor.InvokeMethod("data_ptr");
+                pointer.As<long>().Should().Be((long)source.Storage.Address);
+                Scope.Set("implicit_tensor", tensor);
+                Scope.Exec("implicit_tensor[1] = 88.0");
+                ReadAt<double>(source, 1).Should().Be(88.0);
+
+                // Both pythonnet reverse-conversion spellings consult the same registered decoder,
+                // which now recognizes torch.Tensor through the adapter registry.
+                using NDArray viaGeneric = tensor.As<NDArray>();
+                using NDArray viaType = (NDArray)tensor.AsManagedObject(typeof(NDArray));
+                WriteAt(viaGeneric, -12.0, 2);
+                ReadAt<double>(viaType, 2).Should().Be(-12.0);
+                PyFloat("implicit_tensor[2].item()").Should().Be(-12.0);
+
+                using PyObject gradTensor = Scope.Eval(
+                    "torch.arange(4, dtype=torch.float64, requires_grad=True)");
+                using NDArray implicitCopy = gradTensor.As<NDArray>();
+                WriteAt(implicitCopy, 700.0, 0);
+                Scope.Set("implicit_grad_tensor", gradTensor);
+                PyFloat("implicit_grad_tensor.detach()[0].item()").Should().Be(0.0,
+                    "default Auto decoding may force-copy an unviewable Tensor but must never mutate it");
+            }
+        }
+
         private void RequireValidatedPyTorch()
             => PyTorchTestGate.Require(Scope);
     }
