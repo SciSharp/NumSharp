@@ -8,7 +8,8 @@ GIL policy, and shutdown behavior.
 
 > Verified live on CPython 3.12.12 · NumPy 2.4.2 · pythonnet 3.0.5 ·
 > **Pandas 3.0.5** · net8.0/net10.0. The claims on this page are exercised against the installed
-> package by 19 tests in `PandasInteropTests` and `PandasInteropEdgeCaseTests`.
+> package by 29 tests in `PandasInteropTests`, `PandasInteropEdgeCaseTests`, and
+> `PandasInteropRareScenarioTests`.
 
 ## Setup
 
@@ -129,8 +130,9 @@ NDArrayPythonInterop.RegisterCodec(new NumpyCodecOptions
 - `DecodeArrayAdapters = false` excludes Pandas/Torch adapters without disabling native NumPy or
   buffer sources.
 
-The adapter is registered automatically. `PythonArrayAdapterRegistry.Register(
-PandasPythonArrayAdapter.Instance)` therefore returns `false` because the name already exists.
+The adapter is registered automatically.
+`PythonArrayAdapterRegistry.Register(PandasPythonArrayAdapter.Instance)` therefore returns `false`
+because the name already exists.
 
 ## Edge behavior pinned by tests
 
@@ -143,7 +145,14 @@ PandasPythonArrayAdapter.Instance)` therefore returns `false` because the name a
 - Pandas subclasses and public extension-array base classes;
 - derived NumSharp-view lifetime after every Pandas/Python wrapper is deleted;
 - explicit caller-owned GIL mode, four-thread churn, disposed wrappers, failing overrides, and leak
-  counters after every unsuccessful conversion.
+  counters after every unsuccessful conversion;
+- full NumSharp→Pandas→NumSharp pointer/shape/stride identity for positive, negative, offset,
+  Fortran, and broadcast layouts;
+- every nullable integer/unsigned/float/boolean extension dtype, both mask-free and with `pd.NA`;
+- float16/float32, int64/uint64, real/complex, and object-producing column-promotion boundaries;
+- big-endian integer/float/complex view rejection plus component-wise byte swapping on copy;
+- imported-view resize refusal, owning-copy resize, NumSharp-export lifetime under Pandas ownership,
+  malformed `to_numpy` returns, descending RangeIndex, and two-axis negative strides.
 
 ## Claims ledger
 
@@ -168,6 +177,17 @@ PandasPythonArrayAdapter.Instance)` therefore returns `false` because the name a
 | 17 | caller-owned GIL mode works for view and copy | [`ExplicitNoGilPolicy_WorksInsideOneOuterGil_ForPandasViewAndCopy`][gate-edge] |
 | 18 | concurrent round-trips drain every export/import counter | [`ConcurrentPandasRoundTrips_AreThreadSafeAndDrainEveryLifetimeCounter`][gate-edge] |
 | 19 | disposed and broken Pandas objects fail cleanly without leases | [`DisposedAndBrokenPandasObjects_FailCleanlyWithoutLeasingMemory`][gate-edge] |
+| 20 | NumSharp layouts round-trip through Pandas with identical pointer, shape and strides | [`NumSharpLayouts_RoundTripThroughPandasWithoutLosingPointerShapeOrStrides`][gate-rare] |
+| 21 | every mask-free nullable extension dtype exposes its resolved stable typed buffer | [`NullableExtensionDtypesWithoutMissingValues_ExposeEveryStableTypedBuffer`][gate-rare] |
+| 22 | nullable extension masks reject View and resolve Copy dtype/NaN precisely | [`NullableExtensionDtypesWithMissingValues_RejectViewAndResolveCopyDtypePrecisely`][gate-rare] |
+| 23 | mixed-column promotion follows Pandas, including uint64→float64 precision boundaries | [`MixedColumnPromotion_FollowsPandasCommonDtypeIncludingPrecisionBoundaries`][gate-rare] |
+| 24 | big-endian integer, float and complex values reject View and byte-swap correctly on Copy | [`BigEndianNumericSeries_RejectView_AndCopyByteSwapsEveryScalarComponent`][gate-rare] |
+| 25 | imported views cannot resize/detach while owning copies can | [`ImportedPandasViewCannotResizeOrDetach_WhileOwningCopyCan`][gate-rare] |
+| 26 | Pandas retains a NumSharp export after the original NDArray is disposed | [`PandasObject_KeepsNumSharpExportAliveAfterOriginalArrayIsDisposed`][gate-rare] |
+| 27 | Pandas mutations update a leased view while an owning copy stays detached | [`PandasMutationUpdatesLeasedView_ButOwningCopyRemainsDetached`][gate-rare] |
+| 28 | malformed `to_numpy` return types fail without acquiring import leases | [`MalformedToNumpyReturnTypes_FailWithoutAcquiringImportLeases`][gate-rare] |
+| 29 | descending RangeIndex and two-axis negative-stride frames preserve logical order | [`DescendingRangeIndexAndTwoAxisReorderedFrame_PreserveUnusualLogicalOrder`][gate-rare] |
 
 [gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PandasInteropTests.cs
 [gate-edge]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PandasInteropEdgeCaseTests.cs
+[gate-rare]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PandasInteropRareScenarioTests.cs
