@@ -160,13 +160,29 @@ namespace NumSharp
 
         /// <summary>
         ///     Write <paramref name="len"/> values into an equally-strided run of
-        ///     <paramref name="a"/>'s storage by aliasing it as a 1-D view.
+        ///     <paramref name="a"/>'s storage.
         /// </summary>
+        /// <remarks>
+        ///     The fast path is the IL strided-store kernel (<see cref="TryDiagonalScatter"/>),
+        ///     which writes straight through <paramref name="a"/>'s real strides — no aliased
+        ///     view, no NDIter setup. The <paramref name="values"/> block is addressed by its own
+        ///     stride/offset, so a stride-0 broadcast (the scalar fill) and a contiguous tiled
+        ///     buffer (the sequence fill) both feed it without materialising a slice. When the
+        ///     kernel is unavailable the code falls back to the original alias + <c>SetData</c>.
+        /// </remarks>
         private static void WriteDiagonalBlock(
             NDArray a, NDArray values, long valueStart, long len, long offset, long stride, long bufferSize)
         {
             if (len <= 0) return;
 
+            // The i-th target reads values[valueStart + i] = base + valuesOffset + (valueStart+i)*valuesStride.
+            long valuesStride = values.ndim >= 1 ? values.Shape.strides[0] : 0;
+            long valuesOffset = values.Shape.offset + valueStart * valuesStride;
+
+            if (TryDiagonalScatter(a, offset, stride, values, valuesOffset, valuesStride, len))
+                return;
+
+            // Fallback: alias a strided 1-D view and route through the copy machinery.
             var targetShape = new Shape(new[] {len}, new[] {stride}, offset, bufferSize);
             var target = new NDArray(a.Storage.Alias(targetShape)) {TensorEngine = a.TensorEngine};
 
@@ -175,6 +191,44 @@ namespace NumSharp
                 : values[$"{valueStart}:{valueStart + len}"];
 
             target.SetData(slice);
+        }
+
+        /// <summary>
+        ///     Write <paramref name="count"/> elements from <paramref name="src"/> into an
+        ///     equally-strided run of <paramref name="dest"/>'s buffer through the IL
+        ///     strided-store kernel (<see cref="Backends.Kernels.DirectILKernelGenerator.GetDiagWriteKernel"/>).
+        ///     Shared by <see cref="fill_diagonal"/>, <see cref="diag"/>'s 1-D branch and
+        ///     <see cref="diagflat"/> — all three reduce to the same primitive: scatter a 1-D
+        ///     source along a constant-stride diagonal.
+        /// </summary>
+        /// <remarks>
+        ///     Both endpoints are addressed by REAL element strides/offsets (never memory order),
+        ///     so any destination layout — contiguous, transposed, sliced, F-order, negative-stride
+        ///     — writes to the correct positions, exactly as the aliased-view + <c>SetData</c> path
+        ///     did but without the ~5 μs NDIter setup. A <paramref name="srcStrideElems"/> of 0
+        ///     broadcasts a single source element (the scalar fill). <paramref name="dest"/> and
+        ///     <paramref name="src"/> MUST share the dtype (the callers guarantee it: diag/diagflat
+        ///     preserve the source dtype; fill_diagonal casts its values first), so the store is a
+        ///     same-width byte copy with no cast. Returns <c>false</c> — leaving the destination
+        ///     untouched — when the kernel is unavailable, so callers fall back to <c>SetData</c>.
+        /// </remarks>
+        private static unsafe bool TryDiagonalScatter(
+            NDArray dest, long destOffsetElems, long destStrideElems,
+            NDArray src, long srcOffsetElems, long srcStrideElems, long count)
+        {
+            if (count <= 0) return true;
+
+            long eb = dest.dtypesize;
+            int copyKind = Backends.Kernels.DirectILKernelGenerator.CopyKindFor(eb);
+            if (copyKind == 0) return false; // every NumSharp dtype is 1/2/4/8/16 B; defensive only.
+
+            var kernel = Backends.Kernels.DirectILKernelGenerator.GetDiagWriteKernel(copyKind);
+            if (kernel == null) return false;
+
+            byte* dstPtr = (byte*)dest.Storage.Address + destOffsetElems * eb;
+            byte* srcPtr = (byte*)src.Storage.Address + srcOffsetElems * eb;
+            kernel(dstPtr, destStrideElems * eb, srcPtr, srcStrideElems * eb, count);
+            return true;
         }
     }
 }

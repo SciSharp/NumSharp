@@ -112,10 +112,20 @@ namespace NumSharp
             // Flat index of the first element of the k-th diagonal, then a constant
             // stride of n+1 walks it — the same arithmetic NumPy's flat-slice uses.
             long start = k >= 0 ? k : absK * n;
-            var diagShape = new Shape(new[] {s}, new[] {n + 1}, start, res.Shape.BufferSize);
 
-            var target = new NDArray(res.Storage.Alias(diagShape)) {TensorEngine = res.TensorEngine};
-            target.SetData(v1d);
+            // Scatter v1d straight down the diagonal via the IL strided-store kernel — no
+            // aliased view, and none of NDIter.Copy's per-strided-write overhead (measured on a
+            // 3162² construct: 3.5 ms via SetData vs 2.4 ms via the kernel; the win grows with the
+            // diagonal length). v1d is 1-D, so its single stride (0-d guarded to 0) addresses any
+            // layout, including a strided/negative-stride input.
+            long srcStride = v1d.ndim >= 1 ? v1d.Shape.strides[0] : 0;
+            if (!TryDiagonalScatter(res, start, n + 1, v1d, v1d.Shape.offset, srcStride, s))
+            {
+                // Fallback: alias the diagonal as a 1-D view and route through the copy machinery.
+                var diagShape = new Shape(new[] {s}, new[] {n + 1}, start, res.Shape.BufferSize);
+                var target = new NDArray(res.Storage.Alias(diagShape)) {TensorEngine = res.TensorEngine};
+                target.SetData(v1d);
+            }
 
             return res;
         }
