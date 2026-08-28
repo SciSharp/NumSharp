@@ -118,6 +118,42 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
+        /// <summary>
+        /// Emit IsPositiveInfinity check (np.isposinf).
+        /// For float/double: calls float.IsPositiveInfinity/double.IsPositiveInfinity.
+        /// For integer types: always false (integers cannot be infinite).
+        /// </summary>
+        private static void EmitIsPosInfCall(ILGenerator il, NPTypeCode type)
+        {
+            if (type == NPTypeCode.Single)
+                il.EmitCall(OpCodes.Call, typeof(float).GetMethod("IsPositiveInfinity", new[] { typeof(float) })!, null);
+            else if (type == NPTypeCode.Double)
+                il.EmitCall(OpCodes.Call, typeof(double).GetMethod("IsPositiveInfinity", new[] { typeof(double) })!, null);
+            else
+            {
+                il.Emit(OpCodes.Pop);
+                il.Emit(OpCodes.Ldc_I4_0);
+            }
+        }
+
+        /// <summary>
+        /// Emit IsNegativeInfinity check (np.isneginf).
+        /// For float/double: calls float.IsNegativeInfinity/double.IsNegativeInfinity.
+        /// For integer types: always false (integers cannot be infinite).
+        /// </summary>
+        private static void EmitIsNegInfCall(ILGenerator il, NPTypeCode type)
+        {
+            if (type == NPTypeCode.Single)
+                il.EmitCall(OpCodes.Call, typeof(float).GetMethod("IsNegativeInfinity", new[] { typeof(float) })!, null);
+            else if (type == NPTypeCode.Double)
+                il.EmitCall(OpCodes.Call, typeof(double).GetMethod("IsNegativeInfinity", new[] { typeof(double) })!, null);
+            else
+            {
+                il.Emit(OpCodes.Pop);
+                il.Emit(OpCodes.Ldc_I4_0);
+            }
+        }
+
         #endregion
 
         #region SIMD Predicate Kernels (float/double -> bool)
@@ -155,7 +191,8 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         public static UnaryKernel? GetPredicateContiguousKernel(UnaryOp op, NPTypeCode inputType)
         {
-            if (op != UnaryOp.IsNan && op != UnaryOp.IsInf && op != UnaryOp.IsFinite)
+            if (op != UnaryOp.IsNan && op != UnaryOp.IsInf && op != UnaryOp.IsFinite
+                && op != UnaryOp.IsPosInf && op != UnaryOp.IsNegInf)
                 return null;
             if (inputType != NPTypeCode.Single && inputType != NPTypeCode.Double)
                 return null;
@@ -217,11 +254,13 @@ namespace NumSharp.Backends.Kernels
             LocalBuilder? locInf = null;
             if (op != UnaryOp.IsNan)
             {
+                // +inf for IsInf/IsFinite/IsPosInf; -inf for IsNegInf (the signed
+                // constant the Equals(v, locInf) mask compares against).
                 locInf = il.DeclareLocal(vectorType);
                 if (inputType == NPTypeCode.Single)
-                    il.Emit(OpCodes.Ldc_R4, float.PositiveInfinity);
+                    il.Emit(OpCodes.Ldc_R4, op == UnaryOp.IsNegInf ? float.NegativeInfinity : float.PositiveInfinity);
                 else
-                    il.Emit(OpCodes.Ldc_R8, double.PositiveInfinity);
+                    il.Emit(OpCodes.Ldc_R8, op == UnaryOp.IsNegInf ? double.NegativeInfinity : double.PositiveInfinity);
                 il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, clrType), null);
                 il.Emit(OpCodes.Stloc, locInf);
             }
@@ -353,6 +392,8 @@ namespace NumSharp.Backends.Kernels
             {
                 case UnaryOp.IsNan: EmitIsNanCall(il, inputType); break;
                 case UnaryOp.IsInf: EmitIsInfCall(il, inputType); break;
+                case UnaryOp.IsPosInf: EmitIsPosInfCall(il, inputType); break;
+                case UnaryOp.IsNegInf: EmitIsNegInfCall(il, inputType); break;
                 default: EmitIsFiniteCall(il, inputType); break;
             }
 
@@ -387,6 +428,19 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.IsInf:
                     // Equals(Abs(v), +inf) — Abs(NaN) stays NaN and NaN == inf is false.
                     il.EmitCall(OpCodes.Call, VectorMethodCache.Generic(bits, "Abs", clrType, paramCount: 1), null);
+                    il.Emit(OpCodes.Ldloc, locInf!);
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(bits, clrType), null);
+                    break;
+
+                case UnaryOp.IsPosInf:
+                    // Equals(v, +inf) — no Abs; the only lane equal to +inf IS +inf
+                    // (NaN == inf is false, -inf == +inf is false). locInf holds +inf.
+                    il.Emit(OpCodes.Ldloc, locInf!);
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(bits, clrType), null);
+                    break;
+
+                case UnaryOp.IsNegInf:
+                    // Equals(v, -inf) — no Abs; locInf holds -inf for this op.
                     il.Emit(OpCodes.Ldloc, locInf!);
                     il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(bits, clrType), null);
                     break;
@@ -504,7 +558,8 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         public static StridedUnaryKernel? GetPredicateStridedKernel(UnaryOp op, NPTypeCode inputType)
         {
-            if (op != UnaryOp.IsNan && op != UnaryOp.IsInf && op != UnaryOp.IsFinite)
+            if (op != UnaryOp.IsNan && op != UnaryOp.IsInf && op != UnaryOp.IsFinite
+                && op != UnaryOp.IsPosInf && op != UnaryOp.IsNegInf)
                 return null;
             if (inputType != NPTypeCode.Single && inputType != NPTypeCode.Double)
                 return null;
@@ -568,11 +623,12 @@ namespace NumSharp.Backends.Kernels
             LocalBuilder? locInf = null;
             if (op != UnaryOp.IsNan)
             {
+                // +inf for IsInf/IsFinite/IsPosInf; -inf for IsNegInf.
                 locInf = il.DeclareLocal(vectorType);
                 if (inputType == NPTypeCode.Single)
-                    il.Emit(OpCodes.Ldc_R4, float.PositiveInfinity);
+                    il.Emit(OpCodes.Ldc_R4, op == UnaryOp.IsNegInf ? float.NegativeInfinity : float.PositiveInfinity);
                 else
-                    il.Emit(OpCodes.Ldc_R8, double.PositiveInfinity);
+                    il.Emit(OpCodes.Ldc_R8, op == UnaryOp.IsNegInf ? double.NegativeInfinity : double.PositiveInfinity);
                 il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(bits, clrType), null);
                 il.Emit(OpCodes.Stloc, locInf);
             }
@@ -655,6 +711,8 @@ namespace NumSharp.Backends.Kernels
             {
                 case UnaryOp.IsNan: EmitIsNanCall(il, inputType); break;
                 case UnaryOp.IsInf: EmitIsInfCall(il, inputType); break;
+                case UnaryOp.IsPosInf: EmitIsPosInfCall(il, inputType); break;
+                case UnaryOp.IsNegInf: EmitIsNegInfCall(il, inputType); break;
                 default: EmitIsFiniteCall(il, inputType); break;
             }
             il.Emit(OpCodes.Stind_I1);

@@ -90,6 +90,10 @@ namespace NumSharp.Backends.Kernels
         IsNan,
         /// <summary>Test element-wise for positive or negative infinity</summary>
         IsInf,
+        /// <summary>Test element-wise for positive infinity (np.isposinf). x == +inf.</summary>
+        IsPosInf,
+        /// <summary>Test element-wise for negative infinity (np.isneginf). x == -inf.</summary>
+        IsNegInf,
 
         /// <summary>
         /// Complex conjugate (np.conjugate / np.conj). Identity at every real dtype

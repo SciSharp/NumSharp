@@ -240,6 +240,12 @@ namespace NumSharp
         public abstract NDArray IsFinite(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray IsNan(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray IsInf(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        // np.isposinf / np.isneginf (numpy/lib/_ufunclike_impl.py). Not ufuncs — no
+        // where/dtype; the single settable side is out (positional in NumPy). Complex
+        // input is rejected at the np.* layer (NumPy's signbit raises), so the engine
+        // predicate never sees Complex.
+        public abstract NDArray IsPosInf(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray IsNegInf(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         #endregion
 

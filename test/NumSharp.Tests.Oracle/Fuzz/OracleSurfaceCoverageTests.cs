@@ -49,6 +49,14 @@ namespace NumSharp.Tests.Fuzz
             "get_printoptions", "iinfo", "load", "load_npy", "load_npz",
             "nditer_chunks", "printoptions", "save", "savez",
             "savez_compressed", "set_printoptions",
+            // isposinf/isneginf/nan_to_num: gated by the dedicated byte-exact suites
+            // np.isposinf_isneginf.Test.cs / np.nan_to_num.Test.cs, differentially verified against
+            // NumPy 2.4.2 (isposinf/isneginf byte-identical across float64/float32/float16 × C/
+            // reversed/stepped layouts; nan_to_num byte-identical across float64/float32/float16/
+            // complex128 × default/scalar fills, plus array-fill and copy-semantics coverage). The
+            // predicates additionally ride the same fused predicate kernel already fuzzed for
+            // isinf/isnan (complex rejected up front with NumPy's verbatim TypeError).
+            "isposinf", "isneginf", "nan_to_num",
         };
 
         // NumSharp compatibility/convenience APIs with no NumPy 2.4.2 callable of the same name.

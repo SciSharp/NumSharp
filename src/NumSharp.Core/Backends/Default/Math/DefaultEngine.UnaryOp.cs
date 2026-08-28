@@ -461,7 +461,8 @@ namespace NumSharp.Backends
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool IsUnaryPredicateOp(UnaryOp op)
-            => op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf;
+            => op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf
+               || op == UnaryOp.IsPosInf || op == UnaryOp.IsNegInf;
 
         /// <summary>
         ///     <see cref="NumSharp.Utilities.NDComplexMath.Abs"/> — resolved once and

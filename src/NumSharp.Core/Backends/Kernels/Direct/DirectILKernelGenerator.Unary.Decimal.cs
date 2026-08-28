@@ -202,6 +202,8 @@ namespace NumSharp.Backends.Kernels
 
                 case UnaryOp.IsNan:
                 case UnaryOp.IsInf:
+                case UnaryOp.IsPosInf:
+                case UnaryOp.IsNegInf:
                     // Decimal cannot be NaN or Inf - pop value, push false
                     il.Emit(OpCodes.Pop);
                     il.Emit(OpCodes.Ldc_I4_0);
@@ -633,6 +635,16 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.IsInf:
                     il.EmitCall(OpCodes.Call,
                         ScalarMethodCache.Predicate(typeof(Half), "IsInfinity"), null);
+                    break;
+
+                case UnaryOp.IsPosInf:
+                    il.EmitCall(OpCodes.Call,
+                        ScalarMethodCache.Predicate(typeof(Half), "IsPositiveInfinity"), null);
+                    break;
+
+                case UnaryOp.IsNegInf:
+                    il.EmitCall(OpCodes.Call,
+                        ScalarMethodCache.Predicate(typeof(Half), "IsNegativeInfinity"), null);
                     break;
 
                 case UnaryOp.IsFinite:

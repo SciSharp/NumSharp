@@ -298,6 +298,16 @@ namespace NumSharp.Backends.Kernels
                     EmitIsInfCall(il, type);
                     break;
 
+                case UnaryOp.IsPosInf:
+                    // Test for +inf (np.isposinf). Integer types: always false.
+                    EmitIsPosInfCall(il, type);
+                    break;
+
+                case UnaryOp.IsNegInf:
+                    // Test for -inf (np.isneginf). Integer types: always false.
+                    EmitIsNegInfCall(il, type);
+                    break;
+
                 default:
                     throw new NotSupportedException($"Unary operation {op} not supported");
             }
