@@ -48,6 +48,7 @@ namespace NumSharp
         /// <see cref="where"/> takes its same-dtype fast path and the result keeps <paramref name="a"/>'s
         /// dtype (a strong int32 0 would otherwise promote float16 → float32 under NEP50).
         /// </remarks>
+        [NDScopedCovered] // only callers: [NDScoped] nancumsum / nancumprod (the isnan mask + superseded fill are scope-reclaimed)
         private static NDArray _replace_nan_for_scan(NDArray a, int val)
         {
             switch (a.typecode)

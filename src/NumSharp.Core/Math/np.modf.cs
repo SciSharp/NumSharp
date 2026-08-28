@@ -25,6 +25,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>Fractional part of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.modf.html</remarks>
+        [NDScoped] // same boundary as the NPTypeCode overload: PreserveFContig's superseded C-order pair is reclaimed
         public static (NDArray Fractional, NDArray Intergral) modf(NDArray x, Type dtype)
             => PreserveFContig(x, x.TensorEngine.ModF(x, dtype));
 

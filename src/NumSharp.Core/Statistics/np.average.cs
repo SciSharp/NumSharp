@@ -515,6 +515,7 @@ namespace NumSharp
         // Dtype-generic zero-detection. Mirrors numpy's `np.any(scl == 0.0)` — uses
         // DirectILKernelGenerator-backed equality + np.any (vacuous-false on empty input).
         // Works for Half/Complex/Decimal where Convert.ToDouble fails (no IConvertible).
+        [NDScoped] // bool boundary: the zero scalar, its astype and the == mask are all reclaimed here
         private static bool HasZero(NDArray scl)
         {
             if (scl.size == 0) return false;

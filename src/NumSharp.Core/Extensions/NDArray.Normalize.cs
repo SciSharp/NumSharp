@@ -10,6 +10,7 @@ namespace NumSharp
         /// Note: this is not a numpy function.
         /// </summary>
         [Obsolete("Non numpy functionality, will be removed in future versions. use np.clip() instead.")]
+        [NDScoped] // void boundary: reclaims min/max and every per-element scalar temp of the loop
         public void Normalize()
         {
             var min = this.min(0);

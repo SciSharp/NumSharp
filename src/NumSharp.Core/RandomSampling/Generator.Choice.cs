@@ -32,6 +32,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.shuffle.html
         ///     <br/>Fisher–Yates using <c>random_interval</c> (mask-rejection), byte-identical to NumPy.
         /// </remarks>
+        [NDScoped] // void boundary: the N-D path's index array + reordered gather are reclaimed after CopyInPlace
         public void shuffle(NDArray x, int axis = 0)
         {
             // NumPy evaluates `n = len(x)` before any other check, so a 0-d array raises TypeError here
@@ -82,6 +83,7 @@ namespace NumSharp
         }
 
         /// <inheritdoc cref="permutation(long)"/>
+        [NDScoped] // reclaims the N-D path's index-array temp; the gathered result is yielded
         public NDArray permutation(NDArray x, int axis = 0)
         {
             int nd = x.ndim;
