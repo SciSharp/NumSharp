@@ -262,6 +262,42 @@ namespace NumSharp.Tests.LinearAlgebra
             AssertClose(np.linalg.inv(m.T), Tol, 0.6, -0.2, -0.7, 0.4); // inv(mᵀ) = inv(m)ᵀ
         }
 
+        // ------------------------------------------------------ blocked path (large matrices)
+
+        [TestMethod]
+        public void Blocked_LargeMatrix_FactorsCorrectly()
+        {
+            // n > 256 routes the double factorisation through the BLOCKED path, whose Schur update
+            // rides SimdMatMul. A diagonal-dominant matrix keeps it well-conditioned; reconstruction
+            // proves the whole blocked pipeline (panel factor + pivot application + TRSM + GEMM) end
+            // to end, and slogdet exercises the blocked factor's diagonal fold.
+            const int n = 300;
+            var a = np.zeros(new Shape(n, n), NPTypeCode.Double);
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    a.SetData((double)(((long)i * 131 + (long)j * 67) % 997), i, j);
+            for (int i = 0; i < n; i++)
+                a.SetData(a.GetDouble(i, i) + 100000.0, i, i);
+
+            var recon = np.matmul(a, np.linalg.inv(a));
+            double maxI = 0;
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    maxI = System.Math.Max(maxI, System.Math.Abs(recon.GetDouble(i, j) - (i == j ? 1.0 : 0.0)));
+            Assert.IsTrue(maxI < 1e-9, $"A @ inv(A) should be I; max error = {maxI:E3}");
+
+            var b = np.arange((double)n);
+            var ax = np.matmul(a, np.linalg.solve(a, b));
+            double maxB = 0;
+            for (int i = 0; i < n; i++)
+                maxB = System.Math.Max(maxB, System.Math.Abs(ax.GetDouble(i) - b.GetDouble(i)));
+            Assert.IsTrue(maxB < 1e-7, $"A @ solve(A, b) should be b; max residual = {maxB:E3}");
+
+            var (sign, log) = np.linalg.slogdet(a);
+            AssertClose(sign, Tol, 1.0);
+            Assert.IsTrue(double.IsFinite(Convert.ToDouble(log.ravel().GetAtIndex(0))), "log|det| should be finite");
+        }
+
         // ---------------------------------------------------------------- composing functions
 
         [TestMethod]

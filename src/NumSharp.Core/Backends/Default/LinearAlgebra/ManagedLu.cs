@@ -2,7 +2,10 @@ using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using NumSharp;
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -48,9 +51,24 @@ namespace NumSharp.Backends
     ///     into a contiguous row-major buffer, so every layout (C/F/strided/transposed/reversed/
     ///     broadcast/sliced) works; the operand is never mutated. Stacks loop element by element with
     ///     the scratch buffers hoisted once per call, and results are allocated <c>fillZeros:false</c>
-    ///     because every cell is written. The hot inner loop — the rank-1 elimination and the
-    ///     substitution's row updates — is a contiguous <c>axpy</c>, SIMD-vectorised for the double
-    ///     path via <see cref="Vector{T}"/>.
+    ///     because every cell is written.
+    ///     </para>
+    ///     <para>
+    ///     <b>The double path is IL-SIMD powered, the house style.</b> The hot loops are hand-written
+    ///     <see cref="Vector256{T}"/> + FMA kernels (<see cref="GerDouble"/> / <see cref="AxpyNegDouble"/>
+    ///     / <see cref="DivRowDouble"/>), the same shape as <c>SimdMatMul</c>'s micro-kernel: the O(m³)
+    ///     rank-1 elimination is a REGISTER-BLOCKED GER (four trailing rows per pass, the pivot-row
+    ///     vector loaded once and reused, four independent <c>Fma.MultiplyAddNegated</c> chains), and the
+    ///     substitution's row updates are 4×-unrolled FMA axpys. Past
+    ///     <see cref="BlockedThreshold"/> a matrix takes the BLOCKED factorisation
+    ///     (<see cref="FactorDoubleBlocked"/>) whose Schur update rides the cache-tiled
+    ///     <see cref="SimdMatMul.MatMulDouble"/> — the unblocked GER re-streams the trailing submatrix
+    ///     every step and so is cache-bandwidth bound at scale. Complex stays scalar (no
+    ///     <c>Vector256</c> complex product). <b>Perf (NPY/NS, threads=1):</b> small matrices win big
+    ///     (n=4 det 3.3× / inv 4.3×, n=16 ~2.5×) — they are dispatch-overhead bound, so SIMD on the tiny
+    ///     inner loops is a wash — and large matrices sit below NumPy (n≥256 ≈ 0.4–0.6×), capped by the
+    ///     same managed-GEMM-vs-OpenBLAS ceiling as the products: <c>SimdMatMul</c>'s managed dgemm is
+    ///     slower than the OpenBLAS dgemm NumPy's getrf calls, and no managed kernel closes that.
     ///     </para>
     /// </remarks>
     internal static unsafe class ManagedLu
@@ -86,8 +104,21 @@ namespace NumSharp.Backends
             /// </summary>
             T Div(T a, T b);
 
-            /// <summary><c>y[i] -= alpha·x[i]</c> for <c>i in [0,n)</c> — the rank-1 / substitution update.</summary>
+            /// <summary><c>y[i] -= alpha·x[i]</c> for <c>i in [0,n)</c> — a single-row axpy (substitution).</summary>
             void AxpyNeg(T* y, T* x, T alpha, long n);
+
+            /// <summary>
+            ///     The <c>getf2</c> rank-1 elimination of one column: the trailing submatrix
+            ///     <c>buf[k+1:, k+1:colEnd] -= buf[k+1:, k] ⊗ buf[k, k+1:colEnd]</c>, where <c>buf</c> is
+            ///     row-major with leading dimension <c>m</c> and the column multipliers already sit in
+            ///     <c>buf[k+1:, k]</c>. <paramref name="colEnd"/> is <c>m</c> for the full unblocked
+            ///     update and the panel's right edge when factorising a blocked panel. This is the O(m³)
+            ///     hot loop of the unblocked factorisation; the double path implements it as a
+            ///     register-blocked <see cref="Vector256{T}"/> FMA GER (4 trailing rows per iteration,
+            ///     the pivot-row vector loaded once and reused, four independent FMA chains) — the same
+            ///     shape as <c>SimdMatMul</c>'s micro-kernel.
+            /// </summary>
+            void RankOneUpdate(T* buf, long m, long k, long colEnd);
 
             /// <summary><c>y[i] /= d</c> for <c>i in [0,n)</c> — the back-substitution row scale.</summary>
             void DivRow(T* y, T d, long n);
@@ -108,38 +139,11 @@ namespace NumSharp.Backends
             public double PivotMag(double v) => Math.Abs(v);
             public double Div(double a, double b) => a / b;
 
-            [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-            public void AxpyNeg(double* y, double* x, double alpha, long n)
-            {
-                long i = 0;
-                int w = Vector<double>.Count;
-                var va = new Vector<double>(alpha);
-                for (; i + w <= n; i += w)
-                {
-                    var vy = Unsafe.ReadUnaligned<Vector<double>>(y + i);
-                    var vx = Unsafe.ReadUnaligned<Vector<double>>(x + i);
-                    Unsafe.WriteUnaligned(y + i, vy - va * vx);
-                }
-
-                for (; i < n; i++)
-                    y[i] -= alpha * x[i];
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-            public void DivRow(double* y, double d, long n)
-            {
-                long i = 0;
-                int w = Vector<double>.Count;
-                var vd = new Vector<double>(d);
-                for (; i + w <= n; i += w)
-                {
-                    var vy = Unsafe.ReadUnaligned<Vector<double>>(y + i);
-                    Unsafe.WriteUnaligned(y + i, vy / vd);
-                }
-
-                for (; i < n; i++)
-                    y[i] /= d;
-            }
+            // The double hot loops are shared statics on ManagedLu (AxpyNegDouble / GerDouble /
+            // DivRowDouble) so the blocked factorisation reuses the very same SIMD kernels.
+            public void AxpyNeg(double* y, double* x, double alpha, long n) => AxpyNegDouble(y, x, alpha, n);
+            public void RankOneUpdate(double* buf, long m, long k, long colEnd) => GerDouble(buf, m, k, colEnd);
+            public void DivRow(double* y, double d, long n) => DivRowDouble(y, d, n);
 
             public void FoldStep(double d, ref double sign, ref double logacc)
             {
@@ -180,6 +184,19 @@ namespace NumSharp.Backends
                     double pi = ar * xi + ai * xr;
                     y[i] = new Complex(y[i].Real - pr, y[i].Imaginary - pi);
                 }
+            }
+
+            public void RankOneUpdate(Complex* buf, long m, long k, long colEnd)
+            {
+                // Complex has no Vector256 arithmetic that helps a complex product, so the rank-1
+                // update stays a scalar per-row axpy (still the getf2 structure, one update per element).
+                long seg = colEnd - k - 1;
+                if (seg <= 0)
+                    return;
+
+                Complex* piv = buf + k * m + (k + 1);
+                for (long i = k + 1; i < m; i++)
+                    AxpyNeg(buf + i * m + (k + 1), piv, buf[i * m + k], seg);
             }
 
             public void DivRow(Complex* y, Complex d, long n)
@@ -551,6 +568,14 @@ namespace NumSharp.Backends
             where T : unmanaged
             where TOps : struct, ILuOps<T>
         {
+            // Large double matrices take the BLOCKED path, whose Schur update rides the tuned
+            // SimdMatMul GEMM (BLAS3, cache-tiled) — the unblocked GER below re-streams the whole
+            // trailing submatrix every step and so is cache-bandwidth bound past a few hundred rows.
+            // The `typeof(T) == typeof(double)` test is a JIT-time constant per instantiation, so the
+            // branch is elided entirely from the Complex kernel. Small / complex stay unblocked.
+            if (typeof(T) == typeof(double) && Vector256.IsHardwareAccelerated && m > BlockedThreshold)
+                return FactorDoubleBlocked((double*)(void*)buf, m, pv);
+
             var ops = default(TOps);
             int info = 0;
             for (long kk = 0; kk < m; kk++)
@@ -591,16 +616,284 @@ namespace NumSharp.Backends
                         buf[idx] = ops.Div(buf[idx], pivot);
                     }
 
-                    // Rank-1 update: each row i>kk has row_kk[kk+1:] axpy'd out of it, scaled by the
-                    // multiplier just written. The row segment is contiguous → SIMD for the double path.
-                    long seg = m - kk - 1;
-                    T* rowk = buf + kk * m + (kk + 1);
-                    for (long i = kk + 1; i < m; i++)
-                        ops.AxpyNeg(buf + i * m + (kk + 1), rowk, buf[i * m + kk], seg);
+                    // Rank-1 update of the trailing submatrix — the O(m³) hot loop. The double path
+                    // runs a register-blocked Vector256 FMA GER; complex stays scalar (see RankOneUpdate).
+                    ops.RankOneUpdate(buf, m, kk, m);
                 }
             }
 
             return info;
+        }
+
+        // ----------------------------------------------------------------------------------------
+        //  Shared double SIMD kernels (used by DoubleOps AND the blocked factorisation) + the
+        //  blocked LU that routes its Schur update through the tuned SimdMatMul GEMM.
+        // ----------------------------------------------------------------------------------------
+
+        // Below this side length the unblocked register-blocked-FMA LU is FASTER: the trailing
+        // submatrix still fits L2/L3, so it is not yet memory-bound, and the blocked path's Schur
+        // temp round-trip + non-GEMM panel/TRSM only add overhead (measured: 256² unblocked 681 µs vs
+        // blocked 703 µs). Past this the trailing update spills cache and the blocked path — whose
+        // Schur GEMM rides the cache-tiled SimdMatMul — pulls ahead (512² ≈ par, 1024² ≈ 1.3×). It
+        // stays capped below NumPy for large n because SimdMatMul's managed GEMM is itself slower than
+        // the OpenBLAS dgemm NumPy's getrf calls — the same managed-vs-native ceiling as the products.
+        private const long BlockedThreshold = 256;
+
+        // Panel width for the blocked factorisation (columns factored unblocked before each GEMM).
+        private const int PanelWidth = 64;
+
+        // A fused (-mult·b + acc) — ONE rounding — where FMA is available; the plain mul-sub (two
+        // roundings) otherwise. The double path routes its subtract-accumulate through this so the
+        // Vector256 body and the scalar tail always agree, and the arithmetic matches scipy-openblas'
+        // own FMA getrf kernels (still allclose to NumPy, never bit-exact for a blocked reference).
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double FmaSub(double mult, double b, double acc)
+            => Fma.IsSupported ? Math.FusedMultiplyAdd(-mult, b, acc) : acc - mult * b;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector256<double> FmaSub(Vector256<double> mult, Vector256<double> b, Vector256<double> acc)
+            => Fma.IsSupported ? Fma.MultiplyAddNegated(mult, b, acc) : acc - mult * b;
+
+        /// <summary><c>y[i] -= alpha·x[i]</c> — 4×-unrolled Vector256 FMA axpy (single row).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void AxpyNegDouble(double* y, double* x, double alpha, long n)
+        {
+            long i = 0;
+            if (Vector256.IsHardwareAccelerated)
+            {
+                var va = Vector256.Create(alpha);
+                // 4× unrolled: four independent stores per iteration hide the load→FMA→store latency.
+                for (; i + 16 <= n; i += 16)
+                {
+                    Vector256.Store(FmaSub(va, Vector256.Load(x + i), Vector256.Load(y + i)), y + i);
+                    Vector256.Store(FmaSub(va, Vector256.Load(x + i + 4), Vector256.Load(y + i + 4)), y + i + 4);
+                    Vector256.Store(FmaSub(va, Vector256.Load(x + i + 8), Vector256.Load(y + i + 8)), y + i + 8);
+                    Vector256.Store(FmaSub(va, Vector256.Load(x + i + 12), Vector256.Load(y + i + 12)), y + i + 12);
+                }
+
+                for (; i + 4 <= n; i += 4)
+                    Vector256.Store(FmaSub(va, Vector256.Load(x + i), Vector256.Load(y + i)), y + i);
+            }
+
+            for (; i < n; i++)
+                y[i] = FmaSub(alpha, x[i], y[i]);
+        }
+
+        /// <summary>
+        ///     The <c>getf2</c> rank-1 elimination over columns <c>[k+1, colEnd)</c> and rows
+        ///     <c>[k+1, m)</c>, as a register-blocked <see cref="Vector256{T}"/> FMA GER — four
+        ///     trailing rows per pass, the pivot-row vector loaded once and reused, four independent
+        ///     FMA chains (the shape of <c>SimdMatMul</c>'s micro-kernel).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void GerDouble(double* buf, long m, long k, long colEnd)
+        {
+            long seg = colEnd - k - 1;
+            if (seg <= 0)
+                return;
+
+            double* piv = buf + k * m + (k + 1);
+            long i = k + 1;
+
+            if (Vector256.IsHardwareAccelerated)
+            {
+                for (; i + 4 <= m; i += 4)
+                {
+                    double s0 = buf[(i + 0) * m + k], s1 = buf[(i + 1) * m + k];
+                    double s2 = buf[(i + 2) * m + k], s3 = buf[(i + 3) * m + k];
+                    var m0 = Vector256.Create(s0);
+                    var m1 = Vector256.Create(s1);
+                    var m2 = Vector256.Create(s2);
+                    var m3 = Vector256.Create(s3);
+                    double* r0 = buf + (i + 0) * m + (k + 1);
+                    double* r1 = buf + (i + 1) * m + (k + 1);
+                    double* r2 = buf + (i + 2) * m + (k + 1);
+                    double* r3 = buf + (i + 3) * m + (k + 1);
+
+                    long j = 0;
+                    for (; j + 4 <= seg; j += 4)
+                    {
+                        var bv = Vector256.Load(piv + j);
+                        Vector256.Store(FmaSub(m0, bv, Vector256.Load(r0 + j)), r0 + j);
+                        Vector256.Store(FmaSub(m1, bv, Vector256.Load(r1 + j)), r1 + j);
+                        Vector256.Store(FmaSub(m2, bv, Vector256.Load(r2 + j)), r2 + j);
+                        Vector256.Store(FmaSub(m3, bv, Vector256.Load(r3 + j)), r3 + j);
+                    }
+
+                    for (; j < seg; j++)
+                    {
+                        double bj = piv[j];
+                        r0[j] = FmaSub(s0, bj, r0[j]);
+                        r1[j] = FmaSub(s1, bj, r1[j]);
+                        r2[j] = FmaSub(s2, bj, r2[j]);
+                        r3[j] = FmaSub(s3, bj, r3[j]);
+                    }
+                }
+            }
+
+            for (; i < m; i++)
+                AxpyNegDouble(buf + i * m + (k + 1), piv, buf[i * m + k], seg);
+        }
+
+        /// <summary><c>y[i] /= d</c> — Vector256 divide + scalar tail.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void DivRowDouble(double* y, double d, long n)
+        {
+            long i = 0;
+            if (Vector256.IsHardwareAccelerated)
+            {
+                var vd = Vector256.Create(d);
+                for (; i + 4 <= n; i += 4)
+                    Vector256.Store(Vector256.Load(y + i) / vd, y + i);
+            }
+
+            for (; i < n; i++)
+                y[i] /= d;
+        }
+
+        /// <summary>
+        ///     Right-looking BLOCKED LU (double, row-major <c>m×m</c>) — LAPACK's <c>getrf</c>
+        ///     structure. Each pass factors a <see cref="PanelWidth"/>-wide panel unblocked, applies
+        ///     its row swaps to the rest, solves the triangular block (TRSM) and updates the trailing
+        ///     submatrix with a GEMM. The GEMM is the O(m³) work and rides the tuned, cache-tiled
+        ///     <see cref="SimdMatMul.MatMulDouble"/> — which is the whole point: it keeps the working
+        ///     set in cache and reuses it, where the unblocked GER re-streams the trailing submatrix
+        ///     every step. Same partial-pivoting sequence as the unblocked path, so identical <c>info</c>;
+        ///     the values differ within floating-point tolerance (the GEMM accumulates blocked).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static int FactorDoubleBlocked(double* buf, long m, int* pv)
+        {
+            int info = 0;
+            long maxRest = m - PanelWidth;                 // the first panel leaves the largest trailing block
+            double* tmp = Alloc<double>(maxRest * maxRest); // Schur GEMM scratch (T = A21·U12)
+            try
+            {
+                for (long k0 = 0; k0 < m; k0 += PanelWidth)
+                {
+                    long pend = Math.Min(k0 + PanelWidth, m); // panel right edge
+
+                    int pinfo = FactorPanelDouble(buf, m, k0, pend, pv);
+                    if (pinfo != 0 && info == 0)
+                        info = pinfo;
+
+                    ApplyPanelPivots(buf, m, k0, pend, pv);
+
+                    long rest = m - pend;
+                    if (rest <= 0)
+                        continue;
+
+                    long kb = pend - k0;
+                    TrsmLowerUnitDouble(buf, m, k0, pend, rest);
+
+                    // A22 -= A21 · U12. A21 = buf[pend:m, k0:pend] (rest×kb, strides m,1);
+                    // U12 = buf[k0:pend, pend:m] (kb×rest, strides m,1). A22 = buf[pend:m, pend:m].
+                    double* a21 = buf + pend * m + k0;
+                    double* u12 = buf + k0 * m + pend;
+                    SimdMatMul.MatMulDouble(a21, m, 1, u12, m, 1, tmp, rest, rest, kb);
+                    for (long i = 0; i < rest; i++)
+                        AxpyNegDouble(buf + (pend + i) * m + pend, tmp + i * rest, 1.0, rest);
+                }
+            }
+            finally
+            {
+                Free(tmp);
+            }
+
+            return info;
+        }
+
+        /// <summary>
+        ///     Unblocked LU of one tall panel — columns <c>[k0, pend)</c>, rows <c>[k0, m)</c> — with
+        ///     partial pivoting over the FULL column. Row swaps touch only the panel columns; the rest
+        ///     is swapped later by <see cref="ApplyPanelPivots"/>, exactly as LAPACK's <c>getf2</c> +
+        ///     <c>laswp</c> split.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static int FactorPanelDouble(double* buf, long m, long k0, long pend, int* pv)
+        {
+            int info = 0;
+            for (long kk = k0; kk < pend; kk++)
+            {
+                long p = kk;
+                double best = Math.Abs(buf[kk * m + kk]);
+                for (long i = kk + 1; i < m; i++)
+                {
+                    double a = Math.Abs(buf[i * m + kk]);
+                    if (a > best)
+                    {
+                        best = a;
+                        p = i;
+                    }
+                }
+
+                pv[kk] = (int)p;
+
+                double pivot = buf[p * m + kk];
+                if (pivot == 0.0)
+                {
+                    if (info == 0)
+                        info = (int)(kk + 1);
+                    continue;
+                }
+
+                if (p != kk)
+                    SwapRowRange(buf, kk, p, m, k0, pend); // panel columns only
+
+                if (kk < m - 1)
+                {
+                    for (long i = kk + 1; i < m; i++)
+                        buf[i * m + kk] /= pivot;
+                    if (kk + 1 < pend)
+                        GerDouble(buf, m, kk, pend); // panel rank-1 update, cols kk+1..pend
+                }
+            }
+
+            return info;
+        }
+
+        /// <summary>Applies a factored panel's row swaps to the columns OUTSIDE it (LAPACK <c>laswp</c>).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void ApplyPanelPivots(double* buf, long m, long k0, long pend, int* pv)
+        {
+            for (long kk = k0; kk < pend; kk++)
+            {
+                long p = pv[kk];
+                if (p == kk)
+                    continue;
+                SwapRowRange(buf, kk, p, m, 0, k0);   // left: previous panels' L factors
+                SwapRowRange(buf, kk, p, m, pend, m); // right: the trailing block, before it is updated
+            }
+        }
+
+        /// <summary>
+        ///     TRSM <c>U12 = L11⁻¹ · A12</c> in place: the unit-lower <c>kb×kb</c> panel diagonal block
+        ///     <c>L11 = buf[k0:pend, k0:pend]</c> solved against <c>A12 = buf[k0:pend, pend:m]</c>
+        ///     (<c>kb × rest</c>). Unit diagonal, so no division — a forward sweep of FMA axpys.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void TrsmLowerUnitDouble(double* buf, long m, long k0, long pend, long rest)
+        {
+            for (long i = k0; i < pend; i++)
+            {
+                double* bi = buf + i * m + pend;
+                for (long j = k0; j < i; j++)
+                    AxpyNegDouble(bi, buf + j * m + pend, buf[i * m + j], rest); // bi -= L11[i,j]·bj
+            }
+        }
+
+        /// <summary>Swaps columns <c>[c0, c1)</c> of two rows.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void SwapRowRange(double* buf, long r1, long r2, long m, long c0, long c1)
+        {
+            double* a = buf + r1 * m;
+            double* b = buf + r2 * m;
+            for (long c = c0; c < c1; c++)
+            {
+                double t = a[c];
+                a[c] = b[c];
+                b[c] = t;
+            }
         }
 
         /// <summary>
