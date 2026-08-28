@@ -76,7 +76,22 @@ State the improvement against the **old managed path** AND against **single-thre
 "6-7× faster" with no baseline is the mistake — it was 6-7× over the *old managed path*, but *parity*
 with NumPy. Both are true and both matter; say which.
 
-## Verify parity — the checklist
+## Non-compute kinds don't get timed — they get semantic checks
+
+A **view / early-exit** path has no throughput to compare; it's validated by asymptotics + semantics:
+
+- **view vs copy:** confirm it's actually O(1) (shares storage, no data movement — `nd.Storage` /
+  `shares_memory`), and that it carries the SAME metadata the copy path would: writeable, broadcast,
+  owns-data flags, dtype, shape. A `flip` of a read-only broadcast MUST stay read-only; a materializing
+  bug shows up as a wrongly-writeable result, not a wrong value.
+- **early exit / memory strategy:** confirm the short-circuit/threshold branch returns the identical
+  result the full/other-strategy branch would, at the boundary (e.g. `size==0`, exactly at
+  `WriteOnceMaxBytes`). A micro-benchmark only confirms it's cheaper — the oracle confirms it's correct.
+
+## Verify parity — the checklist (values AND metadata)
+
+Bit-identical *values* and matching *metadata* (dtype, shape, view flags, NaN/-0 handling) to the
+general path on the subset.
 
 1. **Know what the oracle pins.** Grep the corpus for the op:
    ```bash

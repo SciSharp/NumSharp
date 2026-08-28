@@ -1,148 +1,171 @@
 ---
 name: specialized-path
 description: >-
-  How to discover, validate, build, and honestly measure a SPECIALIZED high-performance path — a
-  faster route for a recognizable SUBSET of an operation's inputs (a degenerate/symmetric/strided/
-  overlapping shape the general kernel handles badly), gated with a fallback so the general case never
-  regresses. Use this whenever you're asked to make an np.* op faster, "why is <op> slow / how do we
-  beat NumPy", add a fast path / gemv / syrk / stencil / tall-skinny / small-N kernel, optimize a
-  composition that internally calls np.dot / np.matmul / a reduction / an iterator, or decide whether
-  a speedup is even reachable. Trigger on: "specialized path", "fast path", "make <op> faster", "why
-  is <op> slower than numpy", "beat numpy", "gemv/gevm/syrk/gram/stencil", "degenerate shape",
-  "tall-skinny", "optimize matmul/reduction for <shape>", "is this memory-bound", "measure the
-  speedup". Reach for it before hand-writing a kernel OR claiming a perf win.
+  How to discover, validate, build, and honestly verify a SPECIALIZED path for ANY function — a cheaper
+  route for a recognizable SUBSET of an operation's inputs, sitting behind the general implementation
+  with a gate + fallback so the general case never regresses and semantics stay bit-identical. The
+  cheaper route can be a different KERNEL (SIMD vs scalar, gemv/syrk/stencil), a different ALGORITHM
+  (hash vs sort), a VIEW instead of a copy (O(1) stride tricks), an EARLY EXIT (all-false / empty /
+  k==0), a MEMORY strategy (cpblk, prefetch, write-once), a FUSED pass, or a native BACKEND seam. Use
+  this whenever you make an np.* op faster or cheaper, ask "why is <op> slow / can we beat NumPy",
+  add a fast path / special-case / view-return / short-circuit, optimize a composition, or decide
+  whether a speedup is even reachable. Trigger on: "specialized path", "fast path", "special case",
+  "make <op> faster/cheaper", "why is <op> slow", "beat numpy", "return a view instead of a copy",
+  "hash vs sort", "gemv/syrk/stencil/fused", "short-circuit / early exit", "degenerate/tall-skinny
+  shape", "is this memory-bound", "measure the speedup". Reach for it before hand-writing a special
+  case OR claiming a win.
 ---
 
-# Specialized high-performance paths
+# Specialized paths (for any function)
 
-A **specialized path** is a faster route for a recognizable SUBSET of an operation's inputs, sitting
-behind the general kernel: `if (structure matches) fast(); else general();`. The general kernel stays
-correct for everything; the specialized path only has to be correct+fast for the shape it claims, and
-**must fall back cleanly so the general case never regresses**.
+A **specialized path** is a cheaper route for a recognizable SUBSET of an operation's inputs, sitting
+behind the general implementation: `if (subset recognized) cheaper(); else general();`. The general
+implementation stays correct for everything; the specialized route only has to be correct+cheaper for
+the subset it claims, and **must fall back cleanly (general case unchanged) and stay bit-identical in
+semantics.** That invariant is the whole game — everything below serves it.
 
-The cycle is **DISCOVER → EXPERIMENT → CREATE → MEASURE → VERIFY**. Do them in order — most of the
-value (and most of the failure modes) is in EXPERIMENT and MEASURE, *before* and *after* you write the
-kernel. Depth lives in `references/`; this file is the map + the hard-won rules.
+The cycle is **DISCOVER → EXPERIMENT → CREATE → MEASURE → VERIFY.** Most of the value (and the failure
+modes) is in EXPERIMENT (prove the win before building) and MEASURE/VERIFY (prove it after). Depth is
+in `references/`; this file is the map + the hard-won rules.
 
-## THE meta-rule: not every specialized path beats NumPy — measure to find out
+## The KINDS of specialized path (recognize which you're building)
 
-You **beat** NumPy when the general path is *pathological* for the shape (strided-transpose GEMM,
-degenerate length-1 packing, quadratic re-reads). You reach **parity** when the op is
-*memory-bandwidth bound* and NumPy's reference (cblas/OpenBLAS) is already at the floor — there's no
-pathology left to exploit. Tell them apart by measuring the general path's **GB/s vs the hardware
-floor** (`references/measure-verify.md` → "ceiling analysis"). Real examples from one session:
+The "cheaper route" is not always a SIMD kernel. Each kind below is the same pattern — recognize a
+subset, take a cheaper route, gate + fallback — and each has a live NumSharp example:
 
-| path | commit | vs OLD managed | vs single-thread NumPy | why |
-|------|--------|----------------|------------------------|-----|
-| cov/corrcoef **syrk** (`A@A.T`) | d64f3df5 | 10× | **2.88× (beats)** | general path was a strided-transpose GEMM (553µs) — pathological |
-| **gemv/gevm** (matrix·vector) | 4f666fc8 | 3–17× | ~0.8× gemv / ~1.0–1.85× gevm (**parity**) | memory-bound; cblas dgemv already at the floor — no pathology |
-| diff/ediff1d **stencil** (`a[1:]-a[:-1]`) | 6e94dbcc | 8% + 4× fewer allocs | already faster in isolation | the "slowness" was a benchmark leaked-alloc artifact, not the kernel |
+| kind | recognized subset | cheaper route | NumSharp example |
+|------|-------------------|---------------|------------------|
+| **kernel swap** | shape / layout / dtype | a tighter compute kernel | gemv/gevm (`N==1`/`M==1`), syrk (`A@A.T`), contiguous stencil (`diff`), SimdFull vs General |
+| **algorithm swap** | a data property (cardinality, value-range) | a different algorithm | `unique` hash(int)/sort(float); `isin` table vs sort+searchsorted by value-range; `np.block` concat vs single-alloc by size |
+| **view vs copy** | contiguity / stride relationship | an O(1) view, no data movement | `flip`/`rot90` (stride negation), `trim_zeros` (bounding box), reshape-when-contig |
+| **early exit / short-circuit** | a structural state | skip the work entirely | `all`/`any` mask early-exit, `where(cond)` all-false prescan, matmul `k==0`→zeros, `diff n==0`→input |
+| **memory strategy** | size / layout threshold | a cheaper allocation/access | `cpblk` for contiguous copy, `take` prefetch above 2 MiB footprint, `np.tri` write-once below 64 MiB vs zero-pages above |
+| **fused pass** | contiguous / no-cast shape | collapse a composition to one pass | `np.select` fused chain (`TrySelectFused`), `np.evaluate`, `ediff1d` fused subtract |
+| **backend seam** | operands a backend implements | a native route, else managed | `IBlasBackend.Try*` (returns false → managed fallback) |
 
-Do NOT conflate "faster than the OLD managed path" with "faster than NumPy" — that mistake inflated a
-"6-7×" claim that was really parity. Always report both, explicitly.
+## THE meta-rule: prove the win on the subset BEFORE you build
 
-## DISCOVER — where opportunities hide
+Not every specialized path is worth it. For **view / early-exit** kinds the win is asymptotic (O(1) vs
+O(N)) — obviously worth it, but you still must prove *semantics are identical* (see VERIFY). For
+**kernel / algorithm / memory** kinds the win is empirical — you must measure it, and often it only
+wins in a *band* (a crossover). The specific pre-check for a compute path is **ceiling analysis**:
 
-1. **Find compositions over a general primitive.** Grep the source for internal callers of the general
-   kernel — that's where operands with exploitable structure appear:
-   `grep -rn "np\.dot(\|np\.matmul(\|\.Sum(\|NDIter" src/NumSharp.Core --include=*.cs | grep -v test`.
-2. **Recognize the structural patterns** (each defeats a general kernel in a specific way):
-   - **Degenerate dimension** — `N==1` (gemv), `M==1` (gevm): the general kernel's inner SIMD loop or
-     packing collapses to scalar/overhead.
-   - **Symmetric** — `A@A.T` (syrk): compute the upper triangle, mirror (half the work).
-   - **Tall-skinny / small-M / small-K** — packing/blocking fixed cost dominates the actual FLOPs.
-   - **Overlapping/adjacent views** — `a[1:]-a[:-1]` is a *stencil* (one source, overlapping loads), not
-     a binary op on two aliased views + slice allocations.
-   - **Transposed/strided operand** routed through a general path that materializes a copy or drops to a
-     scalar inner loop.
-3. **Profile to CONFIRM the dominant cost** before building anything. Break the composition into
-   components, time each in `-c Release`. The specialized path only matters if it attacks the *dominant*
-   component (cov's dot was 553µs of a 762µs call; its concat/center were the rest).
-4. **Check "already optimal" so you don't waste effort.** Measure the general path's GB/s: if it's near
-   the memory floor, there's nothing to win. `dot(1d,1d)`/`norm(2)` are already SimdDot; `outer` is a
-   broadcast multiply — both near-floor, no opportunity.
+You **beat** the reference (NumPy) when the general route is *pathological* for the subset
+(strided-transpose GEMM, degenerate length-1 packing, materialize-all-coordinates, quadratic
+re-reads). You reach **parity** when the op is *memory-bandwidth bound* and the reference is already at
+the floor — no pathology to exploit. Tell them apart by measuring the general route's **GB/s vs the
+hardware floor** (`references/discover.md` → "ceiling analysis"). Worked instances from one session:
 
-Full recipes: `references/discover.md`.
+| path | commit | vs OLD | vs single-thread NumPy | why |
+|------|--------|--------|------------------------|-----|
+| cov/corrcoef **syrk** | d64f3df5 | 10× | **2.88× (beats)** | general route was a strided-transpose GEMM (553µs) — pathological |
+| **gemv/gevm** | 4f666fc8 | 3–17× | ~0.8–1.0× (**parity**) | memory-bound; cblas dgemv already at the floor — no pathology |
+| diff/ediff1d **stencil** | 6e94dbcc | 8% + 4× fewer allocs | already faster in isolation | the "slowness" was a benchmark leaked-alloc artifact, not the kernel |
 
-## EXPERIMENT — validate BEFORE you build
+Do NOT conflate "faster than the OLD path" with "faster than NumPy" — that mistake inflated a "6–7×"
+claim that was really parity. Report both baselines, explicitly.
 
-1. **Write a THROWAWAY hand kernel and race it** against the general path (`dotnet run -c Release`,
-   fresh filename). Not clearly faster → **STOP**, the opportunity isn't there.
-2. **Sweep for the CROSSOVER.** The fast path wins only in a regime — find its edge and gate to it
-   (cov Gram: M≤16, loses above; gemv: N==1 with the contraction axis contiguous). Everything else
-   falls back.
-3. **Do ceiling analysis.** Memory-bound + tuned reference = parity ceiling (don't over-invest chasing
-   1.5×). Pathological general path = big win available. See `references/discover.md`.
+## DISCOVER — where the subset hides
+
+Find where the general path handles a recognizable subset suboptimally. The subset can be keyed on:
+**shape** (a degenerate/small/tall-skinny dimension), **layout** (contiguity, stride, transpose,
+aliasing), **dtype** (SIMD-capable vs not, int vs float), **data property** (cardinality, value-range,
+all-false, empty), **size** (a threshold where a different allocation/algorithm wins), or an
+**aliasing relationship** (`A@A.T`, `a[1:]` vs `a[:-1]`).
+
+- **Grep for compositions over a general primitive** — that's where structured operands appear:
+  `grep -rn "np\.dot(\|np\.matmul(\|\.Sum(\|argwhere\|concatenate\|NDIter" src/NumSharp.Core --include=*.cs | grep -v test`.
+- **Profile the composition** to confirm which component dominates — specialize only the dominant one
+  (cov's `dot` was 553µs of 762µs; its concat/center were the rest, and at 10M they flip to dominate).
+- **Check "already optimal"** so you don't waste effort — `dot(1d,1d)`/`norm(2)` are already at the
+  SimdDot floor; `outer` is a broadcast multiply near its floor. Measure the general route's GB/s
+  against the hardware floor first.
+
+Recipes + the structural-pattern table: `references/discover.md`.
+
+## EXPERIMENT — validate before building
+
+1. **Prototype the cheaper route (throwaway) and prove it wins on the subset.** A hand kernel raced
+   against the general path (`-c Release`, fresh filename); or, for a view/algorithm path, an asymptotic
+   argument + a micro-check. Not clearly better → **STOP**.
+2. **Find the CROSSOVER → set the gate.** The route usually wins only in a band (cov Gram: `M<=16`,
+   loses above; `unique` hash: integers only; `np.tri` write-once: `<64 MiB`). The gate is part of the
+   design, not an afterthought — firing outside the winning band is a regression.
+3. **Ceiling analysis for compute paths** (memory-bound → parity ceiling; pathological → big win).
 
 ## CREATE — integrate cleanly
 
-- **Integrate at the general primitive's DISPATCH, not a per-function hack** — so every consumer
-  benefits. gemv went into `TryMatMulSimd`/`SimdMatMul` dispatch, which lifted `np.matvec`,
-  `np.inner`, `np.dot(m,v)`, and transitively `einsum`/`tensordot`/`multi_dot`.
-- **dtype-dynamic WITHOUT a per-dtype switch** (project rule): generic helper +
-  `GetGenericHelper(name, GetClrType(dt)).CreateDelegate<Kernel>()` (the `CumSumHelperSameType` /
-  `GramHelperSameType` pattern), or an NPTypeCode-keyed IL emit (the `AdjacentDiff` pattern using
-  `EmitVectorLoad/Operation/Store`). Reuse existing SIMD primitives (`GramDot`, `SimdDot`,
-  `SimpleStrided`) rather than re-deriving.
-- **GATE + FALLBACK is the contract.** Check the structural condition; on ANY miss return
-  `null` / fall through to the general kernel. The general case must be byte-for-byte and
-  perf-for-perf unchanged.
-- **Pointer discipline:** logical base is `(byte*)nd.Address + nd.Shape.offset * elemsize`; gate the
-  SIMD path on the *reduction axis* being contiguous (`stride == 1`), else fall back.
+- **Gate at the op's DISPATCH, not a per-caller hack** — so every consumer benefits (gemv went into the
+  matmul dispatch and lifted `matvec`/`inner`/`dot`/`einsum`/`tensordot` at once). Shape it as a
+  `Try…()` that returns `null`/`false` on any miss and falls through to the general path.
+- **The gate + fallback is the contract.** On ANY unmet condition (dtype out of scope, non-contiguous
+  reduction axis, size outside the band, structure not recognized) → general path, byte-for-byte and
+  perf-for-perf unchanged. Never widen a fast path to a shape you didn't measure.
+- **For KERNEL kinds, stay dtype-dynamic without a per-dtype switch** — a generic helper +
+  `GetGenericHelper(name, GetClrType(dt)).CreateDelegate<Kernel>()` (the `GramHelperSameType` /
+  `CumSumHelperSameType` shape) or an NPTypeCode-keyed IL emit (the `AdjacentDiff` shape). Reuse
+  primitives (`GramDot`, `SimdDot`, `SimpleStrided`). For VIEW/ALGORITHM/EARLY-EXIT kinds it's a plain
+  C# branch — no IL.
+- **Pointer/stride discipline** (kernel kinds): logical base is
+  `(byte*)nd.Address + nd.Shape.offset * elemsize`; gate SIMD on the reduction/inner axis being
+  unit-stride. **`nd.shape[i]` is `long`** — cast or use `nd.Shape.dimensions[i]`.
 
-Patterns + snippets: `references/implement.md`.
+Patterns per kind + snippets: `references/implement.md`.
 
-## MEASURE — honestly (the traps that will burn you)
+## MEASURE — honestly (traps that will burn you)
 
-- **`dotnet run -c Release` ALWAYS** — Debug taints hand-written loops ~2× (IL-emitted kernels look
-  normal, so a Debug run mis-ranks the two).
-- **FRESH FILENAME per benchmark** — the runfile cache keys on filename+content, so re-running the
-  same `bench.cs` after a rebuild reuses the STALE old DLL (made a NEW build read identical to OLD).
-- **git-stash before/after in the SAME session** — the only reliable improvement number; machine
-  regime drifts and cross-run comparisons lie.
-- **Pin NumPy to one thread** — `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1`. NumPy
-  multi-threads BLAS by default (an unpinned dgemv hit 171 GB/s = impossible single-core); the official
-  harness pins, so single-thread is the fair comparison.
-- **SHORT benches, `GC.Collect()` between cases** — a long combined bench contaminates later cases ~2×
-  (regime pressure accumulates; a gevm group measured after a gemv group read 2× slow).
-- best-of-N (**min**), warm, correctness-checked before the timed rows.
+Perf-measurement traps (apply to kernel/algorithm/memory kinds; a view/early-exit path is verified
+asymptotically + a micro-check that no hidden copy sneaks in):
 
-Full playbook + copy-paste harness: `references/measure-verify.md`.
+- **`dotnet run -c Release` ALWAYS** — Debug taints hand loops ~2× (IL-emitted kernels look normal, so
+  Debug mis-ranks candidates).
+- **FRESH FILENAME per rebuild** — the runfile cache keys on filename+content; re-running the same
+  `bench.cs` after a rebuild reuses the STALE old DLL.
+- **git-stash before/after in the SAME session** — the only reliable improvement number; machine regime
+  drifts hourly and cross-run ratios lie.
+- **Pin NumPy to one thread** (`OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1`) — NumPy
+  multi-threads BLAS by default (an unpinned dgemv hit 171 GB/s = impossible single-core).
+- **SHORT benches, `GC.Collect()` between cases** — long combined benches contaminate later cases ~2×.
 
-## VERIFY — parity is non-negotiable
+Full playbook + harness: `references/measure-verify.md`.
 
-1. **Know what the oracle PINS.** Grep the corpus (`test/NumSharp.Tests.Oracle/Fuzz/corpus/*.jsonl`)
-   for the op's dtypes/shapes — usually **byte-exact for SMALL sizes, tolerance (allclose) for large**.
-   Design so the pinned regime is byte-identical: a SIMD reduction's scalar tail IS a sequential dot
-   for small K, matching the general path — that's why gemv/Gram stay green.
-2. **A large-K accumulation reorder (SIMD multi-accumulator) is OK only if the corpus doesn't pin it**
-   (managed float GEMM was never byte-exact with cblas at large K anyway) — but VERIFY, don't assume.
+## VERIFY — the specialized route must be SEMANTICALLY IDENTICAL on the subset
+
+Bit-identical *values* and matching *metadata* (dtype, shape, view writeable/read-only + owns-data
+flags, NaN/-0 handling) to what the general path produces.
+
+1. **Know what the oracle PINS.** Grep the corpus (`test/NumSharp.Tests.Oracle/Fuzz/corpus/*.jsonl`) for
+   the op — usually byte-exact for SMALL sizes, tolerance for large. Design so the pinned regime is
+   byte-identical: a SIMD reduction's scalar tail IS a sequential dot for small K, matching the general
+   path — that's why gemv/Gram stay green; a returned VIEW must carry the same writeable/broadcast flags
+   the copy path would (a `flip` of a read-only broadcast stays read-only).
+2. **A reorder/different algorithm is only safe if the pinned regime still matches — VERIFY, don't
+   assume.** (Large-K SIMD reorder is fine only because the corpus doesn't pin it; a hash `unique` must
+   still return the same SET as the sort path.)
 3. **Run the gates:** `dotnet test --filter "TestCategory=FuzzMatrix"` (byte-parity), the op's
-   unit/battle tests, and a differential sweep vs NumPy across shapes/dtypes/layouts (contiguous + F +
-   transposed + strided + the fallback path). See the `oracle` skill for the corpus machinery.
+   unit/battle tests, and a differential sweep vs NumPy across shapes × dtypes × layouts — contiguous,
+   F-contig, transposed, negative-stride, strided, AND the fallback path. See the `oracle` skill.
 
 ## Critical gotchas (learned the hard way)
 
-- **`nd.shape[i]` returns `long`**, not int — cast, or use `nd.Shape.dimensions[i]`. (Cost me two
-  build errors.)
-- **The "slowness" may be a benchmark artifact, not the kernel.** diff/ediff1d were already faster than
+- **The "slowness" may be a benchmark artifact, not the code.** diff/ediff1d were already faster than
   NumPy in isolation; the reported 0.4× was the leaked-output allocator asymmetry (GC lazy-finalize vs
-  NumPy eager refcount-free) + a contaminated snapshot. Reproduce the real regime (dispose vs
-  no-dispose) BEFORE optimizing — see the `benchmark` skill's regime-volatility notes.
-- **Symmetry mirroring is bit-exact even for `A@B.T` when the result is mathematically symmetric**
-  (cov's weighted Gram): `dot(A[i],B[j]) == dot(A[j],B[i])` term-by-term, so compute the upper triangle
-  and mirror — matches NumPy's independent per-entry dots.
-- **Reuse the general kernel for the byte-exact regime instead of re-deriving it.** gevm just *widened a
-  dispatch condition* to route `M==1` to the existing `SimpleStrided` daxpy — zero new bytes for the
-  pinned small cases, only the large (unpinned) path moved off blocked.
+  NumPy eager refcount-free) + a contaminated snapshot. Reproduce the REAL regime before optimizing.
+- **Reuse the general kernel for the pinned regime** instead of re-deriving it — gevm just *widened a
+  dispatch condition* to route `M==1` to the existing `SimpleStrided`, so the pinned small cases changed
+  zero bytes; only the unpinned large path moved.
+- **Match the algorithm SELECTION, not just the values.** `unique` hashes ints and sorts floats
+  *because NumPy does* — mirroring the selection keeps edge behaviour (order, NaN) aligned for free.
+- **`nd.shape[i]` returns `long`** — cast or use `nd.Shape.dimensions[i]` (a real build-error trap).
 
 ## References
 
-- `references/discover.md` — discovery patterns, grep recipes, profiling a composition, crossover +
-  ceiling analysis (memory-bound vs pathological).
-- `references/implement.md` — integration point, generic-delegate vs IL-emit dtype dispatch, gate +
-  fallback, pointer/stride discipline, reusable primitives.
-- `references/measure-verify.md` — the honest-measurement harness + every trap, and the parity/gate
+- `references/discover.md` — where subsets hide (shape/layout/dtype/value-range/size/aliasing), grep
+  recipes, profiling a composition, ceiling analysis.
+- `references/implement.md` — integration + the gate/fallback contract, per-kind patterns (kernel IL/
+  generic-delegate, view stride-tricks, algorithm-swap, early-exit, memory-strategy, backend seam),
+  pointer/stride discipline.
+- `references/measure-verify.md` — the honest-measurement harness + every trap, and the semantic-parity
   checklist.
 - Sibling skills: **`benchmark`** (the official harness + NPY/NS), **`oracle`** (the byte-parity gate).
 - Worked commits: `d64f3df5` (cov syrk), `4f666fc8` (gemv/gevm), `6e94dbcc` (diff stencil).

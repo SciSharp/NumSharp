@@ -11,7 +11,22 @@ others.
 Exception: when the structure is function-specific (cov's `dot(Xc, Xc.T)` is only a Gram *because cov
 knows the operands alias*), gate inside the function (`np.cov.TryGramCov`) and call the shared kernel.
 
-## 2. dtype-dynamic WITHOUT a per-dtype switch (project rule)
+## 2. Implementation shape per KIND
+
+Sections 3–7 below are the KERNEL-kind deep dive. The other kinds are simpler — a plain C# branch, no
+IL — but the same gate + fallback contract. Map your kind to its shape and its exemplar:
+
+| kind | implementation shape | exemplar (file) |
+|------|----------------------|-----------------|
+| **kernel swap** | IL-emit or generic-delegate kernel keyed by dtype; gate on layout/shape (§3–7) | `DirectILKernelGenerator.Gram.cs` (`GemvHelper`), `.AdjacentDiff.cs` |
+| **algorithm swap** | pick the algorithm from a data property, both paths returning the identical SET | `NDArray.unique.Hash.cs` (hash int / sort float), `np.isin.cs` (table vs searchsorted by value-range) |
+| **view vs copy** | build a `Shape` with negated/permuted strides + shifted offset via `Storage.Alias`; **inherit the source's writeable/broadcast flags** | `np.flip.cs`, `np.rot90.cs`, `np.matrix_transpose.cs` |
+| **early exit** | a cheap structural test up front (`size==0`, `k==0`, SIMD all-zero prescan) → return the identity/short-circuit result | `all`/`any` (mask early-exit), `np.where` (all-false prescan) |
+| **memory strategy** | a size/layout `if` choosing the allocation/access; `const` threshold | `np.tri.cs` (`WriteOnceMaxBytes`), `DirectILKernelGenerator.Take.cs` (`IndexPrefetchThresholdBytes`) |
+| **fused pass** | one `Try…()` that recognizes the contiguous/no-cast shape and runs a single pass; else the composition | `np.select.cs` (`TrySelectFused`), `NDExpr.Evaluate.cs` |
+| **backend seam** | a `Try…(out result)` interface member the backend overrides for what it serves, default returns false | `IBlasBackend.cs` (`TryDot`/`TryMatMul2D`/…) |
+
+## 3. dtype-dynamic WITHOUT a per-dtype switch (KERNEL kinds — project rule)
 
 Two blessed patterns — never a `switch(typecode){ case Double: DoDouble(); ...}` over 15 dtypes.
 
@@ -54,7 +69,7 @@ Best when you need per-lane control the generic path can't express, or all-dtype
 `EmitScalarOperation(il, op, dt)`, `EmitLoadIndirect/StoreIndirect(il, dt)`. See
 `DirectILKernelGenerator.AdjacentDiff.cs` for a full 4×-unrolled SIMD + remainder + scalar-tail kernel.
 
-## 3. Reuse existing primitives — don't re-derive
+## 4. Reuse existing primitives — don't re-derive
 
 - `GramDot<T>` (generic 4-accumulator SIMD dot, `DirectILKernelGenerator.Gram.cs`) — the reduction core
   for Gram/gemv.
@@ -62,7 +77,7 @@ Best when you need per-lane control the generic path can't express, or all-dtype
 - `SimpleStrided` inside `SimdMatMul` — the per-k SIMD daxpy; gevm just *routes* `M==1` to it (widened
   a dispatch condition) instead of writing a new kernel — which is also why gevm stayed byte-exact.
 
-## 4. GATE + FALLBACK is the whole contract
+## 5. GATE + FALLBACK is the whole contract (universal — every kind)
 
 The specialized path returns `null` / doesn't fire on ANY miss, and control falls through to the
 untouched general kernel. Gate on: dtype in scope, **reduction axis contiguous** (`stride==1`),
@@ -80,7 +95,7 @@ if (kernel is null) return null;
 Never widen a fast path to a shape you didn't measure — that's how you turn a win into a regression
 (cov Gram loses above M=16; firing it there would slow cov down).
 
-## 5. Pointer & stride discipline
+## 6. Pointer & stride discipline (kernel kinds)
 
 - Logical base pointer = `(byte*)nd.Address + nd.Shape.offset * elemsize` (mirror `ExecuteUnaryKernel` /
   `TryMatMulSimd`). `nd.Address` is the buffer base at offset 0.
@@ -91,7 +106,7 @@ Never widen a fast path to a shape you didn't measure — that's how you turn a 
   slower strided kernel or a fallback.
 - **`nd.shape[i]` is `long`** — cast to int or use `nd.Shape.dimensions[i]` (a real build-error trap).
 
-## 6. Symmetry: compute half, mirror — and know when it's bit-exact
+## 7. Symmetry: compute half, mirror — and know when it's bit-exact
 
 For a symmetric result compute the upper triangle and mirror. This is bit-exact vs NumPy's independent
 per-entry dots even for `A @ B.T` when the result is *mathematically* symmetric (cov's weighted Gram,
