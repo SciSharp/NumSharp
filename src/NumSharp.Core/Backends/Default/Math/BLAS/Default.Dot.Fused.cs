@@ -57,7 +57,9 @@ namespace NumSharp.Backends
             if (tc != right.typecode)
             {
                 var product = left * right;
-                return ReduceAdd(product, null, false, typeCode: product.GetTypeCode);
+                var reduced = ReduceAdd(product, null, false, typeCode: product.GetTypeCode);
+                product.Dispose();
+                return reduced;
             }
 
             // numpy: empty dot → scalar 0 of the INPUT dtype (not the widened sum dtype).
@@ -99,7 +101,9 @@ namespace NumSharp.Backends
                 default:
                     // Char (no INumber<char>) or anything unforeseen → existing path.
                     var product = left * right;
-                    return ReduceAdd(product, null, false, typeCode: product.GetTypeCode);
+                    var fallback = ReduceAdd(product, null, false, typeCode: product.GetTypeCode);
+                    product.Dispose();
+                    return fallback;
             }
         }
 

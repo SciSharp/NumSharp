@@ -124,7 +124,18 @@ namespace NumSharp.Backends
             var incr = new ValueCoordinatesIncrementor(ref iterShape);
             var index = incr.Index;
             for (long i = 0; i < len; i++, incr.Next())
-                MultiplyMatrix(lhsB.GetData(index), rhsB.GetData(index), ret.GetData(index));
+            {
+                // Per-iteration dispose, not a method scope: a scope would hold 3×batch sub-views
+                // alive simultaneously (the pool-bucket overflow NDScope's granularity note warns of).
+                var lhs2d = lhsB.GetData(index);
+                var rhs2d = rhsB.GetData(index);
+                var ret2d = ret.GetData(index);
+                var slot = MultiplyMatrix(lhs2d, rhs2d, ret2d);   // returns ret2d itself (the @out form)
+                lhs2d.Dispose();
+                rhs2d.Dispose();
+                slot.Dispose();
+                ret2d.Dispose();   // same instance as slot — Dispose is idempotent, the second call is a no-op
+            }
 
             return ret;
         }

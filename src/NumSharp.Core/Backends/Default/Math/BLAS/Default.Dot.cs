@@ -80,7 +80,10 @@ namespace NumSharp.Backends
                 // Reshape 1D to row vector (1, n), multiply, squeeze back to 1D
                 var leftReshaped = left.reshape(1, leftshape[0]);
                 var result = MultiplyMatrix(leftReshaped, right);
-                return result.reshape(rightshape[1]);
+                var squeezed = result.reshape(rightshape[1]);
+                leftReshaped.Dispose(); // row-vector alias of the input — the input keeps its own ref
+                result.Dispose();       // the returned view holds its own counted ref on the product buffer
+                return squeezed;
             }
 
             //left cant be 0 or 1 by this point

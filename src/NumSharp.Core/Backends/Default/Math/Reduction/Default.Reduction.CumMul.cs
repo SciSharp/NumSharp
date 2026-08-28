@@ -15,7 +15,9 @@ namespace NumSharp.Backends
             if (arr.GetTypeCode == NPTypeCode.Boolean)
             {
                 var int64Arr = arr.astype(NPTypeCode.Int64, copy: true);
-                return ReduceCumMul(int64Arr, axis_, typeCode ?? NPTypeCode.Int64);
+                var cum = ReduceCumMul(int64Arr, axis_, typeCode ?? NPTypeCode.Int64);
+                int64Arr.Dispose();
+                return cum;
             }
 
             var shape = arr.Shape;

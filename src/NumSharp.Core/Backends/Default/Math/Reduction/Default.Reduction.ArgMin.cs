@@ -105,7 +105,10 @@ namespace NumSharp.Backends
                 }
                 // 1-D input whose only axis has size 1 squeezes to a fresh 0-d — a numpy
                 // SCALAR (read-only) at the boundary.
-                return np.squeeze_fast(np.zeros(shape.dimensions, NPTypeCode.Int64), axis).MarkReductionScalar();
+                var zerosBase = np.zeros(shape.dimensions, NPTypeCode.Int64);
+                var squeezed = np.squeeze_fast(zerosBase, axis);
+                zerosBase.Dispose(); // the squeeze view holds its own counted ref on the buffer
+                return squeezed.MarkReductionScalar();
             }
 
             //handle keepdims - prepare output shape

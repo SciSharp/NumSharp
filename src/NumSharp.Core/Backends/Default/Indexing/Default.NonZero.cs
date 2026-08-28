@@ -167,8 +167,10 @@ namespace NumSharp.Backends
         {
             // NumPy: even the empty result is columns of a shared (0, ndim) multi-index buffer —
             // each tuple entry keeps byte stride ndim*8 and owndata=False (probed 2.4.2).
-            return MakeNonZeroColumnViews(
-                new NDArray(NPTypeCode.Int64, new Shape(0, ndim), false), 0, ndim);
+            var emptyBase = new NDArray(NPTypeCode.Int64, new Shape(0, ndim), false);
+            var views = MakeNonZeroColumnViews(emptyBase, 0, ndim);
+            emptyBase.Dispose(); // each column view holds its own counted ref on the shared buffer
+            return views;
         }
 
         /// <summary>
