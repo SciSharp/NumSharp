@@ -32,6 +32,14 @@ namespace NDScoping
                 if (args[i] == "level")
                     level = args[i + 1].ToUpperInvariant();
 
+            // The user-facing, read-me-top-to-bottom tutorial (Examples.cs): leak -> manual ->
+            // NDScope -> [NDScoped] -> [NDScopedAsync], all on identical code.
+            if (args.Contains("examples"))
+            {
+                await Examples.Run();
+                return 0;
+            }
+
             Console.WriteLine("NDScoping — every level and layer of NDScope reclamation");
             Console.WriteLine(new string('-', 64));
 
@@ -280,7 +288,9 @@ namespace NDScoping
             Console.WriteLine("Cross-cutting: nesting, Attach/Detach, the exception path, threading, granularity.");
             Console.WriteLine();
             Console.WriteLine("Every demo asserts its claim via the public NDArray.IsDisposed and prints OK/FAIL.");
-            Console.WriteLine("Verbs:  dotnet run   |   dotnet run -- level A|B|C|D|Z|cross|0   |   dotnet run -- --stress");
+            Console.WriteLine();
+            Console.WriteLine("New here? Start with the guided tutorial:  dotnet run -- examples  (read Examples.cs).");
+            Console.WriteLine("Verbs:  dotnet run   |   dotnet run -- examples   |   dotnet run -- level A|B|C|D|Z|cross|0   |   dotnet run -- --stress");
         }
     }
 }

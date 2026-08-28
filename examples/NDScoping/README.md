@@ -15,12 +15,19 @@ the console output is *evidence, not narration*. It doubles as a living gate bes
 
 ```bash
 cd examples/NDScoping
+dotnet run -- examples           # START HERE: the guided tutorial (Examples.cs) — leak -> [NDScoped]
 dotnet run                       # run every level, print the PASS/FAIL table + weave coverage
 dotnet run -- level A            # one level: 0 | A | B | C | D | Z | cross
 dotnet run -- --stress           # 25x sweeps with forced GCs between (a mis-scope -> a wrong value)
 dotnet run -- --explain          # print each level's one-line "what this shows" without running
 dotnet run -- level D            # the analyzer demo (shells CounterExamples/show-analyzer.sh)
 ```
+
+**New to NDScope? Read [`Examples.cs`](Examples.cs)** — a single, top-to-bottom, heavily-commented
+file that runs one small computation (operators, `np.*`, broadcasting, two chained temporaries) five
+ways: leaking, prevented by hand, with `NDScope`, with `[NDScoped]`, and with `[NDScopedAsync]` — so
+you see the exact same code go from leak to leak-free. The `Level*` files below are the exhaustive
+matrix; `Examples.cs` is the introduction.
 
 The last line of a full run reflects over the built assembly and reports **weave coverage** — the
 example proving *it itself was woven* (every `[NDScoped]`/`[NDScopedAsync]` method carries an
