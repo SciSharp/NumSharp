@@ -273,6 +273,69 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
+        /// <summary>
+        ///     <c>np.delete(arr, indices, axis=null)</c> ravels a NON-contiguous input with a COPY
+        ///     (the <c>work</c> array), which the composition then deletes from and concatenates —
+        ///     the ravel copy was never disposed (measured: one bucketed buffer escaped, scoping OFF).
+        ///     The corpus does not exercise this transposed-axis=None layout, so this is delete's
+        ///     dedicated pin; <c>delete</c> is now [NDScoped]. The contiguous axis=None case ravels to
+        ///     a VIEW (no copy, nothing to reclaim) and is a control.
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [TestCategory("ScopeAudit")]
+        public void Delete_NonContiguousAxisNull_ReclaimsRavelWorkCopy()
+        {
+            ScopeAudit.Settle();
+            var m = np.arange(2000).astype(np.float64).reshape(40, 50);
+            var mt = m.T;   // transposed => non-contiguous => np.ravel copies
+            try
+            {
+                long? escaped = ScopeAudit.Measure(() =>
+                {
+                    using var r = np.delete(mt, new long[] { 1, 2, 3 }, null);
+                });
+                Assert.AreEqual(0L, escaped,
+                    "np.delete(non-contiguous, axis=null) must reclaim its ravel work-copy ([NDScoped] pin)");
+            }
+            finally
+            {
+                m.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     <c>np.bmat</c> concatenates its blocks and wraps the result in an <c>asmatrix</c> VIEW,
+        ///     so the intermediate concatenation(s) — and, for <c>bmat(ndarray)</c>, the <c>obj.copy()</c>
+        ///     the view aliases — are orphaned once the view owns the buffer (measured: one bucketed
+        ///     buffer escaped). <c>bmat</c> is not in the corpus, so this is its dedicated pin; it is now
+        ///     [NDScoped], which reclaims the intermediates while yielding the view (ARC keeps the
+        ///     view's shared buffer alive).
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [TestCategory("ScopeAudit")]
+        public void Bmat_ReclaimsIntermediateConcatenations()
+        {
+            ScopeAudit.Settle();
+            var a = np.arange(4).astype(np.float64).reshape(2, 2);
+            var b = np.arange(4).astype(np.float64).reshape(2, 2);
+            try
+            {
+                long? escaped = ScopeAudit.Measure(() =>
+                {
+                    using var r = np.bmat(new[] { a, b });
+                });
+                Assert.AreEqual(0L, escaped,
+                    "np.bmat must reclaim its intermediate concatenation ([NDScoped] pin)");
+            }
+            finally
+            {
+                a.Dispose();
+                b.Dispose();
+            }
+        }
+
         // ---------------------------------------------------------------------------------
         // Known escape families. Each op below LEAKED at gate landing (2026-08-26, full-corpus
         // sweep; per-op ceiling = the worst confirmed buffers-escaped-per-call observed then).

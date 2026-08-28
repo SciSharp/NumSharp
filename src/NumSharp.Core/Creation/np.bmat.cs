@@ -31,6 +31,12 @@ namespace NumSharp
         ///     <see cref="block(object)"/> for the N-D generalization.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.bmat.html
         /// </remarks>
+        // Scope: bmat builds intermediate row concatenations / a parsed-block copy and then wraps the
+        // final concatenation in an asmatrix VIEW — so every intermediate (and, for bmat(NDArray),
+        // the obj.copy() the view aliases) is orphaned once the view owns the buffer (measured: one
+        // bucketed buffer escaped per call). [NDScoped] reclaims the intermediates while yielding the
+        // asmatrix view; ARC keeps the view's shared buffer alive through it (rule R1 / invariant I3).
+        [NDScoped]
         public static NDArray bmat(NDArray[][] obj)
         {
             if (obj is null)
@@ -63,6 +69,7 @@ namespace NumSharp
         ///     <c>matrix()</c> finalize). No matrix products; see <see cref="bmat(NDArray[][])"/>.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.bmat.html
         /// </remarks>
+        [NDScoped]
         public static NDArray bmat(NDArray[] obj)
         {
             if (obj is null)
@@ -83,6 +90,7 @@ namespace NumSharp
         ///     which returns a view. The copy is taken first, then coerced to 2-D, so the result never
         ///     aliases <paramref name="obj"/>. https://numpy.org/doc/stable/reference/generated/numpy.bmat.html
         /// </remarks>
+        [NDScoped]
         public static NDArray bmat(NDArray obj)
         {
             if (obj is null)
@@ -123,6 +131,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/generated/numpy.bmat.html
         ///     </para>
         /// </remarks>
+        [NDScoped]
         public static NDArray bmat(ITuple obj)
         {
             if (obj is null)
@@ -179,6 +188,7 @@ namespace NumSharp
         ///     them. https://numpy.org/doc/stable/reference/generated/numpy.bmat.html
         ///     </para>
         /// </remarks>
+        [NDScoped]
         public static NDArray bmat(string obj, IDictionary<string, NDArray> ldict,
             IDictionary<string, NDArray> gdict = null)
         {

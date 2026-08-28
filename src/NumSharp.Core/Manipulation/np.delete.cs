@@ -59,6 +59,13 @@ namespace NumSharp
         /// <summary>
         ///     Long-index overload of <see cref="delete(NDArray, int, int?)"/>.
         /// </summary>
+        // Scope: delete is a composition that owns transients — PrepareAxisContext mints a ravel
+        // `work` copy for axis=None on an N-D input, the DeleteXxx helpers build concatenated chunks,
+        // and WithSourceOrder mints an asfortranarray copy for an F-contiguous source (orphaning the
+        // C-contiguous intermediate). None were reclaimed (measured: one bucketed buffer escaped per
+        // delete). [NDScoped] reclaims them all while yielding the fresh result; a passthrough `work`
+        // (already 1-D input) is never tracked, and the bool-path's hand-disposed keepArr is idempotent.
+        [NDScoped]
         public static NDArray delete(NDArray arr, long obj, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -71,6 +78,7 @@ namespace NumSharp
         ///     Slice-index overload. <paramref name="obj"/> is interpreted via
         ///     Python <c>slice.indices(N)</c> against the axis length.
         /// </summary>
+        [NDScoped]
         public static NDArray delete(NDArray arr, Slice obj, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -84,6 +92,7 @@ namespace NumSharp
         ///     Array-of-indices overload. Negative indices are normalized; duplicates
         ///     are silently collapsed (each axis position is removed at most once).
         /// </summary>
+        [NDScoped]
         public static NDArray delete(NDArray arr, int[] obj, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -99,6 +108,7 @@ namespace NumSharp
         /// <summary>
         ///     Long-array-of-indices overload.
         /// </summary>
+        [NDScoped]
         public static NDArray delete(NDArray arr, long[] obj, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -113,6 +123,7 @@ namespace NumSharp
         ///     inversion. Length must match the targeted axis size (NumPy raises
         ///     <c>ValueError</c> otherwise).
         /// </summary>
+        [NDScoped]
         public static NDArray delete(NDArray arr, bool[] obj, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -141,6 +152,7 @@ namespace NumSharp
         ///     integer arrays collapse to the scalar-index fast path (matching
         ///     NumPy's <c>obj.size == 1 and obj.dtype.kind in "ui": obj = obj.item()</c>).
         /// </summary>
+        [NDScoped]
         public static NDArray delete(NDArray arr, NDArray obj, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));

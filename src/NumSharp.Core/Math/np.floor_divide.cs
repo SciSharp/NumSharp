@@ -48,6 +48,9 @@ namespace NumSharp
         /// <param name="x1">Dividend array.</param>
         /// <param name="x2">Scalar or array-like divisor.</param>
         /// <returns>y = floor(x1/x2).</returns>
+        // Scope: reclaims the np.asanyarray(x2) temp minted for a scalar/array-like divisor (the
+        // a//obj operator analog); an NDArray-input passthrough stays untracked.
+        [NDScoped]
         public static NDArray floor_divide(NDArray x1, object x2)
             => x1.TensorEngine.FloorDivide(x1, np.asanyarray(x2));
 
@@ -59,6 +62,7 @@ namespace NumSharp
         /// <param name="x2">Scalar or array-like divisor.</param>
         /// <param name="dtype">The dtype of the returned NDArray.</param>
         /// <returns>y = floor(x1/x2).</returns>
+        [NDScoped]
         public static NDArray floor_divide(NDArray x1, object x2, Type dtype)
             => x1.TensorEngine.FloorDivide(x1, np.asanyarray(x2), dtype);
 
@@ -70,6 +74,7 @@ namespace NumSharp
         /// <param name="x2">Scalar or array-like divisor.</param>
         /// <param name="typeCode">The dtype of the returned NDArray.</param>
         /// <returns>y = floor(x1/x2).</returns>
+        [NDScoped]
         public static NDArray floor_divide(NDArray x1, object x2, NPTypeCode typeCode)
             => x1.TensorEngine.FloorDivide(x1, np.asanyarray(x2), typeCode);
     }

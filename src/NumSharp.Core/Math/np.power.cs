@@ -13,6 +13,11 @@ namespace NumSharp
         /// <param name="dtype">The dtype of the returned NDArray</param>
         /// <returns>The bases in x1 raised to the exponents in x2. This is a scalar NDArray if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
+        // Scope: the object overloads mint an np.asanyarray(x2) temp for a scalar/array-like
+        // exponent (the same leftover the a**obj operator carries); [NDScoped] reclaims it while
+        // an NDArray-input passthrough stays untracked. The (NDArray, NDArray) overloads below own
+        // no temp and stay unscoped.
+        [NDScoped]
         public static NDArray power(NDArray x1, object x2, Type dtype) => x1.TensorEngine.Power(x1, np.asanyarray(x2), dtype);
 
         /// <summary>
@@ -23,6 +28,7 @@ namespace NumSharp
         /// <param name="typeCode">The dtype of the returned NDArray</param>
         /// <returns>The bases in x1 raised to the exponents in x2. This is a scalar NDArray if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
+        [NDScoped]
         public static NDArray power(NDArray x1, object x2, NPTypeCode typeCode) => x1.TensorEngine.Power(x1, np.asanyarray(x2), typeCode);
 
         /// <summary>
@@ -32,6 +38,7 @@ namespace NumSharp
         /// <param name="x2">The exponents (scalar or array-like).</param>
         /// <returns>The bases in x1 raised to the exponents in x2. This is a scalar NDArray if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
+        [NDScoped]
         public static NDArray power(NDArray x1, object x2) => x1.TensorEngine.Power(x1, np.asanyarray(x2), (NPTypeCode?)null);
 
         /// <summary>

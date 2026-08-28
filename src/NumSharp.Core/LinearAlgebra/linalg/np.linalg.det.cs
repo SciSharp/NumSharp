@@ -18,6 +18,9 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            // Scope: reclaims the ToCommon dtype-cast temp (minted only when `a` needs casting;
+            // a passthrough input is never tracked), yielding the engine's fresh determinant scalar.
+            [NDScoped]
             public static NDArray det(NDArray a)
             {
                 AssertStackedSquare(a);
@@ -36,6 +39,9 @@ namespace NumSharp
             /// </returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.slogdet.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            // Scope: reclaims the ToCommon dtype-cast temp; the (sign, logabsdet) tuple result is
+            // yielded through the weaver's Returns<T1,T2> tuple egress (both engine-fresh).
+            [NDScoped]
             public static (NDArray sign, NDArray logabsdet) slogdet(NDArray a)
             {
                 AssertStackedSquare(a);

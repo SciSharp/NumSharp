@@ -19,6 +19,11 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            // Scope: ToCommon mints a dtype-cast temp when `a` is not already the common type
+            // (a.typecode == common ? a : Cast(...)) — a leftover otherwise dropped to the finalizer.
+            // [NDScoped] reclaims it while leaving a passthrough input untouched (rule R2); the
+            // engine's fresh inverse is yielded. Matches the scoped siblings pinv/tensorinv.
+            [NDScoped]
             public static NDArray inv(NDArray a)
             {
                 AssertStackedSquare(a);

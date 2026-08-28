@@ -21,6 +21,10 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            // Scope: solve casts BOTH operands via ToCommon (two potential dtype-cast temps) before
+            // the engine call — [NDScoped] reclaims whichever were minted (a passthrough operand
+            // already at the common type is never tracked), yielding the engine's fresh solution.
+            [NDScoped]
             public static NDArray solve(NDArray a, NDArray b)
             {
                 AssertStackedSquare(a);
