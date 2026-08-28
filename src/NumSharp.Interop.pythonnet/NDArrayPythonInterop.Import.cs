@@ -14,7 +14,8 @@ namespace NumSharp.Interop.PythonNet
         ///     Copy any supported Python array object into a fresh C-contiguous NumSharp array. Native
         ///     inputs are PEP 3118 buffers (numpy, memoryview, bytes, bytearray, array.array, PyArrow,
         ///     ...); registered <see cref="IPythonArrayAdapter"/> instances first expose library arrays
-        ///     such as <c>torch.Tensor</c> through their official buffer/NumPy adapter. Honors strides /
+        ///     such as <c>torch.Tensor</c> and Pandas containers through their official buffer/NumPy
+        ///     adapter. Honors strides /
         ///     Fortran order (non-contiguous sources are linearized by CPython's
         ///     <c>memoryview.tobytes('C')</c>). The native buffer route is numpy-agnostic; an adapter may
         ///     use its library's official NumPy interchange object. The result owns its memory — no
@@ -124,8 +125,8 @@ namespace NumSharp.Interop.PythonNet
         /// <summary>
         ///     Zero-copy NumSharp view over Python memory: NumSharp SHARES the exporter's buffer
         ///     (mutations visible both ways). A registered <see cref="IPythonArrayAdapter"/> may first
-        ///     expose a library object such as a CPU <c>torch.Tensor</c> through its official shareable
-        ///     array adapter; all memory decisions below remain unchanged.
+        ///     expose a library object such as a CPU <c>torch.Tensor</c> or homogeneous Pandas object
+        ///     through its official shareable array adapter; all memory decisions below remain unchanged.
         ///
         ///     <para><b>Three zero-copy routes:</b></para>
         ///     <list type="bullet">

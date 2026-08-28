@@ -147,6 +147,7 @@ own gates.
 |---|---|---|---|
 | **numpy, in process** — `NDArray` ⇄ `numpy.ndarray`, every layout, both directions | `NumSharp.Interop.pythonnet` | ✅ views both ways | [Python & numpy (pythonnet)](pythonnet-numpy.md) |
 | **PyTorch CPU tensors** — NumSharp ⇄ Torch through PyTorch's official NumPy adapters | `NumSharp.Interop.pythonnet` | ✅ compatible views both ways | [PyTorch](pytorch.md) |
+| **Pandas containers** — `DataFrame` / `Series` / `Index` / extension arrays through verified `to_numpy` projections | `NumSharp.Interop.pythonnet` | ✅ when Pandas exposes stable storage; Auto copies otherwise | [Pandas](pandas.md) |
 | **Python buffer consumers** — `torch.frombuffer`, Pillow, Arrow, OpenCV, stdlib | `NumSharp.Interop.pythonnet` | ✅ `memoryview` / PEP 3118 | [Any library via np.frombuffer](np-frombuffer.md) |
 | **Numpy.NET coexistence** — drive real numpy's C# API over NumSharp buffers | + `Numpy.Bare` | ✅ `PyObject` handoff | [Numpy.NET](numpy-net.md) |
 | **`.npy` / `.npz` files** — `np.save` / `np.load`, byte-for-byte identical to NumPy's own writer | `NumSharp` (core) | — files, not memory | [NumPy compliance](../compliance.md#file-format-interoperability) |
@@ -186,6 +187,7 @@ above applies to it; it has [its own page](openblas.md).
 - [Python & numpy (pythonnet)](pythonnet-numpy.md) — the reference bridge: four verbs, layouts,
   lifetime, codec, GIL, dtypes, versions
 - [PyTorch](pytorch.md) — shared CPU tensors, autograd, all 15 dtypes, layout/device copy boundaries
+- [Pandas](pandas.md) — frames/series/indexes, Copy-on-Write, mixed blocks and extension dtypes
 - [Any library via np.frombuffer](np-frombuffer.md) — the buffer protocol route to libraries that
   never touch numpy
 - [Numpy.NET](numpy-net.md) — running SciSharp's numpy binding over NumSharp memory

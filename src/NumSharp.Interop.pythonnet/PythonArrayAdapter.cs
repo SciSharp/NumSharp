@@ -46,11 +46,16 @@ namespace NumSharp.Interop.PythonNet
     public static class PythonArrayAdapterRegistry
     {
         private static readonly object Gate = new object();
-        private static IPythonArrayAdapter[] _adapters = { TorchPythonArrayAdapter.Instance };
+        private static IPythonArrayAdapter[] _adapters =
+        {
+            TorchPythonArrayAdapter.Instance,
+            PandasPythonArrayAdapter.Instance,
+        };
 
         /// <summary>
         ///     Register an adapter process-wide. Registration is thread-safe and idempotent by
-        ///     <see cref="IPythonArrayAdapter.Name"/>; the built-in Torch adapter is already present.
+        ///     <see cref="IPythonArrayAdapter.Name"/>; the built-in Torch and Pandas adapters are
+        ///     already present.
         /// </summary>
         /// <param name="adapter">The session-neutral adapter to add.</param>
         /// <returns><c>true</c> when added; <c>false</c> when the same name was already registered.</returns>

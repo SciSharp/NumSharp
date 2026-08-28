@@ -1,6 +1,6 @@
 # NumSharp.Interop.pythonnet
 
-Zero-copy interop between NumSharp `NDArray` and the Python ecosystem via [Python.NET (pythonnet)](https://github.com/pythonnet/pythonnet) — with **no Numpy.NET dependency**. NumPy and PEP 3118 buffers enter the memory bridge directly; registered `IPythonArrayAdapter` instances feed library objects such as `torch.Tensor` through that same bridge. Torch is built in—`TorchInterop` remains an ergonomic façade, not a second memory implementation.
+Zero-copy interop between NumSharp `NDArray` and the Python ecosystem via [Python.NET (pythonnet)](https://github.com/pythonnet/pythonnet) — with **no Numpy.NET dependency**. NumPy and PEP 3118 buffers enter the memory bridge directly; registered `IPythonArrayAdapter` instances feed library objects such as `torch.Tensor` and Pandas containers through that same bridge. PyTorch and Pandas adapters are built in; neither duplicates the memory implementation.
 
 ```csharp
 using NumSharp;
@@ -60,6 +60,37 @@ non-writeable NumSharp broadcasts. Scalars, empty arrays, storage offsets, F-ord
 conjugate/negative view bits, derived-view lifetimes, resize refusal, all dtype boundary values,
 caller-owned GIL mode and concurrent churn are pinned by the live interop test matrix.
 
+## Pandas through the existing bridge
+
+The built-in `PandasPythonArrayAdapter` recognizes `DataFrame`, `Series`, `Index`,
+`ExtensionArray`, and their subclasses. Pandas → NumSharp uses the ordinary verbs:
+
+```csharp
+using NDArray view = series.AsNDArray(allowReadonly: true); // verified shared projection
+using NDArray copy = frame.ToNDArray();                     // owning C-contiguous snapshot
+
+NDArrayPythonInterop.RegisterCodec();
+using NDArray automatic = frame.As<NDArray>();              // Auto: view, then copy fallback
+```
+
+Pandas documents that `to_numpy(copy:false)` does not guarantee a view. View mode therefore checks
+that two independent official projections overlap before the existing bridge leases one. Homogeneous
+NumPy-backed frames, numeric Series/Indexes, and some extension arrays share; mixed numeric blocks,
+nullable arrays with missing values, categorical, and sparse arrays copy through Auto/Copy. Pandas 3
+usually exposes shared projections read-only, so direct view callers pass `allowReadonly:true` and
+receive a non-writeable `NDArray`. Object/string/datetime/timedelta outputs remain unsupported because
+NumSharp has no corresponding dtype. Axis labels are metadata and do not enter the value array.
+
+NumSharp → Pandas is the existing NumPy encoder; request Pandas `copy:false` when sharing is intended:
+
+```csharp
+NDArrayPythonInterop.RegisterCodec();
+scope.Set("values", nd);
+scope.Exec("series = pd.Series(values, copy=False)");
+```
+
+## Adapter-aware pythonnet codec
+
 After `NDArrayPythonInterop.RegisterCodec()`, pythonnet uses the same adapter registry implicitly:
 
 ```csharp
@@ -70,8 +101,9 @@ using NDArray b = (NDArray)tensor.AsManagedObject(typeof(NDArray));
 ```
 
 `NumpyCodecOptions.DecodeArrayAdapters` is on by default and independent of `DecodeAnyBuffer` and
-`DecodeArrayLike`. View permits only share-preserving adaptation; Copy permits detach/device transfer;
-Auto tries View and falls back to Copy.
+`DecodeArrayLike`. View permits only share-preserving adaptation; Copy permits library-specific
+materialization (including Pandas coercion or Torch detach/device transfer); Auto tries View and
+falls back to Copy.
 
 `nd.ToPython()` itself produces the bridge's NumPy view because pythonnet's encoder sees the managed
 source type, not the eventual Python library target. That is also why `torch.from_numpy(nd)` works:
@@ -124,7 +156,7 @@ using (Py.GIL())
 | `View` | Always share; **decline** the conversion (return no value) if a view is impossible — a loud failure for callers who depend on shared memory. |
 | `Copy` | Always an independent copy — no shared memory, no Py_buffer lock, total coverage. |
 
-Plus `DecodeArrayAdapters` (default `true`, including Torch), `DecodeAnyBuffer` (default `true`) and `DecodeArrayLike` (default `true` for numeric builtin containers). NumPy `ndarray` subclasses decode via an `__mro__` walk.
+Plus `DecodeArrayAdapters` (default `true`, including PyTorch and Pandas), `DecodeAnyBuffer` (default `true`) and `DecodeArrayLike` (default `true` for numeric builtin containers). NumPy `ndarray` subclasses decode via an `__mro__` walk.
 
 > **`Auto` decode shares memory.** Under the default, `pyObj.As<NDArray>()` on a contiguous/strided-numpy source is a zero-copy view: mutations flow both ways, read-only sources decode as non-writeable views, and the view holds a `Py_buffer` lock on the source (a `bytearray` cannot be resized while it lives). Use `DecodeMode = Copy` when you want a detached snapshot that never touches the Python object.
 

@@ -75,6 +75,8 @@
     href: interop/pythonnet-numpy.md
   - name: PyTorch
     href: interop/pytorch.md
+  - name: Pandas
+    href: interop/pandas.md
   - name: Any library via np.frombuffer
     href: interop/np-frombuffer.md
   - name: Numpy.NET

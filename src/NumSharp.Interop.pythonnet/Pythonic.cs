@@ -52,6 +52,13 @@ namespace NumSharp.Interop.PythonNet
         internal static PyObject asarray(PyObject obj)
             => PythonRuntimeInterop.NpAsarray.Invoke(obj);
 
+        /// <summary><c>np.shares_memory(a, b)</c> — exact overlap check for adapter view validation.</summary>
+        internal static bool shares_memory(PyObject a, PyObject b)
+        {
+            using PyObject result = PythonRuntimeInterop.NpSharesMemory.Invoke(a, b);
+            return result.As<bool>();
+        }
+
         /// <summary><c>np.lib</c> submodule namespace.</summary>
         internal static class lib
         {

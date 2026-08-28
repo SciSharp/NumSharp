@@ -186,7 +186,8 @@ namespace NumSharp.Interop.PythonNet
         // handler touch them). Losing racers dispose their instance immediately (safe under the
         // GIL); winners are owned by the session and swept by OnEngineShutdown.
 
-        private static PyObject _npEmpty, _npFrombuffer, _npArray, _npAsarray, _npAsStrided, _torchFromNumpy;
+        private static PyObject _npEmpty, _npFrombuffer, _npArray, _npAsarray, _npAsStrided,
+                                _npSharesMemory, _torchFromNumpy;
         private static PyObject _ctypesCCharMul, _weakrefFinalize, _builtinsMemoryview;
         private static PyObject _trueLiteral, _falseLiteral, _strC, _strB;
         private static PyObject _nameFromAddress, _nameReshape, _nameSetflags, _nameCast, _nameTobytes,
@@ -214,6 +215,11 @@ namespace NumSharp.Interop.PythonNet
             using var strideTricks = lib.GetAttr("stride_tricks");
             return strideTricks.GetAttr("as_strided");
         });
+
+        /// <summary>Cached <c>numpy.shares_memory</c>. Call under the GIL.</summary>
+        internal static PyObject NpSharesMemory => GetCached(
+            ref _npSharesMemory,
+            static () => Numpy.GetAttr("shares_memory"));
 
         /// <summary>
         ///     Cached bound <c>ctypes.c_char.__mul__</c> — computes the sized array type
@@ -301,6 +307,7 @@ namespace NumSharp.Interop.PythonNet
             DisposeModule(ref _npArray);
             DisposeModule(ref _npAsarray);
             DisposeModule(ref _npAsStrided);
+            DisposeModule(ref _npSharesMemory);
             DisposeModule(ref _torchFromNumpy);
             DisposeModule(ref _ctypesCCharMul);
             DisposeModule(ref _weakrefFinalize);

@@ -97,7 +97,8 @@ namespace NumSharp.Interop.PythonNet
         ///     <c>true</c> (default): objects recognized by the process-wide
         ///     <see cref="IPythonArrayAdapter"/> registry participate in implicit
         ///     <c>PyObject.As&lt;NDArray&gt;()</c> / <c>AsManagedObject(typeof(NDArray))</c> conversion.
-        ///     The built-in adapter covers <c>torch.Tensor</c> and its subclasses.
+        ///     Built-in adapters cover <c>torch.Tensor</c> and Pandas <c>DataFrame</c>, <c>Series</c>,
+        ///     <c>Index</c>, and <c>ExtensionArray</c> objects (including subclasses).
         ///     <c>false</c>: registered adapters are ignored by this codec; NumPy/buffer/builtin options
         ///     remain independent.
         /// </summary>
@@ -137,7 +138,8 @@ namespace NumSharp.Interop.PythonNet
     ///     pythonnet boundary — <c>nd.ToPython()</c>, <c>scope.Set("x", nd)</c>, passing an
     ///     <see cref="NDArray"/> to a Python callable, and <c>pyObj.As&lt;NDArray&gt;()</c> /
     ///     <c>AsManagedObject(typeof(NDArray))</c> on the way back. Registered adapters make the reverse
-    ///     path include library arrays such as <c>torch.Tensor</c> without duplicating memory code.
+    ///     path include library arrays such as <c>torch.Tensor</c> and Pandas containers without
+    ///     duplicating memory code.
     ///
     ///     <para>Encoding falls back to pythonnet's default CLR-object wrapping for arrays it cannot
     ///     express as numpy (<see cref="NPTypeCode.Decimal"/>), instead of failing the conversion.</para>

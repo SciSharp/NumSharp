@@ -11,8 +11,9 @@ namespace NumSharp.Interop.PythonNet
     ///     <para>Binds only to pythonnet's <see cref="PyObject"/> and Python memory protocols — NO
     ///     Numpy.NET dependency. PEP 3118 exporters (numpy, memoryview, array.array, bytes, PyArrow,
     ///     ...) enter directly; registered <see cref="IPythonArrayAdapter"/> instances expose library
-    ///     objects that lack a buffer, notably <c>torch.Tensor</c>, through their official shareable
-    ///     array adapter. Every source then follows the same pointer/layout/lifetime pipeline.</para>
+    ///     objects that lack a buffer, notably <c>torch.Tensor</c> and Pandas containers, through
+    ///     their official NumPy adapters. Every source then follows the same
+    ///     pointer/layout/lifetime pipeline.</para>
     ///
     ///     <para><b>The four verbs</b> (everything else is packaging over these):</para>
     ///     <list type="bullet">
@@ -167,7 +168,8 @@ namespace NumSharp.Interop.PythonNet
         ///     Convenience alias for <see cref="PythonArrayAdapterRegistry.Register"/>. Registers a
         ///     library-specific adapter that feeds the existing Python memory bridge. Registration is
         ///     process-wide, thread-safe and idempotent by <see cref="IPythonArrayAdapter.Name"/>. The
-        ///     built-in <see cref="TorchPythonArrayAdapter"/> is already registered.
+        ///     built-in <see cref="TorchPythonArrayAdapter"/> and
+        ///     <see cref="PandasPythonArrayAdapter"/> are already registered.
         /// </summary>
         /// <returns><c>true</c> when added; <c>false</c> when an adapter with the same name already exists.</returns>
         public static bool RegisterArrayAdapter(IPythonArrayAdapter adapter)

@@ -332,7 +332,8 @@ package's data protocol:
 | NumPy/SciPy/scikit-learn code accepting `ndarray` | `nd.ToNumpy()` | input view is zero-copy; the operation decides its output |
 | Buffer consumers such as `torch.frombuffer`, `pa.py_buffer`, `PIL.Image.frombuffer` | `nd.ToMemoryView()` | zero-copy for compatible contiguous CPU buffers |
 | PyTorch CPU tensors | built-in adapter → ordinary `AsNDArray` / `ToNDArray`; `TorchInterop` aliases remain | zero-copy view or explicit copy according to the ordinary bridge verb |
-| pandas/polars/OpenCV APIs accepting NumPy | pass `nd.ToNumpy()` | library may retain, view, or copy according to its own API |
+| Pandas `DataFrame` / `Series` / `Index` / extension arrays | built-in adapter → ordinary `AsNDArray` / `ToNDArray`; see the [Pandas page](pandas.md) | verified view or explicit/Auto copy according to Pandas storage |
+| polars/OpenCV APIs accepting NumPy | pass `nd.ToNumpy()` | library may retain, view, or copy according to its own API |
 | GPU/device arrays (PyTorch CUDA, CuPy, JAX, TensorFlow) | device-specific transfer or DLPack | NumSharp currently has no device-memory/DLPack object; a CPU crossing copies |
 
 See [Any library via `np.frombuffer`](np-frombuffer.md) for the PEP 3118 consumer route and
