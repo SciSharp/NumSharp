@@ -20,6 +20,7 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            [NDScoped] // reclaims the ToCommon cast temp and the pre-collapse complex w/v CollapseEig supersedes
             public static (NDArray eigenvalues, NDArray eigenvectors) eig(NDArray a)
             {
                 AssertStackedSquare(a);
@@ -34,6 +35,7 @@ namespace NumSharp
             /// </summary>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvals.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            [NDScoped] // reclaims the ToCommon cast temp and the pre-collapse complex eigenvalues
             public static NDArray eigvals(NDArray a)
             {
                 AssertStackedSquare(a);
@@ -99,6 +101,7 @@ namespace NumSharp
             /// </returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigh.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            [NDScoped] // reclaims the ToCommon cast temp; the tuple is yielded component-wise
             public static (NDArray eigenvalues, NDArray eigenvectors) eigh(NDArray a, char UPLO = 'L')
             {
                 char uplo = RequireUplo(UPLO);
@@ -111,6 +114,7 @@ namespace NumSharp
             ///     Eigenvalues of a real symmetric or complex Hermitian matrix, ascending.
             /// </summary>
             /// <inheritdoc cref="eigh"/>
+            [NDScoped] // reclaims the ToCommon cast temp (the discarded eigenvector slot is null here)
             public static NDArray eigvalsh(NDArray a, char UPLO = 'L')
             {
                 char uplo = RequireUplo(UPLO);

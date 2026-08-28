@@ -105,6 +105,7 @@ namespace NumSharp
             ///     The two-way choice for a three-matrix chain: <c>(AB)C</c> costs
             ///     <c>a0·a1·b1 + a0·b1·c1</c> and <c>A(BC)</c> costs <c>a1·b1·c1 + a0·a1·c1</c>.
             /// </summary>
+            [NDScopedCovered] // only caller: [NDScoped] multi_dot (the inner dot of the chosen parenthesisation is scope-reclaimed)
             private static NDArray ThreeInBestOrder(NDArray a, NDArray b, NDArray c)
             {
                 long a0 = a.Shape.dimensions[0];
@@ -157,6 +158,7 @@ namespace NumSharp
                 return split;
             }
 
+            [NDScopedCovered] // only caller: [NDScoped] multi_dot (every recursive partial product is scope-reclaimed)
             private static NDArray Chain(NDArray[] arrays, int[,] split, int i, int j)
                 => i == j
                     ? arrays[i]

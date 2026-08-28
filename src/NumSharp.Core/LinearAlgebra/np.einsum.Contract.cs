@@ -254,6 +254,7 @@ namespace NumSharp
         ///     then the contraction runs as one <see cref="matmul"/> (batched when there are shared
         ///     output indices) or, when nothing is contracted, one broadcast <see cref="multiply"/>.
         /// </summary>
+        [NDScopedCovered] // only reached from [NDScoped] EinsumContract's fold (superseded left/right/ab stages are scope-reclaimed)
         private static NDArray PairwiseContract(NDArray a, string aTerm, NDArray b, string bTerm,
             string outTerm, NPTypeCode computeType)
         {
@@ -406,6 +407,7 @@ namespace NumSharp
         ///     transposed to the output's order and reshaped with length-1 axes wherever it lacks an
         ///     output label, then a single broadcast <see cref="multiply"/> forms the result.
         /// </summary>
+        [NDScopedCovered] // only reached from PairwiseContract ← [NDScoped] EinsumContract (superseded left/right stages are scope-reclaimed)
         private static NDArray PureMultiplication(NDArray a, string aTerm, long[] shapeA,
             NDArray b, string bTerm, long[] shapeB, string outTerm, NPTypeCode computeType)
         {

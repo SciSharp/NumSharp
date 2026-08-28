@@ -248,6 +248,7 @@ namespace NumSharp.Backends
         //  occur, and Single is computed in double exactly as NumPy's lite wrapper does.
         // ----------------------------------------------------------------------------------------
 
+        [NDScoped] // reclaims the Single branch's double-bridge astype temps (up-cast operand + pre-narrow result)
         internal static NDArray Det(NDArray a)
         {
             switch (a.typecode)
@@ -264,6 +265,7 @@ namespace NumSharp.Backends
             }
         }
 
+        [NDScoped] // reclaims the Single branch's double-bridge astype temps; the (sign, logabsdet) tuple is yielded
         internal static (NDArray sign, NDArray logabsdet) Slogdet(NDArray a)
         {
             switch (a.typecode)
@@ -289,6 +291,7 @@ namespace NumSharp.Backends
             }
         }
 
+        [NDScoped] // reclaims the Single branch's double-bridge astype temps
         internal static NDArray Inv(NDArray a)
         {
             switch (a.typecode)
@@ -304,6 +307,7 @@ namespace NumSharp.Backends
             }
         }
 
+        [NDScoped] // reclaims the Single branch's double-bridge astype temps (both operands + pre-narrow result)
         internal static NDArray Solve(NDArray a, NDArray b, bool oneDimensionalRhs)
         {
             switch (a.typecode)

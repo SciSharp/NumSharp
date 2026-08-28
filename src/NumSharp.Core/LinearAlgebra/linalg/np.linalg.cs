@@ -176,6 +176,7 @@ namespace NumSharp
             ///     root rounds, so a Frobenius norm built that way drifts from NumPy's. For every
             ///     real dtype this is the ordinary square.
             /// </remarks>
+            [NDScopedCovered] // only callers: the norm helpers, themselves covered under the [NDScoped] norm entries
             internal static NDArray AbsSquared(NDArray x)
             {
                 if (x.typecode != NPTypeCode.Complex)

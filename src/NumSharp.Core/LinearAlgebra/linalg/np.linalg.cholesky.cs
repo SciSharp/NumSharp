@@ -24,6 +24,7 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            [NDScoped] // reclaims the ToCommon cast temp
             public static NDArray cholesky(NDArray a, bool upper = false)
             {
                 AssertStackedSquare(a);

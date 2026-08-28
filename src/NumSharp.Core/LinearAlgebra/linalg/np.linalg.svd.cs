@@ -28,6 +28,7 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            [NDScoped] // reclaims the ToCommon cast temp; the (U, S, Vh) tuple is yielded component-wise
             public static (NDArray U, NDArray S, NDArray Vh) svd(NDArray a, bool full_matrices = true,
                 bool compute_uv = true, bool hermitian = false)
             {
@@ -42,6 +43,7 @@ namespace NumSharp
             /// </summary>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.svdvals.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            [NDScoped] // reclaims the ToCommon cast temp (U/Vh are null under compute_uv: false)
             public static NDArray svdvals(NDArray x)
             {
                 AssertStacked2d(x);
@@ -194,6 +196,7 @@ namespace NumSharp
             ///     NaN only arises here from a <c>0/0</c> (an all-zero matrix), which is infinitely
             ///     ill-conditioned.
             /// </summary>
+            [NDScopedCovered] // only caller: [NDScoped] cond (the isnan/logical/inf-scalar temps are scope-reclaimed)
             private static NDArray CondNanToInf(NDArray r, NDArray x)
             {
                 var nanMask = np.isnan(r);

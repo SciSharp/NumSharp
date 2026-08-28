@@ -12,6 +12,7 @@ namespace NumSharp
         /// <param name="p">Rank-1 array of polynomial coefficients.</param>
         /// <returns>The roots — the eigenvalues of the companion matrix.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.roots.html</remarks>
+        [NDScoped] // reclaims the ravel/nonzero/strip/astype chain and the companion-matrix + eigvals intermediates
         public static NDArray roots(NDArray p)
         {
             p = np.atleast_1d(p);

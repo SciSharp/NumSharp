@@ -56,6 +56,7 @@ namespace NumSharp
         ///     <c>np.vdot</c> — both operands flattened to 1-D, <paramref name="a"/> conjugated when
         ///     complex, then a vector dot product. Always 0-d.
         /// </summary>
+        [NDScoped] // engine boundary (also called directly, not only via np.vdot): the ravel/reshape/conjugate temps are reclaimed
         public virtual NDArray Vdot(NDArray a, NDArray b)
         {
             var blas = Blas;
@@ -76,6 +77,7 @@ namespace NumSharp
         ///     The <c>np.vecdot</c> gufunc <c>(n),(n)->()</c> — <paramref name="x1"/> conjugated when
         ///     complex. Operands arrive validated; leading axes broadcast.
         /// </summary>
+        [NDScoped] // engine boundary: the conjugate + elementwise product feeding the reduction are reclaimed
         public virtual NDArray Vecdot(NDArray x1, NDArray x2)
         {
             var blas = Blas;
@@ -91,6 +93,7 @@ namespace NumSharp
         /// <summary>
         ///     The <c>np.matvec</c> gufunc <c>(m,n),(n)->(m)</c> — NumPy's <c>gemv</c> route.
         /// </summary>
+        [NDScoped] // engine boundary: the column-promoted operand and the pre-DropAxis product are reclaimed
         public virtual NDArray Matvec(NDArray x1, NDArray x2)
         {
             var blas = Blas;
@@ -107,6 +110,7 @@ namespace NumSharp
         ///     The <c>np.vecmat</c> gufunc <c>(n),(n,m)->(m)</c> — <paramref name="x1"/> conjugated
         ///     when complex.
         /// </summary>
+        [NDScoped] // engine boundary: the conjugate/expand_dims operand and the pre-DropAxis product are reclaimed
         public virtual NDArray Vecmat(NDArray x1, NDArray x2)
         {
             var blas = Blas;

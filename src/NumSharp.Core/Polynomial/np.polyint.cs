@@ -56,6 +56,7 @@ namespace NumSharp
         }
 
         /// <summary>Convenience overload — <c>polyint</c> with a single scalar integration constant.</summary>
+        [NDScoped] // the 0-d k wrapper is built in THIS frame, before the main overload's scope opens
         public static NDArray polyint(NDArray p, int m, double k)
             => polyint(p, m, NDArray.Scalar(k));
     }

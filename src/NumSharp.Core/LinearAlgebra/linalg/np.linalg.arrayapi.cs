@@ -105,6 +105,7 @@ namespace NumSharp
             ///     separate <c>axisa</c>/<c>axisb</c>/<c>axisc</c> per operand.
             ///     </para>
             /// </remarks>
+            [NDScoped] // reclaims the moveaxis views, the six component products and the pre-moveaxis stack
             public static NDArray cross(NDArray x1, NDArray x2, int axis = -1)
             {
                 int a1 = NormalizeAxis(axis, x1.ndim);

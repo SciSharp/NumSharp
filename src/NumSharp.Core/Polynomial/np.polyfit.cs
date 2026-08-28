@@ -23,6 +23,7 @@ namespace NumSharp
         ///     for the <c>full</c> five-tuple or the <c>cov</c> two-tuple.
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html</remarks>
+        [NDScoped] // PolyfitResult is an INDArrayCarrier: the outputs it carries are yielded, every float-cast/vander/scale/cov temp is reclaimed
         public static PolyfitResult polyfit(NDArray x, NDArray y, int deg, double? rcond = null,
             bool full = false, NDArray w = null, object cov = null)
         {

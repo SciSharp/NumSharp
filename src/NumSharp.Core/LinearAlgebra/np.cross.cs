@@ -118,6 +118,7 @@ namespace NumSharp
         ///     NOT <c>np.stack</c>, whose <c>atleast_1d</c> would turn 0-d components into <c>(3,1)</c>)
         ///     and then moved to <paramref name="axisc"/>.
         /// </summary>
+        [NDScopedCovered] // only caller: [NDScoped] np.cross (the expand_dims wrappers + pre-moveaxis stack are scope-reclaimed)
         private static NDArray StackCross(NDArray cp0, NDArray cp1, NDArray cp2, int axisc)
         {
             int outNdim = cp0.ndim + 1;                         // len(broadcast_shape + (3,))
