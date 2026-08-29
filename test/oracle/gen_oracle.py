@@ -315,6 +315,55 @@ def gen_binary(ops, dt_pairs, pair_layout_names):
     return cases
 
 
+# np.interp(x, xp, fp, left, right, period) — 1-D linear interpolation. Bit-exact with NumPy
+# (managed binary_search_with_guess + slope port). Operands [x, xp, fp]; params carry left/right/period.
+def gen_interp():
+    cases = []
+    n = [0]
+
+    def emit(x, xp, fp, params, cid, layout="c_contiguous_1d"):
+        kwargs = {k: params[k] for k in ("left", "right", "period") if k in params}
+        try:
+            r = np.asarray(np.interp(x, xp, fp, **kwargs))
+        except Exception:
+            return
+        # asarray (not ascontiguousarray) so a 0-D x stays 0-D — ascontiguousarray min-1-D-promotes it.
+        def _cc(a):
+            a = np.asarray(a)
+            return a if a.flags["C_CONTIGUOUS"] else np.ascontiguousarray(a)
+        xa = _cc(x); xpa = _cc(xp); fpa = _cc(fp)
+        cases.append({
+            "id": f"interp/{cid}/{n[0]}",
+            "op": "interp",
+            "params": params,
+            "operands": [describe(xa, xa), describe(xpa, xpa), describe(fpa, fpa)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": layout,
+            "valueclass": "mixed",
+        })
+        n[0] += 1
+
+    xp = np.array([1., 2., 3.], np.float64)
+    fp = np.array([3., 2., 0.], np.float64)
+    xq = np.array([0., 1., 1.5, 2.72, 3.14], np.float64)
+    emit(xq, xp, fp, {}, "basic")
+    emit(np.array([-1., 5.]), xp, fp, {"left": -100.0, "right": 99.0}, "leftright")
+    emit(np.array([-1., 5.]), xp, fp, {"left": -100.0}, "leftonly")
+    emit(np.array([np.nan, 2.5, np.inf, -np.inf]), xp, fp, {}, "nan_inf_x")
+    emit(np.array([0., 2., 5.]), np.array([2.]), np.array([9.]), {}, "single_point")
+    emit(np.array([-180., -170., -185., 185., -10., -5., 0., 365.]),
+         np.array([190., -190., 350., -350.]), np.array([5., 10., 3., 4.]), {"period": 360.0}, "period")
+    emit(np.linspace(0., 10., 25), np.arange(11.), np.sin(np.arange(11.)), {}, "sine")
+    emit(np.asarray(2.5), xp, fp, {}, "scalar0d")
+    emit(np.array([[0.5, 2.5], [1.5, 3.5]]), xp, fp, {}, "highdim_2d", "c_contiguous_2d")
+    emit(np.array([2], np.int64), np.array([1, 2, 3], np.int64), np.array([30, 20, 0], np.int64), {}, "int_inputs")
+    emit(np.array([1.5, 4.0]), np.array([2., 3., 5.]), np.array([1j, 0, 2 + 3j]), {}, "complex_fp")
+    emit(np.array([1.5, 2.5]), xp, np.array([np.inf, 0., np.inf]), {}, "inf_fp")
+    emit(np.array([1.5]), np.array([1., 1., 2.]), np.array([10., 20., 30.]), {}, "equal_dx")
+    return cases
+
+
 # T12 — statistics. NumPy is the oracle for value, dtype (median/average/percentile/quantile ->
 # float64; ptp preserves; count_nonzero -> int64), and keepdims shape.
 STAT_REDUCE_OPS = {
@@ -650,6 +699,12 @@ ARCTAN2_PAIRS = [
     ("float32", "float32"), ("float64", "float64"), ("float16", "float16"),
     ("int32", "int32"), ("int32", "float64"), ("uint8", "int8"), ("float32", "float64"),
 ]
+
+# logaddexp / logaddexp2 / nextafter: binary float-tier ufuncs with arctan2's promotion
+# (ee->e, ff->f, dd->d, gg->g). nextafter is bit-exact; logaddexp/logaddexp2 diverge <=2 ULP
+# (managed fdlibm log1p vs NumPy's closed ucrtbase log1p) — excused in MisalignedRegistry.
+LOGADDEXP_OPS = {"logaddexp": np.logaddexp, "logaddexp2": np.logaddexp2}
+NEXTAFTER_OP = {"nextafter": np.nextafter}
 
 
 # np.place(arr, mask, vals) mutates arr in-place where mask is True, cycling through vals.
@@ -7259,6 +7314,7 @@ def main():
         cases += gen_count_nonzero(CNZ_DTYPES, STAT_LAYOUTS)
         cases += gen_quantile(QUANTILE_SPECS, STAT_DTYPES, STAT_LAYOUTS)
         cases += gen_clip(CLIP_DTYPES, STAT_LAYOUTS)
+        cases += gen_interp()                                  # np.interp (1-D linear interpolation)
         cases += char_tier("stat")
         write_jsonl(os.path.join(corpus_dir, "stat.jsonl"), cases)
     elif mode == "logic":
@@ -7267,6 +7323,8 @@ def main():
         cases += gen_binary(LOGICAL_BIN_OPS, LOGICAL_PAIRS, list(PAIR_LAYOUTS.keys()))   # Group A B1
         cases += gen_unary(LOGICAL_NOT_OP, ALL_DTYPES, list(LAYOUTS.keys()))             # Group A B1
         cases += gen_binary(ARCTAN2_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # Group A B1
+        cases += gen_binary(LOGADDEXP_OPS, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))      # logaddexp/logaddexp2
+        cases += gen_binary(NEXTAFTER_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))       # nextafter (bit-exact)
         cases += gen_binary(ALLCLOSE_OPS, ALLCLOSE_PAIRS, list(PAIR_LAYOUTS.keys()))     # Group A B3
         cases += gen_unary(ISCOMPLEX_OPS, ISCOMPLEX_DTYPES, ISCOMPLEX_LAYOUTS)           # G5
         cases += char_tier("logic")                                                       # G9

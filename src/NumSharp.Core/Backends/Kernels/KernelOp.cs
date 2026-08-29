@@ -31,7 +31,15 @@ namespace NumSharp.Backends.Kernels
         /// <summary>Element-wise maximum, NaN-ignoring (np.fmax): returns the non-NaN operand.</summary>
         FMax,
         /// <summary>Element-wise minimum, NaN-ignoring (np.fmin): returns the non-NaN operand.</summary>
-        FMin
+        FMin,
+        // Log-sum-exp + IEEE step (np.logaddexp/logaddexp2/nextafter) — float-tier binary ufuncs,
+        // same promotion as ATan2. Scalar-only (no Vector op); routed to NDLogAddExpMath helpers.
+        /// <summary>log(exp(x1)+exp(x2)) computed stably (np.logaddexp).</summary>
+        LogAddExp,
+        /// <summary>log2(2**x1 + 2**x2) computed stably (np.logaddexp2).</summary>
+        LogAddExp2,
+        /// <summary>Next representable value after x1 toward x2 (np.nextafter).</summary>
+        NextAfter
     }
 
     /// <summary>

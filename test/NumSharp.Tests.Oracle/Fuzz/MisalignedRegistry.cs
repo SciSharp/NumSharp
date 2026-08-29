@@ -147,6 +147,16 @@ namespace NumSharp.Tests.Fuzz
                 return "corrcoef(complex): normalization inherits npy_cdivide vs System.Numerics "
                      + "rounding (bounded <=2 ULP) [documented]";
 
+            // logaddexp / logaddexp2: log(exp(x1)+exp(x2)) / log2(2**x1+2**x2). Math.Exp / double.Exp2
+            // / MathF.Exp are bit-identical to NumPy's ucrtbase exp/exp2/expf, but the compound uses
+            // log1p, and NumPy's ucrtbase log1p is CLOSED — the managed fdlibm port agrees to <=1 ULP
+            // (5% of log1p evaluations differ by 1). So logaddexp is <=1 ULP, logaddexp2 <=2 ULP (the
+            // LOG2E * log1p product), float16 via float32 <=2. nextafter is NOT here (bit-exact via
+            // BitIncrement/BitDecrement). Bounded per-element; a gross error still fails.
+            if (kind == DivergenceKind.Value && (c.Op == "logaddexp" || c.Op == "logaddexp2")
+                && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
+                return "logaddexp/logaddexp2: managed fdlibm log1p <=2 ULP vs NumPy's closed ucrtbase log1p [documented]";
+
             // (F1) np.fft over a float32/float16 input. NumSharp has ONE complex type (complex128) and
             //      no complex64, so it returns complex128 (fft/rfft/ihfft/the N-D forms) or float64
             //      (irfft/hfft) where NumPy 2.x returns complex64 / float32 / float16. A dtype-ONLY

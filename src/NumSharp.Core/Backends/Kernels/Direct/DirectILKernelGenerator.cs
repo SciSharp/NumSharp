@@ -302,6 +302,26 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo MathAtan2 = typeof(Math).GetMethod(nameof(Math.Atan2), new[] { typeof(double), typeof(double) })
                 ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Atan2));
 
+            // np.logaddexp / np.logaddexp2 / np.nextafter scalar kernels — one static helper per
+            // (op, loop dtype). Operands reach EmitScalarOperation already in the loop dtype, so the
+            // kernel is a single Call to the matching signature (double/float/Half/decimal). See
+            // NDLogAddExpMath.
+            private static MethodInfo LA(string name, Type t) =>
+                typeof(Utilities.NDLogAddExpMath).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic, null, new[] { t, t }, null)
+                ?? throw new MissingMethodException(typeof(Utilities.NDLogAddExpMath).FullName, name);
+            public static readonly MethodInfo LogAddExpD = LA(nameof(Utilities.NDLogAddExpMath.LogAddExp), typeof(double));
+            public static readonly MethodInfo LogAddExpF = LA(nameof(Utilities.NDLogAddExpMath.LogAddExpF), typeof(float));
+            public static readonly MethodInfo LogAddExpH = LA(nameof(Utilities.NDLogAddExpMath.LogAddExpHalf), typeof(Half));
+            public static readonly MethodInfo LogAddExpDec = LA(nameof(Utilities.NDLogAddExpMath.LogAddExpDecimal), typeof(decimal));
+            public static readonly MethodInfo LogAddExp2D = LA(nameof(Utilities.NDLogAddExpMath.LogAddExp2), typeof(double));
+            public static readonly MethodInfo LogAddExp2F = LA(nameof(Utilities.NDLogAddExpMath.LogAddExp2F), typeof(float));
+            public static readonly MethodInfo LogAddExp2H = LA(nameof(Utilities.NDLogAddExpMath.LogAddExp2Half), typeof(Half));
+            public static readonly MethodInfo LogAddExp2Dec = LA(nameof(Utilities.NDLogAddExpMath.LogAddExp2Decimal), typeof(decimal));
+            public static readonly MethodInfo NextAfterD = LA(nameof(Utilities.NDLogAddExpMath.NextAfter), typeof(double));
+            public static readonly MethodInfo NextAfterF = LA(nameof(Utilities.NDLogAddExpMath.NextAfterF), typeof(float));
+            public static readonly MethodInfo NextAfterH = LA(nameof(Utilities.NDLogAddExpMath.NextAfterHalf), typeof(Half));
+            public static readonly MethodInfo NextAfterDec = LA(nameof(Utilities.NDLogAddExpMath.NextAfterDecimal), typeof(decimal));
+
             // Integer power helpers (squared-exponentiation with native wrapping).
             // Used by EmitPowerOperation when result type is integer to preserve
             // NumPy's exact-wrap semantics that Math.Pow's double round-trip loses.
@@ -509,6 +529,22 @@ namespace NumSharp.Backends.Kernels
                 .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(double) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(Half));
             public static readonly MethodInfo DoubleToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(double));
+            // Half <-> float (F16C-lowered by the JIT: [Intrinsic] op_Explicit → vcvtph2ps / vcvtps2ph).
+            // These are the fast, NumPy-HALF-loop-matching conversions: NumPy's npy_half loops widen
+            // to float32 (npy_half_to_float), compute the CRT float function, and round back
+            // (npy_float_to_half) — see EmitUnaryHalfViaFloat. The double bridge above is 2 conversions
+            // deep (Half→float→double) and drags in the slower double math functions.
+            public static readonly MethodInfo HalfToFloat = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(float) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(Half));
+            public static readonly MethodInfo FloatToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(float));
+            // float.Exp2 == the CRT exp2f NumPy's HALF_exp2 loop calls (npy_exp2f). Used ONLY on the
+            // Half path: it is the correctly-rounded software 2^x, byte-identical to NumPy's half loop
+            // (finite AND NaN payload). The float32-array path uses NDFloatMath.Exp2 (the fast SIMD
+            // ≤1-ULP kernel) instead — but that kernel's scalar entry is far slower here than float.Exp2
+            // and blanks the NaN payload, so the half loop deliberately keeps the CRT.
+            public static readonly MethodInfo SingleExp2Crt = typeof(float).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(float).FullName, "Exp2(float)");
             public static readonly MethodInfo HalfIsNaN = typeof(Half).GetMethod("IsNaN", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "IsNaN");
 
@@ -704,8 +740,6 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Sin");
             public static readonly MethodInfo HalfCos = typeof(Half).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Cos");
-            public static readonly MethodInfo HalfTan = typeof(Half).GetMethod("Tan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Tan");
             public static readonly MethodInfo HalfExp = typeof(Half).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Exp");
             public static readonly MethodInfo HalfLog = typeof(Half).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
@@ -718,24 +752,12 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Truncate");
             public static readonly MethodInfo HalfAbs = typeof(Half).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Abs");
-            public static readonly MethodInfo HalfLog10 = typeof(Half).GetMethod("Log10", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Log10");
-            public static readonly MethodInfo HalfLog2 = typeof(Half).GetMethod("Log2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Log2");
-            public static readonly MethodInfo HalfCbrt = typeof(Half).GetMethod("Cbrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Cbrt");
-            public static readonly MethodInfo HalfExp2 = typeof(Half).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Exp2");
-            // Inverse hyperbolic: Half.Asinh/Acosh/Atanh (IHyperbolicFunctions<Half>) internally
-            // compute in float32 — byte-IDENTICAL to NumPy's float16 loop (astype 'e'->'f', i.e.
-            // (Half)asinhf((float)h); verified 0 finite-diffs over all 65536 f16 values) AND faster
-            // than the Half->double->Math.X->Half bridge the rest of the arc-trig f16 tier still uses.
-            public static readonly MethodInfo HalfAsinh = typeof(Half).GetMethod("Asinh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Asinh");
-            public static readonly MethodInfo HalfAcosh = typeof(Half).GetMethod("Acosh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Acosh");
-            public static readonly MethodInfo HalfAtanh = typeof(Half).GetMethod("Atanh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Atanh");
+            // Sinh/Cosh/Tanh/ASin/ACos/ATan/Asinh/Acosh/Atanh/Tan/Cbrt/Log2/Log10/Exp2/Reciprocal/
+            // Square on Half now take the float32 fast path (EmitUnaryHalfViaFloat: `(Half)Xf((float)h)`,
+            // the F16C round-trip that mirrors NumPy's npy_half loop) rather than a BCL Half.* call or
+            // the double bridge — so the corresponding Half.* MethodInfos (HalfTan/Log10/Log2/Cbrt/Exp2/
+            // Asinh/Acosh/Atanh) were removed. Only the ops still on a dedicated Half path keep a cached
+            // method (Sqrt/Sin/Cos/Exp/Log/Floor/Ceiling/Truncate/Abs/Negate above).
             // Note: .NET's Half exposes log1p as LogP1 and expm1 as ExpM1 (IFloatingPointIeee754<Half>).
             // Half.LogP1/ExpM1 lose subnormal precision because internally they compute (1 + x) in
             // Half, which rounds x < Half.Epsilon (≈ 2^-11) to 0. NumPy promotes to a higher-precision
@@ -1281,6 +1303,17 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // np.logaddexp / np.logaddexp2 / np.nextafter — one static helper per (op, loop dtype).
+            // Operands arrive already in resultType (the generic binary loops converted both), and
+            // each helper is signatured (resultType, resultType) -> resultType, so the whole scalar
+            // op is a single Call. Intercept BEFORE the decimal/half routing (like min/max) so those
+            // dtypes flow through the shared helpers rather than EmitDecimal/HalfOperation.
+            if (op == BinaryOp.LogAddExp || op == BinaryOp.LogAddExp2 || op == BinaryOp.NextAfter)
+            {
+                il.EmitCall(OpCodes.Call, ResolveLogAddNextHelper(op, resultType), null);
+                return;
+            }
+
             // Special handling for decimal (uses operator methods)
             if (resultType == NPTypeCode.Decimal)
             {
@@ -1542,6 +1575,42 @@ namespace NumSharp.Backends.Kernels
             }
             // Boolean (or any other) result reaching here: fall back to plain remainder.
             il.Emit(IsUnsigned(resultType) ? OpCodes.Rem_Un : OpCodes.Rem);
+        }
+
+        /// <summary>
+        /// Resolve the (op, loop-dtype) static kernel for np.logaddexp / np.logaddexp2 / np.nextafter.
+        /// Every loop dtype resolves to Half / Single / Double / Decimal (float-tier promotion, same
+        /// as ATan2), so exactly one of four signatures applies per op.
+        /// </summary>
+        private static MethodInfo ResolveLogAddNextHelper(BinaryOp op, NPTypeCode resultType)
+        {
+            switch (op)
+            {
+                case BinaryOp.LogAddExp:
+                    return resultType switch
+                    {
+                        NPTypeCode.Half => CachedMethods.LogAddExpH,
+                        NPTypeCode.Single => CachedMethods.LogAddExpF,
+                        NPTypeCode.Decimal => CachedMethods.LogAddExpDec,
+                        _ => CachedMethods.LogAddExpD,
+                    };
+                case BinaryOp.LogAddExp2:
+                    return resultType switch
+                    {
+                        NPTypeCode.Half => CachedMethods.LogAddExp2H,
+                        NPTypeCode.Single => CachedMethods.LogAddExp2F,
+                        NPTypeCode.Decimal => CachedMethods.LogAddExp2Dec,
+                        _ => CachedMethods.LogAddExp2D,
+                    };
+                default: // BinaryOp.NextAfter
+                    return resultType switch
+                    {
+                        NPTypeCode.Half => CachedMethods.NextAfterH,
+                        NPTypeCode.Single => CachedMethods.NextAfterF,
+                        NPTypeCode.Decimal => CachedMethods.NextAfterDec,
+                        _ => CachedMethods.NextAfterD,
+                    };
+            }
         }
 
         /// <summary>

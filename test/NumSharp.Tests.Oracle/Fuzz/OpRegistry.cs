@@ -170,6 +170,13 @@ namespace NumSharp.Tests.Fuzz
                 case "quantile": return np.quantile(ops[0], p["q"].GetDouble(), ParseAxis(p),
                     keepdims: ParseKeepdims(p));
                 case "clip": return np.clip(ops[0], ops[1], ops[2]);
+                case "interp":
+                {
+                    double? left = p.TryGetValue("left", out var pil) ? pil.GetDouble() : (double?)null;
+                    double? right = p.TryGetValue("right", out var pir) ? pir.GetDouble() : (double?)null;
+                    double? period = p.TryGetValue("period", out var pip2) ? pip2.GetDouble() : (double?)null;
+                    return np.interp(ops[0], ops[1], ops[2], left, right, period);
+                }
 
                 // Logic & element-wise extrema (T13).
                 case "isnan": return np.isnan(ops[0]);
@@ -187,6 +194,9 @@ namespace NumSharp.Tests.Fuzz
                 case "logical_xor": return np.logical_xor(ops[0], ops[1]);
                 case "logical_not": return np.logical_not(ops[0]);
                 case "arctan2": return np.arctan2(ops[0], ops[1]);
+                case "logaddexp": return np.logaddexp(ops[0], ops[1]);
+                case "logaddexp2": return np.logaddexp2(ops[0], ops[1]);
+                case "nextafter": return np.nextafter(ops[0], ops[1]);
 
                 // Group A Batch 3: predicates + whole-array bool reductions (wrapped to 0-D bool).
                 case "iscomplex": return np.iscomplex(ops[0]);
