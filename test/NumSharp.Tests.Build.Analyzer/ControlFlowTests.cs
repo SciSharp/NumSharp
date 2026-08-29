@@ -29,6 +29,12 @@ namespace NumSharp.Tests.Build.Analyzer
             FixtureFacts.AnyStartsWith(flagged, "var t = n switch { 0 => a + b, _ => c - d };", "a dropped both-owning switch expression");
             FixtureFacts.AnyStartsWith(flagged, "var t = (a + b) ?? (c - d);", "a dropped both-owning coalesce");
             FixtureFacts.AnyStartsWith(flagged, "_ = p ? a + b : c - d;", "a discarded both-owning ternary");
+            // throw branches are vacuous for the every-branch rule
+            FixtureFacts.AnyStartsWith(flagged, "var x = p ? a + b : throw", "a dropped produce-or-throw ternary");
+            FixtureFacts.AnyStartsWith(flagged, "var t = n switch { 0 => a + b, _ => throw", "a dropped switch with a throw arm");
+            // both the seed and the += result die unread
+            FixtureFacts.AnyStartsWith(flagged, "var t = a + b;                                      // [NDW012]  seed",
+                "a compound-assigned local, dropped");
         }
 
         [TestMethod]
@@ -45,6 +51,14 @@ namespace NumSharp.Tests.Build.Analyzer
             FixtureFacts.NoneContains(flagged, "var t = p ? a + b : a;", "a dropped MIXED ternary (alias branch)");
             FixtureFacts.NoneContains(flagged, "var t = n switch { 0 => a + b, _ => a };", "a dropped MIXED switch expression");
             FixtureFacts.NoneContains(flagged, "return t;", "a returned conditional result");
+            // an alias completing branch beside a throw stays conservative
+            FixtureFacts.NoneContains(flagged, "var t = p ? a : throw", "an alias-or-throw ternary");
+            // every reclaim spelling counts
+            FixtureFacts.NoneContains(flagged, "t?.Dispose();", "a conditional dispose");
+            FixtureFacts.NoneContains(flagged, "((System.IDisposable)t).Dispose();", "a dispose through an interface cast");
+            FixtureFacts.NoneContains(flagged, "catch { t.Dispose(); }", "a catch-only dispose (path-insensitive)");
+            FixtureFacts.NoneContains(flagged, "using ((System.IDisposable)(a + b))", "a using on a cast bare expression");
+            FixtureFacts.NoneContains(flagged, "t += c;\n            return t;", "a compound-assigned local that is returned");
         }
     }
 }

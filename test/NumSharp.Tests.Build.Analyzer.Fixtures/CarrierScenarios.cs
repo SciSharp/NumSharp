@@ -69,6 +69,28 @@ namespace NumSharp.Tests.Build.Analyzer.Fixtures
             return q.copy();
         }
 
+        // Deconstruction into EXISTING locals is the same contract — the target mention is a WRITE,
+        // not a use, so the unused side still leaks (reported on the declaration).
+        public static NDArray DeconstructIntoExistingUnusedSide(NDArray a)
+        {
+            NDArray q, r;                                   // [NDW012]  r is assigned but never used
+            (q, r) = SplitTuple(a);
+            return q.copy();
+        }
+
+        // The C# 12 collection-expression spelling of an array literal follows the same any-element rule.
+        public static void DroppedCollectionExpression(NDArray a)
+        {
+            NDArray[] g = [a + 1.0];                        // [NDW012]  a collection expression of a temp, dropped
+        }
+
+        // A temp INSIDE an array handed to a non-consuming NumSharp op leaks exactly like a bare temp
+        // handed to one — np.concatenate reads its inputs and never disposes them (R2).
+        public static NDArray TempArrayIntoNumSharpOp(NDArray a, NDArray c)
+        {
+            return np.concatenate(new[] { a + 1.0, c }, 0); // [NDW012]  the a+1.0 element is stranded
+        }
+
         // ----------------------------------------------------------------- MUST stay clean
         public static (NDArray, NDArray) ReturnedTuple(NDArray a)
         {
@@ -117,6 +139,40 @@ namespace NumSharp.Tests.Build.Analyzer.Fixtures
         {
             var g = new[] { a + 1.0 };
             _cache = g;
+        }
+
+        // Deconstruction into existing locals with BOTH sides used stays clean.
+        public static NDArray DeconstructIntoExistingBothUsed(NDArray a)
+        {
+            NDArray q, r;
+            (q, r) = SplitTuple(a);
+            r.Dispose();
+            return q.copy();
+        }
+
+        // Collection-expression twins of the alias/escape rules.
+        public static void CollectionExpressionOfAliases(NDArray a, NDArray b)
+        {
+            NDArray[] g = [a, b];
+        }
+
+        public static NDArray[] CollectionExpressionReturned(NDArray a)
+        {
+            NDArray[] g = [a + 1.0];
+            return g;
+        }
+
+        // An alias-only array into a NumSharp op owns nothing — silent.
+        public static NDArray AliasArrayIntoNumSharpOp(NDArray a, NDArray c)
+        {
+            return np.concatenate(new[] { a, c }, 0);
+        }
+
+        // Enumerating a produced array is CONSUMPTION — the loop owns each element's fate, which the
+        // per-method analysis cannot judge, so foreach collections are conservatively clean.
+        public static void ForeachOverProduced(NDArray a)
+        {
+            foreach (var x in SplitArray(a)) { }
         }
 
         [NDScoped]

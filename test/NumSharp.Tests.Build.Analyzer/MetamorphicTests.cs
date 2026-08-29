@@ -87,5 +87,28 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(1, await Leaks("  public static void M(bool p, NDArray a, NDArray b, NDArray c, NDArray d) { var t = p ? a + b : c - d; }"));
             Assert.AreEqual(0, await Leaks("  public static void M(bool p, NDArray a, NDArray b) { var t = p ? a + b : a; }"));
         }
+
+        [TestMethod]
+        public async Task CastDispose_FlipsDeadLocalClean()
+        {
+            // The SAME dead local; the only delta is a Dispose through an interface cast.
+            Assert.AreEqual(1, await Leaks("  public static void M(NDArray a, NDArray b) { var t = a + b; }"));
+            Assert.AreEqual(0, await Leaks("  public static void M(NDArray a, NDArray b) { var t = a + b; ((System.IDisposable)t).Dispose(); }"));
+        }
+
+        [TestMethod]
+        public async Task Return_FlipsDroppedCollectionExpressionClean()
+        {
+            Assert.AreEqual(1, await Leaks("  public static void M(NDArray a, NDArray b) { NDArray[] g = [a + b]; }"));
+            Assert.AreEqual(0, await Leaks("  public static NDArray[] M(NDArray a, NDArray b) { NDArray[] g = [a + b]; return g; }"));
+        }
+
+        [TestMethod]
+        public async Task AliasCompletingBranch_FlipsThrowTernaryClean()
+        {
+            // The SAME produce-or-throw ternary; the only delta is the completing branch aliasing.
+            Assert.AreEqual(1, await Leaks("  public static void M(bool p, NDArray a, NDArray b) { var t = p ? a + b : throw new System.Exception(); }"));
+            Assert.AreEqual(0, await Leaks("  public static void M(bool p, NDArray a) { var t = p ? a : throw new System.Exception(); }"));
+        }
     }
 }

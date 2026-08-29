@@ -56,5 +56,14 @@ namespace NumSharp.Tests.Build.Analyzer.Fixtures
             var t = a + b;
             NDScope.Detach(t);
         }
+
+        // A local function is part of the OUTER method's operation tree, so a dispose inside it
+        // reclaims the outer temp (the mirror of SC-4, where a local function's OWN leak is caught).
+        public static void DisposedInsideLocalFunction(NDArray a, NDArray b)
+        {
+            var t = a + b;
+            void Clean() { t.Dispose(); }
+            Clean();
+        }
     }
 }

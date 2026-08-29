@@ -125,5 +125,72 @@ namespace NumSharp.Tests.Build.Analyzer.Fixtures
             var t = p ? a + b : c - d;
             return t;
         }
+
+        // A `throw` branch never completes, so it is vacuous for the every-branch rule: the result is
+        // owned on every path that yields one.
+        public static void TernaryThrowBranchDropped(bool p, NDArray a, NDArray b)
+        {
+            var x = p ? a + b : throw new System.Exception();   // [NDW012]  owned whenever it exists
+        }
+
+        public static void SwitchThrowArmDropped(int n, NDArray a, NDArray b)
+        {
+            var t = n switch { 0 => a + b, _ => throw new System.Exception() }; // [NDW012]  same rule
+        }
+
+        // …but an ALIAS completing branch still wins the conservatism: the result may be the caller's.
+        public static void TernaryAliasThrowDropped(bool p, NDArray a)
+        {
+            var t = p ? a : throw new System.Exception();
+        }
+
+        // ---------------- reclaim spellings ----------------
+
+        // Conditional dispose reclaims through the ?. receiver.
+        public static void ConditionalDispose(NDArray a, NDArray b)
+        {
+            var t = a + b;
+            t?.Dispose();
+        }
+
+        // Dispose through an interface cast is the same dispose — the receiver chain came from the
+        // owned value, so the static type of the call is irrelevant.
+        public static void CastDispose(NDArray a, NDArray b)
+        {
+            var t = a + b;
+            ((System.IDisposable)t).Dispose();
+        }
+
+        // A dispose ANYWHERE saves the local — including a catch-only dispose. The analysis is
+        // deliberately path-insensitive (any single reclaiming use counts), so the un-disposed happy
+        // path is not modeled.
+        public static void DisposeInCatchOnly(NDArray a, NDArray b)
+        {
+            var t = a + b;
+            try { }
+            catch { t.Dispose(); }
+        }
+
+        // `using` on a cast of the bare owning expression still reclaims the resource.
+        public static void UsingCastBareExpression(NDArray a, NDArray b)
+        {
+            using ((System.IDisposable)(a + b)) { }
+        }
+
+        // ---------------- compound assignment on an owning local ----------------
+
+        // Both the seed and the += result die unread — a real double leak, reported once on the local.
+        public static void CompoundLocalDropped(NDArray a, NDArray b, NDArray c)
+        {
+            var t = a + b;                                      // [NDW012]  seed + compound result, dropped
+            t += c;
+        }
+
+        public static NDArray CompoundLocalReturned(NDArray a, NDArray b, NDArray c)
+        {
+            var t = a + b;
+            t += c;
+            return t;
+        }
     }
 }

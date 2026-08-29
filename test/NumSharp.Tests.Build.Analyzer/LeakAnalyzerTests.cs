@@ -59,6 +59,10 @@ namespace NumSharp.Tests.Build.Analyzer
             AssertAnyStartsWith(flagged, "var t = ((a + 1.0, b - 1.0), 5);", "dropped NESTED tuple literal");
             AssertAnyStartsWith(flagged, "var g = new[] { a + 1.0 };", "dropped array LITERAL of a temp");
             AssertAnyStartsWith(flagged, "var (q, r) = (a + 1.0, b - 1.0);", "deconstructed literal with an unused side");
+            AssertAnyStartsWith(flagged, "NDArray q, r;", "deconstruction into EXISTING locals with an unused side");
+            AssertAnyStartsWith(flagged, "NDArray[] g = [a + 1.0];", "dropped C# 12 collection expression of a temp");
+            AssertAnyStartsWith(flagged, "return np.concatenate(new[] { a + 1.0, c }, 0);",
+                "a temp inside an array handed to a non-consuming NumSharp op");
         }
 
         [TestMethod]
@@ -73,6 +77,14 @@ namespace NumSharp.Tests.Build.Analyzer
             AssertNoneContains(flagged, "Sink(new[] { a + 1.0 });", "an array literal handed to a sink");
             AssertNoneContains(flagged, "_cache = g;", "an array literal stored to a field");
             AssertNoneContains(flagged, "return t;", "a tuple literal returned via a local");
+            // deconstruction into existing locals with both sides used
+            AssertNoneContains(flagged, "r.Dispose();", "a deconstructed side that is disposed");
+            // collection-expression twins
+            AssertNoneContains(flagged, "NDArray[] g = [a, b];", "a collection expression of aliases");
+            AssertNoneContains(flagged, "return g;", "a returned collection expression");
+            // alias array into a NumSharp op + foreach consumption
+            AssertNoneContains(flagged, "np.concatenate(new[] { a, c }, 0)", "an alias-only array into a NumSharp op");
+            AssertNoneContains(flagged, "foreach (var x in SplitArray(a))", "enumerating a produced array");
         }
 
         private static async Task<List<string>> FlaggedLineTexts(string fileName)

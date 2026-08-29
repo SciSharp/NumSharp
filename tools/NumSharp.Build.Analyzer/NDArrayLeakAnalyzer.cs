@@ -447,6 +447,17 @@ namespace NumSharp.Build.Analyzer
                             if (ProducesOwnedNDArray(Unwrap(e)))
                                 return true;
                         return false;
+                    // The C# 12 collection-expression spelling of the same thing: `NDArray[] g = [a + b];`.
+                    // Matched by SYNTAX because this analyzer compiles against Roslyn 4.8 (the .NET 8 SDK
+                    // floor), which has the language feature but not ICollectionExpressionOperation — a 4.8
+                    // host surfaces the expression as an unrecognized operation, newer hosts as the typed
+                    // one; both carry the elements as child operations. (A spread element is not a
+                    // producer, so a spread-only expression stays silent.)
+                    case IOperation ce when ce.Syntax is CollectionExpressionSyntax:
+                        foreach (var e in ce.ChildOperations)
+                            if (ProducesOwnedNDArray(Unwrap(e)))
+                                return true;
+                        return false;
 
                     // A conditional value (ternary / switch expression / coalesce) holds only ONE of its
                     // branches, so it is a producer only when EVERY branch produces — the same
@@ -454,22 +465,31 @@ namespace NumSharp.Build.Analyzer
                     // local from the owning set: if any branch may be the caller's value, demanding the
                     // result be reclaimed is not safe.
                     case IConditionalOperation cond when cond.WhenFalse != null:
-                        return ProducesOwnedNDArray(Unwrap(cond.WhenTrue)) &&
-                               ProducesOwnedNDArray(Unwrap(cond.WhenFalse));
+                        return BranchProduces(cond.WhenTrue) && BranchProduces(cond.WhenFalse);
                     case ISwitchExpressionOperation sw:
                         if (sw.Arms.Length == 0)
                             return false;
                         foreach (var arm in sw.Arms)
-                            if (!ProducesOwnedNDArray(Unwrap(arm.Value)))
+                            if (!BranchProduces(arm.Value))
                                 return false;
                         return true;
                     case ICoalesceOperation coal:
-                        return ProducesOwnedNDArray(Unwrap(coal.Value)) &&
-                               ProducesOwnedNDArray(Unwrap(coal.WhenNull));
+                        return BranchProduces(coal.Value) && BranchProduces(coal.WhenNull);
 
                     default:
                         return false;
                 }
+            }
+
+            /// <summary>
+            ///     A branch of a conditional value, for the every-branch-produces rule. A <c>throw</c>
+            ///     branch never completes, so it can never be the held value — it is vacuously true
+            ///     (`p ? a + b : throw …` owns its result on every path that yields one).
+            /// </summary>
+            private bool BranchProduces(IOperation branch)
+            {
+                var e = Unwrap(branch);
+                return e is IThrowOperation || ProducesOwnedNDArray(e);
             }
 
             private bool IsNumSharpNonConsumingCall(IInvocationOperation inv)
@@ -492,8 +512,14 @@ namespace NumSharp.Build.Analyzer
                 return false;
             }
 
-            private bool IsDisposeCall(IMethodSymbol m)
-                => m != null && m.Name == "Dispose" && m.Parameters.Length == 0 && IsOwnedNDArrayType(m.ContainingType);
+            /// <summary>
+            ///     Any parameterless <c>Dispose()</c>. The receiver walk only ever arrives here FROM an
+            ///     owned value, so the static type the call is made through is irrelevant —
+            ///     <c>((IDisposable)t).Dispose()</c> disposes the same buffer <c>t.Dispose()</c> does
+            ///     (constraining to an owned containing type made exactly that spelling a false positive).
+            /// </summary>
+            private static bool IsDisposeCall(IMethodSymbol m)
+                => m != null && m.Name == "Dispose" && m.Parameters.Length == 0;
 
             private string EnclosingSuggestion(IMethodSymbol method)
             {
@@ -531,17 +557,25 @@ namespace NumSharp.Build.Analyzer
             }
 
             /// <summary>
-            ///     True for a local reference that is the DECLARATION SITE of the local, not a read — a
-            ///     deconstruction target (`var (q, r) = …` → LocalRef under Tuple under DeclarationExpression)
-            ///     or an `out var x` declaration. Counting these as uses would mask a leak: the unused side
-            ///     of a deconstruction would look "used" by its own declaration.
+            ///     True for a local reference that is a WRITE-SHAPED mention of the local, not a read — a
+            ///     deconstruction target, whether declaring (`var (q, r) = …` → LocalRef under Tuple under
+            ///     DeclarationExpression) or into EXISTING locals (`(q, r) = …` → LocalRef under the Tuple
+            ///     that IS the deconstruction-assignment's Target), or an `out var x` declaration. Counting
+            ///     these as uses would mask a leak: the unused side of a deconstruction would look "used"
+            ///     by its own assignment.
             /// </summary>
             private static bool IsDeclarationReference(ILocalReferenceOperation lref)
             {
+                IOperation child = lref;
                 var p = lref.Parent;
                 while (p is ITupleOperation)
+                {
+                    child = p;
                     p = p.Parent;
-                return p is IDeclarationExpressionOperation;
+                }
+                if (p is IDeclarationExpressionOperation)
+                    return true;
+                return p is IDeconstructionAssignmentOperation d && ReferenceEquals(d.Target, child);
             }
 
             private static ILocalSymbol DeclaredLocalOf(IVariableInitializerOperation initOp)

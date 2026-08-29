@@ -34,6 +34,12 @@ namespace NumSharp.Tests.Build.Analyzer
             // SC-5 lambda inside a scoped method
             FixtureFacts.NoneContains(flagged, "Action f = () => { var t = a + b; };",
                 "a lambda temp inside a scoped method (SC-5, a documented false negative)");
+            // out-var result (callee-fresh vs alias is undecidable per-method)
+            FixtureFacts.NoneContains(flagged, "MakeOut(a, out var t);",
+                "a dropped out-var result (a documented false negative)");
+            // declaration-pattern local
+            FixtureFacts.NoneContains(flagged, "if ((a + b) is NDArray t)",
+                "a produced value matched into an unused pattern local (a documented false negative)");
         }
 
         [TestMethod]

@@ -227,6 +227,36 @@ guess.
 - **Remaining pinned FN:** the MIXED coalesce `x ?? (a + b)` (leaks only when `x` is null — the
   every-branch rule's deliberate residue, pinned in `KnownLimitationScenarios`).
 
+**Third pass — body kinds, exotic reclaim spellings, RB-5 (125 + 4 tests green net8.0/net10.0):**
+- **Body-kind coverage** (`BodyKindScenarios` + `BodyKindTests`): async methods, iterators,
+  instance/static constructors, finalizers, expression-bodied members, unscoped property getters, and
+  user-defined operators are all analyzed and warn on a leak; a lambda RETURNING its temp is a
+  legitimate escape (its consumer owns the value).
+- **Four more analyzer FIXES**, each probe-verified with its negative twin:
+  1. `IsDisposeCall` no longer requires an owned containing type — `((IDisposable)t).Dispose()` was a
+     FALSE POSITIVE (the receiver walk only ever arrives from an owned value, so any parameterless
+     `Dispose` on it disposes the same buffer).
+  2. **C# 12 collection expressions** (`NDArray[] g = [a + b];`) join the any-element producer rule —
+     matched by SYNTAX (`CollectionExpressionSyntax`), because the analyzer compiles against Roslyn 4.8
+     (the .NET 8 SDK floor) which has the language feature but not `ICollectionExpressionOperation`;
+     the syntax match works on both a 4.8 host (None-operation) and newer hosts (typed operation).
+  3. **Deconstruction into EXISTING locals** (`(q, r) = Split(a);`) — the target mentions counted as
+     USES, masking the unused side's leak; `IsDeclarationReference` now treats a local-ref inside a
+     deconstruction-assignment TARGET as a write.
+  4. **`throw` branches are vacuous** for the every-branch conditional rule (`p ? a+b : throw …` owns
+     its result on every path that yields one); an alias completing branch still wins the conservatism.
+- **Reclaim-spelling pins:** `t?.Dispose()`, cast-dispose, catch-only dispose (any single reclaiming
+  use saves the local — deliberately path-insensitive), `using` on a cast bare expression, dispose
+  inside a LOCAL FUNCTION (part of the outer operation tree). Compound-assign local pair (dropped
+  warns / returned clean). Temp-array-into-`np.concatenate` warns; alias-array + foreach-consumption
+  stay clean.
+- **RB-5 LANDED** (`PropertyFuzzTests`): a deterministic seeded generator (100 seeds × 3–8 statements
+  from a 9-template grammar) asserts NDW012 count == the exact number of leaky statements per body —
+  the "escapes are never flagged / drops always are" invariants under arbitrary interleaving, with
+  per-seed replay and body dump on failure.
+- **New pinned FNs:** `out var` results (callee-fresh vs alias is per-method-undecidable) and
+  declaration-pattern locals (`expr is NDArray t` — rare, not worth the plumbing).
+
 ---
 
 ## 9. Workflow for adding a scenario

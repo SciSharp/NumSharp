@@ -36,6 +36,22 @@ namespace NumSharp.Tests.Build.Analyzer.Fixtures
             var t = x ?? (a + b);   // leaks when x is null; not flagged
         }
 
+        // An `out var` result is untracked: whether the callee handed out a FRESH buffer or an alias
+        // of something it retains is not visible per-method, so ownership is conservatively not
+        // assumed — the dropped result is silent even when the callee really did construct it.
+        private static void MakeOut(NDArray a, out NDArray x) { x = a + 1.0; }
+        public static void OutVarDropped(NDArray a)
+        {
+            MakeOut(a, out var t);   // t owns a fresh buffer here; not flagged
+        }
+
+        // A declaration-pattern local (`expr is NDArray t`) is untracked — the produced input escapes
+        // into the pattern match. Rare enough that tracking it is not worth the plumbing.
+        public static void IsPatternUnused(NDArray a, NDArray b)
+        {
+            if ((a + b) is NDArray t) { }   // a+b is always constructed; not flagged
+        }
+
         // SC-5: a lambda inside a scoped method rides the enclosing [NDScoped] exemption, so its temp is
         // not analyzed — yet the lambda may run AFTER the scope closes. Silent today.
         [NDScoped]
