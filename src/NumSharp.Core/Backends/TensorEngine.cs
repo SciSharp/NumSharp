@@ -173,6 +173,8 @@ namespace NumSharp
         public abstract NDArray LogAddExp2(NDArray x1, NDArray x2, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray NextAfter(NDArray x1, NDArray x2, Type dtype);
         public abstract NDArray NextAfter(NDArray x1, NDArray x2, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray CopySign(NDArray x1, NDArray x2, Type dtype);
+        public abstract NDArray CopySign(NDArray x1, NDArray x2, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray ACos(NDArray nd, Type dtype);
         public abstract NDArray ACos(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray ASin(NDArray nd, Type dtype);

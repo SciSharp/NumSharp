@@ -35,6 +35,12 @@ namespace NumSharp.Backends
         public override NDArray NextAfter(NDArray x1, NDArray x2, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
             => ExecuteFloatTierBinary(x1, x2, BinaryOp.NextAfter, typeCode, @out, where);
 
+        public override NDArray CopySign(NDArray x1, NDArray x2, Type dtype)
+            => CopySign(x1, x2, dtype?.GetTypeCode());
+
+        public override NDArray CopySign(NDArray x1, NDArray x2, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+            => ExecuteFloatTierBinary(x1, x2, BinaryOp.CopySign, typeCode, @out, where);
+
         // Valid loop dtypes for these ufuncs: the float family (NumPy ee/ff/dd + NumSharp's decimal
         // extension standing in for gg). Everything else -> NumPy's "No loop matching" TypeError.
         private static bool IsFloatTierDtype(NPTypeCode t) =>
@@ -122,7 +128,8 @@ namespace NumSharp.Backends
                 {
                     BinaryOp.LogAddExp => NDLogAddExpMath.LogAddExpDecimal(a, b),
                     BinaryOp.LogAddExp2 => NDLogAddExpMath.LogAddExp2Decimal(a, b),
-                    _ => NDLogAddExpMath.NextAfterDecimal(a, b),
+                    BinaryOp.NextAfter => NDLogAddExpMath.NextAfterDecimal(a, b),
+                    _ => NDLogAddExpMath.CopySignDecimal(a, b),
                 };
                 return NDArray.Scalar(r);
             }
@@ -137,7 +144,8 @@ namespace NumSharp.Backends
                     {
                         BinaryOp.LogAddExp => NDLogAddExpMath.LogAddExpHalf((Half)xf, (Half)yf),
                         BinaryOp.LogAddExp2 => NDLogAddExpMath.LogAddExp2Half((Half)xf, (Half)yf),
-                        _ => NDLogAddExpMath.NextAfterHalf((Half)xf, (Half)yf),
+                        BinaryOp.NextAfter => NDLogAddExpMath.NextAfterHalf((Half)xf, (Half)yf),
+                        _ => NDLogAddExpMath.CopySignHalf((Half)xf, (Half)yf),
                     };
                     return NDArray.Scalar(r);
                 }
@@ -148,7 +156,8 @@ namespace NumSharp.Backends
                     {
                         BinaryOp.LogAddExp => NDLogAddExpMath.LogAddExpF(xf, yf),
                         BinaryOp.LogAddExp2 => NDLogAddExpMath.LogAddExp2F(xf, yf),
-                        _ => NDLogAddExpMath.NextAfterF(xf, yf),
+                        BinaryOp.NextAfter => NDLogAddExpMath.NextAfterF(xf, yf),
+                        _ => NDLogAddExpMath.CopySignF(xf, yf),
                     };
                     return NDArray.Scalar(r);
                 }
@@ -158,7 +167,8 @@ namespace NumSharp.Backends
                     {
                         BinaryOp.LogAddExp => NDLogAddExpMath.LogAddExp(xd, yd),
                         BinaryOp.LogAddExp2 => NDLogAddExpMath.LogAddExp2(xd, yd),
-                        _ => NDLogAddExpMath.NextAfter(xd, yd),
+                        BinaryOp.NextAfter => NDLogAddExpMath.NextAfter(xd, yd),
+                        _ => NDLogAddExpMath.CopySign(xd, yd),
                     };
                     return NDArray.Scalar(r);
                 }

@@ -705,6 +705,9 @@ ARCTAN2_PAIRS = [
 # (managed fdlibm log1p vs NumPy's closed ucrtbase log1p) — excused in MisalignedRegistry.
 LOGADDEXP_OPS = {"logaddexp": np.logaddexp, "logaddexp2": np.logaddexp2}
 NEXTAFTER_OP = {"nextafter": np.nextafter}
+# copysign: magnitude of x1 with the sign of x2. Same float-tier promotion; BIT-EXACT
+# (Math.CopySign is the IEEE bit op), so no MisalignedRegistry excuse (NaN payloads are tokenized).
+COPYSIGN_OP = {"copysign": np.copysign}
 
 
 # np.place(arr, mask, vals) mutates arr in-place where mask is True, cycling through vals.
@@ -7325,6 +7328,7 @@ def main():
         cases += gen_binary(ARCTAN2_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # Group A B1
         cases += gen_binary(LOGADDEXP_OPS, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))      # logaddexp/logaddexp2
         cases += gen_binary(NEXTAFTER_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))       # nextafter (bit-exact)
+        cases += gen_binary(COPYSIGN_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # copysign (bit-exact)
         cases += gen_binary(ALLCLOSE_OPS, ALLCLOSE_PAIRS, list(PAIR_LAYOUTS.keys()))     # Group A B3
         cases += gen_unary(ISCOMPLEX_OPS, ISCOMPLEX_DTYPES, ISCOMPLEX_LAYOUTS)           # G5
         cases += char_tier("logic")                                                       # G9

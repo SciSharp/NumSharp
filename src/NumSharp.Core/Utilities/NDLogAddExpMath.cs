@@ -276,5 +276,26 @@ namespace NumSharp.Utilities
         }
 
         internal static decimal NextAfterDecimal(decimal x, decimal y) => (decimal)NextAfter((double)x, (double)y);
+
+        // =====================================================================
+        // copysign — magnitude of x with the sign of y. BIT-EXACT (Math.CopySign
+        // / MathF.CopySign are the IEEE bit op NumPy's C copysign performs).
+        // =====================================================================
+
+        internal static double CopySign(double x, double y) => Math.CopySign(x, y);
+
+        internal static float CopySignF(float x, float y) => MathF.CopySign(x, y);
+
+        /// <summary>Half copysign on raw bits: |x|'s magnitude bits ORed with y's sign bit
+        /// (NaN payload preserved, sign taken from y — matches NumPy).</summary>
+        internal static Half CopySignHalf(Half x, Half y)
+        {
+            ushort hx = BitConverter.HalfToUInt16Bits(x);
+            ushort hy = BitConverter.HalfToUInt16Bits(y);
+            return BitConverter.UInt16BitsToHalf((ushort)((hx & 0x7fffu) | (hy & 0x8000u)));
+        }
+
+        // Decimal (no NumPy analog, no signed zero): magnitude of x, sign of y (y<0 -> negative).
+        internal static decimal CopySignDecimal(decimal x, decimal y) => y < 0m ? -Math.Abs(x) : Math.Abs(x);
     }
 }

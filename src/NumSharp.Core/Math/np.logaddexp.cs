@@ -94,5 +94,35 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nextafter.html</remarks>
         public static NDArray nextafter(NDArray x1, NDArray x2, Type dtype)
             => x1.TensorEngine.NextAfter(x1, x2, dtype);
+
+        /// <summary>
+        ///     Change the sign of x1 to that of x2, element-wise. <br></br>
+        ///     Returns the magnitude of x1 carrying the sign of x2 (the sign of x2 includes its sign
+        ///     bit, so <c>copysign(3, -0.0) == -3</c>).
+        ///     Mirrors NumPy's ufunc signature: <c>copysign(x1, x2, /, out=None, *, where=True, dtype=None)</c>.
+        /// </summary>
+        /// <param name="x1">Values to change the sign of.</param>
+        /// <param name="x2">The sign of x2 is copied to x1. If shapes differ they must broadcast to a common shape.</param>
+        /// <param name="out">A location into which the result is stored (NumPy ufunc out=).</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        /// <param name="dtype">Explicit loop dtype (float-family only).</param>
+        /// <returns>The values of x1 with the sign of x2. This is a scalar if both x1 and x2 are scalars.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.copysign.html</remarks>
+        public static NDArray copysign(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x1.TensorEngine.CopySign(x1, x2, dtype, @out, where);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience overload.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.copysign.html</remarks>
+        public static NDArray copysign(NDArray x1, NDArray x2, NPTypeCode dtype)
+            => x1.TensorEngine.CopySign(x1, x2, dtype);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience overload.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.copysign.html</remarks>
+        public static NDArray copysign(NDArray x1, NDArray x2, Type dtype)
+            => x1.TensorEngine.CopySign(x1, x2, dtype);
     }
 }

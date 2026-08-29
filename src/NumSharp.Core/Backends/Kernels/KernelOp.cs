@@ -39,7 +39,9 @@ namespace NumSharp.Backends.Kernels
         /// <summary>log2(2**x1 + 2**x2) computed stably (np.logaddexp2).</summary>
         LogAddExp2,
         /// <summary>Next representable value after x1 toward x2 (np.nextafter).</summary>
-        NextAfter
+        NextAfter,
+        /// <summary>Magnitude of x1 with the sign of x2 (np.copysign).</summary>
+        CopySign
     }
 
     /// <summary>

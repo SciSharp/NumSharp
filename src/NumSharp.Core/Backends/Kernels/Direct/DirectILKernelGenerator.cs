@@ -321,6 +321,10 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo NextAfterF = LA(nameof(Utilities.NDLogAddExpMath.NextAfterF), typeof(float));
             public static readonly MethodInfo NextAfterH = LA(nameof(Utilities.NDLogAddExpMath.NextAfterHalf), typeof(Half));
             public static readonly MethodInfo NextAfterDec = LA(nameof(Utilities.NDLogAddExpMath.NextAfterDecimal), typeof(decimal));
+            public static readonly MethodInfo CopySignD = LA(nameof(Utilities.NDLogAddExpMath.CopySign), typeof(double));
+            public static readonly MethodInfo CopySignF = LA(nameof(Utilities.NDLogAddExpMath.CopySignF), typeof(float));
+            public static readonly MethodInfo CopySignH = LA(nameof(Utilities.NDLogAddExpMath.CopySignHalf), typeof(Half));
+            public static readonly MethodInfo CopySignDec = LA(nameof(Utilities.NDLogAddExpMath.CopySignDecimal), typeof(decimal));
 
             // Integer power helpers (squared-exponentiation with native wrapping).
             // Used by EmitPowerOperation when result type is integer to preserve
@@ -1308,7 +1312,7 @@ namespace NumSharp.Backends.Kernels
             // each helper is signatured (resultType, resultType) -> resultType, so the whole scalar
             // op is a single Call. Intercept BEFORE the decimal/half routing (like min/max) so those
             // dtypes flow through the shared helpers rather than EmitDecimal/HalfOperation.
-            if (op == BinaryOp.LogAddExp || op == BinaryOp.LogAddExp2 || op == BinaryOp.NextAfter)
+            if (op == BinaryOp.LogAddExp || op == BinaryOp.LogAddExp2 || op == BinaryOp.NextAfter || op == BinaryOp.CopySign)
             {
                 il.EmitCall(OpCodes.Call, ResolveLogAddNextHelper(op, resultType), null);
                 return;
@@ -1602,13 +1606,21 @@ namespace NumSharp.Backends.Kernels
                         NPTypeCode.Decimal => CachedMethods.LogAddExp2Dec,
                         _ => CachedMethods.LogAddExp2D,
                     };
-                default: // BinaryOp.NextAfter
+                case BinaryOp.NextAfter:
                     return resultType switch
                     {
                         NPTypeCode.Half => CachedMethods.NextAfterH,
                         NPTypeCode.Single => CachedMethods.NextAfterF,
                         NPTypeCode.Decimal => CachedMethods.NextAfterDec,
                         _ => CachedMethods.NextAfterD,
+                    };
+                default: // BinaryOp.CopySign
+                    return resultType switch
+                    {
+                        NPTypeCode.Half => CachedMethods.CopySignH,
+                        NPTypeCode.Single => CachedMethods.CopySignF,
+                        NPTypeCode.Decimal => CachedMethods.CopySignDec,
+                        _ => CachedMethods.CopySignD,
                     };
             }
         }

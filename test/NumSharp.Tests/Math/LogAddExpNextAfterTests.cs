@@ -101,6 +101,65 @@ namespace NumSharp.Tests.Math
                 .Should().BeTrue();
         }
 
+        // ---------------------------------------------------------------- copysign (bit-exact)
+
+        [TestMethod]
+        public void CopySign_Float64()
+        {
+            var r = np.copysign(np.array(new[] { 1.0, -1, 2, -2 }), np.array(new[] { -3.0, 3, -0.0, 0.0 }));
+            r.typecode.Should().Be(NPTypeCode.Double);
+            r.GetAtIndex<double>(0).Should().Be(-1.0);   // |1| with sign of -3
+            r.GetAtIndex<double>(1).Should().Be(1.0);
+            r.GetAtIndex<double>(2).Should().Be(-2.0);   // sign of -0.0 is negative
+            r.GetAtIndex<double>(3).Should().Be(2.0);
+        }
+
+        [TestMethod]
+        public void CopySign_SignOfNegativeZero_IsNegative()
+        {
+            np.copysign((NDArray)3.0, (NDArray)(-0.0)).GetAtIndex<double>(0).Should().Be(-3.0);
+        }
+
+        [TestMethod]
+        public void CopySign_Infinity()
+        {
+            np.copysign((NDArray)double.PositiveInfinity, (NDArray)(-1.0)).GetAtIndex<double>(0)
+                .Should().Be(double.NegativeInfinity);
+        }
+
+        [TestMethod]
+        public void CopySign_Float32_BitExact()
+        {
+            np.copysign(np.array(new[] { 5.0f }), np.array(new[] { -1.0f })).GetAtIndex<float>(0).Should().Be(-5.0f);
+        }
+
+        [TestMethod]
+        public void CopySign_Promotion_FloatTier()
+        {
+            np.copysign(np.array(new short[] { 5 }), np.array(new short[] { -1 })).typecode.Should().Be(NPTypeCode.Single);
+            np.copysign(np.array(new sbyte[] { 5 }), np.array(new sbyte[] { -1 })).typecode.Should().Be(NPTypeCode.Half);
+            np.copysign(np.array(new[] { 5 }), np.array(new[] { -1 })).typecode.Should().Be(NPTypeCode.Double);
+        }
+
+        [TestMethod]
+        public void CopySign_Half_ComputedInFloat32()
+        {
+            var r = np.copysign(np.array(new[] { (Half)5 }), np.array(new[] { (Half)(-1) }));
+            r.typecode.Should().Be(NPTypeCode.Half);
+            ((float)r.GetAtIndex<Half>(0)).Should().Be(-5f);
+        }
+
+        [TestMethod]
+        public void CopySign_OutAndWhere()
+        {
+            var o = np.array(new[] { -9.0, -9, -9 });
+            var w = np.array(new[] { true, false, true });
+            np.copysign(np.array(new[] { 1.0, 2, 3 }), np.array(new[] { -1.0, 1, -1 }), @out: o, where: w);
+            o.GetAtIndex<double>(0).Should().Be(-1.0);
+            o.GetAtIndex<double>(1).Should().Be(-9.0);   // masked off
+            o.GetAtIndex<double>(2).Should().Be(-3.0);
+        }
+
         // ---------------------------------------------------------------- dtype promotion
 
         [TestMethod]

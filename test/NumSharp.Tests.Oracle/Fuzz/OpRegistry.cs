@@ -197,6 +197,7 @@ namespace NumSharp.Tests.Fuzz
                 case "logaddexp": return np.logaddexp(ops[0], ops[1]);
                 case "logaddexp2": return np.logaddexp2(ops[0], ops[1]);
                 case "nextafter": return np.nextafter(ops[0], ops[1]);
+                case "copysign": return np.copysign(ops[0], ops[1]);
 
                 // Group A Batch 3: predicates + whole-array bool reductions (wrapped to 0-D bool).
                 case "iscomplex": return np.iscomplex(ops[0]);
