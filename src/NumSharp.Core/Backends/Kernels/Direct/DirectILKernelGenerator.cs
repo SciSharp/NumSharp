@@ -302,12 +302,12 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo MathAtan2 = typeof(Math).GetMethod(nameof(Math.Atan2), new[] { typeof(double), typeof(double) })
                 ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Atan2));
 
-            // np.logaddexp / np.logaddexp2 / np.nextafter scalar kernels — one static helper per
-            // (op, loop dtype). Operands reach EmitScalarOperation already in the loop dtype, so the
-            // kernel is a single Call to the matching signature (double/float/Half/decimal). See
-            // NDLogAddExpMath.
+            // np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign scalar kernels — one static
+            // helper per (op, loop dtype), resolved through GetLogAddNextMethod. Operands reach
+            // EmitScalarOperation already in the loop dtype, so the kernel is a single Call to the
+            // matching signature (double/float/Half/decimal). Same shape as the NDDiv helpers below.
             private static MethodInfo LA(string name, Type t) =>
-                typeof(Utilities.NDLogAddExpMath).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic, null, new[] { t, t }, null)
+                typeof(Utilities.NDLogAddExpMath).GetMethod(name, new[] { t, t })
                 ?? throw new MissingMethodException(typeof(Utilities.NDLogAddExpMath).FullName, name);
             public static readonly MethodInfo LogAddExpD = LA(nameof(Utilities.NDLogAddExpMath.LogAddExp), typeof(double));
             public static readonly MethodInfo LogAddExpF = LA(nameof(Utilities.NDLogAddExpMath.LogAddExpF), typeof(float));
@@ -1314,7 +1314,7 @@ namespace NumSharp.Backends.Kernels
             // dtypes flow through the shared helpers rather than EmitDecimal/HalfOperation.
             if (op == BinaryOp.LogAddExp || op == BinaryOp.LogAddExp2 || op == BinaryOp.NextAfter || op == BinaryOp.CopySign)
             {
-                il.EmitCall(OpCodes.Call, ResolveLogAddNextHelper(op, resultType), null);
+                EmitLogAddNextOperation(il, op, resultType);
                 return;
             }
 
@@ -1582,11 +1582,23 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Resolve the (op, loop-dtype) static kernel for np.logaddexp / np.logaddexp2 / np.nextafter.
-        /// Every loop dtype resolves to Half / Single / Double / Decimal (float-tier promotion, same
-        /// as ATan2), so exactly one of four signatures applies per op.
+        /// Emit np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign via the
+        /// <see cref="Utilities.NDLogAddExpMath"/> scalar helpers. Stack: [x1, x2] (already in the loop
+        /// dtype) -> [result]. Mirrors <see cref="EmitFloorDivideOperation"/>: resolve the per-dtype
+        /// helper, then a single Call.
         /// </summary>
-        private static MethodInfo ResolveLogAddNextHelper(BinaryOp op, NPTypeCode resultType)
+        private static void EmitLogAddNextOperation(ILGenerator il, BinaryOp op, NPTypeCode resultType)
+            => il.EmitCall(OpCodes.Call, GetLogAddNextMethod(op, resultType), null);
+
+        /// <summary>
+        /// Return the <see cref="Utilities.NDLogAddExpMath"/> scalar helper for
+        /// (<paramref name="op"/>, <paramref name="resultType"/>). Every loop dtype resolves to
+        /// Half / Single / Double / Decimal (float-tier promotion, same as ATan2), so exactly one of
+        /// four signatures applies per op. Parallels <see cref="GetFloorDivideMethod"/> /
+        /// <see cref="GetRemainderMethod"/>, but the four ops are one family (intercepted together like
+        /// maximum/minimum), so they share a single op-keyed resolver.
+        /// </summary>
+        private static MethodInfo GetLogAddNextMethod(BinaryOp op, NPTypeCode resultType)
         {
             switch (op)
             {

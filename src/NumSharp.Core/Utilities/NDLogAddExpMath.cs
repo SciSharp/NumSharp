@@ -28,7 +28,7 @@ namespace NumSharp.Utilities
     /// <c>ee->e</c> half loops which promote to float. Decimal (no NumPy analog) bridges through
     /// double.</para>
     /// </summary>
-    internal static class NDLogAddExpMath
+    public static class NDLogAddExpMath
     {
         // NumPy NPY_LOGE2 / NPY_LOG2E (npy_math_internal.h.src LOGE2 / LOG2E), rounded to each width
         // exactly as NumPy's NPY__FP_SFX macro does.
@@ -60,7 +60,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>log(1+x), fdlibm port (≤1 ULP vs ucrtbase log1p).</summary>
-        internal static double Log1p(double x)
+        public static double Log1p(double x)
         {
             double hfsq, f = 0, c = 0, s, z, R, u;
             int k = 1;
@@ -121,7 +121,7 @@ namespace NumSharp.Utilities
             Lg1 = 0.66666662693f, Lg2 = 0.40000972152f, Lg3 = 0.28498786688f, Lg4 = 0.24279078841f;
 
         /// <summary>log(1+x) at single precision, fdlibm port.</summary>
-        internal static float Log1pf(float x)
+        public static float Log1pf(float x)
         {
             float hfsq, f = 0, c = 0, s, z, R, u;
             int k = 1;
@@ -181,7 +181,7 @@ namespace NumSharp.Utilities
         // logaddexp = log(exp(x)+exp(y)) — npy_logaddexp
         // =====================================================================
 
-        internal static double LogAddExp(double x, double y)
+        public static double LogAddExp(double x, double y)
         {
             if (x == y) return x + LOGE2;              // handles same-sign infinities without warnings
             double tmp = x - y;
@@ -190,7 +190,7 @@ namespace NumSharp.Utilities
             return tmp;                                // NaN
         }
 
-        internal static float LogAddExpF(float x, float y)
+        public static float LogAddExpF(float x, float y)
         {
             if (x == y) return x + LOGE2F;
             float tmp = x - y;
@@ -200,16 +200,16 @@ namespace NumSharp.Utilities
         }
 
         // Half computes in float32, matching NumPy's ee->e half loop (npy_half_to_float, compute, back).
-        internal static Half LogAddExpHalf(Half x, Half y) => (Half)LogAddExpF((float)x, (float)y);
+        public static Half LogAddExpHalf(Half x, Half y) => (Half)LogAddExpF((float)x, (float)y);
 
         // Decimal (no NumPy analog) bridges through double.
-        internal static decimal LogAddExpDecimal(decimal x, decimal y) => (decimal)LogAddExp((double)x, (double)y);
+        public static decimal LogAddExpDecimal(decimal x, decimal y) => (decimal)LogAddExp((double)x, (double)y);
 
         // =====================================================================
         // logaddexp2 = log2(2**x + 2**y) — npy_logaddexp2 (npy_log2_1p = LOG2E*log1p)
         // =====================================================================
 
-        internal static double LogAddExp2(double x, double y)
+        public static double LogAddExp2(double x, double y)
         {
             if (x == y) return x + 1.0;
             double tmp = x - y;
@@ -218,7 +218,7 @@ namespace NumSharp.Utilities
             return tmp;
         }
 
-        internal static float LogAddExp2F(float x, float y)
+        public static float LogAddExp2F(float x, float y)
         {
             if (x == y) return x + 1.0f;
             float tmp = x - y;
@@ -227,23 +227,23 @@ namespace NumSharp.Utilities
             return tmp;
         }
 
-        internal static Half LogAddExp2Half(Half x, Half y) => (Half)LogAddExp2F((float)x, (float)y);
+        public static Half LogAddExp2Half(Half x, Half y) => (Half)LogAddExp2F((float)x, (float)y);
 
-        internal static decimal LogAddExp2Decimal(decimal x, decimal y) => (decimal)LogAddExp2((double)x, (double)y);
+        public static decimal LogAddExp2Decimal(decimal x, decimal y) => (decimal)LogAddExp2((double)x, (double)y);
 
         // =====================================================================
         // nextafter — C nextafter, bit-exact via BitIncrement/BitDecrement.
         // NaN: double/float propagate the operand NaN (x+y), matching ucrtbase.
         // =====================================================================
 
-        internal static double NextAfter(double x, double y)
+        public static double NextAfter(double x, double y)
         {
             if (double.IsNaN(x) || double.IsNaN(y)) return x + y;
             if (x == y) return y;                      // C99: nextafter(x,x)=y (carries y's sign at zero)
             return x < y ? Math.BitIncrement(x) : Math.BitDecrement(x);
         }
 
-        internal static float NextAfterF(float x, float y)
+        public static float NextAfterF(float x, float y)
         {
             if (float.IsNaN(x) || float.IsNaN(y)) return x + y;
             if (x == y) return y;
@@ -256,7 +256,7 @@ namespace NumSharp.Utilities
         /// <summary>Port of <c>npy_half_nextafter</c> (halffloat.cpp): raw 16-bit stepping.
         /// Note NumPy's half returns <b>x</b> when x==y (incl. signed-zero-equal), unlike the C99
         /// double/float path which returns y.</summary>
-        internal static Half NextAfterHalf(Half x, Half y)
+        public static Half NextAfterHalf(Half x, Half y)
         {
             ushort hx = BitConverter.HalfToUInt16Bits(x);
             ushort hy = BitConverter.HalfToUInt16Bits(y);
@@ -275,20 +275,20 @@ namespace NumSharp.Utilities
             return BitConverter.UInt16BitsToHalf(ret);
         }
 
-        internal static decimal NextAfterDecimal(decimal x, decimal y) => (decimal)NextAfter((double)x, (double)y);
+        public static decimal NextAfterDecimal(decimal x, decimal y) => (decimal)NextAfter((double)x, (double)y);
 
         // =====================================================================
         // copysign — magnitude of x with the sign of y. BIT-EXACT (Math.CopySign
         // / MathF.CopySign are the IEEE bit op NumPy's C copysign performs).
         // =====================================================================
 
-        internal static double CopySign(double x, double y) => Math.CopySign(x, y);
+        public static double CopySign(double x, double y) => Math.CopySign(x, y);
 
-        internal static float CopySignF(float x, float y) => MathF.CopySign(x, y);
+        public static float CopySignF(float x, float y) => MathF.CopySign(x, y);
 
         /// <summary>Half copysign on raw bits: |x|'s magnitude bits ORed with y's sign bit
         /// (NaN payload preserved, sign taken from y — matches NumPy).</summary>
-        internal static Half CopySignHalf(Half x, Half y)
+        public static Half CopySignHalf(Half x, Half y)
         {
             ushort hx = BitConverter.HalfToUInt16Bits(x);
             ushort hy = BitConverter.HalfToUInt16Bits(y);
@@ -296,6 +296,6 @@ namespace NumSharp.Utilities
         }
 
         // Decimal (no NumPy analog, no signed zero): magnitude of x, sign of y (y<0 -> negative).
-        internal static decimal CopySignDecimal(decimal x, decimal y) => y < 0m ? -Math.Abs(x) : Math.Abs(x);
+        public static decimal CopySignDecimal(decimal x, decimal y) => y < 0m ? -Math.Abs(x) : Math.Abs(x);
     }
 }
