@@ -40,6 +40,26 @@ namespace NumSharp.Tests.Build.Analyzer
         }
 
         [TestMethod]
+        public async Task EveryStoreEgress_IsClean()
+        {
+            // The store family: property setters (static/instance/initializer), fields on other
+            // objects, array elements, NumSharp's own indexer-set, base-ctor args, void NumSharp ops.
+            var flagged = await FixtureFacts.FlaggedLineTexts("EscapeScenarios.cs");
+            FixtureFacts.NoneContains(flagged, "StaticProp = a + b", "a static property store");
+            FixtureFacts.NoneContains(flagged, "h.Prop = a + b", "an instance property store");
+            FixtureFacts.NoneContains(flagged, "h.Field = a + b", "an instance field store");
+            FixtureFacts.NoneContains(flagged, "new Holder { Prop = a + b }", "an object-initializer store");
+            FixtureFacts.NoneContains(flagged, "arr[0] = a + b", "an array-element store");
+            FixtureFacts.NoneContains(flagged, "a[\"1:3\"] = b + c", "a NumSharp indexer-set");
+            FixtureFacts.NoneContains(flagged, "_refField += a", "a compound assignment into a field");
+            FixtureFacts.NoneContains(flagged, "np.copyto(dst, a + b)", "an argument to a void NumSharp op");
+            FixtureFacts.NoneContains(flagged, "Take(t)", "an argument to a local function");
+            FixtureFacts.NoneContains(flagged, "$\"{a + b}\"", "a string interpolation");
+            FixtureFacts.NoneContains(flagged, "(a + b)?.reshape", "a conditional-access receiver");
+            FixtureFacts.NoneContains(flagged, ": base(a + b)", "a base-constructor argument");
+        }
+
+        [TestMethod]
         public async Task EscapeAnchor_Warns()
         {
             var flagged = await FixtureFacts.FlaggedLineTexts("EscapeScenarios.cs");

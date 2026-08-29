@@ -16,6 +16,21 @@ namespace NumSharp.Tests.Build.Analyzer
         public Task GateNegativeScenarios_MatchTagsExactly()
             => AnalyzerTestHarness.AssertExactAsync("GateNegativeScenarios.cs");
 
+        // GT-9: the gate is a symbol action over methods/properties, which does NOT visit LOCAL
+        // functions — so a [NDScoped] local function draws no gate diagnostic (deferred to the weaver).
+        // Pins that: a scoped-and-returning local function, called and returned, is entirely clean.
+        [TestMethod]
+        public async Task LocalFunctionAttribute_IsNotGated()
+        {
+            var src = "using NumSharp;\npublic static class T {\n" +
+                      "  public static NDArray M(NDArray a) {\n" +
+                      "    [NDScoped] NDArray L() { var t = a + 1.0; return t.copy(); }\n" +
+                      "    return L();\n  }\n}";
+            var r = await AnalyzerTestHarness.RunAsync(src, "localfn_attr.cs");
+            Assert.IsTrue(r.CompileErrors.IsEmpty, "local-function-attribute snippet must compile");
+            Assert.AreEqual(0, r.Ndw.Length, "a [NDScoped] local function draws no analyzer diagnostic (deferred to the weaver)");
+        }
+
         [TestMethod]
         public async Task GateFixture_HasExactlyTheExpectedGateErrors()
         {

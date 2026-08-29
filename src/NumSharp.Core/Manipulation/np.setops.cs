@@ -24,6 +24,7 @@ namespace NumSharp
         ///     <para><c>isin</c> returns bool (no NaN) and <c>intersect1d</c> never emits a NaN (NaN != NaN,
         ///     so a shared-value adjacency check never selects one), so neither needs this pass.</para>
         /// </remarks>
+        [NDScopedCovered] // only reached from the [NDScoped] union1d/setxor1d/setdiff1d entries; the canon scalar + mask ride their scope
         private static NDArray CanonicalizeSetOpNaN(NDArray result)
         {
             // Only float32/float64 are canonicalised by NumPy's sort; f16/complex preserve, ints have no NaN.

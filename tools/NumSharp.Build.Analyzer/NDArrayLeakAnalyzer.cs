@@ -432,6 +432,41 @@ namespace NumSharp.Build.Analyzer
                         // NDScope.Returns/Attach return an NDArray but are reclamation plumbing, not a
                         // fresh temp to flag.
                         return !IsNDScopeMethod(inv.TargetMethod, "Returns", "Attach", "Detach");
+
+                    // A tuple literal / array creation OWNS whatever its elements own, and it holds ALL
+                    // of them at once — so it is a producer iff AT LEAST ONE element is itself a
+                    // producer. A tuple/array of plain inputs ((a, b), new[]{ a, b }) owns nothing, and
+                    // flagging it would demand reclaiming the caller's values (R2).
+                    case ITupleOperation tup:
+                        foreach (var e in tup.Elements)
+                            if (ProducesOwnedNDArray(Unwrap(e)))
+                                return true;
+                        return false;
+                    case IArrayCreationOperation arr when arr.Initializer != null:
+                        foreach (var e in arr.Initializer.ElementValues)
+                            if (ProducesOwnedNDArray(Unwrap(e)))
+                                return true;
+                        return false;
+
+                    // A conditional value (ternary / switch expression / coalesce) holds only ONE of its
+                    // branches, so it is a producer only when EVERY branch produces — the same
+                    // conservatism as the if/else local rule, where a single aliasing branch drops the
+                    // local from the owning set: if any branch may be the caller's value, demanding the
+                    // result be reclaimed is not safe.
+                    case IConditionalOperation cond when cond.WhenFalse != null:
+                        return ProducesOwnedNDArray(Unwrap(cond.WhenTrue)) &&
+                               ProducesOwnedNDArray(Unwrap(cond.WhenFalse));
+                    case ISwitchExpressionOperation sw:
+                        if (sw.Arms.Length == 0)
+                            return false;
+                        foreach (var arm in sw.Arms)
+                            if (!ProducesOwnedNDArray(Unwrap(arm.Value)))
+                                return false;
+                        return true;
+                    case ICoalesceOperation coal:
+                        return ProducesOwnedNDArray(Unwrap(coal.Value)) &&
+                               ProducesOwnedNDArray(Unwrap(coal.WhenNull));
+
                     default:
                         return false;
                 }

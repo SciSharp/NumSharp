@@ -89,9 +89,9 @@ namespace NumSharp.Tests.Build.Analyzer
 
         [DataTestMethod]
         [DataRow("LeakScenarios.cs", 6)]
-        [DataRow("CarrierScenarios.cs", 4)]
+        [DataRow("CarrierScenarios.cs", 9)]
         [DataRow("GateScenarios.cs", 7)]
-        [DataRow("ControlFlowScenarios.cs", 4)]
+        [DataRow("ControlFlowScenarios.cs", 8)]
         [DataRow("OwningScenarios.cs", 3)]
         [DataRow("EscapeScenarios.cs", 1)]
         [DataRow("ScopeScenarios.cs", 1)]

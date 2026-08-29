@@ -45,37 +45,11 @@
 
   <ItemGroup>
     <!-- The fixture source files travel into bin/**/Fixtures/ as DATA the tests read at runtime. They
-         are NOT compiled into this assembly (they live outside the project cone and are <None>). -->
-    <None Include="..\NumSharp.Tests.Build.Analyzer.Fixtures\CarrierScenarios.cs">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>Fixtures\CarrierScenarios.cs</Link>
-    </None>
-    <None Include="..\NumSharp.Tests.Build.Analyzer.Fixtures\ControlFlowScenarios.cs">
-      <Link>Fixtures\ControlFlowScenarios.cs</Link>
-    </None>
-    <None Include="..\NumSharp.Tests.Build.Analyzer.Fixtures\EscapeScenarios.cs">
-      <Link>Fixtures\EscapeScenarios.cs</Link>
-    </None>
-    <None Include="..\NumSharp.Tests.Build.Analyzer.Fixtures\GateNegativeScenarios.cs">
-      <Link>Fixtures\GateNegativeScenarios.cs</Link>
-    </None>
-    <None Include="..\NumSharp.Tests.Build.Analyzer.Fixtures\GateScenarios.cs">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>Fixtures\GateScenarios.cs</Link>
-    </None>
-    <None Include="..\NumSharp.Tests.Build.Analyzer.Fixtures\KnownLimitationScenarios.cs">
-      <Link>Fixtures\KnownLimitationScenarios.cs</Link>
-    </None>
-    <None Include="..\NumSharp.Tests.Build.Analyzer.Fixtures\LeakScenarios.cs">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>Fixtures\LeakScenarios.cs</Link>
-    </None>
-    <None Include="..\NumSharp.Tests.Build.Analyzer.Fixtures\OwningScenarios.cs">
-      <Link>Fixtures\OwningScenarios.cs</Link>
-    </None>
-    <None Include="..\NumSharp.Tests.Build.Analyzer.Fixtures\ScopeScenarios.cs">
-      <Link>Fixtures\ScopeScenarios.cs</Link>
-    </None>
+         are NOT compiled into this assembly (they live outside the project cone and are <None>). A glob
+         so every scenario file is copied automatically — adding a fixture needs no csproj edit. -->
+    <None Include="..\NumSharp.Tests.Build.Analyzer.Fixtures\*.cs"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="Fixtures\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

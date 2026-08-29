@@ -112,10 +112,100 @@ namespace NumSharp.Tests.Build.Analyzer.Fixtures
             r = a + b;
         }
 
+        // ---------------- store escapes: property / element / indexer / ctor (§ user-requested) ----
+
+        private static NDArray StaticProp { get; set; }
+        public sealed class Holder
+        {
+            public NDArray Prop { get; set; }
+            public NDArray Field;
+        }
+
+        // Stored through a STATIC property setter — kept beyond the method.
+        public static void StaticPropertyStore(NDArray a, NDArray b)
+        {
+            StaticProp = a + b;
+        }
+
+        // Stored through an INSTANCE property setter on another object.
+        public static void InstancePropertyStore(Holder h, NDArray a, NDArray b)
+        {
+            h.Prop = a + b;
+        }
+
+        // Stored through an instance FIELD on another object.
+        public static void InstanceFieldStore(Holder h, NDArray a, NDArray b)
+        {
+            h.Field = a + b;
+        }
+
+        // Stored via an OBJECT INITIALIZER (an assignment inside the creation).
+        public static Holder ObjectInitializerStore(NDArray a, NDArray b)
+        {
+            return new Holder { Prop = a + b };
+        }
+
+        // Stored into an ELEMENT of a caller-owned array.
+        public static void ArrayElementStore(NDArray[] arr, NDArray a, NDArray b)
+        {
+            arr[0] = a + b;
+        }
+
+        // Written through NumSharp's own INDEXER SET (a[slice] = value copies the values in).
+        public static void NDArrayIndexerSet(NDArray a, NDArray b, NDArray c)
+        {
+            a["1:3"] = b + c;
+        }
+
+        // A compound assignment back into a FIELD stores the new value.
+        public static void CompoundAssignToField(NDArray a)
+        {
+            _refField += a;
+        }
+
+        // Handed to a VOID NumSharp op (np.copyto consumes/observes; it returns nothing, so the
+        // non-consuming-NumSharp-op rule does not apply).
+        public static void VoidNumSharpOpArgument(NDArray dst, NDArray a, NDArray b)
+        {
+            np.copyto(dst, a + b);
+        }
+
+        // Handed to a LOCAL FUNCTION (not a NumSharp op — an ordinary consuming call).
+        public static void LocalFunctionArgument(NDArray a, NDArray b)
+        {
+            void Take(NDArray x) { }
+            var t = a + b;
+            Take(t);
+        }
+
+        // Observed through string INTERPOLATION (produces a string, not an owned carrier).
+        public static string InterpolatedString(NDArray a, NDArray b)
+        {
+            var s = $"{a + b}";
+            return s;
+        }
+
+        // The receiver of a CONDITIONAL ACCESS follows the view result up to the return.
+        public static NDArray ConditionalAccessReceiver(NDArray a, NDArray b)
+        {
+            return (a + b)?.reshape(1, -1);
+        }
+
         // The non-vacuity anchor: a dropped result really does warn.
         public static void LeakAnchor(NDArray a, NDArray b)
         {
             np.add(a, b);                                   // [NDW012]  dropped on the floor
         }
+    }
+
+    // A base-constructor ARGUMENT escapes into the base object.
+    public class EscapeBase
+    {
+        public EscapeBase(NDArray x) { }
+    }
+
+    public class EscapeDerived : EscapeBase
+    {
+        public EscapeDerived(NDArray a, NDArray b) : base(a + b) { }
     }
 }

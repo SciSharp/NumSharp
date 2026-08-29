@@ -57,5 +57,35 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(1, await Leaks("  public static void M(NDArray a, NDArray b) { var t = a + b; }"));
             Assert.AreEqual(0, await Leaks("  public static void M(NDArray a, NDArray b) { var t = a + b; t.Dispose(); }"));
         }
+
+        [TestMethod]
+        public async Task Return_FlipsDroppedTupleLiteralClean()
+        {
+            Assert.AreEqual(1, await Leaks("  public static void M(NDArray a, NDArray b) { var t = (a + 1.0, b - 1.0); }"));
+            Assert.AreEqual(0, await Leaks("  public static (NDArray, NDArray) M(NDArray a, NDArray b) { var t = (a + 1.0, b - 1.0); return t; }"));
+        }
+
+        [TestMethod]
+        public async Task AliasElements_FlipDroppedTupleLiteralClean()
+        {
+            // The SAME dropped tuple; the only delta is producer elements vs plain inputs (R2).
+            Assert.AreEqual(1, await Leaks("  public static void M(NDArray a, NDArray b) { var t = (a + 1.0, b - 1.0); }"));
+            Assert.AreEqual(0, await Leaks("  public static void M(NDArray a, NDArray b) { var t = (a, b); }"));
+        }
+
+        [TestMethod]
+        public async Task ForeignSink_FlipsDroppedArrayLiteralClean()
+        {
+            Assert.AreEqual(1, await Leaks("  public static void M(NDArray a, NDArray b) { var g = new[] { a + b }; }"));
+            Assert.AreEqual(0, await Leaks("  static void Take(NDArray[] xs) { }\n  public static void M(NDArray a, NDArray b) { Take(new[] { a + b }); }"));
+        }
+
+        [TestMethod]
+        public async Task AliasBranch_FlipsDroppedTernaryClean()
+        {
+            // The SAME dropped ternary; the only delta is one branch aliasing the input.
+            Assert.AreEqual(1, await Leaks("  public static void M(bool p, NDArray a, NDArray b, NDArray c, NDArray d) { var t = p ? a + b : c - d; }"));
+            Assert.AreEqual(0, await Leaks("  public static void M(bool p, NDArray a, NDArray b) { var t = p ? a + b : a; }"));
+        }
     }
 }

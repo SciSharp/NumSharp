@@ -2,10 +2,12 @@ using System;
 
 namespace NumSharp.Tests.Build.Analyzer.Fixtures
 {
-    // Documented analyzer divergences (COVERAGE_PLAN §3.1 CF-1/CF-4/CF-11, §3.2 EC-13, §3.4 SC-5, §3.5
-    // AM-1). NumSharp.Tests.Build.Analyzer asserts THIS file under [TestCategory("Misaligned")], pinning the
-    // analyzer's CURRENT (imperfect) behavior EXACTLY — so improving any of these flips a tag and turns
-    // the pin red, i.e. a change is noticed rather than silent.
+    // Documented analyzer divergences (COVERAGE_PLAN §3.1 CF-1 + the mixed coalesce, §3.2 EC-13, §3.4
+    // SC-5, §3.5 AM-1). NumSharp.Tests.Build.Analyzer asserts THIS file under [TestCategory("Misaligned")],
+    // pinning the analyzer's CURRENT (imperfect) behavior EXACTLY — so improving any of these flips a tag
+    // and turns the pin red, i.e. a change is noticed rather than silent. (CF-4/CF-11 — the dropped
+    // ternary/switch of owning temps — used to be pinned here and are FIXED: every-branch-produces
+    // conditionals are owned now; see ControlFlowScenarios.)
     //
     //   • FALSE NEGATIVES (a real leak the per-local/per-expression analysis misses) produce NOTHING
     //     today and are therefore UNtagged — a future fix would add a warning and fail the exact match.
@@ -26,17 +28,12 @@ namespace NumSharp.Tests.Build.Analyzer.Fixtures
             return t;
         }
 
-        // CF-4: a ternary of two owning temps, dropped. A conditional expression is not treated as a
-        // producer, so the dropped local is not recognized as owning — silent.
-        public static void TernaryTempDropped(bool p, NDArray a, NDArray b, NDArray c, NDArray d)
+        // A MIXED coalesce: the right side leaks whenever x is null, but the left side is the caller's
+        // value, so under the every-branch-produces rule the result is conservatively NOT owned (the
+        // ternary/switch mixed twins pin the same rule in ControlFlowScenarios).
+        public static void CoalesceMixedDropped(NDArray x, NDArray a, NDArray b)
         {
-            var t = p ? a + b : c - d;   // both branches leak; not flagged
-        }
-
-        // CF-11: the switch-expression twin of CF-4 — same reason, silent.
-        public static void SwitchExpressionTempDropped(int n, NDArray a, NDArray b, NDArray c, NDArray d)
-        {
-            var t = n switch { 0 => a + b, _ => c - d };   // leaks; not flagged
+            var t = x ?? (a + b);   // leaks when x is null; not flagged
         }
 
         // SC-5: a lambda inside a scoped method rides the enclosing [NDScoped] exemption, so its temp is

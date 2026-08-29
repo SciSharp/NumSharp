@@ -204,6 +204,29 @@ store), zero false positive on `_ = a;` (a bare input owns nothing). Every scena
 against the analyzer's actual behavior BEFORE tagging (§9 step 1), so each fixture pins reality, not a
 guess.
 
+**Second pass — escape/store edges + composite producers (113 + 4 tests green net8.0/net10.0):**
+- **Store escapes probed clean and pinned** (`EscapeScenarios` + `EveryStoreEgress_IsClean`): static /
+  instance property setter, instance field on another object, object-initializer assignment, array
+  element, NumSharp's own indexer-set (`a["1:3"] = b + c`), compound-assign into a field, base-ctor
+  argument, void NumSharp op (`np.copyto`), local-function argument, string interpolation,
+  conditional-access receiver.
+- **Analyzer FIX — composite producers** (`ProducesOwnedNDArray`): a **tuple literal / array creation**
+  is a producer iff AT LEAST ONE element is itself a producer (it holds all elements at once; a
+  tuple/array of plain inputs owns nothing — R2). A **conditional value** (ternary / switch expression /
+  coalesce) is a producer iff EVERY branch produces (it holds only one branch; a single aliasing branch
+  makes reclaiming unsafe — the same conservatism as the CF-3 if/else rule). This closed CF-4 and CF-11
+  (moved out of the Misaligned pins into tagged warns), caught the dropped/mixed/nested tuple-literal,
+  dropped array-literal, deconstructed-literal-unused-side, discarded-ternary and both-owning-coalesce
+  cases, and kept every alias/escape twin silent (probe-verified, 34 scenarios).
+- **The fix found two REAL leaks in Core** (proof of value): `np.setops.CanonicalizeSetOpNaN`'s `canon`
+  scalar (ternary of two `NDArray.Scalar` producers handed to `np.where`) — ambient-covered by the
+  `[NDScoped]` set-op entries, marked `[NDScopedCovered]`; and `np.interp.PreparePeriodic`'s two
+  wrap-extend temps (`xpLast - period`, `xpFirst + period` inside the `np.concatenate(new[]{…})`
+  argument) — genuinely stranded (interp's entries are unscoped), fixed with a `using` declaration.
+  Core is back to exactly ONE NDW012 (the documented indexer FP); interp/setops unit tests stay green.
+- **Remaining pinned FN:** the MIXED coalesce `x ?? (a + b)` (leaks only when `x` is null — the
+  every-branch rule's deliberate residue, pinned in `KnownLimitationScenarios`).
+
 ---
 
 ## 9. Workflow for adding a scenario
@@ -233,3 +256,9 @@ guess.
   BOTH `ScopeWeaver` and `TypeHelpers`, guarded by the T4 parity test.
 - **The analysis is per-method by design.** Ambient-scope coverage is invisible to it; that is a
   documented limitation, not a bug to chase with heuristics that risk false negatives.
+- **Composite-producer rules are asymmetric ON PURPOSE.** A tuple/array literal produces if ANY element
+  produces (it holds all elements simultaneously — a produced element is definitely in the dropped
+  value); a conditional (ternary/switch/coalesce) produces only if EVERY branch produces (it holds one
+  branch — a possibly-aliasing branch makes reclaiming unsafe, mirroring CF-3). Do not "simplify" the
+  two to one rule: any-element on conditionals flags mixed ternaries (R2 false positives), and
+  every-element on tuples goes silent on `(temp, alias)` drops (real leaks — `np.setops` had one).

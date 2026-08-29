@@ -80,6 +80,12 @@ namespace NumSharp.Tests.Build.Analyzer
         [DataRow("using var t = a + b;", 0)]        // using -> clean
         [DataRow("var t = a + b;", 1)]              // dropped -> leaks
         [DataRow("_ = a + b;", 1)]                  // discarded -> leaks
+        [DataRow("var t = (a + b, b - a);", 1)]     // dropped tuple literal of temps -> leaks (once)
+        [DataRow("var t = (a, b);", 0)]             // tuple of aliases -> owns nothing (R2)
+        [DataRow("var g = new[] { a + b };", 1)]    // dropped array literal of a temp -> leaks (once)
+        [DataRow("var g = new[] { a, b };", 0)]     // array of aliases -> owns nothing (R2)
+        [DataRow("var t = a.size > 0 ? a + b : b - a;", 1)] // both-owning ternary dropped -> leaks
+        [DataRow("var t = a.size > 0 ? a + b : a;", 0)]     // mixed ternary -> conservatively clean
         public async Task Invariant_ReturnedOrDisposedNeverFlagged(string stmt, int expected)
         {
             var ret = stmt.StartsWith("return") ? "NDArray" : "void";

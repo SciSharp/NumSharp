@@ -350,7 +350,10 @@ namespace NumSharp
             // wrap-extend endpoints: xp = [xp[-1]-period, xp..., xp[0]+period], fp = [fp[-1], fp..., fp[0]]
             var xpFirst = xpd["0:1"];
             var xpLast = xpd[(xpd.size - 1).ToString() + ":"];
-            xpd = np.concatenate(new[] { xpLast - period, xpd, xpFirst + period });
+            // np.interp's entries are not [NDScoped], so the two wrap temps must be reclaimed here —
+            // concatenate copies their values out, leaving the temps dead the moment it returns.
+            using NDArray xpLow = xpLast - period, xpHigh = xpFirst + period;
+            xpd = np.concatenate(new[] { xpLow, xpd, xpHigh });
             var fpFirst = fpd["0:1"];
             var fpLast = fpd[(fpd.size - 1).ToString() + ":"];
             fpd = np.concatenate(new[] { fpLast, fpd, fpFirst });

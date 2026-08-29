@@ -24,6 +24,11 @@ namespace NumSharp.Tests.Build.Analyzer
             FixtureFacts.AnyStartsWith(flagged, "for (int i = 0;", "a temp created inside a loop");
             FixtureFacts.AnyStartsWith(flagged, "_ = a + b;", "an explicit discard (CF-10)");
             FixtureFacts.AnyStartsWith(flagged, "var t = a + b;", "a temp abandoned by a throw");
+            // the conditional-value family (CF-4/CF-11 + coalesce): every branch produces -> owned
+            FixtureFacts.AnyStartsWith(flagged, "var t = p ? a + b : c - d;", "a dropped both-owning ternary");
+            FixtureFacts.AnyStartsWith(flagged, "var t = n switch { 0 => a + b, _ => c - d };", "a dropped both-owning switch expression");
+            FixtureFacts.AnyStartsWith(flagged, "var t = (a + b) ?? (c - d);", "a dropped both-owning coalesce");
+            FixtureFacts.AnyStartsWith(flagged, "_ = p ? a + b : c - d;", "a discarded both-owning ternary");
         }
 
         [TestMethod]
@@ -36,6 +41,10 @@ namespace NumSharp.Tests.Build.Analyzer
             FixtureFacts.NoneContains(flagged, "using (a + b)", "a `using` on a bare owning expression");
             FixtureFacts.NoneContains(flagged, "t.Dispose();", "a try/finally dispose");
             FixtureFacts.NoneContains(flagged, "_ = a;", "a discard of a bare input (no owned buffer)");
+            // MIXED conditionals may hand back the caller's value -> conservatively not owned
+            FixtureFacts.NoneContains(flagged, "var t = p ? a + b : a;", "a dropped MIXED ternary (alias branch)");
+            FixtureFacts.NoneContains(flagged, "var t = n switch { 0 => a + b, _ => a };", "a dropped MIXED switch expression");
+            FixtureFacts.NoneContains(flagged, "return t;", "a returned conditional result");
         }
     }
 }

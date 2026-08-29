@@ -53,6 +53,26 @@ namespace NumSharp.Tests.Build.Analyzer
             AssertAnyStartsWith(flagged, "var (q, r) = SplitTuple(a);", "deconstruction with an unused side");
             AssertAnyStartsWith(flagged, "var g = SplitArray(a);", "dropped NDArray[]");
             AssertAnyStartsWith(flagged, "var p = MakePair(a);", "dropped INDArrayCarrier");
+            // literal carriers own what their elements own — dropping one drops the produced temps
+            AssertAnyStartsWith(flagged, "var t = (a + 1.0, b - 1.0);", "dropped tuple LITERAL of temps");
+            AssertAnyStartsWith(flagged, "var t = (a + 1.0, b);", "dropped MIXED tuple literal (its temp leaks)");
+            AssertAnyStartsWith(flagged, "var t = ((a + 1.0, b - 1.0), 5);", "dropped NESTED tuple literal");
+            AssertAnyStartsWith(flagged, "var g = new[] { a + 1.0 };", "dropped array LITERAL of a temp");
+            AssertAnyStartsWith(flagged, "var (q, r) = (a + 1.0, b - 1.0);", "deconstructed literal with an unused side");
+        }
+
+        [TestMethod]
+        public async Task AliasCarriersAndEscapingLiterals_AreNotFlagged()
+        {
+            var flagged = await FlaggedLineTexts("CarrierScenarios.cs");
+            // R2: a tuple/array of plain inputs owns nothing
+            AssertNoneContains(flagged, "var t = (a, b);", "a tuple of input aliases");
+            AssertNoneContains(flagged, "var g = new[] { a, b };", "an array of input aliases");
+            AssertNoneContains(flagged, "new NDArray[5]", "an empty array allocation");
+            // escaping literal forms
+            AssertNoneContains(flagged, "Sink(new[] { a + 1.0 });", "an array literal handed to a sink");
+            AssertNoneContains(flagged, "_cache = g;", "an array literal stored to a field");
+            AssertNoneContains(flagged, "return t;", "a tuple literal returned via a local");
         }
 
         private static async Task<List<string>> FlaggedLineTexts(string fileName)

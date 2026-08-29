@@ -4,10 +4,12 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace NumSharp.Tests.Build.Analyzer
 {
     /// <summary>
-    ///     COVERAGE_PLAN §3.5 + the documented false-negatives/positives (CF-1, CF-4, CF-11, SC-5,
-    ///     EC-13, AM-1). These PIN the analyzer's current, deliberately-imperfect behavior so a future
-    ///     improvement flips the outcome and is NOTICED (the test turns red) rather than passing
+    ///     COVERAGE_PLAN §3.5 + the documented false-negatives/positives (CF-1, the mixed coalesce,
+    ///     SC-5, EC-13, AM-1). These PIN the analyzer's current, deliberately-imperfect behavior so a
+    ///     future improvement flips the outcome and is NOTICED (the test turns red) rather than passing
     ///     silently. Categorised Misaligned — they document a divergence, not a defect to fix now.
+    ///     (CF-4/CF-11 were pinned here until the every-branch-produces conditional fix landed; their
+    ///     warn cases now live in ControlFlowScenarios.)
     /// </summary>
     [TestClass]
     [TestCategory("Misaligned")]
@@ -26,12 +28,9 @@ namespace NumSharp.Tests.Build.Analyzer
             // CF-1 reassignment orphan
             FixtureFacts.NoneContains(flagged, "var t = a + b;   // orphaned",
                 "the reassignment-orphaned first value (CF-1, a documented false negative)");
-            // CF-4 ternary temp
-            FixtureFacts.NoneContains(flagged, "var t = p ? a + b : c - d;",
-                "a dropped ternary of temps (CF-4, a documented false negative)");
-            // CF-11 switch-expression temp
-            FixtureFacts.NoneContains(flagged, "var t = n switch",
-                "a dropped switch-expression of temps (CF-11, a documented false negative)");
+            // mixed coalesce (the every-branch-produces rule's residue)
+            FixtureFacts.NoneContains(flagged, "var t = x ?? (a + b);",
+                "a dropped mixed coalesce (leaks when x is null; a documented false negative)");
             // SC-5 lambda inside a scoped method
             FixtureFacts.NoneContains(flagged, "Action f = () => { var t = a + b; };",
                 "a lambda temp inside a scoped method (SC-5, a documented false negative)");
