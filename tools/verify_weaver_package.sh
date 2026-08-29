@@ -13,7 +13,9 @@
 #      Mono.Cecil under tools/net8.0/any/, build/NumSharp.Build.targets — and NO analyzers/
 #      (the compile-time analyzer ships in the NumSharp package itself, asserted here on the
 #      NumSharp nupkg: analyzers/dotnet/cs/NumSharp.Build.Analyzer.dll alone — the compiler
-#      host provides Microsoft.CodeAnalysis)
+#      host provides Microsoft.CodeAnalysis); 2b: packing Core with
+#      -p:EnableNDArrayLeakAnalyzer=false still ships the analyzer (payload toggle-independent)
+#      while Core's own compile draws no NDW012 (the toggle governs analysis, never the payload)
 #   3  scaffold a multi-TFM (net8.0;net10.0) consumer referencing NumSharp.Core by ProjectReference
 #   4  `dotnet add package NumSharp.Build` from the local feed → NuGet writes PrivateAssets="all"
 #      by itself (the developmentDependency install UX — the not-a-dependency half of the contract)
@@ -68,7 +70,7 @@ fail() { echo "FAIL: $*" >&2; echo "(work dir kept for inspection: $WORK)" >&2; 
 command -v dotnet >/dev/null 2>&1 || fail "dotnet not on PATH"
 command -v python >/dev/null 2>&1 || fail "python not on PATH (used for zip inspection)"
 
-step "1/15 pack NumSharp.Build the way CI does (build -t:Rebuild, then pack --no-build)"
+step "1/18 pack NumSharp.Build the way CI does (build -t:Rebuild, then pack --no-build)"
 dotnet build "$ROOTW/tools/NumSharp.Build/NumSharp.Build.csproj" -c Release -t:Rebuild -v q --nologo
 dotnet pack  "$ROOTW/tools/NumSharp.Build/NumSharp.Build.csproj" -c Release --no-build -o "$FEEDW" -v q --nologo
 PKG="$(ls "$FEED"/NumSharp.Build.*.nupkg 2>/dev/null | head -1)"
@@ -93,7 +95,7 @@ echo "packed: $(basename "$CPKG")"
 GPF="${NUGET_PACKAGES:-$HOME/.nuget/packages}"
 rm -rf "$GPF/numsharp.build/$WVER" "$GPF/numsharp/$CVER" 2>/dev/null || true
 
-step "2/15 package shape: developmentDependency, no dependencies, no lib/, tools+targets payload; analyzer rides the NumSharp package"
+step "2/18 package shape: developmentDependency, no dependencies, no lib/, tools+targets payload; analyzer rides the NumSharp package"
 python - "$(winpath "$PKG")" <<'PY'
 import sys, zipfile
 z = zipfile.ZipFile(sys.argv[1]); names = set(z.namelist())
@@ -133,7 +135,29 @@ need(not any(n.startswith("analyzers/") and "CodeAnalysis" in n for n in names),
 print("NumSharp package analyzer payload OK")
 PY
 
-step "3/15 scaffold the consumer (net8.0;net10.0, ProjectReference to NumSharp.Core)"
+# 2b — the analyzer payload is TOGGLE-INDEPENDENT: -p:EnableNDArrayLeakAnalyzer=false turns the
+# analyzer off for Core's OWN compile (so no NDW012 there) but the packed nupkg still carries it —
+# the conditional ProjectReference split in NumSharp.Core.csproj keeps the DLL building either way.
+TOFF="$WORK/toggleoff"
+mkdir -p "$TOFF"
+dotnet pack "$ROOTW/src/NumSharp.Core/NumSharp.Core.csproj" -c Release -o "$(winpath "$TOFF")" \
+  -p:GeneratePackageOnBuild=false -p:EnableNDArrayLeakAnalyzer=false -v q --nologo > "$TOFF/pack.log" 2>&1 \
+  || { tail -20 "$TOFF/pack.log"; fail "2b: toggle-off pack of NumSharp.Core failed"; }
+if grep -q "warning NDW012" "$TOFF/pack.log"; then
+  fail "2b: NDW012 fired on Core's own compile despite EnableNDArrayLeakAnalyzer=false"
+fi
+python - "$(winpath "$TOFF")" <<'PY'
+import sys, zipfile, glob
+pkgs = glob.glob(sys.argv[1] + "/NumSharp.[0-9]*.nupkg")
+if not pkgs:
+    print("FAIL: 2b produced no NumSharp nupkg"); sys.exit(1)
+names = zipfile.ZipFile(pkgs[0]).namelist()
+if "analyzers/dotnet/cs/NumSharp.Build.Analyzer.dll" not in names:
+    print("FAIL: toggle-off pack dropped the analyzer — the payload must not depend on EnableNDArrayLeakAnalyzer"); sys.exit(1)
+print("2b: analyzer still packed under EnableNDArrayLeakAnalyzer=false (payload is toggle-independent)")
+PY
+
+step "3/18 scaffold the consumer (net8.0;net10.0, ProjectReference to NumSharp.Core)"
 cat > "$CONSUMER/nuget.config" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>
@@ -266,7 +290,7 @@ EOF
 # The id exists only for this gate, so evicting it is safe and makes the run hermetic.
 rm -rf "$HOME/.nuget/packages/numsharp.weaver" "$HOME/.nuget/packages/numsharp/$CVER"
 
-step "4/15 dotnet add package → PrivateAssets=all written automatically (not-a-dependency UX)"
+step "4/18 dotnet add package → PrivateAssets=all written automatically (not-a-dependency UX)"
 (cd "$CONSUMER" && dotnet add Consumer.csproj package NumSharp.Build --source "$FEEDW" > "$WORK/add.log" 2>&1) \
   || { tail -20 "$WORK/add.log"; fail "dotnet add package NumSharp.Build failed"; }
 grep -qi "PrivateAssets" "$CONSUMER/Consumer.csproj" \
@@ -274,14 +298,14 @@ grep -qi "PrivateAssets" "$CONSUMER/Consumer.csproj" \
 echo "PrivateAssets written by NuGet itself:"
 grep -i -A2 "NumSharp.Build" "$CONSUMER/Consumer.csproj" | sed 's/^/    /'
 
-step "5/15 build → the packaged NDScopeWeave target weaves per TFM"
+step "5/18 build → the packaged NDScopeWeave target weaves per TFM"
 (cd "$CONSUMER" && dotnet build -c Release -v n > "$WORK/build1.log" 2>&1) \
   || { tail -40 "$WORK/build1.log"; fail "consumer build failed"; }
 WOVEN=$(grep -c "woven 3, already-scoped 0" "$WORK/build1.log" || true)
 [ "$WOVEN" -eq 2 ] || { grep -i "NumSharp.Build" "$WORK/build1.log" || true; fail "expected 'woven 3' for both TFMs, saw $WOVEN"; }
 echo "woven 3 methods on net8.0 AND net10.0"
 
-step "6/15 run the woven consumer on both TFMs"
+step "6/18 run the woven consumer on both TFMs"
 for tfm in net8.0 net10.0; do
   (cd "$CONSUMER" && dotnet run --no-build -c Release -f "$tfm" > "$WORK/run.$tfm.log" 2>&1) \
     || { cat "$WORK/run.$tfm.log"; fail "consumer run failed on $tfm"; }
@@ -289,7 +313,7 @@ for tfm in net8.0 net10.0; do
   echo "$tfm: CONSUMER-OK"
 done
 
-step "7/15 incremental rebuild → weave skipped via the per-TFM marker"
+step "7/18 incremental rebuild → weave skipped via the per-TFM marker"
 # One settling build first: the P2P chain (Core self-weave + its weaver bootstrap) can legitimately
 # recompile ONCE after the surrounding property-set context changes; the invariant under test is
 # that a build in which CoreCompile is up to date does not re-weave.
@@ -302,7 +326,7 @@ if grep -q "woven 3" "$WORK/build2.log"; then
 fi
 echo "up-to-date build did not re-weave"
 
-step "8/15 -p:SkipNDScopeWeave=true → no weave, and the consumer's own gate goes red (non-vacuous)"
+step "8/18 -p:SkipNDScopeWeave=true → no weave, and the consumer's own gate goes red (non-vacuous)"
 (cd "$CONSUMER" && dotnet build -c Release -t:Rebuild -p:SkipNDScopeWeave=true -v n > "$WORK/build3.log" 2>&1) \
   || { tail -40 "$WORK/build3.log"; fail "SkipNDScopeWeave build failed"; }
 if grep -qi "NumSharp.Build:" "$WORK/build3.log"; then
@@ -314,7 +338,7 @@ fi
 grep -q "UNWOVEN" "$WORK/run.skip.log" || { cat "$WORK/run.skip.log"; fail "expected UNWOVEN report from the skipped build"; }
 echo "escape hatch works; step-6 gate proven non-vacuous"
 
-step "9/15 pack the consumer → depends on NumSharp, NOT on NumSharp.Build"
+step "9/18 pack the consumer → depends on NumSharp, NOT on NumSharp.Build"
 (cd "$CONSUMER" && dotnet build -c Release -t:Rebuild -v q --nologo > "$WORK/build4.log" 2>&1) \
   || { tail -40 "$WORK/build4.log"; fail "re-weave rebuild failed"; }
 (cd "$CONSUMER" && dotnet pack -c Release --no-build -o "$WORK/out" -v q --nologo > "$WORK/pack.log" 2>&1) \
@@ -355,7 +379,7 @@ scaffold_pkgref() { # <dir> <extra-propertygroup-xml>
 EOF
 }
 
-step "10/15 PackageReference-NumSharp consumer (lib/ resolution, the real product path)"
+step "10/18 PackageReference-NumSharp consumer (lib/ resolution, the real product path)"
 PD="$WORK/pkgref"
 scaffold_pkgref "$PD" ""
 cp "$CONSUMER/Program.cs" "$PD/Program.cs"
@@ -366,7 +390,7 @@ grep -q "woven 3, already-scoped 0" "$PD/build.log" || fail "PackageReference co
 grep -q "CONSUMER-OK" "$PD/run.log" || { cat "$PD/run.log"; fail "no CONSUMER-OK from the PackageReference consumer"; }
 echo "PackageReference consumer woven and green"
 
-step "11/15 error shapes fail the build — the ANALYZER at compile-time, the weaver post-compile"
+step "11/18 error shapes fail the build — the ANALYZER at compile-time, the weaver post-compile"
 # The compile-time Roslyn analyzer arrives via the NumSharp PackageReference (analyzers/dotnet/cs/
 # in THAT package); NumSharp.Build adds the post-compile weaver. The analyzer's ERROR diagnostics
 # preempt the weaver — a failed CoreCompile never reaches the weave — so the SOURCE-detectable
@@ -429,7 +453,7 @@ fi
 grep -q "error NDW004" "$EW/build.log" || { grep -o "error NDW[0-9]*" "$EW/build.log" | sort -u; fail "11b: missing NDW004 (weaver) in the failed build output"; }
 echo "11b: weaver reported NDW004 post-compile (the analyzer passed the shape)"
 
-step "12/15 attribute-free consumer no-ops (assembly untouched)"
+step "12/18 attribute-free consumer no-ops (assembly untouched)"
 ND="$WORK/noattr"
 scaffold_pkgref "$ND" ""
 cat > "$ND/Program.cs" <<'EOF'
@@ -455,7 +479,7 @@ grep -Eq "no \[NDScoped\]/\[NDScopedAsync\] usage detected|no \[NDScoped\]/\[NDS
   || { cat "$ND/run.log"; fail "attribute-free consumer run failed"; }
 echo "no-op verified (assembly left unwritten)"
 
-step "13/15 transitive isolation: AppB references woven LibA, is NOT woven itself"
+step "13/18 transitive isolation: AppB references woven LibA, is NOT woven itself"
 TD="$WORK/transitive"
 mkdir -p "$TD/liba" "$TD/appb"
 cp "$CONSUMER/nuget.config" "$TD/nuget.config"
@@ -522,7 +546,7 @@ fi
   || { cat "$TD/appb/run.log" 2>/dev/null; fail "transitive isolation assertion failed"; }
 echo "LibA woven, AppB untouched (attribute inert without the package)"
 
-step "14/15 strong-named consumer is re-signed with its own key and runs"
+step "14/18 strong-named consumer is re-signed with its own key and runs"
 SD="$WORK/signed"
 scaffold_pkgref "$SD" "<SignAssembly>true</SignAssembly><AssemblyOriginatorKeyFile>consumer.snk</AssemblyOriginatorKeyFile>"
 cp "$ROOT/Open.snk" "$SD/consumer.snk"
@@ -561,7 +585,7 @@ PY
 [ $? -eq 0 ] || fail "re-signed consumer lacks the StrongNameSigned flag"
 echo "re-signed with the consumer's key; signature flag set; runs green"
 
-step "15/15 state-machine weave: async / iterator / non-async-Task methods woven and behaving"
+step "15/18 state-machine weave: async / iterator / non-async-Task methods woven and behaving"
 AD="$WORK/asyncsm"
 scaffold_pkgref "$AD" ""
 cat > "$AD/Program.cs" <<'EOF'

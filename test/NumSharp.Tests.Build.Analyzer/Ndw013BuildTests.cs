@@ -17,6 +17,15 @@ namespace NumSharp.Tests.Build.Analyzer
     [TestCategory("AnalyzerBuild")]
     public class Ndw013BuildTests
     {
+        /// <summary>
+        ///     The generated consumer must target the TFM of the RUNNING test host, because it
+        ///     references the host's own NumSharp.dll (<c>typeof(NDArray).Assembly.Location</c>) —
+        ///     a hardcoded net8.0 project handed the net10.0 build fails reference resolution
+        ///     outright, which is exactly how these tests were silently broken on the net10.0
+        ///     test target while CI (which excludes AnalyzerBuild) stayed green.
+        /// </summary>
+        private static string HostTfm => $"net{Environment.Version.Major}.0";
+
         [TestMethod]
         public void Ndw013_FiresWithoutWeaver_And_IsSilentWhenActive()
         {
@@ -34,7 +43,7 @@ namespace NumSharp.Tests.Build.Analyzer
                 File.WriteAllText(Path.Combine(work, "T.csproj"), $@"<Project Sdk=""Microsoft.NET.Sdk"">
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>{HostTfm}</TargetFramework>
     <Nullable>disable</Nullable>
     <SignAssembly>false</SignAssembly>
   </PropertyGroup>
@@ -83,7 +92,7 @@ namespace NumSharp.Tests.Build.Analyzer
                 File.WriteAllText(Path.Combine(work, "T.csproj"), $@"<Project Sdk=""Microsoft.NET.Sdk"">
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>{HostTfm}</TargetFramework>
     <Nullable>disable</Nullable>
     <SignAssembly>false</SignAssembly>
   </PropertyGroup>
@@ -146,7 +155,7 @@ namespace NumSharp.Tests.Build.Analyzer
                 File.WriteAllText(Path.Combine(work, "T.csproj"), $@"<Project Sdk=""Microsoft.NET.Sdk"">
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>{HostTfm}</TargetFramework>
     <Nullable>disable</Nullable>
     <SignAssembly>false</SignAssembly>
   </PropertyGroup>
