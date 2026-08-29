@@ -497,16 +497,23 @@ namespace NumSharp.Backends.Kernels
         // so they carry AggressiveInlining (inline into the kernel where the JIT can) plus
         // AggressiveOptimization (full tier-1 codegen from the first call when they're
         // invoked standalone via the kernel's Call, skipping the tier-0 hot-path penalty).
+        // NaN-PROPAGATING: the NaN OPERAND is returned VERBATIM (payload + sign preserved),
+        // in1 preferred when both are NaN — NumPy's (ge(in1,in2) || isnan(in1)) ? in1 : in2
+        // (probed 2.4.2: maximum([nanA],[1]) = nanA's exact bits, maximum([-nan],[nanA]) = -nan).
+        // Returning canonical Half.NaN here — as this once did — silently rewrote the payload
+        // on every emitted-IL route (mixed-dtype keys, SimdChunk, np.clip's Half clamp).
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static Half HalfMaxNaN(Half a, Half b)
         {
-            if (Half.IsNaN(a) || Half.IsNaN(b)) return Half.NaN;
+            if (Half.IsNaN(a)) return a;
+            if (Half.IsNaN(b)) return b;
             return a >= b ? a : b;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static Half HalfMinNaN(Half a, Half b)
         {
-            if (Half.IsNaN(a) || Half.IsNaN(b)) return Half.NaN;
+            if (Half.IsNaN(a)) return a;
+            if (Half.IsNaN(b)) return b;
             return a <= b ? a : b;
         }
 

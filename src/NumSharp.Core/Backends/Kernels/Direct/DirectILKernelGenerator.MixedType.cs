@@ -113,6 +113,18 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static MixedTypeKernel GenerateMixedTypeKernel(MixedTypeKernelKey key)
         {
+            // f16 elementwise min/max family — the comparison is defined on the raw bit
+            // pattern (sign-magnitude order), so (Half,Half)→Half maximum/minimum/fmax/fmin
+            // ride static bit-level AVX2 kernels with zero float conversions (the f16 op class
+            // that BEATS NumPy — see Binary.MinMax.Half.cs). SimdChunk/General and mixed-dtype
+            // keys keep the emitted IL below.
+            if (key.LhsType == NPTypeCode.Half && key.RhsType == NPTypeCode.Half && key.ResultType == NPTypeCode.Half)
+            {
+                var halfMinMax = TryGetHalfMinMaxKernel(key.Op, key.Path);
+                if (halfMinMax != null)
+                    return halfMinMax;
+            }
+
             return key.Path switch
             {
                 ExecutionPath.SimdFull => GenerateSimdFullKernel(key),
