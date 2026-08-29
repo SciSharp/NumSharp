@@ -551,22 +551,24 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Max/min for Half. The IL reduction kernel can't drive Half (OpCodes.Bgt/Blt don't
-        /// apply to the struct), so this stays out-of-IL — but Half DOES expose a hardware-backed
-        /// comparison order, so the contiguous buffer is scanned with Half's own operators rather
-        /// than bridging every element through (double). That boxing-free, no-round-trip scan is
-        /// ~9× the old iterator+double path. NaN propagates per NumPy (max/min with NaN → NaN):
-        /// once the accumulator is NaN, <c>x &gt; acc</c> is false and only another NaN re-sets it,
-        /// so the first NaN sticks. Non-contiguous / empty inputs keep the iterator fallback.
+        /// apply to the struct), but the flat extremum needs no float math at all: f16 ordering is
+        /// sign-magnitude on the raw bits, so the contiguous buffer rides the bit-level AVX2
+        /// key-transform kernel (<see cref="DirectILKernelGenerator.HalfMaxBitsContiguous"/> —
+        /// zero conversions, pmaxuw/pminuw over order keys). This replaced the scalar
+        /// Half-operator scan (two hardware F16C converts per element) at ~9× its speed AND
+        /// fixed its NaN rule: the scan's <c>x &gt; acc || IsNaN(x)</c> let a LATER NaN overwrite
+        /// the accumulator, where NumPy's fold <c>(ge(acc,x) || isnan(acc)) ? acc : x</c> sticks
+        /// at the FIRST NaN (payload + sign verbatim) — the kernel rescans for exactly that
+        /// element, and likewise returns the FIRST zero's sign on a ±0 extremum (npy_half ge/le
+        /// call -0 == +0, probed 2.4.2). Non-contiguous / empty inputs keep the iterator fallback.
         /// </summary>
         private unsafe object MaxElementwiseHalfFallback(NDArray arr)
         {
             long n = arr.size;
             if (arr.Shape.IsContiguous && n > 0)
             {
-                Half* p = (Half*)((byte*)arr.Address + arr.Shape.offset * 2);
-                Half acc = p[0];
-                for (long i = 1; i < n; i++) { Half x = p[i]; if (x > acc || Half.IsNaN(x)) acc = x; }
-                return acc;
+                ushort* p = (ushort*)((byte*)arr.Address + arr.Shape.offset * 2);
+                return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.HalfMaxBitsContiguous(p, n));
             }
 
             // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
@@ -578,10 +580,8 @@ namespace NumSharp.Backends
             long n = arr.size;
             if (arr.Shape.IsContiguous && n > 0)
             {
-                Half* p = (Half*)((byte*)arr.Address + arr.Shape.offset * 2);
-                Half acc = p[0];
-                for (long i = 1; i < n; i++) { Half x = p[i]; if (x < acc || Half.IsNaN(x)) acc = x; }
-                return acc;
+                ushort* p = (ushort*)((byte*)arr.Address + arr.Shape.offset * 2);
+                return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.HalfMinBitsContiguous(p, n));
             }
 
             // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
