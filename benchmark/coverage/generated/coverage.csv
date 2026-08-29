@@ -72,7 +72,7 @@ numpy.concatenate,np,concatenate,function,Shape manipulation,available,op_matrix
 numpy.conj,np,conj,ufunc,Math,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Unary/UnaryFamilyBenchmarks.cs,
 numpy.conjugate,np,conjugate,ufunc,Math,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Unary/UnaryFamilyBenchmarks.cs,
 numpy.convolve,np,convolve,function,Math,available,op_matrix,openblas_optional_sliding_dot,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Statistics/SignalStatisticsBenchmarks.cs,
-numpy.copy,np,copy,function,Array creation,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Creation/CreationBenchmarks.cs; benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Creation/CreationBenchmarks.cs; benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs,
+numpy.copy,np,copy,function,Array creation,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Creation/CreationBenchmarks.cs; benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs,
 numpy.copyto,np,copyto,function,Array metadata & memory,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/ApiSurface/UtilityBenchmarks.cs,
 numpy.corrcoef,np,corrcoef,function,Statistics & histograms,available,op_matrix,managed,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Statistics/SignalStatisticsBenchmarks.cs,
 numpy.correlate,np,correlate,function,Statistics & histograms,available,op_matrix,openblas_optional_sliding_dot,benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Statistics/SignalStatisticsBenchmarks.cs,

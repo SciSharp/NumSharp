@@ -92,10 +92,6 @@ public class CreationBenchmarks : TypedBenchmarkBase
     [BenchmarkCategory("Copy")]
     public void CopyMethod() { using var _ = _source.copy(); }
 
-    [Benchmark(Description = "np.copy(a) [asarray equivalent]")]
-    [BenchmarkCategory("Convert")]
-    public void AsArray() { using var _ = np.copy(_source); }
-
     // ========================================================================
     // Like-based
     // ========================================================================

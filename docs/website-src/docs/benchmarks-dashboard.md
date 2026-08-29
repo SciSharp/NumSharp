@@ -396,6 +396,8 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 .ns-bench-dashboard .s-close { background: #d8a528; }
 .ns-bench-dashboard .s-slower { background: var(--slow); }
 .ns-bench-dashboard .s-much { background: var(--bad); }
+.ns-bench-dashboard .s-negligible { background: #8793a1; }
+.ns-bench-dashboard .s-failed { background: #7f1d1d; }
 .ns-bench-dashboard .s-nodata { background: #c7ccd1; }
 
 .ns-bench-dashboard .band-faster-100x { background: linear-gradient(90deg, #0e7490, #14b8a6); }
@@ -414,6 +416,12 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 .ns-bench-dashboard .band-much-010 { background: linear-gradient(90deg, #cf5a50, #bd3237); }
 .ns-bench-dashboard .band-much-005 { background: linear-gradient(90deg, #bd3237, #9d1926); }
 .ns-bench-dashboard .band-much-000 { background: linear-gradient(90deg, #9d1926, #6f0c16); }
+.ns-bench-dashboard .band-negligible {
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.24) 0 0.25rem, transparent 0.25rem 0.5rem),
+    #8793a1;
+}
+.ns-bench-dashboard .band-failed { background: #7f1d1d; }
 .ns-bench-dashboard .band-nodata {
   background:
     repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.32) 0 0.25rem, transparent 0.25rem 0.5rem),
@@ -1800,9 +1808,9 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   <section>
     <div class="section-head">
       <h2>Status Mix</h2>
-      <p class="section-note">All measured rows classified by NumPy / NumSharp, including sub-microsecond rows; only no-data cells are separate</p>
+      <p class="section-note">Credible rows are grouped by NumPy / NumSharp ratio; negligible and no-data cells are separate</p>
     </div>
-    <div class="status-bar" role="list" aria-label="Status mix ratio bands ordered from fastest measured rows to slowest measured rows, followed by no-data rows">
+    <div class="status-bar" role="list" aria-label="Status mix ratio bands ordered from fastest credible rows to slowest credible rows, followed by negligible, failed, and no-data rows">
       <span class="status-segment band-faster-100x tip-left" role="listitem" tabindex="0" style="--w:0.216%" aria-label="4 rows at 100x or faster" data-tip="4 faster rows, &gt;=100x&#10;1. np.zeros_like (float64) | dtype=float64 | N=10M | 2150.69x | NS &lt;0.1% NP&#10;2. np.zeros_like (int64) | dtype=int64 | N=10M | 1585.88x | NS 0.1% NP&#10;3. np.zeros_like (int32) | dtype=int32 | N=10M | 1230.61x | NS 0.1% NP&#10;4. np.zeros_like (float32) | dtype=float32 | N=10M | 1061.51x | NS 0.1% NP"></span>
       <span class="status-segment band-faster-20 tip-left" role="listitem" tabindex="0" style="--w:0.054%" aria-label="1 row at 20x to 100x faster" data-tip="1 faster row, 20-100x&#10;1. np.prod axis=1 (float64) | dtype=float64 | N=10M | 23.97x | NS 4.2% NP"></span>
       <span class="status-segment band-faster-10 tip-left" role="listitem" tabindex="0" style="--w:1.243%" aria-label="23 rows at 10x to 20x faster" data-tip="23 faster rows, 10-20x (top 10)&#10;1. np.dot(a, b) (float64) | dtype=float64 | N=100K | 14.17x | NS 7.1% NP&#10;2. np.prod (float64) | dtype=float64 | N=100K | 13.75x | NS 7.3% NP&#10;3. np.nanstd(a) (float64) | dtype=float64 | N=1K | 13.33x | NS 7.5% NP&#10;4. np.std (float32) | dtype=float32 | N=1K | 12.79x | NS 7.8% NP&#10;5. np.nanstd(a) (float16) | dtype=float16 | N=1K | 12.50x | NS 8.0% NP&#10;6. np.percentile(a, 50) (float64) | dtype=float64 | N=1K | 12.18x | NS 8.2% NP&#10;7. np.nanquantile(a, 0.5) (float32) | dtype=float32 | N=1K | 11.86x | NS 8.4% NP&#10;8. np.nanvar(a) (float16) | dtype=float16 | N=1K | 11.67x | NS 8.6% NP&#10;9. np.nanpercentile(a, 50) (float32) | dtype=float32 | N=1K | 11.51x | NS 8.7% NP&#10;10. np.nanpercentile(a, 50) (float64) | dtype=float64 | N=1K | 11.42x | NS 8.8% NP"></span>
@@ -1819,6 +1827,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       <span class="status-segment band-much-010 tip-right" role="listitem" tabindex="0" style="--w:3.944%" aria-label="73 much slower rows at 0.10x to 0.20x" data-tip="73 much slower rows, 0.10-0.20x (top 10)&#10;1. a + 5 (literal) (uint32) | dtype=uint32 | N=1K | 0.20x | NS 502.0% NP&#10;2. np.floor (float64) | dtype=float64 | N=100K | 0.20x | NS 501.8% NP&#10;3. np.left_shift(a, 2) (uint16) | dtype=uint16 | N=1K | 0.20x | NS 502.8% NP&#10;4. np.left_shift(a, 2) (uint32) | dtype=uint32 | N=1K | 0.20x | NS 502.6% NP&#10;5. np.sign (float64) | dtype=float64 | N=1K | 0.20x | NS 504.1% NP&#10;6. a * 2 (literal) (float32) | dtype=float32 | N=1K | 0.20x | NS 504.5% NP&#10;7. np.left_shift(a, 2) (int16) | dtype=int16 | N=1K | 0.20x | NS 510.5% NP&#10;8. np.add(a, b) (float64) | dtype=float64 | N=1K | 0.20x | NS 514.0% NP&#10;9. np.right_shift(a, 2) (uint16) | dtype=uint16 | N=1K | 0.20x | NS 511.7% NP&#10;10. np.exp2 (float32) | dtype=float32 | N=100K | 0.19x | NS 515.7% NP"></span>
       <span class="status-segment band-much-005 tip-right" role="listitem" tabindex="0" style="--w:2.215%" aria-label="41 much slower rows at 0.05x to 0.10x" data-tip="41 much slower rows, 0.05-0.10x (top 10)&#10;1. np.right_shift(a, 2) (int16) | dtype=int16 | N=100K | 0.10x | NS 1021.3% NP&#10;2. np.zeros_like (int32) | dtype=int32 | N=1K | 0.10x | NS 1051.8% NP&#10;3. np.zeros_like (int64) | dtype=int64 | N=1K | 0.10x | NS 1056.4% NP&#10;4. np.invert(a) (bool) | dtype=bool | N=100K | 0.09x | NS 1068.5% NP&#10;5. np.ones (float32) | dtype=float32 | N=1K | 0.09x | NS 1080.3% NP&#10;6. a[::-1] (reversed) | dtype=float64 | N=10M | 0.09x | NS 1091.4% NP&#10;7. a | b (uint64) | dtype=uint64 | N=1K | 0.09x | NS 1094.0% NP&#10;8. np.invert(a) (uint64) | dtype=uint64 | N=1K | 0.09x | NS 1161.5% NP&#10;9. np.isnan(a) (float32) | dtype=float32 | N=100K | 0.09x | NS 1177.4% NP&#10;10. np.full (float32) | dtype=float32 | N=1K | 0.08x | NS 1199.1% NP"></span>
       <span class="status-segment band-much-000 tip-right" role="listitem" tabindex="0" style="--w:0.756%" aria-label="14 much slower rows below 0.05x" data-tip="14 much slower rows, &lt;0.05x (slowest 10)&#10;1. np.empty (float64) | dtype=float64 | N=1K | 0.02x | NS 4784.9% NP&#10;2. np.empty (int32) | dtype=int32 | N=100K | 0.02x | NS 4659.1% NP&#10;3. np.empty (int64) | dtype=int64 | N=100K | 0.02x | NS 4388.7% NP&#10;4. np.empty (float64) | dtype=float64 | N=100K | 0.02x | NS 4137.0% NP&#10;5. np.empty (int64) | dtype=int64 | N=1K | 0.03x | NS 3888.0% NP&#10;6. np.empty (float32) | dtype=float32 | N=100K | 0.03x | NS 3787.7% NP&#10;7. np.zeros (float64) | dtype=float64 | N=1K | 0.03x | NS 3534.8% NP&#10;8. np.empty (int32) | dtype=int32 | N=1K | 0.03x | NS 3239.4% NP&#10;9. np.zeros (int32) | dtype=int32 | N=1K | 0.04x | NS 2881.0% NP&#10;10. np.copy (int64) | dtype=int64 | N=1K | 0.04x | NS 2479.3% NP"></span>
+      <span class="status-segment band-negligible tip-right" role="listitem" tabindex="0" style="--w:0%" aria-label="Negligible rows excluded from performance bands"></span>
+      <span class="status-segment band-failed tip-right" role="listitem" tabindex="0" style="--w:0%" aria-label="Failed benchmark rows"></span>
       <span class="status-segment band-nodata tip-right" role="listitem" tabindex="0" style="--w:3.73%" aria-label="69 no-data rows pending C# measurements" data-tip="69 no-data rows, pending C# measurements (first 10)&#10;1. matrix + scalar | dtype=float64 | N=1K | pending C#&#10;2. matrix + row_vector (N,M)+(M,) | dtype=float64 | N=1K | pending C#&#10;3. matrix + col_vector (N,M)+(N,1) | dtype=float64 | N=1K | pending C#&#10;4. np.broadcast_to(row, (N,M)) | dtype=float64 | N=1K | pending C#&#10;5. matrix + scalar | dtype=float64 | N=100K | pending C#&#10;6. matrix + row_vector (N,M)+(M,) | dtype=float64 | N=100K | pending C#&#10;7. matrix + col_vector (N,M)+(N,1) | dtype=float64 | N=100K | pending C#&#10;8. np.broadcast_to(row, (N,M)) | dtype=float64 | N=100K | pending C#&#10;9. reshape 1D-&gt;2D | dtype=float64 | N=1K | pending C#&#10;10. reshape 2D-&gt;1D | dtype=float64 | N=1K | pending C#"></span>
     </div>
     <div class="legend-grid">
@@ -1827,6 +1837,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       <span class="legend-item" data-status-summary="close"><span class="legend-swatch s-close"></span>523 close, 0.80-1.05x</span>
       <span class="legend-item" data-status-summary="slower"><span class="legend-swatch s-slower"></span>954 slower, 0.33-0.80x</span>
       <span class="legend-item" data-status-summary="much"><span class="legend-swatch s-much"></span>516 much slower, &lt;0.33x</span>
+      <span class="legend-item" data-status-summary="negligible"><span class="legend-swatch s-negligible"></span>Negligible</span>
+      <span class="legend-item" data-status-summary="failed"><span class="legend-swatch s-failed"></span>Failed</span>
       <span class="legend-item" data-status-summary="nodata"><span class="legend-swatch s-nodata"></span>63 no data</span>
     </div>
   </section>
@@ -2033,7 +2045,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   <section class="function-explorer" data-function-explorer aria-labelledby="function-explorer-title">
     <div class="section-head">
       <h2 id="function-explorer-title">Function Explorer</h2>
-      <p class="section-note">The list shows one best-available score; backend-sensitive details expose Managed Core and OpenBLAS separately</p>
+      <p class="section-note">Scores use credible rows only; negligible and no-data cells remain available in the raw tables</p>
     </div>
     <div class="function-explorer-shell">
       <aside class="function-sidebar" aria-label="np function list">
@@ -2210,6 +2222,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     { className: "band-much-010", title: "0.20x to 0.33x", min: 0.2, max: 0.33, sort: "asc" },
     { className: "band-much-005", title: "0.10x to 0.20x", min: 0.1, max: 0.2, sort: "asc" },
     { className: "band-much-000", title: "Below 0.10x", max: 0.1, sort: "asc" },
+    { className: "band-negligible", title: "Negligible", negligible: true, sort: "index" },
+    { className: "band-failed", title: "Failed", failed: true, sort: "index" },
     { className: "band-nodata", title: "No data", noData: true, sort: "index" }
   ];
 
@@ -2233,6 +2247,18 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     return Number.isFinite(number) ? number : null;
   };
 
+  // Keep every geomean on the report generator's credibility contract. In particular, a
+  // non-null ratio is not necessarily comparable: sub-microsecond/view/lazy-allocation cells and
+  // >20x artifacts are deliberately published with status="negligible" so raw timing remains
+  // inspectable without letting call overhead masquerade as throughput.
+  const excludedGeomeanStatuses = new Set(["no_data", "negligible", "failed"]);
+  const isCredibleRow = (row) => Number.isFinite(row.ratio)
+    && row.ratio > 0
+    && !excludedGeomeanStatuses.has(row.status);
+  // Negligible rows have exactly one UI home: the dedicated status-band tooltip. Keep them out
+  // of the Function Explorer entirely, including its raw tab and timed-row denominator.
+  const isExplorerRow = (row) => row.status !== "negligible";
+
   const functionNameFromOperation = (operation) => {
     const value = String(operation || "");
     const npMatch = value.match(/\bnp(?:\.[A-Za-z_][A-Za-z0-9_]*)+/);
@@ -2240,6 +2266,39 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     const ndarrayMatch = value.match(/^\s*a\.([A-Za-z_][A-Za-z0-9_]*)/);
     return ndarrayMatch ? `ndarray.${ndarrayMatch[1]}` : null;
   };
+
+  const o1FunctionNames = new Set([
+    "np.real", "np.asarray", "np.asanyarray", "np.asmatrix", "np.frombuffer",
+    "np.atleast_1d", "np.atleast_2d", "np.atleast_3d", "np.array_split", "np.split",
+    "np.dsplit", "np.hsplit", "np.vsplit", "np.unstack", "np.broadcast_arrays",
+    "np.broadcast_to", "np.diagonal", "np.expand_dims", "np.flip", "np.fliplr", "np.flipud",
+    "np.matrix_transpose", "np.moveaxis", "np.permute_dims", "np.ravel", "np.reshape",
+    "np.rollaxis", "np.rot90", "np.squeeze", "np.swapaxes", "np.transpose", "np.ix_", "np.size",
+    "np.iscomplexobj", "np.isrealobj", "np.isscalar", "np.isfortran", "np.can_cast",
+    "np.common_type", "np.isdtype", "np.issubdtype", "np.min_scalar_type", "np.mintypecode",
+    "np.promote_types", "np.result_type", "np.iterable", "np.nested_iters",
+    "np.format_float_positional", "np.format_float_scientific", "np.get_printoptions",
+    "np.printoptions", "np.set_printoptions", "np.einsum_path", "np.linalg.diagonal",
+    "np.linalg.matrix_transpose", "ndarray.T", "ndarray.conj", "ndarray.conjugate",
+    "ndarray.diagonal", "ndarray.getfield", "ndarray.item", "ndarray.ravel", "ndarray.reshape",
+    "ndarray.setflags", "ndarray.squeeze", "ndarray.swapaxes", "ndarray.to_device",
+    "ndarray.transpose", "ndarray.view"
+  ]);
+  const o1ExactOperations = new Set([
+    "np.diag", "np.diag(a2d)", "reshape 1d->2d", "reshape 1d->3d", "reshape 2d->1d",
+    "a[100:1000] (contiguous slice)", "a[10:100, :] (row slice 2d)",
+    "a[:, 10:100] (col slice 2d)", "a[::-1] (reversed)", "a[::-1]",
+    "a[::2] (strided slice)"
+  ]);
+  const isO1Operation = (operation) => {
+    const value = String(operation || "")
+      .replace(/\s*\((?:bool|u?int\d+|float\d+|complex\d+|decimal)\)\s*$/i, "")
+      .trim();
+    return o1FunctionNames.has(functionNameFromOperation(value))
+      || o1ExactOperations.has(value.toLowerCase());
+  };
+  const normalizeCredibilityStatus = (status, numSharpMs, available, operation) =>
+    available && (numSharpMs === 0 || isO1Operation(operation)) ? "negligible" : status;
 
   const formatRatio = (value) => Number.isFinite(value) ? `${value.toFixed(value >= 10 ? 2 : 3)}x` : "n/a";
   const formatMs = (value) => {
@@ -2259,6 +2318,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
   const formatBandLabel = (row) => {
     const ratio = row.ratio;
+    if (row.status === "negligible" && !Number.isFinite(ratio)) return "Negligible";
     if (!Number.isFinite(ratio)) return "No data";
     if (ratio >= 100) return "100x or faster";
     if (ratio >= 20) return "20x to 100x faster";
@@ -2332,7 +2392,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
   const buildDataTable = (visibleRows, isNoData = false) => {
     const availabilityLabel = (row) => {
-      const label = row.availability === "missing_backend" ? "Missing backend"
+      const label = row.availability === "failed" ? "Benchmark failed"
+        : row.availability === "missing_backend" ? "Missing backend"
         : row.availability === "not_supported" ? "Not supported"
         : row.availability === "not_measured" ? "Not measured"
         : "No comparable timing";
@@ -2459,11 +2520,17 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const bandForElement = (element) => bandDefinitions.find((band) => element.classList.contains(band.className));
 
   const rowMatchesBand = (row, band) => {
+    if (band.negligible) {
+      return row.status === "negligible";
+    }
+    if (band.failed) {
+      return row.status === "failed";
+    }
     if (band.noData) {
-      return row.status === "no_data" || row.ratio === null;
+      return row.status === "no_data";
     }
 
-    if (row.ratio === null) return false;
+    if (!isCredibleRow(row)) return false;
     if (band.min !== undefined && row.ratio < band.min) return false;
     if (band.max !== undefined && row.ratio >= band.max) return false;
     return true;
@@ -2481,7 +2548,11 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       segment.style.setProperty("--w", `${(count / total * 100).toFixed(3)}%`);
       segment.setAttribute("aria-label", band.noData
         ? `${count} no-data rows pending C# measurements`
-        : `${count} rows at ${band.title}`);
+        : band.failed
+          ? `${count} failed benchmark rows`
+        : band.negligible
+          ? `${count} negligible rows excluded from performance rollups`
+          : `${count} credible rows at ${band.title}`);
     });
 
     const sum = (...classes) => classes.reduce((value, className) => value + (counts.get(className) || 0), 0);
@@ -2491,6 +2562,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       close: `${sum("band-close-090", "band-close-075", "band-close-050")} close, 0.80-1.05x`,
       slower: `${sum("band-slower-040", "band-slower-030", "band-slower-020")} slower, 0.33-0.80x`,
       much: `${sum("band-much-010", "band-much-005", "band-much-000")} much slower, <0.33x`,
+      negligible: `${sum("band-negligible")} negligible`,
+      failed: `${sum("band-failed")} failed`,
       nodata: `${sum("band-nodata")} no data`
     };
 
@@ -2502,7 +2575,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   };
 
   const updateEffectiveRollups = (rows, suiteTier = null) => {
-    const credible = rows.filter((row) => Number.isFinite(row.ratio) && !["no_data", "negligible"].includes(row.status));
+    const credible = rows.filter(isCredibleRow);
     const geomean = (items) => {
       const ratios = items.map((row) => row.ratio).filter((ratio) => Number.isFinite(ratio) && ratio > 0);
       return ratios.length ? Math.exp(ratios.reduce((sum, ratio) => sum + Math.log(ratio), 0) / ratios.length) : null;
@@ -2571,8 +2644,10 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       if (!suite) return;
       const key = suiteKey(suite);
       const matchesTier = (row) => tier === null || row.n === tier;
-      const suiteRows = managedRows.filter((row) => suiteKey(row.suite) === key && matchesTier(row));
-      const nativeSuiteRows = openBlasRows.filter((row) => suiteKey(row.suite) === key && matchesTier(row));
+      const suiteRows = managedRows.filter((row) =>
+        isCredibleRow(row) && suiteKey(row.suite) === key && matchesTier(row));
+      const nativeSuiteRows = openBlasRows.filter((row) =>
+        isCredibleRow(row) && suiteKey(row.suite) === key && matchesTier(row));
       const title = tier === null ? `${suite} benchmark rows` : `${suite} at ${formatN(tier)} benchmark rows`;
       const html = buildTooltipTable(title, suiteRows, nativeSuiteRows);
       attachTooltip(element, html, title);
@@ -2694,12 +2769,15 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       groups.get(key).push(row);
     });
 
-    return Array.from(groups.entries()).map(([name, groupRows]) => ({
-      name,
-      rows: groupRows,
-      measuredRows: groupRows.filter((row) => row.ratio !== null),
-      score: geomeanRows(groupRows)
-    }));
+    return Array.from(groups.entries()).map(([name, groupRows]) => {
+      const credibleRows = groupRows.filter(isCredibleRow);
+      return {
+        name,
+        rows: groupRows,
+        credibleRows,
+        score: geomeanRows(credibleRows)
+      };
+    });
   };
 
   const buildFunctionTable = (rows) => {
@@ -2762,25 +2840,27 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     });
 
     return Array.from(groups.values()).map((group) => {
-      const measuredRows = group.rows.filter((row) => row.ratio !== null);
-      const ratios = measuredRows.map((row) => row.ratio);
+      const timedRows = group.rows.filter((row) => row.ratio !== null);
+      const credibleRows = group.rows.filter(isCredibleRow);
+      const ratios = credibleRows.map((row) => row.ratio);
       const sizes = sortedSizes(group.rows.map((row) => row.n));
       const sizeStats = sizes.map((size) => {
-        const sizeRows = measuredRows.filter((row) => row.n === size);
+        const sizeRows = credibleRows.filter((row) => row.n === size);
         return { n: size, rows: sizeRows, score: geomeanRows(sizeRows) };
       });
 
       return {
         ...group,
-        measuredRows,
-        score: geomeanRows(measuredRows),
+        timedRows,
+        credibleRows,
+        score: geomeanRows(credibleRows),
         min: ratios.length ? Math.min(...ratios) : null,
         max: ratios.length ? Math.max(...ratios) : null,
         suites: uniqueSorted(group.rows.map((row) => row.suite)),
         dtypes: sortedDtypes(group.rows.map((row) => row.dtype)),
         sizes,
         sizeStats,
-        scenarios: summarizeGroups(measuredRows, scenarioForRow)
+        scenarios: summarizeGroups(credibleRows, scenarioForRow)
       };
     });
   };
@@ -2839,15 +2919,15 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       let tableNote = note;
       if (!tableRows) {
         if (mode === "worst") {
-          tableRows = sortRows(group.measuredRows, "asc");
-          tableNote = `${Math.min(topCount, group.measuredRows.length)} of ${group.measuredRows.length} slowest measured rows for ${group.name}`;
+          tableRows = sortRows(group.credibleRows, "asc");
+          tableNote = `${Math.min(topCount, group.credibleRows.length)} of ${group.credibleRows.length} slowest credible rows for ${group.name}`;
         } else if (mode === "raw") {
           tableRows = group.rows.slice().sort((a, b) =>
             String(a.operation).localeCompare(String(b.operation)) || String(a.dtype).localeCompare(String(b.dtype)) || (a.n ?? 0) - (b.n ?? 0));
           tableNote = `${tableRows.length} raw benchmark rows for ${group.name}`;
         } else {
-          tableRows = sortRows(group.measuredRows, "desc");
-          tableNote = `${Math.min(topCount, group.measuredRows.length)} of ${group.measuredRows.length} fastest measured rows for ${group.name}`;
+          tableRows = sortRows(group.credibleRows, "desc");
+          tableNote = `${Math.min(topCount, group.credibleRows.length)} of ${group.credibleRows.length} fastest credible rows for ${group.name}`;
         }
       }
 
@@ -2864,14 +2944,14 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       const body = group.dtypes.map((dtype) => {
         const cells = group.sizes.map((size) => {
           const cellRows = group.rows.filter((row) => row.dtype === dtype && row.n === size);
-          const measuredCellRows = cellRows.filter((row) => row.ratio !== null);
-          const score = geomeanRows(measuredCellRows);
+          const credibleCellRows = cellRows.filter(isCredibleRow);
+          const score = geomeanRows(credibleCellRows);
           const isEmpty = cellRows.length === 0;
           const classes = `function-heat-cell ${ratioToneClass(score)}${isEmpty ? " is-empty" : ""}`;
           return `<td>
             <button class="${classes}" type="button" data-heat-dtype="${escapeHtml(dtype)}" data-heat-n="${size}" ${isEmpty ? "disabled" : ""}>
               <span class="function-heat-ratio">${formatRatio(score)}</span>
-              <span class="function-heat-count">${cellRows.length} rows</span>
+              <span class="function-heat-count">${credibleCellRows.length}/${cellRows.length} credible</span>
             </button>
           </td>`;
         }).join("");
@@ -2890,11 +2970,11 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
     const renderScenarios = (group) => {
       const scenarios = group.scenarios
-        .filter((scenario) => scenario.measuredRows.length > 0)
+        .filter((scenario) => scenario.credibleRows.length > 0)
         .sort((a, b) => scoreForSort(a, Number.POSITIVE_INFINITY) - scoreForSort(b, Number.POSITIVE_INFINITY));
 
       if (scenarios.length === 0) {
-        return `<div class="function-empty">No measured scenario rows.</div>`;
+        return `<div class="function-empty">No credible scenario rows.</div>`;
       }
 
       const maxScore = Math.max(...scenarios.map((scenario) => scenario.score || 0), 1);
@@ -2905,7 +2985,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
           <span class="function-scenario-label">${escapeHtml(scenario.name)}</span>
           <span class="function-scenario-track"><span class="function-scenario-fill" style="--w:${width.toFixed(1)}%"></span></span>
           <span class="function-scenario-score">${formatRatio(scenario.score)}</span>
-          <span class="function-scenario-count">${scenario.measuredRows.length}</span>
+          <span class="function-scenario-count">${scenario.credibleRows.length}</span>
         </div>`;
       }).join("")}</div>`;
     };
@@ -2914,14 +2994,14 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       activeName = group.name;
       const tone = ratioToneClass(group.score);
       const suiteText = group.suites.join(", ");
-      const best = sortRows(group.measuredRows, "desc")[0];
-      const worst = sortRows(group.measuredRows, "asc")[0];
+      const best = sortRows(group.credibleRows, "desc")[0];
+      const worst = sortRows(group.credibleRows, "asc")[0];
 
       detail.innerHTML = `
         <div class="function-detail-head">
           <div>
             <div class="function-title" role="heading" aria-level="3">${escapeHtml(group.name)}</div>
-            <p class="function-subtitle">${escapeHtml(suiteText)} · ${group.measuredRows.length} measured / ${group.rows.length} rows · ${group.dtypes.length} dtypes · ${group.sizes.length} size tiers</p>
+            <p class="function-subtitle">${escapeHtml(suiteText)} · ${group.credibleRows.length} credible / ${group.timedRows.length} timed / ${group.rows.length} rows · ${group.dtypes.length} dtypes · ${group.sizes.length} size tiers</p>
           </div>
           <span class="function-ratio-pill ${tone}">${formatRatio(group.score)}</span>
         </div>
@@ -2985,14 +3065,14 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         activeName = filtered[0]?.name || null;
       }
 
-      listMeta.textContent = `${filtered.length} of ${groups.length} measured functions`;
+      listMeta.textContent = `${filtered.length} of ${groups.length} benchmarked functions`;
       list.innerHTML = filtered.map((group) => {
         const isActive = group.name === activeName;
         const tone = ratioToneClass(group.score);
         return `<button class="function-list-item ${tone}${isActive ? " is-active" : ""}" type="button" role="option" aria-selected="${String(isActive)}" data-function-name="${escapeHtml(group.name)}">
           <span class="function-list-name">${escapeHtml(group.name)}</span>
           <span class="function-list-score">${formatRatio(group.score)}</span>
-          <span class="function-list-detail">${group.measuredRows.length}/${group.rows.length} rows · ${escapeHtml(group.suites.join(", "))}</span>
+          <span class="function-list-detail">${group.credibleRows.length}/${group.timedRows.length} credible rows · ${escapeHtml(group.suites.join(", "))}</span>
           ${buildSparkline(group)}
         </button>`;
       }).join("") || `<div class="function-empty">No matching np.* functions.</div>`;
@@ -3017,6 +3097,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const profileRows = (combinedRows, profile) => combinedRows.flatMap((row, index) => {
     const result = row.profiles?.[profile];
     if (!result || result.availability !== "available" || result.numsharp_ms === null) return [];
+    const numSharpMs = numberOrNull(result.numsharp_ms);
     return [{
       index,
       operation: row.operation || "",
@@ -3027,8 +3108,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       ratio: numberOrNull(result.ratio),
       pctNumPy: numberOrNull(result.pct_numpy),
       numpyMs: numberOrNull(row.numpy_ms),
-      numSharpMs: numberOrNull(result.numsharp_ms),
-      status: result.status || "",
+      numSharpMs,
+      status: normalizeCredibilityStatus(result.status || "", numSharpMs, true, row.operation),
       functionName: functionNameFromOperation(row.operation || "")
     }];
   });
@@ -3047,7 +3128,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       pctNumPy: null,
       numpyMs: numberOrNull(row.numpy_ms),
       numSharpMs: null,
-      status: "no_data",
+      status: result.status === "failed" ? "failed" : "no_data",
       availability: result.availability,
       exceptionType: result.exception_type || "",
       exceptionMessage: result.exception_message || "",
@@ -3084,39 +3165,44 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       return;
     }
 
-    const rows = rawRows.map((row, index) => ({
-      index,
-      operation: row.operation || "",
-      suite: row.suite || "",
-      category: row.category || "",
-      dtype: row.dtype || "",
-      n: numberOrNull(row.n),
-      ratio: numberOrNull(row.ratio),
-      pctNumPy: numberOrNull(row.pct_numpy),
-      numpyMs: numberOrNull(row.numpy_ms),
-      numSharpMs: numberOrNull(row.numsharp_ms),
-      status: row.status || "",
-      functionName: functionNameFromOperation(row.operation || "")
-    }));
+    const rows = rawRows.map((row, index) => {
+      const numSharpMs = numberOrNull(row.numsharp_ms);
+      const available = legacyPayload ? row.numsharp_ms !== null : Boolean(row.effective_profile);
+      return {
+        index,
+        operation: row.operation || "",
+        suite: row.suite || "",
+        category: row.category || "",
+        dtype: row.dtype || "",
+        n: numberOrNull(row.n),
+        ratio: numberOrNull(row.ratio),
+        pctNumPy: numberOrNull(row.pct_numpy),
+        numpyMs: numberOrNull(row.numpy_ms),
+        numSharpMs,
+        status: normalizeCredibilityStatus(row.status || "", numSharpMs, available, row.operation),
+        functionName: functionNameFromOperation(row.operation || "")
+      };
+    });
 
     if (legacyPayload) managedRows = rows;
 
-    const measuredRows = rows.filter((row) => row.ratio !== null);
     updateStatusMix(rows);
     initializeSuiteScoreboard(rows, managedRows, nativeRows);
-    initializeFunctionExplorer(rows);
+    initializeFunctionExplorer(rows.filter(isExplorerRow));
 
     document.querySelectorAll(".status-segment").forEach((element) => {
       const band = bandForElement(element);
       if (!band) return;
-      const bandRows = band.noData
-        ? managedRows.filter((row) => rowMatchesBand(row, band)).concat(managedUnavailableRows)
-        : managedRows.filter((row) => rowMatchesBand(row, band));
-      const nativeBandRows = band.noData
-        ? nativeRows.filter((row) => rowMatchesBand(row, band)).concat(nativeUnavailableRows)
-        : nativeRows.filter((row) => rowMatchesBand(row, band));
-      const title = band.noData ? "No-data benchmark rows" : `${band.title} benchmark rows`;
-      attachTooltip(element, buildTooltipTable(title, bandRows, nativeBandRows, { noData: band.noData }), title);
+      const unavailableBand = band.noData || band.failed;
+      const bandRows = managedRows.filter((row) => rowMatchesBand(row, band)).concat(
+        unavailableBand ? managedUnavailableRows.filter((row) => rowMatchesBand(row, band)) : []);
+      const nativeBandRows = nativeRows.filter((row) => rowMatchesBand(row, band)).concat(
+        unavailableBand ? nativeUnavailableRows.filter((row) => rowMatchesBand(row, band)) : []);
+      const title = band.failed ? "Failed benchmark rows"
+        : band.noData ? "No-data benchmark rows"
+        : `${band.title} benchmark rows`;
+      attachTooltip(
+        element, buildTooltipTable(title, bandRows, nativeBandRows, { noData: unavailableBand }), title);
     });
 
     document.querySelectorAll(".dtype-cell").forEach((element) => {
@@ -3126,10 +3212,12 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
       const tier = tierByPanel[panelId];
       const dtypeRows = managedRows.filter((row) => {
+        if (!isCredibleRow(row)) return false;
         if (row.dtype !== dtype) return false;
         return tier === null || row.n === tier;
       });
       const nativeDtypeRows = nativeRows.filter((row) => {
+        if (!isCredibleRow(row)) return false;
         if (row.dtype !== dtype) return false;
         return tier === null || row.n === tier;
       });
@@ -3604,6 +3692,47 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     return ndarrayMatch ? `ndarray.${ndarrayMatch[1]}` : null;
   };
 
+  // The backend overlay must use the same credibility gate as the primary Function Explorer.
+  // Available timings can still be intentionally negligible and therefore absent from rollups.
+  const excludedGeomeanStatuses = new Set(["no_data", "negligible", "failed"]);
+  const isCredibleRow = (row) => Number.isFinite(Number(row.ratio))
+    && Number(row.ratio) > 0
+    && !excludedGeomeanStatuses.has(row.status);
+  // Match the primary explorer: excluded measurements are inspectable only through the
+  // Negligible status-band tooltip, never through backend explorer groups or tables.
+  const isExplorerRow = (row) => row.status !== "negligible";
+  const o1FunctionNames = new Set([
+    "np.real", "np.asarray", "np.asanyarray", "np.asmatrix", "np.frombuffer",
+    "np.atleast_1d", "np.atleast_2d", "np.atleast_3d", "np.array_split", "np.split",
+    "np.dsplit", "np.hsplit", "np.vsplit", "np.unstack", "np.broadcast_arrays",
+    "np.broadcast_to", "np.diagonal", "np.expand_dims", "np.flip", "np.fliplr", "np.flipud",
+    "np.matrix_transpose", "np.moveaxis", "np.permute_dims", "np.ravel", "np.reshape",
+    "np.rollaxis", "np.rot90", "np.squeeze", "np.swapaxes", "np.transpose", "np.ix_", "np.size",
+    "np.iscomplexobj", "np.isrealobj", "np.isscalar", "np.isfortran", "np.can_cast",
+    "np.common_type", "np.isdtype", "np.issubdtype", "np.min_scalar_type", "np.mintypecode",
+    "np.promote_types", "np.result_type", "np.iterable", "np.nested_iters",
+    "np.format_float_positional", "np.format_float_scientific", "np.get_printoptions",
+    "np.printoptions", "np.set_printoptions", "np.einsum_path", "np.linalg.diagonal",
+    "np.linalg.matrix_transpose", "ndarray.T", "ndarray.conj", "ndarray.conjugate",
+    "ndarray.diagonal", "ndarray.getfield", "ndarray.item", "ndarray.ravel", "ndarray.reshape",
+    "ndarray.setflags", "ndarray.squeeze", "ndarray.swapaxes", "ndarray.to_device",
+    "ndarray.transpose", "ndarray.view"
+  ]);
+  const o1ExactOperations = new Set([
+    "np.diag", "np.diag(a2d)", "reshape 1d->2d", "reshape 1d->3d", "reshape 2d->1d",
+    "a[100:1000] (contiguous slice)", "a[10:100, :] (row slice 2d)",
+    "a[:, 10:100] (col slice 2d)", "a[::-1] (reversed)", "a[::-1]",
+    "a[::2] (strided slice)"
+  ]);
+  const isO1Operation = (operation) => {
+    const value = String(operation || "")
+      .replace(/\s*\((?:bool|u?int\d+|float\d+|complex\d+|decimal)\)\s*$/i, "")
+      .trim();
+    return o1FunctionNames.has(functionName(value)) || o1ExactOperations.has(value.toLowerCase());
+  };
+  const normalizeCredibilityStatus = (status, numSharpMs, available, operation) =>
+    available && (numSharpMs === 0 || isO1Operation(operation)) ? "negligible" : status;
+
   const geomean = (rows) => {
     const ratios = rows.map((row) => Number(row.ratio)).filter((ratio) => ratio > 0 && Number.isFinite(ratio));
     return ratios.length ? Math.exp(ratios.reduce((sum, ratio) => sum + Math.log(ratio), 0) / ratios.length) : null;
@@ -3632,6 +3761,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const rowsForProfile = (rows, profile) => rows.flatMap((row) => {
     const result = row.profiles?.[profile];
     if (!result) return [];
+    const numSharpMs = result.numsharp_ms === null ? null : Number(result.numsharp_ms);
     return [{
       name: functionName(row.operation),
       operation: row.operation,
@@ -3640,12 +3770,13 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       category: row.category,
       n: Number(row.n),
       dtype: row.dtype,
-      nsMs: result.numsharp_ms === null ? null : Number(result.numsharp_ms),
-      numsharp_ms: result.numsharp_ms === null ? null : Number(result.numsharp_ms),
+      nsMs: numSharpMs,
+      numsharp_ms: numSharpMs,
       numpyMs: row.numpy_ms === null ? null : Number(row.numpy_ms),
       numpy_ms: row.numpy_ms === null ? null : Number(row.numpy_ms),
       ratio: result.ratio === null ? null : Number(result.ratio),
-      status: result.status,
+      status: normalizeCredibilityStatus(
+        result.status, numSharpMs, result.availability === "available", row.operation),
       availability: result.availability,
       exceptionType: result.exception_type,
       exceptionMessage: result.exception_message
@@ -3653,7 +3784,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   });
 
   const rowsForEffectiveProfile = (rows) => rows.flatMap((row) => {
-    if (!row.effective_profile || row.numsharp_ms === null || row.ratio === null) return [];
+    if (!row.effective_profile || row.numsharp_ms === null) return [];
+    const numSharpMs = Number(row.numsharp_ms);
     return [{
       name: functionName(row.operation),
       operation: row.operation,
@@ -3662,12 +3794,12 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       category: row.category,
       n: Number(row.n),
       dtype: row.dtype,
-      nsMs: Number(row.numsharp_ms),
-      numsharp_ms: Number(row.numsharp_ms),
+      nsMs: numSharpMs,
+      numsharp_ms: numSharpMs,
       numpyMs: row.numpy_ms === null ? null : Number(row.numpy_ms),
       numpy_ms: row.numpy_ms === null ? null : Number(row.numpy_ms),
-      ratio: Number(row.ratio),
-      status: row.status,
+      ratio: row.ratio === null ? null : Number(row.ratio),
+      status: normalizeCredibilityStatus(row.status, numSharpMs, true, row.operation),
       availability: "available",
       effectiveProfile: row.effective_profile,
       effectiveBackend: row.effective_backend || row.effective_profile
@@ -3688,15 +3820,15 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const scoresFor = (name) => {
     const managedRows = coreGroups.get(name) || [];
     const openblasRows = nativeGroups.get(name) || [];
-    const bestRows = effectiveGroups.get(name) || [];
-    const managedAvailable = managedRows.filter((row) => row.availability === "available");
-    const openblasAvailable = openblasRows.filter((row) => row.availability === "available");
+    const bestRows = (effectiveGroups.get(name) || []).filter(isCredibleRow);
+    const managedAvailable = managedRows.filter((row) => row.availability === "available" && isCredibleRow(row));
+    const openblasAvailable = openblasRows.filter((row) => row.availability === "available" && isCredibleRow(row));
     const managed = geomean(managedAvailable);
     const openblas = geomean(openblasAvailable);
     const best = geomean(bestRows);
     const managedWins = bestRows.filter((row) => row.effectiveBackend === "managed").length;
     const openblasWins = bestRows.filter((row) => row.effectiveBackend === "openblas").length;
-    const winner = best === null ? "Unavailable"
+    const winner = best === null ? "No credible rows"
       : managedWins && openblasWins ? `Mixed · Core ${managedWins} / OpenBLAS ${openblasWins}`
       : openblasWins ? "OpenBLAS"
       : "Managed Core";
@@ -3715,7 +3847,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   };
 
   const coreTable = (rows) => {
-    const available = rows.filter((row) => row.availability === "available");
+    const available = rows.filter((row) => row.availability === "available" && isCredibleRow(row));
     return available.length ? `
     <div class="function-table-scroll backend-lens-table" data-backend-table="managed" data-load-more-scope>
       <table class="function-table"><thead><tr><th>Operation</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th></tr></thead>
@@ -3728,7 +3860,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   };
 
   const nativeTable = (rows) => {
-    const available = rows.filter((row) => row.availability === "available");
+    const available = rows.filter((row) => row.availability === "available" && isCredibleRow(row));
     return available.length ? `
     <div class="function-table-scroll backend-lens-table" data-backend-table="openblas" data-load-more-scope hidden>
       <table class="function-table"><thead><tr><th>Operation / scenario</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th></tr></thead>
@@ -3746,8 +3878,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       <div class="backend-comparison-head">
         <div><div class="backend-comparison-title">Backend comparison</div><div class="backend-comparison-note">Published value: ${formatRatio(scores.best)} · fastest backend selected independently for each matching scenario</div></div>
         <div class="function-tabs backend-lens-tabs" role="tablist" aria-label="${escapeHtml(name)} backend timings">
-          <button class="function-tab is-active" type="button" role="tab" aria-selected="true" data-backend-lens="managed">Managed Core ${scores.managedAvailable.length}</button>
-          <button class="function-tab" type="button" role="tab" aria-selected="false" data-backend-lens="openblas">OpenBLAS ${scores.openblasAvailable.length}</button>
+          <button class="function-tab is-active" type="button" role="tab" aria-selected="true" data-backend-lens="managed">Managed Core ${scores.managedAvailable.length} credible</button>
+          <button class="function-tab" type="button" role="tab" aria-selected="false" data-backend-lens="openblas">OpenBLAS ${scores.openblasAvailable.length} credible</button>
         </div>
       </div>
       <div class="function-stat-strip">
@@ -3821,15 +3953,15 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       const scores = scoresFor(name);
       list.insertAdjacentHTML("beforeend", `<button class="function-list-item ${toneClass(scores.best)}" type="button" role="option" aria-selected="false" data-native-only-name="${escapeHtml(name)}">
         <span class="function-list-name">${escapeHtml(name)}</span><span class="function-list-score">${formatRatio(scores.best)}</span>
-        <span class="function-list-detail">${rows.length} measured rows · OpenBLAS required</span><span class="function-list-winner">Best available · OpenBLAS</span>
+        <span class="function-list-detail">${scores.openblasAvailable.length}/${rows.length} credible rows · OpenBLAS required</span><span class="function-list-winner">Best available · OpenBLAS</span>
       </button>`);
     });
-    dashboard.querySelector("[data-function-list-meta]").textContent = `${list.querySelectorAll(".function-list-item").length} measured functions · one effective score`;
+    dashboard.querySelector("[data-function-list-meta]").textContent = `${list.querySelectorAll(".function-list-item").length} benchmarked functions · one credible effective score`;
   };
 
   const updateHeadline = () => {
     const effectiveRatios = combinedRows
-      .filter((row) => Number.isFinite(Number(row.ratio)) && !["no_data", "negligible"].includes(row.status))
+      .filter(isCredibleRow)
       .map((row) => Number(row.ratio));
     dashboard.querySelector("[data-effective-geomean]").textContent = formatRatio(geomean(effectiveRatios.map((ratio) => ({ ratio }))));
   };
@@ -3851,12 +3983,26 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     if (!response.ok) throw new Error(`Benchmark report HTTP ${response.status}`);
     return response.json();
   }).then((payload) => {
-    combinedRows = Array.isArray(payload) ? payload : (payload.rows || []);
+    combinedRows = (Array.isArray(payload) ? payload : (payload.rows || [])).map((row) => ({
+      ...row,
+      status: normalizeCredibilityStatus(
+        row.status, row.numsharp_ms === null ? null : Number(row.numsharp_ms),
+        Boolean(row.effective_profile) || (Array.isArray(payload) && row.numsharp_ms !== null), row.operation)
+    }));
     coreRows = Array.isArray(payload)
-      ? payload.map((row) => ({ ...row, name: functionName(row.operation), availability: row.numsharp_ms === null ? "not_measured" : "available" }))
+      ? payload.map((row) => ({
+          ...row,
+          name: functionName(row.operation),
+          availability: row.numsharp_ms === null ? "not_measured" : "available",
+          status: normalizeCredibilityStatus(
+            row.status, Number(row.numsharp_ms), row.numsharp_ms !== null, row.operation)
+        }))
       : rowsForProfile(combinedRows, "managed");
     nativeRows = Array.isArray(payload) ? [] : rowsForProfile(combinedRows, "openblas");
     effectiveRows = Array.isArray(payload) ? coreRows : rowsForEffectiveProfile(combinedRows);
+    coreRows = coreRows.filter(isExplorerRow);
+    nativeRows = nativeRows.filter(isExplorerRow);
+    effectiveRows = effectiveRows.filter(isExplorerRow);
     coreGroups = groupRows(coreRows, (row) => functionName(row.operation));
     nativeGroups = groupRows(nativeRows, (row) => row.name);
     effectiveGroups = groupRows(effectiveRows, (row) => row.name);

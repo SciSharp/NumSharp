@@ -132,12 +132,12 @@ scenario-only benchmarks are expected here; API-looking stale labels should be c
 | `a.amax() [method]` (`numpy.ndarray.amax`) | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/MinMaxBenchmarks.cs` |
 | `a.amin() [method]` (`numpy.ndarray.amin`) | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/MinMaxBenchmarks.cs` |
 | `a[100:1000] (contiguous slice)` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
-| `a[100:1000] * 2` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
-| `a[100:1000].copy()` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
 | `a[10:100, :] (row slice 2D)` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
 | `a[:, 10:100] (col slice 2D)` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
 | `a[::-1] (reversed)` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
 | `a[::2] (strided slice)` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
 | `a[::2] * 2` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
+| `a[N/10:9N/10] * 2` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
+| `a[N/10:9N/10].copy()` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
 | `a * a (square via multiply)` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Unary/PowerBenchmarks.cs` |
 | `a * a * a (cube via multiply)` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Unary/PowerBenchmarks.cs` |

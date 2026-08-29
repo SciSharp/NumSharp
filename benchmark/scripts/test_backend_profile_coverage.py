@@ -22,6 +22,12 @@ def complete_envelope():
 
 
 class BackendProfileCoverageTests(unittest.TestCase):
+    def test_completed_zero_duration_is_negligible_not_no_data(self):
+        result = module.profile_result(
+            "managed", {"availability": "available", "numsharp_ms": 0.0}, 0.0002)
+        self.assertEqual("negligible", result["status"])
+        self.assertIsNone(result["ratio"])
+
     def test_complete_symmetric_profiles_pass(self):
         managed = complete_envelope()
         openblas = complete_envelope()

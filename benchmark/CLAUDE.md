@@ -557,14 +557,14 @@ NumSharp uses):
 | 🟡 | close | 0.5–1.05× | 95.2–200% | near parity / within 2× slower |
 | 🟠 | slower | 0.2–0.5× | 200–500% | optimization target |
 | 🔴 | much_slower | < 0.2× | > 500% | priority fix |
-| ▫ | **negligible** | < 1µs either side, or > 20× | — | too fast to be a *credible* comparison — kept in the per-suite tables but **excluded** from the geomeans and the Best/Worst rankings |
+| ▫ | **negligible** | semantic O(1)-in-N scenario, < 1µs either side, or > 20× | — | not a credible throughput comparison — kept in raw tables but **excluded from every rollup and ranking** |
 | ⚪ | no_data | — | — | C# side has no row at this (op, dtype, N) — the join found no match |
 
-**Credibility gating** (`merge-results.py` `classify()`): a row is only a believable throughput
-comparison when **both sides did ≥ `WORK_FLOOR_MS` (1µs)** of work AND the speedup is **within
-`MAX_CREDIBLE_SPEEDUP` (20×)**. Anything else is `negligible` (▫) — a sub-microsecond call-overhead
-row, a view return, a lazy allocation, or a dead-code-eliminated kernel manufacturing a meaningless
-1000× "win". Geomeans and Best/Worst use `CREDIBLE` rows only.
+**Credibility gating** (`merge-results.py` `classify()` + `scripts/credibility.py`): a row is only a
+believable throughput comparison when the scenario is not semantically O(1) in element count, **both
+sides did ≥ `WORK_FLOOR_MS` (1µs)** of work, and the speedup is within
+`MAX_CREDIBLE_SPEEDUP` (20×). Anything else is `negligible` (▫). O(1) view/metadata/fixed-count
+wrapper scenarios are excluded regardless of noisy timing; see `benchmark/O1_EXCLUSIONS.md`.
 
 **How CI publishes** (`.github/workflows/benchmark.yml`, post-release/manual): it runs
 `run_benchmark.py`, then `git add`s the refreshed `benchmark-report.md`, the subsystem `*_results.*`,

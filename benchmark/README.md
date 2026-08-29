@@ -18,7 +18,7 @@ matrix cannot express.
 > uses (30% = NumSharp takes only 30% as long; <100% = faster).
 
 Bands used by the report: ✅ `≥1.05×` · 🟡 `≥0.5×` · 🟠 `≥0.2×` · 🔴 `<0.2×` · ▫ negligible
-(sub-µs / >20× — excluded from geomeans & rankings) · ⚪ C# side not run.
+(semantic O(1)-in-N scenario, sub-µs, or >20× — excluded from every rollup/ranking) · ⚪ C# side not run.
 
 **Timing basis:** every ratio compares the two sides' per-case **min** (best window). Min-based harnesses
 run each case to a ~200 ms time budget (a >20 ms/call op runs exactly 100 times); the C# op-matrix keeps

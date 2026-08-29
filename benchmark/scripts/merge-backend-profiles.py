@@ -15,14 +15,21 @@ import json
 import math
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+from credibility import o1_exclusion_reason  # noqa: E402
 
 SCHEMA_VERSION = 2
 AVAILABLE = "available"
 MISSING_BACKEND = "missing_backend"
 NOT_SUPPORTED = "not_supported"
 NOT_MEASURED = "not_measured"
+FAILED = "failed"
 WORK_FLOOR_MS = 0.001
 MAX_CREDIBLE_SPEEDUP = 20.0
 
@@ -71,11 +78,18 @@ def number(value: Any) -> float | None:
         return None
 
 
-def performance_status(numpy_ms: float | None, numsharp_ms: float | None) -> tuple[float | None, float | None, str]:
-    if numpy_ms is None or numsharp_ms is None or numsharp_ms <= 0:
+def performance_status(numpy_ms: float | None, numsharp_ms: float | None,
+                       operation: str = "") -> tuple[float | None, float | None, str]:
+    if numpy_ms is None or numsharp_ms is None:
         return None, None, "no_data"
+    # A completed overhead-subtracted microbenchmark can legitimately land at exactly 0 ns.
+    # Preserve it as measured-but-negligible rather than pretending that the profile was absent.
+    if numpy_ms <= 0 or numsharp_ms <= 0:
+        return None, None, "negligible"
     ratio = numpy_ms / numsharp_ms
     pct_numpy = numsharp_ms / numpy_ms * 100 if numpy_ms > 0 else None
+    if operation and o1_exclusion_reason(normalize_operation(operation)):
+        return ratio, pct_numpy, "negligible"
     if numpy_ms < WORK_FLOOR_MS or numsharp_ms < WORK_FLOOR_MS or ratio > MAX_CREDIBLE_SPEEDUP:
         return ratio, pct_numpy, "negligible"
     if ratio >= 1.05:
@@ -119,6 +133,14 @@ def normalize_operation(value: str) -> str:
     value = {
         "np.where(cond, a, b)": "np.where ternary",
         "np.where(cond)": "np.where nonzero",
+        "np.sum(contiguous_slice)": "np.sum contiguous_slice",
+        "np.sum(strided_slice)": "np.sum strided_slice",
+        "np.sum(row_slice)": "np.sum row_slice",
+        "np.sum(col_slice)": "np.sum col_slice",
+        "np.diag": "np.diag view",
+        "np.diag(a2d)": "np.diag view",
+        "np.diag(a1d)": "np.diag construct",
+        "np.transpose(a, axes)": "np.transpose axes",
     }.get(value, value)
     value = re.sub(r"\s+\[[^\]]*\]", "", value)
     value = re.sub(r"\(\s*(?:[a-z_][a-z0-9_]*\s*,\s*)?axis\s*=\s*(-?\d+)\s*\)", r" axis=\1", value)
@@ -143,14 +165,15 @@ def profile_result(
     numsharp_ms: float | None,
     availability: str = AVAILABLE,
     *,
+    operation: str = "",
     actual_backend: str | None = None,
     exception_type: str | None = None,
     exception_message: str | None = None,
 ) -> dict[str, Any]:
-    ratio, pct_numpy, status = performance_status(numpy_ms, numsharp_ms)
+    ratio, pct_numpy, status = performance_status(numpy_ms, numsharp_ms, operation)
     if availability != AVAILABLE:
         ratio = pct_numpy = None
-        status = "no_data"
+        status = "failed" if availability == FAILED else "no_data"
     return {
         "profile": profile,
         "actual_backend": actual_backend or ("managed" if profile == "managed" else "openblas"),
@@ -191,6 +214,9 @@ def load_json_profile(path: Path, profile: str) -> list[dict[str, Any]]:
         existing = raw.get("result") if isinstance(raw.get("result"), dict) else None
         availability = str(raw.get("availability") or (existing or {}).get("availability") or AVAILABLE)
         numsharp_ms = number(raw.get("numsharp_ms") if existing is None else existing.get("numsharp_ms"))
+        source_status = str(raw.get("status") or (existing or {}).get("status") or "")
+        if source_status == "failed" and numsharp_ms is None:
+            availability = FAILED
         if numsharp_ms is None and availability == AVAILABLE:
             availability = NOT_MEASURED
         explicit_backend = raw.get("actual_backend") or (existing or {}).get("actual_backend")
@@ -205,6 +231,7 @@ def load_json_profile(path: Path, profile: str) -> list[dict[str, Any]]:
             row["numpy_ms"],
             numsharp_ms,
             availability,
+            operation=row["operation"],
             actual_backend=actual_backend,
             exception_type=raw.get("exception_type") or (existing or {}).get("exception_type"),
             exception_message=raw.get("exception_message") or (existing or {}).get("exception_message"),
@@ -234,13 +261,15 @@ def load_legacy_openblas_tsv(path: Path) -> tuple[list[dict[str, Any]], list[dic
                 }.get(operation) or ("mode=same,kernel=31" if route == "sliding" else "")),
                 "numpy_ms": numpy_ms,
                 "backend_route": route,
-                "result": profile_result("openblas", numpy_ms, numsharp_ms, AVAILABLE),
+                "result": profile_result(
+                    "openblas", numpy_ms, numsharp_ms, AVAILABLE, operation=display_operation(operation)),
             }
             openblas_rows.append(row)
             if route in {"lapack", "composed", "hybrid"}:
                 missing = dict(row)
                 missing["result"] = profile_result(
                     "managed", numpy_ms, None, MISSING_BACKEND,
+                    operation=display_operation(operation),
                     exception_type="OpenBlasMissingBackendException",
                     exception_message="Managed C# has no backend for this operation and parameter mode.",
                 )
@@ -249,7 +278,7 @@ def load_legacy_openblas_tsv(path: Path) -> tuple[list[dict[str, Any]], list[dic
 
 
 def dedupe(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    quality = {AVAILABLE: 3, MISSING_BACKEND: 2, NOT_SUPPORTED: 2, NOT_MEASURED: 1}
+    quality = {AVAILABLE: 3, FAILED: 2, MISSING_BACKEND: 2, NOT_SUPPORTED: 2, NOT_MEASURED: 1}
     selected: dict[tuple[str, str, int, str], dict[str, Any]] = {}
     for row in rows:
         key = cell_key(row)
@@ -326,7 +355,8 @@ def combine(managed: dict[str, Any], openblas: dict[str, Any]) -> dict[str, Any]
         for result in row["profiles"].values():
             if result["availability"] != AVAILABLE or result["numsharp_ms"] is None:
                 continue
-            ratio, pct_numpy, status = performance_status(row["numpy_ms"], result["numsharp_ms"])
+            ratio, pct_numpy, status = performance_status(
+                row["numpy_ms"], result["numsharp_ms"], row["operation"])
             result["ratio"] = round(ratio, 6) if ratio is not None else None
             result["pct_numpy"] = round(pct_numpy, 3) if pct_numpy is not None else None
             result["status"] = status
@@ -342,7 +372,9 @@ def combine(managed: dict[str, Any], openblas: dict[str, Any]) -> dict[str, Any]
         row["numsharp_ms"] = effective["numsharp_ms"] if effective else None
         row["ratio"] = effective["ratio"] if effective else None
         row["pct_numpy"] = effective["pct_numpy"] if effective else None
-        row["status"] = effective["status"] if effective else "no_data"
+        row["status"] = effective["status"] if effective else (
+            "failed" if any(result.get("status") == "failed" for result in row["profiles"].values())
+            else "no_data")
         combined_rows.append(row)
 
     combined_rows.sort(key=lambda row: (row["suite"], row["operation"], row["dtype"], row["n"], row["scenario"]))
@@ -371,7 +403,7 @@ def write_csv(path: Path, payload: dict[str, Any]) -> None:
 
 
 def write_markdown(path: Path, payload: dict[str, Any]) -> None:
-    counts = {"managed": 0, "openblas": 0, "missing_backend": 0, "not_supported": 0}
+    counts = {"managed": 0, "openblas": 0, "missing_backend": 0, "not_supported": 0, "failed": 0}
     for row in payload["rows"]:
         if row["effective_backend"]:
             counts[row["effective_backend"]] += 1
@@ -391,7 +423,8 @@ def write_markdown(path: Path, payload: dict[str, Any]) -> None:
         f"- Managed effective cells: **{counts['managed']:,}**",
         f"- OpenBLAS effective cells: **{counts['openblas']:,}**",
         f"- Missing backend records: **{counts['missing_backend']:,}**",
-        f"- Not supported records: **{counts['not_supported']:,}**", "",
+        f"- Not supported records: **{counts['not_supported']:,}**",
+        f"- Failed benchmark records: **{counts['failed']:,}**", "",
         "| Operation | DType | N | Managed C# | OpenBLAS | Effective | NPY/NS |",
         "|---|---|---:|---:|---:|---|---:|",
     ]
@@ -413,7 +446,8 @@ def write_markdown(path: Path, payload: dict[str, Any]) -> None:
             if v >= 0.001:
                 return f"{v:.5f} ms"
             return f"{v:.6f} ms"
-        ratio = "—" if row["ratio"] is None else f"{row['ratio']:.3f}x"
+        ratio = "failed" if row["status"] == "failed" else (
+            "—" if row["ratio"] is None else f"{row['ratio']:.3f}x")
         lines.append(f"| `{row['operation']}` | {row['dtype']} | {row['n']:,} | {cell(managed)} | {cell(openblas)} | {row['effective_backend'] or '—'} | {ratio} |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

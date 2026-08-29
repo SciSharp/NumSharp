@@ -30,6 +30,11 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+from credibility import o1_exclusion_reason  # noqa: E402
+
 UNIVERSAL_TIERS = {1_000, 100_000, 10_000_000}
 
 @dataclass
@@ -290,9 +295,20 @@ MAX_CREDIBLE_SPEEDUP = 20.0    # ratio > 20 ⇒ "NumSharp >20x faster" ⇒ artif
 CREDIBLE = ("faster", "close", "slower", "much_slower")
 
 
-def classify(numpy_ms: float, numsharp_ms: Optional[float], ratio: Optional[float]) -> str:
+def classify(numpy_ms: float, numsharp_ms: Optional[float], ratio: Optional[float],
+             operation: str = "") -> str:
     """Status that also gates credibility (see WORK_FLOOR_MS / MAX_CREDIBLE_SPEEDUP)."""
-    if numsharp_ms is None or ratio is None:
+    if numsharp_ms is None:
+        return "no_data"
+    if operation and o1_exclusion_reason(normalize_op_name(operation)):
+        return "negligible"
+    # BenchmarkDotNet can subtract the invocation overhead down to exactly zero for an O(1)
+    # property/view call. The benchmark DID run; zero therefore means "below measurement
+    # resolution", not "C# benchmark not run". It has no finite ratio, but it is still a
+    # measured negligible cell and must not inflate the pending/no-data count.
+    if numpy_ms <= 0 or numsharp_ms <= 0:
+        return "negligible"
+    if ratio is None:
         return "no_data"
     if (numpy_ms < WORK_FLOOR_MS or numsharp_ms < WORK_FLOOR_MS
             or ratio > MAX_CREDIBLE_SPEEDUP):
@@ -338,7 +354,8 @@ def normalize_op_name(name: str) -> str:
       * fold "(a, axis=k)" / "(axis=k)" into " axis=k",
       * strip identifier-only argument lists ("(a)", "(a, b)", "(cond, a, b)") but KEEP
         numeric args ("(a, 50)", "(a, 2)") that distinguish percentile / shift / etc.
-    The two np.where forms are disambiguated up front so arg-stripping doesn't collide them.
+    Known identifier-only scenario arguments (slice layout, diag input rank, transpose axes) are
+    also disambiguated up front so structurally different benchmarks cannot collide.
     """
     import re
     name = re.sub(r'\s*\((int32|int64|float32|float64|uint8|int16|uint16|uint32|uint64|bool|decimal)\)\s*$', '', name)
@@ -349,6 +366,15 @@ def normalize_op_name(name: str) -> str:
     pre = {
         'np.where(cond, a, b)': 'np.where ternary',
         'np.where(cond)': 'np.where nonzero',
+        'np.sum(contiguous_slice)': 'np.sum contiguous_slice',
+        'np.sum(strided_slice)': 'np.sum strided_slice',
+        'np.sum(row_slice)': 'np.sum row_slice',
+        'np.sum(col_slice)': 'np.sum col_slice',
+        # NumPy's 2-D diagonal-view twin is historically labelled simply "np.diag".
+        'np.diag': 'np.diag view',
+        'np.diag(a2d)': 'np.diag view',
+        'np.diag(a1d)': 'np.diag construct',
+        'np.transpose(a, axes)': 'np.transpose axes',
     }
     name = pre.get(name, name)
 
@@ -373,6 +399,31 @@ def normalize_op_name(name: str) -> str:
     return name
 
 
+def validate_join_key_uniqueness(rows: List[dict], source: str) -> None:
+    """Reject ambiguous normalized (operation, dtype, N) cells before dict indexing drops one.
+
+    The join intentionally normalizes cosmetic C#/NumPy spelling differences, but that must never
+    collapse distinct scenarios. A collision previously paired NumPy's O(1) ``np.diag`` 2-D view
+    with NumSharp's O(N) 1-D matrix construction and silently discarded four slice-sum scenarios.
+    """
+    groups: Dict[Tuple[str, str, int], List[str]] = {}
+    for row in rows:
+        raw_name = str(row.get('name') or row.get('operation') or '')
+        if not raw_name:
+            continue
+        key = (normalize_op_name(raw_name), str(row.get('dtype') or '').lower(), int(row.get('n') or 0))
+        groups.setdefault(key, []).append(raw_name)
+
+    collisions = [(key, names) for key, names in groups.items() if len(names) > 1]
+    if collisions:
+        preview = '; '.join(
+            f"{key}: {sorted(set(names))}" for key, names in sorted(collisions)[:12])
+        suffix = '' if len(collisions) <= 12 else f" (+{len(collisions) - 12} more)"
+        raise RuntimeError(
+            f"{source} has {len(collisions)} ambiguous normalized benchmark cell(s): "
+            f"{preview}{suffix}")
+
+
 def merge_results(numpy_results: List[dict], csharp_results: List[dict],
                   failures: Optional[List[dict]] = None) -> List[UnifiedResult]:
     """Merge NumPy and C# results into unified comparison.
@@ -381,6 +432,8 @@ def merge_results(numpy_results: List[dict], csharp_results: List[dict],
     load_csharp_results). A NumPy row whose matching C# cell crashed is marked
     ``failed`` (❌) rather than ``no_data`` (⚪), so the report distinguishes a
     benchmark that errored from one that was never run."""
+    validate_join_key_uniqueness(numpy_results, "NumPy results")
+    validate_join_key_uniqueness(csharp_results, "C# results")
     unified = []
 
     # Index the crashed C# benchmarks by the SAME (op, dtype, N) key the join uses, so a
@@ -424,7 +477,7 @@ def merge_results(numpy_results: List[dict], csharp_results: List[dict],
         numsharp_ms = (cs_result.get('min_ms') or numsharp_mean_ms) if cs_result else None
         ratio = numpy_ms / numsharp_ms if (numsharp_ms and numsharp_ms > 0) else None         # NP/NS, >1 = faster
         pct = numsharp_ms / numpy_ms * 100 if (numsharp_ms is not None and numpy_ms > 0) else None  # share of NumPy time
-        status = classify(numpy_ms, numsharp_ms, ratio)
+        status = classify(numpy_ms, numsharp_ms, ratio, name)
         # A crashed C# cell has no result (status == no_data), but it is a FAILURE, not a
         # never-run cell — relabel so ❌ is never rendered as ⚪ "not run".
         if status == "no_data" and key in failed_index:
@@ -516,7 +569,7 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
         "|🟡| Close | 0.5–1.0× | 100–200% | within 2× slower |",
         "|🟠| Slower | 0.2–0.5× | 200–500% | optimization target |",
         "|🔴| Slow | <0.2× | >500% | priority fix |",
-        "|▫| Negligible | <1µs / >20× | — | too fast to compare — excluded from rankings |",
+        "|▫| Negligible | O(1)-in-N / <1µs / >20× | — | non-throughput — excluded from all rollups/rankings |",
         "|⚪| Pending | - | — | C# benchmark not run |",
         "|❌| Failed | - | — | C# benchmark ran but crashed/OOM'd (no measurement) |",
         "",
@@ -572,8 +625,8 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
     if with_data:
         # Sort by ratio (NumPy ÷ NumSharp) — best (highest = most ahead of NumPy) first
         sorted_by_ratio = sorted(with_data, key=lambda r: r.ratio, reverse=True)
-        note = (f"_Ranked over {len(with_data)} credible comparisons "
-                f"(both sides ≥{WORK_FLOOR_MS * 1000:.0f}µs, within {MAX_CREDIBLE_SPEEDUP:.0f}×); "
+        note = (f"_Ranked over {len(with_data)} credible comparisons (semantic O(1)-in-N rows excluded; "
+                f"both sides ≥{WORK_FLOOR_MS * 1000:.0f}µs and within {MAX_CREDIBLE_SPEEDUP:.0f}×); "
                 f"{negligible_n} negligible rows excluded as non-comparable (▫). "
                 f"Ratio = NumPy ÷ NumSharp — above 1.0× = NumSharp faster · "
                 f"%NumPy🕐 = share of NumPy's time NumSharp uses._")

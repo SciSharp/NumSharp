@@ -86,9 +86,17 @@ def json_lines(text: str) -> list[dict]:
 def profile_result(profile: str, cs: dict, numpy_ms: float | None) -> dict:
     availability = cs.get("availability", "not_measured")
     numsharp_ms = cs.get("numsharp_ms")
-    ratio = numpy_ms / numsharp_ms if availability == "available" and numpy_ms and numsharp_ms else None
-    pct_numpy = numsharp_ms / numpy_ms * 100 if ratio is not None else None
+    ratio = None
+    pct_numpy = None
     status = "no_data"
+    if availability == "available" and numpy_ms is not None and numsharp_ms is not None:
+        if numpy_ms <= 0 or numsharp_ms <= 0:
+            # The harness completed, but overhead subtraction rounded the duration to zero.
+            # This is below measurement resolution, not an unavailable backend.
+            status = "negligible"
+        else:
+            ratio = numpy_ms / numsharp_ms
+            pct_numpy = numsharp_ms / numpy_ms * 100
     if ratio is not None:
         if numpy_ms < 0.001 or numsharp_ms < 0.001 or ratio > 20:
             status = "negligible"

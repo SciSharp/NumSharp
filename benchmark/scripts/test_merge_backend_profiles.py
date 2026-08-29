@@ -36,6 +36,47 @@ def row(profile, availability, numsharp_ms=None, numpy_ms=1.0,
 
 
 class BackendProfileMergeTests(unittest.TestCase):
+    def test_failed_timing_survives_profile_and_combined_envelopes(self):
+        failed = row("managed", module.FAILED)
+        managed = module.profile_envelope("managed", [failed])
+        combined = module.combine(managed, module.profile_envelope("openblas", []))
+        self.assertEqual("failed", managed["rows"][0]["result"]["status"])
+        self.assertEqual("failed", combined["rows"][0]["status"])
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "report.md"
+            module.write_markdown(report, combined)
+            text = report.read_text(encoding="utf-8")
+        self.assertIn("Failed benchmark records: **1**", text)
+        self.assertIn("| failed |", text)
+
+    def test_flat_failed_row_loads_as_failed_availability(self):
+        payload = [{
+            "operation": "np.right_shift(a, 2)", "suite": "Bitwise", "dtype": "bool", "n": 1_000,
+            "numpy_ms": 0.001, "numsharp_ms": None, "status": "failed",
+        }]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "managed.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            loaded = module.load_json_profile(path, "managed")
+        self.assertEqual(module.FAILED, loaded[0]["result"]["availability"])
+        self.assertEqual("failed", loaded[0]["result"]["status"])
+
+    def test_completed_zero_duration_is_negligible_not_no_data(self):
+        ratio, pct_numpy, status = module.performance_status(0.0002, 0.0)
+        self.assertIsNone(ratio)
+        self.assertIsNone(pct_numpy)
+        self.assertEqual("negligible", status)
+
+    def test_identifier_scenarios_have_distinct_backend_cell_keys(self):
+        def key(operation):
+            return module.cell_key({
+                "operation": operation, "dtype": "float64", "n": 1_000, "scenario": ""})
+
+        self.assertEqual(key("np.diag"), key("np.diag(a2d)"))
+        self.assertNotEqual(key("np.diag"), key("np.diag(a1d)"))
+        self.assertNotEqual(key("np.sum(contiguous_slice)"), key("np.sum(strided_slice)"))
+        self.assertNotEqual(key("np.transpose(a)"), key("np.transpose(a, axes)"))
+
     def test_not_supported_is_preserved_as_availability(self):
         result = module.profile_result(
             "openblas", 1.0, None, module.NOT_SUPPORTED,

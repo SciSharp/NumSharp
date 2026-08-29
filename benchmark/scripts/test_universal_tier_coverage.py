@@ -21,6 +21,30 @@ def row(n, name="np.example(a)", dtype="float64"):
 
 
 class UniversalTierCoverageTests(unittest.TestCase):
+    def test_completed_zero_duration_is_negligible_not_no_data(self):
+        self.assertEqual("negligible", module.classify(0.0002, 0.0, None))
+        self.assertEqual("no_data", module.classify(0.0002, None, None))
+
+    def test_identifier_scenarios_do_not_collapse_to_one_join_key(self):
+        cases = {
+            "np.sum(contiguous_slice)": "np.sum contiguous_slice",
+            "np.sum(strided_slice)": "np.sum strided_slice",
+            "np.diag": "np.diag view",
+            "np.diag(a2d)": "np.diag view",
+            "np.diag(a1d)": "np.diag construct",
+            "np.transpose(a)": "np.transpose",
+            "np.transpose(a, axes)": "np.transpose axes",
+        }
+        self.assertEqual(cases, {name: module.normalize_op_name(name) for name in cases})
+
+    def test_ambiguous_join_keys_fail_before_indexing(self):
+        rows = [
+            {"name": "np.copy(a)", "dtype": "float64", "n": 1_000},
+            {"name": "np.copy(a) [duplicate]", "dtype": "float64", "n": 1_000},
+        ]
+        with self.assertRaisesRegex(RuntimeError, "ambiguous normalized benchmark cell"):
+            module.validate_join_key_uniqueness(rows, "test")
+
     def test_complete_universal_tiers_pass(self):
         module.validate_universal_tier_coverage(
             [row(1_000), row(100_000), row(10_000_000)], "test")

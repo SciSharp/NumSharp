@@ -101,8 +101,10 @@ The most common task. Full worked example in **`references/add-benchmark.md`**. 
 - **What we commit is `benchmark/history/<date>_<sha>/`**, not the gitignored `benchmark/results/<ts>/` scratch.
   Reference `benchmark/history/latest/benchmark-report.md`.
 - **These are mostly view ops → sub-µs.** flip/rot90/transpose-aliases are O(1) views; their benchmark tracks
-  allocation/dispatch overhead, not throughput. Ops doing real work (trim_zeros, reductions) are where ratios
-  are meaningful.
+  allocation/dispatch overhead, not throughput. `benchmark/scripts/credibility.py` marks every reviewed
+  O(1)-in-N scenario negligible regardless of measured duration, and every dashboard rollup must honor that
+  status. The proof ledger is `benchmark/O1_EXCLUSIONS.md`. Ops doing real work (trim_zeros, reductions) are
+  where ratios are meaningful.
 
 ## References
 

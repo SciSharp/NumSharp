@@ -1482,12 +1482,7 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Creation/CreationBenchmarks.cs"
         },
         {
-          "description": "np.copy(a) [asarray equivalent]",
-          "suite_directory": "Creation",
-          "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Creation/CreationBenchmarks.cs"
-        },
-        {
-          "description": "np.copy(a[100:1000])",
+          "description": "np.copy(a[N/10:9N/10])",
           "suite_directory": "Slicing",
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs"
         }
@@ -9342,16 +9337,6 @@
       "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs"
     },
     {
-      "description": "a[100:1000] * 2",
-      "suite_directory": "Slicing",
-      "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs"
-    },
-    {
-      "description": "a[100:1000].copy()",
-      "suite_directory": "Slicing",
-      "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs"
-    },
-    {
       "description": "a[10:100, :] (row slice 2D)",
       "suite_directory": "Slicing",
       "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs"
@@ -9373,6 +9358,16 @@
     },
     {
       "description": "a[::2] * 2",
+      "suite_directory": "Slicing",
+      "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs"
+    },
+    {
+      "description": "a[N/10:9N/10] * 2",
+      "suite_directory": "Slicing",
+      "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs"
+    },
+    {
+      "description": "a[N/10:9N/10].copy()",
       "suite_directory": "Slicing",
       "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs"
     },

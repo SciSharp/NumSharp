@@ -40,12 +40,13 @@ The nditer subsystem reports a section that crashes all retries (the known inter
 ## Reading the report
 
 - **Convention is NPY/NS** (NumPy_ms / NumSharp_ms, `>1` = NumSharp faster). Published bands: ✅ `≥1.05×` 🟡 `≥0.5×`
-  🟠 `≥0.2×` 🔴 `<0.2×` · **▫ negligible** (sub-µs either side or >20× — excluded from geomeans & Best/Worst)
+  🟠 `≥0.2×` 🔴 `<0.2×` · **▫ negligible** (semantic O(1)-in-N, sub-µs either side, or >20× — excluded from every rollup/ranking)
   · **⚪** (C# side unjoined). The `%NumPy🕐` column = NumSharp_ms / NumPy_ms × 100 = share of NumPy's time
   NumSharp uses (<100% = faster).
-- **Credibility gating** (`merge-results.py` `classify()`): only rows where **both sides did ≥1µs of work AND the
-  speedup is within 20×** count toward the geomeans and rankings. Sub-µs call-overhead rows, view returns, lazy
-  allocs and dead-code-eliminated kernels are `▫ negligible` — kept in the per-suite tables, never showcased.
+- **Credibility gating** (`merge-results.py` `classify()` + `scripts/credibility.py`): only non-O(1)
+  scenarios where **both sides did ≥1µs of work and the speedup is within 20×** count. Reviewed
+  O(1)-in-N view/metadata/fixed-count-wrapper scenarios are negligible regardless of timing; see
+  `benchmark/O1_EXCLUSIONS.md`. Raw rows stay inspectable and are never showcased.
 - The report has the full **per-(op, dtype, N, scenario) matrix**, both profile results, one
   fastest-valid effective value, then the five appended subsystem sections.
 - A row missing a C# or NumPy value ("C# not run" / "NumPy only") almost always means the two names didn't

@@ -131,10 +131,14 @@ def parse_size_summary(report_md):
         return rows
     m = re.search(r"## Summary by size(.+?)(?:\n#{2,3} |\n---|\Z)", text, re.S)
     block = m.group(1) if m else ""
+    headers = {}
     for line in block.splitlines():
         if not line.startswith("|"):
             continue
         cells = [c.strip() for c in line.strip("|").split("|")]
+        if cells and cells[0].lower() == "n":
+            headers = {cell.lower(): index for index, cell in enumerate(cells)}
+            continue
         if len(cells) < 10 or not cells[0].replace(",", "").isdigit():
             continue
         if int(cells[0].replace(",", "")) < 1000:
@@ -144,8 +148,12 @@ def parse_size_summary(report_md):
                 continue
         except ValueError:
             continue
+        geomean_index = headers.get("geomean", 8)
+        pct_index = next((index for label, index in headers.items() if label.startswith("%np")), 9)
+        if max(geomean_index, pct_index) >= len(cells):
+            continue
         rows.append({"N": cells[0], "ok": cells[2], "close": cells[3], "slow": cells[4],
-                     "red": cells[5], "geomean": cells[8], "pnp": cells[9]})
+                     "red": cells[5], "geomean": cells[geomean_index], "pnp": cells[pct_index]})
     return rows
 
 
