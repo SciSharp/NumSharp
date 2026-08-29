@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # publish generated dashboard data to the master-code-data branch
   pages: write
   id-token: write
 
@@ -83,6 +83,31 @@ jobs:
       - name: Execute every official C# benchmark body once
         run: dotnet run -c Release -f net8.0 --no-cache benchmark/scripts/smoke_benchmark_bodies.cs
 
+      # Publish the just-verified data to the orphan master-code-data branch as a new
+      # <date>_<sha> snapshot per type + repointed `latest`. Only on master pushes (never PRs),
+      # so PR builds cannot mutate the data branch. The freshly generated artifacts feed the
+      # publish; benchmark-coverage rides here (its audit_coverage.py --check gate ran above),
+      # while the heavy `benchmark` report is published by benchmark.yml after a benchmark run.
+      - name: Publish dashboard data to master-code-data
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin master-code-data >/dev/null 2>&1; then
+            git fetch origin master-code-data --depth=1
+            git worktree add -B master-code-data /tmp/mcd origin/master-code-data
+          else
+            git worktree add --orphan -b master-code-data /tmp/mcd
+          fi
+          python tools/dashboard_data/publish.py --type inventory \
+            --from artifacts/numpy-numsharp-coverage --branch-worktree /tmp/mcd --sha "${GITHUB_SHA}" --commit
+          python tools/dashboard_data/publish.py --type tests-oracle \
+            --from artifacts/tests-oracle-inventory --branch-worktree /tmp/mcd --sha "${GITHUB_SHA}" --commit
+          python tools/dashboard_data/publish.py --type benchmark-coverage \
+            --from benchmark/coverage/generated --branch-worktree /tmp/mcd --sha "${GITHUB_SHA}" --commit
+          git -C /tmp/mcd push origin master-code-data
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         if: always()
@@ -111,6 +136,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so resolve.py can read master-side commit dates
 
       - name: Use generated coverage artifact
         uses: actions/download-artifact@v4
@@ -123,6 +150,24 @@ jobs:
         with:
           name: numsharp-tests-oracle-inventory
           path: test/inventory/generated
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Bake the newest of master-vs-master-code-data per dataset into the DocFX inputs.
+      # master's committed copies (above) stay the fallback, so the site builds from master alone.
+      - name: Resolve newest dashboard data (master vs master-code-data)
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin master-code-data >/dev/null 2>&1; then
+            git fetch origin master-code-data --depth=1
+            git worktree add /tmp/mcd origin/master-code-data
+            python tools/dashboard_data/resolve.py --data-worktree /tmp/mcd --into .
+          else
+            echo "master-code-data not found on origin; building from master's committed data (fallback)."
+          fi
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4

@@ -72,6 +72,25 @@ jobs:
         # the NDIter section to benchmark-report.md.
         run: python benchmark/run_benchmark.py
 
+      # Publish the fresh benchmark snapshot to the orphan master-code-data branch as a new
+      # <date>_<sha> folder + repointed `latest` (the whole benchmark/history/latest set: report
+      # JSON/CSV/MD, subsystem sheets, cards). Separate from the master commit below and pushed to
+      # its own branch, so the data branch carries the newest benchmark data for the docs resolver.
+      - name: Publish benchmark data to master-code-data
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin master-code-data >/dev/null 2>&1; then
+            git fetch origin master-code-data --depth=1
+            git worktree add -B master-code-data /tmp/mcd origin/master-code-data
+          else
+            git worktree add --orphan -b master-code-data /tmp/mcd
+          fi
+          python tools/dashboard_data/publish.py --type benchmark \
+            --from benchmark/history/latest --branch-worktree /tmp/mcd --sha "${GITHUB_SHA}" --commit
+          git -C /tmp/mcd push origin master-code-data
+
       - name: Render full reports into the docs site
         # The op matrix + the iterator sheet become searchable DocFX pages (a
         # different result model from the cards, so they are whole-page includes,
