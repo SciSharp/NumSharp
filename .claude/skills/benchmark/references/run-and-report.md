@@ -64,6 +64,28 @@ They drift — know which is which:
   only the canonical combined JSON and computes effective rollups/backend drill-downs from measured rows.
 - **`benchmark/README.md`** is a static orientation guide, **not** the report — CI never refreshes it.
 
+## Dashboard data delivery — the `master-code-data` branch
+
+The three live docs dashboards fetch same-origin JSON that DocFX bakes at build time. That data now has
+**two sources, reconciled by date at build time** (`master` stays a backwards-compatible fallback):
+
+- **Code branch (`master`)** — each dataset's committed copy (the historical path; still builds alone).
+- **Orphan `master-code-data` branch** — generated data as `<type>/<date>_<sha>/` snapshots + a git
+  symlink `latest`, one folder per type: `benchmark`, `tests-oracle`, `inventory` (NumPy API coverage),
+  `benchmark-coverage`. The branch's top-level + per-type READMEs are the authoritative spec.
+
+Tooling lives on the code branch in **`tools/dashboard_data/`** (stdlib-only):
+- `publish.py --type <t> --from <dir> --branch-worktree <wt> --sha <sha> --commit` — append a
+  `<date>_<sha>` snapshot for a type and repoint `latest`.
+- `resolve.py --data-worktree <wt> --into .` — at docs-build time, per dataset pick the newer of
+  master-vs-branch by **git commit date** and overlay it onto the paths DocFX already reads (so the UI's
+  relative `data/…` fetch is unchanged). `latest` is the newest pointer; missing → max `<date>_<sha>` fallback.
+- `common.py` — the per-type file/overlay map + `latest`/fallback/date helpers.
+
+CI: `benchmark.yml` publishes the fresh `benchmark` snapshot after a run; `docs.yml` publishes
+`inventory`/`tests-oracle`/`benchmark-coverage` on master pushes and runs `resolve.py` before `docfx build`.
+**`docfx.json` is unchanged** — the resolver stages winners into the paths its resource/content blocks already glob.
+
 ## History snapshots — what we commit
 
 | Path | Tracked? | Contents |
@@ -74,7 +96,8 @@ They drift — know which is which:
 
 `benchmark/scripts/snapshot_history.py` assembles it (called by `run_benchmark.py`; `--commit` to also git-commit).
 **Publish ritual:** run → review → commit `benchmark/history/`. Reference `benchmark/history/latest/benchmark-report.md`,
-never the gitignored scratch.
+never the gitignored scratch. The same `benchmark/history/latest` snapshot is also published to the
+`master-code-data` branch (see *Dashboard data delivery* above) so the docs resolver can serve it to the site.
 
 ## The Debug-taint reminder (bears repeating)
 

@@ -88,7 +88,7 @@ The most common task. Full worked example in **`references/add-benchmark.md`**. 
 
 ## Other tasks → where to go
 
-- **Run the suite (official / subset), interpret the report, the reports/UI surfaces + snapshots** → `references/run-and-report.md`. (The human-facing UI is the DocFX page `docs/website-src/docs/benchmarks-dashboard.md`; its Function Explorer data is generated, while narrative cards are curated.)
+- **Run the suite (official / subset), interpret the report, the reports/UI surfaces + snapshots** → `references/run-and-report.md`. (The human-facing UI is the DocFX page `docs/website-src/docs/benchmarks-dashboard.md`; its Function Explorer data is generated, while narrative cards are curated. Generated dashboard data is now delivered via the orphan **`master-code-data`** branch with a build-time date-priority resolver in `tools/dashboard_data/` — see `references/run-and-report.md`.)
 - **Add or edit a matrix subsystem or backend profile case** → `references/subsystems.md`.
 - **Everything else (all suites, config internals, troubleshooting, type map)** → `benchmark/CLAUDE.md`.
 
