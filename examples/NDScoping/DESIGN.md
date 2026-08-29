@@ -369,7 +369,7 @@ and reports `ANALYZER-OK` / the codes it saw (it does not build the counter-exam
 - **Non-goals:** performance numbers (that is `benchmark/`), NumPy parity (that is the oracle),
   exhaustive dtype coverage (the demos use `float64` for legibility — the reclamation contract is
   dtype-agnostic), and re-teaching the weaver internals (that is `DISPOSAL-GUIDELINES.md` /
-  `docs/website-src/docs/ndscoped.md`, which this example links to).
+  `docs/website-src/docs/numsharp-build-compiler.md`, which this example links to).
 
 ---
 
@@ -394,7 +394,7 @@ The example uses only the **public** surface (`NDScope`, the two attributes, `IN
    weave-coverage line reports full coverage.
 
 Cross-references: `src/NumSharp.Core/Backends/NDScope.cs` (the API + its XML doc, which this example
-makes executable), `DISPOSAL-GUIDELINES.md`, `docs/website-src/docs/ndscoped.md`,
+makes executable), `DISPOSAL-GUIDELINES.md`, `docs/website-src/docs/numsharp-build-compiler.md`,
 `tools/NumSharp.Build` + `tools/NumSharp.Build.Analyzer`, and the formal gates `NDScopeTests` /
 `NDScopeWeaveTests` / `NDScopeAsyncTests` / `verify_build_package.sh`.
 ```

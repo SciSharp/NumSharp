@@ -4,7 +4,7 @@
 **warning** — NDW012, never an error — for an NDArray a method **creates but never reclaims or hands
 off**, so its pooled unmanaged buffer is left to the finalizer instead of being returned promptly (the
 exact cost `[NDScoped]` exists to remove; see `DISPOSAL-GUIDELINES.md` and the website's
-`ndscoped.html#ndw012`). It ships **inside the NumSharp package** (`analyzers/dotnet/cs/`, packed by
+`numsharp-build-compiler.html#ndw012`). It ships **inside the NumSharp package** (`analyzers/dotnet/cs/`, packed by
 `_NumSharpCorePackAnalyzer`), so every `PackageReference` consumer gets it with no extra install; it
 also runs on NumSharp.Core's own build (toggle: `-p:EnableNDArrayLeakAnalyzer=false`; Core adds NDW012
 to `$(WarningsNotAsErrors)` so a leak can never break a build even under `TreatWarningsAsErrors`).
@@ -263,6 +263,6 @@ guaranteed to load). That is why collection expressions are matched by **syntax*
 (`CollectionExpressionSyntax`) rather than `ICollectionExpressionOperation` (absent in 4.8): the
 syntax match works on a 4.8 host (unrecognized operation) and newer hosts (typed operation) alike.
 
-Related: `DISPOSAL-GUIDELINES.md` (the ownership rules), `docs/website-src/docs/ndscoped.md` (the
+Related: `DISPOSAL-GUIDELINES.md` (the ownership rules), `docs/website-src/docs/numsharp-build-compiler.md` (the
 user-facing `[NDScoped]`/NDW012/NDW013 page), `test/NumSharp.Tests.Build.Analyzer/COVERAGE_PLAN.md`
 (the scenario backlog and its design guardrails — §10 there lists the do-not-regress rules).

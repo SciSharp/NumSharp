@@ -37,7 +37,7 @@ namespace NumSharp.Build.Analyzer
     public sealed class NDArrayLeakAnalyzer : DiagnosticAnalyzer
     {
         private const string Category = "NumSharp.Build";
-        private const string HelpLink = "https://scisharp.github.io/NumSharp/docs/ndscoped.html#ndw012";
+        private const string HelpLink = "https://scisharp.github.io/NumSharp/docs/numsharp-build-compiler.html#ndw012";
 
         internal static readonly DiagnosticDescriptor Nw012 = new DiagnosticDescriptor(
             "NDW012",

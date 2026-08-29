@@ -27,7 +27,7 @@ namespace NumSharp.Build.Analyzer
     public sealed class NDScopedTargetAnalyzer : DiagnosticAnalyzer
     {
         private const string Category = "NumSharp.Build";
-        private const string HelpLink = "https://scisharp.github.io/NumSharp/docs/ndscoped.html";
+        private const string HelpLink = "https://scisharp.github.io/NumSharp/docs/numsharp-build-compiler.html";
         private const string SyncName = "[NDScoped]";
         private const string AsyncName = "[NDScopedAsync]";
 

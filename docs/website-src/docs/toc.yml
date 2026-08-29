@@ -11,7 +11,7 @@
 - name: Buffering & Memory
   href: buffering.md
 - name: NumSharp.Build Compiler
-  href: ndscoped.md
+  href: numsharp-build-compiler.md
 - name: Exceptions
   href: exceptions.md
 - name: NumPy Compliance & Compatibility

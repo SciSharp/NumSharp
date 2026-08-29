@@ -140,7 +140,7 @@ NDScopedAttribute.cs`, public — the attribute is consumer-facing) is rewritten
 pattern produces. The SAME transform ships to consumer projects as the **`NumSharp.Build`
 NuGet package** (tools + MSBuild targets only, `PrivateAssets="all"` on install — a weaver on
 the project it is installed on, never a runtime dependency; gate:
-`tools/verify_build_package.sh`, docs: `docs/website-src/docs/ndscoped.md`); there the weaver
+`tools/verify_build_package.sh`, docs: `docs/website-src/docs/numsharp-build-compiler.md`); there the weaver
 resolves `NDScope`/`INDArrayCarrier` out of the REFERENCED NumSharp assembly via the compile's
 reference list:
 

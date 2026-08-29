@@ -103,6 +103,6 @@ Requires a project that references NumSharp (that is where `NDScope` and the att
 
 Full reference — which return shapes are woven (tuples, `NDArray[]`, result-struct carriers via
 `INDArrayCarrier`, `out` params), the `NDScope` API, hand-scoping, and the `NDW00x` build errors:
-<https://scisharp.github.io/NumSharp/docs/ndscoped.html>
+<https://scisharp.github.io/NumSharp/docs/numsharp-build-compiler.html>
 
 Part of the [SciSharp STACK](https://scisharp.github.io/SciSharp/).
