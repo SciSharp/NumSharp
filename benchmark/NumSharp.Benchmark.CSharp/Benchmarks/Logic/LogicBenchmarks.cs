@@ -108,16 +108,25 @@ public class CloseBenchmarks : TypedBenchmarkBase
 }
 
 /// <summary>
-/// Boolean reductions all / any. Input is a boolean array (~50% true), so dtype is bool.
+/// Boolean reductions all / any plus the logical_* ufuncs. Input is a boolean array (~50% true),
+/// and the dtype is declared explicitly (the BincountBenchmarks pattern): a BDN case without a
+/// DType parameter is loaded as float64 by merge-results.py, so this class's rows were keyed
+/// (op, float64, N) and never joined the NumPy twin's (op, bool, N) rows — every cell rendered
+/// ⚪ no_data at every tier while the measurements were silently discarded.
 /// </summary>
 [BenchmarkCategory("Logic")]
-public class BoolLogicBenchmarks : BenchmarkBase
+public class BoolLogicBenchmarks : TypedBenchmarkBase
 {
     private NDArray _mask = null!;
     private NDArray _other = null!;
 
     [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
+
+    [ParamsSource(nameof(Types))]
+    public new NPTypeCode DType { get; set; }
+
+    public static IEnumerable<NPTypeCode> Types => new[] { NPTypeCode.Boolean };
 
     [GlobalSetup]
     public void Setup()
