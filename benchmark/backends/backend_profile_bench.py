@@ -63,9 +63,18 @@ for n in product_tiers:
     linalg_a = np.random.random((linalg_side, linalg_side))
     linalg_b = np.random.random((linalg_side, linalg_side))
 
+    # np.inner / ndarray.dot join the op-matrix Statistics/NDArray suites, which are memory-heavy
+    # families: their published 10M tier runs MEMORY_HEAVY_LARGE_WORKLOAD (1M) physical elements on
+    # two DISTINCT arrays. Measure the SAME physical problem — a raw-10M same-vector dot here is 10x
+    # the work at half the memory traffic, and combine() rebases this row onto the main matrix's 1M
+    # two-array NumPy baseline (the exact cross-pairing the matmul side already fixed).
+    work_n = 1_000_000 if n == 10_000_000 else n
+    capped_a = np.random.random(work_n) * 100 - 50
+    capped_b = np.random.random(work_n) * 100 - 50
+
     emit("np.dot", "np.dot(a, b)", "openblas_optional", n, lambda: np.dot(vector, vector))
-    emit("ndarray.dot", "a.dot(b) [ndarray]", "openblas_optional", n, lambda: vector.dot(vector), suite="NDArray")
-    emit("np.inner", "np.inner(a, b)", "openblas_optional", n, lambda: np.inner(vector, vector), suite="Statistics")
+    emit("ndarray.dot", "a.dot(b) [ndarray]", "openblas_optional", n, lambda: capped_a.dot(capped_b), suite="NDArray")
+    emit("np.inner", "np.inner(a, b)", "openblas_optional", n, lambda: np.inner(capped_a, capped_b), suite="Statistics")
     emit("np.vdot", "np.vdot(a, b)", "openblas_optional", n, lambda: np.vdot(vector, vector))
     emit("np.vecdot", "np.vecdot(a, b)", "openblas_optional", n, lambda: np.vecdot(vector, vector))
     emit("np.linalg.vecdot", "np.linalg.vecdot(a, b)", "openblas_optional", n, lambda: np.linalg.vecdot(vector, vector))
@@ -86,10 +95,13 @@ for n in product_tiers:
     emit("np.linalg.multi_dot", "np.linalg.multi_dot(arrays)", "openblas_optional_composed", n, lambda: np.linalg.multi_dot((linalg_a, linalg_b, linalg_a)))
     emit("np.linalg.matrix_power", "np.linalg.matrix_power(a, 3)", "openblas_optional_composed", n, lambda: np.linalg.matrix_power(linalg_a, 3))
 
-# Sliding dot is backend-sensitive too and follows the same published workload tiers.
+# Sliding dot is backend-sensitive too and follows the same published workload tiers. The op-matrix
+# twin (the Statistics Signal suite) is a memory-heavy family, so its published 10M tier runs 1M
+# physical signal elements — match it or combine() pairs a 10M-position sweep against a 1M baseline.
 for n in product_tiers:
     np.random.seed(84 + n)
-    signal = np.random.random(n) * 100 - 50
+    work_n = 1_000_000 if n == 10_000_000 else n
+    signal = np.random.random(work_n) * 100 - 50
     kernel = np.random.random(31) * 2 - 1
     emit("np.correlate", "np.correlate(a, kernel)", "openblas_optional_sliding_dot", n, lambda: np.correlate(signal, kernel, mode="same"), suite="Statistics")
     emit("np.convolve", "np.convolve(a, kernel)", "openblas_optional_sliding_dot", n, lambda: np.convolve(signal, kernel, mode="same"), suite="Statistics")

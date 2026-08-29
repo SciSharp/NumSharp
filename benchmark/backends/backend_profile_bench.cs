@@ -162,9 +162,18 @@ foreach (int n in new[] { 1_000, 100_000, 10_000_000 })
     using var linalgA = np.random.rand(linalgSide * linalgSide).reshape(linalgSide, linalgSide);
     using var linalgB = np.random.rand(linalgSide * linalgSide).reshape(linalgSide, linalgSide);
 
+    // np.inner / ndarray.dot join the op-matrix Statistics/NDArray suites, which are memory-heavy
+    // families: their published 10M tier runs ArraySizeSource.MemoryHeavyLargeWorkload (1M) physical
+    // elements on two DISTINCT arrays. Measure the SAME physical problem — a raw-10M same-vector dot
+    // here is 10x the work at half the memory traffic, and combine() rebases this row onto the main
+    // matrix's 1M two-array NumPy baseline (the exact cross-pairing the matmul side already fixed).
+    int workN = n == 10_000_000 ? 1_000_000 : n;
+    using var cappedA = np.random.rand(workN) * 100 - 50;
+    using var cappedB = np.random.rand(workN) * 100 - 50;
+
     Emit("np.dot", "np.dot(a, b)", "openblas_optional", n, () => { using var r = np.dot(vector, vector); });
-    Emit("ndarray.dot", "a.dot(b) [ndarray]", "openblas_optional", n, () => { using var r = vector.dot(vector); }, suite: "NDArray");
-    Emit("np.inner", "np.inner(a, b)", "openblas_optional", n, () => { using var r = np.inner(vector, vector); }, suite: "Statistics");
+    Emit("ndarray.dot", "a.dot(b) [ndarray]", "openblas_optional", n, () => { using var r = cappedA.dot(cappedB); }, suite: "NDArray");
+    Emit("np.inner", "np.inner(a, b)", "openblas_optional", n, () => { using var r = np.inner(cappedA, cappedB); }, suite: "Statistics");
     Emit("np.vdot", "np.vdot(a, b)", "openblas_optional", n, () => { using var r = np.vdot(vector, vector); });
     Emit("np.vecdot", "np.vecdot(a, b)", "openblas_optional", n, () => { using var r = np.vecdot(vector, vector); });
     Emit("np.linalg.vecdot", "np.linalg.vecdot(a, b)", "openblas_optional", n, () => { using var r = np.linalg.vecdot(vector, vector); });
@@ -186,11 +195,14 @@ foreach (int n in new[] { 1_000, 100_000, 10_000_000 })
     Emit("np.linalg.matrix_power", "np.linalg.matrix_power(a, 3)", "openblas_optional_composed", n, () => { using var r = np.linalg.matrix_power(linalgA, 3); });
 }
 
-// Sliding dot is backend-sensitive too and follows the same published workload tiers.
+// Sliding dot is backend-sensitive too and follows the same published workload tiers. The op-matrix
+// twin (SignalStatisticsBenchmarks) is a memory-heavy family, so its published 10M tier runs 1M
+// physical signal elements — match it or combine() pairs a 10M-position sweep against a 1M baseline.
 foreach (int n in new[] { 1_000, 100_000, 10_000_000 })
 {
     np.random.seed(84 + n);
-    using var signal = np.random.rand(n) * 100 - 50;
+    int workN = n == 10_000_000 ? 1_000_000 : n;
+    using var signal = np.random.rand(workN) * 100 - 50;
     using var kernel = np.random.rand(31) * 2 - 1;
     Emit("np.correlate", "np.correlate(a, kernel)", "openblas_optional_sliding_dot", n, () => { using var r = np.correlate(signal, kernel, "same"); }, suite: "Statistics");
     Emit("np.convolve", "np.convolve(a, kernel)", "openblas_optional_sliding_dot", n, () => { using var r = np.convolve(signal, kernel, "same"); }, suite: "Statistics");
