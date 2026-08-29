@@ -908,47 +908,28 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Helper for NaN-aware min of a contiguous Half array.
-        /// NaN values are ignored. Returns NaN if all values are NaN.
+        /// NaN-aware min of a contiguous Half array — rides the bit-level AVX2 key kernel
+        /// (<see cref="HalfNanMinBitsContiguous"/>; zero float conversions). NaN skipped;
+        /// all-NaN returns the FIRST element VERBATIM (NumPy's fmin.reduce accumulator —
+        /// the old scalar loop returned canonical Half.NaN, destroying payload + sign);
+        /// ±0 ties keep the first zero. Empty keeps the canonical-NaN convention (the
+        /// engine guards NumPy's empty-input error upstream).
         /// </summary>
         internal static unsafe Half NanMinHalfHelper(Half* src, long size)
         {
             if (size == 0)
                 return Half.NaN;
-
-            Half minVal = Half.PositiveInfinity;
-            bool foundNonNaN = false;
-            for (long i = 0; i < size; i++)
-            {
-                if (!Half.IsNaN(src[i]))
-                {
-                    if (src[i] < minVal) minVal = src[i];
-                    foundNonNaN = true;
-                }
-            }
-            return foundNonNaN ? minVal : Half.NaN;
+            return BitConverter.UInt16BitsToHalf(HalfNanMinBitsContiguous((ushort*)src, size));
         }
 
         /// <summary>
-        /// Helper for NaN-aware max of a contiguous Half array.
-        /// NaN values are ignored. Returns NaN if all values are NaN.
+        /// NaN-aware max twin of <see cref="NanMinHalfHelper"/> (NumPy's fmax.reduce).
         /// </summary>
         internal static unsafe Half NanMaxHalfHelper(Half* src, long size)
         {
             if (size == 0)
                 return Half.NaN;
-
-            Half maxVal = Half.NegativeInfinity;
-            bool foundNonNaN = false;
-            for (long i = 0; i < size; i++)
-            {
-                if (!Half.IsNaN(src[i]))
-                {
-                    if (src[i] > maxVal) maxVal = src[i];
-                    foundNonNaN = true;
-                }
-            }
-            return foundNonNaN ? maxVal : Half.NaN;
+            return BitConverter.UInt16BitsToHalf(HalfNanMaxBitsContiguous((ushort*)src, size));
         }
 
         #endregion

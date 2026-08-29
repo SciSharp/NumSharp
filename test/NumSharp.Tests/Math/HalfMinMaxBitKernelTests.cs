@@ -164,4 +164,32 @@ public class HalfMinMaxBitKernelTests
         MaxBits(view).Should().Be((ushort)(0x4000 + 62));
         MinBits(view).Should().Be((ushort)(0x4000 + 1));
     }
+
+    // ── nanmin/nanmax (fmax.reduce / fmin.reduce semantics; probed 2.4.2) ────
+
+    [TestMethod]
+    public void NanMinMax_SkipNaN_AllNaN_FirstElementVerbatim()
+    {
+        // nanmax([1, nan, 3]) skips the NaN -> 3
+        using var a = FromBits(0x3c00, 0x7e01, 0x4200);
+        using (var r = np.nanmax(a)) BitConverter.HalfToUInt16Bits((Half)r.GetAtIndex(0)).Should().Be((ushort)0x4200);
+        using (var r = np.nanmin(a)) BitConverter.HalfToUInt16Bits((Half)r.GetAtIndex(0)).Should().Be((ushort)0x3c00);
+        // all-NaN: the fold accumulator never leaves the FIRST element - returned VERBATIM
+        // (payload + sign; the old scalar helper returned canonical Half.NaN)
+        using var b = FromBits(0x7e01, 0xfe22);
+        using (var r = np.nanmax(b)) BitConverter.HalfToUInt16Bits((Half)r.GetAtIndex(0)).Should().Be((ushort)0x7e01);
+        using var c = FromBits(0xfe22, 0x7d05);
+        using (var r = np.nanmin(c)) BitConverter.HalfToUInt16Bits((Half)r.GetAtIndex(0)).Should().Be((ushort)0xfe22);
+    }
+
+    [TestMethod]
+    public void NanMinMax_ZeroTies_FirstZeroWins_EvenAfterLeadingNaN()
+    {
+        // nanmax([-0,+0]) = -0 (first zero); leading NaN is skipped, zeros still tie to first
+        using var a = FromBits(0x8000, 0x0000);
+        using (var r = np.nanmax(a)) BitConverter.HalfToUInt16Bits((Half)r.GetAtIndex(0)).Should().Be((ushort)0x8000);
+        using var b = FromBits(0x7e01, 0x8000, 0x0000);
+        using (var r = np.nanmax(b)) BitConverter.HalfToUInt16Bits((Half)r.GetAtIndex(0)).Should().Be((ushort)0x8000);
+        using (var r = np.nanmin(b)) BitConverter.HalfToUInt16Bits((Half)r.GetAtIndex(0)).Should().Be((ushort)0x8000);
+    }
 }

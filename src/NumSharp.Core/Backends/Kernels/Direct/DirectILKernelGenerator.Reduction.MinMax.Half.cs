@@ -136,6 +136,78 @@ namespace NumSharp.Backends.Kernels
             return bits;
         }
 
+        /// <summary>
+        /// Flat NaN-SKIPPING max over a contiguous float16 buffer, returned as raw bits —
+        /// NumPy's <c>nanmax</c> == <c>fmax.reduce</c> (probed 2.4.2): NaN elements are
+        /// skipped, ±0 ties keep the FIRST zero, and an all-NaN input returns the FIRST
+        /// element VERBATIM (the fold's accumulator never leaves it). NaN lanes are blended
+        /// to the identity key (0 for max), so any finite element forces
+        /// keyMax ≥ key(-inf) = 0x03ff — keyMax below that ⟺ no finite element existed.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static unsafe ushort HalfNanMaxBitsContiguous(ushort* p, long n)
+            => HalfNanMinMaxBitsCore(p, n, isMin: false);
+
+        /// <summary>NaN-skipping min twin (<c>nanmin</c> == <c>fmin.reduce</c>): NaN lanes
+        /// blend to key 0xFFFF; keyMin above key(+inf) = 0xfc00 ⟺ all-NaN.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static unsafe ushort HalfNanMinBitsContiguous(ushort* p, long n)
+            => HalfNanMinMaxBitsCore(p, n, isMin: true);
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe ushort HalfNanMinMaxBitsCore(ushort* p, long n, bool isMin)
+        {
+            ushort kMax = 0, kMin = 0xFFFF;
+            long i = 0;
+
+            if (Avx2.IsSupported && n >= 16)
+            {
+                var m7fff = Vector256.Create((short)0x7FFF);
+                var vinf = Vector256.Create((short)0x7C00);
+                var m8000 = Vector256.Create(unchecked((short)0x8000));
+                var accMax = Vector256<ushort>.Zero;
+                var accMin = Vector256<ushort>.AllBitsSet;
+                for (; i + 16 <= n; i += 16)
+                {
+                    var b = Avx.LoadVector256((short*)(p + i));
+                    var nan = Avx2.CompareGreaterThan(Avx2.And(b, m7fff), vinf).AsUInt16();
+                    var k = HalfKeyV(b, m8000);
+                    if (isMin)
+                        accMin = Avx2.Min(accMin, Avx2.Or(nan, k));      // NaN → 0xFFFF (identity)
+                    else
+                        accMax = Avx2.Max(accMax, Avx2.AndNot(nan, k));  // NaN → 0 (identity)
+                }
+                if (isMin)
+                {
+                    var min128 = Sse41.Min(accMin.GetLower(), accMin.GetUpper());
+                    kMin = Sse41.MinHorizontal(min128).GetElement(0);
+                }
+                else
+                {
+                    var max128 = Sse41.Max(accMax.GetLower(), accMax.GetUpper());
+                    var inv = Sse2.Xor(max128, Vector128<ushort>.AllBitsSet);
+                    kMax = (ushort)~Sse41.MinHorizontal(inv).GetElement(0);
+                }
+            }
+
+            for (; i < n; i++)
+            {
+                if ((p[i] & 0x7FFF) > 0x7C00) continue;                  // skip NaN
+                ushort k = HalfKeyScalar(p[i]);
+                if (k > kMax) kMax = k;
+                if (k < kMin) kMin = k;
+            }
+
+            // No finite element → fold accumulator == the first element (a NaN), verbatim.
+            if (isMin ? kMin > 0xFC00 : kMax < 0x03FF)
+                return p[0];
+
+            ushort bits = HalfUnkeyScalar(isMin ? kMin : kMax);
+            if ((bits & 0x7FFF) == 0)
+                return HalfFirstZeroBits(p, n);
+            return bits;
+        }
+
         /// <summary>16 f16 bit patterns → 16 order keys (3 single-instruction ops).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector256<ushort> HalfKeyV(Vector256<short> b, Vector256<short> m8000)
