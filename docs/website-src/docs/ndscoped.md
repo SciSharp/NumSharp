@@ -58,12 +58,14 @@ dotnet add package NumSharp.Build
 ```
 
 Referencing the package is the whole opt-in: it wires the weave step into your build, and it is
-**not a dependency** — the package ships MSBuild targets, a build tool, and a Roslyn analyzer only
-(no `lib/`, no dependency entries), and `dotnet add package` installs it with `PrivateAssets="all"`
-automatically, so it never appears in your own package's dependency graph. The **analyzer** flags a
-wrong or unsupported target (an `async` method under `[NDScoped]`, an unsupported return, …) as a
-build error in the editor — before the weave runs — so mistakes surface immediately. Now mark any
-method that owns `NDArray` transients `[NDScoped]` and keep the body exactly as you wrote it —
+**not a dependency** — the package ships MSBuild targets and a build tool only (no `lib/`, no
+dependency entries), and `dotnet add package` installs it with `PrivateAssets="all"` automatically,
+so it never appears in your own package's dependency graph. The companion **Roslyn analyzer** ships
+with the `NumSharp` package itself (not this one), so it is already active the moment you reference
+NumSharp: it flags a wrong or unsupported target (an `async` method under `[NDScoped]`, an
+unsupported return, …) as a build error in the editor — before the weave runs — so mistakes surface
+immediately, weaver installed or not. Now mark any method that owns `NDArray` transients
+`[NDScoped]` and keep the body exactly as you wrote it —
 
 ```csharp
 using NumSharp;
@@ -287,11 +289,12 @@ surfaces in the editor and on every build instead of only as a runtime finalizer
 
 ### NDW012 — an NDArray is created but never disposed or scoped
 
-Installing `NumSharp.Build` turns on a Roslyn analyzer that **warns** when a method creates an
+The `NumSharp` package ships a Roslyn analyzer that **warns** when a method creates an
 `NDArray` (or any carrier of one — `NDArray[]`, a `ValueTuple`/`Tuple` of NDArrays, an
 `INDArrayCarrier` result struct) and then never returns it, assigns it to an `out`/`ref` parameter,
 stores it, disposes it, or yields it through an `NDScope` — so its pooled buffer is left to the
-finalizer. NumSharp.Core runs the same analyzer on its own build.
+finalizer. Referencing NumSharp is the whole opt-in (no weaver install needed); NumSharp.Core runs
+the same analyzer on its own build.
 
 ```csharp
 public NDArray Bad(NDArray a, NDArray b)
@@ -356,20 +359,23 @@ to `$(MSBuildWarningsAsMessages)`, or — the intended fix — by installing the
 ## Troubleshooting
 
 **A `[NDScoped]` / `[NDScopedAsync]` build error.** A shape whose egress cannot be seen is refused
-rather than mis-woven. Two layers report it: the package ships a **Roslyn analyzer** that flags the
-SOURCE-detectable mistakes at **compile time** — in the editor, with a red squiggle, and as a build
-error that runs before (and preempts) the weave — and the **IL weaver** reports the rest post-compile.
+rather than mis-woven. Two layers report it: the **NumSharp package** ships a **Roslyn analyzer** that
+flags the SOURCE-detectable mistakes at **compile time** — in the editor, with a red squiggle, and as
+a build error that runs before (and preempts) the weave — and the **IL weaver** (this package) reports
+the rest post-compile.
 The analyzer covers **NDW002, NDW003, NDW005, NDW006, NDW009, NDW010, NDW011** (the `[NDScoped]`-target
 gate) plus **NDW012** (the [leak warning](#ndw012), a separate always-on analyzer); the weaver covers the
 IL-only **NDW001, NDW004, NDW007, NDW008** (a resolution failure, an unrecognized state machine, a
-tail-call, or a NumSharp too old for the async seam). Separately, **NDW013** ships in NumSharp itself
-(not this package) so it can warn when `[NDScoped]` is used [without the weaver installed](#ndw013).
+tail-call, or a NumSharp too old for the async seam). **NDW013** also ships in NumSharp itself
+so it can warn when `[NDScoped]` is used [without the weaver installed](#ndw013).
 Same code, same fix, whichever layer fires.
 
-> **A `PackageReference` consumer gets the analyzer automatically** (NuGet applies it from
-> `analyzers/dotnet/cs/`). A **source-mode consumer** — one that references the weaver by
-> `ProjectReference` and `<Import>`s `build/NumSharp.Build.targets` directly — turns it on the same
-> way it points the tool at a built weaver: either reference the analyzer project with
+> **A `PackageReference` consumer gets the analyzer automatically** — NuGet applies it from the
+> **NumSharp** package's `analyzers/dotnet/cs/`, so referencing NumSharp alone is enough (no weaver
+> install required). A **source-mode consumer** — one that references NumSharp.Core by
+> `ProjectReference` and `<Import>`s `build/NumSharp.Build.targets` directly, so no package delivers
+> the analyzer — turns it on the same way it points the tool at a built weaver: either reference the
+> analyzer project with
 > `<ProjectReference "…/NumSharp.Build.Analyzer.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />`,
 > or set `<NumSharpBuildAnalyzerDll>…/NumSharp.Build.Analyzer.dll</NumSharpBuildAnalyzerDll>` at a
 > built analyzer DLL (the parallel to `<NumSharpBuildToolDll>`). Without either, a source-mode build

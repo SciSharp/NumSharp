@@ -63,15 +63,16 @@
   <!-- ==================================================================================
        Compile-time analyzer — the SOURCE-mode half of the story.
 
-       When this package is installed as a PackageReference, NuGet AUTO-APPLIES the analyzer
-       from `analyzers/dotnet/cs/` (and honours `ExcludeAssets="analyzers"`), so nothing here is
-       needed and this stays inert. A SOURCE-mode consumer — one that IMPORTS these targets
-       directly (referencing the weaver by ProjectReference instead of a package, the in-repo
-       recipe) — gets NO such auto-apply, so it opts in by pointing $(NumSharpBuildAnalyzerDll)
-       at the built analyzer DLL, EXACTLY as it already points $(NumSharpBuildToolDll) at the
-       built tool. That makes the same NDW002/003/005/006/009/010/011 diagnostics fail the build
-       at CoreCompile (and squiggle in the IDE) for a csproj consumer too, not just the weaver's
-       post-compile pass.
+       This package ships NO analyzer of its own: the compile-time analyzer rides the NumSharp
+       package itself (analyzers/dotnet/cs/ there — NuGet AUTO-APPLIES it, and honours
+       `ExcludeAssets="analyzers"` on the NumSharp reference), so a PackageReference consumer
+       already has the diagnostics and nothing here is needed. A SOURCE-mode consumer — one that
+       IMPORTS these targets directly AND references NumSharp.Core by ProjectReference (the
+       in-repo recipe, where no package delivers the analyzer) — opts in by pointing
+       $(NumSharpBuildAnalyzerDll) at the built analyzer DLL, EXACTLY as it already points
+       $(NumSharpBuildToolDll) at the built tool. That makes the same
+       NDW002/003/005/006/009/010/011 diagnostics fail the build at CoreCompile (and squiggle in
+       the IDE) for a csproj consumer too, not just the weaver's post-compile pass.
 
        Deliberately NO DEFAULT: an unset property adds nothing, so a real PackageReference build
        never double-applies the analyzer and a consumer's `ExcludeAssets="analyzers"` opt-out is

@@ -71,20 +71,31 @@
   </ItemGroup>
 
   <!-- ==================================================================================
-       Compile-time leak analyzer (NDW012) for NumSharp.Core's OWN build.
+       Compile-time leak analyzer (NDW012) for NumSharp.Core's OWN build — AND the analyzer
+       the NumSharp PACKAGE ships to its consumers.
 
        The NumSharp.Build.Analyzer flags an NDArray a method creates but never returns, out/ref's,
        stores, disposes, or yields to an NDScope — a transient left to the finalizer. Referencing it
        with OutputItemType="Analyzer" (ReferenceOutputAssembly=false, so netstandard2.0 is never a
        runtime ref) runs it during Core's compile, so `dotnet build` on NumSharp captures leaks in
-       np.* code, not just in downstream consumers of the NumSharp.Build package.
+       np.* code, not just in downstream consumers.
 
        The analyzer ALSO carries the [NDScoped]-target gate (NDW002/003/005/006/009/010/011), but on
        Core those are REDUNDANT with the self-weave (which validates every [NDScoped] method
        post-compile) and have never run over Core's full attributed surface — so they are turned off
        for Core's own build in src/NumSharp.Core/.editorconfig, leaving only the NDW012 leak warning.
 
-       Toggle: -p:EnableNDArrayLeakAnalyzer=false removes the analyzer from Core's compile entirely.
+       SHIPPING: the analyzer DLL is ALSO packed into THIS package's analyzers/dotnet/cs/ (see
+       _NumSharpCorePackAnalyzer below), so every PackageReference consumer of NumSharp gets the
+       NDW diagnostics — the [NDScoped]-target gate as compile ERRORS and the NDW012 leak nudge —
+       WITHOUT installing anything else. The NumSharp.Build package is weaver-ONLY (tool + targets,
+       no analyzers/): its job is the post-compile weave, and shipping the analyzer here instead of
+       there means the two packages installed together never double-apply it. The attributes and the
+       analyzer both living in/with NumSharp keeps them version-locked to the surface they validate.
+
+       Toggle: -p:EnableNDArrayLeakAnalyzer=false removes the analyzer from Core's COMPILE — the
+       P2P below stays (without OutputItemType) so the DLL is still BUILT and the package still
+       ships it; the toggle governs analysis of Core, never the package payload.
        ================================================================================== -->
   <PropertyGroup>
     <EnableNDArrayLeakAnalyzer Condition="'$(EnableNDArrayLeakAnalyzer)' == ''">true</EnableNDArrayLeakAnalyzer>
@@ -96,6 +107,45 @@
   <ItemGroup Condition="'$(EnableNDArrayLeakAnalyzer)' == 'true'">
     <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
+  <!-- Toggle OFF still builds the analyzer (no OutputItemType → it never analyzes Core): the pack
+       target below stages its DLL by GetTargetPath WITHOUT a rebuild, so the DLL must exist from
+       the ordinary build whatever the toggle says. PrivateAssets=all + IsPackable=false on the
+       analyzer keep this out of the nuspec dependency list in both branches. -->
+  <ItemGroup Condition="'$(EnableNDArrayLeakAnalyzer)' != 'true'">
+    <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- ==================================================================================
+       Pack the analyzer into the NumSharp package (analyzers/dotnet/cs/).
+
+       NuGet auto-applies analyzers/dotnet/cs/ to a consumer's C# compile, so referencing
+       NumSharp alone turns on the NDW diagnostics. Same mechanics as the weaver package's
+       old staging (which moved here): GetTargetPath resolves the DLL WITHOUT a rebuild —
+       safe under a no-build pack (the way CI packs: build with Rebuild, then pack with no
+       rebuild; the P2P above built the DLL) — and RemoveProperties="TargetFramework" strips
+       the inner build's net8.0/net10.0 global so the analyzer resolves its own
+       netstandard2.0 output.
+
+       TfmSpecificContentInPackage runs once PER TFM in TargetFrameworks; analyzers/ is a
+       TFM-agnostic folder, so the target stages on the net8.0 pass only (the repo's floor
+       TFM) — both passes adding the same file would draw NU5118.
+       ================================================================================== -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_NumSharpCorePackAnalyzer</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+  <Target Name="_NumSharpCorePackAnalyzer" Condition="'$(TargetFramework)' == 'net8.0'">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj"
+             Targets="GetTargetPath" Properties="Configuration=$(Configuration)" RemoveProperties="TargetFramework">
+      <Output TaskParameter="TargetOutputs" ItemName="_NumSharpCoreAnalyzer" />
+    </MSBuild>
+    <!-- Loud, actionable failure instead of a silently analyzer-less nupkg (the gates —
+         verify_strong_name.cs and verify_weaver_package.sh step 2 — assert presence too). -->
+    <Error Condition="'@(_NumSharpCoreAnalyzer)' == '' or !Exists('@(_NumSharpCoreAnalyzer)')"
+           Text="NumSharp pack: NumSharp.Build.Analyzer.dll not found (looked at '@(_NumSharpCoreAnalyzer)'). Build the solution (or NumSharp.Core, whose ProjectReference builds the analyzer) before packing with --no-build." />
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="@(_NumSharpCoreAnalyzer)" PackagePath="analyzers/dotnet/cs/" />
+    </ItemGroup>
+  </Target>
 
   <Target Name="LogDebugInfo">
     <Message Text="Building for $(TargetFramework) on $(OS)" Importance="High" />

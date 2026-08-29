@@ -74,16 +74,20 @@ foreach (var pkg in packages)
         bool hasCecil = zip.Entries.Any(e => e.FullName.Equals("tools/net8.0/any/Mono.Cecil.dll", StringComparison.OrdinalIgnoreCase));
         bool hasTargets = zip.Entries.Any(e => e.FullName.Equals("build/NumSharp.Build.targets", StringComparison.OrdinalIgnoreCase));
         bool hasLib = zip.Entries.Any(e => e.FullName.StartsWith("lib/", StringComparison.OrdinalIgnoreCase));
+        // Weaver-ONLY by design: the compile-time analyzer ships in the NumSharp package itself
+        // (asserted below), never here — both packages carrying it would double-apply on any
+        // consumer that installs both.
+        bool hasAnalyzers = zip.Entries.Any(e => e.FullName.StartsWith("analyzers/", StringComparison.OrdinalIgnoreCase));
 
         checkedCount++;
-        if (hasTool && hasCecil && hasTargets && !hasLib)
+        if (hasTool && hasCecil && hasTargets && !hasLib && !hasAnalyzers)
         {
-            Console.WriteLine("  OK   tools-only weaver package (build/ + tools/ payload verified; key check n/a)");
+            Console.WriteLine("  OK   tools-only weaver package (build/ + tools/ payload verified, no analyzers/; key check n/a)");
         }
         else
         {
             Console.Error.WriteLine($"  ::error::FAIL {Path.GetFileName(pkg)} — tools-only package malformed " +
-                                    $"(tool={hasTool}, cecil={hasCecil}, targets={hasTargets}, lib-present={hasLib})");
+                                    $"(tool={hasTool}, cecil={hasCecil}, targets={hasTargets}, lib-present={hasLib}, analyzers-present={hasAnalyzers})");
             failures++;
         }
         continue;
@@ -143,6 +147,31 @@ foreach (var pkg in packages)
         checkedCount++;
         if (problem is null) Console.WriteLine($"  OK   {entry.FullName}  {token}");
         else { Console.Error.WriteLine($"  ::error::FAIL {entry.FullName}  {token}  — {problem}"); failures++; }
+    }
+
+    // The core NumSharp package (NumSharp.<version>.nupkg — "NumSharp." followed by a digit; the
+    // sibling packages are NumSharp.Bitmap/Interop.*) must ALSO carry the compile-time analyzer:
+    // analyzers/dotnet/cs/NumSharp.Build.Analyzer.dll, staged by _NumSharpCorePackAnalyzer so every
+    // consumer gets the NDW diagnostics from referencing NumSharp alone. It is deliberately
+    // UNSIGNED (loaded by the compiler host, never by a user's app) and lives outside lib/, so the
+    // key loop above never sees it — presence is the whole assertion, and a mis-pack that drops it
+    // must not ride a green key check.
+    var coreName = Path.GetFileName(pkg);
+    if (coreName.StartsWith("NumSharp.", StringComparison.OrdinalIgnoreCase)
+        && coreName.Length > "NumSharp.".Length && char.IsDigit(coreName["NumSharp.".Length]))
+    {
+        bool hasAnalyzer = zip.Entries.Any(e => e.FullName.Equals("analyzers/dotnet/cs/NumSharp.Build.Analyzer.dll", StringComparison.OrdinalIgnoreCase));
+        checkedCount++;
+        if (hasAnalyzer)
+        {
+            Console.WriteLine("  OK   analyzers/dotnet/cs/NumSharp.Build.Analyzer.dll  (presence check; unsigned by design)");
+        }
+        else
+        {
+            Console.Error.WriteLine($"  ::error::FAIL {coreName} — analyzers/dotnet/cs/NumSharp.Build.Analyzer.dll is missing " +
+                                    "(the NumSharp package ships the compile-time analyzer; see NumSharp.Core.csproj → _NumSharpCorePackAnalyzer)");
+            failures++;
+        }
     }
 }
 

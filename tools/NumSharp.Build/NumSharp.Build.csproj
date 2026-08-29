@@ -35,7 +35,14 @@
        installed on: a project that merely references a woven library is never woven.
        The [NDScoped] attribute itself ships in NumSharp.Core and is inert without this
        package, so adding/removing the package never changes results — only WHEN the
-       transients' buffers are reclaimed. Gate: tools/verify_weaver_package.sh.
+       transients' buffers are reclaimed.
+
+       This package is weaver-ONLY — it ships NO analyzers/. The compile-time Roslyn
+       analyzer (tools/NumSharp.Build.Analyzer: the [NDScoped]-target gate + the NDW012
+       leak nudge) ships inside the NumSharp package itself (NumSharp.Core.csproj →
+       _NumSharpCorePackAnalyzer), so every NumSharp consumer has it before ever
+       installing this weaver — and installing both packages never double-applies it.
+       Gate: tools/verify_weaver_package.sh.
        ================================================================================== -->
   <PropertyGroup>
     <IsPackable>true</IsPackable>
@@ -46,11 +53,11 @@
     <Company>SciSharp STACK</Company>
     <Product>NumSharp</Product>
     <Copyright>2021 © SciSharp STACK Team</Copyright>
-    <Description>Build-time IL weaver + Roslyn analyzer for NumSharp's [NDScoped]/[NDScopedAsync] deterministic memory reclamation. Installing this package wires a post-compile step into your project's build: every method you mark [NDScoped] (synchronous) or [NDScopedAsync] (async/Task) is rewritten to open an NDScope, so the NDArray temporaries it drops are returned to NumSharp's buffer pool the moment the method exits instead of waiting on the finalizer. A bundled analyzer reports a wrong or unsupported target as a build error at compile time. Ships as MSBuild targets + a tool + an analyzer only — it never becomes a runtime dependency of your project (`dotnet add package` installs it with PrivateAssets="all" automatically).</Description>
+    <Description>Build-time IL weaver for NumSharp's [NDScoped]/[NDScopedAsync] deterministic memory reclamation. Installing this package wires a post-compile step into your project's build: every method you mark [NDScoped] (synchronous) or [NDScopedAsync] (async/Task) is rewritten to open an NDScope, so the NDArray temporaries it drops are returned to NumSharp's buffer pool the moment the method exits instead of waiting on the finalizer. Ships as MSBuild targets + a tool only — it never becomes a runtime dependency of your project (`dotnet add package` installs it with PrivateAssets="all" automatically). The companion Roslyn analyzer (which reports a wrong or unsupported [NDScoped] target as a compile error and nudges on leaked NDArray temporaries) ships inside the NumSharp package itself, so it is already active in any project that can use the attributes.</Description>
     <PackageProjectUrl>https://scisharp.github.io/NumSharp/</PackageProjectUrl>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>NumSharp, NDScope, NDScoped, NDScopedAsync, weaver, analyzer, Roslyn, IL, Mono.Cecil, MSBuild, memory, pooling, NumPy, SciSharp</PackageTags>
+    <PackageTags>NumSharp, NDScope, NDScoped, NDScopedAsync, weaver, IL, Mono.Cecil, MSBuild, memory, pooling, NumPy, SciSharp</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
@@ -73,15 +80,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The compile-time Roslyn analyzer that gates [NDScoped]/[NDScopedAsync] targets. Built
-         alongside the tool for ordering; ReferenceOutputAssembly=false because the tool never LINKS
-         it (its DLL is staged into the package's analyzers/dotnet/cs/ folder by _NumSharpBuildPackTool,
-         where NuGet auto-applies it to the consumer's compile), and PrivateAssets=all so it — and its
-         Microsoft.CodeAnalysis reference — never becomes a dependency of anything. -->
-    <ProjectReference Include="..\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Include="build/**" Pack="true" PackagePath="build/" />
     <None Include="../../LICENSE" Pack="true" PackagePath="\" Visible="false" />
     <None Include="README.md" Pack="true" PackagePath="\" />
@@ -89,24 +87,11 @@
 
   <!-- The tool payload is the PUBLISH output (dll + runtimeconfig + deps + Mono.Cecil), not the
        bare build output — publish is the blessed closed set `dotnet exec` needs to resolve Cecil
-       from beside the tool. Runs per packed TFM (there is one: net8.0). -->
+       from beside the tool. Runs per packed TFM (there is one: net8.0). The compile-time analyzer
+       deliberately does NOT ship here — it rides the NumSharp package (see the header comment). -->
   <Target Name="_NumSharpBuildPackTool" DependsOnTargets="Publish">
-    <!-- The analyzer's build output is the ONLY analyzer asset that ships (Microsoft.CodeAnalysis is
-         provided by the compiler host at run time). It is built by the ProjectReference above;
-         GetTargetPath resolves its DLL WITHOUT a rebuild, so this works under a no-build pack (the
-         way CI packs: build -t:Rebuild, then pack with no rebuild). It lands in analyzers/dotnet/cs/,
-         the folder NuGet applies to a consumer's C# compile — so installing the package turns on the
-         analyzer AND the weaver together. -->
-    <!-- RemoveProperties="TargetFramework": during pack the weaver's own net8.0 is a GLOBAL property
-         that would otherwise flow in and make GetTargetPath look under the analyzer's non-existent
-         net8.0 output — strip it so the analyzer resolves its own netstandard2.0. -->
-    <MSBuild Projects="$(MSBuildThisFileDirectory)../NumSharp.Build.Analyzer/NumSharp.Build.Analyzer.csproj"
-             Targets="GetTargetPath" Properties="Configuration=$(Configuration)" RemoveProperties="TargetFramework">
-      <Output TaskParameter="TargetOutputs" ItemName="_NumSharpBuildAnalyzer" />
-    </MSBuild>
     <ItemGroup>
       <TfmSpecificPackageFile Include="$(PublishDir)**/*" PackagePath="tools/net8.0/any/" />
-      <TfmSpecificPackageFile Include="@(_NumSharpBuildAnalyzer)" PackagePath="analyzers/dotnet/cs/" />
     </ItemGroup>
   </Target>
 

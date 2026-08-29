@@ -192,17 +192,20 @@ state-machine/deferral machinery below (a synchronous iterator uses the invocati
 as an async method does); the split is which attribute the method carries, and choosing the wrong one
 is a loud build error (NDW009/NDW010/NDW011), never a silent unwoven ship.
 
-**Two layers report a bad target.** The `NumSharp.Build` package ships a Roslyn analyzer
-(`tools/NumSharp.Build.Analyzer`, staged into the package's `analyzers/dotnet/cs/`) beside the IL
-weaver. The analyzer reports every SOURCE-detectable rejection at COMPILE time — in the editor and
-before the weave — and preempts the weaver: NDW002 (ref egress), NDW003 (unsupported carrier), NDW005
-(no body), NDW006 (setter-only property), NDW009/NDW010/NDW011 (wrong attribute / both). The IL-only
-rejections stay with the weaver post-compile: NDW001 (NDScope unresolved), NDW004 (an unrecognized
-state-machine shape), NDW007 (a tail-call), NDW008 (a NumSharp too old for the async seam). The
-analyzer mirrors the weaver's `Classify` exactly, so the two never disagree; where they cannot cheaply
-agree — a real iterator vs a method merely returning a bare `IEnumerable` — the analyzer defers to the
-weaver rather than risk a false positive. Gate: `tools/verify_weaver_package.sh` step 11 (11a analyzer,
-11b weaver).
+**Two layers report a bad target.** The `NumSharp` package ships the Roslyn analyzer
+(`tools/NumSharp.Build.Analyzer`, staged into NumSharp's `analyzers/dotnet/cs/` by
+`NumSharp.Core.csproj → _NumSharpCorePackAnalyzer` — so it is present the moment the attributes
+are, weaver installed or not); the `NumSharp.Build` package adds the IL weaver and ships no
+analyzers/ of its own. The analyzer reports every SOURCE-detectable rejection at COMPILE time — in
+the editor and before the weave — and preempts the weaver: NDW002 (ref egress), NDW003 (unsupported
+carrier), NDW005 (no body), NDW006 (setter-only property), NDW009/NDW010/NDW011 (wrong attribute /
+both). The IL-only rejections stay with the weaver post-compile: NDW001 (NDScope unresolved), NDW004
+(an unrecognized state-machine shape), NDW007 (a tail-call), NDW008 (a NumSharp too old for the
+async seam). The analyzer mirrors the weaver's `Classify` exactly, so the two never disagree; where
+they cannot cheaply agree — a real iterator vs a method merely returning a bare `IEnumerable` — the
+analyzer defers to the weaver rather than risk a false positive. Gate:
+`tools/verify_weaver_package.sh` step 11 (11a analyzer, 11b weaver) + step 18 (analyzer via the
+NumSharp package alone).
 
 **Async & iterators — the state-machine weave.** An async or iterator method's visible body is a
 stub; the real code — and every egress — lives in the compiler state machine's `MoveNext`, which

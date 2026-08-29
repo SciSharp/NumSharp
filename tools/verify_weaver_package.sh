@@ -10,8 +10,10 @@
 #   1  pack the weaver exactly as CI does (build -t:Rebuild, then pack --no-build — this also
 #      proves Publish-under-NoBuild stages the tools/ payload)
 #   2  package SHAPE: developmentDependency=true, NO dependency entries, NO lib/, the tool +
-#      Mono.Cecil under tools/net8.0/any/, build/NumSharp.Build.targets, and the compile-time
-#      analyzer under analyzers/dotnet/cs/ (alone — the compiler host provides Microsoft.CodeAnalysis)
+#      Mono.Cecil under tools/net8.0/any/, build/NumSharp.Build.targets — and NO analyzers/
+#      (the compile-time analyzer ships in the NumSharp package itself, asserted here on the
+#      NumSharp nupkg: analyzers/dotnet/cs/NumSharp.Build.Analyzer.dll alone — the compiler
+#      host provides Microsoft.CodeAnalysis)
 #   3  scaffold a multi-TFM (net8.0;net10.0) consumer referencing NumSharp.Core by ProjectReference
 #   4  `dotnet add package NumSharp.Build` from the local feed → NuGet writes PrivateAssets="all"
 #      by itself (the developmentDependency install UX — the not-a-dependency half of the contract)
@@ -40,6 +42,9 @@
 #      draws a build WARNING; a [NDScoped] method with the same body does NOT
 #  17  the WEAVER-MISSING guard (NDW013, shipped in NumSharp itself): a consumer that uses [NDScoped]
 #      but does NOT install NumSharp.Build draws a build WARNING; installing the weaver silences it
+#  18  the analyzer rides the NumSharp package ALONE: a consumer that references NumSharp but NOT
+#      NumSharp.Build still gets the compile-time gate (a bad [NDScoped] target FAILS the build,
+#      NDW003) and the NDW012 leak warning — no weaver install required
 #
 # Usage:  tools/verify_weaver_package.sh [workdir]     (workdir kept on failure, or with KEEP=1)
 # Needs:  dotnet SDK (net8 + net10 targeting), python (zip inspection; no unzip dependency).
@@ -68,7 +73,7 @@ dotnet build "$ROOTW/tools/NumSharp.Build/NumSharp.Build.csproj" -c Release -t:R
 dotnet pack  "$ROOTW/tools/NumSharp.Build/NumSharp.Build.csproj" -c Release --no-build -o "$FEEDW" -v q --nologo
 PKG="$(ls "$FEED"/NumSharp.Build.*.nupkg 2>/dev/null | head -1)"
 [ -n "$PKG" ] && [ -f "$PKG" ] || fail "pack produced no NumSharp.Build nupkg in $FEED"
-WVER="$(basename "$PKG" .nupkg | sed 's/^NumSharp\.Weaver\.//')"
+WVER="$(basename "$PKG" .nupkg | sed 's/^NumSharp\.Build\.//')"
 echo "packed: $(basename "$PKG")"
 
 # NumSharp itself joins the feed for the PackageReference consumer (step 10) — the real-world
@@ -82,7 +87,13 @@ CPKG="$(ls "$FEED"/NumSharp.[0-9]*.nupkg 2>/dev/null | head -1)"
 CVER="$(basename "$CPKG" .nupkg | sed 's/^NumSharp\.//')"
 echo "packed: $(basename "$CPKG")"
 
-step "2/15 package shape: developmentDependency, no dependencies, no lib/, tools+targets payload"
+# Evict same-id/same-version entries from the GLOBAL package cache: the cache is consulted before
+# any source, so a stale extraction from a previous run would silently shadow the packages just
+# packed and this script would verify LAST run's bits (the constant-version local-package trap).
+GPF="${NUGET_PACKAGES:-$HOME/.nuget/packages}"
+rm -rf "$GPF/numsharp.build/$WVER" "$GPF/numsharp/$CVER" 2>/dev/null || true
+
+step "2/15 package shape: developmentDependency, no dependencies, no lib/, tools+targets payload; analyzer rides the NumSharp package"
 python - "$(winpath "$PKG")" <<'PY'
 import sys, zipfile
 z = zipfile.ZipFile(sys.argv[1]); names = set(z.namelist())
@@ -98,13 +109,28 @@ for required in ("build/NumSharp.Build.targets",
                  "tools/net8.0/any/NumSharp.Build.dll",
                  "tools/net8.0/any/NumSharp.Build.runtimeconfig.json",
                  "tools/net8.0/any/NumSharp.Build.deps.json",
-                 "tools/net8.0/any/Mono.Cecil.dll",
-                 "analyzers/dotnet/cs/NumSharp.Build.Analyzer.dll"):   # compile-time analyzer, NuGet auto-applies it
+                 "tools/net8.0/any/Mono.Cecil.dll"):
     need(required in names, "missing " + required)
+# Weaver-ONLY: the compile-time analyzer ships in the NumSharp package (checked next), never here —
+# two copies across the two packages would double-apply on any consumer that installs both.
+need(not any(n.startswith("analyzers/") for n in names),
+     "NumSharp.Build must ship NO analyzers/ (the analyzer rides the NumSharp package)")
+print("weaver package shape OK")
+PY
+python - "$(winpath "$CPKG")" <<'PY'
+import sys, zipfile
+z = zipfile.ZipFile(sys.argv[1]); names = set(z.namelist())
+def need(cond, msg):
+    if not cond:
+        print("FAIL:", msg); sys.exit(1)
+# The NumSharp package carries the compile-time analyzer, so referencing NumSharp ALONE gives every
+# consumer the [NDScoped]-target gate + the NDW012 leak nudge (step 18 proves it end-to-end).
+need("analyzers/dotnet/cs/NumSharp.Build.Analyzer.dll" in names,
+     "NumSharp package is missing analyzers/dotnet/cs/NumSharp.Build.Analyzer.dll")
 # The analyzer ships ALONE — Microsoft.CodeAnalysis is provided by the compiler host at run time.
 need(not any(n.startswith("analyzers/") and "CodeAnalysis" in n for n in names),
      "Microsoft.CodeAnalysis must NOT ship under analyzers/ (the compiler host provides it)")
-print("package shape OK")
+print("NumSharp package analyzer payload OK")
 PY
 
 step "3/15 scaffold the consumer (net8.0;net10.0, ProjectReference to NumSharp.Core)"
@@ -341,11 +367,12 @@ grep -q "CONSUMER-OK" "$PD/run.log" || { cat "$PD/run.log"; fail "no CONSUMER-OK
 echo "PackageReference consumer woven and green"
 
 step "11/15 error shapes fail the build — the ANALYZER at compile-time, the weaver post-compile"
-# Installing the package turns on BOTH the compile-time Roslyn analyzer (analyzers/dotnet/cs/) and
-# the post-compile weaver. The analyzer's ERROR diagnostics preempt the weaver — a failed CoreCompile
-# never reaches the weave — so the SOURCE-detectable rejections (wrong attribute NDW009/010/011, ref
-# egress NDW002, unsupported carrier NDW003) surface at COMPILE, while the IL-only NDW004 (an
-# unrecognized state-machine shape) surfaces POST-COMPILE on a file the analyzer passes.
+# The compile-time Roslyn analyzer arrives via the NumSharp PackageReference (analyzers/dotnet/cs/
+# in THAT package); NumSharp.Build adds the post-compile weaver. The analyzer's ERROR diagnostics
+# preempt the weaver — a failed CoreCompile never reaches the weave — so the SOURCE-detectable
+# rejections (wrong attribute NDW009/010/011, ref egress NDW002, unsupported carrier NDW003)
+# surface at COMPILE, while the IL-only NDW004 (an unrecognized state-machine shape) surfaces
+# POST-COMPILE on a file the analyzer passes.
 
 # 11a — analyzer (compile-time): every source-detectable rejection, all in ONE failed compile.
 EA="$WORK/errors_analyzer"
@@ -663,8 +690,8 @@ grep -q "woven 3, already-scoped 0" "$AD/build.log" || fail "async consumer did 
 grep -q "ASYNC-SM-OK" "$AD/run.log" || { cat "$AD/run.log"; fail "async state-machine behaviors failed"; }
 echo "async/iterator/deferred-task consumers woven and green"
 
-step "16/17 leak analyzer (NDW012): a dropped NDArray warns; a [NDScoped] method with the same body does not"
-# The weaver package's analyzer/dotnet/cs/ also carries the leak analyzer. A method that is NOT scoped
+step "16/18 leak analyzer (NDW012): a dropped NDArray warns; a [NDScoped] method with the same body does not"
+# The NumSharp package's analyzers/dotnet/cs/ carries the leak analyzer. A method that is NOT scoped
 # and drops an NDArray it never returns/disposes must draw NDW012; a [NDScoped] method is exempt.
 LK="$WORK/leak"
 scaffold_pkgref "$LK" ""
@@ -682,7 +709,7 @@ LKN=$(grep -oE "Program\.cs\([0-9]+,[0-9]+\): warning NDW012" "$LK/build.log" | 
 [ "$LKN" -eq 1 ] || { grep -i ndw012 "$LK/build.log" | head; fail "16: expected exactly one NDW012 site (the non-scoped leak), saw $LKN"; }
 echo "16: NDW012 warns on the dropped NDArray and exempts the [NDScoped] method"
 
-step "17/17 weaver-missing guard (NDW013): [NDScoped] without the weaver warns; installing it silences"
+step "17/18 weaver-missing guard (NDW013): [NDScoped] without the weaver warns; installing it silences"
 # NDW013 ships in the NumSharp package's build/NumSharp.targets, so a consumer that references NumSharp
 # but NOT NumSharp.Build still gets the "your [NDScoped] is inert" warning.
 NW="$WORK/noweaver"
@@ -705,7 +732,50 @@ grep -q "warning NDW013" "$NW/build.log" || { grep -i ndw013 "$NW/build.log"; fa
 if grep -q "warning NDW013" "$NW/build2.log"; then fail "17: NDW013 still fired after installing the weaver"; fi
 echo "17: NDW013 warns without the weaver and is silent once it is installed"
 
+step "18/18 analyzer ships in NumSharp itself: diagnostics WITHOUT NumSharp.Build installed"
+# The whole point of staging the analyzer into the NumSharp package: a consumer referencing NumSharp
+# ALONE (no weaver) already gets the compile-time [NDScoped]-target gate and the NDW012 leak nudge.
+# 18a — a bad [NDScoped] target FAILS the build (NDW003) with only the NumSharp PackageReference.
+AA="$WORK/analyzer_alone"
+mkdir -p "$AA"
+cp "$CONSUMER/nuget.config" "$AA/nuget.config"
+cat > "$AA/Consumer.csproj" <<EOF
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Library</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><PackageReference Include="NumSharp" Version="$CVER" /></ItemGroup>
+</Project>
+EOF
+cat > "$AA/Bad.cs" <<'EOF'
+using System.Collections.Generic;
+using NumSharp;
+public static class Bad
+{
+    [NDScoped] public static List<NDArray> Carrier(NDArray a) => new List<NDArray> { a + 1 };   // NDW003
+}
+EOF
+if (cd "$AA" && dotnet build -c Release -v n > build.log 2>&1); then
+  fail "18a: bad [NDScoped] target BUILD SUCCEEDED without NumSharp.Build — the analyzer must ride the NumSharp package"
+fi
+grep -q "error NDW003" "$AA/build.log" || { grep -o "error NDW[0-9]*" "$AA/build.log" | sort -u; fail "18a: missing NDW003 from the NumSharp-only consumer"; }
+echo "18a: NDW003 failed the build with NumSharp alone (no weaver installed)"
+
+# 18b — the NDW012 leak warning also fires with only the NumSharp PackageReference.
+AB="$WORK/analyzer_alone_leak"
+mkdir -p "$AB"
+cp "$CONSUMER/nuget.config" "$AB/nuget.config"
+cp "$AA/Consumer.csproj" "$AB/Consumer.csproj"
+cat > "$AB/Leak.cs" <<'EOF'
+using NumSharp;
+public static class Leaks
+{
+    public static double Bad(NDArray a, NDArray b) { var t = a + b; return 0.0; }   // NDW012 — 't' leaks
+}
+EOF
+(cd "$AB" && dotnet build -c Release -v n > build.log 2>&1) || { tail -30 "$AB/build.log"; fail "18b: NumSharp-only leak consumer build failed"; }
+grep -q "warning NDW012" "$AB/build.log" || { grep -i ndw012 "$AB/build.log"; fail "18b: NDW012 did not fire from the NumSharp-only consumer"; }
+echo "18b: NDW012 warned with NumSharp alone (no weaver installed)"
+
 
 echo
-echo "verify_weaver_package: ALL 17 STEPS OK"
+echo "verify_weaver_package: ALL 18 STEPS OK"
 if [ "${KEEP:-0}" != "1" ]; then rm -rf "$WORK"; else echo "(KEEP=1: work dir kept at $WORK)"; fi
