@@ -4,7 +4,7 @@
 
 ### 📦 New NuGet Packages
 
-Two optional companion packages ship for the first time, co-versioned with **NumSharp** 0.70.0 (both depend on **NumSharp.Core**).
+Three optional companion packages ship for the first time, co-versioned with **NumSharp** 0.70.0 (the two interop packages depend on **NumSharp.Core**; **NumSharp.Build** is a build-time development dependency that never enters your dependency graph).
 
 - **NumSharp.Interop.OpenBLAS** - new TensorEngine.Blas BLAS+LAPACK backend (NumPy's own dependency): powered by [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS), byte-identical to [NumPy](https://numpy.org) 2.4.2; Core stays 100% managed without it but lacks support for most of the functions.
   - Delivery - bundles the exact binaries NumPy 2.4.2 pinned dependency version (the [scipy-openblas64](https://pypi.org/project/scipy-openblas64/) / [scipy-openblas32](https://pypi.org/project/scipy-openblas32/) PyPI packages), per-RID for 8 platforms; enable/disable at runtime. Supports PyPI version pin and build-time download with auto-install at runtime.
@@ -26,6 +26,12 @@ Two optional companion packages ship for the first time, co-versioned with **Num
     - plus anything exposing __array_interface__ (e.g. [pandas](https://pandas.pydata.org)) - and plain list/tuple/nested sequences via numpy's asarray.
   - Lifetime & GIL - GC-safe leases, optional GIL control, live export/import counters for leak checks.
   - Dependency - pythonnet 3.0.5+ (Python 3.7-3.13, and future 3.x).
+- **NumSharp.Build** - build-time IL weaver for `[NDScoped]` / `[NDScopedAsync]` deterministic memory reclamation: mark a method and the `NDArray` temporaries it drops return to NumSharp's buffer pool the moment it exits, instead of waiting on the finalizer - the source keeps its 100% original body; the scope is woven post-compile into the intermediate assembly.
+  - Not a dependency - MSBuild targets + a tool only (no `lib/`, no dependency entries); `dotnet add package NumSharp.Build` writes `PrivateAssets="all"` by itself, so installing it changes your **build**, never your package's dependency graph.
+  - Coverage - synchronous methods, `async` methods, iterators, and non-`async` `Task`/`ValueTask` returns are woven through their compiler state machines; incremental per-TFM, idempotent (double-weaving impossible), and a strong-named consumer is re-signed with its own key.
+  - Compile-time safety ships with **NumSharp itself**, not this package: the Roslyn analyzer rides the NumSharp nupkg's `analyzers/dotnet/cs/`, so referencing NumSharp alone reports a wrong or unsupported `[NDScoped]` target as a build **error** (NDW002-NDW011) and nudges on leaked `NDArray` temporaries (NDW012); NumSharp also carries the NDW013 build warning for `[NDScoped]` used **without** the weaver installed (the attributes are then inert).
+  - Escape hatches - `-p:SkipNDScopeWeave=true` builds without weaving (nothing else changes); `-p:NDScopeWeaveILVerify=true` additionally runs `dotnet-ilverify` on the woven output.
+  - Gate - `tools/verify_weaver_package.sh`, an 18-step real-consumer nupkg flow (package shapes, weave + incrementality, transitive isolation, re-signing, state machines, the analyzer/weaver error layers, NDW012/NDW013, and analyzer-via-NumSharp-alone).
 
 ### 📊 Dashboards & Docs
 

@@ -10,6 +10,10 @@
   href: broadcasting.md
 - name: Buffering & Memory
   href: buffering.md
+- name: NumSharp.Build ([NDScoped] weaver)
+  href: ndscoped.md
+- name: Exceptions
+  href: exceptions.md
 - name: NumPy Compliance & Compatibility
   href: compliance.md
 - name: NumPy API Coverage & Support
