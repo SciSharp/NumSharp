@@ -1749,7 +1749,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     </article>
     <article class="metric-card">
       <div class="metric-label">Cast subsystem</div>
-      <div class="metric-value metric-good">1,202</div>
+      <div class="metric-value metric-good">1,187</div>
       <p class="metric-note">wins out of 1,568 comparable cast cells</p>
     </article>
   </section>
@@ -2009,23 +2009,23 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     <div class="story-grid">
       <article class="story-card">
         <h3>NDIter</h3>
-        <strong class="metric-good">1.45x</strong>
-        <p>Iterator operation geomean across 165 comparable cells: 106 wins and 59 losses, with no sections excluded by the access-violation policy.</p>
+        <strong class="metric-good">1.46x</strong>
+        <p>Iterator operation geomean across 165 comparable cells: 108 wins and 57 losses, with no sections excluded by the access-violation policy.</p>
       </article>
       <article class="story-card">
         <h3>Layout</h3>
-        <strong class="metric-near">0.37-3.81x</strong>
-        <p>Published geomeans by layout span 0.37x to 3.81x: large copy and elementwise paths win, while strided/broadcast reductions and decimal sums trail.</p>
+        <strong class="metric-near">0.54-9.24x</strong>
+        <p>Published geomeans by layout span 0.54x to 9.24x: large copy and elementwise paths win, while strided/broadcast reductions and decimal sums trail.</p>
       </article>
       <article class="story-card">
         <h3>Cast</h3>
-        <strong class="metric-good">1,202 wins</strong>
+        <strong class="metric-good">1,187 wins</strong>
         <p>The full src-to-dst astype grid is broadly ahead. Remaining lag clusters around same-type diagonal copy and bool conversion cases.</p>
       </article>
       <article class="story-card">
         <h3>Fusion</h3>
-        <strong class="metric-good">4.78x</strong>
-        <p>The best fixed expression speedup for fused <code>np.evaluate</code> over NumSharp's unfused chain; broadcast fusion reaches 3.27x.</p>
+        <strong class="metric-good">4.12x</strong>
+        <p>The best fixed expression speedup for fused <code>np.evaluate</code> over NumSharp's unfused chain; broadcast fusion reaches 4.10x.</p>
       </article>
     </div>
   </section>
@@ -2044,8 +2044,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
               <option value="">All suites</option>
             </select>
             <select class="function-select" aria-label="Sort functions" data-function-sort>
+              <option value="best" selected>Best first</option>
               <option value="worst">Worst first</option>
-              <option value="best">Best first</option>
               <option value="name">Name</option>
               <option value="rows">Most rows</option>
             </select>
