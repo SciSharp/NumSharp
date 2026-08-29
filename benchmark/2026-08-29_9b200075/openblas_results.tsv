@@ -1,0 +1,253 @@
+profile	operation	dtype	n	scenario	availability	ns_ms	np_ms	ratio	exception_type
+managed	np.polyfit(x, y, 3)	float64	1000		missing_backend		0.0448		OpenBlasMissingBackendException
+managed	np.polyfit(x, y, 3)	float64	100000		missing_backend		0.8973		OpenBlasMissingBackendException
+managed	np.polyfit(x, y, 3)	float64	10000000		missing_backend		8.5729		OpenBlasMissingBackendException
+managed	np.roots(p)	float64	1000		missing_backend		0.0878		OpenBlasMissingBackendException
+managed	np.roots(p)	float64	100000		missing_backend		0.2035		OpenBlasMissingBackendException
+managed	np.roots(p)	float64	10000000		missing_backend		0.7704		OpenBlasMissingBackendException
+managed	np.dot(a, b)	float64	1000		available	0.0004	0.0005	1.249937	
+managed	np.dot(a, b)	float64	100000		available	0.0122	0.0069	0.565573	
+managed	np.dot(a, b)	float64	10000000		available	7.9269	7.4223	0.936343	
+managed	np.einsum('ij,jk->ik', a, b)	float64	1000	ij,jk->ik	available	0.0039	0.0061	1.564107	
+managed	np.einsum('ij,jk->ik', a, b)	float64	100000	ij,jk->ik	available	3.8778	5.1769	1.33501	
+managed	np.einsum('ij,jk->ik', a, b)	float64	10000000	ij,jk->ik	available	6.4587	9.6582	1.495378	
+managed	np.einsum(subscripts, operands)	float64	1000		available	0.0024	0.0014	0.583326	
+managed	np.einsum(subscripts, operands)	float64	100000		available	0.0134	0.0394	2.940297	
+managed	np.einsum(subscripts, operands)	float64	10000000		available	8.4578	9.2857	1.097886	
+managed	np.linalg.cholesky(a)	float64	1000		missing_backend		0.0043		OpenBlasMissingBackendException
+managed	np.linalg.cholesky(a)	float64	100000		missing_backend		0.0174		OpenBlasMissingBackendException
+managed	np.linalg.cholesky(a)	float64	10000000		missing_backend		0.1038		OpenBlasMissingBackendException
+managed	np.linalg.cond(a)	float64	1000		missing_backend		0.0349		OpenBlasMissingBackendException
+managed	np.linalg.cond(a)	float64	100000		missing_backend		0.4757		OpenBlasMissingBackendException
+managed	np.linalg.cond(a)	float64	10000000		missing_backend		0.9891		OpenBlasMissingBackendException
+managed	np.linalg.det(a)	float64	1000		available	0.0043	0.0126	2.930228	
+managed	np.linalg.det(a)	float64	100000		available	0.0728	0.0587	0.806318	
+managed	np.linalg.det(a)	float64	10000000		available	0.1875	0.1187	0.633067	
+managed	np.linalg.eig(a)	float64	1000		missing_backend		0.2033		OpenBlasMissingBackendException
+managed	np.linalg.eig(a)	float64	100000		missing_backend		2.6986		OpenBlasMissingBackendException
+managed	np.linalg.eig(a)	float64	10000000		missing_backend		5.8331		OpenBlasMissingBackendException
+managed	np.linalg.eigh(a)	float64	1000		missing_backend		0.0463		OpenBlasMissingBackendException
+managed	np.linalg.eigh(a)	float64	100000		missing_backend		0.4004		OpenBlasMissingBackendException
+managed	np.linalg.eigh(a)	float64	10000000		missing_backend		1.5458		OpenBlasMissingBackendException
+managed	np.linalg.eigvals(a)	float64	1000		missing_backend		0.1279		OpenBlasMissingBackendException
+managed	np.linalg.eigvals(a)	float64	100000		missing_backend		1.5435		OpenBlasMissingBackendException
+managed	np.linalg.eigvals(a)	float64	10000000		missing_backend		3.0426		OpenBlasMissingBackendException
+managed	np.linalg.eigvalsh(a)	float64	1000		missing_backend		0.0366		OpenBlasMissingBackendException
+managed	np.linalg.eigvalsh(a)	float64	100000		missing_backend		0.2893		OpenBlasMissingBackendException
+managed	np.linalg.eigvalsh(a)	float64	10000000		missing_backend		0.5261		OpenBlasMissingBackendException
+managed	np.linalg.inv(a)	float64	1000		available	0.0125	0.0239	1.912001	
+managed	np.linalg.inv(a)	float64	100000		available	0.2485	0.1823	0.733602	
+managed	np.linalg.inv(a)	float64	10000000		available	0.5972	0.3679	0.616042	
+managed	np.linalg.lstsq(a, b)	float64	1000		missing_backend		0.1637		OpenBlasMissingBackendException
+managed	np.linalg.lstsq(a, b)	float64	100000		missing_backend		1.6285		OpenBlasMissingBackendException
+managed	np.linalg.lstsq(a, b)	float64	10000000		missing_backend		2.9627		OpenBlasMissingBackendException
+managed	np.linalg.matmul(a, b)	float64	1000		available	0.0036	0.0023	0.638886	
+managed	np.linalg.matmul(a, b)	float64	100000		available	3.8721	2.2518	0.581545	
+managed	np.linalg.matmul(a, b)	float64	10000000		available	6.4165	4.2537	0.662932	
+managed	np.linalg.matrix_norm(a, ord=2)	float64	1000	ord=2	missing_backend		0.0695		OpenBlasMissingBackendException
+managed	np.linalg.matrix_norm(a, ord=2)	float64	100000	ord=2	missing_backend		0.4811		OpenBlasMissingBackendException
+managed	np.linalg.matrix_norm(a, ord=2)	float64	10000000	ord=2	missing_backend		0.9909		OpenBlasMissingBackendException
+managed	np.linalg.matrix_power(a, -1)	float64	1000	n=-1	available	0.0133	0.0257	1.932332	
+managed	np.linalg.matrix_power(a, -1)	float64	100000	n=-1	available	0.2505	0.1843	0.735729	
+managed	np.linalg.matrix_power(a, -1)	float64	10000000	n=-1	available	0.6002	0.3715	0.61896	
+managed	np.linalg.matrix_power(a, 3)	float64	1000		available	0.0155	0.0052	0.335483	
+managed	np.linalg.matrix_power(a, 3)	float64	100000		available	0.7173	0.3235	0.450997	
+managed	np.linalg.matrix_power(a, 3)	float64	10000000		available	0.7173	0.3239	0.451554	
+managed	np.linalg.matrix_rank(a)	float64	1000		missing_backend		0.0717		OpenBlasMissingBackendException
+managed	np.linalg.matrix_rank(a)	float64	100000		missing_backend		0.4822		OpenBlasMissingBackendException
+managed	np.linalg.matrix_rank(a)	float64	10000000		missing_backend		0.995		OpenBlasMissingBackendException
+managed	np.linalg.multi_dot(arrays)	float64	1000		available	0.0157	0.0051	0.32484	
+managed	np.linalg.multi_dot(arrays)	float64	100000		available	0.7175	0.3291	0.458676	
+managed	np.linalg.multi_dot(arrays)	float64	10000000		available	0.7174	0.329	0.458601	
+managed	np.linalg.norm(a, ord=2)	float64	1000	ord=2	missing_backend		0.0696		OpenBlasMissingBackendException
+managed	np.linalg.norm(a, ord=2)	float64	100000	ord=2	missing_backend		0.4809		OpenBlasMissingBackendException
+managed	np.linalg.norm(a, ord=2)	float64	10000000	ord=2	missing_backend		0.993		OpenBlasMissingBackendException
+managed	np.linalg.pinv(a)	float64	1000		missing_backend		0.0845		OpenBlasMissingBackendException
+managed	np.linalg.pinv(a)	float64	100000		missing_backend		1.5793		OpenBlasMissingBackendException
+managed	np.linalg.pinv(a)	float64	10000000		missing_backend		3.2965		OpenBlasMissingBackendException
+managed	np.linalg.qr(a)	float64	1000		missing_backend		0.0225		OpenBlasMissingBackendException
+managed	np.linalg.qr(a)	float64	100000		missing_backend		0.3839		OpenBlasMissingBackendException
+managed	np.linalg.qr(a)	float64	10000000		missing_backend		0.7958		OpenBlasMissingBackendException
+managed	np.linalg.slogdet(a)	float64	1000		available	0.0046	0.0144	3.130433	
+managed	np.linalg.slogdet(a)	float64	100000		available	0.0322	0.0604	1.875777	
+managed	np.linalg.slogdet(a)	float64	10000000		available	0.1889	0.1195	0.63261	
+managed	np.linalg.solve(a, b)	float64	1000		available	0.0071	0.0071	0.999999	
+managed	np.linalg.solve(a, b)	float64	100000		available	0.0464	0.064	1.37931	
+managed	np.linalg.solve(a, b)	float64	10000000		available	0.2406	0.1247	0.518288	
+managed	np.linalg.svd(a)	float64	1000		missing_backend		0.149		OpenBlasMissingBackendException
+managed	np.linalg.svd(a)	float64	100000		missing_backend		1.4689		OpenBlasMissingBackendException
+managed	np.linalg.svd(a)	float64	10000000		missing_backend		2.9843		OpenBlasMissingBackendException
+managed	np.linalg.svdvals(a)	float64	1000		missing_backend		0.0558		OpenBlasMissingBackendException
+managed	np.linalg.svdvals(a)	float64	100000		missing_backend		0.4667		OpenBlasMissingBackendException
+managed	np.linalg.svdvals(a)	float64	10000000		missing_backend		0.9773		OpenBlasMissingBackendException
+managed	np.linalg.tensordot(a, b)	float64	1000		available	0.0041	0.0056	1.36585	
+managed	np.linalg.tensordot(a, b)	float64	100000		available	0.3594	0.1721	0.478854	
+managed	np.linalg.tensordot(a, b)	float64	10000000		available	0.3621	0.1721	0.475283	
+managed	np.linalg.tensorinv(a)	float64	1000		available	0.0128	0.0259	2.023437	
+managed	np.linalg.tensorinv(a)	float64	100000		available	0.249	0.1845	0.740964	
+managed	np.linalg.tensorinv(a)	float64	10000000		available	0.5967	0.372	0.623429	
+managed	np.linalg.tensorsolve(a, b)	float64	1000		available	0.0076	0.0184	2.421052	
+managed	np.linalg.tensorsolve(a, b)	float64	100000		available	0.1032	0.0667	0.646318	
+managed	np.linalg.tensorsolve(a, b)	float64	10000000		available	0.2408	0.1276	0.5299	
+managed	np.linalg.vecdot(a, b)	float64	1000		available	0.0018	0.0008	0.444432	
+managed	np.linalg.vecdot(a, b)	float64	100000		available	0.0341	0.0073	0.214076	
+managed	np.linalg.vecdot(a, b)	float64	10000000		available	29.299	8.4273	0.287631	
+managed	np.matmul(a, b)	float64	1000		available	0.0036	0.0022	0.611108	
+managed	np.matmul(a, b)	float64	100000		available	3.883	2.2609	0.582256	
+managed	np.matmul(a, b)	float64	10000000		available	6.5035	4.2523	0.653848	
+managed	np.matvec(a, b)	float64	1000		available	0.001	0.0007	0.699976	
+managed	np.matvec(a, b)	float64	100000		available	0.0155	0.0116	0.748387	
+managed	np.matvec(a, b)	float64	10000000		available	0.0216	0.0162	0.749999	
+managed	np.tensordot(a, b)	float64	1000		available	0.0013	0.0036	2.769229	
+managed	np.tensordot(a, b)	float64	100000		available	0.0134	0.0209	1.5597	
+managed	np.tensordot(a, b)	float64	10000000		available	7.2145	8.5836	1.189771	
+managed	np.tensordot(a, b, axes=1)	float64	1000	axes=1,matrix	available	0.0041	0.0054	1.317069	
+managed	np.tensordot(a, b, axes=1)	float64	100000	axes=1,matrix	available	3.8851	2.2798	0.586806	
+managed	np.tensordot(a, b, axes=1)	float64	10000000	axes=1,matrix	available	6.431	4.2931	0.667563	
+managed	np.vdot(a, b)	float64	1000		available	0.001	0.0005	0.499975	
+managed	np.vdot(a, b)	float64	100000		available	0.0125	0.007	0.56	
+managed	np.vdot(a, b)	float64	10000000		available	7.9176	8.3329	1.052453	
+managed	np.vecdot(a, b)	float64	1000		available	0.0026	0.0006	0.23076	
+managed	np.vecdot(a, b)	float64	100000		available	0.0341	0.007	0.205278	
+managed	np.vecdot(a, b)	float64	10000000		available	29.1383	8.275	0.28399	
+managed	np.vecmat(a, b)	float64	1000		available	0.0009	0.0007	0.777751	
+managed	np.vecmat(a, b)	float64	100000		available	0.0098	0.0136	1.387754	
+managed	np.vecmat(a, b)	float64	10000000		available	0.0272	0.0194	0.713235	
+managed	a.dot(b) [ndarray]	float64	1000		available	0.0004	0.0004	0.999935	
+managed	a.dot(b) [ndarray]	float64	100000		available	0.0122	0.0068	0.557377	
+managed	a.dot(b) [ndarray]	float64	10000000		available	7.5925	8.3031	1.093592	
+managed	np.convolve(a, kernel)	float64	1000		available	0.0131	0.0235	1.793891	
+managed	np.convolve(a, kernel)	float64	100000		available	0.3791	2.2177	5.849908	
+managed	np.convolve(a, kernel)	float64	10000000		available	46.4639	199.3455	4.290331	
+managed	np.correlate(a, kernel)	float64	1000		available	0.0043	0.0224	5.209301	
+managed	np.correlate(a, kernel)	float64	100000		available	0.3706	2.1965	5.926875	
+managed	np.correlate(a, kernel)	float64	10000000		available	46.2195	206.05	4.458075	
+managed	np.inner(a, b)	float64	1000		available	0.0004	0.0006	1.499939	
+managed	np.inner(a, b)	float64	100000		available	0.0122	0.007	0.57377	
+managed	np.inner(a, b)	float64	10000000		available	7.9907	8.3426	1.044039	
+openblas	np.polyfit(x, y, 3)	float64	1000		available	0.066	0.0448	0.678788	
+openblas	np.polyfit(x, y, 3)	float64	100000		available	1.1174	0.8973	0.803025	
+openblas	np.polyfit(x, y, 3)	float64	10000000		available	7.0263	8.5729	1.220116	
+openblas	np.roots(p)	float64	1000		available	0.0736	0.0878	1.192935	
+openblas	np.roots(p)	float64	100000		available	0.1891	0.2035	1.07615	
+openblas	np.roots(p)	float64	10000000		available	0.7742	0.7704	0.995092	
+openblas	np.dot(a, b)	float64	1000		available	0.0007	0.0005	0.71425	
+openblas	np.dot(a, b)	float64	100000		available	0.0122	0.0069	0.565573	
+openblas	np.dot(a, b)	float64	10000000		available	4.4499	7.4223	1.66797	
+openblas	np.einsum('ij,jk->ik', a, b)	float64	1000	ij,jk->ik	available	0.0021	0.0061	2.90477	
+openblas	np.einsum('ij,jk->ik', a, b)	float64	100000	ij,jk->ik	available	2.2524	5.1769	2.298393	
+openblas	np.einsum('ij,jk->ik', a, b)	float64	10000000	ij,jk->ik	available	4	9.6582	2.41455	
+openblas	np.einsum(subscripts, operands)	float64	1000		available	0.0011	0.0014	1.272711	
+openblas	np.einsum(subscripts, operands)	float64	100000		available	0.0134	0.0394	2.940297	
+openblas	np.einsum(subscripts, operands)	float64	10000000		available	8.457	9.2857	1.09799	
+openblas	np.linalg.cholesky(a)	float64	1000		available	0.0034	0.0043	1.264698	
+openblas	np.linalg.cholesky(a)	float64	100000		available	0.0326	0.0174	0.533742	
+openblas	np.linalg.cholesky(a)	float64	10000000		available	0.068	0.1038	1.526471	
+openblas	np.linalg.cond(a)	float64	1000		available	0.0533	0.0349	0.654784	
+openblas	np.linalg.cond(a)	float64	100000		available	0.4661	0.4757	1.020596	
+openblas	np.linalg.cond(a)	float64	10000000		available	0.9824	0.9891	1.00682	
+openblas	np.linalg.det(a)	float64	1000		available	0.008	0.0126	1.574997	
+openblas	np.linalg.det(a)	float64	100000		available	0.0543	0.0587	1.081031	
+openblas	np.linalg.det(a)	float64	10000000		available	0.1129	0.1187	1.051373	
+openblas	np.linalg.eig(a)	float64	1000		available	0.1941	0.2033	1.047398	
+openblas	np.linalg.eig(a)	float64	100000		available	2.6725	2.6986	1.009766	
+openblas	np.linalg.eig(a)	float64	10000000		available	5.8937	5.8331	0.989718	
+openblas	np.linalg.eigh(a)	float64	1000		available	0.0847	0.0463	0.546635	
+openblas	np.linalg.eigh(a)	float64	100000		available	0.818	0.4004	0.489487	
+openblas	np.linalg.eigh(a)	float64	10000000		available	1.5346	1.5458	1.007298	
+openblas	np.linalg.eigvals(a)	float64	1000		available	0.1109	0.1279	1.153291	
+openblas	np.linalg.eigvals(a)	float64	100000		available	1.5514	1.5435	0.994908	
+openblas	np.linalg.eigvals(a)	float64	10000000		available	3.2028	3.0426	0.949981	
+openblas	np.linalg.eigvalsh(a)	float64	1000		available	0.0294	0.0366	1.244898	
+openblas	np.linalg.eigvalsh(a)	float64	100000		available	0.2839	0.2893	1.019021	
+openblas	np.linalg.eigvalsh(a)	float64	10000000		available	0.5183	0.5261	1.015049	
+openblas	np.linalg.inv(a)	float64	1000		available	0.0157	0.0239	1.522293	
+openblas	np.linalg.inv(a)	float64	100000		available	0.1604	0.1823	1.136534	
+openblas	np.linalg.inv(a)	float64	10000000		available	0.3403	0.3679	1.081105	
+openblas	np.linalg.lstsq(a, b)	float64	1000		available	0.1518	0.1637	1.078393	
+openblas	np.linalg.lstsq(a, b)	float64	100000		available	1.622	1.6285	1.004007	
+openblas	np.linalg.lstsq(a, b)	float64	10000000		available	2.9606	2.9627	1.000709	
+openblas	np.linalg.matmul(a, b)	float64	1000		available	0.0016	0.0023	1.437493	
+openblas	np.linalg.matmul(a, b)	float64	100000		available	2.2462	2.2518	1.002493	
+openblas	np.linalg.matmul(a, b)	float64	10000000		available	3.9929	4.2537	1.065316	
+openblas	np.linalg.matrix_norm(a, ord=2)	float64	1000	ord=2	available	0.0532	0.0695	1.306391	
+openblas	np.linalg.matrix_norm(a, ord=2)	float64	100000	ord=2	available	0.4653	0.4811	1.033957	
+openblas	np.linalg.matrix_norm(a, ord=2)	float64	10000000	ord=2	available	0.9814	0.9909	1.00968	
+openblas	np.linalg.matrix_power(a, -1)	float64	1000	n=-1	available	0.0165	0.0257	1.557577	
+openblas	np.linalg.matrix_power(a, -1)	float64	100000	n=-1	available	0.1635	0.1843	1.127217	
+openblas	np.linalg.matrix_power(a, -1)	float64	10000000	n=-1	available	0.3473	0.3715	1.06968	
+openblas	np.linalg.matrix_power(a, 3)	float64	1000		available	0.0078	0.0052	0.666664	
+openblas	np.linalg.matrix_power(a, 3)	float64	100000		available	0.3164	0.3235	1.02244	
+openblas	np.linalg.matrix_power(a, 3)	float64	10000000		available	0.3163	0.3239	1.024028	
+openblas	np.linalg.matrix_rank(a)	float64	1000		available	0.0559	0.0717	1.282647	
+openblas	np.linalg.matrix_rank(a)	float64	100000		available	0.4716	0.4822	1.022477	
+openblas	np.linalg.matrix_rank(a)	float64	10000000		available	0.9822	0.995	1.013032	
+openblas	np.linalg.multi_dot(arrays)	float64	1000		available	0.0078	0.0051	0.653844	
+openblas	np.linalg.multi_dot(arrays)	float64	100000		available	0.3163	0.3291	1.040468	
+openblas	np.linalg.multi_dot(arrays)	float64	10000000		available	0.3166	0.329	1.039166	
+openblas	np.linalg.norm(a, ord=2)	float64	1000	ord=2	available	0.0319	0.0696	2.181817	
+openblas	np.linalg.norm(a, ord=2)	float64	100000	ord=2	available	0.4662	0.4809	1.031532	
+openblas	np.linalg.norm(a, ord=2)	float64	10000000	ord=2	available	0.9787	0.993	1.014611	
+openblas	np.linalg.pinv(a)	float64	1000		available	0.1601	0.0845	0.527795	
+openblas	np.linalg.pinv(a)	float64	100000		available	1.5796	1.5793	0.99981	
+openblas	np.linalg.pinv(a)	float64	10000000		available	3.085	3.2965	1.068558	
+openblas	np.linalg.qr(a)	float64	1000		available	0.0333	0.0225	0.675676	
+openblas	np.linalg.qr(a)	float64	100000		available	0.3141	0.3839	1.222222	
+openblas	np.linalg.qr(a)	float64	10000000		available	0.6888	0.7958	1.155343	
+openblas	np.linalg.slogdet(a)	float64	1000		available	0.008	0.0144	1.799999	
+openblas	np.linalg.slogdet(a)	float64	100000		available	0.0548	0.0604	1.10219	
+openblas	np.linalg.slogdet(a)	float64	10000000		available	0.1133	0.1195	1.054722	
+openblas	np.linalg.solve(a, b)	float64	1000		available	0.0083	0.0071	0.855421	
+openblas	np.linalg.solve(a, b)	float64	100000		available	0.0579	0.064	1.105354	
+openblas	np.linalg.solve(a, b)	float64	10000000		available	0.1187	0.1247	1.050548	
+openblas	np.linalg.svd(a)	float64	1000		available	0.1357	0.149	1.09801	
+openblas	np.linalg.svd(a)	float64	100000		available	1.4284	1.4689	1.028353	
+openblas	np.linalg.svd(a)	float64	10000000		available	2.7944	2.9843	1.067957	
+openblas	np.linalg.svdvals(a)	float64	1000		available	0.0474	0.0558	1.177215	
+openblas	np.linalg.svdvals(a)	float64	100000		available	0.4632	0.4667	1.007556	
+openblas	np.linalg.svdvals(a)	float64	10000000		available	0.9755	0.9773	1.001845	
+openblas	np.linalg.tensordot(a, b)	float64	1000		available	0.0048	0.0056	1.166663	
+openblas	np.linalg.tensordot(a, b)	float64	100000		available	0.1591	0.1721	1.08171	
+openblas	np.linalg.tensordot(a, b)	float64	10000000		available	0.1591	0.1721	1.08171	
+openblas	np.linalg.tensorinv(a)	float64	1000		available	0.0158	0.0259	1.63924	
+openblas	np.linalg.tensorinv(a)	float64	100000		available	0.1609	0.1845	1.146675	
+openblas	np.linalg.tensorinv(a)	float64	10000000		available	0.3431	0.372	1.084232	
+openblas	np.linalg.tensorsolve(a, b)	float64	1000		available	0.0089	0.0184	2.067415	
+openblas	np.linalg.tensorsolve(a, b)	float64	100000		available	0.0587	0.0667	1.136286	
+openblas	np.linalg.tensorsolve(a, b)	float64	10000000		available	0.1198	0.1276	1.065109	
+openblas	np.linalg.vecdot(a, b)	float64	1000		available	0.0008	0.0008	0.999971	
+openblas	np.linalg.vecdot(a, b)	float64	100000		available	0.0123	0.0073	0.593496	
+openblas	np.linalg.vecdot(a, b)	float64	10000000		available	8.4696	8.4273	0.995006	
+openblas	np.matmul(a, b)	float64	1000		available	0.0016	0.0022	1.374992	
+openblas	np.matmul(a, b)	float64	100000		available	2.247	2.2609	1.006186	
+openblas	np.matmul(a, b)	float64	10000000		available	3.9891	4.2523	1.06598	
+openblas	np.matvec(a, b)	float64	1000		available	0.0004	0.0007	1.749941	
+openblas	np.matvec(a, b)	float64	100000		available	0.0098	0.0116	1.183674	
+openblas	np.matvec(a, b)	float64	10000000		available	0.0142	0.0162	1.140844	
+openblas	np.tensordot(a, b)	float64	1000		available	0.0013	0.0036	2.769229	
+openblas	np.tensordot(a, b)	float64	100000		available	0.0134	0.0209	1.5597	
+openblas	np.tensordot(a, b)	float64	10000000		available	7.7939	8.5836	1.101323	
+openblas	np.tensordot(a, b, axes=1)	float64	1000	axes=1,matrix	available	0.0048	0.0054	1.124996	
+openblas	np.tensordot(a, b, axes=1)	float64	100000	axes=1,matrix	available	2.2485	2.2798	1.01392	
+openblas	np.tensordot(a, b, axes=1)	float64	10000000	axes=1,matrix	available	3.9968	4.2931	1.074134	
+openblas	np.vdot(a, b)	float64	1000		available	0.0007	0.0005	0.71425	
+openblas	np.vdot(a, b)	float64	100000		available	0.0122	0.007	0.57377	
+openblas	np.vdot(a, b)	float64	10000000		available	8.2873	8.3329	1.005502	
+openblas	np.vecdot(a, b)	float64	1000		available	0.0008	0.0006	0.749969	
+openblas	np.vecdot(a, b)	float64	100000		available	0.0123	0.007	0.569105	
+openblas	np.vecdot(a, b)	float64	10000000		available	8.4108	8.275	0.983854	
+openblas	np.vecmat(a, b)	float64	1000		available	0.0004	0.0007	1.749941	
+openblas	np.vecmat(a, b)	float64	100000		available	0.0117	0.0136	1.162392	
+openblas	np.vecmat(a, b)	float64	10000000		available	0.0176	0.0194	1.102273	
+openblas	a.dot(b) [ndarray]	float64	1000		available	0.0006	0.0004	0.666623	
+openblas	a.dot(b) [ndarray]	float64	100000		available	0.0122	0.0068	0.557377	
+openblas	a.dot(b) [ndarray]	float64	10000000		available	8.3942	8.3031	0.989147	
+openblas	np.convolve(a, kernel)	float64	1000		available	0.0424	0.0235	0.554245	
+openblas	np.convolve(a, kernel)	float64	100000		available	1.9148	2.2177	1.158189	
+openblas	np.convolve(a, kernel)	float64	10000000		available	206.6472	199.3455	0.964666	
+openblas	np.correlate(a, kernel)	float64	1000		available	0.0332	0.0224	0.674699	
+openblas	np.correlate(a, kernel)	float64	100000		available	1.915	2.1965	1.146997	
+openblas	np.correlate(a, kernel)	float64	10000000		available	166.2216	206.05	1.23961	
+openblas	np.inner(a, b)	float64	1000		available	0.0007	0.0006	0.857108	
+openblas	np.inner(a, b)	float64	100000		available	0.0122	0.007	0.57377	
+openblas	np.inner(a, b)	float64	10000000		available	7.6714	8.3426	1.087494	
