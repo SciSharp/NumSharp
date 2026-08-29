@@ -20,6 +20,7 @@ namespace NumSharp
         /// <param name="period">A period for the x-coordinates, allowing proper interpolation of angular x-coordinates. Must be non-zero.</param>
         /// <returns>The interpolated values, same shape as x (float64, or complex128 when fp is complex). A scalar (0-d) if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.interp.html</remarks>
+        [NDScoped]
         public static NDArray interp(NDArray x, NDArray xp, NDArray fp,
             double? left = null, double? right = null, double? period = null)
         {
@@ -36,6 +37,7 @@ namespace NumSharp
         ///     accepting complex <paramref name="left"/> / <paramref name="right"/> fill values.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.interp.html</remarks>
+        [NDScoped]
         public static NDArray interp(NDArray x, NDArray xp, NDArray fp,
             Complex? left, Complex? right = null, double? period = null)
             => InterpComplex(x, xp, fp, left, right, period);
@@ -350,8 +352,9 @@ namespace NumSharp
             // wrap-extend endpoints: xp = [xp[-1]-period, xp..., xp[0]+period], fp = [fp[-1], fp..., fp[0]]
             var xpFirst = xpd["0:1"];
             var xpLast = xpd[(xpd.size - 1).ToString() + ":"];
-            // np.interp's entries are not [NDScoped], so the two wrap temps must be reclaimed here —
-            // concatenate copies their values out, leaving the temps dead the moment it returns.
+            // concatenate copies the wrap temps' values out, leaving them dead the moment it
+            // returns — reclaim them here eagerly rather than holding them to the entry scope's
+            // close (the [NDScoped] interp entries would sweep them anyway; Dispose is idempotent).
             using NDArray xpLow = xpLast - period, xpHigh = xpFirst + period;
             xpd = np.concatenate(new[] { xpLow, xpd, xpHigh });
             var fpFirst = fpd["0:1"];
