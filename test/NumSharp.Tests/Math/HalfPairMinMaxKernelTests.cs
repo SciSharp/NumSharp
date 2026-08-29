@@ -122,4 +122,54 @@ public class HalfPairMinMaxKernelTests
         g[2].Should().Be((ushort)0xfe22, "negative NaN survives with sign");
         g[3].Should().Be((ushort)0x3800, "0.5 is inside the window");
     }
+
+    [TestMethod]
+    public void Clip_Half_NaNBounds_PropagateBoundBits()
+    {
+        // NumPy clip = _NPY_MIN(_NPY_MAX(x, lo), hi) (probed 2.4.2):
+        //   clip(5, 1, nan-hi) -> the hi bound's exact NaN bits;
+        //   clip(5, nan-lo, 1) -> the lo bound's NaN bits ride through BOTH stages.
+        // A precedence bug once routed ANY NaN max-bound (Half included) into a
+        // float32 all-NaN fill — wrong dtype and payload.
+        using var x = FromBits(0x4500, 0x3c00, 0xbc00);
+        using (var c = np.clip(x, (Half)1f, BitConverter.UInt16BitsToHalf(0x7e01)))
+        {
+            var g = Bits(c);
+            c.typecode.Should().Be(NPTypeCode.Half, "clip must stay float16");
+            g[0].Should().Be((ushort)0x7e01, "hi-bound NaN bits propagate");
+            g[1].Should().Be((ushort)0x7e01);
+            g[2].Should().Be((ushort)0x7e01, "below-lo still hits the NaN hi stage");
+        }
+        using (var c = np.clip(x, BitConverter.UInt16BitsToHalf(0xfe22), (Half)1f))
+        {
+            // lo = -NaN: the max stage's guarded ge(x, nan) is FALSE for every x, so the
+            // BOUND wins the stage and its exact bits ride through the min stage
+            // (isnan(in1) → in1). Probed live: clip(-1, -nan, 1) = 0xfe22 on 2.4.2.
+            var g = Bits(c);
+            g[0].Should().Be((ushort)0xfe22, "the -NaN lo bound replaces every value");
+            g[1].Should().Be((ushort)0xfe22);
+            g[2].Should().Be((ushort)0xfe22);
+        }
+    }
+
+    [TestMethod]
+    public void Clip_Half_MinGreaterThanMax_MaxWins_And_ArrayBounds()
+    {
+        // lo > hi: the min stage runs LAST, so hi wins (probed: clip(2, 3, 1) = 1).
+        using var x = FromBits(0x4000);
+        using (var c = np.clip(x, (Half)3f, (Half)1f))
+            Bits(c)[0].Should().Be((ushort)0x3c00);
+        // array bounds ride the same kernel (per-element lo/hi)
+        using var y = FromBits(0x3800, 0x4500, 0xbc00, 0x7e05);
+        using var lo = FromBits(0x3c00, 0x3c00, 0x8000, 0x0000);
+        using var hi = FromBits(0x4000, 0x4200, 0x3c00, 0x3c00);
+        using (var c = np.clip(y, lo, hi))
+        {
+            var g = Bits(c);
+            g[0].Should().Be((ushort)0x3c00, "0.5 clips up to lo=1");
+            g[1].Should().Be((ushort)0x4200, "5 clips down to hi=3");
+            g[2].Should().Be((ushort)0x8000, "-1 clips up to lo=-0");
+            g[3].Should().Be((ushort)0x7e05, "NaN input passes verbatim through array bounds");
+        }
+    }
 }

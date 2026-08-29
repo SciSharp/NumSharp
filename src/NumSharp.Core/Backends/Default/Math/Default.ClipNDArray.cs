@@ -73,12 +73,18 @@ namespace NumSharp.Backends
                 return @out;
             }
 
-            // ---- Special-case NaN scalar bounds on float dtypes (NumPy: entire
+            // ---- Special-case NaN scalar bounds on float32/float64 (NumPy: entire
             //      result is NaN). The IL kernel uses Vector.Min/Max which on x86
             //      do not propagate NaN-in-bounds in the second-operand position
             //      consistently across vendors, so we short-circuit here.
+            //      Single/Double ONLY — a && bound tighter than || here once made ANY
+            //      dtype with a NaN max-bound take this float32 fill (a Half array came
+            //      back as a float32 all-NaN — wrong dtype AND payload). Half now rides
+            //      its bit-level clip kernel, which propagates the bound's exact NaN
+            //      bits per element like NumPy's _NPY_MIN/_NPY_MAX chain (probed 2.4.2:
+            //      clip(5f16, 1, nan) = the bound's NaN bits, not a canonical fill).
             if ((outType == NPTypeCode.Single || outType == NPTypeCode.Double)
-                && ScalarIsNaN(min) || ScalarIsNaN(max))
+                && (ScalarIsNaN(min) || ScalarIsNaN(max)))
             {
                 var nan = outType == NPTypeCode.Double
                     ? np.full(lhs.Shape, double.NaN)

@@ -221,6 +221,124 @@ namespace NumSharp.Backends.Kernels
                 pr[i] = HalfPairSelectBits(a, pb[i], isMax, nanIgnore);
         }
 
+        // ── np.clip (Half) — the same pair-select primitive chained max-then-min ────
+        //
+        // NumPy's clip.cpp: val = _NPY_MIN(_NPY_MAX(x, lo), hi) where
+        // _NPY_MAX(a,b) = isnan(a) || ge(a,b) ? a : b (guarded ge, in1 preference) —
+        // exactly HalfPairSelectBits(val, bound, isMax, nanIgnore:false) per stage. So a
+        // NaN x passes through VERBATIM, a NaN bound REPLACES the value from its stage on
+        // (probed 2.4.2: clip(5, nan, 1) = the lo-bound NaN bits), lo>hi resolves to hi
+        // (min applied last), and ±0 stage-ties keep the running value.
+
+        /// <summary>
+        /// Returns the static bit-level clip kernel for a Half (mode, kind) pair — always
+        /// available (every combination is served). Cached by the caller's clip-kernel cache.
+        /// </summary>
+        internal static unsafe ClipKernel GetHalfClipKernel(ClipMode mode, ClipBoundsKind kind)
+        {
+            if (kind == ClipBoundsKind.Scalar)
+                return (src, dst, n, lo, hi) => HalfClipScalarBounds(
+                    (ushort*)src, (ushort*)dst, n,
+                    mode != ClipMode.MaxOnly ? *(ushort*)lo : (ushort)0,
+                    mode != ClipMode.MinOnly ? *(ushort*)hi : (ushort)0,
+                    mode);
+            return (src, dst, n, lo, hi) => HalfClipArrayBounds(
+                (ushort*)src, (ushort*)dst, n, (ushort*)lo, (ushort*)hi, mode);
+        }
+
+        /// <summary>One clamp stage on a streamed lane vector vs a hoisted scalar bound.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector256<short> HalfClipStageScalar(
+            Vector256<short> v, Vector256<short> vb, Vector256<short> magB, Vector256<short> nanB,
+            Vector256<ushort> kb, Vector256<short> m7fff, Vector256<short> vinf, Vector256<short> m8000, bool isMax)
+        {
+            var magV = Avx2.And(v, m7fff);
+            var nanV = Avx2.CompareGreaterThan(magV, vinf);
+            var kv = HalfKeyV(v, m8000);
+            var cmp = isMax
+                ? Avx2.CompareEqual(Avx2.Max(kv, kb), kv)
+                : Avx2.CompareEqual(Avx2.Min(kv, kb), kv);
+            var bothZero = Avx2.CompareEqual(Avx2.Or(magV, magB), Vector256<short>.Zero);
+            var takeV = Avx2.Or(nanV, Avx2.AndNot(Avx2.Or(nanV, nanB), Avx2.Or(cmp.AsInt16(), bothZero)));
+            return Avx2.BlendVariable(vb.AsByte(), v.AsByte(), takeV.AsByte()).AsInt16();
+        }
+
+        /// <summary>Fused clip with scalar bound(s) — both bound mask sets hoist out of the loop.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void HalfClipScalarBounds(ushort* src, ushort* dst, long n, ushort lo, ushort hi, ClipMode mode)
+        {
+            bool hasLo = mode != ClipMode.MaxOnly, hasHi = mode != ClipMode.MinOnly;
+            long i = 0;
+            if (Avx2.IsSupported)
+            {
+                var m7fff = Vector256.Create((short)0x7FFF);
+                var vinf = Vector256.Create((short)0x7C00);
+                var m8000 = Vector256.Create(unchecked((short)0x8000));
+                var vlo = Vector256.Create(unchecked((short)lo));
+                var magLo = Vector256.Create((short)(lo & 0x7FFF));
+                var nanLo = (lo & 0x7FFF) > 0x7C00 ? Vector256<short>.AllBitsSet : Vector256<short>.Zero;
+                var klo = Vector256.Create(HalfKeyScalar(lo));
+                var vhi = Vector256.Create(unchecked((short)hi));
+                var magHi = Vector256.Create((short)(hi & 0x7FFF));
+                var nanHi = (hi & 0x7FFF) > 0x7C00 ? Vector256<short>.AllBitsSet : Vector256<short>.Zero;
+                var khi = Vector256.Create(HalfKeyScalar(hi));
+                for (; i + 16 <= n; i += 16)
+                {
+                    var v = Avx.LoadVector256((short*)(src + i));
+                    if (hasLo) v = HalfClipStageScalar(v, vlo, magLo, nanLo, klo, m7fff, vinf, m8000, isMax: true);
+                    if (hasHi) v = HalfClipStageScalar(v, vhi, magHi, nanHi, khi, m7fff, vinf, m8000, isMax: false);
+                    Avx.Store((short*)(dst + i), v);
+                }
+            }
+            for (; i < n; i++)
+            {
+                ushort v = src[i];
+                if (hasLo) v = HalfPairSelectBits(v, lo, isMax: true, nanIgnore: false);
+                if (hasHi) v = HalfPairSelectBits(v, hi, isMax: false, nanIgnore: false);
+                dst[i] = v;
+            }
+        }
+
+        /// <summary>Fused clip with per-element array bound(s) (each `n` values).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void HalfClipArrayBounds(ushort* src, ushort* dst, long n, ushort* lo, ushort* hi, ClipMode mode)
+        {
+            bool hasLo = mode != ClipMode.MaxOnly, hasHi = mode != ClipMode.MinOnly;
+            long i = 0;
+            if (Avx2.IsSupported)
+            {
+                var m7fff = Vector256.Create((short)0x7FFF);
+                var vinf = Vector256.Create((short)0x7C00);
+                var m8000 = Vector256.Create(unchecked((short)0x8000));
+                for (; i + 16 <= n; i += 16)
+                {
+                    var v = Avx.LoadVector256((short*)(src + i));
+                    if (hasLo)
+                    {
+                        var b = Avx.LoadVector256((short*)(lo + i));
+                        var magB = Avx2.And(b, m7fff);
+                        var nanB = Avx2.CompareGreaterThan(magB, vinf);
+                        v = HalfClipStageScalar(v, b, magB, nanB, HalfKeyV(b, m8000), m7fff, vinf, m8000, isMax: true);
+                    }
+                    if (hasHi)
+                    {
+                        var b = Avx.LoadVector256((short*)(hi + i));
+                        var magB = Avx2.And(b, m7fff);
+                        var nanB = Avx2.CompareGreaterThan(magB, vinf);
+                        v = HalfClipStageScalar(v, b, magB, nanB, HalfKeyV(b, m8000), m7fff, vinf, m8000, isMax: false);
+                    }
+                    Avx.Store((short*)(dst + i), v);
+                }
+            }
+            for (; i < n; i++)
+            {
+                ushort v = src[i];
+                if (hasLo) v = HalfPairSelectBits(v, lo[i], isMax: true, nanIgnore: false);
+                if (hasHi) v = HalfPairSelectBits(v, hi[i], isMax: false, nanIgnore: false);
+                dst[i] = v;
+            }
+        }
+
         /// <summary>
         /// Scalar lane select — the exact NumPy fold on bits, <paramref name="a"/> is in1.
         /// Used by the SIMD tails and available to any strided caller.

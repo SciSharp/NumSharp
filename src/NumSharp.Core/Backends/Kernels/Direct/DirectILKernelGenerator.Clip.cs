@@ -89,6 +89,13 @@ namespace NumSharp.Backends.Kernels
 
         private static ClipKernel Generate(NPTypeCode dtype, ClipMode mode, ClipBoundsKind kind)
         {
+            // f16 clip is two chained bit-level pair-selects (max with lo, min with hi) on
+            // raw ushort lanes — zero float conversions, every (mode, kind) combo served.
+            // See Binary.MinMax.Half.cs (the emitted scalar loop below served Half before
+            // via per-element HalfMaxNaN/HalfMinNaN calls).
+            if (dtype == NPTypeCode.Half)
+                return GetHalfClipKernel(mode, kind);
+
             var dm = new DynamicMethod(
                 name: $"Clip_{dtype}_{mode}_{kind}",
                 returnType: typeof(void),
