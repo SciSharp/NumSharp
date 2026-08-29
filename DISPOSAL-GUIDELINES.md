@@ -39,7 +39,8 @@ the bug.
   dispose, every egress yielded) so the method keeps its 100% original body. Every NDArray
   constructed under the scope — however deep the helper-call tree — is reclaimed at exit; inputs
   were constructed before the scope opened and are structurally untouchable. Hand-write the
-  scope only for shapes the weaver rejects (carrier-struct returns, `ref NDArray`).
+  scope only for shapes the weaver rejects (a struct without `INDArrayCarrier`, `ref` flows,
+  an ND-carrying collection/task egress).
 - **The rules the scope automates** (and which still govern any hand-written dispose):
   (**R1**) never dispose what you return, (**R2**) never dispose an input you were given,
   (**R3**) dispose after the last use (through any view too).
@@ -170,17 +171,18 @@ branches and nested-handler boundaries that referenced them stay valid).
 | `NDArray` / `NDArray<T>` | value routed through `Returns<T>(T)` at every ret |
 | `NDArray[]` / `NDArray<T>[]` | `Returns<T>(T[])` (tuple results — nonzero etc.) |
 | `ValueTuple` of 2..4 NDArrays (`(NDArray, NDArray)` — `modf`/`polydiv`/`qr`/`eig`/`svd`/`lstsq`/…) | each component yielded through the matching `Returns<T1,…>` tuple overload (no box) |
-| any OTHER `ValueTuple`/`Tuple` (arity 5..8, a non-NDArray component, or a reference `Tuple`) | `Returns(ITuple)` — yields every NDArray component, skips the rest (boxed on the boundary; negligible off the hot path) |
+| any OTHER `ValueTuple`/`Tuple` (any arity — Rest-packed 8+ flatten — a non-NDArray component, or a reference `Tuple`) | `Returns(ITuple)` — every component dispatches by its RUNTIME type: bare NDArrays, `NDArray[]` elements, NESTED tuples (recursively), carrier structs and bare buffers are all yielded; components carrying no NDArray are skipped (boxed on the boundary; negligible off the hot path). A component carrying NDArrays in a shape the dispatch cannot see through (`List<NDArray>`, `Task<NDArray>`, `T : NDArray`) is **error NDW003** |
 | result-struct carrier implementing `INDArrayCarrier` (`UniqueResult`, `MeshgridResult`, `PolyfitResult`, …) | `retVar.YieldTo(scope)` via boxing-free `constrained.callvirt` — the struct's own method re-parents each NDArray it holds (so private fields are reached from INSIDE the struct) |
 | bare `IArraySlice` / `UnmanagedStorage` return (a lower-layer buffer NOT wrapped in an NDArray) | `Returns(slice)`/`Returns(storage)` takes a **counted ARC reference** (`TryAddRef`) so the scope's deterministic `Release` of an intermediate NDArray sharing the buffer can't free it under the caller (a bare buffer is otherwise an UNCOUNTED alias); the ref is abandoned, so the block's finalizer reclaims it on unreachability |
-| `void` / scalar (`long`, `bool`, `double`, string, enums, …) | scope only; `out NDArray`/`out NDArray[]` params still escaped |
-| `out NDArray` / `out NDArray[]` param | final-value escape before each successful return |
-| **`[NDScopedExit]`** on a by-value `NDArray`/`NDArray[]`/tuple-of-NDArrays PARAMETER — an argument the callee RETAINS | `NDScope.Detach(param)` injected at the method's ENTRY (the compiler stub, for async/iterator), so the CALLER's ambient scope will not dispose the argument. Independent of the method's own scope model (works with or without `[NDScoped]`). Covers property setters (`[param: NDScopedExit]` on `value`) and any method/ctor parameter you own; a raw public-field store (`obj.field = a`) has no parameter to annotate — use a property setter or a hand `NDScope.Detach`. An unsupported parameter type (a `ref`/`out`/`in`, a scalar, a bare buffer, an `INDArrayCarrier` struct) is **error NDW014** |
+| `void` / scalar (`long`, `bool`, `double`, string, enums, …) | scope only; `out` params of any supported carrier shape still escaped |
+| `out` param of a supported carrier shape — `NDArray`(`<T>`), `NDArray[]`, a `ValueTuple`/`Tuple` of supported shapes (nested included), an `INDArrayCarrier` struct, a bare `IArraySlice`/`UnmanagedStorage` | final-value escape before each successful return (tuples box through `Returns(ITuple)`; a carrier's `YieldTo` runs `constrained.` through the byref, no box; buffers take the counted ref) |
+| `out` param of an ND-carrying shape the escape cannot yield (`out List<NDArray>`, `out Task<NDArray>`, `out NDArray[,]`, `out T` with `T : NDArray`) | **error NDW015** — the caller would receive it with its arrays already swept; scope by hand |
+| **`[NDScopedExit]`** on a by-value `NDArray`/`NDArray[]`/tuple-of-NDArrays PARAMETER — an argument the callee RETAINS (nested tuples and `NDArray[]` components detach recursively) | `NDScope.Detach(param)` injected at the method's ENTRY (the compiler stub, for async/iterator), so the CALLER's ambient scope will not dispose the argument. Independent of the method's own scope model (works with or without `[NDScoped]`). Covers property setters (`[param: NDScopedExit]` on `value`) and any method/ctor parameter you own; a raw public-field store (`obj.field = a`) has no parameter to annotate — use a property setter or a hand `NDScope.Detach`. An unsupported parameter type (a `ref`/`out`/`in`, a scalar, a bare buffer, an `INDArrayCarrier` struct, or a tuple with an ND-carrying component `Detach` cannot see through) is **error NDW014** |
 | **`[NDScopedAsync]`** NON-async `Task`/`ValueTask`[`<T>`] (T = any supported row above, or none) | `ReturnsTask`/`ReturnsValueTask` at every ret + `CloseUnlessDeferred` in the finally: a COMPLETED task's result is yielded immediately; an INCOMPLETE one **defers the scope's disposal to the task's completion** (the in-flight callee may still be using tracked temps handed to it) and yields the result there; an incomplete `ValueTask` is `Preserve()`d first (single-consumption — the caller receives the multi-observable form) |
 | **`[NDScopedAsync]`** `async` method (`Task`, `Task<T>`, `ValueTask`[`<T>`], `void`, custom task-like) | woven through the STATE MACHINE — see "Async & iterators" below |
 | **`[NDScoped]`** synchronous iterator (`IEnumerable`[`<T>`]/`IEnumerator`[`<T>`]) / **`[NDScopedAsync]`** async iterator (`IAsyncEnumerable<T>`) | woven through the state machine; `yield return`ed elements routed through `Returns` (the consumer owns them) |
-| `ref NDArray`(`[]`) param | **error NDW002** — hidden egress; scope by hand |
-| unsupported carrier (object/collection field, a `>4`-arity or mixed tuple, a result struct WITHOUT `INDArrayCarrier`) — returned directly, inside a `Task<T>`, as an async result, or `yield return`ed | **error NDW003** — the weaver cannot see every NDArray, so members would be handed back disposed; add `INDArrayCarrier` to the struct, or scope by hand |
+| `ref`/`in` param over ANY NDArray-carrying shape (`ref NDArray`(`[]`), a tuple with an NDArray component, a carrier struct, a `List<NDArray>`, a `T : NDArray`) | **error NDW002** — hidden egress; scope by hand |
+| unsupported carrier (a bespoke reference type, a collection, a result struct WITHOUT `INDArrayCarrier`, a nested `Task<Task<…>>`, or a tuple with an ND-carrying component the `Returns(ITuple)` dispatch cannot see through) — returned directly, inside a `Task<T>`, as an async result, or `yield return`ed | **error NDW003** — the weaver cannot see every NDArray, so members would be handed back disposed; add `INDArrayCarrier` to the struct, or scope by hand |
 | a state machine not compiled by Roslyn/C# (missing `MoveNext`/`<>t__builder`/`<>2__current`) | **error NDW004** — refused loudly, never mis-woven |
 | async/iterator/Task-shaped target against a NumSharp predating the seam | **error NDW008** — update the NumSharp package |
 | an `async`/iterator/`Task`-shaped method marked `[NDScoped]`, or a plain synchronous method / synchronous iterator marked `[NDScopedAsync]`, or a method carrying BOTH | **error NDW009 / NDW010 / NDW011** — the WRONG attribute (or both); each error names the correct one |
@@ -277,11 +279,12 @@ letting those methods quietly revert to the finalizer backstop, and a non-vacuit
 the attribute being stripped. The tuple and `INDArrayCarrier` rows have in-tree consumers —
 `np.polydiv` (tuple) and `np.unique_counts`/`unique_inverse`/`unique_all` (result structs), pinned
 behaviorally by `NDScopeWeaveCarrierTests` (members survive, dropped results re-parent into an
-enclosing scope, internal temps leave zero strands). The `out NDArray`/`out NDArray[]` egress row is
-now the one transform branch with **no in-tree consumer** (no `[NDScoped]` method currently takes an
-out-array param); its runtime semantics are pinned by `NDScopeTests.OutParameter_Egress_ViaReturns`
-(hand-written scope) and its emitted IL is a structural twin of the return-value `Returns` path —
-correct by construction, kept for the shape's completeness.
+enclosing scope, internal temps leave zero strands). The `out`-parameter egress rows have **no
+in-tree consumer** (no `[NDScoped]` method currently takes an out-carrier param); their runtime
+semantics are pinned by `NDScopeTests.OutParameter_Egress_ViaReturns` (hand-written scope) plus the
+recursive-`Returns(ITuple)`/carrier/buffer pins in `NDScopeWeaveCarrierTests`, and the emitted IL is
+a structural twin of the return-value `Returns` path — correct by construction, kept for the shape's
+completeness.
 
 **Escape hatches.** `-p:SkipNDScopeWeave=true` builds without weaving (attributed methods then
 simply run unscoped — the finalizer backstop, the pre-migration status quo);
@@ -289,11 +292,12 @@ simply run unscoped — the finalizer backstop, the pre-migration status quo);
 output (kept opt-in so machines without the tool still build; measured: the weave adds ZERO
 ILVerify findings over the unwoven baseline in both configurations).
 
-**When to hand-scope instead of the attribute:** an UNSUPPORTED carrier return the weaver rejects
-with NDW003 (an object/collection member, a `>4`-arity or mixed tuple — a supported carrier struct
-instead just implements `INDArrayCarrier` and stays woven), `ref NDArray` flows, a mid-method
-handback that genuinely must free before a later allocation (nest an inner block scope), or any body
-where the egress isn't expressible as return-value + out-params.
+**When to hand-scope instead of the attribute:** an UNSUPPORTED carrier the weaver rejects with
+NDW003/NDW015 (an object/collection member, an ND-carrying `List`/`Task`/`T : NDArray` component —
+a result struct instead just implements `INDArrayCarrier` and stays woven, and any tuple of
+supported shapes, nested included, is woven too), `ref`/`in` flows over ND-carrying shapes, a
+mid-method handback that genuinely must free before a later allocation (nest an inner block scope),
+or any body where the egress isn't expressible as return-value + out-params.
 
 **Retained arguments — `[NDScopedExit]`.** The scope auto-protects only two egresses — the return
 value and `out` params. A tracked array handed to something that **keeps** it (a field/property

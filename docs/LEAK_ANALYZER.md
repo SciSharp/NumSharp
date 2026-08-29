@@ -217,6 +217,33 @@ covered helpers = the overwhelming majority of Core's reclamation, fully automat
 leaf paths like interp's periodic branch), and the analyzer is the gate that keeps the two honest —
 anything that falls through both shows up as a warning on the very next build.
 
+**The EGRESS side now matches the analyzer's carrier model too** (closed 2026-08-29; probe-verified
+live, then pinned). The leak side of §9's promise was always complete — tracking happens at
+construction, so ANY dropped shape is reclaimed — but the *yield* side had holes: a scoped method
+could return a shape the analyzer models as an owned carrier ("a `ValueTuple` containing any NDArray,
+**any nesting**") whose NDArrays the egress machinery then missed, handing the caller **disposed**
+arrays from a gate-clean, successfully-woven method. All closed:
+
+- `Returns(ITuple)` / `Detach(ITuple)` now dispatch each component by its RUNTIME type —
+  nested tuples (recursively), `NDArray[]` elements, `INDArrayCarrier` structs and bare
+  `IArraySlice`/`UnmanagedStorage` components are all seen through (previously only bare `NDArray`
+  components were; `((a, b), c)` returned `a`, `b` disposed). Covers sync returns, async
+  `SetResult`, `yield return`ed elements, task-carried results, and `[NDScopedExit]` params in one
+  fix — every route funnels through these two methods.
+- The `out`-parameter escape covers the full carrier vocabulary (was: bare `NDArray`/`NDArray[]`
+  only — an `out (NDArray, NDArray)` or `out` carrier struct was silently swept); an ND-carrying
+  `out` shape it cannot yield is the new **build error NDW015**, never a sweep.
+- **NDW002 widened** to `ref`/`in` over ANY NDArray-carrying shape (an ND tuple, a carrier struct, a
+  `List<NDArray>`, a `T : NDArray` — all previously slipped through silently); a general tuple with
+  an ND-carrying component the dispatch cannot see through (`List<NDArray>`, `Task<NDArray>`) and a
+  nested `Task<Task<NDArray>>` are **NDW003** now instead of weaving-then-corrupting; the gate
+  analyzer mirrors all of it and no longer false-positives on a custom `[AsyncMethodBuilder]`
+  task-like async method (the weaver validates the real result type at IL time).
+
+Gates: `NDScopeWeaveCarrierTests` (recursive ITuple dispatch ×4), `NDScopeExitTests` (recursive
+detach ×2), `NDScopeAsyncTests` (task-carried nested tuple), `GateNegativeTests` (28 new weaver-parity
+rows incl. the NDW015/NDW002 matrix and the custom-task-like pin).
+
 ## 10. Verification
 
 - **Exact-match fixtures** (8 NDW012 scenario files, ~44 warn-tagged + ~75 clean scenarios): a missing

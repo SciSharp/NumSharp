@@ -259,6 +259,99 @@ namespace NumSharp.Tests.Lifetime
             a.Dispose(); b.Dispose();
         }
 
+        // Returns(ITuple) dispatches each component by its RUNTIME type through the same family the
+        // weaver emits for direct returns — so a nested tuple, an NDArray[] component, a carrier
+        // struct component and a bare-buffer component are all seen through, not skipped. (Before
+        // the recursive dispatch, ((a, b), c) handed the caller a and b DISPOSED — the exact
+        // silent-corruption class the leak analyzer's carrier model says a scope covers.)
+
+        [TestMethod]
+        public void ITupleEgress_NestedTuple_ComponentsYieldedRecursively()
+        {
+            NDArray a, b, c, dropped;
+            using (var scope = NDScope.Open())
+            {
+                a = np.arange(3); b = np.arange(4); c = np.arange(5);
+                dropped = np.arange(6);                       // control: the scope still reclaims
+                scope.Returns((ITuple)((a, b), c));           // the woven box+callvirt shape
+            }
+
+            Assert.IsFalse(a.IsDisposed, "a nested tuple's inner component must be yielded");
+            Assert.IsFalse(b.IsDisposed, "a nested tuple's inner component must be yielded");
+            Assert.IsFalse(c.IsDisposed, "the outer bare component must be yielded");
+            Assert.IsTrue(dropped.IsDisposed, "an un-yielded array in the same scope is still reclaimed");
+            Assert.AreEqual(3L, b.GetInt64(3), "the surviving inner buffer is readable");
+            a.Dispose(); b.Dispose(); c.Dispose();
+
+            // A reference Tuple nesting a ValueTuple dispatches identically.
+            NDArray x, y;
+            using (var scope = NDScope.Open())
+            {
+                x = np.arange(2); y = np.arange(3);
+                scope.Returns((ITuple)Tuple.Create((object)(x, y), (object)7));
+            }
+
+            Assert.IsFalse(x.IsDisposed, "a ValueTuple nested inside a reference Tuple is seen through");
+            Assert.IsFalse(y.IsDisposed);
+            x.Dispose(); y.Dispose();
+        }
+
+        [TestMethod]
+        public void ITupleEgress_NDArrayArrayComponent_ElementsYielded()
+        {
+            NDArray a, b, c;
+            using (var scope = NDScope.Open())
+            {
+                a = np.arange(3); b = np.arange(4); c = np.arange(5);
+                scope.Returns((ITuple)(new[] { a, b }, c));
+            }
+
+            Assert.IsFalse(a.IsDisposed, "an NDArray[] component's elements must be yielded");
+            Assert.IsFalse(b.IsDisposed);
+            Assert.IsFalse(c.IsDisposed);
+            a.Dispose(); b.Dispose(); c.Dispose();
+        }
+
+        [TestMethod]
+        public void ITupleEgress_CarrierComponent_MembersYielded()
+        {
+            NDArray a, c;
+            using (var scope = NDScope.Open())
+            {
+                a = np.arange(3); c = np.arange(5);
+                scope.Returns((ITuple)(new TupleBox { V = a }, c));   // INDArrayCarrier rides inside the tuple
+            }
+
+            Assert.IsFalse(a.IsDisposed, "a carrier-struct component yields through its own YieldTo");
+            Assert.IsFalse(c.IsDisposed);
+            a.Dispose(); c.Dispose();
+        }
+
+        [TestMethod]
+        public void ITupleEgress_SliceComponent_CountedRefSurvivesScope()
+        {
+            IArraySlice slice;
+            NDArray c;
+            using (var scope = NDScope.Open())
+            {
+                var nd = np.arange(4);                                 // int64; tracked; NOT yielded
+                slice = nd.Storage.InternalArray;
+                c = np.arange(2);
+                scope.Returns((ITuple)(slice, c));                     // bare-buffer component takes a counted ref
+            }
+
+            Assert.IsFalse(slice.IsReleased, "a bare-buffer component must be counted-ref protected");
+            Assert.AreEqual(3L, slice.GetIndex<long>(3), "the surviving buffer is readable");
+            Assert.IsFalse(c.IsDisposed);
+            c.Dispose();
+        }
+
+        private struct TupleBox : INDArrayCarrier
+        {
+            public NDArray V;
+            void INDArrayCarrier.YieldTo(NDScope scope) => scope.Returns(V);
+        }
+
         // ------------------------------------- 4) bare lower-layer buffer egress (IArraySlice/UnmanagedStorage)
         //
         // The scope reclaims NDArrays via the DETERMINISTIC Release path (eager free at refcount 0). A bare

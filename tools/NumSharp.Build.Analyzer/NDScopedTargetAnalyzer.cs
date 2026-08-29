@@ -14,11 +14,13 @@ namespace NumSharp.Build.Analyzer
     ///     <para>
     ///     It covers every SOURCE-detectable rejection: the wrong attribute (NDW009 = async/Task under
     ///     <c>[NDScoped]</c>, NDW010 = a plain sync method / synchronous iterator under
-    ///     <c>[NDScopedAsync]</c>, NDW011 = both attributes), a hidden <c>ref NDArray</c> egress
-    ///     (NDW002), an unsupported carrier return (NDW003), a body-less method (NDW005), and a
-    ///     setter-only property (NDW006). The IL-only rejections stay with the weaver: NDW004 (an
-    ///     unrecognized state-machine shape), NDW007 (a tail-call prefix), NDW008 (the referenced
-    ///     NumSharp predates the async seam).
+    ///     <c>[NDScopedAsync]</c>, NDW011 = both attributes), a hidden <c>ref</c>/<c>in</c> egress over
+    ///     any NDArray-carrying shape (NDW002), an unsupported carrier return (NDW003), a body-less
+    ///     method (NDW005), a setter-only property (NDW006), and an <c>out</c> parameter whose
+    ///     NDArray-carrying shape the out-escape cannot yield (NDW015). The IL-only rejections stay
+    ///     with the weaver: NDW004 (an unrecognized state-machine shape), NDW007 (a tail-call prefix),
+    ///     NDW008 (the referenced NumSharp predates the async seam), NDW014 (a bad
+    ///     <c>[NDScopedExit]</c> parameter).
     ///     </para>
     /// </summary>
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -61,8 +63,12 @@ namespace NumSharp.Build.Analyzer
             "method carries both [NDScoped] and [NDScopedAsync]",
             "method '{0}' carries BOTH [NDScoped] and [NDScopedAsync] — a method has exactly one scoping model; keep only the attribute that matches it ([NDScoped] for synchronous methods and synchronous iterators, [NDScopedAsync] for async methods, async iterators and non-async Task/ValueTask returns)");
 
+        internal static readonly DiagnosticDescriptor Nw015 = Error("NDW015",
+            "Scoped method has an unsupported 'out' NDArray-carrying parameter",
+            "{0} method '{1}' has an 'out {2}' parameter '{3}' — an NDArray-carrying shape the scope's out-escape cannot yield (supported: NDArray, NDArray[], a ValueTuple/Tuple of supported shapes, an INDArrayCarrier struct, a bare IArraySlice/UnmanagedStorage); scope this method by hand");
+
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-            ImmutableArray.Create(Nw002, Nw003, Nw005, Nw006, Nw009, Nw010, Nw011);
+            ImmutableArray.Create(Nw002, Nw003, Nw005, Nw006, Nw009, Nw010, Nw011, Nw015);
 
         public override void Initialize(AnalysisContext context)
         {
@@ -152,13 +158,26 @@ namespace NumSharp.Build.Analyzer
                 return;
             }
 
-            // NDW002 — a 'ref' (or 'in') NDArray-carrying parameter is a hidden egress. async methods
-            // and iterators cannot have by-ref parameters, so this only ever matches a plain method.
+            // NDW002 — a 'ref' (or 'in') parameter over ANYTHING that carries an NDArray (a bare
+            // array, a tuple with an NDArray component, a carrier struct, a collection of NDArrays,
+            // a T : NDArray) is a hidden egress. NDW015 — an 'out' whose NDArray-carrying shape the
+            // return rewrite cannot yield (a collection, a task, a multi-dim array) would be handed
+            // to the caller with its arrays already swept. async methods and iterators cannot have
+            // by-ref parameters, so these only ever match a plain method.
             foreach (var pr in parameters)
             {
-                if (pr.RefKind != RefKind.None && pr.RefKind != RefKind.Out && TypeHelpers.IsNDArrayCarrying(pr.Type, k))
+                if (pr.RefKind == RefKind.None || !TypeHelpers.CarriesNDArray(pr.Type, k))
+                    continue;
+
+                if (pr.RefKind != RefKind.Out)
                 {
                     report(Diagnostic.Create(Nw002, loc, label, name, pr.Type.ToDisplayString(), pr.Name));
+                    return;
+                }
+
+                if (!TypeHelpers.IsSupportedOutCarrier(pr.Type, k))
+                {
+                    report(Diagnostic.Create(Nw015, loc, label, name, pr.Type.ToDisplayString(), pr.Name));
                     return;
                 }
             }
@@ -166,7 +185,8 @@ namespace NumSharp.Build.Analyzer
             // NDW003 — an unsupported return carrier. A bare enumerable interface is DEFERRED to the
             // weaver: a real iterator (yield) is fine and validates its element type at IL time, and a
             // non-iterator returning IEnumerable is rare — the analyzer must not flag the valid iterator.
-            // A Task/ValueTask is unwrapped once to the result it carries.
+            // A Task/ValueTask is unwrapped once to the result it carries; a NESTED task is refused
+            // (the inner task's completion outlives the scope's deferral lifecycle — weaver parity).
             if (TypeHelpers.IsEnumerableInterface(returnType, k))
                 return;
 
@@ -175,7 +195,22 @@ namespace NumSharp.Build.Analyzer
             {
                 if (result == null)
                     return; // bare Task/ValueTask — no result to carry
+                if (TypeHelpers.IsTaskLike(result, k, out _))
+                {
+                    report(Diagnostic.Create(Nw003, loc, label, name, returnType.ToDisplayString()));
+                    return;
+                }
+
                 carrier = result;
+            }
+            else if (isAsync)
+            {
+                // An async method whose return is NOT one of the four exact task shapes — a custom
+                // [AsyncMethodBuilder] task-like (or void). The carrier that matters is the state
+                // machine's RESULT type, which only exists at IL time (SetResult's argument); the
+                // weaver validates it there, so gating the task-like TYPE here would be a false
+                // positive on a shape the weaver weaves. Defer.
+                return;
             }
 
             if (!TypeHelpers.IsSupportedCarrier(carrier, k))

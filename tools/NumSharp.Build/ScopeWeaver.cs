@@ -507,11 +507,31 @@ internal abstract class ScopeWeaver
 
         foreach (var p in m.Parameters)
         {
-            if (p.ParameterType is ByReferenceType brt && IsNDArrayCarrying(brt.ElementType) && !p.IsOut)
+            if (p.ParameterType is not ByReferenceType brt || !CarriesNDArray(brt.ElementType))
+                continue;
+
+            // NDW002 — 'ref'/'in' over ANYTHING that carries an NDArray (a bare array, a tuple with an
+            // NDArray component, a carrier struct, a collection of NDArrays, a T : NDArray): the caller
+            // aliases the value both ways, a hidden egress the weaver cannot reason about.
+            if (!p.IsOut)
             {
                 stderr.WriteLine(
                     $"NumSharp.Build : error NDW002: {label} method '{m.FullName}' has 'ref {brt.ElementType.Name}' " +
                     $"parameter '{p.Name}' — a hidden egress the weaver cannot see; scope this method by hand");
+                return ValidationOutcome.Error;
+            }
+
+            // NDW015 — an 'out' whose FINAL value the return rewrite knows how to yield is a supported
+            // egress (NDArray, NDArray[], a tuple of supported shapes, an INDArrayCarrier struct, a bare
+            // buffer); any OTHER NDArray-carrying out shape (a collection, a task, a multi-dim array, a
+            // T : NDArray) would be handed to the caller with its arrays already swept — refuse loudly.
+            if (ClassifyOutParam(brt.ElementType) is null)
+            {
+                stderr.WriteLine(
+                    $"NumSharp.Build : error NDW015: {label} method '{m.FullName}' has 'out {brt.ElementType.FullName}' " +
+                    $"parameter '{p.Name}' — an NDArray-carrying shape the scope's out-escape cannot yield " +
+                    "(supported: NDArray, NDArray[], a ValueTuple/Tuple of supported shapes, an INDArrayCarrier " +
+                    "struct, a bare IArraySlice/UnmanagedStorage); scope this method by hand");
                 return ValidationOutcome.Error;
             }
         }
@@ -745,10 +765,6 @@ internal abstract class ScopeWeaver
                || name.StartsWith("Microsoft.", StringComparison.Ordinal);
     }
 
-    /// <summary>NDArray-like, or a rank-1 array of NDArray-like — the two shapes Returns can yield.</summary>
-    private static bool IsNDArrayCarrying(TypeReference t)
-        => IsNDArrayLike(t) || (t is ArrayType { Rank: 1 } arr && IsNDArrayLike(arr.ElementType));
-
     /// <summary>
     ///     NDArray or any subclass (NDArray&lt;T&gt; open or instantiated). Resolution runs through the
     ///     module's <see cref="WeaverAssemblyResolver"/>, so the base-type chain is chased across the
@@ -810,22 +826,32 @@ internal abstract class ScopeWeaver
         // weavable (or there is none) — the egress call yields a completed result immediately and
         // DEFERS the scope's disposal to an incomplete task's completion, because the in-flight
         // callee may still be using tracked temps handed to it. An unsupported result type falls
-        // through to NDW003 exactly like a direct return of it would.
+        // through to NDW003 exactly like a direct return of it would — and so does a NESTED task
+        // (Task&lt;Task&lt;NDArray&gt;&gt;): the inner task's completion outlives the scope's own
+        // deferral lifecycle, so nothing sound can be emitted (the state-machine path refuses the
+        // same shape for the same reason).
         if (IsTaskLike(ret, out var taskResult, out _))
-            return taskResult is null || Classify(taskResult) is not null ? RetKind.TaskLike : null;
+            return taskResult is null || Classify(taskResult) is { } taskKind && taskKind != RetKind.TaskLike
+                ? RetKind.TaskLike
+                : null;
 
         if (IsScalar(ret))
             return RetKind.Scalar;
 
         // A small all-NDArray ValueTuple (svd/qr/eig/lstsq/modf/average/polydiv) takes the strongly-typed
-        // Returns overload (no box); any OTHER tuple — arity 5..8, a non-NDArray component, or a
-        // reference-type Tuple — takes the general Returns(ITuple). A result-struct carrier
-        // (UniqueResult, MeshgridResult, PolyfitResult, …) yields through its own INDArrayCarrier.YieldTo.
+        // Returns overload (no box); any OTHER tuple — arity 5+, a non-NDArray component, or a
+        // reference-type Tuple — takes the general Returns(ITuple), which dispatches each component by
+        // its runtime type (bare NDArray, NDArray[], a nested tuple, a carrier struct, a bare buffer).
+        // That dispatch is what bounds the supported component set: a component that CARRIES NDArrays
+        // in a shape Returns(ITuple) cannot see through (a List<NDArray>, a Task<NDArray>, a T : NDArray)
+        // would have them swept and handed back disposed — those tuples are refused (NDW003). A
+        // result-struct carrier (UniqueResult, MeshgridResult, PolyfitResult, …) yields through its own
+        // INDArrayCarrier.YieldTo.
         if (TryGetNDArrayTuple(ret, out _))
             return RetKind.NDArrayTuple;
 
-        if (IsGeneralTuple(ret, out _))
-            return RetKind.Tuple;
+        if (ret is GenericInstanceType generalTuple && IsGeneralTuple(ret, out _))
+            return IsSupportedTupleCarrier(generalTuple) ? RetKind.Tuple : null;
 
         if (ImplementsCarrierInterface(ret))
             return RetKind.Carrier;
@@ -859,8 +885,128 @@ internal abstract class ScopeWeaver
         if (TryGetNDArrayTuple(t, out _))
             return RetKind.NDArrayTuple;
 
-        if (IsGeneralTuple(t, out _))
-            return RetKind.Tuple;
+        // Detach(ITuple) sees through NDArray components, NDArray[] components and nested tuples —
+        // but has no seam for a carrier struct, a bare buffer, a collection or a task riding inside
+        // the tuple, so an NDArray-carrying component of one of those shapes must be hand-detached
+        // (the same NDW014 exit every unsupported top-level exit type takes).
+        if (t is GenericInstanceType exitTuple && IsGeneralTuple(t, out _))
+            return IsSupportedDetachTuple(exitTuple) ? RetKind.Tuple : null;
+
+        return null;
+    }
+
+    /// <summary>
+    ///     TRUE when a value of this type can HOLD an NDArray the ambient scope may have tracked —
+    ///     the reach test behind the ref/out gates and the tuple component rules: NDArray-likes,
+    ///     arrays of them (any rank), tuples/collections/tasks whose type arguments carry one, a
+    ///     result-struct carrier, a bare buffer, and a generic parameter constrained to NDArray.
+    ///     Types that cannot statically name an NDArray (scalars, <c>object</c>, bespoke POCOs)
+    ///     answer false — the same conservatism the leak analyzer applies (R2).
+    /// </summary>
+    private static bool CarriesNDArray(TypeReference t)
+    {
+        if (t is null || t.IsByReference || t.IsPointer)
+            return false;
+
+        if (t is ArrayType at)
+            return CarriesNDArray(at.ElementType);
+
+        if (t is GenericParameter gp)
+        {
+            foreach (var c in gp.Constraints)
+                if (IsNDArrayLike(c.ConstraintType))
+                    return true;
+            return false;
+        }
+
+        if (IsNDArrayLike(t))
+            return true;
+
+        if (t.FullName is IArraySliceFullName or UnmanagedStorageFullName)
+            return true;
+
+        if (ImplementsCarrierInterface(t))
+            return true;
+
+        if (t is GenericInstanceType git)
+            foreach (var arg in git.GenericArguments)
+                if (CarriesNDArray(arg))
+                    return true;
+
+        return false;
+    }
+
+    /// <summary>
+    ///     Component rule for a general tuple yielded through <c>Returns(ITuple)</c>: every component
+    ///     that CARRIES an NDArray must classify to a shape that egress dispatches (a bare NDArray,
+    ///     an NDArray[], a nested tuple, a carrier struct, a bare buffer) — and NOT a task (its
+    ///     completion outlives the scope's lifecycle). Components carrying no NDArray are skipped by
+    ///     the runtime dispatch and constrain nothing.
+    /// </summary>
+    private static bool IsSupportedTupleCarrier(GenericInstanceType tuple)
+    {
+        foreach (var arg in tuple.GenericArguments)
+        {
+            if (!CarriesNDArray(arg))
+                continue;
+            if (Classify(arg) is null or RetKind.TaskLike)
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Component rule for an <c>[NDScopedExit]</c> tuple detached through <c>Detach(ITuple)</c>:
+    ///     NDArray components, NDArray[] components and nested tuples detach; a carrier struct or
+    ///     bare buffer component has no detach seam, and a collection/task component hides its
+    ///     arrays — those reject (NDW014, hand-detach). Non-NDArray-carrying components are skipped.
+    /// </summary>
+    private static bool IsSupportedDetachTuple(GenericInstanceType tuple)
+    {
+        foreach (var arg in tuple.GenericArguments)
+        {
+            if (!CarriesNDArray(arg))
+                continue;
+            if (IsNDArrayLike(arg))
+                continue;
+            if (arg is ArrayType { Rank: 1 } at && IsNDArrayLike(at.ElementType))
+                continue;
+            if (arg is GenericInstanceType nested &&
+                (TryGetNDArrayTuple(arg, out _) || IsGeneralTuple(arg, out _)) &&
+                IsSupportedDetachTuple(nested))
+                continue;
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    ///     The egress kind the return rewrite emits for an <c>out</c> parameter's FINAL value, or
+    ///     null when the shape is unsupported (NDW015): the same vocabulary as a direct return of it
+    ///     minus the task shapes (a deferral cannot be wired through an out slot). Only consulted
+    ///     for types that <see cref="CarriesNDArray"/>.
+    /// </summary>
+    private static RetKind? ClassifyOutParam(TypeReference elem)
+    {
+        if (IsNDArrayLike(elem))
+            return RetKind.NDArrayLike;
+
+        if (elem is ArrayType { Rank: 1 } arr && IsNDArrayLike(arr.ElementType))
+            return RetKind.NDArrayLikeArray;
+
+        if (TryGetNDArrayTuple(elem, out _))
+            return RetKind.NDArrayTuple;
+
+        if (elem is GenericInstanceType outTuple && IsGeneralTuple(elem, out _))
+            return IsSupportedTupleCarrier(outTuple) ? RetKind.Tuple : null;
+
+        if (ImplementsCarrierInterface(elem))
+            return RetKind.Carrier;
+
+        if (elem.FullName is IArraySliceFullName or UnmanagedStorageFullName)
+            return RetKind.Storage;
 
         return null;
     }
@@ -1167,10 +1313,14 @@ internal abstract class ScopeWeaver
 
         body.InitLocals = true;
 
-        var outNdParams = new List<ParameterDefinition>();
+        // Every out parameter whose FINAL value the scope must yield, with the egress kind the
+        // rewrite emits for it — the full supported carrier vocabulary (Validate already refused
+        // any NDArray-carrying out shape this cannot express, so the filter here is a formality).
+        var outEscapes = new List<(ParameterDefinition Param, RetKind Kind)>();
         foreach (var p in m.Parameters)
-            if (p.IsOut && p.ParameterType is ByReferenceType brt && IsNDArrayCarrying(brt.ElementType))
-                outNdParams.Add(p);
+            if (p.IsOut && p.ParameterType is ByReferenceType brt && CarriesNDArray(brt.ElementType) &&
+                ClassifyOutParam(brt.ElementType) is { } outKind)
+                outEscapes.Add((p, outKind));
 
         // -- prologue (OUTSIDE the protected region, like C#'s `using var scope = NDScope.Open();`)
         var tryStart = body.Instructions[0];
@@ -1290,17 +1440,20 @@ internal abstract class ScopeWeaver
                         break;
                 }
             }
-            else if (outNdParams.Count > 0)
+            else if (outEscapes.Count > 0)
             {
-                ret.OpCode = OpCodes.Ldloc; // becomes the first out-escape's `ldloc scope`
-                ret.Operand = scopeVar;
+                // Mutate the ret into the FIRST instruction of the first out-escape (kind-dependent —
+                // most sequences start with `ldloc scope`, a carrier's with `ldarg p`) so branches
+                // that targeted the ret stay valid, then append the rest.
+                var first = BuildOutEscape(il, outEscapes[0].Param, outEscapes[0].Kind, scopeVar, refs);
+                ret.OpCode = first[0].OpCode;
+                ret.Operand = first[0].Operand;
                 cursor = ret;
-                cursor = EmitOutEscapeTail(il, cursor, outNdParams[0], refs);
-                for (int i = 1; i < outNdParams.Count; i++)
-                {
-                    cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, scopeVar));
-                    cursor = EmitOutEscapeTail(il, cursor, outNdParams[i], refs);
-                }
+                for (int i = 1; i < first.Count; i++)
+                    cursor = InsertAfter(il, cursor, first[i]);
+                for (int i = 1; i < outEscapes.Count; i++)
+                    foreach (var instr in BuildOutEscape(il, outEscapes[i].Param, outEscapes[i].Kind, scopeVar, refs))
+                        cursor = InsertAfter(il, cursor, instr);
 
                 cursor = InsertAfter(il, cursor, il.Create(OpCodes.Leave, epilogueStart));
                 continue;
@@ -1312,11 +1465,9 @@ internal abstract class ScopeWeaver
                 continue;
             }
 
-            foreach (var p in outNdParams)
-            {
-                cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldloc, scopeVar));
-                cursor = EmitOutEscapeTail(il, cursor, p, refs);
-            }
+            foreach (var (param, outKind) in outEscapes)
+                foreach (var instr in BuildOutEscape(il, param, outKind, scopeVar, refs))
+                    cursor = InsertAfter(il, cursor, instr);
 
             InsertAfter(il, cursor, il.Create(OpCodes.Leave, epilogueStart));
         }
@@ -1334,27 +1485,87 @@ internal abstract class ScopeWeaver
         body.OptimizeMacros();
     }
 
-    /// <summary>Emits `ldarg p; ldind.ref; callvirt Returns&lt;elem&gt;; pop` — the caller has already put `scope` on the stack.</summary>
-    private static Instruction EmitOutEscapeTail(ILProcessor il, Instruction cursor, ParameterDefinition p, Refs refs)
+    /// <summary>
+    ///     The full instruction sequence yielding one <c>out</c> parameter's FINAL value through the
+    ///     scope, per egress kind — fresh instructions each call (a sequence is inserted per return
+    ///     site and instructions cannot be shared between insertion points). Stack-neutral; mirrors
+    ///     the return-path emission of the same kind:
+    ///     <list type="bullet">
+    ///     <item>NDArray / NDArray[]: <c>ldloc scope; ldarg p; ldind.ref; callvirt Returns&lt;T&gt;; pop</c></item>
+    ///     <item>tuples: <c>ldloc scope; ldarg p; [ldobj+box | ldind.ref]; callvirt Returns(ITuple); pop</c></item>
+    ///     <item>carrier struct: <c>ldarg p; ldloc scope; constrained. T; callvirt YieldTo</c> — the
+    ///           byref parameter IS the managed this-pointer the constrained call needs</item>
+    ///     <item>bare buffer: <c>ldloc scope; ldarg p; ldind.ref; callvirt Returns(slice/storage); pop</c></item>
+    ///     </list>
+    /// </summary>
+    private static List<Instruction> BuildOutEscape(ILProcessor il, ParameterDefinition p, RetKind kind,
+                                                    VariableDefinition scopeVar, Refs refs)
     {
         var elem = ((ByReferenceType)p.ParameterType).ElementType;
-        GenericInstanceMethod returnsRef;
-        if (elem is ArrayType arr)
+        var seq = new List<Instruction>(6);
+        switch (kind)
         {
-            returnsRef = new GenericInstanceMethod(refs.ReturnsMany); // out NDArray[]-style tuple slot
-            returnsRef.GenericArguments.Add(arr.ElementType);
-        }
-        else
-        {
-            returnsRef = new GenericInstanceMethod(refs.ReturnsOne);
-            returnsRef.GenericArguments.Add(elem);
+            case RetKind.NDArrayLike:
+            case RetKind.NDArrayLikeArray:
+                GenericInstanceMethod returnsRef;
+                if (elem is ArrayType arr)
+                {
+                    returnsRef = new GenericInstanceMethod(refs.ReturnsMany);
+                    returnsRef.GenericArguments.Add(arr.ElementType);
+                }
+                else
+                {
+                    returnsRef = new GenericInstanceMethod(refs.ReturnsOne);
+                    returnsRef.GenericArguments.Add(elem);
+                }
+
+                seq.Add(il.Create(OpCodes.Ldloc, scopeVar));
+                seq.Add(il.Create(OpCodes.Ldarg, p));
+                seq.Add(il.Create(OpCodes.Ldind_Ref));
+                seq.Add(il.Create(OpCodes.Callvirt, returnsRef));
+                seq.Add(il.Create(OpCodes.Pop));
+                break;
+
+            case RetKind.NDArrayTuple:
+            case RetKind.Tuple:
+                // scope.Returns((ITuple)final) — a ValueTuple loads and boxes; a reference Tuple
+                // loads its reference straight. The tuple's NDArray references are re-parented in
+                // place, so nothing is stored back through the ref.
+                seq.Add(il.Create(OpCodes.Ldloc, scopeVar));
+                seq.Add(il.Create(OpCodes.Ldarg, p));
+                IsGeneralTuple(elem, out var isValueTuple);
+                if (kind == RetKind.NDArrayTuple || isValueTuple)
+                {
+                    seq.Add(il.Create(OpCodes.Ldobj, elem));
+                    seq.Add(il.Create(OpCodes.Box, elem));
+                }
+                else
+                {
+                    seq.Add(il.Create(OpCodes.Ldind_Ref));
+                }
+
+                seq.Add(il.Create(OpCodes.Callvirt, refs.ReturnsITuple));
+                seq.Add(il.Create(OpCodes.Pop));
+                break;
+
+            case RetKind.Carrier:
+                seq.Add(il.Create(OpCodes.Ldarg, p));
+                seq.Add(il.Create(OpCodes.Ldloc, scopeVar));
+                seq.Add(il.Create(OpCodes.Constrained, elem));
+                seq.Add(il.Create(OpCodes.Callvirt, refs.CarrierYieldTo));
+                break;
+
+            case RetKind.Storage:
+                var storageRef = elem.FullName == UnmanagedStorageFullName ? refs.ReturnsStorage : refs.ReturnsSlice;
+                seq.Add(il.Create(OpCodes.Ldloc, scopeVar));
+                seq.Add(il.Create(OpCodes.Ldarg, p));
+                seq.Add(il.Create(OpCodes.Ldind_Ref));
+                seq.Add(il.Create(OpCodes.Callvirt, storageRef));
+                seq.Add(il.Create(OpCodes.Pop));
+                break;
         }
 
-        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldarg, p));
-        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Ldind_Ref));
-        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Callvirt, returnsRef));
-        cursor = InsertAfter(il, cursor, il.Create(OpCodes.Pop));
-        return cursor;
+        return seq;
     }
 
     private static MethodReference InstantiateReturns(TypeReference returnType, RetKind kind, Refs refs)

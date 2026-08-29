@@ -58,9 +58,10 @@ public void Adopt([NDScopedExit] NDArray w) => Weights = w;   // w survives the 
 ```
 
 It works with or without a method-level scope attribute, covers `NDArray` / `NDArray[]` / tuples of
-NDArrays (a property setter's `value` counts), and is a no-op when there is no ambient scope. An
-unsupported parameter type is a build error (NDW014). A raw public-field store has no parameter to
-annotate — route it through a setter or call `NDScope.Detach` by hand.
+NDArrays — nested tuples and `NDArray[]` components detach recursively — (a property setter's
+`value` counts), and is a no-op when there is no ambient scope. An unsupported parameter type is a
+build error (NDW014). A raw public-field store has no parameter to annotate — route it through a
+setter or call `NDScope.Detach` by hand.
 
 **A companion Roslyn analyzer catches mistakes at compile time — and it ships with NumSharp
 itself, not with this package.** The `NumSharp` package carries the analyzer (under its
@@ -68,10 +69,12 @@ itself, not with this package.** The `NumSharp` package carries the analyzer (un
 active in every project that can use the attributes — before this weaver is ever installed. It
 reports a wrong or unsupported target as a build ERROR — in the editor, before the weave runs: the
 wrong attribute (NDW009 = an `async`/`Task` method under `[NDScoped]`, NDW010 = a plain sync method
-or synchronous iterator under `[NDScopedAsync]`, NDW011 = both attributes), a hidden `ref NDArray`
-egress (NDW002), an unsupported carrier return (NDW003), a body-less method (NDW005), or a
-setter-only property (NDW006). The IL-only checks (an unrecognized state machine, a tail-call, an
-out-of-date NumSharp) stay with the weaver post-compile. A SOURCE-mode consumer (ProjectReference to
+or synchronous iterator under `[NDScopedAsync]`, NDW011 = both attributes), a hidden `ref`/`in`
+egress over any NDArray-carrying shape (NDW002), an unsupported carrier return (NDW003), a body-less
+method (NDW005), a setter-only property (NDW006), or an `out` parameter whose NDArray-carrying shape
+the out-escape cannot yield (NDW015). The IL-only checks (an unrecognized state machine, a
+tail-call, an out-of-date NumSharp, a bad `[NDScopedExit]` parameter) stay with the weaver
+post-compile. A SOURCE-mode consumer (ProjectReference to
 NumSharp.Core + imported targets — no package, so no auto-apply) opts the analyzer in by referencing
 the analyzer project with `OutputItemType="Analyzer"`, or by setting `$(NumSharpBuildAnalyzerDll)`
 at the built analyzer DLL — the parallel to `$(NumSharpBuildToolDll)`.

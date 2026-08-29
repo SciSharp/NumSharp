@@ -108,6 +108,46 @@ namespace NumSharp.Tests.Lifetime
             // no throw is the assertion
         }
 
+        [TestMethod]
+        public void Detach_NestedTuple_InnerComponentsDetachedRecursively()
+        {
+            // Detach(ITuple) mirrors Returns(ITuple)'s recursive dispatch: a retained
+            // ((NDArray, NDArray), NDArray) argument detaches ALL THREE arrays, not just the bare
+            // one (before the recursion the inner pair stayed tracked and was swept under the
+            // retainer — the [NDScopedExit] contract broken for the exact shape NDW014 admits).
+            ((NDArray, NDArray), NDArray) tup;
+            using (var scope = NDScope.Open())
+            {
+                tup = ((np.arange(3), np.arange(4)), np.arange(5));
+                NDScope.Detach((ITuple)tup);
+            }
+
+            Assert.IsFalse(tup.Item1.Item1.IsDisposed, "a nested tuple's inner component must be detached");
+            Assert.IsFalse(tup.Item1.Item2.IsDisposed, "a nested tuple's inner component must be detached");
+            Assert.IsFalse(tup.Item2.IsDisposed);
+            Assert.AreEqual(2L, tup.Item1.Item2.GetInt64(2), "the surviving buffer is readable");
+            tup.Item1.Item1.Dispose();
+            tup.Item1.Item2.Dispose();
+            tup.Item2.Dispose();
+        }
+
+        [TestMethod]
+        public void Detach_NDArrayArrayComponent_ElementsDetached()
+        {
+            (NDArray[], int) tup;
+            using (var scope = NDScope.Open())
+            {
+                tup = (new[] { np.arange(3), np.arange(4) }, 7);
+                NDScope.Detach((ITuple)tup);
+            }
+
+            Assert.IsFalse(tup.Item1[0].IsDisposed, "an NDArray[] component's elements must be detached");
+            Assert.IsFalse(tup.Item1[1].IsDisposed);
+            Assert.AreEqual(7, tup.Item2);
+            tup.Item1[0].Dispose();
+            tup.Item1[1].Dispose();
+        }
+
         // ------------------------------------------------------------------ the [NDScopedExit] weave semantics
 
         [TestMethod]

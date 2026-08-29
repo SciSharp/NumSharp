@@ -257,6 +257,33 @@ guess.
 - **New pinned FNs:** `out var` results (callee-fresh vs alias is per-method-undecidable) and
   declaration-pattern locals (`expr is NDArray t` — rare, not worth the plumbing).
 
+**Fourth pass — the RUNTIME/weaver side of §9's promise (the egress gap; 153 + 4 tests green
+net8.0/net10.0):** this pass fixed NDScope/ScopeWeaver, not the leak analyzer — probing showed the
+analyzer's carrier model ("a tuple of NDArrays, any nesting" = owned) was AHEAD of what a scope
+actually yielded, so a gate-clean `[NDScoped]` method could hand back DISPOSED arrays:
+- **Runtime fix** (`NDScope.cs`): `Returns(ITuple)` and `Detach(ITuple)` dispatch each component by
+  RUNTIME type (nested tuples recursively, `NDArray[]` elements, `INDArrayCarrier` structs, bare
+  buffers) — one fix covering sync returns, async `SetResult`, yielded elements, task-carried
+  results (`YieldBoxed`) and `[NDScopedExit]` params. Probe: 11 live GAP reproductions → all green.
+- **Weaver fix** (`ScopeWeaver.cs`): the `out`-param escape now emits the full carrier vocabulary
+  (tuple → box+`Returns(ITuple)`, carrier → `constrained. YieldTo` through the byref, buffer →
+  counted ref); **NDW015** (new) gates an ND-carrying `out` shape it cannot yield; **NDW002**
+  widened to `ref`/`in` over ANY `CarriesNDArray` shape; a general tuple return validates its
+  components (a `List<NDArray>`/`Task<NDArray>`/`T : NDArray` component → NDW003) and a nested
+  `Task<Task<NDArray>>` is refused; `ClassifyExitParam` applies the same component rule (NDW014).
+- **Gate-analyzer mirror** (T4): `TypeHelpers.CarriesNDArray`/`IsSupportedOutCarrier` + recursive
+  tuple-component validation in `IsSupportedCarrier`; NDW015 descriptor; NDW002 widened; a custom
+  `[AsyncMethodBuilder]` task-like async method is now DEFERRED to the weaver instead of the old
+  NDW003 false positive (GT-8 closed — the weaver validates the SM's real result type at IL time).
+- **New tests:** `GateNegativeTests` +28 (tuple-component/task-nesting DataRows, the
+  `RefOutParamParity` matrix, `OutGenericConstrainedToNDArray_IsGated`,
+  `CustomTaskLikeAsyncMethod_IsNotGated`); `NDScopeWeaveCarrierTests` +4 recursive-ITuple pins;
+  `NDScopeExitTests` +2 recursive-detach pins; `NDScopeAsyncTests` +1 task-carried nested tuple.
+  Verified end-to-end on live-woven probe assemblies (16 runtime checks + a 12-shape gate matrix,
+  ILVerify clean on every woven subject); `[NDScoped]` on LOCAL FUNCTIONS confirmed already woven
+  (GT-9's "deferred to the weaver" is genuinely handled — the generated method carries the
+  attribute and `CollectTargets` finds it).
+
 ---
 
 ## 9. Workflow for adding a scenario

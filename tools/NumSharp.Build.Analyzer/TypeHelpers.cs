@@ -74,18 +74,120 @@ namespace NumSharp.Build.Analyzer
             if (t is IArrayTypeSymbol arr && arr.Rank == 1 && IsNDArrayLike(arr.ElementType, k))
                 return true;
             if (IsTaskLike(t, k, out var inner))
-                return inner == null || IsSupportedCarrier(inner, k);
+                // A NESTED task result (Task<Task<NDArray>>) is refused like a direct return of it
+                // would be: the inner task's completion outlives the scope's deferral lifecycle.
+                return inner == null || (!IsTaskLike(inner, k, out _) && IsSupportedCarrier(inner, k));
             if (IsScalar(t))
                 return true;
-            if (t.IsTupleType)          // any ValueTuple (arity/mix) — Returns(ITuple)/typed overloads
-                return true;
-            if (IsSystemTuple(t))       // any reference-type System.Tuple<...>
-                return true;
+            if (t is INamedTypeSymbol tuple && (t.IsTupleType || IsSystemTuple(t)))
+                // any ValueTuple/Tuple — Returns(ITuple)/typed overloads — but only when every
+                // NDArray-carrying component is a shape that egress dispatches (weaver parity)
+                return IsSupportedTupleCarrier(tuple, k);
             if (ImplementsCarrier(t, k))
                 return true;
             if (Eq(t, k.IArraySlice) || Eq(t, k.UnmanagedStorage))
                 return true;
             return false;
+        }
+
+        /// <summary>
+        ///     TRUE when a value of this type can HOLD an NDArray the ambient scope may have tracked —
+        ///     the reach test behind the ref/out gates and the tuple component rule (mirrors the
+        ///     weaver's <c>CarriesNDArray</c>): NDArray-likes, arrays of them (any rank), tuples /
+        ///     collections / tasks whose type arguments carry one, a result-struct carrier, a bare
+        ///     buffer, and a type parameter constrained to NDArray. Types that cannot statically name
+        ///     an NDArray (scalars, <c>object</c>, bespoke POCOs) answer false (R2 conservatism).
+        /// </summary>
+        internal static bool CarriesNDArray(ITypeSymbol t, KnownTypes k)
+        {
+            if (t == null)
+                return false;
+            if (t is IArrayTypeSymbol arr)
+                return CarriesNDArray(arr.ElementType, k);
+            if (t is ITypeParameterSymbol tp)
+            {
+                foreach (var c in tp.ConstraintTypes)
+                    if (IsNDArrayLike(c, k))
+                        return true;
+                return false;
+            }
+
+            if (IsNDArrayLike(t, k))
+                return true;
+            if (Eq(t, k.IArraySlice) || Eq(t, k.UnmanagedStorage))
+                return true;
+            if (ImplementsCarrier(t, k))
+                return true;
+
+            if (t is INamedTypeSymbol named)
+            {
+                if (named.IsTupleType)
+                {
+                    foreach (var e in named.TupleElements)
+                        if (CarriesNDArray(e.Type, k))
+                            return true;
+                    return false;
+                }
+
+                foreach (var arg in named.TypeArguments)
+                    if (CarriesNDArray(arg, k))
+                        return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        ///     The weaver's <c>ClassifyOutParam</c> as a boolean: can the return rewrite yield this
+        ///     <c>out</c> parameter's final value? The direct-return vocabulary minus the task shapes
+        ///     (a deferral cannot be wired through an out slot). Only consulted for types that
+        ///     <see cref="CarriesNDArray"/>.
+        /// </summary>
+        internal static bool IsSupportedOutCarrier(ITypeSymbol t, KnownTypes k)
+        {
+            if (IsNDArrayLike(t, k))
+                return true;
+            if (t is IArrayTypeSymbol arr && arr.Rank == 1 && IsNDArrayLike(arr.ElementType, k))
+                return true;
+            if (t is INamedTypeSymbol tuple && (t.IsTupleType || IsSystemTuple(t)))
+                return IsSupportedTupleCarrier(tuple, k);
+            if (ImplementsCarrier(t, k))
+                return true;
+            if (Eq(t, k.IArraySlice) || Eq(t, k.UnmanagedStorage))
+                return true;
+            return false;
+        }
+
+        /// <summary>
+        ///     Component rule for a general tuple yielded through <c>Returns(ITuple)</c> (mirrors the
+        ///     weaver's <c>IsSupportedTupleCarrier</c>): every component that CARRIES an NDArray must
+        ///     itself be a supported, non-task carrier — the shapes the runtime dispatch sees through
+        ///     (a bare NDArray, an NDArray[], a nested tuple, a carrier struct, a bare buffer).
+        ///     Components carrying no NDArray are skipped by the dispatch and constrain nothing.
+        /// </summary>
+        private static bool IsSupportedTupleCarrier(INamedTypeSymbol tuple, KnownTypes k)
+        {
+            if (tuple.IsTupleType)
+            {
+                foreach (var e in tuple.TupleElements)
+                    if (!IsSupportedTupleComponent(e.Type, k))
+                        return false;
+                return true;
+            }
+
+            foreach (var arg in tuple.TypeArguments)
+                if (!IsSupportedTupleComponent(arg, k))
+                    return false;
+            return true;
+        }
+
+        private static bool IsSupportedTupleComponent(ITypeSymbol c, KnownTypes k)
+        {
+            if (!CarriesNDArray(c, k))
+                return true;
+            if (IsTaskLike(c, k, out _))
+                return false;
+            return IsSupportedCarrier(c, k);
         }
 
         /// <summary>A value holding no NDArray — primitives, enums, string, decimal/Half/Complex, native ints.</summary>

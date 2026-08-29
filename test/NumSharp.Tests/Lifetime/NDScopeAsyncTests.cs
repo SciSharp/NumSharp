@@ -343,6 +343,33 @@ namespace NumSharp.Tests.Lifetime
         }
 
         [TestMethod]
+        public void ReturnsTask_TupleResult_NestedAndArrayComponents_AllYielded()
+        {
+            // The task egress funnels through YieldBoxed → Returns(ITuple), whose recursive component
+            // dispatch must see through a NESTED tuple and an NDArray[] component — a completed
+            // Task<((a, b), c)> or Task<(NDArray[], n)> must never hand back disposed arrays.
+            var scope = NDScope.Open();
+            var a = np.arange(2);
+            var b = np.arange(3);
+            var c = np.arange(4);
+            _ = scope.ReturnsTask(Task.FromResult(((a, b), c)));
+            NDScope.CloseUnlessDeferred(scope);
+            Assert.IsFalse(a.IsDisposed, "nested tuple component must survive the task egress");
+            Assert.IsFalse(b.IsDisposed);
+            Assert.IsFalse(c.IsDisposed);
+            a.Dispose(); b.Dispose(); c.Dispose();
+
+            var scope2 = NDScope.Open();
+            var x = np.arange(2);
+            var y = np.arange(3);
+            _ = scope2.ReturnsTask(Task.FromResult((new[] { x, y }, 7)));
+            NDScope.CloseUnlessDeferred(scope2);
+            Assert.IsFalse(x.IsDisposed, "NDArray[] component's elements must survive the task egress");
+            Assert.IsFalse(y.IsDisposed);
+            x.Dispose(); y.Dispose();
+        }
+
+        [TestMethod]
         public void ReturnsTask_Plain_UpcastSniff_Deferred_YieldsAtCompletion()
         {
             var tcs = new TaskCompletionSource<NDArray>();

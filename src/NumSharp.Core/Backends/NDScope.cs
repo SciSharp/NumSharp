@@ -202,20 +202,25 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Yields every <see cref="NDArray"/> in a tuple result of ANY arity (up to 8) and ANY mix —
-        ///     the general <see cref="ITuple"/> egress that also covers a reference-type <see cref="System.Tuple"/>.
-        ///     Components that are NOT an <see cref="NDArray"/> (a scalar, a count, …) are skipped; a null
-        ///     tuple is a no-op. This is the weaver's egress for a tuple the strongly-typed overloads above
-        ///     don't cover (arity 5–8, a non-NDArray component, or a boxed/reference tuple). It indexes
-        ///     through <see cref="ITuple"/>, so value-type components box — negligible on the once-per-call
-        ///     return path; hand-scope a hot all-NDArray tuple through the typed overloads to avoid it.
+        ///     Yields every <see cref="NDArray"/> a tuple result CARRIES, at any arity (Rest-packed
+        ///     8+ included) and ANY mix — the general <see cref="ITuple"/> egress that also covers a
+        ///     reference-type <see cref="System.Tuple"/>. Each component dispatches by its RUNTIME
+        ///     type through the same family the weaver emits for direct returns: a bare
+        ///     <see cref="NDArray"/>, an <c>NDArray[]</c> (every element), a NESTED tuple
+        ///     (recursively — <c>((a, b), c)</c> yields all three), an <see cref="INDArrayCarrier"/>
+        ///     struct (its <c>YieldTo</c>), and a bare <see cref="IArraySlice"/>/<see cref="UnmanagedStorage"/>
+        ///     (counted-ref protection). Components carrying no NDArray (a scalar, a count, …) are
+        ///     skipped; a null tuple is a no-op. This is the weaver's egress for a tuple the
+        ///     strongly-typed overloads above don't cover (arity 5+, a non-NDArray component, or a
+        ///     boxed/reference tuple). It indexes through <see cref="ITuple"/>, so value-type
+        ///     components box — negligible on the once-per-call return path; hand-scope a hot
+        ///     all-NDArray tuple through the typed overloads to avoid it.
         /// </summary>
         public ITuple Returns(ITuple tuple)
         {
             if (tuple is not null)
                 for (int i = 0; i < tuple.Length; i++)
-                    if (tuple[i] is NDArray nd)
-                        Returns(nd);
+                    YieldBoxed(tuple[i]);
             return tuple;
         }
 
@@ -282,18 +287,32 @@ namespace NumSharp
 
         /// <summary>
         ///     Detaches every <see cref="NDArray"/> a tuple carries — the <c>ValueTuple</c>/<c>Tuple</c>
-        ///     egress of an <see cref="NDScopedExitAttribute"/> parameter, any arity up to 8 and any
-        ///     component mix (non-<see cref="NDArray"/> components are skipped, a null tuple is a no-op).
-        ///     Indexing through <see cref="ITuple"/> boxes value-type components, negligible on the
-        ///     once-per-call escape path; it mirrors <see cref="Returns(ITuple)"/>.
+        ///     egress of an <see cref="NDScopedExitAttribute"/> parameter, any arity (Rest-packed 8+
+        ///     included) and any component mix: bare <see cref="NDArray"/>s, whole <c>NDArray[]</c>
+        ///     components, and NESTED tuples (recursively) all detach; components carrying no
+        ///     NDArray are skipped, and a null tuple is a no-op. Indexing through
+        ///     <see cref="ITuple"/> boxes value-type components, negligible on the once-per-call
+        ///     escape path; it mirrors <see cref="Returns(ITuple)"/>.
         /// </summary>
         public static void Detach(ITuple tuple)
         {
             if (tuple is null)
                 return;
             for (int i = 0; i < tuple.Length; i++)
-                if (tuple[i] is NDArray nd)
-                    Detach(nd);
+            {
+                switch (tuple[i])
+                {
+                    case NDArray nd:
+                        Detach(nd);
+                        break;
+                    case NDArray[] nds:
+                        Detach(nds);
+                        break;
+                    case ITuple nested:
+                        Detach(nested);
+                        break;
+                }
+            }
         }
 
         /// <summary>
