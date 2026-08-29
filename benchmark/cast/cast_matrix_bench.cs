@@ -22,6 +22,9 @@ if (dbg?.IsJITOptimizerDisabled ?? false) { Console.Error.WriteLine("FATAL: Debu
 
 double Best(Action f, int it, int wm, int rd)
 {
+    string depth = (Environment.GetEnvironmentVariable("NUMSHARP_BENCHMARK_DEPTH") ?? "measure").ToLowerInvariant();
+    if (depth == "pass") { var once = Stopwatch.StartNew(); f(); once.Stop(); return once.Elapsed.TotalMilliseconds; }
+    if (depth == "light") wm = Math.Min(wm, 3);
     // Warmup; its timed tail (first call excluded — JIT/pool-cold) doubles as a per-call pilot.
     f();
     var pw = Stopwatch.StartNew();
@@ -33,7 +36,8 @@ double Best(Action f, int it, int wm, int rd)
     // fixed round count — the caller's it/rd hints are superseded).
     bool slow = perCall > 20.0;
     it = slow ? 1 : Math.Clamp((int)Math.Round(1.0 / Math.Max(perCall, 1e-6)), 1, 1_000_000);
-    rd = slow ? 100 : Math.Max(2, (int)Math.Ceiling(200.0 / Math.Max(it * perCall, 1e-9)));
+    double budget = 200.0 / (depth == "light" ? 6.0 : 1.0);
+    rd = slow ? (depth == "light" ? 17 : 100) : Math.Max(1, (int)Math.Ceiling(budget / Math.Max(it * perCall, 1e-9)));
     double b = 1e9;
     for (int r = 0; r < rd; r++) { var sw = Stopwatch.StartNew(); for (int i = 0; i < it; i++) f(); b = Math.Min(b, sw.Elapsed.TotalMilliseconds / it); }
     return b;
@@ -51,6 +55,17 @@ var DTYPES = new (string name, NPTypeCode tc)[]
     ("char", NPTypeCode.Char), ("f16", NPTypeCode.Half), ("f32", NPTypeCode.Single),
     ("f64", NPTypeCode.Double), ("dec", NPTypeCode.Decimal), ("c128", NPTypeCode.Complex),
 };
+var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+{
+    ["bool"]="bool", ["uint8"]="u8", ["int8"]="i8", ["int16"]="i16", ["uint16"]="u16",
+    ["int32"]="i32", ["uint32"]="u32", ["int64"]="i64", ["uint64"]="u64", ["char"]="char",
+    ["float16"]="f16", ["float32"]="f32", ["float64"]="f64", ["decimal"]="dec", ["complex128"]="c128",
+};
+var requested = (Environment.GetEnvironmentVariable("NUMSHARP_BENCHMARK_DTYPES") ?? "")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    .Select(value => aliases.TryGetValue(value, out var canonical) ? canonical : value)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+bool Wanted(params string[] dtypes) => requested.Count == 0 || dtypes.Any(requested.Contains);
 // 8 layouts: C, F-contig, transpose, offset-slice (stride-1 inner), neg-outer
 // (stride-1 inner), neg-inner (reversed inner), strided-inner [:, ::2] (no
 // stride-1 axis), broadcast (stride-0). DST of a cast is always fresh-contig.
@@ -80,6 +95,7 @@ foreach (var (sn, stc) in DTYPES)
         catch (Exception e) { Console.Error.WriteLine($"layout {sn}/{lay}: {e.GetType().Name}"); continue; }
         foreach (var (dn, dtc) in DTYPES)
         {
+            if (!Wanted(sn, dn)) continue; // src→dst matrices match a requested dtype on ANY side
             try
             {
                 var probe = v.astype(dtc, copy: true);          // correctness/throw gate + warm path

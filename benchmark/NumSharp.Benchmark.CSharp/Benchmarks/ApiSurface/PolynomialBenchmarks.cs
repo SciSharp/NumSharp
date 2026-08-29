@@ -5,7 +5,7 @@ using NumSharp.Benchmark.CSharp.Infrastructure;
 namespace NumSharp.Benchmark.CSharp.Benchmarks.ApiSurface;
 
 [BenchmarkCategory("ApiSurface", "Polynomial")]
-public class PolynomialBenchmarks : BenchmarkBase
+public class PolynomialBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _p = null!;
     private NDArray _q = null!;
@@ -19,10 +19,10 @@ public class PolynomialBenchmarks : BenchmarkBase
     public void Setup()
     {
         np.random.seed(Seed);
-        _p = np.random.rand(17) * 2 - 1;
-        _q = np.random.rand(9) * 2 - 1;
-        _roots = np.linspace(-2, 2, 16);
-        _x = np.linspace(-1, 1, N);
+        _p = CreateRandomArray(17, DType);
+        _q = CreateRandomArray(9, DType, seed: 43);
+        _roots = np.linspace(-2, 2, 16).astype(DType);
+        _x = np.linspace(-1, 1, N).astype(DType);
     }
 
     [GlobalCleanup]
@@ -34,6 +34,8 @@ public class PolynomialBenchmarks : BenchmarkBase
     [Benchmark(Description = "np.polydiv(p, q)")] public object PolyDiv() => np.polydiv(_p, _q);
     [Benchmark(Description = "np.polyint(p)")] public NDArray PolyInt() => np.polyint(_p);
     [Benchmark(Description = "np.polymul(p, q)")] public NDArray PolyMul() => np.polymul(_p, _q);
-    [Benchmark(Description = "np.polysub(p, q)")] public NDArray PolySub() => np.polysub(_p, _q);
+    [Benchmark(Description = "np.polysub(p, q)")] public object PolySub() => DType != NPTypeCode.Boolean
+        ? np.polysub(_p, _q)
+        : VerifyUnsupportedDtype(() => np.polysub(_p, _q));
     [Benchmark(Description = "np.polyval(p, x)")] public NDArray PolyVal() => np.polyval(_p, _x);
 }

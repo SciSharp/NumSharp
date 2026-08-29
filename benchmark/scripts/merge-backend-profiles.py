@@ -13,6 +13,7 @@ import argparse
 import csv
 import json
 import math
+import os
 import re
 import subprocess
 import sys
@@ -63,6 +64,8 @@ def report_metadata(output: Path) -> dict[str, str]:
         "snapshot_date": snapshot_date,
         "commit": commit,
         "numpy_version": numpy_version,
+        "benchmark_depth": os.environ.get("NUMSHARP_BENCHMARK_DEPTH", "measure"),
+        "benchmark_dtypes": os.environ.get("NUMSHARP_BENCHMARK_DTYPES", ""),
         "memory_heavy_large_workload_n": "1000000",
         "memory_heavy_large_tier_label": "10000000",
     }

@@ -40,12 +40,26 @@ Release`). Full detail in [`CLAUDE.md`](CLAUDE.md).
 ## Run it
 
 ```bash
-python run_benchmark.py                          # full official run (18 suites + backend profiles + subsystems)
+python run_benchmark.py                          # interactive depth + dtype picker
+python run_benchmark.py --depth measure          # full official run (18 suites + backend profiles + subsystems)
 python run_benchmark.py --suites arithmetic unary
 python run_benchmark.py --skip-build             # reuse the existing Release build
 python run_benchmark.py --skip-csharp            # NumPy only
-python run_benchmark.py --quick                  # dev: fewer NumPy iterations
+python run_benchmark.py --quick                  # deprecated alias for --depth light
 ```
+
+Execution depth and dtype targeting:
+
+```bash
+python run_benchmark.py --depth pass                         # exactly 1 BDN/NumPy call per cell; 0 warmups
+python run_benchmark.py --depth light --dtypes f32,c128      # rough estimate; comma-separated dtype filter
+python run_benchmark.py --depth measure                      # full publication profile (default with other flags)
+```
+
+With no CLI arguments, an interactive terminal shows a depth options picker followed by a dtype
+picker. Multi-dtype scenarios match a requested dtype on any side. Pass/light are validation/local
+estimate profiles: they write only to `results/<timestamp>/`, skip complementary subsystem sheets,
+and never replace canonical root, docs, or history artifacts.
 
 `run_benchmark.py` is the single entry point. It builds the C# suite, runs each suite through
 BenchmarkDotNet (`OfficialBenchmarkConfig`: InProcessEmit toolchain, 50 measured iterations, iteration
@@ -69,11 +83,19 @@ committable `history/<date>_<sha>/` snapshot (+ repoints `history/latest`).
 | `scripts/snapshot_history.py` | Assembles `history/<date>_<sha>/` + `latest` (the publish step). |
 | `scripts/render_dashboard.py` | `benchmark-report.json` → `benchmark-dashboard.md` (ASCII sheet; run by hand — seeds the DocFX UI). |
 | `scripts/audit_coverage.py` + `coverage/generated/` | Machine-checkable API benchmark ledger (456/456 benchmarkable compatibility APIs). |
+| [`scenarios.html`](scenarios.html) + `scripts/generate_scenarios_html.py` | Executable 499-title × 15-dtype audit with Comparable, C# BDN, and Python coverage lenses. |
 | `backends/` + `openblas/` | Targeted Managed/OpenBLAS runs using one JSON schema; catches MissingBackendException and NotSupportedException. |
 | `nditer/` `layout/` `operand/` `cast/` `fusion/` | Five appended complementary subsystems. |
 | `history/` | **Tracked** snapshots — *what we commit and reference*. `latest` → newest. |
 | `results/` | **Gitignored** raw per-run scratch. |
 | `run-benchmarks.ps1` | Legacy Windows-only runner (inverse NS/NPY convention). |
+
+Regenerate the scenario/dtype audit from live BenchmarkDotNet attributes and the NumPy suite builders:
+
+```bash
+python benchmark/scripts/generate_scenarios_html.py
+python benchmark/scripts/generate_scenarios_html.py --no-build --check
+```
 
 ### The op matrix (18 suites)
 
@@ -141,7 +163,7 @@ refreshed report + cards + profile JSON + `history/` snapshot, then redeploys th
    `.name` normalize to the C# `Description` (both collapse to `np.foo` via `normalize_op_name`).
 3. **Smoke it** — `dotnet build -c Release`; confirm BDN discovers it (`dotnet run -c Release --no-build
    -f net10.0 -- --list flat | grep <Class>`) and the NumPy rows emit (`python numpy_benchmark.py --suite
-   <suite> --quick`). Full numbers come from `python run_benchmark.py` (or the post-release CI job).
+   <suite> --depth light`). Full numbers come from `python run_benchmark.py --depth measure` (or the post-release CI job).
 
 ## Deeper docs
 

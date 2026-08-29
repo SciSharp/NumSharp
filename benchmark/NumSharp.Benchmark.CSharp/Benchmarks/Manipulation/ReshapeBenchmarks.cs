@@ -8,7 +8,7 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Manipulation;
 /// Benchmarks for reshape and transpose operations.
 /// </summary>
 [BenchmarkCategory("Manipulation", "Reshape")]
-public class ReshapeBenchmarks : BenchmarkBase
+public class ReshapeBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _arr1D = null!;
     private NDArray _arr2D = null!;
@@ -23,16 +23,16 @@ public class ReshapeBenchmarks : BenchmarkBase
     public void Setup()
     {
         np.random.seed(Seed);
-        _arr1D = np.random.rand(N) * 100;
+        _arr1D = CreateRandomArray(N, DType);
 
         var rows = (int)Math.Sqrt(N);
         var cols = N / rows;
-        _arr2D = np.random.rand(rows, cols) * 100;
-        _arr1DFor2D = np.random.rand(rows * cols) * 100;
+        _arr2D = CreateRandomArray2D(rows, cols, DType);
+        _arr1DFor2D = CreateRandomArray(rows * cols, DType);
 
         var d = (int)Math.Pow(N, 1.0 / 3);
-        _arr3D = np.random.rand(d, d, d) * 100;
-        _arr1DFor3D = np.random.rand(d * d * Math.Max(1, N / (d * d))) * 100;
+        _arr3D = CreateRandomArray3D(d, d, d, DType);
+        _arr1DFor3D = CreateRandomArray(d * d * Math.Max(1, N / (d * d)), DType);
     }
 
     [GlobalCleanup]

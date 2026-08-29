@@ -9,7 +9,7 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Broadcasting;
 /// Tests various broadcasting patterns: scalar, row, column, and general.
 /// </summary>
 [BenchmarkCategory("Broadcasting")]
-public class BroadcastBenchmarks : BenchmarkBase
+public class BroadcastBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _matrix = null!;
     private NDArray _rowVector = null!;
@@ -30,15 +30,15 @@ public class BroadcastBenchmarks : BenchmarkBase
         var n = (int)Math.Sqrt(N);
         _matrixSize = n;
 
-        _matrix = (np.random.rand(n, n) * 100).astype(np.float64);
-        _rowVector = (np.random.rand(n) * 100).astype(np.float64);
-        _colVector = (np.random.rand(n, 1) * 100).astype(np.float64);
-        _scalar = np.array(42.0);
+        _matrix = CreateRandomArray2D(n, n, DType);
+        _rowVector = CreateRandomArray(n, DType);
+        _colVector = CreateRandomArray(n, DType, seed: 43).reshape(n, 1);
+        _scalar = NDArray.Scalar(GetScalar(DType), DType);
 
         // 3D tensor for more complex broadcasting
         var d = (int)Math.Pow(n * n, 1.0 / 3);  // ~same total elements
-        _tensor3D = (np.random.rand(d, d, d) * 100).astype(np.float64);
-        _broadcast2D = (np.random.rand(d, d) * 100).astype(np.float64);
+        _tensor3D = CreateRandomArray3D(d, d, d, DType);
+        _broadcast2D = CreateRandomArray2D(d, d, DType, seed: 43);
     }
 
     [GlobalCleanup]

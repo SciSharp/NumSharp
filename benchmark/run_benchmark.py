@@ -33,14 +33,15 @@ Design notes
 
 Usage
 -----
-  python run_benchmark.py                         # full official run, all comparison suites
+  python run_benchmark.py                         # interactive depth + dtype picker
+  python run_benchmark.py --depth measure         # full official run, all comparison suites
   python run_benchmark.py --suites arithmetic unary
   python run_benchmark.py --skip-build            # reuse the existing Release build
   python run_benchmark.py --skip-csharp           # NumPy only
   python run_benchmark.py --skip-python           # C# only (reuse existing numpy JSON)
   python run_benchmark.py --skip-nditer          # no NDIter section
   python run_benchmark.py --skip-layout --skip-cast --skip-fusion   # op matrix (+NDIter) only
-  python run_benchmark.py --quick                 # dev: 10 NumPy iterations (C# config fixed)
+  python run_benchmark.py --quick                 # deprecated alias for --depth light
 """
 import argparse
 import json
@@ -51,6 +52,9 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
+from benchmark_modes import ALL_DTYPES, DEPTHS, parse_dtypes  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 HISTORY_DIR = HERE / "history"
@@ -160,14 +164,96 @@ def run_matrix_subsystem(name, sheet, results_md, title, report_md, results_dir,
     append_section(report_md, results_md, title)
 
 
-def main():
+def validate_execution_depth(results_dir: Path, depth: str) -> None:
+    """Prove pass/light used the requested sample counts and no workload failed."""
+    expected_bdn = DEPTHS[depth].bdn_measurements
+    expected_warmups = DEPTHS[depth].bdn_warmups
+    bad_bdn = []
+    bdn_cells = 0
+    for directory in (results_dir / "csharp", results_dir / "csharp-openblas"):
+        for path in directory.glob("*.json"):
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            for row in payload.get("Benchmarks", []):
+                bdn_cells += 1
+                stats = row.get("Statistics")
+                measurements = row.get("Measurements") or []
+                actual = sum(1 for item in measurements
+                             if item.get("IterationMode") == "Workload"
+                             and item.get("IterationStage") == "Actual")
+                warmups = sum(1 for item in measurements
+                              if item.get("IterationMode") == "Workload"
+                              and item.get("IterationStage") == "Warmup")
+                # BenchmarkDotNet may discard statistical outliers from
+                # Statistics.OriginalValues. Measurements retains every iteration
+                # that actually ran, which is the depth contract we need to prove.
+                if stats is None or actual != expected_bdn or warmups != expected_warmups:
+                    bad_bdn.append((row.get("FullName") or row.get("Method"), actual, warmups))
+    if bad_bdn:
+        raise RuntimeError(
+            f"{depth} BDN validation failed: expected {expected_bdn} measured iteration(s) and "
+            f"{expected_warmups} warmup(s) per cell; "
+            f"bad={bad_bdn[:20]}")
+
+    numpy_path = results_dir / "numpy-results.json"
+    numpy_rows = json.loads(numpy_path.read_text(encoding="utf-8")) if numpy_path.exists() else []
+    if depth == "pass":
+        bad_numpy = [(row.get("name"), row.get("dtype"), row.get("n"), row.get("iterations"))
+                     for row in numpy_rows if row.get("iterations") != 1]
+        if bad_numpy:
+            raise RuntimeError(f"pass NumPy validation failed: expected one call per cell; {bad_numpy[:20]}")
+
+    report_path = results_dir / "benchmark-report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {"rows": []}
+    failed = [(row.get("operation"), row.get("dtype"), row.get("n"))
+              for row in report.get("rows", []) if row.get("status") == "failed"]
+    if failed:
+        raise RuntimeError(f"{depth} benchmark execution produced {len(failed)} failed cells: {failed[:20]}")
+    print(f"{depth} validation: {bdn_cells} BDN cells × {expected_bdn} measured iteration(s) "
+          f"after {expected_warmups} warmup(s); "
+          f"{len(numpy_rows)} NumPy cells; 0 workload failures")
+
+
+def prompt_run_options(input_fn=input) -> list[str]:
+    """Interactive picker used only when the orchestrator receives no CLI arguments."""
+    print("NumSharp benchmark depth")
+    print("  1. pass     — execute every selected BDN/NumPy case once; no warmup")
+    print("  2. light    — 1/6 measurement budget; at most 3 warmups")
+    print("  3. measure  — full publication-quality benchmark (current default)")
+    choices = {"1": "pass", "2": "light", "3": "measure",
+               "pass": "pass", "light": "light", "measure": "measure"}
+    while True:
+        raw = input_fn("Select depth [3]: ").strip().lower() or "3"
+        if raw in choices:
+            depth = choices[raw]
+            break
+        print("Choose 1/pass, 2/light, or 3/measure.")
+
+    print("\nDtypes (comma-separated names or aliases; blank = all 15):")
+    print("  " + ", ".join(ALL_DTYPES))
+    while True:
+        dtype_text = input_fn("Select dtypes [all]: ").strip()
+        try:
+            parse_dtypes(dtype_text)
+            break
+        except ValueError as error:
+            print(error)
+    argv = ["--depth", depth]
+    if dtype_text:
+        argv.extend(["--dtypes", dtype_text])
+    return argv
+
+
+def main(argv=None):
     ap = argparse.ArgumentParser(description="NumSharp vs NumPy official benchmark")
     ap.add_argument("--suites", nargs="*", default=list(SUITES), choices=list(SUITES),
                     help="Subset of comparison suites to run (default: all)")
     ap.add_argument("--skip-csharp", action="store_true", help="Skip the C# benchmarks")
     ap.add_argument("--skip-python", action="store_true", help="Skip the NumPy benchmarks")
     ap.add_argument("--skip-build", action="store_true", help="Reuse the existing Release build")
-    ap.add_argument("--quick", action="store_true", help="Dev: fewer NumPy iterations")
+    ap.add_argument("--quick", action="store_true", help="Deprecated alias for --depth light")
+    ap.add_argument("--depth", choices=tuple(DEPTHS), default="measure",
+                    help="pass=single execution; light=1/6 budget; measure=full rigor")
+    ap.add_argument("--dtypes", help="Comma-separated dtype filter; multi-dtype cases match any side")
     ap.add_argument("--skip-nditer", action="store_true",
                     help="Skip the NDIter iterator benchmark (benchmark/nditer)")
     ap.add_argument("--skip-layout", action="store_true",
@@ -182,7 +268,31 @@ def main():
                     help="Skip the full LinearAlgebra OpenBLAS profile and targeted backend extras")
     ap.add_argument("--no-history", action="store_true",
                     help="Skip writing the committable benchmark/history/<date>_<sha>/ snapshot + latest symlink")
-    args = ap.parse_args()
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    if not raw_argv:
+        raw_argv = prompt_run_options()
+    args = ap.parse_args(raw_argv)
+
+    if args.quick:
+        if args.depth != "measure":
+            ap.error("--quick cannot be combined with --depth; use --depth light")
+        print("--quick is deprecated; using --depth light", flush=True)
+        args.depth = "light"
+    try:
+        requested_dtypes = parse_dtypes(args.dtypes)
+    except ValueError as error:
+        ap.error(str(error))
+
+    # One contract for every child process: BDN configuration, NumPy timing, and standalone
+    # matrices read these values. Canonical names avoid cross-language alias drift.
+    os.environ["NUMSHARP_BENCHMARK_DEPTH"] = args.depth
+    os.environ["NUMSHARP_BENCHMARK_DTYPES"] = ",".join(requested_dtypes)
+    non_measure = args.depth != "measure"
+    skip_official_openblas = args.skip_openblas or "float64" not in requested_dtypes
+    if non_measure:
+        # Pass/light validate execution or provide a rough local estimate. They must never replace
+        # publication-quality root/docs/history artifacts.
+        args.no_history = True
 
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     results_dir = HERE / "results" / ts
@@ -192,7 +302,14 @@ def main():
     openblas_csharp_out = results_dir / "csharp-openblas"
     openblas_csharp_out.mkdir(exist_ok=True)
     numpy_json = results_dir / "numpy-results.json"
+    (results_dir / "run-config.json").write_text(json.dumps({
+        "depth": args.depth,
+        "dtypes": list(requested_dtypes),
+        "suites": list(args.suites),
+        "publication_eligible": not non_measure,
+    }, indent=2), encoding="utf-8")
     print(f"Results -> {results_dir}")
+    print(f"Depth: {args.depth} · dtypes: {', '.join(requested_dtypes)}")
 
     t0 = time.time()
 
@@ -200,7 +317,7 @@ def main():
     if not args.skip_csharp and not args.skip_build:
         run(["dotnet", "build", "-c", "Release", "-f", TFM, str(CSHARP_PROJ),
              "-v", "q", "--nologo", "-clp:NoSummary;ErrorsOnly", "-p:WarningLevel=0"], check=True)
-        if "linalg" in args.suites and not args.skip_openblas:
+        if "linalg" in args.suites and not skip_official_openblas:
             run(["dotnet", "build", "-c", "Release", str(OPENBLAS_CSHARP_PROJ),
                  "-v", "q", "--nologo", "-clp:NoSummary;ErrorsOnly", "-p:WarningLevel=0",
                  "-p:GeneratePackageOnBuild=false"], check=True)
@@ -210,14 +327,14 @@ def main():
         merged = []
         for s in args.suites:
             tmp = results_dir / f"numpy-{s}.json"
-            cmd = [sys.executable, str(PY_BENCH), "--suite", s, "--cache-sizes", "--output", str(tmp)]
+            cmd = [sys.executable, str(PY_BENCH), "--suite", s, "--cache-sizes",
+                   "--depth", args.depth, "--dtypes", ",".join(requested_dtypes),
+                   "--output", str(tmp)]
             # The api suite carries the scalar/dtype/text dispatch ops — also sweep the N=1
             # (Scalar) pure-dispatch tier there (the "scalar x scalar" point). Scoped to this
             # suite so no other suite emits unmatched N=1 rows.
             if s == "api":
                 cmd.append("--with-scalar")
-            if args.quick:
-                cmd.append("--quick")
             run(cmd, check=True)
             if tmp.exists():
                 merged.extend(json.loads(tmp.read_text()))
@@ -234,7 +351,7 @@ def main():
             print(f"\n=== C# suite: {s} ({SUITES[s]}) ===", flush=True)
             run(["dotnet", "run", "-c", "Release", "--no-build", "-f", TFM,
                  "--project", str(CSHARP_PROJ), "--", "--filter", SUITES[s]],
-                cwd=CSHARP_DIR, check=False)
+                cwd=CSHARP_DIR, check=non_measure)
             if ARTIFACTS.exists():
                 for f in ARTIFACTS.glob("*-report-full-compressed.json"):
                     shutil.copy(f, csharp_out / f.name)
@@ -246,7 +363,7 @@ def main():
     #     keeps Core-only Managed runs unable to load a native backend by construction.
     openblas_matrix_base = results_dir / "benchmark-report.openblas-matrix"
     merge_env = {**os.environ, "PYTHONUTF8": "1"}
-    if not args.skip_csharp and not args.skip_openblas and "linalg" in args.suites:
+    if not args.skip_csharp and not skip_official_openblas and "linalg" in args.suites:
         if OPENBLAS_ARTIFACTS.exists():
             shutil.rmtree(OPENBLAS_ARTIFACTS, ignore_errors=True)
         print("\n=== C# suite: linalg (OpenBLAS profile; complete official suite) ===", flush=True)
@@ -258,7 +375,7 @@ def main():
         }
         run(["dotnet", "run", "-c", "Release", "--no-build", "-f", TFM,
              "--project", str(OPENBLAS_CSHARP_PROJ), "--", "--filter", SUITES["linalg"]],
-            cwd=OPENBLAS_CSHARP_DIR, check=False, env=openblas_env)
+            cwd=OPENBLAS_CSHARP_DIR, check=non_measure, env=openblas_env)
         if OPENBLAS_ARTIFACTS.exists():
             for f in OPENBLAS_ARTIFACTS.glob("*-report-full-compressed.json"):
                 shutil.copy(f, openblas_csharp_out / f.name)
@@ -280,12 +397,24 @@ def main():
     # subsystems below each append one section to it.
     report_md = results_dir / "benchmark-report.managed-matrix.md"
 
+    # Pass/light are exact op-matrix execution profiles. The complementary subsystems own distinct
+    # timing models and tracked output files; publication runs continue to execute them below.
+    effective_skip_nditer = args.skip_nditer or non_measure
+    effective_skip_layout = args.skip_layout or non_measure
+    effective_skip_operand = args.skip_operand or non_measure
+    effective_skip_cast = args.skip_cast or non_measure
+    effective_skip_fusion = args.skip_fusion or non_measure
+    effective_skip_targeted_openblas = skip_official_openblas or non_measure
+    if non_measure:
+        print("\nPass/light profile: complementary subsystem sheets are skipped; "
+              "all 499 official BDN/NumPy scenarios remain in scope.", flush=True)
+
     # 4b. NDIter iterator benchmark — complementary harness (file-based, section-
     #     isolated, crash-resilient: a NumSharp AccessViolation is IGNORED and the
     #     section reported NA). Its result model is aspect x tier, not op/dtype/N,
     #     so it is APPENDED to the report as its own section rather than merged —
     #     preserving the iterator-isolation value the op matrix cannot express.
-    if not args.skip_nditer:
+    if not effective_skip_nditer:
         print("\n=== NDIter iterator benchmark (benchmark/nditer) ===", flush=True)
         sheet_cmd = [sys.executable, str(NPYITER_SHEET)]
         if args.skip_build:
@@ -311,9 +440,9 @@ def main():
 
     # 4c. Complementary subsystems — layout / operand / cast / fusion / OpenBLAS.
     #     op/dtype/N matrix cannot express and appends its own rendered section.
-    skip_matrix = {"layout": args.skip_layout, "operand": args.skip_operand,
-                   "cast": args.skip_cast, "fusion": args.skip_fusion,
-                   "openblas": args.skip_openblas}
+    skip_matrix = {"layout": effective_skip_layout, "operand": effective_skip_operand,
+                   "cast": effective_skip_cast, "fusion": effective_skip_fusion,
+                   "openblas": effective_skip_targeted_openblas}
     for name, sheet, results, title in MATRIX_SUBSYSTEMS:
         if skip_matrix[name]:
             continue
@@ -329,39 +458,44 @@ def main():
                    "--output", str(results_dir / "benchmark-report")]
     backend_managed = HERE / "openblas" / "openblas_results.managed.json"
     backend_openblas = HERE / "openblas" / "openblas_results.openblas.json"
-    if backend_managed.exists() and not args.skip_openblas:
+    if backend_managed.exists() and not effective_skip_targeted_openblas:
         profile_cmd.extend(["--managed-extra", str(backend_managed)])
     official_openblas = Path(str(openblas_matrix_base) + ".json")
-    if official_openblas.exists() and not args.skip_openblas:
+    if official_openblas.exists() and not skip_official_openblas:
         profile_cmd.extend(["--openblas", str(official_openblas)])
-        if backend_openblas.exists():
+        if backend_openblas.exists() and not effective_skip_targeted_openblas:
             profile_cmd.extend(["--openblas-extra", str(backend_openblas)])
-    elif backend_openblas.exists() and not args.skip_openblas:
+    elif backend_openblas.exists() and not effective_skip_targeted_openblas:
         profile_cmd.extend(["--openblas", str(backend_openblas)])
     run(profile_cmd, check=True)
 
+    if non_measure:
+        validate_execution_depth(results_dir, args.depth)
+
     # Append the complementary subsystem sheets to the newly generated profile-aware report.
     report_md = results_dir / "benchmark-report.md"
-    if not args.skip_nditer:
+    if not effective_skip_nditer:
         append_section(report_md, NPYITER_REPORT, "NDIter iterator benchmark")
     for name, _sheet, results, title in MATRIX_SUBSYSTEMS:
         if not skip_matrix[name]:
             append_section(report_md, results, title)
 
     # 5. Copy the headline artifacts to the benchmark/ root for convenience.
-    for name in ["benchmark-report.md", "benchmark-report.json", "benchmark-report.csv",
-                 "benchmark-report.managed.json", "benchmark-report.openblas.json", "numpy-results.json"]:
-        src = results_dir / name
-        if src.exists():
-            shutil.copy(src, HERE / name)
+    if not non_measure:
+        for name in ["benchmark-report.md", "benchmark-report.json", "benchmark-report.csv",
+                     "benchmark-report.managed.json", "benchmark-report.openblas.json", "numpy-results.json"]:
+            src = results_dir / name
+            if src.exists():
+                shutil.copy(src, HERE / name)
 
     # The rich DocFX dashboard fetches this relative URL at runtime. Keep it generated from the
     # exact same merge result instead of leaving the Function Explorer with a missing asset.
-    DOCS_BENCHMARK_JSON.parent.mkdir(parents=True, exist_ok=True)
-    for name in ["benchmark-report.json", "benchmark-report.managed.json", "benchmark-report.openblas.json"]:
-        src = results_dir / name
-        if src.exists():
-            shutil.copy(src, DOCS_BENCHMARK_JSON.parent / name)
+    if not non_measure:
+        DOCS_BENCHMARK_JSON.parent.mkdir(parents=True, exist_ok=True)
+        for name in ["benchmark-report.json", "benchmark-report.managed.json", "benchmark-report.openblas.json"]:
+            src = results_dir / name
+            if src.exists():
+                shutil.copy(src, DOCS_BENCHMARK_JSON.parent / name)
 
     # 6. History snapshot + latest symlink — the committable provenance/publish step
     #    (benchmark/scripts/snapshot_history.py): copies the report + both profile JSON files and subsystem

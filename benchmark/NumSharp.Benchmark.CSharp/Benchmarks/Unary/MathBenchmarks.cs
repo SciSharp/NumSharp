@@ -19,7 +19,7 @@ public class MathBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.TranscendentalTypes;
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
@@ -46,15 +46,21 @@ public class MathBenchmarks : TypedBenchmarkBase
 
     [Benchmark(Description = "np.sign(a)")]
     [BenchmarkCategory("Sign")]
-    public NDArray Sign() => np.sign(_a);
+    public object Sign() => DType != NPTypeCode.Boolean
+        ? np.sign(_a)
+        : VerifyUnsupportedDtype(() => np.sign(_a));
 
     [Benchmark(Description = "np.floor(a)")]
     [BenchmarkCategory("Rounding")]
-    public NDArray Floor() => np.floor(_a);
+    public object Floor() => DType != NPTypeCode.Complex
+        ? np.floor(_a)
+        : VerifyUnsupportedDtype(() => np.floor(_a));
 
     [Benchmark(Description = "np.ceil(a)")]
     [BenchmarkCategory("Rounding")]
-    public NDArray Ceil() => np.ceil(_a);
+    public object Ceil() => DType != NPTypeCode.Complex
+        ? np.ceil(_a)
+        : VerifyUnsupportedDtype(() => np.ceil(_a));
 
     [Benchmark(Description = "np.around(a)")]
     [BenchmarkCategory("Rounding")]

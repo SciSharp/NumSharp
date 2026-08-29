@@ -6,7 +6,7 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Manipulation;
 
 /// <summary>Remaining public joining, splitting, repetition, padding, and rolling APIs.</summary>
 [BenchmarkCategory("Manipulation", "ExtendedShape")]
-public class ExtendedShapeBenchmarks : BenchmarkBase
+public class ExtendedShapeBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _a = null!;
     private NDArray _b = null!;
@@ -22,11 +22,11 @@ public class ExtendedShapeBenchmarks : BenchmarkBase
     public void Setup()
     {
         np.random.seed(Seed);
-        _a = np.random.rand(WorkN);
-        _b = np.random.rand(WorkN);
-        _matrix = np.random.rand(WorkN).reshape(10, WorkN / 10);
-        _cube = np.random.rand(WorkN).reshape(10, 10, WorkN / 100);
-        _row = np.arange(WorkN / 10).astype(np.float64);
+        _a = CreateRandomArray(WorkN, DType);
+        _b = CreateRandomArray(WorkN, DType, seed: 43);
+        _matrix = CreateRandomArray(WorkN, DType).reshape(10, WorkN / 10);
+        _cube = CreateRandomArray(WorkN, DType).reshape(10, 10, WorkN / 100);
+        _row = np.arange(WorkN / 10).astype(DType);
     }
 
     [GlobalCleanup]

@@ -8,15 +8,33 @@ appends the five complementary subsystems, and archives raw scratch to
 `results/<ts>/` (gitignored), and writes the committable `history/<date>_<sha>/` snapshot.
 
 ```bash
-python run_benchmark.py                       # full official run (18 suites + backend profiles + subsystems)
+python run_benchmark.py                       # interactive depth + dtype picker
+python run_benchmark.py --depth measure       # full official run (18 suites + backend profiles + subsystems)
 python run_benchmark.py --suites manipulation unary   # subset of the op matrix
 python run_benchmark.py --skip-build          # reuse existing Release build
 python run_benchmark.py --skip-csharp         # NumPy only
-python run_benchmark.py --quick               # dev: fewer NumPy iterations
+python run_benchmark.py --quick               # deprecated alias for --depth light
 python run_benchmark.py --no-history          # don't write the history snapshot
 # subsystem opt-outs: --skip-nditer --skip-layout --skip-operand --skip-cast --skip-fusion
 # backend profile opt-out: --skip-openblas
 ```
+
+With no arguments in an interactive terminal, the runner opens a depth picker and then a dtype
+picker. Scripts and CI should be explicit:
+
+```bash
+python benchmark/run_benchmark.py --depth pass                 # 1 call/cell, 0 warmups; execution gate
+python benchmark/run_benchmark.py --depth light --dtypes f32   # rough ratio: 8/3 BDN, 1/6 NumPy budget
+python benchmark/run_benchmark.py --depth measure              # full publication-quality run
+python benchmark/run_benchmark.py --depth pass --dtypes f16,c128 --suites unary reduction
+```
+
+`--dtypes` accepts comma-separated NumSharp/NumPy names and short aliases. Parameterized BDN cases
+are filtered before execution. A scenario with more than one dtype axis matches if the requested
+dtype occurs on **any** side. Pass/light retain raw reports under `benchmark/results/<ts>/`, record
+`run-config.json`, validate every BDN sample count and pass-mode NumPy call count, skip complementary
+subsystem sheets, and never overwrite canonical root/docs/history artifacts. `--quick` is retained
+only as a deprecated alias for `--depth light`.
 
 **Cost:** the full matrix is long (µs–ms array ops × applicable dtypes/sizes × 18 suites + subsystems). For iterating
 on one op, `--suites <that suite>` or the smoke path (`--list flat` + `numpy_benchmark.py --suite <s> --quick`) is

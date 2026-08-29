@@ -21,7 +21,7 @@ public class DivideBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.CommonTypes;
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
@@ -55,7 +55,9 @@ public class DivideBenchmarks : TypedBenchmarkBase
 
     [Benchmark(Description = "np.floor_divide(a, b)")]
     [BenchmarkCategory("Elementwise", "ApiEntryPoint")]
-    public NDArray NpFloorDivide() => np.floor_divide(_a, _b);
+    public object NpFloorDivide() => DType != NPTypeCode.Complex
+        ? np.floor_divide(_a, _b)
+        : VerifyUnsupportedDtype(() => np.floor_divide(_a, _b));
 
     [Benchmark(Description = "a / scalar")]
     [BenchmarkCategory("Scalar")]

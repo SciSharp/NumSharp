@@ -5,7 +5,7 @@ using NumSharp.Benchmark.CSharp.Infrastructure;
 namespace NumSharp.Benchmark.CSharp.Benchmarks.ApiSurface;
 
 [BenchmarkCategory("ApiSurface", "IO")]
-public class IoBenchmarks : BenchmarkBase
+public class IoBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _a = null!;
     private string _directory = null!;
@@ -23,7 +23,7 @@ public class IoBenchmarks : BenchmarkBase
     [GlobalSetup]
     public void Setup()
     {
-        _a = np.linspace(-100, 100, N);
+        _a = np.linspace(-100, 100, N).astype(DType);
         _directory = Path.Combine(Path.GetTempPath(), "numsharp-benchmark-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_directory);
         _npy = Path.Combine(_directory, "input.npy");
@@ -33,9 +33,16 @@ public class IoBenchmarks : BenchmarkBase
         _saveText = Path.Combine(_directory, "save.txt");
         _saveZip = Path.Combine(_directory, "save.npz");
         _saveZipCompressed = Path.Combine(_directory, "save-compressed.npz");
-        np.save(_npy, _a);
+        if (DType != NPTypeCode.Decimal)
+            np.save(_npy, _a);
         _a.tofile(_raw);
-        np.savetxt(_text, _a);
+        var loadFixtureFormat = DType is
+            NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.SByte or NPTypeCode.Int16 or
+            NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or
+            NPTypeCode.UInt64 or NPTypeCode.Char
+            ? "%d"
+            : "%.18e";
+        np.savetxt(_text, _a, fmt: loadFixtureFormat);
     }
 
     [GlobalCleanup]
@@ -47,11 +54,37 @@ public class IoBenchmarks : BenchmarkBase
         GC.Collect();
     }
 
-    [Benchmark(Description = "np.fromfile(path)")] public NDArray FromFile() => np.fromfile(_raw, np.float64);
-    [Benchmark(Description = "np.loadtxt(path)")] public NDArray LoadTxt() => np.loadtxt(_text);
-    [Benchmark(Description = "np.load(path)")] public object Load() => np.load(_npy);
-    [Benchmark(Description = "np.save(path, a)")] public void Save() => np.save(_save, _a);
+    [Benchmark(Description = "np.fromfile(path)")] public NDArray FromFile() => np.fromfile(_raw, DType);
+    [Benchmark(Description = "np.loadtxt(path)")] public NDArray LoadTxt() => np.loadtxt(_text, DType);
+    [Benchmark(Description = "np.load(path)")] public object Load() => DType != NPTypeCode.Decimal
+        ? np.load(_npy)
+        : RecordUnsafeUnsupportedDtype();
+    [Benchmark(Description = "np.save(path, a)")] public object Save()
+    {
+        if (DType != NPTypeCode.Decimal)
+        {
+            np.save(_save, _a);
+            return DType;
+        }
+        return VerifyUnsupportedDtype(() => { np.save(_save, _a); return DType; });
+    }
     [Benchmark(Description = "np.savetxt(path, a)")] public void SaveTxt() => np.savetxt(_saveText, _a);
-    [Benchmark(Description = "np.savez(path, a)")] public void SaveZ() => np.savez(_saveZip, _a);
-    [Benchmark(Description = "np.savez_compressed(path, a)")] public void SaveZCompressed() => np.savez_compressed(_saveZipCompressed, _a);
+    [Benchmark(Description = "np.savez(path, a)")] public object SaveZ()
+    {
+        if (DType != NPTypeCode.Decimal)
+        {
+            np.savez(_saveZip, _a);
+            return DType;
+        }
+        return VerifyUnsupportedDtype(() => { np.savez(_saveZip, _a); return DType; });
+    }
+    [Benchmark(Description = "np.savez_compressed(path, a)")] public object SaveZCompressed()
+    {
+        if (DType != NPTypeCode.Decimal)
+        {
+            np.savez_compressed(_saveZipCompressed, _a);
+            return DType;
+        }
+        return VerifyUnsupportedDtype(() => { np.savez_compressed(_saveZipCompressed, _a); return DType; });
+    }
 }

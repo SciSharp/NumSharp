@@ -6,11 +6,11 @@ using NumSharp.Benchmark.CSharp.Infrastructure;
 namespace NumSharp.Benchmark.CSharp.Benchmarks.Creation;
 
 /// <summary>
-/// Array conversion and structured creation APIs. Uses float64 across the universal
+/// Array conversion and structured creation APIs across all NumSharp dtypes and the universal
 /// 1K / 100K / 10M workload tiers.
 /// </summary>
 [BenchmarkCategory("Creation", "Conversion")]
-public class ConversionCreationBenchmarks : BenchmarkBase
+public class ConversionCreationBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _source = null!;
     private NDArray _matrix = null!;
@@ -28,12 +28,12 @@ public class ConversionCreationBenchmarks : BenchmarkBase
     public void Setup()
     {
         np.random.seed(Seed);
-        _source = np.random.rand(WorkN) * 100;
+        _source = CreateRandomArray(WorkN, DType);
         _side = (int)Math.Sqrt(WorkN);
-        _matrix = np.random.rand(_side * _side).reshape(_side, _side);
+        _matrix = CreateRandomArray2D(_side, _side, DType);
         _strided = _source["::2"];
-        _axis = np.arange(_side).astype(np.float64);
-        _bytes = new byte[checked(WorkN * sizeof(double))];
+        _axis = np.linspace(-1, 1, _side).astype(DType);
+        _bytes = new byte[checked(WorkN * DType.SizeOf())];
         _text = string.Join(" ", Enumerable.Range(0, WorkN)
             .Select(i => (i % 100).ToString(CultureInfo.InvariantCulture)));
     }
@@ -58,10 +58,10 @@ public class ConversionCreationBenchmarks : BenchmarkBase
     [Benchmark(Description = "np.asfortranarray(a)")] public NDArray AsFortranArray() => np.asfortranarray(_matrix);
     [Benchmark(Description = "np.asmatrix(a)")] public NDArray AsMatrix() => np.asmatrix(_source);
     [Benchmark(Description = "np.require(a, requirements=C)")] public NDArray Require() => np.require(_strided, requirements: new[] { "C" });
-    [Benchmark(Description = "np.frombuffer(buffer)")] public NDArray FromBuffer() => np.frombuffer(_bytes, np.float64);
-    [Benchmark(Description = "np.fromstring(text)")] public NDArray FromString() => np.fromstring(_text, np.float64, sep: " ");
-    [Benchmark(Description = "np.eye(n)")] public NDArray Eye() => np.eye(_side);
-    [Benchmark(Description = "np.identity(n)")] public NDArray Identity() => np.identity(_side);
+    [Benchmark(Description = "np.frombuffer(buffer)")] public NDArray FromBuffer() => np.frombuffer(_bytes, DType);
+    [Benchmark(Description = "np.fromstring(text)")] public NDArray FromString() => np.fromstring(_text, DType, sep: " ");
+    [Benchmark(Description = "np.eye(n)")] public NDArray Eye() => np.eye(_side, dtype: DType.AsType());
+    [Benchmark(Description = "np.identity(n)")] public NDArray Identity() => np.identity(_side, dtype: DType.AsType());
     [Benchmark(Description = "np.meshgrid(x, y)")] public np.MeshgridResult Meshgrid() => np.meshgrid(_axis, _axis);
     [Benchmark(Description = "np.vander(x)")] public NDArray Vander() => np.vander(_axis);
 }

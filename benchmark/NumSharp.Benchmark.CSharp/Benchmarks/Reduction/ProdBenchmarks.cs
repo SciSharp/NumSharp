@@ -23,11 +23,7 @@ public class ProdBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => new[]
-    {
-        NPTypeCode.Int64,
-        NPTypeCode.Double
-    };
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()

@@ -25,12 +25,7 @@ public class LogicBenchmarks : TypedBenchmarkBase
     // Decimal is excluded: it has no NumPy peer (would be discarded anyway) AND its scalar
     // DecimalMath path reliably triggers the known unmanaged-storage AccessViolation under this
     // suite's load, which crashes the whole class before BenchmarkDotNet can export a report.
-    public static IEnumerable<NPTypeCode> Types => new[]
-    {
-        NPTypeCode.Half,
-        NPTypeCode.Single,
-        NPTypeCode.Double
-    };
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
@@ -86,12 +81,7 @@ public class CloseBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => new[]
-    {
-        NPTypeCode.Half,
-        NPTypeCode.Single,
-        NPTypeCode.Double
-    };
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
@@ -108,11 +98,7 @@ public class CloseBenchmarks : TypedBenchmarkBase
 }
 
 /// <summary>
-/// Boolean reductions all / any plus the logical_* ufuncs. Input is a boolean array (~50% true),
-/// and the dtype is declared explicitly (the BincountBenchmarks pattern): a BDN case without a
-/// DType parameter is loaded as float64 by merge-results.py, so this class's rows were keyed
-/// (op, float64, N) and never joined the NumPy twin's (op, bool, N) rows — every cell rendered
-/// ⚪ no_data at every tier while the measurements were silently discarded.
+/// Boolean reductions all / any plus the logical_* ufuncs on every supported input dtype.
 /// </summary>
 [BenchmarkCategory("Logic")]
 public class BoolLogicBenchmarks : TypedBenchmarkBase
@@ -126,14 +112,13 @@ public class BoolLogicBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => new[] { NPTypeCode.Boolean };
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
     {
-        np.random.seed(Seed);
-        _mask = (np.random.rand(N) > 0.5).astype(np.@bool);
-        _other = (np.random.rand(N) > 0.5).astype(np.@bool);
+        _mask = CreateRandomArray(N, DType);
+        _other = CreateRandomArray(N, DType, seed: 43);
     }
 
     [GlobalCleanup]

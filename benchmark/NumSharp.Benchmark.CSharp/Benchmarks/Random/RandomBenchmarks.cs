@@ -5,7 +5,7 @@ using NumSharp.Benchmark.CSharp.Infrastructure;
 namespace NumSharp.Benchmark.CSharp.Benchmarks.Random;
 
 [BenchmarkCategory("Random", "Continuous")]
-public class ContinuousRandomBenchmarks : BenchmarkBase
+public class ContinuousRandomBenchmarks : OfficialBenchmarkBase
 {
     [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
@@ -56,7 +56,7 @@ public class DiscreteRandomBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => new[] { NPTypeCode.Int64 };
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
     private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
     private Shape Size => new(WorkN);
 
@@ -74,7 +74,7 @@ public class DiscreteRandomBenchmarks : TypedBenchmarkBase
 }
 
 [BenchmarkCategory("Random", "Structured")]
-public class StructuredRandomBenchmarks : BenchmarkBase
+public class StructuredRandomBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _source = null!;
     private NDArray _shuffleTarget = null!;
@@ -91,7 +91,7 @@ public class StructuredRandomBenchmarks : BenchmarkBase
     public void Setup()
     {
         np.random.seed(Seed);
-        _source = np.arange(WorkN).astype(np.float64);
+        _source = np.arange(WorkN).astype(DType);
         _shuffleTarget = _source.copy();
     }
 
@@ -117,7 +117,7 @@ public class MultinomialRandomBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => new[] { NPTypeCode.Int64 };
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup() => np.random.seed(Seed);

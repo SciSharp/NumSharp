@@ -18,14 +18,14 @@ public class SetOperationBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => new[] { NPTypeCode.Int32 };
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _a = np.random.randint(0, Math.Max(2, WorkN / 2), new Shape(WorkN));
-        _b = np.random.randint(0, Math.Max(2, WorkN / 2), new Shape(WorkN));
+        _a = np.random.randint(0, Math.Max(2, WorkN / 2), new Shape(WorkN)).astype(DType);
+        _b = np.random.randint(0, Math.Max(2, WorkN / 2), new Shape(WorkN)).astype(DType);
     }
 
     [GlobalCleanup]

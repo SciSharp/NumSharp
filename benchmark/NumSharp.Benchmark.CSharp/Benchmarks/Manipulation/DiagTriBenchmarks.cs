@@ -33,7 +33,7 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Manipulation;
 /// [Benchmark(Description)] labels normalize 1:1 onto those names for the (op, dtype, N) merge join.
 /// </summary>
 [BenchmarkCategory("Manipulation", "DiagTri")]
-public class DiagTriBenchmarks : BenchmarkBase
+public class DiagTriBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _arr2D = null!;
     private NDArray _arr1D = null!;
@@ -50,11 +50,11 @@ public class DiagTriBenchmarks : BenchmarkBase
         np.random.seed(Seed);
         _rows = (int)Math.Sqrt(N);
         _cols = N / _rows;
-        _arr2D = np.random.rand(_rows, _cols) * 100;
+        _arr2D = CreateRandomArray2D(_rows, _cols, DType);
         // diag/diagflat on a 1-D input build an n x n matrix, so the vector is sized to the
         // square root of N — keeping the CONSTRUCTED array at ~N elements like every other case.
-        _arr1D = np.random.rand(_rows) * 100;
-        _fillTarget = np.random.rand(_rows, _cols) * 100;
+        _arr1D = CreateRandomArray(_rows, DType);
+        _fillTarget = CreateRandomArray2D(_rows, _cols, DType, seed: 43);
     }
 
     [GlobalCleanup]
@@ -88,7 +88,7 @@ public class DiagTriBenchmarks : BenchmarkBase
 
     [Benchmark(Description = "np.tri(n)")]
     [BenchmarkCategory("Tri")]
-    public NDArray Tri() => np.tri(_rows, _cols);
+    public NDArray Tri() => np.tri(_rows, _cols, 0, DType);
 
     [Benchmark(Description = "np.tril(a2d)")]
     [BenchmarkCategory("Tri")]
@@ -106,7 +106,7 @@ public class DiagTriBenchmarks : BenchmarkBase
     [BenchmarkCategory("FillDiagonal")]
     public NDArray FillDiagonal()
     {
-        np.fill_diagonal(_fillTarget, 1.0);
+        np.fill_diagonal(_fillTarget, GetScalar(DType, 1));
         return _fillTarget;
     }
 

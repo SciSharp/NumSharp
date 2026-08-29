@@ -38,10 +38,18 @@ import time
 import argparse
 import json
 import sys
+import contextlib
+import io
 from dataclasses import dataclass, asdict
 from typing import Callable, List, Optional, Dict, Any
 import statistics
 import math
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parents[1] / "scripts"
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+from benchmark_modes import ALL_DTYPES, DEPTHS, parse_dtypes, selected  # noqa: E402
 
 # =============================================================================
 # Configuration
@@ -78,6 +86,10 @@ DTYPES = {
     'float64': np.float64,
     'complex128': np.complex128, # NumSharp Complex
 }
+
+# Set by main(); direct imports/tests retain the full measured defaults.
+ACTIVE_BENCHMARK_DEPTH = "measure"
+ACTIVE_DTYPES = set(DTYPES)
 
 # Common types for quick benchmarks
 COMMON_DTYPES = ['int32', 'int64', 'float32', 'float64']
@@ -125,7 +137,18 @@ def benchmark(func: Callable, n: int, warmup: int = 10, iterations: int = 50,
     calibration call is too noisy for a sub-µs op (its lone perf_counter pair is mostly timer
     overhead). Reported ``iterations`` is the TOTAL calls executed (samples x inner).
     """
-    # Warmup
+    depth = DEPTHS[ACTIVE_BENCHMARK_DEPTH]
+    if depth.name == "pass":
+        start = time.perf_counter()
+        func()
+        elapsed = (time.perf_counter() - start) * 1000.0
+        return BenchmarkResult(
+            name=func.__name__ if hasattr(func, '__name__') else str(func),
+            category="", suite="", dtype="", n=n,
+            mean_ms=elapsed, stddev_ms=0.0, min_ms=elapsed, max_ms=elapsed,
+            iterations=1, ops_per_sec=1000.0 / elapsed if elapsed > 0 else 0)
+
+    warmup = depth.numpy_warmups
     for _ in range(warmup):
         func()
 
@@ -144,10 +167,11 @@ def benchmark(func: Callable, n: int, warmup: int = 10, iterations: int = 50,
     # Min-time policy (repo perf convention): a call >20 ms/call runs EXACTLY `slow_samples` times
     # (each sample is one real call); everything else batches ~min_measure_ms (>=1 ms) windows and
     # accumulates enough of them for the TOTAL window to span `total_ms` — time-bound, not a fixed
-    # sample count. Both budgets scale off `iterations` so the official run (iterations=50) lands on
-    # the 200 ms / 100-sample floor while --quick (iterations=10) stays a fast 40 ms / 20-sample sweep.
-    total_ms = max(1.0, iterations * 4.0)              # 50 -> 200 ms ; 10 -> 40 ms
-    slow_samples = max(2, iterations * 2)              # 50 -> 100    ; 10 -> 20
+    # sample count. Both budgets scale off `iterations`; depth then applies the shared divisor so
+    # measure lands on the 200 ms / 100-sample floor and light uses one sixth of both budgets.
+    divisor = depth.numpy_budget_divisor
+    total_ms = max(1.0, iterations * 4.0 / divisor)     # measure 200 ms; light ~33 ms
+    slow_samples = max(1, math.ceil(iterations * 2 / divisor))  # measure 100; light 17
     if one_ms > 20.0:
         inner, samples = 1, slow_samples
     else:
@@ -1137,22 +1161,28 @@ def run_manipulation_benchmarks(n: int, iterations: int) -> List[BenchmarkResult
     if n <= ARRAY_SIZES["large"]:
         work_n = memory_heavy_work_n(n)
         np.random.seed(42)
-        set_a = np.random.randint(0, max(2, work_n // 2), work_n, dtype=np.int32)
-        set_b = np.random.randint(0, max(2, work_n // 2), work_n, dtype=np.int32)
-        set_cases = [
-            ("np.intersect1d(a, b)", lambda: np.intersect1d(set_a, set_b)),
-            ("np.isin(a, b)", lambda: np.isin(set_a, set_b)),
-            ("np.setdiff1d(a, b)", lambda: np.setdiff1d(set_a, set_b)),
-            ("np.setxor1d(a, b)", lambda: np.setxor1d(set_a, set_b)),
-            ("np.union1d(a, b)", lambda: np.union1d(set_a, set_b)),
-            ("np.unique(a)", lambda: np.unique(set_a)),
-            ("np.unique_all(a)", lambda: np.unique_all(set_a)),
-            ("np.unique_counts(a)", lambda: np.unique_counts(set_a)),
-            ("np.unique_inverse(a)", lambda: np.unique_inverse(set_a)),
-            ("np.unique_values(a)", lambda: np.unique_values(set_a)),
-        ]
-        for name, func in set_cases:
-            results.append(_b(func, n, iterations, name, "Manipulation", "int32", "SetOperations"))
+        # Set operations are meaningful for both the historical int32 corpus and the universal
+        # float64 benchmark profile. Keep identical integer-valued samples after casting so the
+        # two dtype rows differ only in representation, not cardinality/distribution.
+        set_seed_a = np.random.randint(0, max(2, work_n // 2), work_n, dtype=np.int32)
+        set_seed_b = np.random.randint(0, max(2, work_n // 2), work_n, dtype=np.int32)
+        for set_dtype in ("int32", "float64"):
+            set_a = set_seed_a.astype(DTYPES[set_dtype], copy=False)
+            set_b = set_seed_b.astype(DTYPES[set_dtype], copy=False)
+            set_cases = [
+                ("np.intersect1d(a, b)", lambda: np.intersect1d(set_a, set_b)),
+                ("np.isin(a, b)", lambda: np.isin(set_a, set_b)),
+                ("np.setdiff1d(a, b)", lambda: np.setdiff1d(set_a, set_b)),
+                ("np.setxor1d(a, b)", lambda: np.setxor1d(set_a, set_b)),
+                ("np.union1d(a, b)", lambda: np.union1d(set_a, set_b)),
+                ("np.unique(a)", lambda: np.unique(set_a)),
+                ("np.unique_all(a)", lambda: np.unique_all(set_a)),
+                ("np.unique_counts(a)", lambda: np.unique_counts(set_a)),
+                ("np.unique_inverse(a)", lambda: np.unique_inverse(set_a)),
+                ("np.unique_values(a)", lambda: np.unique_values(set_a)),
+            ]
+            for name, func in set_cases:
+                results.append(_b(func, n, iterations, name, "Manipulation", set_dtype, "SetOperations"))
 
         shape_a = np.random.random(work_n)
         shape_b = np.random.random(work_n)
@@ -1478,12 +1508,35 @@ FLOAT_DTYPES = ['float16', 'float32', 'float64']
 
 def _b(func, n, iterations, name, suite, dtype, category=""):
     """Run one benchmark and tag it. name MUST equal the C# [Benchmark(Description=...)]."""
+    if dtype not in ACTIVE_DTYPES:
+        return None
     r = benchmark(func, n, iterations=iterations)
     r.name = f"{name} ({dtype})"
     r.suite = suite
     r.dtype = dtype
     r.category = category or suite
     return r
+
+
+def _rejection_evidence(func, n, name, suite, dtype, category="UnsupportedDtype"):
+    """Execute and prove an expected NumPy dtype rejection without timing exception overhead.
+
+    These rows make the function × dtype inventory complete, but zero duration forces the merge
+    classifier's measured-negligible path. An exception-construction ratio is not array throughput
+    and must never enter a geomean, ranking, explorer, or scoreboard evidence list.
+    """
+    if dtype not in ACTIVE_DTYPES:
+        return None
+    try:
+        func()
+    except TypeError:
+        pass
+    else:
+        raise AssertionError(f"{name} unexpectedly accepted dtype {dtype}")
+    return BenchmarkResult(
+        name=f"{name} ({dtype})", category=category, suite=suite, dtype=dtype, n=n,
+        mean_ms=0.0, stddev_ms=0.0, min_ms=0.0, max_ms=0.0,
+        iterations=1, ops_per_sec=0.0)
 
 
 def run_comparison_benchmarks(n, dtype_name, iterations):
@@ -1508,18 +1561,21 @@ def run_comparison_benchmarks(n, dtype_name, iterations):
 def run_bitwise_benchmarks(n, dtype_name, iterations):
     a = create_random_array(n, dtype_name, seed=42)
     b = create_random_array(n, dtype_name, seed=43)
-    return [
-        _b(lambda: a & b, n, iterations, "a & b", "Bitwise", dtype_name),
-        _b(lambda: a | b, n, iterations, "a | b", "Bitwise", dtype_name),
-        _b(lambda: a ^ b, n, iterations, "a ^ b", "Bitwise", dtype_name),
-        _b(lambda: np.invert(a), n, iterations, "np.invert(a)", "Bitwise", dtype_name),
-        _b(lambda: np.left_shift(a, 2), n, iterations, "np.left_shift(a, 2)", "Bitwise", dtype_name),
-        _b(lambda: np.right_shift(a, 2), n, iterations, "np.right_shift(a, 2)", "Bitwise", dtype_name),
-        _b(lambda: np.bitwise_and(a, b), n, iterations, "np.bitwise_and(a, b)", "Bitwise", dtype_name),
-        _b(lambda: np.bitwise_or(a, b), n, iterations, "np.bitwise_or(a, b)", "Bitwise", dtype_name),
-        _b(lambda: np.bitwise_xor(a, b), n, iterations, "np.bitwise_xor(a, b)", "Bitwise", dtype_name),
-        _b(lambda: np.bitwise_not(a), n, iterations, "np.bitwise_not(a)", "Bitwise", dtype_name),
+    cases = [
+        ("a & b", lambda: a & b),
+        ("a | b", lambda: a | b),
+        ("a ^ b", lambda: a ^ b),
+        ("np.invert(a)", lambda: np.invert(a)),
+        ("np.left_shift(a, 2)", lambda: np.left_shift(a, 2)),
+        ("np.right_shift(a, 2)", lambda: np.right_shift(a, 2)),
+        ("np.bitwise_and(a, b)", lambda: np.bitwise_and(a, b)),
+        ("np.bitwise_or(a, b)", lambda: np.bitwise_or(a, b)),
+        ("np.bitwise_xor(a, b)", lambda: np.bitwise_xor(a, b)),
+        ("np.bitwise_not(a)", lambda: np.bitwise_not(a)),
     ]
+    if dtype_name == "float64":
+        return [_rejection_evidence(func, n, name, "Bitwise", dtype_name) for name, func in cases]
+    return [_b(func, n, iterations, name, "Bitwise", dtype_name) for name, func in cases]
 
 
 def run_unary_extra_benchmarks(n, dtype_name, iterations):
@@ -1560,6 +1616,17 @@ def run_logic_benchmarks(n, dtype_name, iterations):
         rows.extend([
             _b(lambda: np.isclose(close_a, close_b), n, iterations, "np.isclose(a, b)", "Logic", dtype_name, "Close"),
             _b(lambda: np.allclose(close_a, close_b), n, iterations, "np.allclose(a, b)", "Logic", dtype_name, "Close"),
+        ])
+    if dtype_name == "float64":
+        # logical_* and all/any accept arbitrary numeric inputs. The older suite measured only
+        # boolean operands, leaving valid float64 C# scenarios unjoined in the coverage audit.
+        rows.extend([
+            _b(lambda: bool(np.all(a)), n, iterations, "np.all(a)", "Logic", dtype_name),
+            _b(lambda: bool(np.any(a)), n, iterations, "np.any(a)", "Logic", dtype_name),
+            _b(lambda: np.logical_and(a, b), n, iterations, "np.logical_and(a, b)", "Logic", dtype_name),
+            _b(lambda: np.logical_or(a, b), n, iterations, "np.logical_or(a, b)", "Logic", dtype_name),
+            _b(lambda: np.logical_xor(a, b), n, iterations, "np.logical_xor(a, b)", "Logic", dtype_name),
+            _b(lambda: np.logical_not(a), n, iterations, "np.logical_not(a)", "Logic", dtype_name),
         ])
     return rows
 
@@ -1630,6 +1697,7 @@ def run_statistics_benchmarks(n, dtype_name, iterations):
         matrix = np.random.random(side * side).reshape(side, side)
         bins = np.linspace(-50, 50, 257)
         values = np.random.randint(0, max(2, work_n // 10), work_n, dtype=np.int32)
+        float_values = values.astype(np.float64)
         rows.extend([
             _b(lambda: np.convolve(signal_a, kernel, mode="same"), n, iterations, "np.convolve(a, kernel)", "Statistics", "float64", "Signal"),
             _b(lambda: np.correlate(signal_a, kernel, mode="same"), n, iterations, "np.correlate(a, kernel)", "Statistics", "float64", "Signal"),
@@ -1643,6 +1711,8 @@ def run_statistics_benchmarks(n, dtype_name, iterations):
             _b(lambda: np.corrcoef(signal_a, b), n, iterations, "np.corrcoef(a, b)", "Statistics", "float64", "Signal"),
             _b(lambda: np.digitize(signal_a, bins), n, iterations, "np.digitize(a, bins)", "Statistics", "float64", "Signal"),
             _b(lambda: np.bincount(values), n, iterations, "np.bincount(a)", "Statistics", "int32", "Histogram"),
+            _rejection_evidence(
+                lambda: np.bincount(float_values), n, "np.bincount(a)", "Statistics", "float64"),
         ])
     return rows
 
@@ -1737,8 +1807,10 @@ def run_fft_benchmarks(n, iterations):
     matrix = np.random.random(side * side).reshape(side, side).astype(np.complex128)
     matrix_spectrum = np.fft.fft2(matrix)
     real_vector = np.random.random(work_n)
+    float_spectrum = np.fft.fft(real_vector)
     real_spectrum = np.fft.rfft(real_vector)
     real_matrix = np.random.random(side * side).reshape(side, side)
+    float_matrix_spectrum = np.fft.fft2(real_matrix)
     real_matrix_spectrum = np.fft.rfft2(real_matrix)
     return [
         _b(lambda: np.fft.fft(vector), n, iterations, "np.fft.fft(a)", "Fourier", "complex128", "Complex"),
@@ -1749,6 +1821,17 @@ def run_fft_benchmarks(n, iterations):
         _b(lambda: np.fft.ifftn(matrix_spectrum), n, iterations, "np.fft.ifftn(a)", "Fourier", "complex128", "Complex"),
         _b(lambda: np.fft.fftshift(vector), n, iterations, "np.fft.fftshift(a)", "Fourier", "complex128", "Helpers"),
         _b(lambda: np.fft.ifftshift(vector), n, iterations, "np.fft.ifftshift(a)", "Fourier", "complex128", "Helpers"),
+        # The complex-transform family accepts real float64 inputs and promotes the spectrum to
+        # complex128. Mirror ComplexFftBenchmarks(DType=Double), including inverse transforms over
+        # the promoted spectrum and the dtype-preserving shift helpers.
+        _b(lambda: np.fft.fft(real_vector), n, iterations, "np.fft.fft(a)", "Fourier", "float64", "Complex"),
+        _b(lambda: np.fft.ifft(float_spectrum), n, iterations, "np.fft.ifft(a)", "Fourier", "float64", "Complex"),
+        _b(lambda: np.fft.fft2(real_matrix), n, iterations, "np.fft.fft2(a)", "Fourier", "float64", "Complex"),
+        _b(lambda: np.fft.ifft2(float_matrix_spectrum), n, iterations, "np.fft.ifft2(a)", "Fourier", "float64", "Complex"),
+        _b(lambda: np.fft.fftn(real_matrix), n, iterations, "np.fft.fftn(a)", "Fourier", "float64", "Complex"),
+        _b(lambda: np.fft.ifftn(float_matrix_spectrum), n, iterations, "np.fft.ifftn(a)", "Fourier", "float64", "Complex"),
+        _b(lambda: np.fft.fftshift(real_vector), n, iterations, "np.fft.fftshift(a)", "Fourier", "float64", "Helpers"),
+        _b(lambda: np.fft.ifftshift(real_vector), n, iterations, "np.fft.ifftshift(a)", "Fourier", "float64", "Helpers"),
         _b(lambda: np.fft.rfft(real_vector), n, iterations, "np.fft.rfft(a)", "Fourier", "float64", "Real"),
         _b(lambda: np.fft.irfft(real_spectrum, n=work_n), n, iterations, "np.fft.irfft(a)", "Fourier", "float64", "Real"),
         _b(lambda: np.fft.hfft(real_spectrum, n=work_n), n, iterations, "np.fft.hfft(a)", "Fourier", "float64", "Real"),
@@ -1825,6 +1908,11 @@ def run_random_benchmarks(n, iterations):
     ]
     rows = [_b(func, n, iterations, name, "Random", "float64", "Continuous") for name, func in continuous]
     rows.extend(_b(func, n, iterations, name, "Random", "int64", "Discrete") for name, func in discrete)
+    # These generators have a fixed integer output dtype rather than a dtype argument. C# exposes
+    # the same fixed-output work under every requested scenario dtype; mirror that convention so a
+    # float64-only run still executes and audits the complete public random surface.
+    rows.extend(_b(func, n, iterations, name, "Random", "float64", "DiscreteFixedOutput")
+                for name, func in discrete)
     rows.extend(_b(func, n, iterations, name, "Random", "float64", "Structured") for name, func in structured)
     return rows
 
@@ -2115,83 +2203,133 @@ def run_suites(n: int, suite: str, dtypes_to_run: List[str], iterations: int) ->
                     print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
         # Extra unary math (cbrt/reciprocal/square/negative/positive/trunc) — mirrors
         # the C# UnaryExtraBenchmarks class (also under the Unary namespace).
-        for dtype in FLOAT_DTYPES:
+        for dtype in selected(FLOAT_DTYPES, dtypes_to_run):
             results_all.extend(run_unary_extra_benchmarks(n, dtype, iterations))
 
     if suite in ["reduction", "all"]:
         print(f"\n{'='*60}\n  Reduction Benchmarks (N={n:,})\n{'='*60}")
-        for dtype in dtypes_to_run:
+        for dtype in selected(ARITHMETIC_DTYPES, dtypes_to_run):
             print(f"\n  --- {dtype} ---")
             results = run_reduction_benchmarks(n, dtype, iterations)
             results_all.extend(results)
             for r in results:
                 print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
         # NaN-aware reductions + cumprod — mirror C# NanReductionBenchmarks / CumulativeBenchmarks.
-        for dtype in FLOAT_DTYPES:
+        for dtype in selected(FLOAT_DTYPES, dtypes_to_run):
             results_all.extend(run_nan_reduction_benchmarks(n, dtype, iterations))
             results_all.extend(run_cumulative_benchmarks(n, dtype, iterations))
         # Product reduction — mirror C# ProdBenchmarks (Int64, Double only, to bound the product).
-        for dtype in ['int64', 'float64']:
+        for dtype in selected(['int64', 'float64'], dtypes_to_run):
             results_all.extend(run_prod_benchmarks(n, dtype, iterations))
 
-    if suite in ["broadcast", "all"]:
+    if suite in ["broadcast", "all"] and "float64" in dtypes_to_run:
         results_all.extend(run_broadcast_benchmarks(n, iterations))
 
     if suite in ["creation", "all"]:
         print(f"\n{'='*60}\n  Creation Benchmarks (N={n:,})\n{'='*60}")
-        for dtype in COMMON_DTYPES:
+        for dtype in selected(COMMON_DTYPES, dtypes_to_run):
             print(f"\n  --- {dtype} ---")
             results = run_creation_benchmarks(n, dtype, iterations)
             results_all.extend(results)
             for r in results:
                 print(f"  {r.name:<40} avg {r.mean_ms:>8.3f} ms  min {r.min_ms:>8.3f} ms")
 
-    if suite in ["manipulation", "all"]:
+    if suite in ["manipulation", "all"] and set(dtypes_to_run) & set(COMMON_DTYPES):
         results_all.extend(run_manipulation_benchmarks(n, iterations))
 
-    if suite in ["slicing", "all"]:
+    if suite in ["slicing", "all"] and "float64" in dtypes_to_run:
         results_all.extend(run_slicing_benchmarks(n, iterations))
 
     if suite in ["comparison", "all"]:
-        for dtype in COMMON_DTYPES:
+        for dtype in selected(COMMON_DTYPES, dtypes_to_run):
             results_all.extend(run_comparison_benchmarks(n, dtype, iterations))
 
     if suite in ["bitwise", "all"]:
-        for dtype in BITWISE_DTYPES:
+        for dtype in selected(BITWISE_DTYPES + ['float64'], dtypes_to_run):
             results_all.extend(run_bitwise_benchmarks(n, dtype, iterations))
 
     if suite in ["logic", "all"]:
-        for dtype in FLOAT_DTYPES:
+        for dtype in selected(FLOAT_DTYPES, dtypes_to_run):
             results_all.extend(run_logic_benchmarks(n, dtype, iterations))
-        results_all.extend(run_bool_logic_benchmarks(n, iterations))
+        if "bool" in dtypes_to_run:
+            results_all.extend(run_bool_logic_benchmarks(n, iterations))
 
     if suite in ["statistics", "all"]:
-        for dtype in FLOAT_DTYPES:
+        for dtype in selected(FLOAT_DTYPES, dtypes_to_run):
             results_all.extend(run_statistics_benchmarks(n, dtype, iterations))
 
     if suite in ["sorting", "all"]:
-        for dtype in COMMON_DTYPES:
+        for dtype in selected(COMMON_DTYPES, dtypes_to_run):
             results_all.extend(run_sorting_benchmarks(n, dtype, iterations))
 
-    if suite in ["linalg", "all"]:
+    if suite in ["linalg", "all"] and "float64" in dtypes_to_run:
         results_all.extend(run_linalg_benchmarks(n, iterations))
 
-    if suite in ["fft", "all"]:
+    if suite in ["fft", "all"] and set(dtypes_to_run) & {"float64", "complex128"}:
         results_all.extend(run_fft_benchmarks(n, iterations))
 
-    if suite in ["random", "all"]:
+    if suite in ["random", "all"] and set(dtypes_to_run) & {"float64", "int64"}:
         results_all.extend(run_random_benchmarks(n, iterations))
 
-    if suite in ["ndarray", "all"]:
+    if suite in ["ndarray", "all"] and "float64" in dtypes_to_run:
         results_all.extend(run_ndarray_benchmarks(n, iterations))
 
-    if suite in ["api", "all"]:
+    if suite in ["api", "all"] and "float64" in dtypes_to_run:
         results_all.extend(run_api_surface_benchmarks(n, iterations))
 
-    if suite in ["selection", "all"]:
+    if suite in ["selection", "all"] and "float64" in dtypes_to_run:
         results_all.extend(run_where_benchmarks(n, iterations))
 
-    return results_all
+    return [row for row in results_all if row is not None and row.dtype in ACTIVE_DTYPES]
+
+
+OFFICIAL_SCENARIO_SUITES = (
+    "arithmetic", "unary", "reduction", "broadcast", "creation", "manipulation", "slicing",
+    "comparison", "bitwise", "logic", "statistics", "sorting", "linalg", "selection", "fft",
+    "random", "ndarray", "api",
+)
+
+
+def discover_scenarios() -> List[Dict[str, Any]]:
+    """Discover the Python twin titles/dtypes without executing timed benchmark bodies.
+
+    The real suite builders remain the single source of truth: only the timing primitive is
+    replaced, so dtype loops, conditional cases, titles, suites, and categories are exactly what
+    an official run would schedule at the standard tier.
+    """
+    original_benchmark = globals()["benchmark"]
+
+    def discovery_benchmark(_func, n, **_kwargs):
+        return BenchmarkResult("", "", "", "", n, 0.0, 0.0, 0.0, 0.0, 1, 0.0)
+
+    rows: List[BenchmarkResult] = []
+    globals()["benchmark"] = discovery_benchmark
+    try:
+        # Suite builders print progress and may trigger benign NumPy warnings while constructing
+        # inputs. Discovery stdout must remain pure JSON for the generator.
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            for suite in OFFICIAL_SCENARIO_SUITES:
+                rows.extend(run_suites(
+                    ARRAY_SIZES["small"], suite,
+                    [dtype for dtype in ALL_DTYPES if dtype in DTYPES], 1))
+    finally:
+        globals()["benchmark"] = original_benchmark
+
+    grouped: Dict[tuple, set] = {}
+    metadata: Dict[tuple, tuple] = {}
+    for row in rows:
+        suffix = f" ({row.dtype})"
+        # Newer helpers append the dtype to the result name; several original suite builders keep
+        # the exact C# Description without that reporting suffix. Both forms are official output.
+        title = row.name[:-len(suffix)] if row.name.endswith(suffix) else row.name
+        key = (title, row.suite, row.category)
+        grouped.setdefault(key, set()).add(row.dtype)
+        metadata[key] = (title, row.suite, row.category)
+
+    return [
+        {"title": title, "suite": suite, "category": category, "dtypes": sorted(grouped[key])}
+        for key, (title, suite, category) in sorted(metadata.items())
+    ]
 
 
 def main():
@@ -2209,27 +2347,55 @@ def main():
     parser.add_argument("--with-scalar", action="store_true",
                         help="Also sweep the N=1 (Scalar) dispatch-overhead tier — the 'scalar x scalar' point")
     parser.add_argument("--type", type=str, default=None, help="Specific dtype (e.g., int32, float64)")
-    parser.add_argument("--iterations", type=int, default=50, help="Benchmark iterations")
-    parser.add_argument("--quick", action="store_true", help="Quick run (10 iterations, common types only)")
+    parser.add_argument("--iterations", type=int, default=50, help="Measure-mode iteration baseline")
+    parser.add_argument("--quick", action="store_true", help="Deprecated alias for --depth light")
+    parser.add_argument("--depth", choices=tuple(DEPTHS), default="measure",
+                        help="pass=1 call/0 warmup; light=1/6 budget/max 3 warmups; measure=full")
+    parser.add_argument("--dtypes", help="Comma-separated dtype filter")
     parser.add_argument("--json", action="store_true", help="Output JSON")
     parser.add_argument("--output", type=str, default=None, help="Output JSON to file")
+    parser.add_argument("--list-scenarios-json", action="store_true",
+                        help="Discover official scenario titles/dtypes without running timings")
     args = parser.parse_args()
 
+    if args.list_scenarios_json:
+        print(json.dumps({
+            "schema_version": 1,
+            "source": "NumPy suite-builder dry discovery",
+            "numpy_version": np.__version__,
+            "rows": discover_scenarios(),
+        }, indent=2))
+        return
+
+    global ACTIVE_BENCHMARK_DEPTH, ACTIVE_DTYPES
     if args.quick:
-        args.iterations = 10
+        if args.depth != "measure":
+            parser.error("--quick cannot be combined with --depth; use --depth light")
+        args.depth = "light"
+    ACTIVE_BENCHMARK_DEPTH = args.depth
 
     if args.size and args.size != "all":
         args.n = ARRAY_SIZES[args.size]
 
     # Determine which dtypes to run
-    dtypes_to_run = COMMON_DTYPES if args.quick else ARITHMETIC_DTYPES
-    if args.type:
-        dtypes_to_run = [args.type]
+    dtype_text = args.dtypes or args.type
+    try:
+        requested_dtypes = parse_dtypes(dtype_text)
+    except ValueError as error:
+        parser.error(str(error))
+    dtypes_to_run = [dtype for dtype in requested_dtypes if dtype in DTYPES]
+    ACTIVE_DTYPES = set(dtypes_to_run)
 
     print(f"\nNumPy {np.__version__}")
     print(f"Python {sys.version.split()[0]}")
     print(f"Array size: N = {args.n:,}")
-    print(f"Iterations: {args.iterations}")
+    if args.depth == "pass":
+        print("Measurement budget: exactly 1 call; 0 warmups")
+    elif args.depth == "light":
+        print(f"Measurement budget: 1/6 of the {args.iterations}-iteration baseline; max 3 warmups")
+    else:
+        print(f"Measurement baseline: {args.iterations} iterations; 10 warmups")
+    print(f"Depth: {args.depth}")
     print(f"Types: {dtypes_to_run}")
 
     # Sizes to sweep: --size all (or --cache-sizes) runs the three cache-tier sizes in one

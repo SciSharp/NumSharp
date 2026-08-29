@@ -21,7 +21,7 @@ public class NanReductionBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.FloatingTypes;
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
@@ -47,8 +47,12 @@ public class NanReductionBenchmarks : TypedBenchmarkBase
     [Benchmark(Description = "np.nanvar(a)")] public NDArray NanVar() => np.nanvar(_a);
     [Benchmark(Description = "np.nanprod(a)")] public NDArray NanProd() => np.nanprod(_aProd);
     [Benchmark(Description = "np.nanmedian(a)")] public NDArray NanMedian() => np.nanmedian(_a);
-    [Benchmark(Description = "np.nanpercentile(a, 50)")] public NDArray NanPercentile() => np.nanpercentile(_a, 50.0);
-    [Benchmark(Description = "np.nanquantile(a, 0.5)")] public NDArray NanQuantile() => np.nanquantile(_a, 0.5);
+    [Benchmark(Description = "np.nanpercentile(a, 50)")] public object NanPercentile() => DType != NPTypeCode.Boolean
+        ? np.nanpercentile(_a, 50.0)
+        : VerifyUnsupportedDtype(() => np.nanpercentile(_a, 50.0));
+    [Benchmark(Description = "np.nanquantile(a, 0.5)")] public object NanQuantile() => DType != NPTypeCode.Boolean
+        ? np.nanquantile(_a, 0.5)
+        : VerifyUnsupportedDtype(() => np.nanquantile(_a, 0.5));
     [Benchmark(Description = "np.nanargmax(a)")] public long NanArgMax() => np.nanargmax(_a);
     [Benchmark(Description = "np.nanargmin(a)")] public long NanArgMin() => np.nanargmin(_a);
 }

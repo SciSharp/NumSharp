@@ -7,6 +7,24 @@ using BenchmarkDotNet.Reports;
 using NumSharp.Benchmark.CSharp;
 using NumSharp.Benchmark.CSharp.Infrastructure;
 
+// Machine-readable, no-timing discovery used by benchmark/scripts/generate_scenarios_html.py.
+// It reflects BenchmarkDotNet's own [Benchmark] / [ParamsSource] metadata, so the dtype audit
+// cannot drift from the cases BDN would schedule.
+if (args.Any(arg => string.Equals(arg, "--audit-scenarios-json", StringComparison.OrdinalIgnoreCase)))
+{
+    ScenarioAudit.WriteJson(typeof(Program).Assembly);
+    return;
+}
+
+// One direct invocation of every official function × dtype cell at the smallest declared size.
+// This is an execution/correctness gate, not a timing run; it makes the green audit matrix
+// independently reproducible without paying BenchmarkDotNet process/statistics overhead.
+if (args.Any(arg => string.Equals(arg, "--verify-scenarios", StringComparison.OrdinalIgnoreCase)))
+{
+    Environment.ExitCode = ScenarioAudit.VerifyExecution(typeof(Program).Assembly) ? 0 : 1;
+    return;
+}
+
 // Run all benchmarks or specific ones based on command line args
 if (args.Length == 0)
 {

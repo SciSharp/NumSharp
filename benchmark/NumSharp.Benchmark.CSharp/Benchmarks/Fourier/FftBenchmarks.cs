@@ -19,15 +19,15 @@ public class ComplexFftBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => new[] { NPTypeCode.Complex };
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _vector = np.random.rand(WorkN).astype(np.complex128);
+        _vector = CreateRandomArray(WorkN, DType);
         int side = (int)Math.Sqrt(WorkN);
-        _matrix = np.random.rand(side * side).reshape(side, side).astype(np.complex128);
+        _matrix = CreateRandomArray2D(side, side, DType);
         _spectrum = np.fft.fft(_vector);
         _matrixSpectrum = np.fft.fft2(_matrix);
     }
@@ -68,15 +68,22 @@ public class RealFftBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => new[] { NPTypeCode.Double };
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _vector = np.random.rand(WorkN);
+        _vector = CreateRandomArray(WorkN, DType);
         _side = (int)Math.Sqrt(WorkN);
-        _matrix = np.random.rand(_side * _side).reshape(_side, _side);
+        _matrix = CreateRandomArray2D(_side, _side, DType);
+        if (DType == NPTypeCode.Complex)
+        {
+            // The real-transform family intentionally rejects complex-domain inputs.
+            _spectrum = null!;
+            _matrixSpectrum = null!;
+            return;
+        }
         _spectrum = np.fft.rfft(_vector);
         _matrixSpectrum = np.fft.rfft2(_matrix);
     }
@@ -91,18 +98,21 @@ public class RealFftBenchmarks : TypedBenchmarkBase
         GC.Collect();
     }
 
-    [Benchmark(Description = "np.fft.rfft(a)")] public NDArray RFft() => np.fft.rfft(_vector);
-    [Benchmark(Description = "np.fft.irfft(a)")] public NDArray IRFft() => np.fft.irfft(_spectrum, n: WorkN);
-    [Benchmark(Description = "np.fft.hfft(a)")] public NDArray HFft() => np.fft.hfft(_spectrum, n: WorkN);
-    [Benchmark(Description = "np.fft.ihfft(a)")] public NDArray IHFft() => np.fft.ihfft(_vector);
-    [Benchmark(Description = "np.fft.rfft2(a)")] public NDArray RFft2() => np.fft.rfft2(_matrix);
-    [Benchmark(Description = "np.fft.irfft2(a)")] public NDArray IRFft2() => np.fft.irfft2(_matrixSpectrum, s: new[] { _side, _side });
-    [Benchmark(Description = "np.fft.rfftn(a)")] public NDArray RFftN() => np.fft.rfftn(_matrix);
-    [Benchmark(Description = "np.fft.irfftn(a)")] public NDArray IRFftN() => np.fft.irfftn(_matrixSpectrum, s: new[] { _side, _side });
+    [Benchmark(Description = "np.fft.rfft(a)")] public object RFft() => RealInput(() => np.fft.rfft(_vector));
+    [Benchmark(Description = "np.fft.irfft(a)")] public object IRFft() => RealInput(() => np.fft.irfft(_spectrum, n: WorkN));
+    [Benchmark(Description = "np.fft.hfft(a)")] public object HFft() => RealInput(() => np.fft.hfft(_spectrum, n: WorkN));
+    [Benchmark(Description = "np.fft.ihfft(a)")] public object IHFft() => RealInput(() => np.fft.ihfft(_vector));
+    [Benchmark(Description = "np.fft.rfft2(a)")] public object RFft2() => RealInput(() => np.fft.rfft2(_matrix));
+    [Benchmark(Description = "np.fft.irfft2(a)")] public object IRFft2() => RealInput(() => np.fft.irfft2(_matrixSpectrum, s: new[] { _side, _side }));
+    [Benchmark(Description = "np.fft.rfftn(a)")] public object RFftN() => RealInput(() => np.fft.rfftn(_matrix));
+    [Benchmark(Description = "np.fft.irfftn(a)")] public object IRFftN() => RealInput(() => np.fft.irfftn(_matrixSpectrum, s: new[] { _side, _side }));
+
+    private object RealInput(Func<NDArray> operation) =>
+        DType == NPTypeCode.Complex ? RecordUnsafeUnsupportedDtype() : operation();
 }
 
 [BenchmarkCategory("Fourier", "Helpers")]
-public class FftHelperBenchmarks : BenchmarkBase
+public class FftHelperBenchmarks : OfficialBenchmarkBase
 {
     [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }

@@ -35,7 +35,7 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Manipulation;
 /// "np.r_(a, b)" joins onto NumPy's "np.r_" while "np.r_[a, b]" would not join at all.
 /// </summary>
 [BenchmarkCategory("Manipulation", "IndexTricks")]
-public class IndexTricksBenchmarks : BenchmarkBase
+public class IndexTricksBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _a = null!;
     private NDArray _b = null!;
@@ -51,13 +51,13 @@ public class IndexTricksBenchmarks : BenchmarkBase
     public void Setup()
     {
         np.random.seed(Seed);
-        _a = np.random.rand(N) * 100;
-        _b = np.random.rand(N) * 100;
+        _a = CreateRandomArray(N, DType);
+        _b = CreateRandomArray(N, DType, seed: 43);
 
         // ix_ operands: two index vectors whose cross product is the sqrt(N) x sqrt(N) mesh.
         var side = (int)Math.Sqrt(N);
-        _rows = np.arange(side);
-        _cols = np.arange(side);
+        _rows = np.arange(side).astype(DType);
+        _cols = np.arange(side).astype(DType);
 
         _arangeExpr = $"0:{N}";
         _linspaceExpr = $"0:1:{N}j";

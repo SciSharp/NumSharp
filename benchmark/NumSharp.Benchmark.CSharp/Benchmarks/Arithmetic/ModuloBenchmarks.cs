@@ -20,13 +20,7 @@ public class ModuloBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => new[]
-    {
-        NPTypeCode.Int32,
-        NPTypeCode.Int64,
-        NPTypeCode.Single,
-        NPTypeCode.Double
-    };
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
@@ -49,13 +43,19 @@ public class ModuloBenchmarks : TypedBenchmarkBase
 
     [Benchmark(Description = "a % b (element-wise)")]
     [BenchmarkCategory("Elementwise")]
-    public NDArray Modulo_Elementwise() => _a % _b;
+    public object Modulo_Elementwise() => DType != NPTypeCode.Complex
+        ? _a % _b
+        : VerifyUnsupportedDtype(() => _a % _b);
 
     [Benchmark(Description = "np.mod(a, b)")]
     [BenchmarkCategory("Elementwise", "ApiEntryPoint")]
-    public NDArray NpMod() => np.mod(_a, _b);
+    public object NpMod() => DType != NPTypeCode.Complex
+        ? np.mod(_a, _b)
+        : VerifyUnsupportedDtype(() => np.mod(_a, _b));
 
     [Benchmark(Description = "a % 7 (literal)")]
     [BenchmarkCategory("Scalar")]
-    public NDArray Modulo_Scalar() => _a % 7;
+    public object Modulo_Scalar() => DType != NPTypeCode.Complex
+        ? _a % 7
+        : VerifyUnsupportedDtype(() => _a % 7);
 }

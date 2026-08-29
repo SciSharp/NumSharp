@@ -9,7 +9,7 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Slicing;
 /// Tests contiguous vs strided slices and their impact on subsequent operations.
 /// </summary>
 [BenchmarkCategory("Slicing")]
-public class SliceBenchmarks : BenchmarkBase
+public class SliceBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _arr1D = null!;
     private NDArray _arr2D = null!;
@@ -28,7 +28,7 @@ public class SliceBenchmarks : BenchmarkBase
     {
         np.random.seed(Seed);
 
-        _arr1D = np.random.rand(N) * 100;
+        _arr1D = CreateRandomArray(N, DType);
 
         // Middle 80% of the array ([N/10 : 9N/10]) — a real O(N) span, unlike the fixed
         // "100:1000" that did the same ~900 elements at every N (non-comparable across sizes).
@@ -36,7 +36,7 @@ public class SliceBenchmarks : BenchmarkBase
 
         var rows = (int)Math.Sqrt(N);
         var cols = N / rows;
-        _arr2D = np.random.rand(rows, cols) * 100;
+        _arr2D = CreateRandomArray2D(rows, cols, DType);
 
         // Pre-slice for operation benchmarks
         _contiguousSlice = _arr1D["100:1000"];           // Contiguous view

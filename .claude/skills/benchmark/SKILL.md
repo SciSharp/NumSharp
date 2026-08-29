@@ -7,9 +7,9 @@ description: >-
   the NPY/NS convention. Use this whenever you add a benchmark for an np.* op, wire a C# benchmark to
   its NumPy twin, run the official suite or a subset, read/interpret the ratio matrix or history
   snapshots, add a whole subsystem, or debug a suspicious measurement (the Debug-taint 2x pitfall,
-  the InProcessEmit toolchain). Trigger on: "benchmark", "add a benchmark", "how fast is <op> vs
+  the InProcessEmit toolchain). Trigger on: "benchmark", "add a benchmark", "how fast is np.add vs
   numpy", "run_benchmark.py", "BenchmarkDotNet", "NPY/NS ratio", "perf comparison", "benchmark
-  <op>", "benchmark-report", "history snapshot", "why is my timing 2x slow". Reach for it before
+  np.add", "benchmark-report", "history snapshot", "why is my timing 2x slow". Reach for it before
   quoting any NumSharp-vs-NumPy speed number.
 ---
 
@@ -45,6 +45,13 @@ script assembly, not Core. The BenchmarkDotNet projects are exempt (they mandate
 | NumPy | `benchmark/NumSharp.Benchmark.Python/numpy_benchmark.py` | `run_<suite>_benchmarks(...)` emitting `BenchmarkResult` rows. |
 | Merge | `benchmark/scripts/{merge-results,merge-backend-profiles}.py` | Joins language timings, then backend profiles on the exact cell. |
 | Orchestrator | `benchmark/run_benchmark.py` | Builds C#, runs each suite (BDN) + warm NumPy across 1K/100K/10M, merges, snapshots. |
+
+`run_benchmark.py --depth pass|light|measure` is the execution-depth contract shared by BDN and
+NumPy. `pass` is an execution gate (one workload call, zero warmups); `light` uses 8 BDN measurements
+and 3 warmups plus one-sixth of NumPy's normal time/sample budget; `measure` is the 5/50 BDN + full
+NumPy publication profile. Pass/light write only under `benchmark/results/` and must never replace
+root/docs/history artifacts. `--dtypes f32,float64` selects comma-separated dtypes; a multi-dtype
+scenario (for example src→dst casts) matches when any dtype side is requested.
 
 The join is by **normalized op name**: `normalize_op_name` strips the dtype tag, `[annotations]`, and
 identifier-only arg lists — so C# `"np.foo(a)"` and NumPy `"np.foo"` both collapse to `np.foo` and join. Get the
@@ -82,9 +89,9 @@ The most common task. Full worked example in **`references/add-benchmark.md`**. 
 2. **NumPy twin** — append to the matching `run_<suite>_benchmarks(...)` in `numpy_benchmark.py`, setting
    `r.name, r.category, r.suite, r.dtype`. Make `.name` normalize to the C# Description (`"np.foo"` ↔ `"np.foo(a)"`).
 3. **Smoke it** (this is usually the right scope — a full measured run is the post-release CI job):
-   `dotnet build -c Release`; `dotnet run -c Release --no-build -f net10.0 -- --list flat | grep <Class>` to confirm
-   BenchmarkDotNet discovers it; `python numpy_benchmark.py --suite <suite> --quick` to confirm the NumPy rows emit.
-4. **Full numbers** come from `python run_benchmark.py` (or the `benchmark.yml` post-release workflow).
+   `python benchmark/run_benchmark.py --depth pass --suites <suite> --dtypes <dtype>` executes each
+   selected BDN/NumPy cell exactly once and fails on workload errors. Use `--depth light` for a rough ratio.
+4. **Full numbers** come from `python run_benchmark.py --depth measure` (or the `benchmark.yml` post-release workflow).
 
 ## Other tasks → where to go
 

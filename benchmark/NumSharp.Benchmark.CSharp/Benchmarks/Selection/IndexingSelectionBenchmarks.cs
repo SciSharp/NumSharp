@@ -8,7 +8,7 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Selection;
 /// The public indexing/selection family beyond where(), measured at all universal workload tiers.
 /// </summary>
 [BenchmarkCategory("Selection", "Indexing")]
-public class IndexingSelectionBenchmarks : BenchmarkBase
+public class IndexingSelectionBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _a = null!;
     private NDArray _b = null!;
@@ -30,17 +30,17 @@ public class IndexingSelectionBenchmarks : BenchmarkBase
     public void Setup()
     {
         np.random.seed(Seed);
-        _a = np.random.rand(WorkN) * 100 - 50;
-        _b = np.random.rand(WorkN) * 100 - 50;
-        _mask = _a > 0.0;
-        _negativeMask = _a < 0.0;
+        _a = CreateRandomArray(WorkN, DType);
+        _b = CreateRandomArray(WorkN, DType, seed: 43);
+        _mask = np.random.rand(WorkN) > 0.5;
+        _negativeMask = np.logical_not(_mask);
         _indices = np.arange(0, WorkN, 2);
         _selector = np.random.randint(0, 2, new Shape(WorkN));
         _side = (int)Math.Sqrt(WorkN);
-        _matrix = np.arange(_side * _side).reshape(_side, _side);
+        _matrix = np.arange(_side * _side).astype(DType).reshape(_side, _side);
         _putTarget = _a.copy();
         _placeTarget = _a.copy();
-        _placeValues = np.array(new[] { 1.0, 2.0, 3.0 });
+        _placeValues = np.array(new[] { 1.0, 2.0, 3.0 }).astype(DType);
     }
 
     [GlobalCleanup]
@@ -64,7 +64,7 @@ public class IndexingSelectionBenchmarks : BenchmarkBase
     [Benchmark(Description = "np.extract(mask, a)")] public NDArray Extract() => np.extract(_mask, _a);
     [Benchmark(Description = "np.take(a, indices)")] public NDArray Take() => np.take(_a, _indices);
     [Benchmark(Description = "np.take_along_axis(a, indices)")] public NDArray TakeAlongAxis() => np.take_along_axis(_a, _indices, 0);
-    [Benchmark(Description = "np.select(condlist, choicelist)")] public NDArray Select() => np.select(new[] { _negativeMask, _mask }, new object[] { _a, _b }, 0.0);
+    [Benchmark(Description = "np.select(condlist, choicelist)")] public NDArray Select() => np.select(new[] { _negativeMask, _mask }, new object[] { _a, _b }, GetScalar(DType, 0));
     [Benchmark(Description = "np.put(a, indices, values)")] public void Put() => np.put(_putTarget, _indices, _b["::2"]);
     [Benchmark(Description = "np.place(a, mask, values)")] public void Place() => np.place(_placeTarget, _mask, _placeValues);
     [Benchmark(Description = "np.diag_indices(n)")] public object DiagIndices() => np.diag_indices(_side);

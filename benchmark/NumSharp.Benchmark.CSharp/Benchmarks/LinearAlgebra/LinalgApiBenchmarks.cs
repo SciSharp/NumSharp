@@ -9,7 +9,7 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.LinearAlgebra;
 /// isolated OpenBLAS subsystem because NumSharp.Core intentionally has no LAPACK fallback.
 /// </summary>
 [BenchmarkCategory("LinearAlgebra", "LinalgApi")]
-public class LinalgApiBenchmarks : BenchmarkBase
+public class LinalgApiBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _vector = null!;
     private NDArray _shortVector = null!;
@@ -27,22 +27,22 @@ public class LinalgApiBenchmarks : BenchmarkBase
     public void Setup()
     {
         np.random.seed(Seed);
-        _vector = np.random.rand(N);
-        _shortVector = np.random.rand((int)Math.Sqrt(N));
+        _vector = CreateRandomArray(N, DType);
+        _shortVector = CreateRandomArray((int)Math.Sqrt(N), DType);
         int vectorRows = N / 3;
-        _vectorsA = np.random.rand(vectorRows * 3).reshape(vectorRows, 3);
-        _vectorsB = np.random.rand(vectorRows * 3).reshape(vectorRows, 3);
+        _vectorsA = CreateRandomArray(vectorRows * 3, DType).reshape(vectorRows, 3);
+        _vectorsB = CreateRandomArray(vectorRows * 3, DType, seed: 43).reshape(vectorRows, 3);
         // The O(M^3) linalg ops below (matrix_power(3), multi_dot, ...) stay on a 128-capped matrix
         // so the benchmark finishes; matmul, being O(M^2)-cheap per element and the one cell users
         // compare against np.matmul, uses the SAME min(sqrt(N),384) side as LinAlgBenchmarks.MatMul
         // and the backend-profile bench. Sharing a shape with those keeps the merge key from
         // cross-pairing a 128x128 timing with a 316x316 one at the same N.
         int side = Math.Min((int)Math.Sqrt(N), 128);
-        _matrixA = np.random.rand(side * side).reshape(side, side);
-        _matrixB = np.random.rand(side * side).reshape(side, side);
+        _matrixA = CreateRandomArray2D(side, side, DType);
+        _matrixB = CreateRandomArray2D(side, side, DType, seed: 43);
         int mc = Math.Min((int)Math.Sqrt(N), 384);
-        _matmulA = np.random.rand(mc * mc).reshape(mc, mc);
-        _matmulB = np.random.rand(mc * mc).reshape(mc, mc);
+        _matmulA = CreateRandomArray2D(mc, mc, DType);
+        _matmulB = CreateRandomArray2D(mc, mc, DType, seed: 43);
     }
 
     [GlobalCleanup]
@@ -59,7 +59,9 @@ public class LinalgApiBenchmarks : BenchmarkBase
         GC.Collect();
     }
 
-    [Benchmark(Description = "np.linalg.cross(a, b)")] public NDArray Cross() => np.linalg.cross(_vectorsA, _vectorsB);
+    [Benchmark(Description = "np.linalg.cross(a, b)")] public object Cross() => DType != NPTypeCode.Boolean
+        ? np.linalg.cross(_vectorsA, _vectorsB)
+        : VerifyUnsupportedDtype(() => np.linalg.cross(_vectorsA, _vectorsB));
     [Benchmark(Description = "np.linalg.diagonal(a)")] public NDArray Diagonal() => np.linalg.diagonal(_matrixA);
     [Benchmark(Description = "np.linalg.matmul(a, b)")] public NDArray MatMul() => np.linalg.matmul(_matmulA, _matmulB);
     [Benchmark(Description = "np.linalg.matrix_norm(a)")] public NDArray MatrixNorm() => np.linalg.matrix_norm(_matrixA);

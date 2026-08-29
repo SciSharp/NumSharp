@@ -6,10 +6,10 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Selection;
 
 /// <summary>
 /// np.where: the ternary select form (cond ? x : y) and the single-argument index form
-/// (np.where(cond) → indices of true elements). float64.
+/// (np.where(cond) → indices of true elements), with typed select operands.
 /// </summary>
 [BenchmarkCategory("Selection")]
-public class WhereBenchmarks : BenchmarkBase
+public class WhereBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _cond = null!;
     private NDArray _a = null!;
@@ -22,9 +22,9 @@ public class WhereBenchmarks : BenchmarkBase
     public void Setup()
     {
         np.random.seed(Seed);
-        _a = np.random.rand(N) * 100 - 50;
-        _b = np.random.rand(N) * 100 - 50;
-        _cond = _a > 0.0;
+        _a = CreateRandomArray(N, DType);
+        _b = CreateRandomArray(N, DType, seed: 43);
+        _cond = np.random.rand(N) > 0.5;
     }
 
     [GlobalCleanup]
