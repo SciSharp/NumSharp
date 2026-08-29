@@ -187,9 +187,22 @@ has **no** "supported shape stays clean" gate cases today), §7 NDW013 matrix, T
 
 | Tier | Items | Status |
 |------|-------|--------|
-| P0 | CF-1, CF-4, CF-5, CF-6, CF-10, CF-12; MetamorphicTests (T3) | ☐ |
-| P1 | EC-1…EC-13, OW-1…OW-7, SC-1…SC-7, GT-1…GT-10, N13-1…N13-7, WeaverParityTests (T4) | ☐ |
-| P2 | AM-1/AM-2, TY-1…TY-7, RB-1…RB-5 | ☐ |
+| P0 | CF-2, CF-5, CF-10, CF-12 (warn), CF-3, CF-6, CF-7, CF-8, CF-9 (clean), MetamorphicTests (T3) | ☑ landed |
+| P0 (pinned) | CF-1, CF-4, CF-11 (documented false negatives, `KnownLimitationScenarios` under Misaligned) | ☑ pinned |
+| P1 | EC-1…EC-12, OW-1…OW-7, SC-1…SC-4/6/7, GT-1…GT-7/GT-9/GT-10, WeaverParityTests (T4) | ☑ landed |
+| P1 (pinned) | EC-13, SC-5 (Misaligned) | ☑ pinned |
+| P1 (deferred) | GT-8 (custom `[AsyncMethodBuilder]` — weaver-internals verification needed; the analyzer would gate it NDW003, matching `IsTaskLike`'s 4-shape contract), N13-1/N13-4/N13-5 (multi-TFM / WarningsAsMessages / token-in-string) | ☐ |
+| P2 | AM-1/AM-2, TY-1…TY-7, RB-1…RB-4 + the returned/disposed invariant sweep | ☑ landed |
+| P2 (deferred) | RB-5 (full property-based generator + shrinker — the invariant DataRows cover its spirit) | ☐ |
+
+**Landed this pass (fixtures `ControlFlow`/`Escape`/`Owning`/`Scope`/`GateNegative`/`KnownLimitation`
+Scenarios.cs; tests `ControlFlow`/`EscapeOwning`/`Scope`/`GateNegative`/`Metamorphic`/`Robustness`/
+`TypeSystem`/`KnownLimitation`Tests.cs + `FixtureFacts` + `RunWithoutNumSharpAsync` + N13-3/N13-7 build
+tests):** 101 in-process + 4 `AnalyzerBuild` tests, green net8.0 + net10.0. **One analyzer FIX shipped
+— CF-10:** an explicit discard `_ = a + b;` now reads as a leak (a discard drops the buffer; it is not a
+store), zero false positive on `_ = a;` (a bare input owns nothing). Every scenario was probe-verified
+against the analyzer's actual behavior BEFORE tagging (§9 step 1), so each fixture pins reality, not a
+guess.
 
 ---
 

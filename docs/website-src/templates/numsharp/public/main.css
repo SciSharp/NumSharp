@@ -117,19 +117,25 @@ pre code {
   border-bottom: 1px solid var(--ns-border);
 }
 
-.ns-home-logo {
-  width: 72px;
-  height: 72px;
-  display: block;
-  margin-bottom: 22px;
-}
-
 .ns-home-kicker {
   margin: 0 0 10px;
   color: var(--ns-green);
   font-size: 0.86rem;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.ns-home-title-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ns-home-logo {
+  width: 58px;
+  height: 58px;
+  display: block;
+  flex: 0 0 auto;
 }
 
 .ns-home h1 {
@@ -229,39 +235,6 @@ pre code {
   background: var(--ns-soft);
 }
 
-.ns-home-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  margin: 24px 0 10px;
-  overflow: hidden;
-  border: 1px solid var(--ns-border);
-  border-radius: 8px;
-  background: var(--ns-border);
-}
-
-.ns-home-stats div {
-  min-width: 0;
-  padding: 18px;
-  background: var(--ns-surface);
-}
-
-.ns-home-stats strong,
-.ns-home-stats span {
-  display: block;
-}
-
-.ns-home-stats strong {
-  font-size: 1.2rem;
-  line-height: 1.25;
-}
-
-.ns-home-stats span {
-  margin-top: 4px;
-  color: var(--ns-muted);
-  font-size: 0.92rem;
-}
-
 .ns-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -348,9 +321,6 @@ pre code {
     grid-template-columns: 1fr;
   }
 
-  .ns-home-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 575.98px) {
@@ -370,7 +340,4 @@ pre code {
     width: 100%;
   }
 
-  .ns-home-stats {
-    grid-template-columns: 1fr;
-  }
 }

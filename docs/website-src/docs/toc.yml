@@ -10,8 +10,6 @@
   href: broadcasting.md
 - name: Buffering & Memory
   href: buffering.md
-- name: Scope Reclamation ([NDScoped])
-  href: ndscoped.md
 - name: NumPy Compliance & Compatibility
   href: compliance.md
 - name: NumPy API Coverage & Support
@@ -69,7 +67,7 @@
     href: extensions/bitmap.md
 - name: Interoperability
   href: interop/index.md
-  expanded: false
+  expanded: true
   items:
   - name: Python & numpy (pythonnet)
     href: interop/pythonnet-numpy.md

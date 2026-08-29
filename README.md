@@ -37,7 +37,7 @@ CPython. It is intended for scientific computing, numerical utilities, machine
 learning infrastructure, and projects that want NumPy-style array operations in
 ordinary .NET code.
 
-NumSharp's edge is utilizing the power of [C#'s dynamic IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.html) translating to assembly generation with [JIT optimizations](https://learn.microsoft.com/en-us/dotnet/standard/managed-execution-process#compilation-by-the-jit-compiler) and [CPU acceleration](https://en.wikipedia.org/wiki/Hardware_acceleration).
+NumSharp's edge is utilizing the power of [C#'s dynamic IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.html) and [fused kernels](https://scisharp.github.io/NumSharp/docs/NDIter.html) translating to assembly generated with [JIT optimizations](https://learn.microsoft.com/en-us/dotnet/standard/managed-execution-process#compilation-by-the-jit-compiler) and [SIMD CPU acceleration](https://en.wikipedia.org/wiki/Hardware_acceleration).
 This edge leads the design of NumSharp's backend and by that to higher performance mark than NumPy on many functions as can be seen in [Performance](https://github.com/SciSharp/NumSharp/edit/master/README.md#performance).
 
 NumSharp focuses on:

@@ -1,8 +1,10 @@
 <div class="ns-home">
   <section class="ns-home-intro">
-    <img class="ns-home-logo" src="images/numsharp.icon.svg" alt="NumSharp logo">
     <p class="ns-home-kicker">NumPy-shaped arrays for .NET</p>
-    <h1>NumSharp</h1>
+    <div class="ns-home-title-row">
+      <img class="ns-home-logo" src="images/numsharp.icon.svg" alt="">
+      <h1>NumSharp</h1>
+    </div>
     <p class="ns-home-lede">
       A .NET port of NumPy focused on API parity, unmanaged NDArray storage,
       view semantics, broadcasting, and runtime-generated SIMD kernels.
@@ -30,40 +32,31 @@ Console.WriteLine(a + b);  // [1 3 5 7 9]</code></pre>
     </div>
   </section>
 
-  <section class="ns-home-stats" aria-label="Project highlights">
-    <div>
-      <strong>NumPy 2.x</strong>
-      <span>Compatibility target</span>
-    </div>
-    <div>
-      <strong>15</strong>
-      <span>Core dtypes</span>
-    </div>
-    <div>
-      <strong>V128-V512</strong>
-      <span>Runtime SIMD width</span>
-    </div>
-    <div>
-      <strong>Views</strong>
-      <span>Slicing shares memory</span>
-    </div>
-  </section>
-
   <section class="ns-home-section">
     <div class="ns-home-section-head">
       <h2>Documentation Map</h2>
       <p>Pick the part of the stack you are working on.</p>
     </div>
     <div class="ns-card-grid">
-      <a class="ns-doc-card" href="docs/intro.md">
+      <a class="ns-doc-card" href="docs/NDArray.md">
         <span>Arrays</span>
         <strong>NDArray fundamentals</strong>
-        <p>Shape, strides, storage, indexing, and the mental model for NumSharp arrays.</p>
+        <p>Creation, shape, indexing, views, copies, operators, and storage layout.</p>
+      </a>
+      <a class="ns-doc-card" href="docs/dtypes.md">
+        <span>Types</span>
+        <strong>Dtypes</strong>
+        <p>The 15 supported types, .NET and NumPy mappings, promotion, casting, and SIMD coverage.</p>
       </a>
       <a class="ns-doc-card" href="docs/broadcasting.md">
         <span>Semantics</span>
         <strong>Broadcasting</strong>
         <p>How NumSharp stretches operands without materializing repeated data.</p>
+      </a>
+      <a class="ns-doc-card" href="docs/buffering.md">
+        <span>Memory</span>
+        <strong>Buffering &amp; memory</strong>
+        <p>Unmanaged storage, ownership, zero-copy buffers, memory layout, and view lifetimes.</p>
       </a>
       <a class="ns-doc-card" href="docs/NDIter.md">
         <span>Kernels</span>

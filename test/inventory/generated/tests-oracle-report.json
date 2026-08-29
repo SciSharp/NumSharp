@@ -10,17 +10,17 @@
   },
   "summary": {
     "tests": {
-      "methods": 13804,
-      "declaredInvocations": 14440,
+      "methods": 13831,
+      "declaredInvocations": 14467,
       "dataRows": 716,
       "dataRowMethods": 80,
       "dynamicMethods": 34,
-      "sourceLocated": 13804,
-      "oracleMethods": 657,
-      "fuzzMatrixMethods": 91,
+      "sourceLocated": 13831,
+      "oracleMethods": 664,
+      "fuzzMatrixMethods": 98,
       "npyOracleMethods": 13,
       "statuses": {
-        "active": 13509,
+        "active": 13536,
         "ignored": 11,
         "manual": 5,
         "open_bug": 215,
@@ -29,21 +29,22 @@
       "categories": {
         "Explicit": 2,
         "Fixed": 3,
-        "FuzzMatrix": 91,
+        "FuzzMatrix": 98,
         "HighMemory": 50,
         "LongIndexing": 3,
         "Misaligned": 34,
         "NpyOracle": 13,
         "OpenBugs": 215,
+        "ScopeAudit": 7,
         "WindowsOnly": 75
       },
       "projects": {
-        "NumSharp.Tests": 13201,
+        "NumSharp.Tests": 13221,
         "NumSharp.Tests.Interop": 444,
-        "NumSharp.Tests.Oracle": 159
+        "NumSharp.Tests.Oracle": 166
       },
       "suites": 39,
-      "oracleTestClasses": 16
+      "oracleTestClasses": 18
     },
     "oracle": {
       "corpusFiles": 67,
@@ -651,13 +652,13 @@
       "id": "NumSharp.Tests::Lifetime",
       "project": "NumSharp.Tests",
       "area": "Lifetime",
-      "methods": 78,
-      "declaredInvocations": 78,
+      "methods": 98,
+      "declaredInvocations": 98,
       "dataRows": 0,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 77,
+        "active": 97,
         "open_bug": 1
       },
       "categories": {
@@ -665,6 +666,7 @@
       },
       "sourceFiles": [
         "test/NumSharp.Tests/Lifetime/BufferReleaseSweepTests.cs",
+        "test/NumSharp.Tests/Lifetime/NDScopeAsyncTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeDoubleDisposeTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeManualDisposeTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeStressTests.cs",
@@ -1380,16 +1382,17 @@
       "id": "NumSharp.Tests.Oracle::Differential oracle",
       "project": "NumSharp.Tests.Oracle",
       "area": "Differential oracle",
-      "methods": 89,
-      "declaredInvocations": 89,
+      "methods": 96,
+      "declaredInvocations": 96,
       "dataRows": 0,
       "dynamicMethods": 0,
-      "oracleMethods": 89,
+      "oracleMethods": 96,
       "statuses": {
-        "active": 89
+        "active": 96
       },
       "categories": {
-        "FuzzMatrix": 88
+        "FuzzMatrix": 95,
+        "ScopeAudit": 7
       },
       "sourceFiles": [
         "test/NumSharp.Tests.Oracle/Fuzz/BlasBackendDeltaTests.cs",
@@ -1399,9 +1402,11 @@
         "test/NumSharp.Tests.Oracle/Fuzz/IndexOracleTests.cs",
         "test/NumSharp.Tests.Oracle/Fuzz/Journey3TouchedOracleCoverageTests.cs",
         "test/NumSharp.Tests.Oracle/Fuzz/MetamorphicTests.cs",
+        "test/NumSharp.Tests.Oracle/Fuzz/NativeAllocationChokepointTests.cs",
         "test/NumSharp.Tests.Oracle/Fuzz/OpRegistryRandomIsolationTests.cs",
         "test/NumSharp.Tests.Oracle/Fuzz/OracleCoverageStrengthTests.cs",
-        "test/NumSharp.Tests.Oracle/Fuzz/OracleSurfaceCoverageTests.cs"
+        "test/NumSharp.Tests.Oracle/Fuzz/OracleSurfaceCoverageTests.cs",
+        "test/NumSharp.Tests.Oracle/Fuzz/UndisposedIntermediateTests.cs"
       ]
     },
     {
@@ -15791,6 +15796,50 @@
       }
     },
     {
+      "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NDScopeAsyncTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Lifetime.NDScopeAsyncTests",
+      "class": "NDScopeAsyncTests",
+      "area": "Lifetime",
+      "methods": 20,
+      "declaredInvocations": 20,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 20
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Lifetime/NDScopeAsyncTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeAsyncTests.cs#L56",
+      "methodNames": [
+        "DisposeSlot_FromAnotherThread_TheAbandonedEnumeratorSeam",
+        "DisposeSlot_IsIdempotent_AndNoOpOnEmptySlot",
+        "ExitIterator_HasMore_Suspends_Final_DisposesAndClears",
+        "GcPressure_WhileSuspended_TrackedArraysSurvive",
+        "OpenOrResume_DisposedResidueInSlot_OpensFresh",
+        "OpenOrResume_SegmentsAcrossThreads_OneInvocationScope_TempsSurviveSuspension",
+        "Resume_UnderAmbientScope_YieldReparentsTheResultIntoIt",
+        "ReturnsTask_Completed_YieldsResultNow_FinallyDisposesEagerly",
+        "ReturnsTask_Faulted_DisposesAtCompletion_NothingYielded",
+        "ReturnsTask_Incomplete_DefersDisposal_InFlightOperandSurvives",
+        "ReturnsTask_Incomplete_TrackedResult_IsYieldedAtCompletion",
+        "ReturnsTask_Plain_CarryingAnUpcastResult_SniffsAndYieldsIt",
+        "ReturnsTask_Plain_Incomplete_DefersTheSweep",
+        "ReturnsTask_Plain_UpcastSniff_CoversGenericSubtypesAndTuples",
+        "ReturnsTask_Plain_UpcastSniff_Deferred_YieldsAtCompletion",
+        "ReturnsValueTask_PlainValue_YieldsNow",
+        "ReturnsValueTask_SourceBacked_PreserveKeepsTheCallerConsumptionLegal",
+        "ReturnsValueTask_TaskBacked_Incomplete_Defers_AndTheReturnedTaskIsAwaitable",
+        "Suspend_RestoresTheOuterChain_LaterConstructionsTrackOutward",
+        "SuspendedInvocations_InterleavedOnOneThread_StayIsolated"
+      ],
+      "methodPolicies": {}
+    },
+    {
       "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NDScopeDoubleDisposeTests",
       "project": "NumSharp.Tests",
       "type": "NumSharp.Tests.Lifetime.NDScopeDoubleDisposeTests",
@@ -16038,7 +16087,7 @@
       "sourcePaths": [
         "test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs#L83",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs#L99",
       "methodNames": [
         "EveryScopedMethod_WasWoven"
       ],
@@ -30531,6 +30580,36 @@
       "methodPolicies": {}
     },
     {
+      "id": "NumSharp.Tests.Oracle::NumSharp.Tests.Fuzz.NativeAllocationChokepointTests",
+      "project": "NumSharp.Tests.Oracle",
+      "type": "NumSharp.Tests.Fuzz.NativeAllocationChokepointTests",
+      "class": "NativeAllocationChokepointTests",
+      "area": "Differential oracle",
+      "methods": 1,
+      "declaredInvocations": 1,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 1
+      },
+      "categories": {
+        "FuzzMatrix": 1,
+        "ScopeAudit": 1
+      },
+      "oracleKinds": {
+        "FuzzMatrix": 1
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Oracle/Fuzz/NativeAllocationChokepointTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/NativeAllocationChokepointTests.cs#L53",
+      "methodNames": [
+        "EveryRawNativeAllocation_IsAKnownChokepoint"
+      ],
+      "methodPolicies": {}
+    },
+    {
       "id": "NumSharp.Tests.Oracle::NumSharp.Tests.Fuzz.OpRegistryRandomIsolationTests",
       "project": "NumSharp.Tests.Oracle",
       "type": "NumSharp.Tests.Fuzz.OpRegistryRandomIsolationTests",
@@ -30613,6 +30692,41 @@
       "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/OracleSurfaceCoverageTests.cs#L83",
       "methodNames": [
         "EveryPublicNumpySurface_IsCoveredOrExplicitlyClassified"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Oracle::NumSharp.Tests.Fuzz.UndisposedIntermediateTests",
+      "project": "NumSharp.Tests.Oracle",
+      "type": "NumSharp.Tests.Fuzz.UndisposedIntermediateTests",
+      "class": "UndisposedIntermediateTests",
+      "area": "Differential oracle",
+      "methods": 6,
+      "declaredInvocations": 6,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 6
+      },
+      "categories": {
+        "FuzzMatrix": 6,
+        "ScopeAudit": 6
+      },
+      "oracleKinds": {
+        "FuzzMatrix": 6
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Oracle/Fuzz/UndisposedIntermediateTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/UndisposedIntermediateTests.cs#L39",
+      "methodNames": [
+        "BinaryScalarCastTemp_IsDisposed",
+        "Corpus_AllOps_LeaveNoUndisposedIntermediates",
+        "Harness_CleanDisposedOp_ReadsZero",
+        "Harness_Detects_AbandonedTake",
+        "Harness_Detects_ForeignReturn",
+        "Harness_Detects_FullPoolBypass"
       ],
       "methodPolicies": {}
     },

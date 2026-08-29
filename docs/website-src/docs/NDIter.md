@@ -1,30 +1,34 @@
 # NDIter — kerneling your NDArray with IL generation
 
-NumPy's `nditer` is the unsung workhorse of NumPy. Every ufunc, every reduction, every broadcasted operation is scheduled by `nditer` under the covers. It decides which axes to iterate, which to coalesce, whether to buffer, how to walk strided memory — then it hands those decisions to a typed C inner loop generated from C++ templates.
+NumPy's `NpyIter` is one of the core schedulers behind ufuncs, reductions, broadcasting, and advanced iteration. It decides which axes to walk, which axes can coalesce, whether operands need buffers, and which pointer/stride window a typed inner loop receives. The iterator is C; many of the specialized loops it feeds are generated from NumPy's `.src` templates.
 
-NumSharp has to reach the same destination from the other direction. We have no templates. What we have is `System.Reflection.Emit.DynamicMethod` and a JIT that eagerly autovectorizes tight loops. This page explains how NumSharp's port of `nditer` (`NDIter`) works, why we diverge from NumPy in a few places, and — most importantly — how `NDIter.Execution.cs` glues the iterator to `ILKernelGenerator` so a single call like `ExecuteBinary(Add)` cashes out to the same kind of native SIMD loop that NumPy's C++ emits at compile time, but generated at your first call and cached forever after.
+NumSharp reaches the same boundary with a stack-only `NDIterRef`, heap-allocated unmanaged state, and two kinds of generated kernel: **per-chunk** `NDInnerLoopFunc` kernels driven by the iterator, and **whole-array** `DirectILKernelGenerator` kernels that consume the iterator's post-coalesce shape/strides directly. Those are different contracts and use different caches. This page maps both, together with the managed `np.nditer` wrapper, typed C# extensions, buffering/casting/masking, production call sites, and the known parity gaps.
 
-Read this page end-to-end if you're writing a new `np.*` function, porting a ufunc, or trying to squeeze more performance out of an existing operation.
+The implementation claims below were rechecked against the local NumPy source clone, live NumPy 2.4.3 probes, the NumSharp tests, and the current benchmark corpus on 2026-08-28. Read this page end-to-end if you're writing a new `np.*` function, porting a ufunc, or changing iterator scheduling.
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Public Iteration Surface](#public-iteration-surface)
   - [Typed iteration — `np.nditer<T>` / `np.nditer_chunks<T>`](#typed-iteration--unboxed-elements-and-span-chunks)
+  - [Managed `np.nditer` contract](#managed-npnditer-contract)
 - [What NDIter Is](#what-nditer-is)
+  - [Subsystem map and evidence](#subsystem-map-and-evidence)
 - [Divergences from NumPy](#divergences-from-numpy)
+  - [Current known gaps](#current-known-gaps)
 - [Iterator State](#iterator-state)
 - [Construction](#construction)
 - [Coalescing, Reordering, and Flipping](#coalescing-reordering-and-flipping)
 - [Memory Overlap and COPY_IF_OVERLAP](#memory-overlap-and-copy_if_overlap)
 - [Iteration Mechanics](#iteration-mechanics)
 - [Buffering](#buffering)
+- [Masked writes](#masked-writes)
 - [Buffered Reduction: The Double Loop](#buffered-reduction-the-double-loop)
 - [Kernel Integration Layer](#kernel-integration-layer)
   - [Quick reference](#quick-reference)
   - [Decision tree](#decision-tree)
   - [Measured behavior](#measured-behavior)
-  - [Cache state — two lifetimes to know about](#cache-state--two-lifetimes-to-know-about)
+  - [Cache state — separate families and lifetimes](#cache-state--separate-families-and-lifetimes)
   - [Layer 1 — Canonical Inner-Loop API](#layer-1--canonical-inner-loop-api)
   - [Layer 2 — Struct-Generic Dispatch](#layer-2--struct-generic-dispatch)
   - [Layer 3 — Typed ufunc Dispatch](#layer-3--typed-ufunc-dispatch)
@@ -34,7 +38,7 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
     - [Tier 3C — Expression DSL](#tier-3c--expression-dsl)
       - [Node catalog](#node-catalog)
       - [Operator overloads](#operator-overloads)
-      - [Call — invoke any .NET method](#call--invoke-any-net-method)
+      - [Call — invoke supported .NET numeric methods](#call--invoke-supported-net-numeric-methods)
       - [Type discipline](#type-discipline)
       - [SIMD coverage rules](#simd-coverage-rules)
       - [Caching and auto-keys](#caching-and-auto-keys)
@@ -44,6 +48,11 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
       - [Debugging compiled kernels](#debugging-compiled-kernels)
       - [When to use Tier 3C](#when-to-use-tier-3c)
 - [Path Detection](#path-detection)
+- [Production consumers and legacy surfaces](#production-consumers-and-legacy-surfaces)
+- [Fused kernels in production](#fused-kernels-in-production)
+  - [General expression fusion — `np.evaluate`](#general-expression-fusion--npevaluate)
+  - [Measured fused versus unfused performance](#measured-fused-versus-unfused-performance)
+  - [Specialized production fusions](#specialized-production-fusions)
 - [Worked Examples](#worked-examples)
 - [Performance](#performance)
   - [JIT warmup and measurement](#jit-warmup-and-measurement)
@@ -60,13 +69,13 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
 
 An array is just a pointer plus a shape plus strides. Iterating "through" it means producing, one element (or chunk of elements) at a time, the byte offset into the buffer. For a contiguous row-major 3×4 array this is trivial — walk from 0 to 11 with stride 1. For a transposed view, a sliced view, a broadcasted view, or two arrays with mismatched strides, it is not.
 
-`NDIter` takes that tangle and produces a single linear schedule of pointer advances. Once you have it, you can write one loop — `do { kernel(dataptrs, strides, count); } while (iternext); ` — and it runs correctly for every memory layout NumSharp supports.
+`NDIterRef` takes that tangle and produces a deterministic schedule of pointer advances. A chunk driver can then use the canonical loop — `do { kernel(dataptrs, byteStrides, count); } while (iternext);` — while a whole-array helper can pass the post-coalesce `Shape` plus element-stride arrays to a DirectIL kernel.
 
 ### Why Build Our Own?
 
-NumPy's `nditer` is C99 with templates mixed in through macro expansion. We can't take it verbatim. At the same time we want every one of its capabilities: coalescing, reordering, negative-stride flipping, ALLOCATE, COPY_IF_OVERLAP, buffered casting, buffered reduction with the double-loop trick, C/F/K ordering, per-operand flags, op_axes with explicit reduction encoding. These are features users rely on without realizing it — `np.sum(a, axis=0)` quietly benefits from four of them.
+NumPy's iterator is a large C subsystem split across `nditer_constr.c`, `nditer_api.c`, `nditer_templ.c.src`, and the Python wrapper. NumSharp cannot copy that ABI, but it ports the same scheduling ideas: coalescing, reordering, negative-stride flipping, `ALLOCATE`, `COPY_IF_OVERLAP`, buffered casting, buffered reduction, C/F/A/K ordering, per-operand flags, and `op_axes` reduction encoding.
 
-NumSharp implements all of it in managed code with `NativeMemory.AllocZeroed` for unmanaged state and `ILKernelGenerator` for the typed inner loops. The bridge that wires them together is `NDIter.Execution.cs`, which this page centers on.
+NumSharp.Core remains managed C#, but the iterator owns explicitly allocated unmanaged state (`NativeMemory.AllocZeroed`/`AlignedAlloc`) because its hot contract is raw pointers. `NDIter.Execution.cs` connects that schedule to chunk kernels and selected DirectIL whole-array helpers; it is not the only consumer of the iterator.
 
 ---
 
@@ -80,14 +89,21 @@ NumSharp implements all of it in managed code with `NativeMemory.AllocZeroed` fo
 | Every element **unboxed / by reference** | `foreach (ref T x in np.nditer<T>(a))` | The fast path. See [Typed iteration](#typed-iteration--unboxed-elements-and-span-chunks). |
 | A **`Span<T>` per inner loop**, to vectorize | `foreach (Span<T> c in np.nditer_chunks<T>(a))` | Hands the chunk straight to `TensorPrimitives` / `Vector<T>`. A contiguous array is one chunk. |
 | NumPy's `nditer` object, with its full flag surface | `using var it = np.nditer(a, flags: …)` | `multi_index`, `external_loop`, `buffered`, `op_axes`, `itviews`, `copy()`, … — the parity surface. |
+| Nested loops over disjoint axis groups | `var levels = np.nested_iters(a, axes)` | Returns linked `NDIterator` objects; advancing an outer level re-bases and resets its child. |
 | `(index, value)` pairs in logical C-order | `foreach (var (idx, v) in np.ndenumerate(a))` | `np.ndenumerate<T>(a)` yields unboxed `T`. |
 | Just the index space of a shape | `foreach (var idx in np.ndindex(3, 2))` | Pure odometer; no operands. |
 | Each operand of a broadcast, flattened | `np.broadcast(a, b, …).iters[i]` — a `NDFlatIterator` | One flat C-order stream per operand, each stretched to the broadcast shape (e.g. `np.broadcast([1,2,3], [[10],[20]]).iters[0]` yields `1,2,3,1,2,3`). |
 | The broadcast itself, as tuples | `foreach (object[] vals in np.broadcast(a, b, …))` | NumPy's `np.broadcast` object: one per-operand value tuple per step, with a live `.index` cursor, `.numiter`, `.size`, and `.reset()`. |
 
-All of these are built on the same `Shape`/stride machinery; `np.nditer` and the typed forms are driven by `NDIterRef` itself. `NDFlatIterator` (`NumSharp.Backends.Iteration`) is the small public analog of NumPy's `flatiter`; it is re-enumerable, unlike NumPy's one-shot flatiters.
+All of these use the same `Shape`/stride semantics, but they do **not** all use the same iterator implementation:
 
-Like NumSharp's `NDIter`, `np.broadcast(...)` accepts **any number of operands** — NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp does not (see [Divergences from NumPy](#divergences-from-numpy)).
+- `np.nditer`, `np.nditer<T>`, `np.nditer_chunks<T>`, and `np.nested_iters` are driven by `NDIterRef`.
+- `np.ndindex` is a pure C-order odometer, matching modern NumPy's `itertools.product` implementation rather than routing through `nditer`.
+- `np.ndenumerate` is a C-order coordinate walker plus `GetAtIndex`; `np.broadcast` and `NDFlatIterator` similarly use broadcast views plus logical flat access.
+
+That separation is intentional: index-only and boxed convenience APIs should not pay for unmanaged multi-operand iterator state.
+
+Like `NDIterRef`, `np.broadcast(...)` has **no explicit operand-count cap** — NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp sizes per-operand structures dynamically (see [Divergences from NumPy](#divergences-from-numpy)).
 
 ### Typed iteration — unboxed elements and Span chunks
 
@@ -103,25 +119,15 @@ foreach (Span<double> c in np.nditer_chunks<double>(a, writeable: true))
     TensorPrimitives.Multiply(c, 2.0, c);
 ```
 
-Both run on the same `NDIterRef` as `np.nditer`, so every memory layout behaves identically — contiguous, F-order, transposed, reversed, sliced, broadcast, 0-d and empty. What is gone is the per-element `NDArray` view, which is what made the boxed form slow.
+Both build an unbuffered, single-operand `EXTERNAL_LOOP` `NDIterRef`, so contiguous, F-order, transposed, reversed, broadcast, 0-d, and empty schedules come from the same engine. `np.nditer<T>` can consume any inner stride. `np.nditer_chunks<T>` is narrower: a `Span<T>` can describe only a unit-stride inner loop, so stepped inner axes are rejected before iteration.
 
-**Why it matters** (100K `float64`, Release, best-of-9; ratios are NumPy ÷ NumSharp, so higher is faster):
-
-| Approach | Time | vs NumPy |
-|----------|------|----------|
-| `np.nditer` `it[0]` (boxed, parity surface) | 59 ms | 0.18× |
-| `np.nditer<T>` | 0.167 ms | **40×** |
-| `np.nditer_chunks<T>` | 0.162 ms | **41×** |
-| `np.nditer_chunks<T>` + `Vector<T>` | 0.027 ms | **249×** |
-| *raw pointer walk (floor)* | *0.047 ms* | — |
-
-NumPy reference: `for x in np.nditer(a)` = 6.681 ms. The boxed cell is not an engine problem — a bare `iternext()` walk of the same 100K elements takes 0.61 ms against NumPy's 2.60 ms (4.3×). The whole deficit is the ~0.6 µs `NDArray` view built per element.
+The performance reason for these extensions is structural rather than a fixed multiplier: they remove the per-element `NDArray` alias view and boxing. For current numbers use the canonical [NDIter benchmark report](https://scisharp.github.io/NumSharp/docs/reports/nditer_results.html), not an isolated timing embedded in this page.
 
 **Rules of the road:**
 
 - **The dtype must match exactly.** A `ref` cannot convert, so `np.nditer<double>` over an `int32` array **throws** rather than reinterpreting the bytes. Cast first with `astype`.
 - **Order is `'K'` (memory order)**, matching `np.nditer` exactly — on a reversed view `a[:, ::-1]` of `arange(6).reshape(2,3)` both libraries yield `0 1 2 3 4 5`, and both yield `2 1 0 5 4 3` under `order: 'C'`. `'K'` is also what lets reversed / F-contiguous / transposed views coalesce into a single chunk. Pass `order: 'C'` for the logical order `np.ndenumerate` uses.
-- **`writeable: true` is required to write**, and a broadcast view is rejected with NumPy's own message, `operand array with iterator write flag set is read-only`.
+- **The returned type is always mutable.** `writeable: true` asks the iterator to validate/open the operand as `READWRITE`, and it correctly rejects a broadcast view. It is **not** a C# read-only guarantee: both overloads still return `ref T` / `Span<T>` when `writeable` is false, and assigning through either currently mutates the array. Treat `writeable: false` as a caller contract, not enforcement; never assign through that reference (especially for stride-0 broadcast views).
 - **`nditer_chunks<T>` needs a unit-stride inner loop.** A `Span<T>` is contiguous by definition, so a stepped view such as `a[":, ::2"]` is rejected up front — at `GetEnumerator`, never mid-loop. Use `np.nditer<T>`, which handles any stride, or iterate a `.copy()`.
 - **An empty array iterates zero times**, where `np.nditer` raises `Iteration of zero-sized operands is not enabled` unless given NumPy's `zerosize_ok`. Deliberate: forcing `if (a.size > 0)` around every `foreach` is not how C# collections behave.
 - **Re-enumeration restarts.** The value returned by `np.nditer<T>(…)` holds no unmanaged state; each `foreach` builds a fresh iterator. This is deliberately unlike the class-based `np.nditer`, which is its own iterator (NumPy's `iter(x) is x`) and therefore *resumes*.
@@ -129,19 +135,47 @@ NumPy reference: `for x in np.nditer(a)` = 6.681 ms. The boxed cell is not an en
 
 Being `ref struct`s, the enumerators cannot escape to a field, a lambda or an `async` frame — the compiler enforces the lifetime the `ref`/`Span` needs. For fusing several operations into one pass instead of walking elements yourself, see [Tier 3C — Expression DSL](#tier-3c--expression-dsl) and `np.evaluate`.
 
+### Managed `np.nditer` contract
+
+The class returned by the non-generic `np.nditer(...)` overloads is `np.NDIterator`. It owns a detached `NDIterState*`, re-borrows a non-owning `NDIterRef` for each call, and must be closed or disposed. Prefer `using`; disposal flushes a pending buffer window, resolves `COPY_IF_OVERLAP`/`UPDATEIFCOPY` write-backs, and frees state.
+
+| Behavior | NumSharp contract |
+|----------|-------------------|
+| Enumeration result | Always `NDArray[]`. A one-operand iterator yields `vals[0]`; NumPy yields a bare 0-d array in that case. |
+| Cursor | One shared cursor. A second `foreach` resumes; call `reset()` to rewind. Typed iterators instead create a fresh cursor per enumeration. |
+| Current values | 0-d alias views, or 1-d alias views under `external_loop`. Unbuffered aliases keep pointing at the published element; buffered aliases may be overwritten on the next refill. Copy a value you need to retain. |
+| Null output operand | Defaults to `writeonly, allocate`; dtype is inferred from the non-null operands when omitted. |
+| `copy()` | Copies the iterator at its current cursor and duplicates active buffers; the copy advances independently. |
+| `remove_multi_index()` | Clears index tracking, reorders/coalesces, and resets the cursor to the start. |
+| `iterrange` | Requires `ranged`; setting `[start,end)` repositions the iterator to `start` and stops at `end`. |
+| `itviews` | Exposes the internal post-reorder/coalesce operand views only when unbuffered. See the scalar gap below. |
+| delayed buffers | With `delay_bufalloc`, call `reset()` before reading `it[i]` or enumerating the managed wrapper. Kernel entry points on `NDIterRef` auto-materialize delayed buffers, but the managed indexer currently does not. |
+
+`np.nested_iters` links two or more of these managed iterators. Outer levels drop `external_loop`/`buffered`; the innermost keeps them and receives `buffersize`. Each outer advance calls `ResetBasePointers` down the child chain, then rewinds the children. Dispose **every** returned level.
+
 ---
 
 ## What NDIter Is
 
-`NDIter` is a `ref partial struct` living in `NumSharp.Backends.Iteration`. Concretely:
+The stack-only engine is `NDIterRef`, a `ref partial struct` in `NumSharp.Backends.Iteration`. `NDIter` is a different type: a static compatibility/helper class that owns the production copy/cast core. Keep the names distinct:
+
+| Name | Lifetime and boundary |
+|------|-----------------------|
+| `np.NDIterator` | Managed public wrapper returned by `np.nditer`; owns detached unmanaged state and has a finalizer safety net. |
+| `NDIterRef` | Stack-only low-level scheduler and kernel-author API; owns or borrows `NDIterState*`. |
+| `NDIterState` | Blittable unmanaged state and dynamically sized pointer arrays. |
+| `NDIter` | Static copy/cast/reduction helpers (`Copy`, `CopyAs`, `TryCopySameType`, legacy state factories). It is not an iterator instance. |
+| `NDIterExecution` / `NDIterPathSelector` | Unused legacy scaffolding in `NDIterKernels.cs`; the current bridge uses `NDIterRef.ForEach`/`Execute*` and `DetectExecutionPath` instead. Do not build new code on it. |
+
+The active low-level shape is:
 
 ```
-NDIterRef (ref partial struct)                ← public handle (~3000 lines across 2 partials)
+NDIterRef (ref partial struct)                ← stack-only handle (5 partial files)
     ├── _state: NDIterState*                  ← heap-allocated unmanaged state
     ├── _operands: NDArray[]                   ← kept alive by GC root
     └── _cachedIterNext: NDIterNextFunc?      ← memoized iterate-advance delegate
 
-NDIterState (unmanaged struct)                ← ~30 fields, all dynamically sized
+NDIterState (unmanaged struct)                ← unmanaged state + dynamic blocks
     ├── Scalars: NDim, NOp, IterSize, IterIndex, ItFlags, ...
     ├── Dim arrays (size = NDim): Shape*, Coords*, Strides*, Perm*
     ├── Op arrays (size = NOp):   DataPtrs*, ResetDataPtrs*, BufStrides*,
@@ -150,26 +184,42 @@ NDIterState (unmanaged struct)                ← ~30 fields, all dynamically si
                                   ArrayWritebackPtrs*, CoreSize, CorePos, ...
 ```
 
-The public struct is cheap to pass around; the heavy state lives behind one pointer so we can allocate it exactly once, on the heap, sized to the problem. Dispose frees it.
+The handle is cheap to pass, but construction performs unmanaged allocation: one state object, one dimension-dependent block when `ndim > 0`, and one per-operand block. Buffering may add one aligned block per operand. `Dispose`/`FreeState` must release the matching ownership path.
 
 ### The Files
 
 | File | What lives there |
 |------|------------------|
-| `NDIter.cs` | Construction, iteration wrappers, debug dump, `Copy`, `Dispose` (~3000 lines) |
-| `NDIter.State.cs` | `NDIterState` definition, allocation, `Advance`, `Reset`, `GotoIterIndex`, `BufferedReduceAdvance` |
-| `NDIter.Execution.cs` | **Kernel integration layer** — `ForEach`, `ExecuteGeneric`, `Execute{Binary,Unary,Reduction,Comparison,Scan,Copy}` (~600 lines) |
+| `NDIter.cs` | `NDIterRef` construction/configuration/advance/indexing/lifecycle plus the static `NDIter` copy/cast core (~4,600 lines) |
+| `NDIter.State.cs` | `NDIterState`, the two dynamic blocks, accessors, `Advance`, `Reset`, `GotoIterIndex`, `BufferedReduceAdvance` |
+| `NDIter.Detach.cs` | Ownership transfer/borrow bridge used by the managed `np.NDIterator` wrapper |
+| `NDIter.Execution.cs` | Chunk drivers plus the separate whole-array DirectIL helper family (~970 lines) |
 | `NDIterFlags.cs` | `NDIterFlags`, `NDIterOpFlags`, `NDIterGlobalFlags`, `NDIterPerOpFlags`, casting/order enums |
 | `NDIterCoalescing.cs` | `CoalesceAxes`, `ReorderAxesForCoalescing`, `FlipNegativeStrides` |
 | `NDIterCasting.cs` | Safe/same-kind/unsafe cast rules, `ConvertValue`, `FindCommonDtype` |
 | `NDIterBufferManager.cs` | Aligned buffer allocation, copy-in/copy-out, `GROWINNER`, `BUF_REUSABLE` |
 | `NDIter.Reduce.cs` | `NewReduce` — builds the reduction iterator (stride-ordered `op_axes`, stride-0 output axis) |
 | `NDIter.Execution.Custom.cs` | Custom-op tiers: `ExecuteRawIL` (3A), `ExecuteElementWise` (3B), `ExecuteExpression` (3C) |
+| `NDIterKernels.cs` | Legacy `INDIterKernel`/`NDIterExecutionPath` experiment; no current production or test call sites |
 | `NDMemOverlap.cs` | Diophantine memory-overlap solver for `COPY_IF_OVERLAP` (port of NumPy's `mem_overlap.c`) |
 | `NDExpr.cs`, `NDExpr.Typing.cs`, `NDExpr.Evaluate.cs` | Tier 3C / `np.evaluate` expression tree, per-node NEP50 typing, lowering to one pass |
 | `NDScalarReductionKernels.cs`, `NDNanReductionKernels.cs` | Half/Complex + NaN-aware scalar (axis=None) reduction kernel structs |
 | `NDAxisIter.cs`, `NDAxisIter.State.cs` | Single-axis reduction iterator for `var` / `std` / `cumsum` / `cumprod` |
 | `NDLogicalReductionKernels.cs` | `All` / `Any` reduction kernel structs |
+
+### Subsystem map and evidence
+
+These stable area ids are useful when discussing iterator changes. Status labels mean: **operational** = implemented and a representative path was exercised; **partial** = meaningful implementation with a known boundary; **risk** = a reproduced correctness or lifetime hazard.
+
+| Area | Status | Boundary | Primary evidence |
+|------|--------|----------|------------------|
+| `A1` Public surfaces | operational | `np.nditer`, typed iterators, `np.nested_iters`, plus the independent `ndindex`/`ndenumerate`/`broadcast` conveniences | `APIs/np.nditer*.cs`, `APIs/np.nested_iters.cs`, `Indexing/np.nd*.cs`, `Creation/np.broadcast.cs`; focused iterator run: 670/670 tests |
+| `A2` Schedule and state | operational | broadcast shape, `op_axes`, order, permutation, flipping, coalescing, index/range tracking, ownership | `NDIter.cs`, `NDIter.State.cs`, `NDIterCoalescing.cs`, `NDIter.Detach.cs`; battle/parity/state tests |
+| `A3` Transfer safety | partial / risk | casting, window buffers, masks, overlap copies, write-back | `NDIterCasting.cs`, `NDIterBufferManager.cs`, `NDMemOverlap.cs`; buffer/overlap/masked-write tests; known gaps below |
+| `A4` Kernel execution | operational | per-chunk drivers, struct-generic reductions, custom compiled inner loops, whole-array DirectIL helpers | `NDIter.Execution*.cs`, `DirectILKernelGenerator.InnerLoop.cs`; custom-op/reduction/scan tests |
+| `A5` Production consumers | operational | engine routing for elementwise, reductions, selection, fusion, sorting, byteswap, copy/fill/pad | `DefaultEngine.{BinaryOp,CompareOp,UnaryOp,Evaluate,ReductionOp}.cs`, `np.where.cs`, `np.diff.cs`, `NDArray.byteswap.cs`, `np.copyto.cs` |
+
+The focused test run covers construction, ordering, indices, buffering, overlap, masks, custom kernels, public wrappers, reductions, scans, and nested iteration. The separate AuditV2 iterator class intentionally still exposes current gaps; one of its failures (`T1.2`) is a stale reflection check for an old method name—the live 20,005-element buffered probes completed as 20,005 scalar steps and three external-loop windows.
 
 ---
 
@@ -179,18 +229,35 @@ NumPy's `nditer` has two hard-coded limits that NumSharp drops:
 
 | Limit | NumPy | NumSharp |
 |-------|-------|----------|
-| `NPY_MAXDIMS` | 64 | unlimited (dynamic alloc, soft limit ≈ 300k from `stackalloc`) |
-| `NPY_MAXARGS` | 64 | unlimited (dynamic alloc) |
+| `NPY_MAXDIMS` | 64 | no explicit construction cap; practical memory/stack limits remain |
+| `NPY_MAXARGS` | 64 | no explicit construction cap; per-operand state is dynamic |
 
-NumPy uses fixed arrays inside `NDIter_InternalIterator`. NumSharp allocates everything via `NativeMemory.AllocZeroed` sized to the actual `(ndim, nop)` the caller passes. The trade is marginally more setup cost in exchange for no artificial ceilings and no wasted memory on a 2-operand 1-D iter.
+NumPy uses fixed-size workspaces and caps these public dimensions. NumSharp allocates its dimension and operand blocks from the actual `(ndim, nop)`, so construction has no explicit `NPY_MAXDIMS`/`NPY_MAXARGS` check. This is not literally infinite: memory and stack remain practical limits, and selected whole-array helpers still `stackalloc` stride arrays proportional to `ndim`.
 
 Other deliberate differences:
 
 - **Flag bit layout.** NumSharp reserves low bits 0-7 for the compatibility flags (`SourceBroadcast`, `SourceContiguous`, `DestinationContiguous`). NumPy-parity flags (`IDENTPERM`, `HASINDEX`, `REDUCE`, ...) sit at bits 8-15. Transfer flags pack into the top byte at shift 24. Semantics match NumPy; positions do not.
-- **Element strides everywhere internally.** NumPy stores byte strides in `NAD_STRIDES`. NumSharp stores element strides in `state.Strides` and multiplies by `ElementSizes[op]` at use. This matches NumSharp's `Shape.strides` convention.
+- **Two stride units.** NumPy's axis data is byte-strided. NumSharp keeps source-array axis strides in **elements** (`state.Strides`) and scales them with `SrcElementSizes`; `BufStrides` and the `NDInnerLoopFunc` contract are **bytes**. Whole-array DirectIL helpers receive element strides. Mixing these units is a correctness bug, not a performance detail.
 - **No Python object support.** `REFS_OK`, garbage collection hooks, and `NDIter_GetBufferNeedsAPI` are no-ops. All cast routines are written assuming the data is plain unmanaged bytes.
-- **Int64 indexing.** Every iteration counter is `long`. Arrays > 2 GB are first-class, unlike NumPy which still uses `npy_intp` (platform-dependent).
-- **NumSharp-only iterator flag.** `PARALLEL_SAFE` marks an iteration range as splittable across workers with no write hazard — set when there is no `REDUCE` operand and at most one write operand whose overlap was resolved by `COPY_IF_OVERLAP`. It has no NumPy equivalent.
+- **Int64 indexing.** Iteration counters are `long`. This matches 64-bit NumPy's `npy_intp`; the difference appears on 32-bit hosts, where NumPy's index type is pointer-sized.
+- **NumSharp-only internal flag.** `PARALLEL_SAFE` records a construction-time range-splitting judgment. It is metadata for planned/selected parallel drivers, not automatic parallel execution by `ForEach`.
+- **Typed empty iteration.** `np.nditer<T>` and `np.nditer_chunks<T>` treat an empty array as an empty C# collection. The managed parity wrapper follows NumPy and requires `zerosize_ok`.
+- **Delayed-buffer execution entry.** `NDIterRef.ForEach`/`ExecuteGeneric`/`ExecuteReducing` auto-materialize `DELAY_BUFALLOC`; NumPy requires an explicit reset. The managed wrapper does not share that guard—see the gap below.
+
+### Current known gaps
+
+These are observed current-state boundaries, not target behavior:
+
+| Surface | NumPy 2.4.x | Current NumSharp | Safe practice |
+|---------|-------------|------------------|---------------|
+| Scalar `itviews` / `GetIterView(0)` | Returns a 0-d view | Indexes `original.flat[0]` and throws `IndexError` | Use `it[0]`/`value[0]`; do not request `itviews` for 0-d until fixed |
+| `enable_external_loop()` after index tracking | Raises `ValueError` | Sets `EXLOOP`, leaving an illegal `HASINDEX`/`HASMULTIINDEX` combination | Choose `external_loop` at construction and never combine it with index flags |
+| Managed `delay_bufalloc` read before `reset()` | Raises `ValueError` | `it[i]` can reinterpret source bytes as the requested buffer dtype (garbage) | Always call `reset()` before managed access; low-level kernel entry points auto-ensure |
+| Typed `writeable: false` | No NumPy equivalent | Still returns mutable `ref T`/`Span<T>` and writes succeed | Treat it as read-only by convention; set `writeable: true` for intentional writes |
+| `np.nested_iters(..., order: 'A')` without `multi_index` | Resolves each axis-group traversal from Any-order rules | Six of 48 probed 3-D axis partitions produced a different value stream; C/F/K matched in that matrix | Prefer explicit `C`, `F`, or `K`, or track `multi_index` when coordinates define the contract |
+| `BUFFERED + REDUCE + WRITEMASKED` write-back | Supported for valid masks | Construction succeeds, write-back throws `NotSupportedException` | Use unbuffered masked reduction or separate the mask/reduction pass |
+| Low-level `GetInnerLoopSizePtr()` on 0-d | C API callers use the scalar protocol | Direct call addresses `Shape[-1]`; managed/typed/`ForEach` paths guard it | For `NDim == 0`, use `count = 1` and stride `0` |
+| `NDExpr.Call` signature dtypes | Python callables are dynamically typed | Supports 12 CLR numeric signatures; rejects `SByte`, `Half`, and `Complex` parameters/returns | Compose built-in nodes or use Tier 3B/3A for those types |
 
 ---
 
@@ -275,31 +342,32 @@ Behind the scenes:
 ```
 1. Pre-check WRITEMASKED/ARRAYMASK pairing    (state-free validation)
 2. Resolve broadcast shape                    (ResolveReturnShape; respects op_axes)
-3. Allocate ALLOCATE operands with result dtype
-4. state.AllocateDimArrays(ndim, nop)         (one big NativeMemory.AllocZeroed)
-5. Set MaskOp from ARRAYMASK flag
-6. Find common dtype if COMMON_DTYPE
-7. For each operand:
+3. If COPY_IF_OVERLAP: solve read/write overlap, replace hazardous writers
+   with forced-copy temporaries, register write-back originals
+4. Allocate null ALLOCATE/VIRTUAL operands with resolved dtype and shape
+5. state.AllocateDimArrays(ndim, nop)         (dimension block + operand block)
+6. Set MaskOp from ARRAYMASK flag
+7. Find common dtype if COMMON_DTYPE
+8. For each operand:
       - SetOpSrcDType (array dtype)
       - SetOpDType (buffer dtype; equals array dtype when not casting)
       - Translate NDIterPerOpFlags → NDIterOpFlags
-      - Mark CAST if dtypes differ
+      - Mark CAST / FORCECOPY / HAS_WRITEBACK as needed
       - Compute strides (respecting op_axes or broadcast)
       - Set data pointer = arr.Address + offset * elemSize
-      - Mark SourceBroadcast if any dim has stride 0 with Shape > 1
-8. Validate casting requires BUFFERED flag
-9. NDIterCasting.ValidateCasts(ref state, casting)
-10. Apply op_axes reduction flags (detects implicit + explicit reduction axes)
-11. FlipNegativeStrides (K-order only; skipped for C/F/A)
-12. If NDim > 1: ReorderAxesForCoalescing → CoalesceAxes
-    (but only when MULTI_INDEX and C_INDEX/F_INDEX are both off)
-13. Set EXLOOP, GROWINNER, HASMULTIINDEX, HASINDEX flags per request
-14. InitializeFlatIndex() if HASINDEX
-15. UpdateInnerStrides()  (cache inner stride per op for fast access)
-16. UpdateContiguityFlags()  (sets CONTIGUOUS if every operand is contiguous)
-17. If BUFFERED: allocate buffers, prime them with CopyToBuffer
-18. If BUFFERED + REDUCE: SetupBufferedReduction (double-loop)
-19. If IterSize <= 1: set ONEITERATION
+      - Mark SourceBroadcast or validate/mark a stretched WRITE as REDUCE
+9. Require BUFFERED when iteration dtype differs; validate casting rule
+10. Apply op_axes reduction flags (implicit + REDUCTION_AXIS-encoded axes)
+11. Validate WRITEMASKED reduction strides against ARRAYMASK
+12. FlipNegativeStrides (K-order only; skipped for C/F/A)
+13. Reorder; coalesce only when index tracking and requested order allow it;
+    otherwise remove unit axes where safe
+14. Set EXLOOP, GROWINNER, HASMULTIINDEX, HASINDEX; initialize flat index
+15. Refresh inner-stride and contiguity caches
+16. If BUFFERED: allocate/prime a window, or set DELAYBUF
+17. If BUFFERED + REDUCE: allocate and configure the legacy double loop
+18. If IterSize <= 1: set ONEITERATION
+19. Derive PARALLEL_SAFE metadata from reduction/write-overlap state
 ```
 
 The result is a state machine ready to produce pointers.
@@ -319,7 +387,7 @@ There are four mostly-disjoint flag enums. A quick reference:
 | `REDUCE_OK` | Allow reduction operands (needed for axis reductions) |
 | `BUFFERED` | Enable operand buffering (required with cross-type casting) |
 | `GROWINNER` | Make inner loop as large as possible within buffer |
-| `DELAY_BUFALLOC` | Defer buffer alloc until first `Reset` |
+| `DELAY_BUFALLOC` | Defer allocation. Call `reset()` before managed `NDIterator` access; low-level kernel drivers auto-ensure. |
 | `DONT_NEGATE_STRIDES` | Suppress `FlipNegativeStrides` |
 | `COPY_IF_OVERLAP` | Copy operand if it overlaps another in memory |
 | `RANGED` | Iterator covers a sub-range |
@@ -334,6 +402,8 @@ There are four mostly-disjoint flag enums. A quick reference:
 | `CONTIG` | Require contiguous view (may force buffering) |
 | `NO_BROADCAST` | Error if this operand would need to broadcast |
 | `WRITEMASKED`, `ARRAYMASK` | Writemask pair for masked writes |
+| `VIRTUAL` | Null temporary operand; currently materialized as a real array, matching NumPy's observable behavior |
+| `OVERLAP_ASSUME_ELEMENTWISE_PER_OP` | Lets exact same-layout aliases avoid a `COPY_IF_OVERLAP` temporary when elementwise access is guaranteed |
 
 **`NDIterFlags` — internal state, set/cleared during iteration.** (`IDENTPERM`, `NEGPERM`, `HASINDEX`, `BUFFER`, `REDUCE`, `ONEITERATION`, etc.) These flow from construction decisions.
 
@@ -463,19 +533,26 @@ long* size = iter.GetInnerLoopSizePtr();
 
 With `EXTERNAL_LOOP` set and the array coalesced to 1-D, one `iternext` call returns the entire array size — a single kernel invocation processes everything.
 
+Two low-level traps matter to kernel authors:
+
+- `GetInnerLoopSizePtr()` is not scalar-safe by itself; `NDim == 0` would address `Shape[-1]`. `ForEach`, the managed indexer, and both typed iterators special-case the scalar as `(count=1, stride=0)`.
+- `GetInnerStrideArray()` exposes internal **element** strides. The `NDInnerLoopFunc` contract is **byte** strides. Let `ForEach`/`ExecuteGeneric` do the conversion, or multiply by the correct source element size yourself. `BufStrides` are already bytes.
+
 ---
 
 ## Buffering
 
 Buffering solves two problems:
 
-1. **Casting.** If the caller wants to see doubles but the NDArray is int32, the iterator copies into a double buffer, runs the kernel against the buffer, writes back on dispose.
-2. **Non-contiguous + SIMD.** If the operand is strided (sliced, transposed), copying to a contiguous buffer lets a SIMD kernel work efficiently.
+1. **Casting.** If the caller wants to see doubles but the NDArray is int32, the iterator gathers/converts into a double buffer. Writable operands convert/scatter back at window flush or disposal.
+2. **A non-linear iteration walk.** When an operand cannot be represented as one arithmetic progression through the whole post-coalesce iteration space, a tight window simplifies the kernel contract.
 
 `NDIterBufferManager.AllocateBuffers` allocates 64-byte-aligned blocks (AVX-512-friendly) per operand that needs buffering. Default buffer size is 8192 elements; this can be tuned per call.
 
+`BUFFERED` does **not** imply that every operand gets a buffer. An operand stays direct (`BUFNEVER`-style) when it needs no cast/`CONTIG` requirement and its positions form one linear progression: contiguous arrays, constant-stride 1-D views, and fully broadcast scalars qualify. Its `BufStrides[op]` records the true inner **byte** stride. Only cast/`CONTIG`/reduction/non-linear operands get an aligned block and a tight element-size `BufStride`.
+
 ```
-strided array (stride=5, size=24)       aligned 64-byte buffer (size ≤ 8192)
+CONTIG-requested strided array          aligned 64-byte buffer (size ≤ 8192)
 ┌─────┬─────┬─────┬─────┐               ┌──┬──┬──┬──┬──┬──┬──┐
 │ a[0]│  ?  │  ?  │  ?  │  CopyToBuffer │a0│a5│a10│...         │
 │  ?  │  ?  │  ?  │ a[5]│    ────────▶  └──┴──┴──┴──┴──┴──┴──┘
@@ -484,7 +561,7 @@ strided array (stride=5, size=24)       aligned 64-byte buffer (size ≤ 8192)
 └─────────────────────┘                     BufStrides[op] = sizeof(T)
 ```
 
-Once the buffer is filled, `DataPtrs[op]` moves into the buffer and every inner-loop kernel treats it as a flat contiguous array. When iteration advances past `BufIterEnd`, `NDIterBufferManager.CopyFromBuffer` writes output back into the original array (respecting original strides) and `CopyToBuffer` refills input buffers for the next chunk.
+Once a buffered operand is filled, its `DataPtrs[op]` points into the tight block; an unbuffered operand's pointer remains in its array. At a window boundary `FlushBufferWindow` scatters writable buffers back through the original strides (and mask, when present), `GotoIterIndex` repositions array pointers, and `FillBufferWindow` gathers the next window. `Reset`, final `iternext`, `ForEach`, and disposal all contain flush paths so a last partial window is not lost.
 
 ### GROWINNER
 
@@ -493,6 +570,20 @@ Once the buffer is filled, `DataPtrs[op]` moves into the buffer and every inner-
 ### BUF_REUSABLE
 
 For reductions, the same input block may be read multiple times (e.g. `mean` when accumulator type differs). The `BUF_REUSABLE` flag tells the iterator "the buffer contents are still valid, skip the copy." `CopyToBufferIfNeeded` honors it.
+
+---
+
+## Masked writes
+
+NumPy's ufunc `where=` machinery is represented by one `ARRAYMASK` operand and one or more `WRITEMASKED` outputs. Construction enforces the pairing: exactly one mask, at least one write-masked operand, the mask is read-only, and the mask cannot itself be write-masked. For a reduction, the mask stride must not vary along an axis where the output is pinned.
+
+The execution path depends on buffering:
+
+1. `ForEach`/Tier 3B recognizes a trailing bool/`Byte` mask and decomposes every chunk into mask-true runs. It calls the ordinary unmasked kernel only for those runs, so dense masks keep SIMD-sized stretches.
+2. Buffered non-reduction output uses the same run decomposition in `CopyWindowFromBufferMasked`; false slots are never scattered back.
+3. A stride-0 mask gates the entire chunk/window from one byte.
+4. Buffered masks must be `Boolean` or `Byte`. Other mask dtypes keep the plain low-level contract, where the custom kernel is responsible for masking.
+5. Buffered **reduction** write-back is the remaining gap: it throws rather than silently corrupt false-mask slots.
 
 ---
 
@@ -533,120 +624,109 @@ if (iter.IsFirstVisit(reduceOp)) *(double*)ptrs[reduceOp] = 0.0;
 
 ## Kernel Integration Layer
 
-Everything up to this point describes `NDIter`'s scheduling machinery. What `NDIter.Execution.cs` adds is the connection between that schedule and the SIMD kernels `ILKernelGenerator` emits.
-
-The layer is a partial declaration of `NDIterRef` that exposes **seven entry points** arranged along an ergonomics-vs-control axis. Pick the one that matches your use case; they all share the same compiled-kernel cache and all run through the same `ForEach` driver at the bottom.
+Everything up to this point describes scheduling. `NDIter.Execution.cs` exposes **three execution shapes** over that state. They are peers, not one seven-level call stack:
 
 ```
-           ergonomics                                                     control
-              ▲                                                              ▲
-              │                                                              │
-  Layer 3     │  ExecuteBinary / Unary / Reduction / Comparison / Scan      │  90% case
-              │  "one call, NumPy-style — one line per op"                   │
-  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Tier 3C      │  ExecuteExpression(NDExpr)                                  │  compose
-              │  "build a tree with operators; no IL in caller"              │  with DSL
-  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Tier 3C+Call │  NDExpr.Call(Math.X / Func / MethodInfo, args)              │  inject any
-              │  "invoke arbitrary managed method per element"               │  BCL / user op
-  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Tier 3B      │  ExecuteElementWiseBinary(scalarBody, vectorBody)            │  hand-tune
-              │  "write per-element IL; factory wraps the unroll shell"      │  the vector body
-  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Tier 3A      │  ExecuteRawIL(emit, key, aux)                                │  emit
-              │  "emit the whole inner-loop body including ret"              │  everything
-  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Layer 2     │  ExecuteGeneric<TKernel> / ExecuteReducing<TKernel, TAccum>  │  struct-
-              │  "zero-alloc; JIT specializes per struct; early-exit reduce" │  generic
-  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Layer 1     │  ForEach(NDInnerLoopFunc kernel, void* aux)                 │  delegate,
-              │  "closest to NumPy's C API; closures welcome"                │  anything goes
-              │                                                              │
-              ▼                                                              ▼
-           NDIter state (Shape, Strides, DataPtrs, Buffers, ...)
-                                  │
-                                  ▼
-              ILKernelGenerator (DynamicMethod + V128/V256/V512)
+                         NDIterState
+             (DataPtrs, Shape, strides, buffers)
+                    /              |              \
+                   /               |               \
+  chunk delegate driver     struct-generic driver    whole-array DirectIL helpers
+  ForEach(NDInnerLoopFunc)   ExecuteGeneric/Reducing  ExecuteBinary/Unary/...
+           ▲                         |                        |
+           |                         |                        |
+  Tier 3A / 3B / 3C          JIT-specialized struct     family-specific cache
+  compile NDInnerLoopFunc     no delegate indirection   direct delegate invocation
 ```
+
+- **Chunk delegate driver.** `ForEach` owns delayed-buffer materialization, window advancement, byte-stride conversion, and bool/byte mask-run decomposition. Custom Tier 3A/B/C kernels compile to `NDInnerLoopFunc` and enter here.
+- **Struct-generic driver.** `ExecuteGeneric` and `ExecuteReducing` repeat the scheduling logic without a delegate. The JIT specializes the concrete kernel struct; reducing kernels can early-exit.
+- **Whole-array helpers.** `ExecuteBinary`, `ExecuteUnary`, `ExecuteReduction`, `ExecuteComparison`, `ExecuteScan`, and `ExecuteCopy` prepare post-coalesce element-stride arrays and call family-specific `DirectILKernelGenerator` delegates directly. Except for the buffered binary/copy cases, these helpers require a C-contiguous output because their legacy kernels ignore output strides. They do **not** funnel through `ForEach`.
 
 ### Quick reference
 
-| # | Entry point | When to reach for it | Per-call cost |
-|---|-------------|----------------------|---------------|
-| 1 | `ExecuteBinary` / `Unary` / `Reduction` / `Comparison` / `Scan` | The op is a standard NumPy ufunc. 90% of cases. | Cache hit after first call |
-| 2 | `ExecuteExpression(NDExpr)` | Compose a fused ufunc from DSL nodes (`Add`, `Sqrt`, `Where`, `Exp`, comparisons, `Min`/`Max`/`Clamp`, …). SIMD when dtypes align. | Cache hit after first compile |
-| 3 | `ExecuteExpression(NDExpr.Call(...))` | DSL doesn't expose the op you want (`Math.BitIncrement`, custom activation, reflected plugin method). | +5-10 ns / element for non-static delegates |
-| 4 | `ExecuteElementWiseBinary` / `Unary` / `Ternary` / `ExecuteElementWise` (array form) | You want SIMD + 4× unroll for a fused or non-standard op; the DSL doesn't compose to it, but the loop shape is still element-wise. Hand-write the scalar + vector body. | Cache hit after first compile |
-| 5 | `ExecuteRawIL(emit, key, aux)` | Non-rectangular loop: gather/scatter, cross-element deps, branch-on-auxdata. You emit every opcode. | Cache hit after first compile |
-| 6 | `ExecuteGeneric<TKernel>` / `ExecuteReducing<TKernel, TAccum>` | Custom kernel in struct form. Zero allocation; JIT specializes. **Only** path with early-exit reductions. | No delegate indirection |
-| 7 | `ForEach(NDInnerLoopFunc)` | Exploratory; one-off fused kernels; anything a closure makes natural. | Delegate allocation per call |
+| Entry point | Contract | Use it when |
+|-------------|----------|-------------|
+| `ForEach(NDInnerLoopFunc)` | Chunk/window driver; byte strides; optional mask wrapper | You already have a reusable inner-loop delegate or need `auxdata`/a closure |
+| `ExecuteGeneric<TKernel>` / `ExecuteReducing<TKernel,TAccum>` | Same schedule, struct call; early exit on reducing form | A hot custom kernel should avoid delegate dispatch |
+| `ExecuteElementWiseUnary/Binary/Ternary` | Tier 3B compiler → cached chunk delegate → `ForEach` | Production elementwise routing over arbitrary inner strides; this is what `DefaultEngine` commonly uses |
+| `ExecuteExpression(NDExpr)` | Tier 3C expression → Tier 3B compiler → `ForEach` | A fused expression fits the DSL and avoids temporaries |
+| `ExecuteRawIL` | Tier 3A caller-authored `NDInnerLoopFunc` IL → `ForEach` | The loop body/auxdata cannot be expressed by Tier 3B/C |
+| `ExecuteBinary` / `Unary` / `Comparison` / `Scan` / `Copy` | Whole-array DirectIL helper | The exact legacy helper contract fits, especially a contiguous output; do not assume it is the universal ufunc route |
+| `ExecuteReduction<TResult>` | Whole-array typed reduction helper | A one-operand scalar reduction; this has a current production call site |
+| `BufferedReduce<K,T>` | Legacy `BUFFER+REDUCE` double-loop driver | Specialized internal experiments only; no current production call site |
 
 ### Decision tree
 
 ```
-Is the op a standard NumPy ufunc already in ExecuteBinary/Unary/Reduction?
-  yes → Layer 3 (baked). Fastest, zero work. Done.
+Does an existing DefaultEngine/np.* route already implement this operation?
+  yes → extend that route and its kernel family; preserve its layout/dtype gates.
+  no ↓
+
+Is it a one-operand scalar reduction handled by ExecuteReduction<TResult>?
+  yes → use that whole-array helper and its family-specific cache.
   no ↓
 
 Can I express it as a tree of DSL nodes (Add, Sqrt, Where, Exp, …)?
-  yes → Tier 3C. Fused, SIMD-or-scalar automatic, no IL.
+  yes → Tier 3C → cached inner-loop delegate → ForEach.
   no ↓
 
-Is the missing piece a BCL method (Math.X, user activation, reflected plugin)?
-  yes → Tier 3C + Call. Scalar-only but fused. Done.
+Is the missing piece a supported CLR method signature?
+  yes → Tier 3C + Call (scalar-only; not SByte/Half/Complex signatures).
   no ↓
 
-Do I need V256/V512 intrinsics the DSL doesn't wrap (Fma, Shuffle, Gather, …)?
-  yes → Tier 3B. Hand-write the vector body; factory wraps the shell.
+Is the computation rectangular and element-wise?
+  yes → Tier 3B. Supply scalar IL and optional vector IL; the factory wraps strides/tails.
   no ↓
 
-Is the loop shape non-rectangular (gather/scatter, cross-element deps)?
-  yes → Tier 3A. Emit the whole inner-loop IL yourself.
+Need a custom emitted inner loop or auxdata?
+  yes → Tier 3A.
   no ↓
 
 Do I need an early-exit reduction (Any / All / find-first)?
-  yes → Layer 2 ExecuteReducing. Returns false from the kernel to bail out.
+  yes → ExecuteReducing. Return false from the kernel to bail out.
   no ↓
 
-Just exploring or writing a one-off?
-       → Layer 1 ForEach. Delegate per call; flexible.
+Already have a chunk delegate / closure?
+       → ForEach.
 ```
 
 ### Measured behavior
 
-Benchmarked on 1M-element arrays, post-warmup, via the showcase script in this doc's `/demos/` sibling (not checked in — recreate with the snippet in each tier's section below):
+The authoritative source is the generated [NDIter benchmark report](https://scisharp.github.io/NumSharp/docs/reports/nditer_results.html). Its 2026-08-28 snapshot measures matched NumSharp/NumPy kernels across scalar, 1K, 100K, 1M, and 10M sizes:
 
-| Technique | Operation | Time / run | Notes |
-|-----------|-----------|-----------:|-------|
-| Layer 3 | `a + b` (f32) | 0.58 ms | baked, 4×-unrolled V256, cache hit |
-| Tier 3B | `2a + 3b` hand V256 (f32) | 0.61 ms | within ~7% of baked — same shell |
-| Layer 2 reduction | `AnyNonZero` early-exit (hit @ 500) | 0.001 ms | returns `false` from kernel, bridge bails |
-| Tier 3A | `abs(a - b)` raw IL (i32) | 1.27 ms | scalar loop, JIT autovectorizes post tier-1 |
-| Call | `GELU` via captured lambda (f64) | 8.08 ms | `Math.Tanh` dominates |
-| Tier 3C | stable sigmoid via `Where` (f64) | 13.6 ms | 3 × `Math.Exp` per element |
+| Signal | Current snapshot | Interpretation |
+|--------|------------------|----------------|
+| 165-cell operation matrix | 1.49× NumPy÷NumSharp geomean; 114 wins / 51 losses | Overall useful, not a universal win |
+| Iterator construction (9 configs) | 2.74× geomean; 9/9 wins | Dynamic state setup is competitive despite unmanaged allocation |
+| Strided-row chunk width 4 | 0.44× | Per-chunk dispatch dominates very narrow loops |
+| Strided-row chunk width 16 | 1.01× | Break-even is workload/host dependent |
+| Early-hit `any` | about 24× at 100K–10M | Struct reducing early exit avoids the full scan |
+| 10M `sqrt` | 0.23× | A prominent size-specific loss; never quote only the geomean |
 
-Layer 1 and Layer 2 element-wise kernels have a tier-0 JIT characteristic: when run from a dynamic host (ephemeral script, `dotnet_run`, first-call cold start) they can measure 30-50× slower than production code. Post-tier-1 promotion (~100 hot-loop iterations) brings them within 2-3 ms for hypot on 1M f32. See [JIT warmup and measurement](#jit-warmup-and-measurement).
+The harness uses Release builds, warm pilots, time-bound best-of rounds, matched case ids, and correctness checks. Re-run it when a kernel, buffer policy, or route threshold changes; do not preserve isolated microprobe numbers in prose.
 
-### Cache state — two lifetimes to know about
+### Cache state — separate families and lifetimes
 
-The full integration layer shares two process-lifetime caches. The kernel-cache counts are public read-only observability on `GeneratedDelegates`; resetting a cache is an internal test-only hook (needs `[InternalsVisibleTo]` or the `AssemblyName=NumSharp.DotNetRunScript` script directive):
+There is no single cache shared by every entry point:
+
+- Tier 3A/B/C share `DirectILKernelGenerator._innerLoopCache`, keyed by string. `GeneratedDelegates.InnerLoopCount` observes only that cache.
+- Whole-array helpers use family-specific caches such as `_mixedTypeCache`, `_unaryCache`, `_comparisonCache`, `_elementReductionCache`, `_scanCache`, and `_copyKernelCache`.
+- `ExecuteGeneric`/`ExecuteReducing` rely on normal JIT generic specialization, not a DynamicMethod dictionary.
+- A caller-supplied `ForEach` delegate is not inserted into a generator cache by `ForEach`.
+- `DelegateSlots` separately roots bound targets/captured delegates used by `NDExpr.Call`; those registrations live for the process.
+
+The public observability for the custom inner-loop/Call lifetimes is:
 
 ```csharp
-int kernels = GeneratedDelegates.InnerLoopCount;        // compiled DynamicMethods (public)
-int slots   = DelegateSlots.RegisteredCount;            // registered delegates + targets (public)
+int customInnerLoops = GeneratedDelegates.InnerLoopCount;
+int callSlots        = DelegateSlots.RegisteredCount;
 
-GeneratedDelegates.ClearInnerLoop();          // internal, test-only
-DelegateSlots.Clear();                                   // test-only — pair with above!
+GeneratedDelegates.ClearInnerLoop();  // internal, test-only
+DelegateSlots.Clear();                 // test-only; clear with the kernel cache
 ```
 
-After running the full showcase (Layer 3 + Tiers A-C + Call across 130 warmup+timed iterations), typical counts are:
-
-```
-GeneratedDelegates.InnerLoopCount      = 4     ← one per unique cache key across all tiers
-DelegateSlots.RegisteredCount          = 131   ← one per Call(lambda) construction
-```
-
-The `131` reflects the behavior described in the [Memory model and lifetime](#memory-model-and-lifetime) section — every `NDExpr.Call(lambda, …)` constructor call re-registers the delegate, even if the kernel is reused via an explicit `cacheKey`. To keep slot growth flat, register delegates once at startup (`static readonly Func<…>`); see the [registration-once pattern](#memory-model-and-lifetime).
+Every new captured delegate instance gets a new slot even if an explicit kernel key reuses compiled IL. Keep delegates/targets in stable fields and construct reusable expression trees once; see [Memory model and lifetime](#memory-model-and-lifetime).
 
 ### Layer 1 — Canonical Inner-Loop API
 
@@ -665,7 +745,8 @@ One call per *inner loop*, not per element. The iterator decides what "inner loo
 |----------|-----------|----------------|
 | Fully coalesced + contiguous, with `EXTERNAL_LOOP` | 1 | `IterSize` |
 | Non-coalesced with `EXTERNAL_LOOP` | outer product | `Shape[NDim-1]` |
-| Buffered | `ceil(IterSize / BufferSize)` | `BufIterEnd` |
+| Buffered non-reduction | `ceil(IterSize / BufferSize)` | current `BufTransferSize` |
+| Buffered reduction | double-loop dependent | legacy `BufIterEnd` contract |
 | Neither `EXTERNAL_LOOP` nor `BUFFERED` | `IterSize` | 1 |
 
 The strides passed to the kernel are always in **bytes** — the bridge converts from element strides for the non-buffered path. This matches NumPy's convention and makes the kernel body identical whether or not the iterator is buffering.
@@ -701,7 +782,7 @@ iter.ForEach((ptrs, strides, count, _) => {
 });
 ```
 
-Use this when you're writing a one-off operation that doesn't fit the standard ufunc shape, or when you want to fuse several operations into a single pass to avoid temporaries.
+Use this when you already own a reusable inner-loop delegate, need `auxdata`, or want closure ergonomics while exploring. `ForEach` itself does not allocate a delegate; a capturing lambda at the call site does.
 
 ### Layer 2 — Struct-Generic Dispatch
 
@@ -778,7 +859,7 @@ On a 1M-element array with a non-zero near the start, this returns after one ker
 
 ### Layer 3 — Typed ufunc Dispatch
 
-Layer 3 is what you reach for 90% of the time: "run a standard ufunc, pick the best kernel." The bridge inspects the iterator's post-coalesce stride picture, constructs the right cache key for `ILKernelGenerator`, materializes a SIMD kernel, and invokes it.
+This section describes the bridge's **whole-array helper family**. It is useful, but it is not the universal production ufunc layer: current `DefaultEngine` elementwise routes commonly build `EXTERNAL_LOOP` iterators and call Tier 3B `ExecuteElementWise*`. Of the helpers below, `ExecuteReduction<TResult>` has a direct current engine call site; several others are available low-level APIs with test coverage but no production callers.
 
 ```csharp
 public void ExecuteBinary(BinaryOp op);       // [in0, in1, out]
@@ -790,20 +871,20 @@ public void ExecuteCopy();                     // [src, dst]
 public void BufferedReduce<K, T>(K kernel);    // explicit BUFFER+REDUCE double-loop
 ```
 
-Under the hood each helper does four things:
+Under the hood the non-buffered whole-array helpers do four things:
 
 1. **Validate.** Throw if operand count or flags are wrong.
 2. **Detect path.** Scan operand strides, pick `SimdFull` / `SimdScalarRight` / `SimdScalarLeft` / `SimdChunk` / `General`.
 3. **Prepare args.** `stackalloc` one stride array per operand, fill with element strides, grab `_state->Shape` and data pointers.
-4. **Invoke.** `ILKernelGenerator.GetMixedTypeKernel(key)(...)` — cache hit returns the cached delegate, cache miss emits IL and caches.
+4. **Invoke.** A family-specific `DirectILKernelGenerator.Get*Kernel(key)` — cache hit returns its delegate, cache miss emits IL and stores it in that family's dictionary.
 
-For buffered paths, `ExecuteBinary` dispatches to `RunBufferedBinary`, which runs the kernel against `_state->Buffers` using `BufStrides` (always element-sized for the buffer dtype) rather than the original-array strides — the inner loop reads contiguous buffer memory while `NDIterBufferManager` handles the strided copy-in and copy-out.
+The helpers bridge to legacy whole-array delegates whose output is implicitly dense. `RequireContiguousOutput` therefore rejects strided outputs for unary/comparison/scan and non-buffered binary. Use Tier 3B/`ForEach` when every operand stride must be honored. Buffered `ExecuteBinary` is the exception: `RunBufferedBinary` consumes windows and lets buffer write-back honor the real destination strides.
 
 ### Custom Operations (Tier 3A / 3B / 3C)
 
-The enum-driven `Execute{Binary,Unary,Reduction,...}` methods cover every primitive NumPy ufunc, but they're a closed set. The moment you want `a*b + c` as one pass, or `sqrt(a² + b²)` without materializing intermediates, or a brand-new op that isn't in `BinaryOp`/`UnaryOp`, you're outside the baked catalog.
+The enum-driven whole-array helpers cover a closed set of binary, unary, comparison, reduction, scan, and copy shapes. Production routes also need masking, arbitrary output strides, mixed-type emitters, and fused expressions; those are reasons to use the custom inner-loop family even for an operation whose enum already exists.
 
-The Custom Operations extension solves this by letting the bridge **IL-generate a kernel specialized for any user-defined computation** while preserving Layer 3's 4×-unrolled SIMD shell. Three tiers trade control for convenience:
+The Custom Operations extension lets the bridge **IL-generate a stride-aware rectangular elementwise kernel** while preserving the Tier 3B 4×-unrolled SIMD shell when the supplied dtype/vector body permits it. Three tiers trade control for convenience:
 
 ```
               ┌─────────────────── You provide ────────────────────┐
@@ -1041,7 +1122,7 @@ Unlike NumPy's comparison ufuncs (which return `bool` arrays), Tier 3C's single-
 
 NaN semantics match IEEE 754: any comparison involving NaN produces 0 (false). `NaN == NaN → 0`, `NaN < 5 → 0`, `NaN >= 5 → 0`. To test for NaN, use `IsNaN(x)`.
 
-**Call — invoke any .NET method.** The escape hatch for math not in the node catalog. Scalar path only.
+**Call — invoke a supported .NET numeric method.** The escape hatch for math not in the node catalog. Scalar path only; signatures are limited to the 12 CLR dtypes listed below.
 
 | Factory | Semantics |
 |---------|-----------|
@@ -1050,7 +1131,7 @@ NaN semantics match IEEE 754: any comparison involving NaN produces 0 (false). `
 | `Call(MethodInfo staticMethod, params NDExpr[] args)` | Invoke a reflection-obtained static method. |
 | `Call(MethodInfo instanceMethod, object target, params NDExpr[] args)` | Invoke a reflection-obtained instance method against `target`. |
 
-See [Call — invoke any .NET method](#call--invoke-any-net-method) below for dispatch paths, auto-conversion rules, supported signatures, performance envelope, and overload-disambiguation guidance.
+See [Call — invoke supported .NET numeric methods](#call--invoke-supported-net-numeric-methods) below for dispatch paths, auto-conversion rules, supported signatures, performance envelope, and overload-disambiguation guidance.
 
 ##### Operator overloads
 
@@ -1069,9 +1150,11 @@ var clamped = NDExpr.Min(NDExpr.Max(NDExpr.Input(0), NDExpr.Const(0f)), NDExpr.C
 
 Overloads: `+ - * /` (arithmetic), `%` (NumPy mod), `& | ^` (bitwise), unary `-` (negate), `~` (bitwise not), `!` (logical not). No overloads for `<`, `>`, `==`, `!=` (those need to return `bool` in C#, which would collide with `object.Equals` and similar) — use the factory methods (`Less`, `Greater`, `Equal`, `NotEqual`, `LessEqual`, `GreaterEqual`) for comparisons.
 
-##### Call — invoke any .NET method
+##### Call — invoke supported .NET numeric methods
 
-The DSL's built-in catalog covers most element-wise math. `Call` is the escape hatch for everything else: user-defined activations, BCL helpers without a dedicated node (e.g. `Math.BitDecrement`, `Math.CopySign`), plugin methods discovered through reflection, captured-state business logic. It trades SIMD for universality.
+The DSL's built-in catalog covers most element-wise math. `Call` is the escape hatch for supported numeric user-defined activations, BCL helpers without a dedicated node (for example `Math.BitDecrement`/`Math.CopySign`), plugin methods discovered through reflection, and captured-state logic. It trades SIMD for flexibility, but it is not arbitrary managed interop.
+
+Supported parameter and return types are `Boolean`, `Byte`, `Int16`, `UInt16`, `Int32`, `UInt32`, `Int64`, `UInt64`, `Char`, `Single`, `Double`, and `Decimal`. `SByte`, `Half`, and `Complex` are currently rejected when the `CallNode` is constructed, as are `void`, reference types, by-ref parameters, and unrelated structs. Built-in `NDExpr` nodes cover more dtypes than `Call`; use Tier 3B/3A when the missing signature matters.
 
 **One node, four factory shapes, three dispatch paths.** All four factories construct the same `CallNode`; the node inspects its input and picks the cheapest dispatch at construction:
 
@@ -1182,7 +1265,7 @@ NDExpr.Call(mi, x);  // unambiguous — the MethodInfo is already picked
 
 **Thread safety.**
 
-`DelegateSlots` registration uses `Interlocked.Increment` for ID generation and `ConcurrentDictionary` for storage, so concurrent `Call` construction from multiple threads is safe. Kernel compilation itself happens under the `ConcurrentDictionary.GetOrAdd` atomicity for the inner-loop cache — one compilation per key, even under contention. Once compiled, kernels are re-entrant (they only read the delegate/target from their immutable slot).
+`DelegateSlots` registration uses `Interlocked.Increment` for ID generation and `ConcurrentDictionary` for storage, so concurrent `Call` construction publishes safe slot ids. The inner-loop cache also publishes safely with `ConcurrentDictionary.GetOrAdd`, but its value factory is allowed to run more than once under contention; multiple equivalent DynamicMethods may be compiled transiently and only one is retained. Once published, kernels are re-entrant because invocation reads schedule pointers plus immutable slot references.
 
 **Performance envelope.**
 
@@ -1271,7 +1354,7 @@ Three things outlive a single Tier 3C call. Knowing what they are and how long t
 
 **1. Compiled kernels (`_innerLoopCache`).**
 
-Every unique `(structural signature, inputTypes, outputType)` triple produces a `DynamicMethod` that's JIT-compiled once and cached in a process-wide `ConcurrentDictionary<string, NDInnerLoopFunc>` keyed by the cache-key string. The cache is append-only within the process lifetime. Cache keys are strings, so GC collects the old tree nodes once compilation completes, but the compiled delegate itself holds its `DynamicMethod` handle indefinitely.
+Every unique `(structural signature, inputTypes, outputType)` triple retains one `DynamicMethod` in a process-wide `ConcurrentDictionary<string, NDInnerLoopFunc>` keyed by the cache-key string. Under first-use contention more than one equivalent method may be compiled, but only one value is published. The cache is append-only within the process lifetime. GC can collect the old tree nodes once compilation completes, while the retained delegate keeps its `DynamicMethod` handle alive.
 
 Typical memory profile:
 - Each compiled kernel is ~2-5 KB of native code + its metadata in the runtime's dynamic-method table.
@@ -1403,21 +1486,21 @@ Tier 3C kernels are `DynamicMethod` delegates — you can't step into their IL w
 
 ##### When to use Tier 3C
 
-Reach for Tier 3C when you want Layer 3 ergonomics for fused or custom ops and you're not chasing the last 15% of throughput. The DSL covers arithmetic, bitwise, rounding, transcendentals (exp/log/trig/hyperbolic/inverse-trig), predicates (IsNaN/IsFinite/IsInf), comparisons, Min/Max/Clamp/Where, and common compositions (ReLU, Leaky ReLU, sigmoid, clamp, hypot, linear, FMA, piecewise functions) without writing IL. For absolute peak perf on a hot ufunc — or for ops outside the DSL's node catalog (e.g. intrinsics the runtime exposes but the DSL doesn't wrap) — drop to Tier 3B and hand-tune the vector body.
+Reach for Tier 3C when a fused/custom rectangular elementwise operation fits the DSL. The catalog covers arithmetic, bitwise, rounding, transcendentals, predicates, comparisons, `Min`/`Max`/`Clamp`/`Where`, and common compositions without caller-authored IL. SIMD is an all-or-nothing property of the tree, so measure the compiled route; drop to Tier 3B when you need a vector emitter the DSL lacks or need to support one of `Call`'s excluded signature dtypes.
 
 **Decision tree: which tier do I need?**
 
 ```
-Is the op a standard NumPy ufunc already in ExecuteBinary/Unary/Reduction?
-  yes → Layer 3 (baked). Fastest, zero work. Done.
+Does an existing production route already implement the op?
+  yes → extend that route; do not replace its layout/dtype gates with a helper by name alone.
   no ↓
 
 Can I express it as a tree of DSL nodes (Add, Sqrt, Where, Exp, etc.)?
   yes → Tier 3C. Fused, SIMD-or-scalar automatic, no IL.
   no ↓
 
-Is the missing piece a BCL method (Math.X, user activation, reflected plugin)?
-  yes → Tier 3C with Call. Scalar but fused. Done.
+Is the missing piece a supported BCL/user numeric method signature?
+  yes → Tier 3C with Call. Scalar but fused.
   no ↓
 
 Do I need V256/V512 intrinsics the DSL doesn't wrap (Fma, Shuffle, ...)?
@@ -1428,13 +1511,13 @@ Is the loop shape non-rectangular (gather/scatter, cross-element deps)?
   yes → Tier 3A. Emit the whole inner-loop IL yourself.
 ```
 
-**Caching is shared across all tiers.** All three write into the same `_innerLoopCache` inside `ILKernelGenerator.InnerLoop.cs`. The first `ExecuteRawIL("k")` call JIT-compiles; every subsequent call with the same key returns the cached delegate immediately. `GeneratedDelegates.InnerLoopCount` (public) exposes the size for tests.
+**Caching is shared across the three custom tiers only.** Tier 3A/B/C write into the same `_innerLoopCache` inside `DirectILKernelGenerator.InnerLoop.cs`; the whole-array helper families use other dictionaries. The first custom compile for a key emits/JITs, and later calls with that key return the cached `NDInnerLoopFunc`. `GeneratedDelegates.InnerLoopCount` exposes this custom-inner-loop cache size.
 
 ---
 
 ## Path Detection
 
-`DetectExecutionPath()` is the heart of Layer 3. It looks at the iterator *after* coalescing and negative-stride flipping, and picks:
+`DetectExecutionPath()` serves the whole-array mixed-type/comparison helper family. It looks at the iterator *after* coalescing and negative-stride flipping, and picks:
 
 ```csharp
 if (CONTIGUOUS flag set)                                return SimdFull;
@@ -1453,27 +1536,140 @@ The resulting `ExecutionPath` is baked into the `MixedTypeKernelKey`:
 var key = new MixedTypeKernelKey(LhsType, RhsType, ResultType, Op, Path);
 ```
 
-Different paths get different IL. `SimdFull` emits a flat 4× unrolled SIMD loop. `SimdScalarRight` broadcasts the scalar into a vector once, then runs a SIMD loop against only the LHS. `SimdChunk` processes the inner dim as a chunk within an outer coordinate loop. `General` does full coordinate-based iteration in IL. All of that machinery already lives in `ILKernelGenerator`; Layer 3's job is just to pick the right key.
+Different paths get different whole-array IL. `SimdFull` emits a flat 4×-unrolled SIMD loop. `SimdScalarRight`/`Left` splat a stride-0 operand. `SimdChunk` processes a unit/zero-stride inner dimension inside an outer coordinate loop. `General` performs coordinate-based iteration. This is distinct from Tier 3B's runtime byte-stride check inside a cached `NDInnerLoopFunc`.
+
+Do not confuse this with `NDIterPathSelector.SelectPath` in `NDIterKernels.cs`. That older selector returns a different `NDIterExecutionPath` enum, its buffered executor still contains TODO transfer hooks, and it has no call sites. `NDIterRef.DetectExecutionPath` is the active helper selector.
+
+---
+
+## Production consumers and legacy surfaces
+
+The iterator is broader than `np.nditer`, and production code does not enter through one universal method:
+
+| Consumer family | Representative files | Entry shape |
+|-----------------|----------------------|-------------|
+| Elementwise binary/compare/unary/out/shift | `DefaultEngine.BinaryOp.cs`, `CompareOp.cs`, `UnaryOp.cs`, `UfuncOut.cs`, `Default.Shift.cs` | Usually `NDIterRef.MultiNew(EXTERNAL_LOOP, ...)` + Tier 3B `ExecuteElementWise*`; direct contiguous bypasses stay outside NDIter |
+| Fused evaluation | `DefaultEngine.Evaluate.cs` | `AdvancedNew`/`MultiNew` + compiled expression/inner-loop kernels |
+| Reductions and scans | `DefaultEngine.ReductionOp.cs`, `Default.Reduction.{Add,CumAdd,Nan}.cs`, `Default.All.cs`, `Default.Any.cs` | `ExecuteReduction`, `ExecuteReducing`, `ForEach`, `NewReduce`, or dedicated axis iterators depending dtype/layout |
+| Selection/indexing/sorting | `np.where.cs`, `Default.BooleanMask.cs`, `Default.NonZero.cs`, `AxisSort.cs` | Chunk `ForEach`/reducing kernels where a direct whole-array kernel does not fit |
+| Copy/cast/fill/pad/concatenate | static `NDIter.Copy`/`CopyAs`, called by `np.copyto`, `NDArray.fill`, `np.pad`, `np.concatenate`, storage cloning/casting | Separate static copy-state core with contiguous, strided-IL, scalar-cast, broadcast, and overlap-temporary tiers |
+| Other focused consumers | `np.diff.cs`, `NDArray.byteswap.cs`, `np.average.cs`, `np.nan{mean,var,std}.cs` | Lean Tier 3B or chunk/reducing routes tailored to operation semantics |
+
+Three older surfaces remain for compatibility or experiments:
+
+- Static `NDIter.CreateCopyState`/`CreateReductionState` and helpers are used by the copy core; they are a smaller state model than full `NDIterRef.AdvancedNew`.
+- `NDIterInnerLoopFunc` (declared in `NDIter.cs`) and `NDInnerLoopFunc` (declared in `NDIter.Execution.cs`) have the same signature but are distinct delegate types. New chunk code uses `NDInnerLoopFunc`.
+- `INDIterKernel`, `NDIterPathSelector`, and `NDIterExecution` in `NDIterKernels.cs` are unused legacy scaffolding, not an alternative production backend.
+
+---
+
+## Fused kernels in production
+
+Here, **fused** means that one kernel evaluates multiple array operations before it stores a result, or evaluates an elementwise expression while accumulating its reduction. It does **not** merely mean that the CPU happened to use a fused multiply-add instruction. The useful property is fewer full-array passes and no intermediate `NDArray` for values such as `a * b` or `a - b`.
+
+There are two production shapes:
+
+1. **General expression fusion** through `np.evaluate`: an `NDExpr` tree is typed with NumPy rules and compiled to one cached `NDInnerLoopFunc`, then `NDIterRef` supplies its broadcast/layout-aware chunks.
+2. **Specialized fusion** inside an API such as weighted `np.average`, contiguous `np.diff`, or `np.asarray_chkfinite`: a purpose-built kernel combines the exact passes that operation needs. Some of these use `NDIterRef`; others are whole-array kernels whose own layout gate is cheaper.
+
+That distinction matters when reading benchmark results. The dedicated fusion benchmark compares the same NumSharp expression **with and without** fusion. The unified API benchmark compares NumSharp with NumPy and may include other differences besides fusion.
+
+### General expression fusion — `np.evaluate`
+
+`np.evaluate` is a NumSharp extension (the closest NumPy-ecosystem analogue is `numexpr.evaluate`). The public API binds embedded `NDArray` leaves, `DefaultEngine.Evaluate` resolves each expression node's NumPy/NEP50 dtype, and `NDExpr.CompileNumPy` emits the cached inner loop. The elementwise route then executes it as:
+
+```text
+NDExpr tree
+  → bind each repeated NDArray once
+  → infer every node's NumPy dtype
+  → compile/cache one NDInnerLoopFunc
+  → NDIterRef.MultiNew(EXTERNAL_LOOP | COPY_IF_OVERLAP, ...)
+  → iter.ForEach(kernel)
+```
+
+These are real expressions from `benchmark/fusion/evaluate_bench.cs`:
+
+```csharp
+// Multiply and add without materializing a*b.
+NDArray mulAdd = np.evaluate((NDExpr)a * b + c);
+
+// Four arithmetic nodes, but still one output pass and no a-b / a+b temporaries.
+NDArray normalized = np.evaluate(
+    (NDExpr.Arr(a) - b) / (NDExpr.Arr(a) + b));
+
+// The multiply and scalar reduction share one pass; a*b is never allocated.
+NDArray dotLike = np.evaluate(NDExpr.Sum((NDExpr)a * b));
+
+// Per-node typing preserves the equivalent NumPy promotion: int32 * weak int,
+// then addition with float64, all inside the compiled kernel.
+NDArray mixed = np.evaluate((NDExpr)ai * 2 + c);
+
+// A caller-owned result removes the fused path's result allocation as well.
+NDArray output = np.empty_like(c);
+np.evaluate((NDExpr)a * b + c, @out: output);
+```
+
+Elementwise fusion supports broadcasting, strided operands, overlap-safe `out=`, and buffered write-back when `out` needs a cast. A root `Sum`, `Prod`, `Min`, `Max`, or `Mean` fuses element evaluation with the reduction; reductions nested inside a larger elementwise expression are intentionally rejected and require two calls.
+
+### Measured fused versus unfused performance
+
+The current [fusion benchmark report](https://scisharp.github.io/NumSharp/docs/reports/fusion_results.html) uses 4 million elements and warmed best-window measurements. In this table, **speedup is NumSharp unfused ÷ NumSharp fused**; it is not a NumPy/NumSharp ratio.
+
+| Real expression | Fused work | Fused | Unfused | Fusion speedup |
+|-----------------|------------|------:|--------:|---------------:|
+| `a*b+c` (`float64`) | multiply + add | 3.38 ms | 5.76 ms | **1.70×** |
+| `(a-b)/(a+b)` (`float64`) | two subtract/add branches + divide | 2.83 ms | 12.00 ms | **4.24×** |
+| `sum(a*b)` (`float64`) | multiply + scalar sum | 2.23 ms | 3.64 ms | **1.63×** |
+| `sum(af*bf)` (`float32`) | multiply + scalar sum | 1.20 ms | 1.45 ms | **1.21×** |
+| `i4*2+f8` | mixed-dtype multiply + add | 2.68 ms | 3.79 ms | **1.41×** |
+
+The allocating comparisons above are the fair fusion ratios. The separate `a*b+c, out=` case is a one-pass write into a preallocated result and measures **3.26 ms**; the report deliberately gives it no unfused ratio because an `out=` spelling of the unfused chain is still two passes.
+
+Fusion is not automatically faster for every layout. The same benchmark applies `a*b+c` to three operands with the same 2-D layout:
+
+| Operand layout | Fused | Unfused | Fusion speedup |
+|----------------|------:|--------:|---------------:|
+| C-contiguous | 3.38 ms | 5.75 ms | **1.70×** |
+| F-contiguous | 11.74 ms | 17.66 ms | **1.50×** |
+| Transposed | 11.71 ms | 17.48 ms | **1.49×** |
+| Strided (`[:, ::2]`) | 11.64 ms | 4.76 ms | **0.41×** |
+| Broadcast (stride 0) | 2.02 ms | 7.72 ms | **3.81×** |
+
+The broadcast case is the largest win because the fused kernel repeatedly consumes a stride-0 value without writing intermediates. The strided case is the important counterexample: the current fused scalar-strided route is about **2.44× slower** than the unfused chain (`1 / 0.41`). Treat fusion as a memory-traffic opportunity, not a guarantee; benchmark the exact dtype and layout, and keep this regression visible when changing the general stride path.
+
+The canonical NDIter benchmark also contains `fuse7`, a lower-level eight-operand inner loop that adds seven `float64` arrays in one pass and compares it with six chained `np.add(..., out=...)` calls. Its current NumPy÷NumSharp dividend is **1.41× at 100K, 1.69× at 1M, and 2.02× at 10M**. That case validates the iterator/kernel mechanism directly; the `np.evaluate` table above is the user-facing production evidence.
+
+### Specialized production fusions
+
+Several APIs use focused kernels because their loop shape is more specific than a general `NDExpr` tree:
+
+| API / implementation | What is fused | Active boundary | Current benchmark evidence |
+|----------------------|---------------|-----------------|----------------------------|
+| Weighted `np.average` / `DirectILKernelGenerator.WeightedSum.cs` | Accumulates `sum(a * weights)` **and** `sum(weights)` into two outputs in one four-operand pass | Primitive numeric dtypes; a contiguous reduce-all case calls the kernel directly, while axis reductions use `NDIterRef` with pinned or scatter outputs. `Bool`, `Char`, `Half`, `Complex`, and `Decimal` fall back to multiply then sum. | The unified `np.average(a)` rows use `weights == null` and therefore dispatch to `mean`; they do **not** measure this fused kernel. An isolated weighted fusion benchmark is still needed. |
+| `np.diff` / `DirectILKernelGenerator.AdjacentDiff.cs` | Computes `out[i] = a[i+1] - a[i]` from overlapping loads in one whole-array pass, avoiding two slice views and generic binary iteration | `n == 1`, no prepend/append, C-contiguous non-broadcast input, innermost axis, non-Boolean dtype | The unified 100K `float64` case is **0.04747 ms** and **0.490× NumPy**; the 1K case is **0.00306 ms** and **1.343× NumPy**. It is a real fused route, but the larger current case remains a performance gap. |
+| `np.asarray_chkfinite` / `FiniteScan.cs` | Fuses `isfinite(a)` and `all(...)` into one NaN-poison scan with no Boolean temporary | Float-family dtypes; contiguous SIMD plus strided/transposed/negative-stride/broadcast handling | The unified 100K `float64` case is **0.01176 ms**, **1.814× faster than NumPy**. |
+
+The last column uses the [unified benchmark report](https://scisharp.github.io/NumSharp/docs/reports/benchmark-report.html), where the ratio is **NumPy ÷ NumSharp**. Do not compare those ratios directly with the dedicated fusion table's unfused-NumSharp baseline.
 
 ---
 
 ## Worked Examples
 
-Seventeen worked examples grouped by API tier.
+Nineteen worked examples grouped by execution shape.
 
-**Layers 1–3 (baked kernels):**
+**Chunk drivers and whole-array helpers:**
 1. [Three-operand binary over a 3-D contiguous array](#1-three-operand-binary-over-a-3-d-contiguous-array)
 2. [Array × scalar with broadcast detection](#2-array--scalar-with-broadcast-detection)
 3. [Sliced view — non-contiguous input](#3-sliced-view--non-contiguous-input)
 4. [Fused hypot via Layer 1](#4-fused-hypot-via-layer-1)
 5. [Early-exit Any over 1M elements](#5-early-exit-any-over-1m-elements)
 
-**Tier 3B (templated scalar + vector bodies):**
+**Custom compiled inner loops:**
 
 6. [Fused hypot via Tier 3C expression](#6-fused-hypot-via-tier-3c-expression)
 7. [Fused linear transform via Tier 3B with vector body](#7-fused-linear-transform-via-tier-3b-with-vector-body)
 
-**Tier 3C (expression DSL):**
+**More Tier 3C expression DSL examples:**
 
 8. [ReLU via Tier 3C comparison-multiply](#8-relu-via-tier-3c-comparison-multiply)
 9. [Clamp with Min/Max](#9-clamp-with-minmax)
@@ -1825,68 +2021,53 @@ The `provider` object's state (`Temperature`) is captured into the compiled kern
 
 ## Performance
 
-Benchmarking 1M `sqrt` on a contiguous float32 array after 300 warmup iterations, Ryzen-class CPU:
+Performance is a property of the **selected route, layout, dtype, size, chunk width, and warm state**, not of the `NDIter` name. The current canonical results are generated into [the NDIter benchmark report](https://scisharp.github.io/NumSharp/docs/reports/nditer_results.html); the snapshot above deliberately includes both wins and losses.
 
-| Approach | Time | ns/elem | Notes |
-|----------|------|---------|-------|
-| `ForEach` with byte-ptr scalar | 2.82 ms | 2.82 | JIT autovectorizes V256 sqrt, no unroll |
-| `ExecuteGeneric<Scalar>` byte-ptr | 2.54 ms | 2.54 | Same, no delegate indirection |
-| `ExecuteGeneric<Scalar>` typed-ptr branch | 2.79 ms | 2.79 | `if (stride == 4) float*` branch |
-| `ExecuteGeneric<V256+4x>` hand-SIMD | **0.86 ms** | 0.86 | User-written Vector256 + 4× unroll |
-| `ExecuteUnary(Sqrt)` IL kernel | **0.75 ms** | 0.75 | `ILKernelGenerator`'s 4×-unrolled V256 |
+The dominant costs to reason about are:
 
-**Layer 3 is ~3.7× faster than Layer 1/2 scalar code** — the gap is entirely explained by loop unrolling, since the JIT does autovectorize a typed-pointer loop into V256 but doesn't issue the four independent vectors per iteration that `ILKernelGenerator` emits. A user who writes Vector256 + 4× unroll by hand closes the gap to 15% (0.86 vs 0.75 ms).
-
-Layer 1 and Layer 2 give you control and fusion. For any standard elementwise ufunc, **Layer 3 is the right default**. Drop to Layer 1/2 when fusing several ops (one pass, zero temporaries), when the op isn't in `ILKernelGenerator`, or when your kernel has a structure the generator can't express.
-
-**Custom ops (Tier 3B / Tier 3C) hit the Layer 3 envelope.** Because the factory wraps user bodies in the same 4×-unrolled SIMD + remainder + scalar-tail shell, a Tier 3B or Tier 3C kernel for sqrt lands within rounding distance of `ExecuteUnary(Sqrt)` — the only overhead is the runtime contig check (a few stride comparisons at kernel entry). Fused ops like `sqrt(a² + b²)` via Tier 3C are typically faster than composing three Layer 3 calls, because there are no intermediate arrays and the whole computation stays in V256 registers between operations.
-
-**Custom op overhead breakdown.** Tier 3A and Tier 3B kernels share the same `NDInnerLoopFunc` delegate shape as the baked ufuncs; call overhead is identical. Tier 3C adds:
-
-| Overhead source | When | Cost |
-|----------------|------|------|
-| Compile (first call per key) | First `ExecuteExpression` with a given cache key | 1-10 ms one-time (IL emission + JIT) |
-| Auto-key derivation | When `cacheKey: null` | ~O(tree size) StringBuilder walk — typically < 1 μs |
-| Runtime contig check | Every inner-loop entry | 2-4 stride comparisons (~ns) |
-| Scalar-strided fallback | When any operand has non-contig inner stride | Per-element pointer arithmetic; JIT autovectorizes post-tier-1 |
-| `Call` dispatch (Path A) | Every element — static method | One `call <methodinfo>`; JIT may inline |
-| `Call` dispatch (Path B/C) | Every element — instance or delegate | `ldc.i4 + DelegateSlots.Lookup + castclass + callvirt` (~5-10 ns) |
-
-**When fusion pays off.** Fusing `sqrt(a² + b²)` into one Tier 3C kernel avoids materializing the `a²` and `a² + b²` intermediates. For 1M float32 elements, that's 8 MB of memory traffic saved per temporary — on a typical 30-GB/s RAM bandwidth, that's ~300 μs per avoided temporary. Fusing 3 ops into one Tier 3C kernel can beat 3 baked Layer 3 calls by 1-2× when memory-bound.
-
-**When Call pays off.** If the user-supplied method does nontrivial work (e.g. three `Math.Exp` calls for a numerically-stable sigmoid), the dispatch overhead is a few-percent tax on something that was never going to SIMD anyway. If the method is trivial (`x => x * 2`), composing out of DSL primitives (`NDExpr.Input(0) * NDExpr.Const(2.0)`) keeps the SIMD path and runs 3-5× faster. Pick Call when the method is the cheapest thing to write and the kernel isn't a hot path; pick DSL composition when the kernel is profiled and matters.
+- **Construction:** state + dimension/operand blocks, broadcast/order analysis, overlap solving, and optional aligned buffers.
+- **Dispatch width:** one delegate call over a long coalesced chunk is cheap; millions of width-1/4 chunks are not. The canonical width-4 canary is slower than NumPy while width 16 is near parity.
+- **Transfer:** buffering can unlock tight SIMD but adds gather/scatter and possibly casting. Linear strided operands are intentionally left direct.
+- **Kernel body:** Tier 3B vector IL gets the shared 4×-unrolled shell only when every operand dtype is identical/SIMD-capable and a vector body exists. Otherwise it uses the scalar-strided body.
+- **Fusion:** Tier 3C/Tier 3B can avoid intermediate arrays and memory traffic, but unsupported nodes demote the entire expression to scalar.
+- **Early exit:** `ExecuteReducing` can stop on the first decisive chunk; this is why the benchmark's early-hit `any` can be dramatically faster than a full scan.
+- **`Call`:** static methods emit a direct call; captured delegates/bound targets add a process-wide slot lookup and virtual dispatch per element. Use it for meaningful scalar work, not as a replacement for a built-in SIMD-capable node.
 
 ### JIT warmup and measurement
 
-.NET uses tiered compilation: methods first compile to unoptimized tier-0 code, then get promoted to tier-1 after ~100+ calls. Until tier-1, **autovectorization doesn't happen** — a scalar kernel that runs at 2.5 ms/iter in steady state measures at 70+ ms/iter when warmed up only 10 times.
+.NET uses tiered compilation: a struct-generic or caller-authored scalar loop may first run as tier-0 code and later be recompiled/optimized. DynamicMethod compilation and family-cache population also add first-use costs. A short ad-hoc benchmark can therefore measure a different program from the steady-state route.
 
 Under-warmed measurement shows up as:
-- Layer 2 scalar shows 50-80 ms instead of 2-5 ms
-- `ExecuteGeneric` looks slower than `ForEach` (it isn't, post-warmup)
-- Reusing a single iterator looks 50× faster than constructing fresh ones (the reuse path warmed up faster because it kept hitting the same call site)
+- `ExecuteGeneric` and `ForEach` swap apparent order between runs;
+- a first custom compile dominates the operation;
+- iterator reuse looks implausibly better because only one call site reached optimized code;
+- a tiny chunk-width route measures dispatch rather than arithmetic.
 
-Benchmark with ≥200 warmup iterations per variant, not just a few. Production code doesn't see this effect because long-running loops are always past tier-1.
+Use the canonical harness's warm pilot, adaptive batching, best-of rounds, matched NumPy ids, and correctness checks. If you create a focused benchmark, record runtime, CPU, vector support, exact layout/dtype/size, construction inclusion, warmup policy, and cache state.
 
 ### Implementation Notes
 
-The bridge is tuned for the JIT in two ways:
+The chunk bridge is tuned for the JIT in two ways:
 
 1. **Fast-path split.** `ExecuteGeneric` dispatches to `ExecuteGenericSingle` (1 call, inlineable) or `ExecuteGenericMulti` (do/while driver). Small single-call bodies are what the autovectorizer needs to do its job — a do/while with a delegate inside prevents tier-1 SIMD promotion.
 
 2. **`AggressiveInlining + AggressiveOptimization`.** Both attributes sit on the fast path so the JIT doesn't punt on inlining due to method size and immediately promotes to tier-1 once discovered hot.
 
-Without these, `ExecuteGeneric` gets stuck at tier-0 in micro-benchmarks and looks 30× slower than it actually is.
+Tier 3B/C instead use an emitted runtime stride check: dense byte strides enter the optional SIMD/unroll body; any mismatch enters the scalar-strided body. Whole-array helpers have different code shapes and caches, so do not infer their behavior from the struct-generic driver.
 
 ### When Does Each Layer Pay Off?
 
-| Layer | Good for | Drawback |
+| Route | Good for | Boundary |
 |-------|----------|----------|
-| Layer 1 (`ForEach`) | Exploration, one-off fused kernels, non-standard ops | Delegate allocation per call; no loop unrolling |
-| Layer 2 (`ExecuteGeneric`) | Same as Layer 1 in a hot path | No delegate cost, otherwise same — no loop unrolling |
-| Layer 3 (`Execute*`) | Standard ufuncs already in `ILKernelGenerator` | No fusion; one kernel per call |
-| `BufferedReduce` | Axis reductions with casting | Double-loop only worth it with `BUFFER + REDUCE` |
+| `ForEach` | Existing/capturing chunk delegate, `auxdata`, masked run wrapper | Delegate call per chunk; caller controls whether delegate allocation occurs |
+| `ExecuteGeneric` | Hot reusable struct kernel; JIT specialization | Kernel implements its own scalar/SIMD body and stride branches |
+| `ExecuteReducing` | Early-exit `All`/`Any`/find-first and scalar accumulators | Not an axis-output scheduler by itself |
+| Tier 3B `ExecuteElementWise*` | Production rectangular elementwise ops over arbitrary inner strides | Caller emits valid scalar IL; SIMD requires compatible identical dtypes and vector IL |
+| Tier 3C `ExecuteExpression` | Fused DSL expressions and no temporary arrays | One unsupported node demotes SIMD; `EXTERNAL_LOOP` is required unless one iteration |
+| Whole-array `Execute*` helpers | Exact closed helper shape, especially scalar reduction/contiguous output | Separate family contracts/caches; most are not the current general elementwise route |
+| `BufferedReduce` | Legacy explicit `BUFFER+REDUCE` schedule | No production callers; masked write-back remains unsupported |
 
-To reach Layer 3 parity in Layer 2, keep a typed-pointer fast branch and add the 4× unroll yourself. The typed-pointer contiguous branch helps the JIT tier up faster and gives the autovectorizer a trivial pattern to match:
+For a struct-generic kernel, keep a typed-pointer fast branch and a byte-stride fallback. Add explicit vector/unroll code only after the canonical benchmark shows the route matters:
 
 ```csharp
 public void Execute(void** p, long* s, long n) {
@@ -1902,44 +2083,47 @@ public void Execute(void** p, long* s, long n) {
 }
 ```
 
-For maximum throughput, write the 4×-unrolled V256 version in the fast branch — you'll land within 15% of the IL kernel.
+The emitted Tier 3B shell already owns its vector remainder and scalar tail; do not duplicate that shell inside a Tier 3B scalar/vector body.
 
 ### Allocations
 
-Layer 3 allocates exactly once per call: the stackalloc stride arrays (NDim longs each). No heap allocation. Layer 2 inlines the entire kernel body into the JIT's codegen of `ExecuteGeneric` — no allocation at all, not even a delegate. Layer 1 allocates a single delegate per call (closure if it captures anything).
+Separate iterator-state allocation from execution-call allocation:
+
+- `NDIterRef.AdvancedNew` allocates unmanaged state plus dimension/operand blocks; buffering adds aligned blocks. `np.NDIterator` detaches and owns the same state.
+- Whole-array helpers use `stackalloc` stride arrays; that is stack space, not a managed heap allocation. First use can allocate/compile a cached `DynamicMethod`.
+- `ExecuteGeneric`/`ExecuteReducing` do not allocate a delegate. The iterator state already exists.
+- `ForEach` does not manufacture a delegate; a capturing lambda supplied by the caller allocates, while a cached/static delegate does not.
 
 **Custom-op tiers:**
 
 | Tier | Per-call allocation | One-time allocation |
 |------|--------------------|--------------------|
-| Tier 3A (`ExecuteRawIL`) | stackalloc strides + the user's `Action<ILGenerator>` closure on first compile | compiled `DynamicMethod` cached by key; stays live for process lifetime (~2-5 KB native + runtime metadata) |
-| Tier 3B (`ExecuteElementWise`) | stackalloc strides + (on first compile) two `Action<ILGenerator>` closures | compiled kernel cached by key |
-| Tier 3C (`ExecuteExpression`) | stackalloc strides + (on first compile) an NDExpr tree allocated by the caller + StringBuilder for the auto-key | compiled kernel cached by key |
+| Tier 3A (`ExecuteRawIL`) | Caller-provided emit callback; `ForEach` schedule | Compiled `DynamicMethod` cached by key for process lifetime |
+| Tier 3B (`ExecuteElementWise`) | Operand-type array and caller emit callbacks (typically static/cached) | Compiled `NDInnerLoopFunc` cached by key |
+| Tier 3C (`ExecuteExpression`) | Expression tree is allocated by the caller; auto-key walks the tree | Compiled inner loop cached by structural/explicit key |
 | Tier 3C with `Call` | same as Tier 3C, plus one `DelegateSlots` entry per unique captured delegate / bound target | registered references live for process lifetime; see [Memory model and lifetime](#memory-model-and-lifetime) |
 
-The one case where allocations grow without bound is the anti-pattern of constructing a new `Call` delegate per iteration — each new delegate reference gets a new slot ID and a new cache entry. Register delegates once at startup to avoid this.
+The unbounded-growth anti-pattern is constructing a new `Call` delegate per iteration: each reference gets a new slot id, and an auto-derived key includes that id, so it also grows the custom kernel cache. An explicit reused key would instead bind to the first compiled slot, not the new delegate—another reason to register and reuse stable delegates.
 
 ---
 
 ## Summary
 
-NDIter is how NumSharp turns "iterate these three arrays of possibly-different shapes, types, and strides" into a deterministic schedule of pointer advances. `NDIter.Execution.cs` is how that schedule becomes a SIMD kernel call.
+`NDIterRef` turns operands with different shapes, strides, offsets, orders, dtypes, masks, and overlap relationships into a deterministic pointer/window schedule. The public `np.NDIterator` owns that schedule across managed calls; typed iterators borrow it for allocation-free C# traversal; `np.nested_iters` links several schedules by re-basing child pointers.
 
-**The core idea.** NumPy's C++ templates compile `for (i = 0; i < n; i++) c[i] = a[i] + b[i]` ahead of time, specialized per type. NumSharp cannot. Instead it emits that same loop as IL via `DynamicMethod` the first time you ask for it, then caches the JIT-compiled delegate forever. `NDIter` handles the *layout* problem (what offsets, in what order), `ILKernelGenerator` handles the *type* problem (what opcodes, with what SIMD intrinsics), and `NDIter.Execution.cs` hands the one to the other.
+**Three execution shapes.** `ForEach` drives a chunk delegate, `ExecuteGeneric`/`ExecuteReducing` drive a JIT-specialized struct, and the closed `ExecuteBinary/Unary/...` helpers call whole-array DirectIL delegates. Only custom Tier 3A/B/C kernels universally funnel through `ForEach`; caches are split by family.
 
-**Three layers.** `ExecuteBinary / Unary / Reduction / ...` for standard ufuncs (this is what you want 90% of the time — it's ~3.7× faster than a JIT-autovectorized scalar loop and ~1.15× faster than hand-written Vector256 + 4× unroll). `ExecuteGeneric<TKernel>` for custom kernels that need zero dispatch overhead. `ForEach` with a `NDInnerLoopFunc` delegate when you're exploring, fusing, or writing something exotic.
-
-**Custom ops extend Layer 3.** When a baked ufunc doesn't match your problem, three tiers let you reach the same SIMD-unrolled performance envelope without leaving the bridge: `ExecuteRawIL` (you emit the whole body), `ExecuteElementWise` (you supply per-element scalar + vector IL; factory wraps the unroll shell), `ExecuteExpression` (compose with `NDExpr` — no IL required). Each tier is cached, reuses `ILKernelGenerator`'s emit primitives, and runs through the same `ForEach` driver as baked ops.
+**Custom ops.** `ExecuteRawIL` emits the whole `NDInnerLoopFunc`; `ExecuteElementWise` supplies scalar and optional vector value bodies inside the shared shell; `ExecuteExpression` lowers a typed DSL tree to that Tier 3B compiler. They preserve iterator chunk/window/mask semantics and share the custom inner-loop cache.
 
 **Coalesce first.** A 3-D contiguous array should run as one flat SIMD loop, not a triple-nested loop. The iterator does this for you — as long as you don't set flags that disable it (`MULTI_INDEX`, `C_INDEX`, `F_INDEX`).
 
-**Buffer when casting or when non-contiguous + SIMD-critical.** The iterator copies strided input into aligned contiguous buffers, runs the kernel there, and writes back — correct for the bridge and for a bare `ForEach` / `Iternext()` loop alike.
+**Buffer selectively.** Cast/`CONTIG`/reduction/non-linear operands get aligned windows; contiguous, constant-stride 1-D, and scalar-broadcast operands can remain direct with true byte strides.
 
-**Struct-generic is a template substitute.** Constraining a type parameter to `struct` lets the JIT specialize the method per concrete type at codegen time. For hot inner loops this is indistinguishable from a hand-inlined function. Use it — but remember that **scalar kernel code only autovectorizes after tier-1 JIT promotion**, which takes ~100+ hot-loop iterations. Microbenchmarks that warm up 10 times will wildly under-report Layer 1/2 performance. Production code never sees this effect.
+**Struct-generic is a template substitute.** Constraining a type parameter to `struct` lets the JIT specialize the driver for a concrete kernel type and removes delegate dispatch. Inlining and vectorization remain runtime- and body-dependent, so verify the exact hot path instead of assuming a particular tier threshold.
 
-**Simple kernels autovectorize after warmup.** Post-tier-1, the JIT autovectorizes both byte-pointer `*(float*)(p + i*s) = ...` and typed-pointer `dst[i] = ...` loops into Vector256. If you care about every microsecond, a stride-equality branch with typed pointers in the fast path is slightly more robust and reaches tier-1 faster, but it's not the order-of-magnitude difference you might expect — the Vector256 + 4×-unroll hand-kernel is.
+**Autovectorization is not a contract.** A simple typed-pointer or constant-byte-stride loop may vectorize after optimization; branch shape, runtime version, CPU, and caller context can change the result. Tier 3B's explicit vector body is the controlled SIMD route.
 
-Everything else — flag enums, op_axes encoding, negative-stride flipping, the double-loop reduction schedule — exists to handle corner cases NumPy users write every day without thinking. NumSharp handles them the same way, just translated into a language where we emit IL instead of expanding templates.
+Everything else—flag parsing, `op_axes`, negative-stride flipping, index tracking, overlap solving, masked runs, and buffered write-back—protects correctness around the hot loop. The current gaps are explicit above; do not describe the subsystem as full parity until those boundaries are closed.
 
 ## See Also
 

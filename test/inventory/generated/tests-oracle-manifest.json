@@ -16,17 +16,17 @@
   ],
   "summary": {
     "tests": {
-      "methods": 13804,
-      "declaredInvocations": 14440,
+      "methods": 13831,
+      "declaredInvocations": 14467,
       "dataRows": 716,
       "dataRowMethods": 80,
       "dynamicMethods": 34,
-      "sourceLocated": 13804,
-      "oracleMethods": 657,
-      "fuzzMatrixMethods": 91,
+      "sourceLocated": 13831,
+      "oracleMethods": 664,
+      "fuzzMatrixMethods": 98,
       "npyOracleMethods": 13,
       "statuses": {
-        "active": 13509,
+        "active": 13536,
         "ignored": 11,
         "manual": 5,
         "open_bug": 215,
@@ -35,21 +35,22 @@
       "categories": {
         "Explicit": 2,
         "Fixed": 3,
-        "FuzzMatrix": 91,
+        "FuzzMatrix": 98,
         "HighMemory": 50,
         "LongIndexing": 3,
         "Misaligned": 34,
         "NpyOracle": 13,
         "OpenBugs": 215,
+        "ScopeAudit": 7,
         "WindowsOnly": 75
       },
       "projects": {
-        "NumSharp.Tests": 13201,
+        "NumSharp.Tests": 13221,
         "NumSharp.Tests.Interop": 444,
-        "NumSharp.Tests.Oracle": 159
+        "NumSharp.Tests.Oracle": 166
       },
       "suites": 39,
-      "oracleTestClasses": 16
+      "oracleTestClasses": 18
     },
     "oracle": {
       "corpusFiles": 67,

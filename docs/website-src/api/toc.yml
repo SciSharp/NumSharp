@@ -49,6 +49,9 @@ items:
   - uid: NumSharp.IIndex
     name: IIndex
     type: Interface
+  - uid: NumSharp.INDArrayCarrier
+    name: INDArrayCarrier
+    type: Interface
   - uid: NumSharp.INumSharpException
     name: INumSharpException
     type: Interface
@@ -93,6 +96,21 @@ items:
     type: Struct
   - uid: NumSharp.NDArrayFlags
     name: NDArrayFlags
+    type: Class
+  - uid: NumSharp.NDScope
+    name: NDScope
+    type: Class
+  - uid: NumSharp.NDScopedAsyncAttribute
+    name: NDScopedAsyncAttribute
+    type: Class
+  - uid: NumSharp.NDScopedAttribute
+    name: NDScopedAttribute
+    type: Class
+  - uid: NumSharp.NDScopedCoveredAttribute
+    name: NDScopedCoveredAttribute
+    type: Class
+  - uid: NumSharp.NDScopedExitAttribute
+    name: NDScopedExitAttribute
     type: Class
   - uid: NumSharp.NPTypeCode
     name: NPTypeCode
@@ -664,9 +682,15 @@ items:
   - uid: NumSharp.Backends.Kernels.CumulativeKernelKey
     name: CumulativeKernelKey
     type: Struct
+  - uid: NumSharp.Backends.Kernels.DiagWriteKernel
+    name: DiagWriteKernel
+    type: Delegate
   - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator
     name: DirectILKernelGenerator
     type: Class
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.AdjacentDiffKernel
+    name: DirectILKernelGenerator.AdjacentDiffKernel
+    type: Delegate
   - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.CastKernel
     name: DirectILKernelGenerator.CastKernel
     type: Delegate
@@ -679,11 +703,20 @@ items:
   - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.ClipMode
     name: DirectILKernelGenerator.ClipMode
     type: Enum
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.GemvKernel
+    name: DirectILKernelGenerator.GemvKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.GramKernel
+    name: DirectILKernelGenerator.GramKernel
+    type: Delegate
   - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.InnerCastLoop
     name: DirectILKernelGenerator.InnerCastLoop
     type: Delegate
   - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.MaskedCastKernel
     name: DirectILKernelGenerator.MaskedCastKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.NanToNumKernel
+    name: DirectILKernelGenerator.NanToNumKernel
     type: Delegate
   - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.QuantileKernel
     name: DirectILKernelGenerator.QuantileKernel
