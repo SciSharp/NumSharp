@@ -2250,6 +2250,17 @@ def main():
         print(f"\n{'#'*64}\n#  ARRAY SIZE  N = {n:,}\n{'#'*64}")
         all_results.extend(run_suites(n, args.suite, dtypes_to_run, args.iterations))
 
+    # Tier-key invariant: MEMORY_HEAVY_LARGE_WORKLOAD (1M) is a PHYSICAL cap only, never a
+    # published tier — a memory-heavy row must keep n=10M so every calc, geomean, and UI size
+    # grouping treats it at the 10M level. A suite that accidentally emitted n=work_n would
+    # otherwise mint a silent fourth "1M" level (the universal-tier contract in merge-results.py
+    # catches the common 1K+100K-without-10M shape of this mistake; this guard catches the rest).
+    leaked = sorted({r.name for r in all_results if r.n == MEMORY_HEAVY_LARGE_WORKLOAD})
+    if leaked:
+        raise RuntimeError(
+            f"{len(leaked)} result(s) published n={MEMORY_HEAVY_LARGE_WORKLOAD:,} — the memory-heavy "
+            f"workload is a physical cap, not a tier; emit them under n=10,000,000: {leaked[:10]}")
+
     # Output
     if args.json or args.output:
         json_output = json.dumps([asdict(r) for r in all_results], indent=2)
