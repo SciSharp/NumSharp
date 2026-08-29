@@ -123,6 +123,14 @@ namespace NumSharp.Backends.Kernels
                 var halfMinMax = TryGetHalfMinMaxKernel(key.Op, key.Path);
                 if (halfMinMax != null)
                     return halfMinMax;
+
+                // Add/Subtract/Multiply/Divide ride the SIMD widen-compute-narrow pipeline
+                // (float32 compute + Giesen RTNE narrow — NumPy's exact HALF loop, 8 lanes at
+                // a time; see Binary.Arith.Half.cs). The emitted IL below bridged through
+                // DOUBLE, which double-rounds differently than NumPy's float32 path.
+                var halfArith = TryGetHalfArithKernel(key.Op, key.Path);
+                if (halfArith != null)
+                    return halfArith;
             }
 
             return key.Path switch

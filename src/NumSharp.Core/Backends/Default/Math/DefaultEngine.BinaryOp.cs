@@ -358,6 +358,20 @@ namespace NumSharp.Backends
             var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
             var cleanShape = leftShape.Clean();
 
+            // (Half,Half)→Half add/sub/mul/div DECLINE Tier 3B: the direct route serves
+            // them with the bit-exact SIMD widen-compute-narrow kernels
+            // (Binary.Arith.Half.cs — float32 compute + Giesen RTNE narrow, NumPy's
+            // exact HALF loop incl. the NaN-payload operand-order pin), while this
+            // route's scalar inner-loop body bridges Half through DOUBLE (its hardware
+            // (double)Half widen QUIETS sNaN before the op and double-rounds
+            // differently on exponent-gap sums). Contiguous same-shape pairs already
+            // took the trivial bypass; this redirect sends the scalar-broadcast
+            // layouts to SimdScalarLeft/Right and leaves strided on the same
+            // EmitScalarOperation numerics as before (via SimdChunk).
+            if (lhsType == NPTypeCode.Half && rhsType == NPTypeCode.Half && resultType == NPTypeCode.Half
+                && (op == BinaryOp.Add || op == BinaryOp.Subtract || op == BinaryOp.Multiply || op == BinaryOp.Divide))
+                return null;
+
             // NDIter's internal shape arithmetic is int-bounded; route only
             // when the broadcast result fits. Pre-existing test
             // LongIndexingBroadcastTest exercises the > int.MaxValue path via
