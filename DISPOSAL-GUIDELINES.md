@@ -139,7 +139,7 @@ NDScopedAttribute.cs`, public — the attribute is consumer-facing) is rewritten
 pattern produces. The SAME transform ships to consumer projects as the **`NumSharp.Build`
 NuGet package** (tools + MSBuild targets only, `PrivateAssets="all"` on install — a weaver on
 the project it is installed on, never a runtime dependency; gate:
-`tools/verify_weaver_package.sh`, docs: `docs/website-src/docs/ndscoped.md`); there the weaver
+`tools/verify_build_package.sh`, docs: `docs/website-src/docs/ndscoped.md`); there the weaver
 resolves `NDScope`/`INDArrayCarrier` out of the REFERENCED NumSharp assembly via the compile's
 reference list:
 
@@ -204,7 +204,7 @@ both). The IL-only rejections stay with the weaver post-compile: NDW001 (NDScope
 async seam). The analyzer mirrors the weaver's `Classify` exactly, so the two never disagree; where
 they cannot cheaply agree — a real iterator vs a method merely returning a bare `IEnumerable` — the
 analyzer defers to the weaver rather than risk a false positive. Gate:
-`tools/verify_weaver_package.sh` step 11 (11a analyzer, 11b weaver) + step 18 (analyzer via the
+`tools/verify_build_package.sh` step 11 (11a analyzer, 11b weaver) + step 18 (analyzer via the
 NumSharp package alone).
 
 **Async & iterators — the state-machine weave.** An async or iterator method's visible body is a
@@ -243,7 +243,7 @@ chain works when completion is inline; a genuinely cross-thread completion leave
 untracked — finalizer backstop if dropped). An abandoned-without-Dispose enumerator or a
 never-completing async invocation falls to the ordinary GC/finalizer backstop. Verified end-to-end
 (struct AND class state machines, generic ones included, 200-way concurrent stress, ILVerify clean)
-by the async consumer battery in `tools/verify_weaver_package.sh`; the seam's runtime contracts are
+by the async consumer battery in `tools/verify_build_package.sh`; the seam's runtime contracts are
 pinned by `NDScopeAsyncTests`.
 
 **Lower-layer buffer returns — scope of support.** The `IArraySlice`/`UnmanagedStorage` row above

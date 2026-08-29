@@ -28,11 +28,11 @@ bash show-analyzer.sh          # or:  dotnet run --project examples/NDScoping --
 
 The IL-only rejections (NDW001 NDScope unresolved, NDW004 an unrecognized state-machine shape, NDW007
 a tail-call, NDW008 a NumSharp too old for the async seam) are NOT source-detectable, so they stay
-with the weaver post-compile and are not demonstrated here — see `tools/verify_weaver_package.sh`.
+with the weaver post-compile and are not demonstrated here — see `tools/verify_build_package.sh`.
 
 ## Why only the analyzer is wired
 
 The csproj references the analyzer (`OutputItemType="Analyzer"`) and NumSharp.Core, and nothing else —
 no weaver import. The build never gets past `CoreCompile`, so there is nothing to weave; the analyzer
 is independent of the weave (`-p:SkipNDScopeWeave` has no effect here). This is the same layer split
-`verify_weaver_package.sh` step 11 uses: the analyzer preempts the weaver.
+`verify_build_package.sh` step 11 uses: the analyzer preempts the weaver.

@@ -4,7 +4,7 @@
 #
 # The CounterExamples project deliberately does not compile: each method in BadShapes.cs trips one
 # NDW00x analyzer error. This script builds it, asserts the build FAILED and that every expected
-# error code appears in the output, then prints ANALYZER-OK. It mirrors verify_weaver_package.sh's
+# error code appears in the output, then prints ANALYZER-OK. It mirrors verify_build_package.sh's
 # step 11 (the analyzer catches these at CoreCompile and preempts the weaver).
 # ==============================================================================================
 set -u

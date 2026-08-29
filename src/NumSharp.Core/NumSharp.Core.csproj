@@ -139,7 +139,7 @@
       <Output TaskParameter="TargetOutputs" ItemName="_NumSharpCoreAnalyzer" />
     </MSBuild>
     <!-- Loud, actionable failure instead of a silently analyzer-less nupkg (the gates —
-         verify_strong_name.cs and verify_weaver_package.sh step 2 — assert presence too). -->
+         verify_strong_name.cs and verify_build_package.sh step 2 — assert presence too). -->
     <Error Condition="'@(_NumSharpCoreAnalyzer)' == '' or !Exists('@(_NumSharpCoreAnalyzer)')"
            Text="NumSharp pack: NumSharp.Build.Analyzer.dll not found (looked at '@(_NumSharpCoreAnalyzer)'). Build the solution (or NumSharp.Core, whose ProjectReference builds the analyzer) before packing with --no-build." />
     <ItemGroup>

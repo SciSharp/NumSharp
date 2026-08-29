@@ -35,7 +35,7 @@ The guiding principle: **every demo is falsifiable.** A demo that claims "the te
 reclaimed at the method boundary" ends by asserting `temp.IsDisposed == true` and
 `result.IsDisposed == false`, and prints `OK`/`FAIL`. If the weaver or the scope ever regressed, the
 example would go red — so it doubles as a living, readable gate beside the formal ones
-(`NDScopeTests`, `NDScopeWeaveTests`, `verify_weaver_package.sh`).
+(`NDScopeTests`, `NDScopeWeaveTests`, `verify_build_package.sh`).
 
 ---
 
@@ -107,7 +107,7 @@ public static Report Run(string name, Func<List<NDArray>, NDArray> body, double?
 - For **async** the probe has a `Task`-returning overload; for **iterators** an `IEnumerable`
   overload that also checks each yielded element is alive and owned by the consumer.
 - An optional **GC-pressure** mode (`--stress`) re-runs every demo 25× with forced full GCs between
-  sweeps (the `verify_weaver_package.sh` step-15 trick): a mis-scoped result whose buffer was
+  sweeps (the `verify_build_package.sh` step-15 trick): a mis-scoped result whose buffer was
   reclaimed early surfaces as pool-reuse corruption, i.e. a wrong value.
 
 The probe never touches `NDScope.Current`/`Track` (internal) — the demos append their temps
@@ -284,7 +284,7 @@ a comment:
 
 `CounterExamples/show-analyzer.sh` (the demo): `dotnet build` the project, assert the build **fails**
 and that each of the seven `error NDWxxx` codes appears in the output; print `ANALYZER-OK`. This is
-the same layer split `verify_weaver_package.sh` step 11 uses — the analyzer catches these at
+the same layer split `verify_build_package.sh` step 11 uses — the analyzer catches these at
 CoreCompile and preempts the weaver.
 
 `CounterExamples/NDScoping.CounterExamples.csproj` wires **only the analyzer** (no weave needed —
@@ -396,5 +396,5 @@ The example uses only the **public** surface (`NDScope`, the two attributes, `IN
 Cross-references: `src/NumSharp.Core/Backends/NDScope.cs` (the API + its XML doc, which this example
 makes executable), `DISPOSAL-GUIDELINES.md`, `docs/website-src/docs/ndscoped.md`,
 `tools/NumSharp.Build` + `tools/NumSharp.Build.Analyzer`, and the formal gates `NDScopeTests` /
-`NDScopeWeaveTests` / `NDScopeAsyncTests` / `verify_weaver_package.sh`.
+`NDScopeWeaveTests` / `NDScopeAsyncTests` / `verify_build_package.sh`.
 ```

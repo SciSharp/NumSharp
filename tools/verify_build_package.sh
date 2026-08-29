@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =================================================================================================
-# verify_weaver_package.sh — end-to-end gate for the NumSharp.Build NuGet package.
+# verify_build_package.sh — end-to-end gate for the NumSharp.Build NuGet package.
 #
 # The OpenBLAS verify_build_override.sh pattern: a scripted nupkg-flow run in which every claim the
 # package makes ("install it and your [NDScoped] methods are woven; it is a weaver on the project
@@ -49,7 +49,7 @@
 #      NumSharp.Build still gets the compile-time gate (a bad [NDScoped] target FAILS the build,
 #      NDW003) and the NDW012 leak warning — no weaver install required
 #
-# Usage:  tools/verify_weaver_package.sh [workdir]     (workdir kept on failure, or with KEEP=1)
+# Usage:  tools/verify_build_package.sh [workdir]     (workdir kept on failure, or with KEEP=1)
 # Needs:  dotnet SDK (net8 + net10 targeting), python (zip inspection; no unzip dependency).
 # =================================================================================================
 set -euo pipefail
@@ -817,5 +817,5 @@ echo "18b: NDW012 warned with NumSharp alone (no weaver installed)"
 
 
 echo
-echo "verify_weaver_package: ALL 18 STEPS OK"
+echo "verify_build_package: ALL 18 STEPS OK"
 if [ "${KEEP:-0}" != "1" ]; then rm -rf "$WORK"; else echo "(KEEP=1: work dir kept at $WORK)"; fi

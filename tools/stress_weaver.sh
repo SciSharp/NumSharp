@@ -2,7 +2,7 @@
 # =================================================================================================
 # stress_weaver.sh — scale/concurrency stress harness for the NumSharp.Build package.
 #
-# Complements tools/verify_weaver_package.sh (the correctness gate): where the gate proves each
+# Complements tools/verify_build_package.sh (the correctness gate): where the gate proves each
 # claim once, this generates ~1,000 [NDScoped] methods across every weave shape and pushes them
 # through BOTH consumption modes, then hammers the woven output at runtime.
 #

@@ -10,7 +10,7 @@
   href: broadcasting.md
 - name: Buffering & Memory
   href: buffering.md
-- name: NumSharp.Build ([NDScoped] weaver)
+- name: NumSharp.Build Compiler
   href: ndscoped.md
 - name: Exceptions
   href: exceptions.md

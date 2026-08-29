@@ -42,7 +42,7 @@
        leak nudge) ships inside the NumSharp package itself (NumSharp.Core.csproj →
        _NumSharpCorePackAnalyzer), so every NumSharp consumer has it before ever
        installing this weaver — and installing both packages never double-applies it.
-       Gate: tools/verify_weaver_package.sh.
+       Gate: tools/verify_build_package.sh.
        ================================================================================== -->
   <PropertyGroup>
     <IsPackable>true</IsPackable>

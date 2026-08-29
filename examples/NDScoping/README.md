@@ -6,7 +6,7 @@ that gap** — it makes a composition method a *deterministic* reclamation point
 **every level and layer** of that mechanism, side by side, running, with the reclamation made
 visible: each demo asserts its claim via the public `NDArray.IsDisposed` and prints `OK`/`FAIL`, so
 the console output is *evidence, not narration*. It doubles as a living gate beside the formal ones
-(`NDScopeTests`, `NDScopeWeaveTests`, `verify_weaver_package.sh`).
+(`NDScopeTests`, `NDScopeWeaveTests`, `verify_build_package.sh`).
 
 > Full spec: [`DESIGN.md`](DESIGN.md). Background: [`../../DISPOSAL-GUIDELINES.md`](../../DISPOSAL-GUIDELINES.md)
 > and the API's own XML doc in `src/NumSharp.Core/Backends/NDScope.cs`, which this example makes executable.

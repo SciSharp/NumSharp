@@ -122,7 +122,7 @@ jobs:
           --filter "$FILTER" --logger "trx"
 
     # The analyzer gate. AnalyzerBuild is excluded: that one test spawns `dotnet build` to exercise the
-    # MSBuild NDW013 warning (also covered by tools/verify_weaver_package.sh step 17); the in-process
+    # MSBuild NDW013 warning (also covered by tools/verify_build_package.sh step 17); the in-process
     # Roslyn-analyzer assertions here are the cross-platform gate.
     - name: Test Analyzer (net8.0)
       shell: bash
@@ -475,7 +475,7 @@ jobs:
           -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
 
         # The weaver: a tools-only build-time package (no lib/, no dependencies — see
-        # tools/verify_weaver_package.sh). Its pack target publishes the tool into tools/,
+        # tools/verify_build_package.sh). Its pack target publishes the tool into tools/,
         # which under --no-build below stages the outputs this Rebuild produced.
         dotnet build tools/NumSharp.Build/NumSharp.Build.csproj \
           --configuration Release \

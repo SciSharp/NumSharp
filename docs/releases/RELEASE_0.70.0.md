@@ -31,7 +31,7 @@ Three optional companion packages ship for the first time, co-versioned with **N
   - Coverage - synchronous methods, `async` methods, iterators, and non-`async` `Task`/`ValueTask` returns are woven through their compiler state machines; incremental per-TFM, idempotent (double-weaving impossible), and a strong-named consumer is re-signed with its own key.
   - Compile-time safety ships with **NumSharp itself**, not this package: the Roslyn analyzer rides the NumSharp nupkg's `analyzers/dotnet/cs/`, so referencing NumSharp alone reports a wrong or unsupported `[NDScoped]` target as a build **error** (NDW002-NDW011) and nudges on leaked `NDArray` temporaries (NDW012); NumSharp also carries the NDW013 build warning for `[NDScoped]` used **without** the weaver installed (the attributes are then inert).
   - Escape hatches - `-p:SkipNDScopeWeave=true` builds without weaving (nothing else changes); `-p:NDScopeWeaveILVerify=true` additionally runs `dotnet-ilverify` on the woven output.
-  - Gate - `tools/verify_weaver_package.sh`, an 18-step real-consumer nupkg flow (package shapes, weave + incrementality, transitive isolation, re-signing, state machines, the analyzer/weaver error layers, NDW012/NDW013, and analyzer-via-NumSharp-alone).
+  - Gate - `tools/verify_build_package.sh`, an 18-step real-consumer nupkg flow (package shapes, weave + incrementality, transitive isolation, re-signing, state machines, the analyzer/weaver error layers, NDW012/NDW013, and analyzer-via-NumSharp-alone).
 
 ### 📊 Dashboards & Docs
 

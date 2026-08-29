@@ -14,7 +14,7 @@ namespace NumSharp.Tests.Lifetime
     ///     Each test hand-drives the EXACT call protocol the woven IL performs — the same trick the
     ///     out-parameter and ITuple branches use — so the runtime semantics are pinned without
     ///     weaving this assembly; the end-to-end woven proof lives in
-    ///     <c>tools/verify_weaver_package.sh</c>'s async consumer step.
+    ///     <c>tools/verify_build_package.sh</c>'s async consumer step.
     /// </summary>
     [TestClass]
     [DoNotParallelize]

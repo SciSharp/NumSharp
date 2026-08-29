@@ -64,7 +64,7 @@ foreach (var pkg in packages)
 
     // NumSharp.Build is a TOOLS-ONLY package BY DESIGN: build/ targets + a tools/ payload, no lib/
     // and no dependency entries — installing it changes the consumer's BUILD, never its dependency
-    // graph (gate: tools/verify_weaver_package.sh). Its payload is exempt from the key check — the
+    // graph (gate: tools/verify_build_package.sh). Its payload is exempt from the key check — the
     // tool never loads into a user's app (tools/ assemblies are neither referenced nor copied), and
     // Mono.Cecil beside it carries Cecil's key, not NumSharp's. What IS asserted is the payload
     // itself, so a mis-pack cannot ride the exemption and ship an empty shell.
