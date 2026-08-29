@@ -27,7 +27,8 @@
 #      proving both the escape hatch and that step 6 is non-vacuous
 #   9  pack the consumer → its nuspec depends on NumSharp but NOT on NumSharp.Build
 #  10  the REAL product path: a consumer taking NumSharp itself as a PackageReference (lib/
-#      resolution, not the P2P ref-assembly path) weaves and runs
+#      resolution, not the P2P ref-assembly path) weaves and runs; 10b repeats it on net10.0
+#      (lib/net10.0 + the TFM-agnostic analyzers/ and build/ assets, everything from the nupkgs)
 #  11  error shapes FAIL the build in the right LAYER: 11a the compile-time ANALYZER reports the
 #      source-detectable rejections (NDW002 ref egress, NDW003 unsupported carrier, NDW009/010 the
 #      WRONG attribute, NDW011 both attributes) and preempts the weaver; 11b the post-compile WEAVER
@@ -388,7 +389,22 @@ cp "$CONSUMER/Program.cs" "$PD/Program.cs"
 grep -q "woven 3, already-scoped 0" "$PD/build.log" || fail "PackageReference consumer did not weave"
 (cd "$PD" && dotnet run --no-build -c Release > run.log 2>&1) || { cat "$PD/run.log"; fail "PackageReference consumer run failed"; }
 grep -q "CONSUMER-OK" "$PD/run.log" || { cat "$PD/run.log"; fail "no CONSUMER-OK from the PackageReference consumer"; }
-echo "PackageReference consumer woven and green"
+echo "net8.0 PackageReference consumer woven and green"
+
+# 10b — the SAME pure-nupkg consumer on net10.0: proves lib/net10.0 resolves from the package and
+# the TFM-agnostic analyzers/ + build/ assets serve the second TFM too (the mixed P2P consumer of
+# steps 3-9 covers net10.0 weaving, but not the everything-from-the-nupkg composition). The extra
+# property lands AFTER the template's TargetFramework, so the later assignment overrides it — the
+# same mechanism step 14 uses for SignAssembly.
+PD10="$WORK/pkgref10"
+scaffold_pkgref "$PD10" "<TargetFramework>net10.0</TargetFramework>"
+cp "$CONSUMER/Program.cs" "$PD10/Program.cs"
+(cd "$PD10" && dotnet build -c Release -v n > build.log 2>&1) \
+  || { tail -30 "$PD10/build.log"; fail "10b: net10.0 PackageReference consumer build failed"; }
+grep -q "woven 3, already-scoped 0" "$PD10/build.log" || fail "10b: net10.0 PackageReference consumer did not weave"
+(cd "$PD10" && dotnet run --no-build -c Release > run.log 2>&1) || { cat "$PD10/run.log"; fail "10b: net10.0 PackageReference consumer run failed"; }
+grep -q "CONSUMER-OK" "$PD10/run.log" || { cat "$PD10/run.log"; fail "10b: no CONSUMER-OK from the net10.0 PackageReference consumer"; }
+echo "net10.0 PackageReference consumer woven and green"
 
 step "11/18 error shapes fail the build — the ANALYZER at compile-time, the weaver post-compile"
 # The compile-time Roslyn analyzer arrives via the NumSharp PackageReference (analyzers/dotnet/cs/
