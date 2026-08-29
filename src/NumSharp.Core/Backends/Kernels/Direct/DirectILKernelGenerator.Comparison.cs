@@ -138,6 +138,16 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static ComparisonKernel GenerateComparisonKernel(ComparisonKernelKey key)
         {
+            // f16 comparisons are pure bit logic (sign-magnitude key order + NaN/±0 masks), so
+            // (Half,Half) keys ride static bit-level AVX2 kernels with zero float conversions —
+            // see Comparison.Half.cs. SimdChunk/General keep the emitted scalar IL below.
+            if (key.LhsType == NPTypeCode.Half && key.RhsType == NPTypeCode.Half)
+            {
+                var halfCmp = TryGetHalfComparisonKernel(key.Op, key.Path);
+                if (halfCmp != null)
+                    return halfCmp;
+            }
+
             return key.Path switch
             {
                 ExecutionPath.SimdFull => GenerateComparisonSimdFullKernel(key),
