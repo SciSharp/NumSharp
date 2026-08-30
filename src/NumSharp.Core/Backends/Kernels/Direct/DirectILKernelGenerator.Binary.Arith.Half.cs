@@ -59,6 +59,21 @@ namespace NumSharp.Backends.Kernels
                 case ExecutionPath.SimdScalarLeft:
                     return (l, r, o, ls, rs, sh, nd, n) =>
                         HalfArithScalarLeft(*(ushort*)l, (ushort*)r, (ushort*)o, n, op);
+
+                // Strided / broadcast layouts. Half is the ONLY dtype routed to the
+                // direct kernel here — every other dtype takes NDIter (see the
+                // (Half,Half)→Half decline in DefaultEngine.TryExecuteBinaryOpViaNDIter),
+                // which is the exact reason the emitted SimdChunk kernel's per-row chunk
+                // model — never exercised by another dtype — mis-addresses BOTH a
+                // double-broadcast (kron's a⊗b builds two operands broadcast on
+                // complementary axes) and a strided view whose inner |stride| ∉ {0,1}
+                // (a reversed step-2 slice), silently producing garbage. Serve them with
+                // the per-element coordinate odometer instead (EmitGeneralLoop's proven
+                // address model + the bit-exact scalar WCN), correct for every layout.
+                case ExecutionPath.SimdChunk:
+                case ExecutionPath.General:
+                    return (l, r, o, ls, rs, sh, nd, n) =>
+                        HalfArithStrided((ushort*)l, (ushort*)r, (ushort*)o, ls, rs, sh, nd, n, op);
             }
             return null;
         }
@@ -190,6 +205,39 @@ namespace NumSharp.Backends.Kernels
             }
             for (; i < n; i++)
                 pr[i] = HalfArithBits(a, pb[i], op);
+        }
+
+        /// <summary>
+        /// Strided / broadcast (Half,Half)→Half arithmetic (SimdChunk / General paths):
+        /// a per-element coordinate odometer — EmitGeneralLoop's exact address model —
+        /// driving the bit-exact scalar widen-compute-narrow (<see cref="HalfArithBits"/>).
+        /// For each output element i (written C-contiguous, linearly), i is decomposed into
+        /// coordinates over <paramref name="shape"/> (C-order, last axis fastest) and each
+        /// operand is read at Σ coord_d·stride_d from its (offset-adjusted) base — so it is
+        /// correct for ANY layout: contiguous, broadcast (stride 0), negative stride, or
+        /// step (|stride| &gt; 1). Bit-identical to NumPy because HalfArithBits IS NumPy's
+        /// scalar HALF loop (float32 compute + RTNE narrow + the operand-order NaN pin);
+        /// only the addressing changes vs the contiguous kernels. Scalar by construction —
+        /// the contiguous SimdFull / SimdScalar paths keep the SIMD widen-compute-narrow.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void HalfArithStrided(
+            ushort* pa, ushort* pb, ushort* pr,
+            long* lhsStrides, long* rhsStrides, long* shape, int ndim, long n, BinaryOp op)
+        {
+            for (long i = 0; i < n; i++)
+            {
+                long idx = i, lhsOff = 0, rhsOff = 0;
+                for (int d = ndim - 1; d >= 0; d--)
+                {
+                    long dim = shape[d];
+                    long coord = idx % dim;
+                    idx /= dim;
+                    lhsOff += coord * lhsStrides[d];
+                    rhsOff += coord * rhsStrides[d];
+                }
+                pr[i] = HalfArithBits(pa[lhsOff], pb[rhsOff], op);
+            }
         }
 
         /// <summary>

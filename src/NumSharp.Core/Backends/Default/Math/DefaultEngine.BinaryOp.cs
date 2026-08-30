@@ -1122,10 +1122,13 @@ namespace NumSharp.Backends
 
                 if (canMerge)
                 {
+                    // Use the pre-merge shapeW/shapeR locals (shape[writeAxis] is overwritten
+                    // below) so each operand's merged stride is resolved against the real axis
+                    // sizes — a size-1 axis must defer to its neighbour's stride.
+                    lhsStrides[writeAxis] = MergeStride(shapeW, lhsStrides[writeAxis], shapeR, lhsStrides[readAxis]);
+                    rhsStrides[writeAxis] = MergeStride(shapeW, rhsStrides[writeAxis], shapeR, rhsStrides[readAxis]);
+                    resStrides[writeAxis] = MergeStride(shapeW, resStrides[writeAxis], shapeR, resStrides[readAxis]);
                     shape[writeAxis] = shapeW * shapeR;
-                    lhsStrides[writeAxis] = MergeStride(lhsStrides[writeAxis], lhsStrides[readAxis]);
-                    rhsStrides[writeAxis] = MergeStride(rhsStrides[writeAxis], rhsStrides[readAxis]);
-                    resStrides[writeAxis] = MergeStride(resStrides[writeAxis], resStrides[readAxis]);
                 }
                 else
                 {
@@ -1156,13 +1159,31 @@ namespace NumSharp.Backends
             return !(hasC && hasF);
         }
 
+        /// <summary>
+        ///     The stride of an axis formed by merging an outer dim (<paramref name="shapeW"/>,
+        ///     <paramref name="strideW"/>) with the adjacent inner dim (<paramref name="shapeR"/>,
+        ///     <paramref name="strideR"/>). A valid merge (validated by
+        ///     <see cref="ClassifyMergePair"/>) is C-order (<c>strideW == strideR*shapeR</c>) or
+        ///     F-order (<c>strideR == strideW*shapeW</c>); the merged axis walks the pair in that
+        ///     order, so its stride is the INNER/fastest one — the stride of SMALLER MAGNITUDE.
+        ///
+        ///     The prior <c>strideW &lt; strideR</c> (smaller VALUE) was correct only for
+        ///     non-negative strides: for a reversed view whose merged pair is e.g. (-24, -8),
+        ///     smaller-value keeps -24 (the OUTER stride) where the merged axis must step by -8,
+        ///     so the kernel then read the wrong elements (silent garbage on float16 — the sole
+        ///     dtype routed to this direct path; every other dtype coalesces inside NDIter). A
+        ///     size-1 axis contributes no offset (its coord is always 0), so the merged axis is
+        ///     driven entirely by the OTHER axis's stride regardless of magnitude.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static long MergeStride(long strideW, long strideR)
+        private static long MergeStride(long shapeW, long strideW, long shapeR, long strideR)
         {
+            if (shapeW == 1) return strideR;   // outer phantom → inner drives
+            if (shapeR == 1) return strideW;   // inner phantom → outer drives
             if (strideW == 0 && strideR == 0) return 0;
             if (strideW == 0) return strideR;
             if (strideR == 0) return strideW;
-            return strideW < strideR ? strideW : strideR;
+            return Math.Abs(strideW) <= Math.Abs(strideR) ? strideW : strideR;
         }
 
         /// <summary>
