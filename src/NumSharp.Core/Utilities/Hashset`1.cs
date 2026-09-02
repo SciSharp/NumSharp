@@ -1969,9 +1969,13 @@ namespace NumSharp.Utilities
         // Threshold above which we use 33% growth instead of doubling (1 billion elements)
         public const long LargeGrowthThreshold = 1_000_000_000L;
 
-        // Maximum supported array size (limited by .NET array indexing with long)
-        // In practice, limited by available memory
-        public const long MaxPrimeArrayLength = 0x7FFFFFC7L; // Same as Array.MaxLength on 64-bit
+        // Ceiling used by ExpandPrime's overflow/cap guard: the largest capacity we keep a
+        // precomputed prime for (the last entry of the primes table below, and itself prime).
+        // NOTE: this is deliberately NOT the 32-bit Array.MaxLength (0x7FFFFFC7). That value was a
+        // leftover from the int-based HashHelpers this was ported from; sitting at ~2.147e9 it
+        // capped the long-indexed 33% growth path mid-stream (e.g. an oldSize of 2e9 could not grow
+        // to its 2.666e9 target) and was not even prime. Beyond this ceiling GetPrime computes.
+        public const long MaxPrimeArrayLength = 37915399967L; // largest precomputed prime (0x8D3EF171F)
 
         // Precomputed primes for small sizes
         public static readonly long[] primes = new long[] {
@@ -1982,13 +1986,13 @@ namespace NumSharp.Utilities
             672827, 807403, 968897, 1162687, 1395263, 1674319, 2009191, 2411033, 2893249, 3471899,
             4166287, 4999559, 5999471, 7199369,
             // Extended primes for large collections
-            8639243, 10367101, 12440537, 14928671, 17914409, 21497293, 25796759, 30956117,
-            37147349, 44576827, 53492203, 64190647, 77028793, 92434559, 110921473, 133105769,
-            159726947, 191672339, 230006821, 276008189, 331209833, 397451801, 476942167,
-            572330603, 686796727, 824156077, 988987301, 1186784761, 1424141717, 1708970063,
-            2050764077, 2460916897, 2953100281, 3543720337, 4252464407, 5102957291, 6123548753,
-            7348258507, 8817910211, 10581492263, 12697790717, 15237348869, 18284818643,
-            21941782381, 26330138861, 31596166633, 37915399963
+            8639249, 10367101, 12440537, 14928671, 17914409, 21497293, 25796759, 30956117,
+            37147349, 44576837, 53492207, 64190647, 77028799, 92434613, 110921477, 133105781,
+            159726947, 191672347, 230006849, 276008191, 331209871, 397451807, 476942227,
+            572330611, 686796769, 824156087, 988987303, 1186784761, 1424141723, 1708970119,
+            2050764137, 2460916919, 2953100291, 3543720353, 4252464407, 5102957317, 6123548759,
+            7348258573, 8817910219, 10581492269, 12697790719, 15237348881, 18284818661,
+            21941782393, 26330138893, 31596166643, 37915399967
         };
 
         public static bool IsPrime(long candidate)

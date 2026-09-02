@@ -151,7 +151,6 @@ public class HashsetLongIndexingTests
     }
 
     [TestMethod]
-    [OpenBugs] // HashHelpersLong.primes array contains non-prime values
     public void HashHelpersLong_GetPrime()
     {
         // Should return the prime from the table for small values
@@ -197,7 +196,6 @@ public class HashsetLongIndexingTests
     }
 
     [TestMethod]
-    [OpenBugs] // HashHelpersLong.primes array contains non-prime values
     public void HashHelpersLong_ExpandPrime_ProgressiveGrowthTest()
     {
         // Verify growth pattern changes at threshold
