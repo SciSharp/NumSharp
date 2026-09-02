@@ -196,7 +196,9 @@ namespace NumSharp.Backends
         // Strided clip: read src and (array) bounds through their own strides in C-order, writing
         // a C-contiguous dst. Per-element semantics mirror the IL kernel's scalar tail exactly —
         // Math.Max/Min for sized numerics + decimal, NaN-aware helpers for Half / Complex, numeric
-        // ordering for Char (read as UInt16) — so results are identical to the contiguous path.
+        // ordering for Char (read as UInt16), Boolean read as Byte (bool storage is 0/1, so the
+        // unsigned Byte Max/Min gives the same false<true ordering as the contiguous path's 0/1
+        // scalar-select) — so results are identical to the contiguous path.
         private static unsafe void ClipStrided(NDArray src, NDArray dst, NDArray loCast, NDArray hiCast,
             NPTypeCode outType, DirectILKernelGenerator.ClipMode mode, DirectILKernelGenerator.ClipBoundsKind kind)
         {
@@ -220,6 +222,12 @@ namespace NumSharp.Backends
 
             switch (outType)
             {
+                // Boolean rides the Byte kernel: bool is one byte storing 0/1 (loaded as Ldind_U1
+                // by the contiguous IL path), and unsigned Byte Max/Min reproduces false<true
+                // ordering exactly — clip(bool, lo, hi) = Min(Max(v, lo), hi) with lo/hi read as
+                // bytes. Fixes "clip not supported for Boolean" on the strided/transposed/F-order
+                // path (the contiguous path already handled bool via its 0/1 scalar select).
+                case NPTypeCode.Boolean: ClipStridedT<byte>(sBase, (byte*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
                 case NPTypeCode.Byte:    ClipStridedT<byte>(sBase, (byte*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
                 case NPTypeCode.SByte:   ClipStridedT<sbyte>(sBase, (sbyte*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
                 case NPTypeCode.Int16:   ClipStridedT<short>(sBase, (short*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;

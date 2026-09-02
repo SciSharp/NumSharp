@@ -12,39 +12,16 @@ namespace NumSharp.Tests
     [TestClass]
     public class OpenBugsDtypeCoverageTests : TestClass
     {
-        // ============================================================================
-        //  BUG: np.clip on a Boolean array throws on the NON-CONTIGUOUS path.
-        //
-        //  np.clip(bool_array, True, True) -> all-True bool array (NumPy 2.4.2).
-        //  NumSharp handles the CONTIGUOUS bool clip fine, but the general strided /
-        //  transposed / F-contiguous kernel throws:
-        //      NotSupportedException: clip not supported for Boolean
-        //  So the bug is layout-dependent — the SIMD/contiguous path supports Boolean
-        //  while the coordinate/strided clip kernel omits it.
-        // ============================================================================
-        private static readonly NDArray ClipTrue = NDArray.Scalar(true);
-
-        [TestMethod, OpenBugs]
-        public void Clip_Bool_Transposed_Throws()
-        {
-            var a = np.array(new bool[] { true, false, false, true, true, false }).reshape(2, 3).T; // non-contiguous
-            NDArray r = null;
-            Action act = () => r = np.clip(a, ClipTrue, ClipTrue);
-            act.Should().NotThrow("NumPy clips a transposed bool array (lo=hi=True -> all True); NumSharp's " +
-                                  "strided clip kernel throws NotSupportedException for Boolean.");
-            r.typecode.Should().Be(NPTypeCode.Boolean);
-        }
-
-        [TestMethod, OpenBugs]
-        public void Clip_Bool_Strided_Throws()
-        {
-            var a = np.array(new bool[] { true, false, false, true, true, false, false, true })["::2"]; // strided view
-            NDArray r = null;
-            Action act = () => r = np.clip(a, ClipTrue, ClipTrue);
-            act.Should().NotThrow("NumPy clips a strided bool view; NumSharp throws NotSupportedException " +
-                                  "for Boolean on the non-contiguous clip path (contiguous bool clip works).");
-            r.typecode.Should().Be(NPTypeCode.Boolean);
-        }
+        // np.clip on a Boolean array previously threw on the NON-CONTIGUOUS path
+        // ("NotSupportedException: clip not supported for Boolean") while the contiguous path
+        // worked — the strided/transposed/F-order clip kernel (ClipStrided) omitted the Boolean
+        // case. FIXED: Boolean now rides the Byte kernel there (bool storage is 0/1, so unsigned
+        // Byte Min/Max reproduces the false<true clamp exactly, bit-identical to the contiguous
+        // 0/1 scalar select). Now GREEN at full coverage in the stat differential-fuzz tier
+        // (CLIP_DTYPES in gen_oracle.py — bool × every layout), so the two [OpenBugs] pins here
+        // (Clip_Bool_Transposed/Strided) were removed. Non-contiguous ~/invert on bool was
+        // already correct; the NonContiguousTests.NegateBoolean_* pins were likewise retired
+        // (np.negative(bool) is a NumPy-2.4.2 TypeError, ~ is the boolean flip).
 
         // ============================================================================
         //  BUG: np.trace of an UNSIGNED dtype returns Int64 instead of uint64.

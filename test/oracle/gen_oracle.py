@@ -377,10 +377,11 @@ STAT_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_cont
 CNZ_DTYPES = list(ALL_DTYPES)          # widened: count_nonzero is dtype-agnostic
 # clip dtypes. complex128 IS supported by NumPy's clip (probed 2.4.2: lexicographic
 # real-then-imag ordering, NaN-poisoning comparisons — np.clip([1+2j,5+1j,-3+0j],0,2) ->
-# [1+2j, 2+0j, 0+0j]); included below. bool is CARVED OUT: NumSharp's general
-# (strided/transposed/F-contig) clip kernel throws "clip not supported for
-# Boolean" (only the contiguous path handles bool) — reproduced under [OpenBugs] (Clip_Bool_Strided_*).
-CLIP_DTYPES = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
+# [1+2j, 2+0j, 0+0j]); included below. bool is included too (fixed): NumSharp's general
+# (strided/transposed/F-contig) clip kernel now handles Boolean by riding the Byte Min/Max
+# path — bool bounds are (False, True) so the clip is an IDENTITY, gating that the strided
+# path reads/writes each bool element in the right C-order position (the exact bug it had).
+CLIP_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
                "float16", "float32", "float64", "complex128"]
 QUANTILE_SPECS = [
     ("percentile", lambda a, q, ax: np.percentile(a, q, axis=ax), [0.0, 25.0, 50.0, 75.0, 100.0]),
@@ -465,7 +466,11 @@ def gen_clip(dtypes, layout_names):
         for s in dtypes:
             dt = np.dtype(s)
             base, view = fn(dt)
-            lo_v, hi_v = (1, 100) if dt.kind == "u" else (-10, 10)
+            # bool has only two orderable values, so any scalar bound pair either passes the
+            # array through (False, True) or saturates it to a constant — (False, True) makes clip
+            # the identity, which is the informative case: it verifies the strided/transposed read
+            # maps to the right C-order output slot (the bug that carved bool out originally).
+            lo_v, hi_v = (0, 1) if dt.kind == "b" else (1, 100) if dt.kind == "u" else (-10, 10)
             lo = np.array(lo_v, dtype=dt).reshape(())
             hi = np.array(hi_v, dtype=dt).reshape(())
             try:
