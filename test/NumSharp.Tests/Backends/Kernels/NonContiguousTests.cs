@@ -330,41 +330,114 @@ public class NonContiguousTests
 
     #endregion
 
-    #region Negate Boolean on Non-Contiguous Arrays (Task #74 fix verification)
+    #region Boolean flip (~ / invert) on Non-Contiguous Arrays (Task #74 fix verification)
+
+    // NumPy 2.4.2 removed the boolean negative loop: np.negative(bool) (and unary `-`) now
+    // raises. The boolean flip is the `~` operator (np.invert / np.logical_not), which must work
+    // through a non-contiguous view. NumSharp mirrors both — negative(bool) throws NumPy's exact
+    // message, and `~` reads/writes the strided view in logical C-order. (Verified against
+    // NumPy 2.4.2: np.negative([True]) -> TypeError "The numpy boolean negative, the `-` operator,
+    // is not supported, use the `~` operator or the logical_not function instead.")
 
     [TestMethod]
-    [OpenBugs]  // Remove when Task #74 is fixed
     public void NegateBoolean_SlicedArray()
     {
-        // NumPy: np.negative(arr[::2]) where arr = [True, False, True, False, True]
-        // arr[::2] = [True, True, True]
-        // negative(bool) in NumPy returns int: [-1, -1, -1]
         var arr = np.array(new[] { true, false, true, false, true });
-        var sliced = arr["::2"];
+        var sliced = arr["::2"]; // [True, True, True]
 
-        var result = np.negative(sliced);
+        // np.negative(bool) is rejected in NumPy 2.4.2 — the loop no longer exists.
+        var ex = Assert.ThrowsException<System.NotSupportedException>(() => np.negative(sliced));
+        StringAssert.Contains(ex.Message, "boolean negative");
 
-        // NumPy negative on bool converts to int and negates
-        Assert.AreEqual(-1, result.GetInt32(0));
-        Assert.AreEqual(-1, result.GetInt32(1));
-        Assert.AreEqual(-1, result.GetInt32(2));
+        // `~` (invert) is the boolean flip NumPy points to: ~[T,T,T] = [F,F,F].
+        var inverted = ~sliced;
+        Assert.AreEqual(NPTypeCode.Boolean, inverted.typecode);
+        Assert.AreEqual(false, inverted.GetBoolean(0));
+        Assert.AreEqual(false, inverted.GetBoolean(1));
+        Assert.AreEqual(false, inverted.GetBoolean(2));
     }
 
     [TestMethod]
-    [OpenBugs]  // Remove when Task #74 is fixed
     public void NegateBoolean_ReversedArray()
     {
-        // NumPy: np.negative(arr[::-1]) where arr = [True, False, False, True]
-        // arr[::-1] = [True, False, False, True]
         var arr = np.array(new[] { true, false, false, true });
-        var reversed = arr["::-1"];
+        var reversed = arr["::-1"]; // [True, False, False, True]
 
-        var result = np.negative(reversed);
+        var ex = Assert.ThrowsException<System.NotSupportedException>(() => np.negative(reversed));
+        StringAssert.Contains(ex.Message, "boolean negative");
 
-        Assert.AreEqual(-1, result.GetInt32(0));
-        Assert.AreEqual(0, result.GetInt32(1));
-        Assert.AreEqual(0, result.GetInt32(2));
-        Assert.AreEqual(-1, result.GetInt32(3));
+        // ~[T,F,F,T] = [F,T,T,F], read through the negative-stride view in C-order.
+        var inverted = ~reversed;
+        Assert.AreEqual(NPTypeCode.Boolean, inverted.typecode);
+        Assert.AreEqual(false, inverted.GetBoolean(0));
+        Assert.AreEqual(true, inverted.GetBoolean(1));
+        Assert.AreEqual(true, inverted.GetBoolean(2));
+        Assert.AreEqual(false, inverted.GetBoolean(3));
+    }
+
+    [TestMethod]
+    public void InvertBoolean_Transposed_AllForms()
+    {
+        // NumPy 2.4.2: ~, np.invert, np.logical_not, np.bitwise_not all give the logical NOT of a
+        // transposed (F-contiguous) bool view. a.T C-order = [T,T,F,T,F,F] -> flip = [F,F,T,F,T,T].
+        var a = np.array(new[] { true, false, false, true, true, false }).reshape(2, 3).T; // (3,2)
+        var expect = new[] { false, false, true, false, true, true };
+        foreach (var (name, r) in new[]
+                 {
+                     ("~", ~a), ("invert", np.invert(a)),
+                     ("logical_not", np.logical_not(a)), ("bitwise_not", np.bitwise_not(a))
+                 })
+        {
+            Assert.AreEqual(NPTypeCode.Boolean, r.typecode, name);
+            Assert.AreEqual(3, r.shape[0], name);
+            Assert.AreEqual(2, r.shape[1], name);
+            for (int i = 0; i < 6; i++)
+                Assert.AreEqual(expect[i], r.GetBoolean(i / 2, i % 2), $"{name}[{i}]");
+        }
+    }
+
+    [TestMethod]
+    public void InvertBoolean_3D_Transposed()
+    {
+        // Higher-rank (4,2,3) transposed view: only original [0,0,0]=0 is False, so ~ flips only
+        // that element to True; every other element (True) flips to False.
+        var a = np.arange(24).reshape(2, 3, 4).astype(NPTypeCode.Boolean).transpose(new int[] { 2, 0, 1 });
+        var r = ~a;
+        Assert.AreEqual(NPTypeCode.Boolean, r.typecode);
+        Assert.AreEqual(4, r.shape[0]);
+        Assert.AreEqual(2, r.shape[1]);
+        Assert.AreEqual(3, r.shape[2]);
+        Assert.AreEqual(true, r.GetBoolean(0, 0, 0));   // ~False
+        Assert.AreEqual(false, r.GetBoolean(0, 0, 1));  // ~True
+        Assert.AreEqual(false, r.GetBoolean(3, 1, 2));  // ~True (last)
+    }
+
+    [TestMethod]
+    public void InvertBoolean_BroadcastView_ReturnsFreshWriteable()
+    {
+        // ~ of a READ-ONLY broadcast view (stride=0) returns a fresh, WRITEABLE, C-contiguous array
+        // (NumPy returns a new array, not a view). Source [T,F,T] broadcast to (2,3).
+        var src = np.broadcast_to(np.array(new[] { true, false, true }), new Shape(2, 3));
+        Assert.IsFalse(src.Shape.IsWriteable, "broadcast source is read-only");
+        var r = ~src;
+        Assert.AreEqual(NPTypeCode.Boolean, r.typecode);
+        Assert.IsTrue(r.Shape.IsWriteable, "invert result must be a fresh writeable array");
+        // C-order: [F,T,F, F,T,F].
+        var expect = new[] { false, true, false, false, true, false };
+        for (int i = 0; i < 6; i++)
+            Assert.AreEqual(expect[i], r.GetBoolean(i / 3, i % 3), $"[{i}]");
+    }
+
+    [TestMethod]
+    public void NegativeBoolean_UnaryMinusOperator_AlsoRejected()
+    {
+        // NumPy 2.4.2 rejects BOTH np.negative(bool) AND the unary `-` operator with the same
+        // TypeError, at every layout including a read-only broadcast view. `~` remains the flip.
+        var a = np.array(new[] { true, false, false, true, true, false }).reshape(2, 3).T;
+        Assert.ThrowsException<System.NotSupportedException>(() => -a);
+        var bc = np.broadcast_to(np.array(new[] { true }), new Shape(3));
+        var ex = Assert.ThrowsException<System.NotSupportedException>(() => np.negative(bc));
+        StringAssert.Contains(ex.Message, "boolean negative");
     }
 
     #endregion
