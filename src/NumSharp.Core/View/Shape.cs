@@ -20,10 +20,16 @@ namespace NumSharp
         /// <summary>Data is C-contiguous (row-major, last dimension varies fastest).</summary>
         C_CONTIGUOUS = 0x0001,
 
-        /// <summary>Data is F-contiguous (column-major). Reserved, always false for NumSharp.</summary>
+        /// <summary>Data is F-contiguous (column-major).</summary>
         F_CONTIGUOUS = 0x0002,
 
-        /// <summary>Array owns its data buffer.</summary>
+        /// <summary>
+        ///     Array owns its data buffer (NumPy's <c>NPY_ARRAY_OWNDATA</c>). Not derivable from
+        ///     dims/strides — maintained by <see cref="NumSharp.Backends.UnmanagedStorage.SyncOwnDataFlag"/>
+        ///     at the storage funnels: set when the storage allocated its buffer
+        ///     (NumPy <c>ctors.c</c>: <c>fa-&gt;flags |= NPY_ARRAY_OWNDATA</c> when <c>data == NULL</c>),
+        ///     cleared for views and foreign-memory wraps (<c>base != NULL ⟹ !OWNDATA</c>).
+        /// </summary>
         OWNDATA = 0x0004,
 
         /// <summary>Data is aligned for the CPU (always true for managed allocations).</summary>
@@ -358,9 +364,13 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Does this array own its data buffer?
-        ///     False for views (slices, transposes, broadcasts).
-        ///     Cached flag set at storage level.
+        ///     Does this array own its data buffer (NumPy's <c>flags.owndata</c>)?
+        ///     True for freshly allocated arrays (<c>np.arange</c>, <c>np.zeros</c>, <c>.copy()</c>);
+        ///     false for views (slices, transposes, broadcasts) and foreign-memory wraps (memmaps).
+        ///     Maintained at the <see cref="NumSharp.Backends.UnmanagedStorage"/> funnels
+        ///     (<see cref="NumSharp.Backends.UnmanagedStorage.SyncOwnDataFlag"/>), mirroring
+        ///     <c>UnmanagedStorage.OwnsData</c> — meaningful only on a shape read off a storage
+        ///     (<c>nd.Shape</c>); a hand-built <see cref="Shape"/> carries no ownership claim.
         /// </summary>
         public readonly bool OwnsData
         {
@@ -569,12 +579,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Creates a shape with modified flags (for clearing WRITEABLE on broadcasts).
+        ///     Creates a shape with modified flags (for clearing WRITEABLE on broadcasts, or
+        ///     setting/clearing OWNDATA at the <see cref="NumSharp.Backends.UnmanagedStorage"/> funnels).
         /// </summary>
+        /// <remarks>
+        ///     Dimensions and strides are unchanged, so <see cref="size"/> and <see cref="_hashCode"/>
+        ///     are carried over verbatim through the no-walk constructor instead of being recomputed.
+        /// </remarks>
         public Shape WithFlags(ArrayFlags flagsToSet = ArrayFlags.None, ArrayFlags flagsToClear = ArrayFlags.None)
         {
             int newFlags = (_flags | (int)flagsToSet) & ~(int)flagsToClear;
-            return new Shape(dimensions, strides, offset, bufferSize, newFlags);
+            return new Shape(dimensions, strides, offset, bufferSize, newFlags, size, _hashCode);
         }
 
         /// <summary>

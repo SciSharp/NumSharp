@@ -175,6 +175,31 @@ namespace NumSharp.Backends
         internal bool OwnsData => _baseStorage is null && !ExternalBase;
 
         /// <summary>
+        ///     Reconciles <see cref="_shape"/>'s <see cref="ArrayFlags.OWNDATA"/> bit with
+        ///     <see cref="OwnsData"/> — the NumSharp analog of NumPy's <c>PyArray_NewFromDescr_int</c>
+        ///     (<c>ctors.c</c>: <c>fa-&gt;flags |= NPY_ARRAY_OWNDATA</c> when it allocates,
+        ///     <c>fa-&gt;flags &amp;= ~NPY_ARRAY_OWNDATA</c> when data is passed in) plus the invariant
+        ///     NumPy asserts in <c>_IsWriteable</c> (<c>common.c</c>): <c>base != NULL ⟹ !OWNDATA</c>.
+        /// </summary>
+        /// <remarks>
+        ///     Must be called wherever ownership or <see cref="_shape"/> transitions: at the end of every
+        ///     allocating constructor / <see cref="_Allocate"/>, after every <see cref="_baseStorage"/>
+        ///     assignment (views borrow the parent's shape, which carries the parent's bit), after
+        ///     <see cref="ExternalBase"/> is raised, and in <see cref="SetShapeUnsafe(ref Shape)"/> /
+        ///     the <c>ReplaceData</c> family (freshly built shapes never carry the bit, which would
+        ///     silently strip it from an owner).
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected internal void SyncOwnDataFlag()
+        {
+            bool owns = _baseStorage is null && !ExternalBase;
+            if (((_shape._flags & (int)ArrayFlags.OWNDATA) != 0) != owns)
+                _shape = owns
+                    ? _shape.WithFlags(flagsToSet: ArrayFlags.OWNDATA)
+                    : _shape.WithFlags(flagsToClear: ArrayFlags.OWNDATA);
+        }
+
+        /// <summary>
         ///     May this array's WRITEABLE flag be turned (back) on? The NumSharp analog of NumPy's
         ///     <c>_IsWriteable</c> (<c>numpy/_core/src/multiarray/common.c</c>), consulted by
         ///     <see cref="NDArray.setflags"/> / <c>flags.writeable = true</c>:
@@ -351,6 +376,7 @@ namespace NumSharp.Backends
             var ret = new UnmanagedStorage();
             ret._Allocate(shape, storage.InternalArray);
             ret._baseStorage = storage._baseStorage ?? storage;
+            ret.SyncOwnDataFlag(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             ret.Engine = storage.Engine;
             return ret;
         }
@@ -359,11 +385,26 @@ namespace NumSharp.Backends
         private UnmanagedStorage() { }
 
         /// <summary>
+        ///     <see cref="Shape.Scalar"/> with <see cref="ArrayFlags.OWNDATA"/> pre-set — the shape every
+        ///     allocating scalar constructor stores (a fresh scalar storage owns its buffer; NumPy's
+        ///     <c>ctors.c</c> raises <c>NPY_ARRAY_OWNDATA</c> on every allocating constructor). Pre-built
+        ///     once so the hot scalar ctors pay no per-construction flag fixup.
+        /// </summary>
+        private static readonly Shape ScalarOwnedShape = Shape.Scalar.WithFlags(flagsToSet: ArrayFlags.OWNDATA);
+
+        /// <summary>
+        ///     A fresh C-contiguous vector shape carrying <see cref="ArrayFlags.OWNDATA"/> — stored by the
+        ///     allocating managed-array constructors, which copy <c>values</c> into brand-new unmanaged
+        ///     memory this storage owns.
+        /// </summary>
+        private static Shape OwnedVectorShape(long length) => new Shape(length).WithFlags(flagsToSet: ArrayFlags.OWNDATA);
+
+        /// <summary>
         ///     Scalar constructor
         /// </summary>
         private unsafe UnmanagedStorage(IArraySlice values)
         {
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             _dtype = (_typecode = values.TypeCode).AsType();
             Address = (byte*)values.Address;
             Count = 1;
@@ -421,7 +462,7 @@ namespace NumSharp.Backends
         // {            
             // _dtype = typeof(#1);
             // _typecode = InfoOf<#2>.NPTypeCode;
-            // _shape = Shape.Scalar;
+            // _shape = ScalarOwnedShape;
             // InternalArray = _slices.#1 = ArraySlice.Scalar<#2>(scalar);
             // unsafe
             // {
@@ -435,7 +476,7 @@ namespace NumSharp.Backends
         {
             _dtype = typeof(Boolean);
             _typecode = InfoOf<bool>.NPTypeCode;
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             InternalArray = _slices.Boolean = ArraySlice.Scalar<bool>(scalar);
             unsafe
             {
@@ -448,7 +489,7 @@ namespace NumSharp.Backends
         {
             _dtype = typeof(Byte);
             _typecode = InfoOf<byte>.NPTypeCode;
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             InternalArray = _slices.Byte = ArraySlice.Scalar<byte>(scalar);
             unsafe
             {
@@ -461,7 +502,7 @@ namespace NumSharp.Backends
         {
             _dtype = typeof(Int16);
             _typecode = InfoOf<short>.NPTypeCode;
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             InternalArray = _slices.Int16 = ArraySlice.Scalar<short>(scalar);
             unsafe
             {
@@ -474,7 +515,7 @@ namespace NumSharp.Backends
         {
             _dtype = typeof(UInt16);
             _typecode = InfoOf<ushort>.NPTypeCode;
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             InternalArray = _slices.UInt16 = ArraySlice.Scalar<ushort>(scalar);
             unsafe
             {
@@ -487,7 +528,7 @@ namespace NumSharp.Backends
         {
             _dtype = typeof(Int32);
             _typecode = InfoOf<int>.NPTypeCode;
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             InternalArray = _slices.Int32 = ArraySlice.Scalar<int>(scalar);
             unsafe
             {
@@ -500,7 +541,7 @@ namespace NumSharp.Backends
         {
             _dtype = typeof(UInt32);
             _typecode = InfoOf<uint>.NPTypeCode;
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             InternalArray = _slices.UInt32 = ArraySlice.Scalar<uint>(scalar);
             unsafe
             {
@@ -513,7 +554,7 @@ namespace NumSharp.Backends
         {
             _dtype = typeof(Int64);
             _typecode = InfoOf<long>.NPTypeCode;
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             InternalArray = _slices.Int64 = ArraySlice.Scalar<long>(scalar);
             unsafe
             {
@@ -526,7 +567,7 @@ namespace NumSharp.Backends
         {
             _dtype = typeof(UInt64);
             _typecode = InfoOf<ulong>.NPTypeCode;
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             InternalArray = _slices.UInt64 = ArraySlice.Scalar<ulong>(scalar);
             unsafe
             {
@@ -539,7 +580,7 @@ namespace NumSharp.Backends
         {
             _dtype = typeof(Char);
             _typecode = InfoOf<char>.NPTypeCode;
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             InternalArray = _slices.Char = ArraySlice.Scalar<char>(scalar);
             unsafe
             {
@@ -552,7 +593,7 @@ namespace NumSharp.Backends
         {
             _dtype = typeof(Double);
             _typecode = InfoOf<double>.NPTypeCode;
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             InternalArray = _slices.Double = ArraySlice.Scalar<double>(scalar);
             unsafe
             {
@@ -565,7 +606,7 @@ namespace NumSharp.Backends
         {
             _dtype = typeof(Single);
             _typecode = InfoOf<float>.NPTypeCode;
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             InternalArray = _slices.Single = ArraySlice.Scalar<float>(scalar);
             unsafe
             {
@@ -578,7 +619,7 @@ namespace NumSharp.Backends
         {
             _dtype = typeof(Decimal);
             _typecode = InfoOf<decimal>.NPTypeCode;
-            _shape = Shape.Scalar;
+            _shape = ScalarOwnedShape;
             InternalArray = _slices.Decimal = ArraySlice.Scalar<decimal>(scalar);
             unsafe
             {
@@ -593,7 +634,7 @@ namespace NumSharp.Backends
                 // throw new ArgumentNullException(nameof(values));
             // _dtype = typeof(#1);
             // _typecode = _dtype.GetTypeCode();
-            // _shape = new Shape(values.Length);
+            // _shape = OwnedVectorShape(values.Length);
             // InternalArray = _slices.#1 = new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(values));
             // unsafe
             // {
@@ -608,7 +649,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Boolean);
             _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
+            _shape = OwnedVectorShape(values.Length);
             InternalArray = _slices.Boolean = new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromArray(values));
             unsafe
             {
@@ -623,7 +664,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Byte);
             _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
+            _shape = OwnedVectorShape(values.Length);
             InternalArray = _slices.Byte = new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromArray(values));
             unsafe
             {
@@ -638,7 +679,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Int16);
             _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
+            _shape = OwnedVectorShape(values.Length);
             InternalArray = _slices.Int16 = new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromArray(values));
             unsafe
             {
@@ -653,7 +694,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(UInt16);
             _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
+            _shape = OwnedVectorShape(values.Length);
             InternalArray = _slices.UInt16 = new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromArray(values));
             unsafe
             {
@@ -668,7 +709,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Int32);
             _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
+            _shape = OwnedVectorShape(values.Length);
             InternalArray = _slices.Int32 = new ArraySlice<int>(UnmanagedMemoryBlock<int>.FromArray(values));
             unsafe
             {
@@ -683,7 +724,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(UInt32);
             _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
+            _shape = OwnedVectorShape(values.Length);
             InternalArray = _slices.UInt32 = new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.FromArray(values));
             unsafe
             {
@@ -698,7 +739,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Int64);
             _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
+            _shape = OwnedVectorShape(values.Length);
             InternalArray = _slices.Int64 = new ArraySlice<long>(UnmanagedMemoryBlock<long>.FromArray(values));
             unsafe
             {
@@ -713,7 +754,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(UInt64);
             _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
+            _shape = OwnedVectorShape(values.Length);
             InternalArray = _slices.UInt64 = new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromArray(values));
             unsafe
             {
@@ -728,7 +769,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Char);
             _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
+            _shape = OwnedVectorShape(values.Length);
             InternalArray = _slices.Char = new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromArray(values));
             unsafe
             {
@@ -743,7 +784,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Double);
             _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
+            _shape = OwnedVectorShape(values.Length);
             InternalArray = _slices.Double = new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromArray(values));
             unsafe
             {
@@ -758,7 +799,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Single);
             _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
+            _shape = OwnedVectorShape(values.Length);
             InternalArray = _slices.Single = new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromArray(values));
             unsafe
             {
@@ -773,7 +814,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Decimal);
             _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
+            _shape = OwnedVectorShape(values.Length);
             InternalArray = _slices.Decimal = new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromArray(values));
             unsafe
             {
@@ -1135,6 +1176,12 @@ namespace NumSharp.Backends
             _dtype = _typecode.AsType();
             SetInternalArray(values);
             Count = shape.size;
+
+            // OWNDATA mirrors this storage's actual ownership (NumPy ctors.c: allocating constructors
+            // raise NPY_ARRAY_OWNDATA; a borrowed shape may carry its previous array's bit either way).
+            // View-producers that call _Allocate before wiring _baseStorage (CreateBroadcastedUnsafe)
+            // re-sync after that assignment.
+            SyncOwnDataFlag();
         }
 
         /// <summary>

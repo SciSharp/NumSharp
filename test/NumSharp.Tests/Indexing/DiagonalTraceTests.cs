@@ -177,7 +177,9 @@ public class DiagonalTraceTests
         // Every dtype walks the same stride-view path; one round-trip each.
         var a3x3 = (Func<NPTypeCode, NDArray>)(tc => np.arange(9, tc).reshape(3, 3));
 
-        np.diagonal(a3x3(NPTypeCode.Boolean)).Shape.Should().Be(new Shape(3));
+        // Boolean cannot come from arange (NumPy TypeError past length 2, guard added with the
+        // AuditV2 ctor fixes) — reach the same 3x3 bool stride-view via a cast instead.
+        np.diagonal(np.arange(9, NPTypeCode.Int32).astype(NPTypeCode.Boolean).reshape(3, 3)).Shape.Should().Be(new Shape(3));
         np.diagonal(a3x3(NPTypeCode.Byte)).Shape.Should().Be(new Shape(3));
         np.diagonal(a3x3(NPTypeCode.SByte)).Shape.Should().Be(new Shape(3));
         np.diagonal(a3x3(NPTypeCode.Int16)).Shape.Should().Be(new Shape(3));

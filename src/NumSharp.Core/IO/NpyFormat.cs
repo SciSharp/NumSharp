@@ -1024,6 +1024,7 @@ namespace NumSharp.IO
                     var empty = new NDArray(header.Dtype.TypeCode, new Shape(header.Shape));
                     // NumPy's memmap reports owndata=False in EVERY mode (its base is the mmap object).
                     empty.Storage.ExternalBase = true;
+                    empty.Storage.SyncOwnDataFlag(); // drop the allocating ctor's OWNDATA bit
                     if (!writeable)
                     {
                         // NumPy refuses setflags(write=True) on an 'r' memmap even when it is empty
@@ -1121,6 +1122,7 @@ namespace NumSharp.IO
             // The mapped memory belongs to the file mapping, not the array — NumPy's memmap has the mmap
             // object as its (non-array) base and reports owndata=False in EVERY mode ('r'/'r+'/'c').
             nd.Storage.ExternalBase = true;
+            nd.Storage.SyncOwnDataFlag(); // drop the wrap ctor's OWNDATA bit ('r+'/'c' take no later shape swap)
 
             // 'r'/'readonly' → non-writeable, applied to the WRAP storage (the owner) BEFORE any view is
             // taken: the F-order reshape/transpose below then inherit read-onlyness from it, and

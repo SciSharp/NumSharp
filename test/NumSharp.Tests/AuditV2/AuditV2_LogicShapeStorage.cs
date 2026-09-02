@@ -148,16 +148,19 @@ namespace NumSharp.Tests.AuditV2
         }
 
         // ============================================================================
-        // T1.29 — Shape.OWNDATA flag declared at 0x0004 but never set anywhere.
-        // File: src/NumSharp.Core/View/Shape.cs (line 27 enum, line 358-362 getter,
-        //       line 127 ComputeFlagsStatic — no OR with OWNDATA).
+        // T1.29 — FIXED: the OWNDATA bit (0x0004) is now maintained by
+        // UnmanagedStorage.SyncOwnDataFlag() at every storage funnel (allocating
+        // ctors/_Allocate set it, Alias/wrap/_baseStorage/ExternalBase transitions
+        // clear it, in-place shape swaps reconcile), mirroring
+        // UnmanagedStorage.OwnsData — NumPy ctors.c: fa->flags |= NPY_ARRAY_OWNDATA
+        // when allocating, cleared when data is passed in. Kept as a regression pin;
+        // the extensive probed-vs-NumPy matrix lives in Backends/OwnDataFlagTests.cs.
         // ============================================================================
         /// <summary>
-        /// T1.29 — `Shape.OwnsData` always returns false because no code path
-        /// ever sets the OWNDATA flag (0x0004). NumPy reports OWNDATA=True for
-        /// any array that owns its data buffer.
+        /// T1.29 — `Shape.OwnsData` reports true for arrays that own their buffer
+        /// (NumPy: OWNDATA=True for every allocating constructor).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.29")]
+        [TestMethod]
         public void T1_29_OWNDATA_Flag_Never_Set()
         {
             // Freshly allocated arrays own their data per NumPy semantics.
@@ -212,15 +215,16 @@ namespace NumSharp.Tests.AuditV2
         }
 
         // ============================================================================
-        // T1.64 — np.arr.flags.OWNDATA always reports False; NumPy reports True
-        // for arrays that own their data. Surface-level manifestation of T1.29.
+        // T1.64 — FIXED alongside T1.29: nd.Shape.Flags carries OWNDATA for owners
+        // and drops it on views; nd.flags.owndata reads this Shape bit, so the whole
+        // flags oracle (flags_oracle.jsonl) gates the mirror. Regression pin.
         // ============================================================================
         /// <summary>
-        /// T1.64 — `nd.Shape.Flags` never has OWNDATA set, regardless of how the
-        /// array was created. NumPy: `np.arange(10).flags.owndata` is True;
+        /// T1.64 — `nd.Shape.Flags` has OWNDATA set exactly for owning arrays.
+        /// NumPy: `np.arange(10).flags.owndata` is True;
         /// `np.arange(10)[1:5].flags.owndata` is False.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.64")]
+        [TestMethod]
         public void T1_64_Flags_OWNDATA_Always_False()
         {
             var fresh = np.arange(10);
