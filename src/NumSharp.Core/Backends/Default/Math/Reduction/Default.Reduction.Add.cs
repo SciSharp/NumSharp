@@ -104,7 +104,7 @@ namespace NumSharp.Backends
             var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
             NDArray result;
             if (@out is not null) { if (@out.Shape != outputShape) throw new IncorrectShapeException($"Output shape mismatch"); result = @out; }
-            else result = new NDArray(outputType, outputShape, false);
+            else result = AllocateReductionResult(outputType, outputDims, shape);
 
             long axisSize = shape.dimensions[axis];
             long outputSize = result.size > 0 ? result.size : 1;
@@ -118,14 +118,48 @@ namespace NumSharp.Backends
             }
 
             if (keepdims)
-            {
-                var ks = new long[arr.ndim];
-                for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : result.shape[sd++];
-                result.Storage.Reshape(new Shape(ks));
-            }
+                result.Storage.ExpandDimension(axis);
             // A fresh 0-d result (1-D input reduced over its only axis) is a numpy SCALAR at the
             // boundary — read-only; an out= operand returns writeable (PyArray_Return semantics).
             return @out is not null ? result : result.MarkReductionScalar();
+        }
+
+        /// <summary>
+        ///     Allocates a reduction's output in the memory order NumPy's reduce iterator would pick
+        ///     with KEEPORDER: an F-contiguous input yields an F-contiguous result, a C-contiguous or
+        ///     general-strided input yields a C-contiguous result (issue #610). The reduction kernels
+        ///     write each output element through <c>outputStrides</c> (the general/slab paths use
+        ///     them directly; the C-contiguous fast paths are gated on a C-contiguous INPUT, so they
+        ///     are never reached for an F-contiguous input), so filling an F-strided buffer costs no
+        ///     extra copy — this is exactly how NumPy allocates the output operand and writes into it,
+        ///     rather than reordering after the fact. <paramref name="outputDims"/> is the input
+        ///     shape with the reduced axis removed; a 0-D or 1-D result is intrinsically both C- and
+        ///     F-contiguous, so only rank &gt;= 2 results consult the order. keepdims re-inserts the
+        ///     reduced axis with <see cref="UnmanagedStorage.ExpandDimension"/>, which preserves the
+        ///     order (unlike a Reshape to a fresh C-shape, which would reset it). ArgMax/ArgMin do NOT
+        ///     use this: NumPy allocates their index output in C-order regardless of input (probed 2.4.2).
+        /// </summary>
+        internal static NDArray AllocateReductionResult(NPTypeCode outputType, long[] outputDims, Shape inputShape)
+        {
+            if (outputDims.Length == 0)
+                return new NDArray(outputType, Shape.Scalar, false);
+            var order = outputDims.Length >= 2 ? OrderResolver.Resolve('K', inputShape) : 'C';
+            var outputShape = order == 'F' ? new Shape(outputDims, 'F') : new Shape(outputDims);
+            return new NDArray(outputType, outputShape, false);
+        }
+
+        /// <summary>
+        ///     Zero-filled sibling of <see cref="AllocateReductionResult"/>, for the degenerate
+        ///     size-1-axis std/var paths whose result is all zeros: the layout still follows the
+        ///     input's memory order (F for an F-contig input), matching NumPy (issue #610). Unlike
+        ///     the executors above, <paramref name="dims"/> is already the FINAL result shape (the
+        ///     caller having applied keepdims), so no ExpandDimension follows.
+        /// </summary>
+        internal static NDArray AllocateReductionZeros(NPTypeCode outputType, long[] dims, Shape inputShape)
+        {
+            var order = dims.Length >= 2 ? OrderResolver.Resolve('K', inputShape) : 'C';
+            var zeroShape = order == 'F' ? new Shape(dims, 'F') : new Shape(dims);
+            return np.zeros(zeroShape, outputType);
         }
 
         /// <summary>
@@ -227,7 +261,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                result = new NDArray(outputType, outputShape, false);
+                result = AllocateReductionResult(outputType, outputDims, shape);
             }
 
             // The per-chunk kernel folds into the existing output slot(s), so the output
@@ -245,12 +279,9 @@ namespace NumSharp.Backends
                 ILKernelGenerator.MeanDivideByCount(result, shape.dimensions[axis]);
 
             if (keepdims)
-            {
-                var ks = new long[arr.ndim];
-                for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : result.shape[sd++];
-                result.Storage.Reshape(new Shape(ks));
-            }
-            // Same PyArray_Return rule as ExecuteAxisReduction's exit.
+                result.Storage.ExpandDimension(axis);
+            // Same PyArray_Return rule as ExecuteAxisReduction's exit; the output was already
+            // allocated in KEEPORDER (F for an F-contig input), so there is nothing to reorder.
             return @out is not null ? result : result.MarkReductionScalar();
         }
 
@@ -343,7 +374,10 @@ namespace NumSharp.Backends
                 if (outputType != arr.GetTypeCode) v = Converts.ChangeType(v, outputType);
                 return NDArray.Scalar(v).MarkReductionScalar();
             }
-            var result = new NDArray(outputType, new Shape(resultDims), false);
+            // KEEPORDER: reducing a size-1 axis of an F-contiguous input keeps F-contig; SetAtIndex
+            // writes each element through the result's strides, so an F-order buffer fills correctly
+            // with no copy (resultDims already carries the final keepdims shape) (issue #610).
+            var result = AllocateReductionResult(outputType, resultDims, shape);
             if (outputType == arr.GetTypeCode) for (long i = 0; i < result.size; i++) result.SetAtIndex(arr.GetAtIndex(i), i);
             else for (long i = 0; i < result.size; i++) result.SetAtIndex(Converts.ChangeType(arr.GetAtIndex(i), outputType), i);
             return result;

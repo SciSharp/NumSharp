@@ -1205,11 +1205,25 @@ namespace NumSharp.Tests.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.flip is missing from NumSharp
+        [TestCategory("Fixed")] // np.flip is implemented (O(ndim) stride-negation view). This was a
+                   // stale false.Should().BeTrue() placeholder left over from before the feature shipped.
         public void Flip_ApiGap()
         {
-            // NumPy: np.flip(arr, axis=0) reverses along axis - not implemented in NumSharp
-            false.Should().BeTrue("np.flip is not implemented");
+            // NumPy: arr = [[0,1,2],[3,4,5]]
+            //   flip(arr, 0) = [[3,4,5],[0,1,2]]   (reverse rows)
+            //   flip(arr, 1) = [[2,1,0],[5,4,3]]   (reverse columns)
+            //   flip(arr)    = [[5,4,3],[2,1,0]]   (reverse all axes)
+            var arr = np.arange(6).reshape(2, 3);
+            var f0 = np.flip(arr, 0);
+            ((int)f0[0, 0]).Should().Be(3);
+            ((int)f0[0, 2]).Should().Be(5);
+            ((int)f0[1, 0]).Should().Be(0);
+            var f1 = np.flip(arr, 1);
+            ((int)f1[0, 0]).Should().Be(2);
+            ((int)f1[1, 2]).Should().Be(3);
+            var fAll = np.flip(arr);
+            ((int)fAll[0, 0]).Should().Be(5);
+            ((int)fAll[1, 2]).Should().Be(0);
         }
 
         // ============================================================================
@@ -1835,9 +1849,9 @@ namespace NumSharp.Tests.View
         // --- 3-D F-contig tests: F-preservation fails (documented) ---
 
         [TestMethod]
-        [OpenBugs] // Reductions with keepdims=True on 3-D F-contig flip to C-contig output.
-                   // NumPy: shape (1,3,4) on 3-D (2,3,4) F-contig stays F-contig (C=0, F=1).
-                   // NumSharp: returns C=1, F=0.
+        [TestCategory("Fixed")] // issue #610: axis reductions now allocate their output with
+                   // KEEPORDER (PreserveReductionOrder), so a 3-D F-contig input keeps F-contig
+                   // output. NumPy: sum(F3, axis=0, keepdims=True) shape (1,3,4) is C=0, F=1.
         public void Sum_FContig3D_Axis0_KeepDims_PreservesFContig()
         {
             var f3 = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(double));
@@ -1853,7 +1867,7 @@ namespace NumSharp.Tests.View
         }
 
         [TestMethod]
-        [OpenBugs] // Same gap as Sum_FContig3D_Axis0_KeepDims — mean doesn't preserve F either.
+        [TestCategory("Fixed")] // issue #610: KEEPORDER reduction output — mean preserves F too.
         public void Mean_FContig3D_Axis1_KeepDims_PreservesFContig()
         {
             var f3 = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(double));
@@ -1869,7 +1883,7 @@ namespace NumSharp.Tests.View
         }
 
         [TestMethod]
-        [OpenBugs] // Reductions without keepdims on 3-D F-contig also flip to C-contig.
+        [TestCategory("Fixed")] // issue #610: KEEPORDER reduction output — no-keepdims preserves F.
                    // NumPy: shape (3,4) from reducing axis=0 of (2,3,4) F-contig stays F-contig (C=0, F=1).
         public void Sum_FContig3D_Axis0_NoKeepDims_PreservesFContig()
         {
@@ -1944,7 +1958,7 @@ namespace NumSharp.Tests.View
         }
 
         [TestMethod]
-        [OpenBugs] // NaN-aware 3-D F-contig reduction doesn't preserve F-contig either.
+        [TestCategory("Fixed")] // issue #610: KEEPORDER reduction output — nansum preserves F too.
                    // NumPy: nansum(F3, axis=0, keepdims=True) shape (1,3,4) stays F-contig.
         public void NanSum_FContig3D_Axis0_KeepDims_PreservesFContig()
         {
@@ -2273,20 +2287,22 @@ namespace NumSharp.Tests.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumSharp's np.repeat does NOT support the `axis` parameter
-                   // (see src/NumSharp.Core/Manipulation/np.repeat.cs — always ravels first).
-                   // NumPy: repeat(F(4,3), 2, axis=0) duplicates each row, shape (8,3).
+        [TestCategory("Fixed")] // np.repeat(axis) is implemented. This was a stale
+                   // false.Should().BeTrue() placeholder left over from before the feature shipped.
         public void Repeat_FContig_Axis0_ApiGap()
         {
-            // Expected NumPy values once axis is supported:
+            // NumPy: repeat(F(4,3), 2, axis=0) duplicates each row along axis 0 ->
             //   [[0,4,8],[0,4,8],[1,5,9],[1,5,9],[2,6,10],[2,6,10],[3,7,11],[3,7,11]]
-            var f = np.arange(12).reshape(3, 4).T;
-            // This call will compile error until axis is supported; once supported,
-            // remove the [OpenBugs] and uncomment the assertions below.
-            // var r = np.repeat(f, 2, axis: 0);
-            // r.shape.Should().Equal(new long[] { 8, 3 });
-            // ((long)r[1, 0]).Should().Be(0);  // duplicated row
-            false.Should().BeTrue("np.repeat does not support axis parameter yet");
+            // shape (8,3); the output is C-contig (repeat materializes, breaking F layout — as NumPy does).
+            var f = np.arange(12).reshape(3, 4).T;  // F-contig (4,3) [[0,4,8],[1,5,9],[2,6,10],[3,7,11]]
+            var r = np.repeat(f, 2, axis: 0);
+            r.shape.Should().Equal(new long[] { 8, 3 });
+            ((long)r[0, 0]).Should().Be(0);
+            ((long)r[1, 0]).Should().Be(0);  // duplicated row 0
+            ((long)r[2, 0]).Should().Be(1);  // row 1
+            ((long)r[0, 1]).Should().Be(4);
+            ((long)r[7, 2]).Should().Be(11);
+            r.Shape.IsContiguous.Should().BeTrue("NumPy: repeat produces C-contig output");
         }
 
         [TestMethod]
@@ -2763,8 +2779,7 @@ namespace NumSharp.Tests.View
         }
 
         [TestMethod]
-        [OpenBugs] // Same 3-D reduction F-preservation gap as Section 41 — confirmed
-                   // here for the Decimal scalar-full path as well.
+        [TestCategory("Fixed")] // issue #610: KEEPORDER reduction output — Decimal sum preserves F.
         public void Decimal_FContig3D_SumKeepDims_PreservesFContig()
         {
             var f3 = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(decimal));
@@ -2867,9 +2882,8 @@ namespace NumSharp.Tests.View
         }
 
         [TestMethod]
-        [OpenBugs] // Same axis-reduction F-preservation gap as Section 41 — shows up
-                   // on 6-D too, meaning the limit isn't ndim-specific; any axis
-                   // reduction loses F-contig layout.
+        [TestCategory("Fixed")] // issue #610: KEEPORDER reduction output is rank-agnostic — a
+                   // 6-D F-contig sum keeps F-contig, same as the 3-D cases.
         public void HighDim_6D_FContig_Sum_Axis0_KeepDims_PreservesFContig()
         {
             var f = np.empty(new Shape(2L, 3L, 2L, 3L, 2L, 3L), order: 'F', dtype: typeof(double));

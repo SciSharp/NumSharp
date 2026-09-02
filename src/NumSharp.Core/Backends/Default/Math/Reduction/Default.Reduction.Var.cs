@@ -132,14 +132,15 @@ namespace NumSharp.Backends
                     ?? (arr.GetTypeCode == NPTypeCode.Complex
                         ? NPTypeCode.Double
                         : arr.GetTypeCode.GetComputingType());
+                // KEEPORDER: reducing a size-1 axis of an F-contiguous input keeps F-contig (issue #610).
                 if (keepdims)
                 {
                     var keepdimsShapeDims = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShapeDims[i] = (i == axis) ? 1 : shape[i];
-                    return np.zeros(keepdimsShapeDims, zerosType);
+                    return AllocateReductionZeros(zerosType, keepdimsShapeDims, shape);
                 }
-                return np.zeros(Shape.GetAxis(shape, axis), zerosType);
+                return AllocateReductionZeros(zerosType, Shape.GetAxis(shape, axis), shape);
             }
 
             // IL-generated axis reduction fast path - handles all numeric types
@@ -168,7 +169,9 @@ namespace NumSharp.Backends
             Shape axisedShape = Shape.GetAxis(arr.Shape, axis);
             var retType = typeCode ?? arr.GetTypeCode.GetComputingType();
 
-            var ret = new NDArray(retType, axisedShape, false);
+            // KEEPORDER: allocate in the input's memory order (F for an F-contig input); NDAxisIter
+            // writes each element through the destination's strides, so no post-hoc copy (issue #610).
+            var ret = AllocateReductionResult(retType, axisedShape.dimensions, arr.Shape);
             int _ddof = ddof ?? 0;
             var input = arr.GetTypeCode == NPTypeCode.Double ? arr : Cast(arr, NPTypeCode.Double, copy: true);
             NDAxisIter.ReduceDouble<VarAxisDoubleKernel>(input.Storage, ret.Storage, axis, _ddof);
@@ -408,8 +411,9 @@ namespace NumSharp.Backends
             for (int d = 0, od = 0; d < arr.ndim; d++)
                 if (d != axis) outputDims[od++] = shape.dimensions[d];
 
-            var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
-            var result = new NDArray(NPTypeCode.Double, outputShape, false);
+            // KEEPORDER: allocate the result in the input's memory order (F for an F-contig input),
+            // so the strided-output kernel fills it in place with no post-hoc copy (issue #610).
+            var result = AllocateReductionResult(NPTypeCode.Double, outputDims, shape);
 
             long axisSize = shape.dimensions[axis];
             long outputSize = result.size > 0 ? result.size : 1;
@@ -443,13 +447,10 @@ namespace NumSharp.Backends
                 result = Cast(result, outputType, copy: true);
             }
 
+            // ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout (a Reshape
+            // to a fresh C-shape would reset it to C).
             if (keepdims)
-            {
-                var ks = new long[arr.ndim];
-                for (int d = 0, sd = 0; d < arr.ndim; d++)
-                    ks[d] = (d == axis) ? 1 : (sd < outputDims.Length ? outputDims[sd++] : 1);
-                result.Storage.Reshape(new Shape(ks));
-            }
+                result.Storage.ExpandDimension(axis);
 
             return result;
         }
