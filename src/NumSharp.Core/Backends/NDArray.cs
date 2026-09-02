@@ -283,10 +283,14 @@ namespace NumSharp
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(Array values, Shape shape = default, char order = 'C') : this(values.GetType().GetElementType())
         {
-            // Note: F-order not supported, order parameter is accepted but ignored (C-order only)
-
             if (shape.IsEmpty)
                 shape = Shape.ExtractShape(values);
+
+            // Honor an explicit 'F' request: the (row-major) values buffer is reinterpreted as
+            // column-major by rebuilding the shape with F-contiguous strides — mirroring NumPy's
+            // ndarray(buffer=..., order='F'). 'C' (the default) keeps the extracted C-order layout.
+            if (order == 'F' && shape.NDim > 1)
+                shape = new Shape(shape.dimensions, 'F');
 
             Storage.Allocate(values.ResolveRank() != 1 ? ArraySlice.FromArray(Arrays.Flatten(values), false) : ArraySlice.FromArray(values, false), shape);
             InitializeArc();
@@ -303,10 +307,13 @@ namespace NumSharp
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(IArraySlice values, Shape shape = default, char order = 'C') : this(values.TypeCode)
         {
-            // Note: F-order not supported, order parameter is accepted but ignored (C-order only)
-
             if (shape.IsEmpty)
                 shape = Shape.Vector(values.Count);
+
+            // Honor an explicit 'F' request: reinterpret the buffer as column-major by rebuilding
+            // the shape with F-contiguous strides (NumPy's ndarray(buffer=..., order='F')).
+            if (order == 'F' && shape.NDim > 1)
+                shape = new Shape(shape.dimensions, 'F');
 
             Storage.Allocate(values, shape);
             InitializeArc();

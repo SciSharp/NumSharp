@@ -168,7 +168,7 @@ public class AuditV2_NDArrayCreation
     //   caller requested. Users passing `order='F'` get C-order storage
     //   with no warning.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.44")]
+    [TestMethod]
     public void T1_44_NDArrayCtor_FOrderArg_SilentlyIgnored()
     {
         // Given 1..6 in row-major slot 0..5, C-order (2,3) yields
@@ -249,7 +249,7 @@ public class AuditV2_NDArrayCreation
     //   The List<NPTypeCode> sibling at :1097-1098 has a different but
     //   equally-broken pattern (assigning into an uninitialized List slot).
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.47")]
+    [TestMethod]
     public void T1_47_CanCoerceAll_Array_StartIndex_ThrowsArgumentException()
     {
         var method = typeof(np).GetMethod(
@@ -329,7 +329,7 @@ public class AuditV2_NDArrayCreation
     //   by alternating between `start_t` and `next_t` — a NumSharp-specific
     //   extension that silently swallows an obvious user error.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.50")]
+    [TestMethod]
     public void T1_50_Arange_BoolDtype_LengthOver2_DoesNotRaise()
     {
         Action act = () => np.arange(0, 5, 1, NPTypeCode.Boolean);
@@ -366,7 +366,7 @@ public class AuditV2_NDArrayCreation
     //   element size" check (16 bytes), because the reader expects
     //   complex128.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.54")]
+    [TestMethod]
     public void T1_54_FromBuffer_c8_AlignsWith_npDtype_AndRejects()
     {
         // 16 bytes — accepted as Complex128 today. Should be rejected (c8 = complex64).
@@ -379,7 +379,7 @@ public class AuditV2_NDArrayCreation
             "'c8' (complex64) is not a NumSharp dtype; frombuffer must be consistent with np.dtype()");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.54")]
+    [TestMethod]
     public void T1_54_FromBuffer_F_AlignsWith_npDtype_AndRejects()
     {
         // 16 bytes — accepted as Complex128 today. Should be rejected ('F' = complex64).
@@ -390,23 +390,23 @@ public class AuditV2_NDArrayCreation
             "'F' (complex64 typechar) is not a NumSharp dtype; frombuffer must be consistent with np.dtype()");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.54")]
+    [TestMethod]
     public void T1_54_FromBuffer_c8_RealBytes_AreSilentlyWidened()
     {
         // Build 16 bytes that, if interpreted as complex64 (2 floats), encode
-        // 1.0 + 2.0i — but np.frombuffer reads them as a complex128 (2 doubles)
-        // and the float bit pattern becomes garbage values.
+        // 1.0 + 2.0i — under the OLD behavior np.frombuffer read them as a single
+        // complex128 (2 doubles), silently halving the element count (2 -> 1) and
+        // turning the float bit pattern into garbage.
         var floats = new float[] { 1.0f, 2.0f, 3.0f, 4.0f };
         var bytes = new byte[floats.Length * 4]; // 16 bytes (genuine complex64 array of length 2)
         Buffer.BlockCopy(floats, 0, bytes, 0, bytes.Length);
 
-        var r = np.frombuffer(bytes, "c8");
-
-        // The current behavior silently treats the buffer as complex128 (1 element).
-        // After the fix, this call should throw, OR if the API decides to support
-        // c8, it should produce a 2-element complex128 array with values 1+2i and 3+4i.
-        r.size.Should().Be(2,
-            "c8 buffer has 2 complex64 elements; frombuffer must not silently halve to 1 complex128");
+        // Resolution (see the two sibling *_AndRejects tests): frombuffer now REJECTS 'c8'
+        // (complex64) to stay consistent with np.dtype(), rather than silently reinterpreting
+        // the buffer as complex128. This is the "this call should throw" branch the audit noted.
+        Action c8 = () => np.frombuffer(bytes, "c8");
+        c8.Should().Throw<NotSupportedException>(
+            "'c8' (complex64) is not a NumSharp dtype; frombuffer must not silently widen it to complex128");
     }
 
     // -----------------------------------------------------------------------
@@ -425,7 +425,7 @@ public class AuditV2_NDArrayCreation
     //   leaks when callers explicitly compare API surface or migrate code
     //   from Python.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.56")]
+    [TestMethod]
     public void T1_56_NpArray_ArrayInput_DefaultNdmin_MatchesNumPy()
     {
         // Pull the (Array, Type, int, bool, char) overload and inspect the

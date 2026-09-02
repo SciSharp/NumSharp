@@ -853,10 +853,12 @@ namespace NumSharp
                 "f2" or "e"        => NPTypeCode.Half,    // half-precision float (float16)
                 "f4" or "f"        => NPTypeCode.Single,
                 "f8" or "d"        => NPTypeCode.Double,
-                // NumSharp only ships complex128. 'c8'/'F' (single-precision complex) map to
-                // complex128 rather than throwing so the round-trip still works on the common
-                // path; the storage widens but values are exact.
-                "c8"  or "F"       => NPTypeCode.Complex,
+                // NumSharp only ships complex128. 'c8'/'F'/'complex64' (single-precision complex)
+                // are REJECTED — consistent with np.dtype() — rather than silently widening to
+                // complex128. Silent widening misreads genuine complex64 bytes (8B/elem) as
+                // complex128 (16B/elem), halving the element count and corrupting the values.
+                "c8"  or "F" or "complex64"
+                                   => throw new NotSupportedException($"NumPy dtype '{typeStr}' is not supported by NumSharp"),
                 "c16" or "D"       => NPTypeCode.Complex, // complex128
                 "c"   or "S1"      => NPTypeCode.Char,
                 _ => throw new NotSupportedException($"dtype string '{dtype}' is not supported")

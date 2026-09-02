@@ -63,6 +63,12 @@ namespace NumSharp
             if (dtype == NPTypeCode.Empty)
                 dtype = NPTypeCode.Double;
 
+            // NumPy parity: arange(..., dtype=bool) is only supported when the result has at most
+            // length 2 — BOOL_fill (arraytypes.c.src) is invoked to populate index >= 2 and always
+            // raises TypeError. Lengths 0/1/2 are computed directly and are legal.
+            if (dtype == NPTypeCode.Boolean && length > 2)
+                throw new TypeError("arange() is only supported for booleans when the result has at most length 2.");
+
             var nd = new NDArray(dtype, Shape.Vector(length), false);
 
             // NumPy's fill algorithm:

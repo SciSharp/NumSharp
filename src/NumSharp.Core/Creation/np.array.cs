@@ -68,7 +68,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         [MethodImpl(Optimize)]
         [SuppressMessage("ReSharper", "InvalidXmlDocComment")]
-        public static NDArray array(Array array, Type dtype = null, int ndmin = 1, bool copy = true, char order = 'C')
+        public static NDArray array(Array array, Type dtype = null, int ndmin = 0, bool copy = true, char order = 'C')
         {
             if (array == null)
                 throw new ArgumentNullException(nameof(array));

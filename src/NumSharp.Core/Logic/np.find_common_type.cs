@@ -1068,7 +1068,7 @@ namespace NumSharp
             {
                 var len = N - start;
                 var sub = new NPTypeCode[len];
-                Array.Copy(dtypelist, start, sub, len, len);
+                Array.Copy(dtypelist, start, sub, 0, len);
                 dtypelist = sub;
                 N = sub.Length;
             }
@@ -1101,7 +1101,7 @@ namespace NumSharp
                 var len = N - start;
                 var sub = new List<NPTypeCode>(len);
                 for (int i = start; i < N; i++)
-                    sub[i - start] = dtypelist[i];
+                    sub.Add(dtypelist[i]);
                 dtypelist = sub;
                 N = sub.Count;
             }
