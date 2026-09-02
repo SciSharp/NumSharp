@@ -472,5 +472,66 @@ namespace NumSharp.Tests.View
             AssertFContig(r);
             np.array_equal(r, np.var(C3d(), axis: 1, ddof: 1, keepdims: true)).Should().BeTrue();
         }
+
+        // ============================================================================
+        // Group 14: NEGATIVE axis — normalized before the reduction, then KEEPORDER applies.
+        // ============================================================================
+
+        [TestMethod]
+        public void Sum_FContig3D_NegativeAxis_PreservesF()
+        {
+            // axis=-1 == axis=2 -> (2,3) F.
+            var r = np.sum(F3d(), axis: -1);
+            r.shape.Should().Equal(new long[] { 2, 3 });
+            AssertFContig(r);
+            np.array_equal(r, np.sum(F3d(), axis: 2)).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Std_FContig3D_NegativeAxis_KeepDims_PreservesF()
+        {
+            // axis=-2 == axis=1 -> (2,1,4) F.
+            var r = np.std(F3d(), axis: -2, keepdims: true);
+            r.shape.Should().Equal(new long[] { 2, 1, 4 });
+            AssertFContig(r);
+        }
+
+        // ============================================================================
+        // Group 15: higher rank — the KEEPORDER fix is rank-agnostic (3-D and 6-D covered
+        //           elsewhere; 4-D pinned here to bridge them).
+        // ============================================================================
+
+        [TestMethod]
+        public void Sum_FContig4D_Axis2_KeepDims_PreservesF()
+        {
+            var f = np.arange(36).astype(typeof(double)).reshape(2, 3, 2, 3).copy('F');
+            var r = np.sum(f, axis: 2, keepdims: true);
+            r.shape.Should().Equal(new long[] { 2, 3, 1, 3 });
+            AssertFContig(r);
+            var c = np.arange(36).astype(typeof(double)).reshape(2, 3, 2, 3).copy('C');
+            np.array_equal(r, np.sum(c, axis: 2, keepdims: true)).Should().BeTrue();
+        }
+
+        // ============================================================================
+        // Group 16: an OFFSET F-contig input (a column slice of an F array keeps F with
+        //           offset != 0). The kernel must read through Shape.offset — values correct.
+        // ============================================================================
+
+        [TestMethod]
+        public void Sum_OffsetFContigColumnView_ReadsThroughOffset()
+        {
+            // F(4,3)[:, 1:3] is a (4,2) F-contig VIEW with offset != 0 (arr[i,j]=i*3+j).
+            var f = np.arange(12).astype(typeof(double)).reshape(4, 3).copy('F');
+            var view = f[":, 1:3"];
+            view.Shape.IsFContiguous.Should().BeTrue("a column slice of an F array stays F-contig");
+            view.Shape.offset.Should().NotBe(0, "the view starts partway into the buffer");
+
+            // sum axis0 -> (2,), values 22 + 4*j' -> [22, 26]; 1-D result is both-contig.
+            var r = np.sum(view, axis: 0);
+            r.shape.Should().Equal(new long[] { 2 });
+            AssertBothContig(r);
+            ((double)r[0]).Should().Be(22);
+            ((double)r[1]).Should().Be(26);
+        }
     }
 }
