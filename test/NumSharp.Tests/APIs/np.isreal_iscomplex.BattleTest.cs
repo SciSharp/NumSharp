@@ -188,4 +188,84 @@ public class NpIsRealIsComplexBattleTests
     }
 
     #endregion
+
+    #region Complex input — VALUE-based imaginary inspection (NumPy 2.4.2)
+
+    // isreal(x) = imag(x) == 0 ; iscomplex(x) = imag(x) != 0 (for a complex dtype).
+    // np.iscomplex([1+2j, 3+0j, 0+1j, 5+0j]) -> [True, False, True, False]
+    // np.isreal(...)                         -> [False, True, False, True]
+    private static readonly System.Numerics.Complex[] Mixed =
+        { new(1, 2), new(3, 0), new(0, 1), new(5, 0) };
+
+    [TestMethod]
+    public void IsComplex_Complex_InspectsImaginary()
+    {
+        var r = np.iscomplex(np.array(Mixed));
+        r.GetBoolean(0).Should().BeTrue("1+2j has nonzero imaginary part");
+        r.GetBoolean(1).Should().BeFalse("3+0j is real");
+        r.GetBoolean(2).Should().BeTrue("0+1j has nonzero imaginary part");
+        r.GetBoolean(3).Should().BeFalse("5+0j is real");
+    }
+
+    [TestMethod]
+    public void IsReal_Complex_InspectsImaginary()
+    {
+        var r = np.isreal(np.array(Mixed));
+        r.GetBoolean(0).Should().BeFalse("1+2j has nonzero imaginary part");
+        r.GetBoolean(1).Should().BeTrue("3+0j is real");
+        r.GetBoolean(2).Should().BeFalse("0+1j has nonzero imaginary part");
+        r.GetBoolean(3).Should().BeTrue("5+0j is real");
+    }
+
+    [TestMethod]
+    public void IsRealIsComplex_Complex_Specials_IeeeSemantics()
+    {
+        // -0.0 imag -> real (== 0 True); NaN/Inf imag -> NOT real (== 0 False, != 0 True).
+        var c = np.array(new System.Numerics.Complex[]
+        {
+            new(1, 0.0), new(1, -0.0), new(2, double.NaN),
+            new(3, double.PositiveInfinity), new(0, double.NegativeInfinity),
+        });
+        var ir = np.isreal(c);
+        var ic = np.iscomplex(c);
+        // isreal:    [ True, True, False, False, False ]
+        ir.GetBoolean(0).Should().BeTrue();
+        ir.GetBoolean(1).Should().BeTrue("-0.0 == 0");
+        ir.GetBoolean(2).Should().BeFalse("NaN == 0 is False");
+        ir.GetBoolean(3).Should().BeFalse("Inf == 0 is False");
+        ir.GetBoolean(4).Should().BeFalse("-Inf == 0 is False");
+        // iscomplex: [ False, False, True, True, True ]
+        ic.GetBoolean(0).Should().BeFalse();
+        ic.GetBoolean(1).Should().BeFalse("-0.0 != 0 is False");
+        ic.GetBoolean(2).Should().BeTrue("NaN != 0 is True");
+        ic.GetBoolean(3).Should().BeTrue();
+        ic.GetBoolean(4).Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void IsRealIsComplex_Complex_0d_Scalar()
+    {
+        np.isreal(NDArray.Scalar(new System.Numerics.Complex(3, 0))).GetBoolean(0).Should().BeTrue();
+        np.iscomplex(NDArray.Scalar(new System.Numerics.Complex(3, 0))).GetBoolean(0).Should().BeFalse();
+        np.isreal(NDArray.Scalar(new System.Numerics.Complex(3, 1))).GetBoolean(0).Should().BeFalse();
+        np.iscomplex(NDArray.Scalar(new System.Numerics.Complex(3, 1))).GetBoolean(0).Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void IsReal_StridedRealView_AllTrue_NoGarbage()
+    {
+        // Regression: np.ones/np.zeros were handed the view's Shape (strides+offset) and emitted
+        // garbage bytes. A strided real view must be all-True (isreal) / all-False (iscomplex).
+        var strided = np.arange(10)["::2"]; // stride-2 view, size 5, non-contiguous
+        var ir = np.isreal(strided);
+        var ic = np.iscomplex(strided);
+        ir.size.Should().Be(5);
+        for (int i = 0; i < 5; i++)
+        {
+            ir.GetBoolean(i).Should().BeTrue($"real element {i} is real");
+            ic.GetBoolean(i).Should().BeFalse($"real element {i} is not complex");
+        }
+    }
+
+    #endregion
 }

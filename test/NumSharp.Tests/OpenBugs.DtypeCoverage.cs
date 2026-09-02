@@ -102,34 +102,11 @@ namespace NumSharp.Tests
                 "NumPy rounds float16 0.05 -> 0.0; NumSharp diverges.");
         }
 
-        // ============================================================================
-        //  BUG: np.iscomplex / np.isreal IGNORE the imaginary part.
-        //
-        //  np.iscomplex([1+2j, 3+0j, 0+1j, 5+0j]) == [True, False, True, False] (imag != 0).
-        //  np.isreal(...) == [False, True, False, True].
-        //  NumSharp's iscomplex returns ALL False and isreal returns ALL True for complex input —
-        //  it never inspects the imaginary component. (It also emits garbage bytes on strided real
-        //  input — same op, separate manifestation.) Carved from the logic tier.
-        // ============================================================================
-        [TestMethod, OpenBugs]
-        public void IsComplex_IgnoresImaginaryPart()
-        {
-            var c = np.array(new System.Numerics.Complex[]
-                { new(1, 2), new(3, 0), new(0, 1), new(5, 0) });
-            var r = np.iscomplex(c);
-            ((bool)r.GetValue(0)).Should().BeTrue("1+2j has nonzero imaginary part -> iscomplex True");
-            ((bool)r.GetValue(2)).Should().BeTrue("0+1j has nonzero imaginary part -> iscomplex True");
-            ((bool)r.GetValue(1)).Should().BeFalse("3+0j is real -> iscomplex False");
-        }
-
-        [TestMethod, OpenBugs]
-        public void IsReal_IgnoresImaginaryPart()
-        {
-            var c = np.array(new System.Numerics.Complex[]
-                { new(1, 2), new(3, 0), new(0, 1), new(5, 0) });
-            var r = np.isreal(c);
-            ((bool)r.GetValue(0)).Should().BeFalse("1+2j has nonzero imaginary part -> isreal False");
-            ((bool)r.GetValue(1)).Should().BeTrue("3+0j is real -> isreal True");
-        }
+        // np.iscomplex / np.isreal previously IGNORED the imaginary part (iscomplex -> all False,
+        // isreal -> all True for complex input) AND emitted garbage bytes on strided real input.
+        // FIXED: ported to NumPy's own structure (isreal(x) = imag(x) == 0; iscomplex = imag != 0 for
+        // complex, else all-False), building the non-complex result from DIMENSIONS only. Now GREEN at
+        // full coverage in the logic differential-fuzz tier (ISCOMPLEX_* in gen_oracle.py — all dtypes
+        // incl. complex128 × every layout), so the two [OpenBugs] pins here were removed.
     }
 }

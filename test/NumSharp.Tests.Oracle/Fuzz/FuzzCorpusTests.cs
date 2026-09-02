@@ -521,7 +521,7 @@ namespace NumSharp.Tests.Fuzz
             ["fft.jsonl"] = 1700,
             ["groupa.jsonl"] = 237,
             ["iter.jsonl"] = 4400,
-            ["logic.jsonl"] = 1775,
+            ["logic.jsonl"] = 2648,   // +873: iscomplex/isreal widened to ALL dtypes (complex128) × EVERY layout
             ["manip.jsonl"] = 13397,
             ["matmul.jsonl"] = 769,
             ["matmul_parity.jsonl"] = 470,

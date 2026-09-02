@@ -673,17 +673,18 @@ LOGIC_BIN_PAIRS = [
     ("complex128", "complex128"),
 ]
 
-# G5 (F5) — iscomplex/isreal: REAL dtypes × CONTIGUOUS layouts ONLY (this is the verified-green
-# envelope). CARVED (both documented bugs already pinned in OpenBugs.DtypeCoverage.cs —
-# IsComplex_IgnoresImaginaryPart / IsReal_IgnoresImaginaryPart, ≈:119/:130):
-#   * complex128 input — NumSharp never inspects the imaginary part (iscomplex -> all False,
-#     isreal -> all True, both wrong for nonzero-imag values);
-#   * strided/F-contiguous/transposed REAL input — same op emits garbage bytes on the
-#     non-contiguous path.
+# G5 (F5) — iscomplex/isreal: FULL coverage — ALL dtypes (complex128 included) × EVERY layout.
+# Ported to NumPy's own structure (_type_check_impl): isreal(x) = imag(x) == 0; iscomplex(x) =
+# imag(x) != 0 for a complex dtype, else all-False. The complex128 pool carries nonzero imaginary
+# parts (real + rolled-imag, with NaN/Inf/-0 among them), so this tier now exercises the imaginary
+# inspection that was previously CARVED. The former carve had two causes, both fixed:
+#   * complex128 input — NumSharp now inspects the imaginary lane (np.imag strided view) instead of
+#     returning all-False/all-True regardless of value;
+#   * strided/F-contiguous/transposed REAL input — the non-contiguous path emitted garbage bytes
+#     because np.ones/np.zeros were handed the view's Shape (strides+offset); it now builds a fresh
+#     C-contiguous bool array from the DIMENSIONS only.
 ISCOMPLEX_OPS = {"iscomplex": np.iscomplex, "isreal": np.isreal}
-ISCOMPLEX_DTYPES = [d for d in ALL_DTYPES if d != "complex128"]
-ISCOMPLEX_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d",
-                     "one_element_1d", "scalar_0d"]
+ISCOMPLEX_DTYPES = list(ALL_DTYPES)
 
 # Group A Batch 1: logical_and/or/xor (binary -> bool, truthiness of each element),
 # logical_not (unary -> bool), arctan2 (binary -> float; NumPy promotes int -> float64,
@@ -2376,9 +2377,9 @@ NANQ_DTYPES = ["float16", "float32", "float64"]  # NaN only exists in float; poo
 
 # Group A Batch 3: searching (flatnonzero/argwhere -> int64 coords) + whole-array bool reductions
 # (allclose/array_equal, wrapped to a 0-D bool via np.asarray). All GREEN.
-# CARVED (-> [OpenBugs]): iscomplex/isreal (NumSharp ignores the imaginary part for complex input and
-# emits garbage bytes on strided real input) and unique (mishandles offset/strided views + NaN-complex
-# ordering). flatnonzero/argwhere stay.
+# iscomplex/isreal are now GREEN at FULL coverage (ported to NumPy's imag(x)==0 / imag!=0 structure —
+# see the ISCOMPLEX_* block above; the two OpenBugs pins were removed). unique stays CARVED (-> [OpenBugs]):
+# it mishandles offset/strided views + NaN-complex ordering. flatnonzero/argwhere stay.
 NZ_OPS = {"flatnonzero": np.flatnonzero, "argwhere": np.argwhere}
 NZ_DTYPES = ["bool", "int32", "uint8", "float64", "complex128"]
 ALLCLOSE_OPS = {"allclose": lambda a, b: np.asarray(np.allclose(a, b)),
@@ -7330,7 +7331,7 @@ def main():
         cases += gen_binary(NEXTAFTER_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))       # nextafter (bit-exact)
         cases += gen_binary(COPYSIGN_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # copysign (bit-exact)
         cases += gen_binary(ALLCLOSE_OPS, ALLCLOSE_PAIRS, list(PAIR_LAYOUTS.keys()))     # Group A B3
-        cases += gen_unary(ISCOMPLEX_OPS, ISCOMPLEX_DTYPES, ISCOMPLEX_LAYOUTS)           # G5
+        cases += gen_unary(ISCOMPLEX_OPS, ISCOMPLEX_DTYPES, list(LAYOUTS.keys()))         # G5 (full)
         cases += char_tier("logic")                                                       # G9
         write_jsonl(os.path.join(corpus_dir, "logic.jsonl"), cases)
     elif mode == "modf":
