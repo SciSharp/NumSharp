@@ -282,4 +282,63 @@ public class np_ArrayPrint_ParityTests
     [TestMethod] public void Edge_Char_LegacyStringRendering() => np.array('h', 'e', 'l', 'l', 'o').ToString(false).Should().Be("hello");
 
     #endregion
+
+    #region broadcast-of-a-view: str AND repr (both formatter passes read through the logical iterator)
+
+    // A broadcast view whose SOURCE was itself sliced (reversed / stepped / column / slice-of-slice)
+    // stacks a stride=0 axis on top of non-trivial (negative / >1 / row-major-column) view strides.
+    // Both formatter passes — array_str (space separator) and array_repr (", " separator) — must walk
+    // the array in LOGICAL C-order through Shape.TransformOffset, not the raw base pointer, or the
+    // reversed order / stepped offsets / compound slice-of-slice stride render as garbage. These are the
+    // four scenarios once tracked as OpenBugs "BUG 1a-1d"; the values were verified against NumPy 2.4.2.
+
+    [TestMethod]
+    public void BroadcastView_ReversedSlice()   // np.broadcast_to(np.arange(3)[::-1], (2,3))
+    {
+        var a = np.broadcast_to(np.arange(3)["::-1"], new Shape(2, 3));
+        Str(a, "[[2 1 0]\n [2 1 0]]");
+        Repr(a, "array([[2, 1, 0],\n       [2, 1, 0]])");
+    }
+
+    [TestMethod]
+    public void BroadcastView_StepSlice()        // np.broadcast_to(np.arange(6)[::2], (2,3))
+    {
+        var a = np.broadcast_to(np.arange(6)["::2"], new Shape(2, 3));
+        Str(a, "[[0 2 4]\n [0 2 4]]");
+        Repr(a, "array([[0, 2, 4],\n       [0, 2, 4]])");
+    }
+
+    [TestMethod]
+    public void BroadcastView_SlicedColumn()     // np.broadcast_to(np.arange(12).reshape(3,4)[:,1:2], (3,3))
+    {
+        var a = np.broadcast_to(np.arange(12).reshape(3, 4)[":, 1:2"], new Shape(3, 3));
+        Str(a, "[[1 1 1]\n [5 5 5]\n [9 9 9]]");
+        Repr(a, "array([[1, 1, 1],\n       [5, 5, 5],\n       [9, 9, 9]])");
+    }
+
+    [TestMethod]
+    public void BroadcastView_DoubleSliced()     // np.broadcast_to(np.arange(12).reshape(3,4)[::2,:][:,0:1], (2,4))
+    {
+        var a = np.broadcast_to(np.arange(12).reshape(3, 4)["::2, :"][":, 0:1"], new Shape(2, 4));
+        Str(a, "[[0 0 0 0]\n [8 8 8 8]]");
+        Repr(a, "array([[0, 0, 0, 0],\n       [8, 8, 8, 8]])");
+    }
+
+    [TestMethod]
+    public void BroadcastView_ReversedSlice_To3D()   // np.broadcast_to(np.arange(3)[::-1], (2,2,3))
+    {
+        var a = np.broadcast_to(np.arange(3)["::-1"], new Shape(2, 2, 3));
+        Str(a, "[[[2 1 0]\n  [2 1 0]]\n\n [[2 1 0]\n  [2 1 0]]]");
+        Repr(a, "array([[[2, 1, 0],\n        [2, 1, 0]],\n\n       [[2, 1, 0],\n        [2, 1, 0]]])");
+    }
+
+    [TestMethod]
+    public void BroadcastView_TransposedSliced()     // np.broadcast_to(np.arange(6).reshape(2,3).T[:,0:1], (3,4))
+    {
+        var a = np.broadcast_to(np.arange(6).reshape(2, 3).T[":, 0:1"], new Shape(3, 4));
+        Str(a, "[[0 0 0 0]\n [1 1 1 1]\n [2 2 2 2]]");
+        Repr(a, "array([[0, 0, 0, 0],\n       [1, 1, 1, 1],\n       [2, 2, 2, 2]])");
+    }
+
+    #endregion
 }
