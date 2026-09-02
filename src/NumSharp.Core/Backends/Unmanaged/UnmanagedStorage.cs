@@ -175,8 +175,10 @@ namespace NumSharp.Backends
         internal bool OwnsData => _baseStorage is null && !ExternalBase;
 
         /// <summary>
-        ///     Reconciles <see cref="_shape"/>'s <see cref="ArrayFlags.OWNDATA"/> bit with
-        ///     <see cref="OwnsData"/> — the NumSharp analog of NumPy's <c>PyArray_NewFromDescr_int</c>
+        ///     Post-transition hook — run after this storage's <see cref="_shape"/> is (re)assigned or its
+        ///     ownership links (<see cref="_baseStorage"/> / <see cref="ExternalBase"/>) change. Reconciles
+        ///     the shape's <see cref="ArrayFlags.OWNDATA"/> bit with <see cref="OwnsData"/> — the NumSharp
+        ///     analog of NumPy's <c>PyArray_NewFromDescr_int</c>
         ///     (<c>ctors.c</c>: <c>fa-&gt;flags |= NPY_ARRAY_OWNDATA</c> when it allocates,
         ///     <c>fa-&gt;flags &amp;= ~NPY_ARRAY_OWNDATA</c> when data is passed in) plus the invariant
         ///     NumPy asserts in <c>_IsWriteable</c> (<c>common.c</c>): <c>base != NULL ⟹ !OWNDATA</c>.
@@ -190,7 +192,7 @@ namespace NumSharp.Backends
         ///     silently strip it from an owner).
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected internal void SyncOwnDataFlag()
+        protected internal void OnReshaped()
         {
             bool owns = _baseStorage is null && !ExternalBase;
             if (((_shape._flags & (int)ArrayFlags.OWNDATA) != 0) != owns)
@@ -376,7 +378,7 @@ namespace NumSharp.Backends
             var ret = new UnmanagedStorage();
             ret._Allocate(shape, storage.InternalArray);
             ret._baseStorage = storage._baseStorage ?? storage;
-            ret.SyncOwnDataFlag(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
+            ret.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             ret.Engine = storage.Engine;
             return ret;
         }
@@ -1181,7 +1183,7 @@ namespace NumSharp.Backends
             // raise NPY_ARRAY_OWNDATA; a borrowed shape may carry its previous array's bit either way).
             // View-producers that call _Allocate before wiring _baseStorage (CreateBroadcastedUnsafe)
             // re-sync after that assignment.
-            SyncOwnDataFlag();
+            OnReshaped();
         }
 
         /// <summary>

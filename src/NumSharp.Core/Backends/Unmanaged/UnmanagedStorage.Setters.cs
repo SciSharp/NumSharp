@@ -1071,7 +1071,7 @@ namespace NumSharp.Backends
             if (_shape.IsEmpty)
             {
                 _shape = new Shape(values.Length);
-                SyncOwnDataFlag(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+                OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             }
         }
 
@@ -1087,7 +1087,7 @@ namespace NumSharp.Backends
             if (_shape.IsEmpty)
             {
                 _shape = Shape.Vector(values.Count);
-                SyncOwnDataFlag(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+                OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             }
         }
 
@@ -1104,7 +1104,7 @@ namespace NumSharp.Backends
             if (_shape.IsEmpty)
             {
                 _shape = Shape.Vector(values.Count);
-                SyncOwnDataFlag(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+                OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             }
         }
 
@@ -1167,7 +1167,7 @@ namespace NumSharp.Backends
 
             //first try to convert to dtype only then we apply changes.
             _shape = nd.shape;
-            SyncOwnDataFlag(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             _dtype = nd.dtype;
             _typecode = nd.GetTypeCode;
             if (_typecode == NPTypeCode.Empty)
@@ -1191,7 +1191,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
 
             _shape = shape;
-            SyncOwnDataFlag(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             SetInternalArray(_ChangeTypeOfArray(values, _dtype));
         }
 
@@ -1204,7 +1204,7 @@ namespace NumSharp.Backends
         public void ReplaceData(IArraySlice values, Shape shape)
         {
             _shape = shape;
-            SyncOwnDataFlag(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             SetInternalArray(values);
         }
 
@@ -1218,7 +1218,7 @@ namespace NumSharp.Backends
         public void ReplaceData(IArraySlice values, Type dtype, Shape shape)
         {
             _shape = shape;
-            SyncOwnDataFlag(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             SetInternalArray(values);
         }
 
@@ -1244,7 +1244,7 @@ namespace NumSharp.Backends
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
             _shape = shape;
-            SyncOwnDataFlag(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             SetInternalArray(changedArray);
         }
 
@@ -1271,7 +1271,7 @@ namespace NumSharp.Backends
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
             _shape = shape;
-            SyncOwnDataFlag(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             SetInternalArray(changedArray);
         }
 
@@ -1293,7 +1293,7 @@ namespace NumSharp.Backends
                 throw new NotSupportedException($"{_dtype.Name} as a dtype is not supported.");
 
             _shape = shape;
-            SyncOwnDataFlag(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             SetInternalArray(nd.Array);
         }
 

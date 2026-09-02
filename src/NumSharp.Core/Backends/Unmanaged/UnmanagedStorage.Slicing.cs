@@ -130,7 +130,7 @@ namespace NumSharp.Backends
                 var emptyStorage = new UnmanagedStorage();
                 emptyStorage._Allocate(slicedShape, emptySlice);
                 emptyStorage._baseStorage = _baseStorage ?? this;
-                emptyStorage.SyncOwnDataFlag(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
+                emptyStorage.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return emptyStorage;
             }
 
@@ -150,7 +150,7 @@ namespace NumSharp.Backends
                     freshShape = freshShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(InternalArray.Slice(slicedShape.offset, slicedShape.size), freshShape);
                 view._baseStorage = _baseStorage ?? this;
-                view.SyncOwnDataFlag(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
+                view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
 

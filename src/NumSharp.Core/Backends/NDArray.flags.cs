@@ -59,7 +59,7 @@ namespace NumSharp
         private bool W => _arr.Shape.IsWriteable;
         // OWNDATA: no base storage AND no foreign owner (a memmap's memory belongs to the file mapping,
         // NumPy's non-array base — its owndata is False in every mmap_mode). Read from the Shape's
-        // OWNDATA bit — the stored mirror of UnmanagedStorage.OwnsData maintained by SyncOwnDataFlag()
+        // OWNDATA bit — the stored mirror of UnmanagedStorage.OwnsData maintained by OnReshaped()
         // at every storage funnel — so the flags oracle gates the mirror itself: a funnel that drops or
         // fails to set the bit turns the corpus red instead of leaving Shape.OwnsData silently wrong.
         private bool O => _arr.Shape.OwnsData;

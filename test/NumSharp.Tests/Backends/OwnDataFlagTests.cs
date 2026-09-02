@@ -11,7 +11,7 @@ namespace NumSharp.Tests.Backends
     ///     <c>ctors.c</c>: an allocating constructor raises <c>NPY_ARRAY_OWNDATA</c>, a data-passed-in
     ///     constructor clears it, and <c>base != NULL ⟹ !OWNDATA</c> (asserted in <c>common.c</c>'s
     ///     <c>_IsWriteable</c>). In NumSharp the bit is maintained by
-    ///     <c>UnmanagedStorage.SyncOwnDataFlag()</c> at every storage funnel, mirroring
+    ///     <c>UnmanagedStorage.OnReshaped()</c> at every storage funnel, mirroring
     ///     <c>UnmanagedStorage.OwnsData</c> (<c>_baseStorage is null &amp;&amp; !ExternalBase</c>), and
     ///     <c>nd.flags.owndata</c> reads the Shape bit — so the flags oracle gates the mirror.
     ///
@@ -346,7 +346,7 @@ namespace NumSharp.Tests.Backends
         {
             // NumPy's memmap has the mmap object as its non-array base: owndata=False in EVERY mode.
             // 'r+' is the sharpest regression: it takes NO later shape swap, so only the explicit
-            // SyncOwnDataFlag() after ExternalBase=true clears the wrap ctor's bit.
+            // OnReshaped() after ExternalBase=true clears the wrap ctor's bit.
             string dir = Path.Combine(Path.GetTempPath(), "ns_owndata_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(dir);
             try

@@ -104,13 +104,13 @@ namespace NumSharp.Backends
             // The incoming shape is usually freshly built (OWNDATA bit clear) — reconcile with this
             // storage's actual ownership so an in-place reshape/setflags does not strip an owner's bit
             // (NumPy: in-place shape/flag mutation never changes OWNDATA).
-            SyncOwnDataFlag();
+            OnReshaped();
         }
 
         protected internal void ExpandDimension(int axis)
         {
             _shape = _shape.ExpandDimension(axis);
-            SyncOwnDataFlag(); // rebuilt shape — keep OWNDATA mirroring this storage's ownership
+            OnReshaped(); // rebuilt shape — keep OWNDATA mirroring this storage's ownership
         }
 
         #endregion

@@ -46,7 +46,7 @@ namespace NumSharp.Backends
                 r.SetInternalArray(InternalArray);
             r.Count = _shape.size; //incase shape is sliced
             r._baseStorage = _baseStorage ?? this;
-            r.SyncOwnDataFlag(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
+            r.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             r.Engine = Engine;
             return r;
         }
@@ -117,7 +117,7 @@ namespace NumSharp.Backends
             r._shape = shape;
             r.Count = shape.size; //incase shape is sliced
             r._baseStorage = _baseStorage ?? this;
-            r.SyncOwnDataFlag(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
+            r.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             r.Engine = Engine;
             return r;
         }
@@ -165,7 +165,7 @@ namespace NumSharp.Backends
                 r.SetInternalArray(InternalArray);
             r.Count = shape.size; //incase shape is sliced
             r._baseStorage = _baseStorage ?? this;
-            r.SyncOwnDataFlag(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
+            r.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             r.Engine = Engine;
             return r;
         }
@@ -297,7 +297,7 @@ namespace NumSharp.Backends
             r.SetInternalArray(newSlice);
             r.Count = shape.size;
             r._baseStorage = _baseStorage ?? this;
-            r.SyncOwnDataFlag(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
+            r.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             r.Engine = Engine;
             return r;
         }
@@ -407,7 +407,7 @@ namespace NumSharp.Backends
             r.SetInternalArray(slice);
             r.Count = laneShape.size; // logical element count (bufferSize may be larger for a sliced/broadcast view)
             r._baseStorage = _baseStorage ?? this;
-            r.SyncOwnDataFlag(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
+            r.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             r.Engine = Engine;
             return r;
         }

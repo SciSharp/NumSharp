@@ -149,7 +149,7 @@ namespace NumSharp.Tests.AuditV2
 
         // ============================================================================
         // T1.29 — FIXED: the OWNDATA bit (0x0004) is now maintained by
-        // UnmanagedStorage.SyncOwnDataFlag() at every storage funnel (allocating
+        // UnmanagedStorage.OnReshaped() at every storage funnel (allocating
         // ctors/_Allocate set it, Alias/wrap/_baseStorage/ExternalBase transitions
         // clear it, in-place shape swaps reconcile), mirroring
         // UnmanagedStorage.OwnsData — NumPy ctors.c: fa->flags |= NPY_ARRAY_OWNDATA

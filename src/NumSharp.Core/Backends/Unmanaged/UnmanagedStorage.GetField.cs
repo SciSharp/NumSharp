@@ -108,7 +108,7 @@ namespace NumSharp.Backends
             r2.SetInternalArray(newSlice);
             r2.Count = newShape.size;
             r2._baseStorage = _baseStorage ?? this;
-            r2.SyncOwnDataFlag(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
+            r2.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             r2.Engine = Engine;
             return r2;
         }
