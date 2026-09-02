@@ -341,4 +341,332 @@ public class np_ArrayPrint_ParityTests
     }
 
     #endregion
+
+    #region broadcast-of-a-view: all NumPy dtypes (str + repr) - a stride=0 axis over a reversed view, every dtype
+
+    [TestMethod]
+    public void BV_Dtype_Bool()
+    {
+        var a = np.broadcast_to(np.array(new[]{true,false,true})["::-1"], new Shape(2, 3));
+        Str(a, "[[ True False  True]\n [ True False  True]]");
+        Repr(a, "array([[ True, False,  True],\n       [ True, False,  True]])");
+    }
+
+    [TestMethod]
+    public void BV_Dtype_Int8()
+    {
+        var a = np.broadcast_to(np.array(new sbyte[]{-3, 5, -7})["::-1"], new Shape(2, 3));
+        Str(a, "[[-7  5 -3]\n [-7  5 -3]]");
+        Repr(a, "array([[-7,  5, -3],\n       [-7,  5, -3]], dtype=int8)");
+    }
+
+    [TestMethod]
+    public void BV_Dtype_UInt8()
+    {
+        var a = np.broadcast_to(np.array(new byte[]{3, 250, 7})["::-1"], new Shape(2, 3));
+        Str(a, "[[  7 250   3]\n [  7 250   3]]");
+        Repr(a, "array([[  7, 250,   3],\n       [  7, 250,   3]], dtype=uint8)");
+    }
+
+    [TestMethod]
+    public void BV_Dtype_Int16()
+    {
+        var a = np.broadcast_to(np.array(new short[]{-300, 5, -7})["::-1"], new Shape(2, 3));
+        Str(a, "[[  -7    5 -300]\n [  -7    5 -300]]");
+        Repr(a, "array([[  -7,    5, -300],\n       [  -7,    5, -300]], dtype=int16)");
+    }
+
+    [TestMethod]
+    public void BV_Dtype_UInt16()
+    {
+        var a = np.broadcast_to(np.array(new ushort[]{3, 60000, 7})["::-1"], new Shape(2, 3));
+        Str(a, "[[    7 60000     3]\n [    7 60000     3]]");
+        Repr(a, "array([[    7, 60000,     3],\n       [    7, 60000,     3]], dtype=uint16)");
+    }
+
+    [TestMethod]
+    public void BV_Dtype_Int32()
+    {
+        var a = np.broadcast_to(np.array(new int[]{-3, 50000, -7})["::-1"], new Shape(2, 3));
+        Str(a, "[[   -7 50000    -3]\n [   -7 50000    -3]]");
+        Repr(a, "array([[   -7, 50000,    -3],\n       [   -7, 50000,    -3]], dtype=int32)");
+    }
+
+    [TestMethod]
+    public void BV_Dtype_UInt32()
+    {
+        var a = np.broadcast_to(np.array(new uint[]{3, 4000000000U, 7})["::-1"], new Shape(2, 3));
+        Str(a, "[[         7 4000000000          3]\n [         7 4000000000          3]]");
+        Repr(a, "array([[         7, 4000000000,          3],\n       [         7, 4000000000,          3]], dtype=uint32)");
+    }
+
+    [TestMethod]
+    public void BV_Dtype_Int64()
+    {
+        var a = np.broadcast_to(np.array(new long[]{-3, 5000000000L, -7})["::-1"], new Shape(2, 3));
+        Str(a, "[[        -7 5000000000         -3]\n [        -7 5000000000         -3]]");
+        Repr(a, "array([[        -7, 5000000000,         -3],\n       [        -7, 5000000000,         -3]])");
+    }
+
+    [TestMethod]
+    public void BV_Dtype_UInt64()
+    {
+        var a = np.broadcast_to(np.array(new ulong[]{3, 18000000000000000000UL, 7})["::-1"], new Shape(2, 3));
+        Str(a, "[[                   7 18000000000000000000                    3]\n [                   7 18000000000000000000                    3]]");
+        Repr(a, "array([[                   7, 18000000000000000000,                    3],\n       [                   7, 18000000000000000000,                    3]],\n      dtype=uint64)");
+    }
+
+    [TestMethod]
+    public void BV_Dtype_Half()
+    {
+        var a = np.broadcast_to(np.array(new Half[]{(Half)1.5f, (Half)(-2.25f), (Half)3.0f})["::-1"], new Shape(2, 3));
+        Str(a, "[[ 3.   -2.25  1.5 ]\n [ 3.   -2.25  1.5 ]]");
+        Repr(a, "array([[ 3.  , -2.25,  1.5 ],\n       [ 3.  , -2.25,  1.5 ]], dtype=float16)");
+    }
+
+    [TestMethod]
+    public void BV_Dtype_Single()
+    {
+        var a = np.broadcast_to(np.array(new float[]{1.5f, -2.25f, 333.0f})["::-1"], new Shape(2, 3));
+        Str(a, "[[333.    -2.25   1.5 ]\n [333.    -2.25   1.5 ]]");
+        Repr(a, "array([[333.  ,  -2.25,   1.5 ],\n       [333.  ,  -2.25,   1.5 ]], dtype=float32)");
+    }
+
+    [TestMethod]
+    public void BV_Dtype_Double()
+    {
+        var a = np.broadcast_to(np.array(new double[]{1.5, -2.25, 333.125})["::-1"], new Shape(2, 3));
+        Str(a, "[[333.125  -2.25    1.5  ]\n [333.125  -2.25    1.5  ]]");
+        Repr(a, "array([[333.125,  -2.25 ,   1.5  ],\n       [333.125,  -2.25 ,   1.5  ]])");
+    }
+
+    [TestMethod]
+    public void BV_Dtype_Complex()
+    {
+        var a = np.broadcast_to(np.array(new Complex[]{new Complex(1, 2), new Complex(-3, -4), new Complex(5, 0)})["::-1"], new Shape(2, 3));
+        Str(a, "[[ 5.+0.j -3.-4.j  1.+2.j]\n [ 5.+0.j -3.-4.j  1.+2.j]]");
+        Repr(a, "array([[ 5.+0.j, -3.-4.j,  1.+2.j],\n       [ 5.+0.j, -3.-4.j,  1.+2.j]])");
+    }
+
+    #endregion
+
+    #region broadcast-of-a-view: summarization (threshold) - leading/trailing edgeitems read through view strides
+
+    [TestMethod]
+    public void BV_Summarize_Reversed1D()
+    {
+        var a = np.broadcast_to(np.arange(1000)["::-1"], new Shape(2, 1000));
+        Str(a, "[[999 998 997 ...   2   1   0]\n [999 998 997 ...   2   1   0]]");
+        Repr(a, "array([[999, 998, 997, ...,   2,   1,   0],\n       [999, 998, 997, ...,   2,   1,   0]], shape=(2, 1000))");
+    }
+
+    [TestMethod]
+    public void BV_Summarize_Stepped1D()
+    {
+        var a = np.broadcast_to(np.arange(2000)["::2"], new Shape(2, 1000));
+        Str(a, "[[   0    2    4 ... 1994 1996 1998]\n [   0    2    4 ... 1994 1996 1998]]");
+        Repr(a, "array([[   0,    2,    4, ..., 1994, 1996, 1998],\n       [   0,    2,    4, ..., 1994, 1996, 1998]], shape=(2, 1000))");
+    }
+
+    [TestMethod]
+    public void BV_Summarize_Column()
+    {
+        var a = np.broadcast_to(np.arange(50).reshape(50, 1)["::-1"], new Shape(50, 3));
+        Str(a, "[[49 49 49]\n [48 48 48]\n [47 47 47]\n [46 46 46]\n [45 45 45]\n [44 44 44]\n [43 43 43]\n [42 42 42]\n [41 41 41]\n [40 40 40]\n [39 39 39]\n [38 38 38]\n [37 37 37]\n [36 36 36]\n [35 35 35]\n [34 34 34]\n [33 33 33]\n [32 32 32]\n [31 31 31]\n [30 30 30]\n [29 29 29]\n [28 28 28]\n [27 27 27]\n [26 26 26]\n [25 25 25]\n [24 24 24]\n [23 23 23]\n [22 22 22]\n [21 21 21]\n [20 20 20]\n [19 19 19]\n [18 18 18]\n [17 17 17]\n [16 16 16]\n [15 15 15]\n [14 14 14]\n [13 13 13]\n [12 12 12]\n [11 11 11]\n [10 10 10]\n [ 9  9  9]\n [ 8  8  8]\n [ 7  7  7]\n [ 6  6  6]\n [ 5  5  5]\n [ 4  4  4]\n [ 3  3  3]\n [ 2  2  2]\n [ 1  1  1]\n [ 0  0  0]]");
+        Repr(a, "array([[49, 49, 49],\n       [48, 48, 48],\n       [47, 47, 47],\n       [46, 46, 46],\n       [45, 45, 45],\n       [44, 44, 44],\n       [43, 43, 43],\n       [42, 42, 42],\n       [41, 41, 41],\n       [40, 40, 40],\n       [39, 39, 39],\n       [38, 38, 38],\n       [37, 37, 37],\n       [36, 36, 36],\n       [35, 35, 35],\n       [34, 34, 34],\n       [33, 33, 33],\n       [32, 32, 32],\n       [31, 31, 31],\n       [30, 30, 30],\n       [29, 29, 29],\n       [28, 28, 28],\n       [27, 27, 27],\n       [26, 26, 26],\n       [25, 25, 25],\n       [24, 24, 24],\n       [23, 23, 23],\n       [22, 22, 22],\n       [21, 21, 21],\n       [20, 20, 20],\n       [19, 19, 19],\n       [18, 18, 18],\n       [17, 17, 17],\n       [16, 16, 16],\n       [15, 15, 15],\n       [14, 14, 14],\n       [13, 13, 13],\n       [12, 12, 12],\n       [11, 11, 11],\n       [10, 10, 10],\n       [ 9,  9,  9],\n       [ 8,  8,  8],\n       [ 7,  7,  7],\n       [ 6,  6,  6],\n       [ 5,  5,  5],\n       [ 4,  4,  4],\n       [ 3,  3,  3],\n       [ 2,  2,  2],\n       [ 1,  1,  1],\n       [ 0,  0,  0]])");
+    }
+
+    [TestMethod]
+    public void BV_Summarize_3D()
+    {
+        var a = np.broadcast_to(np.arange(100)["::-1"], new Shape(2, 3, 100));
+        Str(a, "[[[99 98 97 96 95 94 93 92 91 90 89 88 87 86 85 84 83 82 81 80 79 78 77\n   76 75 74 73 72 71 70 69 68 67 66 65 64 63 62 61 60 59 58 57 56 55 54\n   53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32 31\n   30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8\n    7  6  5  4  3  2  1  0]\n  [99 98 97 96 95 94 93 92 91 90 89 88 87 86 85 84 83 82 81 80 79 78 77\n   76 75 74 73 72 71 70 69 68 67 66 65 64 63 62 61 60 59 58 57 56 55 54\n   53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32 31\n   30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8\n    7  6  5  4  3  2  1  0]\n  [99 98 97 96 95 94 93 92 91 90 89 88 87 86 85 84 83 82 81 80 79 78 77\n   76 75 74 73 72 71 70 69 68 67 66 65 64 63 62 61 60 59 58 57 56 55 54\n   53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32 31\n   30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8\n    7  6  5  4  3  2  1  0]]\n\n [[99 98 97 96 95 94 93 92 91 90 89 88 87 86 85 84 83 82 81 80 79 78 77\n   76 75 74 73 72 71 70 69 68 67 66 65 64 63 62 61 60 59 58 57 56 55 54\n   53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32 31\n   30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8\n    7  6  5  4  3  2  1  0]\n  [99 98 97 96 95 94 93 92 91 90 89 88 87 86 85 84 83 82 81 80 79 78 77\n   76 75 74 73 72 71 70 69 68 67 66 65 64 63 62 61 60 59 58 57 56 55 54\n   53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32 31\n   30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8\n    7  6  5  4  3  2  1  0]\n  [99 98 97 96 95 94 93 92 91 90 89 88 87 86 85 84 83 82 81 80 79 78 77\n   76 75 74 73 72 71 70 69 68 67 66 65 64 63 62 61 60 59 58 57 56 55 54\n   53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32 31\n   30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8\n    7  6  5  4  3  2  1  0]]]");
+        Repr(a, "array([[[99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84,\n         83, 82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68,\n         67, 66, 65, 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52,\n         51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36,\n         35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20,\n         19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  9,  8,  7,  6,  5,  4,\n          3,  2,  1,  0],\n        [99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84,\n         83, 82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68,\n         67, 66, 65, 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52,\n         51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36,\n         35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20,\n         19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  9,  8,  7,  6,  5,  4,\n          3,  2,  1,  0],\n        [99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84,\n         83, 82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68,\n         67, 66, 65, 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52,\n         51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36,\n         35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20,\n         19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  9,  8,  7,  6,  5,  4,\n          3,  2,  1,  0]],\n\n       [[99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84,\n         83, 82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68,\n         67, 66, 65, 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52,\n         51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36,\n         35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20,\n         19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  9,  8,  7,  6,  5,  4,\n          3,  2,  1,  0],\n        [99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84,\n         83, 82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68,\n         67, 66, 65, 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52,\n         51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36,\n         35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20,\n         19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  9,  8,  7,  6,  5,  4,\n          3,  2,  1,  0],\n        [99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84,\n         83, 82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68,\n         67, 66, 65, 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52,\n         51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36,\n         35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20,\n         19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  9,  8,  7,  6,  5,  4,\n          3,  2,  1,  0]]])");
+    }
+
+    [TestMethod]
+    public void BV_Summarize_BothAxes()
+    {
+        var a = np.broadcast_to(np.arange(60).reshape(60, 1)["::-1"], new Shape(60, 60));
+        Str(a, "[[59 59 59 ... 59 59 59]\n [58 58 58 ... 58 58 58]\n [57 57 57 ... 57 57 57]\n ...\n [ 2  2  2 ...  2  2  2]\n [ 1  1  1 ...  1  1  1]\n [ 0  0  0 ...  0  0  0]]");
+        Repr(a, "array([[59, 59, 59, ..., 59, 59, 59],\n       [58, 58, 58, ..., 58, 58, 58],\n       [57, 57, 57, ..., 57, 57, 57],\n       ...,\n       [ 2,  2,  2, ...,  2,  2,  2],\n       [ 1,  1,  1, ...,  1,  1,  1],\n       [ 0,  0,  0, ...,  0,  0,  0]], shape=(60, 60))");
+    }
+
+    #endregion
+
+    #region broadcast-of-a-view: line wrapping at linewidth
+
+    [TestMethod]
+    public void BV_Wrap_WideInts()
+    {
+        var a = np.broadcast_to(np.arange(30)["::-1"], new Shape(2, 30));
+        Str(a, "[[29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6\n   5  4  3  2  1  0]\n [29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6\n   5  4  3  2  1  0]]");
+        Repr(a, "array([[29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14,\n        13, 12, 11, 10,  9,  8,  7,  6,  5,  4,  3,  2,  1,  0],\n       [29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14,\n        13, 12, 11, 10,  9,  8,  7,  6,  5,  4,  3,  2,  1,  0]])");
+    }
+
+    [TestMethod]
+    public void BV_Wrap_WideFloats()
+    {
+        var a = np.broadcast_to((np.arange(20.0) / 7.0)["::-1"], new Shape(2, 20));
+        Str(a, "[[2.71428571 2.57142857 2.42857143 2.28571429 2.14285714 2.\n  1.85714286 1.71428571 1.57142857 1.42857143 1.28571429 1.14285714\n  1.         0.85714286 0.71428571 0.57142857 0.42857143 0.28571429\n  0.14285714 0.        ]\n [2.71428571 2.57142857 2.42857143 2.28571429 2.14285714 2.\n  1.85714286 1.71428571 1.57142857 1.42857143 1.28571429 1.14285714\n  1.         0.85714286 0.71428571 0.57142857 0.42857143 0.28571429\n  0.14285714 0.        ]]");
+        Repr(a, "array([[2.71428571, 2.57142857, 2.42857143, 2.28571429, 2.14285714,\n        2.        , 1.85714286, 1.71428571, 1.57142857, 1.42857143,\n        1.28571429, 1.14285714, 1.        , 0.85714286, 0.71428571,\n        0.57142857, 0.42857143, 0.28571429, 0.14285714, 0.        ],\n       [2.71428571, 2.57142857, 2.42857143, 2.28571429, 2.14285714,\n        2.        , 1.85714286, 1.71428571, 1.57142857, 1.42857143,\n        1.28571429, 1.14285714, 1.        , 0.85714286, 0.71428571,\n        0.57142857, 0.42857143, 0.28571429, 0.14285714, 0.        ]])");
+    }
+
+    #endregion
+
+    #region broadcast-of-a-view: special values (nan / inf / signed zero / complex)
+
+    [TestMethod]
+    public void BV_Special_NanInf()
+    {
+        var a = np.broadcast_to(np.array(new double[]{double.NaN, double.PositiveInfinity, double.NegativeInfinity})["::-1"], new Shape(2, 3));
+        Str(a, "[[-inf  inf  nan]\n [-inf  inf  nan]]");
+        Repr(a, "array([[-inf,  inf,  nan],\n       [-inf,  inf,  nan]])");
+    }
+
+    [TestMethod]
+    public void BV_Special_NegZero()
+    {
+        var a = np.broadcast_to(np.array(new double[]{-0.0, 0.0, 1.0})["::-1"], new Shape(2, 3));
+        Str(a, "[[ 1.  0. -0.]\n [ 1.  0. -0.]]");
+        Repr(a, "array([[ 1.,  0., -0.],\n       [ 1.,  0., -0.]])");
+    }
+
+    [TestMethod]
+    public void BV_Special_ComplexNan()
+    {
+        var a = np.broadcast_to(np.array(new Complex[]{new Complex(double.NaN, 1), new Complex(2, double.PositiveInfinity), new Complex(3, 0)})["::-1"], new Shape(2, 3));
+        Str(a, "[[ 3. +0.j  2.+infj nan +1.j]\n [ 3. +0.j  2.+infj nan +1.j]]");
+        Repr(a, "array([[ 3. +0.j,  2.+infj, nan +1.j],\n       [ 3. +0.j,  2.+infj, nan +1.j]])");
+    }
+
+    [TestMethod]
+    public void BV_Special_Single_Nan()
+    {
+        var a = np.broadcast_to(np.array(new float[]{float.NaN, 1.0f, float.PositiveInfinity})["::-1"], new Shape(2, 3));
+        Str(a, "[[inf  1. nan]\n [inf  1. nan]]");
+        Repr(a, "array([[inf,  1., nan],\n       [inf,  1., nan]], dtype=float32)");
+    }
+
+    #endregion
+
+    #region non-broadcast view repr parity (reversed / stepped / transposed / column / both-reversed)
+
+    [TestMethod]
+    public void View_Repr_Reversed1D_Int64()
+    {
+        var a = np.arange(6)["::-1"];
+        Str(a, "[5 4 3 2 1 0]");
+        Repr(a, "array([5, 4, 3, 2, 1, 0])");
+    }
+
+    [TestMethod]
+    public void View_Repr_Stepped1D_Int64()
+    {
+        var a = np.arange(10)["::2"];
+        Str(a, "[0 2 4 6 8]");
+        Repr(a, "array([0, 2, 4, 6, 8])");
+    }
+
+    [TestMethod]
+    public void View_Repr_Transposed_Int64()
+    {
+        var a = np.arange(12).reshape(3, 4).T;
+        Str(a, "[[ 0  4  8]\n [ 1  5  9]\n [ 2  6 10]\n [ 3  7 11]]");
+        Repr(a, "array([[ 0,  4,  8],\n       [ 1,  5,  9],\n       [ 2,  6, 10],\n       [ 3,  7, 11]])");
+    }
+
+    [TestMethod]
+    public void View_Repr_Column_Int64()
+    {
+        var a = np.arange(12).reshape(3, 4)[":, 1:2"];
+        Str(a, "[[1]\n [5]\n [9]]");
+        Repr(a, "array([[1],\n       [5],\n       [9]])");
+    }
+
+    [TestMethod]
+    public void View_Repr_BothReversed_Int64()
+    {
+        var a = np.arange(12).reshape(3, 4)["::-1, ::-1"];
+        Str(a, "[[11 10  9  8]\n [ 7  6  5  4]\n [ 3  2  1  0]]");
+        Repr(a, "array([[11, 10,  9,  8],\n       [ 7,  6,  5,  4],\n       [ 3,  2,  1,  0]])");
+    }
+
+    [TestMethod]
+    public void View_Repr_Reversed1D_Double()
+    {
+        var a = np.arange(6.0)["::-1"];
+        Str(a, "[5. 4. 3. 2. 1. 0.]");
+        Repr(a, "array([5., 4., 3., 2., 1., 0.])");
+    }
+
+    [TestMethod]
+    public void View_Repr_Transposed_Single()
+    {
+        var a = np.array(new float[]{0, 1, 2, 3, 4, 5}).reshape(2, 3).T;
+        Str(a, "[[0. 3.]\n [1. 4.]\n [2. 5.]]");
+        Repr(a, "array([[0., 3.],\n       [1., 4.],\n       [2., 5.]], dtype=float32)");
+    }
+
+    [TestMethod]
+    public void View_Repr_Reversed1D_Complex()
+    {
+        var a = (np.arange(4) + np.array(Complex.ImaginaryOne) * np.arange(4))["::-1"];
+        Str(a, "[3.+3.j 2.+2.j 1.+1.j 0.+0.j]");
+        Repr(a, "array([3.+3.j, 2.+2.j, 1.+1.j, 0.+0.j])");
+    }
+
+    [TestMethod]
+    public void View_Repr_Stepped1D_Bool()
+    {
+        var a = np.array(new[]{true, false, true, false, true, false})["::2"];
+        Str(a, "[ True  True  True]");
+        Repr(a, "array([ True,  True,  True])");
+    }
+
+    #endregion
+
+    #region broadcast-of-a-view: higher rank and inserted axes (newaxis, 4-D, 5-D)
+
+    [TestMethod]
+    public void BV_HigherRank_NewaxisMiddle()
+    {
+        var a = np.broadcast_to(np.arange(4)["::-1"][":, np.newaxis"], new Shape(4, 3));
+        Str(a, "[[3 3 3]\n [2 2 2]\n [1 1 1]\n [0 0 0]]");
+        Repr(a, "array([[3, 3, 3],\n       [2, 2, 2],\n       [1, 1, 1],\n       [0, 0, 0]])");
+    }
+
+    [TestMethod]
+    public void BV_HigherRank_4D()
+    {
+        var a = np.broadcast_to(np.arange(3)["::-1"], new Shape(2, 2, 2, 3));
+        Str(a, "[[[[2 1 0]\n   [2 1 0]]\n\n  [[2 1 0]\n   [2 1 0]]]\n\n\n [[[2 1 0]\n   [2 1 0]]\n\n  [[2 1 0]\n   [2 1 0]]]]");
+        Repr(a, "array([[[[2, 1, 0],\n         [2, 1, 0]],\n\n        [[2, 1, 0],\n         [2, 1, 0]]],\n\n\n       [[[2, 1, 0],\n         [2, 1, 0]],\n\n        [[2, 1, 0],\n         [2, 1, 0]]]])");
+    }
+
+    [TestMethod]
+    public void BV_HigherRank_5D()
+    {
+        var a = np.broadcast_to(np.arange(2)["::-1"], new Shape(1, 2, 1, 2, 2));
+        Str(a, "[[[[[1 0]\n    [1 0]]]\n\n\n  [[[1 0]\n    [1 0]]]]]");
+        Repr(a, "array([[[[[1, 0],\n          [1, 0]]],\n\n\n        [[[1, 0],\n          [1, 0]]]]])");
+    }
+
+    #endregion
+
+    #region np.array2string options over broadcast-of-a-view arrays (threshold / edgeitems / precision / sign / separator / suppress)
+
+    [TestMethod] public void A2S_BroadcastView_Threshold() => np.array2string(np.broadcast_to(np.arange(20)["::-1"], new Shape(2, 20)), threshold: 5).Should().Be("[[19 18 17 ...  2  1  0]\n [19 18 17 ...  2  1  0]]");
+
+    [TestMethod] public void A2S_BroadcastView_Edgeitems() => np.array2string(np.broadcast_to(np.arange(20)["::-1"], new Shape(2, 20)), threshold: 5, edgeitems: 2).Should().Be("[[19 18 ...  1  0]\n [19 18 ...  1  0]]");
+
+    [TestMethod] public void A2S_BroadcastView_Precision() => np.array2string(np.broadcast_to((np.arange(6.0) / 3.0)["::-1"], new Shape(2, 6)), precision: 2).Should().Be("[[1.67 1.33 1.   0.67 0.33 0.  ]\n [1.67 1.33 1.   0.67 0.33 0.  ]]");
+
+    [TestMethod] public void A2S_BroadcastView_Sign() => np.array2string(np.broadcast_to(np.array(new double[]{1.0, -2.0, 3.0})["::-1"], new Shape(2, 3)), sign: '+').Should().Be("[[+3. -2. +1.]\n [+3. -2. +1.]]");
+
+    [TestMethod] public void A2S_BroadcastView_Separator() => np.array2string(np.broadcast_to(np.arange(3)["::-1"], new Shape(2, 3)), separator: ", ").Should().Be("[[2, 1, 0],\n [2, 1, 0]]");
+
+    [TestMethod] public void A2S_BroadcastView_SuppressSmall() => np.array2string(np.broadcast_to(np.array(new double[]{1e-12, 2.0, 3.0})["::-1"], new Shape(2, 3)), suppress_small: true).Should().Be("[[3. 2. 0.]\n [3. 2. 0.]]");
+
+    #endregion
 }
