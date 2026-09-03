@@ -453,7 +453,7 @@ namespace NumSharp.Backends.Kernels
         /// own mixed-type IL, or accept the scalar fallback where the body
         /// handles conversion.
         /// </summary>
-        private static bool CanSimdAllOperands(NPTypeCode[] types)
+        internal static bool CanSimdAllOperands(NPTypeCode[] types)
         {
             if (VectorBits == 0) return false;
             NPTypeCode first = types[0];

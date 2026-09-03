@@ -112,6 +112,10 @@ namespace NumSharp.Backends.Iteration
 
             ValidateElementWiseOperandCount(operandTypes.Length);
 
+            if (vectorBody != null && Is2DElementwiseShape() &&
+                TryExecute2DElementwise(operandTypes, scalarBody, vectorBody, key))
+                return;
+
             if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
                 kernel = DirectILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, key);
             ForEach(kernel);
@@ -135,6 +139,105 @@ namespace NumSharp.Backends.Iteration
                     "operandTypes");
         }
 
+        // =====================================================================
+        // 2-D coalesced-block fast path (narrow strided rows)
+        // =====================================================================
+
+        /// <summary>
+        /// Type-independent gate for the <see cref="ND2DElementwiseKernel"/> route: the iteration
+        /// is a CONTIGUOUS inner axis under one or more outer axes that flatten to a single strided
+        /// run (a <c>m[:, :w]</c> column slice, a broadcast-row operand, a trailing-narrow N-D view
+        /// <c>x[..., :w]</c>, …). The ordinary per-chunk route drives these one row at a time under
+        /// EXTERNAL_LOOP, paying the odometer advance AND the kernel's own SIMD-viability prologue
+        /// PER ROW; the block kernel loops the (flattened) outer axis itself, prologue once —
+        /// ~1.7-2.1x NumPy on narrow rows vs the ~0.8x the per-row route gets
+        /// (docs/NDITER_PERF_DISCOVERY.md §7 angle 2).
+        ///
+        /// The outer axes must be MUTUALLY contiguous for every operand
+        /// (<c>stride[d] == stride[d+1] * shape[d+1]</c>) so they collapse to one
+        /// <c>(outerCount, outerStride)</c> — true for any trailing-narrow slice, since such a view
+        /// leaves the outer axes exactly as contiguous as the source. NumSharp's NDIter does not
+        /// coalesce these axes itself, so a 3-D <c>x[:, :, :w]</c> stays NDim=3 here and this flatten
+        /// is what lets it reach the block kernel. Cheap and allocation-free: the common
+        /// contiguous/1-D case fails the <c>NDim &gt;= 2</c> / inner-contiguous test immediately, so
+        /// the callers only build an operand-type array when this returns true.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool Is2DElementwiseShape()
+        {
+            uint f = _state->ItFlags;
+            if ((f & (uint)NDIterFlags.BUFFER) != 0) return false;        // cast/promote → windowed path
+            if ((f & (uint)NDIterFlags.EXLOOP) == 0) return false;        // need the coalesced inner axis
+            if ((f & (uint)NDIterFlags.ONEITERATION) != 0) return false;  // single chunk is already optimal
+            int ndim = _state->NDim;
+            if (ndim < 2) return false;                                   // 1-D is the single-chunk contig path
+            if (_state->MaskOp >= 0) return false;                        // where= → ForEach masked driver
+
+            int inner = ndim - 1;
+            long* shape = _state->Shape;
+            int nop = _state->NOp;
+            for (int op = 0; op < nop; op++)
+            {
+                // The inner (last) axis must be element-contiguous — that is what lets the block
+                // kernel SIMD each row in place. A strided/broadcast inner axis keeps the per-chunk
+                // route (which honors arbitrary inner strides).
+                if (_state->GetStride(inner, op) != 1) return false;
+                // Outer axes must be mutually contiguous so they flatten to one (count, stride).
+                for (int d = 0; d < inner - 1; d++)
+                    if (_state->GetStride(d, op) != _state->GetStride(d + 1, op) * shape[d + 1])
+                        return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Compile (or fetch) and run the 2-D block kernel for a shape
+        /// <see cref="Is2DElementwiseShape"/> has already approved. Returns false — having
+        /// touched nothing — when the operands are not all the same SIMD-capable dtype (mixed
+        /// dtypes, Decimal/Half/Complex, comparison→bool), so the caller falls back to the
+        /// per-chunk <see cref="ForEach"/>. The <paramref name="scalarBody"/>/<paramref name="vectorBody"/>
+        /// are the SAME emit delegates the per-chunk kernel uses, so the two routes are
+        /// byte-identical (element-wise ops carry no cross-element state, so looping the outer
+        /// axis inside the kernel cannot change any result).
+        /// </summary>
+        private bool TryExecute2DElementwise(
+            NPTypeCode[] operandTypes,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            in InnerLoopKernelKey key)
+        {
+            if (vectorBody is null) return false;
+            if (!DirectILKernelGenerator.Enabled) return false;
+
+            int nop = _state->NOp;
+            if (operandTypes.Length != nop) return false;                 // defensive (mask already excluded)
+            if (!DirectILKernelGenerator.CanSimdAllOperands(operandTypes)) return false;
+
+            int ndim = _state->NDim;
+            int inner = ndim - 1;
+            long* shape = _state->Shape;
+
+            long innerCount = shape[inner];
+            long outerCount = 1;
+            for (int d = 0; d < inner; d++)
+                outerCount *= shape[d];
+
+            // The mutually-contiguous outer axes collapse to a single stride: the innermost outer
+            // axis's (axis inner-1) stride reproduces the whole odometer's C-order walk. Data
+            // pointers traverse SOURCE-array memory, so scale by SrcElementSizes exactly as
+            // NDIter.ExternalLoopNext does (identical to ElementSizes on this unbuffered path). A
+            // broadcast operand's stride is 0.
+            long* outerStrides = stackalloc long[nop];
+            for (int op = 0; op < nop; op++)
+                outerStrides[op] = _state->GetStride(inner - 1, op) * _state->SrcElementSizes[op];
+
+            if (!DirectILKernelGenerator.TryGet2DKernel(key, out var kernel))
+                kernel = DirectILKernelGenerator.Compile2DElementwiseKernel(operandTypes, scalarBody, vectorBody, key);
+
+            kernel(GetDataPtrArray(), innerCount, outerStrides, outerCount);
+            return true;
+        }
+
         /// <summary>Convenience: 1-input + 1-output (unary).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void ExecuteElementWiseUnary(
@@ -152,6 +255,9 @@ namespace NumSharp.Backends.Iteration
             in InnerLoopKernelKey key)
         {
             ValidateElementWiseOperandCount(2);
+            if (vectorBody != null && Is2DElementwiseShape() &&
+                TryExecute2DElementwise(new[] { inType, outType }, scalarBody, vectorBody, key))
+                return;
             if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
                 kernel = DirectILKernelGenerator.CompileInnerLoop(new[] { inType, outType }, scalarBody, vectorBody, key);
             ForEach(kernel);
@@ -165,6 +271,9 @@ namespace NumSharp.Backends.Iteration
             in InnerLoopKernelKey key)
         {
             ValidateElementWiseOperandCount(3);
+            if (vectorBody != null && Is2DElementwiseShape() &&
+                TryExecute2DElementwise(new[] { lhs, rhs, outType }, scalarBody, vectorBody, key))
+                return;
             if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
                 kernel = DirectILKernelGenerator.CompileInnerLoop(new[] { lhs, rhs, outType }, scalarBody, vectorBody, key);
             ForEach(kernel);

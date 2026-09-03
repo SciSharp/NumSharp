@@ -34,6 +34,12 @@ namespace NumSharp.Backends.Kernels
             // Specialized emitters for ops that can't be expressed as a single container call.
             switch (op)
             {
+                // 'positive' is identity at every numeric dtype — the loaded vector already IS the
+                // result (same contract as EmitUnaryScalarOperation's Positive branch), so emit
+                // nothing: the SIMD loop becomes a pure load→store copy. This is what lets a strided
+                // narrow-row positive engage the 2-D block kernel (and gives contiguous positive a
+                // SIMD copy instead of the scalar fallback). Gated by CanUseUnarySimd(Positive).
+                case UnaryOp.Positive:                                      return;
                 case UnaryOp.Square:     EmitVectorSquare(il, clrType);     return;
                 case UnaryOp.Reciprocal: EmitVectorReciprocal(il, clrType); return;
                 // The float32 factor is the QUOTIENT OF FLOAT CONSTANTS, matching NumPy's

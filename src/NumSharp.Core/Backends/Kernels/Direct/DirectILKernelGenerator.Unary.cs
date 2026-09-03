@@ -223,6 +223,14 @@ namespace NumSharp.Backends.Kernels
             if (!key.IsSameType)
                 return false;
 
+            // 'positive' is identity — a pure load→store copy vectorizes for every SIMD-capable
+            // dtype (Int64/UInt64 included: there is no abs/negate emulation, just a copy). The
+            // vector body emits nothing (EmitUnaryVectorOperation Positive branch). This upgrades
+            // contiguous positive off the scalar fallback AND lets a strided narrow-row positive
+            // engage the 2-D block kernel.
+            if (key.Op == UnaryOp.Positive)
+                return CanUseSimd(key.InputType);
+
             // BitwiseNot works for integer types only (and bool). Char is excluded:
             // there is no Vector<char> in the BCL (CanUseSimd(Char) is false for the same
             // reason), so a Char invert with N>=vector-width crashed at kernel-compile time

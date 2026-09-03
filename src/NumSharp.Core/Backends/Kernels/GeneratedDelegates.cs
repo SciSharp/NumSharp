@@ -57,6 +57,9 @@ namespace NumSharp.Backends.Kernels
         // DirectILKernelGenerator.InnerLoop.cs
         /// <summary>Cached kernels in <c>DirectILKernelGenerator._innerLoopCache</c>.</summary>
         public static int InnerLoopCount => DirectILKernelGenerator._innerLoopCache.Count;
+        // DirectILKernelGenerator.InnerLoop2D.cs
+        /// <summary>Cached kernels in <c>DirectILKernelGenerator._innerLoop2DCache</c> (2-D block kernels for narrow strided rows).</summary>
+        public static int InnerLoop2DCount => DirectILKernelGenerator._innerLoop2DCache.Count;
         // DirectILKernelGenerator.MatMul.cs
         /// <summary>Cached kernels in <c>DirectILKernelGenerator._matmulKernelCache</c>.</summary>
         public static int MatmulKernelCount => DirectILKernelGenerator._matmulKernelCache.Count;
@@ -142,7 +145,7 @@ namespace NumSharp.Backends.Kernels
             ArgwhereCount + ArgwhereFlatCount + ContiguousKernelCount + MaskedCastCount +
             MaskedCastUnsupportedCount + InnerCastCount + CastCount + CastUnsupportedCount +
             StridedCastCount + StridedCastUnsupportedCount + ClipKernelCount + ComparisonCount +
-            ComparisonScalarCount + CopyKernelCount + FilterAxisCount + InnerLoopCount +
+            ComparisonScalarCount + CopyKernelCount + FilterAxisCount + InnerLoopCount + InnerLoop2DCount +
             MatmulKernelCount + MixedTypeCount + QuantileKernelCount + BoolAxisReductionCount +
             NanAxisReductionCount + AxisReductionCount + NanElementReductionCount +
             ElementReductionCount + RepeatBroadcastCount + RepeatPerJCount + BinaryScalarCount +
@@ -171,9 +174,11 @@ namespace NumSharp.Backends.Kernels
         internal static void ClearInnerLoop()
         {
             // The packed-key front cache aliases the same delegates; clear both so a recompile
-            // is forced through every route.
+            // is forced through every route. The 2-D block kernels are a separate delegate type
+            // keyed by the same (op, dtypes) identity — clear them too.
             DirectILKernelGenerator._innerLoopKeyCache.Clear();
             DirectILKernelGenerator._innerLoopCache.Clear();
+            DirectILKernelGenerator._innerLoop2DCache.Clear();
         }
         internal static void ClearMatmulKernel() => DirectILKernelGenerator._matmulKernelCache.Clear();
         internal static void ClearMixedType() => DirectILKernelGenerator._mixedTypeCache.Clear();

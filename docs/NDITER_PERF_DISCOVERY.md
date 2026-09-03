@@ -319,20 +319,51 @@ pool-stagger on that number.
    Dispatching the 1-D integer-index-on-axis-0 case of the indexer to those kernels is
    2.5–3.5× and turns the sheet's largest remaining family loss (0.61× geomean) into ~1.7–2.3×.
 
-2. **A 2-D kernel contract for narrow rows.** Per row the driver now costs ~4.5 ns and the kernel
-   prologue (stride checks, SIMD viability dispatch) another few. Routing narrow rows through the
-   BUFFERED window machinery does NOT help:
+2. **A 2-D kernel contract for narrow rows — LANDED (2026-09-03).** Per row the per-chunk route
+   pays the driver (~4.5 ns odometer + dispatch) AND the kernel's own prologue (snapshot ptrs,
+   then a runtime SIMD-viability dispatch — stride==elemSize checks per operand) on *every* row,
+   for a handful of elements of actual work. Routing narrow rows through the BUFFERED window
+   machinery does NOT help (the gather/scatter costs as much as it saves — the inner runs are
+   already SIMD-able in place):
 
    | 2M float64 as `(rows, w)` strided rows | w = 4 | w = 16 | w = 64 |
    |----------------------------------------|------:|-------:|-------:|
    | EXTERNAL_LOOP, one kernel call per row | 3.95 ms | 2.27 | 1.92 |
    | BUFFERED windows (gather + one call per 8192) | 4.45 ms | 2.93 | 2.60 |
-   | `np.positive(sv, out=)` production     | 3.76 ms | 2.70 | 2.36 |
+   | hand-written 2-D loop (the FLOOR)      | 1.71 ms | 1.23 | 1.12 |
    | NumPy `np.positive(sv, out=)`          | 2.99 ms | 1.98 | 1.82 |
 
-   The lever is a kernel variant that loops the outer axis itself with per-operand outer byte
-   strides, called once per coalesced 2-D block, so neither the odometer nor the prologue runs
-   per row.
+   The floor (one prologue, an inner SIMD run, a per-row pointer bump) is ~1.7-2.1× NumPy — the
+   whole gap was per-row overhead, not memory traffic. The fix is a kernel variant
+   (`ND2DElementwiseKernel`, `DirectILKernelGenerator.InnerLoop2D.cs`) that loops the outer axis
+   itself with per-operand outer byte strides, called once per coalesced 2-D block, so neither the
+   odometer nor the prologue runs per row. It reuses the SAME scalar/vector emit bodies as the
+   per-chunk kernel (byte-identical results). The dispatcher (`NDIterRef.Is2DElementwiseShape` /
+   `TryExecute2DElementwise`, wired into the three packed-key `ExecuteElementWise*` entry points)
+   gates on: unbuffered, no `where=` mask, EXTERNAL_LOOP, inner axis element-contiguous for every
+   operand, all operands the same SIMD-capable dtype. **NumSharp's NDIter does not coalesce the
+   outer axes** (a 3-D `x[:, :, :w]` stays NDim=3), so the gate ALSO flattens *mutually contiguous*
+   outer axes (`stride[d] == stride[d+1]*shape[d+1]`, true for any trailing-narrow N-D slice) into
+   one `(outerCount, outerStride)` and reuses the same 2-D kernel — which additionally routes those
+   N-D cases off the pre-existing malformed-output crash in the ForEach 3-D odometer path.
+
+   Two pieces rode along: `positive` had **no** vector body (`CanUseUnarySimd(Positive)` was false),
+   so it was scalar even contiguously and could not engage this path — an identity vector body was
+   added (`EmitUnaryVectorOperation` Positive branch), which also gives contiguous positive a SIMD
+   copy (1.59× NumPy). Comparisons self-exclude (mixed dtype → bool) and already have the Direct
+   whole-array strided kernel.
+
+   **Measured (NPY/NS, 2M f64, no-out fresh alloc):** 2-D positive **1.95-2.18×**, sqrt
+   **2.11-2.52×**, add **1.82-2.29×**; 3-D trailing-narrow positive **1.66-2.07×**, sqrt
+   **1.51-2.26×**, add **1.37-2.17×** — every cell a win, up from the 0.82× (positive w=4) it
+   started at. Gates: FuzzMatrix (all tiers, incl. `out_where` across every strided layout) 98/98,
+   main suite 14446/0, plus a 700-case 2-D and 123-case N-D self-consistency check (2-D/N-D strided
+   result bit-identical to the contiguous-copy result across ops × dtypes × widths × layouts).
+   **Still open:** the inner-*broadcast* 2-D case (`add(A, col)` with a stride-0 inner) and
+   *non*-flattenable outer axes (a doubly-strided `x[::2, :, :w]`) keep the per-chunk route; both
+   are correct, just not accelerated by this kernel. And `np.empty(view.Shape)` inheriting the
+   view's strides fabricates a malformed (size-N buffer, addressing-beyond-N strides) output that
+   crashes any kernel that honors it — a pre-existing footgun, unrelated to this lever.
 
 3. **SIMD run detection in the `where=` masked driver.** `InvokeInner` finds mask-true runs one
    byte at a time. Short runs are already ahead of NumPy; long runs lose to the scan:

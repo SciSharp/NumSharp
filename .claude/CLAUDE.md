@@ -1289,6 +1289,32 @@ before/after tables and the ranked next levers (fancy-index → take/put kernels
 contract for narrow rows, SIMD run scan for `where=`, the fresh-NDArray floor) — is
 **`docs/NDITER_PERF_DISCOVERY.md`**.
 
+**Narrow strided rows — the 2-D block kernel (2026-09-03, LANDED).** The per-chunk route drives a
+`(rows, w)` view with a CONTIGUOUS inner axis one row at a time under EXTERNAL_LOOP, paying the odometer
+advance AND the per-chunk kernel's own SIMD-viability prologue on EVERY row — so for a narrow `w` it was
+~0.82× NumPy (`np.positive`), while a hand-written 2-D loop (prologue once, inner SIMD run, per-row
+pointer bump) is ~1.7–2.1× NumPy — the whole gap is per-row overhead, not memory traffic (buffering the
+strided rows into a contiguous window was measured SLOWER — the inner runs are already SIMD-able in
+place). `ND2DElementwiseKernel` (`Backends/Kernels/Direct/DirectILKernelGenerator.InnerLoop2D.cs`) loops
+the outer axis itself with per-operand outer byte strides, called ONCE per coalesced 2-D block; it reuses
+the SAME scalar/vector emit bodies as the per-chunk kernel, so results are byte-identical (elementwise ops
+carry no cross-element state). Dispatched by `NDIterRef.{Is2DElementwiseShape,TryExecute2DElementwise}`
+(wired into the three packed-key `ExecuteElementWise*` entry points, so it serves BOTH `out=` and
+allocating unary/binary routes), gated on: unbuffered, no `where=` mask, EXTERNAL_LOOP, inner axis
+element-contiguous for every operand, all operands the same SIMD-capable dtype. NumSharp's NDIter does NOT
+coalesce outer axes (a 3-D `x[:, :, :w]` stays NDim=3), so the gate ALSO flattens *mutually contiguous*
+outer axes (`stride[d] == stride[d+1]*shape[d+1]`, true for any trailing-narrow N-D slice) into one
+`(outerCount, outerStride)` and reuses the same kernel — covering N-D trailing-narrow AND routing it off a
+pre-existing malformed-output crash in the ForEach 3-D odometer path. Rode along: `positive` had no vector
+body (identity was scalar even contiguously) — an identity vector body was added
+(`EmitUnaryVectorOperation` Positive branch + `CanUseUnarySimd(Positive)`), so contiguous positive is now
+a SIMD copy (1.59× NumPy) too. **Measured (NPY/NS, 2M f64):** 2-D positive **1.95–2.18×**, sqrt
+**2.11–2.52×**, add **1.82–2.29×**; 3-D trailing-narrow **1.37–2.26×**. Gates: FuzzMatrix 98/98 (incl.
+`out_where` across every strided layout), main suite 14446/0, + 700-case 2-D and 123-case N-D
+self-consistency (strided result bit-identical to the contiguous-copy result). Still on the per-chunk
+route (correct, unaccelerated): inner-*broadcast* 2-D (`add(A, col)`, stride-0 inner) and *non*-flattenable
+outer (doubly-strided `x[::2, :, :w]`).
+
 **Do NOT try to fix `it[0]` by re-seating a cached view** — measured, and it is a silent-wrong-answer
 trap. `UnmanagedStorage` keeps **three** synchronized address caches: the public `byte* Address`, the
 `IArraySlice InternalArray`, and a per-dtype `ArraySlice<T> _arrayXxx` field. Re-seating `Address`
