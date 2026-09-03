@@ -448,12 +448,57 @@ so the assertion now pins the NumPy behaviour.
   `w == lanes/2` half-vector store. That is a per-width kernel specialization, deliberately not done.
 - **Hosts without AVX2 at 256-bit width** (V128, V512, non-x86) and 1/2-byte lanes keep the scalar tail.
 - **Strided-inner rows** (`x[:, ::2]` that does NOT coalesce because of a second operand) stay on the
-  per-chunk route's gather path; `where=` masked and buffered-cast routes are untouched.
+  per-chunk route's gather path; buffered-cast routes are untouched. `where=` was admitted in the
+  third generation (§12).
 - **The K1 `'A'`-order axis-ordering divergence** on a transposed 3-D operand is pre-existing and remains.
-- The coalescer change reaches every NDIter consumer (copies, casts, reductions), not only these kernels;
-  only the elementwise routes were measured here.
+- The coalescer change reaches every NDIter consumer (copies, casts, reductions), not only these kernels.
+  Measured afterwards on the `benchmark/layout` and `benchmark/cast` benches, pinned, pre-coalescer
+  commit vs this one: reduce 0.997×, elementwise 1.068× (strided 1.11×), cast 0.992× — no regression,
+  no dependence (`docs/NDITER_PERF_DISCOVERY.md` §6.6, lever 4).
 
-## 12. See also
+## 12. Third generation — the `where=` form (2026-09-03)
+
+`DirectILKernelGenerator.InnerLoop2D.Masked.cs`; gate `NDIterRef.Is2DMaskedElementwiseShape`, driver
+`TryExecute2DMasked` / `Run2DMaskedBlocks`, wired into BOTH `ExecuteElementWise` overloads (the ufunc
+routes arrive with a packed key). A masked ufunc over narrow strided rows used to be excluded from the
+block route: the ForEach masked driver ran per row — odometer, a mask-run scan over a few bytes (below
+any vector width, so scalar), one per-chunk kernel call per run with its own prologue — and sat at
+0.4–0.9× NumPy where the unmasked rows ran 2–8×.
+
+The mask rides the block kernel as its trailing operand (same delegate, one more pointer/stride slot;
+its element size is one byte so byte strides equal element strides). The kernel dispatches ONCE per
+call on the mask's inner stride:
+
+- **1 (a byte per element):** every vector group turns its mask bytes into the lane mask — one
+  8-byte (32-bit lanes) or 4-byte (64-bit lanes) load, `Avx2.ConvertToVector256Int32/Int64` (pmovzx),
+  `GreaterThan(·, 0)` — and runs the SAME `MaskLoad` → body → `MaskStore` the second generation uses
+  for its sub-vector tails, so a masked-off element is neither read for its lane's sake nor written,
+  and integer masked-off lanes are 1-filled against a software divide. The row tail assembles its word
+  from exactly `tail` bytes (a small byte loop), so the kernel never reads past the mask array's end,
+  and ANDs the hoisted tail mask.
+- **0 (a byte per row — a `(rows, 1)` mask):** the row is gated on its byte and runs full vectors +
+  the static masked tail (fill hoisted).
+- **anything else, or no vector body / non-SIMD dtype:** the masked scalar 2-D block (per-element
+  `mask[i·stride] != 0`, per-row gate for stride 0), runtime-stride addressing for every operand.
+
+The C/S input patterns are the second generation's (unary {C, S}, binary {CC, SC, CS}; wider ops
+all-C), each its own block behind a per-call stride dispatch.
+
+**Measured (1M f64 as `(rows, w)` column views, pinned, min-of-rounds, NPY/NS before → after):** w=3
+`add` byte-mask **0.66 → 1.67**, row mask 1.82 → **4.11**, column mask 0.99 → **3.50**, `sqrt` byte-mask
+**0.38 → 1.29**; w=4 `add` byte-mask 0.78 → **2.17**, column mask 2.62 → **10.5**, `sqrt` 1.26 → **6.24**;
+w=16 `add` 2.30 → 3.60, `sqrt` 3.32 → 5.93. Unmasked rows unchanged. Full tables:
+`docs/NDITER_PERF_DISCOVERY.md` §6.6.
+
+**Gates:** an 8,358-check self-consistency probe (11 dtypes × 14 widths 1–40 × {byte mask, 5-runs,
+row mask, column mask, all-true, all-false} × {add, multiply-scalar, add-col, negative, sqrt, exp} ×
+{column view, offset column view} + 3-D `x[:, :, :w]` / `x[::2, :, :w]`), every strided result
+byte-equal to the same call on contiguous copies AND to an independent `np.where` composition —
+0 mismatches; `Indexing.KernelRoute.Tests` (`Where_NarrowStridedRows_*`, 3-D, the zero-divisor
+masked-off pin); main suite 14476/0; FuzzMatrix 98/98 (`out_where.jsonl` covers every ufunc
+out=/where= layout, base buffer included).
+
+## 13. See also
 
 - `docs/NDITER_PERF_DISCOVERY.md` — the cost model, the measuring traps, the probes, and the full ranked
   next-wins list (this is §7 angle 2).

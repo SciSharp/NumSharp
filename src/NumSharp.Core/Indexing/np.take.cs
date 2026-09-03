@@ -123,8 +123,8 @@ namespace NumSharp
                 source = sourceOwned;
             }
 
-            // Cast indices to contig int64.
-            var idx64 = CastIndicesToInt64(indices, "same_kind", out bool ownIdx);
+            // Cast indices to contig int64 (a contig int32 array is read in place).
+            var idx64 = CastIndicesToInt64(indices, "same_kind", out bool ownIdx, out bool idx32);
 
             // Output shape = indices.shape, dtype = a.dtype, C-contig allocated.
             var outShape = new Shape((long[])indices.Shape.dimensions.Clone());
@@ -148,7 +148,7 @@ namespace NumSharp
             {
                 ExecuteTakeKernel(source, idx64, result,
                     outerSize: 1, indicesCount: indicesCount,
-                    maxItem: maxItem, innerSize: elemBytes, mode: mode);
+                    maxItem: maxItem, innerSize: elemBytes, mode: mode, idx32: idx32);
             }
             finally
             {
@@ -169,7 +169,7 @@ namespace NumSharp
                 source = sourceOwned;
             }
 
-            var idx64 = CastIndicesToInt64(indices, "same_kind", out bool ownIdx);
+            var idx64 = CastIndicesToInt64(indices, "same_kind", out bool ownIdx, out bool idx32);
 
             // Compute outer × inner factorisation around `axis`.
             long outerSize = 1;
@@ -205,7 +205,7 @@ namespace NumSharp
             {
                 ExecuteTakeKernel(source, idx64, result,
                     outerSize: outerSize, indicesCount: indicesCount,
-                    maxItem: maxItem, innerSize: innerBytes, mode: mode);
+                    maxItem: maxItem, innerSize: innerBytes, mode: mode, idx32: idx32);
             }
             finally
             {
@@ -225,29 +225,47 @@ namespace NumSharp
 
         private static unsafe void ExecuteTakeKernel(
             NDArray source, NDArray idx64, NDArray result,
-            long outerSize, long indicesCount, long maxItem, long innerSize, int mode)
+            long outerSize, long indicesCount, long maxItem, long innerSize, int mode, bool idx32 = false)
         {
             int copyKind = DirectILKernelGenerator.CopyKindFor(innerSize);
             // Software prefetch pays off only when the randomly-gathered region misses cache; below that
             // threshold it is pure per-element overhead (measured ~1.6x slower at 100K). Gate on the
             // gathered footprint = maxItem slabs of innerSize bytes.
             bool prefetch = maxItem * innerSize > IndexPrefetchThresholdBytes;
-            var kernel = DirectILKernelGenerator.GetTakeKernel(copyKind, prefetch);
-            if (kernel == null)
-                throw new NotSupportedException("np.take: IL kernel unavailable");
 
             byte* srcPtr = (byte*)source.Storage.Address + source.Shape.offset * source.dtypesize;
-            long* idxPtr = (long*)idx64.Storage.Address + idx64.Shape.offset;
+            // idx32: the index buffer holds int32 values; the kernels' `long*` parameter is a reinterpret.
+            long* idxPtr = idx32
+                ? (long*)((int*)idx64.Storage.Address + idx64.Shape.offset)
+                : (long*)idx64.Storage.Address + idx64.Shape.offset;
             byte* dstPtr = (byte*)result.Storage.Address;
 
-            long status = kernel(srcPtr, idxPtr, indicesCount, outerSize,
-                                  maxItem, innerSize, mode, dstPtr);
+            long status;
             long expected = outerSize * indicesCount;
+            // The lean flat gather (DirectILKernelGenerator.GatherFlat.cs) serves the single-slab-per-
+            // index RAISE case — axis=None, or axis=0 with a primitive-width trailing slab — with a
+            // compile-time element width and no per-element mode dispatch; wrap/clip and multi-outer
+            // gathers keep the general kernel.
+            var flat = (mode == 0 && outerSize == 1 && copyKind != 0)
+                ? DirectILKernelGenerator.GetTakeFlatKernel(copyKind, idx32, prefetch)
+                : null;
+            if (flat != null)
+            {
+                status = flat(srcPtr, idxPtr, indicesCount, maxItem, dstPtr);
+            }
+            else
+            {
+                var kernel = DirectILKernelGenerator.GetTakeKernel(copyKind, prefetch, idx32);
+                if (kernel == null)
+                    throw new NotSupportedException("np.take: IL kernel unavailable");
+                status = kernel(srcPtr, idxPtr, indicesCount, outerSize,
+                                maxItem, innerSize, mode, dstPtr);
+            }
             if (status < expected)
             {
                 long failPair = status;
                 long badJ = failPair % indicesCount;
-                long badVal = idxPtr[badJ];
+                long badVal = idx32 ? ((int*)idxPtr)[badJ] : idxPtr[badJ];
                 throw new ArgumentOutOfRangeException(
                     nameof(idx64),
                     $"index {badVal} is out of bounds for axis with size {maxItem}");
@@ -269,12 +287,30 @@ namespace NumSharp
         ///     </para>
         /// </summary>
         private static NDArray CastIndicesToInt64(NDArray indices, string castingRule, out bool owned)
+            => CastIndicesToInt64(indices, castingRule, out owned, out _);
+
+        /// <summary>
+        ///     As <see cref="CastIndicesToInt64(NDArray, string, out bool)"/>, but a C-contiguous
+        ///     <b>int32</b> index array is returned AS-IS with <paramref name="idx32"/> set: the take/put
+        ///     kernels read int32 indices in place (their <c>idx32</c> variants), so the common C# index
+        ///     (<c>np.array(new int[] {…})</c> is int32) no longer pays a widening copy — measured 27 % of
+        ///     <c>np.take(a, idx32)</c> at 100K.
+        /// </summary>
+        private static NDArray CastIndicesToInt64(NDArray indices, string castingRule, out bool owned, out bool idx32)
         {
             var tc = indices.GetTypeCode;
+            idx32 = false;
 
             if (tc == NPTypeCode.Int64 && indices.Shape.IsContiguous)
             {
                 owned = false;
+                return indices;
+            }
+
+            if (tc == NPTypeCode.Int32 && indices.Shape.IsContiguous)
+            {
+                owned = false;
+                idx32 = true;
                 return indices;
             }
 

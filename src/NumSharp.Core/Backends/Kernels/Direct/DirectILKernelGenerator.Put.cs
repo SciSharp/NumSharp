@@ -55,21 +55,31 @@ namespace NumSharp.Backends.Kernels
         /// Returns <c>null</c> only when <see cref="Enabled"/> is false.
         /// </summary>
         public static PutKernel GetPutKernel(int copyKind)
+            => GetPutKernel(copyKind, idx32: false);
+
+        /// <summary>
+        /// As <see cref="GetPutKernel(int)"/>, with the index width selectable: <paramref name="idx32"/>
+        /// generates a kernel that reads the <c>indices</c> argument as <b>int32</b> values (the
+        /// delegate still types the pointer <c>long*</c> — the caller reinterprets its <c>int*</c>),
+        /// so an int32 index array is scattered in place instead of widened to an int64 copy first.
+        /// </summary>
+        public static PutKernel GetPutKernel(int copyKind, bool idx32)
         {
             if (!Enabled)
                 return null;
 
-            if (_putKernels.TryGetValue(copyKind, out var cached))
+            int key = (copyKind << 1) | (idx32 ? 1 : 0);
+            if (_putKernels.TryGetValue(key, out var cached))
                 return cached;
 
             try
             {
-                var k = GeneratePutKernelIL(copyKind);
-                return _putKernels.GetOrAdd(copyKind, k);
+                var k = GeneratePutKernelIL(copyKind, idx32);
+                return _putKernels.GetOrAdd(key, k);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetPutKernel({copyKind}): {ex.GetType().Name}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetPutKernel({copyKind},{idx32}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -95,10 +105,13 @@ namespace NumSharp.Backends.Kernels
         /// }
         /// </code>
         /// </summary>
-        private static PutKernel GeneratePutKernelIL(int copyKind)
+        private static PutKernel GeneratePutKernelIL(int copyKind, bool idx32 = false)
         {
+            // Index element width: the `indices` argument is read as int32 (sign-extended) or int64.
+            long idxWidth = idx32 ? 4L : 8L;
+
             var dm = new DynamicMethod(
-                name: $"IL_Put_c{copyKind}",
+                name: $"IL_Put_c{copyKind}_i{idxWidth}",
                 returnType: typeof(long),
                 parameterTypes: new[]
                 {
@@ -144,11 +157,12 @@ namespace NumSharp.Backends.Kernels
             // idx = indices[i]
             il.Emit(OpCodes.Ldarg_1);
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Ldc_I8, idxWidth);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_I8);
+            if (idx32) { il.Emit(OpCodes.Ldind_I4); il.Emit(OpCodes.Conv_I8); }
+            else il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Stloc, locIdx);
 
             // Mode dispatch — reuse the Take helper. The Take kernel's mode helper

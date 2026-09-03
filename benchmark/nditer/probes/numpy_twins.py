@@ -4,6 +4,7 @@
     python benchmark/nditer/probes/numpy_twins.py ab        # twin of ab_ops_probe.cs (id<TAB>ns rows)
     python benchmark/nditer/probes/numpy_twins.py angles    # twin of angles_probe.cs
     python benchmark/nditer/probes/numpy_twins.py narrow [ABCDE]   # twin of narrow_probe.cs (2-D block kernel)
+    python benchmark/nditer/probes/numpy_twins.py fancy_where [ABC] # twin of fancy_where_probe.cs (fancy index, where= runs, masked narrow rows)
     python benchmark/nditer/probes/numpy_twins.py join before.tsv after.tsv [numpy.tsv]
 
 Run with OPENBLAS_NUM_THREADS=1 so nothing on the NumPy side fans out, and on a hybrid P/E-core host
@@ -287,6 +288,122 @@ def narrow(sections="ABCDE"):
             print(f"w={w:3d}: flat  positive {tpf:8.1f} [{tpf * 1e3 / rowsF:5.2f}]  add {taf:8.1f} [{taf * 1e3 / rowsF:5.2f}]   |  ::2  positive {tph:8.1f} [{tph * 1e3 / rowsH:5.2f}]  add {tah:8.1f} [{tah * 1e3 / rowsH:5.2f}]")
 
 
+# ---------------------------------------------------------------------------
+# fancy_where — the NumPy twin of fancy_where_probe.cs (identical keys): (A) the fancy-index
+# operator vs np.take/np.put at 1K/100K/10M, (B) where= across mask run lengths, (C) where=
+# over narrow strided rows. Masks use `//` (the C# side uses np.floor_divide — `/` on an
+# integer NDArray is true division).
+# ---------------------------------------------------------------------------
+def _fw_row(key, us):
+    print(f"{key}\t{us!r}")
+
+
+def fancy_where_a():
+    for n in (1_000, 100_000, 10_000_000):
+        tag = {1_000: "1K", 100_000: "100K"}.get(n, "10M")
+        a = (np.arange(n, dtype=np.float64) % 97.0) + 1.0
+        ai = np.arange(n, dtype=np.int32)
+        idx32 = ((np.arange(n, dtype=np.int64) * 2654435761) % n).astype(np.int32)
+        idx64 = idx32.astype(np.int64)
+        vals = np.arange(n, dtype=np.float64)
+        vals_i = np.arange(n, dtype=np.int32)
+        dst = a.copy()
+        dst_i = ai.copy()
+        _fw_row(f"{tag}|f64|get|a[idx32]", best_us(lambda: a[idx32]))
+        _fw_row(f"{tag}|f64|get|a[idx64]", best_us(lambda: a[idx64]))
+        _fw_row(f"{tag}|f64|get|take(a,idx32)", best_us(lambda: np.take(a, idx32)))
+        _fw_row(f"{tag}|f64|get|take(a,idx64)", best_us(lambda: np.take(a, idx64)))
+        _fw_row(f"{tag}|i32|get|a[idx32]", best_us(lambda: ai[idx32]))
+        _fw_row(f"{tag}|i32|get|take(a,idx64)", best_us(lambda: np.take(ai, idx64)))
+
+        def s1():
+            dst[idx32] = vals
+
+        def s2():
+            dst[idx64] = vals
+
+        def s3():
+            dst[idx64] = 3.0
+
+        def s4():
+            dst_i[idx32] = vals_i
+
+        _fw_row(f"{tag}|f64|set|a[idx32]=v", best_us(s1))
+        _fw_row(f"{tag}|f64|set|a[idx64]=v", best_us(s2))
+        _fw_row(f"{tag}|f64|set|put(a,idx64,v)", best_us(lambda: np.put(dst, idx64, vals)))
+        _fw_row(f"{tag}|f64|set|a[idx64]=scalar", best_us(s3))
+        _fw_row(f"{tag}|i32|set|a[idx32]=v", best_us(s4))
+        _fw_row(f"{tag}|i32|set|put(a,idx64,v)", best_us(lambda: np.put(dst_i, idx64, vals_i)))
+        if n >= 8:
+            rows_ = n // 8
+            m = a.reshape(rows_, 8)
+            ridx = ((np.arange(rows_, dtype=np.int64) * 2654435761) % rows_).astype(np.int64)
+            rvals = np.arange(rows_ * 8, dtype=np.float64).reshape(rows_, 8)
+            md = m.copy()
+
+            def s5():
+                md[ridx] = rvals
+
+            def s6():
+                md[ridx] = rvals[0]
+
+            _fw_row(f"{tag}|f64|get2d|m[ridx]", best_us(lambda: m[ridx]))
+            _fw_row(f"{tag}|f64|get2d|take(m,ridx,0)", best_us(lambda: np.take(m, ridx, axis=0)))
+            _fw_row(f"{tag}|f64|set2d|m[ridx]=v", best_us(s5))
+            _fw_row(f"{tag}|f64|set2d|m[ridx]=row", best_us(s6))
+
+
+def fancy_where_b():
+    for n in (100_000, 1_000_000):
+        tag = "100K" if n == 100_000 else "1M"
+        a = (np.arange(n, dtype=np.float64) % 97.0) + 1.0
+        b = (np.arange(n, dtype=np.float64) % 31.0) + 2.0
+        o = np.empty(n)
+        ar = np.arange(n)
+        for run in (1, 8, 64, 1024):
+            mask = (ar // run % 2) == 0
+            _fw_row(f"{tag}|add|where=run{run}", best_us(lambda: np.add(a, b, out=o, where=mask)))
+            if run == 64:
+                _fw_row(f"{tag}|sqrt|where=run{run}", best_us(lambda: np.sqrt(a, out=o, where=mask)))
+        half = ar < n // 2
+        all_t = ar >= 0
+        all_f = ar < 0
+        _fw_row(f"{tag}|add|where=half", best_us(lambda: np.add(a, b, out=o, where=half)))
+        _fw_row(f"{tag}|add|where=allTrue", best_us(lambda: np.add(a, b, out=o, where=all_t)))
+        _fw_row(f"{tag}|add|where=allFalse", best_us(lambda: np.add(a, b, out=o, where=all_f)))
+        _fw_row(f"{tag}|add|unmasked", best_us(lambda: np.add(a, b, out=o)))
+
+
+def fancy_where_c():
+    for w in (3, 4, 16):
+        total = 1_000_000
+        rows_ = total // w
+        back = (np.arange(rows_ * 2 * w, dtype=np.float64) % 97.0 + 1.0).reshape(rows_, 2 * w)
+        back2 = (np.arange(rows_ * 2 * w, dtype=np.float64) % 31.0 + 2.0).reshape(rows_, 2 * w)
+        sv, sv2 = back[:, :w], back2[:, :w]
+        o = np.empty((rows_, w))
+        ar = np.arange(rows_ * w).reshape(rows_, w)
+        blocks = (ar // 64 % 2) == 0
+        rowmask = ((np.arange(rows_) % 2) == 0)[:, None]
+        colmask = ((np.arange(w) % 2) == 0)[None, :]
+        _fw_row(f"1M|w{w}|add|where=blocks64", best_us(lambda: np.add(sv, sv2, out=o, where=blocks)))
+        _fw_row(f"1M|w{w}|add|where=rowmask", best_us(lambda: np.add(sv, sv2, out=o, where=rowmask)))
+        _fw_row(f"1M|w{w}|add|where=colmask", best_us(lambda: np.add(sv, sv2, out=o, where=colmask)))
+        _fw_row(f"1M|w{w}|sqrt|where=blocks64", best_us(lambda: np.sqrt(sv, out=o, where=blocks)))
+        _fw_row(f"1M|w{w}|add|unmasked", best_us(lambda: np.add(sv, sv2, out=o)))
+        _fw_row(f"1M|w{w}|sqrt|unmasked", best_us(lambda: np.sqrt(sv, out=o)))
+
+
+
+def fancy_where(sections="ABC"):
+    if "A" in sections:
+        fancy_where_a()
+    if "B" in sections:
+        fancy_where_b()
+    if "C" in sections:
+        fancy_where_c()
+
+
 def join(before, after, numpy_tsv=None):
     def load(path):
         d = {}
@@ -331,6 +448,8 @@ if __name__ == "__main__":
         angles()
     elif cmd == "narrow":
         narrow(sys.argv[2] if len(sys.argv) > 2 else "ABCDE")
+    elif cmd == "fancy_where":
+        fancy_where(sys.argv[2] if len(sys.argv) > 2 else "ABC")
     elif cmd == "join":
         join(*sys.argv[2:])
     else:

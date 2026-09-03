@@ -92,6 +92,13 @@ namespace NumSharp.Backends.Iteration
                     $"operandTypes length ({operandTypes.Length}) must match iterator NOp ({_state->NOp}).",
                     nameof(operandTypes));
 
+            // A where= ufunc over narrow strided rows: the masked 2-D block kernel runs the whole
+            // coalesced block in ONE call (the mask riding as its trailing operand) instead of the
+            // per-row masked driver — see DirectILKernelGenerator.InnerLoop2D.Masked.cs.
+            if (kernelNOp == _state->NOp - 1 && Is2DMaskedElementwiseShape()
+                && TryExecute2DMasked(operandTypes, scalarBody, vectorBody, cacheKey))
+                return;
+
             var kernel = DirectILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, cacheKey);
             ForEach(kernel);
         }
@@ -114,6 +121,12 @@ namespace NumSharp.Backends.Iteration
 
             if (Is2DElementwiseShape() &&
                 TryExecute2DElementwise(operandTypes, scalarBody, vectorBody, key))
+                return;
+
+            // The where= routes arrive here with a packed key and the mask as the trailing
+            // operand: narrow strided rows take the masked 2-D block kernel, one call per block.
+            if (operandTypes.Length == _state->NOp - 1 && Is2DMaskedElementwiseShape() &&
+                TryExecute2DMasked(operandTypes, scalarBody, vectorBody, key))
                 return;
 
             if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
@@ -296,6 +309,155 @@ namespace NumSharp.Backends.Iteration
                     break;
             }
             return true;
+        }
+
+        // =====================================================================
+        // 2-D coalesced-block fast path — where= (ARRAYMASK) form
+        // =====================================================================
+
+        /// <summary>
+        /// The <see cref="Is2DElementwiseShape"/> gate for a masked ufunc: the trailing ARRAYMASK
+        /// operand is admitted when its inner axis is one byte per element (stride 1) or one
+        /// byte per row (stride 0 — a <c>(rows, 1)</c> broadcast mask); every other condition is
+        /// the unmasked gate's (unbuffered, EXTERNAL_LOOP, NDim ≥ 2, output row contiguous,
+        /// inputs contiguous or broadcast). The masked block kernel folds the same trailing
+        /// outer axes and walks any leading ones per block, exactly like the unmasked route.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool Is2DMaskedElementwiseShape()
+        {
+            uint f = _state->ItFlags;
+            if ((f & (uint)NDIterFlags.BUFFER) != 0) return false;
+            if ((f & (uint)NDIterFlags.EXLOOP) == 0) return false;
+            if ((f & (uint)NDIterFlags.ONEITERATION) != 0) return false;
+            int ndim = _state->NDim;
+            if (ndim < 2) return false;
+            int nop = _state->NOp;
+            int maskOp = _state->MaskOp;
+            if (maskOp != nop - 1) return false;
+
+            int inner = ndim - 1;
+            if (_state->GetStride(inner, nop - 2) != 1) return false;          // the output row
+            for (int op = 0; op < nop - 2; op++)
+            {
+                long s = _state->GetStride(inner, op);
+                if (s != 1 && s != 0) return false;
+            }
+            long ms = _state->GetStride(inner, maskOp);
+            return ms == 1 || ms == 0;
+        }
+
+        /// <summary>
+        /// Compile (or fetch) and run the masked 2-D block kernel for an iteration
+        /// <see cref="Is2DMaskedElementwiseShape"/> has approved: the same axis folding and
+        /// per-block odometer as <see cref="TryExecute2DElementwise"/>, over ALL operands (the
+        /// mask included — its element size is one byte, so its byte strides are its element
+        /// strides). Returns false, having touched nothing, only when runtime IL generation is
+        /// unavailable.
+        /// </summary>
+        private bool TryExecute2DMasked(
+            NPTypeCode[] operandTypes,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            string cacheKey)
+        {
+            if (!DirectILKernelGenerator.Enabled) return false;
+            if (operandTypes.Length != _state->NOp - 1) return false;
+            Run2DMaskedBlocks(DirectILKernelGenerator.Compile2DMaskedElementwiseKernel(operandTypes, scalarBody, vectorBody, cacheKey));
+            return true;
+        }
+
+        /// <summary>Packed-key form of <see cref="TryExecute2DMasked(NPTypeCode[], Action{ILGenerator}, Action{ILGenerator}?, string)"/> (a hit builds no string).</summary>
+        private bool TryExecute2DMasked(
+            NPTypeCode[] operandTypes,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            in InnerLoopKernelKey key)
+        {
+            if (!DirectILKernelGenerator.Enabled) return false;
+            if (operandTypes.Length != _state->NOp - 1) return false;
+            Run2DMaskedBlocks(DirectILKernelGenerator.Compile2DMaskedElementwiseKernel(operandTypes, scalarBody, vectorBody, key));
+            return true;
+        }
+
+        /// <summary>
+        /// Drive a masked 2-D block kernel over the iteration: fold the trailing outer axes every
+        /// operand (mask included) walks contiguously into one block and walk any leading axes
+        /// per block — the <see cref="TryExecute2DElementwise"/> structure over all NOp operands.
+        /// </summary>
+        private void Run2DMaskedBlocks(ND2DElementwiseKernel kernel)
+        {
+            int nop = _state->NOp;                                        // data operands + the mask
+            int ndim = _state->NDim;
+            int inner = ndim - 1;
+            long* shape = _state->Shape;
+            int* srcSizes = _state->SrcElementSizes;
+
+            int first = inner - 1;
+            while (first > 0)
+            {
+                bool contiguous = true;
+                for (int op = 0; op < nop; op++)
+                {
+                    if (_state->GetStride(first - 1, op) != _state->GetStride(first, op) * shape[first])
+                    {
+                        contiguous = false;
+                        break;
+                    }
+                }
+                if (!contiguous) break;
+                first--;
+            }
+
+            long innerCount = shape[inner];
+            long outerCount = 1;
+            for (int d = first; d < inner; d++)
+                outerCount *= shape[d];
+
+            long* innerStrides = stackalloc long[nop];
+            long* outerStrides = stackalloc long[nop];
+            for (int op = 0; op < nop; op++)
+            {
+                innerStrides[op] = _state->GetStride(inner, op) * srcSizes[op];
+                outerStrides[op] = _state->GetStride(inner - 1, op) * srcSizes[op];
+            }
+
+
+            void** basePtrs = GetDataPtrArray();
+            if (first == 0)
+            {
+                kernel(basePtrs, innerStrides, innerCount, outerStrides, outerCount);
+                return;
+            }
+
+            void** ptrs = stackalloc void*[nop];
+            for (int op = 0; op < nop; op++)
+                ptrs[op] = basePtrs[op];
+            long* coords = stackalloc long[first];
+            for (int d = 0; d < first; d++)
+                coords[d] = 0;
+
+            while (true)
+            {
+                kernel(ptrs, innerStrides, innerCount, outerStrides, outerCount);
+
+                int axis = first - 1;
+                for (; axis >= 0; axis--)
+                {
+                    if (++coords[axis] < shape[axis])
+                    {
+                        for (int op = 0; op < nop; op++)
+                            ptrs[op] = (byte*)ptrs[op] + _state->GetStride(axis, op) * srcSizes[op];
+                        break;
+                    }
+                    coords[axis] = 0;
+                    for (int op = 0; op < nop; op++)
+                        ptrs[op] = (byte*)ptrs[op] - _state->GetStride(axis, op) * (shape[axis] - 1) * srcSizes[op];
+                }
+                if (axis < 0)
+                    break;
+            }
+            return;
         }
 
         /// <summary>Convenience: 1-input + 1-output (unary).</summary>

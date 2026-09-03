@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Threading.Tasks;
+using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 using NumSharp.Utilities;
 
@@ -1248,6 +1249,44 @@ namespace NumSharp
 
                     if (isSubshaped)
                         retShape = Arrays.Concat(indicesImpliedShape, subShape);
+                }
+            }
+
+            // Kernel route — ONE index array over a C-contiguous source (a[idx], m[ridx], a[idx2d]):
+            // the take kernels gather straight from the index buffer at its own width (int32 or
+            // int64, offset honoured), one typed MOV (or one slab cpblk) per index, no offset
+            // delegate, no materialised offset array, no second pass — NumPy's mapiter_trivial_get
+            // shape, ~3-4x the route below at 100K (docs/NDITER_PERF_DISCOVERY.md §7 lever 1). The
+            // general route stays for everything else: several index arrays, a non-contiguous
+            // source, a strided / reversed / narrow-dtype index view, a caller-supplied @out, or a
+            // zero-byte slab (an empty trailing axis — nothing to gather, shape only).
+            if (ndsCount == 1 && @out is null && source.Shape.IsContiguous && DirectILKernelGenerator.Enabled
+                && FancyIndexKernels.TryGetIndexPointer(indices[0], out void* kernelIdxPtr, out bool kernelIdx32))
+            {
+                long slabElements = 1;
+                if (isSubshaped)
+                    for (int i = 0; i < subShape.Length; i++)
+                        slabElements *= subShape[i];
+                long slabBytes = slabElements * InfoOf<T>.Size;
+                long indexCount = indices[0].size;
+                long axisLength = srcShape.dimensions[0];
+                if (slabBytes > 0)
+                {
+                    // Allocated at the FINAL retShape (fresh, C-contiguous, owned — flags.owndata=True
+                    // like NumPy's fancy result); the kernel fills it flat.
+                    var gathered = new NDArray<T>(retShape, false);
+                    byte* srcBase = (byte*)source.Storage.Address + srcShape.offset * InfoOf<T>.Size;
+                    long fail = FancyIndexKernels.Gather(srcBase, kernelIdxPtr, kernelIdx32, indexCount, axisLength, slabBytes, (byte*)gathered.Address);
+                    if (fail == -1)
+                        return gathered;
+                    if (fail >= 0)
+                    {
+                        // Same NumPy-verbatim text the general route raises (the single index array is
+                        // axis 0); the partially filled result is a scope-reclaimed temp.
+                        long badIndex = FancyIndexKernels.ReadIndex(kernelIdxPtr, kernelIdx32, fail);
+                        throw new IndexError($"index {badIndex} is out of bounds for axis 0 with size {axisLength}");
+                    }
+                    // -2: the IL kernels are unavailable on this host — fall through to the general route.
                 }
             }
 

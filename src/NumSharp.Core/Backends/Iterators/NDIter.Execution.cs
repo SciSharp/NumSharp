@@ -1,6 +1,8 @@
 using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 using NumSharp.Backends.Kernels;
 
 // =============================================================================
@@ -250,6 +252,89 @@ namespace NumSharp.Backends.Iteration
 
             void** adjusted = stackalloc void*[nop];
             long i = 0;
+
+            // Contiguous mask bytes (the ufunc where= case): locate each run boundary with a
+            // vector compare over 16/32 mask bytes at a time instead of one byte per iteration.
+            // The byte scan was the whole cost of a sparse or long-run mask — an all-false 100K
+            // mask took 31.7 µs against NumPy's 5.3 (npy_memchr / a word-at-a-time skip), and a
+            // half-true one 34.2 vs 22.7 — while short runs (length ≤ 8) were already ahead, being
+            // kernel-call-bound (docs/NDITER_PERF_DISCOVERY.md §7 lever 3).
+            if (maskStride == 1 && Vector256.IsHardwareAccelerated)
+            {
+                // One movemask per 32-byte block; every run inside the block is then walked with
+                // two trailing-zero counts on the bit pattern — no per-run vector probe, so a
+                // run-length-1 (alternating) mask costs the same as the byte loop it replaces,
+                // and a block that is all-false or all-true is one compare. A run that reaches
+                // the block end continues through SkipMaskTrue (which resumes vector scanning).
+                while (i + 32 <= count)
+                {
+                    uint bits = ~Vector256.Equals(Vector256.Load(mask + i), Vector256<byte>.Zero).ExtractMostSignificantBits();
+                    if (bits == 0)
+                    {
+                        i += 32;
+                        continue;
+                    }
+                    long blockBase = i;
+                    bool crossed = false;
+                    while (bits != 0)
+                    {
+                        int s = BitOperations.TrailingZeroCount(bits);
+                        int e = BitOperations.TrailingZeroCount(~(bits >> s));   // run length inside the block (32 - s at most)
+                        long start = blockBase + s;
+                        long end;
+                        if (s + e >= 32)
+                        {
+                            end = SkipMaskTrue(mask, blockBase + 32, count);        // the run continues past this block
+                            crossed = true;
+                            bits = 0;
+                        }
+                        else
+                        {
+                            end = start + e;
+                            bits &= ~(((1u << e) - 1u) << s);
+                        }
+                        for (int op = 0; op < nop; op++)
+                            adjusted[op] = (byte*)dataptrs[op] + start * strides[op];
+                        kernel(adjusted, strides, end - start, auxdata);
+                        if (crossed)
+                            i = end;
+                    }
+                    if (!crossed)
+                        i = blockBase + 32;
+                }
+                while (i < count)
+                {
+                    while (i < count && mask[i] == 0)
+                        i++;
+                    long start = i;
+                    while (i < count && mask[i] != 0)
+                        i++;
+                    if (i > start)
+                    {
+                        for (int op = 0; op < nop; op++)
+                            adjusted[op] = (byte*)dataptrs[op] + start * strides[op];
+                        kernel(adjusted, strides, i - start, auxdata);
+                    }
+                }
+                return;
+            }
+
+            if (maskStride == 1)
+            {
+                while (i < count)
+                {
+                    i = SkipMaskFalse(mask, i, count);
+                    if (i >= count)
+                        break;
+                    long start = i;
+                    i = SkipMaskTrue(mask, i, count);
+                    for (int op = 0; op < nop; op++)
+                        adjusted[op] = (byte*)dataptrs[op] + start * strides[op];
+                    kernel(adjusted, strides, i - start, auxdata);
+                }
+                return;
+            }
+
             while (i < count)
             {
                 while (i < count && mask[i * maskStride] == 0)
@@ -264,6 +349,71 @@ namespace NumSharp.Backends.Iteration
                     kernel(adjusted, strides, i - start, auxdata);
                 }
             }
+        }
+
+        /// <summary>
+        /// First position at or after <paramref name="i"/> whose mask byte is non-zero, or
+        /// <paramref name="count"/>. Vector blocks are tested with one compare + movemask; the
+        /// first block holding a set lane is resolved with a trailing-zero count.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static long SkipMaskFalse(byte* mask, long i, long count)
+        {
+            if (Vector256.IsHardwareAccelerated)
+            {
+                while (i + 32 <= count)
+                {
+                    uint nonZero = ~Vector256.Equals(Vector256.Load(mask + i), Vector256<byte>.Zero).ExtractMostSignificantBits();
+                    if (nonZero != 0)
+                        return i + BitOperations.TrailingZeroCount(nonZero);
+                    i += 32;
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated)
+            {
+                while (i + 16 <= count)
+                {
+                    uint nonZero = ~Vector128.Equals(Vector128.Load(mask + i), Vector128<byte>.Zero).ExtractMostSignificantBits() & 0xFFFFu;
+                    if (nonZero != 0)
+                        return i + BitOperations.TrailingZeroCount(nonZero);
+                    i += 16;
+                }
+            }
+            while (i < count && mask[i] == 0)
+                i++;
+            return i;
+        }
+
+        /// <summary>
+        /// First position at or after <paramref name="i"/> whose mask byte is zero, or
+        /// <paramref name="count"/> — the end of the current mask-true run.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static long SkipMaskTrue(byte* mask, long i, long count)
+        {
+            if (Vector256.IsHardwareAccelerated)
+            {
+                while (i + 32 <= count)
+                {
+                    uint zero = Vector256.Equals(Vector256.Load(mask + i), Vector256<byte>.Zero).ExtractMostSignificantBits();
+                    if (zero != 0)
+                        return i + BitOperations.TrailingZeroCount(zero);
+                    i += 32;
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated)
+            {
+                while (i + 16 <= count)
+                {
+                    uint zero = Vector128.Equals(Vector128.Load(mask + i), Vector128<byte>.Zero).ExtractMostSignificantBits();
+                    if (zero != 0)
+                        return i + BitOperations.TrailingZeroCount(zero);
+                    i += 16;
+                }
+            }
+            while (i < count && mask[i] != 0)
+                i++;
+            return i;
         }
 
         /// <summary>

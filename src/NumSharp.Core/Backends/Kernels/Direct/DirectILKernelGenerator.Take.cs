@@ -76,22 +76,32 @@ namespace NumSharp.Backends.Kernels
         /// Returns <c>null</c> only when <see cref="Enabled"/> is false.
         /// </summary>
         public static TakeKernel GetTakeKernel(int copyKind, bool prefetch)
+            => GetTakeKernel(copyKind, prefetch, idx32: false);
+
+        /// <summary>
+        /// As <see cref="GetTakeKernel(int, bool)"/>, with the index width selectable:
+        /// <paramref name="idx32"/> generates a kernel that reads the <c>indices</c> argument as
+        /// <b>int32</b> values (the pointer is still typed <c>long*</c> by the delegate — the
+        /// caller reinterprets its <c>int*</c>), so an int32 index array is gathered in place
+        /// instead of being widened to a temporary int64 copy first.
+        /// </summary>
+        public static TakeKernel GetTakeKernel(int copyKind, bool prefetch, bool idx32)
         {
             if (!Enabled)
                 return null;
 
-            int key = (copyKind << 1) | (prefetch ? 1 : 0);
+            int key = (copyKind << 2) | (idx32 ? 2 : 0) | (prefetch ? 1 : 0);
             if (_takeKernels.TryGetValue(key, out var cached))
                 return cached;
 
             try
             {
-                var k = GenerateTakeKernelIL(copyKind, prefetch);
+                var k = GenerateTakeKernelIL(copyKind, prefetch, idx32);
                 return _takeKernels.GetOrAdd(key, k);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetTakeKernel({copyKind},{prefetch}): {ex.GetType().Name}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetTakeKernel({copyKind},{prefetch},{idx32}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -166,10 +176,13 @@ namespace NumSharp.Backends.Kernels
         /// }
         /// </code>
         /// </summary>
-        private static TakeKernel GenerateTakeKernelIL(int copyKind, bool prefetch)
+        private static TakeKernel GenerateTakeKernelIL(int copyKind, bool prefetch, bool idx32 = false)
         {
+            // Index element width: the `indices` argument is read as int32 (sign-extended) or int64.
+            long idxWidth = idx32 ? 4L : 8L;
+
             var dm = new DynamicMethod(
-                name: $"IL_Take_c{copyKind}_{(prefetch ? "pf" : "np")}",
+                name: $"IL_Take_c{copyKind}_i{idxWidth}_{(prefetch ? "pf" : "np")}",
                 returnType: typeof(long),
                 parameterTypes: new[]
                 {
@@ -252,11 +265,12 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Ldloc, locJ);
                 il.Emit(OpCodes.Ldc_I8, PrefetchDistance);
                 il.Emit(OpCodes.Add);
-                il.Emit(OpCodes.Ldc_I8, 8L);
+                il.Emit(OpCodes.Ldc_I8, idxWidth);
                 il.Emit(OpCodes.Mul);
                 il.Emit(OpCodes.Conv_I);
                 il.Emit(OpCodes.Add);
-                il.Emit(OpCodes.Ldind_I8);           // indices[j + DIST]
+                if (idx32) { il.Emit(OpCodes.Ldind_I4); il.Emit(OpCodes.Conv_I8); }
+                else il.Emit(OpCodes.Ldind_I8);      // indices[j + DIST]
                 il.Emit(OpCodes.Add);                // outer*maxItem + idxFuture
                 il.Emit(OpCodes.Ldarg, 5);           // innerSize
                 il.Emit(OpCodes.Mul);
@@ -269,11 +283,12 @@ namespace NumSharp.Backends.Kernels
             // idx = indices[j]
             il.Emit(OpCodes.Ldarg_1);
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Ldc_I8, idxWidth);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_I8);
+            if (idx32) { il.Emit(OpCodes.Ldind_I4); il.Emit(OpCodes.Conv_I8); }
+            else il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Stloc, locIdx);
 
             // ----- Mode dispatch -----

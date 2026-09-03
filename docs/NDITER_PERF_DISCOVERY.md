@@ -180,6 +180,19 @@ Every one of these was a wrong number first.
    same binary from stream placement alone — believe only effects well outside that band there, and
    take the min of at least two rounds per side.
 
+12. **`/` on an integer NDArray is NumPy true division — build masks with `np.floor_divide`.** The
+   first `where=` numbers in §7 compared different masks on the two sides: the C# probe built its
+   "64-element blocks" as `(np.arange(n) / 64 % 2) == 0`, which is float division and yields ONE true
+   element every 128 (a sparse, run-length-1 mask), while the NumPy twin used `//` and had real
+   64-runs. `angles_probe.cs` and `fancy_where_probe.cs` now use `np.floor_divide`; a mask whose
+   NumSharp and NumPy timings disagree in SHAPE (not just scale) is the tell.
+
+13. **Never A/B the live tree.** A `dotnet run` bench compiles the tree AS IT IS when the run starts;
+   editing a source file while a chain of "post" runs is in flight hands later runs a half-edited
+   tree (one run built with a compile error and reported partial rows). Both sides of an A/B belong
+   in detached worktrees (`git worktree add --detach <scratch>/pre <sha>`), never in the checkout
+   being edited.
+
 ---
 
 ## 4. The probes
@@ -306,6 +319,89 @@ fields per operand per axis, about 15 ns per chunk with three operands.
 `astype@1` is the one cell still behind: it is the fresh-result allocation (section 7, angle 5),
 not the cast.
 
+### 6.6 Tier 1 remeasured and closed (2026-09-03, `fancy_where_probe.cs` + `numpy_twins.py fancy_where`)
+
+Everything below is pinned to one P-core (trap 11), min-of-rounds, µs unless marked; "before" is
+commit `ccadeef4` built in a detached worktree (trap 13), "NumPy" is 2.4.2 on the same core. The
+masks are real runs (trap 12).
+
+**Lever 1 — the fancy-index operator on the take/put kernels** (`Selection/FancyIndexKernels.cs`,
+`DirectILKernelGenerator.GatherFlat.cs`):
+
+| 100K float64, 100K random indices | before | after | NumPy | NPY/NS before → after |
+|------------------------------------|-------:|------:|------:|----------------------:|
+| `a[idx32]`                         | 248.9 | 40.4 | 201.0 | 0.81 → **4.97** |
+| `a[idx64]`                         | 253.4 | 45.3 | 56.9 | 0.22 → **1.26** |
+| `np.take(a, idx32)`                | 101.6 | 38.6 | 366.3 | 3.60 → **9.49** |
+| `np.take(a, idx64)`                | 74.8 | 44.3 | 104.9 | 1.40 → **2.37** |
+| `a[idx32] = v`                     | 290.5 | 86.6 | 189.9 | 0.65 → **2.19** |
+| `a[idx64] = v`                     | 294.7 | 97.4 | 109.8 | 0.37 → **1.13** |
+| `a[idx64] = scalar`                | 284.0 | 91.7 | 105.7 | 0.37 → **1.15** |
+| `m[ridx]` (12500 rows of 8)        | 63.3 | 33.0 | 88.5 | 1.40 → **2.68** |
+| `m[ridx] = v`                      | 53.5 | 28.2 | 91.2 | 1.71 → **3.23** |
+| `m[ridx] = row`                    | 80.1 | 26.7 | 167.9 | 2.10 → **6.29** |
+| 10M `a[idx64]` (ms)                | 131.2 | 83.1 | 172.3 | 1.31 → **2.07** |
+| 10M `a[idx64] = v` (ms)            | 113.9 | 82.7 | 85.5 | 0.75 → **1.03** |
+| 10M `m[ridx] = row` (ms)           | 39.5 | 10.2 | 12.9 | 0.33 → **1.27** |
+| 1K `a[idx64]`                      | 2.9 | 0.8 | 0.7 | 0.23 → 0.88 |
+
+NumPy's `a[idx64]` is its `mapiter_trivial` loop (57 µs at 100K — load, check-and-adjust, one
+typed MOV); the old general take kernel sat at 75 µs (three runtime-size multiplies and a
+per-element mode dispatch), which is why the flat gather (compile-time width, running cursors,
+one unsigned bounds compare) had to exist to beat it. `a[idx32]` is where NumPy is slow (a non-intp
+index takes its general MapIter path) and where the C# case usually lands, since
+`np.array(new int[]{…})` is int32: the kernels read int32 indices in place instead of widening
+them, which is also the 27 % `np.take(a, idx32)` shed. The 1K cells sit at the fresh-NDArray floor
+(angle 4). The fancy SETTER pre-validates every index with a `Vector<T>` bounds scan before its
+first store — NumPy's `mapiter_trivial_set` does exactly that ("Check the indices beforehand"), so
+a bad index leaves the array untouched on both sides.
+
+**Lever 3 — SIMD run detection in the `where=` masked driver** (`NDIter.Execution.cs`,
+`InvokeInner`): one movemask per 32 mask bytes, the runs inside a block walked with two
+trailing-zero counts, so a run-length-1 mask costs what the byte loop cost.
+
+| `np.add(a, b, out=o, where=m)`, 100K f64 | before | after | NumPy | NPY/NS |
+|------------------------------------------|-------:|------:|------:|-------:|
+| run length 1 (alternating)               | 236.9 | 243.1 | 273.7 | 1.13 |
+| run length 8                             | 62.3 | 36.7 | 66.7 | 1.82 |
+| run length 64                            | 43.0 | 16.9 | 23.1 | 1.37 |
+| run length 1024                          | 37.8 | 10.7 | 26.3 | 2.46 |
+| one half-array run                       | 34.0 | 8.2 | 22.7 | 2.76 |
+| all true                                 | 55.0 | 26.2 | 50.7 | 1.93 |
+| all false                                | 27.7 | 1.5 | 5.3 | 3.52 |
+
+A first version that probed 32 bytes per run boundary regressed the run-length-1 case to 353 µs
+(0.78×) — the per-boundary vector probe costs more than a byte compare when every run is one
+element; the per-block bit walk is what makes both regimes win.
+
+**Lever 3b — `where=` admitted into the 2-D block kernel** (`DirectILKernelGenerator.InnerLoop2D.Masked.cs`,
+`NDIterRef.Is2DMaskedElementwiseShape` / `TryExecute2DMasked`): the mask rides the block kernel as
+its trailing operand; a byte-per-element mask becomes each vector group's lane mask (pmovzx +
+compare) feeding the same masked load/body/masked store the unmasked kernel uses for its tails, a
+`(rows, 1)` mask gates whole rows, and ops without a vector body get a masked scalar 2-D block.
+
+| 1M f64 as `(rows, w)` column views, µs | before | after | NumPy | NPY/NS before → after |
+|-----------------------------------------|-------:|------:|------:|----------------------:|
+| w=3 `add`, 64-element mask runs         | 3538 | 1409 | 2349 | 0.66 → **1.67** |
+| w=3 `add`, row mask `(rows,1)`          | 2509 | 1109 | 4561 | 1.82 → **4.11** |
+| w=3 `add`, column mask `(1,w)`          | 5166 | 1460 | 5107 | 0.99 → **3.50** |
+| w=3 `sqrt`, 64-element mask runs        | 3350 | 978 | 1258 | 0.38 → **1.29** |
+| w=4 `add`, 64-element mask runs         | 2799 | 1010 | 2192 | 0.78 → **2.17** |
+| w=4 `add`, column mask                  | 3988 | 997 | 10438 | 2.62 → **10.47** |
+| w=4 `sqrt`, 64-element mask runs        | 2492 | 505 | 3151 | 1.26 → **6.24** |
+| w=16 `add`, 64-element mask runs        | 1435 | 918 | 3300 | 2.30 → **3.60** |
+| w=16 `sqrt`, 64-element mask runs       | 881 | 493 | 2926 | 3.32 → **5.93** |
+| w=4 `add`, unmasked (unchanged)         | 843 | 785 | 4413 | 5.6 |
+
+**Lever 4 — the coalescer's reach on copy, cast and reduce** — verified, no action needed: the
+`benchmark/layout` and `benchmark/cast` benches run pinned on the pre-coalescer commit (`fb6e34cd`)
+and on `ccadeef4` give geomeans of **0.997×** (reduce, 864 cells), **1.068×** (elementwise, 672;
+`strided` 1.11×, `bcast` 1.09×), **0.992×** (cast, 832 cells over f64/i32/u8/f16 × 8 layouts). The
+per-cell extremes (0.45×–2.2× both ways) are the documented allocator-regime swing, not the
+coalescer: the largest ones are C-layout cast cells, which a 1-D contiguous cast cannot route
+differently. The copy / identity-ufunc bench (`copy_path_bench`, 464 cells) reads **1.031×**
+(strided 1.05×, sliced 1.05×, bcast 1.01×).
+
 ---
 
 ## 7. Where the next wins are
@@ -317,8 +413,9 @@ are ranked by expected payoff; none needs threads. One candidate was checked and
 interleaved, repeated form (section 3, trap 9) shows no effect at 1M or 4M. Do not build a
 pool-stagger on that number.
 
-1. **Route the fancy-index operator to the take/put kernels.** `a[idx]` and `a[idx] = v` walk the
-   older MapIter-style path; `np.take`/`np.put` have prefetching typed-MOV kernels.
+1. **Route the fancy-index operator to the take/put kernels — LANDED (2026-09-03, §6.6).** `a[idx]`
+   and `a[idx] = v` walked the older MapIter-style path (an offset delegate per element, a
+   materialised offset array, a second pass); `np.take`/`np.put` had prefetching typed-MOV kernels.
 
    | 100K float64, 100K random int32 indices | NumSharp | NumPy |
    |-----------------------------------------|---------:|------:|
@@ -327,8 +424,11 @@ pool-stagger on that number.
    | `a[idx] = v`                            |   294 µs | 193 µs |
    | `np.put(a, idx, v)`                     |  82.7 µs | 205 µs |
 
-   Dispatching the 1-D integer-index-on-axis-0 case of the indexer to those kernels is
-   2.5–3.5× and turns the sheet's largest remaining family loss (0.61× geomean) into ~1.7–2.3×.
+   The single-index-array case of both indexers (any source rank: a flat gather, or whole trailing
+   sub-arrays per index) now runs the kernels — plus a lean FLAT gather/scatter variant with a
+   compile-time element width and int32-in-place index reads, which the general take kernel needed
+   to beat NumPy's trivial path. Measured 5.6–7× on the get, 3–3.4× on the set, 1.3–5× vs NumPy
+   (§6.6, lever 1). The remaining `fancy` sheet loss is the 1K allocation floor (angle 4).
 
 2. **A 2-D kernel contract for narrow rows — LANDED (2026-09-03).** Per row the per-chunk route
    pays the driver (~4.5 ns odometer + dispatch) AND the kernel's own prologue (snapshot ptrs,
@@ -397,8 +497,9 @@ pool-stagger on that number.
    fabricates a malformed (size-N buffer, addressing-beyond-N strides) output that crashes any
    kernel that honors it — a pre-existing footgun, unrelated to this lever.
 
-3. **SIMD run detection in the `where=` masked driver.** `InvokeInner` finds mask-true runs one
-   byte at a time. Short runs are already ahead of NumPy; long runs lose to the scan:
+3. **SIMD run detection in the `where=` masked driver — LANDED (2026-09-03, §6.6).** `InvokeInner`
+   found mask-true runs one byte at a time. Short runs were already ahead of NumPy; long runs lost
+   to the scan:
 
    | `np.add(a, b, out=o, where=m)`, 100K | NumSharp | NumPy |
    |--------------------------------------|---------:|------:|
@@ -407,8 +508,11 @@ pool-stagger on that number.
    | one half-array run                   |  34.4 µs | 21.9 µs |
    | unmasked                             |  23.3 µs | 23.2 µs |
 
-   A `Vector256` compare over 32 mask bytes at a time to locate the next transition brings the
-   long-run cases to parity.
+   (The "64-element blocks" row above was a SPARSE mask on the NumSharp side — trap 12; the true
+   before/after is in §6.6.) The driver now takes one movemask per 32-byte block and walks the runs
+   inside it by bit arithmetic: every run regime is 1.1–3.9× NumPy. The same session admitted
+   `where=` into the 2-D block kernel (§6.6, lever 3b), which is where the masked route's real
+   loss sat — narrow strided rows at 0.4–0.9× NumPy, now 1.3–10×.
 
 4. **The fresh-NDArray floor.** `np.empty(1000)` costs 216 ns and `np.empty(1)` 211 ns against
    NumPy's 183 / 161; `new Shape(1000)` is 5.5 ns of that, so the cost is the storage object,

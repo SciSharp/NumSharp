@@ -77,8 +77,8 @@ namespace NumSharp
 
         private static unsafe void PutImpl(NDArray a, NDArray indices, NDArray values, int mode)
         {
-            // Cast indices to contig int64; cast values to contig a.dtype.
-            var idx64 = CastIndicesToInt64(indices, "safe", out bool ownIdx);
+            // Cast indices to contig int64 (a contig int32 array is read in place); cast values to contig a.dtype.
+            var idx64 = CastIndicesToInt64(indices, "safe", out bool ownIdx, out bool idx32);
 
             NDArray valsCast;
             bool ownVals;
@@ -102,21 +102,35 @@ namespace NumSharp
             try
             {
                 int copyKind = DirectILKernelGenerator.CopyKindFor(a.dtypesize);
-                var kernel = DirectILKernelGenerator.GetPutKernel(copyKind);
-                if (kernel == null)
-                    throw new NotSupportedException("np.put: IL kernel unavailable");
 
                 byte* dstPtr = (byte*)a.Storage.Address + a.Shape.offset * a.dtypesize;
-                long* idxPtr = (long*)idx64.Storage.Address + idx64.Shape.offset;
+                // idx32: the index buffer holds int32 values; the kernels' `long*` parameter is a reinterpret.
+                long* idxPtr = idx32
+                    ? (long*)((int*)idx64.Storage.Address + idx64.Shape.offset)
+                    : (long*)idx64.Storage.Address + idx64.Shape.offset;
                 byte* valsPtr = (byte*)valsCast.Storage.Address + valsCast.Shape.offset * valsCast.dtypesize;
 
-                long status = kernel(dstPtr, idxPtr, indices.size,
-                                      valsPtr, valsCast.size,
-                                      a.size, a.dtypesize, mode);
+                long status;
+                // The lean flat scatter (DirectILKernelGenerator.GatherFlat.cs) serves RAISE mode with a
+                // compile-time element width; wrap/clip keep the general kernel.
+                var flat = mode == 0 ? DirectILKernelGenerator.GetPutFlatKernel(copyKind, idx32) : null;
+                if (flat != null)
+                {
+                    status = flat(dstPtr, idxPtr, indices.size, valsPtr, valsCast.size, a.size);
+                }
+                else
+                {
+                    var kernel = DirectILKernelGenerator.GetPutKernel(copyKind, idx32);
+                    if (kernel == null)
+                        throw new NotSupportedException("np.put: IL kernel unavailable");
+                    status = kernel(dstPtr, idxPtr, indices.size,
+                                    valsPtr, valsCast.size,
+                                    a.size, a.dtypesize, mode);
+                }
                 if (status < indices.size)
                 {
                     long badI = status;
-                    long badVal = idxPtr[badI];
+                    long badVal = idx32 ? ((int*)idxPtr)[badI] : idxPtr[badI];
                     throw new IndexOutOfRangeException(
                         $"index {badVal} is out of bounds for axis 0 with size {a.size}");
                 }

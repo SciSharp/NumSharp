@@ -69,7 +69,7 @@ unsafe
         int n = 100_000;
         var a = (np.arange(n).astype(np.float64) % 97.0) + 1.0; var b = (np.arange(n).astype(np.float64) % 31.0) + 2.0; var o = np.empty(new Shape(n), np.float64);
         NDArray alt = (np.arange(n) % 2) == 0;              // run length 1
-        NDArray blocks = (np.arange(n) / 64 % 2) == 0;      // run length 64
+        NDArray blocks = (np.floor_divide(np.arange(n), 64) % 2) == 0;   // run length 64 (integer division: `/` on an int array is NumPy true division)
         NDArray half = np.arange(n) < n / 2;                // one run
         Console.WriteLine($"where=alternating {BestNs(() => np.add(a, b, o, where: alt)) / 1e3:F1}  where=64-blocks {BestNs(() => np.add(a, b, o, where: blocks)) / 1e3:F1}  where=half {BestNs(() => np.add(a, b, o, where: half)) / 1e3:F1}  unmasked {BestNs(() => np.add(a, b, o)) / 1e3:F1}");
     }

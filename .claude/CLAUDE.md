@@ -1342,8 +1342,49 @@ reads 2–3× slower uniformly and swings run to run (the first-generation absol
 reproduce) — `narrow_probe.cs`/`numpy_twins.py` honour `NS_PROBE_AFFINITY`; 100K strided-stream cells move
 ±20 % with the same binary from placement alone. Still open: copy-class ops at w=2/3 gain only 1.1–1.3×
 from the masked path (a half-vector store would add ~1.3× — a per-width specialization, not done);
-`where=` masked and buffered-cast routes are untouched; a strided-inner row that does not coalesce stays
+buffered-cast routes are untouched; a strided-inner row that does not coalesce stays
 on the per-chunk gather path.
+
+**Tier 1 of the discovery document's next-wins list, remeasured and closed (2026-09-03, second
+pass; `docs/NDITER_PERF_DISCOVERY.md` §6.6, probe `benchmark/nditer/probes/fancy_where_probe.cs` +
+`numpy_twins.py fancy_where`).** Three levers landed, one verified: (1) **the fancy-index operator
+runs the take/put kernels** — `a[idx]`, `a[idx] = v`, `m[ridx]`, `m[ridx] = row` (ONE integer index
+array over a C-contiguous source of any rank; the old route kept an offset delegate per element, a
+materialised offset array and a second pass) go through `Selection/FancyIndexKernels.cs`: a lean
+FLAT gather/scatter (`DirectILKernelGenerator.GatherFlat.cs` — compile-time element width, running
+cursors, NumPy's `check_and_adjust_index` as one add + one UNSIGNED compare) for primitive-width
+slabs, the general take/put kernels (`cpblk`) for whole-sub-array slabs, and int32 indices read IN
+PLACE (`idx32` kernel variants — `np.array(new int[]{…})` is int32, and `np.take`/`np.put` gained the
+same in-place read, shedding the 27 % widening copy). The setter pre-validates every index with a
+`Vector<T>` bounds scan BEFORE its first store, exactly as NumPy's `mapiter_trivial_set` does, so a
+bad index leaves the array untouched; the verbatim IndexError, the two value-broadcast ValueError
+texts, last-write-wins on duplicates, view offsets on source AND index array (a contiguous slice
+re-seats `Storage.Address` and keeps `Shape.offset` 0, a strided one keeps the base address and a
+non-zero offset — `Storage.Address + Shape.offset × itemsize` is right for both) are pinned by
+`Indexing.KernelRoute.Tests`. Pinned NPY/NS at
+100K f64: `a[idx32]` 0.81 → **4.97**, `a[idx64]` 0.22 → **1.26** (NumPy's trivial path beaten),
+`a[idx64] = v` 0.37 → **1.13**, `m[ridx] = row` 2.1 → **6.3** (10M: 0.33 → 1.27), `np.take(a, idx32)`
+3.6 → **9.5**. (2) **The `where=` masked driver scans mask runs with SIMD** (`NDIter.Execution.cs`
+`InvokeInner`): one movemask per 32-byte block, the runs inside walked by trailing-zero counts (a
+per-boundary vector probe was tried first and regressed run-length-1 masks 0.78× — the per-block bit
+walk keeps both regimes): all-false 27.7 → 1.5 µs, half 34 → 8.2, 64-runs 43 → 16.9, run-length-1
+unchanged; every regime 1.1–3.9× NumPy. (3) **`where=` admitted into the 2-D block kernel**
+(`DirectILKernelGenerator.InnerLoop2D.Masked.cs`, `NDIterRef.Is2DMaskedElementwiseShape`/
+`TryExecute2DMasked`, wired into BOTH `ExecuteElementWise` overloads — the ufunc routes arrive with a
+PACKED key, which the first wiring missed): the mask rides as the trailing operand; a byte-per-element
+mask becomes each vector group's lane mask (pmovzx + compare) feeding the tails' masked
+load/body/store, a `(rows,1)` mask gates rows, ops without a vector body get a masked scalar block;
+the tail word is assembled from exactly `tail` bytes so the mask array is never over-read. Narrow-row
+masked cells 0.4–0.9× → **1.3–10.5×** NumPy (w=4 `sqrt` 2492 → 505 µs), gated by an 8,358-check
+self-consistency probe (0 mismatches) + `out_where.jsonl`. (4) **The coalescer's reach on copy/cast/
+reduce verified** — pinned A/B of the `benchmark/layout` + `benchmark/cast` benches, pre-coalescer
+commit vs `ccadeef4`: reduce 0.997×, elementwise 1.068× (strided 1.11×), cast 0.992× — no regression,
+per-cell swings are the allocator-regime noise. **Two measurement traps found on the way** (discovery
+doc §3, traps 12–13): `/` on an integer NDArray is TRUE division, so `(ar / 64 % 2) == 0` is a sparse
+mask, not 64-runs — the first where= numbers compared different masks on the two sides (build masks
+with `np.floor_divide`); and never A/B the live tree — a chain of `dotnet run` benches compiles the
+tree as it is when each run starts, so editing during the chain hands later runs a half-edited tree
+(both sides belong in detached worktrees).
 
 **Do NOT try to fix `it[0]` by re-seating a cached view** — measured, and it is a silent-wrong-answer
 trap. `UnmanagedStorage` keeps **three** synchronized address caches: the public `byte* Address`, the

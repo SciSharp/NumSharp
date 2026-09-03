@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Threading.Tasks;
+using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 using NumSharp.Utilities;
 
@@ -739,6 +740,28 @@ namespace NumSharp
                 }
             }
 
+            // Kernel route — ONE index array into a C-contiguous destination (a[idx] = v, m[ridx] = v,
+            // m[ridx] = row): validate every index first (NumPy's mapiter_trivial_set does exactly that
+            // before its first store, so a bad index leaves the array untouched), then let the put
+            // kernels scatter straight from the index buffer at its own width — one typed MOV (or one
+            // slab cpblk) per index, a wrapping values cursor for a scalar / single-sub-array value
+            // instead of a materialised broadcast copy (docs/NDITER_PERF_DISCOVERY.md §7 lever 1).
+            // Everything else keeps the general route below: several index arrays, a non-contiguous
+            // destination, a strided / reversed / narrow-dtype index view, a zero-byte slab.
+            if (ndsCount == 1 && source.Shape.IsContiguous && DirectILKernelGenerator.Enabled
+                && FancyIndexKernels.TryGetIndexPointer(indices[0], out void* kernelIdxPtr, out bool kernelIdx32))
+            {
+                long slabElements = 1;
+                if (isSubshaped)
+                    for (int i = 0; i < subShape.Length; i++)
+                        slabElements *= subShape[i];
+                long slabBytes = slabElements * InfoOf<T>.Size;
+                if (slabBytes > 0 && TryScatterKernel(source, srcShape, kernelIdxPtr, kernelIdx32, indices[0].size,
+                        srcShape.dimensions[0], slabBytes, retShape, subShape, isSubshaped, values))
+                    return;
+                // false: the IL kernels are unavailable on this host — general route.
+            }
+
             //when -----------------------------------------
             //indices point to an ndarray
             //TODO: if (isSubshaped && !source.Shape.IsContiguous)
@@ -872,7 +895,69 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Accepts collapsed 
+        ///     The kernel scatter behind <see cref="SetIndices{T}"/>'s single-index-array route: a SIMD
+        ///     bounds scan over the whole index array FIRST (so an out-of-range index raises before any
+        ///     element is written — NumPy's <c>mapiter_trivial_set</c> "check the indices beforehand"),
+        ///     then the put kernel with a wrapping values cursor. The value resolves without a copy
+        ///     when it is a scalar (a 1-D destination), exactly the selection shape, or exactly one
+        ///     trailing sub-array (<c>m[ridx] = row</c>); any other broadcastable value is materialised
+        ///     to the selection shape as the general route does, with the same two NumPy error texts.
+        ///     Returns false — having written nothing — only when the IL kernels are unavailable.
+        /// </summary>
+        private static unsafe bool TryScatterKernel<T>(
+            NDArray<T> source, Shape srcShape, void* idxPtr, bool idx32, long indexCount, long axisLength,
+            long slabBytes, long[] retShape, long[] subShape, bool isSubshaped, NDArray values) where T : unmanaged
+        {
+            long bad = FancyIndexKernels.FirstOutOfRange(idxPtr, idx32, indexCount, axisLength);
+            if (bad >= 0)
+                throw new IndexError($"index {FancyIndexKernels.ReadIndex(idxPtr, idx32, bad)} is out of bounds for axis 0 with size {axisLength}");
+
+            string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+            var typed = values.AsOrMakeGeneric<T>();
+            long valuesCount;
+            if (!isSubshaped && typed.size == 1)
+            {
+                valuesCount = 1;                                   // scalar fill: the values cursor never moves
+            }
+            else if (typed.Shape.IsContiguous && typed.Shape.dimensions.SequenceEqual(retShape))
+            {
+                valuesCount = indexCount;                          // exactly the selection: a straight copy
+            }
+            else if (isSubshaped && typed.Shape.IsContiguous && typed.Shape.dimensions.SequenceEqual(subShape))
+            {
+                valuesCount = 1;                                   // one sub-array for every selected row
+            }
+            else
+            {
+                // The value must BROADCAST to the indexing-result shape; materialise it C-contiguous at
+                // exactly retShape (the same ValueError texts as the general route, per branch).
+                try
+                {
+                    typed = np.broadcast_to(typed, (Shape)retShape).copy().MakeGeneric<T>();
+                }
+                catch (IncorrectShapeException)
+                {
+                    if (isSubshaped)
+                        throw new ValueError(
+                            $"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
+                            $"could not be broadcast to indexing result of shape {Tup(retShape)}");
+                    throw new ValueError($"could not broadcast input array from shape {Tup(values.Shape.dimensions)} into shape {Tup(retShape)}");
+                }
+                valuesCount = indexCount;
+            }
+
+            byte* dstBase = (byte*)source.Storage.Address + srcShape.offset * InfoOf<T>.Size;
+            byte* valuesPtr = (byte*)typed.Storage.Address + typed.Shape.offset * InfoOf<T>.Size;
+            long status = FancyIndexKernels.Scatter(dstBase, idxPtr, idx32, indexCount, valuesPtr, valuesCount, axisLength, slabBytes);
+            if (status == -2)
+                return false;
+            if (status >= 0)   // unreachable after the scan above; a hard stop rather than a silent partial write
+                throw new IndexError($"index {FancyIndexKernels.ReadIndex(idxPtr, idx32, status)} is out of bounds for axis 0 with size {axisLength}");
+            return true;
+        }
+
+        /// <summary>
+        ///     Accepts collapsed
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="dst"></param>
