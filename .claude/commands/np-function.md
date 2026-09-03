@@ -41,7 +41,7 @@ NumPy is the source of truth and if NumPy does A, we do A but in NumSharp's C# w
 These cli functions allow rapid development and experimentation.
 Specifying '#:project' and other '#' with paths must be absolute path.
 
-> **Large or quote-dense scripts:** do NOT inline them in a `<<'EOF'` heredoc — an oversized single-command heredoc can corrupt in transport and fail with `unexpected EOF while looking for matching '`. Write the script to a file (`probe.cs` / `probe.py`) and redirect it in: `dotnet run -c Release - < probe.cs` or `python probe.py`. Short snippets can stay inline. (Timing/benchmark scripts are file-based anyway — the `benchmark` skill mandates `dotnet run -c Release - < script.cs` with a fresh filename per rebuild.)
+> **Large or quote-dense scripts:** do NOT inline them in a `<<'EOF'` heredoc — the Bash tool wraps every command in `eval '…'` and re-escapes each `'`, so a quote-dense heredoc stops balancing at scale and fails with `unexpected EOF while looking for matching '`. Write the script to a file in the session scratchpad directory (the path given in the system prompt — never the repo cwd, never `/tmp`; a bare `probe.cs` lands in the repo tree) and redirect it in: `dotnet run -c Release - < <scratchpad>/probe.cs` or `python <scratchpad>/probe.py`. Short snippets can stay inline. (Timing/benchmark scripts are file-based anyway — the `benchmark` skill mandates `dotnet run -c Release - < script.cs` with a fresh filename per rebuild.)
 
 ### Benchmarking
 Use "dotnet run <<'EOFDOTNET'" and "python <<'EOFPYTHON'" to produce professional benchmarks.
