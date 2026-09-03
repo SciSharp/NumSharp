@@ -356,6 +356,31 @@ them, which is also the 27 % `np.take(a, idx32)` shed. The 1K cells sit at the f
 first store — NumPy's `mapiter_trivial_set` does exactly that ("Check the indices beforehand"), so
 a bad index leaves the array untouched on both sides.
 
+**Why the kernels read int32 indices in place (measured, `fancy_where_probe.cs` section D).**
+NumSharp indexes with int64 everywhere, and the int32 variants exist only because they were
+measured against the int64-only alternative — widen the index array to a contiguous int64 temp
+(what `NormalizeIndexArray`/`CastIndicesToInt64` did) and run the int64 kernel — and won at every
+size. All index ARITHMETIC stays int64 (the int32 is sign-extended on load; only the load width and
+the cursor step differ), and an int32 index costs the same as a native int64 one:
+
+| pinned, min-of-rounds, µs | int32 in place | widen → int64 kernel | native int64 | widen / in place | int64 / in place |
+|---------------------------|---------------:|---------------------:|-------------:|-----------------:|-----------------:|
+| 1K `a[idx]`               | 0.8 | 1.4 | 0.8 | 1.77 | 1.02 |
+| 1K `np.put`               | 0.4 | 0.9 | 0.4 | 2.46 | 1.00 |
+| 100K `a[idx]`             | 39.0 | 67.1 | 43.8 | 1.72 | 1.12 |
+| 100K `np.take`            | 38.8 | 70.6 | 42.5 | 1.82 | 1.10 |
+| 100K `a[idx] = v`         | 86.5 | 120.8 | 97.6 | 1.40 | 1.13 |
+| 100K `np.put`             | 80.2 | 105.9 | 82.2 | 1.32 | 1.03 |
+| 100K `m[ridx]` (rows)     | 39.5 | 45.0 | 43.4 | 1.14 | 1.10 |
+| 10M `a[idx]` (ms)         | 89.0 | 107.0 | 89.6 | 1.20 | 1.01 |
+| 10M `a[idx] = v` (ms)     | 86.2 | 105.1 | 90.0 | 1.22 | 1.04 |
+| 10M `np.put` (ms)         | 79.0 | 97.8 | 81.1 | 1.24 | 1.03 |
+
+The widening temp is the whole difference: its allocation is the 1K floor, its convert + write is
+the 100K cost, and its extra 12 bytes per index of memory traffic is the 10M cost. The rule this
+encodes: a narrower index width is used ONLY where it removes a copy; it never becomes the type
+anything computes in.
+
 **Lever 3 — SIMD run detection in the `where=` masked driver** (`NDIter.Execution.cs`,
 `InvokeInner`): one movemask per 32 mask bytes, the runs inside a block walked with two
 trailing-zero counts, so a run-length-1 mask costs what the byte loop cost.

@@ -4,7 +4,7 @@
     python benchmark/nditer/probes/numpy_twins.py ab        # twin of ab_ops_probe.cs (id<TAB>ns rows)
     python benchmark/nditer/probes/numpy_twins.py angles    # twin of angles_probe.cs
     python benchmark/nditer/probes/numpy_twins.py narrow [ABCDE]   # twin of narrow_probe.cs (2-D block kernel)
-    python benchmark/nditer/probes/numpy_twins.py fancy_where [ABC] # twin of fancy_where_probe.cs (fancy index, where= runs, masked narrow rows)
+    python benchmark/nditer/probes/numpy_twins.py fancy_where [ABC] # twin of fancy_where_probe.cs (fancy index, where= runs, masked narrow rows; its section D is C#-only)
     python benchmark/nditer/probes/numpy_twins.py join before.tsv after.tsv [numpy.tsv]
 
 Run with OPENBLAS_NUM_THREADS=1 so nothing on the NumPy side fans out, and on a hybrid P/E-core host

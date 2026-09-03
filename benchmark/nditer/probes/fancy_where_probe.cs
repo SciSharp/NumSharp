@@ -8,8 +8,12 @@
 //       int32 AND int64 indices, 1K / 100K / 10M
 //   (B) the where= masked driver across mask run lengths (1, 8, 64, 1024, half, all-true, all-false)
 //   (C) where= over narrow strided rows (w = 3 / 4 / 16; byte mask, row mask, column mask)
+//   (D) the int32-index-in-place kernel variants against the int64-only alternative (widen the index
+//       array to an int64 temp, run the int64 kernel) and against a native int64 index — C# only, no
+//       NumPy twin; the measurement that justifies keeping the idx32 variants (NumSharp indexes with
+//       int64 everywhere; a narrower width is used only where it removes a copy)
 //
-//   NS_PROBE_AFFINITY=0x4 DOTNET_TC_CallCountingDelayMs=0 dotnet run -c Release benchmark/nditer/probes/fancy_where_probe.cs [ABC]
+//   NS_PROBE_AFFINITY=0x4 DOTNET_TC_CallCountingDelayMs=0 dotnet run -c Release benchmark/nditer/probes/fancy_where_probe.cs [ABCD]
 //   NS_PROBE_AFFINITY=0x4 python benchmark/nditer/probes/numpy_twins.py fancy_where [ABC]   # NumPy side, same keys
 //   python benchmark/nditer/probes/numpy_twins.py join before.tsv after.tsv numpy.tsv
 //
@@ -131,5 +135,34 @@ if (sections.Contains('C'))
         Row($"1M|w{w}|add|unmasked", BestUs(() => np.add(sv, sv2, o)));
         Row($"1M|w{w}|sqrt|unmasked", BestUs(() => np.sqrt(sv, o)));
         blocks.Dispose(); rowmask.Dispose(); colmask.Dispose(); back.Dispose(); back2.Dispose(); o.Dispose(); ar.Dispose();
+    }
+}
+
+if (sections.Contains('D'))
+{
+    // int32 index read in place (the idx32 kernels) vs the int64-only design (astype(int64) temp + the
+    // int64 kernel, temp disposed) vs a native int64 index. Keys: <tag>|<dtype>|<op>|idx32-inplace /
+    // idx32-widen / idx64. The variants earn their place only while idx32-widen / idx32-inplace > 1.
+    foreach (int n in new[] { 1_000, 100_000, 10_000_000 })
+    {
+        string tag = n switch { 1_000 => "1K", 100_000 => "100K", _ => "10M" };
+        var a = (np.arange(n).astype(np.float64) % 97.0) + 1.0;
+        var idx32 = ((np.arange(n).astype(np.int64) * 2654435761L) % n).astype(np.int32);
+        var idx64 = idx32.astype(np.int64);
+        var vals = np.arange(n).astype(np.float64);
+        var dst = a.copy();
+        Row($"{tag}|f64|get|idx32-inplace", BestUs(() => { var r = a[idx32]; r.Dispose(); }));
+        Row($"{tag}|f64|get|idx32-widen", BestUs(() => { var t = idx32.astype(np.int64); var r = a[t]; r.Dispose(); t.Dispose(); }));
+        Row($"{tag}|f64|get|idx64", BestUs(() => { var r = a[idx64]; r.Dispose(); }));
+        Row($"{tag}|f64|take|idx32-inplace", BestUs(() => { var r = np.take(a, idx32); r.Dispose(); }));
+        Row($"{tag}|f64|take|idx32-widen", BestUs(() => { var t = idx32.astype(np.int64); var r = np.take(a, t); r.Dispose(); t.Dispose(); }));
+        Row($"{tag}|f64|take|idx64", BestUs(() => { var r = np.take(a, idx64); r.Dispose(); }));
+        Row($"{tag}|f64|set|idx32-inplace", BestUs(() => dst[idx32] = vals));
+        Row($"{tag}|f64|set|idx32-widen", BestUs(() => { var t = idx32.astype(np.int64); dst[t] = vals; t.Dispose(); }));
+        Row($"{tag}|f64|set|idx64", BestUs(() => dst[idx64] = vals));
+        Row($"{tag}|f64|put|idx32-inplace", BestUs(() => np.put(dst, idx32, vals)));
+        Row($"{tag}|f64|put|idx32-widen", BestUs(() => { var t = idx32.astype(np.int64); np.put(dst, t, vals); t.Dispose(); }));
+        Row($"{tag}|f64|put|idx64", BestUs(() => np.put(dst, idx64, vals)));
+        a.Dispose(); idx32.Dispose(); idx64.Dispose(); vals.Dispose(); dst.Dispose();
     }
 }

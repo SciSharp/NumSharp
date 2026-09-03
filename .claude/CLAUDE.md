@@ -1355,7 +1355,13 @@ FLAT gather/scatter (`DirectILKernelGenerator.GatherFlat.cs` — compile-time el
 cursors, NumPy's `check_and_adjust_index` as one add + one UNSIGNED compare) for primitive-width
 slabs, the general take/put kernels (`cpblk`) for whole-sub-array slabs, and int32 indices read IN
 PLACE (`idx32` kernel variants — `np.array(new int[]{…})` is int32, and `np.take`/`np.put` gained the
-same in-place read, shedding the 27 % widening copy). The setter pre-validates every index with a
+same in-place read). **NumSharp indexes with int64 everywhere; the int32 load width is kept on
+measurement only** (discovery doc §6.6, `fancy_where_probe.cs` section D): against the int64-only
+alternative — widen the index array to an int64 temp, run the int64 kernel — the in-place read is
+1.7–2.5× at 1K (the temp's allocation floor), 1.1–1.8× at 100K (its convert + write), 1.2× at 10M
+(its 12 bytes/index of extra traffic), while an int32 index costs the same as a native int64 one
+(0.97–1.13×); all index ARITHMETIC stays int64 (the int32 is sign-extended on load — only the load
+width and cursor step differ). Drop the variants if that ever stops being true. The setter pre-validates every index with a
 `Vector<T>` bounds scan BEFORE its first store, exactly as NumPy's `mapiter_trivial_set` does, so a
 bad index leaves the array untouched; the verbatim IndexError, the two value-broadcast ValueError
 texts, last-write-wins on duplicates, view offsets on source AND index array (a contiguous slice
