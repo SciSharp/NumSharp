@@ -78,6 +78,16 @@ completes. *That crash is a real NumSharp memory-safety bug — see Findings.*
 
 Tiers: `scalar`=1 · `1K`=1 000 · `100K`=100 000 · `1M`=1 000 000.
 
+## Probes (`probes/`)
+
+Three `dotnet run` file-based apps with a RELATIVE `#:project`, plus their NumPy twin, for
+measuring the iterator outside the sheet: `fixed_cost_probe.cs` (construction, per-chunk,
+1M/10M attribution, the production `out=` routes with managed bytes per call, the glue
+components), `ab_ops_probe.cs` (48 NDIter-routed ops at 1K/100K, for A/B against a worktree
+of a baseline commit), `angles_probe.cs` (the candidate next levers as experiments) and
+`numpy_twins.py fixed|ab|angles|join`. The cost model, the traps and every number they
+produced on 2026-09-03 are in **`docs/NDITER_PERF_DISCOVERY.md`**.
+
 ## Findings ledger (kept current with each run)
 
 Tracked regressions surfaced by this benchmark (NumSharp slower than NumPy):

@@ -1283,7 +1283,11 @@ fuzz tier. **Benchmark trap:** the nditer sheet's C# process must run with
 `DOTNET_TC_CallCountingDelayMs=0` (the orchestrator now sets it) — tiered compilation's 100 ms
 quiet-window rule kept the first rows of every section at tier-0 (`lessbool@1` 484 vs 124 ns for the
 identical call), and the 2026-08-29 sheet's 1M/10M elementwise cells were host-contaminated on BOTH sides
-(fresh: add@10M 0.85×, sqrt@10M 0.97×, not 0.33×/0.23×).
+(fresh: add@10M 0.85×, sqrt@10M 0.97×, not 0.33×/0.23×). **The discovery document** — cost model, the
+measuring traps with their evidence, the reproducible probes (`benchmark/nditer/probes/`), the full
+before/after tables and the ranked next levers (fancy-index → take/put kernels 2.5–3.5×, a 2-D kernel
+contract for narrow rows, SIMD run scan for `where=`, the fresh-NDArray floor) — is
+**`docs/NDITER_PERF_DISCOVERY.md`**.
 
 **Do NOT try to fix `it[0]` by re-seating a cached view** — measured, and it is a silent-wrong-answer
 trap. `UnmanagedStorage` keeps **three** synchronized address caches: the public `byte* Address`, the
