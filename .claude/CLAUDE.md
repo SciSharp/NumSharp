@@ -1390,7 +1390,13 @@ doc §3, traps 12–13): `/` on an integer NDArray is TRUE division, so `(ar / 6
 mask, not 64-runs — the first where= numbers compared different masks on the two sides (build masks
 with `np.floor_divide`); and never A/B the live tree — a chain of `dotnet run` benches compiles the
 tree as it is when each run starts, so editing during the chain hands later runs a half-edited tree
-(both sides belong in detached worktrees).
+(both sides belong in detached worktrees). **The next session on this line starts at
+`docs/NDITER_PERF_CONTINUATION.md`** — state, protocol, the measured remaining gaps (the fancy-index
+shapes still on the delegate route: two index arrays 0.09×, slice + index array 0.05×, F-order
+source rows 0.18×, strided index view 0.21×; the cast-`out` masked narrow rows 0.33×; few-row
+leading-axis reductions 0.52×; the Tier 2 claims that did NOT reproduce pinned) and a ranked plan
+with a design per lever (`benchmark/nditer/probes/neighbours_probe.cs` + `numpy_twins.py neighbours`
+reproduce every number in it).
 
 **Do NOT try to fix `it[0]` by re-seating a cached view** — measured, and it is a silent-wrong-answer
 trap. `UnmanagedStorage` keeps **three** synchronized address caches: the public `byte* Address`, the

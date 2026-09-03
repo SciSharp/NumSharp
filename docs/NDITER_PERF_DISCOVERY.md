@@ -431,6 +431,10 @@ differently. The copy / identity-ufunc bench (`copy_path_bench`, 464 cells) read
 
 ## 7. Where the next wins are
 
+**The live ranked plan now lives in `docs/NDITER_PERF_CONTINUATION.md`** (2026-09-03): it
+re-measures the angles below pinned, records which of them did not reproduce, and carries the
+design per lever. The list here is kept as the original record.
+
 Each angle below was measured with `angles_probe.cs` and its NumPy twin on an idle host. They
 are ranked by expected payoff; none needs threads. One candidate was checked and rejected:
 **4K aliasing of pooled buffers.** Every large pooled buffer (NumPy's too) sits at page offset

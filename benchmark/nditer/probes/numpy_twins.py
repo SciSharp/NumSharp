@@ -5,6 +5,7 @@
     python benchmark/nditer/probes/numpy_twins.py angles    # twin of angles_probe.cs
     python benchmark/nditer/probes/numpy_twins.py narrow [ABCDE]   # twin of narrow_probe.cs (2-D block kernel)
     python benchmark/nditer/probes/numpy_twins.py fancy_where [ABC] # twin of fancy_where_probe.cs (fancy index, where= runs, masked narrow rows; its section D is C#-only)
+    python benchmark/nditer/probes/numpy_twins.py neighbours [EFG]  # twin of neighbours_probe.cs (fancy-index neighbours, where= neighbours, Tier 2 claims)
     python benchmark/nditer/probes/numpy_twins.py join before.tsv after.tsv [numpy.tsv]
 
 Run with OPENBLAS_NUM_THREADS=1 so nothing on the NumPy side fans out, and on a hybrid P/E-core host
@@ -404,6 +405,148 @@ def fancy_where(sections="ABC"):
         fancy_where_c()
 
 
+# ---------------------------------------------------------------------------
+# neighbours — the NumPy twin of neighbours_probe.cs (identical keys): (E) the fancy-index shapes
+# still on the delegate route, (F) where= neighbours, (G) the Tier 2 claims. Masks use `//`.
+# ---------------------------------------------------------------------------
+def _nb_row(key, us):
+    print(f"{key}\t{us!r}")
+
+
+def neighbours_e():
+    for n in (100_000, 1_000_000):
+        tag = "100K" if n == 100_000 else "1M"
+        side = int(np.sqrt(n))
+        m = (np.arange(side * side, dtype=np.float64) % 97.0 + 1.0).reshape(side, side)
+        mT = m.T
+        a = (np.arange(n, dtype=np.float64) % 97.0) + 1.0
+        ri = (np.arange(n, dtype=np.int64) * 2654435761) % side
+        ci = (np.arange(n, dtype=np.int64) * 40503) % side
+        rk = (np.arange(side, dtype=np.int64) * 2654435761) % side
+        idx = (np.arange(n, dtype=np.int64) * 2654435761) % n
+        idx_view = np.concatenate([idx, idx])[::2]
+        mask = (np.arange(n) % 2) == 0
+        mask_few = (np.arange(n) % 100) == 0
+        vals = np.arange(n, dtype=np.float64)
+        dst = a.copy()
+        dst_view = np.arange(2 * n, dtype=np.float64)[::2]
+        col_vals = np.arange(side * side, dtype=np.float64).reshape(side, side)
+
+        def set2():
+            m[ri, ci] = vals
+
+        def setcol():
+            m[:, rk] = col_vals
+
+        def setmask_s():
+            dst[mask] = 3.0
+
+        def setmask_v():
+            dst[mask] = vals[mask]
+
+        def setview():
+            dst_view[idx] = vals
+
+        _nb_row(f"{tag}|fancy|m[ri,ci] (2 index arrays)", best_us(lambda: m[ri, ci]))
+        _nb_row(f"{tag}|fancy|m[:, rk] (column gather)", best_us(lambda: m[:, rk]))
+        _nb_row(f"{tag}|fancy|m[rk, :2] (rows + slice)", best_us(lambda: m[rk, :2]))
+        _nb_row(f"{tag}|fancy|mT[rk] (F-order source rows)", best_us(lambda: mT[rk]))
+        _nb_row(f"{tag}|fancy|a[idx[::2]] (strided index view)", best_us(lambda: a[idx_view]))
+        _nb_row(f"{tag}|fancy|m[ri,ci]=v (2-array set)", best_us(set2))
+        _nb_row(f"{tag}|fancy|m[:, rk]=v (column set)", best_us(setcol))
+        _nb_row(f"{tag}|mask|a[mask] (50%)", best_us(lambda: a[mask]))
+        _nb_row(f"{tag}|mask|a[mask] (1%)", best_us(lambda: a[mask_few]))
+        _nb_row(f"{tag}|mask|a[mask]=scalar (50%)", best_us(setmask_s))
+        _nb_row(f"{tag}|mask|a[mask]=v (50%)", best_us(setmask_v))
+        _nb_row(f"{tag}|mask|compress", best_us(lambda: np.compress(mask, a)))
+        _nb_row(f"{tag}|mask|count_nonzero", best_us(lambda: np.count_nonzero(mask)))
+        _nb_row(f"{tag}|take|axis1 m.take(rk, axis=1)", best_us(lambda: np.take(m, rk, axis=1)))
+        _nb_row(f"{tag}|put|put(view[::2], idx, v)", best_us(lambda: np.put(dst_view, idx, vals)))
+        _nb_row(f"{tag}|put|view[::2][idx]=v", best_us(setview))
+
+
+def neighbours_f():
+    for n in (100_000, 1_000_000):
+        tag = "100K" if n == 100_000 else "1M"
+        a = (np.arange(n, dtype=np.float64) % 97.0) + 1.0
+        b = (np.arange(n, dtype=np.float64) % 31.0) + 2.0
+        a32, b32 = a.astype(np.float32), b.astype(np.float32)
+        o = np.empty(n)
+        ob = np.empty(n, dtype=bool)
+        ar = np.arange(n)
+        blocks = (ar // 64 % 2) == 0
+        _nb_row(f"{tag}|where|add(f32,f32,out=f64,where) cast-out", best_us(lambda: np.add(a32, b32, out=o, where=blocks)))
+        _nb_row(f"{tag}|where|add(f32,f32,out=f64) cast-out unmasked", best_us(lambda: np.add(a32, b32, out=o)))
+        _nb_row(f"{tag}|where|less(a,b,out,where)", best_us(lambda: np.less(a, b, out=ob, where=blocks)))
+        _nb_row(f"{tag}|where|less(a,b,out)", best_us(lambda: np.less(a, b, out=ob)))
+        _nb_row(f"{tag}|where|copyto(o,a,where)", best_us(lambda: np.copyto(o, a, where=blocks)))
+        _nb_row(f"{tag}|where|np.where(mask,a,b)", best_us(lambda: np.where(blocks, a, b)))
+        _nb_row(f"{tag}|where|add(a,b,where) no out (alloc)", best_us(lambda: np.add(a, b, where=blocks)))
+        w = 4
+        rows_ = n // w
+        sv2 = b.reshape(rows_, w)
+        o32 = np.empty((rows_, w), dtype=np.float32)
+        m2 = blocks.reshape(rows_, w)
+        back = (np.arange(rows_ * 2 * w, dtype=np.float64) % 97.0 + 1.0).reshape(rows_, 2 * w)
+        svs = back[:, :4]
+        o2 = np.empty((rows_, w))
+        _nb_row(f"{tag}|where|rows w4 add(view,view,out=f32,where) cast-out", best_us(lambda: np.add(svs, sv2, out=o32, where=m2, casting="unsafe")))
+        _nb_row(f"{tag}|where|rows w4 add(view,view,out,where)", best_us(lambda: np.add(svs, sv2, out=o2, where=m2)))
+
+
+def neighbours_g():
+    for n in (100_000, 1_000_000):
+        tag = "100K" if n == 100_000 else "1M"
+        i32 = (np.arange(n, dtype=np.int32) % 97) + 1
+        i64 = i32.astype(np.int64)
+        f32 = i32.astype(np.float32)
+        f64 = i32.astype(np.float64)
+        o64 = np.empty(n)
+        _nb_row(f"{tag}|cast|sqrt(i32)", best_us(lambda: np.sqrt(i32)))
+        _nb_row(f"{tag}|cast|sqrt(i32,out=f64)", best_us(lambda: np.sqrt(i32, out=o64)))
+        _nb_row(f"{tag}|cast|sqrt(i64)", best_us(lambda: np.sqrt(i64)))
+        _nb_row(f"{tag}|cast|sqrt(f32)", best_us(lambda: np.sqrt(f32)))
+        _nb_row(f"{tag}|cast|sqrt(f64)", best_us(lambda: np.sqrt(f64)))
+        _nb_row(f"{tag}|cast|exp(i32)", best_us(lambda: np.exp(i32)))
+        _nb_row(f"{tag}|cast|negative(i32,out=f64)", best_us(lambda: np.negative(i32, out=o64)))
+        _nb_row(f"{tag}|cast|add(i32,f64)", best_us(lambda: np.add(i32, f64)))
+        _nb_row(f"{tag}|cast|astype(i32->f64)", best_us(lambda: i32.astype(np.float64)))
+        _nb_row(f"{tag}|reduce|sum(f32,dtype=f64)", best_us(lambda: np.sum(f32, dtype=np.float64)))
+        _nb_row(f"{tag}|reduce|sum(f32)", best_us(lambda: np.sum(f32)))
+        _nb_row(f"{tag}|reduce|sum(i32) (->i64)", best_us(lambda: np.sum(i32)))
+        _nb_row(f"{tag}|reduce|mean(f32)", best_us(lambda: np.mean(f32)))
+        _nb_row(f"{tag}|reduce|sum(i32,dtype=f64)", best_us(lambda: np.sum(i32, dtype=np.float64)))
+        for w in (3, 4, 8, 16, 64):
+            rows_ = n // w
+            x = f64[:rows_ * w].reshape(rows_, w)
+            _nb_row(f"{tag}|axis|sum(x,axis=1) w{w}", best_us(lambda: np.sum(x, axis=1)))
+            _nb_row(f"{tag}|axis|max(x,axis=1) w{w}", best_us(lambda: np.max(x, axis=1)))
+            _nb_row(f"{tag}|axis|mean(x,axis=1) w{w}", best_us(lambda: np.mean(x, axis=1)))
+            xt = f64[:rows_ * w].reshape(w, rows_)
+            _nb_row(f"{tag}|axis|sum(xt,axis=0) ({w},N)", best_us(lambda: np.sum(xt, axis=0)))
+    for n in (1, 16, 100, 1000):
+        a = np.arange(n, dtype=np.float64) + 1.0
+        b = a.copy()
+        o = a.copy()
+        i32 = np.arange(n, dtype=np.int32)
+        _nb_row(f"tiny{n}|add(out)", best_us(lambda: np.add(a, b, out=o)))
+        _nb_row(f"tiny{n}|add (alloc)", best_us(lambda: np.add(a, b)))
+        _nb_row(f"tiny{n}|sqrt(out)", best_us(lambda: np.sqrt(a, out=o)))
+        _nb_row(f"tiny{n}|sqrt(i32) cast", best_us(lambda: np.sqrt(i32)))
+        _nb_row(f"tiny{n}|sum", best_us(lambda: np.sum(a)))
+        _nb_row(f"tiny{n}|less(out)", best_us(lambda: np.less(a, b)))
+
+
+
+def neighbours(sections="EFG"):
+    if "E" in sections:
+        neighbours_e()
+    if "F" in sections:
+        neighbours_f()
+    if "G" in sections:
+        neighbours_g()
+
+
 def join(before, after, numpy_tsv=None):
     def load(path):
         d = {}
@@ -450,6 +593,8 @@ if __name__ == "__main__":
         narrow(sys.argv[2] if len(sys.argv) > 2 else "ABCDE")
     elif cmd == "fancy_where":
         fancy_where(sys.argv[2] if len(sys.argv) > 2 else "ABC")
+    elif cmd == "neighbours":
+        neighbours(sys.argv[2] if len(sys.argv) > 2 else "EFG")
     elif cmd == "join":
         join(*sys.argv[2:])
     else:
