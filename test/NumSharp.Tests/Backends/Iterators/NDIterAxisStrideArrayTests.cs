@@ -78,21 +78,22 @@ namespace NumSharp.Tests.Backends.Iterators
         [TestMethod]
         public unsafe void AxisStride_2D_NonContig_NoMultiIndex_FortranOrder()
         {
-            // Non-contiguous 2D: [:, ::2] won't coalesce.
+            // Non-contiguous 2D: [:, ::2] is UNIFORMLY strided, so NumPy's unconditional
+            // npyiter_coalesce_axes merges its two axes into ONE strided axis under K/C order:
             // np.arange(12).reshape(3,4).astype(int32)[:, ::2] has shape (3,2), strides (16, 8)
+            // bytes, and 16 == 8 * 2 — probed on NumPy 2.4.2, np.nditer(a, ['external_loop'])
+            // reports ndim 1 and hands out a single 6-element chunk. NumSharp used to keep it 2-D
+            // (the old coalesce ran only for all-contiguous operands — the oracle's K1 "coalesces
+            // fewer dimensions than NumPy" excuse); CoalesceAxesIterationOrder now matches NumPy.
             var a = np.arange(12).reshape(3, 4).astype(np.int32)[":, ::2"];
             using var it = NDIterRef.New(a);
 
-            Assert.AreEqual(2, it.NDim);  // Does NOT coalesce (stride gap)
+            Assert.AreEqual(1, it.NDim);  // Coalesced to one strided axis, like NumPy
 
             Span<long> strides = stackalloc long[1];
-            // Axis 0 in Fortran order = fastest-changing (innermost) = stride 8
+            // The merged axis walks at the inner (element-2) stride = 8 bytes for int32.
             it.GetAxisStrideArray(0, strides);
             Assert.AreEqual(8L, strides[0]);
-
-            // Axis 1 in Fortran order = outer = stride 16
-            it.GetAxisStrideArray(1, strides);
-            Assert.AreEqual(16L, strides[0]);
         }
 
         [TestMethod]

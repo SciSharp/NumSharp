@@ -1289,31 +1289,61 @@ before/after tables and the ranked next levers (fancy-index → take/put kernels
 contract for narrow rows, SIMD run scan for `where=`, the fresh-NDArray floor) — is
 **`docs/NDITER_PERF_DISCOVERY.md`**.
 
-**Narrow strided rows — the 2-D block kernel (2026-09-03, LANDED).** The per-chunk route drives a
-`(rows, w)` view with a CONTIGUOUS inner axis one row at a time under EXTERNAL_LOOP, paying the odometer
-advance AND the per-chunk kernel's own SIMD-viability prologue on EVERY row — so for a narrow `w` it was
-~0.82× NumPy (`np.positive`), while a hand-written 2-D loop (prologue once, inner SIMD run, per-row
-pointer bump) is ~1.7–2.1× NumPy — the whole gap is per-row overhead, not memory traffic (buffering the
-strided rows into a contiguous window was measured SLOWER — the inner runs are already SIMD-able in
-place). `ND2DElementwiseKernel` (`Backends/Kernels/Direct/DirectILKernelGenerator.InnerLoop2D.cs`) loops
-the outer axis itself with per-operand outer byte strides, called ONCE per coalesced 2-D block; it reuses
-the SAME scalar/vector emit bodies as the per-chunk kernel, so results are byte-identical (elementwise ops
-carry no cross-element state). Dispatched by `NDIterRef.{Is2DElementwiseShape,TryExecute2DElementwise}`
-(wired into the three packed-key `ExecuteElementWise*` entry points, so it serves BOTH `out=` and
-allocating unary/binary routes), gated on: unbuffered, no `where=` mask, EXTERNAL_LOOP, inner axis
-element-contiguous for every operand, all operands the same SIMD-capable dtype. NumSharp's NDIter does NOT
-coalesce outer axes (a 3-D `x[:, :, :w]` stays NDim=3), so the gate ALSO flattens *mutually contiguous*
-outer axes (`stride[d] == stride[d+1]*shape[d+1]`, true for any trailing-narrow N-D slice) into one
-`(outerCount, outerStride)` and reuses the same kernel — covering N-D trailing-narrow AND routing it off a
-pre-existing malformed-output crash in the ForEach 3-D odometer path. Rode along: `positive` had no vector
-body (identity was scalar even contiguously) — an identity vector body was added
-(`EmitUnaryVectorOperation` Positive branch + `CanUseUnarySimd(Positive)`), so contiguous positive is now
-a SIMD copy (1.59× NumPy) too. **Measured (NPY/NS, 2M f64):** 2-D positive **1.95–2.18×**, sqrt
-**2.11–2.52×**, add **1.82–2.29×**; 3-D trailing-narrow **1.37–2.26×**. Gates: FuzzMatrix 98/98 (incl.
-`out_where` across every strided layout), main suite 14446/0, + 700-case 2-D and 123-case N-D
-self-consistency (strided result bit-identical to the contiguous-copy result). Still on the per-chunk
-route (correct, unaccelerated): inner-*broadcast* 2-D (`add(A, col)`, stride-0 inner) and *non*-flattenable
-outer (doubly-strided `x[::2, :, :w]`).
+**Narrow strided rows — the 2-D block kernel (2026-09-03, LANDED, then extended the same day).** The
+per-chunk route drives a `(rows, w)` view with a CONTIGUOUS inner axis one row at a time under
+EXTERNAL_LOOP, paying the odometer advance AND the per-chunk kernel's own SIMD-viability prologue on EVERY
+row — so for a narrow `w` it was ~0.82× NumPy (`np.positive`), while a hand-written 2-D loop (prologue
+once, inner SIMD run, per-row pointer bump) is ~1.7–2.1× NumPy — the whole gap is per-row overhead, not
+memory traffic (buffering the strided rows into a contiguous window was measured SLOWER — the inner runs
+are already SIMD-able in place). `ND2DElementwiseKernel`
+(`Backends/Kernels/Direct/DirectILKernelGenerator.InnerLoop2D.cs`) loops the outer axis itself with
+per-operand outer byte strides, called ONCE per 2-D block; it reuses the SAME scalar/vector emit bodies as
+the per-chunk kernel, so results are byte-identical (elementwise ops carry no cross-element state).
+Dispatched by `NDIterRef.{Is2DElementwiseShape,TryExecute2DElementwise}` (wired into the three packed-key
+`ExecuteElementWise*` entry points, so it serves BOTH `out=` and allocating unary/binary routes), gated
+on: unbuffered, no `where=` mask, EXTERNAL_LOOP, NDim ≥ 2, output inner axis element-contiguous, every
+input inner axis contiguous OR broadcast (stride 1 or 0). **The review of the first report
+(`docs/NDITER_2D_BLOCK_KERNEL.md` §11) found it had measured only w ≥ 4, f64, 2M and ops with a vector
+body**, and that three of its own shapes LOST to NumPy: sub-vector rows (`sqrt(m[:, :3])` 0.41× — scalar
+tail per row where NumPy finishes with a masked vector), inner-broadcast (`add(A, col)` 1.15× — the gate
+demanded a contiguous inner for every operand), and ops without a vector body (`exp` on 4-wide rows
+0.84×). It also found a GENERAL ITERATOR DEFECT: NDIter coalesced axes only when every operand was
+contiguous and nothing was broadcast (its `CoalesceAxes` assumes the ascending pre-coalesce layout), so a
+C-contiguous `(250000, 4)` array times a 0-d scalar iterated 2-D, one kernel call per 4-element row
+(1.7 ms → 251 µs fixed) — NumPy's `npyiter_coalesce_axes` runs unconditionally. **All closed:**
+`NDIterCoalescing.CoalesceAxesIterationOrder` merges adjacent axes every operand walks contiguously
+(`stride[d] == stride[d+1]*shape[d+1]`, or a size-1 stride-0 axis) in iteration order on the
+non-all-contiguous branch (subsumes `RemoveUnitAxes`; `a[:, ::2]` is ONE strided chunk exactly as NumPy
+hands it out — the oracle's K1 excuse shrank to the `'A'`-order transposed-3-D case, and a 3-D
+`x[:, :, :w]` now reaches the kernel as `(rows, w)` with no special flatten); the kernel contract carries
+`innerByteStrides` and dispatches ONCE per call on the inner-mode pattern — unary {C, S}, binary
+{CC, SC, CS} — each pattern a full 2-D loop with the S operand loaded and `Vector.Create`'d once per row;
+32/64-bit lanes on a 256-bit AVX2 host finish each row's `innerCount % lanes` remainder (or the WHOLE row
+when `innerCount < lanes`) with ONE `MaskLoad`→body→`MaskStore` (mask hoisted per call; integer
+masked-off lanes filled with 1 so a software vector divide cannot throw; other hosts and 1/2-byte lanes
+keep the scalar tail); a once-per-call row-shape dispatch picks generic / one-vector rows (`innerCount ==
+lanes`: one full vector per row, no inner loop — the generic shape paid three compares per row for the
+same work) / masked rows; a null vector body or non-SIMD dtype set gets a scalar-only 2-D block
+(constant-stride addressing when every inner stride is its own element size, runtime strides otherwise);
+and leading axes that do not fold into the block (`x[::2, :, :w]`) are walked by a per-BLOCK odometer in
+the dispatcher. Rode along in the first generation: `positive` had no vector body — an identity vector
+body was added (`EmitUnaryVectorOperation` Positive branch + `CanUseUnarySimd(Positive)`), so contiguous
+positive is a SIMD copy (1.59× NumPy). **Measured (NPY/NS, pinned to one P-core, min of two rounds, old →
+new):** `sqrt` w=2/3 **0.53/0.41 → 1.58/1.84** (100K) and 0.60/0.52 → 1.78/2.24 (2M); `add(A, col)` c=4
+**1.15 → 6.5**, `multiply(view, 2.0)` c=4 **0.48 → 1.97**, `add(view, col)` c=4 **1.63 → 6.0**,
+`view * 2.0` 1.10 → 4.8; `exp` w=4 0.84 → 1.22 (narrow now equals contiguous); `x[::2, :, :4]` positive
+**0.70 → 2.12**, add 1.11 → 2.45; the w ≥ 4 cells the first report measured are unchanged or up
+(2M positive w=4 1.91 → 2.33). Gates: a 16,831-check self-consistency probe (every mode × widths 1–100 ×
+10 dtypes × reversed/strided-out/aliased/mixed-dtype/3-D/4-D/bool/Complex, bytes vs contiguous copies)
+**0 mismatches**; FuzzMatrix **98/98** (K1 narrowed); main suite **14446/0**; `np.nditer` chunk lengths
+and value streams identical to NumPy on the K1 layouts × C/F/A/K except the pre-existing `'A'`-order
+case. **Measurement traps** (discovery doc §3 trap 11): on this hybrid host an UNPINNED benchmark thread
+reads 2–3× slower uniformly and swings run to run (the first-generation absolute numbers did not
+reproduce) — `narrow_probe.cs`/`numpy_twins.py` honour `NS_PROBE_AFFINITY`; 100K strided-stream cells move
+±20 % with the same binary from placement alone. Still open: copy-class ops at w=2/3 gain only 1.1–1.3×
+from the masked path (a half-vector store would add ~1.3× — a per-width specialization, not done);
+`where=` masked and buffered-cast routes are untouched; a strided-inner row that does not coalesce stays
+on the per-chunk gather path.
 
 **Do NOT try to fix `it[0]` by re-seating a cached view** — measured, and it is a silent-wrong-answer
 trap. `UnmanagedStorage` keeps **three** synchronized address caches: the public `byte* Address`, the

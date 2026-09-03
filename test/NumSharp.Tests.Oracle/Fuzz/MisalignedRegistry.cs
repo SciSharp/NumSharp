@@ -695,19 +695,23 @@ namespace NumSharp.Tests.Fuzz
             // neighbouring regression still fails.
             // =================================================================================
 
-            // (K1) np.nditer traversal on three layouts. Two distinct causes, both real:
-            //   * order='A' over a TRANSPOSED 3-D operand — NumSharp picks a different axis
-            //     ordering than NumPy's stride-sorted 'A'/'K' heuristic, so the value stream, the
-            //     multi_index stream and BOTH tracked-index streams (c_index/f_index) all differ.
-            //   * external_loop CHUNKING — NumSharp coalesces fewer dimensions than NumPy, so it
-            //     emits more (shorter) chunks: the concatenated values agree but the chunk-length
-            //     slot does not (e.g. [8] vs NumPy's [4], [6] vs [1]).
-            // Scoped to nditer_* on these three layouts; every other layout/order is gated exactly.
+            // (K1) np.nditer traversal with order='A' over a TRANSPOSED 3-D operand — NumSharp
+            // picks a different axis ordering than NumPy's stride-sorted 'A'/'K' heuristic, so the
+            // value stream, the multi_index stream and BOTH tracked-index streams (c_index/f_index)
+            // all differ. Scoped to nditer_* on that one layout; every other layout/order is gated
+            // exactly.
+            //
+            // This excuse used to also cover `strided_2d_cols` and `negstride_2d_offset` for a
+            // second cause — external_loop CHUNKING: NumSharp's constructor only coalesced axes when
+            // every operand was contiguous and nothing was broadcast, so a uniformly strided
+            // a[:, ::2] ran one chunk per row where NumPy's unconditional npyiter_coalesce_axes hands
+            // out ONE strided chunk ([8] vs [4], [6] vs [1]). NDIterCoalescing.CoalesceAxesIterationOrder
+            // (2026-09-03) merges in iteration order exactly as NumPy does; probed against 2.4.2 on
+            // all three layouts × C/F/A/K, the chunk lengths and value streams are identical except
+            // the 'A'-order transposed_3d case above, so those two layouts are gated bit-exactly now.
             if (c.Op != null && (c.Op == "nditer" || c.Op.StartsWith("nditer_"))
-                && (c.Layout == "transposed_3d" || c.Layout == "strided_2d_cols"
-                    || c.Layout == "negstride_2d_offset"))
-                return "nditer traversal: order='A' axis ordering over a transposed 3-D operand, and "
-                     + "external_loop coalescing fewer dimensions than NumPy [known bug]";
+                && c.Layout == "transposed_3d")
+                return "nditer traversal: order='A' axis ordering over a transposed 3-D operand [known bug]";
 
             // (K2) np.isscalar on a 0-D ARRAY. NumPy answers False — a 0-d ndarray is an array, not
             // a scalar, which is one of its best-known gotchas — while NumSharp answers True.

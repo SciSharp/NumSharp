@@ -1,10 +1,17 @@
 # NDIter 2-D block kernel for narrow strided rows
 
-**Commit:** `af25a746` (branch `journey3`, 2026-09-03)
-**Lever:** `docs/NDITER_PERF_DISCOVERY.md` §7 angle 2 — *"A 2-D kernel contract for narrow rows"* — now LANDED.
-**Headline:** `np.positive`/`sqrt`/`add`/… on a `(rows, w)` strided view went from **0.82× NumPy** (w=4)
+**Commits:** `af25a746` (first generation) and the second-generation commit that follows it (branch
+`journey3`, 2026-09-03). §1–§10 are the first-generation report as written; **§11 is the review that
+challenged it** — three regimes it never measured were losses, and closing them changed the iterator
+as well as the kernel.
+**Lever:** `docs/NDITER_PERF_DISCOVERY.md` §7 angle 2 — *"A 2-D kernel contract for narrow rows"* — LANDED, then extended.
+**Headline (first generation):** `np.positive`/`sqrt`/`add`/… on a `(rows, w)` strided view went from **0.82× NumPy** (w=4)
 to **1.4–2.5×** across 2-D *and* N-D trailing-narrow views, with a **1.59×** bonus on contiguous
 `positive`. Bit-identical to the previous path; FuzzMatrix 98/98, main suite 14446/0.
+**Headline (second generation, §11):** sub-vector rows (`sqrt` on `m[:, :2]`/`m[:, :3]`) **0.4–0.6× → 1.6–2.2×**
+NumPy, `add(A, col)` **1.15× → 6.5×**, `multiply(view, 2.0)` **0.48× → 2.0×**, `exp` on 4-wide rows
+**0.84× → 1.22×**, `x[::2, :, :w]` **0.70× → 2.1×**; NDIter now coalesces axes the way NumPy does.
+16,831-check self-consistency 0 mismatches, FuzzMatrix 98/98 with one excuse narrowed, main suite 14446/0.
 
 Ratios follow the house convention **NPY/NS = NumPy_ms ÷ NumSharp_ms, higher = NumSharp faster**. All
 numbers measured on the same host (Windows 11, i9-13900K class, AVX2, .NET 10, NumPy 2.4.2), fresh and
@@ -242,16 +249,19 @@ old one bit-for-bit.
 
 ---
 
-## 8. What's left (correct, unaccelerated)
+## 8. What's left (correct, unaccelerated) — as of the first generation; see §11 for what closed
 
 - **inner-broadcast 2-D** — `add(A, col)` where `col` broadcasts over the inner axis (stride-0 inner):
   the gate requires a contiguous inner for all operands, so this keeps the per-chunk route (which SIMDs the
   broadcast per row). Extending the 2-D kernel with a broadcast-inner variant is possible future work.
+  *(Closed in §11: the SC/CS modes.)*
 - **non-flattenable outer** — a doubly-strided `x[::2, :, :w]`: outer axes are not mutually contiguous, so
   they cannot collapse to a single stride; keeps the per-chunk route. A full N-D outer odometer in the
-  kernel would cover it but re-introduces per-row odometer cost.
+  kernel would cover it but re-introduces per-row odometer cost. *(Closed in §11: a per-BLOCK odometer in
+  the dispatcher.)*
 - **non-SIMD dtypes** (Half / Decimal / Complex) and **comparisons** (mixed dtype → bool) are excluded by
-  design; comparisons already have the whole-array Direct strided kernel.
+  design; comparisons already have the whole-array Direct strided kernel. *(Non-SIMD dtypes and every op
+  without a vector body now take the scalar-only 2-D block, §11; comparisons stay on their Direct kernel.)*
 - **`np.empty(Shape)` inheriting view strides** — a separate pre-existing footgun (§6).
 
 ---
@@ -276,8 +286,177 @@ repeated on an idle host.
 
 ---
 
-## 10. See also
+## 11. Second generation — the review that challenged §1–§10
+
+### 11.1 What the first report did not measure
+
+§5 measured one dtype (f64), one size regime (2M, DRAM-bound, where every kernel converges on memory
+bandwidth), widths of at least one full vector (w ≥ 4), and ops that have a vector body. A wider probe
+(`benchmark/nditer/probes/narrow_probe.cs` + `numpy_twins.py narrow`) covered what it left out — widths
+1–64 at 100K/1M/2M, f32/u8/i32, ops without a vector body, the broadcast shapes §8 listed as "left", and
+3-D views — and found three regimes where NumSharp was **losing** to NumPy on the very shapes the kernel
+exists for:
+
+| Regime | Example | NPY/NS before | Why |
+|---|---|---:|---|
+| Sub-vector rows | `np.sqrt(m[:, :3], out)` 100K | **0.41×** | `w < lanes` ran the SCALAR tail per row; NumPy finishes rows with a masked vector (`npyv_load_tillz`/`store_till`), so at 3.3 ns/element it was 6× slower per element than the w=4 path |
+| Inner-broadcast | `np.add(A, col)` 1M, c=4 | **1.15×** (vs 3.3× for `add(A, row)`) | the gate required a contiguous inner axis for EVERY operand; a broadcast-column or 0-d scalar operand fell to the per-row route at ~7 ns/row |
+| Scalar-body ops | `np.exp(m[:, :4], out)` 1M | **0.84×** | the gate required a vector body; exp/log/power/mod/mixed-dtype kernels paid the per-row route (+43 % over contiguous) |
+
+And one that was a **general iterator defect**, found while tracing `multiply(view, 2.0)`: a C-contiguous
+`(250000, 4)` array times a 0-d scalar iterated as **2-D**, one kernel call per 4-element row (1.7 ms
+for 1M elements, vs 0.25 ms at c=64). The constructor ran `CoalesceAxes` only when every operand was
+contiguous AND nothing was broadcast, because that routine assumes the ascending (innermost-first)
+layout its own sort produces. NumPy's `npyiter_coalesce_axes` runs unconditionally after order
+resolution; a stride-0 operand passes its test as `0 == 0 * shape`. The oracle already listed the
+consequence — "NumSharp coalesces fewer dimensions than NumPy" — as the K1 known bug.
+
+### 11.2 Measurement traps found on the way
+
+- **E-core scheduling.** This host is a hybrid part. Unpinned, the C# probe read 2–3× slower *uniformly*
+  and swung run to run (1M `positive` w=4: 800–2600 µs unpinned, **411 µs** pinned), which also made the
+  first-generation absolute numbers irreproducible. Both probes now honour `NS_PROBE_AFFINITY=<hex mask>`
+  (`Process.ProcessorAffinity` / `SetProcessAffinityMask`); every number below is pinned to one P-core,
+  NumPy and NumSharp alike, never concurrently.
+- **Placement variance of strided streams at 100K.** With the SAME binary, cache-resident cells such as
+  `add` w=3/4 at 100K moved between 50 and 63 µs across runs (relative page offsets of the read and
+  write streams). Only effects well outside ±20 % are reported at 100K; the 1M/2M cells are stable.
+- **Interleave old/new.** The old kernel was built in a detached worktree at the previous commit and the
+  runs alternated old → new → old → new; each cell below is the minimum of two rounds per side.
+
+### 11.3 What changed
+
+1. **NDIter coalesces in iteration order, like NumPy** — `NDIterCoalescing.CoalesceAxesIterationOrder`,
+   called on the non-all-contiguous construction branch in place of `RemoveUnitAxes` (which it subsumes).
+   It merges every adjacent (outer, inner) pair that ALL operands walk as one axis —
+   `stride[d] == stride[d+1] * shape[d+1]`, or a size-1 axis with stride 0 — so the element-visit order
+   never changes; only the odometer shortens. A contiguous array against a 0-d scalar now iterates as ONE
+   1-D chunk (`multiply(A, 2.0, out)` on `(250000, 4)`: **1.7 ms → 251 µs**), a trailing-narrow
+   `x[:, :, :w]` arrives at the kernel as `(rows, w)` without the first generation's special flatten, and
+   `a[:, ::2]` runs as ONE strided chunk exactly as NumPy's external_loop hands it out. Probed against
+   2.4.2 on the three oracle layouts × C/F/A/K orders: chunk lengths and value streams identical except
+   the pre-existing `order='A'` transposed-3-D case, so the K1 excuse is now scoped to that one layout
+   and `strided_2d_cols`/`negstride_2d_offset` are gated bit-exactly.
+2. **Inner-broadcast modes.** The kernel contract gained `innerByteStrides`; every input's inner stride
+   is the element size (C) or 0 (S) and the kernel dispatches ONCE per call on the pattern — unary
+   {C, S}, binary {CC, SC, CS} — each owning a full 2-D loop in which an S operand is loaded and
+   `Vector.Create`'d once per row. The gate accepts stride 0 on inputs.
+3. **Masked sub-vector rows.** For 32/64-bit lanes on an AVX2 host at 256-bit width, the row remainder
+   `innerCount % lanes` — and the whole row when `innerCount < lanes` — is one `MaskLoad` per C input →
+   the same vector body → one `MaskStore` (the mask is built once per call:
+   `GreaterThan(Create(tail), {0,1,…})`). Masked-off lanes are never touched in memory; their register
+   values are discarded, and for integer lanes they are filled with 1 first so a software vector divide
+   cannot throw on a 0 lane. Other hosts and 1/2-byte lanes keep the scalar tail.
+4. **Row-shape dispatch.** Once per call the block picks generic (unroll/remainder/tail), one-vector rows
+   (`innerCount == lanes`: a single full vector per row, no inner loop — the generic shape paid three
+   compares and an index update per row for the same work, 2.03 vs 1.59 ns/row on 1M f64 w=4) or
+   sub-vector rows (a single masked vector per row).
+5. **Scalar-only block.** A null vector body (or a non-SIMD dtype set) now gets the outer loop around a
+   scalar inner loop — constant-stride addressing when every operand's inner stride is its own element
+   size, runtime strides otherwise — instead of the per-row route.
+6. **Per-block odometer.** Leading axes that do not fold into the block (`x[::2, :, :w]`) are walked in
+   `TryExecute2DElementwise` with one kernel call per block, never per row.
+
+Bit-identity is by construction (the same scalar/vector emit delegates, element-wise ops carry no
+cross-element state) and was verified: **16,831 checks, 0 mismatches** across 124 compiled 2-D kernels —
+every mode, widths 1–100, 10 dtypes, reversed rows, strided `out=`, aliased `out=`, mixed dtypes, 3-D
+flat / `::2` / `::3` / `::-1` / two-axis-strided, 4-D, bool, Complex — comparing bytes (NaN payloads
+included) against the same op on contiguous copies.
+
+### 11.4 Results (pinned, min of two rounds per side, NPY/NS old → new)
+
+**Sub-vector rows** (`out=`, f64 `(rows, w)`):
+
+| N | op | w | NumPy µs | old µs | new µs | NPY/NS |
+|---|---|---|---:|---:|---:|---|
+| 100K | sqrt | 2 | 174 | 329 | 110 | 0.53 → **1.58** |
+| 100K | sqrt | 3 | 136 | 329 | 73.5 | 0.41 → **1.84** |
+| 1M | sqrt | 2 | 1815 | 3291 | 1098 | 0.55 → **1.65** |
+| 1M | sqrt | 3 | 1395 | 3293 | 735 | 0.42 → **1.90** |
+| 2M | sqrt | 2 | 4129 | 6903 | 2313 | 0.60 → **1.78** |
+| 2M | sqrt | 3 | 3603 | 6929 | 1606 | 0.52 → **2.24** |
+| 1M | positive | 2 | 1461 | 446 | 379 | 3.3 → 3.9 |
+| 1M | positive | 3 | 1124 | 472 | 360 | 2.4 → 3.1 |
+| 1M | add | 2 | 3066 | 1205 | 989 | 2.5 → 3.1 |
+| 1M | add | 3 | 2465 | 1169 | 883 | 2.1 → 2.8 |
+
+**One-vector rows and wider** (unchanged code path except the row-shape dispatch):
+
+| N | op | w | NumPy µs | old µs | new µs | NPY/NS |
+|---|---|---|---:|---:|---:|---|
+| 1M | positive | 4 | 872 | 411 | 393 | 2.1 → 2.2 |
+| 1M | add | 4 | 2081 | 953 | 802 | 2.2 → 2.6 |
+| 2M | positive | 4 | 2939 | 1538 | 1259 | 1.91 → 2.33 |
+| 2M | sqrt | 4 | 3150 | 1583 | 1321 | 1.99 → 2.38 |
+| 2M | add | 4 | 5234 | 2400 | 2352 | 2.18 → 2.23 |
+| 1M | positive | 16 | 523 | 383 | 304 | 1.4 → 1.7 |
+| 2M | sqrt | 16 | 2318 | 1181 | 1171 | 1.96 → 1.98 |
+
+**Ops without a vector body** (1M f64, `out=`): `exp` w=4 3937 → 2699 µs (NumPy 3289: **0.84× → 1.22×**;
+contiguous exp is 2550–2640 on both sides, so the narrow view now costs what the contiguous one does),
+w=16 0.91× → 1.08×, w=64 unchanged at parity; `mod(view, 3.0)` w=4 6104 → 4739 µs (1.87× → 2.41×).
+
+**Broadcast shapes** (1M f64):
+
+| Shape | c | NumPy µs | old µs | new µs | NPY/NS |
+|---|---|---:|---:|---:|---|
+| `add(A, col, out)` | 4 | 1991 | 1735 | 306 | 1.15 → **6.5** |
+| | 16 | 702 | 518 | 271 | 1.35 → 2.6 |
+| | 64 | 454 | 258 | 268 | 1.76 → 1.70 |
+| `multiply(view, 2.0, out)` | 4 | 836 | 1733 | 424 | 0.48 → **1.97** |
+| | 16 | 540 | 549 | 387 | 0.98 → 1.39 |
+| | 64 | 426 | 358 | 378 | 1.19 → 1.13 |
+| `view * 2.0` (allocating) | 4 | 1937 | 1767 | 407 | 1.10 → 4.8 |
+| `add(view, col, out)` | 4 | 2938 | 1800 | 492 | 1.63 → **6.0** |
+| | 16 | 1009 | 549 | 401 | 1.84 → 2.5 |
+| `add(A, row, out)` | 4 | 878 | 265 | 265 | 3.3 → 3.3 (already the CC path) |
+| `multiply(A, 2.0, out)`, A contiguous | 4 | — | ~1700 | 251 | the coalescer: 2-D per-row → one 1-D chunk |
+
+**3-D** (2M f64, `out=`):
+
+| View | op | NumPy µs | old µs | new µs | NPY/NS |
+|---|---|---:|---:|---:|---|
+| `x[:, :, :4]` | positive | 2571 | 1551 | 1316 | 1.66 → 1.95 |
+| `x[:, :, :4]` | add | 4914 | 2413 | 2441 | 2.04 → 2.01 |
+| `x[::2, :, :4]` | positive | 1275 | 1810 | 600 | 0.70 → **2.12** |
+| `x[::2, :, :4]` | add | 2674 | 2401 | 1090 | 1.11 → **2.45** |
+| `x[::2, :, :16]` | positive | 720 | 705 | 484 | 1.02 → 1.49 |
+| `x[::2, :, :16]` | add | 1572 | 1264 | 879 | 1.24 → 1.79 |
+
+Other dtypes at 1M (f32/u8/i32 `positive`/`add`, w=3…32) were already 2–8× NumPy and are unchanged
+within noise.
+
+### 11.5 Gates
+
+| Gate | Result |
+|---|---|
+| Self-consistency probe (strided/broadcast vs contiguous copies, bytes) | **16,831 / 0 mismatches**, 124 kernels |
+| FuzzMatrix, all 64 corpus tiers, K1 excuse narrowed to `transposed_3d` | **98/98** |
+| Main suite (`TestCategory!=OpenBugs&!=HighMemory`) | **14446 passed, 0 failed, 11 skipped** |
+| Iterator / NDIter / NDExpr / Evaluate filter | 907 passed, 5 failed — the same five `[OpenBugs]` as before |
+| `np.nditer` chunking vs NumPy on the K1 layouts × C/F/A/K | identical except the pre-existing `'A'`-order transposed-3-D case |
+| net8.0 + net10.0 | both build |
+
+One test changed: `AxisStride_2D_NonContig_NoMultiIndex_FortranOrder` asserted the old non-coalescing
+(`NDim == 2` for `a[:, ::2]` under the default K order); NumPy reports `ndim 1` and a single chunk there,
+so the assertion now pins the NumPy behaviour.
+
+### 11.6 What is left
+
+- **Copy-class ops at w=2/3** gain only 1.1–1.3× from the masked path (a masked vector costs about what
+  two or three scalar moves cost); the floor probe (§F of `narrow_probe.cs`) shows a further ~1.3× for a
+  `w == lanes/2` half-vector store. That is a per-width kernel specialization, deliberately not done.
+- **Hosts without AVX2 at 256-bit width** (V128, V512, non-x86) and 1/2-byte lanes keep the scalar tail.
+- **Strided-inner rows** (`x[:, ::2]` that does NOT coalesce because of a second operand) stay on the
+  per-chunk route's gather path; `where=` masked and buffered-cast routes are untouched.
+- **The K1 `'A'`-order axis-ordering divergence** on a transposed 3-D operand is pre-existing and remains.
+- The coalescer change reaches every NDIter consumer (copies, casts, reductions), not only these kernels;
+  only the elementwise routes were measured here.
+
+## 12. See also
 
 - `docs/NDITER_PERF_DISCOVERY.md` — the cost model, the measuring traps, the probes, and the full ranked
   next-wins list (this is §7 angle 2).
+- `benchmark/nditer/probes/narrow_probe.cs` + `numpy_twins.py narrow` — the second-generation probe
+  (sections A–F: widths × sizes, dtypes, scalar-body ops, broadcast shapes, 3-D, hand-written floors).
 - `.claude/CLAUDE.md` → the NDIter section — the concise landed-lever summary.

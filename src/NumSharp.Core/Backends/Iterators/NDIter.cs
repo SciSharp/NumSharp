@@ -809,15 +809,21 @@ namespace NumSharp.Backends.Iteration
                         NDIterCoalescing.ReorderAxesForCoalescing(ref *_state, effectiveOrder, forCoalescing: false);
 
                         // NumPy coalesces UNCONDITIONALLY after order resolution
-                        // (npyiter_coalesce_axes has no contiguity guard), which
-                        // absorbs every size-1 axis via the strict trivial branch.
-                        // NumSharp's full coalesce is gated on all-contiguous, so
-                        // absorb the size-1 axes here explicitly — a trailing one
-                        // would sit innermost (stride 0 under the fill invariant),
-                        // collapsing EXLOOP to one-element inner loops and failing
-                        // the buffer-manager linearity test. Safe on this branch
-                        // only: no multi-index/flat-index is tracked.
-                        NDIterCoalescing.RemoveUnitAxes(ref *_state);
+                        // (npyiter_coalesce_axes has no contiguity guard): every
+                        // size-1 axis is absorbed via the strict trivial branch AND
+                        // every adjacent pair that all operands walk contiguously
+                        // is merged — a C-contiguous (R, w) operand next to a 0-d
+                        // scalar (strides 0, 0) collapses to ONE 1-D chunk, a
+                        // trailing-narrow x[:, :, :w] to (R, w), a uniformly strided
+                        // a[:, ::2] to one strided 1-D chunk. CoalesceAxes cannot
+                        // do this here (it assumes the ascending pre-coalesce
+                        // layout its own sort produces), so this branch used to
+                        // only strip the size-1 axes and left every such case
+                        // paying one kernel call per row. CoalesceAxesIterationOrder
+                        // is the iteration-order merge (innermost axis last) and
+                        // subsumes RemoveUnitAxes. Safe on this branch only: no
+                        // multi-index/flat-index is tracked.
+                        NDIterCoalescing.CoalesceAxesIterationOrder(ref *_state);
                     }
                 }
                 else

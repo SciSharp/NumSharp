@@ -188,6 +188,113 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
+        /// NumPy's unconditional <c>npyiter_coalesce_axes</c> (nditer_constr.c), written for the
+        /// ITERATION-ORDER layout <see cref="NDIterState.Advance"/> / <c>ExternalLoopNext</c> walk
+        /// (axis NDim-1 innermost). Merges every adjacent (outer d, inner d+1) pair that ONE axis
+        /// would walk identically for EVERY operand — <c>stride[d] == stride[d+1] * shape[d+1]</c>,
+        /// or either axis is size-1 with stride 0 (the fill_axisdata invariant) — so the
+        /// element-visit sequence is unchanged; only the odometer gets shorter and the inner loop
+        /// longer. It subsumes <see cref="RemoveUnitAxes"/> (a size-1 axis is the trivial case).
+        ///
+        /// This is the merge the non-all-contiguous construction branch was missing:
+        /// <see cref="CoalesceAxes"/> assumes the ASCENDING pre-coalesce layout its sort produces
+        /// (position 0 innermost — its test is <c>stride0 * shape0 == stride1</c>), so it can only
+        /// run when the result is known to collapse to 1-D, i.e. every operand contiguous and
+        /// nothing broadcast. Everything else was left uncoalesced, and that cost real chunks:
+        /// a C-contiguous <c>(250000, 4)</c> array times a 0-d scalar stayed 2-D and ran the
+        /// kernel once per 4-element row (NumPy: one 1-M chunk — the scalar's stride-0 axes pass
+        /// <c>0 == 0 * shape</c>); a trailing-narrow 3-D view <c>x[:, :, :w]</c> stayed 3-D; and a
+        /// uniformly strided <c>a[:, ::2]</c> ran one chunk per row where NumPy's external_loop
+        /// hands out ONE strided chunk (the oracle's K1 "coalesces fewer dimensions" excuse).
+        ///
+        /// Runs AFTER the order/flip resolution, exactly where NumPy runs its coalesce, so a
+        /// K-order stride sort or a C/F forced order is honored: merging only ever joins axes the
+        /// chosen order already walks back-to-back. Must NOT run when a multi-index or flat index
+        /// is tracked (index reconstruction needs the original axes; NumPy skips it there too).
+        /// Reduce operands keep their structure by construction: a reduced axis has output stride
+        /// 0, which never satisfies the contiguity test against a walked inner axis.
+        /// </summary>
+        public static void CoalesceAxesIterationOrder(ref NDIterState state)
+        {
+            if (state.NDim <= 1)
+                return;
+
+            var shape = state.Shape;
+            var strides = state.Strides;
+            var perm = state.Perm;
+            int stridesNDim = state.StridesNDim;
+            int nop = state.NOp;
+            int ndim = state.NDim;
+
+            // 'write' is the axis being grown; 'read' walks the next inner axis.
+            int write = 0;
+            for (int read = 1; read < ndim; read++)
+            {
+                long shapeO = shape[write];
+                long shapeI = shape[read];
+
+                bool canMerge = true;
+                for (int op = 0; op < nop; op++)
+                {
+                    long so = strides[op * stridesNDim + write];
+                    long si = strides[op * stridesNDim + read];
+                    bool ok = (shapeO == 1 && so == 0) ||
+                              (shapeI == 1 && si == 0) ||
+                              (so == si * shapeI);
+                    if (!ok)
+                    {
+                        canMerge = false;
+                        break;
+                    }
+                }
+
+                if (canMerge)
+                {
+                    // The merged axis walks shapeO*shapeI elements at the INNER stride — unless
+                    // the inner axis is the trivial size-1 one, in which case the outer stride
+                    // carries the walk (and the trivial axis's stride is 0 by the invariant, or
+                    // equal to the outer's when it satisfied the contiguity test instead).
+                    if (shapeI != 1)
+                    {
+                        for (int op = 0; op < nop; op++)
+                        {
+                            int baseIdx = op * stridesNDim;
+                            strides[baseIdx + write] = strides[baseIdx + read];
+                        }
+                    }
+                    shape[write] = shapeO * shapeI;
+                }
+                else
+                {
+                    write++;
+                    if (write != read)
+                    {
+                        shape[write] = shape[read];
+                        for (int op = 0; op < nop; op++)
+                        {
+                            int baseIdx = op * stridesNDim;
+                            strides[baseIdx + write] = strides[baseIdx + read];
+                        }
+                    }
+                }
+            }
+
+            int newNDim = write + 1;
+            if (newNDim == ndim)
+                return;  // nothing merged
+
+            state.NDim = newNDim;
+
+            // Axis merging invalidates the original-axis mapping; reset to identity exactly like
+            // CoalesceAxes / RemoveUnitAxes (no index tracking is active on this path).
+            for (int d = 0; d < newNDim; d++)
+                perm[d] = (sbyte)d;
+            state.ItFlags |= (uint)NDIterFlags.IDENTPERM;
+
+            state.UpdateInnerStrides();
+        }
+
+        /// <summary>
         /// Try to coalesce the inner dimension for better vectorization.
         /// Returns true if inner loop size increased.
         /// </summary>

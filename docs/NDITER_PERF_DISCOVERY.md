@@ -169,6 +169,17 @@ Every one of these was a wrong number first.
        python benchmark/nditer/probes/numpy_twins.py join before.tsv after.tsv numpy.tsv
        git worktree remove --force /tmp/ns-base
 
+11. **Pin to one P-core on a hybrid part.** This host has E-cores, and an unpinned benchmark thread
+   lands on one often enough that a whole run reads 2–3× slower UNIFORMLY and the same cell swings
+   run to run (1M f64 `positive` on 4-wide rows: 800–2600 µs unpinned, 411 µs pinned — the
+   first-generation 2-D-kernel numbers were taken unpinned and did not reproduce). Uniform
+   slowness across every row of a probe is the tell; a "before" and an "after" taken in different
+   scheduling states compare nothing. `narrow_probe.cs` and `numpy_twins.py` honour
+   `NS_PROBE_AFFINITY=<hex mask>` (`0x4` = one P-core here); give both sides the same mask and never
+   run them concurrently. Cache-resident strided-stream cells (100K) additionally move ±20 % with the
+   same binary from stream placement alone — believe only effects well outside that band there, and
+   take the min of at least two rounds per side.
+
 ---
 
 ## 4. The probes
@@ -359,11 +370,32 @@ pool-stagger on that number.
    started at. Gates: FuzzMatrix (all tiers, incl. `out_where` across every strided layout) 98/98,
    main suite 14446/0, plus a 700-case 2-D and 123-case N-D self-consistency check (2-D/N-D strided
    result bit-identical to the contiguous-copy result across ops × dtypes × widths × layouts).
-   **Still open:** the inner-*broadcast* 2-D case (`add(A, col)` with a stride-0 inner) and
-   *non*-flattenable outer axes (a doubly-strided `x[::2, :, :w]`) keep the per-chunk route; both
-   are correct, just not accelerated by this kernel. And `np.empty(view.Shape)` inheriting the
-   view's strides fabricates a malformed (size-N buffer, addressing-beyond-N strides) output that
-   crashes any kernel that honors it — a pre-existing footgun, unrelated to this lever.
+   **Second generation (same day, `docs/NDITER_2D_BLOCK_KERNEL.md` §11).** A review of the report
+   above with a wider probe (`narrow_probe.cs` + `numpy_twins.py narrow`: widths 1–64 at
+   100K/1M/2M, f32/u8/i32, ops without a vector body, the broadcast shapes, 3-D) found three
+   regimes where the kernel's own shapes were LOSING to NumPy — sub-vector rows (`sqrt` on
+   `m[:, :3]` **0.41×**: the scalar tail per row where NumPy finishes with a masked vector),
+   inner-broadcast (`add(A, col)` **1.15×** vs 3.3× for `add(A, row)`), and ops without a vector
+   body (`exp` on 4-wide rows **0.84×**) — plus a general iterator defect: NDIter only coalesced
+   axes when every operand was contiguous and nothing was broadcast, so a C-contiguous
+   `(250000, 4)` array times a 0-d scalar iterated 2-D, one kernel call per 4-element row
+   (1.7 ms → 251 µs once fixed). All four closed: NDIter now merges axes in iteration order
+   exactly as NumPy's unconditional `npyiter_coalesce_axes` does
+   (`NDIterCoalescing.CoalesceAxesIterationOrder`; `a[:, ::2]` is one chunk like NumPy's, and the
+   oracle's K1 excuse shrank to the `'A'`-order transposed-3-D case); the kernel gained
+   inner-broadcast modes {C,S}/{CC,SC,CS} dispatched once per call, AVX2 masked sub-vector rows
+   and tails (`vmaskmov`, integer masked-off lanes filled with 1), a once-per-call row-shape
+   dispatch (generic / one-vector rows / masked rows), a scalar-only block for ops without a
+   vector body, and a per-BLOCK odometer for non-foldable leading axes. Pinned, min-of-two,
+   NPY/NS: `sqrt` w=2/3 0.53/0.41 → **1.58/1.84** (100K) and 0.60/0.52 → 1.78/2.24 (2M);
+   `add(A, col)` c=4 1.15 → **6.5**; `multiply(view, 2.0)` 0.48 → **1.97**; `add(view, col)`
+   1.63 → **6.0**; `exp` w=4 0.84 → 1.22; `x[::2, :, :4]` positive 0.70 → **2.12**. Gates:
+   16,831-check self-consistency 0 mismatches, FuzzMatrix 98/98, main suite 14446/0. Still open:
+   copy-class ops at w=2/3 gain only 1.1–1.3× (a half-vector store would add ~1.3× — a per-width
+   specialization, not done); hosts without 256-bit AVX2 keep the scalar tail; `where=` and
+   buffered-cast routes are untouched. And `np.empty(view.Shape)` inheriting the view's strides
+   fabricates a malformed (size-N buffer, addressing-beyond-N strides) output that crashes any
+   kernel that honors it — a pre-existing footgun, unrelated to this lever.
 
 3. **SIMD run detection in the `where=` masked driver.** `InvokeInner` finds mask-true runs one
    byte at a time. Short runs are already ahead of NumPy; long runs lose to the scan:

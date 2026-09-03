@@ -3,9 +3,12 @@
     python benchmark/nditer/probes/numpy_twins.py fixed     # twin of fixed_cost_probe.cs
     python benchmark/nditer/probes/numpy_twins.py ab        # twin of ab_ops_probe.cs (id<TAB>ns rows)
     python benchmark/nditer/probes/numpy_twins.py angles    # twin of angles_probe.cs
+    python benchmark/nditer/probes/numpy_twins.py narrow [ABCDE]   # twin of narrow_probe.cs (2-D block kernel)
     python benchmark/nditer/probes/numpy_twins.py join before.tsv after.tsv [numpy.tsv]
 
-Run with OPENBLAS_NUM_THREADS=1 so nothing on the NumPy side fans out. See docs/NDITER_PERF_DISCOVERY.md.
+Run with OPENBLAS_NUM_THREADS=1 so nothing on the NumPy side fans out, and on a hybrid P/E-core host
+with NS_PROBE_AFFINITY=<hex mask> (the same mask as the C# probe) so both sides sit on one P-core.
+See docs/NDITER_PERF_DISCOVERY.md.
 """
 import sys
 import time
@@ -211,6 +214,79 @@ def angles():
         print(f"rep{rep}: natural (same) offsets {t0:.3f}   B+128B/O+256B {t1:.3f}   B+64B/O+128B {t2:.3f}")
 
 
+def best_us(body):
+    return best_ns(body) / 1e3
+
+
+def narrow(sections="ABCDE"):
+    """Twin of narrow_probe.cs — the 2-D block kernel outside the first report's regime."""
+    if "A" in sections:
+        print("=== (A) f64 (rows, w) strided view, out=: positive | add | sqrt ===")
+        for total in (100_000, 1_000_000, 2_097_152):
+            for w in (1, 2, 3, 4, 8, 16, 64):
+                rows = total // w
+                back = np.arange(rows * 2 * w, dtype=np.float64).reshape(rows, 2 * w)
+                back2 = (np.arange(rows * 2 * w, dtype=np.float64) % 7.0).reshape(rows, 2 * w)
+                sv, sv2, dst = back[:, :w], back2[:, :w], np.empty((rows, w))
+                tp = best_us(lambda: np.positive(sv, out=dst))
+                ta = best_us(lambda: np.add(sv, sv2, out=dst))
+                ts = best_us(lambda: np.sqrt(sv, out=dst))
+                print(f"N={total:8d} w={w:3d} rows={rows:7d}: positive {tp:9.1f} [{tp * 1e3 / rows:5.2f}]  add {ta:9.1f} [{ta * 1e3 / rows:5.2f}]  sqrt {ts:9.1f} [{ts * 1e3 / rows:5.2f}]   (us [ns/row])")
+    if "B" in sections:
+        print("=== (B) 1M other dtypes (rows, w) out=: positive | add ===")
+        for dt, name, widths in ((np.float32, "f32", (3, 4, 8, 16)), (np.uint8, "u8", (3, 16, 32)), (np.int32, "i32", (3, 4, 8))):
+            total = 1_000_000
+            for w in widths:
+                rows = total // w
+                back = (np.arange(rows * 2 * w) % 100).astype(dt).reshape(rows, 2 * w)
+                back2 = (np.arange(rows * 2 * w) % 7).astype(dt).reshape(rows, 2 * w)
+                sv, sv2, dst = back[:, :w], back2[:, :w], np.empty((rows, w), dtype=dt)
+                tp = best_us(lambda: np.positive(sv, out=dst))
+                ta = best_us(lambda: np.add(sv, sv2, out=dst))
+                print(f"{name:4s} w={w:3d} rows={rows:7d}: positive {tp:9.1f} [{tp * 1e3 / rows:5.2f}]  add {ta:9.1f} [{ta * 1e3 / rows:5.2f}]")
+    if "C" in sections:
+        print("=== (C) 1M f64 exp(out) | mod(sv, 3.0, out) | contiguous twins ===")
+        for w in (4, 16, 64):
+            total = 1_000_000
+            rows = total // w
+            back = ((np.arange(rows * 2 * w, dtype=np.float64) % 13.0) + 0.5).reshape(rows, 2 * w)
+            sv, dst = back[:, :w], np.empty((rows, w))
+            flat, fdst = np.ascontiguousarray(sv), np.empty((rows, w))
+            te, tec = best_us(lambda: np.exp(sv, out=dst)), best_us(lambda: np.exp(flat, out=fdst))
+            tm, tmc = best_us(lambda: np.mod(sv, 3.0, out=dst)), best_us(lambda: np.mod(flat, 3.0, out=fdst))
+            print(f"w={w:3d} rows={rows:7d}: exp {te:9.1f} [{te * 1e3 / rows:5.2f}] (contig {tec:8.1f})   mod {tm:9.1f} [{tm * 1e3 / rows:5.2f}] (contig {tmc:8.1f})")
+    if "D" in sections:
+        print("=== (D) 1M f64 broadcast shapes, out=: add(A,col) | multiply(view,2.0) | view*2.0 | add(A,row) | add(view,col) ===")
+        for c in (4, 16, 64):
+            total = 1_000_000
+            r = total // c
+            A = (np.arange(total, dtype=np.float64) % 97.0).reshape(r, c)
+            col = (np.arange(r, dtype=np.float64) % 5.0).reshape(r, 1)
+            row = (np.arange(c, dtype=np.float64) % 5.0).reshape(1, c)
+            back = np.arange(r * 2 * c, dtype=np.float64).reshape(r, 2 * c)
+            sv, dst = back[:, :c], np.empty((r, c))
+            tc = best_us(lambda: np.add(A, col, out=dst))
+            tms = best_us(lambda: np.multiply(sv, 2.0, out=dst))
+            tos = best_us(lambda: sv * 2.0)
+            tr = best_us(lambda: np.add(A, row, out=dst))
+            tvc = best_us(lambda: np.add(sv, col, out=dst))
+            print(f"c={c:3d} rows={r:7d}: add(A,col) {tc:8.1f} [{tc * 1e3 / r:5.2f}]  multiply(sv,2.0,out) {tms:8.1f} [{tms * 1e3 / r:5.2f}]  sv*2.0 {tos:8.1f}  add(A,row) {tr:8.1f} [{tr * 1e3 / r:5.2f}]  add(sv,col) {tvc:8.1f} [{tvc * 1e3 / r:5.2f}]")
+    if "E" in sections:
+        print("=== (E) 2M f64 3-D: flattenable x[:, :, :w] vs non-flattenable x[::2, :, :w], out=: positive | add ===")
+        for w in (4, 16):
+            total = 2_097_152
+            d1 = 64
+            d0 = total // (w * d1)
+            x = np.arange(d0 * d1 * 2 * w, dtype=np.float64).reshape(d0, d1, 2 * w)
+            y = (np.arange(d0 * d1 * 2 * w, dtype=np.float64) % 7.0).reshape(d0, d1, 2 * w)
+            flat, flat2, dstF = x[:, :, :w], y[:, :, :w], np.empty((d0, d1, w))
+            half, half2, dstH = x[::2, :, :w], y[::2, :, :w], np.empty(((d0 + 1) // 2, d1, w))
+            rowsF, rowsH = d0 * d1, ((d0 + 1) // 2) * d1
+            tpf, taf = best_us(lambda: np.positive(flat, out=dstF)), best_us(lambda: np.add(flat, flat2, out=dstF))
+            tph, tah = best_us(lambda: np.positive(half, out=dstH)), best_us(lambda: np.add(half, half2, out=dstH))
+            print(f"w={w:3d}: flat  positive {tpf:8.1f} [{tpf * 1e3 / rowsF:5.2f}]  add {taf:8.1f} [{taf * 1e3 / rowsF:5.2f}]   |  ::2  positive {tph:8.1f} [{tph * 1e3 / rowsH:5.2f}]  add {tah:8.1f} [{tah * 1e3 / rowsH:5.2f}]")
+
+
 def join(before, after, numpy_tsv=None):
     def load(path):
         d = {}
@@ -233,7 +309,18 @@ def join(before, after, numpy_tsv=None):
         print(f"{k:40s} {b[k]:10.1f} {a[k]:10.1f} {b[k] / a[k]:6.2f}x {('%10.1f' % npv) if npv else '':>10s} {('%6.2fx' % (npv / a[k])) if npv else '':>7s}")
 
 
+def pin_affinity():
+    """NS_PROBE_AFFINITY=<hex mask> pins the process like the C# probes do (hybrid-core hosts)."""
+    import os
+    aff = os.environ.get("NS_PROBE_AFFINITY")
+    if aff and sys.platform == "win32":
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        k32.SetProcessAffinityMask(k32.GetCurrentProcess(), ctypes.c_size_t(int(aff, 16)))
+
+
 if __name__ == "__main__":
+    pin_affinity()
     cmd = sys.argv[1] if len(sys.argv) > 1 else "fixed"
     print(f"# numpy {np.__version__}", file=sys.stderr)
     if cmd == "fixed":
@@ -242,6 +329,8 @@ if __name__ == "__main__":
         ab()
     elif cmd == "angles":
         angles()
+    elif cmd == "narrow":
+        narrow(sys.argv[2] if len(sys.argv) > 2 else "ABCDE")
     elif cmd == "join":
         join(*sys.argv[2:])
     else:
