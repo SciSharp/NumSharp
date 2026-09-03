@@ -558,14 +558,14 @@ namespace NumSharp.Backends
             UnaryOp capOp = op;
             Action<ILGenerator> scalarBody;
             Action<ILGenerator>? vectorBody;
-            string cacheKey;
+            InnerLoopKernelKey cacheKey;   // packed key (no per-call string): npy_unop_{op}_{in}_{out}
             if (bufferedPromoting)
             {
                 // Kernel only ever sees the output dtype — the iterator's
                 // buffered fill already performed the input cast.
                 scalarBody = il => DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capOut);
                 vectorBody = il => DirectILKernelGenerator.EmitUnaryVectorOperation(il, capOp, capOut);
-                cacheKey = $"npy_unop_{op}_{outputType}_{outputType}";
+                cacheKey = InnerLoopKernelKey.Unary(op, outputType, outputType);
             }
             else
             {
@@ -591,7 +591,7 @@ namespace NumSharp.Backends
                 vectorBody = simdViable
                     ? il => DirectILKernelGenerator.EmitUnaryVectorOperation(il, capOp, capIn)
                     : null;
-                cacheKey = $"npy_unop_{op}_{inputType}_{outputType}";
+                cacheKey = InnerLoopKernelKey.Unary(op, inputType, outputType);
             }
 
             try

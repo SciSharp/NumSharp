@@ -86,7 +86,17 @@ SECTION_PROBE = {
 # DOTNET_DbgEnableMiniDump=0: an AV returns a non-zero exit IMMEDIATELY instead of
 # hanging the process while the runtime writes a crash dump (the silent stall that
 # voided the first full run). We never taskkill dotnet — fast clean exits + retry.
-NS_ENV_EXTRA = {"DOTNET_DbgEnableMiniDump": "0", "DOTNET_EnableCrashReport": "0"}
+#
+# DOTNET_TC_CallCountingDelayMs=0: tiered compilation only promotes a method to tier-1
+# after a 100 ms window in which NO new method was jitted at tier-0 — and a benchmark
+# process keeps jitting new methods (DynamicMethod kernels, first-touched routes) for
+# most of a 200 ms row, so the FIRST rows of every section were timed at tier-0.
+# Measured (2026-09-03, copycast@1): lessbool@1 484 ns with the default delay vs 124 ns
+# with it at 0; astype@1 755 vs 346 ns; the very same call measured 130 ns as a later
+# row in the same process. NumPy has no JIT, so the delay only ever inflated the
+# NumSharp side of the small-N tiers. Zero delay = promote after the usual 30 calls.
+NS_ENV_EXTRA = {"DOTNET_DbgEnableMiniDump": "0", "DOTNET_EnableCrashReport": "0",
+                "DOTNET_TC_CallCountingDelayMs": "0"}
 NS_TIMEOUT = 360
 NP_TIMEOUT = 240
 

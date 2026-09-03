@@ -467,7 +467,8 @@ namespace NumSharp.Backends
             // Vector body intentionally null: the Tier 3B 4×-unrolled wrapper
             // requires same-dtype-across-all-operands and bool output breaks
             // that invariant. Inner-loop factory falls to scalar-strided body.
-            string cacheKey = $"npy_cmp_{op}_{lhsType}_{rhsType}";
+            // Packed key (no per-call string): npy_cmp_{op}_{lhsType}_{rhsType}.
+            var cacheKey = InnerLoopKernelKey.Comparison(op, lhsType, rhsType);
 
             try
             {

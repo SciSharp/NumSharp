@@ -1251,6 +1251,40 @@ per-element `NDArray` view (~0.6 µs each) — `new NDArray(storage, shape)` re-
 the hot 0-d path takes the direct slice ctor instead (measured 2× cheaper) and the strided
 `external_loop` path (once per CHUNK, not per element) keeps the storage route.
 
+**NDIter's fixed cost, and where it went (2026-09-03).** A heap `NDIterState` is ONE native block:
+the header plus a 1536-byte inline arena that `AllocateDimArrays` carves the dimension/operand arrays
+from (`NDIterRef.AllocateStateBlock` / `ReleaseStateBlock`, `NDIter.State.cs`), recycled through a
+bounded `[ThreadStatic]` 4-slot cache with `ResetForRecycle` re-zeroing the header and only the carved
+bytes — every array the iterator hands out must start zeroed (`BaseOffsets` is `+=`-accumulated by
+`FlipNegativeStrides`). The three calloc/free pairs it replaced were **78 ns of a 161 ns** three-operand
+construction; construction now measures **62 ns (1-op) / 93 ns (3-op EXTERNAL_LOOP) / 113 ns (ufunc
+flags)**, against `np.nditer`'s 258 / 698 / 923 ns. Arena overflow (≈ ndim × nop beyond ~8 × 8) falls
+back to the separate blocks; stack states (`CreateCopyState`) have no arena. The production ufunc routes
+identify their Tier-3B kernel by the packed `InnerLoopKernelKey` (a front cache over the string-keyed
+`_innerLoopCache`; `ToCacheKey()` reproduces the legacy `npy_binop_{op}_{l}_{r}_{res}` string byte-exactly
+on a miss) instead of interpolating that string per call (45 ns + 96 B of garbage, measured — more than the
+iterator itself costs after the block cache). The unbuffered EXTERNAL_LOOP drivers
+(`ForEach`/`ExecuteGenericMulti`/`ExecuteReducing`) call `ExternalLoopNext` directly, inlined with the
+state's array pointers hoisted into locals, instead of through the cached advance delegate (per-chunk
+driver overhead 5.6 → 4.7 ns; the remaining cost is the kernel delegate call plus the odometer — a narrow
+inner loop is a KERNEL-selection matter, not iterator overhead: NumPy's `np.positive` on 4-wide rows runs
+5.9 ns/row through its buffered transfer + one vectorized loop). The comparison `out=` route runs the
+whole-array SIMD comparison kernel (`NDIterRef.TryExecuteComparison`) when the inputs share a dtype and
+the bool out is contiguous in iteration order — it compiled a scalar-only body for every layout before
+(`np.less(f64, f64, out=)` at 100K: 43.4 µs → 9.3 µs, NumPy 11.4). The three `*UfuncInto` routes skip
+`Broadcast` + `ResolveUfuncIterationShape` when every operand has identical dims (identity transforms,
+~55 ns + two Shape allocations), and `ResolveWritebacks` disposes the COPY_IF_OVERLAP temp eagerly and
+reverts the operand slot to the original (it used to leak one pooled buffer per in-place ufunc call to
+the finalizer). **Net at n=1 (ns, before → after | NumPy 2.4.2):** `add(out=)` 411 → 168 | 289,
+`less(out=)` 366 → 140 | 300, `sqrt(out=)` 338 → 183 | 258, `negative(out=)` 329 → 153 | 267, in-place
+`add(a, b, out=a)` 282 → 154 | 570; managed garbage per call 552 → 200 B. Gates:
+`NDIterStateBlockTests`, `InnerLoopKernelKeyTests`, `NDIterComparisonOutRouteTests` + the `out_where`
+fuzz tier. **Benchmark trap:** the nditer sheet's C# process must run with
+`DOTNET_TC_CallCountingDelayMs=0` (the orchestrator now sets it) — tiered compilation's 100 ms
+quiet-window rule kept the first rows of every section at tier-0 (`lessbool@1` 484 vs 124 ns for the
+identical call), and the 2026-08-29 sheet's 1M/10M elementwise cells were host-contaminated on BOTH sides
+(fresh: add@10M 0.85×, sqrt@10M 0.97×, not 0.33×/0.23×).
+
 **Do NOT try to fix `it[0]` by re-seating a cached view** — measured, and it is a silent-wrong-answer
 trap. `UnmanagedStorage` keeps **three** synchronized address caches: the public `byte* Address`, the
 `IArraySlice InternalArray`, and a per-dtype `ArraySlice<T> _arrayXxx` field. Re-seating `Address`

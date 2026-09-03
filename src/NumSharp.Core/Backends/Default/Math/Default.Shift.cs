@@ -178,7 +178,8 @@ namespace NumSharp.Backends
                                               DirectILKernelGenerator.ShiftVariableSupported(resultType, isLeftShift)
                 ? il => DirectILKernelGenerator.EmitShiftVectorBody(il, capType, capLeft)
                 : null;
-            string cacheKey = $"npy_shift_{(isLeftShift ? "L" : "R")}_{valueLoopType}_{resultType}";
+            // Packed key (no per-call string): npy_shift_{L|R}_{valueLoopType}_{resultType}.
+            var cacheKey = InnerLoopKernelKey.Shift(isLeftShift, valueLoopType, resultType);
 
             using (var iter = NDIterRef.MultiNew(
                 3, new[] { value, count, result },

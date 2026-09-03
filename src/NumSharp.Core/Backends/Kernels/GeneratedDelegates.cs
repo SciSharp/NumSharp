@@ -168,7 +168,13 @@ namespace NumSharp.Backends.Kernels
         internal static void ClearComparisonScalar() => DirectILKernelGenerator._comparisonScalarCache.Clear();
         internal static void ClearCopyKernel() => DirectILKernelGenerator._copyKernelCache.Clear();
         internal static void ClearFilterAxis() => DirectILKernelGenerator._filterAxis.Clear();
-        internal static void ClearInnerLoop() => DirectILKernelGenerator._innerLoopCache.Clear();
+        internal static void ClearInnerLoop()
+        {
+            // The packed-key front cache aliases the same delegates; clear both so a recompile
+            // is forced through every route.
+            DirectILKernelGenerator._innerLoopKeyCache.Clear();
+            DirectILKernelGenerator._innerLoopCache.Clear();
+        }
         internal static void ClearMatmulKernel() => DirectILKernelGenerator._matmulKernelCache.Clear();
         internal static void ClearMixedType() => DirectILKernelGenerator._mixedTypeCache.Clear();
         internal static void ClearQuantileKernel() => DirectILKernelGenerator._quantileKernelCache.Clear();

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Iteration;
@@ -60,8 +61,47 @@ namespace NumSharp.Backends.Kernels
 
         internal static readonly ConcurrentDictionary<string, NDInnerLoopFunc> _innerLoopCache = new();
 
+        /// <summary>
+        /// Struct-keyed FRONT cache over <see cref="_innerLoopCache"/> for the production
+        /// ufunc routes. Those routes used to build their string key with an interpolated
+        /// <c>$"npy_binop_{op}_{lhs}_{rhs}_{res}"</c> on EVERY call — four enum formats plus a
+        /// string allocation, measured 45 ns + 96 B of garbage per call against ~10 ns for a
+        /// lookup on a prebuilt key — a fixed tax on every NDIter-routed op that dwarfs what
+        /// the iterator itself costs at small sizes. A hit here never touches a string; a
+        /// miss builds the SAME string (<see cref="InnerLoopKernelKey.ToCacheKey"/>) and
+        /// goes through <see cref="_innerLoopCache"/>, so DynamicMethod names, kernel
+        /// identity and <c>GeneratedDelegates.InnerLoopCount</c> are unchanged.
+        /// </summary>
+        internal static readonly ConcurrentDictionary<InnerLoopKernelKey, NDInnerLoopFunc> _innerLoopKeyCache = new();
+
         // Cache size + reset are centralized on GeneratedDelegates
         // (GeneratedDelegates.InnerLoopCount / GeneratedDelegates.ClearInnerLoop).
+
+        /// <summary>
+        /// Look up a production inner-loop kernel by its packed key without building a string.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static bool TryGetInnerLoop(in InnerLoopKernelKey key, out NDInnerLoopFunc kernel)
+            => _innerLoopKeyCache.TryGetValue(key, out kernel!);
+
+        /// <summary>
+        /// Struct-keyed <see cref="CompileInnerLoop(NPTypeCode[], Action{ILGenerator}, Action{ILGenerator}?, string)"/>:
+        /// serves the kernel from the front cache, else compiles it under the equivalent
+        /// string key and registers it in both caches.
+        /// </summary>
+        internal static NDInnerLoopFunc CompileInnerLoop(
+            NPTypeCode[] operandTypes,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            in InnerLoopKernelKey key)
+        {
+            if (_innerLoopKeyCache.TryGetValue(key, out var cached))
+                return cached;
+
+            var kernel = CompileInnerLoop(operandTypes, scalarBody, vectorBody, key.ToCacheKey());
+            _innerLoopKeyCache.TryAdd(key, kernel);
+            return kernel;
+        }
 
         #endregion
 

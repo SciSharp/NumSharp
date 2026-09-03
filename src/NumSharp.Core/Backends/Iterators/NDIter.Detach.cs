@@ -112,7 +112,13 @@ namespace NumSharp.Backends.Iteration
                 if (original is null)
                     continue;
 
-                np.copyto(original, operands[iop]);
+                var temp = operands[iop];
+                np.copyto(original, temp);
+
+                // Same as ResolveWritebacks: the operand slot reverts to the original and the
+                // forced-copy temp is released eagerly instead of leaking to the finalizer.
+                operands[iop] = original;
+                temp.Dispose();
             }
         }
     }

@@ -486,8 +486,9 @@ namespace NumSharp.Backends
                 : null;
 
             // Cache key MUST encode all three dtypes; mixed-dtype kernels
-            // are distinct from same-dtype ones for the same op.
-            string cacheKey = $"npy_binop_{op}_{lhsType}_{rhsType}_{resultType}";
+            // are distinct from same-dtype ones for the same op. Packed key
+            // (no per-call string): npy_binop_{op}_{lhsType}_{rhsType}_{resultType}.
+            var cacheKey = InnerLoopKernelKey.Binary(op, lhsType, rhsType, resultType);
 
             try
             {

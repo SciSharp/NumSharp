@@ -165,6 +165,20 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
+            // Unbuffered EXTERNAL_LOOP — the production ufunc configuration and the
+            // per-chunk hot path (a strided-row op pays this loop once per row): call the
+            // advancer directly so it inlines here, instead of one delegate indirection per
+            // chunk on top of the kernel's own. Measured ~1 ns/chunk of the ~5.6 ns/chunk
+            // driver overhead (iternext + dispatch) on 4-element rows.
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) == 0 && IsPlainExternalLoopAdvance())
+            {
+                do
+                {
+                    InvokeInner(kernel, dataptrs, byteStrides, innerSize, auxdata, maskOp, nop);
+                } while (ExternalLoopNext(ref *_state));
+                return;
+            }
+
             var iternext = GetIterNext();
 
             // Buffered (reduce) fills can change size at the tail, so re-read per call.
@@ -342,6 +356,17 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
+            // Unbuffered EXTERNAL_LOOP: direct (inlined) advance, no delegate per chunk.
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) == 0 && IsPlainExternalLoopAdvance())
+            {
+                long exlInnerSize = ResolveInnerLoopCount();
+                do
+                {
+                    kernel.Execute(dataptrs, byteStrides, exlInnerSize);
+                } while (ExternalLoopNext(ref *_state));
+                return;
+            }
+
             var iternext = GetIterNext();
 
             if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
@@ -415,6 +440,18 @@ namespace NumSharp.Backends.Iteration
                     if (!kernel.Execute(dataptrs, byteStrides, *winSize, ref accum))
                         break;
                 } while (BufferedWindowAdvance());
+                return accum;
+            }
+
+            // Unbuffered EXTERNAL_LOOP: direct (inlined) advance, no delegate per chunk.
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) == 0 && IsPlainExternalLoopAdvance())
+            {
+                long exlInnerSize = ResolveInnerLoopCount();
+                do
+                {
+                    if (!kernel.Execute(dataptrs, byteStrides, exlInnerSize, ref accum))
+                        break;
+                } while (ExternalLoopNext(ref *_state));
                 return accum;
             }
 
@@ -662,6 +699,34 @@ namespace NumSharp.Backends.Iteration
                 _state->Shape,
                 ndim,
                 _state->IterSize);
+        }
+
+        /// <summary>
+        /// Run the whole-array comparison kernel (the SIMD <c>Vector.Compare</c> + mask-packing
+        /// kernel the no-out comparison route uses for contiguous inputs) over
+        /// [lhs, rhs, out(bool)] when the iterator's layout admits it: unbuffered, three
+        /// operands, a Boolean output that is C-contiguous in iteration order (the legacy
+        /// kernel ignores output strides — see <see cref="RequireContiguousOutput"/>).
+        /// Returns false, having touched nothing, when it does not, so the caller can fall
+        /// back to the per-chunk Tier-3B route. The ufunc <c>out=</c> route used to compile a
+        /// scalar-only inner loop for EVERY layout — measured 0.28× NumPy on
+        /// <c>np.less(a, b, out=)</c> at 100K elements.
+        /// </summary>
+        internal bool TryExecuteComparison(ComparisonOp op)
+        {
+            if (_state->NOp != 3)
+                return false;
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
+                return false;
+            if (_state->GetOpDType(2) != NPTypeCode.Boolean)
+                return false;
+            if (!DirectILKernelGenerator.Enabled)
+                return false;
+            if (!IsOperandIterContiguous(2))
+                return false;
+
+            ExecuteComparison(op);
+            return true;
         }
 
         /// <summary>

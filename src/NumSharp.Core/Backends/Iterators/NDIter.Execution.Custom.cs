@@ -96,6 +96,45 @@ namespace NumSharp.Backends.Iteration
             ForEach(kernel);
         }
 
+        /// <summary>
+        /// Packed-key form of <see cref="ExecuteElementWise(NPTypeCode[], Action{ILGenerator}, Action{ILGenerator}?, string)"/>
+        /// for the production ufunc routes: a cache hit runs the kernel without building a
+        /// string or touching <paramref name="operandTypes"/> beyond its length; a miss
+        /// compiles under the equivalent string key (see <see cref="InnerLoopKernelKey"/>).
+        /// </summary>
+        public void ExecuteElementWise(
+            NPTypeCode[] operandTypes,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            in InnerLoopKernelKey key)
+        {
+            if (operandTypes is null) throw new ArgumentNullException(nameof(operandTypes));
+
+            ValidateElementWiseOperandCount(operandTypes.Length);
+
+            if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
+                kernel = DirectILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, key);
+            ForEach(kernel);
+        }
+
+        /// <summary>
+        /// The operand-count contract of <see cref="ExecuteElementWise(NPTypeCode[], Action{ILGenerator}, Action{ILGenerator}?, string)"/>
+        /// (a trailing ARRAYMASK operand is driven by ForEach, not the kernel), shared by the
+        /// packed-key forms so a hit never allocates the dtype array just to count it.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ValidateElementWiseOperandCount(int operandTypeCount)
+        {
+            int kernelNOp = _state->NOp;
+            if (_state->MaskOp == kernelNOp - 1 && operandTypeCount == kernelNOp - 1)
+                kernelNOp--;
+
+            if (operandTypeCount != kernelNOp)
+                throw new ArgumentException(
+                    $"operandTypes length ({operandTypeCount}) must match iterator NOp ({_state->NOp}).",
+                    "operandTypes");
+        }
+
         /// <summary>Convenience: 1-input + 1-output (unary).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void ExecuteElementWiseUnary(
@@ -104,6 +143,32 @@ namespace NumSharp.Backends.Iteration
             Action<ILGenerator>? vectorBody,
             string cacheKey)
             => ExecuteElementWise(new[] { inType, outType }, scalarBody, vectorBody, cacheKey);
+
+        /// <summary>Packed-key unary form: a cache hit allocates nothing.</summary>
+        public void ExecuteElementWiseUnary(
+            NPTypeCode inType, NPTypeCode outType,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            in InnerLoopKernelKey key)
+        {
+            ValidateElementWiseOperandCount(2);
+            if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
+                kernel = DirectILKernelGenerator.CompileInnerLoop(new[] { inType, outType }, scalarBody, vectorBody, key);
+            ForEach(kernel);
+        }
+
+        /// <summary>Packed-key binary form: a cache hit allocates nothing.</summary>
+        public void ExecuteElementWiseBinary(
+            NPTypeCode lhs, NPTypeCode rhs, NPTypeCode outType,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            in InnerLoopKernelKey key)
+        {
+            ValidateElementWiseOperandCount(3);
+            if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
+                kernel = DirectILKernelGenerator.CompileInnerLoop(new[] { lhs, rhs, outType }, scalarBody, vectorBody, key);
+            ForEach(kernel);
+        }
 
         /// <summary>Convenience: 2-input + 1-output (binary).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]

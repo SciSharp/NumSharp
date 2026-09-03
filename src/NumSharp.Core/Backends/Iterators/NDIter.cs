@@ -109,8 +109,9 @@ namespace NumSharp.Backends.Iteration
             if (opFlags == null || opFlags.Length < nop)
                 throw new ArgumentException("OpFlags array must contain at least nop elements", nameof(opFlags));
 
-            // Allocate state on heap for ref struct lifetime
-            var statePtr = (NDIterState*)NativeMemory.AllocZeroed((nuint)sizeof(NDIterState));
+            // Allocate state on heap for ref struct lifetime — one block carrying the header and
+            // the arena the dimension/operand arrays are carved from (recycled per thread).
+            var statePtr = AllocateStateBlock();
 
             try
             {
@@ -126,12 +127,89 @@ namespace NumSharp.Backends.Iteration
             }
             catch
             {
-                // Free dimension arrays if they were allocated
-                statePtr->FreeDimArrays();
-                NativeMemory.Free(statePtr);
+                // Tear down whatever Initialize managed to build (buffers, external dimension
+                // arrays) and hand the block back to the cache / allocator.
+                FreeState(statePtr);
                 throw;
             }
         }
+
+        // =========================================================================
+        // State block allocation — single block + per-thread recycling
+        // =========================================================================
+        //
+        // Every heap NDIterState is ONE native allocation: the header followed by
+        // StateArenaBytes of arena that NDIterState.AllocateDimArrays carves its dimension
+        // and per-operand arrays from (see the arena notes in NDIter.State.cs). Freed blocks
+        // are parked in a small per-thread cache and handed to the next construction after
+        // ResetForRecycle re-zeroed only what the previous iterator used. Measured on the
+        // three-operand 1-D construction: 161 ns → ~90 ns; the three calloc/free pairs it
+        // replaces were 78 ns of that (one 616-byte calloc/free is 29 ns). The cache is
+        // bounded (StateBlockCacheSlots blocks per thread, ~1.9 KB each) and blocks are
+        // uniform, so there is no size-class logic; a block freed on another thread simply
+        // joins that thread's cache. States allocated elsewhere (no arena) are freed
+        // directly, so ReleaseStateBlock is safe for any pointer FreeState accepts.
+
+        /// <summary>Bytes reserved after the state header for the dimension + per-operand arrays.</summary>
+        internal const int StateArenaBytes = 1536;
+
+        /// <summary>Blocks parked per thread by <see cref="ReleaseStateBlock"/>.</summary>
+        internal const int StateBlockCacheSlots = 4;
+
+        private sealed class StateBlockCache
+        {
+            public readonly nint[] Slots = new nint[StateBlockCacheSlots];
+            public int Count;
+        }
+
+        [ThreadStatic]
+        private static StateBlockCache? t_stateBlocks;
+
+        /// <summary>
+        /// Obtain a zeroed state header with an attached, zeroed inline arena — from the
+        /// per-thread cache when one is parked there, else a fresh single allocation.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static NDIterState* AllocateStateBlock()
+        {
+            var cache = t_stateBlocks;
+            if (cache is not null && cache.Count > 0)
+                return (NDIterState*)cache.Slots[--cache.Count];
+
+            var block = (NDIterState*)NativeMemory.AllocZeroed((nuint)(sizeof(NDIterState) + StateArenaBytes));
+            block->AttachInlineArena((byte*)block + sizeof(NDIterState), StateArenaBytes);
+            return block;
+        }
+
+        /// <summary>
+        /// Release a state header whose buffers and external dimension arrays have already
+        /// been freed: single-block states are re-zeroed and parked in the per-thread cache
+        /// (or freed when it is full); states without an inline arena are freed directly.
+        /// </summary>
+        internal static void ReleaseStateBlock(NDIterState* state)
+        {
+            if (state == null)
+                return;
+
+            if (!state->HasInlineArena)
+            {
+                NativeMemory.Free(state);
+                return;
+            }
+
+            var cache = t_stateBlocks ??= new StateBlockCache();
+            if (cache.Count < StateBlockCacheSlots)
+            {
+                state->ResetForRecycle();
+                cache.Slots[cache.Count++] = (nint)state;
+                return;
+            }
+
+            NativeMemory.Free(state);
+        }
+
+        /// <summary>Blocks currently parked in the calling thread's cache (diagnostics/tests).</summary>
+        internal static int CachedStateBlockCount => t_stateBlocks?.Count ?? 0;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private void Initialize(
@@ -1426,7 +1504,19 @@ namespace NumSharp.Backends.Iteration
                 var original = originals[iop];
                 if (original is null)
                     continue;
-                np.copyto(original, ops[iop]);
+                var temp = ops[iop];
+                np.copyto(original, temp);
+
+                // The forced-copy temporary has served its purpose: put the user's original
+                // back in the operand slot (NumPy's operands revert to the originals once
+                // WRITEBACKIFCOPY resolves) and release the temp NOW. It used to be dropped
+                // here and reclaimed only by a later GC + finalizer pass — one leaked pooled
+                // buffer per in-place ufunc call (np.add(a, b, out=a) is COPY_IF_OVERLAP's
+                // bread and butter), which is exactly the finalizer buffer-lifetime tax the
+                // small-N benchmarks keep surfacing. Views taken over the temp (GetIterView)
+                // keep their own reference on the storage block, so this only drops ours.
+                ops[iop] = original;
+                temp.Dispose();
             }
         }
 
@@ -2129,6 +2219,18 @@ namespace NumSharp.Backends.Iteration
             return true;
         }
 
+        /// <summary>
+        /// Advance an EXTERNAL_LOOP iterator past the inner loop the kernel just consumed:
+        /// one outer-odometer step (ripple carry over axes NDim-2..0). This is the per-chunk
+        /// cost every strided-row op pays, so the state's array pointers are hoisted into
+        /// locals — through <c>ref state</c> the JIT must assume each <c>DataPtrs[op]</c>
+        /// store may alias the pointer FIELDS and reload them per operand per axis — and the
+        /// kernel drivers (<see cref="ForEach"/>, <c>ExecuteGenericMulti</c>,
+        /// <see cref="ExecuteReducing{TKernel, TAccum}"/>) call it DIRECTLY rather than
+        /// through the cached <see cref="NDIterNextFunc"/> delegate, letting it inline into
+        /// the driver loop. It stays a valid delegate target for <see cref="GetIterNext"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool ExternalLoopNext(ref NDIterState state)
         {
             // For external loop, we advance outer dimensions
@@ -2136,38 +2238,69 @@ namespace NumSharp.Backends.Iteration
             if (state.IterIndex >= state.IterEnd)
                 return false;
 
-            state.IterIndex += state.Shape[state.NDim - 1];
+            int ndim = state.NDim;
+            long* shape = state.Shape;
+
+            state.IterIndex += shape[ndim - 1];
 
             if (state.IterIndex >= state.IterEnd)
                 return false;
 
+            int nop = state.NOp;
+            int stridesNDim = state.StridesNDim;
+            long* strides = state.Strides;
+            long* dataPtrs = state.DataPtrs;
+            int* srcElementSizes = state.SrcElementSizes;
+            long* coords = state.Coords;
+
             // Advance outer coordinates. DataPtrs traverse SOURCE-array memory,
             // so multiply element strides by the SOURCE element size (the buffer
             // dtype's ElementSizes diverges under a buffered cast — bug (b)).
-            for (int axis = state.NDim - 2; axis >= 0; axis--)
+            for (int axis = ndim - 2; axis >= 0; axis--)
             {
-                state.Coords[axis]++;
+                long coord = ++coords[axis];
+                long dim = shape[axis];
 
-                if (state.Coords[axis] < state.Shape[axis])
+                if (coord < dim)
                 {
                     // Update data pointers
-                    for (int op = 0; op < state.NOp; op++)
+                    for (int op = 0; op < nop; op++)
                     {
-                        long stride = state.GetStride(axis, op);
-                        state.DataPtrs[op] += stride * state.SrcElementSizes[op];
+                        long stride = strides[op * stridesNDim + axis];
+                        dataPtrs[op] += stride * srcElementSizes[op];
                     }
                     return true;
                 }
 
                 // Carry
-                state.Coords[axis] = 0;
-                for (int op = 0; op < state.NOp; op++)
+                coords[axis] = 0;
+                long back = dim - 1;
+                for (int op = 0; op < nop; op++)
                 {
-                    long stride = state.GetStride(axis, op);
-                    state.DataPtrs[op] -= stride * (state.Shape[axis] - 1) * state.SrcElementSizes[op];
+                    long stride = strides[op * stridesNDim + axis];
+                    dataPtrs[op] -= stride * back * srcElementSizes[op];
                 }
             }
 
+            return true;
+        }
+
+        /// <summary>
+        /// True when the iterator's advance function would resolve to
+        /// <see cref="ExternalLoopNext"/> (see <see cref="GetIterNext"/>): EXTERNAL_LOOP, not
+        /// a single iteration, and not windowed-buffered. The kernel drivers use it to call
+        /// the advancer directly instead of through the delegate.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool IsPlainExternalLoopAdvance()
+        {
+            uint f = _state->ItFlags;
+            if ((f & (uint)NDIterFlags.EXLOOP) == 0)
+                return false;
+            if ((f & (uint)NDIterFlags.ONEITERATION) != 0)
+                return false;
+            if ((f & (uint)NDIterFlags.BUFFER) != 0 && (f & (uint)NDIterFlags.REDUCE) == 0)
+                return false;
             return true;
         }
 
@@ -3734,8 +3867,8 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public NDIterRef Copy()
         {
-            // Allocate new state on heap
-            var newStatePtr = (NDIterState*)NativeMemory.AllocZeroed((nuint)sizeof(NDIterState));
+            // Allocate new state on heap (single block + arena, like AdvancedNew)
+            var newStatePtr = AllocateStateBlock();
 
             try
             {
@@ -3838,7 +3971,7 @@ namespace NumSharp.Backends.Iteration
                 if ((newStatePtr->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
                     NDIterBufferManager.FreeBuffers(ref *newStatePtr);
                 newStatePtr->FreeDimArrays();
-                NativeMemory.Free(newStatePtr);
+                ReleaseStateBlock(newStatePtr);
                 throw;
             }
         }
@@ -3883,7 +4016,8 @@ namespace NumSharp.Backends.Iteration
                 // NUMSHARP DIVERGENCE: Unlike NumPy's fixed arrays, we allocate dynamically
                 _state->FreeDimArrays();
 
-                NativeMemory.Free(_state);
+                // Park the block for the next construction on this thread (or free it).
+                ReleaseStateBlock(_state);
                 _state = null;
                 _ownsState = false;
             }
@@ -3926,7 +4060,7 @@ namespace NumSharp.Backends.Iteration
             if ((state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
                 NDIterBufferManager.FreeBuffers(ref *state);
             state->FreeDimArrays();
-            NativeMemory.Free(state);
+            ReleaseStateBlock(state);
         }
     }
 
