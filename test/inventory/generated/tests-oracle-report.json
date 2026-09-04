@@ -10,94 +10,94 @@
   },
   "summary": {
     "tests": {
-      "methods": 13831,
-      "declaredInvocations": 14467,
-      "dataRows": 716,
-      "dataRowMethods": 80,
+      "methods": 14264,
+      "declaredInvocations": 14912,
+      "dataRows": 732,
+      "dataRowMethods": 84,
       "dynamicMethods": 34,
-      "sourceLocated": 13831,
-      "oracleMethods": 664,
-      "fuzzMatrixMethods": 98,
+      "sourceLocated": 14264,
+      "oracleMethods": 748,
+      "fuzzMatrixMethods": 102,
       "npyOracleMethods": 13,
       "statuses": {
-        "active": 13536,
+        "active": 13998,
         "ignored": 11,
         "manual": 5,
-        "open_bug": 215,
+        "open_bug": 186,
         "platform": 64
       },
       "categories": {
         "Explicit": 2,
-        "Fixed": 3,
-        "FuzzMatrix": 98,
+        "Fixed": 11,
+        "FuzzMatrix": 102,
         "HighMemory": 50,
         "LongIndexing": 3,
-        "Misaligned": 34,
+        "Misaligned": 36,
         "NpyOracle": 13,
-        "OpenBugs": 215,
-        "ScopeAudit": 7,
+        "OpenBugs": 186,
+        "ScopeAudit": 10,
         "WindowsOnly": 75
       },
       "projects": {
-        "NumSharp.Tests": 13221,
-        "NumSharp.Tests.Interop": 444,
-        "NumSharp.Tests.Oracle": 166
+        "NumSharp.Tests": 13570,
+        "NumSharp.Tests.Interop": 524,
+        "NumSharp.Tests.Oracle": 170
       },
       "suites": 39,
       "oracleTestClasses": 18
     },
     "oracle": {
-      "corpusFiles": 67,
-      "serializedRows": 116971,
-      "corpusRows": 116969,
+      "corpusFiles": 68,
+      "serializedRows": 117919,
+      "corpusRows": 117917,
       "metadataRows": 2,
       "unmappedContractRows": 0,
-      "opMappedContractRows": 116969,
-      "numpyRows": 103143,
+      "opMappedContractRows": 117917,
+      "numpyRows": 104091,
       "hostSensitiveRows": 697,
       "advancedIndexRows": 12426,
       "decimalRows": 703,
       "hostPinRecords": 2,
       "charRows": 5506,
-      "opKeys": 367,
-      "layouts": 2215,
+      "opKeys": 372,
+      "layouts": 2216,
       "errorRows": 1338,
       "resultKinds": {
-        "array": 108316,
+        "array": 109264,
         "dtype": 561,
         "scalar": 1727,
         "text": 245,
         "tuple": 6120
       },
       "dtypeRows": {
-        "bool": 18883,
+        "bool": 19446,
         "char": 5506,
-        "complex128": 9145,
+        "complex128": 9225,
         "complex64": 412,
         "decimal": 703,
-        "float16": 11107,
-        "float32": 12358,
-        "float64": 24979,
-        "int16": 7130,
-        "int32": 11534,
-        "int64": 16781,
-        "int8": 7585,
-        "uint16": 7216,
-        "uint32": 6516,
-        "uint64": 8241,
-        "uint8": 7504
+        "float16": 11252,
+        "float32": 12503,
+        "float64": 25210,
+        "int16": 7172,
+        "int32": 11648,
+        "int64": 16824,
+        "int8": 7663,
+        "uint16": 7258,
+        "uint32": 6558,
+        "uint64": 8283,
+        "uint8": 7582
       },
-      "dtypeContractLinks": 155600,
+      "dtypeContractLinks": 157245,
       "flagsOracleRows": 1104,
       "layoutOracleRows": 210,
       "npyOracleCases": 286,
       "specializedOracleCases": 1600,
-      "totalSerializedContracts": 118569,
+      "totalSerializedContracts": 119517,
       "thinOpLabels": 64,
       "singleLayoutOpLabels": 75,
       "singleDtypeOpLabels": 12,
       "opLabelsWithErrors": 37,
-      "opLabelsWithoutErrors": 330
+      "opLabelsWithoutErrors": 335
     }
   },
   "suites": [
@@ -105,13 +105,13 @@
       "id": "NumSharp.Tests::API & iteration",
       "project": "NumSharp.Tests",
       "area": "API & iteration",
-      "methods": 710,
-      "declaredInvocations": 710,
-      "dataRows": 0,
+      "methods": 731,
+      "declaredInvocations": 743,
+      "dataRows": 16,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 710
+        "active": 731
       },
       "categories": {
         "Misaligned": 1
@@ -119,6 +119,7 @@
       "sourceFiles": [
         "test/NumSharp.Tests/APIs/CountNonzeroTests.cs",
         "test/NumSharp.Tests/APIs/NpTypeAliasParityTests.cs",
+        "test/NumSharp.Tests/APIs/np.bufsize.Test.cs",
         "test/NumSharp.Tests/APIs/np.can_cast.BattleTest.cs",
         "test/NumSharp.Tests/APIs/np.common_type.BattleTest.cs",
         "test/NumSharp.Tests/APIs/np.finfo.BattleTest.cs",
@@ -153,11 +154,11 @@
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 86,
-        "open_bug": 53
+        "active": 95,
+        "open_bug": 44
       },
       "categories": {
-        "OpenBugs": 53
+        "OpenBugs": 44
       },
       "sourceFiles": [
         "test/NumSharp.Tests/AuditV2/AuditV2_CastingRandomUtilities.cs",
@@ -191,19 +192,19 @@
       "id": "NumSharp.Tests::Backends & kernels",
       "project": "NumSharp.Tests",
       "area": "Backends & kernels",
-      "methods": 3346,
-      "declaredInvocations": 3710,
+      "methods": 3398,
+      "declaredInvocations": 3762,
       "dataRows": 409,
       "dynamicMethods": 3,
       "oracleMethods": 38,
       "statuses": {
-        "active": 3312,
-        "open_bug": 34
+        "active": 3366,
+        "open_bug": 32
       },
       "categories": {
         "HighMemory": 25,
         "Misaligned": 6,
-        "OpenBugs": 34
+        "OpenBugs": 32
       },
       "sourceFiles": [
         "test/NumSharp.Tests/Backends/AllocationGuardTests.cs",
@@ -224,6 +225,7 @@
         "test/NumSharp.Tests/Backends/Iterators/NDIterAxisStrideArrayTests.cs",
         "test/NumSharp.Tests/Backends/Iterators/NDIterBattleTests.cs",
         "test/NumSharp.Tests/Backends/Iterators/NDIterBufferedWindowTests.cs",
+        "test/NumSharp.Tests/Backends/Iterators/NDIterComparisonOutRouteTests.cs",
         "test/NumSharp.Tests/Backends/Iterators/NDIterCreateCompatibleStridesTests.cs",
         "test/NumSharp.Tests/Backends/Iterators/NDIterCreateCopyStateTests.cs",
         "test/NumSharp.Tests/Backends/Iterators/NDIterCustomOpEdgeCaseTests.cs",
@@ -240,6 +242,7 @@
         "test/NumSharp.Tests/Backends/Iterators/NDIterRefTests.cs",
         "test/NumSharp.Tests/Backends/Iterators/NDIterResetBasePointersTests.cs",
         "test/NumSharp.Tests/Backends/Iterators/NDIterSizeOneStrideTests.cs",
+        "test/NumSharp.Tests/Backends/Iterators/NDIterStateBlockTests.cs",
         "test/NumSharp.Tests/Backends/Iterators/NDIterTransferFlagsTests.cs",
         "test/NumSharp.Tests/Backends/Iterators/NDIterWriteMaskedExecutionTests.cs",
         "test/NumSharp.Tests/Backends/Iterators/NDIterWriteMaskedTests.cs",
@@ -269,6 +272,7 @@
         "test/NumSharp.Tests/Backends/Kernels/HalfNegateBitFlipTests.cs",
         "test/NumSharp.Tests/Backends/Kernels/HalfToIntCastParityTests.cs",
         "test/NumSharp.Tests/Backends/Kernels/IndexingEdgeCaseTests.cs",
+        "test/NumSharp.Tests/Backends/Kernels/InnerLoopKernelKeyTests.cs",
         "test/NumSharp.Tests/Backends/Kernels/KernelMisalignmentTests.cs",
         "test/NumSharp.Tests/Backends/Kernels/LinearAlgebraTests.cs",
         "test/NumSharp.Tests/Backends/Kernels/ManipulationEdgeCaseTests.cs",
@@ -307,6 +311,7 @@
         "test/NumSharp.Tests/Backends/NDArray.setflags.Test.cs",
         "test/NumSharp.Tests/Backends/NDArrayMethodParityTests.cs",
         "test/NumSharp.Tests/Backends/OpenBlasDeliveryTests.cs",
+        "test/NumSharp.Tests/Backends/OwnDataFlagTests.cs",
         "test/NumSharp.Tests/Backends/ReadonlyWriteGuardTests.cs",
         "test/NumSharp.Tests/Backends/Unmanaged/AllocationTests.cs",
         "test/NumSharp.Tests/Backends/Unmanaged/ArcLifecycleTests.cs",
@@ -337,13 +342,13 @@
       "id": "NumSharp.Tests::Casting",
       "project": "NumSharp.Tests",
       "area": "Casting",
-      "methods": 841,
-      "declaredInvocations": 877,
+      "methods": 889,
+      "declaredInvocations": 925,
       "dataRows": 45,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 841
+        "active": 889
       },
       "categories": {
         "Misaligned": 1
@@ -652,13 +657,13 @@
       "id": "NumSharp.Tests::Lifetime",
       "project": "NumSharp.Tests",
       "area": "Lifetime",
-      "methods": 98,
-      "declaredInvocations": 98,
+      "methods": 113,
+      "declaredInvocations": 113,
       "dataRows": 0,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 97,
+        "active": 112,
         "open_bug": 1
       },
       "categories": {
@@ -668,6 +673,7 @@
         "test/NumSharp.Tests/Lifetime/BufferReleaseSweepTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeAsyncTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeDoubleDisposeTests.cs",
+        "test/NumSharp.Tests/Lifetime/NDScopeExitTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeManualDisposeTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeStressTests.cs",
         "test/NumSharp.Tests/Lifetime/NDScopeTests.cs",
@@ -683,16 +689,16 @@
       "id": "NumSharp.Tests::Linear algebra",
       "project": "NumSharp.Tests",
       "area": "Linear algebra",
-      "methods": 373,
-      "declaredInvocations": 373,
+      "methods": 408,
+      "declaredInvocations": 408,
       "dataRows": 0,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 373
+        "active": 408
       },
       "categories": {
-        "Misaligned": 1
+        "Misaligned": 2
       },
       "sourceFiles": [
         "test/NumSharp.Tests/LinearAlgebra/BlasProductApiTests.cs",
@@ -702,6 +708,7 @@
         "test/NumSharp.Tests/LinearAlgebra/LinAlgEngineSeamTests.cs",
         "test/NumSharp.Tests/LinearAlgebra/LinAlgErrorParityTests.cs",
         "test/NumSharp.Tests/LinearAlgebra/LinAlgSignatureParityTests.cs",
+        "test/NumSharp.Tests/LinearAlgebra/ManagedLuTests.cs",
         "test/NumSharp.Tests/LinearAlgebra/MatMulInt64Tests.cs",
         "test/NumSharp.Tests/LinearAlgebra/MatMulStridedTests.cs",
         "test/NumSharp.Tests/LinearAlgebra/NDArray.Transpose.Test.cs",
@@ -726,13 +733,13 @@
       "id": "NumSharp.Tests::Logic",
       "project": "NumSharp.Tests",
       "area": "Logic",
-      "methods": 403,
-      "declaredInvocations": 444,
+      "methods": 433,
+      "declaredInvocations": 474,
       "dataRows": 47,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 392,
+        "active": 422,
         "ignored": 2,
         "open_bug": 9
       },
@@ -755,9 +762,11 @@
         "test/NumSharp.Tests/Logic/np.isfinite.Test.cs",
         "test/NumSharp.Tests/Logic/np.isinf.Test.cs",
         "test/NumSharp.Tests/Logic/np.isnan.Test.cs",
+        "test/NumSharp.Tests/Logic/np.isposinf_isneginf.Test.cs",
         "test/NumSharp.Tests/Logic/np.isscalar.Test.cs",
         "test/NumSharp.Tests/Logic/np.iterable.Test.cs",
         "test/NumSharp.Tests/Logic/np.logical_reduction.iterator.tests.cs",
+        "test/NumSharp.Tests/Logic/np.nan_to_num.Test.cs",
         "test/NumSharp.Tests/Logic/np.where.BattleTest.cs",
         "test/NumSharp.Tests/Logic/np.where.Test.cs",
         "test/NumSharp.Tests/Logic/np_all_axis_Test.cs"
@@ -861,13 +870,13 @@
       "id": "NumSharp.Tests::Math",
       "project": "NumSharp.Tests",
       "area": "Math",
-      "methods": 530,
-      "declaredInvocations": 530,
+      "methods": 612,
+      "declaredInvocations": 612,
       "dataRows": 0,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 530
+        "active": 612
       },
       "categories": {},
       "sourceFiles": [
@@ -876,7 +885,14 @@
         "test/NumSharp.Tests/Math/BroadcastErrorMessageParityTests.cs",
         "test/NumSharp.Tests/Math/Default.Reduction.Arg.UsingTests.cs",
         "test/NumSharp.Tests/Math/Exp2KernelTests.cs",
+        "test/NumSharp.Tests/Math/HalfArithKernelTests.cs",
+        "test/NumSharp.Tests/Math/HalfComparisonKernelTests.cs",
+        "test/NumSharp.Tests/Math/HalfMinMaxBitKernelTests.cs",
+        "test/NumSharp.Tests/Math/HalfPairMinMaxKernelTests.cs",
+        "test/NumSharp.Tests/Math/HalfRoundKernelTests.cs",
+        "test/NumSharp.Tests/Math/InterpTests.cs",
         "test/NumSharp.Tests/Math/InverseHyperbolicTests.cs",
+        "test/NumSharp.Tests/Math/LogAddExpNextAfterTests.cs",
         "test/NumSharp.Tests/Math/NDArray.Absolute.Parity.Test.cs",
         "test/NumSharp.Tests/Math/NDArray.Absolute.Test.cs",
         "test/NumSharp.Tests/Math/NDArray.ComplexAccessors.Test.cs",
@@ -1013,18 +1029,18 @@
       "id": "NumSharp.Tests::Open bugs",
       "project": "NumSharp.Tests",
       "area": "Open bugs",
-      "methods": 145,
-      "declaredInvocations": 145,
+      "methods": 137,
+      "declaredInvocations": 137,
       "dataRows": 0,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
         "active": 74,
-        "open_bug": 71
+        "open_bug": 63
       },
       "categories": {
         "Fixed": 2,
-        "OpenBugs": 71,
+        "OpenBugs": 63,
         "WindowsOnly": 11
       },
       "sourceFiles": [
@@ -1156,13 +1172,13 @@
       "id": "NumSharp.Tests::Selection",
       "project": "NumSharp.Tests",
       "area": "Selection",
-      "methods": 363,
-      "declaredInvocations": 363,
+      "methods": 393,
+      "declaredInvocations": 393,
       "dataRows": 0,
       "dynamicMethods": 31,
       "oracleMethods": 3,
       "statuses": {
-        "active": 362,
+        "active": 392,
         "open_bug": 1
       },
       "categories": {
@@ -1179,6 +1195,7 @@
         "test/NumSharp.Tests/Selection/Indexing.CombinatorialParity.MatrixTests.cs",
         "test/NumSharp.Tests/Selection/Indexing.EdgeParity.MatrixTests.cs",
         "test/NumSharp.Tests/Selection/Indexing.FancyParity.MatrixTests.cs",
+        "test/NumSharp.Tests/Selection/Indexing.KernelRoute.Tests.cs",
         "test/NumSharp.Tests/Selection/Indexing.LayoutValueParity.MatrixTests.cs",
         "test/NumSharp.Tests/Selection/IndexingProbeMatrix.Tests.cs",
         "test/NumSharp.Tests/Selection/NDArray.AMax.Test.cs",
@@ -1191,22 +1208,24 @@
       "id": "NumSharp.Tests::Shape & views",
       "project": "NumSharp.Tests",
       "area": "Shape & views",
-      "methods": 439,
-      "declaredInvocations": 439,
+      "methods": 483,
+      "declaredInvocations": 483,
       "dataRows": 0,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 426,
-        "open_bug": 13
+        "active": 478,
+        "open_bug": 5
       },
       "categories": {
-        "Fixed": 1,
-        "OpenBugs": 13
+        "Fixed": 9,
+        "Misaligned": 1,
+        "OpenBugs": 5
       },
       "sourceFiles": [
         "test/NumSharp.Tests/View/NDArray.View.Test.cs",
         "test/NumSharp.Tests/View/OrderSupport.OpenBugs.Tests.cs",
+        "test/NumSharp.Tests/View/ReductionKeepOrderTests.cs",
         "test/NumSharp.Tests/View/Shape.IsContiguous.Test.cs",
         "test/NumSharp.Tests/View/Shape.OffsetParity.Tests.cs",
         "test/NumSharp.Tests/View/Shape.Order.Tests.cs",
@@ -1296,12 +1315,9 @@
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 127,
-        "open_bug": 2
+        "active": 129
       },
-      "categories": {
-        "OpenBugs": 2
-      },
+      "categories": {},
       "sourceFiles": [
         "test/NumSharp.Tests/Utilities/ArraysTests.cs",
         "test/NumSharp.Tests/Utilities/FluentExtensionTests.cs",
@@ -1314,13 +1330,13 @@
       "id": "NumSharp.Tests.Interop::Python interoperability",
       "project": "NumSharp.Tests.Interop",
       "area": "Python interoperability",
-      "methods": 444,
-      "declaredInvocations": 444,
+      "methods": 524,
+      "declaredInvocations": 524,
       "dataRows": 0,
       "dynamicMethods": 0,
-      "oracleMethods": 444,
+      "oracleMethods": 524,
       "statuses": {
-        "active": 444
+        "active": 524
       },
       "categories": {
         "Misaligned": 1
@@ -1331,6 +1347,8 @@
         "test/NumSharp.Tests.Interop/CodecByteContractTests.cs",
         "test/NumSharp.Tests.Interop/CodecModeTests.cs",
         "test/NumSharp.Tests.Interop/CodecTests.cs",
+        "test/NumSharp.Tests.Interop/CreationCtorEdgeCaseLiveParityTests.cs",
+        "test/NumSharp.Tests.Interop/CreationCtorLiveParityTests.cs",
         "test/NumSharp.Tests.Interop/DocExamples.InteropIndexPage.cs",
         "test/NumSharp.Tests.Interop/DocExamples.NpFrombufferPage.cs",
         "test/NumSharp.Tests.Interop/DocExamples.NumpyNetPage.cs",
@@ -1348,8 +1366,13 @@
         "test/NumSharp.Tests.Interop/NumpyComputeInteropTests.cs",
         "test/NumSharp.Tests.Interop/NumpyNetInteropTests.cs",
         "test/NumSharp.Tests.Interop/OwnershipAndWriteabilityTests.cs",
+        "test/NumSharp.Tests.Interop/PandasInteropEdgeCaseTests.cs",
+        "test/NumSharp.Tests.Interop/PandasInteropRareScenarioTests.cs",
+        "test/NumSharp.Tests.Interop/PandasInteropTests.cs",
         "test/NumSharp.Tests.Interop/PolynomialLiveParityTests.cs",
         "test/NumSharp.Tests.Interop/ProductsLiveParityTests.cs",
+        "test/NumSharp.Tests.Interop/PyTorchInteropEdgeCaseTests.cs",
+        "test/NumSharp.Tests.Interop/PyTorchInteropTests.cs",
         "test/NumSharp.Tests.Interop/PythonNetUsageTests.cs",
         "test/NumSharp.Tests.Interop/ReferenceFlowTests.cs",
         "test/NumSharp.Tests.Interop/ScenarioTests.cs",
@@ -1382,17 +1405,17 @@
       "id": "NumSharp.Tests.Oracle::Differential oracle",
       "project": "NumSharp.Tests.Oracle",
       "area": "Differential oracle",
-      "methods": 96,
-      "declaredInvocations": 96,
+      "methods": 100,
+      "declaredInvocations": 100,
       "dataRows": 0,
       "dynamicMethods": 0,
-      "oracleMethods": 96,
+      "oracleMethods": 100,
       "statuses": {
-        "active": 96
+        "active": 100
       },
       "categories": {
-        "FuzzMatrix": 95,
-        "ScopeAudit": 7
+        "FuzzMatrix": 99,
+        "ScopeAudit": 10
       },
       "sourceFiles": [
         "test/NumSharp.Tests.Oracle/Fuzz/BlasBackendDeltaTests.cs",
@@ -1842,12 +1865,12 @@
       "type": "NumSharp.Tests.APIs.NpIsRealIsComplexBattleTests",
       "class": "NpIsRealIsComplexBattleTests",
       "area": "API & iteration",
-      "methods": 21,
-      "declaredInvocations": 21,
+      "methods": 26,
+      "declaredInvocations": 26,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 21
+        "active": 26
       },
       "categories": {},
       "oracleKinds": {},
@@ -1861,23 +1884,28 @@
         "IsComplexObj_FloatArray_False",
         "IsComplexObj_IntArray_False",
         "IsComplexObj_Null_Throws",
+        "IsComplex_Complex_InspectsImaginary",
         "IsComplex_EmptyArray",
         "IsComplex_FloatArray_AllFalse",
         "IsComplex_IntArray_AllFalse",
         "IsComplex_Null_Throws",
         "IsComplex_ShapeMatches",
+        "IsRealIsComplex_Complex_0d_Scalar",
+        "IsRealIsComplex_Complex_Specials_IeeeSemantics",
         "IsRealObj_AllTypes_True",
         "IsRealObj_DoubleArray_True",
         "IsRealObj_EmptyArray_True",
         "IsRealObj_FloatArray_True",
         "IsRealObj_IntArray_True",
         "IsRealObj_Null_Throws",
+        "IsReal_Complex_InspectsImaginary",
         "IsReal_DoubleArray_AllTrue",
         "IsReal_EmptyArray",
         "IsReal_FloatArray_AllTrue",
         "IsReal_IntArray_AllTrue",
         "IsReal_Null_Throws",
-        "IsReal_ShapeMatches"
+        "IsReal_ShapeMatches",
+        "IsReal_StridedRealView_AllTrue_NoGarbage"
       ],
       "methodPolicies": {}
     },
@@ -2480,6 +2508,46 @@
       "methodPolicies": {}
     },
     {
+      "id": "NumSharp.Tests::NumSharp.Tests.APIs.np_bufsize_Test",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.APIs.np_bufsize_Test",
+      "class": "np_bufsize_Test",
+      "area": "API & iteration",
+      "methods": 16,
+      "declaredInvocations": 28,
+      "dataRows": 16,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 16
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/APIs/np.bufsize.Test.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/APIs/np.bufsize.Test.cs#L22",
+      "methodNames": [
+        "Bufsize_DoesNotChangeResults",
+        "Bufsize_IsThreadLocal",
+        "Current_Equals_GetBufsize",
+        "Default_Is_8192",
+        "FailedSet_LeavesCurrentUnchanged",
+        "FailedSet_ReturnsNothing_AndKeepsPreviousOnNextSet",
+        "Negative_Raises_NonNegative",
+        "NotMultipleOf16_Raises",
+        "SetBufsize_Chained_ReturnsEachPreviousValue",
+        "SetBufsize_ChangesNdIterBuffer",
+        "SetBufsize_Persists_WithinThread",
+        "SetBufsize_ReturnsOld_AndUpdatesCurrent",
+        "SetBufsize_ValidValues_Accepted",
+        "TooBig_Raises",
+        "TooSmall_Raises",
+        "ValueError_Is_ArgumentException"
+      ],
+      "methodPolicies": {}
+    },
+    {
       "id": "NumSharp.Tests::NumSharp.Tests.APIs.np_flatiter_tests",
       "project": "NumSharp.Tests",
       "type": "NumSharp.Tests.APIs.np_flatiter_tests",
@@ -2919,11 +2987,11 @@
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 3,
-        "open_bug": 6
+        "active": 5,
+        "open_bug": 4
       },
       "categories": {
-        "OpenBugs": 6
+        "OpenBugs": 4
       },
       "oracleKinds": {},
       "corpusFiles": [],
@@ -2944,9 +3012,7 @@
       ],
       "methodPolicies": {
         "T1_10_Shape_SetIndexer_Mutates_Readonly_Struct": "open_bug",
-        "T1_29_OWNDATA_Flag_Never_Set": "open_bug",
         "T1_42_Shape_Equals_Ignores_Strides_Offset_BufferSize": "open_bug",
-        "T1_64_Flags_OWNDATA_Always_False": "open_bug",
         "T2_All_Contiguous_Is_Much_Slower_Than_NumPy": "open_bug",
         "T2_NonZero_Is_Much_Slower_Than_NumPy": "open_bug"
       }
@@ -3115,11 +3181,11 @@
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 6,
-        "open_bug": 12
+        "active": 13,
+        "open_bug": 5
       },
       "categories": {
-        "OpenBugs": 12
+        "OpenBugs": 5
       },
       "oracleKinds": {},
       "corpusFiles": [],
@@ -3150,16 +3216,9 @@
       "methodPolicies": {
         "T1_16_Cast_CopyFalse_MutatesCallerStorage": "open_bug",
         "T1_43_Cast_CopyFalse_EmptyArray_AlsoMutatesCaller": "open_bug",
-        "T1_44_NDArrayCtor_FOrderArg_SilentlyIgnored": "open_bug",
         "T1_46_FindCommonType_UInt8Array_PlusLargeInt_SilentOverflow": "open_bug",
-        "T1_47_CanCoerceAll_Array_StartIndex_ThrowsArgumentException": "open_bug",
         "T1_48_AsContiguousArray_Scalar_DoesNotPromoteTo_1D": "open_bug",
-        "T1_48_AsFortranArray_Scalar_DoesNotPromoteTo_1D": "open_bug",
-        "T1_50_Arange_BoolDtype_LengthOver2_DoesNotRaise": "open_bug",
-        "T1_54_FromBuffer_F_AlignsWith_npDtype_AndRejects": "open_bug",
-        "T1_54_FromBuffer_c8_AlignsWith_npDtype_AndRejects": "open_bug",
-        "T1_54_FromBuffer_c8_RealBytes_AreSilentlyWidened": "open_bug",
-        "T1_56_NpArray_ArrayInput_DefaultNdmin_MatchesNumPy": "open_bug"
+        "T1_48_AsFortranArray_Scalar_DoesNotPromoteTo_1D": "open_bug"
       }
     },
     {
@@ -4181,6 +4240,40 @@
       "methodPolicies": {}
     },
     {
+      "id": "NumSharp.Tests::NumSharp.Tests.Backends.Iterators.NDIterComparisonOutRouteTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Backends.Iterators.NDIterComparisonOutRouteTests",
+      "class": "NDIterComparisonOutRouteTests",
+      "area": "Backends & kernels",
+      "methods": 10,
+      "declaredInvocations": 10,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 10
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Backends/Iterators/NDIterComparisonOutRouteTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/Iterators/NDIterComparisonOutRouteTests.cs#L32",
+      "methodNames": [
+        "Bool_Out_Aliasing_An_Input_Is_Overlap_Safe",
+        "Cast_Out_Keeps_The_Buffered_Route",
+        "F_Order_Out_Falls_Back_And_Is_Correct",
+        "Mixed_Dtypes_Compare_At_Common_Type",
+        "NaN_Semantics_Match_IEEE",
+        "Row_Broadcast_Into_Contiguous_Out",
+        "SameDtype_Contiguous_Every_Dtype",
+        "Scalar_Broadcast_Rhs_Into_Contiguous_Out",
+        "Strided_Inputs_Into_Contiguous_Out",
+        "Strided_Out_Falls_Back_And_Is_Correct"
+      ],
+      "methodPolicies": {}
+    },
+    {
       "id": "NumSharp.Tests::NumSharp.Tests.Backends.Iterators.NDIterCreateCompatibleStridesTests",
       "project": "NumSharp.Tests",
       "type": "NumSharp.Tests.Backends.Iterators.NDIterCreateCompatibleStridesTests",
@@ -4939,6 +5032,38 @@
         "WriteBroadcast_WithReduceOk_AccumulatesLikeNumPy",
         "WriteBroadcast_WithoutReduceOk_Throws",
         "WriteBroadcast_WriteOnlyWithReduceOk_Throws"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Backends.Iterators.NDIterStateBlockTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Backends.Iterators.NDIterStateBlockTests",
+      "class": "NDIterStateBlockTests",
+      "area": "Backends & kernels",
+      "methods": 8,
+      "declaredInvocations": 8,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 8
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Backends/Iterators/NDIterStateBlockTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/Iterators/NDIterStateBlockTests.cs#L51",
+      "methodNames": [
+        "Arena_Overflow_Falls_Back_To_External_Blocks",
+        "Cache_Is_Bounded",
+        "Copy_Gets_Its_Own_Block",
+        "Detached_State_Freed_Through_FreeState_Is_Recycled",
+        "Dispose_Parks_Block_And_Next_Construction_Pops_It",
+        "Negative_Stride_Flip_On_Recycled_Block_Starts_From_Zero_BaseOffsets",
+        "Production_Ufunc_Out_Route_Recycles_Across_Layouts",
+        "Recycled_Block_Hosts_A_Different_Iterator_Correctly"
       ],
       "methodPolicies": {}
     },
@@ -6307,6 +6432,34 @@
       "methodPolicies": {}
     },
     {
+      "id": "NumSharp.Tests::NumSharp.Tests.Backends.Kernels.InnerLoopKernelKeyTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Backends.Kernels.InnerLoopKernelKeyTests",
+      "class": "InnerLoopKernelKeyTests",
+      "area": "Backends & kernels",
+      "methods": 4,
+      "declaredInvocations": 4,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 4
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Backends/Kernels/InnerLoopKernelKeyTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/Kernels/InnerLoopKernelKeyTests.cs#L17",
+      "methodNames": [
+        "Distinct_Identities_Never_Collide",
+        "Fields_Round_Trip",
+        "Production_Route_Registers_Kernel_Under_Both_Keys",
+        "ToCacheKey_Reproduces_Legacy_String_Formats"
+      ],
+      "methodPolicies": {}
+    },
+    {
       "id": "NumSharp.Tests::NumSharp.Tests.Backends.Kernels.KernelMisalignmentTests",
       "project": "NumSharp.Tests",
       "type": "NumSharp.Tests.Backends.Kernels.KernelMisalignmentTests",
@@ -6631,17 +6784,14 @@
       "type": "NumSharp.Tests.Backends.Kernels.NonContiguousTests",
       "class": "NonContiguousTests",
       "area": "Backends & kernels",
-      "methods": 33,
-      "declaredInvocations": 33,
+      "methods": 37,
+      "declaredInvocations": 37,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 31,
-        "open_bug": 2
+        "active": 37
       },
-      "categories": {
-        "OpenBugs": 2
-      },
+      "categories": {},
       "oracleKinds": {},
       "corpusFiles": [],
       "sourcePaths": [
@@ -6664,8 +6814,12 @@
         "BroadcastTo_Mean",
         "BroadcastTo_Scalar_Sum",
         "FloorDivide_SlicedArrays",
+        "InvertBoolean_3D_Transposed",
+        "InvertBoolean_BroadcastView_ReturnsFreshWriteable",
+        "InvertBoolean_Transposed_AllForms",
         "NegateBoolean_ReversedArray",
         "NegateBoolean_SlicedArray",
+        "NegativeBoolean_UnaryMinusOperator_AlsoRejected",
         "Power_SlicedArrays",
         "Power_TransposedArrays",
         "ReversedTransposed_Add",
@@ -6683,10 +6837,7 @@
         "Transpose_3D_Sum",
         "TransposedSlice_Sum"
       ],
-      "methodPolicies": {
-        "NegateBoolean_ReversedArray": "open_bug",
-        "NegateBoolean_SlicedArray": "open_bug"
-      }
+      "methodPolicies": {}
     },
     {
       "id": "NumSharp.Tests::NumSharp.Tests.Backends.Kernels.NumpyAlignmentBugTests",
@@ -7737,7 +7888,7 @@
         "Tensorinv_ComposesOnInv",
         "Tensorinv_IndOneAndThree_ReshapeTheRightWay",
         "Tensorsolve_ComposesOnSolve",
-        "WithoutTheBackend_TheseRaiseNotSupported_WithIt_TheyCompute"
+        "TheLuFamily_ComputesManagedWithoutTheBackend_AndThroughLapackWithIt"
       ],
       "methodPolicies": {}
     },
@@ -8279,6 +8430,56 @@
         "VersionMarker_RequiredFalse_FallsThroughToTheBundle",
         "VersionMarker_ShaComparison_IsCaseInsensitive",
         "VersionMarker_WithMismatchedSha_RefusesTheFile"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Backends.OwnDataFlagTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Backends.OwnDataFlagTests",
+      "class": "OwnDataFlagTests",
+      "area": "Backends & kernels",
+      "methods": 26,
+      "declaredInvocations": 26,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 26
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Backends/OwnDataFlagTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/OwnDataFlagTests.cs#L58",
+      "methodNames": [
+        "ArithmeticAndReductions_Own",
+        "AxisMovers_AreViews",
+        "BroadcastViews_DoNotOwn",
+        "CopyAndCast_Own",
+        "CopyReturningOps_Own",
+        "Creation_AllocatingConstructors_Own",
+        "Creation_ScalarAndVectorCtors_AllDtypes_Own",
+        "Creation_ZeroDim_And_Empty_Own",
+        "DiagonalAndLaneViews_DoNotOwn",
+        "DtypeReinterpretingViews_DoNotOwn",
+        "FlagsNum_MatchesNumPy_PinnedComposites",
+        "FullSliceAndView_BorrowTheParentShape_ButDoNotOwn",
+        "HandBuiltShapes_CarryNoOwnershipClaim",
+        "InPlaceMutations_PreserveOwnership",
+        "Memmap_EveryMode_NeverOwns",
+        "Mirror_ShapeBit_StorageTruth_FlagsSurface_AlwaysAgree",
+        "NewAxisAndSqueeze_Views",
+        "OwnDataBit_DoesNotAffectShapeEquality",
+        "ReadOnlyOwner_ImagOfReal_OwnsButNotWriteable",
+        "ReshapeFamily_ViewsAndViewOfCopy_DoNotOwn",
+        "RowAndElementViews_DoNotOwn",
+        "Setflags_PreservesOwnershipOnBothSides",
+        "Slicing_Views_DoNotOwn",
+        "ViewOfView_ChainsToOwner_StillDoesNotOwn",
+        "ViewReturningOps_DoNotOwn",
+        "WithFlags_OwnDataRoundtrip_PreservesEverythingElse"
       ],
       "methodPolicies": {}
     },
@@ -11010,12 +11211,12 @@
       "type": "NumSharp.Tests.Casting.np_ArrayPrint_ParityTests",
       "class": "np_ArrayPrint_ParityTests",
       "area": "Casting",
-      "methods": 115,
-      "declaredInvocations": 115,
+      "methods": 163,
+      "declaredInvocations": 163,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 115
+        "active": 163
       },
       "categories": {},
       "oracleKinds": {},
@@ -11025,6 +11226,12 @@
       ],
       "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Casting/np.ArrayPrint.ParityTests.cs#L19",
       "methodNames": [
+        "A2S_BroadcastView_Edgeitems",
+        "A2S_BroadcastView_Precision",
+        "A2S_BroadcastView_Separator",
+        "A2S_BroadcastView_Sign",
+        "A2S_BroadcastView_SuppressSmall",
+        "A2S_BroadcastView_Threshold",
         "A2S_EdgeItems",
         "A2S_FloatmodeFixed",
         "A2S_FloatmodeMaxprecEqual",
@@ -11034,6 +11241,39 @@
         "A2S_SignSpace",
         "A2S_SuppressSmall",
         "A2S_Threshold",
+        "BV_Dtype_Bool",
+        "BV_Dtype_Complex",
+        "BV_Dtype_Double",
+        "BV_Dtype_Half",
+        "BV_Dtype_Int16",
+        "BV_Dtype_Int32",
+        "BV_Dtype_Int64",
+        "BV_Dtype_Int8",
+        "BV_Dtype_Single",
+        "BV_Dtype_UInt16",
+        "BV_Dtype_UInt32",
+        "BV_Dtype_UInt64",
+        "BV_Dtype_UInt8",
+        "BV_HigherRank_4D",
+        "BV_HigherRank_5D",
+        "BV_HigherRank_NewaxisMiddle",
+        "BV_Special_ComplexNan",
+        "BV_Special_NanInf",
+        "BV_Special_NegZero",
+        "BV_Special_Single_Nan",
+        "BV_Summarize_3D",
+        "BV_Summarize_BothAxes",
+        "BV_Summarize_Column",
+        "BV_Summarize_Reversed1D",
+        "BV_Summarize_Stepped1D",
+        "BV_Wrap_WideFloats",
+        "BV_Wrap_WideInts",
+        "BroadcastView_DoubleSliced",
+        "BroadcastView_ReversedSlice",
+        "BroadcastView_ReversedSlice_To3D",
+        "BroadcastView_SlicedColumn",
+        "BroadcastView_StepSlice",
+        "BroadcastView_TransposedSliced",
         "Complex_Frac",
         "Complex_Ints",
         "Complex_IntsRepr",
@@ -11137,6 +11377,15 @@
         "Summarize_1D_Repr",
         "Summarize_1D_Str",
         "Summarize_2D_Str",
+        "View_Repr_BothReversed_Int64",
+        "View_Repr_Column_Int64",
+        "View_Repr_Reversed1D_Complex",
+        "View_Repr_Reversed1D_Double",
+        "View_Repr_Reversed1D_Int64",
+        "View_Repr_Stepped1D_Bool",
+        "View_Repr_Stepped1D_Int64",
+        "View_Repr_Transposed_Int64",
+        "View_Repr_Transposed_Single",
         "Wrap_1D_Repr",
         "Wrap_1D_Str",
         "Wrap_CustomLineWidth"
@@ -15801,12 +16050,12 @@
       "type": "NumSharp.Tests.Lifetime.NDScopeAsyncTests",
       "class": "NDScopeAsyncTests",
       "area": "Lifetime",
-      "methods": 20,
-      "declaredInvocations": 20,
+      "methods": 21,
+      "declaredInvocations": 21,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 20
+        "active": 21
       },
       "categories": {},
       "oracleKinds": {},
@@ -15831,6 +16080,7 @@
         "ReturnsTask_Plain_Incomplete_DefersTheSweep",
         "ReturnsTask_Plain_UpcastSniff_CoversGenericSubtypesAndTuples",
         "ReturnsTask_Plain_UpcastSniff_Deferred_YieldsAtCompletion",
+        "ReturnsTask_TupleResult_NestedAndArrayComponents_AllYielded",
         "ReturnsValueTask_PlainValue_YieldsNow",
         "ReturnsValueTask_SourceBacked_PreserveKeepsTheCallerConsumptionLegal",
         "ReturnsValueTask_TaskBacked_Incomplete_Defers_AndTheReturnedTaskIsAwaitable",
@@ -15863,6 +16113,40 @@
         "ExplicitTransientDispose_PlusScopeDispose_ReleasesBufferExactlyOnce",
         "WovenStorageMethods_UnderGCPressure_NoDoubleFree",
         "YieldedViewOntoDisposedBase_SurvivesBothDisposes"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.NDScopeExitTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Lifetime.NDScopeExitTests",
+      "class": "NDScopeExitTests",
+      "area": "Lifetime",
+      "methods": 10,
+      "declaredInvocations": 10,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 10
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Lifetime/NDScopeExitTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeExitTests.cs#L38",
+      "methodNames": [
+        "Detach_MixedTuple_SkipsNonNDArrayComponents",
+        "Detach_NDArrayArrayComponent_ElementsDetached",
+        "Detach_NDArrayArray_AllElementsSurviveScope",
+        "Detach_NDArrayArray_WithoutDetach_AreReclaimed_Teeth",
+        "Detach_NestedTuple_InnerComponentsDetachedRecursively",
+        "Detach_NullAndNullElements_AreNoOps",
+        "Detach_ValueTuple_ViaITuple_AllComponentsSurvive",
+        "ExitParam_NoAmbientScope_DetachIsHarmless",
+        "ExitParam_RetainedArgument_SurvivesCallerScope",
+        "ExitParam_WithoutDetach_RetainedArgumentDangles_Teeth"
       ],
       "methodPolicies": {}
     },
@@ -16006,12 +16290,12 @@
       "type": "NumSharp.Tests.Lifetime.NDScopeWeaveCarrierTests",
       "class": "NDScopeWeaveCarrierTests",
       "area": "Lifetime",
-      "methods": 13,
-      "declaredInvocations": 13,
+      "methods": 17,
+      "declaredInvocations": 17,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 13
+        "active": 17
       },
       "categories": {},
       "oracleKinds": {},
@@ -16021,9 +16305,13 @@
       ],
       "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveCarrierTests.cs#L40",
       "methodNames": [
+        "ITupleEgress_CarrierComponent_MembersYielded",
         "ITupleEgress_DroppedUnderEnclosingScope_Reparented",
         "ITupleEgress_HighArityMixed_EveryNDArrayYielded_NonArraySkipped",
+        "ITupleEgress_NDArrayArrayComponent_ElementsYielded",
+        "ITupleEgress_NestedTuple_ComponentsYieldedRecursively",
         "ITupleEgress_ReferenceTuple_AndNull_AreHandled",
+        "ITupleEgress_SliceComponent_CountedRefSurvivesScope",
         "StorageEgress_ReturnedSlice_CountedRefSurvivesScopeReclamation",
         "StorageEgress_ReturnedUnmanagedStorage_CountedRefSurvives",
         "StorageEgress_WithoutProtection_ScopeReleaseFreesTheBareAlias",
@@ -16087,7 +16375,7 @@
       "sourcePaths": [
         "test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs#L99",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs#L108",
       "methodNames": [
         "EveryScopedMethod_WasWoven"
       ],
@@ -16438,10 +16726,10 @@
         "ArrayApiForms_ReduceTheLASTTwoAxes_WhereTheirMainNamespaceTwinsTakeTheFirst",
         "Cross_IsTheThreeVectorProduct_OverAnyAxis",
         "Einsum_Computes_WithoutABackend_LikeTheProducts",
-        "EveryFactorisation_RaisesNotSupported_UntilABackendIsInstalled",
+        "EveryFactorisationWithoutManagedNumerics_RaisesNotSupported_UntilABackendIsInstalled",
         "EveryNewSeamMemberDefaultsToDeclining_SoAnExistingBackendKeepsCompiling",
+        "MatrixPower_NegativeExponent_ComputesThroughTheManagedInverse",
         "MatrixPower_NonNegativeExponents_Work",
-        "MatrixPower_StopsOnlyOnANegativeExponent",
         "MatrixPower_ZeroGivesTheIdentityInTheOperandsOwnDtype",
         "MatrixRank_BelowRankTwo_IsAPredicateNotACount",
         "MultiDot_ChainsAnyNumberOfMatrices_AndUnwrapsVectorEndpoints",
@@ -16525,6 +16813,67 @@
         "Linalg_ParameterNamesAndOrderMatchNumPy",
         "MainNamespace_ParameterNamesAndOrderMatchNumPy",
         "TheTwoNonNullDefaultsCsharpCannotSpell_AreCarriedBySentinels"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.LinearAlgebra.ManagedLuTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.LinearAlgebra.ManagedLuTests",
+      "class": "ManagedLuTests",
+      "area": "Linear algebra",
+      "methods": 35,
+      "declaredInvocations": 35,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 35
+      },
+      "categories": {
+        "Misaligned": 1
+      },
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/LinearAlgebra/ManagedLuTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/LinearAlgebra/ManagedLuTests.cs#L44",
+      "methodNames": [
+        "Blocked_LargeMatrix_FactorsCorrectly",
+        "Det_Complex_MatchesNumPy",
+        "Det_EmptyMatrix_IsTheEmptyProductOne",
+        "Det_ExactlySingular_IsZero_WithoutRaising",
+        "Det_Float32_ComputesInDouble_ReturnsSingle",
+        "Det_IntegerWidensToFloat64",
+        "Det_NonContiguous_TransposeAndStrided_ReadThroughStrides",
+        "Det_NonFinite_PropagatesRatherThanFalselyReportingSingular",
+        "Det_OneByOne_GoesThroughTheLogExpFold_NotTheProductOfPivots",
+        "Det_Stack_IsPerElement",
+        "Det_TwoByTwo_MatchesNumPy",
+        "Det_ZeroBatch_IsEmpty_And_EmptyMatricesInAStackAreOne",
+        "ExactlySingularButNotZeroPivot_DivergesFromNumPysBlockedLapack",
+        "Inv_Batch_IsPerElement",
+        "Inv_Complex_MatchesNumPy",
+        "Inv_Empty_KeepsTheShape",
+        "Inv_ExactlySingular_RaisesLinAlgError",
+        "Inv_IntegerWidensToFloat64_Float32StaysSingle",
+        "Inv_NonContiguous_MatchesTheContiguousInverse",
+        "Inv_ReconstructsTheIdentity",
+        "Inv_TwoByTwo_MatchesNumPy",
+        "MatrixPower_NegativeExponent_ComputesThroughTheManagedInverse",
+        "Slogdet_Complex_SignIsUnitModulus_LogabsdetIsReal",
+        "Slogdet_Empty_IsOneAndZero",
+        "Slogdet_Singular_IsZeroAndNegInf_WithoutRaising",
+        "Slogdet_TwoByTwo_MatchesNumPy",
+        "Solve_Batched_BroadcastsTheVectorAcrossTheStack",
+        "Solve_Complex_MatchesNumPy",
+        "Solve_ExactlySingular_RaisesLinAlgError",
+        "Solve_Float32_ComputesInDouble_ReturnsSingle",
+        "Solve_MatrixRhs_MatchesNumPy",
+        "Solve_ReconstructsTheRightHandSide",
+        "Solve_VectorRhs_MatchesNumPy",
+        "Tensorinv_ComposesOverTheManagedInverse",
+        "Tensorsolve_ComposesOverTheManagedSolve"
       ],
       "methodPolicies": {}
     },
@@ -17826,6 +18175,44 @@
       "methodPolicies": {}
     },
     {
+      "id": "NumSharp.Tests::NumSharp.Tests.Logic.np_isposinf_isneginf_Test",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Logic.np_isposinf_isneginf_Test",
+      "class": "np_isposinf_isneginf_Test",
+      "area": "Logic",
+      "methods": 14,
+      "declaredInvocations": 14,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 14
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Logic/np.isposinf_isneginf.Test.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Logic/np.isposinf_isneginf.Test.cs#L15",
+      "methodNames": [
+        "isposinf_1D",
+        "isposinf_2D",
+        "isposinf_Complex_Throws",
+        "isposinf_Decimal_AlwaysFalse",
+        "isposinf_Empty",
+        "isposinf_Float32",
+        "isposinf_Half",
+        "isposinf_IntegerAndBool_AlwaysFalse",
+        "isposinf_MaxValueIsNotInfinity",
+        "isposinf_Out_NumericAndBool",
+        "isposinf_ReversedView",
+        "isposinf_Scalar",
+        "isposinf_SteppedView",
+        "isposinf_isneginf_ReturnsBoolDtype"
+      ],
+      "methodPolicies": {}
+    },
+    {
       "id": "NumSharp.Tests::NumSharp.Tests.Logic.np_isscalar_tests",
       "project": "NumSharp.Tests",
       "type": "NumSharp.Tests.Logic.np_isscalar_tests",
@@ -17891,6 +18278,46 @@
         "PrimitiveScalars_AreNotIterable",
         "ScalarLiteral_IsNotHijackedByImplicitNDArrayConversion",
         "String_IsIterable"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Logic.np_nan_to_num_Test",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Logic.np_nan_to_num_Test",
+      "class": "np_nan_to_num_Test",
+      "area": "Logic",
+      "methods": 16,
+      "declaredInvocations": 16,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 16
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Logic/np.nan_to_num.Test.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Logic/np.nan_to_num.Test.cs#L15",
+      "methodNames": [
+        "nan_to_num_2D",
+        "nan_to_num_ArrayFills",
+        "nan_to_num_BoolReturnedUnchanged",
+        "nan_to_num_Complex_ArrayFills",
+        "nan_to_num_Complex_Default",
+        "nan_to_num_Complex_ScalarFills",
+        "nan_to_num_CopySemantics",
+        "nan_to_num_CustomScalarFills",
+        "nan_to_num_Empty",
+        "nan_to_num_Float16_Defaults",
+        "nan_to_num_Float32_Defaults",
+        "nan_to_num_Float64_Defaults",
+        "nan_to_num_IndividualFills",
+        "nan_to_num_IntegerReturnedUnchanged",
+        "nan_to_num_NonContiguous_InPlace",
+        "nan_to_num_Scalars"
       ],
       "methodPolicies": {}
     },
@@ -20772,6 +21199,46 @@
       "methodPolicies": {}
     },
     {
+      "id": "NumSharp.Tests::NumSharp.Tests.Math.InterpTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Math.InterpTests",
+      "class": "InterpTests",
+      "area": "Math",
+      "methods": 16,
+      "declaredInvocations": 16,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 16
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Math/InterpTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Math/InterpTests.cs#L16",
+      "methodNames": [
+        "Basic",
+        "ComplexFp",
+        "ComplexFp_ComplexLeft",
+        "EmptyXp_Raises",
+        "EqualDx_UsesLeftEndpointNoDivByZero",
+        "HighDimX_PreservesShape",
+        "IntegerInputs_CastToFloat64",
+        "LeftRight_Custom",
+        "LeftRight_Defaults_AreEndpoints",
+        "LengthMismatch_Raises",
+        "NaN_And_Inf_X",
+        "PeriodZero_Raises",
+        "Period_WrapsCoordinates",
+        "ScalarX_Returns0d",
+        "SinglePoint_Xp",
+        "Xp2D_Raises"
+      ],
+      "methodPolicies": {}
+    },
+    {
       "id": "NumSharp.Tests::NumSharp.Tests.Math.InverseHyperbolicTests",
       "project": "NumSharp.Tests",
       "type": "NumSharp.Tests.Math.InverseHyperbolicTests",
@@ -20810,6 +21277,56 @@
         "Ufunc_Dtype_SelectsLoopPrecision",
         "Ufunc_Out_ReturnsSameInstanceAndWrites",
         "Ufunc_Where_LeavesMaskedSlotsUntouched"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Math.LogAddExpNextAfterTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Math.LogAddExpNextAfterTests",
+      "class": "LogAddExpNextAfterTests",
+      "area": "Math",
+      "methods": 26,
+      "declaredInvocations": 26,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 26
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Math/LogAddExpNextAfterTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Math/LogAddExpNextAfterTests.cs#L20",
+      "methodNames": [
+        "BothScalars_Returns0d",
+        "Broadcasting_RowAgainstMatrix",
+        "ComplexInput_RaisesNoLoop",
+        "CopySign_Float32_BitExact",
+        "CopySign_Float64",
+        "CopySign_Half_ComputedInFloat32",
+        "CopySign_Infinity",
+        "CopySign_OutAndWhere",
+        "CopySign_Promotion_FloatTier",
+        "CopySign_SignOfNegativeZero_IsNegative",
+        "EmptyArrays_ReturnEmpty",
+        "Half_ComputedInFloat32",
+        "IntegerDtype_RaisesNoLoop",
+        "LogAddExp2_EqualInputs_XPlusOne",
+        "LogAddExp2_Float64",
+        "LogAddExp_Float64",
+        "LogAddExp_Infinities_SameSign_NoNaN",
+        "LogAddExp_NaN_Propagates",
+        "LogAddExp_SmallValue_NotLostToZero",
+        "NextAfter_EqualInputs_ReturnsSecond",
+        "NextAfter_Float32_BitExact",
+        "NextAfter_Float64_BitExact",
+        "NextAfter_NaN_ReturnsNaN",
+        "OutParam_ReturnsSameInstance_AndWrites",
+        "Promotion_FloatTier_MatchesArctan2",
+        "WhereParam_LeavesMaskedSlotsUntouched"
       ],
       "methodPolicies": {}
     },
@@ -21921,12 +22438,12 @@
       "type": "NumSharp.Tests.Math.np_clip_test",
       "class": "np_clip_test",
       "area": "Math",
-      "methods": 6,
-      "declaredInvocations": 6,
+      "methods": 16,
+      "declaredInvocations": 16,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 6
+        "active": 16
       },
       "categories": {},
       "oracleKinds": {},
@@ -21940,6 +22457,16 @@
         "Case2",
         "Case3",
         "Clip_ArrayBounds_PropagatesNaN",
+        "Clip_Bool_3D_Transposed_Identity",
+        "Clip_Bool_BroadcastBound_Transposed",
+        "Clip_Bool_Empty_And_Singleton_NonContiguous",
+        "Clip_Bool_InPlace_StridedOut",
+        "Clip_Bool_MinGreaterThanMax_AllFalse",
+        "Clip_Bool_MinOnly_MaxOnly_Transposed",
+        "Clip_Bool_NegativeStride_2D_Identity",
+        "Clip_Bool_Strided",
+        "Clip_Bool_Strided_ArrayBounds",
+        "Clip_Bool_Transposed",
         "Clip_OutAlias_PropagatesNaN",
         "Clip_ScalarBounds_PropagatesNaN"
       ],
@@ -21997,6 +22524,156 @@
         "Rint_Subnormal_UnderflowsToSignedZero",
         "Rint_Where_Broadcasts",
         "Rint_Where_KeepsPriorOutContents"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.MathTests.HalfArithKernelTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.MathTests.HalfArithKernelTests",
+      "class": "HalfArithKernelTests",
+      "area": "Math",
+      "methods": 5,
+      "declaredInvocations": 5,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 5
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Math/HalfArithKernelTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Math/HalfArithKernelTests.cs#L50",
+      "methodNames": [
+        "Arith_NaNPriority_ProbedMatrix",
+        "Arith_NarrowRTNE_TieSeam",
+        "Arith_ScalarBroadcast_BothSides_NaNPriorityHolds",
+        "Arith_Specials_DefaultQNaN_Inf_SignedZero",
+        "Arith_SubnormalsExact_TailAndSimdAgree"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.MathTests.HalfComparisonKernelTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.MathTests.HalfComparisonKernelTests",
+      "class": "HalfComparisonKernelTests",
+      "area": "Math",
+      "methods": 5,
+      "declaredInvocations": 5,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 5
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Math/HalfComparisonKernelTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Math/HalfComparisonKernelTests.cs#L33",
+      "methodNames": [
+        "Compare_NaN_FalseExceptNotEqual_EvenSameBits",
+        "Compare_Ordering_InfSubnormalsNegatives",
+        "Compare_ScalarBroadcast_BothSides_RolesStraight",
+        "Compare_SignedZeros_EqualInAllOrderedOps",
+        "Compare_TailAndSimdSeams_Agree"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.MathTests.HalfMinMaxBitKernelTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.MathTests.HalfMinMaxBitKernelTests",
+      "class": "HalfMinMaxBitKernelTests",
+      "area": "Math",
+      "methods": 11,
+      "declaredInvocations": 11,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 11
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Math/HalfMinMaxBitKernelTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Math/HalfMinMaxBitKernelTests.cs#L35",
+      "methodNames": [
+        "Max_FirstNaN_PayloadPreserved",
+        "Max_NaN_AtEveryLoopBoundary",
+        "Max_NegativeNaN_ReturnedWithSign",
+        "Max_SignedZeroTie_FirstZeroWins",
+        "Max_ZeroAmongNegatives_FirstZeroSign",
+        "MinMax_Infinities_And_Subnormals",
+        "MinMax_LargeArray_MatchesScalarFold",
+        "MinMax_OffsetContiguousView_UsesKernelCorrectly",
+        "NanMinMax_SkipNaN_AllNaN_FirstElementVerbatim",
+        "NanMinMax_ZeroTies_FirstZeroWins_EvenAfterLeadingNaN",
+        "Ptp_Half_InheritsKernel_NaNAndZeroCases"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.MathTests.HalfPairMinMaxKernelTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.MathTests.HalfPairMinMaxKernelTests",
+      "class": "HalfPairMinMaxKernelTests",
+      "area": "Math",
+      "methods": 5,
+      "declaredInvocations": 5,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 5
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Math/HalfPairMinMaxKernelTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Math/HalfPairMinMaxKernelTests.cs#L54",
+      "methodNames": [
+        "Clip_Half_MinGreaterThanMax_MaxWins_And_ArrayBounds",
+        "Clip_Half_NaNBounds_PropagateBoundBits",
+        "Clip_Half_NaNPayloadPreserved",
+        "PairOps_ProbedMatrix_ArrayArray",
+        "PairOps_ScalarBroadcast_BothSides_MatchStreamed"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.MathTests.HalfRoundKernelTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.MathTests.HalfRoundKernelTests",
+      "class": "HalfRoundKernelTests",
+      "area": "Math",
+      "methods": 4,
+      "declaredInvocations": 4,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 4
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Math/HalfRoundKernelTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Math/HalfRoundKernelTests.cs#L67",
+      "methodNames": [
+        "Round_Around_SharesRintKernel_RTNETies",
+        "Round_IdentityBand_1024AndAbove_IncludingInf",
+        "Round_ProbedMatrix_AllFourOps",
+        "Round_TailAndSimdSeams_Agree"
       ],
       "methodPolicies": {}
     },
@@ -23744,17 +24421,17 @@
       "type": "NumSharp.Tests.OpenBugs",
       "class": "OpenBugs",
       "area": "Open bugs",
-      "methods": 75,
-      "declaredInvocations": 75,
+      "methods": 71,
+      "declaredInvocations": 71,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
         "active": 62,
-        "open_bug": 13
+        "open_bug": 9
       },
       "categories": {
         "Fixed": 2,
-        "OpenBugs": 13
+        "OpenBugs": 9
       },
       "oracleKinds": {},
       "corpusFiles": [],
@@ -23828,10 +24505,6 @@
         "Bug_SwapAxes_Strides_WrongForAxis01",
         "Bug_SwapAxes_Strides_WrongForAxis02",
         "Bug_SwapAxes_Strides_WrongForAxis12",
-        "Bug_ToString_DoubleSlicedBroadcast",
-        "Bug_ToString_ReversedSliceBroadcast",
-        "Bug_ToString_SlicedColumnBroadcast",
-        "Bug_ToString_StepSliceBroadcast",
         "Bug_Transpose_ColBroadcast_WrongValues",
         "Bug_Transpose_ReturnsPhysicalCopy_ShouldBeView",
         "Bug_Unique_NotSorted",
@@ -23847,10 +24520,6 @@
         "Bug_ArgMaxMin_Decimal_WrongIndex": "open_bug",
         "Bug_NanAxis_Half_NonContiguous_WrongValues": "open_bug",
         "Bug_NanMaxMin_Complex_DoesNotSkipNaN": "open_bug",
-        "Bug_ToString_DoubleSlicedBroadcast": "open_bug",
-        "Bug_ToString_ReversedSliceBroadcast": "open_bug",
-        "Bug_ToString_SlicedColumnBroadcast": "open_bug",
-        "Bug_ToString_StepSliceBroadcast": "open_bug",
         "ScalarOverflow_Char_PlusTooLargeInt_ShouldRaise": "open_bug",
         "ScalarOverflow_Power_UnsignedBase_NegativeIntExponent_ShouldRaise": "open_bug",
         "ScalarOverflow_Signed_OutOfRangeInt_ShouldRaise": "open_bug",
@@ -23955,36 +24624,28 @@
       "type": "NumSharp.Tests.OpenBugsDtypeCoverageTests",
       "class": "OpenBugsDtypeCoverageTests",
       "area": "Open bugs",
-      "methods": 7,
-      "declaredInvocations": 7,
+      "methods": 3,
+      "declaredInvocations": 3,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "open_bug": 7
+        "open_bug": 3
       },
       "categories": {
-        "OpenBugs": 7
+        "OpenBugs": 3
       },
       "oracleKinds": {},
       "corpusFiles": [],
       "sourcePaths": [
         "test/NumSharp.Tests/OpenBugs.DtypeCoverage.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/OpenBugs.DtypeCoverage.cs#L26",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/OpenBugs.DtypeCoverage.cs#L34",
       "methodNames": [
-        "Clip_Bool_Strided_Throws",
-        "Clip_Bool_Transposed_Throws",
-        "IsComplex_IgnoresImaginaryPart",
-        "IsReal_IgnoresImaginaryPart",
         "Round_Float16_Fractional_Diverges",
         "Round_NegativeDecimals_Broken",
         "Trace_Unsigned_WrongResultDtype"
       ],
       "methodPolicies": {
-        "Clip_Bool_Strided_Throws": "open_bug",
-        "Clip_Bool_Transposed_Throws": "open_bug",
-        "IsComplex_IgnoresImaginaryPart": "open_bug",
-        "IsReal_IgnoresImaginaryPart": "open_bug",
         "Round_Float16_Fractional_Diverges": "open_bug",
         "Round_NegativeDecimals_Broken": "open_bug",
         "Trace_Unsigned_WrongResultDtype": "open_bug"
@@ -26740,6 +27401,60 @@
       "methodPolicies": {}
     },
     {
+      "id": "NumSharp.Tests::NumSharp.Tests.Selection.Indexing_KernelRoute_Tests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Selection.Indexing_KernelRoute_Tests",
+      "class": "Indexing_KernelRoute_Tests",
+      "area": "Selection",
+      "methods": 30,
+      "declaredInvocations": 30,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 30
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Selection/Indexing.KernelRoute.Tests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Selection/Indexing.KernelRoute.Tests.cs#L40",
+      "methodNames": [
+        "FlatKernels_AreAvailableForEveryTypedWidth",
+        "Get1D_EveryDtype_Width1To16",
+        "Get1D_IndexArrayIsAnOffsetContiguousView",
+        "Get1D_Int32AndInt64Indices_MatchElementwiseReference",
+        "Get1D_OutOfBounds_VerbatimIndexError",
+        "Get1D_SourceIsAnOffsetContiguousView",
+        "Get1D_StridedIndexView_TakesTheGeneralRoute_SameValues",
+        "Get_EmptyTrailingAxis_ShapeOnly",
+        "Get_NDIndexArray_ResultTakesTheIndexShape",
+        "Get_ReturnsAFreshOwnedCopy",
+        "Get_RowGather_2D_And_3D_MatchesTakeAxis0",
+        "Get_RowGather_NarrowSlab_UsesTypedWidth",
+        "Put_Int32Indices_ReadInPlace_AllModes",
+        "Put_ValuesCycle_ThroughTheFlatKernel",
+        "Set1D_ArrayScalarAndBroadcastValues",
+        "Set1D_DuplicateIndices_LastWriteWins",
+        "Set1D_EveryDtype_Width1To16",
+        "Set1D_IncompatibleValue_VerbatimValueError",
+        "Set1D_OffsetViews_OnDestinationAndIndex",
+        "Set1D_OutOfBounds_RaisesBeforeAnyWrite",
+        "Set1D_ValueDtypeCastsToDestination",
+        "Set2D_RowScatter_3DDestination_16ByteDtype",
+        "Set2D_RowScatter_ExactSingleRowAndScalar",
+        "Set2D_RowScatter_NoPartialWriteAndVerbatimErrors",
+        "Take_Int32Indices_ReadInPlace_AllModes",
+        "Where_ContiguousMask_RunBoundariesAcrossVectorBlocks",
+        "Where_MaskShorterThanAVectorAndStridedMask_StillCorrect",
+        "Where_NarrowRows_3D_LeadingAxisWalkedPerBlock",
+        "Where_NarrowRows_MaskedOffElementsKeepPriorContents_AndIntegerDivideIsSafe",
+        "Where_NarrowStridedRows_EveryMaskKind_MatchesReference"
+      ],
+      "methodPolicies": {}
+    },
+    {
       "id": "NumSharp.Tests::NumSharp.Tests.Selection.Indexing_LayoutValueParity_MatrixTests",
       "project": "NumSharp.Tests",
       "type": "NumSharp.Tests.Selection.Indexing_LayoutValueParity_MatrixTests",
@@ -28020,12 +28735,9 @@
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 26,
-        "open_bug": 2
+        "active": 28
       },
-      "categories": {
-        "OpenBugs": 2
-      },
+      "categories": {},
       "oracleKinds": {},
       "corpusFiles": [],
       "sourcePaths": [
@@ -28062,10 +28774,7 @@
         "Hashset_TryGetValue",
         "Hashset_UnionWith"
       ],
-      "methodPolicies": {
-        "HashHelpersLong_ExpandPrime_ProgressiveGrowthTest": "open_bug",
-        "HashHelpersLong_GetPrime": "open_bug"
-      }
+      "methodPolicies": {}
     },
     {
       "id": "NumSharp.Tests::NumSharp.Tests.Utilities.StackedMemoryPoolTests",
@@ -28176,12 +28885,12 @@
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 224,
-        "open_bug": 13
+        "active": 232,
+        "open_bug": 5
       },
       "categories": {
-        "Fixed": 1,
-        "OpenBugs": 13
+        "Fixed": 9,
+        "OpenBugs": 5
       },
       "oracleKinds": {},
       "corpusFiles": [],
@@ -28429,20 +29138,82 @@
         "ZerosLike_ValuesAllZero"
       ],
       "methodPolicies": {
-        "Decimal_FContig3D_SumKeepDims_PreservesFContig": "open_bug",
         "FancyWrite_2D_CContig_MatchingArrayRHS_Crashes": "open_bug",
         "FancyWrite_2D_CContig_ScalarRHS_Crashes": "open_bug",
         "FancyWrite_2D_FContig_ScalarRHS_Crashes": "open_bug",
         "FancyWrite_FContig_PreservesFContig": "open_bug",
-        "Flip_ApiGap": "open_bug",
-        "HighDim_6D_FContig_Sum_Axis0_KeepDims_PreservesFContig": "open_bug",
-        "Mean_FContig3D_Axis1_KeepDims_PreservesFContig": "open_bug",
-        "NanSum_FContig3D_Axis0_KeepDims_PreservesFContig": "open_bug",
-        "Repeat_FContig_Axis0_ApiGap": "open_bug",
-        "Squeeze_FContigWithUnitDim_PreservesFContig": "open_bug",
-        "Sum_FContig3D_Axis0_KeepDims_PreservesFContig": "open_bug",
-        "Sum_FContig3D_Axis0_NoKeepDims_PreservesFContig": "open_bug"
+        "Squeeze_FContigWithUnitDim_PreservesFContig": "open_bug"
       }
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.View.ReductionKeepOrderTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.View.ReductionKeepOrderTests",
+      "class": "ReductionKeepOrderTests",
+      "area": "Shape & views",
+      "methods": 44,
+      "declaredInvocations": 44,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 44
+      },
+      "categories": {
+        "Misaligned": 1
+      },
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/View/ReductionKeepOrderTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/View/ReductionKeepOrderTests.cs#L40",
+      "methodNames": [
+        "ArgMax_FContig3D_Axis0_StaysC",
+        "ArgMin_FContig3D_Axis1_StaysC",
+        "FResult_EqualsCResult_AcrossNanOps",
+        "FResult_EqualsCResult_AcrossValueOps",
+        "Max_FContig3D_Axis2_PreservesF",
+        "Min_FContig3D_Axis1_KeepDims_PreservesF",
+        "NanMax_FContig3D_Axis0_PreservesF",
+        "NanMean_CContig3D_Axis1_KeepDims_StaysC",
+        "NanMean_Complex_FContig3D_Axis1_PreservesF",
+        "NanMean_FContig3D_Axis1_KeepDims_PreservesF",
+        "NanMin_FContig3D_Axis2_KeepDims_PreservesF",
+        "NanProd_FContig3D_Axis0_PreservesF",
+        "NanStd_FContig3D_Axis0_PreservesF",
+        "NanVar_FContig3D_Axis2_KeepDims_PreservesF",
+        "Prod_FContig3D_Axis0_PreservesF",
+        "Std_CContig3D_Axis1_StaysC",
+        "Std_FContig3D_Axis0_Ddof1_PreservesF",
+        "Std_FContig3D_Axis0_PreservesF",
+        "Std_FContig3D_NegativeAxis_KeepDims_PreservesF",
+        "Std_FContig_Size1ReducedAxis_PreservesF",
+        "Sum_CContig3D_Axis0_KeepDims_StaysC",
+        "Sum_EmptyFContig_Axis1_IsBoth",
+        "Sum_FContig2D_Axis0_OneDResult_IsBoth",
+        "Sum_FContig3D_Axis0_ExactValues_MatchNumPy",
+        "Sum_FContig3D_KeepDims_Axis0_PreservesF",
+        "Sum_FContig3D_KeepDims_Axis1_PreservesF",
+        "Sum_FContig3D_KeepDims_Axis2_PreservesF",
+        "Sum_FContig3D_NegativeAxis_PreservesF",
+        "Sum_FContig4D_Axis2_KeepDims_PreservesF",
+        "Sum_FContig_Complex_PreservesF",
+        "Sum_FContig_Decimal_PreservesF",
+        "Sum_FContig_Half_PreservesF",
+        "Sum_FContig_Int32_WidensToInt64_PreservesF",
+        "Sum_FContig_LeadingUnitDim_Axis1_KeepDims_IsBoth",
+        "Sum_FContig_MiddleUnitDim_Axis0_KeepDims_IsBoth",
+        "Sum_FContig_Single_PreservesF",
+        "Sum_FContig_Size1ReducedAxis_KeepDims_PreservesF",
+        "Sum_FContig_Size1ReducedAxis_PreservesF",
+        "Sum_FContig_TrailingUnitDim_Axis0_KeepDims_IsBoth",
+        "Sum_OffsetFContigColumnView_ReadsThroughOffset",
+        "Sum_TransposedInput_ValuesCorrect_LayoutIsCNotF",
+        "Var_FContig3D_Axis1_Ddof1_KeepDims_PreservesF",
+        "Var_FContig3D_Axis1_KeepDims_PreservesF",
+        "Var_FContig_Size1ReducedAxis_KeepDims_PreservesF"
+      ],
+      "methodPolicies": {}
     },
     {
       "id": "NumSharp.Tests::NumSharp.Tests.View.ShapeIsContiguousTest",
@@ -29061,16 +29832,16 @@
       "type": "NumSharp.Tests.Interop.CodecModeTests",
       "class": "CodecModeTests",
       "area": "Python interoperability",
-      "methods": 19,
-      "declaredInvocations": 19,
+      "methods": 20,
+      "declaredInvocations": 20,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 19
+        "active": 20
       },
       "categories": {},
       "oracleKinds": {
-        "Live NumPy interop": 19
+        "Live NumPy interop": 20
       },
       "corpusFiles": [],
       "sourcePaths": [
@@ -29093,6 +29864,7 @@
         "Copy_Decode_ContiguousNumpy_IsASnapshot",
         "Copy_Encode_IsASnapshot",
         "Default_Modes_AreAutoBothDirections",
+        "PythonArrayAdapterRegistry_AndRegisterMethod_ArePublicExtensionPoints",
         "View_Decode_Complex64_Declines_NoSilentCopy",
         "View_Decode_ContiguousNumpy_IsAView",
         "View_Decode_StridedComplex64_Declines_NoSilentCopy",
@@ -29129,6 +29901,80 @@
         "Decode_NdarrayToNDArray_DefaultsToView",
         "Encode_Decimal_ConvertsToFloat64",
         "Register_IsIdempotentPerSession"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.CreationCtorEdgeCaseLiveParityTests",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.CreationCtorEdgeCaseLiveParityTests",
+      "class": "CreationCtorEdgeCaseLiveParityTests",
+      "area": "Python interoperability",
+      "methods": 14,
+      "declaredInvocations": 14,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 14
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 14
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/CreationCtorEdgeCaseLiveParityTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/CreationCtorEdgeCaseLiveParityTests.cs#L39",
+      "methodNames": [
+        "T1_44_FOrderCtor_AllDtypes_ByteExact_Match_Numpy",
+        "T1_44_FOrderCtor_Empty_1D_HigherRank_Match_Numpy",
+        "T1_44_FOrderCtor_IArraySliceOverload_Match_Numpy",
+        "T1_44_FOrderCtor_Size1Dims_FlagsStridesBytes_Match_Numpy",
+        "T1_44_FOrderCtor_WriteThrough_FStrided_Match_Numpy",
+        "T1_47_CanCoerceAll_VariousStarts_NoThrow_Match_Numpy_ResultType",
+        "T1_47_FindCommonType_ManyCombos_Match_Numpy_ResultType",
+        "T1_50_ArangeBool_RareSteps_ByteExact_Match_Numpy",
+        "T1_50_ArangeBool_RareSteps_Over2_BothRaise_VerbatimMessage",
+        "T1_54_Frombuffer_AllSupportedDtypes_ByteExact_Match_Numpy",
+        "T1_54_Frombuffer_BigEndian_ByteSwapsToNative_Match_Numpy",
+        "T1_54_Frombuffer_CountOffset_ByteExact_Match_Numpy",
+        "T1_54_Frombuffer_SizeNotMultipleOfItemsize_BothRaise_SameMessage",
+        "T1_56_NpArray_Ndmin_RareValues_ShapesAndBytes_Match_Numpy"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.CreationCtorLiveParityTests",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.CreationCtorLiveParityTests",
+      "class": "CreationCtorLiveParityTests",
+      "area": "Python interoperability",
+      "methods": 8,
+      "declaredInvocations": 8,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 8
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 8
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/CreationCtorLiveParityTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/CreationCtorLiveParityTests.cs#L45",
+      "methodNames": [
+        "T1_44_FOrderCtor_2D_ByteExact_FlagsAndStrides_Match_Numpy",
+        "T1_44_FOrderCtor_3D_ByteExact_Match_Numpy",
+        "T1_47_FindCommonType_RemovedInNumpy_NumSharp_EndResult_Matches_ResultType",
+        "T1_50_ArangeBool_LegalLengths_ByteExact_Match_Numpy",
+        "T1_50_ArangeBool_LengthOver2_BothRaise_VerbatimMessage",
+        "T1_54_Frombuffer_SupportedDtypes_ByteExact_Match_Numpy",
+        "T1_54_Frombuffer_c8_F_NumpyReadsComplex64_NumSharpDeliberatelyRejects",
+        "T1_56_NpArray_Ndmin_DefaultAndSweep_ShapesAndBytes_Match_Numpy"
       ],
       "methodPolicies": {}
     },
@@ -29817,6 +30663,113 @@
       "methodPolicies": {}
     },
     {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.PandasInteropEdgeCaseTests",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.PandasInteropEdgeCaseTests",
+      "class": "PandasInteropEdgeCaseTests",
+      "area": "Python interoperability",
+      "methods": 12,
+      "declaredInvocations": 12,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 12
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 12
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/PandasInteropEdgeCaseTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PandasInteropEdgeCaseTests.cs#L21",
+      "methodNames": [
+        "All15NumSharpDtypes_RoundTripThroughPandasNumericSeries",
+        "AxisLabelsDuplicatesAndMultiIndex_AreMetadataOnly_ValuesKeepTwoDimensionalOrder",
+        "CodecModes_RespectPandasViewCopyAutoAndExplicitAdapterDisable",
+        "Complex64ViewDeclines_AndCopyWidensToNumSharpComplex128",
+        "ConcurrentPandasRoundTrips_AreThreadSafeAndDrainEveryLifetimeCounter",
+        "DerivedNumSharpView_KeepsPandasStorageAliveAfterAllPythonWrappersDie",
+        "DisposedAndBrokenPandasObjects_FailCleanlyWithoutLeasingMemory",
+        "EmptyAndDegenerateShapes_PreserveRankShapeAndResolvedDtype",
+        "ExplicitNoGilPolicy_WorksInsideOneOuterGil_ForPandasViewAndCopy",
+        "MaterializingPandasObjects_RejectView_ButNumericCopiesPreservePandasValues",
+        "ObjectStringDatetimeTimedeltaAndNestedIndex_AreDirectedUnsupportedFailures",
+        "PositiveAndNegativeStridedSeries_PreserveLogicalOffsetsAndStrides"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.PandasInteropRareScenarioTests",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.PandasInteropRareScenarioTests",
+      "class": "PandasInteropRareScenarioTests",
+      "area": "Python interoperability",
+      "methods": 10,
+      "declaredInvocations": 10,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 10
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 10
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/PandasInteropRareScenarioTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PandasInteropRareScenarioTests.cs#L19",
+      "methodNames": [
+        "BigEndianNumericSeries_RejectView_AndCopyByteSwapsEveryScalarComponent",
+        "DescendingRangeIndexAndTwoAxisReorderedFrame_PreserveUnusualLogicalOrder",
+        "ImportedPandasViewCannotResizeOrDetach_WhileOwningCopyCan",
+        "MalformedToNumpyReturnTypes_FailWithoutAcquiringImportLeases",
+        "MixedColumnPromotion_FollowsPandasCommonDtypeIncludingPrecisionBoundaries",
+        "NullableExtensionDtypesWithMissingValues_RejectViewAndResolveCopyDtypePrecisely",
+        "NullableExtensionDtypesWithoutMissingValues_ExposeEveryStableTypedBuffer",
+        "NumSharpLayouts_RoundTripThroughPandasWithoutLosingPointerShapeOrStrides",
+        "PandasMutationUpdatesLeasedView_ButOwningCopyRemainsDetached",
+        "PandasObject_KeepsNumSharpExportAliveAfterOriginalArrayIsDisposed"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.PandasInteropTests",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.PandasInteropTests",
+      "class": "PandasInteropTests",
+      "area": "Python interoperability",
+      "methods": 7,
+      "declaredInvocations": 7,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 7
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 7
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/PandasInteropTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PandasInteropTests.cs#L18",
+      "methodNames": [
+        "BuiltInAdapter_RecognizesFrameSeriesIndexExtensionAndSubclasses_NotScalars",
+        "HomogeneousDataFrame_ImplicitDecoderPreservesFortranStridesAndPointer",
+        "IndexAndNullableExtensionWithoutMissingValues_AreStableViews",
+        "MixedNumericFrame_OrdinaryCopyAndImplicitAutoAreDetachedAndUpcastByPandas",
+        "NumSharpToPandas_ImplicitEncoderSharesInput_WhenCopyFalseIsExplicit",
+        "NumericSeries_UsesExistingReadonlyViewBridge_WithExactPointerAndLayout",
+        "Runtime_IsLatestStablePandas305"
+      ],
+      "methodPolicies": {}
+    },
+    {
       "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.PolynomialLiveParityTests",
       "project": "NumSharp.Tests.Interop",
       "type": "NumSharp.Tests.Interop.PolynomialLiveParityTests",
@@ -29896,6 +30849,86 @@
         "Vecdot_Complex_Broadcast_ByteExact",
         "Vecdot_Complex_Conjugated_ByteExact",
         "Vecmat_Complex_Conjugated_ByteExact"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.PyTorchInteropEdgeCaseTests",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.PyTorchInteropEdgeCaseTests",
+      "class": "PyTorchInteropEdgeCaseTests",
+      "area": "Python interoperability",
+      "methods": 17,
+      "declaredInvocations": 17,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 17
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 17
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/PyTorchInteropEdgeCaseTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PyTorchInteropEdgeCaseTests.cs#L22",
+      "methodNames": [
+        "AcceleratorTensor_ForceCopiesToCpu_WhenAnAcceleratorIsAvailable",
+        "All15Dtypes_BoundaryValuesRoundTripThroughTorch",
+        "CodecModes_UseTheTorchAdapterForViewCopyAutoAndExplicitDisable",
+        "ConcurrentTorchRoundTrips_AreThreadSafeAndReturnCountersToBaseline",
+        "ConjugateAndNegativeBits_RequireForce_ThenResolveExactly",
+        "CustomAdapter_AlsoFeedsDirectVerbsAndCodecWithoutNewMemoryCode",
+        "ExpandedTensor_IsReadOnlyInNumSharp_AndRequiresCopyBackToTorch",
+        "ExplicitNoGilPolicy_WorksUnderOneOuterGil_ForEveryTorchVerb",
+        "NullDisposedAndNonTensorInputs_FailCleanlyWithoutLeaking",
+        "NumSharpDerivedViews_KeepTorchStorageAliveAfterTheOriginalTensorWrapperDies",
+        "NumSharpShapes_ScalarEmptyOffsetFortranAndSingletonAxes",
+        "SharedStorage_CannotResizeOnEitherSide_CopyStorageCan",
+        "ToTorchCopy_IsDetachedBothWays_AndDoesNotKeepAnExportPin",
+        "TorchDerivedViews_KeepNumSharpExportAliveUntilTheLastTensorDies",
+        "TorchDtypes_AllNativelyViewableTypesShare_Complex64CopiesAndWidens",
+        "TorchShapes_ScalarEmptyTransposeOffsetAndExpanded",
+        "UnsupportedTorchDtypesLayoutsAndDevices_FailWithDirectedPyTorchErrors"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.PyTorchInteropTests",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.PyTorchInteropTests",
+      "class": "PyTorchInteropTests",
+      "area": "Python interoperability",
+      "methods": 11,
+      "declaredInvocations": 11,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 11
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 11
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/PyTorchInteropTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PyTorchInteropTests.cs#L19",
+      "methodNames": [
+        "ExistingMemoryBridge_DirectVerbsAdaptTorchTensor_ViewAndCopySemantics",
+        "NumSharpToTorch_All15Dtypes_MapOnPyTorch213",
+        "NumSharpToTorch_AutogradCompute_GradientReturnsToNumSharp",
+        "NumSharpToTorch_Contiguous_IsZeroCopyAndMutatesBothWays",
+        "NumSharpToTorch_PositiveStridedView_PreservesShapeStrideAndStorage",
+        "NumSharpToTorch_UnsafeLayoutsRequireExplicitCopy",
+        "PythonnetImplicitEncoderAndDecoder_WorkAcrossTorchFromNumpyAndTensorReturn",
+        "Runtime_IsLatestStablePyTorch213",
+        "TorchTensor_IsNotABufferExporter_TheNumpyAdapterIsIntentional",
+        "TorchToNumSharp_CopyIsDetached_AndForceHandlesAutogradTensor",
+        "TorchToNumSharp_PositiveStridedCpuTensor_IsZeroCopyAndSurvivesTensorWrapper"
       ],
       "methodPolicies": {}
     },
@@ -30295,18 +31328,18 @@
       "type": "NumSharp.Tests.Fuzz.FuzzCorpusTests",
       "class": "FuzzCorpusTests",
       "area": "Differential oracle",
-      "methods": 63,
-      "declaredInvocations": 63,
+      "methods": 64,
+      "declaredInvocations": 64,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 63
+        "active": 64
       },
       "categories": {
-        "FuzzMatrix": 63
+        "FuzzMatrix": 64
       },
       "oracleKinds": {
-        "FuzzMatrix": 63
+        "FuzzMatrix": 64
       },
       "corpusFiles": [
         "aliasing.jsonl",
@@ -30415,6 +31448,7 @@
         "MatmulParity",
         "Modf",
         "MultiOutput",
+        "Nan",
         "NanReduce",
         "NanScan",
         "NumPyFloat32Kernels",
@@ -30603,7 +31637,7 @@
       "sourcePaths": [
         "test/NumSharp.Tests.Oracle/Fuzz/NativeAllocationChokepointTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/NativeAllocationChokepointTests.cs#L53",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/NativeAllocationChokepointTests.cs#L54",
       "methodNames": [
         "EveryRawNativeAllocation_IsAKnownChokepoint"
       ],
@@ -30689,7 +31723,7 @@
       "sourcePaths": [
         "test/NumSharp.Tests.Oracle/Fuzz/OracleSurfaceCoverageTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/OracleSurfaceCoverageTests.cs#L83",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/OracleSurfaceCoverageTests.cs#L98",
       "methodNames": [
         "EveryPublicNumpySurface_IsCoveredOrExplicitlyClassified"
       ],
@@ -30701,19 +31735,19 @@
       "type": "NumSharp.Tests.Fuzz.UndisposedIntermediateTests",
       "class": "UndisposedIntermediateTests",
       "area": "Differential oracle",
-      "methods": 6,
-      "declaredInvocations": 6,
+      "methods": 9,
+      "declaredInvocations": 9,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 6
+        "active": 9
       },
       "categories": {
-        "FuzzMatrix": 6,
-        "ScopeAudit": 6
+        "FuzzMatrix": 9,
+        "ScopeAudit": 9
       },
       "oracleKinds": {
-        "FuzzMatrix": 6
+        "FuzzMatrix": 9
       },
       "corpusFiles": [],
       "sourcePaths": [
@@ -30722,11 +31756,14 @@
       "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/UndisposedIntermediateTests.cs#L39",
       "methodNames": [
         "BinaryScalarCastTemp_IsDisposed",
+        "Bmat_ReclaimsIntermediateConcatenations",
         "Corpus_AllOps_LeaveNoUndisposedIntermediates",
+        "Delete_NonContiguousAxisNull_ReclaimsRavelWorkCopy",
         "Harness_CleanDisposedOp_ReadsZero",
         "Harness_Detects_AbandonedTake",
         "Harness_Detects_ForeignReturn",
-        "Harness_Detects_FullPoolBypass"
+        "Harness_Detects_FullPoolBypass",
+        "OperatorNot_ReclaimsUntypedMakeGenericWrapper"
       ],
       "methodPolicies": {}
     },
@@ -30798,7 +31835,7 @@
         "B4_ModfFloat64Threw_NotExcused",
         "B5_SinhFloat64Threw_NotExcused",
         "B5_SinhInt8Threw_StillExcused",
-        "B6_IscloseComplexValueDiff_StillExcused",
+        "B6_IscloseComplexValueDiff_NotExcused",
         "B6_IscloseRealValueDiff_NotExcused",
         "B7_ComplexMinFiniteDiff_NotExcused",
         "B7_ComplexMinNaNDiff_StillExcused",
@@ -32706,13 +33743,14 @@
     {
       "name": "logic.jsonl",
       "family": "numpy",
-      "rows": 2503,
-      "contractRows": 2503,
+      "rows": 3311,
+      "contractRows": 3311,
       "metadataRows": 0,
       "opKeys": [
         "allclose",
         "arctan2",
         "array_equal",
+        "copysign",
         "fmax",
         "fmin",
         "isclose",
@@ -32721,14 +33759,17 @@
         "isinf",
         "isnan",
         "isreal",
+        "logaddexp",
+        "logaddexp2",
         "logical_and",
         "logical_not",
         "logical_or",
         "logical_xor",
         "maximum",
-        "minimum"
+        "minimum",
+        "nextafter"
       ],
-      "opCount": 17,
+      "opCount": 21,
       "dtypes": [
         "bool",
         "char",
@@ -32786,7 +33827,7 @@
         "mixed"
       ],
       "resultKinds": {
-        "array": 2503
+        "array": 3311
       },
       "errorRows": 0,
       "charRows": 284
@@ -34714,6 +35755,65 @@
       "charRows": 0
     },
     {
+      "name": "nan.jsonl",
+      "family": "numpy",
+      "rows": 120,
+      "contractRows": 120,
+      "metadataRows": 0,
+      "opKeys": [
+        "abs",
+        "arccos",
+        "arccosh",
+        "arcsin",
+        "arcsinh",
+        "arctan",
+        "arctanh",
+        "cbrt",
+        "ceil",
+        "conjugate",
+        "cos",
+        "cosh",
+        "exp",
+        "exp2",
+        "expm1",
+        "floor",
+        "log",
+        "log10",
+        "log1p",
+        "log2",
+        "negative",
+        "positive",
+        "reciprocal",
+        "rint",
+        "sign",
+        "sin",
+        "sinh",
+        "sqrt",
+        "square",
+        "tan",
+        "tanh",
+        "trunc"
+      ],
+      "opCount": 32,
+      "dtypes": [
+        "complex128",
+        "float16",
+        "float32",
+        "float64"
+      ],
+      "layouts": [
+        "nan_grid"
+      ],
+      "valueClasses": [
+        "nan"
+      ],
+      "resultKinds": {
+        "array": 120
+      },
+      "errorRows": 0,
+      "charRows": 0
+    },
+    {
       "name": "nanreduce.jsonl",
       "family": "numpy",
       "rows": 10266,
@@ -35825,19 +36925,20 @@
     {
       "name": "stat.jsonl",
       "family": "numpy",
-      "rows": 4265,
-      "contractRows": 4265,
+      "rows": 4285,
+      "contractRows": 4285,
       "metadataRows": 0,
       "opKeys": [
         "average",
         "clip",
         "count_nonzero",
+        "interp",
         "median",
         "percentile",
         "ptp",
         "quantile"
       ],
-      "opCount": 7,
+      "opCount": 8,
       "dtypes": [
         "bool",
         "char",
@@ -35867,7 +36968,7 @@
         "mixed"
       ],
       "resultKinds": {
-        "array": 4265
+        "array": 4285
       },
       "errorRows": 0,
       "charRows": 335
@@ -38893,6 +39994,39 @@
       "strength": {
         "thinContracts": false,
         "singleLayout": true,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "interp",
+      "cases": 13,
+      "files": [
+        "stat.jsonl"
+      ],
+      "layouts": [
+        "c_contiguous_1d",
+        "c_contiguous_2d"
+      ],
+      "dtypes": [
+        "complex128",
+        "float64",
+        "int64"
+      ],
+      "valueClasses": [
+        "mixed"
+      ],
+      "parameterSignatures": 4,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
         "singleDtype": false,
         "hasErrorContracts": false
       }
@@ -42058,96 +43192,6 @@
       }
     },
     {
-      "op": "iscomplex",
-      "cases": 60,
-      "files": [
-        "logic.jsonl"
-      ],
-      "layouts": [
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "one_element_1d",
-        "scalar_0d"
-      ],
-      "dtypes": [
-        "bool",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
-      "op": "isreal",
-      "cases": 60,
-      "files": [
-        "logic.jsonl"
-      ],
-      "layouts": [
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "one_element_1d",
-        "scalar_0d"
-      ],
-      "dtypes": [
-        "bool",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
       "op": "mask_indices",
       "cases": 60,
       "files": [
@@ -42223,6 +43267,178 @@
         "mixed"
       ],
       "parameterSignatures": 60,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "copysign",
+      "cases": 63,
+      "files": [
+        "logic.jsonl"
+      ],
+      "layouts": [
+        "pp_broadcast_col",
+        "pp_broadcast_row",
+        "pp_contig_contig",
+        "pp_contig_fortran",
+        "pp_contig_strided",
+        "pp_negstride_both",
+        "pp_scalar_left",
+        "pp_scalar_right",
+        "pp_strided_strided"
+      ],
+      "dtypes": [
+        "float16",
+        "float32",
+        "float64",
+        "int32",
+        "int8",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "logaddexp",
+      "cases": 63,
+      "files": [
+        "logic.jsonl"
+      ],
+      "layouts": [
+        "pp_broadcast_col",
+        "pp_broadcast_row",
+        "pp_contig_contig",
+        "pp_contig_fortran",
+        "pp_contig_strided",
+        "pp_negstride_both",
+        "pp_scalar_left",
+        "pp_scalar_right",
+        "pp_strided_strided"
+      ],
+      "dtypes": [
+        "float16",
+        "float32",
+        "float64",
+        "int32",
+        "int8",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "logaddexp2",
+      "cases": 63,
+      "files": [
+        "logic.jsonl"
+      ],
+      "layouts": [
+        "pp_broadcast_col",
+        "pp_broadcast_row",
+        "pp_contig_contig",
+        "pp_contig_fortran",
+        "pp_contig_strided",
+        "pp_negstride_both",
+        "pp_scalar_left",
+        "pp_scalar_right",
+        "pp_strided_strided"
+      ],
+      "dtypes": [
+        "float16",
+        "float32",
+        "float64",
+        "int32",
+        "int8",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "nextafter",
+      "cases": 63,
+      "files": [
+        "logic.jsonl"
+      ],
+      "layouts": [
+        "pp_broadcast_col",
+        "pp_broadcast_row",
+        "pp_contig_contig",
+        "pp_contig_fortran",
+        "pp_contig_strided",
+        "pp_negstride_both",
+        "pp_scalar_left",
+        "pp_scalar_right",
+        "pp_strided_strided"
+      ],
+      "dtypes": [
+        "float16",
+        "float32",
+        "float64",
+        "int32",
+        "int8",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed"
+      ],
+      "parameterSignatures": 1,
       "resultKinds": [
         "array"
       ],
@@ -44464,7 +45680,7 @@
     },
     {
       "op": "clip",
-      "cases": 117,
+      "cases": 124,
       "files": [
         "decimal_stat.jsonl",
         "stat.jsonl"
@@ -44480,6 +45696,7 @@
         "transposed_3d"
       ],
       "dtypes": [
+        "bool",
         "char",
         "complex128",
         "decimal",
@@ -46673,6 +47890,140 @@
       }
     },
     {
+      "op": "iscomplex",
+      "cases": 338,
+      "files": [
+        "logic.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "isreal",
+      "cases": 338,
+      "files": [
+        "logic.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
       "op": "invert",
       "cases": 339,
       "files": [
@@ -47614,74 +48965,6 @@
       }
     },
     {
-      "op": "conjugate",
-      "cases": 364,
-      "files": [
-        "unary.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
       "op": "copy",
       "cases": 364,
       "files": [
@@ -48362,6 +49645,77 @@
       }
     },
     {
+      "op": "conjugate",
+      "cases": 365,
+      "files": [
+        "nan.jsonl",
+        "unary.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
       "op": "cumsum",
       "cases": 370,
       "files": [
@@ -48502,83 +49856,6 @@
       }
     },
     {
-      "op": "reciprocal",
-      "cases": 377,
-      "files": [
-        "random_smoke.jsonl",
-        "specials.jsonl",
-        "unary.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "random",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
-        "random",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
       "op": "transpose",
       "cases": 377,
       "files": [
@@ -48652,11 +49929,13 @@
       }
     },
     {
-      "op": "arccos",
-      "cases": 384,
+      "op": "reciprocal",
+      "cases": 381,
       "files": [
+        "nan.jsonl",
+        "random_smoke.jsonl",
         "specials.jsonl",
-        "unary_extra.jsonl"
+        "unary.jsonl"
       ],
       "layouts": [
         "broadcast_1d_to_2d",
@@ -48669,10 +49948,12 @@
         "f_contiguous_2d",
         "f_contiguous_3d",
         "highrank_5d",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
         "one_element_1d",
+        "random",
         "reshape_view_2d",
         "scalar_0d",
         "scalar_broadcast",
@@ -48693,7 +49974,6 @@
       ],
       "dtypes": [
         "bool",
-        "char",
         "complex128",
         "float16",
         "float32",
@@ -48709,531 +49989,8 @@
       ],
       "valueClasses": [
         "mixed",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
-      "op": "arccosh",
-      "cases": 384,
-      "files": [
-        "specials.jsonl",
-        "unary_extra.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
-      "op": "arcsin",
-      "cases": 384,
-      "files": [
-        "specials.jsonl",
-        "unary_extra.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
-      "op": "arcsinh",
-      "cases": 384,
-      "files": [
-        "specials.jsonl",
-        "unary_extra.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
-      "op": "arctan",
-      "cases": 384,
-      "files": [
-        "specials.jsonl",
-        "unary_extra.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
-      "op": "arctanh",
-      "cases": 384,
-      "files": [
-        "specials.jsonl",
-        "unary_extra.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
-      "op": "cosh",
-      "cases": 384,
-      "files": [
-        "specials.jsonl",
-        "unary_extra.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
-      "op": "exp2",
-      "cases": 384,
-      "files": [
-        "specials.jsonl",
-        "unary_extra.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
+        "nan",
+        "random",
         "specials"
       ],
       "parameterSignatures": 1,
@@ -49477,383 +50234,6 @@
       }
     },
     {
-      "op": "log10",
-      "cases": 384,
-      "files": [
-        "specials.jsonl",
-        "unary_extra.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
-      "op": "log2",
-      "cases": 384,
-      "files": [
-        "specials.jsonl",
-        "unary_extra.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
-      "op": "positive",
-      "cases": 384,
-      "files": [
-        "errors_full.jsonl",
-        "specials.jsonl",
-        "unary_extra.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "error",
-        "mixed",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 26,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": true
-      }
-    },
-    {
-      "op": "rint",
-      "cases": 384,
-      "files": [
-        "specials.jsonl",
-        "unary_extra.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
-      "op": "sinh",
-      "cases": 384,
-      "files": [
-        "specials.jsonl",
-        "unary_extra.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
       "op": "diff",
       "cases": 385,
       "files": [
@@ -49973,10 +50353,10 @@
       }
     },
     {
-      "op": "expm1",
-      "cases": 388,
+      "op": "rint",
+      "cases": 387,
       "files": [
-        "precision.jsonl",
+        "nan.jsonl",
         "specials.jsonl",
         "unary_extra.jsonl"
       ],
@@ -49986,12 +50366,12 @@
         "c_contiguous_1d",
         "c_contiguous_2d",
         "c_contiguous_3d",
-        "contig_1d",
         "empty_2d",
         "empty_composed",
         "f_contiguous_2d",
         "f_contiguous_3d",
         "highrank_5d",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -50032,6 +50412,1025 @@
       ],
       "valueClasses": [
         "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "arccos",
+      "cases": 388,
+      "files": [
+        "nan.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "arccosh",
+      "cases": 388,
+      "files": [
+        "nan.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "arcsin",
+      "cases": 388,
+      "files": [
+        "nan.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "arcsinh",
+      "cases": 388,
+      "files": [
+        "nan.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "arctan",
+      "cases": 388,
+      "files": [
+        "nan.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "arctanh",
+      "cases": 388,
+      "files": [
+        "nan.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "cosh",
+      "cases": 388,
+      "files": [
+        "nan.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "exp2",
+      "cases": 388,
+      "files": [
+        "nan.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "log10",
+      "cases": 388,
+      "files": [
+        "nan.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "log2",
+      "cases": 388,
+      "files": [
+        "nan.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "positive",
+      "cases": 388,
+      "files": [
+        "errors_full.jsonl",
+        "nan.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "error",
+        "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 26,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": true
+      }
+    },
+    {
+      "op": "sinh",
+      "cases": 388,
+      "files": [
+        "nan.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "expm1",
+      "cases": 392,
+      "files": [
+        "nan.jsonl",
+        "precision.jsonl",
+        "specials.jsonl",
+        "unary_extra.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "contig_1d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
         "precision",
         "specials"
       ],
@@ -50052,8 +51451,9 @@
     },
     {
       "op": "log1p",
-      "cases": 388,
+      "cases": 392,
       "files": [
+        "nan.jsonl",
         "precision.jsonl",
         "specials.jsonl",
         "unary_extra.jsonl"
@@ -50070,6 +51470,7 @@
         "f_contiguous_2d",
         "f_contiguous_3d",
         "highrank_5d",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -50110,6 +51511,7 @@
       ],
       "valueClasses": [
         "mixed",
+        "nan",
         "precision",
         "specials"
       ],
@@ -50560,9 +51962,10 @@
     },
     {
       "op": "cbrt",
-      "cases": 403,
+      "cases": 406,
       "files": [
         "errors_full.jsonl",
+        "nan.jsonl",
         "random_smoke.jsonl",
         "specials.jsonl",
         "unary.jsonl"
@@ -50578,6 +51981,7 @@
         "f_contiguous_2d",
         "f_contiguous_3d",
         "highrank_5d",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -50620,6 +52024,7 @@
       "valueClasses": [
         "error",
         "mixed",
+        "nan",
         "random",
         "specials"
       ],
@@ -50640,10 +52045,11 @@
     },
     {
       "op": "ceil",
-      "cases": 409,
+      "cases": 412,
       "files": [
         "decimal_unary.jsonl",
         "errors_full.jsonl",
+        "nan.jsonl",
         "random_smoke.jsonl",
         "specials.jsonl",
         "unary.jsonl"
@@ -50660,6 +52066,7 @@
         "f_contiguous_2d",
         "f_contiguous_3d",
         "highrank_5d",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -50704,6 +52111,7 @@
         "decimal",
         "error",
         "mixed",
+        "nan",
         "random",
         "specials"
       ],
@@ -50725,11 +52133,12 @@
     },
     {
       "op": "floor",
-      "cases": 410,
+      "cases": 413,
       "files": [
         "decimal_unary.jsonl",
         "errors.jsonl",
         "errors_full.jsonl",
+        "nan.jsonl",
         "random_smoke.jsonl",
         "specials.jsonl",
         "unary.jsonl"
@@ -50747,6 +52156,7 @@
         "f_contiguous_2d",
         "f_contiguous_3d",
         "highrank_5d",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -50791,6 +52201,7 @@
         "decimal",
         "error",
         "mixed",
+        "nan",
         "random",
         "specials"
       ],
@@ -50811,89 +52222,12 @@
       }
     },
     {
-      "op": "tan",
-      "cases": 415,
-      "files": [
-        "random_smoke.jsonl",
-        "specials.jsonl",
-        "unary.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "random",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "mixed",
-        "random",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
       "op": "trunc",
-      "cases": 415,
+      "cases": 418,
       "files": [
         "decimal_unary.jsonl",
         "errors_full.jsonl",
+        "nan.jsonl",
         "random_smoke.jsonl",
         "specials.jsonl",
         "unary.jsonl"
@@ -50910,6 +52244,7 @@
         "f_contiguous_2d",
         "f_contiguous_3d",
         "highrank_5d",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -50954,6 +52289,7 @@
         "decimal",
         "error",
         "mixed",
+        "nan",
         "random",
         "specials"
       ],
@@ -50971,14 +52307,96 @@
         "singleLayout": false,
         "singleDtype": false,
         "hasErrorContracts": true
+      }
+    },
+    {
+      "op": "tan",
+      "cases": 419,
+      "files": [
+        "nan.jsonl",
+        "random_smoke.jsonl",
+        "specials.jsonl",
+        "unary.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "random",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "mixed",
+        "nan",
+        "random",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
       }
     },
     {
       "op": "sign",
-      "cases": 417,
+      "cases": 421,
       "files": [
         "decimal_unary.jsonl",
         "errors_full.jsonl",
+        "nan.jsonl",
         "random_smoke.jsonl",
         "specials.jsonl",
         "unary.jsonl"
@@ -50995,6 +52413,7 @@
         "f_contiguous_2d",
         "f_contiguous_3d",
         "highrank_5d",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -51039,6 +52458,7 @@
         "decimal",
         "error",
         "mixed",
+        "nan",
         "random",
         "specials"
       ],
@@ -51056,183 +52476,6 @@
         "singleLayout": false,
         "singleDtype": false,
         "hasErrorContracts": true
-      }
-    },
-    {
-      "op": "square",
-      "cases": 420,
-      "files": [
-        "decimal_unary.jsonl",
-        "random_smoke.jsonl",
-        "specials.jsonl",
-        "unary.jsonl"
-      ],
-      "layouts": [
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "decimal",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "one_element_1d",
-        "random",
-        "reshape_view_2d",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "decimal",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "decimal",
-        "mixed",
-        "random",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "decimal",
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
-      }
-    },
-    {
-      "op": "cos",
-      "cases": 421,
-      "files": [
-        "numpy_f32_kernels.jsonl",
-        "random_smoke.jsonl",
-        "specials.jsonl",
-        "unary.jsonl"
-      ],
-      "layouts": [
-        "broadcast",
-        "broadcast_1d_to_2d",
-        "broadcast_row_partial",
-        "c_contiguous_1d",
-        "c_contiguous_2d",
-        "c_contiguous_3d",
-        "col_strided",
-        "contig1d",
-        "contig2d",
-        "empty",
-        "empty_2d",
-        "empty_composed",
-        "f_contiguous_2d",
-        "f_contiguous_3d",
-        "highrank_5d",
-        "int_contig",
-        "int_reversed",
-        "negstride_1d",
-        "negstride_2d_offset",
-        "newaxis_inserted",
-        "offset",
-        "offset_strided3",
-        "one_element_1d",
-        "random",
-        "reshape_view_2d",
-        "reversed",
-        "row_reversed",
-        "scalar_0d",
-        "scalar_broadcast",
-        "simple_slice_offset_1d",
-        "singleton_dim_3d",
-        "sliced_composed",
-        "strided2",
-        "strided_2d_cols",
-        "strided_outer_2d",
-        "strided_step2_1d",
-        "transposed",
-        "transposed_2d",
-        "transposed_3d",
-        "un_contig_1d",
-        "un_contig_2d",
-        "un_f_contig_2d",
-        "un_negstride_1d",
-        "un_strided_1d",
-        "zerod",
-        "zerod_from_index"
-      ],
-      "dtypes": [
-        "bool",
-        "char",
-        "complex128",
-        "float16",
-        "float32",
-        "float64",
-        "int16",
-        "int32",
-        "int64",
-        "int8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "uint8"
-      ],
-      "valueClasses": [
-        "kernel_edges",
-        "mixed",
-        "random",
-        "specials"
-      ],
-      "parameterSignatures": 1,
-      "resultKinds": [
-        "array"
-      ],
-      "errorCases": 0,
-      "families": [
-        "numpy"
-      ],
-      "strength": {
-        "thinContracts": false,
-        "singleLayout": false,
-        "singleDtype": false,
-        "hasErrorContracts": false
       }
     },
     {
@@ -51362,9 +52605,96 @@
       }
     },
     {
-      "op": "log",
+      "op": "square",
       "cases": 424,
       "files": [
+        "decimal_unary.jsonl",
+        "nan.jsonl",
+        "random_smoke.jsonl",
+        "specials.jsonl",
+        "unary.jsonl"
+      ],
+      "layouts": [
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "decimal",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "one_element_1d",
+        "random",
+        "reshape_view_2d",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "decimal",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "decimal",
+        "mixed",
+        "nan",
+        "random",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "decimal",
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "cos",
+      "cases": 425,
+      "files": [
+        "nan.jsonl",
         "numpy_f32_kernels.jsonl",
         "random_smoke.jsonl",
         "specials.jsonl",
@@ -51388,6 +52718,7 @@
         "highrank_5d",
         "int_contig",
         "int_reversed",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -51437,6 +52768,104 @@
       "valueClasses": [
         "kernel_edges",
         "mixed",
+        "nan",
+        "random",
+        "specials"
+      ],
+      "parameterSignatures": 1,
+      "resultKinds": [
+        "array"
+      ],
+      "errorCases": 0,
+      "families": [
+        "numpy"
+      ],
+      "strength": {
+        "thinContracts": false,
+        "singleLayout": false,
+        "singleDtype": false,
+        "hasErrorContracts": false
+      }
+    },
+    {
+      "op": "log",
+      "cases": 428,
+      "files": [
+        "nan.jsonl",
+        "numpy_f32_kernels.jsonl",
+        "random_smoke.jsonl",
+        "specials.jsonl",
+        "unary.jsonl"
+      ],
+      "layouts": [
+        "broadcast",
+        "broadcast_1d_to_2d",
+        "broadcast_row_partial",
+        "c_contiguous_1d",
+        "c_contiguous_2d",
+        "c_contiguous_3d",
+        "col_strided",
+        "contig1d",
+        "contig2d",
+        "empty",
+        "empty_2d",
+        "empty_composed",
+        "f_contiguous_2d",
+        "f_contiguous_3d",
+        "highrank_5d",
+        "int_contig",
+        "int_reversed",
+        "nan_grid",
+        "negstride_1d",
+        "negstride_2d_offset",
+        "newaxis_inserted",
+        "offset",
+        "offset_strided3",
+        "one_element_1d",
+        "random",
+        "reshape_view_2d",
+        "reversed",
+        "row_reversed",
+        "scalar_0d",
+        "scalar_broadcast",
+        "simple_slice_offset_1d",
+        "singleton_dim_3d",
+        "sliced_composed",
+        "strided2",
+        "strided_2d_cols",
+        "strided_outer_2d",
+        "strided_step2_1d",
+        "transposed",
+        "transposed_2d",
+        "transposed_3d",
+        "un_contig_1d",
+        "un_contig_2d",
+        "un_f_contig_2d",
+        "un_negstride_1d",
+        "un_strided_1d",
+        "zerod",
+        "zerod_from_index"
+      ],
+      "dtypes": [
+        "bool",
+        "char",
+        "complex128",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8"
+      ],
+      "valueClasses": [
+        "kernel_edges",
+        "mixed",
+        "nan",
         "random",
         "specials"
       ],
@@ -51457,8 +52886,9 @@
     },
     {
       "op": "exp",
-      "cases": 426,
+      "cases": 430,
       "files": [
+        "nan.jsonl",
         "numpy_f32_kernels.jsonl",
         "random_smoke.jsonl",
         "specials.jsonl",
@@ -51482,6 +52912,7 @@
         "highrank_5d",
         "int_contig",
         "int_reversed",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -51531,6 +52962,7 @@
       "valueClasses": [
         "kernel_edges",
         "mixed",
+        "nan",
         "random",
         "specials"
       ],
@@ -51551,8 +52983,9 @@
     },
     {
       "op": "sin",
-      "cases": 428,
+      "cases": 432,
       "files": [
+        "nan.jsonl",
         "numpy_f32_kernels.jsonl",
         "random_smoke.jsonl",
         "specials.jsonl",
@@ -51576,6 +53009,7 @@
         "highrank_5d",
         "int_contig",
         "int_reversed",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -51625,6 +53059,7 @@
       "valueClasses": [
         "kernel_edges",
         "mixed",
+        "nan",
         "random",
         "specials"
       ],
@@ -51645,8 +53080,9 @@
     },
     {
       "op": "tanh",
-      "cases": 428,
+      "cases": 432,
       "files": [
+        "nan.jsonl",
         "numpy_f32_kernels.jsonl",
         "numpy_f64_kernels.jsonl",
         "specials.jsonl",
@@ -51670,6 +53106,7 @@
         "highrank_5d",
         "int_contig",
         "int_reversed",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -51718,6 +53155,7 @@
       "valueClasses": [
         "kernel_edges",
         "mixed",
+        "nan",
         "specials"
       ],
       "parameterSignatures": 1,
@@ -52507,8 +53945,9 @@
     },
     {
       "op": "sqrt",
-      "cases": 637,
+      "cases": 641,
       "files": [
+        "nan.jsonl",
         "random_smoke.jsonl",
         "specials.jsonl",
         "tail.jsonl",
@@ -52525,6 +53964,7 @@
         "f_contiguous_2d",
         "f_contiguous_3d",
         "highrank_5d",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -52584,6 +54024,7 @@
       ],
       "valueClasses": [
         "mixed",
+        "nan",
         "random",
         "specials",
         "tail"
@@ -52605,9 +54046,10 @@
     },
     {
       "op": "abs",
-      "cases": 652,
+      "cases": 656,
       "files": [
         "decimal_unary.jsonl",
+        "nan.jsonl",
         "random_smoke.jsonl",
         "specials.jsonl",
         "tail.jsonl",
@@ -52625,6 +54067,7 @@
         "f_contiguous_2d",
         "f_contiguous_3d",
         "highrank_5d",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -52686,6 +54129,7 @@
       "valueClasses": [
         "decimal",
         "mixed",
+        "nan",
         "random",
         "specials",
         "tail"
@@ -52708,10 +54152,11 @@
     },
     {
       "op": "negative",
-      "cases": 653,
+      "cases": 657,
       "files": [
         "decimal_unary.jsonl",
         "errors_full.jsonl",
+        "nan.jsonl",
         "random_smoke.jsonl",
         "specials.jsonl",
         "tail.jsonl",
@@ -52729,6 +54174,7 @@
         "f_contiguous_2d",
         "f_contiguous_3d",
         "highrank_5d",
+        "nan_grid",
         "negstride_1d",
         "negstride_2d_offset",
         "newaxis_inserted",
@@ -52791,6 +54237,7 @@
         "decimal",
         "error",
         "mixed",
+        "nan",
         "random",
         "specials",
         "tail"

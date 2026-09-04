@@ -21,14 +21,14 @@
   "summary": {
     "default_scope": {
       "total": 560,
-      "available": 478,
+      "available": 488,
       "partial": 2,
       "unsupported": 0,
-      "missing": 80,
-      "exact": 463,
+      "missing": 70,
+      "exact": 473,
       "alias": 17,
-      "coverage_percent": 85.4,
-      "addressed_percent": 85.7
+      "coverage_percent": 87.1,
+      "addressed_percent": 87.5
     },
     "by_surface": {
       "fft": {
@@ -66,14 +66,14 @@
       },
       "np": {
         "total": 390,
-        "available": 312,
+        "available": 322,
         "partial": 1,
         "unsupported": 0,
-        "missing": 77,
-        "exact": 298,
+        "missing": 67,
+        "exact": 308,
         "alias": 15,
-        "coverage_percent": 80.0,
-        "addressed_percent": 80.3
+        "coverage_percent": 82.6,
+        "addressed_percent": 82.8
       },
       "random": {
         "total": 51,
@@ -156,14 +156,14 @@
       },
       "Floating-point handling": {
         "total": 7,
-        "available": 0,
+        "available": 3,
         "partial": 0,
         "unsupported": 0,
-        "missing": 7,
-        "exact": 0,
+        "missing": 4,
+        "exact": 3,
         "alias": 0,
-        "coverage_percent": 0.0,
-        "addressed_percent": 0.0
+        "coverage_percent": 42.9,
+        "addressed_percent": 42.9
       },
       "Fourier transforms": {
         "total": 18,
@@ -211,25 +211,25 @@
       },
       "Logic & comparison": {
         "total": 29,
-        "available": 26,
+        "available": 28,
         "partial": 0,
         "unsupported": 0,
-        "missing": 3,
-        "exact": 26,
+        "missing": 1,
+        "exact": 28,
         "alias": 0,
-        "coverage_percent": 89.7,
-        "addressed_percent": 89.7
+        "coverage_percent": 96.6,
+        "addressed_percent": 96.6
       },
       "Math": {
         "total": 112,
-        "available": 83,
+        "available": 88,
         "partial": 0,
         "unsupported": 0,
-        "missing": 29,
-        "exact": 73,
+        "missing": 24,
+        "exact": 78,
         "alias": 10,
-        "coverage_percent": 74.1,
-        "addressed_percent": 74.1
+        "coverage_percent": 78.6,
+        "addressed_percent": 78.6
       },
       "Polynomials": {
         "total": 10,

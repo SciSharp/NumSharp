@@ -12,14 +12,14 @@
   "summary": {
     "default_scope": {
       "total": 560,
-      "available": 478,
+      "available": 488,
       "partial": 2,
       "unsupported": 0,
-      "missing": 80,
-      "exact": 463,
+      "missing": 70,
+      "exact": 473,
       "alias": 17,
-      "coverage_percent": 85.4,
-      "addressed_percent": 85.7
+      "coverage_percent": 87.1,
+      "addressed_percent": 87.5
     },
     "by_surface": {
       "fft": {
@@ -57,14 +57,14 @@
       },
       "np": {
         "total": 390,
-        "available": 312,
+        "available": 322,
         "partial": 1,
         "unsupported": 0,
-        "missing": 77,
-        "exact": 298,
+        "missing": 67,
+        "exact": 308,
         "alias": 15,
-        "coverage_percent": 80.0,
-        "addressed_percent": 80.3
+        "coverage_percent": 82.6,
+        "addressed_percent": 82.8
       },
       "random": {
         "total": 51,
@@ -147,14 +147,14 @@
       },
       "Floating-point handling": {
         "total": 7,
-        "available": 0,
+        "available": 3,
         "partial": 0,
         "unsupported": 0,
-        "missing": 7,
-        "exact": 0,
+        "missing": 4,
+        "exact": 3,
         "alias": 0,
-        "coverage_percent": 0.0,
-        "addressed_percent": 0.0
+        "coverage_percent": 42.9,
+        "addressed_percent": 42.9
       },
       "Fourier transforms": {
         "total": 18,
@@ -202,25 +202,25 @@
       },
       "Logic & comparison": {
         "total": 29,
-        "available": 26,
+        "available": 28,
         "partial": 0,
         "unsupported": 0,
-        "missing": 3,
-        "exact": 26,
+        "missing": 1,
+        "exact": 28,
         "alias": 0,
-        "coverage_percent": 89.7,
-        "addressed_percent": 89.7
+        "coverage_percent": 96.6,
+        "addressed_percent": 96.6
       },
       "Math": {
         "total": 112,
-        "available": 83,
+        "available": 88,
         "partial": 0,
         "unsupported": 0,
-        "missing": 29,
-        "exact": 73,
+        "missing": 24,
+        "exact": 78,
         "alias": 10,
-        "coverage_percent": 74.1,
-        "addressed_percent": 74.1
+        "coverage_percent": 78.6,
+        "addressed_percent": 78.6
       },
       "Polynomials": {
         "total": 10,
@@ -4332,7 +4332,7 @@
       "numsharp_signatures": [
         "NumSharp.NDArray array(NumSharp.NDArray nd, bool copy = true)",
         "NumSharp.NDArray array(NumSharp.np+MemoryView buffer, bool copy = true)",
-        "NumSharp.NDArray array(System.Array array, System.Type dtype = null, int ndmin = 1, bool copy = true, char order = 'C')",
+        "NumSharp.NDArray array(System.Array array, System.Type dtype = null, int ndmin = 0, bool copy = true, char order = 'C')",
         "NumSharp.NDArray array(System.Collections.Generic.IEnumerable<T> data)",
         "NumSharp.NDArray array(System.Collections.Generic.IEnumerable<T> data, int size)",
         "NumSharp.NDArray array(System.Collections.Generic.IEnumerable<T> data, long size)",
@@ -6228,14 +6228,22 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.copysign.html",
       "in_default_scope": true,
       "category": "Math",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.copysign",
+      "numsharp_signatures": [
+        "NumSharp.NDArray copysign(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
+        "NumSharp.NDArray copysign(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode dtype)",
+        "NumSharp.NDArray copysign(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Math/np.logaddexp.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/np.logaddexp.cs"
+      ],
       "notes": ""
     },
     {
@@ -8625,14 +8633,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.getbufsize.html",
       "in_default_scope": true,
       "category": "Floating-point handling",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.getbufsize",
+      "numsharp_signatures": [
+        "long getbufsize()"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/APIs/np.bufsize.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.bufsize.cs"
+      ],
       "notes": ""
     },
     {
@@ -9459,14 +9473,21 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.interp.html",
       "in_default_scope": true,
       "category": "Math",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.interp",
+      "numsharp_signatures": [
+        "NumSharp.NDArray interp(NumSharp.NDArray x, NumSharp.NDArray xp, NumSharp.NDArray fp, System.Numerics.Complex? left, System.Numerics.Complex? right = null, double? period = null)",
+        "NumSharp.NDArray interp(NumSharp.NDArray x, NumSharp.NDArray xp, NumSharp.NDArray fp, double? left = null, double? right = null, double? period = null)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Math/np.interp.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/np.interp.cs"
+      ],
       "notes": ""
     },
     {
@@ -9840,14 +9861,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.isneginf.html",
       "in_default_scope": true,
       "category": "Logic & comparison",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.isneginf",
+      "numsharp_signatures": [
+        "NumSharp.NDArray isneginf(NumSharp.NDArray x, NumSharp.NDArray out = null)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Logic/np.isneginf.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Logic/np.isneginf.cs"
+      ],
       "notes": ""
     },
     {
@@ -9860,14 +9887,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.isposinf.html",
       "in_default_scope": true,
       "category": "Logic & comparison",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.isposinf",
+      "numsharp_signatures": [
+        "NumSharp.NDArray isposinf(NumSharp.NDArray x, NumSharp.NDArray out = null)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Logic/np.isposinf.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Logic/np.isposinf.cs"
+      ],
       "notes": ""
     },
     {
@@ -10509,14 +10542,22 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.logaddexp.html",
       "in_default_scope": true,
       "category": "Math",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.logaddexp",
+      "numsharp_signatures": [
+        "NumSharp.NDArray logaddexp(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
+        "NumSharp.NDArray logaddexp(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode dtype)",
+        "NumSharp.NDArray logaddexp(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Math/np.logaddexp.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/np.logaddexp.cs"
+      ],
       "notes": ""
     },
     {
@@ -10529,14 +10570,22 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.logaddexp2.html",
       "in_default_scope": true,
       "category": "Math",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.logaddexp2",
+      "numsharp_signatures": [
+        "NumSharp.NDArray logaddexp2(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
+        "NumSharp.NDArray logaddexp2(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode dtype)",
+        "NumSharp.NDArray logaddexp2(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Math/np.logaddexp.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/np.logaddexp.cs"
+      ],
       "notes": ""
     },
     {
@@ -11337,14 +11386,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.nan_to_num.html",
       "in_default_scope": true,
       "category": "Floating-point handling",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.nan_to_num",
+      "numsharp_signatures": [
+        "NumSharp.NDArray nan_to_num(NumSharp.NDArray x, bool copy = true, object nan = null, object posinf = null, object neginf = null)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Logic/np.nan_to_num.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Logic/np.nan_to_num.cs"
+      ],
       "notes": ""
     },
     {
@@ -11939,14 +11994,22 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.nextafter.html",
       "in_default_scope": true,
       "category": "Math",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.nextafter",
+      "numsharp_signatures": [
+        "NumSharp.NDArray nextafter(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
+        "NumSharp.NDArray nextafter(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode dtype)",
+        "NumSharp.NDArray nextafter(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/Math/np.logaddexp.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/Math/np.logaddexp.cs"
+      ],
       "notes": ""
     },
     {
@@ -13918,14 +13981,20 @@
       "documentation_url": "https://numpy.org/doc/stable/reference/generated/numpy.setbufsize.html",
       "in_default_scope": true,
       "category": "Floating-point handling",
-      "availability": "missing",
-      "support": "missing",
-      "status": "missing",
-      "numsharp_target": null,
-      "numsharp_signatures": [],
+      "availability": "exact",
+      "support": "declared",
+      "status": "available",
+      "numsharp_target": "NumSharp.np.setbufsize",
+      "numsharp_signatures": [
+        "long setbufsize(long size)"
+      ],
       "numsharp_obsolete": false,
-      "numsharp_source_paths": [],
-      "numsharp_source_urls": [],
+      "numsharp_source_paths": [
+        "src/NumSharp.Core/APIs/np.bufsize.cs"
+      ],
+      "numsharp_source_urls": [
+        "https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Core/APIs/np.bufsize.cs"
+      ],
       "notes": ""
     },
     {

@@ -201,9 +201,18 @@ namespace NumSharp.Tests.Fuzz
         // (NumSharp reproduces NumPy's MSVC-UCRT per-path sign — sqrt/log/exp/.../sign/abs), while the
         // float widths stay tokenized so the tier still gates that a NaN is produced (right value) and
         // the non-NaN outputs are byte-exact, without false-failing the non-contractual float NaN sign.
+        //
+        // HOST-PINNED to win-amd64, exactly like the sibling Unary/Precision/Fft tiers (RunHostLibmCorpus):
+        // the corpus records numpy 2.4.2 win-amd64/MSVC-UCRT bytes, and this tier bit-compares BOTH the
+        // complex NaN SIGN and the finite-input transcendental VALUES (the grid crosses `finite` with the
+        // specials, so sqrt/exp/log/... over finite operands appear). Off-Windows those bytes shift with
+        // the local libm — and, on a non-x86 CPU, the FRESH default-NaN sign of a genuine 0/0·inf-inf
+        // slot flips (x86 negative, AArch64 positive), which DiffHasSignFlip would hard-fail — so an
+        // off-Windows divergence is a platform artifact, not a NumSharp-vs-NumPy defect. Windows (x64)
+        // stays the strict reference gate; elsewhere the tier is Inconclusive (matmul_parity pattern).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
-        public void Nan() => RunCorpus("nan.jsonl");
+        public void Nan() => RunHostLibmCorpus("nan.jsonl");
 
         // Truthful-vs-precise: precision-adversarial inputs (wide-magnitude/cancellation/mixed
         // sums at N up to 2049, large-mean variance, near-1 products, the expm1/log1p small-|x|

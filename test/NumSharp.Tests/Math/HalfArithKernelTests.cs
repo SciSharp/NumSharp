@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 
 namespace NumSharp.Tests.MathTests;
 
@@ -35,6 +36,18 @@ public class HalfArithKernelTests
         return r;
     }
 
+    // 0/0 and inf + -inf GENERATE a fresh qNaN whose SIGN is the CPU's default-NaN sign — NOT
+    // something the widen-compute-narrow kernel chooses (non-NaN operand lanes take the hardware
+    // FP result untouched; see DirectILKernelGenerator.Binary.Arith.Half.cs, and note the SIMD path
+    // is Avx2-gated so arm64 runs the scalar HalfArithBits fallback, which hits the same hardware
+    // division). x86/x64 emit the NEGATIVE default NaN (float32 0xFFC00000 -> half 0xFE00), matching
+    // the numpy 2.4.2 win-amd64 wheel this kernel is byte-pinned to; AArch64 emits the POSITIVE
+    // default NaN (0x7FC00000 -> 0x7E00). Assert the arch-appropriate default so the x86 byte-parity
+    // gate stays strict while the test still holds on the Apple-silicon (arm64) CI runner.
+    private static readonly ushort DefaultQNaNHalf =
+        RuntimeInformation.ProcessArchitecture is Architecture.X86 or Architecture.X64
+            ? (ushort)0xfe00 : (ushort)0x7e00;
+
     [TestMethod]
     public void Arith_NaNPriority_ProbedMatrix()
     {
@@ -51,12 +64,13 @@ public class HalfArithKernelTests
     [TestMethod]
     public void Arith_Specials_DefaultQNaN_Inf_SignedZero()
     {
-        // probed 2.4.2: 0/0 and inf-inf produce the x86 default qNaN 0xfe00;
+        // probed 2.4.2: 0/0 and inf-inf produce the x86 default qNaN 0xfe00 (arm64: 0x7e00 — the
+        // sign is the CPU's default-NaN sign, see DefaultQNaNHalf);
         // 1/0 = +inf; 1*0 with -0: sign rules; overflow saturates to inf.
         using var a = FromBits(0x0000, 0x7c00, 0x3c00, 0x7bff, 0xbc00);
         using var b = FromBits(0x0000, 0xfc00, 0x0000, 0x7bff, 0x8000);
-        Bits(np.divide(a, b))[0].Should().Be((ushort)0xfe00, "0/0 -> default qNaN");
-        Bits(np.add(a, b))[1].Should().Be((ushort)0xfe00, "inf + -inf -> default qNaN");
+        Bits(np.divide(a, b))[0].Should().Be(DefaultQNaNHalf, "0/0 -> default qNaN");
+        Bits(np.add(a, b))[1].Should().Be(DefaultQNaNHalf, "inf + -inf -> default qNaN");
         Bits(np.divide(a, b))[2].Should().Be((ushort)0x7c00, "1/0 -> +inf");
         Bits(np.add(a, b))[3].Should().Be((ushort)0x7c00, "65504+65504 overflows to +inf");
         Bits(np.multiply(a, b))[4].Should().Be((ushort)0x0000, "-1 * -0 = +0");

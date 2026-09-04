@@ -2,14 +2,14 @@
 
 Compared with NumPy **2.4.2** using NumSharp assembly **0.60.0.0**.
 
-Headline API availability: **85.4%** (478 of 560 default-scope APIs). Including partial mappings, **85.7%** are addressed.
+Headline API availability: **87.1%** (488 of 560 default-scope APIs). Including partial mappings, **87.5%** are addressed.
 
 | Surface | Available | Partial | Unsupported | Missing | Total | Coverage |
 |---|---:|---:|---:|---:|---:|---:|
 | np.fft.* | 18 | 0 | 0 | 0 | 18 | 100.0% |
 | np.linalg.* | 31 | 0 | 0 | 0 | 31 | 100.0% |
 | ndarray.* | 66 | 1 | 0 | 3 | 70 | 94.3% |
-| np.* | 312 | 1 | 0 | 77 | 390 | 80.0% |
+| np.* | 322 | 1 | 0 | 67 | 390 | 82.6% |
 | np.random.* | 51 | 0 | 0 | 0 | 51 | 100.0% |
 
 > Availability is based on the compiled public API. It is not a blanket behavioral-parity claim; dtype, layout, signature, and edge-case parity require differential tests.
@@ -34,7 +34,6 @@ Headline API availability: **85.4%** (478 of 560 default-scope APIs). Including 
 | [`np.broadcast_shapes`](https://numpy.org/doc/stable/reference/generated/numpy.broadcast_shapes.html) | np | missing | Shape manipulation |
 | [`np.busday_count`](https://numpy.org/doc/stable/reference/generated/numpy.busday_count.html) | np | missing | Date & time |
 | [`np.busday_offset`](https://numpy.org/doc/stable/reference/generated/numpy.busday_offset.html) | np | missing | Date & time |
-| [`np.copysign`](https://numpy.org/doc/stable/reference/generated/numpy.copysign.html) | np | missing | Math |
 | [`np.datetime_as_string`](https://numpy.org/doc/stable/reference/generated/numpy.datetime_as_string.html) | np | missing | Date & time |
 | [`np.datetime_data`](https://numpy.org/doc/stable/reference/generated/numpy.datetime_data.html) | np | missing | Date & time |
 | [`np.divmod`](https://numpy.org/doc/stable/reference/generated/numpy.divmod.html) | np | missing | Math |
@@ -52,7 +51,6 @@ Headline API availability: **85.4%** (478 of 560 default-scope APIs). Including 
 | [`np.genfromtxt`](https://numpy.org/doc/stable/reference/generated/numpy.genfromtxt.html) | np | missing | Array creation |
 | [`np.geomspace`](https://numpy.org/doc/stable/reference/generated/numpy.geomspace.html) | np | missing | Array creation |
 | [`np.get_include`](https://numpy.org/doc/stable/reference/generated/numpy.get_include.html) | np | missing | Runtime & diagnostics |
-| [`np.getbufsize`](https://numpy.org/doc/stable/reference/generated/numpy.getbufsize.html) | np | missing | Floating-point handling |
 | [`np.geterr`](https://numpy.org/doc/stable/reference/generated/numpy.geterr.html) | np | missing | Floating-point handling |
 | [`np.geterrcall`](https://numpy.org/doc/stable/reference/generated/numpy.geterrcall.html) | np | missing | Floating-point handling |
 | [`np.gradient`](https://numpy.org/doc/stable/reference/generated/numpy.gradient.html) | np | missing | Math |
@@ -66,8 +64,10 @@ Headline API availability: **85.4%** (478 of 560 default-scope APIs). Including 
 | [`np.hypot`](https://numpy.org/doc/stable/reference/generated/numpy.hypot.html) | np | missing | Math |
 | [`np.i0`](https://numpy.org/doc/stable/reference/generated/numpy.i0.html) | np | missing | Math |
 | [`np.info`](https://numpy.org/doc/stable/reference/generated/numpy.info.html) | np | missing | Runtime & diagnostics |
-| [`np.interp`](https://numpy.org/doc/stable/reference/generated/numpy.interp.html) | np | missing | Math |
 | [`np.is_busday`](https://numpy.org/doc/stable/reference/generated/numpy.is_busday.html) | np | missing | Date & time |
+| [`np.isnat`](https://numpy.org/doc/stable/reference/generated/numpy.isnat.html) | np | missing | Date & time |
+| [`np.kaiser`](https://numpy.org/doc/stable/reference/generated/numpy.kaiser.html) | np | missing | Window functions |
+| [`np.lcm`](https://numpy.org/doc/stable/reference/generated/numpy.lcm.html) | np | missing | Math |
 
 ## Case-insensitive near-misses
 

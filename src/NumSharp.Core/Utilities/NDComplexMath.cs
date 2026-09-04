@@ -905,6 +905,19 @@ namespace NumSharp.Utilities
         public static Complex Expm1(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
+            // NumPy 2.4.2 (win-amd64) runs this through MSVC's cos/sin/exp, which PROPAGATE an input
+            // NaN's sign into both NaN outputs (real takes priority over imag) — so expm1(±NaN, ·) and
+            // expm1(·, ±NaN) are (sNaN, sNaN) carrying the FIRST NaN's sign. .NET's Math.Cos/Sin/Exp
+            // instead always emit the negative double.NaN (0xfff8…), flipping a +NaN input to a -NaN
+            // result, so the arithmetic below would diverge on any NaN input. Guard it exactly like
+            // ExpSpecial (raw input NaN propagated), verified bit-for-bit vs 2.4.2 over the full
+            // ±NaN × {finite,±0,±inf,±NaN} grid. Inf-only inputs carry no NaN and keep the hardware
+            // path below, whose x86 "produce a NaN" sign already matches NumPy.
+            if (double.IsNaN(x) || double.IsNaN(y))
+            {
+                double n = double.IsNaN(x) ? x : y;     // first NaN (real priority); MSVC keeps its sign
+                return new Complex(n, n);
+            }
             double s = Math.Sin(y * 0.5);
             double re = RealExpm1(x) * Math.Cos(y) - 2.0 * s * s;
             double im = Math.Exp(x) * Math.Sin(y);
