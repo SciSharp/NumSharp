@@ -39,6 +39,22 @@ namespace NumSharp.Tests.Fuzz
             "sign", "abs", "absolute"
         };
 
+        /// <summary>
+        ///     The complex NaN-SIGN contract above is authored against numpy 2.4.2 win-amd64 (MSVC UCRT),
+        ///     and NumSharp reproduces it in managed code + x64 SSE — so it holds bit-for-bit on the whole
+        ///     x86 family (Windows AND Linux, shared deterministic SSE), but NOT on AArch64: a fresh NaN
+        ///     from a genuine 0/0·inf-inf inside the complex arithmetic carries the CPU's default-NaN
+        ///     sign, which is POSITIVE on ARM where x86 emits NEGATIVE. Off the x86 reference the raw-byte
+        ///     NaN-sign compare would hard-fail via <see cref="BitDiff.DiffHasSignFlip"/> on a platform
+        ///     artifact, so the sign contract is gated to x86 and NaN tokenizes elsewhere (the finite
+        ///     complex VALUES in these tiers are proven cross-platform — they were macOS-green before this
+        ///     comparison existed). Same host-pin RULE as the RunHostLibmCorpus tiers, applied per-op.
+        /// </summary>
+        private static readonly bool NanSignIsX86Reference =
+            System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture
+                is System.Runtime.InteropServices.Architecture.X86
+                or System.Runtime.InteropServices.Architecture.X64;
+
         // ---- new tiers ---------------------------------------------------------------------
 
         /// <summary>
@@ -171,7 +187,8 @@ namespace NumSharp.Tests.Fuzz
             // result dtype, so `abs`/`absolute` (complex128 -> float64) is gated too. Everywhere else NaN
             // stays tokenized (a differing payload/sign is non-contractual — order/algorithm-dependent).
             bool nanExact = ComplexNanContractOps.Contains(c.Op)
-                            && (tc == NPTypeCode.Complex || c.Operands.Any(o => o.Dtype == "complex128"));
+                            && (tc == NPTypeCode.Complex || c.Operands.Any(o => o.Dtype == "complex128"))
+                            && NanSignIsX86Reference;   // win-amd64 NaN-sign contract; tokenize off x86 (arm64)
 
             // Bit-exact to NumPy ("precise") passes HERE, before truth is ever read — matching
             // NumPy's bytes is the contract, and truth can never turn a precise result red.

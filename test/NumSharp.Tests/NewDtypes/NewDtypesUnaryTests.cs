@@ -531,11 +531,22 @@ namespace NumSharp.Tests.NewDtypes
         [TestMethod]
         public void Complex_Square_FmaContraction()
         {
-            // np.square(z) == z*z with FMA-contracted multiply. Complex.op_Multiply (no FMA) returns 0
-            // for the real part here (exact 1e-20 - 1e-20); NumPy's fma(re,re,-(im*im)) keeps -2.275e-37.
+            // np.square(z) == z*z with FMA-contracted multiply. NDComplexMath.Square uses the x86
+            // vfmaddsub intrinsic (Fma.IsSupported) so fma(re,re,-(im*im)) keeps -2.275e-37; on a host
+            // WITHOUT x86 FMA (e.g. AArch64) it takes the non-fused fallback where re*re and im*im each
+            // round to the same 1e-20 and cancel exactly to 0. Gate the FMA-specific residual to the
+            // x86 reference (the numpy 2.4.2 win-amd64 wheel this is byte-pinned to), matching the
+            // kernel's own dispatch; the imaginary part and interior/overflow hold on every host.
             var s = np.square(np.array(new Complex[] { new(1e-10, 1e-10) })).GetAtIndex<Complex>(0);
-            s.Real.Should().BeApproximately(-2.275215372846689e-37, 1e-52);
-            s.Real.Should().NotBe(0.0, "FMA exposes the rounding of im*im");
+            if (System.Runtime.Intrinsics.X86.Fma.IsSupported)
+            {
+                s.Real.Should().BeApproximately(-2.275215372846689e-37, 1e-52);
+                s.Real.Should().NotBe(0.0, "FMA exposes the rounding of im*im");
+            }
+            else
+            {
+                s.Real.Should().Be(0.0, "no x86 FMA: the non-fused re*re - im*im cancels exactly");
+            }
             s.Imaginary.Should().BeApproximately(2.0000000000000002e-20, 1e-35);
 
             // Interior unaffected, and the overflow gives -inf (not NaN from inf-inf).

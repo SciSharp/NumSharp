@@ -3,21 +3,21 @@
   "summary": {
     "schema_version": 1,
     "api_inventory": "coverage/generated/coverage.json",
-    "total_available_or_partial": 480,
+    "total_available_or_partial": 490,
     "measured_or_aliased": 455,
     "excluded": 19,
-    "missing": 6,
+    "missing": 16,
     "blocked": 0,
-    "coverage_percent": 98.7,
+    "coverage_percent": 96.6,
     "by_status": {
       "covered_alias": 14,
       "excluded": 19,
-      "missing": 6,
+      "missing": 16,
       "op_matrix": 419,
       "subsystem": 22
     },
     "by_backend_route": {
-      "managed": 441,
+      "managed": 451,
       "openblas_hybrid": 3,
       "openblas_optional": 10,
       "openblas_optional_composed": 4,
@@ -51,12 +51,12 @@
         "coverage_percent": 100.0
       },
       "np": {
-        "total": 313,
+        "total": 323,
         "measured_or_aliased": 309,
         "excluded": 1,
-        "missing": 3,
+        "missing": 13,
         "blocked": 0,
-        "coverage_percent": 99.0
+        "coverage_percent": 96.0
       },
       "random": {
         "total": 51,
@@ -1490,6 +1490,19 @@
       "notes": ""
     },
     {
+      "id": "numpy.copysign",
+      "surface": "np",
+      "name": "copysign",
+      "kind": "ufunc",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.copyto",
       "surface": "np",
       "name": "copyto",
@@ -2888,6 +2901,19 @@
       "notes": ""
     },
     {
+      "id": "numpy.getbufsize",
+      "surface": "np",
+      "name": "getbufsize",
+      "kind": "function",
+      "category": "Floating-point handling",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.greater",
       "surface": "np",
       "name": "greater",
@@ -3056,6 +3082,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Manipulation/ExtendedShapeBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.interp",
+      "surface": "np",
+      "name": "interp",
+      "kind": "function",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -3265,6 +3304,32 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Logic/LogicBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.isneginf",
+      "surface": "np",
+      "name": "isneginf",
+      "kind": "function",
+      "category": "Logic & comparison",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.isposinf",
+      "surface": "np",
+      "name": "isposinf",
+      "kind": "function",
+      "category": "Logic & comparison",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -4163,6 +4228,32 @@
       "notes": ""
     },
     {
+      "id": "numpy.logaddexp",
+      "surface": "np",
+      "name": "logaddexp",
+      "kind": "ufunc",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.logaddexp2",
+      "surface": "np",
+      "name": "logaddexp2",
+      "kind": "ufunc",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.logical_and",
       "surface": "np",
       "name": "logical_and",
@@ -4569,6 +4660,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Arithmetic/MultiplyBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.nan_to_num",
+      "surface": "np",
+      "name": "nan_to_num",
+      "kind": "function",
+      "category": "Floating-point handling",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -6040,6 +6144,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/ApiSurface/UtilityBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.nextafter",
+      "surface": "np",
+      "name": "nextafter",
+      "kind": "ufunc",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -8024,6 +8141,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/ApiSurface/UtilityBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.setbufsize",
+      "surface": "np",
+      "name": "setbufsize",
+      "kind": "function",
+      "category": "Floating-point handling",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {

@@ -3,21 +3,21 @@
 Generated from the compiled NumPy 2.4.2 API inventory and the official benchmark sources.
 A covered alias shares the exact compiled NumSharp target with a directly measured API.
 
-Headline benchmark coverage: **98.7%** (455 covered of 461 benchmarkable APIs; 19 reviewed exclusions).
+Headline benchmark coverage: **96.6%** (455 covered of 471 benchmarkable APIs; 19 reviewed exclusions).
 
 | Surface | Covered | Blocked | Excluded | Missing | Benchmarkable | Coverage |
 |---|---:|---:|---:|---:|---:|---:|
 | fft | 18 | 0 | 0 | 0 | 18 | 100.0% |
 | linalg | 31 | 0 | 0 | 0 | 31 | 100.0% |
 | ndarray | 52 | 0 | 15 | 0 | 52 | 100.0% |
-| np | 309 | 0 | 1 | 3 | 312 | 99.0% |
+| np | 309 | 0 | 1 | 13 | 322 | 96.0% |
 | random | 45 | 0 | 3 | 3 | 48 | 93.8% |
 
 ## Execution routes
 
 | Route | APIs | Meaning |
 |---|---:|---|
-| managed | 441 | NumSharp.Core managed code only. |
+| managed | 451 | NumSharp.Core managed code only. |
 | openblas_optional | 10 | Direct product hook with managed fallback. |
 | openblas_optional_composed | 4 | Composition can reach an accelerated product. |
 | openblas_optional_sliding_dot | 2 | Long eligible correlate/convolve regions only. |
@@ -44,11 +44,21 @@ retain a managed fallback; required routes throw when no suitable LAPACK backend
 | API | Surface | Kind | Category | Backend route |
 |---|---|---|---|---|
 | `numpy.bmat` | np | function | Linear algebra | managed |
+| `numpy.copysign` | np | ufunc | Math | managed |
+| `numpy.getbufsize` | np | function | Floating-point handling | managed |
+| `numpy.interp` | np | function | Math | managed |
+| `numpy.isneginf` | np | function | Logic & comparison | managed |
+| `numpy.isposinf` | np | function | Logic & comparison | managed |
+| `numpy.logaddexp` | np | ufunc | Math | managed |
+| `numpy.logaddexp2` | np | ufunc | Math | managed |
+| `numpy.nan_to_num` | np | function | Floating-point handling | managed |
 | `numpy.nancumprod` | np | function | Reductions | managed |
 | `numpy.nancumsum` | np | function | Reductions | managed |
+| `numpy.nextafter` | np | ufunc | Math | managed |
 | `numpy.random.bytes` | random | function | Random | managed |
 | `numpy.random.default_rng` | random | function | Random | managed |
 | `numpy.random.random_integers` | random | function | Random | managed |
+| `numpy.setbufsize` | np | function | Floating-point handling | managed |
 
 ## Benchmark-blocking open bugs
 
