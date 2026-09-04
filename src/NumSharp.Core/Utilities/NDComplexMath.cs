@@ -774,8 +774,11 @@ namespace NumSharp.Utilities
         /// a TRUE <see cref="Fma.MultiplySubtractScalar"/> rather than
         /// <c>FusedMultiplyAdd(re, re, -(im*im))</c> so that a NaN <c>im*im</c> keeps its (positive) sign
         /// instead of being flipped by the explicit unary minus — matching NumPy 2.4.2 bit-for-bit on
-        /// NaN/inf-component inputs too. Without hardware FMA it falls back to NumPy's non-SIMD scalar
-        /// loop (<c>loops.c.src</c>: <c>re*re - im*im</c>), which is likewise NaN-sign correct.
+        /// NaN/inf-component inputs too. Off x86 (e.g. AArch64) there is no such intrinsic, so it uses
+        /// the portable <see cref="Math.FusedMultiplyAdd(double,double,double)"/> — still a real fused
+        /// op, so the finite AND overflow results stay bit-identical to the x86 path (validated over 2M
+        /// random inputs plus the cancellation/overflow edges); only a NaN <c>im*im</c>'s sign differs
+        /// there, which is host-dependent off x86 and tokenized by the oracle (nanExact is x86-gated).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Square(Complex z)
@@ -794,7 +797,14 @@ namespace NumSharp.Utilities
                 double imOut = Fma.MultiplyAddScalar(imV, reV, Vector128.CreateScalarUnsafe(re * im)).ToScalar();
                 return new Complex(reOut, imOut);
             }
-            return new Complex(re * re - im * im, re * im + im * re);
+            // Off x86 (e.g. AArch64): the SAME fused re*re-im*im / im*re+re*im via portable
+            // Math.FusedMultiplyAdd (hardware VFMA where present, correctly-rounded software FMA
+            // otherwise), so complex square is arch-consistent with the vfmaddsub path above — NOT
+            // the old re*re-im*im, whose separate rounding cancels 1e-20-1e-20 to 0 and overflows
+            // inf-inf to NaN, diverging from NumPy by thousands of ULP on cancellation/overflow.
+            return new Complex(
+                Math.FusedMultiplyAdd(re, re, -(im * im)),
+                Math.FusedMultiplyAdd(im, re, re * im));
         }
 
         /// <summary>
