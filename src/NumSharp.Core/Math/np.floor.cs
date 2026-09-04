@@ -14,7 +14,7 @@ namespace NumSharp
         /// <returns>The floor of each element in x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.floor.html</remarks>
         public static NDArray floor(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.Floor(x, dtype, @out, where);
+            => x.TensorEngine.Floor(x, dtype.AsType(), @out, where);
 
         /// <summary>
         ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
@@ -24,7 +24,7 @@ namespace NumSharp
         /// <param name="dtype">The loop dtype the computation should run in.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.floor.html</remarks>
         public static NDArray floor(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.Floor(x, dtype);
+            => x.TensorEngine.Floor(x, dtype.AsType());
 
         /// <summary>
         ///     Return the floor of the input, element-wise. <br></br>

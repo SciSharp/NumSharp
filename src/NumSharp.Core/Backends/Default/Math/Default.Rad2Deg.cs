@@ -5,14 +5,13 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Rad2Deg(NDArray nd, Type dtype) => Rad2Deg(nd, dtype?.GetTypeCode());
-
         /// <summary>
         /// Element-wise radians to degrees conversion using IL-generated kernels.
         /// Computes x * (180/π).
         /// </summary>
-        public override NDArray Rad2Deg(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Rad2Deg(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy validation order: the where bool check is argument
             // parsing -- it precedes loop resolution (the dtype= no-loop
             // raise inside ResolveUnaryFloatReturnType).

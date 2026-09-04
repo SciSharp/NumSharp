@@ -13,13 +13,13 @@ namespace NumSharp
         /// <param name="dtype">Loop dtype (NumPy ufunc dtype=): the comparison runs at this precision.</param>
         /// <returns>The minimum of x1 and x2, element-wise. This is a scalar if both x1 and x2 are scalars.</returns>
         public static NDArray minimum(NDArray x1, NDArray x2, NPTypeCode? dtype = null)
-            => x1.TensorEngine.Minimum(x1, x2, dtype);
+            => x1.TensorEngine.Minimum(x1, x2, dtype.AsType());
 
         /// <summary>
         ///     Element-wise minimum of array elements (NaN-propagating). See <see cref="minimum(NDArray,NDArray,NPTypeCode?)"/>.
         /// </summary>
         public static NDArray minimum(NDArray x1, NDArray x2, Type dtype)
-            => x1.TensorEngine.Minimum(x1, x2, dtype?.GetTypeCode());
+            => x1.TensorEngine.Minimum(x1, x2, dtype);
 
         /// <summary>
         ///     Element-wise minimum of array elements (NaN-propagating), writing into <paramref name="@out"/>.
@@ -37,13 +37,13 @@ namespace NumSharp
         /// <param name="dtype">Loop dtype (NumPy ufunc dtype=): the comparison runs at this precision.</param>
         /// <returns>The minimum of x1 and x2, element-wise, ignoring NaNs.</returns>
         public static NDArray fmin(NDArray x1, NDArray x2, NPTypeCode? dtype = null)
-            => x1.TensorEngine.FMin(x1, x2, dtype);
+            => x1.TensorEngine.FMin(x1, x2, dtype.AsType());
 
         /// <summary>
         ///     Element-wise minimum of array elements, ignoring NaNs. See <see cref="fmin(NDArray,NDArray,NPTypeCode?)"/>.
         /// </summary>
         public static NDArray fmin(NDArray x1, NDArray x2, Type dtype)
-            => x1.TensorEngine.FMin(x1, x2, dtype?.GetTypeCode());
+            => x1.TensorEngine.FMin(x1, x2, dtype);
 
         /// <summary>
         ///     Element-wise minimum of array elements, ignoring NaNs, writing into <paramref name="@out"/>.

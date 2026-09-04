@@ -5,15 +5,14 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Sign(NDArray nd, Type dtype) => Sign(nd, dtype?.GetTypeCode());
-
         /// <summary>
         /// Element-wise sign function using IL-generated kernels.
         /// Returns -1, 0, or 1 based on input sign.
         /// NumPy behavior: preserves input dtype.
         /// </summary>
-        public override NDArray Sign(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Sign(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);
 
             // np.sign preserves input dtype (unlike trigonometric functions);

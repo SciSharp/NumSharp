@@ -5,8 +5,6 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, Type dtype) => ModF(nd, dtype?.GetTypeCode());
-
         /// <summary>
         /// Return the fractional and integral parts of an array, element-wise.
         ///
@@ -19,8 +17,9 @@ namespace NumSharp.Backends
         ///
         /// Decimal is a NumSharp extension (NumPy doesn't have decimal type).
         /// </summary>
-        public override (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, NPTypeCode? typeCode = null)
+        public override (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, Type dtype = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             var resolvedType = typeCode ?? nd.typecode;
 
             // Validate type - modf only makes sense for floating-point types

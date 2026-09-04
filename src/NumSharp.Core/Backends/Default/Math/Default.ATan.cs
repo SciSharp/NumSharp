@@ -5,13 +5,12 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ATan(NDArray nd, Type dtype) => ATan(nd, dtype?.GetTypeCode());
-
         /// <summary>
         /// Element-wise inverse tangent (arctan) using IL-generated kernels.
         /// </summary>
-        public override NDArray ATan(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray ATan(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy validation order: the where bool check is argument
             // parsing -- it precedes loop resolution (the dtype= no-loop
             // raise inside ResolveUnaryFloatReturnType).

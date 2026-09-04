@@ -17,7 +17,7 @@ namespace NumSharp
         /// <returns>Array of the same shape as x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctanh.html</remarks>
         public static NDArray arctanh(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.ATanh(x, dtype, @out, where);
+            => x.TensorEngine.ATanh(x, dtype.AsType(), @out, where);
 
         /// <summary>
         ///     Inverse hyperbolic tangent, element-wise, computed in <paramref name="dtype"/>.
@@ -27,7 +27,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctanh.html</remarks>
         public static NDArray arctanh(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.ATanh(x, dtype);
+            => x.TensorEngine.ATanh(x, dtype.AsType());
 
         /// <summary>
         ///     Inverse hyperbolic tangent, element-wise.
@@ -44,14 +44,14 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atanh.html</remarks>
         public static NDArray atanh(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.ATanh(x, dtype, @out, where);
+            => x.TensorEngine.ATanh(x, dtype.AsType(), @out, where);
 
         /// <summary>
         ///     Inverse hyperbolic tangent, element-wise (Array-API alias), computed in <paramref name="dtype"/>.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atanh.html</remarks>
         public static NDArray atanh(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.ATanh(x, dtype);
+            => x.TensorEngine.ATanh(x, dtype.AsType());
 
         /// <summary>
         ///     Inverse hyperbolic tangent, element-wise (Array-API alias).

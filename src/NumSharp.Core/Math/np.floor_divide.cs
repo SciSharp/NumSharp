@@ -17,7 +17,7 @@ namespace NumSharp
         /// <returns>y = floor(x1/x2). This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.floor_divide.html</remarks>
         public static NDArray floor_divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.FloorDivide(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.FloorDivide(x1, x2, dtype.AsType(), @out, where);
 
         /// <summary>
         /// Return the largest integer smaller or equal to the division of the inputs.
@@ -39,7 +39,7 @@ namespace NumSharp
         /// <param name="typeCode">The dtype of the returned NDArray.</param>
         /// <returns>y = floor(x1/x2). This is a scalar if both x1 and x2 are scalars.</returns>
         public static NDArray floor_divide(NDArray x1, NDArray x2, NPTypeCode typeCode)
-            => x1.TensorEngine.FloorDivide(x1, x2, typeCode);
+            => x1.TensorEngine.FloorDivide(x1, x2, typeCode.AsType());
 
         /// <summary>
         /// Return the largest integer smaller or equal to the division of the inputs.
@@ -76,7 +76,7 @@ namespace NumSharp
         /// <returns>y = floor(x1/x2).</returns>
         [NDScoped]
         public static NDArray floor_divide(NDArray x1, object x2, NPTypeCode typeCode)
-            => x1.TensorEngine.FloorDivide(x1, np.asanyarray(x2), typeCode);
+            => x1.TensorEngine.FloorDivide(x1, np.asanyarray(x2), typeCode.AsType());
     }
 }
 

@@ -19,7 +19,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.std.html</remarks>
         public static NDArray std(NDArray a, bool keepdims = false, int? ddof = null, NPTypeCode? dtype = null)
         {
-            return a.TensorEngine.ReduceStd(a, null, keepdims, ddof, dtype);
+            return a.TensorEngine.ReduceStd(a, null, keepdims, ddof, dtype.AsType());
         }
 
         /// <summary>
@@ -35,7 +35,7 @@ namespace NumSharp
         /// <returns> returns a new array containing the std values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.std.html</remarks>
         public static NDArray std(NDArray a, int axis, Type dtype, bool keepdims = false, int? ddof = null)
-            => a.TensorEngine.ReduceStd(a, axis, keepdims, ddof, dtype != null ? dtype.GetTypeCode() : (NPTypeCode?)null);
+            => a.TensorEngine.ReduceStd(a, axis, keepdims, ddof, dtype);
 
         /// <summary>
         ///     Compute the standard deviation along the specified axis.
@@ -50,7 +50,7 @@ namespace NumSharp
         /// <returns> returns a new array containing the std values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.std.html</remarks>
         public static NDArray std(NDArray a, int axis, NPTypeCode type, bool keepdims = false, int? ddof = null)
-            => a.TensorEngine.ReduceStd(a, axis, keepdims, ddof, type);
+            => a.TensorEngine.ReduceStd(a, axis, keepdims, ddof, type.AsType());
 
         /// <summary>
         ///     Compute the standard deviation along the specified axis.
@@ -66,7 +66,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.std.html</remarks>
         public static NDArray std(NDArray a, int axis, bool keepdims = false, int? ddof = null, NPTypeCode? dtype = null)
         {
-            return a.TensorEngine.ReduceStd(a, axis, keepdims, ddof, dtype);
+            return a.TensorEngine.ReduceStd(a, axis, keepdims, ddof, dtype.AsType());
         }
     }
 }

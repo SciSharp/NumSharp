@@ -15,7 +15,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.sum.html</remarks>
         public NDArray sum(int axis, bool keepdims, Type dtype)
         {
-            return TensorEngine.Sum(this, axis, dtype != null ? dtype.GetTypeCode() : default(NPTypeCode?), keepdims);
+            return TensorEngine.Sum(this, axis, dtype, keepdims);
         }
 
         /// <summary>
@@ -28,7 +28,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.sum.html</remarks>
         public NDArray sum(int axis, bool keepdims, NPTypeCode? typeCode = null)
         {
-            return TensorEngine.Sum(this, axis, typeCode, keepdims);
+            return TensorEngine.Sum(this, axis, typeCode.AsType(), keepdims);
         }
 
         /// <summary>

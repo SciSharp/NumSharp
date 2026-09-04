@@ -12,7 +12,7 @@ namespace NumSharp
         /// <returns>The corresponding angle in radians. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.deg2rad.html</remarks>
         public static NDArray deg2rad(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.Deg2Rad(x, dtype, @out, where);
+            => x.TensorEngine.Deg2Rad(x, dtype.AsType(), @out, where);
 
         /// <summary>
         ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
@@ -22,7 +22,7 @@ namespace NumSharp
         /// <param name="dtype">The loop dtype the computation should run in.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.deg2rad.html</remarks>
         public static NDArray deg2rad(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.Deg2Rad(x, dtype);
+            => x.TensorEngine.Deg2Rad(x, dtype.AsType());
 
         /// <summary>
         /// Convert angles from degrees to radians.

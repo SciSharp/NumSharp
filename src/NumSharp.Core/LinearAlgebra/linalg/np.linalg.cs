@@ -165,7 +165,7 @@ namespace NumSharp
             ///     this, so a rejected dtype never reaches a cast.
             /// </summary>
             internal static NDArray ToCommon(NDArray a, NPTypeCode common)
-                => a.typecode == common ? a : a.TensorEngine.Cast(a, common, copy: false);
+                => a.typecode == common ? a : a.TensorEngine.Cast(a, common.AsType(), copy: false);
 
             /// <summary>
             ///     Element-wise <c>|x|²</c> as a REAL array — NumPy's <c>(x.conj() * x).real</c>.

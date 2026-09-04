@@ -17,29 +17,17 @@ namespace NumSharp.Backends
         // ResolveLogAddNextHelper -> NDLogAddExpMath.
         // =====================================================================
 
-        public override NDArray LogAddExp(NDArray x1, NDArray x2, Type dtype)
-            => LogAddExp(x1, x2, dtype?.GetTypeCode());
+        public override NDArray LogAddExp(NDArray x1, NDArray x2, Type dtype = null, NDArray @out = null, NDArray where = null)
+            => ExecuteFloatTierBinary(x1, x2, BinaryOp.LogAddExp, dtype?.GetTypeCode(), @out, where);
 
-        public override NDArray LogAddExp(NDArray x1, NDArray x2, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
-            => ExecuteFloatTierBinary(x1, x2, BinaryOp.LogAddExp, typeCode, @out, where);
+        public override NDArray LogAddExp2(NDArray x1, NDArray x2, Type dtype = null, NDArray @out = null, NDArray where = null)
+            => ExecuteFloatTierBinary(x1, x2, BinaryOp.LogAddExp2, dtype?.GetTypeCode(), @out, where);
 
-        public override NDArray LogAddExp2(NDArray x1, NDArray x2, Type dtype)
-            => LogAddExp2(x1, x2, dtype?.GetTypeCode());
+        public override NDArray NextAfter(NDArray x1, NDArray x2, Type dtype = null, NDArray @out = null, NDArray where = null)
+            => ExecuteFloatTierBinary(x1, x2, BinaryOp.NextAfter, dtype?.GetTypeCode(), @out, where);
 
-        public override NDArray LogAddExp2(NDArray x1, NDArray x2, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
-            => ExecuteFloatTierBinary(x1, x2, BinaryOp.LogAddExp2, typeCode, @out, where);
-
-        public override NDArray NextAfter(NDArray x1, NDArray x2, Type dtype)
-            => NextAfter(x1, x2, dtype?.GetTypeCode());
-
-        public override NDArray NextAfter(NDArray x1, NDArray x2, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
-            => ExecuteFloatTierBinary(x1, x2, BinaryOp.NextAfter, typeCode, @out, where);
-
-        public override NDArray CopySign(NDArray x1, NDArray x2, Type dtype)
-            => CopySign(x1, x2, dtype?.GetTypeCode());
-
-        public override NDArray CopySign(NDArray x1, NDArray x2, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
-            => ExecuteFloatTierBinary(x1, x2, BinaryOp.CopySign, typeCode, @out, where);
+        public override NDArray CopySign(NDArray x1, NDArray x2, Type dtype = null, NDArray @out = null, NDArray where = null)
+            => ExecuteFloatTierBinary(x1, x2, BinaryOp.CopySign, dtype?.GetTypeCode(), @out, where);
 
         // Valid loop dtypes for these ufuncs: the float family (NumPy ee/ff/dd + NumSharp's decimal
         // extension standing in for gg). Everything else -> NumPy's "No loop matching" TypeError.

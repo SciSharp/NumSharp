@@ -6,8 +6,9 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null)
+        public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, Type dtype = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             var shape = arr.Shape;
 
             if (shape.IsEmpty)

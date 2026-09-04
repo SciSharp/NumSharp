@@ -9,7 +9,9 @@ namespace NumSharp.Backends
     {
         public override NDArray Cast(NDArray nd, Type dtype, bool copy) => Cast(nd, dtype.GetTypeCode(), copy);
 
-        public override NDArray Cast(NDArray nd, NPTypeCode dtype, bool copy)
+        // NPTypeCode is DefaultEngine's internal dtype currency — kept as a (non-abstract) helper
+        // the whole engine calls directly; the TensorEngine abstraction exposes only the Type form.
+        public NDArray Cast(NDArray nd, NPTypeCode dtype, bool copy)
         {
             if (dtype == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(dtype));

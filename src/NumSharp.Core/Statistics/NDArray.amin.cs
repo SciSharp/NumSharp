@@ -14,7 +14,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
         public T amin<T>() where T : unmanaged
         {
-            return np.asscalar<T>(TensorEngine.AMin(this, null, typeof(T).GetTypeCode(), false));
+            return np.asscalar<T>(TensorEngine.AMin(this, null, typeof(T), false));
         }
         
         /// <summary>
@@ -42,7 +42,7 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray amin(Type dtype = null)
         {
-            return TensorEngine.AMin(this, null, dtype?.GetTypeCode(), false);
+            return TensorEngine.AMin(this, null, dtype, false);
         }
 
         /// <summary>

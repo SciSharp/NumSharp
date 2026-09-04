@@ -57,7 +57,7 @@ namespace NumSharp.Backends
             if (tc != right.typecode)
             {
                 var product = left * right;
-                var reduced = ReduceAdd(product, null, false, typeCode: product.GetTypeCode);
+                var reduced = ReduceAdd(product, null, false, dtype: product.GetTypeCode.AsType());
                 product.Dispose();
                 return reduced;
             }
@@ -101,7 +101,7 @@ namespace NumSharp.Backends
                 default:
                     // Char (no INumber<char>) or anything unforeseen → existing path.
                     var product = left * right;
-                    var fallback = ReduceAdd(product, null, false, typeCode: product.GetTypeCode);
+                    var fallback = ReduceAdd(product, null, false, dtype: product.GetTypeCode.AsType());
                     product.Dispose();
                     return fallback;
             }

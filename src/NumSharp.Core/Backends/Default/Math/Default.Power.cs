@@ -6,12 +6,6 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
-        /// Element-wise power with array exponents: x1 ** x2
-        /// </summary>
-        public override NDArray Power(NDArray lhs, NDArray rhs, Type dtype)
-            => Power(lhs, rhs, dtype?.GetTypeCode());
-
-        /// <summary>
         /// Element-wise power: <c>x1 ** x2</c>, NumPy-aligned.
         ///
         /// Promotion / dispatch (NEP50, matches numpy 2.x):
@@ -30,8 +24,9 @@ namespace NumSharp.Backends
         /// The integer kernel calls <see cref="Utilities.NDIntegerPower"/> for
         /// exact dtype wrapping (replaces the previous double round-trip).
         /// </summary>
-        public override NDArray Power(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Power(NDArray lhs, NDArray rhs, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy rule: signed integer exponents cannot be negative when the LOOP is an
             // integer loop. The check is on the exponent, regardless of base value (NumPy throws
             // even for base=1 or base=-1 where the answer would be exact). An explicit dtype=

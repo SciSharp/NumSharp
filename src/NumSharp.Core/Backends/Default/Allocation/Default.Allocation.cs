@@ -9,7 +9,9 @@ namespace NumSharp.Backends
             return new UnmanagedStorage(dtype) {Engine = this};
         }
 
-        public override UnmanagedStorage GetStorage(NPTypeCode typeCode)
+        // NPTypeCode is DefaultEngine's internal dtype currency — kept as a (non-abstract) helper
+        // the whole engine calls directly; the TensorEngine abstraction exposes only the Type form.
+        public UnmanagedStorage GetStorage(NPTypeCode typeCode)
         {
             return new UnmanagedStorage(typeCode) {Engine = this};
         }

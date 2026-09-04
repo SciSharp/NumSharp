@@ -1,3 +1,4 @@
+using System;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
@@ -11,8 +12,9 @@ namespace NumSharp.Backends
         ///     imaginary part. Handles every memory layout (contiguous / strided / transposed /
         ///     broadcast / sliced) through the shared unary dispatch, and honours out=/where=.
         /// </summary>
-        public override NDArray Conjugate(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Conjugate(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // Conjugate has a loop at EVERY dtype (unlike negative, which rejects bool), so there is
             // no dtype rejection here. dtype= (when given) selects the loop and preserves that dtype.
             return ExecuteUnaryOp(nd, UnaryOp.Conjugate, typeCode, @out, where);

@@ -27,7 +27,7 @@ namespace NumSharp
             // as NumPy does (e.g. conjugate(bool, dtype: Double) -> float64).
             if (dtype is null && x.typecode == NPTypeCode.Boolean)
                 x = x.astype(NPTypeCode.SByte);
-            return x.TensorEngine.Conjugate(x, dtype, @out, where);
+            return x.TensorEngine.Conjugate(x, dtype.AsType(), @out, where);
         }
 
         /// <summary>

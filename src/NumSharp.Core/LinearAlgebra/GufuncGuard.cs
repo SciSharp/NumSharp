@@ -60,7 +60,7 @@ namespace NumSharp
 
         /// <summary>Casts an operand to the requested loop dtype, or returns it unchanged.</summary>
         internal static NDArray ToLoop(NDArray operand, NPTypeCode? dtype)
-            => dtype is null ? operand : operand.TensorEngine.Cast(operand, dtype.Value, copy: false);
+            => dtype is null ? operand : operand.TensorEngine.Cast(operand, dtype.Value.AsType(), copy: false);
 
         /// <summary>
         ///     Validates a gufunc <c>axes=</c> list and normalizes each INPUT entry against its

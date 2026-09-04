@@ -16,7 +16,7 @@ namespace NumSharp
         /// <returns>The cosine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cos.html</remarks>
         public static NDArray cos(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.Cos(x, dtype, @out, where);
+            => x.TensorEngine.Cos(x, dtype.AsType(), @out, where);
 
         /// <summary>
         ///     Cosine element-wise, computed in <paramref name="dtype"/>.
@@ -26,7 +26,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cos.html</remarks>
         public static NDArray cos(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.Cos(x, dtype);
+            => x.TensorEngine.Cos(x, dtype.AsType());
 
         /// <summary>
         ///     Cosine element-wise.
@@ -47,7 +47,7 @@ namespace NumSharp
         /// <returns>Output array of same shape as x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cosh.html</remarks>
         public static NDArray cosh(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.Cosh(x, dtype, @out, where);
+            => x.TensorEngine.Cosh(x, dtype.AsType(), @out, where);
 
         /// <summary>
         ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
@@ -57,7 +57,7 @@ namespace NumSharp
         /// <param name="dtype">The loop dtype the computation should run in.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cosh.html</remarks>
         public static NDArray cosh(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.Cosh(x, dtype);
+            => x.TensorEngine.Cosh(x, dtype.AsType());
 
         /// <summary>
         ///     Hyperbolic cosine, element-wise. <br></br>
@@ -79,7 +79,7 @@ namespace NumSharp
         /// <returns>The angle of the ray intersecting the unit circle at the given x-coordinate in radians [0, pi]. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arccos.html</remarks>
         public static NDArray arccos(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.ACos(x, dtype, @out, where);
+            => x.TensorEngine.ACos(x, dtype.AsType(), @out, where);
 
         /// <summary>
         ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
@@ -89,7 +89,7 @@ namespace NumSharp
         /// <param name="dtype">The loop dtype the computation should run in.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arccos.html</remarks>
         public static NDArray arccos(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.ACos(x, dtype);
+            => x.TensorEngine.ACos(x, dtype.AsType());
 
         /// <summary>
         ///     Trigonometric inverse cosine, element-wise. <br></br>

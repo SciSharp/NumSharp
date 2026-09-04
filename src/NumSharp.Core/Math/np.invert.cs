@@ -16,7 +16,7 @@ namespace NumSharp
         /// <returns>Result. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
         public static NDArray invert(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.Invert(x, dtype, @out, where);
+            => x.TensorEngine.Invert(x, dtype.AsType(), @out, where);
 
         /// <summary>
         /// Compute bit-wise inversion in <paramref name="outType"/> — positional-dtype
@@ -24,7 +24,7 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
         public static NDArray invert(NDArray x, NPTypeCode outType)
-            => x.TensorEngine.Invert(x, outType);
+            => x.TensorEngine.Invert(x, outType.AsType());
 
         /// <summary>
         /// Compute bit-wise inversion, or bit-wise NOT, element-wise.

@@ -5,15 +5,14 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Abs(NDArray nd, Type dtype) => Abs(nd, dtype?.GetTypeCode());
-
         /// <summary>
         /// Element-wise absolute value using IL-generated kernels.
         /// NumPy behavior: preserves input dtype (unlike sin/cos which promote to float).
         /// Exception: np.abs(complex) returns float64 (the magnitude).
         /// </summary>
-        public override NDArray Abs(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Abs(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             var inputType = nd.GetTypeCode;
 
             // np.abs(complex) returns the float64 magnitude. NumPy registers exactly the

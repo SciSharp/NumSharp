@@ -14,7 +14,7 @@ namespace NumSharp
         /// This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cbrt.html</remarks>
         public static NDArray cbrt(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.Cbrt(x, dtype, @out, where);
+            => x.TensorEngine.Cbrt(x, dtype.AsType(), @out, where);
 
         /// <summary>
         ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
@@ -24,7 +24,7 @@ namespace NumSharp
         /// <param name="dtype">The loop dtype the computation should run in.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cbrt.html</remarks>
         public static NDArray cbrt(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.Cbrt(x, dtype);
+            => x.TensorEngine.Cbrt(x, dtype.AsType());
 
         /// <summary>
         /// Return the cube-root of an array, element-wise.

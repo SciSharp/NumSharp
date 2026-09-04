@@ -29,12 +29,10 @@ namespace NumSharp.Backends
         //   is inherent, not a kernel-dodge copy).
         // =============================================================================
 
-        public override NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, Type dtype, NDArray @out = null)
-            => ClipNDArray(lhs, min, max, dtype?.GetTypeCode(), @out);
-
         [NDScoped]
-        public override unsafe NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, NPTypeCode? typeCode = null, NDArray @out = null)
+        public override unsafe NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, Type dtype = null, NDArray @out = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // ---- Output dtype (explicit `dtype=` wins; otherwise NEP-50 weak-scalar promote)
             NPTypeCode outType;
             if (typeCode.HasValue)

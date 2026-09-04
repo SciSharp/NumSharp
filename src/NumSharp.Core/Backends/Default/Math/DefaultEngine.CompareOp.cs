@@ -307,48 +307,54 @@ namespace NumSharp.Backends
         // NumPy raises the no-loop TypeError for any non-bool dtype= (probed
         // 2.4.2: equal(a, b, dtype=f64/i32) raises; dtype=bool is a no-op).
 
-        public override NDArray Compare(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Compare(NDArray lhs, NDArray rhs, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateBoolLoopDtype(typeCode, "equal");
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.Equal);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Equal, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
         }
 
-        public override NDArray NotEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray NotEqual(NDArray lhs, NDArray rhs, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateBoolLoopDtype(typeCode, "not_equal");
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.NotEqual);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.NotEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
         }
 
-        public override NDArray Less(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Less(NDArray lhs, NDArray rhs, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateBoolLoopDtype(typeCode, "less");
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.Less);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Less, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
         }
 
-        public override NDArray LessEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray LessEqual(NDArray lhs, NDArray rhs, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateBoolLoopDtype(typeCode, "less_equal");
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.LessEqual);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.LessEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
         }
 
-        public override NDArray Greater(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Greater(NDArray lhs, NDArray rhs, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateBoolLoopDtype(typeCode, "greater");
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.Greater);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Greater, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
         }
 
-        public override NDArray GreaterEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray GreaterEqual(NDArray lhs, NDArray rhs, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateBoolLoopDtype(typeCode, "greater_equal");
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.GreaterEqual);

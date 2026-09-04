@@ -240,7 +240,7 @@ namespace NumSharp
                 {
                     NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double
                         or NPTypeCode.Decimal or NPTypeCode.Complex => x,
-                    _ => x.TensorEngine.Cast(x, NPTypeCode.Double, copy: false)
+                    _ => x.TensorEngine.Cast(x, typeof(double), copy: false)
                 };
 
             private static int[] AllAxes(int nd)

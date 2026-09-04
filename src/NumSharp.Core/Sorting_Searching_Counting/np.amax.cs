@@ -23,7 +23,7 @@ namespace NumSharp
         public static NDArray amax(NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
         {
             // Delegate to TensorEngine which handles keepdims for axis=null
-            return a.TensorEngine.ReduceAMax(a, axis, keepdims, dtype?.GetTypeCode());
+            return a.TensorEngine.ReduceAMax(a, axis, keepdims, dtype);
         }
 
         /// <summary>
@@ -37,7 +37,7 @@ namespace NumSharp
         public static NDArray max(NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
         {
             // Delegate to TensorEngine which handles keepdims for axis=null
-            return a.TensorEngine.ReduceAMax(a, axis, keepdims, dtype?.GetTypeCode());
+            return a.TensorEngine.ReduceAMax(a, axis, keepdims, dtype);
         }
     }
 }

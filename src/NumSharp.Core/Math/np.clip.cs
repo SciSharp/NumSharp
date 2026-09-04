@@ -42,7 +42,7 @@ namespace NumSharp
 
             var lo = a_min ?? min;
             var hi = a_max ?? max;
-            var result = a.TensorEngine.ClipNDArray(a, lo, hi, dtype, @out);
+            var result = a.TensorEngine.ClipNDArray(a, lo, hi, dtype.AsType(), @out);
             return PreserveFContigFromSource(a, result);
         }
 

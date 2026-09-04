@@ -15,7 +15,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.modf.html</remarks>
         [NDScoped]
         public static (NDArray Fractional, NDArray Intergral) modf(NDArray x, NPTypeCode? dtype = null)
-            => PreserveFContig(x, x.TensorEngine.ModF(x, dtype));
+            => PreserveFContig(x, x.TensorEngine.ModF(x, dtype.AsType()));
 
         /// <summary>
         ///     Return the fractional and integral parts of an array, element-wise.

@@ -9,27 +9,27 @@ namespace NumSharp
         /// <param name="@out">A location into which the result is stored (must broadcast with the inputs without being stretched; returned as-is).</param>
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         public static NDArray add(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.Add(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Add(x1, x2, dtype.AsType(), @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.divide.html</remarks>
         public static NDArray divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.Divide(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Divide(x1, x2, dtype.AsType(), @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.true_divide.html</remarks>
         public static NDArray true_divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.Divide(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Divide(x1, x2, dtype.AsType(), @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.multiply.html</remarks>
         public static NDArray multiply(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.Multiply(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Multiply(x1, x2, dtype.AsType(), @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.subtract.html</remarks>
         public static NDArray subtract(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.Subtract(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Subtract(x1, x2, dtype.AsType(), @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mod.html</remarks>
         public static NDArray mod(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.Mod(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Mod(x1, x2, dtype.AsType(), @out, where);
 
         public static NDArray mod(NDArray x1, float x2)
             => x1.TensorEngine.Mod(x1, x2);
@@ -58,7 +58,7 @@ namespace NumSharp
         /// <returns>An array shaped as a but with the specified axis removed.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.prod.html</remarks>
         public static NDArray prod(NDArray a, int? axis = null, Type dtype = null, bool keepdims = false) //todo impl a version with keepdims
-            => a.TensorEngine.ReduceProduct(a, axis, keepdims, dtype != null ? dtype.GetTypeCode() : (NPTypeCode?)null);
+            => a.TensorEngine.ReduceProduct(a, axis, keepdims, dtype);
 
         /// <summary>
         ///     Numerical positive, element-wise (identity: returns +x, a copy).
@@ -69,7 +69,7 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): positive(i32, dtype: float64) widens; bool loop requests raise NumPy's did-not-contain-a-loop TypeError (positive has no bool loop, but positive(bool, dtype: float64) is legal).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.positive.html</remarks>
         public static NDArray positive(NDArray nd, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => nd.TensorEngine.Positive(nd, dtype, @out, where);
+            => nd.TensorEngine.Positive(nd, dtype.AsType(), @out, where);
 
         /// <summary>
         ///     Numerical negative, element-wise.
@@ -84,13 +84,13 @@ namespace NumSharp
             // ufunc out=/where=: the provided out is returned as-is (no
             // layout post-processing — NumPy returns out untouched).
             if (@out is not null || where is not null)
-                return nd.TensorEngine.Negate(nd, dtype, @out, where);
+                return nd.TensorEngine.Negate(nd, dtype.AsType(), @out, where);
 
             // Route through the engine (same path as the unary `-` operator and nd.negate()):
             // the IL kernel negates unsigned integers by two's-complement wrap (NumPy: -1u -> 255)
             // and handles non-contiguous operands via NDIter. The legacy hand-written nd.negative()
             // threw NotSupportedException for unsigned dtypes and required a flat Address.
-            var result = nd.TensorEngine.Negate(nd, dtype);
+            var result = nd.TensorEngine.Negate(nd, dtype.AsType());
             // NumPy-aligned layout preservation: negative preserves F-contig input.
             if (nd.Shape.NDim > 1 && nd.size > 1
                 && nd.Shape.IsFContiguous && !nd.Shape.IsContiguous

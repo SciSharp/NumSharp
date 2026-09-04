@@ -25,7 +25,7 @@ namespace NumSharp
         public static NDArray amin(NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
         {
             // Delegate to TensorEngine which handles keepdims for axis=null
-            return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype?.GetTypeCode());
+            return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype);
         }
 
         /// <summary>
@@ -40,7 +40,7 @@ namespace NumSharp
         public static NDArray min(NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
         {
             // Delegate to TensorEngine which handles keepdims for axis=null
-            return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype?.GetTypeCode());
+            return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype);
         }
     }
 }

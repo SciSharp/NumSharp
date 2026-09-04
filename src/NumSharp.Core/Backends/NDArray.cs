@@ -254,7 +254,7 @@ namespace NumSharp
         protected internal NDArray(NPTypeCode typeCode, TensorEngine engine)
         {
             tensorEngine = engine;
-            Storage = TensorEngine.GetStorage(typeCode);
+            Storage = TensorEngine.GetStorage(typeCode.AsType());
         }
 
         /// <summary>
@@ -771,7 +771,7 @@ namespace NumSharp
         public NDArray astype(NPTypeCode typeCode, bool copy, char order, string casting = "unsafe")
         {
             ValidateAstypeCasting(typeCode, casting);
-            var casted = TensorEngine.Cast(this, typeCode, copy);
+            var casted = TensorEngine.Cast(this, typeCode.AsType(), copy);
             // 'K' (astype's default) is fully handled by Cast's KEEPORDER allocation — see the
             // Type-overload twin above for why re-imposing a collapsed C/F order here is wrong.
             if (order == 'K' || order == 'k')

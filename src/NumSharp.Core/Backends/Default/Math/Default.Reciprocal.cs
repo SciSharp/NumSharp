@@ -6,16 +6,15 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Reciprocal(NDArray nd, Type dtype) => Reciprocal(nd, dtype?.GetTypeCode());
-
         /// <summary>
         /// Element-wise reciprocal (1/x) using IL-generated kernels.
         /// NumPy: for integer dtypes, the result preserves the input dtype with
         /// C-style truncated integer division (so 1/x is 0 for |x| >= 2, and 0
         /// for x == 0 per NumPy seterr=ignore semantics).
         /// </summary>
-        public override NDArray Reciprocal(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Reciprocal(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);
 
             // dtype= selects the loop; the input must reach it same_kind

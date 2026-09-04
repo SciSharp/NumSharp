@@ -12,22 +12,11 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="y">y-coordinates</param>
         /// <param name="x">x-coordinates. If y.shape != x.shape, they must be broadcastable.</param>
-        /// <param name="dtype">Output dtype (overrides type promotion)</param>
-        /// <returns>Array of angles in radians, range [-pi, pi]</returns>
-        public override NDArray ATan2(NDArray y, NDArray x, Type dtype)
-            => ATan2(y, x, dtype?.GetTypeCode());
-
-        /// <summary>
-        /// Element-wise arc tangent of y/x choosing the quadrant correctly.
-        /// NumPy: arctan2(y, x) returns the angle in radians between the positive x-axis
-        /// and the point (x, y), with correct quadrant determination.
-        /// </summary>
-        /// <param name="y">y-coordinates</param>
-        /// <param name="x">x-coordinates. If y.shape != x.shape, they must be broadcastable.</param>
         /// <param name="typeCode">Output dtype (overrides type promotion). If null, uses NumPy rules.</param>
         /// <returns>Array of angles in radians, range [-pi, pi]</returns>
-        public override NDArray ATan2(NDArray y, NDArray x, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray ATan2(NDArray y, NDArray x, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy validation order: where parse -> loop resolution -> out
             // cast -> shape (probed 2.4.2).
             ValidateWhereMask(where);

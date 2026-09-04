@@ -14,7 +14,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
         public T amax<T>() where T : unmanaged
         {
-            return np.asscalar<T>(TensorEngine.AMax(this, null, typeof(T).GetTypeCode(), false));
+            return np.asscalar<T>(TensorEngine.AMax(this, null, typeof(T), false));
         }
 
         /// <summary>
@@ -42,7 +42,7 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray amax(Type dtype = null)
         {
-            return TensorEngine.AMax(this, null, dtype?.GetTypeCode(), false);
+            return TensorEngine.AMax(this, null, dtype, false);
         }
 
         /// <summary>

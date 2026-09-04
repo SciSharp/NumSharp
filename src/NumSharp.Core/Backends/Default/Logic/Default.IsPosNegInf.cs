@@ -1,3 +1,4 @@
+using System;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 
@@ -18,7 +19,7 @@ namespace NumSharp.Backends
         /// The fused kernel computes <c>x == +inf</c> in one pass (single-pass SIMD for
         /// Single/Double, scalar for Half; cf. NumPy's four-pass isinf/signbit/and).
         /// </remarks>
-        public override NDArray IsPosInf(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray IsPosInf(NDArray a, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
             if (@out is null && where is null)
             {
@@ -40,7 +41,7 @@ namespace NumSharp.Backends
         /// - Complex: rejected upstream at the np.* layer.
         /// Fused single-pass kernel computing <c>x == -inf</c>.
         /// </remarks>
-        public override NDArray IsNegInf(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray IsNegInf(NDArray a, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
             if (@out is null && where is null)
             {

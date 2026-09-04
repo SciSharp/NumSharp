@@ -16,7 +16,7 @@ namespace NumSharp
         [NDScoped]
         public static NDArray cumprod(NDArray arr, int? axis = null, NPTypeCode? typeCode = null, NDArray @out = null)
         {
-            NDArray result = arr.TensorEngine.ReduceCumMul(arr, axis, typeCode);
+            NDArray result = arr.TensorEngine.ReduceCumMul(arr, axis, typeCode.AsType());
             return WriteScanToOut(result, @out);
         }
     }

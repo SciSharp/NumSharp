@@ -88,7 +88,7 @@ namespace NumSharp
                 // - N-D diagonal (3+D source) → axis=-1 reduces along the appended
                 //   diag axis, leaving the source's non-axis1/axis2 axes intact.
                 int? sumAxis = diagContig.ndim == 1 ? (int?)null : -1;
-                var result = a.TensorEngine.Sum(diagContig, axis: sumAxis, typeCode: sumDtype, keepdims: false);
+                var result = a.TensorEngine.Sum(diagContig, axis: sumAxis, dtype: sumDtype.AsType(), keepdims: false);
                 return DispatchOut(result, @out);
             }
             finally

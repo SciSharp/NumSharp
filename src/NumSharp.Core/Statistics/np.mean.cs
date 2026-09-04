@@ -81,7 +81,7 @@ namespace NumSharp
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
         public static NDArray mean(NDArray a, int axis, NPTypeCode type, bool keepdims = false)
-            => a.TensorEngine.Mean(a, axis, type, keepdims);
+            => a.TensorEngine.Mean(a, axis, type.AsType(), keepdims);
 
         /// <summary>
         ///     Compute the arithmetic mean along the specified axis.

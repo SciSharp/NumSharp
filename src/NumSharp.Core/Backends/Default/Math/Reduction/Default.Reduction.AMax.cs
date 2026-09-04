@@ -6,8 +6,9 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null)
+        public override NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, Type dtype = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             var shape = arr.Shape;
 
             // Handle empty arrays - need to check axis-specific behavior

@@ -23,7 +23,7 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
         public static NDArray round_(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.Round(x, dtype);
+            => x.TensorEngine.Round(x, dtype.AsType());
 
         /// <summary>
         ///     Evenly round to the given number of decimals.
@@ -41,7 +41,7 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
         public static NDArray round_(NDArray x, int decimals, NPTypeCode dtype)
-            => x.TensorEngine.Round(x, decimals, dtype);
+            => x.TensorEngine.Round(x, decimals, dtype.AsType());
 
         /// <summary>
         ///     Evenly round to the given number of decimals.
@@ -84,7 +84,7 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
         public static NDArray around(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.Round(x, dtype);
+            => x.TensorEngine.Round(x, dtype.AsType());
 
         /// <summary>
         ///     Evenly round to the given number of decimals.
@@ -102,7 +102,7 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
         public static NDArray around(NDArray x, int decimals, NPTypeCode dtype)
-            => x.TensorEngine.Round(x, decimals, dtype);
+            => x.TensorEngine.Round(x, decimals, dtype.AsType());
 
         /// <summary>
         ///     Evenly round to the given number of decimals.

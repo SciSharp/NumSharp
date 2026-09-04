@@ -16,7 +16,7 @@ namespace NumSharp
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_and.html</remarks>
         public static NDArray bitwise_and(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.BitwiseAnd(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.BitwiseAnd(x1, x2, dtype.AsType(), @out, where);
 
         /// <summary>
         /// Compute the bit-wise OR of two arrays element-wise.
@@ -29,7 +29,7 @@ namespace NumSharp
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_or.html</remarks>
         public static NDArray bitwise_or(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.BitwiseOr(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.BitwiseOr(x1, x2, dtype.AsType(), @out, where);
 
         /// <summary>
         /// Compute the bit-wise XOR of two arrays element-wise.
@@ -42,6 +42,6 @@ namespace NumSharp
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_xor.html</remarks>
         public static NDArray bitwise_xor(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.BitwiseXor(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.BitwiseXor(x1, x2, dtype.AsType(), @out, where);
     }
 }

@@ -19,7 +19,7 @@ namespace NumSharp
             // np.cumsum == np.add.accumulate. With an axis argument it preserves the source
             // memory layout (KEEPORDER); ReduceCumAdd now allocates the output in that layout
             // directly (no post-hoc copy needed). axis=None ravels in C-order to a 1-D result.
-            NDArray result = arr.TensorEngine.ReduceCumAdd(arr, axis, typeCode);
+            NDArray result = arr.TensorEngine.ReduceCumAdd(arr, axis, typeCode.AsType());
             return WriteScanToOut(result, @out);
         }
 

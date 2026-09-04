@@ -30,7 +30,7 @@ namespace NumSharp
                 throw new TypeError(
                     "This operation is not supported for complex128 values because it would be ambiguous.");
 
-            return x.TensorEngine.IsPosInf(x, NPTypeCode.Boolean, @out, null);
+            return x.TensorEngine.IsPosInf(x, typeof(bool), @out, null);
         }
     }
 }

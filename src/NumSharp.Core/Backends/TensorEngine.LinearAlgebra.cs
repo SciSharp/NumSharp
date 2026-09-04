@@ -87,7 +87,7 @@ namespace NumSharp
             // The reduction dtype is the LOOP dtype, not NEP50's accumulator: np.vecdot's registered
             // loops are 'ii->i', so an int32 pair reduces to int32 where np.sum would give int64.
             var product = Multiply(LinAlgHelper.Conjugate(x1), x2);
-            return ReduceAdd(product, -1, false, product.typecode);
+            return ReduceAdd(product, -1, false, product.typecode.AsType());
         }
 
         /// <summary>

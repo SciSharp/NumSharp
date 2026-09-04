@@ -6,15 +6,14 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Invert(NDArray nd, Type dtype) => Invert(nd, dtype?.GetTypeCode());
-
         /// <summary>
         /// Element-wise bitwise NOT using IL-generated kernels.
         /// For integers: computes ~x (ones complement).
         /// For booleans: computes logical NOT (NumPy behavior).
         /// </summary>
-        public override NDArray Invert(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Invert(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy validation order (probed 2.4.2): where parse -> loop
             // resolution -> input cast -> out cast -> shape.
             ValidateWhereMask(where);

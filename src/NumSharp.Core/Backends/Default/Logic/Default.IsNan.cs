@@ -1,4 +1,5 @@
-﻿using NumSharp.Backends.Kernels;
+﻿using System;
+using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 
 namespace NumSharp.Backends
@@ -18,8 +19,9 @@ namespace NumSharp.Backends
         /// - Infinity: Returns False (Inf is not NaN)
         /// - Empty arrays: Returns empty bool array
         /// </remarks>
-        public override NDArray IsNan(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray IsNan(NDArray a, Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // typeCode is validate-only: isnan has bool-output loops only
             // (NumPy: dtype=bool is a no-op, anything else raises no-loop).
             ValidateBoolLoopDtype(typeCode, "isnan");

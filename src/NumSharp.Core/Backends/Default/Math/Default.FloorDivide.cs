@@ -4,11 +4,9 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray FloorDivide(NDArray lhs, NDArray rhs, System.Type dtype)
-            => FloorDivide(lhs, rhs, dtype?.GetTypeCode());
-
-        public override NDArray FloorDivide(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray FloorDivide(NDArray lhs, NDArray rhs, System.Type dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // ufunc dtype=/out=/where= compose exactly like NumPy 2.4.2 (probed):
             // dtype= selects the LOOP — floor_divide(i32,i32,dtype=f64) computes
             // the float loop (-7//2 → -4.0); floor_divide(f64,f64,dtype=i32)

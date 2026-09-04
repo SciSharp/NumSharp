@@ -120,7 +120,7 @@ public class AuditV2_NDArrayCreation
         var origStorage = orig.Storage;
         var origDtype = orig.dtype;
 
-        var result = orig.TensorEngine.Cast(orig, NPTypeCode.Double, copy: false);
+        var result = orig.TensorEngine.Cast(orig, typeof(double), copy: false);
 
         // The bug: result is `orig` itself, and `orig.Storage` was replaced.
         ReferenceEquals(orig, result).Should().BeFalse(
@@ -148,7 +148,7 @@ public class AuditV2_NDArrayCreation
         orig.Shape.IsEmpty.Should().BeTrue("sanity");
 
         var origStorage = orig.Storage;
-        var result = orig.TensorEngine.Cast(orig, NPTypeCode.Double, copy: false);
+        var result = orig.TensorEngine.Cast(orig, typeof(double), copy: false);
 
         ReferenceEquals(orig, result).Should().BeFalse(
             "Cast(empty, copy=false) should not return the same instance with mutated storage");

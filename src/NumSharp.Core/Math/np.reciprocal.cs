@@ -14,7 +14,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reciprocal.html</remarks>
         [NDScoped]
         public static NDArray reciprocal(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.Reciprocal(x, dtype, @out, where);
+            => x.TensorEngine.Reciprocal(x, dtype.AsType(), @out, where);
 
         /// <summary>
         ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
@@ -24,7 +24,7 @@ namespace NumSharp
         /// <param name="dtype">The loop dtype the computation should run in.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reciprocal.html</remarks>
         public static NDArray reciprocal(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.Reciprocal(x, dtype);
+            => x.TensorEngine.Reciprocal(x, dtype.AsType());
 
         /// <summary>
         /// Return the reciprocal of the argument, element-wise.

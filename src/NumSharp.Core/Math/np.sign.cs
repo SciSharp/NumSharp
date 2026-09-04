@@ -14,7 +14,7 @@ namespace NumSharp
         /// <returns>The sign of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sign.html</remarks>
         public static NDArray sign(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.Sign(x, dtype, @out, where);
+            => x.TensorEngine.Sign(x, dtype.AsType(), @out, where);
 
         /// <summary>
         ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
@@ -24,7 +24,7 @@ namespace NumSharp
         /// <param name="dtype">The loop dtype the computation should run in.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sign.html</remarks>
         public static NDArray sign(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.Sign(x, dtype);
+            => x.TensorEngine.Sign(x, dtype.AsType());
 
         /// <summary>
         ///     Returns an element-wise indication of the sign of a number. <br></br>
