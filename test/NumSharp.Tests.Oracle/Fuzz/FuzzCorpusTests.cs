@@ -193,6 +193,18 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Specials() => RunCorpus("specials.jsonl");
 
+        // NaN parity: "do NumSharp's functions produce NumPy's NaN?" Every UNARY op for which a NaN
+        // output is reachable, over the FULL special-value grid (finite / ±0 / ±inf / BOTH NaN signs)
+        // — complex128 as the 64-element re×im cross-product, plus float16/32/64 lines. NumPy 2.4.2's
+        // exact output bytes are recorded (gen_nan_oracle.py). CompareArray applies the NaN-contract
+        // policy: the complex-unary ops (ComplexNanContractOps) are compared BIT-EXACT on the NaN sign
+        // (NumSharp reproduces NumPy's MSVC-UCRT per-path sign — sqrt/log/exp/.../sign/abs), while the
+        // float widths stay tokenized so the tier still gates that a NaN is produced (right value) and
+        // the non-NaN outputs are byte-exact, without false-failing the non-contractual float NaN sign.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Nan() => RunCorpus("nan.jsonl");
+
         // Truthful-vs-precise: precision-adversarial inputs (wide-magnitude/cancellation/mixed
         // sums at N up to 2049, large-mean variance, near-1 products, the expm1/log1p small-|x|
         // band) where each case ALSO carries expected.truth — the correctly-rounded mathematical
@@ -543,6 +555,7 @@ namespace NumSharp.Tests.Fuzz
             ["random_parity_host.jsonl"] = 86,
             ["generator_parity.jsonl"] = 68,
             ["generator_parity_host.jsonl"] = 32,
+            ["nan.jsonl"] = 100,   // NaN-parity grid (gen_nan_oracle.py): 27 complex + 3×31 float
             ["random_smoke.jsonl"] = 1600,
             ["reduce.jsonl"] = 9004,
             ["rounding.jsonl"] = 665,

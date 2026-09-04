@@ -35,6 +35,8 @@ test/oracle/                         corpus generators (NumPy 2.4.2)
   gen_oracle.py                      deterministic matrices (astype/binary/comparison/unary/reduce/where/place);
                                      per-mode dtype axes widened to ALL_DTYPES; Char WOVEN into every tier
                                      via the uint16 proxy (char_tier) — relabelled uint16->char, bytes intact
+  gen_nan_oracle.py                  STANDALONE NaN-parity oracle -> nan.jsonl (complex-unary NaN sign
+                                     BIT-EXACT vs NumPy; float widths value-NaN). Owns its own numbering.
   gen_decimal_oracle.cs              INDEPENDENT C# oracle for Decimal (no NumPy analog): naive scalar
                                      System.Decimal math -> decimal_{unary,binary,reduce,scan,power,
                                      varstd,matmul,astype,stat,where,sort,manip}.jsonl (12 tiers, 703 cases)
@@ -199,6 +201,7 @@ python test/oracle/gen_oracle.py products         # CBLAS product family values 
 python test/oracle/gen_oracle.py fft              # np.fft.* — 1-D/N-D/hermitian transforms + freq/shift helpers
 python test/oracle/gen_oracle.py random_parity    # seeded np.random stream bytes (portable + host-libm files)
 python test/oracle/gen_index_oracle.py            # the four index_* corpora (seed pinned 20240626)
+python test/oracle/gen_nan_oracle.py              # nan.jsonl — NaN parity grid (standalone; complex bit-exact)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
 dotnet run test/oracle/gen_decimal_oracle.cs      # Decimal tiers (independent C# System.Decimal oracle)
 ```
@@ -449,6 +452,32 @@ divergences) PLUS the three the tier discovered — `S1`/`S2`/`S3` in Table 1. *
 real-dtype (f16/f32/f64) matmul/dot/outer specials case is bit-exact** — the managed float GEMM
 propagates NaN/inf exactly like NumPy's BLAS on these operands; only C99-unspecified complex-infinity
 arithmetic (`S3`) diverges.
+
+### NaN parity (`nan` tier) — "do our functions produce NumPy's NaN?"
+
+`nan.jsonl` (120 cases, `gen_nan_oracle.py` — a STANDALONE generator like the npy/decimal oracles,
+so it never renumbers the shared corpus) is the dedicated NaN oracle. It runs every UNARY op for
+which a NaN output is reachable over the FULL special-value grid — finite / ±0 / ±inf / **BOTH NaN
+signs (+NaN `0x7ff8…` AND −NaN `0xfff8…`)** — as complex128 (the 64-element re×im cross-product) plus
+float16/32/64 lines, recording NumPy 2.4.2's exact output bytes. `CompareArray` applies the
+NaN-contract policy verbatim:
+
+- **complex128 unary ops** (`ComplexNanContractOps`: sqrt/log/log2/log10/log1p/exp/exp2/expm1/square/
+  reciprocal/sin/cos/tan/sinh/cosh/tanh/arc*/conjugate/negative/positive/**sign**/**abs**) are compared
+  **BIT-EXACT** on the NaN sign — NumSharp reproduces NumPy's MSVC-UCRT per-path sign (produce-a-NaN
+  slots → +NaN; csqrt/clog/cexp/ctanh propagate; csinh/ccosh canonicalise so csin/ccos follow the
+  transform negate). A pure sign flip HARD-FAILS via `DiffHasSignFlip` before any ULP excuse. `abs`
+  returns float64, so the trigger keys on a complex **operand**, not the result dtype.
+- **float16/32/64** stay tokenized, so the tier still gates that a NaN is produced (correct VALUE)
+  exactly where NumPy does and the non-NaN outputs are byte-exact, without false-failing the
+  non-contractual float NaN SIGN (order/algorithm/platform-dependent — see the float32-sum note).
+
+Green on both frameworks; the only excused entries are ~18 `unary ~ULP` on the non-portable float
+`expm1`/`log1p` finite outputs. Teeth verified: reverting any per-path fix turns the tier red with an
+explicit "NaN-sign/signed-zero contract violation". This is the permanent form of the one-off
+103,229-case raw-byte audit that found the 73 detectable NaN-bit divergences (2 fixed — complex
+`abs`/`sign`; the other 71 non-contractual/documented — float reductions, sort, log1p, complex
+binary/reductions, floor_divide/mod-f16).
 
 ### Truthful vs precise (`precision` tier)
 
