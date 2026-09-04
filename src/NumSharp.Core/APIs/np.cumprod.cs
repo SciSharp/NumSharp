@@ -14,9 +14,9 @@ namespace NumSharp
         /// <returns>A new array holding the result is returned unless out is specified, in which case a reference to out is returned. The result has the same size as a, and the same shape as a if axis is not None or a is a 1-d array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumprod.html</remarks>
         [NDScoped]
-        public static NDArray cumprod(NDArray arr, int? axis = null, NPTypeCode? typeCode = null, NDArray @out = null)
+        public static NDArray cumprod(NDArray arr, int? axis = null, DType typeCode = null, NDArray @out = null)
         {
-            NDArray result = arr.TensorEngine.ReduceCumMul(arr, axis, typeCode.AsType());
+            NDArray result = arr.TensorEngine.ReduceCumMul(arr, axis, typeCode);
             return WriteScanToOut(result, @out);
         }
     }

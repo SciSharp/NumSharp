@@ -58,8 +58,8 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isfinite.html</remarks>
-        public static NDArray isfinite(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => a.TensorEngine.IsFinite(a, dtype.AsType(), @out, where);
+        public static NDArray isfinite(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => a.TensorEngine.IsFinite(a, dtype, @out, where);
 
         /// <summary>
         /// Test element-wise for Not a Number.
@@ -71,8 +71,8 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isnan.html</remarks>
-        public static NDArray isnan(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => a.TensorEngine.IsNan(a, dtype.AsType(), @out, where);
+        public static NDArray isnan(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => a.TensorEngine.IsNan(a, dtype, @out, where);
 
         /// <summary>
         /// Test element-wise for positive or negative infinity.
@@ -89,8 +89,8 @@ namespace NumSharp
         /// - Integer types: Always False (integers cannot be Inf)
         /// - NaN: Returns False (NaN is not infinity)
         /// </remarks>
-        public static NDArray isinf(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => a.TensorEngine.IsInf(a, dtype.AsType(), @out, where);
+        public static NDArray isinf(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => a.TensorEngine.IsInf(a, dtype, @out, where);
 
         /// <summary>
         ///     Returns true incase of a number, bool or string. If null, returns false.

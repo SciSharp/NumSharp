@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -6,123 +6,71 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Sum of array elements over a given axis.
+        ///     Sum of all array elements.
         /// </summary>
         /// <param name="a">Elements to sum.</param>
-        /// <param name="axis">Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input array. If axis is negative it counts from the last to the first axis. </param>
-        /// <param name="dtype">The type of the returned array and of the accumulator in which the elements are summed. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
-        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array. If the default value is passed, then keepdims will not be passed through to the sum method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.</param>
-        /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
+        /// <returns>A scalar (0-d) sum of the flattened array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(NDArray a)
             => a.TensorEngine.Sum(a, axis: null, dtype: null, keepdims: false);
 
         /// <summary>
-        ///     Sum of array elements over a given axis.
+        ///     Sum of array elements over the given axis.
         /// </summary>
         /// <param name="a">Elements to sum.</param>
-        /// <param name="axis">Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input array. If axis is negative it counts from the last to the first axis. </param>
-        /// <param name="dtype">The type of the returned array and of the accumulator in which the elements are summed. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
-        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array. If the default value is passed, then keepdims will not be passed through to the sum method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.</param>
-        /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
+        /// <param name="axis">Axis along which a sum is performed (negative counts from the last axis).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(NDArray a, int axis)
             => a.TensorEngine.Sum(a, axis: axis, dtype: null, keepdims: false);
 
         /// <summary>
-        ///     Sum of array elements over a given axis.
+        ///     Sum of all array elements, optionally keeping the reduced dimensions.
         /// </summary>
         /// <param name="a">Elements to sum.</param>
-        /// <param name="axis">Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input array. If axis is negative it counts from the last to the first axis. </param>
-        /// <param name="dtype">The type of the returned array and of the accumulator in which the elements are summed. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
-        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array. If the default value is passed, then keepdims will not be passed through to the sum method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.</param>
-        /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
+        /// <param name="keepdims">If true, the reduced axes are left in the result as size-one dimensions.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(NDArray a, bool keepdims)
             => a.TensorEngine.Sum(a, axis: null, dtype: null, keepdims: keepdims);
 
         /// <summary>
-        ///     Sum of array elements over a given axis.
+        ///     Sum of array elements over the given axis, optionally keeping the reduced dimensions.
         /// </summary>
         /// <param name="a">Elements to sum.</param>
-        /// <param name="axis">Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input array. If axis is negative it counts from the last to the first axis. </param>
-        /// <param name="dtype">The type of the returned array and of the accumulator in which the elements are summed. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
-        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array. If the default value is passed, then keepdims will not be passed through to the sum method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.</param>
-        /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
+        /// <param name="axis">Axis along which a sum is performed (null sums the flattened array).</param>
+        /// <param name="keepdims">If true, the reduced axes are left in the result as size-one dimensions.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
         [NDScoped]
         public static NDArray sum(NDArray a, int? axis, bool keepdims)
             => a.TensorEngine.Sum(a, axis: axis, dtype: null, keepdims: keepdims);
 
         /// <summary>
-        ///     Sum of array elements over a given axis.
+        ///     Sum of array elements in a given <paramref name="dtype"/> (the accumulator/return type).
         /// </summary>
         /// <param name="a">Elements to sum.</param>
-        /// <param name="axis">Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input array. If axis is negative it counts from the last to the first axis. </param>
-        /// <param name="dtype">The type of the returned array and of the accumulator in which the elements are summed. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
-        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array. If the default value is passed, then keepdims will not be passed through to the sum method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.</param>
-        /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
+        /// <param name="dtype">The <see cref="DType"/> of the accumulator/return (a C# <see cref="System.Type"/>, an <see cref="NPTypeCode"/> or a NumPy dtype string all convert implicitly). By default NumPy's NEP50 accumulator rules apply (e.g. int32 → int64).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
-        public static NDArray sum(NDArray a, int? axis, bool keepdims, Type dtype)
-            => a.TensorEngine.Sum(a, axis: axis, dtype: dtype, keepdims: keepdims);
-
-        /// <summary>
-        ///     Sum of array elements over a given axis.
-        /// </summary>
-        /// <param name="a">Elements to sum.</param>
-        /// <param name="axis">Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input array. If axis is negative it counts from the last to the first axis. </param>
-        /// <param name="typeCode">The type of the returned array and of the accumulator in which the elements are summed. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
-        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array. If the default value is passed, then keepdims will not be passed through to the sum method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.</param>
-        /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
-        public static NDArray sum(NDArray a, int? axis, bool keepdims, NPTypeCode? typeCode)
-            => a.TensorEngine.Sum(a, axis: axis, dtype: typeCode.AsType(), keepdims: keepdims);
-
-        /// <summary>
-        ///     Sum of array elements over a given axis.
-        /// </summary>
-        /// <param name="a">Elements to sum.</param>
-        /// <param name="axis">Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input array. If axis is negative it counts from the last to the first axis. </param>
-        /// <param name="dtype">The type of the returned array and of the accumulator in which the elements are summed. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
-        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array. If the default value is passed, then keepdims will not be passed through to the sum method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.</param>
-        /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
-        public static NDArray sum(NDArray a, int? axis, Type dtype)
-            => a.TensorEngine.Sum(a, axis: axis, dtype: dtype, keepdims: false);
-
-        /// <summary>
-        ///     Sum of array elements over a given axis.
-        /// </summary>
-        /// <param name="a">Elements to sum.</param>
-        /// <param name="axis">Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input array. If axis is negative it counts from the last to the first axis. </param>
-        /// <param name="typeCode">The type of the returned array and of the accumulator in which the elements are summed. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
-        /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
-        public static NDArray sum(NDArray a, int? axis, NPTypeCode? typeCode)
-            => a.TensorEngine.Sum(a, axis: axis, dtype: typeCode.AsType(), keepdims: false);
-
-        /// <summary>
-        ///     Sum of array elements over a given axis.
-        /// </summary>
-        /// <param name="a">Elements to sum.</param>
-        /// <param name="axis">Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input array. If axis is negative it counts from the last to the first axis. </param>
-        /// <param name="dtype">The type of the returned array and of the accumulator in which the elements are summed. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
-        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array. If the default value is passed, then keepdims will not be passed through to the sum method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.</param>
-        /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
-        public static NDArray sum(NDArray a, Type dtype)
+        public static NDArray sum(NDArray a, DType dtype)
             => a.TensorEngine.Sum(a, axis: null, dtype: dtype, keepdims: false);
 
         /// <summary>
-        ///     Sum of array elements over a given axis.
+        ///     Sum of array elements over the given axis in a given <paramref name="dtype"/>.
         /// </summary>
         /// <param name="a">Elements to sum.</param>
-        /// <param name="axis">Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input array. If axis is negative it counts from the last to the first axis. </param>
-        /// <param name="typeCode">The type of the returned array and of the accumulator in which the elements are summed. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
-        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array. If the default value is passed, then keepdims will not be passed through to the sum method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.</param>
-        /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
+        /// <param name="axis">Axis along which a sum is performed (null sums the flattened array).</param>
+        /// <param name="dtype">The <see cref="DType"/> of the accumulator/return (implicit from <see cref="System.Type"/> / <see cref="NPTypeCode"/> / NumPy dtype string).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
-        public static NDArray sum(NDArray a, NPTypeCode? typeCode)
-            => a.TensorEngine.Sum(a, axis: null, dtype: typeCode.AsType(), keepdims: false);
+        public static NDArray sum(NDArray a, int? axis, DType dtype)
+            => a.TensorEngine.Sum(a, axis: axis, dtype: dtype, keepdims: false);
+
+        /// <summary>
+        ///     Sum of array elements over the given axis in a given <paramref name="dtype"/>, optionally keeping the reduced dimensions.
+        /// </summary>
+        /// <param name="a">Elements to sum.</param>
+        /// <param name="axis">Axis along which a sum is performed (null sums the flattened array).</param>
+        /// <param name="keepdims">If true, the reduced axes are left in the result as size-one dimensions.</param>
+        /// <param name="dtype">The <see cref="DType"/> of the accumulator/return (implicit from <see cref="System.Type"/> / <see cref="NPTypeCode"/> / NumPy dtype string).</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sum.html</remarks>
+        public static NDArray sum(NDArray a, int? axis, bool keepdims, DType dtype)
+            => a.TensorEngine.Sum(a, axis: axis, dtype: dtype, keepdims: keepdims);
     }
 }

@@ -423,8 +423,8 @@ namespace NumSharp.Tests.Lifetime
                 using (var r = np.intersect1d(d, d2)) { }
                 using (var r = np.setxor1d(d, d2)) { }
                 using (var r = np.setdiff1d(d, d2)) { }
-                using (var r = np.std(f2d, 1, NPTypeCode.Single)) { }   // axis IL path + f32 cast
-                using (var r = np.var(f2d, 1, NPTypeCode.Single)) { }
+                using (var r = np.std(f2d, 1, dtype: NPTypeCode.Single)) { }   // axis IL path + f32 cast
+                using (var r = np.var(f2d, 1, dtype: NPTypeCode.Single)) { }
                 using (var r = np.average(d)) { }
                 using (var r = np.take_along_axis(f2d, gatherIdx, 1)) { }
                 using (var r = (NDArray)np.unique(d)) { }

@@ -22,7 +22,7 @@ namespace NumSharp
         /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
         /// <returns>Minimum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
-        public static NDArray amin(NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
+        public static NDArray amin(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
         {
             // Delegate to TensorEngine which handles keepdims for axis=null
             return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype);
@@ -37,7 +37,7 @@ namespace NumSharp
         /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
         /// <returns>Minimum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
-        public static NDArray min(NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
+        public static NDArray min(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
         {
             // Delegate to TensorEngine which handles keepdims for axis=null
             return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype);

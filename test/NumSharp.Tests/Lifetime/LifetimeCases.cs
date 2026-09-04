@@ -250,8 +250,8 @@ namespace NumSharp.Tests.Lifetime
             yield return new("np.where scalar", () => new NDArray[] { I2d() > 100, I2d() }, o => np.where(o[0], o[1], 0));
             // Axis std/var with a float32 input exercises the IL path's double->float32 cast
             // (the pre-cast double result used to strand per call).
-            yield return new("np.std axis f32", () => new[] { D2d().astype(NPTypeCode.Single) }, o => np.std(o[0], 1, NPTypeCode.Single));
-            yield return new("np.var axis f32", () => new[] { D2d().astype(NPTypeCode.Single) }, o => np.var(o[0], 1, NPTypeCode.Single));
+            yield return new("np.std axis f32", () => new[] { D2d().astype(NPTypeCode.Single) }, o => np.std(o[0], 1, dtype: NPTypeCode.Single));
+            yield return new("np.var axis f32", () => new[] { D2d().astype(NPTypeCode.Single) }, o => np.var(o[0], 1, dtype: NPTypeCode.Single));
         }
     }
 }

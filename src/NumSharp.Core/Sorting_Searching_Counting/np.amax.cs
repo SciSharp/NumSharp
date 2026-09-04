@@ -20,7 +20,7 @@ namespace NumSharp
         /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
         /// <returns>Maximum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
-        public static NDArray amax(NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
+        public static NDArray amax(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
         {
             // Delegate to TensorEngine which handles keepdims for axis=null
             return a.TensorEngine.ReduceAMax(a, axis, keepdims, dtype);
@@ -34,7 +34,7 @@ namespace NumSharp
         /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
         /// <returns>Maximum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
-        public static NDArray max(NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
+        public static NDArray max(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
         {
             // Delegate to TensorEngine which handles keepdims for axis=null
             return a.TensorEngine.ReduceAMax(a, axis, keepdims, dtype);

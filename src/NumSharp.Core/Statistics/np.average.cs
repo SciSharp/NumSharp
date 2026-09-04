@@ -404,7 +404,7 @@ namespace NumSharp
         private static NDArray SumWithAxes(NDArray a, int[] axes, NPTypeCode dtype, bool keepdims)
         {
             if (axes is null)
-                return np.sum(a, axis: null, keepdims: keepdims, typeCode: dtype);
+                return np.sum(a, axis: null, keepdims: keepdims, dtype: dtype);
 
             if (axes.Length == 0)
             {
@@ -413,7 +413,7 @@ namespace NumSharp
             }
 
             if (axes.Length == 1)
-                return np.sum(a, axis: axes[0], keepdims: keepdims, typeCode: dtype);
+                return np.sum(a, axis: axes[0], keepdims: keepdims, dtype: dtype);
 
             int[] sortedDesc = (int[])axes.Clone();
             Array.Sort(sortedDesc);
@@ -421,7 +421,7 @@ namespace NumSharp
 
             NDArray cur = a.typecode == dtype ? a : a.astype(dtype);
             foreach (int ax in sortedDesc)
-                cur = np.sum(cur, axis: ax, keepdims: true, typeCode: dtype);
+                cur = np.sum(cur, axis: ax, keepdims: true, dtype: dtype);
 
             if (!keepdims)
             {

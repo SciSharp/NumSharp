@@ -73,7 +73,7 @@ namespace NumSharp.Tests.Backends.Unmanaged.Math
         public void ExpUpcast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Int32) + 5;
-            var ret = np.exp(right, NPTypeCode.Double);
+            var ret = np.exp(right, dtype: NPTypeCode.Double);
             ret.GetTypeCode.Should().Be(NPTypeCode.Double);
             ret.GetData<double>().All(d => System.Math.Abs(d - 148.4131591) < 0.0001).Should().BeTrue();
 
@@ -87,7 +87,7 @@ namespace NumSharp.Tests.Backends.Unmanaged.Math
         public void ExpDowncast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Double) + 5;
-            new Action(()=> np.exp(right, NPTypeCode.Byte)).Should().Throw<IncorrectTypeException>().Where(exception => exception.Message.Contains("No loop matching the specified signature and casting was found for"));
+            new Action(()=> np.exp(right, dtype: NPTypeCode.Byte)).Should().Throw<IncorrectTypeException>().Where(exception => exception.Message.Contains("No loop matching the specified signature and casting was found for"));
         }
     }
 }

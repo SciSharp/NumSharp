@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -6,75 +6,29 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Compute the variance along the specified axis.
-        ///     Returns the variance of the array elements, a measure of the spread of a distribution.
-        ///     The variance is computed for the flattened array by default, otherwise over the specified axis.
+        ///     Compute the variance of the flattened array.
+        ///     Returns the variance, a measure of the spread of a distribution, of the array elements.
         /// </summary>
-        /// <param name="a">Array containing numbers whose variance is desired. If a is not an array, a conversion is attempted.</param>
-        /// <param name="axis">Axis or axes along which the variance is computed. The default is to compute the variance of the flattened array.</param>
-        /// <param name="keepdims">
-        ///     If this is set to True, the axes which are reduced are left in the result as dimensions with size one.
-        ///     With this option, the result will broadcast correctly against the input array.
-        /// </param>
-        /// <param name="ddof">Means Delta Degrees of Freedom. The divisor used in calculations is N - ddof, where N represents the number of elements. By default ddof is zero.</param>
-        /// <returns> returns a new array containing the var values, otherwise a reference to the output array is returned.</returns>
+        /// <param name="a">Calculate the variance of these values.</param>
+        /// <param name="keepdims">If true, the reduced axes are left in the result as size-one dimensions.</param>
+        /// <param name="ddof">Delta Degrees of Freedom. The divisor used is N - ddof (default 0).</param>
+        /// <param name="dtype">The <see cref="DType"/> the computation/result should use (a C# <see cref="System.Type"/>, an <see cref="NPTypeCode"/> or a NumPy dtype string all convert implicitly).</param>
+        /// <returns>A new array containing the variance values, or a reference to the output array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.var.html</remarks>
-        public static NDArray var(NDArray a, bool keepdims = false, int? ddof = null, NPTypeCode? dtype = null)
-        {
-            return a.TensorEngine.ReduceVar(a, null, keepdims, ddof, dtype.AsType());
-        }
+        public static NDArray var(NDArray a, bool keepdims = false, int? ddof = null, DType dtype = null)
+            => a.TensorEngine.ReduceVar(a, null, keepdims, ddof, dtype);
 
         /// <summary>
         ///     Compute the variance along the specified axis.
-        ///     Returns the variance of the array elements, a measure of the spread of a distribution.
-        ///     The variance is computed for the flattened array by default, otherwise over the specified axis.
         /// </summary>
-        /// <param name="a">Array containing numbers whose variance is desired. If a is not an array, a conversion is attempted.</param>
-        /// <param name="axis">Axis or axes along which the variance is computed. The default is to compute the variance of the flattened array.</param>
-        /// <param name="keepdims">
-        ///     If this is set to True, the axes which are reduced are left in the result as dimensions with size one.
-        ///     With this option, the result will broadcast correctly against the input array.
-        /// </param>
-        /// <param name="ddof">Means Delta Degrees of Freedom. The divisor used in calculations is N - ddof, where N represents the number of elements. By default ddof is zero.</param>
-        /// <returns> returns a new array containing the var values, otherwise a reference to the output array is returned.</returns>
+        /// <param name="a">Calculate the variance of these values.</param>
+        /// <param name="axis">Axis along which the variance is computed.</param>
+        /// <param name="keepdims">If true, the reduced axes are left in the result as size-one dimensions.</param>
+        /// <param name="ddof">Delta Degrees of Freedom. The divisor used is N - ddof (default 0).</param>
+        /// <param name="dtype">The <see cref="DType"/> the computation/result should use (implicit from <see cref="System.Type"/> / <see cref="NPTypeCode"/> / NumPy dtype string).</param>
+        /// <returns>A new array containing the variance values, or a reference to the output array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.var.html</remarks>
-        public static NDArray var(NDArray a, int axis, Type dtype, bool keepdims = false, int? ddof = null)
+        public static NDArray var(NDArray a, int axis, bool keepdims = false, int? ddof = null, DType dtype = null)
             => a.TensorEngine.ReduceVar(a, axis, keepdims, ddof, dtype);
-
-        /// <summary>
-        ///     Compute the variance along the specified axis.
-        ///     Returns the variance of the array elements, a measure of the spread of a distribution.
-        ///     The variance is computed for the flattened array by default, otherwise over the specified axis.
-        /// </summary>
-        /// <param name="a">Array containing numbers whose variance is desired. If a is not an array, a conversion is attempted.</param>
-        /// <param name="axis">Axis or axes along which the variance is computed. The default is to compute the variance of the flattened array.</param>
-        /// <param name="keepdims">
-        ///     If this is set to True, the axes which are reduced are left in the result as dimensions with size one.
-        ///     With this option, the result will broadcast correctly against the input array.
-        /// </param>
-        /// <param name="ddof">Means Delta Degrees of Freedom. The divisor used in calculations is N - ddof, where N represents the number of elements. By default ddof is zero.</param>
-        /// <returns> returns a new array containing the var values, otherwise a reference to the output array is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.var.html</remarks>
-        public static NDArray var(NDArray a, int axis, NPTypeCode type, bool keepdims = false, int? ddof = null)
-            => a.TensorEngine.ReduceVar(a, axis, keepdims, ddof, type.AsType());
-
-        /// <summary>
-        ///     Compute the variance along the specified axis.
-        ///     Returns the variance of the array elements, a measure of the spread of a distribution.
-        ///     The variance is computed for the flattened array by default, otherwise over the specified axis.
-        /// </summary>
-        /// <param name="a">Array containing numbers whose variance is desired. If a is not an array, a conversion is attempted.</param>
-        /// <param name="axis">Axis or axes along which the variance is computed. The default is to compute the variance of the flattened array.</param>
-        /// <param name="keepdims">
-        ///     If this is set to True, the axes which are reduced are left in the result as dimensions with size one.
-        ///     With this option, the result will broadcast correctly against the input array.
-        /// </param>
-        /// <param name="ddof">Means Delta Degrees of Freedom. The divisor used in calculations is N - ddof, where N represents the number of elements. By default ddof is zero.</param>
-        /// <returns> returns a new array containing the var values, otherwise a reference to the output array is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.var.html</remarks>
-        public static NDArray var(NDArray a, int axis, bool keepdims = false, int? ddof = null, NPTypeCode? dtype = null)
-        {
-            return a.TensorEngine.ReduceVar(a, axis, keepdims, ddof, dtype.AsType());
-        }
     }
 }

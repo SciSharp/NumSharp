@@ -587,7 +587,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Sum_WithAxisKeepdimsAndNPTypeCode_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 3 });
-        var result = np.sum(a, axis: null, keepdims: false, typeCode: NPTypeCode.Int64);
+        var result = np.sum(a, axis: null, keepdims: false, dtype: NPTypeCode.Int64);
         result.Should().NotBeNull();
     }
 
@@ -603,7 +603,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Sum_WithAxisAndNPTypeCode_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 3 });
-        var result = np.sum(a, axis: null, typeCode: NPTypeCode.Int64);
+        var result = np.sum(a, axis: null, dtype: NPTypeCode.Int64);
         result.Should().NotBeNull();
     }
 
@@ -681,7 +681,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Mean_WithAxisNPTypeCodeKeepdims_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
-        var result = np.mean(a, axis: 0, type: NPTypeCode.Double, keepdims: false);
+        var result = np.mean(a, axis: 0, dtype: NPTypeCode.Double, keepdims: false);
         result.Should().NotBeNull();
     }
 
@@ -770,7 +770,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Std_WithAxisNPTypeCodeKeepdimsDdof_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
-        var result = np.std(a, axis: 0, type: NPTypeCode.Double, keepdims: false, ddof: null);
+        var result = np.std(a, axis: 0, dtype: NPTypeCode.Double, keepdims: false, ddof: null);
         result.Should().NotBeNull();
     }
 
@@ -805,7 +805,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Var_WithAxisNPTypeCodeKeepdimsDdof_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
-        var result = np.var(a, axis: 0, type: NPTypeCode.Double, keepdims: false, ddof: null);
+        var result = np.var(a, axis: 0, dtype: NPTypeCode.Double, keepdims: false, ddof: null);
         result.Should().NotBeNull();
     }
 
