@@ -2,6 +2,11 @@
 #:property AssemblyName=NumSharp.Benchmark.BodySmoke
 #:property PublishAot=false
 #:property WarningLevel=0
+// A file-based app forces its single TargetFramework as a GLOBAL onto the whole ProjectReference
+// graph, so it restores NumSharp.Core's netstandard2.0-only NDArray analyzer for net8.0 it doesn't
+// target (NETSDK1005). This smoke only EXECUTES benchmark bodies and never needs the analyzer, so
+// its runner passes -p:ReferenceNDArrayAnalyzer=false (a #:property here does NOT propagate to the
+// transitive Core reference during restore — only a command-line global does). See docs.yml.
 
 // Run with: dotnet run -c Release --no-cache benchmark/scripts/smoke_benchmark_bodies.cs
 // --no-cache matters: file-app caching otherwise does not notice a changed ProjectReference.

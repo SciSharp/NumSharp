@@ -81,7 +81,11 @@ jobs:
           python benchmark/scripts/check_smoke_joins.py
 
       - name: Execute every official C# benchmark body once
-        run: dotnet run -c Release -f net8.0 --no-cache benchmark/scripts/smoke_benchmark_bodies.cs
+        # -p:ReferenceNDArrayAnalyzer=false: this file-based app forces net8.0 as a global onto the
+        # whole graph, which would otherwise restore NumSharp.Core's netstandard2.0-only NDArray
+        # analyzer for net8.0 (NETSDK1005). The smoke only runs benchmark bodies, so it drops the
+        # analyzer via a command-line global (a #:property in the .cs does not propagate to the ref).
+        run: dotnet run -c Release -f net8.0 --no-cache -p:ReferenceNDArrayAnalyzer=false benchmark/scripts/smoke_benchmark_bodies.cs
 
       # Publish the just-verified data to the orphan master-code-data branch as a new
       # <date>_<sha> snapshot per type + repointed `latest`. Only on master pushes (never PRs),

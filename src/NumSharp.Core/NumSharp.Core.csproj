@@ -107,14 +107,21 @@
          never fail Core's own build. -->
     <WarningsNotAsErrors Condition="'$(EnableNDArrayLeakAnalyzer)' == 'true'">$(WarningsNotAsErrors);NDW012;NDW016;NDW017</WarningsNotAsErrors>
   </PropertyGroup>
-  <ItemGroup Condition="'$(EnableNDArrayLeakAnalyzer)' == 'true'">
+  <!-- ReferenceNDArrayAnalyzer (default true) lets a build DROP the analyzer ProjectReference
+       entirely. A file-based app (dotnet run some.cs) forces TargetFramework=net8.0 as a GLOBAL onto
+       its whole ProjectReference graph during RESTORE, which then restores this netstandard2.0-only
+       analyzer for net8.0 it doesn't target -> NETSDK1005 and a broken build. The smoke runner
+       benchmark/scripts/smoke_benchmark_bodies.cs (which only EXECUTES benchmark bodies, never needs
+       the analyzer) passes ReferenceNDArrayAnalyzer=false to opt out; every ordinary build leaves it
+       true, so Core is analyzed and the analyzer DLL is built for packing exactly as before. -->
+  <ItemGroup Condition="'$(ReferenceNDArrayAnalyzer)' != 'false' and '$(EnableNDArrayLeakAnalyzer)' == 'true'">
     <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
   <!-- Toggle OFF still builds the analyzer (no OutputItemType → it never analyzes Core): the pack
        target below stages its DLL by GetTargetPath WITHOUT a rebuild, so the DLL must exist from
        the ordinary build whatever the toggle says. PrivateAssets=all + IsPackable=false on the
        analyzer keep this out of the nuspec dependency list in both branches. -->
-  <ItemGroup Condition="'$(EnableNDArrayLeakAnalyzer)' != 'true'">
+  <ItemGroup Condition="'$(ReferenceNDArrayAnalyzer)' != 'false' and '$(EnableNDArrayLeakAnalyzer)' != 'true'">
     <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
 

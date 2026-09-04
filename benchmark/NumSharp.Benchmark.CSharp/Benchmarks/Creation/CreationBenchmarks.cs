@@ -74,7 +74,10 @@ public class CreationBenchmarks : TypedBenchmarkBase
 
     [Benchmark(Description = "np.arange(N)")]
     [BenchmarkCategory("Range")]
-    public void Arange() { using var _ = np.arange(N, DType); }
+    // NumPy 2.x (and NumSharp) allow arange(dtype=bool) only when the result length is <= 2; every
+    // benchmark size is larger, so bool has nothing valid to time here (np.arange(N, bool) raises the
+    // same TypeError on both sides). Skip it so the body-smoke runner doesn't trip on that raise.
+    public void Arange() { if (DType == NPTypeCode.Boolean) return; using var _ = np.arange(N, DType); }
 
     [Benchmark(Description = "np.linspace(0, N, N)")]
     [BenchmarkCategory("Range")]
