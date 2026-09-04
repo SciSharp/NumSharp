@@ -42,8 +42,10 @@ test/oracle/                         corpus generators (NumPy 2.4.2)
                                      flat-reduce/astype kinds; NumSharp-producible layouts)
 test/NumSharp.Tests.Oracle/Fuzz/
   FuzzCorpus.cs                      reconstructs EXACT NDArray views from (dtype,shape,strides,offset,bytes)
-  BitDiff.cs                         bit-exact compare; NaN tokenized; Decimal tokenized by canonical VALUE
-                                     (scale-insensitive: 1.0m == 1.00m); ULP helpers (documented near-misses)
+  BitDiff.cs                         bit-exact compare; NaN tokenized (payload/sign non-contractual) EXCEPT
+                                     the complex-unary ops, whose NaN sign IS contractual and is raw-byte
+                                     compared (Compare nanBitExact + DiffHasSignFlip); Decimal by canonical
+                                     VALUE (scale-insensitive 1.0m == 1.00m); ULP helpers (documented near-misses)
   OpRegistry.cs                      op-name -> NumSharp call
   MisalignedRegistry.cs              the explicit, documented set of intended/known divergences
   Shrinker.cs                        minimizes a failing element-wise case to a 1-element repro
@@ -293,8 +295,8 @@ and paired tightness pins instead of hiding under the broad complex-unary envelo
 | NEP50 weak-scalar: 0-D operand promoted weakly | any multi-operand op × Dtype kind, 0-D operand present | 261 |
 | **F1** `np.fft(float32/float16)`: NumPy returns complex64/float32/float16, NumSharp complex128/float64 — a dtype-ONLY divergence (values = the correctly-rounded double result; bit-verified `fft(x32) == fft(x32.astype(f8))`). NumSharp has one complex type. The unnameable complex64 is routed to a Dtype divergence by `CompareArray`. Contractual dtypes (float64/complex128/int/bool) are bit-exact; the helpers never diverge | 14 fft transforms × {float32,float16} input × Dtype kind | 516 |
 | unary ~ULP (transcendental/magnitude algorithm difference) | single-operand × Value, every diff ≤2 ULP — **EXCEPT exp/log/sin/cos/rad2deg/deg2rad at a float32 result, which are gated bit-exact** (see below) | 563 |
-| complex unary within 3 ULP (full NumPy-algorithm port) | complex unary × Value, ≤3 ULP | 11 |
-| complex cos/sin/arccos/sinh/cosh pathological edge (NaN zero-sign / subnormal / overflow boundary) | those 5 ops × complex × Value | 0 |
+| complex unary within 3 ULP (full NumPy-algorithm port) — FINITE interior only; the NaN SIGN of these ops is now compared **raw-byte** (`ComplexNanContractOps`, `BitDiff.Compare(nanBitExact:true)`) and a pure NaN-sign / signed-zero flip HARD-FAILS via `DiffHasSignFlip` before any ULP excuse runs (NumSharp reproduces NumPy 2.4.2 win-amd64 / MSVC UCRT NaN signs bit-for-bit) | complex unary × Value, ≤3 ULP, no sign flip | 11 |
+| complex arccos/arccosh/sinh/cosh (+ sin/cos routing through sinh/cosh) pathological FINITE edge (sub-DBL_MIN denormal-real flush / \|x\|∈[710,710.13] overflow boundary) — the former "cos/sin NaN zero-sign" regime is GONE (now byte-exact) | those ops × complex × Value, finite | 0 |
 | complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex) | divide × complex × Value, ≤2 ULP | 17 |
 | complex corrcoef normalization inherits complex-division rounding | corrcoef × complex input/result × Value, ≤2 ULP | 1 |
 | complex add/subtract within 2 ULP (FMA contraction) | add/subtract × complex × Value, ≤2 ULP | 0 |

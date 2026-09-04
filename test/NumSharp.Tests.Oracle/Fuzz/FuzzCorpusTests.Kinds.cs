@@ -17,6 +17,25 @@ namespace NumSharp.Tests.Fuzz
     /// </summary>
     public partial class FuzzCorpusTests
     {
+        /// <summary>
+        ///     The single-operand complex ufuncs backed by <c>NDComplexMath</c>, whose NaN SIGN (and
+        ///     signed-zero) NumSharp reproduces bit-for-bit against NumPy 2.4.2 win-amd64 (MSVC UCRT
+        ///     complex functions). For these — and ONLY these — a complex128 result's NaN is compared
+        ///     by raw bytes rather than tokenized, so the sign fix is gated and a regression fails.
+        ///     Verified byte-exact over the full ±0/±inf/NaN × ±0/±inf/NaN special-value grid (every
+        ///     "produce a NaN" slot is the positive NPY_NAN; the negatives are genuine 0/0·inf-inf or a
+        ///     transform negate, which reproduce on x86 by construction). abs/absolute return float64
+        ///     and so never reach the Complex branch; the complex BINARY ops (add/mul/power/…) keep the
+        ///     tokenizing comparison (their NaN is non-contractual — see MisalignedRegistry F5/#12).
+        /// </summary>
+        private static readonly HashSet<string> ComplexNanContractOps = new()
+        {
+            "sqrt", "log", "log2", "log10", "log1p", "exp", "exp2", "expm1", "square", "reciprocal",
+            "sin", "cos", "tan", "sinh", "cosh", "tanh",
+            "arcsin", "arccos", "arctan", "arcsinh", "arccosh", "arctanh",
+            "conjugate", "conj", "negative", "positive"
+        };
+
         // ---- new tiers ---------------------------------------------------------------------
 
         /// <summary>
@@ -142,14 +161,27 @@ namespace NumSharp.Tests.Fuzz
             var actual = FuzzCorpus.ResultBytes(result);
             var expected = FuzzCorpus.FromHex(exp.Buffer);
 
+            // The complex-unary ufuncs (NDComplexMath) reproduce NumPy 2.4.2's NaN SIGN bit-for-bit
+            // (MSVC UCRT convention: sqrt/log/exp/... +NaN, csin/ctan via the transform's -Re negate,
+            // ctanh sign-propagating), so for those ops the NaN sign is CONTRACTUAL and is compared by
+            // raw bytes. Everywhere else NaN stays tokenized (a differing payload is non-contractual).
+            bool nanExact = tc == NPTypeCode.Complex && ComplexNanContractOps.Contains(c.Op);
+
             // Bit-exact to NumPy ("precise") passes HERE, before truth is ever read — matching
             // NumPy's bytes is the contract, and truth can never turn a precise result red.
-            var diffs = BitDiff.Compare(expected, actual, tc);
+            var diffs = BitDiff.Compare(expected, actual, tc, nanExact);
             if (diffs.Count == 0)
                 return;
 
             var truth = exp.Truth == null ? null : FuzzCorpus.FromHex(exp.Truth);
-            var vreason = MisalignedRegistry.Classify(c, DivergenceKind.Value, expected, actual, tc, diffs, truth);
+
+            // A pure NaN-sign / signed-zero flip in a NaN-contract complex-unary op is a HARD failure:
+            // it must bypass the ULP / pathological-edge excuses, which report NaN-vs-NaN as 0 ULP and
+            // would otherwise swallow the regression this gate exists to catch. A finite rounding
+            // residual (nanExact but no sign flip) still flows through the registry (the ≤3-ULP excuse).
+            bool signFlip = nanExact && diffs.Any(d => BitDiff.DiffHasSignFlip(expected, actual, d.Index, tc));
+            var vreason = signFlip ? null
+                : MisalignedRegistry.Classify(c, DivergenceKind.Value, expected, actual, tc, diffs, truth);
             if (vreason != null)
             {
                 Bump(documented, vreason);
@@ -159,7 +191,7 @@ namespace NumSharp.Tests.Fuzz
             // Shrinking rebuilds the case as a 1-element repro, which only makes sense for the
             // elementwise single-array shape — skip it for tuple slots.
             var shrunk = slot == null ? Shrinker.ShrinkElementwise(c, diffs[0].Index) : null;
-            failures.Add($"{c.Id} [{c.Layout}]{at}: " +
+            failures.Add($"{c.Id} [{c.Layout}]{at}: " + (signFlip ? "NaN-sign/signed-zero contract violation " : "") +
                 string.Join(", ", diffs.Take(3).Select(d => $"@{d.Index} exp {d.Expected} act {d.Actual}" +
                     TruthNote(expected, actual, truth, d.Index, tc))) +
                 (diffs.Count > 3 ? $" (+{diffs.Count - 3} more)" : "") +

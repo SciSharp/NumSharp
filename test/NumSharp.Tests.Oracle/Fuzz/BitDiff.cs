@@ -20,6 +20,18 @@ namespace NumSharp.Tests.Fuzz
         public readonly record struct Diff(int Index, string Expected, string Actual);
 
         public static List<Diff> Compare(byte[] expected, byte[] actual, NPTypeCode tc)
+            => Compare(expected, actual, tc, nanBitExact: false);
+
+        /// <summary>
+        ///     As <see cref="Compare(byte[],byte[],NPTypeCode)"/>, but when <paramref name="nanBitExact"/>
+        ///     is true NaN is compared by its RAW bytes (sign + payload) instead of being tokenized to
+        ///     "NaN". Used by the complex-unary NaN-sign contract: NumPy 2.4.2 emits a DETERMINISTIC NaN
+        ///     sign per op/path (MSVC UCRT: sqrt/log/... +NaN, csin/ctan the transform's negate, ctanh
+        ///     propagates), which NumSharp now reproduces bit-for-bit — so for those ops the sign is
+        ///     contractual and must be gated, not tokenized away. Off everywhere else, where a differing
+        ///     NaN payload is non-contractual (e.g. order-dependent float32 sum) and would false-fail.
+        /// </summary>
+        public static List<Diff> Compare(byte[] expected, byte[] actual, NPTypeCode tc, bool nanBitExact)
         {
             var diffs = new List<Diff>();
             if (expected.Length != actual.Length)
@@ -32,39 +44,39 @@ namespace NumSharp.Tests.Fuzz
             int count = isz == 0 ? 0 : expected.Length / isz;
             for (int i = 0; i < count; i++)
             {
-                string e = Token(expected, i * isz, tc);
-                string a = Token(actual, i * isz, tc);
+                string e = Token(expected, i * isz, tc, nanBitExact);
+                string a = Token(actual, i * isz, tc, nanBitExact);
                 if (e != a)
                     diffs.Add(new Diff(i, e, a));
             }
             return diffs;
         }
 
-        private static string Token(byte[] b, int off, NPTypeCode tc)
+        private static string Token(byte[] b, int off, NPTypeCode tc, bool nanBitExact)
         {
             switch (tc)
             {
                 case NPTypeCode.Single:
                 {
                     float v = BitConverter.ToSingle(b, off);
-                    return float.IsNaN(v) ? "NaN" : Hex(b, off, 4);
+                    return float.IsNaN(v) && !nanBitExact ? "NaN" : Hex(b, off, 4);
                 }
                 case NPTypeCode.Double:
                 {
                     double v = BitConverter.ToDouble(b, off);
-                    return double.IsNaN(v) ? "NaN" : Hex(b, off, 8);
+                    return double.IsNaN(v) && !nanBitExact ? "NaN" : Hex(b, off, 8);
                 }
                 case NPTypeCode.Half:
                 {
                     Half v = BitConverter.ToHalf(b, off);
-                    return Half.IsNaN(v) ? "NaN" : Hex(b, off, 2);
+                    return Half.IsNaN(v) && !nanBitExact ? "NaN" : Hex(b, off, 2);
                 }
                 case NPTypeCode.Complex:
                 {
                     double re = BitConverter.ToDouble(b, off);
                     double im = BitConverter.ToDouble(b, off + 8);
-                    string r = double.IsNaN(re) ? "NaN" : Hex(b, off, 8);
-                    string m = double.IsNaN(im) ? "NaN" : Hex(b, off + 8, 8);
+                    string r = double.IsNaN(re) && !nanBitExact ? "NaN" : Hex(b, off, 8);
+                    string m = double.IsNaN(im) && !nanBitExact ? "NaN" : Hex(b, off + 8, 8);
                     return r + ":" + m;
                 }
                 case NPTypeCode.Decimal:
@@ -188,6 +200,58 @@ namespace NumSharp.Tests.Fuzz
                 default:
                     return false;
             }
+        }
+
+        /// <summary>
+        ///     True iff the difference at <paramref name="index"/> is (at least partly) a pure SIGN /
+        ///     payload flip of a NaN or of a signed zero — a NaN with a different sign/payload, or +0.0
+        ///     vs -0.0 — rather than a change of numeric value. This is exactly the class of difference
+        ///     that <see cref="WithinUlp"/> / <see cref="UlpDistance"/> report as "0 ULP" (NaN-vs-NaN and
+        ///     +0-vs-(-0) are treated as equal there), so a ULP-envelope excuse would silently swallow it.
+        ///     The complex-unary NaN-sign gate uses this to HARD-FAIL such a flip before the excuses run,
+        ///     while a genuine finite rounding difference (the excused interior residual) returns false.
+        /// </summary>
+        public static bool DiffHasSignFlip(byte[] exp, byte[] act, int index, NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Double: return SignFlipD(exp, act, index * 8);
+                case NPTypeCode.Single: return SignFlipS(exp, act, index * 4);
+                case NPTypeCode.Half:   return SignFlipH(exp, act, index * 2);
+                case NPTypeCode.Complex:
+                {
+                    int o = index * 16;
+                    return SignFlipD(exp, act, o) || SignFlipD(exp, act, o + 8);
+                }
+                default: return false;
+            }
+        }
+
+        private static bool SignFlipD(byte[] e, byte[] a, int off)
+        {
+            double x = BitConverter.ToDouble(e, off), y = BitConverter.ToDouble(a, off);
+            long lx = BitConverter.DoubleToInt64Bits(x), ly = BitConverter.DoubleToInt64Bits(y);
+            if (lx == ly) return false;                          // identical bits: not a diff at all
+            if (double.IsNaN(x) && double.IsNaN(y)) return true; // NaN vs NaN with different bits (sign/payload)
+            return x == 0.0 && y == 0.0;                         // +0.0 vs -0.0
+        }
+
+        private static bool SignFlipS(byte[] e, byte[] a, int off)
+        {
+            float x = BitConverter.ToSingle(e, off), y = BitConverter.ToSingle(a, off);
+            int lx = BitConverter.SingleToInt32Bits(x), ly = BitConverter.SingleToInt32Bits(y);
+            if (lx == ly) return false;
+            if (float.IsNaN(x) && float.IsNaN(y)) return true;
+            return x == 0.0f && y == 0.0f;
+        }
+
+        private static bool SignFlipH(byte[] e, byte[] a, int off)
+        {
+            Half x = BitConverter.ToHalf(e, off), y = BitConverter.ToHalf(a, off);
+            short lx = BitConverter.HalfToInt16Bits(x), ly = BitConverter.HalfToInt16Bits(y);
+            if (lx == ly) return false;
+            if (Half.IsNaN(x) && Half.IsNaN(y)) return true;
+            return x == (Half)0.0 && y == (Half)0.0;
         }
 
         private static long UlpDouble(double a, double b)

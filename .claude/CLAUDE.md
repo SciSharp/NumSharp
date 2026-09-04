@@ -59,7 +59,21 @@ All operations must handle all 15 types via type switch pattern.
 **Perf notes:**
 - SByte / Byte / Int*/UInt* / Single / Double — full SIMD via the mixed-type kernel's `SimdFull` execution path (V128/V256/V512 detected at startup).
 - Half — **no vector f16 arithmetic or F16C in the BCL** (`Vector<Half>` throws), yet most of the f16 ufunc surface BEATS NumPy 2–60× bit-exactly via three techniques picked by "does the op need real float math?": bit-level AVX2 on raw ushort lanes (sign/negate/abs, min/max/ptp, maximum/minimum/fmax/fmin, the six comparisons, nanmin/nanmax, clip, floor/ceil/trunc/rint — all on the proven sign-magnitude order map `key = bits ^ (0x8000 | asr(bits,15))`, NaN keys strictly outside the finite band), SIMD widen-compute-narrow for add/sub/mul/div (Giesen f16→f32 → one f32 vector op → RTNE narrow — bit-exact incl. the MSVC operand-order NaN-payload host pin, 2.2–3.6×), and scalar-F16C widen-unary (`EmitUnaryHalfViaFloat`: `(Half)MathF.X((float)h)`, NumPy's npy_half model) for 16 transcendentals — conversion-bound ≈ parity, the physical ceiling. `np.power` still bridges `Half→double→Math.Pow→Half`. Full design, semantics contract (NaN-guarded npy_half comparators, first-NaN/first-zero folds, sNaN quieting), dispatch map and traps (portable Vector256 ushort ops don't lower — 30×; RyuJIT re-swaps commutative intrinsic operands — NaN priority must be an explicit blend; AVX2 lacks 16-bit variable shifts): **`docs/FLOAT16_DESIGN.md`**.
-- Complex — scalar path via `System.Numerics.Complex` operators / `Complex.Pow`. ~2× slower than NumPy.
+- Complex — scalar path via `System.Numerics.Complex` operators / `Complex.Pow`. ~2× slower than NumPy. The
+  complex128 **unary** ufuncs (`Utilities/NDComplexMath.cs`: sqrt/log/log2/log10/log1p/exp/exp2/expm1/square/
+  reciprocal/sin/cos/tan/sinh/cosh/tanh/arcsin/arccos/arctan/arcsinh/arccosh/arctanh/conjugate/negative/positive)
+  match NumPy 2.4.2 **bit-for-bit including the NaN SIGN** — win-amd64 runs MSVC UCRT's complex functions, whose
+  "produce a NaN" slots emit the positive `NPY_NAN` (`0x7ff8…`), while `.NET double.NaN` is `0xfff8…`; on x86 both
+  engines share deterministic SSE, so the only divergences were NumSharp's `double.NaN`/`inf-inf`/`Complex.Exp`
+  seeds. Fixed per-path (positive-NaN constant where NumPy canonicalises; `hypot`/`cexp`/`ctanh` propagate the
+  input NaN's sign; `csinh/ccosh` canonicalise so `csin/ccos` follow the transform negate; `square` = true
+  `vfmaddsub` with `re*im` in the addend slot; `reciprocal` = the exact `CDOUBLE_reciprocal` loop's `-1/d`
+  division, not a `-scl` negate). **Gated**: the oracle compares these ops' complex NaN **raw-byte**
+  (`ComplexNanContractOps` + `BitDiff.Compare(nanBitExact)` + `DiffHasSignFlip` hard-fail), verified over the full
+  ±0/±inf/±NaN grid (both NaN signs). **float32 `sum`** of a NaN-laced array stays a documented, ACCEPTED
+  order-dependent NaN-**bit** difference (value is NaN either way; matching NumPy's pairwise NaN would abandon the
+  multi-accumulator SIMD reduction for a non-contractual sign bit) — the oracle correctly tokenizes float NaN.
+  Complex/float16 `sign`/`maximum` preserve the input NaN bits, matching NumPy.
 - Decimal — scalar path via `DecimalMath.Pow`. Highest precision, slowest.
 
 ## Architecture

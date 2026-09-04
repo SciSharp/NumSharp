@@ -1,6 +1,8 @@
 using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 namespace NumSharp.Utilities
 {
@@ -11,7 +13,12 @@ namespace NumSharp.Utilities
     /// transposed / reversed / sliced / broadcast / 0-d). Most are direct ports of NumPy's own
     /// routines in <c>npy_math_complex.c.src</c> (the FreeBSD msun implementations) because
     /// <c>System.Numerics.Complex</c> diverges on large magnitudes, the unit circle, tiny/subnormal
-    /// values, branch cuts, and signed zeros.
+    /// values, branch cuts, and signed zeros. Every non-finite input additionally matches NumPy's
+    /// exact NaN SIGN bit-for-bit (win-amd64 = MSVC UCRT complex functions): the "produce a NaN" slots
+    /// emit the positive <c>NPY_NAN</c>; <c>csqrt/clog/cnc_log1p/cexp</c> PROPAGATE an input NaN's sign;
+    /// <c>csinh/ccosh</c> CANONICALISE to +NaN (so <c>csin/ccos</c> follow the transform's negate),
+    /// while <c>ctanh</c> propagates; and a genuine <c>0/0 · inf-inf · inf*0</c> keeps its x86-negative
+    /// sign on both engines. Gated by the complex-unary NaN-contract oracle tier (raw-byte NaN compare).
     ///
     /// <para><b>Ported NumPy algorithms.</b>
     /// <see cref="Log"/> = <c>npy_clog</c> (four-regime rescale incl. the near-|z|=1 <c>log1p</c>
@@ -25,8 +32,9 @@ namespace NumSharp.Utilities
     /// <c>log1p</c> interior, and an exponent-classified <c>real_part_reciprocal</c>);
     /// <see cref="Exp"/> = <c>npy_cexp</c>; <see cref="Sqrt"/> = <c>npy_csqrt</c>;
     /// <see cref="Expm1"/> = <c>nc_expm1</c> with a Goldberg real <c>expm1</c>;
-    /// <see cref="Square"/> = FMA-contracted <c>z·z</c> (matches NumPy's complex multiply
-    /// overflow/cancellation); <see cref="Reciprocal"/> = Smith's <c>nc_recip</c>;
+    /// <see cref="Square"/> = <c>vfmaddsub</c> <c>z·z</c> (matches NumPy's SIMD complex multiply
+    /// overflow/cancellation AND NaN sign); <see cref="Reciprocal"/> = the <c>CDOUBLE_reciprocal</c>
+    /// ufunc loop (division-form imaginary term, NaN-sign correct);
     /// <see cref="Exp2"/>/<see cref="Log1p"/> compose the above; <see cref="Abs"/> = <c>npy_cabs</c>
     /// (C99 <c>hypot</c>: an infinite component yields <c>+inf</c> even alongside a NaN — the .NET 8
     /// <c>Complex.Abs</c> returns NaN there).</para>
@@ -35,10 +43,10 @@ namespace NumSharp.Utilities
     /// use <see cref="Complex.Asin"/>/<see cref="Complex.Acos"/> on the finite interior with
     /// signed-zero / branch-cut fixups, and the C99 non-finite tables otherwise.</para>
     ///
-    /// <para><b>Accepted residuals (pathological inputs only, beyond 3 ULP):</b> <c>cos/sin</c> with a
-    /// NaN imaginary part pick the C99-<em>unspecified</em> sign for the resulting zero; <c>arccos</c>
-    /// with a sub-<c>DBL_MIN</c> imaginary part flushes the denormal real part to 0 where NumPy's
-    /// <c>cacos</c> hard-work kernel keeps it (~5.8e-309); <c>sinh/cosh</c> at the <c>|x|∈[710,710.13]</c>
+    /// <para><b>Accepted residuals (pathological FINITE inputs only, beyond 3 ULP — NaN sign is NOT
+    /// among them, it is byte-exact):</b> <c>arccos</c> with a sub-<c>DBL_MIN</c> imaginary part flushes
+    /// the denormal real part to 0 where NumPy's <c>cacos</c> hard-work kernel keeps it (~5.8e-309);
+    /// <c>sinh/cosh</c> (and the <c>sin/cos</c> that route through them) at the <c>|x|∈[710,710.13]</c>
     /// overflow edge differ because Windows' CRT <c>sinh</c> overflows where .NET's stays finite.</para>
     ///
     /// <para><b>Perf:</b> each public entry point is a tiny finite-path wrapper marked
@@ -54,6 +62,16 @@ namespace NumSharp.Utilities
         // NPY_PI_2 / NPY_LOGE2 (npy_math.h). Math.PI/2 == NPY_PI_2 bit-for-bit.
         private const double PI_2 = Math.PI / 2.0;
         private const double LOGE2 = 0.6931471805599453;
+
+        // NumPy's NPY_NAN is the POSITIVE quiet NaN (bits 0x7ff8_0000_0000_0000). .NET's
+        // double.NaN is the NEGATIVE-signed quiet NaN (0xfff8...). On win-amd64 NumPy's complex
+        // ufuncs run through MSVC's UCRT C99 complex functions, which emit this positive NaN in
+        // every "produce a NaN" special path. A NaN produced by genuine invalid arithmetic
+        // (inf-inf, 0/0, inf*0) or an explicit negate is x86-negative on BOTH engines and is left
+        // as arithmetic (so it stays byte-identical to NumPy). This constant stands in wherever the
+        // msun/UCRT reference "returns a dNaN" so the sign matches NumPy 2.4.2 bit-for-bit; it is
+        // gated by the complex-unary NaN-contract oracle tier. See docs/bugs history for the sweep.
+        private static readonly double NAN = BitConverter.Int64BitsToDouble(unchecked((long)0x7FF8000000000000L));
 
         // ctanh large-|x| threshold (npy_ctanh TANH_HUGE) and DBL_MAX/4 + DBL_MIN clog rescale bounds.
         private const double TANH_HUGE = 22.0;
@@ -140,25 +158,29 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static Complex CoshSpecial(double x, double y)
         {
-            // cosh(+-0 +- I(Inf|NaN)) = NaN + I 0 with an unspecified zero-sign; NumPy's libm
-            // takes sign(y) for an infinite y and sign(x) for a NaN y.
+            // NumPy 2.4.2 (win-amd64) runs MSVC UCRT ccosh: every "dNaN" slot is the positive NPY_NAN
+            // (it CANONICALISES — ccosh(-NaN, y) is still +NaN, verified vs 2.4.2), only the ±0/±Inf
+            // signs are carried arithmetically. Emitting the positive NaN (not a sign-propagating x*x)
+            // is also what lets the derived ccos match after its transform. Verified bit-for-bit.
+            // cosh(+-0 +- I(Inf|NaN)) = NaN + I 0, zero-sign = sign(y) for Inf y, sign(x) for NaN y
             if (x == 0.0)
-                return new Complex(y - y, Math.CopySign(0.0, double.IsInfinity(y) ? y : x));
-            // cosh((Inf|NaN) +- I0) = (Inf|NaN) +- I0
+                return new Complex(NAN, Math.CopySign(0.0, double.IsInfinity(y) ? y : x));
+            // cosh((Inf|NaN) +- I0) = (Inf|NaN) + I sign-0  (NaN x treated positive for the zero-sign)
             if (y == 0.0)
-                return new Complex(x * x, Math.CopySign(0.0, x) * y);
+                return new Complex(double.IsInfinity(x) ? double.PositiveInfinity : NAN,
+                                   Math.CopySign(0.0, double.IsNaN(x) ? 1.0 : x) * y);
             // cosh(finite +- I(Inf|NaN)) = NaN + I NaN
             if (double.IsFinite(x))
-                return new Complex(y - y, x * (y - y));
-            // cosh(+-Inf + I y)  (cosh is even: NumPy uses +Inf magnitude for both parts)
+                return new Complex(NAN, NAN);
+            // cosh(+-Inf + I y)  (cosh is even: +Inf magnitude either way)
             if (double.IsInfinity(x))
             {
                 if (!double.IsFinite(y))            // cosh(+-Inf +- I(Inf|NaN)) = +Inf + I NaN
-                    return new Complex(x * x, x * (y - y));
+                    return new Complex(double.PositiveInfinity, NAN);
                 return new Complex((x * x) * Math.Cos(y), (x * x) * Math.Sin(y));
             }
-            // cosh(NaN + I ...) = NaN + I NaN
-            return new Complex((x * x) * (y - y), (x + x) * (y - y));
+            // cosh(NaN + I y) = NaN + I NaN
+            return new Complex(NAN, NAN);
         }
 
         /// <summary>
@@ -183,28 +205,32 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static Complex SinhSpecial(double x, double y)
         {
-            // sinh(+-0 +- I(Inf|NaN)) = sign(+-0)0 + I NaN  (NumPy: real follows sign(x))
+            // NumPy 2.4.2 (win-amd64) MSVC UCRT csinh: like ccosh it CANONICALISES every "dNaN" slot to
+            // the positive NPY_NAN (csinh(-NaN, y) is +NaN, verified vs 2.4.2), carrying only the
+            // ±0/±Inf signs. The positive NaN (not a sign-propagating x*x) is also what makes the
+            // derived csin/ctan match after their -Re negate. Verified bit-for-bit.
+            // sinh(+-0 +- I(Inf|NaN)) = sign(+-0)0 + I NaN
             if (x == 0.0)
-                return new Complex(Math.CopySign(0.0, x), y - y);
+                return new Complex(Math.CopySign(0.0, x), NAN);
             // sinh((Inf|NaN) +- I0)
             if (y == 0.0)
             {
-                if (double.IsNaN(x))                // sinh(NaN + I0) = NaN + I0
-                    return new Complex(x, y);
+                if (double.IsNaN(x))                // sinh(NaN + I0) = NaN + I (+-0, sign(y))
+                    return new Complex(NAN, y);
                 return new Complex(x, Math.CopySign(0.0, y));   // sinh(+-Inf + I0) = +-Inf +- I0
             }
             // sinh(finite +- I(Inf|NaN)) = NaN + I NaN
             if (double.IsFinite(x))
-                return new Complex(y - y, x * (y - y));
+                return new Complex(NAN, NAN);
             // sinh(+-Inf + I y)   (x is +-Inf here)
             if (!double.IsNaN(x))
             {
-                if (!double.IsFinite(y))            // sinh(+-Inf +- I(Inf|NaN)) = +-Inf + I NaN  (sign-preserving)
-                    return new Complex(x, x * (y - y));
+                if (!double.IsFinite(y))            // sinh(+-Inf +- I(Inf|NaN)) = +-Inf + I NaN
+                    return new Complex(x, NAN);
                 return new Complex(x * Math.Cos(y), double.PositiveInfinity * Math.Sin(y));
             }
-            // sinh(NaN + I ...) = NaN + I NaN
-            return new Complex((x * x) * (y - y), (x + x) * (y - y));
+            // sinh(NaN + I y) = NaN + I NaN
+            return new Complex(NAN, NAN);
         }
 
         /// <summary>
@@ -242,14 +268,21 @@ namespace NumSharp.Utilities
         {
             if (!double.IsFinite(x))
             {
-                if (double.IsNaN(x))                // tanh(NaN + I0)=NaN+I0 ; tanh(NaN+Iy)=NaN+INaN
-                    return new Complex(x, y == 0.0 ? y : x * y);
+                if (double.IsNaN(x))                // tanh(NaN + I y)
+                {
+                    if (double.IsNaN(y))            // both NaN: MSVC ctanh sign follows y (verified vs 2.4.2)
+                        return new Complex(y, y);
+                    return new Complex(x, y == 0.0 ? y : x * y);  // I0 keeps +-0; finite y: sign follows x
+                }
                 // x = +-Inf : tanh(+-Inf + I y) = +-1 +- I0. The imaginary zero-sign is unspecified;
                 // NumPy's libm takes sign(y) (not the msun source's sign(sin(2y))).
                 return new Complex(Math.CopySign(1.0, x), Math.CopySign(0.0, y));
             }
-            // x finite, so y is non-finite here: tanh(finite +- I(Inf|NaN)) = NaN + I NaN
-            return new Complex(y - y, y - y);
+            // x finite, so y is non-finite: tanh(finite +- I(Inf|NaN)) = NaN + I NaN. MSVC ctanh
+            // PROPAGATES a NaN y's sign (ctan/tan depend on this — ctanh(x, -NaN) is -NaN, verified vs
+            // 2.4.2) but yields +NaN for an Inf y (inf-inf would be x86-negative, which MSVC does not do).
+            double n = double.IsNaN(y) ? y - y : NAN;
+            return new Complex(n, n);
         }
 
         #endregion
@@ -389,7 +422,7 @@ namespace NumSharp.Utilities
                 if (double.IsInfinity(a)) return new Complex(a, b + b);     // casinh(+-Inf + I NaN) = +-Inf + I NaN
                 if (double.IsInfinity(b)) return new Complex(b, a + a);     // casinh(NaN +- I Inf) = +-Inf + I NaN
                 if (b == 0.0) return new Complex(a + a, b);                 // casinh(NaN + I0)      = NaN + I0
-                return new Complex(double.NaN, double.NaN);
+                return new Complex(NAN, NAN);
             }
             // a or b is +-Inf (no NaN): large-value path.
             double wx, wy;
@@ -410,7 +443,7 @@ namespace NumSharp.Utilities
                 if (double.IsInfinity(x)) return new Complex(y + y, double.NegativeInfinity); // cacos(+-Inf + I NaN) = NaN - I Inf
                 if (double.IsInfinity(y)) return new Complex(x + x, -y);                       // cacos(NaN +- I Inf) = NaN -+ I Inf
                 if (x == 0.0) return new Complex(PI_2, y + y);                                 // cacos(0 + I NaN)    = pi/2 + I NaN
-                return new Complex(double.NaN, double.NaN);
+                return new Complex(NAN, NAN);
             }
             // x or y is +-Inf (no NaN): large-value path.
             double wx, wy;
@@ -442,7 +475,7 @@ namespace NumSharp.Utilities
             {
                 if (double.IsInfinity(x)) return new Complex(Math.CopySign(0.0, x), y + y);                 // catanh(+-Inf + I NaN) = +-0 + I NaN
                 if (double.IsInfinity(y)) return new Complex(Math.CopySign(0.0, x), Math.CopySign(PI_2 + PIO2_LO, y)); // catanh(NaN +- I Inf) = +-0 + I +-pi/2
-                return new Complex(double.NaN, double.NaN);
+                return new Complex(NAN, NAN);
             }
             if (ax > RECIP_EPSILON || ay > RECIP_EPSILON)       // huge: Re(1/z) overflow-safe, Im = +-pi/2
                 return new Complex(RealPartReciprocal(x, y), Math.CopySign(PI_2 + PIO2_LO, y));
@@ -505,13 +538,15 @@ namespace NumSharp.Utilities
         private const double LOG10E = 0.4342944819032518;
 
         /// <summary>
-        /// Complex exponential matching NumPy (<c>npy_cexp</c>). A finite real part defers to
-        /// <see cref="Complex.Exp"/> (ULP-identical to NumPy); a non-finite real part follows C99.
+        /// Complex exponential matching NumPy. A FULLY finite input defers to <see cref="Complex.Exp"/>
+        /// (ULP-identical to NumPy); any non-finite component follows <see cref="ExpSpecial"/>, which
+        /// reproduces MSVC UCRT <c>cexp</c> (NumPy 2.4.2 win-amd64) bit-for-bit — including the positive
+        /// NaN sign that <see cref="Complex.Exp"/> emits negative for a finite real + non-finite imag.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Exp(Complex z)
         {
-            if (double.IsFinite(z.Real))
+            if (double.IsFinite(z.Real) && double.IsFinite(z.Imaginary))
                 return Complex.Exp(z);
             return ExpSpecial(z.Real, z.Imaginary);
         }
@@ -519,13 +554,22 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static Complex ExpSpecial(double x, double y)
         {
-            if (double.IsNaN(x))                                    // exp(NaN + I0)=NaN+I0 ; exp(NaN+Iy)=NaN+I copysign(NaN,y)
-                return y == 0.0 ? new Complex(x, y) : new Complex(x, Math.CopySign(double.NaN, y));
-            if (x > 0.0)                                            // +Inf
+            // Reached only when x or y is non-finite. NumPy 2.4.2 (win-amd64) runs MSVC's UCRT cexp,
+            // which PROPAGATES an input NaN's sign into the NaN outputs (exp(-NaN, y) is all -NaN); an
+            // Inf input carries no NaN, so its "produce a NaN" slot is the positive NPY_NAN. Genuine
+            // 0*inf/inf-inf is not reached here. Verified bit-for-bit against 2.4.2 for +NaN AND -NaN.
+            if (double.IsNaN(x))                                   // exp(NaN + I y): sign follows x
+                return y == 0.0 ? new Complex(x, y) : new Complex(x, x);
+            if (double.IsFinite(x))                                // finite x, non-finite y: sign follows y
             {
-                if (y == 0.0) return new Complex(x, y);             // exp(+Inf + I0) = +Inf + I0
+                double n = double.IsNaN(y) ? y : NAN;             // NaN y propagates; Inf y -> +NaN
+                return new Complex(n, n);
+            }
+            if (x > 0.0)                                           // +Inf
+            {
+                if (y == 0.0) return new Complex(x, y);            // exp(+Inf + I0) = +Inf + I0
                 if (double.IsFinite(y)) return new Complex(x * Math.Cos(y), x * Math.Sin(y));
-                return new Complex(x, double.NaN);                 // exp(+Inf + I(Inf|NaN)) = +Inf + I NaN
+                return new Complex(x, double.IsNaN(y) ? y : NAN);  // +Inf + I(Inf|NaN): NaN y propagates
             }
             // -Inf
             if (double.IsFinite(y))
@@ -533,9 +577,9 @@ namespace NumSharp.Utilities
                 double e = Math.Exp(x);                            // 0
                 return new Complex(e * Math.Cos(y), e * Math.Sin(y));
             }
-            // exp(-Inf + I(Inf|NaN)) = +0 + I copysign(0, y): system libm keeps sign(y) on the
-            // imaginary zero (exp(-inf,-inf).Im = -0 in NumPy 2.4.2), which npy_cexp's flat (0,0) drops.
-            return new Complex(0.0, Math.CopySign(0.0, y));
+            // exp(-Inf + I(Inf|NaN)) = +0 + I copysign(0, y): MSVC cexp keeps sign(y) on the imaginary 0
+            // for an Inf y, but a NaN y (either sign) yields +0 (the NaN is treated sign-agnostically).
+            return new Complex(0.0, Math.CopySign(0.0, double.IsNaN(y) ? 1.0 : y));
         }
 
         /// <summary>
@@ -628,12 +672,16 @@ namespace NumSharp.Utilities
 
         /// <summary>Non-finite corners of <see cref="Hypot"/>, split out (kept off the hot path):
         /// C99 <c>hypot(±inf, *) = +inf</c> even when the other part is NaN; otherwise (a NaN is
-        /// present, neither part infinite) NaN.</summary>
+        /// present, neither part infinite) the C library PROPAGATES that NaN's sign — so
+        /// <c>hypot(2.5, -NaN)</c> is <c>-NaN</c> and <c>sqrt/log1p(2.5, -NaN).real</c> follow it. The
+        /// callers that must NOT see the input sign (<c>clog</c> takes <c>hypot(|re|, |im|)</c>) have
+        /// already <c>Math.Abs</c>'d their operands, so this returns <c>+NaN</c> there — matching NumPy
+        /// 2.4.2 on both signs. Verified bit-for-bit.</summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static double HypotNonFinite(double x, double y)
         {
             if (double.IsInfinity(x) || double.IsInfinity(y)) return double.PositiveInfinity;
-            return double.NaN;
+            return double.IsNaN(x) ? x : y;
         }
 
         /// <summary>
@@ -714,43 +762,62 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        /// Complex square matching NumPy (<c>np.square(z) == z*z</c>). NumPy's complex multiply is the
-        /// textbook <c>(ar*br - ai*bi, ar*bi + ai*br)</c>, but compiled with FMA contraction; for
-        /// <c>z*z</c> this is <c>(fma(re, re, -(im*im)), fma(re, im, im*re))</c>. The FMA path is what
-        /// produces NumPy's <c>square(1e-10+1e-10i).real = -2.275e-37</c> (exact re² minus rounded im²)
-        /// and <c>square(1e300+1e300i).real = -inf</c> (not NaN) — both of which <see cref="Complex.op_Multiply"/>
-        /// (no FMA) turns into <c>0</c> and <c>NaN</c> respectively.
+        /// Complex square matching NumPy (<c>np.square(z) == z*z</c>). NumPy's SIMD complex multiply
+        /// (<c>simd_cmul</c> in <c>loops_arithm_fp.dispatch.c.src</c>) is a fused multiply-add/subtract
+        /// (<c>vfmaddsub</c>): <c>real = fused(re*re - im*im)</c>, <c>imag = fused(re*im + im*re)</c>. The
+        /// fused subtract is what produces NumPy's <c>square(1e-10+1e-10i).real = -2.275e-37</c> (exact
+        /// re² minus rounded im²) and <c>square(1e300+1e300i).real = -inf</c> (not NaN). It is spelled as
+        /// a TRUE <see cref="Fma.MultiplySubtractScalar"/> rather than
+        /// <c>FusedMultiplyAdd(re, re, -(im*im))</c> so that a NaN <c>im*im</c> keeps its (positive) sign
+        /// instead of being flipped by the explicit unary minus — matching NumPy 2.4.2 bit-for-bit on
+        /// NaN/inf-component inputs too. Without hardware FMA it falls back to NumPy's non-SIMD scalar
+        /// loop (<c>loops.c.src</c>: <c>re*re - im*im</c>), which is likewise NaN-sign correct.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Square(Complex z)
         {
             double re = z.Real, im = z.Imaginary;
-            return new Complex(Math.FusedMultiplyAdd(re, re, -(im * im)),
-                               Math.FusedMultiplyAdd(re, im, im * re));
+            if (Fma.IsSupported)
+            {
+                // Both lanes are the SAME fused op NumPy's `vfmaddsub` issues (real = re*re - im*im,
+                // imag = re*im + im*re). The imag is spelled fma(im, re, re*im): re*im and im*re are the
+                // SAME value, so the finite result is identical to NumPy, but on a mixed-sign-NaN input
+                // .NET's fma propagates the ADDEND's NaN while NumPy's muladdsub propagates the PRODUCT's
+                // (re*im) — putting re*im in the ADDEND slot makes the two agree bit-for-bit.
+                var reV = Vector128.CreateScalarUnsafe(re);
+                var imV = Vector128.CreateScalarUnsafe(im);
+                double reOut = Fma.MultiplySubtractScalar(reV, reV, Vector128.CreateScalarUnsafe(im * im)).ToScalar();
+                double imOut = Fma.MultiplyAddScalar(imV, reV, Vector128.CreateScalarUnsafe(re * im)).ToScalar();
+                return new Complex(reOut, imOut);
+            }
+            return new Complex(re * re - im * im, re * im + im * re);
         }
 
         /// <summary>
-        /// Complex reciprocal matching NumPy (<c>nc_recip</c>): Smith's algorithm specialised to a unit
-        /// numerator. This is overflow-safe (so <c>1/(huge)</c> doesn't prematurely flush to 0) AND
-        /// reproduces NumPy's signed zeros (the imaginary part is <c>-rat*scl</c>), neither of which
-        /// <see cref="Complex.op_Division"/> gets right. Bit-identical to NumPy across finite, zero,
-        /// and infinite inputs.
+        /// Complex reciprocal matching NumPy — a verbatim port of the <c>CDOUBLE_reciprocal</c> ufunc
+        /// loop (<c>numpy/_core/src/umath/loops.c.src</c>), the Smith-style branch on the larger
+        /// component. This is overflow-safe (so <c>1/(huge)</c> doesn't prematurely flush to 0) and
+        /// reproduces NumPy's signed zeros, which <see cref="Complex.op_Division"/> does not. Critically
+        /// the imaginary term is written as NumPy writes it — a DIVISION <c>-1/d</c> / <c>-r/d</c>, NOT
+        /// a negate of a reciprocal — so a NaN <c>d</c> keeps its (positive) sign instead of being
+        /// flipped by an explicit unary minus. Bit-identical to NumPy 2.4.2 across finite, zero,
+        /// infinite AND NaN-component inputs.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Reciprocal(Complex z)
         {
             double re = z.Real, im = z.Imaginary;
-            if (Math.Abs(re) >= Math.Abs(im))
+            if (Math.Abs(im) <= Math.Abs(re))
             {
-                double rat = im / re;
-                double scl = 1.0 / (re + im * rat);
-                return new Complex(scl, -rat * scl);
+                double r = im / re;
+                double d = re + im * r;
+                return new Complex(1.0 / d, (-r) / d);
             }
             else
             {
-                double rat = re / im;
-                double scl = 1.0 / (re * rat + im);
-                return new Complex(rat * scl, -scl);
+                double r = re / im;
+                double d = re * r + im;
+                return new Complex(r / d, (-1.0) / d);
             }
         }
 

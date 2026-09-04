@@ -625,12 +625,13 @@ namespace NumSharp.Tests.Fuzz
                 && diffs.Count > 0 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 3)))
                 return "complex unary within 3 ULP (full NumPy-algorithm port)";
 
-            // (7) The only complex-unary divergences beyond 3 ULP are three pathological regimes, each
+            // (7) The complex-unary divergences beyond 3 ULP are pathological FINITE regimes, each
             //     verified against NumPy 2.4.2 and accepted (NumSharp is the more accurate side of the
-            //     square/log cancellation cases; these are inputs no real workload produces):
-            //       - cos/sin with a NaN imaginary part: the sign of the resulting zero component is
-            //         C99-UNSPECIFIED (cos(+-0 + NaN i).imag = +-0 either way); the platform libm and
-            //         the npy_ccos identity pick opposite signs.
+            //     square/log cancellation cases; these are inputs no real workload produces). NOTE: the
+            //     former "cos/sin NaN zero-sign" regime is GONE — NDComplexMath now reproduces NumPy's
+            //     NaN sign (and the signed zero it carries) bit-for-bit, gated by the harness's raw-byte
+            //     NaN compare for the complex-unary ops, so a sign flip HARD-FAILS before reaching here.
+            //     What remains, both FINITE:
             //       - arccos with a sub-DBL_MIN imaginary part: Complex.Acos flushes the denormal real
             //         part to 0 where NumPy's cacos _do_hard_work keeps it (arccos(2 + 1e-308 i).real
             //         ~ 5.8e-309) — a denormal-range edge. arccosh INHERITS this exact case: NumSharp
