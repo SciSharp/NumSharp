@@ -261,7 +261,7 @@ namespace NumSharp.Tests
                 .Should().NotBeNull("int8 promotes to float16 — the documented no-Half-kernel bug");
         }
 
-        // ---- B6: isclose value excuse requires a complex128 operand ----
+        // ---- B6: isclose value diffs are NOT excused (real never was; complex128 FIXED in fbbda5f0) ----
 
         [TestMethod]
         public void B6_IscloseRealValueDiff_NotExcused()
@@ -274,12 +274,13 @@ namespace NumSharp.Tests
         }
 
         [TestMethod]
-        public void B6_IscloseComplexValueDiff_StillExcused()
+        public void B6_IscloseComplexValueDiff_NotExcused()
         {
             MisalignedRegistry.Classify(
                 Case("isclose", ("complex128", new long[] { 4 }), ("float64", new long[] { 4 })),
                 DivergenceKind.Value, new byte[] { 0 }, new byte[] { 1 }, NPTypeCode.Boolean,
-                new[] { new BitDiff.Diff(0, "00", "01") }).Should().NotBeNull();
+                new[] { new BitDiff.Diff(0, "00", "01") }).Should().BeNull(
+                "isclose complex128 is now bit-exact (fixed in fbbda5f0); the excuse was removed");
         }
 
         // ---- B7: complex reduce/scan excuse requires a NaN token in the diffs ----
