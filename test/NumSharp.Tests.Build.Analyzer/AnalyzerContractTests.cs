@@ -40,6 +40,44 @@ namespace NumSharp.Tests.Build.Analyzer
         }
 
         [DataTestMethod]
+        [DataRow("NDW016")]
+        [DataRow("NDW017")]
+        public void OwnershipDiagnostics_DefaultSeverity_IsWarning_And_EnabledByDefault(string id)
+        {
+            // The type-level ownership diagnostics are nudges of the same kind as NDW012: a stored
+            // array that is never disposed still reaches the finalizer, so they must never break a build.
+            var d = new NDArrayHolderAnalyzer().SupportedDiagnostics.Single(x => x.Id == id);
+            Assert.AreEqual(DiagnosticSeverity.Warning, d.DefaultSeverity, $"{id} must be a WARNING, never an Error");
+            Assert.IsTrue(d.IsEnabledByDefault, $"{id} must be enabled by default");
+            Assert.IsTrue(d.HelpLinkUri.EndsWith("#" + id.ToLowerInvariant()), $"{id} links its own anchor on the build-compiler page");
+        }
+
+        [TestMethod]
+        public async Task OwnershipDiagnostics_OnRealCases_AreReportedAsWarnings_NotErrors()
+        {
+            const string src = "using NumSharp;\n" +
+                               "public class Stores { NDArray _a; }\n" +
+                               "public class Forgets : System.IDisposable { NDArray _a; public void Dispose() { } }";
+            var r = await AnalyzerTestHarness.RunAsync(src, "severity_ownership.cs");
+            Assert.IsTrue(r.CompileErrors.IsEmpty, "inline source must compile");
+            Assert.AreEqual(DiagnosticSeverity.Warning, r.Ndw.Single(x => x.Id == "NDW016").Severity);
+            Assert.AreEqual(DiagnosticSeverity.Warning, r.Ndw.Single(x => x.Id == "NDW017").Severity);
+            Assert.AreEqual(0, r.Ndw.Count(x => x.Severity == DiagnosticSeverity.Error), "no ownership finding may be an Error");
+        }
+
+        [TestMethod]
+        public void TheThreeAnalyzers_CoverDisjointDiagnosticIds()
+        {
+            var leak = new NDArrayLeakAnalyzer().SupportedDiagnostics.Select(d => d.Id).ToArray();
+            var gate = new NDScopedTargetAnalyzer().SupportedDiagnostics.Select(d => d.Id).ToArray();
+            var holder = new NDArrayHolderAnalyzer().SupportedDiagnostics.Select(d => d.Id).ToArray();
+            CollectionAssert.AreEquivalent(new[] { "NDW012" }, leak);
+            CollectionAssert.AreEquivalent(new[] { "NDW016", "NDW017" }, holder);
+            Assert.AreEqual(0, leak.Intersect(gate).Count() + leak.Intersect(holder).Count() + gate.Intersect(holder).Count(),
+                "no id is owned by two analyzers");
+        }
+
+        [DataTestMethod]
         [DataRow("NDW002")]
         [DataRow("NDW003")]
         [DataRow("NDW005")]

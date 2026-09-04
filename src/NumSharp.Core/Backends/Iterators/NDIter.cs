@@ -33,7 +33,11 @@ namespace NumSharp.Backends.Iteration
     {
         private NDIterState* _state;
         private bool _ownsState;
-        private NDArray[]? _operands;
+        // Borrowed: an iterator walks the caller's operands and never owns them (NumPy's nditer
+        // contract). The one array it substitutes itself — a COPY_IF_OVERLAP temporary — is written
+        // back and released by ResolveWritebacks, not by any owner-of-the-slot rule. (An ALLOCATE
+        // output is yielded to the caller through the operands array.)
+        [NDBorrowed] private NDArray[]? _operands;
         private NDIterNextFunc? _cachedIterNext;
 
         /// <summary>
@@ -43,9 +47,9 @@ namespace NumSharp.Backends.Iteration
         /// copies the temporary back (NumPy's WRITEBACKIFCOPY resolved at
         /// NDIter_Deallocate). Not duplicated by <see cref="Copy"/> and not
         /// carried by <c>TransferStateOwnership</c> — the write-back belongs to
-        /// the constructing NDIterRef.
+        /// the constructing NDIterRef. Borrowed: the entries ARE the user's operands.
         /// </summary>
-        private NDArray?[]? _writebackOriginals;
+        [NDBorrowed] private NDArray?[]? _writebackOriginals;
 
         // =========================================================================
         // Factory Methods

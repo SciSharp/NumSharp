@@ -15,8 +15,11 @@ namespace NumSharp
     ///     </para>
     /// </summary>
     /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.poly1d.html</remarks>
-    public sealed class poly1d
+    public sealed class poly1d : IDisposable
     {
+        // OWNED: the constructor yields the normalized coefficient array into this field (or copies
+        // the source's), so the polynomial is the array's owner and Dispose releases it — the
+        // ownership analyzer (NDW016) is what made that explicit.
         private NDArray _coeffs;
         private readonly string _variable;
 
@@ -55,11 +58,32 @@ namespace NumSharp
             _variable = variable ?? "x";
         }
 
-        /// <summary>Copy constructor — shares the coefficients and (unless overridden) the variable name.</summary>
+        /// <summary>
+        ///     Copy constructor — copies the coefficients and (unless overridden) the variable name.
+        ///     NumPy's copy shares the coefficient array by reference count; here each polynomial owns
+        ///     its own array (see <see cref="Dispose"/>), so a copy is taken rather than an alias that two
+        ///     owners would dispose.
+        /// </summary>
         public poly1d(poly1d source, string variable = null)
         {
-            _coeffs = source._coeffs;
+            if (source is null)
+                throw new ArgumentNullException(nameof(source));
+            var c = source._coeffs.copy();
+            NDScope.Detach(c); // a field egress: owned by this polynomial, not by any ambient scope
+            _coeffs = c;
             _variable = variable ?? source._variable;
+        }
+
+        /// <summary>
+        ///     Releases the coefficient array this polynomial owns. Idempotent. A polynomial constructed
+        ///     inside an <c>[NDScoped]</c> method has its array tracked by that scope as well (the
+        ///     constructor yields it to the ambient scope), so disposing there is a no-op either way.
+        /// </summary>
+        public void Dispose()
+        {
+            var c = _coeffs;
+            _coeffs = null;
+            c?.Dispose();
         }
 
         /// <summary>The polynomial coefficients, highest power first.</summary>
@@ -137,7 +161,11 @@ namespace NumSharp
         public static poly1d operator +(poly1d a, poly1d b) => new poly1d(np.polyadd(a._coeffs, b._coeffs));
 
         /// <summary>Sum of a polynomial and coefficients (NumPy's <c>poly1d.__add__</c> -> polyadd).</summary>
-        public static poly1d operator +(poly1d a, NDArray b) => new poly1d(np.polyadd(a._coeffs, new poly1d(b)._coeffs));
+        public static poly1d operator +(poly1d a, NDArray b)
+        {
+            using var pb = new poly1d(b); // normalizes b (trims leading zeros); its coefficient view is released on exit
+            return new poly1d(np.polyadd(a._coeffs, pb._coeffs));
+        }
 
         // No `operator +(NDArray, poly1d)`: NumPy's `array + poly1d` is ELEMENT-WISE (the ndarray wins
         // via poly1d.__array__), NOT polyadd — the implicit poly1d->NDArray conversion already yields
@@ -148,7 +176,11 @@ namespace NumSharp
         public static poly1d operator -(poly1d a, poly1d b) => new poly1d(np.polysub(a._coeffs, b._coeffs));
 
         /// <summary>Difference of a polynomial and coefficients (NumPy's <c>poly1d.__sub__</c> -> polysub).</summary>
-        public static poly1d operator -(poly1d a, NDArray b) => new poly1d(np.polysub(a._coeffs, new poly1d(b)._coeffs));
+        public static poly1d operator -(poly1d a, NDArray b)
+        {
+            using var pb = new poly1d(b); // normalizes b; its coefficient view is released on exit
+            return new poly1d(np.polysub(a._coeffs, pb._coeffs));
+        }
 
         /// <summary>Negation.</summary>
         public static poly1d operator -(poly1d a) => new poly1d(-a._coeffs);
@@ -160,7 +192,11 @@ namespace NumSharp
         public static poly1d operator *(poly1d a, poly1d b) => new poly1d(np.polymul(a._coeffs, b._coeffs));
 
         /// <summary>Product of a polynomial and coefficients.</summary>
-        public static poly1d operator *(poly1d a, NDArray b) => new poly1d(np.polymul(a._coeffs, new poly1d(b)._coeffs));
+        public static poly1d operator *(poly1d a, NDArray b)
+        {
+            using var pb = new poly1d(b); // normalizes b; its coefficient view is released on exit
+            return new poly1d(np.polymul(a._coeffs, pb._coeffs));
+        }
 
         /// <summary>Scale every coefficient by a scalar (NumPy's <c>isscalar</c> branch).</summary>
         public static poly1d operator *(poly1d a, double s) => new poly1d(a._coeffs * s);
@@ -186,7 +222,8 @@ namespace NumSharp
         /// </summary>
         public static (poly1d q, poly1d r) operator /(poly1d a, NDArray b)
         {
-            var (q, rem) = np.polydiv(a._coeffs, new poly1d(b)._coeffs);
+            using var pb = new poly1d(b); // normalizes b; its coefficient view is released on exit
+            var (q, rem) = np.polydiv(a._coeffs, pb._coeffs);
             return (new poly1d(q), new poly1d(rem));
         }
 
@@ -227,10 +264,18 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polyval.html</remarks>
         public static poly1d polyval(poly1d p, poly1d x)
         {
-            // NumPy: y = 0; for pv in p.coeffs: y = y*x + pv  — polynomial composition.
+            // NumPy: y = 0; for pv in p.coeffs: y = y*x + pv  — polynomial composition. Each Horner
+            // step builds two polynomials (the product, then the sum that becomes the accumulator);
+            // the product and the superseded accumulator are transients this method owns and releases.
             poly1d y = new poly1d(NDArray.Scalar(0));
             for (long k = 0; k < p.coeffs.size; k++)
-                y = y * x + p.coeffs[k.ToString()];
+            {
+                using var yx = y * x;
+                using var pv = p.coeffs[k.ToString()]; // the k-th coefficient as a 0-d view
+                var next = yx + pv;
+                y.Dispose();
+                y = next;
+            }
             return y;
         }
     }

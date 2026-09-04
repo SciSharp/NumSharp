@@ -8,6 +8,10 @@ exact cost `[NDScoped]` exists to remove; see `DISPOSAL-GUIDELINES.md` and the w
 `_NumSharpCorePackAnalyzer`), so every `PackageReference` consumer gets it with no extra install; it
 also runs on NumSharp.Core's own build (toggle: `-p:EnableNDArrayLeakAnalyzer=false`; Core adds NDW012
 to `$(WarningsNotAsErrors)` so a leak can never break a build even under `TreatWarningsAsErrors`).
+Its sibling `NDArrayHolderAnalyzer` (same DLL, same toggle, NDW016/NDW017 likewise in
+`$(WarningsNotAsErrors)`) carries ownership across the field boundary this pass stops at — a TYPE that
+stores NDArrays must be disposable and dispose them, and an NDArray-owning disposable is itself an
+owned value — see §10.
 
 Every case below is **probe-verified and pinned**: the fixture files in
 `test/NumSharp.Tests.Build.Analyzer.Fixtures/` carry a `// [NDW012]` tag on each line that must warn,
@@ -108,13 +112,13 @@ owning ancestor also leaks is subsumed) — one diagnostic per actual leak.
 |---|---|
 | return / yield / await | `return x;` (incl. via a local, tuples, arrays, conditionals), `yield return a + b;`, `var v = await ComputeAsync(a + b);` |
 | out / ref / in | assignment to an `out` parameter; `Foo(ref t)` / `Foo(out t)` / `Foo(in t)` |
-| **stores** | static/instance **property** setter, static/instance **field**, object-initializer `new W { Prop = a + b }`, array element `arr[0] = …`, dictionary/indexer `map[k] = …`, **NumSharp's own indexer-set** `a["1:3"] = b + c`, `ref`-local store, compound into a field `_f += a`, deconstruction into fields |
+| **stores** | static/instance **property** setter, static/instance **field**, object-initializer `new W { Prop = a + b }`, array element `arr[0] = …`, dictionary/indexer `map[k] = …`, **NumSharp's own indexer-set** `a["1:3"] = b + c`, `ref`-local store, compound into a field `_f += a`, deconstruction into fields — the storing TYPE now owns it, which is what NDW016/NDW017 (§10) hold it to |
 | ctor args | `new Wrapper(a + b)` (assumed to take ownership), `: base(a + b)` |
 | foreign calls | any argument to a **non-NumSharp** method (assumed to consume/observe), incl. `params` elements, collection `Add`, local-function args; a **void** NumSharp op too (`np.copyto(dst, a + b)` — the non-consuming rule keys on the RETURN type) |
 | observation | `Console.WriteLine(a + b)`, string interpolation `$"{a + b}"` (result isn't owned) |
 | closures / delegates | lambda capture (`Action f = () => Use(t);`), a lambda RETURNING its temp (`Func<NDArray> f = () => a + b;`) |
 | views | the receiver of a call/property/indexer **follows the result upward**: `(a + b).reshape(1, -1)` returned, `(a + b)?.reshape(…)`, `x.MakeGeneric<T>()` chains — the view shares the buffer, so if the result escapes the receiver is not a leak |
-| consumption | `foreach (var x in Split(a))` — the loop owns each element's fate (conservative) |
+| consumption | `foreach (var x in Split(a))` — a produced `NDArray[]`/tuple/carrier is a managed container; the loop owns each element's fate (conservative). NOT a produced NDArray or owning disposable (`foreach (var r in a + b)`, `foreach (var x in np.nditer(a))`): C# disposes the enumerator, never the enumerable — those leak (§10) |
 
 ## 5. The reclaims (all clean — deterministically disposed)
 
@@ -123,7 +127,7 @@ owning ancestor also leaks is subsumed) — one diagnostic per actual leak.
 | `using var t = a + b;` | using declaration |
 | `using (var t = a + b) { }` | using statement |
 | `using (a + b) { }` / `using ((IDisposable)(a + b)) { }` | bare owning expression, cast included |
-| `t.Dispose();` | anywhere — including `try/finally`, **catch-only** (path-insensitive by design), and inside a **local function** (local-function bodies are part of the outer method's operation tree) |
+| `t.Dispose();` | anywhere — including `try/finally`, **catch-only** (path-insensitive by design), and inside a **local function** (local-function bodies are part of the outer method's operation tree); `t.DisposeAsync()`, `t.Close()` and NumSharp's `it.close()` (an `np.nditer`) are the same reclaim |
 | `t?.Dispose();` | conditional dispose |
 | `((IDisposable)t).Dispose();` | ANY parameterless `Dispose` counts — the receiver walk only ever arrives from an owned value, so the static type of the call is irrelevant |
 | `scope.Returns(x)` / `NDScope.Attach(x)` / `NDScope.Detach(x)` | handed to the scope machinery |
@@ -244,19 +248,120 @@ Gates: `NDScopeWeaveCarrierTests` (recursive ITuple dispatch ×4), `NDScopeExitT
 detach ×2), `NDScopeAsyncTests` (task-carried nested tuple), `GateNegativeTests` (28 new weaver-parity
 rows incl. the NDW015/NDW002 matrix and the custom-task-like pin).
 
-## 10. Verification
+## 10. Ownership at the TYPE level — NDW016 / NDW017 and the contagion rule
 
-- **Exact-match fixtures** (8 NDW012 scenario files, ~44 warn-tagged + ~75 clean scenarios): a missing
-  AND an unexpected diagnostic both fail; tags live only in comment tails (keep bracketed `[NDWxxx]`
-  out of prose — the marker parser scans for exactly that shape).
+§4 lists "stores" as a clean escape: a value written into a field or property is the storing type's
+to reclaim. Until 2026-09-04 nothing checked that the storing type ever did, so ownership silently
+evaporated at every field boundary. `NDArrayHolderAnalyzer` (`tools/NumSharp.Build.Analyzer/
+NDArrayHolderAnalyzer.cs`, over the shared `OwnershipModel.cs`) closes the hand-off with two more
+**warnings**, and the same model makes owning types *contagious* in the per-method pass:
+
+| Diagnostic | Where | Verdict |
+|---|---|---|
+| **NDW016** | the type's name | a class/struct declares instance **holders** (see below) but implements neither `IDisposable` nor `IAsyncDisposable` (a `ref struct`: has no `public void Dispose()`) |
+| **NDW017** | each member | the type is disposable, but this holder is not disposed on any path from `Dispose()` / `Dispose(bool)` / `DisposeAsync()` / `DisposeAsyncCore()` |
+
+**Holders** — an instance field, or an auto-property (positional record properties included; a
+computed property is a view, not storage), whose type *holds NDArrays*, defined structurally:
+
+| Holds | Examples |
+|---|---|
+| NDArray-like | `NDArray`, `NDArray<T>`, a consumer subclass, `T : NDArray` |
+| arrays, any rank | `NDArray[]`, `NDArray[,]`, `NDArray[][]` |
+| tuples with a holding component | `(NDArray a, int n)`, `List<(string, NDArray)>` |
+| generics instantiated over a holding type, and types nested in them | `List<NDArray>`, `Dictionary<K, NDArray>` (and its `ValueCollection`), `Lazy<NDArray>`, `Task<NDArray>`, a consumer's `Box<NDArray>`, `Cell<NDArray>` |
+| `INDArrayCarrier` structs | `UniqueResult`, a consumer's own carrier |
+| **another type that stores NDArrays** (own members or base type) — the contagion | a class storing a `Batch`, NumSharp's `np.NDIterator` (its `operands`/`value` are visible), `NpzFile` |
+
+Never holders: delegates, pointers, `WeakReference<T>`, comparers/`IComparable`/`IEquatable`,
+`IObservable`/`IObserver`/`IProgress`, unconstrained type parameters, `object`/`IDisposable`, and
+any type from an assembly that cannot even name NDArray (the BCL is answered without a member scan).
+Static members never make an instance an owner. **`[NDBorrowed]`** (`src/NumSharp.Core/Backends/
+NDBorrowedAttribute.cs`, runtime-inert like `[NDScopedCovered]`) excludes a member ("it references an
+array owned elsewhere"), or a whole class/struct ("every array it references is borrowed" — which also
+removes the type from the contagious set even when it is disposable). Exempt outright: static classes,
+interfaces, `[NDBorrowed]` types, and `INDArrayCarrier` implementers (transient result packaging the
+scope yields through). Metadata types are never reported; they are only *consulted*, and since private
+storage is invisible there, every visible instance field/property/indexer counts as evidence.
+
+**Contagion, precisely.** Holding is structural, so a type that stores NDArrays but is not (yet)
+disposable is still a holder in its owner — the owner's NDW016/NDW017 message says "make `Inner`
+disposable first", and a chain resolves one level per fix (pinned by `ContagionChain_ResolvesOneLevelAtATime`).
+For the per-method pass, the contagious set is narrower: an **NDArray-owning disposable** — a
+disposable class/struct/ref struct that holds NDArrays and is not `[NDBorrowed]` — becomes an owned
+value in `IsOwnedNDArrayType`, so `new Batch(a + b);`, a dead `var batch = MakeBatch(a);`,
+`var it = np.nditer(a);` and an `Owner[]` literal all draw NDW012; `using`/`Dispose()`/`Close()`/
+NumSharp's `close()` reclaim; return/store/hand-off escape. A non-disposable holder instance is *not*
+an owned value (nothing the method could reclaim — the type is what warns). And `foreach` now
+leaks a produced **NDArray-like or owning-disposable collection** (`foreach (var r in a + b)`,
+`foreach (var x in np.nditer(a))`): C# disposes the enumerator it obtains, never the enumerable —
+a produced `NDArray[]`/tuple/carrier stays conservatively consumed (a managed container whose
+elements the loop body owns).
+
+**The NDW017 path analysis** (per type, `RegisterSymbolStartAction` + one block walk per member body
++ `RegisterSymbolEndAction`): roots are the type's own `Dispose`/`Dispose(bool)`/`DisposeAsync`/
+`DisposeAsyncCore` (explicit interface implementations included; a finalizer is deliberately not a
+root); reachability follows same-type callees (methods, property accessors, delegates over methods;
+local functions are part of the body). A body disposes holder `m` when: a `Dispose`/`DisposeAsync`/
+`Close`/`close` call's receiver **roots at** `m` — through conversions, `?.`, tuple/field/property
+reads (`_pair.Item1`, `_map.Values`), indexers/elements (`_list[i]`, `_arr[i]`), call results
+(`_list.First()`), and **derived locals** (a local/loop variable/deconstructed name assigned from `m`,
+transitively, to a fixed point); `m` is a `using` resource; `m` (or a component of it) is handed as an
+argument to ANY method/constructor — gated on the argument's own type holding NDArrays, so
+`Log(x.size)` hands off a scalar and `Log(_a.ToString())` a call result, neither counting; or a call on
+`m` carries a lambda that disposes (`_list.ForEach(x => x.Dispose())`). Not disposal: `_a = null`,
+`Clear()`, a finalizer, an unreachable helper. Messages carry the contract (`IDisposable` /
+`IAsyncDisposable` / both / the `Dispose()` pattern), the member and its kind, and one of two hints:
+inherited-Dispose (names the base; override `Dispose(bool)`) or make-the-inner-type-disposable-first.
+
+**Measured on NumSharp.Core (2026-09-04, fresh rebuild):** first run 18 NDW016 types + 9 NDW017
+members + 9 new NDW012 sites. Triage: 20 `[NDBorrowed]` annotations on genuine borrowers
+(`FlatIterator`, `MemoryView`, `NDRefIter<T>`/`NDChunkIter<T>`, `NDEnumerate`(`<T>`), `NDFlatIterator`,
+`NDExpr`'s `ArrayNode`/bind context, `NDArrayFlags`, the debugger proxy, `_Unsafe`/`_Pinning`,
+`r_`'s `Operand`, `SplitContext`, `IndexOp`/`PreparedIndex`, `NpzFile.BagObj`, `NDIterRef`'s operand
+slots, `NDIterator.Current` + its foreach wrapper, `NDArray.TrackingScope`, `Broadcast._ops`,
+`NpzFile._cache` — the arrays it hands out are the reader's); **three real ownership gaps fixed**:
+`poly1d` owned its coefficient array (yielded into it via `scope.Returns`) yet was not disposable — now
+`IDisposable`, its copy-constructor copies (two owners of one array would double-dispose), its
+`operator +/-/*//(poly1d, NDArray)` normalization temps and `polyval`'s Horner intermediates are
+released; `Broadcast` built `broadcast_to` views it never released — `Dispose()` (what `foreach` calls)
+now releases them and lazily rebuilds on the next access; `IndexCollector` stranded its outgrown
+buffer on growth and on the trim path — now `IDisposable`, handing its storage out on a perfect fit;
+and two unscoped entries (`np.isreal`/`np.iscomplex`) handing an `np.imag` view + a `Scalar(0)` temp to
+`np.equal` are `[NDScoped]`. Core is back to **exactly 1 NDW012** (the indexer false positive), 0
+NDW016, 0 NDW017.
+
+**Limitations (pinned or documented):** a holder released through an object the type merely
+*registered* it with elsewhere (`_disposables.Add(_a)` in a constructor, `_disposables.Dispose()` in
+Dispose) reads as NDW017 — mark it `[NDBorrowed]` or dispose it directly; the hand-off rule is an
+over-approximation in the other direction (`Console.WriteLine(_a)` counts as disposal); per-instance
+ownership (a type that sometimes owns, sometimes borrows) is not expressible — annotate the common
+case; a metadata type's private storage is invisible, so a library holder with only private fields is
+not contagious unless it exposes an NDArray-typed member; the receiver-follow concession (§8) applies
+to holder instances too (`return batch.Data.size;` saves `batch`).
+
+## 11. Verification
+
+- **Exact-match fixtures** (11 scenario files: 8 NDW012 + `HolderTypeScenarios.cs` (NDW016),
+  `DisposePathScenarios.cs` (NDW017), `ContagionScenarios.cs` (NDW012 under contagion); ~115
+  warn-tagged + ~150 clean scenarios): a missing AND an unexpected diagnostic both fail; tags live
+  only in comment tails (keep bracketed `[NDWxxx]` out of prose — the marker parser scans for exactly
+  that shape).
 - **Metamorphic pairs**: the same body with one edit (`using`, `return`, `[NDScoped]`, sink, cast-
-  dispose, alias elements/branches) must flip warn↔clean — catches "warns for the wrong reason".
+  dispose, alias elements/branches) must flip warn↔clean — catches "warns for the wrong reason";
+  `OwnershipMetamorphicTests` does the same for types (add `IDisposable` → NDW016 becomes NDW017, add
+  the dispose call → clean, `[NDBorrowed]` member/type, static, computed property, carrier,
+  ref-struct pattern, contagion chain resolving one level at a time, `using` a dropped holder, `close()`).
 - **Property fuzz (RB-5)**: 100 deterministic seeded bodies (3–8 statements from a 9-template grammar)
-  asserted to produce EXACTLY as many NDW012 as leaky statements.
+  asserted to produce EXACTLY as many NDW012 as leaky statements; `OwnershipPropertyFuzzTests` generates
+  120 seeded TYPES (1–6 members from a 14-template holder/non-holder grammar, disposable or not, a
+  random subset of holders disposed through a random Dispose shape) and asserts NDW016 == non-disposable
+  holder types, NDW017 == undisposed holders, NDW012 == 0.
 - **Robustness**: malformed source, unresolved symbols, 400-statement bodies, recursion, generics,
-  the no-NumSharp no-op.
-- **Suite**: 125 in-process + 4 `AnalyzerBuild` tests, green net8.0 + net10.0; Core's own build is the
-  live gate (§9's "1").
+  the no-NumSharp no-op; for types: cycles with and without arrays, 25-deep contagion chains, generic
+  definition vs instantiation, nested/partial types, 300-member types, 200 types, aliases, nullable.
+- **Suite**: 216 in-process + 4 `AnalyzerBuild` tests, green net8.0 + net10.0; Core's own build is the
+  live gate (§9's "1", now with NDW016/NDW017 at 0).
 
 Compile floor: the analyzer targets **Roslyn 4.8** (the .NET 8 SDK — what consumers' compilers are
 guaranteed to load). That is why collection expressions are matched by **syntax**

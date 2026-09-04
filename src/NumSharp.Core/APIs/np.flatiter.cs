@@ -60,6 +60,7 @@ namespace NumSharp
         ///     odometer artifact; every IN-RANGE coord (the values read during iteration) is bit-exact.
         ///     </para>
         /// </summary>
+        [NDBorrowed] // a cursor over the caller's array — it never owns the base it reads and writes through
         public sealed class FlatIterator : IEnumerable<object>
         {
             private readonly NDArray _base;

@@ -39,9 +39,9 @@ namespace NumSharp
         /// </summary>
         public class Broadcast : IEnumerable<object[]>, IEnumerator<object[]>
         {
-            private readonly NDArray[] _ops;
+            [NDBorrowed] private readonly NDArray[] _ops;   // the caller's operands
             private NDFlatIterator[] _iters;
-            private NDArray[] _views;     // operands broadcast to the result shape (lazy)
+            private NDArray[] _views;     // operands broadcast to the result shape (lazy) — OWNED, released by Dispose
             private int _index;           // live cursor — NumPy's broadcast.index
             private object[] _current;    // values at the previous cursor position
 
@@ -170,7 +170,24 @@ namespace NumSharp
 
             void IEnumerator.Reset() => reset();
 
-            public void Dispose() { }
+            /// <summary>
+            ///     Releases the broadcast views built for iteration (each is a <c>broadcast_to</c> view
+            ///     over an operand's buffer — a counted alias whose ref would otherwise wait for the
+            ///     finalizer). Called by <c>foreach</c> at the end of a loop; the views and the
+            ///     <see cref="iters"/> over them are rebuilt lazily on the next access, so the object
+            ///     stays re-enumerable (NumPy's <c>iter(b) is b</c>; call <see cref="reset"/> to rewind).
+            ///     The operands themselves are the caller's and are never touched.
+            /// </summary>
+            public void Dispose()
+            {
+                var views = _views;
+                _views = null;
+                _iters = null;
+                if (views is null)
+                    return;
+                foreach (var v in views)
+                    v?.Dispose();
+            }
         }
     }
 }

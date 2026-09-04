@@ -43,6 +43,7 @@ namespace NumSharp.Backends.Iteration
     /// Operand collection for binding array leaves: deduplicates by reference
     /// so a repeated NDArray maps to one iterator operand.
     /// </summary>
+    [NDBorrowed] // the operands an expression is bound over are the caller's arrays
     internal sealed class NDExprBindContext
     {
         public readonly List<NDArray> Operands = new();
@@ -330,6 +331,7 @@ namespace NumSharp.Backends.Iteration
     // Never reaches typing or emission: np.evaluate always binds first.
     // =========================================================================
 
+    [NDBorrowed] // an expression leaf references the caller's array; np.evaluate never owns its inputs
     public sealed partial class ArrayNode : NDExpr
     {
         private readonly NDArray _array;

@@ -98,6 +98,9 @@ namespace NumSharp.Tests.Build.Analyzer
         [DataRow("ScopeScenarios.cs", 1)]
         [DataRow("GateNegativeScenarios.cs", 4)]
         [DataRow("KnownLimitationScenarios.cs", 2)]
+        [DataRow("HolderTypeScenarios.cs", 25)]
+        [DataRow("DisposePathScenarios.cs", 14)]
+        [DataRow("ContagionScenarios.cs", 9)]
         public void Fixtures_CarryTheTagsTheyAreGatedOn(string fileName, int minTags)
         {
             var markers = DiagnosticMarkers.Parse(AnalyzerTestHarness.FixturePath(fileName));
@@ -109,13 +112,13 @@ namespace NumSharp.Tests.Build.Analyzer
         [TestMethod]
         public void AllExpectedCodes_ArePresentAcrossFixtures()
         {
-            var codes = new[] { "LeakScenarios.cs", "CarrierScenarios.cs", "GateScenarios.cs" }
+            var codes = new[] { "LeakScenarios.cs", "CarrierScenarios.cs", "GateScenarios.cs", "HolderTypeScenarios.cs", "DisposePathScenarios.cs", "ContagionScenarios.cs" }
                 .SelectMany(f => DiagnosticMarkers.Parse(AnalyzerTestHarness.FixturePath(f)))
                 .Select(m => m.Code)
                 .Distinct()
                 .OrderBy(c => c)
                 .ToArray();
-            foreach (var expected in new[] { "NDW002", "NDW003", "NDW005", "NDW006", "NDW009", "NDW010", "NDW011", "NDW012" })
+            foreach (var expected in new[] { "NDW002", "NDW003", "NDW005", "NDW006", "NDW009", "NDW010", "NDW011", "NDW012", "NDW016", "NDW017" })
                 CollectionAssert.Contains(codes, expected, $"the fixtures must cover {expected}");
         }
     }

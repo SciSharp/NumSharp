@@ -21,6 +21,7 @@ namespace NumSharp
         /// np.isreal(a)  // [True, True, True]
         /// </code>
         /// </example>
+        [NDScoped] // reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.equal
         public static NDArray isreal(NDArray a)
         {
             if (a is null)
@@ -56,6 +57,7 @@ namespace NumSharp
         /// np.iscomplex(a)  // [False, False, False]
         /// </code>
         /// </example>
+        [NDScoped] // reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.not_equal
         public static NDArray iscomplex(NDArray a)
         {
             if (a is null)

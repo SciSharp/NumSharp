@@ -50,9 +50,10 @@ jobs:
     - name: Build Oracle (differential-fuzz gate)
       run: dotnet build test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
-    # The analyzer gate: NumSharp.Tests.Build.Analyzer runs the NDW012 leak analyzer + the [NDScoped]-target
-    # gate (NDW002/003/005/006/009/010/011) in-process over the NumSharp.Tests.Build.Analyzer.Fixtures files and
-    # asserts the diagnostics land on exactly the tagged lines.
+    # The analyzer gate: NumSharp.Tests.Build.Analyzer runs the NDW012 leak analyzer + the NDW016/NDW017
+    # type-level ownership analyzer + the [NDScoped]-target gate (NDW002/003/005/006/009/010/011/015)
+    # in-process over the NumSharp.Tests.Build.Analyzer.Fixtures files and asserts the diagnostics land on
+    # exactly the tagged lines.
     - name: Build Analyzer tests
       run: dotnet build test/NumSharp.Tests.Build.Analyzer/NumSharp.Tests.Build.Analyzer.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 

@@ -48,7 +48,11 @@ namespace NumSharp.IO
         private readonly Dictionary<string, ZipArchiveEntry> _keyToEntry;
 
         /// <summary>Cache keyed by entry identity, so duplicate names cannot alias each other.</summary>
-        private readonly Dictionary<ZipArchiveEntry, NDArray> _cache;
+        // Borrowed: an array is handed to whoever first reads it (the indexer / Values / enumeration
+        // return the SAME instance on every access) and that reader owns it — an archive that disposed
+        // its cache on Close would pull the buffer out from under `using var z = np.load_npz(p);
+        // var a = z["a"];`. Dispose only forgets the memo.
+        [NDBorrowed] private readonly Dictionary<ZipArchiveEntry, NDArray> _cache;
 
         private readonly List<string> _files;
 
@@ -344,6 +348,7 @@ namespace NumSharp.IO
         ///     Turns member lookups into property reads — NumPy's <c>BagObj</c>, reached via
         ///     <see cref="NpzFile.F"/>.
         /// </summary>
+        [NDBorrowed] // dot-access sugar over the owning archive; it holds nothing of its own
         private sealed class BagObj : DynamicObject
         {
             // NumPy uses a weakref here so the NpzFile stays collectable despite the cycle. .NET's GC

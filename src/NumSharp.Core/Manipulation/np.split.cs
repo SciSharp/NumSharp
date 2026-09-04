@@ -133,6 +133,7 @@ namespace NumSharp
         ///     This pulls the per-sub-array cost from ~640ns (Shape + Alias + NDArray)
         ///     to ~540ns on a 1-D arange(1000) → 4 split benchmark.
         /// </summary>
+        [NDBorrowed] // the array being split belongs to the caller; the pieces are views yielded to them
         private readonly struct SplitContext
         {
             private readonly NDArray _ary;

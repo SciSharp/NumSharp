@@ -42,7 +42,7 @@ namespace NumSharp.Build.Analyzer
         internal static readonly DiagnosticDescriptor Nw012 = new DiagnosticDescriptor(
             "NDW012",
             "NDArray is created but never disposed, returned, or scoped (leaked to the finalizer)",
-            "This NDArray is never returned, assigned to an out/ref parameter, stored, disposed, or " +
+            "This {1} is never returned, assigned to an out/ref parameter, stored, disposed, or " +
             "reclaimed by an NDScope, so its pooled buffer is left to the finalizer instead of being " +
             "returned promptly. Dispose it (a 'using' declaration or '.Dispose()'), yield it through " +
             "'scope.Returns(...)', or mark the enclosing method '{0}' so the weaver reclaims it.",
@@ -68,7 +68,10 @@ namespace NumSharp.Build.Analyzer
                 if (known == null || known.NDArray == null)
                     return; // NumSharp not referenced — nothing to analyze
 
-                start.RegisterOperationBlockAction(c => new BlockScan(known, c).Run());
+                // The ownership model makes NDArray-owning DISPOSABLES (a consumer's holder class,
+                // NumSharp's own np.nditer iterator) owned values too: ownership is contagious.
+                var model = new OwnershipModel(known, start.Compilation);
+                start.RegisterOperationBlockAction(c => new BlockScan(known, model, c).Run());
             });
         }
 
@@ -83,6 +86,7 @@ namespace NumSharp.Build.Analyzer
         private sealed class BlockScan
         {
             private readonly KnownTypes _k;
+            private readonly OwnershipModel _model;
             private readonly OperationBlockAnalysisContext _ctx;
 
             // local → its non-write value uses; the owning locals; the ones a 'using' already reclaims;
@@ -94,9 +98,10 @@ namespace NumSharp.Build.Analyzer
             private readonly HashSet<ILocalSymbol> _usingLocals = new HashSet<ILocalSymbol>(SymbolEqualityComparer.Default);
             private readonly HashSet<IOperation> _localSourceExprs = new HashSet<IOperation>();
 
-            public BlockScan(KnownTypes k, OperationBlockAnalysisContext ctx)
+            public BlockScan(KnownTypes k, OwnershipModel model, OperationBlockAnalysisContext ctx)
             {
                 _k = k;
+                _model = model;
                 _ctx = ctx;
             }
 
@@ -129,7 +134,7 @@ namespace NumSharp.Build.Analyzer
                     if (_usingLocals.Contains(local))
                         continue;
                     if (DispositionOfLocal(local) == Disposition.Leaks)
-                        Report(local.Locations.Length > 0 ? local.Locations[0] : Location.None, EnclosingSuggestion(method));
+                        Report(local.Locations.Length > 0 ? local.Locations[0] : Location.None, EnclosingSuggestion(method), DescribeOwned(local.Type));
                 }
 
                 // 2) owning expressions whose value is not captured by a local and never escapes.
@@ -145,13 +150,25 @@ namespace NumSharp.Build.Analyzer
                         // sub-expression whose owning ancestor also leaks is subsumed by that ancestor.
                         if (HasLeakingOwnedAncestor(op))
                             continue;
-                        Report(op.Syntax.GetLocation(), EnclosingSuggestion(method));
+                        Report(op.Syntax.GetLocation(), EnclosingSuggestion(method), DescribeOwned(op.Type));
                     }
                 }
             }
 
-            private void Report(Location loc, string suggestion)
-                => _ctx.ReportDiagnostic(Diagnostic.Create(Nw012, loc, suggestion));
+            private void Report(Location loc, string suggestion, string kind)
+                => _ctx.ReportDiagnostic(Diagnostic.Create(Nw012, loc, suggestion, kind));
+
+            /// <summary>How the message names the leaked value: a plain NDArray (carriers included), or an NDArray-owning disposable instance.</summary>
+            private string DescribeOwned(ITypeSymbol t)
+            {
+                if (t is IArrayTypeSymbol arr && _model.IsNDOwningDisposable(arr.ElementType))
+                    return "'" + arr.ElementType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat) +
+                           "' array (disposables that store NDArrays)";
+                if (_model.IsNDOwningDisposable(t))
+                    return "'" + t.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat) +
+                           "' instance (a disposable that stores NDArrays)";
+                return "NDArray";
+            }
 
             // -------------------------------------------------------------- local collection
 
@@ -327,6 +344,14 @@ namespace NumSharp.Build.Analyzer
                         case IArgumentOperation argOp:
                             return DispositionOfArgument(argOp);
 
+                        // the collection of a foreach: C# disposes the ENUMERATOR it obtains, never the
+                        // enumerable itself — so a produced NDArray (`foreach (var row in a + b)`) or an
+                        // NDArray-owning disposable (`foreach (var x in np.nditer(a))`) walked this way is
+                        // never reclaimed. A produced NDArray[] / tuple / carrier is a managed container
+                        // whose ELEMENTS the loop body owns the fate of — conservatively consumed.
+                        case IForEachLoopOperation loop when ReferenceEquals(loop.Collection, op):
+                            return IsNeverDisposedByForeach(Unwrap(op).Type) ? Disposition.Leaks : Disposition.Escapes;
+
                         default:
                             // Unknown context: treat as an escape rather than risk a false positive.
                             return Disposition.Escapes;
@@ -393,7 +418,12 @@ namespace NumSharp.Build.Analyzer
                 return false;
             }
 
-            /// <summary>An owned NDArray carrier value — the kinds whose buffer this method must reclaim.</summary>
+            /// <summary>
+            ///     An owned NDArray carrier value — the kinds whose buffer this method must reclaim:
+            ///     NDArray / NDArray[] / a tuple with one / an INDArrayCarrier struct, and — ownership
+            ///     being contagious — an NDArray-owning DISPOSABLE (a consumer's holder class, NumSharp's
+            ///     np.nditer iterator) or a rank-1 array of them.
+            /// </summary>
             private bool IsOwnedNDArrayType(ITypeSymbol t)
             {
                 if (t == null)
@@ -404,8 +434,20 @@ namespace NumSharp.Build.Analyzer
                     return true;
                 if (ImplementsCarrier(t))                          // INDArrayCarrier result struct
                     return true;
+                if (_model.IsNDOwningDisposable(t))                // a disposable that stores NDArrays
+                    return true;
+                if (t is IArrayTypeSymbol arr && arr.Rank == 1 && _model.IsNDOwningDisposable(arr.ElementType))
+                    return true;
                 return false;
             }
+
+            /// <summary>
+            ///     Whether walking a produced value with <c>foreach</c> strands it: an NDArray-like
+            ///     (enumerating a temp never disposes it) or an NDArray-owning disposable whose
+            ///     enumerator is not the object itself. Arrays, tuples and carriers are not.
+            /// </summary>
+            private bool IsNeverDisposedByForeach(ITypeSymbol t)
+                => t != null && (TypeHelpers.IsNDArrayLike(t, _k) || _model.IsNDOwningDisposable(t));
 
             private bool ImplementsCarrier(ITypeSymbol t)
             {
@@ -513,13 +555,15 @@ namespace NumSharp.Build.Analyzer
             }
 
             /// <summary>
-            ///     Any parameterless <c>Dispose()</c>. The receiver walk only ever arrives here FROM an
-            ///     owned value, so the static type the call is made through is irrelevant —
+            ///     Any parameterless <c>Dispose()</c> / <c>DisposeAsync()</c> / <c>Close()</c> (and NumSharp's
+            ///     NumPy-spelled <c>close()</c> on <c>np.nditer</c>). The receiver walk only ever arrives
+            ///     here FROM an owned value, so the static type the call is made through is irrelevant —
             ///     <c>((IDisposable)t).Dispose()</c> disposes the same buffer <c>t.Dispose()</c> does
             ///     (constraining to an owned containing type made exactly that spelling a false positive).
             /// </summary>
             private static bool IsDisposeCall(IMethodSymbol m)
-                => m != null && m.Name == "Dispose" && m.Parameters.Length == 0;
+                => m != null && m.Parameters.Length == 0 &&
+                   (m.Name == "Dispose" || m.Name == "DisposeAsync" || m.Name == "Close" || m.Name == "close");
 
             private string EnclosingSuggestion(IMethodSymbol method)
             {

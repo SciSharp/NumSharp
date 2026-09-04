@@ -735,6 +735,7 @@ namespace NumSharp
 
             IEnumerator IEnumerable.GetEnumerator() => new Enumerator(this);
 
+            [NDBorrowed] // the foreach wrapper shares the owning iterator's live cursor; it owns nothing
             private sealed class Enumerator : IEnumerator<NDArray[]>
             {
                 private readonly NDIterator _owner;
@@ -753,8 +754,12 @@ namespace NumSharp
                 public void Dispose() { }
             }
 
-            /// <summary>The values published by the most recent <see cref="MoveNext"/>.</summary>
-            public NDArray[] Current { get; private set; }
+            /// <summary>
+            ///     The values published by the most recent <see cref="MoveNext"/>. Borrowed: the
+            ///     per-step views are handed to the consumer, who owns them (NumPy's <c>[x.copy() for
+            ///     x in it]</c> idiom is the one that keeps them).
+            /// </summary>
+            [NDBorrowed] public NDArray[] Current { get; private set; }
 
             /// <summary>
             ///     Publishes the values at the current position and THEN advances — the exact

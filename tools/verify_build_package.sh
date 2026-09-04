@@ -42,7 +42,9 @@
 #      (temps reclaimed at completion, results and yielded elements survive, in-flight operands
 #      protected by deferral)
 #  16  the LEAK analyzer (NDW012): a NON-scoped method that drops an NDArray it never returns/disposes
-#      draws a build WARNING; a [NDScoped] method with the same body does NOT
+#      draws a build WARNING; a [NDScoped] method with the same body does NOT; 16b the OWNERSHIP
+#      analyzer (NDW016/NDW017): a type that stores an NDArray without IDisposable, and a disposable
+#      that never disposes its member, each draw a build WARNING; [NDBorrowed] silences both
 #  17  the WEAVER-MISSING guard (NDW013, shipped in NumSharp itself): a consumer that uses [NDScoped]
 #      but does NOT install NumSharp.Build draws a build WARNING; installing the weaver silences it
 #  18  the analyzer rides the NumSharp package ALONE: a consumer that references NumSharp but NOT
@@ -748,6 +750,29 @@ EOF
 LKN=$(grep -oE "Program\.cs\([0-9]+,[0-9]+\): warning NDW012" "$LK/build.log" | sort -u | wc -l)
 [ "$LKN" -eq 1 ] || { grep -i ndw012 "$LK/build.log" | head; fail "16: expected exactly one NDW012 site (the non-scoped leak), saw $LKN"; }
 echo "16: NDW012 warns on the dropped NDArray and exempts the [NDScoped] method"
+
+# 16b — the type-level ownership pass rides the same analyzer: a type that STORES an NDArray without
+# being disposable draws NDW016, a disposable that never disposes its holder draws NDW017, and a
+# [NDBorrowed] member/type draws neither.
+OW="$WORK/ownership"
+scaffold_pkgref "$OW" ""
+cat > "$OW/Program.cs" <<'EOF'
+using NumSharp;
+internal sealed class Stores { private NDArray _a; public Stores(NDArray a) { _a = a; } }                       // NDW016
+internal sealed class Forgets : System.IDisposable { private NDArray _a; public void Dispose() { } }              // NDW017
+internal sealed class Owns : System.IDisposable { private NDArray _a; public void Dispose() => _a?.Dispose(); }   // clean
+[NDBorrowed] internal sealed class Borrows { private NDArray _a; public Borrows(NDArray a) { _a = a; } }          // clean
+internal sealed class BorrowsOne { [NDBorrowed] private NDArray _a; public BorrowsOne(NDArray a) { _a = a; } }   // clean
+internal static class Program { private static int Main() => 0; }
+EOF
+(cd "$OW" && dotnet build -c Release -v n > build.log 2>&1) || { tail -30 "$OW/build.log"; fail "ownership-analyzer consumer build failed"; }
+OW16=$(grep -oE "Program\.cs\([0-9]+,[0-9]+\): warning NDW016" "$OW/build.log" | sort -u | wc -l)
+OW17=$(grep -oE "Program\.cs\([0-9]+,[0-9]+\): warning NDW017" "$OW/build.log" | sort -u | wc -l)
+[ "$OW16" -eq 1 ] || { grep -i ndw016 "$OW/build.log" | head; fail "16b: expected exactly one NDW016 site (the non-disposable holder), saw $OW16"; }
+[ "$OW17" -eq 1 ] || { grep -i ndw017 "$OW/build.log" | head; fail "16b: expected exactly one NDW017 site (the forgetful disposable), saw $OW17"; }
+grep -q "Program.cs(2," "$OW/build.log" || fail "16b: NDW016 did not land on the storing type"
+grep -q "Program.cs(3," "$OW/build.log" || fail "16b: NDW017 did not land on the forgotten member"
+echo "16b: NDW016/NDW017 warn on the storing type and the forgotten member; the disposing and [NDBorrowed] types are clean"
 
 step "17/18 weaver-missing guard (NDW013): [NDScoped] without the weaver warns; installing it silences"
 # NDW013 ships in the NumSharp package's build/NumSharp.targets, so a consumer that references NumSharp

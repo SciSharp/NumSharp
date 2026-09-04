@@ -319,3 +319,35 @@ actually yielded, so a gate-clean `[NDScoped]` method could hand back DISPOSED a
   branch — a possibly-aliasing branch makes reclaiming unsafe, mirroring CF-3). Do not "simplify" the
   two to one rule: any-element on conditionals flags mixed ternaries (R2 false positives), and
   every-element on tuples goes silent on `(temp, alias)` drops (real leaks — `np.setops` had one).
+
+---
+
+## 11. The ownership pass — NDW016 / NDW017 and contagion (LANDED 2026-09-04)
+
+`NDArrayHolderAnalyzer` (+ the shared `OwnershipModel`) closes the hand-off NDW012's "store" escape
+opens: a TYPE that stores NDArrays must be disposable (NDW016) and must dispose every holder on its
+Dispose path (NDW017); an NDArray-owning disposable is itself an owned value for NDW012 (contagion),
+and a `foreach` over a produced NDArray / owning disposable leaks it. Opt-out: `[NDBorrowed]` on a
+member or a type. Full semantics: `docs/LEAK_ANALYZER.md` §10.
+
+| family | fixture / test | what it pins |
+|---|---|---|
+| holder vocabulary (warn) | `HolderTypeScenarios.cs` (25+ tagged types) | field, auto/init property, positional record, arrays (any rank), List/Dictionary/nested generic, tuple, carrier field, Lazy/Task, NDArray<T>, `T : NDArray`, consumer `Box<NDArray>`, struct, ref struct, abstract, many-members message, contagious disposable member + list of them, non-disposable holder member, `np.NDIterator`, `NpzFile`, cyclic pair with an array |
+| exemptions (clean) | same file | static-only, static+scalar, computed property, `[NDBorrowed]` member/type, delegates, comparers, weak refs, observers/progress, unconstrained generic, object/IDisposable, carrier struct, disposing IDisposable/IAsyncDisposable, ref-struct Dispose pattern, `[NDBorrowed]` disposable + its holder, NumSharp's `FlatIterator` (metadata attribute), scalars-only, derived-adds-nothing, self-reference, cycle without arrays, interface/enum/delegate, generic definition |
+| dispose paths (warn) | `DisposePathScenarios.cs` (14 tagged members) | forgets one of two, `= null`, `Clear()`, foreach-read-only, Reset-only, unreachable helper, finalizer-only, `Log(_a.ToString())`, inherited Dispose without override, contagious member forgotten, non-disposable inner (hint), auto-property, `DisposeAsync` forgets, tuple sibling, struct |
+| dispose spellings (clean) | same file (40+ types) | direct/conditional/this/cast/as-cast/guarded/try-finally, Dispose(bool) pattern, explicit interface, helper / helper chain / static-helper arg / external-helper arg / property setter / delegate / local function, local copy, `Interlocked.Exchange`, `using` statement/declaration, override of base Dispose(bool), array foreach/for/`Array.ForEach`, list foreach/`ForEach`/indexer/`Parallel.ForEach`, dictionary values/pairs/deconstructed/LINQ, nested foreach, tuple components/deconstruction, `Lazy.Value`, carrier field, auto-property, contagious member + list, `close()`, async + `DisposeAsyncCore` pattern, struct, ref struct, record, partial across parts, `[NDBorrowed]` sibling, nested type |
+| contagion (NDW012) | `ContagionScenarios.cs` (9 tagged) | dropped/dead/factory/discarded holder instance, holder array literal, `np.nditer` dropped / walked by foreach, produced NDArray walked by foreach, temp handed to `np.nditer`; clean: using/dispose/return/store/sink/using-statement/`close()`/using-then-foreach, `[NDBorrowed]` disposable, non-disposable wrapper, NDArray[] foreach, alias foreach, `[NDScoped]` twin |
+| metamorphic | `OwnershipMetamorphicTests` (19 pairs) | IDisposable turns 016→017, dispose call →clean, IAsyncDisposable, `[NDBorrowed]` member/type, static, computed, carrier, ref-struct pattern, chain resolving one level at a time, contagion stopping at `[NDBorrowed]`, `using` a dropped holder, holder non-disposable moves the verdict to the type, `close()`, foreach-over-produced until `using`, helper reachability, override of inherited Dispose, foreach-dispose of a collection |
+| property fuzz | `OwnershipPropertyFuzzTests` (120 seeded types) | NDW016 == non-disposable holder types, NDW017 == undisposed holders, NDW012 == 0, over a 14-template grammar × 3 Dispose shapes |
+| robustness | `OwnershipRobustnessTests` (19) | cycles ± arrays, self-reference, 25-deep chain, disposing chain, generic definition vs `Box<NDArray>`/`Box<int>`, alias, nullable, nested, partial, 300 members, 200 types, static/interface/enum/delegate, no-NumSharp no-op, malformed, unresolved member type, arrays of holders, `Cell<NDArray>`, other-instance helper |
+| contract | `AnalyzerContractTests` | NDW016/NDW017 are Warnings, enabled, anchored help links; the three analyzers own disjoint ids |
+
+**Guardrails added by this pass:**
+- **The hand-off rule is type-gated.** An argument counts as a hand-off of a holder only when the
+  argument's OWN type holds NDArrays and it is not a call result — `Log(x.size)` on a loop element and
+  `Log(_a.ToString())` are not disposals. Dropping the gate silently cleared `ForeachWithoutDispose`.
+- **Only root `HoldsNDArrays` answers are memoized when a cycle cut them.** A nested answer computed
+  while its type was on the visiting stack may be inexact; memoizing it turned a real holder clean.
+- **Metadata types are consulted, never reported**, and only from assemblies that can name NDArray.
+- **`INDArrayCarrier` types are exempt from NDW016/NDW017 on purpose** — they are the transient result
+  vocabulary the scope yields through; demanding IDisposable there contradicts the carrier contract.

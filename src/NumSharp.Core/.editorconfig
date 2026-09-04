@@ -1,6 +1,7 @@
 # NumSharp.Core-only analyzer configuration (nested; the repo-root .editorconfig still applies).
 #
-# The NumSharp.Build.Analyzer runs on Core's own compile to surface NDArray leaks (NDW012). The
+# The NumSharp.Build.Analyzer runs on Core's own compile to surface NDArray leaks (NDW012) and
+# NDArray-ownership gaps in types (NDW016/NDW017). The
 # same assembly also carries the [NDScoped]-TARGET gate (NDW002/003/005/006/009/010/011), but on
 # Core those are redundant with the self-weave — the NDScopeWeave target validates every [NDScoped]
 # method post-compile and already fails the build on a bad target — and they have never been run
@@ -15,5 +16,9 @@ dotnet_diagnostic.NDW009.severity = none
 dotnet_diagnostic.NDW010.severity = none
 dotnet_diagnostic.NDW011.severity = none
 
-# The leak analyzer — kept explicit so its intent (and how to tune it) is discoverable here.
+# The ownership analyzers — kept explicit so their intent (and how to tune them) is discoverable here:
+# NDW012 (a method strands an NDArray it created), NDW016 (a type stores NDArrays but is not
+# disposable), NDW017 (a disposable type never disposes an NDArray-holding member).
 dotnet_diagnostic.NDW012.severity = warning
+dotnet_diagnostic.NDW016.severity = warning
+dotnet_diagnostic.NDW017.severity = warning

@@ -71,24 +71,27 @@
   </ItemGroup>
 
   <!-- ==================================================================================
-       Compile-time leak analyzer (NDW012) for NumSharp.Core's OWN build — AND the analyzer
-       the NumSharp PACKAGE ships to its consumers.
+       Compile-time ownership analyzers (NDW012 + NDW016/NDW017) for NumSharp.Core's OWN build — AND
+       the analyzer the NumSharp PACKAGE ships to its consumers.
 
        The NumSharp.Build.Analyzer flags an NDArray a method creates but never returns, out/ref's,
-       stores, disposes, or yields to an NDScope — a transient left to the finalizer. Referencing it
-       with OutputItemType="Analyzer" (ReferenceOutputAssembly=false, so netstandard2.0 is never a
-       runtime ref) runs it during Core's compile, so `dotnet build` on NumSharp captures leaks in
-       np.* code, not just in downstream consumers.
+       stores, disposes, or yields to an NDScope — a transient left to the finalizer (NDW012) — and,
+       at the TYPE level, a class/struct that stores NDArrays without being disposable (NDW016) or
+       without disposing them on its Dispose path (NDW017); ownership is contagious, opt-out is
+       [NDBorrowed]. Referencing it with OutputItemType="Analyzer" (ReferenceOutputAssembly=false, so
+       netstandard2.0 is never a runtime ref) runs it during Core's compile, so `dotnet build` on
+       NumSharp captures leaks in np.* code, not just in downstream consumers.
 
        The analyzer ALSO carries the [NDScoped]-target gate (NDW002/003/005/006/009/010/011), but on
        Core those are REDUNDANT with the self-weave (which validates every [NDScoped] method
        post-compile) and have never run over Core's full attributed surface — so they are turned off
-       for Core's own build in src/NumSharp.Core/.editorconfig, leaving only the NDW012 leak warning.
+       for Core's own build in src/NumSharp.Core/.editorconfig, leaving the NDW012/NDW016/NDW017
+       ownership warnings.
 
        SHIPPING: the analyzer DLL is ALSO packed into THIS package's analyzers/dotnet/cs/ (see
        _NumSharpCorePackAnalyzer below), so every PackageReference consumer of NumSharp gets the
-       NDW diagnostics — the [NDScoped]-target gate as compile ERRORS and the NDW012 leak nudge —
-       WITHOUT installing anything else. The NumSharp.Build package is weaver-ONLY (tool + targets,
+       NDW diagnostics — the [NDScoped]-target gate as compile ERRORS and the NDW012/NDW016/NDW017
+       ownership nudges — WITHOUT installing anything else. The NumSharp.Build package is weaver-ONLY (tool + targets,
        no analyzers/): its job is the post-compile weave, and shipping the analyzer here instead of
        there means the two packages installed together never double-apply it. The attributes and the
        analyzer both living in/with NumSharp keeps them version-locked to the surface they validate.
@@ -99,10 +102,10 @@
        ================================================================================== -->
   <PropertyGroup>
     <EnableNDArrayLeakAnalyzer Condition="'$(EnableNDArrayLeakAnalyzer)' == ''">true</EnableNDArrayLeakAnalyzer>
-    <!-- NDW012 is a non-breaking NUDGE, never a build-breaker. Keep it a WARNING even if this build
-         ever turns on TreatWarningsAsErrors, so a detected leak (Core has hundreds, mostly ambient-
-         scope-covered helpers) can never fail Core's own build. -->
-    <WarningsNotAsErrors Condition="'$(EnableNDArrayLeakAnalyzer)' == 'true'">$(WarningsNotAsErrors);NDW012</WarningsNotAsErrors>
+    <!-- NDW012/NDW016/NDW017 are non-breaking NUDGES, never build-breakers. Keep them WARNINGS even
+         if this build ever turns on TreatWarningsAsErrors, so a detected leak or ownership gap can
+         never fail Core's own build. -->
+    <WarningsNotAsErrors Condition="'$(EnableNDArrayLeakAnalyzer)' == 'true'">$(WarningsNotAsErrors);NDW012;NDW016;NDW017</WarningsNotAsErrors>
   </PropertyGroup>
   <ItemGroup Condition="'$(EnableNDArrayLeakAnalyzer)' == 'true'">
     <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />

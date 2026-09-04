@@ -41,6 +41,7 @@ namespace NumSharp
         internal enum IndexKind : byte { Ellipsis, NewAxis, Slice, Integer, Fancy, Bool, ZeroDBool }
 
         /// <summary>One classified index item produced by <see cref="PrepareIndex"/>.</summary>
+        [NDBorrowed] // an index array the caller passed in (or an ambient-scoped temp), never owned here
         internal readonly struct IndexOp
         {
             public readonly IndexKind Kind;
@@ -66,6 +67,7 @@ namespace NumSharp
         }
 
         /// <summary>Result of <see cref="PrepareIndex"/>: the classified op list + NumPy <c>index_type</c> + dims.</summary>
+        [NDBorrowed] // holds IndexOps, which reference the caller's index arrays
         internal readonly struct PreparedIndex
         {
             public readonly IndexOp[] Ops;

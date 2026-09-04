@@ -468,6 +468,7 @@ namespace NumSharp
             }
 
             /// <summary>One entry of the index expression, kept unmaterialized until the dtype is known.</summary>
+            [NDBorrowed] // an entry references the caller's array until the concatenation reads it
             private readonly struct Operand
             {
                 private readonly NDArray _array;

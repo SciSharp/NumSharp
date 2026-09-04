@@ -16,8 +16,9 @@ using NumSharp.Build.Analyzer;
 namespace NumSharp.Tests.Build.Analyzer
 {
     /// <summary>
-    ///     Compiles a piece of C# in-process, runs BOTH NumSharp analyzers over it, and exposes the
-    ///     resulting NDW diagnostics — the engine every analyzer test drives. References are the
+    ///     Compiles a piece of C# in-process, runs all three NumSharp analyzers over it (the NDW012
+    ///     leak pass, the [NDScoped]-target gate, and the NDW016/NDW017 ownership pass), and exposes
+    ///     the resulting NDW diagnostics — the engine every analyzer test drives. References are the
     ///     running framework's trusted-platform set plus NumSharp itself (so <c>NDArray</c>/<c>NDScope</c>/
     ///     <c>np</c> resolve exactly as they do in a real build).
     /// </summary>
@@ -63,7 +64,7 @@ namespace NumSharp.Tests.Build.Analyzer
                 .Where(d => d.Severity == DiagnosticSeverity.Error)
                 .ToImmutableArray();
             var analyzers = ImmutableArray.Create<DiagnosticAnalyzer>(
-                new NDArrayLeakAnalyzer(), new NDScopedTargetAnalyzer());
+                new NDArrayLeakAnalyzer(), new NDScopedTargetAnalyzer(), new NDArrayHolderAnalyzer());
             var all = await comp.WithAnalyzers(analyzers).GetAnalyzerDiagnosticsAsync();
             var ndw = all.Where(d => d.Id.StartsWith("NDW", StringComparison.Ordinal)).ToImmutableArray();
             return new AnalyzerResult(ndw, compileErrors);
@@ -94,7 +95,7 @@ namespace NumSharp.Tests.Build.Analyzer
                 .ToImmutableArray();
 
             var analyzers = ImmutableArray.Create<DiagnosticAnalyzer>(
-                new NDArrayLeakAnalyzer(), new NDScopedTargetAnalyzer());
+                new NDArrayLeakAnalyzer(), new NDScopedTargetAnalyzer(), new NDArrayHolderAnalyzer());
             var all = await comp.WithAnalyzers(analyzers).GetAnalyzerDiagnosticsAsync();
             var ndw = all.Where(d => d.Id.StartsWith("NDW", StringComparison.Ordinal))
                          .OrderBy(LineOf).ThenBy(d => d.Id, StringComparer.Ordinal)

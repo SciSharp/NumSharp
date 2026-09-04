@@ -115,7 +115,9 @@ namespace NumSharp.Tests.Build.Analyzer.Fixtures
         // ---------------- store escapes: property / element / indexer / ctor (§ user-requested) ----
 
         private static NDArray StaticProp { get; set; }
-        public sealed class Holder
+        // The store target: a type that STORES NDArrays without being disposable — the ownership
+        // the NDW012 escape hands it is exactly what NDW016 then demands it honour.
+        public sealed class Holder                                   // [NDW016]  stores Prop/Field, not disposable
         {
             public NDArray Prop { get; set; }
             public NDArray Field;

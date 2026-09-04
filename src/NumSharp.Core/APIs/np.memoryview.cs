@@ -50,6 +50,7 @@ namespace NumSharp
         ///     </para>
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.data.html</remarks>
+        [NDBorrowed] // a window onto the caller's array (NumPy's memoryview): it never owns the buffer it exposes
         public sealed unsafe class MemoryView
         {
             private readonly NDArray _arr;

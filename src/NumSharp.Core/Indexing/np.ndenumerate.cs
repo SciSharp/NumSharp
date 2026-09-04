@@ -55,6 +55,7 @@ namespace NumSharp
         ///     what <c>flatiter.coords</c> is. Indices are <c>long</c> (NumPy's <c>intp</c>), and
         ///     each step yields a FRESH index array, never a recycled buffer.
         /// </remarks>
+        [NDBorrowed] // a cursor over the caller's array; owns no NDArray and no unmanaged state
         public class NDEnumerate : IEnumerable<(long[] index, object value)>, IEnumerator<(long[] index, object value)>
         {
             private readonly NDArray _arr;
@@ -102,6 +103,7 @@ namespace NumSharp
         ///     Typed <see cref="NDEnumerate"/> — identical traversal, but reads elements as
         ///     <typeparamref name="T"/> without boxing. See <see cref="ndenumerate{T}(NDArray)"/>.
         /// </summary>
+        [NDBorrowed] // a cursor over the caller's array; owns no NDArray and no unmanaged state
         public class NDEnumerate<T> : IEnumerable<(long[] index, T value)>, IEnumerator<(long[] index, T value)>
             where T : unmanaged
         {

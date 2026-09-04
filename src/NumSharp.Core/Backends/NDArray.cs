@@ -63,7 +63,8 @@ namespace NumSharp
         // array (null when untracked or yielded to the caller). Written by NDScope.Track /
         // Returns / Detach on the constructing thread only; makes Returns O(1) and makes
         // yielding an untracked array (an input passthrough, a caller's @out) a provable no-op.
-        internal NDScope TrackingScope;
+        // Borrowed: the scope owns (tracks) this array, not the other way round.
+        [NDBorrowed] internal NDScope TrackingScope;
         internal int TrackingIndex;
 
         /// <summary>
@@ -1686,6 +1687,7 @@ namespace NumSharp
 
         #endregion
 
+        [NDBorrowed] // the debugger's view of an array it does not own
         private class NDArrayDebuggerProxy
         {
             private readonly NDArray NDArray;

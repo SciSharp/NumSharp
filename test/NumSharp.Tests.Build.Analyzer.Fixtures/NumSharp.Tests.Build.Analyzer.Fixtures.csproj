@@ -10,10 +10,11 @@
            diagnostics land on exactly the tagged lines (the authoritative gate — it applies no
            editorconfig, so it sees the gate ERRORS too).
          • Building THIS project on demand (`dotnet build NumSharp.Tests.Build.Analyzer.Fixtures.csproj`)
-           genuinely emits the NDW012 leak WARNINGS — "files that on purpose produce warnings" —
-           because it applies the leak analyzer. The gate diagnostics (NDW002/003/005/006/009/010/
-           011) are ERRORS, so this project's own `.editorconfig` turns them to `none` HERE so the
-           build stays green; the test still asserts them in-process.
+           genuinely emits the NDW012 leak WARNINGS and the NDW016/NDW017 ownership WARNINGS —
+           "files that on purpose produce warnings" — because it applies the analyzers. The gate
+           diagnostics (NDW002/003/005/006/009/010/011) are ERRORS, so this project's own
+           `.editorconfig` turns them to `none` HERE so the build stays green; the test still asserts
+           them in-process.
 
        It is deliberately NOT in SciSharp.NumSharp.sln (so a solution build is not spammed with the
        intentional warnings) and not packable. The test copies these .cs files via a glob — it does
@@ -35,7 +36,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
-    <!-- Apply the leak analyzer so a manual build of this project really does surface NDW012. -->
+    <!-- Apply the analyzers so a manual build of this project really does surface NDW012/NDW016/NDW017. -->
     <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
 

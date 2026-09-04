@@ -34,6 +34,7 @@ namespace NumSharp
     ///     NumSharp array can be.
     ///     </para>
     /// </summary>
+    [NDBorrowed] // reads and sets flags on the array that created it; never owns it
     public sealed class NDArrayFlags : IEquatable<NDArrayFlags>
     {
         // NumPy persistent flag bit values (ndarraytypes.h), shared with NumSharp's ArrayFlags enum.

@@ -401,6 +401,87 @@ choice that keeps those chains from flooding with false positives. Tune it per p
 `.editorconfig` (`dotnet_diagnostic.NDW012.severity = none|suggestion|warning|error`); on NumSharp.Core
 turn it off entirely with `-p:EnableNDArrayLeakAnalyzer=false`.
 
+**Ownership is contagious.** An instance of a *disposable type that stores NDArrays* — your own
+holder class, NumSharp's `np.nditer` iterator, an `NpzFile` — is an owned value exactly like a bare
+NDArray: constructing one (or getting one from a factory) and dropping it is NDW012, `using` /
+`.Dispose()` / `.Close()` (NumSharp's `close()` too) reclaims it, and returning / storing / handing it
+off escapes it. A `foreach` over a produced NDArray or such an instance is also flagged: C# disposes the
+*enumerator* it obtains, never the enumerable, so `foreach (var x in np.nditer(a))` leaves the iterator
+open — hold it in a `using` first.
+
+<a id="ndw016"></a>
+
+### NDW016 — a type stores NDArrays but is not disposable
+
+NDW012 treats a value **stored into a field or property** as a legitimate escape: the storing type owns
+it now. NDW016 closes that hand-off. A class or struct that declares instance fields or auto-properties
+holding NDArrays — an `NDArray` (or subclass), an `NDArray[]` of any rank, a tuple or collection of
+them (`List<NDArray>`, `Dictionary<K, NDArray>`, `(NDArray, int)`), any generic instantiated over one
+(`Lazy<NDArray>`, `Task<NDArray>`, your own `Box<NDArray>`), an `INDArrayCarrier` result struct, or
+**another type that stores them** — and implements neither `IDisposable` nor `IAsyncDisposable` can
+never reclaim those buffers promptly:
+
+```csharp
+public class Model                          // ⚠ NDW016: 'Model' stores NDArrays in '_weights' and 'Cache' …
+{
+    private NDArray _weights;
+    public List<NDArray> Cache { get; set; }
+}
+```
+
+The fix is the one the message names: implement `IDisposable` (or `IAsyncDisposable`) and dispose the
+members there (NDW017 then checks that you actually do), give a transient result struct
+`INDArrayCarrier` so a scope can yield through it, give a `ref struct` the `public void Dispose()`
+pattern — or, when a member only *references* an array owned elsewhere (a view over a caller's
+array, a shared lookup table, an operand an iterator walks), mark it **`[NDBorrowed]`**. The attribute
+goes on a field, a property, or a whole class/struct ("every array this type references is
+borrowed"); it is runtime-inert and analyzer-only, like `[NDScopedCovered]`. Static members, computed
+properties (`NDArray View => _a.T`), delegates, comparers, observers and weak references never make a
+type an owner; a static class, an interface, an `[NDBorrowed]` type and an `INDArrayCarrier` are exempt.
+
+**Contagion.** Because a member whose type stores NDArrays is itself a holder, the diagnostic walks
+up the object graph one level per fix: a class storing a `Batch` (which owns arrays) warns until it
+disposes the batch; a class storing *that* class warns until it disposes it, and so on. A type that
+stores NDArrays but is **not yet disposable** still counts as a holder — its owner's message tells you
+to make it disposable first. Marking a disposable type `[NDBorrowed]` (it owns unmanaged state of its
+own but only borrows its arrays) stops the contagion at that type.
+
+<a id="ndw017"></a>
+
+### NDW017 — a disposable type never disposes an NDArray-holding member
+
+The type *is* disposable, but this member is not disposed on any path reachable from its
+`Dispose()` / `Dispose(bool)` / `DisposeAsync()` / `DisposeAsyncCore()`:
+
+```csharp
+public class Model : IDisposable
+{
+    private NDArray _weights;
+    private List<NDArray> _cache;           // ⚠ NDW017: 'Model' implements IDisposable but never disposes '_cache' …
+    public void Dispose() => _weights?.Dispose();
+}
+```
+
+The path analysis follows same-type helpers the Dispose methods call (`Release()`, a chain of them, a
+property setter, a delegate over a method, a local function) and recognises every ordinary spelling
+of disposal: `_a.Dispose()`, `_a?.Dispose()`, `((IDisposable)_a).Dispose()`, `(_a as IDisposable)?.Dispose()`,
+`using (_a)` / `using var x = _a`, `Interlocked.Exchange(ref _a, null)?.Dispose()`, a local copy
+disposed later, `foreach` / `for` / `Array.ForEach` / `List.ForEach` / `Parallel.ForEach` over an array,
+list or dictionary member (values, pairs, deconstructed pairs, nested collections), tuple components
+(`_pair.a?.Dispose()`, `var (a, b) = _pair;`), carrier fields, `Lazy<T>.Value`, NumSharp's `close()`,
+and handing the member (or a component of it) to **any** method (`Free(_list)`, `DisposeAll(_map.Values)`)
+— the callee is assumed to dispose it. What does **not** count: `_a = null`, `_list.Clear()`, a
+finalizer (the backstop prompt disposal exists to avoid), a helper that nothing on the Dispose path
+calls, and an argument merely *computed from* the member (`Log(_a.ToString())`, `Print(x.size)`).
+A type whose `Dispose` is inherited from a base and never overridden is told so — override
+`Dispose(bool)` or reimplement `IDisposable`; a member whose type stores arrays but is not itself
+disposable is told to make that type disposable first. `[NDBorrowed]` excludes a member here too.
+
+Both are **warnings** (never errors), enabled by default, tunable per project in `.editorconfig`
+(`dotnet_diagnostic.NDW016.severity` / `dotnet_diagnostic.NDW017.severity`); NumSharp.Core runs them on
+its own build and carries `[NDBorrowed]` on its own borrowing types (`FlatIterator`, `MemoryView`,
+`NDEnumerate`, the typed `nditer` enumerables, an iterator's operand slots, `NpzFile`'s hand-out cache).
+
 <a id="ndw013"></a>
 
 ### NDW013 — [NDScoped] used, but the weaver is not installed
@@ -437,7 +518,8 @@ flags the SOURCE-detectable mistakes at **compile time** — in the editor, with
 a build error that runs before (and preempts) the weave — and the **IL weaver** (this package) reports
 the rest post-compile.
 The analyzer covers **NDW002, NDW003, NDW005, NDW006, NDW009, NDW010, NDW011, NDW015** (the
-`[NDScoped]`-target gate) plus **NDW012** (the [leak warning](#ndw012), a separate always-on analyzer);
+`[NDScoped]`-target gate) plus **NDW012** (the [leak warning](#ndw012), a separate always-on analyzer)
+and **NDW016 / NDW017** (the [type-level ownership warnings](#ndw016), a third always-on analyzer);
 the weaver covers the IL-only **NDW001, NDW004, NDW007, NDW008, NDW014** (a resolution failure, an
 unrecognized state machine, a tail-call, a NumSharp too old for the async seam, or a bad
 `[NDScopedExit]` parameter). **NDW013** also ships in NumSharp itself
@@ -472,6 +554,8 @@ Same code, same fix, whichever layer fires.
 | [`NDW013`](#ndw013) | `[NDScoped]`/`[NDScopedAsync]` used but the `NumSharp.Build` package is not installed (or `-p:SkipNDScopeWeave=true`) — the attributes are inert and the temporaries leak | install `NumSharp.Build`, or remove the attributes and dispose by hand; suppress with `-p:NumSharpDisableWeaverMissingWarning=true` |
 | `NDW014` | `[NDScopedExit]` on an unsupported parameter type (a `ref`/`out`/`in`, a scalar, a bare buffer, an `INDArrayCarrier` struct, or a tuple with an ND-carrying component `Detach` cannot see through) | hand-detach with `NDScope.Detach` |
 | `NDW015` | an `out` parameter whose NDArray-carrying shape the out-escape cannot yield (`out List<NDArray>`, `out Task<NDArray>`, `out NDArray[,]`, `out T` with `T : NDArray`) | [hand-scope](#hand-scoping) and yield the final value explicitly |
+| [`NDW016`](#ndw016) | a class/struct stores NDArrays (a field or auto-property holding an NDArray, an array/tuple/collection/generic of them, a carrier struct, or another NDArray-owning type — ownership is contagious) but implements neither `IDisposable` nor `IAsyncDisposable` | implement `IDisposable`/`IAsyncDisposable` and dispose the members, make a transient result struct an `INDArrayCarrier`, give a `ref struct` a `Dispose()`, or mark a member / the type `[NDBorrowed]` when the arrays are owned elsewhere |
+| [`NDW017`](#ndw017) | a disposable type never disposes an NDArray-holding member on any path from its `Dispose`/`Dispose(bool)`/`DisposeAsync`/`DisposeAsyncCore` | dispose it there (directly, in a helper the path calls, in a `foreach`/`ForEach` over a collection, by handing it to a method), override an inherited `Dispose(bool)`, or mark it `[NDBorrowed]` |
 
 **An `[NDScoped]` method still allocates cold buffers in a loop.** Check the coverage gate — a method
 that carries the attribute but no `NDScope` local was not woven (a `-p:SkipNDScopeWeave=true` build,

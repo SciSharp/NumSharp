@@ -111,6 +111,7 @@ namespace NumSharp
         ///     </para>
         /// </summary>
         /// <typeparam name="T">The array's exact element type.</typeparam>
+        [NDBorrowed] // an enumerable over the caller's operand; each GetEnumerator builds (and foreach disposes) its own NDIterRef
         public readonly struct NDRefIter<T> where T : unmanaged
         {
             private readonly NDArray _op;
@@ -220,6 +221,7 @@ namespace NumSharp
         ///     </para>
         /// </summary>
         /// <typeparam name="T">The array's exact element type.</typeparam>
+        [NDBorrowed] // an enumerable over the caller's operand; each GetEnumerator builds (and foreach disposes) its own NDIterRef
         public readonly struct NDChunkIter<T> where T : unmanaged
         {
             private readonly NDArray _op;

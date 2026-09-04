@@ -14,6 +14,8 @@ namespace NumSharp.Build.Analyzer
         public INamedTypeSymbol SyncAttr;
         public INamedTypeSymbol AsyncAttr;
         public INamedTypeSymbol CoveredAttr;
+        /// <summary><c>[NDBorrowed]</c> — the ownership opt-out the holder analyzer honours (null against a NumSharp that predates it).</summary>
+        public INamedTypeSymbol BorrowedAttr;
         public INamedTypeSymbol NDArray;
         public INamedTypeSymbol NDScope;
         public INamedTypeSymbol INDArrayCarrier;
@@ -22,6 +24,9 @@ namespace NumSharp.Build.Analyzer
 
         /// <summary>The assembly NDArray lives in (NumSharp) — the leak analyzer's test for a NumSharp op that never disposes its NDArray inputs.</summary>
         public IAssemblySymbol NumSharpAssembly => NDArray?.ContainingAssembly;
+
+        public INamedTypeSymbol IDisposable;
+        public INamedTypeSymbol IAsyncDisposable;
 
         public INamedTypeSymbol Task;
         public INamedTypeSymbol TaskOfT;
@@ -52,11 +57,15 @@ namespace NumSharp.Build.Analyzer
                 SyncAttr = sync,
                 AsyncAttr = asyncAttr,
                 CoveredAttr = c.GetTypeByMetadataName("NumSharp.NDScopedCoveredAttribute"),
+                BorrowedAttr = c.GetTypeByMetadataName("NumSharp.NDBorrowedAttribute"),
                 NDArray = ndArray,
                 NDScope = c.GetTypeByMetadataName("NumSharp.NDScope"),
                 INDArrayCarrier = c.GetTypeByMetadataName("NumSharp.INDArrayCarrier"),
                 IArraySlice = c.GetTypeByMetadataName("NumSharp.Backends.Unmanaged.IArraySlice"),
                 UnmanagedStorage = c.GetTypeByMetadataName("NumSharp.Backends.UnmanagedStorage"),
+
+                IDisposable = c.GetTypeByMetadataName("System.IDisposable"),
+                IAsyncDisposable = c.GetTypeByMetadataName("System.IAsyncDisposable"),
 
                 Task = c.GetTypeByMetadataName("System.Threading.Tasks.Task"),
                 TaskOfT = c.GetTypeByMetadataName("System.Threading.Tasks.Task`1"),
