@@ -534,9 +534,9 @@ namespace NumSharp.Tests.NewDtypes
             // np.square(z) == z*z with FMA-contracted multiply. NDComplexMath.Square uses the x86
             // vfmaddsub intrinsic (Fma.IsSupported) so fma(re,re,-(im*im)) keeps -2.275e-37; on a host
             // WITHOUT x86 FMA (e.g. AArch64) it takes the non-fused fallback where re*re and im*im each
-            // round to the same 1e-20 and cancel exactly to 0. Gate the FMA-specific residual to the
+            // round to the same 1e-20 and cancel exactly to 0. Gate the FMA-specific results to the
             // x86 reference (the numpy 2.4.2 win-amd64 wheel this is byte-pinned to), matching the
-            // kernel's own dispatch; the imaginary part and interior/overflow hold on every host.
+            // kernel's own dispatch; the imaginary parts and the finite interior hold on every host.
             var s = np.square(np.array(new Complex[] { new(1e-10, 1e-10) })).GetAtIndex<Complex>(0);
             if (System.Runtime.Intrinsics.X86.Fma.IsSupported)
             {
@@ -549,10 +549,16 @@ namespace NumSharp.Tests.NewDtypes
             }
             s.Imaginary.Should().BeApproximately(2.0000000000000002e-20, 1e-35);
 
-            // Interior unaffected, and the overflow gives -inf (not NaN from inf-inf).
+            // Finite interior is unaffected (no cancellation/overflow), so it holds on every host.
             AssertComplex(np.square(np.array(new Complex[] { new(2.0, 3.0) })).GetAtIndex<Complex>(0), -5.0, 12.0, 1e-13);
+            // Overflow is ALSO FMA-specific: re*re and im*im each overflow to +inf. x86 fma(re,re,-(im*im))
+            // evaluates re*re at full width (~1e600) before subtracting im*im, giving -inf; the non-fused
+            // fallback (arm64) computes (+inf) - (+inf) = NaN. imag = 2*(re*im) = +inf on every host.
             var big = np.square(np.array(new Complex[] { new(1e300, 1e300) })).GetAtIndex<Complex>(0);
-            big.Real.Should().Be(double.NegativeInfinity);
+            if (System.Runtime.Intrinsics.X86.Fma.IsSupported)
+                big.Real.Should().Be(double.NegativeInfinity, "fma sees the full-width re*re before the -inf");
+            else
+                double.IsNaN(big.Real).Should().BeTrue("no x86 FMA: (+inf) - (+inf) = NaN");
             big.Imaginary.Should().Be(double.PositiveInfinity);
         }
 
