@@ -88,15 +88,19 @@ namespace NumSharp.Utilities
         private const double SUMSQ_SQRT_MIN = 1.4916681462400413e-154;  // sqrt(DBL_MIN): _sum_squares underflow guard
 
         /// <summary>
-        /// <c>|z| = hypot(re, im)</c> with NumPy/C99 infinity semantics: a ±infinite real or
-        /// imaginary part returns <c>+inf</c> regardless of the other part (including NaN).
-        /// All other inputs defer to <see cref="Complex.Abs"/>.
+        /// <c>|z| = hypot(re, im)</c> with NumPy/C99 (<c>npy_cabs</c>) infinity/NaN semantics: a
+        /// ±infinite real or imaginary part returns <c>+inf</c> regardless of the other part (including
+        /// NaN); a NaN component with no infinity returns the POSITIVE NaN (NumPy's <c>npy_hypot</c>
+        /// yields <c>0x7ff8…</c>, where <see cref="Complex.Abs"/> emits .NET's negative <c>0xfff8…</c>).
+        /// All finite inputs defer to <see cref="Complex.Abs"/> (bit-exact with NumPy).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static double Abs(Complex z)
         {
             if (double.IsInfinity(z.Real) || double.IsInfinity(z.Imaginary))
                 return double.PositiveInfinity;
+            if (double.IsNaN(z.Real) || double.IsNaN(z.Imaginary))
+                return NAN;
             return Complex.Abs(z);
         }
 

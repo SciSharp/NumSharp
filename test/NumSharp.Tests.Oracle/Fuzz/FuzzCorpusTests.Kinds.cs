@@ -33,7 +33,10 @@ namespace NumSharp.Tests.Fuzz
             "sqrt", "log", "log2", "log10", "log1p", "exp", "exp2", "expm1", "square", "reciprocal",
             "sin", "cos", "tan", "sinh", "cosh", "tanh",
             "arcsin", "arccos", "arctan", "arcsinh", "arccosh", "arctanh",
-            "conjugate", "conj", "negative", "positive"
+            "conjugate", "conj", "negative", "positive",
+            // sign(z)=(+NaN,+NaN) for any NaN/both-inf (canonical); abs/absolute(z)=+NaN (npy_cabs) — the
+            // latter returns float64, so the gate keys on a complex OPERAND (below), not the result dtype.
+            "sign", "abs", "absolute"
         };
 
         // ---- new tiers ---------------------------------------------------------------------
@@ -163,9 +166,12 @@ namespace NumSharp.Tests.Fuzz
 
             // The complex-unary ufuncs (NDComplexMath) reproduce NumPy 2.4.2's NaN SIGN bit-for-bit
             // (MSVC UCRT convention: sqrt/log/exp/... +NaN, csin/ctan via the transform's -Re negate,
-            // ctanh sign-propagating), so for those ops the NaN sign is CONTRACTUAL and is compared by
-            // raw bytes. Everywhere else NaN stays tokenized (a differing payload is non-contractual).
-            bool nanExact = tc == NPTypeCode.Complex && ComplexNanContractOps.Contains(c.Op);
+            // ctanh sign-propagating, sign/abs canonicalise to +NaN), so for those ops the NaN sign is
+            // CONTRACTUAL and is compared by raw bytes. The trigger keys on a complex OPERAND, not the
+            // result dtype, so `abs`/`absolute` (complex128 -> float64) is gated too. Everywhere else NaN
+            // stays tokenized (a differing payload/sign is non-contractual — order/algorithm-dependent).
+            bool nanExact = ComplexNanContractOps.Contains(c.Op)
+                            && (tc == NPTypeCode.Complex || c.Operands.Any(o => o.Dtype == "complex128"));
 
             // Bit-exact to NumPy ("precise") passes HERE, before truth is ever read — matching
             // NumPy's bytes is the contract, and truth can never turn a precise result red.

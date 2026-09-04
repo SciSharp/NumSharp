@@ -795,10 +795,15 @@ namespace NumSharp.Backends.Kernels
                         var locR = il.DeclareLocal(typeof(double));
                         var locI = il.DeclareLocal(typeof(double));
                         var lblNonZero = il.DefineLabel();
+                        var lblMagNotNaN = il.DefineLabel();
                         var lblFiniteMag = il.DefineLabel();
                         var lblBothInf = il.DefineLabel();
                         var lblImagInf = il.DefineLabel();
                         var lblEnd = il.DefineLabel();
+                        // NumPy sign(z) with a NaN component (no infinity) is (+NaN, +NaN) — a CANONICAL
+                        // positive NaN, NOT z/|z| (which would propagate each component's own NaN sign).
+                        // MSVC's NPY_NAN is positive; .NET double.NaN is 0xfff8. Match NumPy 2.4.2 bytes.
+                        double signPosNaN = BitConverter.Int64BitsToDouble(unchecked((long)0x7FF8000000000000L));
 
                         il.Emit(OpCodes.Stloc, locZ);
 
@@ -815,6 +820,18 @@ namespace NumSharp.Backends.Kernels
                         il.Emit(OpCodes.Br, lblEnd);
 
                         il.MarkLabel(lblNonZero);
+                        // NaN magnitude (a NaN component, no infinity) → (+NaN, +NaN), matching NumPy
+                        // (the canonical positive NaN — not the component-wise z/|z| that would keep a
+                        // -NaN input's sign). |z| is NaN here because NDComplexMath.Abs returns +NaN.
+                        il.Emit(OpCodes.Ldloc, locMag);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+                        il.Emit(OpCodes.Brfalse, lblMagNotNaN);
+                        il.Emit(OpCodes.Ldc_R8, signPosNaN);
+                        il.Emit(OpCodes.Ldc_R8, signPosNaN);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        il.MarkLabel(lblMagNotNaN);
                         // Check if magnitude is finite → fall through to z/|z|
                         il.Emit(OpCodes.Ldloc, locMag);
                         il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsInfinity, null);
@@ -835,8 +852,9 @@ namespace NumSharp.Backends.Kernels
                         il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsInfinity, null);
                         il.Emit(OpCodes.And);
                         il.Emit(OpCodes.Brfalse, lblBothInf);      // branch if NOT both-inf
-                        il.Emit(OpCodes.Ldc_R8, double.NaN);
-                        il.Emit(OpCodes.Ldc_R8, double.NaN);
+                        // both components infinite → (+NaN, +NaN) — NumPy's positive NPY_NAN, not .NET's 0xfff8
+                        il.Emit(OpCodes.Ldc_R8, signPosNaN);
+                        il.Emit(OpCodes.Ldc_R8, signPosNaN);
                         il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
                         il.Emit(OpCodes.Br, lblEnd);
 
