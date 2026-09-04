@@ -10,7 +10,7 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         [NDScoped]
-        public override NDArray ReduceVar(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, Type dtype = null)
+        public override NDArray ReduceVar(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // Boundary scope: reclaims the fallback double-cast input and the IL path's

@@ -8,7 +8,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise negation using IL-generated kernels.
         /// </summary>
-        public override NDArray Negate(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Negate(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy rejects boolean negative (unary `-` / np.negative) at LOOP

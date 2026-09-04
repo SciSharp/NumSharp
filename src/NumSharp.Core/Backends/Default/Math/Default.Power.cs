@@ -24,7 +24,7 @@ namespace NumSharp.Backends
         /// The integer kernel calls <see cref="Utilities.NDIntegerPower"/> for
         /// exact dtype wrapping (replaces the previous double round-trip).
         /// </summary>
-        public override NDArray Power(NDArray lhs, NDArray rhs, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Power(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy rule: signed integer exponents cannot be negative when the LOOP is an

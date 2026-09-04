@@ -9,7 +9,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Sum(NDArray nd, int? axis = null, Type dtype = null, bool keepdims = false)
+        public override NDArray Sum(NDArray nd, int? axis = null, DType dtype = null, bool keepdims = false)
         {
             return ReduceAdd(nd, axis, keepdims, dtype);
         }

@@ -25,7 +25,7 @@ namespace NumSharp
             NDArray a_min = null,
             NDArray a_max = null,
             NDArray @out = null,
-            NPTypeCode? dtype = null,
+            DType dtype = null,
             NDArray min = null,
             NDArray max = null)
         {
@@ -42,7 +42,7 @@ namespace NumSharp
 
             var lo = a_min ?? min;
             var hi = a_max ?? max;
-            var result = a.TensorEngine.ClipNDArray(a, lo, hi, dtype.AsType(), @out);
+            var result = a.TensorEngine.ClipNDArray(a, lo, hi, dtype, @out);
             return PreserveFContigFromSource(a, result);
         }
 
@@ -61,17 +61,5 @@ namespace NumSharp
             }
             return result;
         }
-
-        /// <summary>
-        ///     Clip (limit) the values in an array, returning a result of the requested CLR <see cref="Type"/>.
-        /// </summary>
-        /// <param name="a">Array containing elements to clip.</param>
-        /// <param name="a_min">Minimum value. If null, clipping is not performed on lower interval edge.</param>
-        /// <param name="a_max">Maximum value. If null, clipping is not performed on upper interval edge.</param>
-        /// <param name="dtype">The dtype the returned ndarray should be of.</param>
-        /// <returns>An array with the elements of a, but where values &lt; a_min are replaced with a_min, and those &gt; a_max with a_max.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.clip.html</remarks>
-        public static NDArray clip(NDArray a, NDArray a_min, NDArray a_max, Type dtype)
-            => a.TensorEngine.ClipNDArray(a, a_min, a_max, dtype);
     }
 }

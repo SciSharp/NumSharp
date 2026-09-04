@@ -18,7 +18,7 @@ namespace NumSharp.Backends
         /// - Integer types: Always True (integers cannot be Inf or NaN)
         /// - Empty arrays: Returns empty bool array
         /// </remarks>
-        public override NDArray IsFinite(NDArray a, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray IsFinite(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // typeCode is validate-only: isfinite has bool-output loops only

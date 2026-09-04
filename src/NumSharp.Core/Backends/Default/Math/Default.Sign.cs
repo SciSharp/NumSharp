@@ -10,7 +10,7 @@ namespace NumSharp.Backends
         /// Returns -1, 0, or 1 based on input sign.
         /// NumPy behavior: preserves input dtype.
         /// </summary>
-        public override NDArray Sign(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Sign(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);

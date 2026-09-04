@@ -9,7 +9,7 @@ namespace NumSharp.Backends
         /// Element-wise ceiling using IL-generated kernels.
         /// NumPy: for integer dtypes, ceil is a no-op that preserves the input dtype.
         /// </summary>
-        public override NDArray Ceil(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Ceil(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);

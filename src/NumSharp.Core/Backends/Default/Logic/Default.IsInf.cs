@@ -19,7 +19,7 @@ namespace NumSharp.Backends
         /// - NaN: Returns False (NaN is not infinity)
         /// - Empty arrays: Returns empty bool array
         /// </remarks>
-        public override NDArray IsInf(NDArray a, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray IsInf(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // typeCode is validate-only: isinf has bool-output loops only

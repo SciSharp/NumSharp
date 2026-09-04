@@ -9,7 +9,7 @@ namespace NumSharp.Backends
         /// Element-wise truncation (toward zero) using IL-generated kernels.
         /// NumPy: for integer dtypes, trunc is a no-op that preserves the input dtype.
         /// </summary>
-        public override NDArray Truncate(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Truncate(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);

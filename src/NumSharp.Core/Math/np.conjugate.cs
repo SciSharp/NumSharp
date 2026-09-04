@@ -19,7 +19,7 @@ namespace NumSharp
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.conjugate.html</remarks>
         [NDScoped]
-        public static NDArray conjugate(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+        public static NDArray conjugate(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
             // NumPy's `conjugate` ufunc has NO bool loop: a plain bool input resolves to the smallest
             // matching loop — int8 — so the result is int8 (values 0/1), NOT bool (probed against
@@ -27,7 +27,7 @@ namespace NumSharp
             // as NumPy does (e.g. conjugate(bool, dtype: Double) -> float64).
             if (dtype is null && x.typecode == NPTypeCode.Boolean)
                 x = x.astype(NPTypeCode.SByte);
-            return x.TensorEngine.Conjugate(x, dtype.AsType(), @out, where);
+            return x.TensorEngine.Conjugate(x, dtype, @out, where);
         }
 
         /// <summary>
@@ -40,7 +40,7 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): selects the loop and its output dtype.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.conj.html</remarks>
         [NDScoped]
-        public static NDArray conj(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+        public static NDArray conj(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => conjugate(x, @out, where, dtype);
     }
 }

@@ -10,7 +10,7 @@ namespace NumSharp.Backends
         /// NumPy behavior: preserves input dtype (unlike sin/cos which promote to float).
         /// Exception: np.abs(complex) returns float64 (the magnitude).
         /// </summary>
-        public override NDArray Abs(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Abs(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             var inputType = nd.GetTypeCode;

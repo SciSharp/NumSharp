@@ -129,11 +129,11 @@ namespace NumSharp.Tests.Math
             np.arcsinh(x, np.zeros(3, NPTypeCode.Double)).typecode.Should().Be(NPTypeCode.Double);
             np.arcsinh(x, np.zeros(3, NPTypeCode.Double), np.array(new[] { true, false, true })).typecode.Should().Be(NPTypeCode.Double);
             np.arcsinh(x, dtype: NPTypeCode.Single).typecode.Should().Be(NPTypeCode.Single);
-            np.arcsinh(x, NPTypeCode.Single).typecode.Should().Be(NPTypeCode.Single);   // positional NPTypeCode overload
-            np.arcsinh(x, typeof(float)).typecode.Should().Be(NPTypeCode.Single);        // positional Type overload
+            np.arcsinh(x, dtype: NPTypeCode.Single).typecode.Should().Be(NPTypeCode.Single);   // positional NPTypeCode overload
+            np.arcsinh(x, dtype: typeof(float)).typecode.Should().Be(NPTypeCode.Single);        // positional Type overload
             // aliases resolve the same 3 arg-shapes
-            np.asinh(x, NPTypeCode.Single).typecode.Should().Be(NPTypeCode.Single);
-            np.acosh(np.array(new[] { 2.0 }), typeof(float)).typecode.Should().Be(NPTypeCode.Single);
+            np.asinh(x, dtype: NPTypeCode.Single).typecode.Should().Be(NPTypeCode.Single);
+            np.acosh(np.array(new[] { 2.0 }), dtype: typeof(float)).typecode.Should().Be(NPTypeCode.Single);
             np.atanh(x, dtype: NPTypeCode.Single).typecode.Should().Be(NPTypeCode.Single);
         }
 

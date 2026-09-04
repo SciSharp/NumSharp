@@ -16,48 +16,14 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the computation runs at this precision; integer/bool requests raise NumPy's "No loop matching" error.</param>
         /// <returns>Array of the same shape as x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctanh.html</remarks>
-        public static NDArray arctanh(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.ATanh(x, dtype.AsType(), @out, where);
-
-        /// <summary>
-        ///     Inverse hyperbolic tangent, element-wise, computed in <paramref name="dtype"/>.
-        ///     Positional-dtype convenience overload (NumPy accepts dtype only as a keyword).
-        /// </summary>
-        /// <param name="x">Input array.</param>
-        /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctanh.html</remarks>
-        public static NDArray arctanh(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.ATanh(x, dtype.AsType());
-
-        /// <summary>
-        ///     Inverse hyperbolic tangent, element-wise.
-        /// </summary>
-        /// <param name="x">Input array.</param>
-        /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
-        /// <returns>Array of the same shape as x. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctanh.html</remarks>
-        public static NDArray arctanh(NDArray x, Type dtype)
-            => x.TensorEngine.ATanh(x, dtype);
+        public static NDArray arctanh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => x.TensorEngine.ATanh(x, dtype, @out, where);
 
         /// <summary>
         ///     Inverse hyperbolic tangent, element-wise (Array-API alias of <see cref="arctanh(NDArray, NDArray, NDArray, NPTypeCode?)"/>, added in NumPy 2.0).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atanh.html</remarks>
-        public static NDArray atanh(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.ATanh(x, dtype.AsType(), @out, where);
-
-        /// <summary>
-        ///     Inverse hyperbolic tangent, element-wise (Array-API alias), computed in <paramref name="dtype"/>.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atanh.html</remarks>
-        public static NDArray atanh(NDArray x, NPTypeCode dtype)
-            => x.TensorEngine.ATanh(x, dtype.AsType());
-
-        /// <summary>
-        ///     Inverse hyperbolic tangent, element-wise (Array-API alias).
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atanh.html</remarks>
-        public static NDArray atanh(NDArray x, Type dtype)
-            => x.TensorEngine.ATanh(x, dtype);
+        public static NDArray atanh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => x.TensorEngine.ATanh(x, dtype, @out, where);
     }
 }

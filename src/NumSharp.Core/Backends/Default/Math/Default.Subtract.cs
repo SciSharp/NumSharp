@@ -9,7 +9,7 @@ namespace NumSharp.Backends
         /// Element-wise subtraction using IL-generated kernels.
         /// Supports all 144 type combinations with automatic type promotion.
         /// </summary>
-        public override NDArray Subtract(NDArray lhs, NDArray rhs, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Subtract(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy rejects boolean subtraction: there is no subtract ufunc loop

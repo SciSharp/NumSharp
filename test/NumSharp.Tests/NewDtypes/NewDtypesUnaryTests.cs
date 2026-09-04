@@ -667,8 +667,8 @@ namespace NumSharp.Tests.NewDtypes
         public void Exp2_SingleOutput_DtypeOverride_FromIntAndDouble()
         {
             // dtype=float32 forces the Single emitter from a wider input. NumPy: exp2([1,2,3], dtype=f32)=[2,4,8].
-            AssertSingleExp2(np.exp2(np.array(new int[] { 1, 2, 3 }), NPTypeCode.Single), 2f, 4f, 8f);
-            AssertSingleExp2(np.exp2(np.array(new double[] { 1, 2, 3 }), typeof(float)), 2f, 4f, 8f);
+            AssertSingleExp2(np.exp2(np.array(new int[] { 1, 2, 3 }), dtype: NPTypeCode.Single), 2f, 4f, 8f);
+            AssertSingleExp2(np.exp2(np.array(new double[] { 1, 2, 3 }), dtype: typeof(float)), 2f, 4f, 8f);
         }
 
         [TestMethod]

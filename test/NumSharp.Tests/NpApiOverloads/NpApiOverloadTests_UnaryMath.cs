@@ -31,7 +31,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Absolute_WithType_Compiles()
     {
         var a = np.array(new double[] { -1.5, 2.3, -3.7 });
-        var result = np.absolute(a, typeof(float));
+        var result = np.absolute(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -40,7 +40,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Absolute_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { -1.5, 2.3, -3.7 });
-        var result = np.absolute(a, NPTypeCode.Single);
+        var result = np.absolute(a, dtype: NPTypeCode.Single);
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -64,7 +64,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Abs_WithType_Compiles()
     {
         var a = np.array(new double[] { -1.5, 2.3, -3.7 });
-        var result = np.abs(a, typeof(float));
+        var result = np.abs(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -73,7 +73,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Abs_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { -1.5, 2.3, -3.7 });
-        var result = np.abs(a, NPTypeCode.Single);
+        var result = np.abs(a, dtype: NPTypeCode.Single);
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -97,7 +97,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Sign_WithType_Compiles()
     {
         var a = np.array(new double[] { -1.5, 0.0, 3.7 });
-        var result = np.sign(a, typeof(float));
+        var result = np.sign(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -121,7 +121,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Sqrt_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 4.0, 9.0 });
-        var result = np.sqrt(a, typeof(float));
+        var result = np.sqrt(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         // sqrt(a, Type) used to silently drop the dtype; it now routes it.
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
@@ -146,7 +146,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Cbrt_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 8.0, 27.0 });
-        var result = np.cbrt(a, typeof(float));
+        var result = np.cbrt(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -185,7 +185,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Ceil_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
-        var result = np.ceil(a, typeof(float));
+        var result = np.ceil(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -209,7 +209,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Floor_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
-        var result = np.floor(a, typeof(float));
+        var result = np.floor(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -233,7 +233,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Trunc_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
-        var result = np.trunc(a, typeof(float));
+        var result = np.trunc(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -268,7 +268,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Round_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
-        var result = np.round_(a, typeof(float));
+        var result = np.round_(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -277,7 +277,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Round_WithDecimalsAndType_Compiles()
     {
         var a = np.array(new double[] { 1.567, -2.345, 3.789 });
-        var result = np.round_(a, 1, typeof(float));
+        var result = np.round_(a, 1, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -311,7 +311,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Around_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
-        var result = np.around(a, typeof(float));
+        var result = np.around(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -320,7 +320,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Around_WithDecimalsAndType_Compiles()
     {
         var a = np.array(new double[] { 1.567, -2.345, 3.789 });
-        var result = np.around(a, 1, typeof(float));
+        var result = np.around(a, 1, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -344,7 +344,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Exp_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
-        var result = np.exp(a, typeof(float));
+        var result = np.exp(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -353,7 +353,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Exp_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
-        var result = np.exp(a, NPTypeCode.Single);
+        var result = np.exp(a, dtype: NPTypeCode.Single);
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -377,7 +377,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Exp2_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
-        var result = np.exp2(a, typeof(float));
+        var result = np.exp2(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
         // Values must be 2^x = [1, 2, 4], not the old locExp=2.0 artifact (Pow(2,2)=4 everywhere).
@@ -390,7 +390,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Exp2_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
-        var result = np.exp2(a, NPTypeCode.Single);
+        var result = np.exp2(a, dtype: NPTypeCode.Single);
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
         Assert.AreEqual(1.0f, result.GetSingle(0), 1e-6f);
@@ -416,7 +416,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Expm1_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
-        var result = np.expm1(a, typeof(float));
+        var result = np.expm1(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -425,7 +425,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Expm1_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
-        var result = np.expm1(a, NPTypeCode.Single);
+        var result = np.expm1(a, dtype: NPTypeCode.Single);
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -449,7 +449,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Log_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, System.Math.E, System.Math.E * System.Math.E });
-        var result = np.log(a, typeof(float));
+        var result = np.log(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         // Note: log(a, Type) doesn't convert dtype in current implementation
     }
@@ -458,7 +458,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Log_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 1.0, System.Math.E, System.Math.E * System.Math.E });
-        var result = np.log(a, NPTypeCode.Double);
+        var result = np.log(a, dtype: NPTypeCode.Double);
         Assert.IsNotNull(result);
     }
 
@@ -481,7 +481,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Log2_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 2.0, 4.0 });
-        var result = np.log2(a, typeof(float));
+        var result = np.log2(a, dtype: typeof(float));
         Assert.IsNotNull(result);
     }
 
@@ -489,7 +489,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Log2_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 1.0, 2.0, 4.0 });
-        var result = np.log2(a, NPTypeCode.Double);
+        var result = np.log2(a, dtype: NPTypeCode.Double);
         Assert.IsNotNull(result);
     }
 
@@ -512,7 +512,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Log10_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 10.0, 100.0 });
-        var result = np.log10(a, typeof(float));
+        var result = np.log10(a, dtype: typeof(float));
         Assert.IsNotNull(result);
     }
 
@@ -520,7 +520,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Log10_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 1.0, 10.0, 100.0 });
-        var result = np.log10(a, NPTypeCode.Double);
+        var result = np.log10(a, dtype: NPTypeCode.Double);
         Assert.IsNotNull(result);
     }
 
@@ -542,7 +542,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Log1p_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, System.Math.E - 1, System.Math.E * System.Math.E - 1 });
-        var result = np.log1p(a, typeof(float));
+        var result = np.log1p(a, dtype: typeof(float));
         Assert.IsNotNull(result);
     }
 
@@ -550,7 +550,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Log1p_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 0.0, System.Math.E - 1, System.Math.E * System.Math.E - 1 });
-        var result = np.log1p(a, NPTypeCode.Double);
+        var result = np.log1p(a, dtype: NPTypeCode.Double);
         Assert.IsNotNull(result);
     }
 
@@ -573,7 +573,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Sin_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, System.Math.PI / 2, System.Math.PI });
-        var result = np.sin(a, typeof(float));
+        var result = np.sin(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -597,7 +597,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Cos_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, System.Math.PI / 2, System.Math.PI });
-        var result = np.cos(a, typeof(float));
+        var result = np.cos(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -620,7 +620,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Tan_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, System.Math.PI / 4 });
-        var result = np.tan(a, typeof(float));
+        var result = np.tan(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -643,7 +643,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Arcsin_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 0.5, 1.0 });
-        var result = np.arcsin(a, typeof(float));
+        var result = np.arcsin(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -666,7 +666,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Arccos_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 0.5, 0.0 });
-        var result = np.arccos(a, typeof(float));
+        var result = np.arccos(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -689,7 +689,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Arctan_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0 });
-        var result = np.arctan(a, typeof(float));
+        var result = np.arctan(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -712,7 +712,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Arcsinh_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
-        var result = np.arcsinh(a, typeof(float));
+        var result = np.arcsinh(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -744,7 +744,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Arccosh_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 2.0, 3.0 });
-        var result = np.arccosh(a, typeof(float));
+        var result = np.arccosh(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -776,7 +776,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Arctanh_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 0.5, -0.5 });
-        var result = np.arctanh(a, typeof(float));
+        var result = np.arctanh(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -808,7 +808,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Sinh_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0 });
-        var result = np.sinh(a, typeof(float));
+        var result = np.sinh(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -831,7 +831,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Cosh_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0 });
-        var result = np.cosh(a, typeof(float));
+        var result = np.cosh(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -854,7 +854,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Tanh_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0 });
-        var result = np.tanh(a, typeof(float));
+        var result = np.tanh(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -878,7 +878,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Deg2Rad_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 90.0, 180.0 });
-        var result = np.deg2rad(a, typeof(float));
+        var result = np.deg2rad(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -902,7 +902,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Rad2Deg_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, System.Math.PI / 2, System.Math.PI });
-        var result = np.rad2deg(a, typeof(float));
+        var result = np.rad2deg(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -926,7 +926,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Radians_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 90.0, 180.0 });
-        var result = np.radians(a, typeof(float));
+        var result = np.radians(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -950,7 +950,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Degrees_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, System.Math.PI / 2, System.Math.PI });
-        var result = np.degrees(a, typeof(float));
+        var result = np.degrees(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -1005,7 +1005,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Reciprocal_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 2.0, 4.0 });
-        var result = np.reciprocal(a, typeof(float));
+        var result = np.reciprocal(a, dtype: typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
@@ -1034,7 +1034,7 @@ public class NpApiOverloadTests_UnaryMath
     public void Modf_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
-        var (fractional, integral) = np.modf(a, typeof(float));
+        var (fractional, integral) = np.modf(a, dtype: typeof(float));
         Assert.IsNotNull(fractional);
         Assert.IsNotNull(integral);
         Assert.AreEqual(NPTypeCode.Single, fractional.typecode);

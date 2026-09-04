@@ -11,7 +11,7 @@ namespace NumSharp.Backends
         /// For integers: computes ~x (ones complement).
         /// For booleans: computes logical NOT (NumPy behavior).
         /// </summary>
-        public override NDArray Invert(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Invert(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy validation order (probed 2.4.2): where parse -> loop

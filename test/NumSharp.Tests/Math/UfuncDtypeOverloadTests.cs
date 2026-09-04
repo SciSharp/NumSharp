@@ -64,7 +64,7 @@ namespace NumSharp.Tests.Math
             // np.sqrt(x, out, where=m, dtype=f32) — everything at once
             var o2 = np.ones(new Shape(3), np.float64) * 99.0;
             var m = np.array(new[] { true, false, true });
-            var r2 = np.sqrt(x, o2, m, NPTypeCode.Single);
+            var r2 = np.sqrt(x, o2, m, dtype: NPTypeCode.Single);
             Assert.IsTrue(ReferenceEquals(r2, o2));
             Assert.AreEqual(2.0, o2.GetDouble(0));
             Assert.AreEqual(99.0, o2.GetDouble(1)); // mask-false keeps prior contents
@@ -135,7 +135,7 @@ namespace NumSharp.Tests.Math
             //   → [1.41421354, 99.]
             var x = np.array(new double[] { 2.0, 3.0 });
             var o = np.ones(new Shape(2), np.float64) * 99.0;
-            var r = np.sqrt(x, o, np.array(new[] { true, false }), NPTypeCode.Single);
+            var r = np.sqrt(x, o, np.array(new[] { true, false }), dtype: NPTypeCode.Single);
 
             Assert.IsTrue(ReferenceEquals(r, o));
             Assert.AreEqual((double)(float)System.Math.Sqrt(2.0), o.GetDouble(0));
@@ -352,28 +352,28 @@ namespace NumSharp.Tests.Math
         {
             var x = np.array(new double[] { 4.0 });
 
-            Assert.AreEqual(NPTypeCode.Single, np.sqrt(x, NPTypeCode.Single).typecode);
-            Assert.AreEqual(NPTypeCode.Single, np.sin(x, NPTypeCode.Single).typecode);
-            Assert.AreEqual(NPTypeCode.Single, np.cos(x, NPTypeCode.Single).typecode);
-            Assert.AreEqual(NPTypeCode.Single, np.tan(x, NPTypeCode.Single).typecode);
-            Assert.AreEqual(NPTypeCode.Double, np.log(x, NPTypeCode.Double).typecode);
-            Assert.AreEqual(NPTypeCode.Double, np.exp(x, NPTypeCode.Double).typecode);
-            Assert.AreEqual(NPTypeCode.Single, np.abs(x, NPTypeCode.Single).typecode);
-            Assert.AreEqual(NPTypeCode.Single, np.absolute(x, NPTypeCode.Single).typecode);
+            Assert.AreEqual(NPTypeCode.Single, np.sqrt(x, dtype: NPTypeCode.Single).typecode);
+            Assert.AreEqual(NPTypeCode.Single, np.sin(x, dtype: NPTypeCode.Single).typecode);
+            Assert.AreEqual(NPTypeCode.Single, np.cos(x, dtype: NPTypeCode.Single).typecode);
+            Assert.AreEqual(NPTypeCode.Single, np.tan(x, dtype: NPTypeCode.Single).typecode);
+            Assert.AreEqual(NPTypeCode.Double, np.log(x, dtype: NPTypeCode.Double).typecode);
+            Assert.AreEqual(NPTypeCode.Double, np.exp(x, dtype: NPTypeCode.Double).typecode);
+            Assert.AreEqual(NPTypeCode.Single, np.abs(x, dtype: NPTypeCode.Single).typecode);
+            Assert.AreEqual(NPTypeCode.Single, np.absolute(x, dtype: NPTypeCode.Single).typecode);
             Assert.AreEqual(NPTypeCode.Single,
-                np.power(x, np.array(new double[] { 2.0 }), NPTypeCode.Single).typecode);
+                np.power(x, np.array(new double[] { 2.0 }), dtype: NPTypeCode.Single).typecode);
             Assert.AreEqual(NPTypeCode.Single,
-                np.floor_divide(x, np.array(new double[] { 2.0 }), NPTypeCode.Single).typecode);
+                np.floor_divide(x, np.array(new double[] { 2.0 }), dtype: NPTypeCode.Single).typecode);
         }
 
         [TestMethod]
         public void TypeOverloads_NowHonorDtype()
         {
-            // np.sqrt(x, typeof(float)) and np.log(x, typeof(float)) silently
+            // np.sqrt(x, dtype: typeof(float)) and np.log(x, typeof(float)) silently
             // IGNORED the dtype before this wave — now they route it.
             var x = np.array(new double[] { 4.0 });
-            Assert.AreEqual(NPTypeCode.Single, np.sqrt(x, typeof(float)).typecode);
-            Assert.AreEqual(NPTypeCode.Single, np.log(x, typeof(float)).typecode);
+            Assert.AreEqual(NPTypeCode.Single, np.sqrt(x, dtype: typeof(float)).typecode);
+            Assert.AreEqual(NPTypeCode.Single, np.log(x, dtype: typeof(float)).typecode);
         }
 
         // =====================================================================

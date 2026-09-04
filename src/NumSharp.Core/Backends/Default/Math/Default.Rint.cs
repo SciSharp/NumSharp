@@ -24,7 +24,7 @@ namespace NumSharp.Backends
         /// "No loop matching the specified signature ..."), inputs reach the loop via a same_kind
         /// cast, and a provided out receives a same_kind-cast write-back.
         /// </summary>
-        public override NDArray Rint(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Rint(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             return ExecuteUnaryOp(nd, UnaryOp.Round, ResolveUnaryFloatReturnType(nd, typeCode, "rint"), @out, where);

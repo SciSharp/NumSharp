@@ -4,7 +4,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray FloorDivide(NDArray lhs, NDArray rhs, System.Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray FloorDivide(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // ufunc dtype=/out=/where= compose exactly like NumPy 2.4.2 (probed):

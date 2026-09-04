@@ -14,7 +14,7 @@ namespace NumSharp.Backends
         /// <param name="x">x-coordinates. If y.shape != x.shape, they must be broadcastable.</param>
         /// <param name="typeCode">Output dtype (overrides type promotion). If null, uses NumPy rules.</param>
         /// <returns>Array of angles in radians, range [-pi, pi]</returns>
-        public override NDArray ATan2(NDArray y, NDArray x, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray ATan2(NDArray y, NDArray x, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy validation order: where parse -> loop resolution -> out

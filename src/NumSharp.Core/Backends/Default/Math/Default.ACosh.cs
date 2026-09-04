@@ -8,7 +8,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise inverse hyperbolic cosine (arccosh) using IL-generated kernels.
         /// </summary>
-        public override NDArray ACosh(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray ACosh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy validation order: the where bool check is argument

@@ -8,7 +8,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise hyperbolic sine using IL-generated kernels.
         /// </summary>
-        public override NDArray Sinh(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Sinh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy validation order: the where bool check is argument

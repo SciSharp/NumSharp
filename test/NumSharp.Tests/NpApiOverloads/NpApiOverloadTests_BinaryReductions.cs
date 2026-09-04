@@ -116,7 +116,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[] { 2, 3, 4 });
         ValueType exp = 2.0;
-        var result = np.power(a, exp, typeof(double));
+        var result = np.power(a, np.asanyarray(exp), dtype: typeof(double));
         result.Should().NotBeNull();
         result.dtype.Should().Be(typeof(double));
     }
@@ -126,7 +126,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[] { 2, 3, 4 });
         ValueType exp = 2.0;
-        var result = np.power(a, exp, NPTypeCode.Double);
+        var result = np.power(a, np.asanyarray(exp), dtype: NPTypeCode.Double);
         result.Should().NotBeNull();
         result.typecode.Should().Be(NPTypeCode.Double);
     }
@@ -148,7 +148,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[] { 2, 3, 4 });
         var b = np.array(new double[] { 2, 2, 2 });
-        var result = np.power(a, b, typeof(double));
+        var result = np.power(a, b, dtype: typeof(double));
         result.Should().NotBeNull();
         result.dtype.Should().Be(typeof(double));
     }
@@ -158,7 +158,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[] { 2, 3, 4 });
         var b = np.array(new double[] { 2, 2, 2 });
-        var result = np.power(a, b, NPTypeCode.Double);
+        var result = np.power(a, b, dtype: NPTypeCode.Double);
         result.Should().NotBeNull();
         result.typecode.Should().Be(NPTypeCode.Double);
     }
@@ -184,7 +184,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[] { 7, 8, 9 });
         var b = np.array(new double[] { 2, 3, 4 });
-        var result = np.floor_divide(a, b, typeof(double));
+        var result = np.floor_divide(a, b, dtype: typeof(double));
         result.Should().NotBeNull();
         result.dtype.Should().Be(typeof(double));
     }
@@ -194,7 +194,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[] { 7, 8, 9 });
         var b = np.array(new double[] { 2, 3, 4 });
-        var result = np.floor_divide(a, b, NPTypeCode.Double);
+        var result = np.floor_divide(a, b, dtype: NPTypeCode.Double);
         result.Should().NotBeNull();
         result.typecode.Should().Be(NPTypeCode.Double);
     }
@@ -216,7 +216,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[] { 7, 8, 9 });
         ValueType divisor = 2.0;
-        var result = np.floor_divide(a, divisor, typeof(double));
+        var result = np.floor_divide(a, np.asanyarray(divisor), dtype: typeof(double));
         result.Should().NotBeNull();
         result.dtype.Should().Be(typeof(double));
     }
@@ -226,7 +226,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[] { 7, 8, 9 });
         ValueType divisor = 2.0;
-        var result = np.floor_divide(a, divisor, NPTypeCode.Double);
+        var result = np.floor_divide(a, np.asanyarray(divisor), dtype: NPTypeCode.Double);
         result.Should().NotBeNull();
         result.typecode.Should().Be(NPTypeCode.Double);
     }
@@ -252,7 +252,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[] { 1, 5, 3 });
         var b = np.array(new double[] { 4, 2, 6 });
-        var result = np.maximum(a, b, typeof(double));
+        var result = np.maximum(a, b, dtype: typeof(double));
         result.Should().NotBeNull();
         result.dtype.Should().Be(typeof(double));
     }
@@ -289,7 +289,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[] { 1, 5, 3 });
         var b = np.array(new double[] { 4, 2, 6 });
-        var result = np.minimum(a, b, typeof(double));
+        var result = np.minimum(a, b, dtype: typeof(double));
         result.Should().NotBeNull();
         result.dtype.Should().Be(typeof(double));
     }
@@ -326,7 +326,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[] { 1, 5, 3 });
         var b = np.array(new double[] { 4, 2, 6 });
-        var result = np.fmax(a, b, typeof(double));
+        var result = np.fmax(a, b, dtype: typeof(double));
         result.Should().NotBeNull();
         result.dtype.Should().Be(typeof(double));
     }
@@ -363,7 +363,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[] { 1, 5, 3 });
         var b = np.array(new double[] { 4, 2, 6 });
-        var result = np.fmin(a, b, typeof(double));
+        var result = np.fmin(a, b, dtype: typeof(double));
         result.Should().NotBeNull();
         result.dtype.Should().Be(typeof(double));
     }
@@ -404,7 +404,7 @@ public class NpApiOverloadTests_BinaryReductions
         var a = np.array(new double[] { 1, 5, 3, 8, 2 });
         var a_min = np.array(new double[] { 2, 2, 2, 2, 2 });
         var a_max = np.array(new double[] { 6, 6, 6, 6, 6 });
-        var result = np.clip(a, a_min, a_max, typeof(double));
+        var result = np.clip(a, a_min, a_max, dtype: typeof(double));
         result.Should().NotBeNull();
         result.dtype.Should().Be(typeof(double));
     }
@@ -486,7 +486,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Invert_ArrayWithDtype_Compiles()
     {
         var a = np.array(new int[] { 0, 1, -1 });
-        var result = np.invert(a, typeof(int));
+        var result = np.invert(a, dtype: typeof(int));
         result.Should().NotBeNull();
     }
 
@@ -505,7 +505,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void BitwiseNot_ArrayWithDtype_Compiles()
     {
         var a = np.array(new int[] { 0, 1, -1 });
-        var result = np.bitwise_not(a, typeof(int));
+        var result = np.bitwise_not(a, dtype: typeof(int));
         result.Should().NotBeNull();
     }
 
@@ -530,7 +530,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var y = np.array(new double[] { 1, 0, -1 });
         var x = np.array(new double[] { 0, 1, 0 });
-        var result = np.arctan2(y, x, typeof(double));
+        var result = np.arctan2(y, x, dtype: typeof(double));
         result.Should().NotBeNull();
         result.dtype.Should().Be(typeof(double));
     }

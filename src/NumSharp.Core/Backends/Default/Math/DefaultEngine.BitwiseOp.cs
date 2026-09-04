@@ -21,7 +21,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute bitwise AND operation.
         /// </summary>
-        public override NDArray BitwiseAnd(NDArray lhs, NDArray rhs, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray BitwiseAnd(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);
@@ -41,7 +41,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute bitwise OR operation.
         /// </summary>
-        public override NDArray BitwiseOr(NDArray lhs, NDArray rhs, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray BitwiseOr(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);
@@ -61,7 +61,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute bitwise XOR operation.
         /// </summary>
-        public override NDArray BitwiseXor(NDArray lhs, NDArray rhs, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray BitwiseXor(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);

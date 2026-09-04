@@ -17,7 +17,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise round using IL-generated kernels.
         /// </summary>
-        public override NDArray Round(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Round(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);
@@ -40,7 +40,7 @@ namespace NumSharp.Backends
         /// Element-wise round with specified decimal places.
         /// Note: This overload uses traditional loop implementation for precision control.
         /// </summary>
-        public override NDArray Round(NDArray nd, int decimals, Type dtype = null, NDArray @out = null)
+        public override NDArray Round(NDArray nd, int decimals, DType dtype = null, NDArray @out = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // decimals==0 routes to the rint ufunc path (out-cast errors there

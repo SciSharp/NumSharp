@@ -671,16 +671,16 @@ namespace NumSharp.Tests.Math
             // Demoted (x, NPTypeCode) and (x, Type) forms keep compiling and
             // now honor the dtype (the log2/log10/log1p Type overloads
             // previously DROPPED it — fixed in this slice).
-            var r1 = np.floor(np.array(new[] { 0.5, 1.5 }), NPTypeCode.Double);
+            var r1 = np.floor(np.array(new[] { 0.5, 1.5 }), dtype: NPTypeCode.Double);
             Assert.AreEqual(NPTypeCode.Double, r1.typecode);
 
-            var r2 = np.log2(np.array(new[] { 1.0, 2 }), np.float32);
+            var r2 = np.log2(np.array(new[] { 1.0, 2 }), dtype: np.float32);
             Assert.AreEqual(NPTypeCode.Single, r2.typecode);
 
-            var r3 = np.log10(np.array(new[] { 1.0, 10 }), np.float32);
+            var r3 = np.log10(np.array(new[] { 1.0, 10 }), dtype: np.float32);
             Assert.AreEqual(NPTypeCode.Single, r3.typecode);
 
-            var r4 = np.sinh(np.array(new[] { 0.0, 1 }), NPTypeCode.Single);
+            var r4 = np.sinh(np.array(new[] { 0.0, 1 }), dtype: NPTypeCode.Single);
             Assert.AreEqual(NPTypeCode.Single, r4.typecode);
         }
     }

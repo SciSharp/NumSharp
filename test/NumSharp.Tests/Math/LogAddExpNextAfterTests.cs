@@ -213,7 +213,7 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void EmptyArrays_ReturnEmpty()
         {
-            var r = np.logaddexp(np.zeros(0, typeof(double)), np.zeros(0, typeof(double)));
+            var r = np.logaddexp(np.zeros(0, dtype: typeof(double)), np.zeros(0, typeof(double)));
             r.size.Should().Be(0);
             r.typecode.Should().Be(NPTypeCode.Double);
         }
@@ -244,7 +244,7 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void IntegerDtype_RaisesNoLoop()
         {
-            Action act = () => np.nextafter(np.array(new[] { 1.0 }), np.array(new[] { 2.0 }), NPTypeCode.Int32);
+            Action act = () => np.nextafter(np.array(new[] { 1.0 }), np.array(new[] { 2.0 }), dtype: NPTypeCode.Int32);
             act.Should().Throw<IncorrectTypeException>().WithMessage("*No loop matching*nextafter*");
         }
     }

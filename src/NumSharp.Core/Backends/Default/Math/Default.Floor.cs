@@ -9,7 +9,7 @@ namespace NumSharp.Backends
         /// Element-wise floor using IL-generated kernels.
         /// NumPy: for integer dtypes, floor is a no-op that preserves the input dtype.
         /// </summary>
-        public override NDArray Floor(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Floor(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);

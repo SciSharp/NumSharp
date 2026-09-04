@@ -15,26 +15,8 @@ namespace NumSharp
         /// <param name="outType">The dtype the returned ndarray should be of.</param>
         /// <returns>Result. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
-        public static NDArray invert(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x.TensorEngine.Invert(x, dtype.AsType(), @out, where);
-
-        /// <summary>
-        /// Compute bit-wise inversion in <paramref name="outType"/> — positional-dtype
-        /// convenience overload (NumPy accepts dtype only as a keyword).
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
-        public static NDArray invert(NDArray x, NPTypeCode outType)
-            => x.TensorEngine.Invert(x, outType.AsType());
-
-        /// <summary>
-        /// Compute bit-wise inversion, or bit-wise NOT, element-wise.
-        /// </summary>
-        /// <param name="x">Only integer and boolean types are handled.</param>
-        /// <param name="outType">The dtype the returned ndarray should be of.</param>
-        /// <returns>Result. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
-        public static NDArray invert(NDArray x, Type outType)
-            => x.TensorEngine.Invert(x, outType);
+        public static NDArray invert(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => x.TensorEngine.Invert(x, dtype, @out, where);
 
         /// <summary>
         /// Compute bit-wise inversion, or bit-wise NOT, element-wise. Alias for invert.
@@ -43,24 +25,7 @@ namespace NumSharp
         /// <param name="outType">The dtype the returned ndarray should be of.</param>
         /// <returns>Result. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
-        public static NDArray bitwise_not(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+        public static NDArray bitwise_not(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => invert(x, @out, where, dtype);
-
-        /// <summary>
-        /// Compute bit-wise inversion, or bit-wise NOT, element-wise. Alias for invert.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
-        public static NDArray bitwise_not(NDArray x, NPTypeCode outType)
-            => invert(x, outType);
-
-        /// <summary>
-        /// Compute bit-wise inversion, or bit-wise NOT, element-wise. Alias for invert.
-        /// </summary>
-        /// <param name="x">Only integer and boolean types are handled.</param>
-        /// <param name="outType">The dtype the returned ndarray should be of.</param>
-        /// <returns>Result. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
-        public static NDArray bitwise_not(NDArray x, Type outType)
-            => invert(x, outType);
     }
 }

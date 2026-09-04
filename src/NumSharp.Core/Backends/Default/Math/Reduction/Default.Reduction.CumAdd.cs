@@ -8,7 +8,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override unsafe NDArray ReduceCumAdd(NDArray arr, int? axis_, Type dtype = null)
+        public override unsafe NDArray ReduceCumAdd(NDArray arr, int? axis_, DType dtype = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy: cumsum on boolean arrays treats True as 1 and False as 0, returning int64

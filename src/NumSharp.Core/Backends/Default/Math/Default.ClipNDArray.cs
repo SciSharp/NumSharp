@@ -30,7 +30,7 @@ namespace NumSharp.Backends
         // =============================================================================
 
         [NDScoped]
-        public override unsafe NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, Type dtype = null, NDArray @out = null)
+        public override unsafe NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, DType dtype = null, NDArray @out = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // ---- Output dtype (explicit `dtype=` wins; otherwise NEP-50 weak-scalar promote)

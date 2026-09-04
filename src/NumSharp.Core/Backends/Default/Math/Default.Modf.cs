@@ -17,7 +17,7 @@ namespace NumSharp.Backends
         ///
         /// Decimal is a NumSharp extension (NumPy doesn't have decimal type).
         /// </summary>
-        public override (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, Type dtype = null)
+        public override (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, DType dtype = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             var resolvedType = typeCode ?? nd.typecode;

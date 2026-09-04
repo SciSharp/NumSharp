@@ -11,7 +11,7 @@ namespace NumSharp.Backends
         /// identity kernel (<see cref="UnaryOp.Positive"/> emits nothing — the same
         /// masked-copy vehicle Default.Round uses), dtype= selects the loop.
         /// </summary>
-        public override NDArray Positive(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Positive(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy: positive has identity loops for every numeric dtype EXCEPT

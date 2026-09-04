@@ -18,23 +18,8 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (float-family only; int/bool/complex raise NumPy's "No loop matching" error).</param>
         /// <returns><c>log(exp(x1) + exp(x2))</c>. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logaddexp.html</remarks>
-        public static NDArray logaddexp(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.LogAddExp(x1, x2, dtype.AsType(), @out, where);
-
-        /// <summary>
-        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience overload
-        ///     (NumPy accepts dtype only as a keyword).
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logaddexp.html</remarks>
-        public static NDArray logaddexp(NDArray x1, NDArray x2, NPTypeCode dtype)
-            => x1.TensorEngine.LogAddExp(x1, x2, dtype.AsType());
-
-        /// <summary>
-        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience overload.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logaddexp.html</remarks>
-        public static NDArray logaddexp(NDArray x1, NDArray x2, Type dtype)
-            => x1.TensorEngine.LogAddExp(x1, x2, dtype);
+        public static NDArray logaddexp(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => x1.TensorEngine.LogAddExp(x1, x2, dtype, @out, where);
 
         /// <summary>
         ///     Logarithm of the sum of exponentiations of the inputs in base-2. <br></br>
@@ -50,22 +35,8 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (float-family only).</param>
         /// <returns><c>log2(2**x1 + 2**x2)</c>. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logaddexp2.html</remarks>
-        public static NDArray logaddexp2(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.LogAddExp2(x1, x2, dtype.AsType(), @out, where);
-
-        /// <summary>
-        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience overload.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logaddexp2.html</remarks>
-        public static NDArray logaddexp2(NDArray x1, NDArray x2, NPTypeCode dtype)
-            => x1.TensorEngine.LogAddExp2(x1, x2, dtype.AsType());
-
-        /// <summary>
-        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience overload.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logaddexp2.html</remarks>
-        public static NDArray logaddexp2(NDArray x1, NDArray x2, Type dtype)
-            => x1.TensorEngine.LogAddExp2(x1, x2, dtype);
+        public static NDArray logaddexp2(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => x1.TensorEngine.LogAddExp2(x1, x2, dtype, @out, where);
 
         /// <summary>
         ///     Return the next floating-point value after x1 towards x2, element-wise. <br></br>
@@ -78,22 +49,8 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (float-family only).</param>
         /// <returns>The next representable values of x1 in the direction of x2. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nextafter.html</remarks>
-        public static NDArray nextafter(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.NextAfter(x1, x2, dtype.AsType(), @out, where);
-
-        /// <summary>
-        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience overload.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nextafter.html</remarks>
-        public static NDArray nextafter(NDArray x1, NDArray x2, NPTypeCode dtype)
-            => x1.TensorEngine.NextAfter(x1, x2, dtype.AsType());
-
-        /// <summary>
-        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience overload.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nextafter.html</remarks>
-        public static NDArray nextafter(NDArray x1, NDArray x2, Type dtype)
-            => x1.TensorEngine.NextAfter(x1, x2, dtype);
+        public static NDArray nextafter(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => x1.TensorEngine.NextAfter(x1, x2, dtype, @out, where);
 
         /// <summary>
         ///     Change the sign of x1 to that of x2, element-wise. <br></br>
@@ -108,21 +65,7 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (float-family only).</param>
         /// <returns>The values of x1 with the sign of x2. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.copysign.html</remarks>
-        public static NDArray copysign(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
-            => x1.TensorEngine.CopySign(x1, x2, dtype.AsType(), @out, where);
-
-        /// <summary>
-        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience overload.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.copysign.html</remarks>
-        public static NDArray copysign(NDArray x1, NDArray x2, NPTypeCode dtype)
-            => x1.TensorEngine.CopySign(x1, x2, dtype.AsType());
-
-        /// <summary>
-        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience overload.
-        /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.copysign.html</remarks>
-        public static NDArray copysign(NDArray x1, NDArray x2, Type dtype)
-            => x1.TensorEngine.CopySign(x1, x2, dtype);
+        public static NDArray copysign(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => x1.TensorEngine.CopySign(x1, x2, dtype, @out, where);
     }
 }

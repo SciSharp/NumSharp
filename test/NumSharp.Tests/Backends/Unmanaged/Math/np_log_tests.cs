@@ -36,7 +36,7 @@ namespace NumSharp.Tests.Backends.Unmanaged.Math
         public void LogUpcast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Int32)+5;
-            var ret = np.log(right, NPTypeCode.Double);
+            var ret = np.log(right, dtype: NPTypeCode.Double);
             ret.GetTypeCode.Should().Be(NPTypeCode.Double);
             ret.GetData<double>().All(d => System.Math.Abs(d - 1.6094379124341) < 0.0001).Should().BeTrue();
 
@@ -50,7 +50,7 @@ namespace NumSharp.Tests.Backends.Unmanaged.Math
         public void LogDowncast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Double) + 5;
-            new Action(()=> np.log(right, NPTypeCode.Byte)).Should().Throw<IncorrectTypeException>().Where(exception => exception.Message.Contains("No loop matching the specified signature and casting was found for"));
+            new Action(()=> np.log(right, dtype: NPTypeCode.Byte)).Should().Throw<IncorrectTypeException>().Where(exception => exception.Message.Contains("No loop matching the specified signature and casting was found for"));
         }
     }
 }

@@ -9,7 +9,7 @@ namespace NumSharp.Backends
         /// Element-wise degrees to radians conversion using IL-generated kernels.
         /// Computes x * (π/180).
         /// </summary>
-        public override NDArray Deg2Rad(NDArray nd, Type dtype = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Deg2Rad(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy validation order: the where bool check is argument
