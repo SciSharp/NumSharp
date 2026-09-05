@@ -4,7 +4,7 @@ NumSharp is a .NET port of Python's NumPy library targeting **1-to-1 API and beh
 
 ## NumPy Reference Source
 
-A full clone of the NumPy repository is available at `src/numpy/`. Use this as the authoritative reference for API behavior, edge cases, and implementation details when implementing or verifying NumSharp functions.
+A full clone of the NumPy repository is available at `refs/numpy/`. Use this as the authoritative reference for API behavior, edge cases, and implementation details when implementing or verifying NumSharp functions.
 
 ## Core Principles
 
@@ -14,7 +14,7 @@ A full clone of the NumPy repository is available at `src/numpy/`. Use this as t
 4. **Breaking Changes OK**: Breaking changes are acceptable to match NumPy
 5. **Test From NumPy Output**: Tests should be based on running actual NumPy code
 
-**When fixing bugs:** Don't just patch symptoms. Check `src/numpy/` for how NumPy implements the same functionality, then refactor NumSharp to match NumPy's structure.
+**When fixing bugs:** Don't just patch symptoms. Check `refs/numpy/` for how NumPy implements the same functionality, then refactor NumSharp to match NumPy's structure.
 
 ## Definition of Done (DOD) - Operations
 

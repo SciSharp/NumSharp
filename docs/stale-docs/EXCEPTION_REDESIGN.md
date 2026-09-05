@@ -20,7 +20,7 @@
 | Throw helper design | COMPLETE |
 | Implementation | NOT STARTED |
 
-**Last Updated:** Based on NumPy v2.4.2 source at `src/numpy/`
+**Last Updated:** Based on NumPy v2.4.2 source at `refs/numpy/`
 
 ---
 
@@ -633,7 +633,7 @@ Throw.IfNotWriteable(shape);  // -> "assignment destination is read-only"
 
 ## Appendix B: NumPy Source References (v2.4.2)
 
-All paths relative to `src/numpy/numpy/`:
+All paths relative to `refs/numpy/numpy/`:
 
 | Error Type | Source File | Line | Verified Message |
 |------------|-------------|------|------------------|

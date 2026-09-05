@@ -1,7 +1,7 @@
 # NumSharp FFT Integration — Technical Plan (`np.fft.*`)
 
 Status: **proposal / research** (no FFT code exists in NumSharp yet).
-Reference: numpy 2.4.2 (`src/numpy/numpy/fft/`), pocketfft engine (`github.com/mreineck/pocketfft`).
+Reference: numpy 2.4.2 (`refs/numpy/numpy/fft/`), pocketfft engine (`github.com/mreineck/pocketfft`).
 Author: research pass, 2026-08-14.
 
 ---
@@ -109,7 +109,7 @@ So the **entire kernel scope is `c2c` + `r2c` + `c2r` on one axis of an N-D arra
 
 - **Upstream:** `https://github.com/mreineck/pocketfft` (Martin Reinecke, Max-Planck-Society).
   3-clause BSD (`pocketfft/LICENSE.md`) — compatible with NumSharp's Apache-2.0.
-- **Vendored copy already in-tree:** `src/numpy/numpy/fft/pocketfft/pocketfft_hdronly.h`
+- **Vendored copy already in-tree:** `refs/numpy/numpy/fft/pocketfft/pocketfft_hdronly.h`
   (git submodule pinned at `33ae5dc9`, `release_for_eigen-24-g33ae5dc`).
 - **Standalone reference clone (this pass):** cloned to the session scratchpad
   (`…/scratchpad/pocketfft-ref/`, latest `main`, 124 KB header). Use the **in-tree pinned copy** as the

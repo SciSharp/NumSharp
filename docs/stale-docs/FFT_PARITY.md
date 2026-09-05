@@ -84,7 +84,7 @@ header comments.
 ## 3. The engine port (`PocketFFT.*.cs`)
 
 Managed port of pocketfft as vendored by NumPy 2.4.2 (pinned commit `33ae5dc9`,
-`src/pocketfft/pocketfft_hdronly.h`). Double engine only (`T0 == double`); operation order preserved
+`refs/pocketfft/pocketfft_hdronly.h`). Double engine only (`T0 == double`); operation order preserved
 verbatim.
 
 | File | Ports (pocketfft) | Contents |

@@ -84,7 +84,7 @@ Verified against NumPy 2.4.2 (`b = np.arange(24).reshape(2,3,4)`):
 
 ## 3. NumPy reference
 
-`src/numpy/numpy/_core/src/multiarray/mapping.c`:
+`refs/numpy/numpy/_core/src/multiarray/mapping.c`:
 
 - `prepare_index(...)` — boolean → integer-array conversion (NumSharp parallel: the
   `np.nonzero()` expansion in the `_NDArrayFound` loops). Already done.

@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 // =============================================================================
 // Managed port of pocketfft (numpy 2.4.2's vendored engine, pinned commit
-// 33ae5dc9): src/pocketfft/pocketfft_hdronly.h.
+// 33ae5dc9): refs/pocketfft/pocketfft_hdronly.h.
 //
 // This file ports:
 //   * cmplx<T0>            -> struct Cmplx           (lines 236-294)

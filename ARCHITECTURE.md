@@ -61,7 +61,7 @@ There is no server, persistence tier, or background service. Process-local state
 | [`NumSharp.Tests`](test/NumSharp.Tests/NumSharp.Tests.csproj) | Main parity, kernel, layout, lifetime, IO, OpenBLAS, and corpus gates | Core, Bitmap, OpenBLAS | Runs managed-by-default; enables OpenBLAS only in scoped tests |
 | [`NumSharp.Tests.Interop`](test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj) | Live Python/NumPy interop and lifetime gates | Core, pythonnet, Python, NumPy | Sequential because CPython and lifetime counters are process-global |
 
-The repositories under [`src/numpy`](src/numpy/), [`src/pocketfft`](src/pocketfft/), and [`src/OpenBLAS`](src/OpenBLAS/) are pinned source-reference submodules, not Core runtime dependencies. NumPy is the behavioral authority; pocketfft and OpenBLAS are implementation references. The currently pinned NumPy submodule is v2.4.2.
+The repositories under [`refs/numpy`](refs/numpy/), [`refs/pocketfft`](refs/pocketfft/), and [`refs/OpenBLAS`](refs/OpenBLAS/) are pinned source-reference submodules, not Core runtime dependencies. NumPy is the behavioral authority; pocketfft and OpenBLAS are implementation references. The currently pinned NumPy submodule is v2.4.2.
 
 ## 3. Stable architecture areas
 
@@ -320,7 +320,7 @@ This table is not a release promise. It is the order in which architecture risk 
 
 When adding or repairing an operation:
 
-1. Locate the corresponding implementation in [`src/numpy`](src/numpy/) and run the pinned NumPy version on dtype, scalar, empty, NaN/Inf/signed-zero, negative-axis, layout, and error cases.
+1. Locate the corresponding implementation in [`refs/numpy`](refs/numpy/) and run the pinned NumPy version on dtype, scalar, empty, NaN/Inf/signed-zero, negative-axis, layout, and error cases.
 2. Identify the owning area and existing execution family. Do not bypass `Shape`, writeability, dtype promotion, or engine dispatch for convenience.
 3. Prefer an API-level composition when it preserves NumPy semantics and avoids avoidable intermediates. Use `DefaultEngine` and emitted kernels for hot or layout-sensitive primitives.
 4. For elementwise multi-operand work, prefer the NDIter inner-loop model unless a proven trivial whole-array route is both simpler and faster. Preserve existing bit order.

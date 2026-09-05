@@ -8,9 +8,9 @@ namespace NumSharp.Tests.Backends.Kernels;
 /// All expected values are verified against NumPy 2.4.2 output.
 ///
 /// Test cases are ported from NumPy's test suite:
-/// - src/numpy/numpy/_core/tests/test_numeric.py (nonzero tests)
-/// - src/numpy/numpy/_core/tests/test_multiarray.py (argmax/argmin, masking)
-/// - src/numpy/numpy/_core/tests/test_indexing.py (boolean indexing)
+/// - refs/numpy/numpy/_core/tests/test_numeric.py (nonzero tests)
+/// - refs/numpy/numpy/_core/tests/test_multiarray.py (argmax/argmin, masking)
+/// - refs/numpy/numpy/_core/tests/test_indexing.py (boolean indexing)
 /// </summary>
 [TestClass]
 public class SimdOptimizationTests

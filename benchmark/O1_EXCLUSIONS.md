@@ -28,21 +28,21 @@ both dashboard JavaScript scopes are regression-tested against that policy.
 
 The vendored NumPy 2.x source is authoritative:
 
-- [`np.real`](../src/numpy/numpy/lib/_type_check_impl.py) returns `val.real` directly.
-- [`flip`](../src/numpy/numpy/lib/_function_base_impl.py) explicitly documents a view performed in
+- [`np.real`](../refs/numpy/numpy/lib/_type_check_impl.py) returns `val.real` directly.
+- [`flip`](../refs/numpy/numpy/lib/_function_base_impl.py) explicitly documents a view performed in
   constant time; `rot90` composes flips and transpose views.
-- [`expand_dims` and split`](../src/numpy/numpy/lib/_shape_base_impl.py) return reshaped/sliced views;
+- [`expand_dims` and split`](../refs/numpy/numpy/lib/_shape_base_impl.py) return reshaped/sliced views;
   split loops over the requested section count, not array elements.
-- [`unstack`](../src/numpy/numpy/_core/shape_base.py) is `tuple(moveaxis(...))`; the benchmark fixes
+- [`unstack`](../refs/numpy/numpy/_core/shape_base.py) is `tuple(moveaxis(...))`; the benchmark fixes
   the leading axis at 10.
-- [`broadcast_to`/`broadcast_arrays`](../src/numpy/numpy/lib/_stride_tricks_impl.py) return views,
+- [`broadcast_to`/`broadcast_arrays`](../refs/numpy/numpy/lib/_stride_tricks_impl.py) return views,
   including stride-zero dimensions.
-- [`moveaxis`/`rollaxis`](../src/numpy/numpy/_core/numeric.py) and
-  [`transpose`/`swapaxes`/`squeeze`](../src/numpy/numpy/_core/fromnumeric.py) only permute shape and
+- [`moveaxis`/`rollaxis`](../refs/numpy/numpy/_core/numeric.py) and
+  [`transpose`/`swapaxes`/`squeeze`](../refs/numpy/numpy/_core/fromnumeric.py) only permute shape and
   stride metadata for ndarray inputs.
-- [`linalg.matrix_transpose`](../src/numpy/numpy/linalg/_linalg.py) delegates to `swapaxes`; diagonal
+- [`linalg.matrix_transpose`](../refs/numpy/numpy/linalg/_linalg.py) delegates to `swapaxes`; diagonal
   extraction is a strided view.
-- [`einsum_path`](../src/numpy/numpy/_core/einsumfunc.py) states its complexity in the number of
+- [`einsum_path`](../refs/numpy/numpy/_core/einsumfunc.py) states its complexity in the number of
   contraction terms. The benchmark fixes that count at two.
 
 ## Empirical cross-check

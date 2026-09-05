@@ -15,7 +15,7 @@ proves exact behavior. This page separates three questions that used to be confl
 3. **Does the operation need an optional backend?** Most operations do not. Matrix
    factorizations do; the distinction is documented below.
 
-The authoritative NumPy implementation is the pinned clone at `src/numpy/`. Documentation and
+The authoritative NumPy implementation is the pinned clone at `refs/numpy/`. Documentation and
 tests are derived from that source and from running NumPy 2.4.2, rather than from memory or from
 older NumSharp behavior.
 

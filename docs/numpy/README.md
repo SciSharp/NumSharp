@@ -10,4 +10,4 @@ These documents serve as reference material for understanding NumPy's APIs, sema
 
 ## Source
 
-The authoritative NumPy source is available at `src/numpy/` (checked out to v2.4.2).
+The authoritative NumPy source is available at `refs/numpy/` (checked out to v2.4.2).

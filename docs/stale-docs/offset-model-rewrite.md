@@ -197,7 +197,7 @@ New derivations:
 
 ## NumPy Reference Files
 
-These files in `src/numpy/` contain the authoritative implementation:
+These files in `refs/numpy/` contain the authoritative implementation:
 
 | File | What to study |
 |------|---------------|

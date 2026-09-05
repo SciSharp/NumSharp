@@ -106,7 +106,7 @@ New `NumSharp.Char8` type (`[StructLayout(Sequential, Size=1)]` readonly struct)
 - Adapted from .NET `System.Char` (Latin1CharInfo table copied verbatim).
 - Full Python `bytes` parity: `Strip`, `Split`, `SplitLines` (bytes-only — only `\n`/`\r`/`\r\n`), `Partition`, `Replace` (with empty-pattern handling), `Center` (CPython's odd-padding-on-the-left formula), `ZFill`, predicates (`IsDigits`/`IsAlphas`/etc.).
 - `Converts.Char8.cs` (324 lines) — parallel to `Converts.Native.cs` for all 12 dtypes; throws on overflow/NaN per existing convention.
-- `src/dotnet/` — fetched System.Char dependency tree (`Char.cs`, `Latin1Utility`, `Ascii.*`, `Rune`, `UnicodeUtility`, `HexConverter`, `Number.Parsing`, etc.) into a reference library. Indexed in `INDEX.md`.
+- `refs/dotnet/` — fetched System.Char dependency tree (`Char.cs`, `Latin1Utility`, `Ascii.*`, `Rune`, `UnicodeUtility`, `HexConverter`, `Number.Parsing`, etc.) into a reference library. Indexed in `INDEX.md`.
 - 250-line Python `bytes` oracle diff (identical) + 270+ C# edge assertions.
 - **Standalone for now** — not yet wired into `NPTypeCode` enum (would touch ~50 switch statements; deferred).
 

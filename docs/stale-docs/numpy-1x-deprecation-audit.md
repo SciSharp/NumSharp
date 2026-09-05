@@ -2,7 +2,7 @@
 
 ## Status: Investigation Complete — See `numpy-1x-deprecation-findings.md` for results
 
-NumSharp was originally built targeting NumPy 1.x APIs. NumPy 2.0 (June 2024) introduced ~100 API removals, behavioral changes, and type promotion overhauls. This plan documents a systematic investigation to identify every NumSharp feature that corresponds to deprecated, removed, or behaviorally-changed NumPy 1.x functionality, using the NumPy v2.4.2 source tree at `src/numpy/` as the authoritative reference.
+NumSharp was originally built targeting NumPy 1.x APIs. NumPy 2.0 (June 2024) introduced ~100 API removals, behavioral changes, and type promotion overhauls. This plan documents a systematic investigation to identify every NumSharp feature that corresponds to deprecated, removed, or behaviorally-changed NumPy 1.x functionality, using the NumPy v2.4.2 source tree at `refs/numpy/` as the authoritative reference.
 
 ## Objectives
 
@@ -16,15 +16,15 @@ NumSharp was originally built targeting NumPy 1.x APIs. NumPy 2.0 (June 2024) in
 
 | Source | Location | Contents |
 |--------|----------|----------|
-| NumPy 2.0 Migration Guide | `src/numpy/doc/source/numpy_2_0_migration_guide.rst` | Comprehensive migration instructions, ~100 removed members table |
-| NumPy 2.0.0 Release Notes | `src/numpy/doc/source/release/2.0.0-notes.rst` | All removals, deprecations, expired deprecations, behavioral changes |
-| NumPy 2.1.0 Release Notes | `src/numpy/doc/source/release/2.1.0-notes.rst` | Post-2.0 deprecations |
-| NumPy 2.2.0 Release Notes | `src/numpy/doc/source/release/2.2.0-notes.rst` | Further deprecations |
-| NumPy _methods.py | `src/numpy/numpy/_core/_methods.py` | Canonical reduction implementations (mean, var, std) |
-| NumPy fromnumeric.py | `src/numpy/numpy/_core/fromnumeric.py` | Function signatures and delegation patterns |
-| NumPy numeric.py | `src/numpy/numpy/_core/numeric.py` | Creation functions, element-wise ops |
-| NumPy _type_aliases.py | `src/numpy/numpy/_core/_type_aliases.py` | Type hierarchy and promotion |
-| **NUMPY_NUMSHARP_MAP.md** | `src/numpy/NUMPY_NUMSHARP_MAP.md` | Complete 1-to-1 API map (394 functions, ~40% coverage) — **must be cross-checked by this audit** |
+| NumPy 2.0 Migration Guide | `refs/numpy/doc/source/numpy_2_0_migration_guide.rst` | Comprehensive migration instructions, ~100 removed members table |
+| NumPy 2.0.0 Release Notes | `refs/numpy/doc/source/release/2.0.0-notes.rst` | All removals, deprecations, expired deprecations, behavioral changes |
+| NumPy 2.1.0 Release Notes | `refs/numpy/doc/source/release/2.1.0-notes.rst` | Post-2.0 deprecations |
+| NumPy 2.2.0 Release Notes | `refs/numpy/doc/source/release/2.2.0-notes.rst` | Further deprecations |
+| NumPy _methods.py | `refs/numpy/numpy/_core/_methods.py` | Canonical reduction implementations (mean, var, std) |
+| NumPy fromnumeric.py | `refs/numpy/numpy/_core/fromnumeric.py` | Function signatures and delegation patterns |
+| NumPy numeric.py | `refs/numpy/numpy/_core/numeric.py` | Creation functions, element-wise ops |
+| NumPy _type_aliases.py | `refs/numpy/numpy/_core/_type_aliases.py` | Type hierarchy and promotion |
+| **NUMPY_NUMSHARP_MAP.md** | `refs/numpy/NUMPY_NUMSHARP_MAP.md` | Complete 1-to-1 API map (394 functions, ~40% coverage) — **must be cross-checked by this audit** |
 
 ---
 
@@ -252,7 +252,7 @@ Write a `dotnet run` script that:
 
 ## Phase 7: Cross-Check NUMPY_NUMSHARP_MAP.md
 
-The file `src/numpy/NUMPY_NUMSHARP_MAP.md` is a comprehensive 394-function API map with status codes (`Y`/`~`/`-`), file locations, and notes. This audit should validate and correct that map.
+The file `refs/numpy/NUMPY_NUMSHARP_MAP.md` is a comprehensive 394-function API map with status codes (`Y`/`~`/`-`), file locations, and notes. This audit should validate and correct that map.
 
 ### 7.1 Deprecation-Related Corrections
 
@@ -355,7 +355,7 @@ Each phase produces:
 
 Final deliverables:
 - `docs/plans/numpy-1x-deprecation-findings.md` — all results consolidated
-- Updated `src/numpy/NUMPY_NUMSHARP_MAP.md` — corrected with deprecation annotations, new 2.x functions, verified status claims
+- Updated `refs/numpy/NUMPY_NUMSHARP_MAP.md` — corrected with deprecation annotations, new 2.x functions, verified status claims
 
 ---
 

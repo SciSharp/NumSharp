@@ -30,7 +30,7 @@ raw bool arrays, stale `(1,)` implied shapes).
 
 ## 1. NumPy's model (the target architecture)
 
-Reference: `src/numpy/numpy/_core/src/multiarray/mapping.c` and `mapping.h`.
+Reference: `refs/numpy/numpy/_core/src/multiarray/mapping.c` and `mapping.h`.
 
 ### 1a. `index_type` flags (`mapping.h:7-21`)
 
@@ -366,7 +366,7 @@ Each phase keeps the full suite + `FuzzMatrix` green and is independently commit
 
 ## 10. Reference map
 
-**NumPy (`src/numpy/numpy/_core/src/multiarray/`):**
+**NumPy (`refs/numpy/numpy/_core/src/multiarray/`):**
 - `mapping.h:7-21` — `HAS_*` flags.
 - `mapping.c:262-769` — `prepare_index_noarray` (the classifier; the spec for §1b).
 - `mapping.c:1520-1644` — getitem routing (§1c).

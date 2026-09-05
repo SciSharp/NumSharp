@@ -34,7 +34,7 @@ contraction is `k = 4`, where every summation order agrees exactly.
 
 ## 2. Why no portable algorithm can fix it
 
-Read `numpy/_core/src/umath/matmul.c.src` (the clone is in-repo at `src/numpy/`). For float32 and
+Read `numpy/_core/src/umath/matmul.c.src` (the clone is in-repo at `refs/numpy/`). For float32 and
 float64 **matrix @ matrix, NumPy always calls cblas**: since gh-23588 it copies a non-blasable
 operand into a contiguous temp and calls BLAS anyway, so the portable C loop
 `matmul_inner_noblas` (`*(typ*)op += val1 * val2`, ascending k) is unreachable in a stock wheel

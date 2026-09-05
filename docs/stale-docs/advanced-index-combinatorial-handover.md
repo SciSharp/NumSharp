@@ -286,7 +286,7 @@ uniform pass, not N special cases. **The fix is to replace the stack with NumPy'
 
 ## 4. The target: NumPy's two-stage model
 
-Authoritative source (cloned in repo): `src/numpy/numpy/_core/src/multiarray/mapping.c`.
+Authoritative source (cloned in repo): `refs/numpy/numpy/_core/src/multiarray/mapping.c`.
 
 ### 4a. Stage 1 — `prepare_index(self, index, ...)`  (`mapping.c:772`)
 Walks the index tuple **once** and produces:
@@ -497,7 +497,7 @@ stale `NumSharp.Core`. Clear it after a Core rebuild; trust only `dotnet test` /
 
 ## 9. NumPy reference index (file:line)
 
-`src/numpy/numpy/_core/src/multiarray/mapping.c`:
+`refs/numpy/numpy/_core/src/multiarray/mapping.c`:
 - `prepare_index` — **772**; classification switch **319–667**; `HAS_*` flags **319,335,348,380,510,559,594,609**.
 - too-many-indices errors — **168, 303, 551, 667**.
 - bool-array dim check — **1150**.

@@ -2,7 +2,7 @@
 // DateTime64 — NumPy datetime64 parity for .NET.
 //
 // ADAPTED FROM: .NET 10 System.DateTime
-//   src/dotnet/src/libraries/System.Private.CoreLib/src/System/DateTime.cs
+//   refs/dotnet/src/libraries/System.Private.CoreLib/src/System/DateTime.cs
 //
 // SCOPE:
 //   DateTime64 is a CONVERSION HELPER TYPE, not a NumSharp NPTypeCode dtype.

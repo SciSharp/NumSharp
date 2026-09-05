@@ -68,7 +68,7 @@ NumSharp's project rule is to match NumPy exactly, error texts included. NumPy's
 wraps the string across source lines **with explicit `\n`s in the literal**, so the runtime
 `ValueError` genuinely contains them — this is not a formatting artifact of any printer:
 
-- **NumPy:** `src/numpy/numpy/_core/src/multiarray/shape.c` (vendored NumPy 2.4.2), the
+- **NumPy:** `refs/numpy/numpy/_core/src/multiarray/shape.c` (vendored NumPy 2.4.2), the
   `refcheck` branch around lines 101–105:
 
   ```c
@@ -107,7 +107,7 @@ For shell pipelines, match a single fragment (`grep "references or is referenced
 multiline-capable matcher with the exact `\n`s.
 
 Rule of thumb this incident produced for future gate authors: **before pinning any NumPy-parity
-error text, check the vendored `src/numpy` C string for embedded `\n`** — if the literal wraps,
+error text, check the vendored `refs/numpy` C string for embedded `\n`** — if the literal wraps,
 assert fragments.
 
 ## Where it is handled today

@@ -14,7 +14,7 @@ Downloaded from [dotnet/runtime](https://github.com/dotnet/runtime) `main` branc
 ## Directory Structure
 
 ```
-src/dotnet/
+refs/dotnet/
 ├── src/
 │   ├── coreclr/System.Private.CoreLib/src/System/Runtime/InteropServices/
 │   │   └── MemoryMarshal.CoreCLR.cs

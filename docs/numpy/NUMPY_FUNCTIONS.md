@@ -376,7 +376,7 @@ vecmat                  vectorize               where
 
 ## Reference
 
-- NumPy 2.4.2 source: `src/numpy/`
+- NumPy 2.4.2 source: `refs/numpy/`
 - NumPy API reference: https://numpy.org/doc/stable/reference/
 - NumSharp source: `src/NumSharp.Core/`
 
