@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 
 namespace NumSharp
@@ -44,9 +45,9 @@ namespace NumSharp
             internal readonly bool NoOpt;          // path_type is False
             internal readonly string Algorithm;    // "greedy" / "optimal" / any other string
             internal readonly int[][] ExplicitPath; // non-null => path_type[1:]
-            internal readonly long? MemoryLimit;   // from the (str, N) tuple form
+            internal readonly BigInteger? MemoryLimit; // from the (str, N) tuple form
 
-            internal Directive(bool noOpt, string algorithm, int[][] explicitPath, long? memoryLimit)
+            internal Directive(bool noOpt, string algorithm, int[][] explicitPath, BigInteger? memoryLimit)
             {
                 NoOpt = noOpt;
                 Algorithm = algorithm;
@@ -60,6 +61,16 @@ namespace NumSharp
         ///     (a 0-d/scalar operand is an empty <c>long[]</c>) and returns the contraction path and
         ///     its printable representation.
         /// </summary>
+        /// <remarks>
+        ///     Every element COUNT and FLOP COUNT in the cost model is a <see cref="BigInteger"/>,
+        ///     not a fixed-width integer, because NumPy computes them with arbitrary-precision Python
+        ///     ints (<c>_compute_size_by_dict</c>/<c>_flop_count</c> in <c>einsumfunc.py</c>). A
+        ///     contraction whose sizes overflow <c>long</c> — e.g. <c>ea,fb,abcd,gc,hd-&gt;efgh</c>
+        ///     with every dimension 100000, whose naive FLOP count is 5×10⁴⁰ — would otherwise wrap to
+        ///     a negative value, print garbage, and derail the greedy/optimal cost comparisons. The
+        ///     individual DIMENSION extents stay <c>long</c> (a single array dimension always fits an
+        ///     int64, as it does in NumPy's <c>intp</c> shapes); only the PRODUCTS need bignum.
+        /// </remarks>
         internal static (int[][] path, string repr) Compute(string subscripts, long[][] shapes, Directive opt)
         {
             var (inputSubscripts, outputSubscript) = ParseEinsumInput(subscripts, shapes);
@@ -108,13 +119,13 @@ namespace NumSharp
             }
 
             // Size of each input array plus the output array.
-            var sizeList = new List<long>(numInputs + 1);
+            var sizeList = new List<BigInteger>(numInputs + 1);
             foreach (string term in inputList)
                 sizeList.Add(ComputeSize(term, dimensionDict));
             sizeList.Add(ComputeSize(outputSubscript, dimensionDict));
-            long maxSize = sizeList.Max();
+            BigInteger maxSize = sizeList.Max();
 
-            long memoryArg = opt.MemoryLimit ?? maxSize;
+            BigInteger memoryArg = opt.MemoryLimit ?? maxSize;
 
             // Compute the path.
             int[][] path;
@@ -142,9 +153,9 @@ namespace NumSharp
             }
 
             // Build the contraction list — mutates working copies of input_sets / input_list.
-            var costList = new List<long>();
+            var costList = new List<BigInteger>();
             var scaleList = new List<int>();
-            var outSizeList = new List<long>();
+            var outSizeList = new List<BigInteger>();
             var contractionList = new List<(string einsumStr, string[] remaining)>();
 
             var workingSets = inputSets;
@@ -161,7 +172,7 @@ namespace NumSharp
                     FindContraction(contractInds, workingSets, outputSet);
                 workingSets = newSets;
 
-                long cost = FlopCount(idxContract, idxRemoved.Count > 0, contractInds.Length, dimensionDict);
+                BigInteger cost = FlopCount(idxContract, idxRemoved.Count > 0, contractInds.Length, dimensionDict);
                 costList.Add(cost);
                 scaleList.Add(idxContract.Count);
                 outSizeList.Add(ComputeSize(outInds, dimensionDict));
@@ -207,11 +218,11 @@ namespace NumSharp
             foreach (string x in inputList)
                 sumUnique += new HashSet<char>(x).Count;
             bool innerProduct = sumUnique - numIndices > 0;
-            long naiveCost = FlopCount(indices, innerProduct, numInputs, dimensionDict);
+            BigInteger naiveCost = FlopCount(indices, innerProduct, numInputs, dimensionDict);
 
-            long optCost = costList.Sum() + 1;
-            double speedup = (double)naiveCost / optCost;
-            long maxIntermediate = outSizeList.Max();
+            BigInteger optCost = costList.Aggregate(BigInteger.Zero, (acc, c) => acc + c) + 1;
+            double speedup = (double)naiveCost / (double)optCost;
+            BigInteger maxIntermediate = outSizeList.Max();
 
             var print = new StringBuilder();
             print.Append("  Complete contraction:  ").Append(overallContraction).Append('\n');
@@ -404,18 +415,18 @@ namespace NumSharp
         //  Cost model — _compute_size_by_dict, _flop_count, _find_contraction.
         // ---------------------------------------------------------------------------------------
 
-        private static long ComputeSize(IEnumerable<char> indices, Dictionary<char, long> idxDict)
+        private static BigInteger ComputeSize(IEnumerable<char> indices, Dictionary<char, long> idxDict)
         {
-            long ret = 1;
+            BigInteger ret = BigInteger.One;
             foreach (char c in indices)
                 ret *= idxDict[c];
             return ret;
         }
 
-        private static long FlopCount(IEnumerable<char> idxContraction, bool inner, int numTerms,
+        private static BigInteger FlopCount(IEnumerable<char> idxContraction, bool inner, int numTerms,
             Dictionary<char, long> sizeDictionary)
         {
-            long overallSize = ComputeSize(idxContraction, sizeDictionary);
+            BigInteger overallSize = ComputeSize(idxContraction, sizeDictionary);
             long opFactor = Math.Max(1, numTerms - 1);
             if (inner)
                 opFactor += 1;
@@ -458,12 +469,12 @@ namespace NumSharp
 
         private readonly struct Candidate
         {
-            internal readonly long SortRemovedNeg; // -removed_size
-            internal readonly long SortCost;       // cost
+            internal readonly BigInteger SortRemovedNeg; // -removed_size
+            internal readonly BigInteger SortCost;       // cost
             internal readonly int[] Positions;
             internal readonly List<HashSet<char>> NewSets;
 
-            internal Candidate(long sortRemovedNeg, long sortCost, int[] positions, List<HashSet<char>> newSets)
+            internal Candidate(BigInteger sortRemovedNeg, BigInteger sortCost, int[] positions, List<HashSet<char>> newSets)
             {
                 SortRemovedNeg = sortRemovedNeg;
                 SortCost = sortCost;
@@ -478,7 +489,7 @@ namespace NumSharp
         }
 
         private static int[][] GreedyPath(List<HashSet<char>> inputSets, HashSet<char> outputSet,
-            Dictionary<char, long> idxDict, long memoryLimit)
+            Dictionary<char, long> idxDict, BigInteger memoryLimit)
         {
             if (inputSets.Count == 1)
                 return new[] { new[] { 0 } };
@@ -486,12 +497,12 @@ namespace NumSharp
                 return new[] { new[] { 0, 1 } };
 
             var naiveContraction = FindContraction(RangeTuple(inputSets.Count), inputSets, outputSet);
-            long naiveCost = FlopCount(naiveContraction.idxContract, naiveContraction.idxRemoved.Count > 0,
+            BigInteger naiveCost = FlopCount(naiveContraction.idxContract, naiveContraction.idxRemoved.Count > 0,
                 inputSets.Count, idxDict);
 
             IEnumerable<int[]> combIter = Combinations2(inputSets.Count);
             var knownContractions = new List<Candidate>();
-            long pathCost = 0;
+            BigInteger pathCost = BigInteger.Zero;
             var path = new List<int[]>();
 
             var curInputSets = inputSets;
@@ -543,23 +554,23 @@ namespace NumSharp
         }
 
         private static bool TryParseContraction(int[] positions, List<HashSet<char>> inputSets,
-            HashSet<char> outputSet, Dictionary<char, long> idxDict, long memoryLimit, long pathCost,
-            long naiveCost, out Candidate candidate)
+            HashSet<char> outputSet, Dictionary<char, long> idxDict, BigInteger memoryLimit, BigInteger pathCost,
+            BigInteger naiveCost, out Candidate candidate)
         {
             candidate = default;
             var (idxResult, newInputSets, idxRemoved, idxContract) =
                 FindContraction(positions, inputSets, outputSet);
 
-            long newSize = ComputeSize(idxResult, idxDict);
+            BigInteger newSize = ComputeSize(idxResult, idxDict);
             if (newSize > memoryLimit)
                 return false;
 
-            long oldSizes = 0;
+            BigInteger oldSizes = BigInteger.Zero;
             foreach (int p in positions)
                 oldSizes += ComputeSize(inputSets[p], idxDict);
-            long removedSize = oldSizes - newSize;
+            BigInteger removedSize = oldSizes - newSize;
 
-            long cost = FlopCount(idxContract, idxRemoved.Count > 0, positions.Length, idxDict);
+            BigInteger cost = FlopCount(idxContract, idxRemoved.Count > 0, positions.Length, idxDict);
             if (pathCost + cost > naiveCost)
                 return false;
 
@@ -597,17 +608,17 @@ namespace NumSharp
         // ---------------------------------------------------------------------------------------
 
         private static int[][] OptimalPath(List<HashSet<char>> inputSets, HashSet<char> outputSet,
-            Dictionary<char, long> idxDict, long memoryLimit)
+            Dictionary<char, long> idxDict, BigInteger memoryLimit)
         {
             int nInputs = inputSets.Count;
-            var fullResults = new List<(long cost, List<int[]> positions, List<HashSet<char>> remaining)>
+            var fullResults = new List<(BigInteger cost, List<int[]> positions, List<HashSet<char>> remaining)>
             {
-                (0, new List<int[]>(), inputSets)
+                (BigInteger.Zero, new List<int[]>(), inputSets)
             };
 
             for (int iteration = 0; iteration < nInputs - 1; iteration++)
             {
-                var iterResults = new List<(long, List<int[]>, List<HashSet<char>>)>();
+                var iterResults = new List<(BigInteger, List<int[]>, List<HashSet<char>>)>();
 
                 foreach (var (cost, positions, remaining) in fullResults)
                 {
@@ -616,11 +627,11 @@ namespace NumSharp
                         var (newResult, newInputSets, idxRemoved, idxContract) =
                             FindContraction(con, remaining, outputSet);
 
-                        long newSize = ComputeSize(newResult, idxDict);
+                        BigInteger newSize = ComputeSize(newResult, idxDict);
                         if (newSize > memoryLimit)
                             continue;
 
-                        long totalCost = cost + FlopCount(idxContract, idxRemoved.Count > 0, con.Length, idxDict);
+                        BigInteger totalCost = cost + FlopCount(idxContract, idxRemoved.Count > 0, con.Length, idxDict);
                         var newPos = new List<int[]>(positions) { con };
                         iterResults.Add((totalCost, newPos, newInputSets));
                     }
@@ -644,8 +655,8 @@ namespace NumSharp
             return MinByCost(fullResults).positions.ToArray();
         }
 
-        private static (long cost, List<int[]> positions, List<HashSet<char>> remaining) MinByCost(
-            List<(long cost, List<int[]> positions, List<HashSet<char>> remaining)> results)
+        private static (BigInteger cost, List<int[]> positions, List<HashSet<char>> remaining) MinByCost(
+            List<(BigInteger cost, List<int[]> positions, List<HashSet<char>> remaining)> results)
         {
             var best = results[0];
             for (int i = 1; i < results.Count; i++)
@@ -732,44 +743,45 @@ namespace NumSharp
         ///     figures, ROUND-HALF-TO-EVEN. Done in integer arithmetic on purpose: .NET's
         ///     <c>"0.000e+00"</c> custom format rounds half-AWAY (13825 → 1.383e+04) where Python rounds
         ///     to even (→ 1.382e+04), which diverges on exact-halfway mantissas. Every value fed here
-        ///     (FLOP counts, intermediate sizes) is an integer, so this is exact.
+        ///     (FLOP counts, intermediate sizes) is an exact integer — a <see cref="BigInteger"/>,
+        ///     since a large contraction's counts exceed <c>long</c> (NumPy formats its own bignum
+        ///     counts the same way, e.g. a naive count of 5×10⁴⁰ prints as <c>5.000e+40</c>).
         /// </summary>
-        private static string Sci(long value)
+        private static string Sci(BigInteger value)
         {
-            if (value == 0)
+            if (value.IsZero)
                 return "0.000e+00";
 
-            bool negative = value < 0;
-            ulong v = negative ? (ulong)(-value) : (ulong)value;
+            bool negative = value.Sign < 0;
+            BigInteger v = negative ? -value : value;
 
-            int digits = 0;
-            for (ulong t = v; t > 0; t /= 10)
-                digits++;
+            // Decimal digit count -> the base-10 exponent. A single ToString is exact and avoids a
+            // per-digit divide loop over what may be a hundreds-of-digits bignum.
+            int digits = v.ToString(CultureInfo.InvariantCulture).Length;
             int exponent = digits - 1;
 
-            ulong mantissa4; // the leading 4 significant digits, 1000..9999
+            int mantissa4; // the leading 4 significant digits, 1000..9999
             if (digits <= 4)
             {
-                ulong mul = 1;
+                int mul = 1;
                 for (int i = 0; i < 4 - digits; i++)
                     mul *= 10;
-                mantissa4 = v * mul;
+                mantissa4 = (int)v * mul;
             }
             else
             {
-                ulong scale = 1;
-                for (int i = 0; i < digits - 4; i++)
-                    scale *= 10;
-                ulong q = v / scale, r = v % scale, half = scale / 2;
-                if (r > half || (r == half && (q & 1) == 1)) // round half to even
-                    q++;
+                BigInteger scale = BigInteger.Pow(10, digits - 4);
+                BigInteger q = BigInteger.DivRem(v, scale, out BigInteger r);
+                BigInteger half = scale / 2;
+                if (r > half || (r == half && !(q % 2).IsZero)) // round half to even
+                    q += BigInteger.One;
                 if (q == 10000) // carry (e.g. 9999.5 -> 10000 -> 1.000e+(E+1))
                 {
                     q = 1000;
                     exponent++;
                 }
 
-                mantissa4 = q;
+                mantissa4 = (int)q;
             }
 
             char expSign = exponent >= 0 ? '+' : '-';

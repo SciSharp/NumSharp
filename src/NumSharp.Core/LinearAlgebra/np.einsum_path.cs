@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -136,9 +137,9 @@ namespace NumSharp
 
             // Path tuple with memory limit: (str, int|float).
             if (pathType is ITuple tuple && tuple.Length == 2 && tuple[0] is string algo && IsNumber(tuple[1]))
-                return new EinsumPathPlanner.Directive(false, algo, null, ToLong(tuple[1]));
+                return new EinsumPathPlanner.Directive(false, algo, null, ToBigInteger(tuple[1]));
             if (pathType is object[] arr && arr.Length == 2 && arr[0] is string arrAlgo && IsNumber(arr[1]))
-                return new EinsumPathPlanner.Directive(false, arrAlgo, null, ToLong(arr[1]));
+                return new EinsumPathPlanner.Directive(false, arrAlgo, null, ToBigInteger(arr[1]));
 
             // A bare number leaks Python's len() error; anything else is "Did not understand".
             if (IsNumber(pathType))
@@ -209,7 +210,27 @@ namespace NumSharp
         private static bool IsNumber(object o) =>
             o is int or long or short or byte or sbyte or uint or ulong or ushort or float or double or decimal;
 
-        private static long ToLong(object o) => Convert.ToInt64(o, CultureInfo.InvariantCulture);
+        /// <summary>
+        ///     Converts a numeric <c>optimize=("greedy", N)</c> memory limit to <see cref="BigInteger"/>.
+        ///     Integer spellings are exact (and may exceed <c>long</c>); float/double/decimal spellings
+        ///     truncate toward zero — matching how NumPy's <c>new_size &gt; memory_limit</c> compares an
+        ///     exact bignum size against a float limit.
+        /// </summary>
+        private static BigInteger ToBigInteger(object o) => o switch
+        {
+            int i => i,
+            long l => l,
+            short s => s,
+            byte b => b,
+            sbyte sb => sb,
+            uint u => u,
+            ulong ul => ul,
+            ushort us => us,
+            float f => new BigInteger(f),
+            double d => new BigInteger(d),
+            decimal m => new BigInteger(m),
+            _ => throw new InvalidCastException($"cannot convert {o?.GetType().Name ?? "null"} to a memory limit")
+        };
 
         private static string PyTypeName(object o) => o switch
         {

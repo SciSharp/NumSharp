@@ -67,6 +67,99 @@ namespace NumSharp.Tests.LinearAlgebra
                 "   5               defg,hd->efgh                               efgh->efgh"));
         }
 
+        // -------------------------------------------------- large / arbitrary-precision sizes
+
+        // A large-dimension operand WITHOUT allocating it: a stride-0 broadcast view. einsum_path
+        // only reads shapes, exactly like NumPy (whose planner is handed shapes, not data).
+        private static NDArray Big(long rows, long cols) =>
+            np.broadcast_to(np.zeros(new Shape(1, 1)), new Shape(rows, cols));
+
+        [TestMethod]
+        public void Sizes_Past_Int32_AreNotTruncated()
+        {
+            // i = 3e9 > int.MaxValue. The naive FLOP count (1.8e11) and largest intermediate
+            // (6e9) both exceed int range and must be reported exactly, matching NumPy 2.4.2.
+            var (path, repr) = np.einsum_path("ij,jk,kl->il", new[] { Big(3_000_000_000L, 2), Z(2, 5), Z(5, 2) }, "greedy");
+
+            path.ToString().Should().Be("['einsum_path', (1, 2), (0, 1)]");
+            repr.Should().Be(Lines(
+                "  Complete contraction:  ij,jk,kl->il",
+                "         Naive scaling:  4",
+                "     Optimized scaling:  3",
+                "      Naive FLOP count:  1.800e+11",
+                "  Optimized FLOP count:  2.400e+10",
+                "   Theoretical speedup:  7.500",
+                "  Largest intermediate:  6.000e+09 elements",
+                "--------------------------------------------------------------------------",
+                "scaling                  current                                remaining",
+                "--------------------------------------------------------------------------",
+                "   3                   kl,jk->jl                                ij,jl->il",
+                "   3                   jl,ij->il                                   il->il"));
+        }
+
+        [TestMethod]
+        public void FlopCount_Past_Int64_UsesArbitraryPrecision()
+        {
+            // Each operand (2e9, 2e9) holds 4e18 elements (fits long), but the naive FLOP count
+            // is 4.8e37 — far past long.MaxValue (~9.2e18). NumPy computes it with Python bignum;
+            // a long cost model wrapped to a NEGATIVE count and derailed the path. Matches NumPy 2.4.2.
+            const long d = 2_000_000_000L;
+            var (path, repr) = np.einsum_path("ij,jk,kl->il", new[] { Big(d, d), Big(d, d), Big(d, d) }, "greedy");
+
+            path.ToString().Should().Be("['einsum_path', (0, 1), (0, 1)]");
+            repr.Should().Be(Lines(
+                "  Complete contraction:  ij,jk,kl->il",
+                "         Naive scaling:  4",
+                "     Optimized scaling:  3",
+                "      Naive FLOP count:  4.800e+37",
+                "  Optimized FLOP count:  3.200e+28",
+                "   Theoretical speedup:  1500000000.000",
+                "  Largest intermediate:  4.000e+18 elements",
+                "--------------------------------------------------------------------------",
+                "scaling                  current                                remaining",
+                "--------------------------------------------------------------------------",
+                "   3                   jk,ij->ik                                kl,ik->il",
+                "   3                   ik,kl->il                                   il->il"));
+        }
+
+        [TestMethod]
+        public void Intermediate_Past_Int64_UsesArbitraryPrecision()
+        {
+            // The extreme case: every dim = 100000 in ea,fb,abcd,gc,hd->efgh gives a naive count
+            // of 5e40 and a largest intermediate of 1e20 elements — which overflows even
+            // Shape.size, so it is driven through the internal planner with raw long[][] shapes
+            // (exactly as NumPy's einsum_path is fed shapes, not arrays). Both greedy and optimal
+            // pick the same path; naive/optimized/speedup/intermediate all match NumPy 2.4.2.
+            const long d = 100000L;
+            var shapes = new[]
+            {
+                new[] { d, d }, new[] { d, d }, new[] { d, d, d, d }, new[] { d, d }, new[] { d, d }
+            };
+
+            foreach (string algorithm in new[] { "greedy", "optimal" })
+            {
+                var directive = new EinsumPathPlanner.Directive(false, algorithm, null, null);
+                var (path, repr) = EinsumPathPlanner.Compute("ea,fb,abcd,gc,hd->efgh", shapes, directive);
+
+                new EinsumPath(path).ToString().Should().Be("['einsum_path', (0, 2), (0, 3), (0, 2), (0, 1)]");
+                repr.Should().Be(Lines(
+                    "  Complete contraction:  ea,fb,abcd,gc,hd->efgh",
+                    "         Naive scaling:  8",
+                    "     Optimized scaling:  5",
+                    "      Naive FLOP count:  5.000e+40",
+                    "  Optimized FLOP count:  8.000e+25",
+                    "   Theoretical speedup:  625000000000000.000",
+                    "  Largest intermediate:  1.000e+20 elements",
+                    "--------------------------------------------------------------------------",
+                    "scaling                  current                                remaining",
+                    "--------------------------------------------------------------------------",
+                    "   5               abcd,ea->bcde                      fb,gc,hd,bcde->efgh",
+                    "   5               bcde,fb->cdef                         gc,hd,cdef->efgh",
+                    "   5               cdef,gc->defg                            hd,defg->efgh",
+                    "   5               defg,hd->efgh                               efgh->efgh"));
+            }
+        }
+
         // ------------------------------------------------------------------ path per optimize mode
 
         [TestMethod]

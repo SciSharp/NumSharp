@@ -1823,15 +1823,24 @@ decision order, with the verbatim error taxonomy (`ValueError` for the parse/sha
 "Did not understand the path: …" / "object of type '…' has no len()" for a bad path object). The
 returned `EinsumPath` ROUND-TRIPS into `np.einsum(…, optimize: path)` (also the raw list and the memory
 tuple) — accepted and validated, though einsum STILL contracts pairwise left-to-right (documented
-above), so the path changes nothing numerically, only which plan is displayed. **Two things done in
-integer arithmetic on purpose:** the `.3e` FLOP/size formatting rounds HALF-TO-EVEN like Python (.NET's
+above), so the path changes nothing numerically, only which plan is displayed. **The cost model is
+`BigInteger`, not `long`** — element counts and FLOP counts are computed with arbitrary precision
+because NumPy uses Python bignum (`_compute_size_by_dict`/`_flop_count`). Individual DIMENSION extents
+stay `long` (a single array dimension always fits int64, as it does in NumPy's `intp` shapes); only the
+PRODUCTS need bignum. A contraction whose sizes overflow `long` — e.g. every dim 100000 in
+`ea,fb,abcd,gc,hd->efgh`, whose naive FLOP count is 5×10⁴⁰ and largest intermediate 10²⁰ — used to wrap
+to a NEGATIVE count, print garbage, and derail the greedy/optimal cost comparisons (giving up to the
+single naive contraction); it now matches NumPy 2.4.2 byte-for-byte. **Two things done in integer
+arithmetic on purpose:** the `.3e` FLOP/size formatting rounds HALF-TO-EVEN like Python (.NET's
 `"0.000e+00"` rounds half-AWAY — 13825 → 1.383e+04 vs NumPy's 1.382e+04), so `Sci()` formats the
-integer directly; and the ellipsis PLACEHOLDER letters are the ONE inherent divergence — NumPy draws
+`BigInteger` directly; and the ellipsis PLACEHOLDER letters are the ONE inherent divergence — NumPy draws
 them from a hash-randomized set (`I`/`f`/`P` across three processes), so NumSharp draws them
 deterministically (the path and every number still match, only the `...`-expanded display letters
-differ, which NumPy itself does not pin). Deliberately NOT ported: `np.einsum_path`'s `einsum_call=True`
-hidden option (NumPy-internal; NumSharp's einsum has its own left-to-right driver). Gate:
-`LinearAlgebra/EinsumPathTests.cs` (23) + `EinsumSubscriptParityTests.cs` (subscript grammar) +
+differ, which NumPy itself does not pin). The contraction-step POSITIONS in `EinsumPath` stay `int[][]`
+(operand indices, capped tiny — NumPy returns the same small ints). Deliberately NOT ported:
+`np.einsum_path`'s `einsum_call=True` hidden option (NumPy-internal; NumSharp's einsum has its own
+left-to-right driver). Gate: `LinearAlgebra/EinsumPathTests.cs` (26 — incl. past-int32/past-int64/
+past-int64-intermediate size pins) + `EinsumSubscriptParityTests.cs` (subscript grammar) +
 `EinsumContractionTests.cs` (the values, against NumPy 2.4.2).
 
 **Signature parity is its own gate.** `LinAlgSignatureParityTests` reflects over the whole surface
