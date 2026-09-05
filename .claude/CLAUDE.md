@@ -1364,7 +1364,7 @@ pass; `docs/NDITER_PERF_DISCOVERY.md` §6.6, probe `benchmark/nditer/probes/fanc
 `numpy_twins.py fancy_where`).** Three levers landed, one verified: (1) **the fancy-index operator
 runs the take/put kernels** — `a[idx]`, `a[idx] = v`, `m[ridx]`, `m[ridx] = row` (ONE integer index
 array over a C-contiguous source of any rank; the old route kept an offset delegate per element, a
-materialised offset array and a second pass) go through `Selection/FancyIndexKernels.cs`: a lean
+materialised offset array and a second pass) go through `Selection/FancyIndexKernelRoute.cs`: a lean
 FLAT gather/scatter (`DirectILKernelGenerator.GatherFlat.cs` — compile-time element width, running
 cursors, NumPy's `check_and_adjust_index` as one add + one UNSIGNED compare) for primitive-width
 slabs, the general take/put kernels (`cpblk`) for whole-sub-array slabs, and int32 indices read IN
