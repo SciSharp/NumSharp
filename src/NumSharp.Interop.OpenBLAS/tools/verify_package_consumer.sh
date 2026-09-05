@@ -220,8 +220,12 @@ if [ "$IS_MAC" = 1 ]; then
 
     step "6. the cache entry is self-verifying: a tampered dependency is rebuilt, never mapped"
     ENTRY="$(dirname "$(dirname "$IMG")")"
-    printf 'garbage' > "$ENTRY/.dylibs/libgfortran.5.dylib"
-    AGAIN="$(cd "$CONS" && dotnet "$PUB/consumer.dll" 2>&1)"
+    # The entry was populated from the READ-ONLY install in step 4 and File.Copy keeps the mode
+    # bits, so its files are 0444: make them writable for the tamper (the loader itself never
+    # needs to — it rebuilds an entry by deleting the directory and renaming a fresh one in).
+    chmod -R u+w "$ENTRY"
+    printf 'garbage' > "$ENTRY/.dylibs/libgfortran.5.dylib" || fail "could not tamper with $ENTRY/.dylibs/libgfortran.5.dylib"
+    AGAIN="$(cd "$CONS" && dotnet "$PUB/consumer.dll" 2>&1)" || { echo "$AGAIN"; fail "the consumer failed after the tamper"; }
     echo "$AGAIN" | grep -q "^enabled=True" || fail "the loader must rebuild a tampered cache entry: $AGAIN"
     cmp -s "$ENTRY/.dylibs/libgfortran.5.dylib" "$PUB/libgfortran.5.dylib" || fail "the tampered dep must have been restored from its source"
     echo "ok"
