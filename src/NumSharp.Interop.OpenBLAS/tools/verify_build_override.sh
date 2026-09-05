@@ -260,8 +260,9 @@ echo "ok"
 
 step "15. the cache holds extracted libraries only (Goal 7: no wheels survive)"
 if [ -d "$CACHE" ]; then
-    WHEELS="$(find "$CACHE" -name '*.whl' | wc -l)"
-    [ "$WHEELS" = "0" ] || fail "$WHEELS wheel(s) found under $CACHE"
+    # BSD wc (macOS) pads the count with leading spaces — compare numerically, never as a string.
+    WHEELS="$(find "$CACHE" -name '*.whl' | wc -l | tr -d '[:space:]')"
+    [ "${WHEELS:-0}" -eq 0 ] || fail "$WHEELS wheel(s) found under $CACHE"
 fi
 echo "ok"
 
