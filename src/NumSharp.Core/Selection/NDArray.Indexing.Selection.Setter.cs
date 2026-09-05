@@ -749,7 +749,7 @@ namespace NumSharp
             // Everything else keeps the general route below: several index arrays, a non-contiguous
             // destination, a strided / reversed / narrow-dtype index view, a zero-byte slab.
             if (ndsCount == 1 && source.Shape.IsContiguous && DirectILKernelGenerator.Enabled
-                && FancyIndexKernels.TryGetIndexPointer(indices[0], out void* kernelIdxPtr, out bool kernelIdx32))
+                && FancyIndexKernelRoute.TryGetIndexPointer(indices[0], out void* kernelIdxPtr, out bool kernelIdx32))
             {
                 long slabElements = 1;
                 if (isSubshaped)
@@ -908,9 +908,9 @@ namespace NumSharp
             NDArray<T> source, Shape srcShape, void* idxPtr, bool idx32, long indexCount, long axisLength,
             long slabBytes, long[] retShape, long[] subShape, bool isSubshaped, NDArray values) where T : unmanaged
         {
-            long bad = FancyIndexKernels.FirstOutOfRange(idxPtr, idx32, indexCount, axisLength);
+            long bad = FancyIndexKernelRoute.FirstOutOfRange(idxPtr, idx32, indexCount, axisLength);
             if (bad >= 0)
-                throw new IndexError($"index {FancyIndexKernels.ReadIndex(idxPtr, idx32, bad)} is out of bounds for axis 0 with size {axisLength}");
+                throw new IndexError($"index {FancyIndexKernelRoute.ReadIndex(idxPtr, idx32, bad)} is out of bounds for axis 0 with size {axisLength}");
 
             string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
             var typed = values.AsOrMakeGeneric<T>();
@@ -948,11 +948,11 @@ namespace NumSharp
 
             byte* dstBase = (byte*)source.Storage.Address + srcShape.offset * InfoOf<T>.Size;
             byte* valuesPtr = (byte*)typed.Storage.Address + typed.Shape.offset * InfoOf<T>.Size;
-            long status = FancyIndexKernels.Scatter(dstBase, idxPtr, idx32, indexCount, valuesPtr, valuesCount, axisLength, slabBytes);
+            long status = FancyIndexKernelRoute.Scatter(dstBase, idxPtr, idx32, indexCount, valuesPtr, valuesCount, axisLength, slabBytes);
             if (status == -2)
                 return false;
             if (status >= 0)   // unreachable after the scan above; a hard stop rather than a silent partial write
-                throw new IndexError($"index {FancyIndexKernels.ReadIndex(idxPtr, idx32, status)} is out of bounds for axis 0 with size {axisLength}");
+                throw new IndexError($"index {FancyIndexKernelRoute.ReadIndex(idxPtr, idx32, status)} is out of bounds for axis 0 with size {axisLength}");
             return true;
         }
 

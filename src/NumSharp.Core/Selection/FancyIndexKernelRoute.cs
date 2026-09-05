@@ -22,7 +22,7 @@ namespace NumSharp
     ///     Everything here is layout-agnostic in dtype: a gather moves <c>slabBytes</c> per index
     ///     (one element, or one whole trailing sub-array when the index selects rows).
     /// </summary>
-    internal static unsafe class FancyIndexKernels
+    internal static unsafe class FancyIndexKernelRoute
     {
         /// <summary>
         ///     Gathered-region footprint above which the take kernels emit software prefetch (the same

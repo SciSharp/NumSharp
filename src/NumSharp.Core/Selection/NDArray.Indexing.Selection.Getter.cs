@@ -1261,7 +1261,7 @@ namespace NumSharp
             // source, a strided / reversed / narrow-dtype index view, a caller-supplied @out, or a
             // zero-byte slab (an empty trailing axis — nothing to gather, shape only).
             if (ndsCount == 1 && @out is null && source.Shape.IsContiguous && DirectILKernelGenerator.Enabled
-                && FancyIndexKernels.TryGetIndexPointer(indices[0], out void* kernelIdxPtr, out bool kernelIdx32))
+                && FancyIndexKernelRoute.TryGetIndexPointer(indices[0], out void* kernelIdxPtr, out bool kernelIdx32))
             {
                 long slabElements = 1;
                 if (isSubshaped)
@@ -1276,14 +1276,14 @@ namespace NumSharp
                     // like NumPy's fancy result); the kernel fills it flat.
                     var gathered = new NDArray<T>(retShape, false);
                     byte* srcBase = (byte*)source.Storage.Address + srcShape.offset * InfoOf<T>.Size;
-                    long fail = FancyIndexKernels.Gather(srcBase, kernelIdxPtr, kernelIdx32, indexCount, axisLength, slabBytes, (byte*)gathered.Address);
+                    long fail = FancyIndexKernelRoute.Gather(srcBase, kernelIdxPtr, kernelIdx32, indexCount, axisLength, slabBytes, (byte*)gathered.Address);
                     if (fail == -1)
                         return gathered;
                     if (fail >= 0)
                     {
                         // Same NumPy-verbatim text the general route raises (the single index array is
                         // axis 0); the partially filled result is a scope-reclaimed temp.
-                        long badIndex = FancyIndexKernels.ReadIndex(kernelIdxPtr, kernelIdx32, fail);
+                        long badIndex = FancyIndexKernelRoute.ReadIndex(kernelIdxPtr, kernelIdx32, fail);
                         throw new IndexError($"index {badIndex} is out of bounds for axis 0 with size {axisLength}");
                     }
                     // -2: the IL kernels are unavailable on this host — fall through to the general route.
