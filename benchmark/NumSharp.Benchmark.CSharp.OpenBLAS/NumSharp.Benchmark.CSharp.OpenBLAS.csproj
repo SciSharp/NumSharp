@@ -7,8 +7,8 @@
     <Nullable>enable</Nullable>
     <PlatformTarget>x64</PlatformTarget>
     <Optimize>true</Optimize>
-    <AssemblyName>NumSharp.Benchmark.OpenBLAS</AssemblyName>
-    <RootNamespace>NumSharp.Benchmark.OpenBLAS</RootNamespace>
+    <AssemblyName>NumSharp.Benchmark.CSharp.OpenBLAS</AssemblyName>
+    <RootNamespace>NumSharp.Benchmark.CSharp.OpenBLAS</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

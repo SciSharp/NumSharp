@@ -118,7 +118,7 @@ benchmark/
 ├── NumSharp.Benchmark.Python/             # Python/NumPy benchmarks
 │   └── numpy_benchmark.py                 # NumPy benchmark implementation
 │
-├── NumSharp.Benchmark.OpenBLAS/            # OpenBLAS official LinearAlgebra BDN runner
+├── NumSharp.Benchmark.CSharp.OpenBLAS/     # OpenBLAS official LinearAlgebra BDN runner
 │   └── Program.cs                          # Enables one-thread OpenBLAS, reuses shared classes/config
 │
 └── NumSharp.Benchmark.CSharp/              # Core-only C# BenchmarkDotNet project + shared benchmark assembly
@@ -444,7 +444,7 @@ These suites were added on top of the original set; each has a NumPy twin in `nu
 ### Backend profiles and complementary subsystems
 
 The official LinearAlgebra BenchmarkDotNet classes execute twice: the Core-only project is the Managed
-profile, while `NumSharp.Benchmark.OpenBLAS` enables one-thread OpenBLAS and discovers the same shared
+profile, while `NumSharp.Benchmark.CSharp.OpenBLAS` enables one-thread OpenBLAS and discovers the same shared
 classes with the same `OfficialBenchmarkConfig`. `merge-backend-profiles.py` refuses publication when
 any measured Managed LinearAlgebra exact cell lacks an available OpenBLAS-profile peer. The targeted
 `benchmark/backends/` harness then supplements product/LAPACK routes outside the official op matrix,

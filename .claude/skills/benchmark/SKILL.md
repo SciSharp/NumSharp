@@ -21,12 +21,18 @@ is the distilled map + the actionable playbooks. Read `benchmark/CLAUDE.md` when
 ## THE convention: NPY/NS (memorize this)
 
 > **ratio = NumPy_ms / NumSharp_ms.** `>1` = NumSharp **faster**, `<1` = slower, `=1` = parity. **Higher is better.**
-> **Timing basis: best window (min)** — ratios compare each side's per-case min over a ~200 ms time-budgeted
-> sweep (a >20 ms/call op runs exactly 100 times; the C# op-matrix keeps 50 BDN iterations), never the mean (NS-side GC/page-fault/machine tails made means lie ~15% geomean-wide);
-> per-case means stay in the JSON (`numpy_mean_ms`/`numsharp_mean_ms`) as tail diagnostics.
+> **Timing basis: best window (min)** — ratios compare each side's per-case *minimum*, never the mean. Interference
+> (GC pauses, page-fault storms, ambient machine load) only ever *adds* time, and it lands almost entirely in the
+> NumSharp side's right tail, so comparing means turned machine state into fake ratio regressions. Min-based
+> harnesses run each case to a ~200 ms time budget (a >20 ms/call op runs exactly 100 times); the C# op-matrix keeps
+> BenchmarkDotNet's 50 iterations. Per-case means stay in the JSON (`numpy_mean_ms`/`numsharp_mean_ms`) as tail
+> diagnostics — a large mean/min gap on one side flags a contaminated window.
 
-Used everywhere — matrices, geomeans, commit messages, every `*_sheet.py`. Dashboard/report bands: ✅ `≥1.05` · 🟡 `≥0.5` · 🟠 `≥0.2`
-· 🔴 `<0.2`. (The legacy `run-benchmarks.ps1` prints the INVERSE NS/NPY — prefer NPY/NS for anything new.)
+Used everywhere — matrices, geomeans, commit messages, every `*_sheet.py`. The report's status icons
+(✅/🟡/🟠/🔴 faster→slower · ▫ negligible/excluded · ⚪ pending · ❌ crashed) and their exact cutoffs live in
+`references/run-and-report.md`; the source of truth is `get_status()` + `classify()` in `scripts/merge-results.py`,
+so read those rather than trusting a hardcoded threshold. (The legacy `run-benchmarks.ps1` prints the INVERSE
+NS/NPY — prefer NPY/NS for anything new.)
 
 ## THE pitfall: Debug taints timings ~2×
 
@@ -41,17 +47,19 @@ script assembly, not Core. The BenchmarkDotNet projects are exempt (they mandate
 | Side | Where | What |
 |------|-------|------|
 | C# | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/<Category>/*.cs` | Core-only BenchmarkDotNet project plus shared benchmark classes; `[Benchmark(Description="np.foo(a)")]` methods. |
-| OpenBLAS C# | `benchmark/NumSharp.Benchmark.OpenBLAS/` | Enables one-thread OpenBLAS and reruns the shared official LinearAlgebra classes/config. |
+| OpenBLAS C# | `benchmark/NumSharp.Benchmark.CSharp.OpenBLAS/` | Enables one-thread OpenBLAS and reruns the shared official LinearAlgebra classes/config. |
 | NumPy | `benchmark/NumSharp.Benchmark.Python/numpy_benchmark.py` | `run_<suite>_benchmarks(...)` emitting `BenchmarkResult` rows. |
 | Merge | `benchmark/scripts/{merge-results,merge-backend-profiles}.py` | Joins language timings, then backend profiles on the exact cell. |
 | Orchestrator | `benchmark/run_benchmark.py` | Builds C#, runs each suite (BDN) + warm NumPy across 1K/100K/10M, merges, snapshots. |
 
 `run_benchmark.py --depth pass|light|measure` is the execution-depth contract shared by BDN and
-NumPy. `pass` is an execution gate (one workload call, zero warmups); `light` uses 8 BDN measurements
-and 3 warmups plus one-sixth of NumPy's normal time/sample budget; `measure` is the 5/50 BDN + full
+NumPy (defined once in `scripts/benchmark_modes.py`, so the two languages can't drift). `pass` is an
+execution gate (one workload call, zero warmups); `light` uses 8 BDN measurements after 3 warmups plus
+one-sixth of NumPy's normal time budget; `measure` is the full 50-measurement / 5-warmup BDN + full
 NumPy publication profile. Pass/light write only under `benchmark/results/` and must never replace
-root/docs/history artifacts. `--dtypes f32,float64` selects comma-separated dtypes; a multi-dtype
-scenario (for example src→dst casts) matches when any dtype side is requested.
+root/docs/history artifacts. `--dtypes f32,float64` selects comma-separated dtypes/aliases (canonical
+set + aliases in `benchmark_modes.py`); a multi-dtype scenario (for example src→dst casts) matches when
+any dtype side is requested.
 
 The join is by **normalized op name**: `normalize_op_name` strips the dtype tag, `[annotations]`, and
 identifier-only arg lists — so C# `"np.foo(a)"` and NumPy `"np.foo"` both collapse to `np.foo` and join. Get the
@@ -67,7 +75,7 @@ names to normalize identically or the row shows as "C# not run" / "NumPy only".
   Allocation-heavy families map the 10M label to 1M physical elements symmetrically on both sides;
   1M is not a separate report/dashboard tier.
 - **Backend profiles** — the complete official LinearAlgebra BDN classes run under both the Core-only
-  executable and `NumSharp.Benchmark.OpenBLAS`; a merge gate rejects any missing exact-cell OpenBLAS
+  executable and `NumSharp.Benchmark.CSharp.OpenBLAS`; a merge gate rejects any missing exact-cell OpenBLAS
   peer. `benchmark/backends/backend_profiles.py` supplements backend-only product/LAPACK routes with
   the same schema; MissingBackendException and NotSupportedException are availability outcomes. Every
   profile publishes `1K / 100K / 10M`; operation-specific physical work remains bounded (LAPACK maps
@@ -95,8 +103,13 @@ The most common task. Full worked example in **`references/add-benchmark.md`**. 
 
 ## Other tasks → where to go
 
-- **Run the suite (official / subset), interpret the report, the reports/UI surfaces + snapshots** → `references/run-and-report.md`. (The human-facing UI is the DocFX page `docs/website-src/docs/benchmarks-dashboard.md`; its Function Explorer data is generated, while narrative cards are curated. Generated dashboard data is now delivered via the orphan **`master-code-data`** branch with a build-time date-priority resolver in `tools/dashboard_data/` — see `references/run-and-report.md`.)
+- **Run the suite (official / subset), interpret the report, the reports/UI surfaces + snapshots** → `references/run-and-report.md`. (The human-facing UI is the DocFX page `docs/website-src/docs/benchmarks-dashboard.md`; its Function Explorer data is generated, while narrative cards are curated. Generated dashboard data is delivered via the orphan **`master-code-data`** branch with a build-time date-priority resolver in `tools/dashboard_data/` — see `references/run-and-report.md`.)
 - **Add or edit a matrix subsystem or backend profile case** → `references/subsystems.md`.
+- **"Is `np.<foo>` benchmarked yet? What's still missing?"** → the generated coverage ledger
+  `benchmark/coverage/generated/summary.md` (+ `coverage.{json,csv}`), refreshed by `scripts/audit_coverage.py`
+  from the `[Benchmark(Description)]` attributes across the op-matrix namespaces plus the reviewed
+  `coverage/overrides.json`. Its "Missing benchmark coverage" table is the to-do list; its route map says which
+  APIs need OpenBLAS. This is a source-level audit, not a timing run.
 - **Everything else (all suites, config internals, troubleshooting, type map)** → `benchmark/CLAUDE.md`.
 
 ## Gotchas
@@ -107,6 +120,10 @@ The most common task. Full worked example in **`references/add-benchmark.md`**. 
   trying to run BDN ad-hoc.
 - **What we commit is `benchmark/history/<date>_<sha>/`**, not the gitignored `benchmark/results/<ts>/` scratch.
   Reference `benchmark/history/latest/benchmark-report.md`.
+- **A row shows "C# not run" / "NumPy only"?** The two sides' names didn't normalize to the same join key — the
+  first thing to check for any new/renamed benchmark. `scripts/check_smoke_joins.py` verifies every C#
+  `[Benchmark(Description)]` ↔ NumPy name join in both directions using the exact merge normalizer (from a quick
+  `numpy_benchmark.py --quick --size small` smoke run), so it catches the mismatch without a full measured run.
 - **These are mostly view ops → sub-µs.** flip/rot90/transpose-aliases are O(1) views; their benchmark tracks
   allocation/dispatch overhead, not throughput. `benchmark/scripts/credibility.py` marks every reviewed
   O(1)-in-N scenario negligible regardless of measured duration, and every dashboard rollup must honor that

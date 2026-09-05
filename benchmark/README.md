@@ -75,7 +75,7 @@ committable `history/<date>_<sha>/` snapshot (+ repoints `history/latest`).
 |------|------|
 | `run_benchmark.py` | THE orchestrator (op matrix + backend profiles + subsystems + history snapshot). |
 | `NumSharp.Benchmark.CSharp/` | Core-only BenchmarkDotNet project and shared benchmark assembly — `Benchmarks/<Category>/*.cs`, config in `Infrastructure/`. |
-| `NumSharp.Benchmark.OpenBLAS/` | OpenBLAS-enabled executable that discovers the shared LinearAlgebra classes and uses the same official config. |
+| `NumSharp.Benchmark.CSharp.OpenBLAS/` | OpenBLAS-enabled executable that discovers the shared LinearAlgebra classes and uses the same official config. |
 | `NumSharp.Benchmark.Python/numpy_benchmark.py` | The NumPy twin — one `run_<suite>_benchmarks(...)` per suite. |
 | `scripts/merge-results.py` | Joins C# + NumPy on `(op, dtype, N)` → `benchmark-report.{md,json,csv}` (NPY/NS + credibility gating). |
 | `scripts/merge-backend-profiles.py` | Merges Managed/OpenBLAS profile JSON, preserves availability exceptions, and selects the effective timing. |

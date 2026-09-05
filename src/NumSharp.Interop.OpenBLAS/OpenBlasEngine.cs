@@ -505,7 +505,7 @@ namespace NumSharp.Interop.OpenBLAS
         //  managed heap issues an OS working-set trim (EmptyWorkingSet) that evicts even these retained
         //  pages — proven by a forced GC + WaitForPendingFinalizers making a warm block re-fault, and by
         //  SetProcessWorkingSetSizeEx / VirtualLock removing it. In a single long-lived process that runs
-        //  many linalg ops back-to-back (the openblas_bench harness), the LAST ops measured pay this trim
+        //  many linalg ops back-to-back (the backend_profile_bench harness), the LAST ops measured pay this trim
         //  mid-timing while the first ~14 do not — the same gesdd is fast at op #2 (cond) and slow at
         //  op #16 (svdvals). Each op measured in isolation, or under a GC-isolated harness (BenchmarkDotNet),
         //  is at parity — so this is left to the harness rather than pinning process pages from the library
