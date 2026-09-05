@@ -115,7 +115,7 @@ namespace NumSharp.Backends.Sorting
             if (axis == null)
             {
                 var flat = a.Shape.IsContiguous ? a.reshape(a.size) : a.ravel().copy('C');
-                var outFlat = new NDArray(NPTypeCode.Int64, new Shape((int)a.size), false);
+                var outFlat = new NDArray(NPTypeCode.Int64, Shape.Vector(a.size), false);
                 ArgPartitionInto(flat, outFlat, 0, WidenKth(kth));
                 return outFlat;
             }
@@ -136,7 +136,7 @@ namespace NumSharp.Backends.Sorting
             if (axis == null)
             {
                 var flat = a.Shape.IsContiguous ? a.reshape(a.size) : a.ravel().copy('C');
-                var outFlat = new NDArray(NPTypeCode.Int64, new Shape((int)a.size), false);
+                var outFlat = new NDArray(NPTypeCode.Int64, Shape.Vector(a.size), false);
                 ArgPartitionInto(flat, outFlat, 0, ExtractKthValues(kth));
                 return outFlat;
             }

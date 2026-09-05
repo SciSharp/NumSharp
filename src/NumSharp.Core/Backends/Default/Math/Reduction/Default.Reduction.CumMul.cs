@@ -41,7 +41,7 @@ namespace NumSharp.Backends
                 }
 
                 return new NDArray(emptyRetType,
-                    axis_ == null ? Shape.Vector((int)shape.size) : new Shape(shape.dimensions), false);
+                    axis_ == null ? Shape.Vector(shape.size) : new Shape(shape.dimensions), false);
             }
 
             // 0-d scalar or single-element 1-D: cumprod is the value itself, promoted to the

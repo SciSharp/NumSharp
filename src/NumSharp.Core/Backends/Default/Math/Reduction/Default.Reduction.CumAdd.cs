@@ -47,7 +47,7 @@ namespace NumSharp.Backends
             // (0,)); with an axis the shape is preserved.
             if (shape.IsEmpty || shape.size == 0)
                 return new NDArray(retTypeCode,
-                    axis_ == null ? Shape.Vector((int)shape.size) : new Shape(shape.dimensions), false);
+                    axis_ == null ? Shape.Vector(shape.size) : new Shape(shape.dimensions), false);
 
             // 0-d scalar or single-element 1-D: cumsum is the value itself, promoted to the
             // accumulator dtype and shaped 1-D — cumsum NEVER returns 0-d (NumPy: cumsum(0-d) -> (1,),
