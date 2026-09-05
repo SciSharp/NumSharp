@@ -6,17 +6,17 @@
   "licenses": [
     {
       "name": "OpenBLAS",
-      "spdx": "BSD-3-Clause-Attribution",
+      "spdx": "BSD-3-Clause",
       "url": "https://github.com/OpenMathLib/OpenBLAS/"
     },
     {
       "name": "LAPACK",
-      "spdx": "BSD-3-Clause-Attribution",
+      "spdx": "BSD-3-Clause",
       "url": "https://github.com/OpenMathLib/OpenBLAS/"
     },
     {
       "name": "GCC runtime library (libgfortran)",
-      "spdx": "GPL-3.0-with-GCC-exception",
+      "spdx": "GPL-3.0-or-later WITH GCC-exception-3.1",
       "url": "https://gcc.gnu.org/git/?p=gcc.git;a=tree;f=libgfortran"
     },
     {

@@ -18,7 +18,9 @@
     <Copyright>2021 © SciSharp STACK Team</Copyright>
     <Description>Zero-copy interop between NumSharp NDArray and the Python ecosystem via Python.NET (pythonnet). Converts NumSharp arrays to/from NumPy and PEP 3118 buffers; built-in PyTorch and Pandas adapters feed their official NumPy projections through the same memory bridge — no Numpy.NET or compile-time library dependency.</Description>
     <PackageTags>NumSharp;NumPy;PyTorch;Torch;Pandas;DataFrame;Series;pythonnet;Python.NET;interop;buffer-protocol;scientific-computing;PEP3118</PackageTags>
-    <PackageProjectUrl>https://scisharp.github.io/NumSharp/docs/interop/pythonnet.html</PackageProjectUrl>
+    <!-- The docs page is docs/interop/pythonnet-numpy.md (there is no interop/pythonnet.md), so the
+         nuget.org "Project website" link must point at the page that exists. -->
+    <PackageProjectUrl>https://scisharp.github.io/NumSharp/docs/interop/pythonnet-numpy.html</PackageProjectUrl>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>

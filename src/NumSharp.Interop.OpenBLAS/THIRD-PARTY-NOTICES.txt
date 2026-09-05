@@ -14,7 +14,7 @@ Bundled components and their licenses:
   OpenBLAS                               BSD-3-Clause
                                          https://github.com/OpenMathLib/OpenBLAS/
 
-  LAPACK                                 BSD-3-Clause (the "modified BSD" of netlib LAPACK)
+  LAPACK                                 BSD-3-Clause
                                          https://github.com/OpenMathLib/OpenBLAS/
 
   GCC runtime library (libgfortran)      GPL-3.0-or-later WITH GCC-exception-3.1

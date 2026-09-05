@@ -55,8 +55,8 @@ default on the seven other RIDs) and **scipy-openblas32** (LP64). The 32-bit dis
 
 NuGet resolves `runtimes/<rid>/native/` per machine, so a RID-specific publish carries only the one
 asset. Licences travel with them in `THIRD-PARTY-NOTICES.txt` (OpenBLAS and its bundled LAPACK are
-BSD-3-Clause-Attribution; the statically linked libgfortran carries the GCC Runtime Library
-Exception, the same basis on which NumPy and SciPy ship it in every wheel).
+BSD-3-Clause; the statically linked libgfortran carries the GCC Runtime Library Exception, the same
+basis on which NumPy and SciPy ship it in every wheel).
 
 ### Discovery order
 

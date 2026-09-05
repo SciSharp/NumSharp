@@ -165,12 +165,16 @@ def refresh_manifest(distribution_version, numpy_version):
         "numpy_version": numpy_version,
         "distribution_version": distribution_version,
         "openblas_version": "0.3.31.dev",
+        # SPDX ids only from the OSI/FSF-approved list: nuget.org rejects a package whose license
+        # expression (NumSharp.Interop.OpenBLAS.csproj mirrors these) carries anything else, and it
+        # does so at push time. 'BSD-3-Clause-Attribution' is a DIFFERENT, unapproved license and
+        # once sat here; OpenBLAS's LICENSE is the plain 3-clause BSD.
         "licenses": [
-            {"name": "OpenBLAS", "spdx": "BSD-3-Clause-Attribution",
+            {"name": "OpenBLAS", "spdx": "BSD-3-Clause",
              "url": "https://github.com/OpenMathLib/OpenBLAS/"},
-            {"name": "LAPACK", "spdx": "BSD-3-Clause-Attribution",
+            {"name": "LAPACK", "spdx": "BSD-3-Clause",
              "url": "https://github.com/OpenMathLib/OpenBLAS/"},
-            {"name": "GCC runtime library (libgfortran)", "spdx": "GPL-3.0-with-GCC-exception",
+            {"name": "GCC runtime library (libgfortran)", "spdx": "GPL-3.0-or-later WITH GCC-exception-3.1",
              "url": "https://gcc.gnu.org/git/?p=gcc.git;a=tree;f=libgfortran"},
             {"name": "openblas-libs (packaging)", "spdx": "BSD-2-Clause",
              "url": "https://github.com/MacPython/openblas-libs"},
