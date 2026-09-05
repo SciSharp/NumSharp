@@ -3556,9 +3556,7 @@
       "numsharp_target": "NumSharp.np.abs",
       "numsharp_signatures": [
         "NumSharp.NDArray abs(NumSharp.NDArray a)",
-        "NumSharp.NDArray abs(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray abs(NumSharp.NDArray a, NumSharp.NPTypeCode? dtype)",
-        "NumSharp.NDArray abs(NumSharp.NDArray a, System.Type dtype)"
+        "NumSharp.NDArray abs(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -3585,9 +3583,7 @@
       "numsharp_target": "NumSharp.np.absolute",
       "numsharp_signatures": [
         "NumSharp.NDArray absolute(NumSharp.NDArray a)",
-        "NumSharp.NDArray absolute(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray absolute(NumSharp.NDArray a, NumSharp.NPTypeCode? dtype)",
-        "NumSharp.NDArray absolute(NumSharp.NDArray a, System.Type dtype)"
+        "NumSharp.NDArray absolute(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -3613,9 +3609,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.arccos",
       "numsharp_signatures": [
-        "NumSharp.NDArray arccos(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray arccos(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray arccos(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray arccos(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -3641,9 +3635,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.acosh",
       "numsharp_signatures": [
-        "NumSharp.NDArray acosh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray acosh(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray acosh(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray acosh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -3669,7 +3661,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.add",
       "numsharp_signatures": [
-        "NumSharp.NDArray add(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray add(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -3752,7 +3744,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.amax",
       "numsharp_signatures": [
-        "NumSharp.NDArray amax(NumSharp.NDArray a, int? axis = null, bool keepdims = false, System.Type dtype = null)",
+        "NumSharp.NDArray amax(NumSharp.NDArray a, int? axis = null, bool keepdims = false, NumSharp.DType dtype = null)",
         "T amax(NumSharp.NDArray a)"
       ],
       "numsharp_obsolete": false,
@@ -3779,7 +3771,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.amin",
       "numsharp_signatures": [
-        "NumSharp.NDArray amin(NumSharp.NDArray a, int? axis = null, bool keepdims = false, System.Type dtype = null)",
+        "NumSharp.NDArray amin(NumSharp.NDArray a, int? axis = null, bool keepdims = false, NumSharp.DType dtype = null)",
         "T amin(NumSharp.NDArray a)"
       ],
       "numsharp_obsolete": false,
@@ -3969,9 +3961,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.arccos",
       "numsharp_signatures": [
-        "NumSharp.NDArray arccos(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray arccos(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray arccos(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray arccos(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -3997,9 +3987,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.arccosh",
       "numsharp_signatures": [
-        "NumSharp.NDArray arccosh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray arccosh(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray arccosh(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray arccosh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -4025,9 +4013,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.arcsin",
       "numsharp_signatures": [
-        "NumSharp.NDArray arcsin(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray arcsin(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray arcsin(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray arcsin(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -4053,9 +4039,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.arcsinh",
       "numsharp_signatures": [
-        "NumSharp.NDArray arcsinh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray arcsinh(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray arcsinh(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray arcsinh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -4081,9 +4065,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.arctan",
       "numsharp_signatures": [
-        "NumSharp.NDArray arctan(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray arctan(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray arctan(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray arctan(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -4109,9 +4091,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.arctan2",
       "numsharp_signatures": [
-        "NumSharp.NDArray arctan2(NumSharp.NDArray y, NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray arctan2(NumSharp.NDArray y, NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray arctan2(NumSharp.NDArray y, NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray arctan2(NumSharp.NDArray y, NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -4137,9 +4117,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.arctanh",
       "numsharp_signatures": [
-        "NumSharp.NDArray arctanh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray arctanh(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray arctanh(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray arctanh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -4300,11 +4278,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.around",
       "numsharp_signatures": [
-        "NumSharp.NDArray around(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray around(NumSharp.NDArray x, System.Type dtype)",
-        "NumSharp.NDArray around(NumSharp.NDArray x, int decimals = 0, NumSharp.NDArray out = null)",
-        "NumSharp.NDArray around(NumSharp.NDArray x, int decimals, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray around(NumSharp.NDArray x, int decimals, System.Type dtype)"
+        "NumSharp.NDArray around(NumSharp.NDArray x, int decimals = 0, NumSharp.NDArray out = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -4686,9 +4660,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.arcsin",
       "numsharp_signatures": [
-        "NumSharp.NDArray arcsin(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray arcsin(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray arcsin(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray arcsin(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -4714,9 +4686,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.asinh",
       "numsharp_signatures": [
-        "NumSharp.NDArray asinh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray asinh(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray asinh(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray asinh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -4801,9 +4771,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.arctan",
       "numsharp_signatures": [
-        "NumSharp.NDArray arctan(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray arctan(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray arctan(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray arctan(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -4829,9 +4797,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.arctan2",
       "numsharp_signatures": [
-        "NumSharp.NDArray arctan2(NumSharp.NDArray y, NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray arctan2(NumSharp.NDArray y, NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray arctan2(NumSharp.NDArray y, NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray arctan2(NumSharp.NDArray y, NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -4857,9 +4823,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.atanh",
       "numsharp_signatures": [
-        "NumSharp.NDArray atanh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray atanh(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray atanh(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray atanh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -5085,7 +5049,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.bitwise_and",
       "numsharp_signatures": [
-        "NumSharp.NDArray bitwise_and(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray bitwise_and(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -5131,9 +5095,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.invert",
       "numsharp_signatures": [
-        "NumSharp.NDArray invert(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray invert(NumSharp.NDArray x, NumSharp.NPTypeCode outType)",
-        "NumSharp.NDArray invert(NumSharp.NDArray x, System.Type outType)"
+        "NumSharp.NDArray invert(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -5186,9 +5148,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.bitwise_not",
       "numsharp_signatures": [
-        "NumSharp.NDArray bitwise_not(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray bitwise_not(NumSharp.NDArray x, NumSharp.NPTypeCode outType)",
-        "NumSharp.NDArray bitwise_not(NumSharp.NDArray x, System.Type outType)"
+        "NumSharp.NDArray bitwise_not(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -5214,7 +5174,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.bitwise_or",
       "numsharp_signatures": [
-        "NumSharp.NDArray bitwise_or(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray bitwise_or(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -5267,7 +5227,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.bitwise_xor",
       "numsharp_signatures": [
-        "NumSharp.NDArray bitwise_xor(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray bitwise_xor(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -5702,9 +5662,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.cbrt",
       "numsharp_signatures": [
-        "NumSharp.NDArray cbrt(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray cbrt(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray cbrt(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray cbrt(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -5756,9 +5714,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.ceil",
       "numsharp_signatures": [
-        "NumSharp.NDArray ceil(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray ceil(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray ceil(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray ceil(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -5858,8 +5814,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.clip",
       "numsharp_signatures": [
-        "NumSharp.NDArray clip(NumSharp.NDArray a, NumSharp.NDArray a_min = null, NumSharp.NDArray a_max = null, NumSharp.NDArray out = null, NumSharp.NPTypeCode? dtype = null, NumSharp.NDArray min = null, NumSharp.NDArray max = null)",
-        "NumSharp.NDArray clip(NumSharp.NDArray a, NumSharp.NDArray a_min, NumSharp.NDArray a_max, System.Type dtype)"
+        "NumSharp.NDArray clip(NumSharp.NDArray a, NumSharp.NDArray a_min = null, NumSharp.NDArray a_max = null, NumSharp.NDArray out = null, NumSharp.DType dtype = null, NumSharp.NDArray min = null, NumSharp.NDArray max = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6129,7 +6084,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.conj",
       "numsharp_signatures": [
-        "NumSharp.NDArray conj(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray conj(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6155,7 +6110,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.conjugate",
       "numsharp_signatures": [
-        "NumSharp.NDArray conjugate(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray conjugate(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6233,9 +6188,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.copysign",
       "numsharp_signatures": [
-        "NumSharp.NDArray copysign(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray copysign(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray copysign(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)"
+        "NumSharp.NDArray copysign(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6359,9 +6312,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.cos",
       "numsharp_signatures": [
-        "NumSharp.NDArray cos(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray cos(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray cos(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray cos(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6387,9 +6338,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.cosh",
       "numsharp_signatures": [
-        "NumSharp.NDArray cosh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray cosh(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray cosh(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray cosh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6540,7 +6489,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.cumprod",
       "numsharp_signatures": [
-        "NumSharp.NDArray cumprod(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null, NumSharp.NDArray out = null)"
+        "NumSharp.NDArray cumprod(NumSharp.NDArray arr, int? axis = null, NumSharp.DType typeCode = null, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6566,7 +6515,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.cumsum",
       "numsharp_signatures": [
-        "NumSharp.NDArray cumsum(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null, NumSharp.NDArray out = null)"
+        "NumSharp.NDArray cumsum(NumSharp.NDArray arr, int? axis = null, NumSharp.DType typeCode = null, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6592,7 +6541,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.cumprod",
       "numsharp_signatures": [
-        "NumSharp.NDArray cumprod(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null, NumSharp.NDArray out = null)"
+        "NumSharp.NDArray cumprod(NumSharp.NDArray arr, int? axis = null, NumSharp.DType typeCode = null, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6618,7 +6567,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.cumsum",
       "numsharp_signatures": [
-        "NumSharp.NDArray cumsum(NumSharp.NDArray arr, int? axis = null, NumSharp.NPTypeCode? typeCode = null, NumSharp.NDArray out = null)"
+        "NumSharp.NDArray cumsum(NumSharp.NDArray arr, int? axis = null, NumSharp.DType typeCode = null, NumSharp.NDArray out = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6704,9 +6653,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.deg2rad",
       "numsharp_signatures": [
-        "NumSharp.NDArray deg2rad(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray deg2rad(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray deg2rad(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray deg2rad(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6732,9 +6679,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.degrees",
       "numsharp_signatures": [
-        "NumSharp.NDArray degrees(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray degrees(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray degrees(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray degrees(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -6974,7 +6919,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.divide",
       "numsharp_signatures": [
-        "NumSharp.NDArray divide(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray divide(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -7364,7 +7309,7 @@
       "numsharp_signatures": [
         "NumSharp.Generic.NDArray<bool> equal(NumSharp.NDArray x1, object x2)",
         "NumSharp.Generic.NDArray<bool> equal(object x1, NumSharp.NDArray x2)",
-        "NumSharp.NDArray equal(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray equal(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -7457,9 +7402,7 @@
       "numsharp_target": "NumSharp.np.exp",
       "numsharp_signatures": [
         "NumSharp.NDArray exp(NumSharp.NDArray a)",
-        "NumSharp.NDArray exp(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray exp(NumSharp.NDArray a, NumSharp.NPTypeCode typeCode)",
-        "NumSharp.NDArray exp(NumSharp.NDArray a, System.Type dtype)"
+        "NumSharp.NDArray exp(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -7486,9 +7429,7 @@
       "numsharp_target": "NumSharp.np.exp2",
       "numsharp_signatures": [
         "NumSharp.NDArray exp2(NumSharp.NDArray a)",
-        "NumSharp.NDArray exp2(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray exp2(NumSharp.NDArray a, NumSharp.NPTypeCode typeCode)",
-        "NumSharp.NDArray exp2(NumSharp.NDArray a, System.Type dtype)"
+        "NumSharp.NDArray exp2(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -7543,9 +7484,7 @@
       "numsharp_target": "NumSharp.np.expm1",
       "numsharp_signatures": [
         "NumSharp.NDArray expm1(NumSharp.NDArray a)",
-        "NumSharp.NDArray expm1(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray expm1(NumSharp.NDArray a, NumSharp.NPTypeCode typeCode)",
-        "NumSharp.NDArray expm1(NumSharp.NDArray a, System.Type dtype)"
+        "NumSharp.NDArray expm1(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -8048,9 +7987,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.floor",
       "numsharp_signatures": [
-        "NumSharp.NDArray floor(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray floor(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray floor(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray floor(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -8076,12 +8013,8 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.floor_divide",
       "numsharp_signatures": [
-        "NumSharp.NDArray floor_divide(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray floor_divide(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode typeCode)",
-        "NumSharp.NDArray floor_divide(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)",
-        "NumSharp.NDArray floor_divide(NumSharp.NDArray x1, object x2)",
-        "NumSharp.NDArray floor_divide(NumSharp.NDArray x1, object x2, NumSharp.NPTypeCode typeCode)",
-        "NumSharp.NDArray floor_divide(NumSharp.NDArray x1, object x2, System.Type dtype)"
+        "NumSharp.NDArray floor_divide(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)",
+        "NumSharp.NDArray floor_divide(NumSharp.NDArray x1, object x2)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -8107,9 +8040,8 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.fmax",
       "numsharp_signatures": [
-        "NumSharp.NDArray fmax(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out)",
-        "NumSharp.NDArray fmax(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray fmax(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)"
+        "NumSharp.NDArray fmax(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.DType dtype = null)",
+        "NumSharp.NDArray fmax(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -8135,9 +8067,8 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.fmin",
       "numsharp_signatures": [
-        "NumSharp.NDArray fmin(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out)",
-        "NumSharp.NDArray fmin(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray fmin(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)"
+        "NumSharp.NDArray fmin(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.DType dtype = null)",
+        "NumSharp.NDArray fmin(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -8726,7 +8657,7 @@
       "numsharp_signatures": [
         "NumSharp.Generic.NDArray<bool> greater(NumSharp.NDArray x1, object x2)",
         "NumSharp.Generic.NDArray<bool> greater(object x1, NumSharp.NDArray x2)",
-        "NumSharp.NDArray greater(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray greater(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -8754,7 +8685,7 @@
       "numsharp_signatures": [
         "NumSharp.Generic.NDArray<bool> greater_equal(NumSharp.NDArray x1, object x2)",
         "NumSharp.Generic.NDArray<bool> greater_equal(object x1, NumSharp.NDArray x2)",
-        "NumSharp.NDArray greater_equal(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray greater_equal(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -9559,9 +9490,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.invert",
       "numsharp_signatures": [
-        "NumSharp.NDArray invert(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray invert(NumSharp.NDArray x, NumSharp.NPTypeCode outType)",
-        "NumSharp.NDArray invert(NumSharp.NDArray x, System.Type outType)"
+        "NumSharp.NDArray invert(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -9716,7 +9645,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.isfinite",
       "numsharp_signatures": [
-        "NumSharp.NDArray isfinite(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray isfinite(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -9794,7 +9723,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.isinf",
       "numsharp_signatures": [
-        "NumSharp.NDArray isinf(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray isinf(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -9820,7 +9749,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.isnan",
       "numsharp_signatures": [
-        "NumSharp.NDArray isnan(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray isnan(NumSharp.NDArray a, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -10193,7 +10122,7 @@
       "numsharp_signatures": [
         "NumSharp.Generic.NDArray<bool> less(NumSharp.NDArray x1, object x2)",
         "NumSharp.Generic.NDArray<bool> less(object x1, NumSharp.NDArray x2)",
-        "NumSharp.NDArray less(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray less(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -10221,7 +10150,7 @@
       "numsharp_signatures": [
         "NumSharp.Generic.NDArray<bool> less_equal(NumSharp.NDArray x1, object x2)",
         "NumSharp.Generic.NDArray<bool> less_equal(object x1, NumSharp.NDArray x2)",
-        "NumSharp.NDArray less_equal(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray less_equal(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -10432,9 +10361,7 @@
       "numsharp_target": "NumSharp.np.log",
       "numsharp_signatures": [
         "NumSharp.NDArray log(NumSharp.NDArray x)",
-        "NumSharp.NDArray log(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray log(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray log(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray log(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -10461,9 +10388,7 @@
       "numsharp_target": "NumSharp.np.log10",
       "numsharp_signatures": [
         "NumSharp.NDArray log10(NumSharp.NDArray x)",
-        "NumSharp.NDArray log10(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray log10(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray log10(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray log10(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -10490,9 +10415,7 @@
       "numsharp_target": "NumSharp.np.log1p",
       "numsharp_signatures": [
         "NumSharp.NDArray log1p(NumSharp.NDArray x)",
-        "NumSharp.NDArray log1p(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray log1p(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray log1p(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray log1p(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -10519,9 +10442,7 @@
       "numsharp_target": "NumSharp.np.log2",
       "numsharp_signatures": [
         "NumSharp.NDArray log2(NumSharp.NDArray x)",
-        "NumSharp.NDArray log2(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray log2(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray log2(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray log2(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -10547,9 +10468,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.logaddexp",
       "numsharp_signatures": [
-        "NumSharp.NDArray logaddexp(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray logaddexp(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray logaddexp(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)"
+        "NumSharp.NDArray logaddexp(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -10575,9 +10494,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.logaddexp2",
       "numsharp_signatures": [
-        "NumSharp.NDArray logaddexp2(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray logaddexp2(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray logaddexp2(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)"
+        "NumSharp.NDArray logaddexp2(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -10943,7 +10860,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.max",
       "numsharp_signatures": [
-        "NumSharp.NDArray max(NumSharp.NDArray a, int? axis = null, bool keepdims = false, System.Type dtype = null)"
+        "NumSharp.NDArray max(NumSharp.NDArray a, int? axis = null, bool keepdims = false, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -10969,9 +10886,8 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.maximum",
       "numsharp_signatures": [
-        "NumSharp.NDArray maximum(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out)",
-        "NumSharp.NDArray maximum(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray maximum(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)"
+        "NumSharp.NDArray maximum(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.DType dtype = null)",
+        "NumSharp.NDArray maximum(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -11020,8 +10936,7 @@
         "NumSharp.NDArray mean(NumSharp.NDArray a)",
         "NumSharp.NDArray mean(NumSharp.NDArray a, bool keepdims)",
         "NumSharp.NDArray mean(NumSharp.NDArray a, int axis)",
-        "NumSharp.NDArray mean(NumSharp.NDArray a, int axis, NumSharp.NPTypeCode type, bool keepdims = false)",
-        "NumSharp.NDArray mean(NumSharp.NDArray a, int axis, System.Type dtype, bool keepdims = false)",
+        "NumSharp.NDArray mean(NumSharp.NDArray a, int axis, NumSharp.DType dtype, bool keepdims = false)",
         "NumSharp.NDArray mean(NumSharp.NDArray a, int axis, bool keepdims)"
       ],
       "numsharp_obsolete": false,
@@ -11149,7 +11064,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.min",
       "numsharp_signatures": [
-        "NumSharp.NDArray min(NumSharp.NDArray a, int? axis = null, bool keepdims = false, System.Type dtype = null)"
+        "NumSharp.NDArray min(NumSharp.NDArray a, int? axis = null, bool keepdims = false, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -11201,9 +11116,8 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.minimum",
       "numsharp_signatures": [
-        "NumSharp.NDArray minimum(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out)",
-        "NumSharp.NDArray minimum(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray minimum(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)"
+        "NumSharp.NDArray minimum(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.DType dtype = null)",
+        "NumSharp.NDArray minimum(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -11256,7 +11170,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.mod",
       "numsharp_signatures": [
-        "NumSharp.NDArray mod(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
+        "NumSharp.NDArray mod(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)",
         "NumSharp.NDArray mod(NumSharp.NDArray x1, float x2)"
       ],
       "numsharp_obsolete": false,
@@ -11283,8 +11197,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.modf",
       "numsharp_signatures": [
-        "System.ValueTuple<NumSharp.NDArray, NumSharp.NDArray> modf(NumSharp.NDArray x, NumSharp.NPTypeCode? dtype = null)",
-        "System.ValueTuple<NumSharp.NDArray, NumSharp.NDArray> modf(NumSharp.NDArray x, System.Type dtype)"
+        "System.ValueTuple<NumSharp.NDArray, NumSharp.NDArray> modf(NumSharp.NDArray x, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -11339,7 +11252,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.multiply",
       "numsharp_signatures": [
-        "NumSharp.NDArray multiply(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray multiply(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -11920,7 +11833,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.negative",
       "numsharp_signatures": [
-        "NumSharp.NDArray negative(NumSharp.NDArray nd, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray negative(NumSharp.NDArray nd, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -11999,9 +11912,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.nextafter",
       "numsharp_signatures": [
-        "NumSharp.NDArray nextafter(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray nextafter(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray nextafter(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)"
+        "NumSharp.NDArray nextafter(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -12055,7 +11966,7 @@
       "numsharp_signatures": [
         "NumSharp.Generic.NDArray<bool> not_equal(NumSharp.NDArray x1, object x2)",
         "NumSharp.Generic.NDArray<bool> not_equal(object x1, NumSharp.NDArray x2)",
-        "NumSharp.NDArray not_equal(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray not_equal(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -12727,7 +12638,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.positive",
       "numsharp_signatures": [
-        "NumSharp.NDArray positive(NumSharp.NDArray nd, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray positive(NumSharp.NDArray nd, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -12754,15 +12665,9 @@
       "numsharp_target": "NumSharp.np.power",
       "numsharp_signatures": [
         "NumSharp.NDArray power(NumSharp.NDArray x1, NumSharp.NDArray x2)",
-        "NumSharp.NDArray power(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray power(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode typeCode)",
-        "NumSharp.NDArray power(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)",
+        "NumSharp.NDArray power(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)",
         "NumSharp.NDArray power(NumSharp.NDArray x1, object x2)",
-        "NumSharp.NDArray power(NumSharp.NDArray x1, object x2, NumSharp.NPTypeCode typeCode)",
-        "NumSharp.NDArray power(NumSharp.NDArray x1, object x2, System.Type dtype)",
-        "NumSharp.NDArray power(ref NumSharp.NDArray x1, ref NumSharp.NDArray x2)",
-        "NumSharp.NDArray power(ref NumSharp.NDArray x1, ref NumSharp.NDArray x2, NumSharp.NPTypeCode typeCode)",
-        "NumSharp.NDArray power(ref NumSharp.NDArray x1, ref NumSharp.NDArray x2, System.Type dtype)"
+        "NumSharp.NDArray power(ref NumSharp.NDArray x1, ref NumSharp.NDArray x2)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -12789,15 +12694,9 @@
       "numsharp_target": "NumSharp.np.power",
       "numsharp_signatures": [
         "NumSharp.NDArray power(NumSharp.NDArray x1, NumSharp.NDArray x2)",
-        "NumSharp.NDArray power(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray power(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NPTypeCode typeCode)",
-        "NumSharp.NDArray power(NumSharp.NDArray x1, NumSharp.NDArray x2, System.Type dtype)",
+        "NumSharp.NDArray power(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)",
         "NumSharp.NDArray power(NumSharp.NDArray x1, object x2)",
-        "NumSharp.NDArray power(NumSharp.NDArray x1, object x2, NumSharp.NPTypeCode typeCode)",
-        "NumSharp.NDArray power(NumSharp.NDArray x1, object x2, System.Type dtype)",
-        "NumSharp.NDArray power(ref NumSharp.NDArray x1, ref NumSharp.NDArray x2)",
-        "NumSharp.NDArray power(ref NumSharp.NDArray x1, ref NumSharp.NDArray x2, NumSharp.NPTypeCode typeCode)",
-        "NumSharp.NDArray power(ref NumSharp.NDArray x1, ref NumSharp.NDArray x2, System.Type dtype)"
+        "NumSharp.NDArray power(ref NumSharp.NDArray x1, ref NumSharp.NDArray x2)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -12849,7 +12748,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.prod",
       "numsharp_signatures": [
-        "NumSharp.NDArray prod(NumSharp.NDArray a, int? axis = null, System.Type dtype = null, bool keepdims = false)"
+        "NumSharp.NDArray prod(NumSharp.NDArray a, int? axis = null, NumSharp.DType dtype = null, bool keepdims = false)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -13053,9 +12952,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.rad2deg",
       "numsharp_signatures": [
-        "NumSharp.NDArray rad2deg(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray rad2deg(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray rad2deg(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray rad2deg(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -13081,9 +12978,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.radians",
       "numsharp_signatures": [
-        "NumSharp.NDArray radians(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray radians(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray radians(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray radians(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -13276,9 +13171,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.reciprocal",
       "numsharp_signatures": [
-        "NumSharp.NDArray reciprocal(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray reciprocal(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray reciprocal(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray reciprocal(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -13324,7 +13217,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.mod",
       "numsharp_signatures": [
-        "NumSharp.NDArray mod(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
+        "NumSharp.NDArray mod(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)",
         "NumSharp.NDArray mod(NumSharp.NDArray x1, float x2)"
       ],
       "numsharp_obsolete": false,
@@ -13525,9 +13418,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.rint",
       "numsharp_signatures": [
-        "NumSharp.NDArray rint(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray rint(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray rint(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray rint(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -13658,11 +13549,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.round_",
       "numsharp_signatures": [
-        "NumSharp.NDArray round_(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray round_(NumSharp.NDArray x, System.Type dtype)",
-        "NumSharp.NDArray round_(NumSharp.NDArray x, int decimals = 0, NumSharp.NDArray out = null)",
-        "NumSharp.NDArray round_(NumSharp.NDArray x, int decimals, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray round_(NumSharp.NDArray x, int decimals, System.Type dtype)"
+        "NumSharp.NDArray round_(NumSharp.NDArray x, int decimals = 0, NumSharp.NDArray out = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -14216,9 +14103,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.sign",
       "numsharp_signatures": [
-        "NumSharp.NDArray sign(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray sign(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray sign(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray sign(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -14284,9 +14169,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.sin",
       "numsharp_signatures": [
-        "NumSharp.NDArray sin(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray sin(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray sin(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray sin(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -14358,9 +14241,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.sinh",
       "numsharp_signatures": [
-        "NumSharp.NDArray sinh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray sinh(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray sinh(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray sinh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -14512,9 +14393,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.sqrt",
       "numsharp_signatures": [
-        "NumSharp.NDArray sqrt(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray sqrt(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray sqrt(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray sqrt(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -14541,7 +14420,7 @@
       "numsharp_target": "NumSharp.np.square",
       "numsharp_signatures": [
         "NumSharp.NDArray square(NumSharp.NDArray x)",
-        "NumSharp.NDArray square(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray square(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -14621,10 +14500,8 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.std",
       "numsharp_signatures": [
-        "NumSharp.NDArray std(NumSharp.NDArray a, bool keepdims = false, int? ddof = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray std(NumSharp.NDArray a, int axis, NumSharp.NPTypeCode type, bool keepdims = false, int? ddof = null)",
-        "NumSharp.NDArray std(NumSharp.NDArray a, int axis, System.Type dtype, bool keepdims = false, int? ddof = null)",
-        "NumSharp.NDArray std(NumSharp.NDArray a, int axis, bool keepdims = false, int? ddof = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray std(NumSharp.NDArray a, bool keepdims = false, int? ddof = null, NumSharp.DType dtype = null)",
+        "NumSharp.NDArray std(NumSharp.NDArray a, int axis, bool keepdims = false, int? ddof = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -14690,7 +14567,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.subtract",
       "numsharp_signatures": [
-        "NumSharp.NDArray subtract(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray subtract(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -14717,15 +14594,12 @@
       "numsharp_target": "NumSharp.np.sum",
       "numsharp_signatures": [
         "NumSharp.NDArray sum(NumSharp.NDArray a)",
-        "NumSharp.NDArray sum(NumSharp.NDArray a, NumSharp.NPTypeCode? typeCode)",
-        "NumSharp.NDArray sum(NumSharp.NDArray a, System.Type dtype)",
+        "NumSharp.NDArray sum(NumSharp.NDArray a, NumSharp.DType dtype)",
         "NumSharp.NDArray sum(NumSharp.NDArray a, bool keepdims)",
         "NumSharp.NDArray sum(NumSharp.NDArray a, int axis)",
-        "NumSharp.NDArray sum(NumSharp.NDArray a, int? axis, NumSharp.NPTypeCode? typeCode)",
-        "NumSharp.NDArray sum(NumSharp.NDArray a, int? axis, System.Type dtype)",
+        "NumSharp.NDArray sum(NumSharp.NDArray a, int? axis, NumSharp.DType dtype)",
         "NumSharp.NDArray sum(NumSharp.NDArray a, int? axis, bool keepdims)",
-        "NumSharp.NDArray sum(NumSharp.NDArray a, int? axis, bool keepdims, NumSharp.NPTypeCode? typeCode)",
-        "NumSharp.NDArray sum(NumSharp.NDArray a, int? axis, bool keepdims, System.Type dtype)"
+        "NumSharp.NDArray sum(NumSharp.NDArray a, int? axis, bool keepdims, NumSharp.DType dtype)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -14830,9 +14704,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.tan",
       "numsharp_signatures": [
-        "NumSharp.NDArray tan(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray tan(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray tan(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray tan(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -14858,9 +14730,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.tanh",
       "numsharp_signatures": [
-        "NumSharp.NDArray tanh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray tanh(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray tanh(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray tanh(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -15303,7 +15173,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.true_divide",
       "numsharp_signatures": [
-        "NumSharp.NDArray true_divide(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray true_divide(NumSharp.NDArray x1, NumSharp.NDArray x2, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -15329,9 +15199,7 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.trunc",
       "numsharp_signatures": [
-        "NumSharp.NDArray trunc(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray trunc(NumSharp.NDArray x, NumSharp.NPTypeCode dtype)",
-        "NumSharp.NDArray trunc(NumSharp.NDArray x, System.Type dtype)"
+        "NumSharp.NDArray trunc(NumSharp.NDArray x, NumSharp.NDArray out = null, NumSharp.NDArray where = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [
@@ -16018,10 +15886,8 @@
       "status": "available",
       "numsharp_target": "NumSharp.np.var",
       "numsharp_signatures": [
-        "NumSharp.NDArray var(NumSharp.NDArray a, bool keepdims = false, int? ddof = null, NumSharp.NPTypeCode? dtype = null)",
-        "NumSharp.NDArray var(NumSharp.NDArray a, int axis, NumSharp.NPTypeCode type, bool keepdims = false, int? ddof = null)",
-        "NumSharp.NDArray var(NumSharp.NDArray a, int axis, System.Type dtype, bool keepdims = false, int? ddof = null)",
-        "NumSharp.NDArray var(NumSharp.NDArray a, int axis, bool keepdims = false, int? ddof = null, NumSharp.NPTypeCode? dtype = null)"
+        "NumSharp.NDArray var(NumSharp.NDArray a, bool keepdims = false, int? ddof = null, NumSharp.DType dtype = null)",
+        "NumSharp.NDArray var(NumSharp.NDArray a, int axis, bool keepdims = false, int? ddof = null, NumSharp.DType dtype = null)"
       ],
       "numsharp_obsolete": false,
       "numsharp_source_paths": [

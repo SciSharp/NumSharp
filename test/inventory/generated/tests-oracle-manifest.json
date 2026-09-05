@@ -4,9 +4,9 @@
   "generator_version": "1.2.0",
   "numpy_version": "2.4.2",
   "assembly_versions": {
-    "NumSharp.Tests": "1.0.0.0",
-    "NumSharp.Tests.Interop": "1.0.0.0",
-    "NumSharp.Tests.Oracle": "1.0.0.0"
+    "NumSharp.Tests": "0.60.0.0",
+    "NumSharp.Tests.Interop": "0.60.0.0",
+    "NumSharp.Tests.Oracle": "0.60.0.0"
   },
   "artifact_files": [
     "tests-oracle-report.json",
@@ -16,19 +16,19 @@
   ],
   "summary": {
     "tests": {
-      "methods": 14264,
-      "declaredInvocations": 14912,
+      "methods": 14386,
+      "declaredInvocations": 15034,
       "dataRows": 732,
       "dataRowMethods": 84,
       "dynamicMethods": 34,
-      "sourceLocated": 14264,
-      "oracleMethods": 748,
+      "sourceLocated": 14386,
+      "oracleMethods": 855,
       "fuzzMatrixMethods": 102,
       "npyOracleMethods": 13,
       "statuses": {
-        "active": 13998,
+        "active": 14117,
         "ignored": 11,
-        "manual": 5,
+        "manual": 8,
         "open_bug": 186,
         "platform": 64
       },
@@ -36,8 +36,8 @@
         "Explicit": 2,
         "Fixed": 11,
         "FuzzMatrix": 102,
-        "HighMemory": 50,
-        "LongIndexing": 3,
+        "HighMemory": 53,
+        "LongIndexing": 6,
         "Misaligned": 36,
         "NpyOracle": 13,
         "OpenBugs": 186,
@@ -45,8 +45,8 @@
         "WindowsOnly": 75
       },
       "projects": {
-        "NumSharp.Tests": 13570,
-        "NumSharp.Tests.Interop": 524,
+        "NumSharp.Tests": 13585,
+        "NumSharp.Tests.Interop": 631,
         "NumSharp.Tests.Oracle": 170
       },
       "suites": 39,

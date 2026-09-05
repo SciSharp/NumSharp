@@ -4,25 +4,25 @@
   "generatorVersion": "1.2.0",
   "numpyVersion": "2.4.2",
   "assemblyVersions": {
-    "NumSharp.Tests": "1.0.0.0",
-    "NumSharp.Tests.Interop": "1.0.0.0",
-    "NumSharp.Tests.Oracle": "1.0.0.0"
+    "NumSharp.Tests": "0.60.0.0",
+    "NumSharp.Tests.Interop": "0.60.0.0",
+    "NumSharp.Tests.Oracle": "0.60.0.0"
   },
   "summary": {
     "tests": {
-      "methods": 14264,
-      "declaredInvocations": 14912,
+      "methods": 14386,
+      "declaredInvocations": 15034,
       "dataRows": 732,
       "dataRowMethods": 84,
       "dynamicMethods": 34,
-      "sourceLocated": 14264,
-      "oracleMethods": 748,
+      "sourceLocated": 14386,
+      "oracleMethods": 855,
       "fuzzMatrixMethods": 102,
       "npyOracleMethods": 13,
       "statuses": {
-        "active": 13998,
+        "active": 14117,
         "ignored": 11,
-        "manual": 5,
+        "manual": 8,
         "open_bug": 186,
         "platform": 64
       },
@@ -30,8 +30,8 @@
         "Explicit": 2,
         "Fixed": 11,
         "FuzzMatrix": 102,
-        "HighMemory": 50,
-        "LongIndexing": 3,
+        "HighMemory": 53,
+        "LongIndexing": 6,
         "Misaligned": 36,
         "NpyOracle": 13,
         "OpenBugs": 186,
@@ -39,8 +39,8 @@
         "WindowsOnly": 75
       },
       "projects": {
-        "NumSharp.Tests": 13570,
-        "NumSharp.Tests.Interop": 524,
+        "NumSharp.Tests": 13585,
+        "NumSharp.Tests.Interop": 631,
         "NumSharp.Tests.Oracle": 170
       },
       "suites": 39,
@@ -192,13 +192,13 @@
       "id": "NumSharp.Tests::Backends & kernels",
       "project": "NumSharp.Tests",
       "area": "Backends & kernels",
-      "methods": 3398,
-      "declaredInvocations": 3762,
+      "methods": 3407,
+      "declaredInvocations": 3771,
       "dataRows": 409,
       "dynamicMethods": 3,
       "oracleMethods": 38,
       "statuses": {
-        "active": 3366,
+        "active": 3375,
         "open_bug": 32
       },
       "categories": {
@@ -313,6 +313,7 @@
         "test/NumSharp.Tests/Backends/OpenBlasDeliveryTests.cs",
         "test/NumSharp.Tests/Backends/OwnDataFlagTests.cs",
         "test/NumSharp.Tests/Backends/ReadonlyWriteGuardTests.cs",
+        "test/NumSharp.Tests/Backends/TensorEngineThreadingTests.cs",
         "test/NumSharp.Tests/Backends/Unmanaged/AllocationTests.cs",
         "test/NumSharp.Tests/Backends/Unmanaged/ArcLifecycleTests.cs",
         "test/NumSharp.Tests/Backends/Unmanaged/DeallocationTests.cs",
@@ -689,13 +690,13 @@
       "id": "NumSharp.Tests::Linear algebra",
       "project": "NumSharp.Tests",
       "area": "Linear algebra",
-      "methods": 408,
-      "declaredInvocations": 408,
+      "methods": 411,
+      "declaredInvocations": 411,
       "dataRows": 0,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 408
+        "active": 411
       },
       "categories": {
         "Misaligned": 2
@@ -776,22 +777,24 @@
       "id": "NumSharp.Tests::LongIndexing",
       "project": "NumSharp.Tests",
       "area": "LongIndexing",
-      "methods": 126,
-      "declaredInvocations": 126,
+      "methods": 129,
+      "declaredInvocations": 129,
       "dataRows": 0,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
         "active": 103,
-        "manual": 2,
+        "manual": 5,
         "open_bug": 21
       },
       "categories": {
         "Explicit": 2,
-        "HighMemory": 22,
+        "HighMemory": 25,
+        "LongIndexing": 3,
         "OpenBugs": 21
       },
       "sourceFiles": [
+        "test/NumSharp.Tests/LongIndexing/ByteHugeArrayOracleTests.cs",
         "test/NumSharp.Tests/LongIndexing/LongIndexingBroadcastTest.cs",
         "test/NumSharp.Tests/LongIndexing/LongIndexingMasterTest.cs",
         "test/NumSharp.Tests/LongIndexing/LongIndexingSmokeTest.cs"
@@ -1330,13 +1333,13 @@
       "id": "NumSharp.Tests.Interop::Python interoperability",
       "project": "NumSharp.Tests.Interop",
       "area": "Python interoperability",
-      "methods": 524,
-      "declaredInvocations": 524,
+      "methods": 631,
+      "declaredInvocations": 631,
       "dataRows": 0,
       "dynamicMethods": 0,
-      "oracleMethods": 524,
+      "oracleMethods": 631,
       "statuses": {
-        "active": 524
+        "active": 631
       },
       "categories": {
         "Misaligned": 1
@@ -1355,6 +1358,19 @@
         "test/NumSharp.Tests.Interop/DocExamples.PythonnetNumpyPage.cs",
         "test/NumSharp.Tests.Interop/DtypeMapTests.cs",
         "test/NumSharp.Tests.Interop/EigLiveParityTests.cs",
+        "test/NumSharp.Tests.Interop/EncoderHandoffTests.cs",
+        "test/NumSharp.Tests.Interop/Examples/Example01_Bootstrap.cs",
+        "test/NumSharp.Tests.Interop/Examples/Example02_FourVerbs.cs",
+        "test/NumSharp.Tests.Interop/Examples/Example03_Layouts.cs",
+        "test/NumSharp.Tests.Interop/Examples/Example04_Dtypes.cs",
+        "test/NumSharp.Tests.Interop/Examples/Example05_BuffersAndLibraries.cs",
+        "test/NumSharp.Tests.Interop/Examples/Example06_Lifetime.cs",
+        "test/NumSharp.Tests.Interop/Examples/Example07_Codec.cs",
+        "test/NumSharp.Tests.Interop/Examples/Example08_Gil.cs",
+        "test/NumSharp.Tests.Interop/Examples/Example09_PyTorch.cs",
+        "test/NumSharp.Tests.Interop/Examples/Example10_Pandas.cs",
+        "test/NumSharp.Tests.Interop/Examples/Example11_CustomAdapter.cs",
+        "test/NumSharp.Tests.Interop/Examples/Example12_Scenarios.cs",
         "test/NumSharp.Tests.Interop/ExportTests.cs",
         "test/NumSharp.Tests.Interop/GilPolicyTests.cs",
         "test/NumSharp.Tests.Interop/ImportTests.cs",
@@ -1381,6 +1397,7 @@
         "test/NumSharp.Tests.Interop/SpecialValueFidelityTests.cs",
         "test/NumSharp.Tests.Interop/StridedBufferViewTests.cs",
         "test/NumSharp.Tests.Interop/SvdLstsqLiveParityTests.cs",
+        "test/NumSharp.Tests.Interop/TupleCodecTests.cs",
         "test/NumSharp.Tests.Interop/ViewabilityMatrixTests.cs"
       ]
     },
@@ -8533,6 +8550,39 @@
         "Ufunc_Positive_out_readonly_throws",
         "Ufunc_Sqrt_out_readonly_throws",
         "Ufunc_out_writable_stillWorks"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Backends.TensorEngineThreadingTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Backends.TensorEngineThreadingTests",
+      "class": "TensorEngineThreadingTests",
+      "area": "Backends & kernels",
+      "methods": 9,
+      "declaredInvocations": 9,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 9
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Backends/TensorEngineThreadingTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/TensorEngineThreadingTests.cs#L14",
+      "methodNames": [
+        "Multithreading_Integrates_WithThreadingSurface",
+        "NumSharpKnob_IsBoundLiveTo_MultiThreadMaxThreads",
+        "Register_Upserts_ReaderAndApplier",
+        "SetThreads_Null_ClearsTheEnvVar",
+        "SetThreads_Writes_ProcessScopeOnly",
+        "SourceOfTruth_SeedsFromPreexistingEnv_AndPushesToApplier",
+        "TrySetDefault_RespectsSourceOfTruth_AndExplicitSets",
+        "UnknownKnob_Throws_ButTryGetDoesNot",
+        "WellKnownKnobs_AreRegistered_WithTheirEnvVars"
       ],
       "methodPolicies": {}
     },
@@ -16375,7 +16425,7 @@
       "sourcePaths": [
         "test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs#L108",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs#L116",
       "methodNames": [
         "EveryScopedMethod_WasWoven"
       ],
@@ -16611,12 +16661,12 @@
       "type": "NumSharp.Tests.LinearAlgebra.EinsumPathTests",
       "class": "EinsumPathTests",
       "area": "Linear algebra",
-      "methods": 23,
-      "declaredInvocations": 23,
+      "methods": 26,
+      "declaredInvocations": 26,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 23
+        "active": 26
       },
       "categories": {},
       "oracleKinds": {},
@@ -16631,9 +16681,11 @@
         "Ellipsis_PathAndMetrics_Match",
         "ExplicitPath_IsReturnedVerbatim",
         "False_And_None_AreSingleContraction",
+        "FlopCount_Past_Int64_UsesArbitraryPrecision",
         "Greedy_Chain_ByteExact",
         "Greedy_FiveOperand_ByteExact",
         "IncompleteExplicitPath_RaisesRuntimeError",
+        "Intermediate_Past_Int64_UsesArbitraryPrecision",
         "InvalidSymbol_Raises",
         "MemoryLimitTuple_IsAccepted",
         "NotUnderstoodPath_RaisesTypeError",
@@ -16643,6 +16695,7 @@
         "OutputCharacterTwice_Raises",
         "PathRoundTripsIntoEinsum",
         "SizeMismatch_Raises",
+        "Sizes_Past_Int32_AreNotTruncated",
         "Sublist_And_Variadic_Forms",
         "True_IsGreedy",
         "TwoArrows_Raises",
@@ -18457,6 +18510,40 @@
         "Where_TypePromotion_IntFloat_ReturnsFloat64"
       ],
       "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.LongIndexing.ByteHugeArrayOracleTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.LongIndexing.ByteHugeArrayOracleTests",
+      "class": "ByteHugeArrayOracleTests",
+      "area": "LongIndexing",
+      "methods": 3,
+      "declaredInvocations": 3,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "manual": 3
+      },
+      "categories": {
+        "HighMemory": 3,
+        "LongIndexing": 3
+      },
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/LongIndexing/ByteHugeArrayOracleTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/LongIndexing/ByteHugeArrayOracleTests.cs#L72",
+      "methodNames": [
+        "ByteHugeArray_ArgSortArgPartition_SupportBeyondIntMaxValue",
+        "ByteHugeArray_BoundedOutputOps_SupportBeyondIntMaxValue",
+        "ByteHugeArray_ScanAndCastOps_SupportBeyondIntMaxValue"
+      ],
+      "methodPolicies": {
+        "ByteHugeArray_ArgSortArgPartition_SupportBeyondIntMaxValue": "manual",
+        "ByteHugeArray_BoundedOutputOps_SupportBeyondIntMaxValue": "manual",
+        "ByteHugeArray_ScanAndCastOps_SupportBeyondIntMaxValue": "manual"
+      }
     },
     {
       "id": "NumSharp.Tests::NumSharp.Tests.LongIndexing.LongIndexingBroadcastTest",
@@ -30226,35 +30313,467 @@
       "methodPolicies": {}
     },
     {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.EncoderHandoffTests",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.EncoderHandoffTests",
+      "class": "EncoderHandoffTests",
+      "area": "Python interoperability",
+      "methods": 4,
+      "declaredInvocations": 4,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 4
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 4
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/EncoderHandoffTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/EncoderHandoffTests.cs#L24",
+      "methodNames": [
+        "DynamicCallArguments_AreHandedOffToo",
+        "RebindingANameThroughTheCodec_KeepsTheLiveExportCountBounded",
+        "TheHandedOffWrapperIsRedundant_PythonnetHoldsItsOwnReference",
+        "TupleEncodes_AreHandedOffToo"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.Examples.Example01_Bootstrap",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.Examples.Example01_Bootstrap",
+      "class": "Example01_Bootstrap",
+      "area": "Python interoperability",
+      "methods": 5,
+      "declaredInvocations": 5,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 5
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 5
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/Examples/Example01_Bootstrap.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/Examples/Example01_Bootstrap.cs#L15",
+      "methodNames": [
+        "Section1_ThePairing_EveryPythonnetHardCapsThePythonItCanDrive",
+        "Section2_CodecRegistration_IsIdempotentPerEngineSession",
+        "Section3_OneBufferBothSides",
+        "Section4_BeginAllowThreads_LetsAnyThreadConvert",
+        "Section5_WhoFreesWhat_TheScopeThenTheNames"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.Examples.Example02_FourVerbs",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.Examples.Example02_FourVerbs",
+      "class": "Example02_FourVerbs",
+      "area": "Python interoperability",
+      "methods": 10,
+      "declaredInvocations": 10,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 10
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 10
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/Examples/Example02_FourVerbs.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/Examples/Example02_FourVerbs.cs#L15",
+      "methodNames": [
+        "AnImportView_OwnsNothing",
+        "ArrayLikes_FromArrayLike_GoesThroughNumpyAsarray",
+        "NonContiguousSources_CopiesLinearize_ViewsKeepStrides",
+        "ReadOnlySources_RefusedByDefault_NonWriteableWithAllowReadonly",
+        "TheAliases_ToPythonIsTheView_CopyTrueIsTheCopy",
+        "TheEverydaySpelling_BindingByNameIsToNumpy",
+        "TheEverydaySpelling_ReadingByNameIsAsNDArray",
+        "ToNDArray_IsACopy_AsNDArray_IsAView",
+        "ToNumpy_IsAView_ToNumpyCopy_IsACopy",
+        "WhoFreesWhat_TheScopeReleasesTheLeases_TheNamesReleaseThePins"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.Examples.Example03_Layouts",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.Examples.Example03_Layouts",
+      "class": "Example03_Layouts",
+      "area": "Python interoperability",
+      "methods": 7,
+      "declaredInvocations": 7,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 7
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 7
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/Examples/Example03_Layouts.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/Examples/Example03_Layouts.cs#L34",
+      "methodNames": [
+        "Export_WhatNumpySeesPerLayout_TheTable",
+        "Export_WhatTheNumpyArrayIsMadeOf",
+        "ImportRoute1_AContiguousPep3118Exporter",
+        "ImportRoute2_NonContiguousNumpyArrays_ViaArrayInterface",
+        "ImportRoute3_NonContiguousNonNumpyExporters_ViaPyBufStrided",
+        "TheOnlyLayoutsThatCannotBeViewed_DeclineWithGuidance_AutoCopies",
+        "WhoFreesWhat"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.Examples.Example04_Dtypes",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.Examples.Example04_Dtypes",
+      "class": "Example04_Dtypes",
+      "area": "Python interoperability",
+      "methods": 8,
+      "declaredInvocations": 8,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 8
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 8
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/Examples/Example04_Dtypes.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/Examples/Example04_Dtypes.cs#L15",
+      "methodNames": [
+        "BigEndian_ByteReversedOnCopy_NeverViewed_SingleByteViewsRegardless",
+        "Complex64_WidenedOnCopy_NeverViewed",
+        "Decimal_ConvertsToFloat64OnExport_TheLowLevelMapsRefuse",
+        "NoNumSharpDtype_RefusedOnBothPaths",
+        "SpecialValues_CrossBitForBit",
+        "TheReverseMaps",
+        "TheTable_EveryDtypeBothDirections",
+        "Ucs4Text_NarrowedToCharOnCopy_TwoByteWcharViews"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.Examples.Example05_BuffersAndLibraries",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.Examples.Example05_BuffersAndLibraries",
+      "class": "Example05_BuffersAndLibraries",
+      "area": "Python interoperability",
+      "methods": 8,
+      "declaredInvocations": 8,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 8
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 8
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/Examples/Example05_BuffersAndLibraries.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/Examples/Example05_BuffersAndLibraries.cs#L17",
+      "methodNames": [
+        "ArrayArray_AllTwelveTypecodes_MapByCTypeAndItemsize",
+        "EveryBuiltinExporter_IsAWritableView",
+        "Pillow_FrombufferReadsInPlace_AnImageCannotBeViewed",
+        "PyArrow_PyBufferWrapsZeroCopy_AnArrowBufferImportsAsRawBytes",
+        "ReadOnlyExporters_Bytes",
+        "SharedMemoryAcrossProcesses_ViewedInPlace_LeaseGoneBeforeClose",
+        "ToMemoryView_RawBytesForConsumersThatNeverTouchNumpy",
+        "Torch_FrombufferShares_TheSameAddressAsNumpy"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.Examples.Example06_Lifetime",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.Examples.Example06_Lifetime",
+      "class": "Example06_Lifetime",
+      "area": "Python interoperability",
+      "methods": 6,
+      "declaredInvocations": 6,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 6
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 6
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/Examples/Example06_Lifetime.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/Examples/Example06_Lifetime.cs#L21",
+      "methodNames": [
+        "ALiveViewLocksReallocation_OnBothSides",
+        "AnExportOutlivesEveryManagedReference",
+        "AnImportLeaseOutlivesEveryPythonReference",
+        "Churn_EverythingReturnsToBaseline",
+        "EngineShutdown_IsProvenByShutdownLeakTests_ThisPinsWhatGoesIn",
+        "TheCounters_MoveByExactlyOnePerCrossing"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.Examples.Example07_Codec",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.Examples.Example07_Codec",
+      "class": "Example07_Codec",
+      "area": "Python interoperability",
+      "methods": 6,
+      "declaredInvocations": 6,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 6
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 6
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/Examples/Example07_Codec.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/Examples/Example07_Codec.cs#L16",
+      "methodNames": [
+        "Decode_AsNDArray_AsManagedObject_AndTheDynamicSpelling_AreAllViews",
+        "Decode_WhatCanDecodeAccepts",
+        "Encode_EveryPythonnetBoundary_IncludingTuples",
+        "TheModes_AutoFallsBack_ViewDeclines_CopyDetaches",
+        "TheOptions_WhichPythonTypesDecode",
+        "TheOrderingTrap_RegisterAtStartup_ThenEveryFreshPairDecodes"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.Examples.Example08_Gil",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.Examples.Example08_Gil",
+      "class": "Example08_Gil",
+      "area": "Python interoperability",
+      "methods": 7,
+      "declaredInvocations": 7,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 7
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 7
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/Examples/Example08_Gil.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/Examples/Example08_Gil.cs#L18",
+      "methodNames": [
+        "RequireGilTrue_BlocksWhileAnotherThreadOwnsTheGil",
+        "TheDefault_VerbsAcquireTheGilThemselves",
+        "TheHotLoop_OneAcquisition_ManyConversions",
+        "TheMachinery_IsImmuneToThePolicy",
+        "TheProcessWideOptOut_NullParametersFollowIt",
+        "TheTrap_APythonToNetCallbackBody_DoesNotHoldTheGil",
+        "WorkerThreads_EachTakesTheGilAroundItsOwnPythonWork"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.Examples.Example09_PyTorch",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.Examples.Example09_PyTorch",
+      "class": "Example09_PyTorch",
+      "area": "Python interoperability",
+      "methods": 10,
+      "declaredInvocations": 10,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 10
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 10
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/Examples/Example09_PyTorch.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/Examples/Example09_PyTorch.cs#L17",
+      "methodNames": [
+        "Autograd_ANumSharpBackedLeaf_GradientBackAsNumSharp",
+        "DtypesPyTorchCannotHandToNumpy_AreDirectedErrors_Complex64CopyWidens",
+        "EveryNumSharpDtype_MapsToATorchDtype",
+        "Expand_AStrideZeroTensor_ImportsAsANonWriteableBroadcast",
+        "NumSharpToPyTorch_ToTorchIsAZeroCopyTensor",
+        "PyTorchToNumSharp_AZeroCopyViewOfCpuStorage",
+        "SharedStorage_CannotBeResizedOnEitherSide",
+        "TensorsThatCannotBeShared_ForceDetachesTransfersAndCopies",
+        "TheCodecAndTheOrdinaryVerbs_SeeTensorsThroughTheAdapter",
+        "UnsafeLayouts_NeedCopyTrue"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.Examples.Example10_Pandas",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.Examples.Example10_Pandas",
+      "class": "Example10_Pandas",
+      "area": "Python interoperability",
+      "methods": 8,
+      "declaredInvocations": 8,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 8
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 8
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/Examples/Example10_Pandas.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/Examples/Example10_Pandas.cs#L21",
+      "methodNames": [
+        "DataFrame_AHomogeneousFrameIsOneFStridedBlock",
+        "Index_RangeIndex_AndNullableExtensionArrays",
+        "LabelsAreMetadata_OnlyTheValueMatrixCrosses",
+        "Lifetime_ADerivedViewKeepsPandasStorageAlive",
+        "NumSharpToPandas_TheNumpyEncoderPlusCopyFalse",
+        "Registry_TheAdapterIsBuiltIn",
+        "Series_TheOrdinaryVerbs_ThroughTheAdapter",
+        "WhatMaterializes_MixedBlocks_MissingValues_Categoricals_Text"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.Examples.Example11_CustomAdapter",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.Examples.Example11_CustomAdapter",
+      "class": "Example11_CustomAdapter",
+      "area": "Python interoperability",
+      "methods": 5,
+      "declaredInvocations": 5,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 5
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 5
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/Examples/Example11_CustomAdapter.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/Examples/Example11_CustomAdapter.cs#L32",
+      "methodNames": [
+        "Declining_NullFromAdaptMeansNotThisOne",
+        "Registration_ProcessWide_ThreadSafe_IdempotentByName",
+        "Robustness_ABrokenAdapterCannotBreakThePipeline",
+        "TheDirectVerbs_TheAdapterSelectsPixels_TheBridgeDoesTheRest",
+        "TheRegisteredCodec_ConsultsTheSameRegistry"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.Examples.Example12_Scenarios",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.Examples.Example12_Scenarios",
+      "class": "Example12_Scenarios",
+      "area": "Python interoperability",
+      "methods": 8,
+      "declaredInvocations": 8,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 8
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 8
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/Examples/Example12_Scenarios.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/Examples/Example12_Scenarios.cs#L16",
+      "methodNames": [
+        "Scenario1_MlInference_FeaturesCrossZeroCopy_PredictionsComeBack",
+        "Scenario2_ImagePipeline_PythonEditsACSharpOwnedImageInPlace",
+        "Scenario3_TelemetryRing_ABoundedLiveCount",
+        "Scenario4_APythonDatasetOutlivesItsPythonReferences_UnderNumSharpKernels",
+        "Scenario5_CoSimulation_MixedOwnershipStaysCoherent",
+        "Scenario6_ALongLivedServiceThroughTheCodec",
+        "Scenario7_GeneratorsStreamChunksIntoNumSharp",
+        "Scenario8_Exceptions_Json_FaultyInputs"
+      ],
+      "methodPolicies": {}
+    },
+    {
       "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.ExportTests",
       "project": "NumSharp.Tests.Interop",
       "type": "NumSharp.Tests.Interop.ExportTests",
       "class": "ExportTests",
       "area": "Python interoperability",
-      "methods": 15,
-      "declaredInvocations": 15,
+      "methods": 17,
+      "declaredInvocations": 17,
       "dataRows": 0,
       "dynamicMethods": 0,
       "statuses": {
-        "active": 15
+        "active": 17
       },
       "categories": {},
       "oracleKinds": {
-        "Live NumPy interop": 15
+        "Live NumPy interop": 17
       },
       "corpusFiles": [],
       "sourcePaths": [
         "test/NumSharp.Tests.Interop/ExportTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/ExportTests.cs#L15",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/ExportTests.cs#L17",
       "methodNames": [
         "BroadcastView_ExportsReadOnly",
         "Contiguous2D_SharesMemoryBothWays",
         "ContiguousPrefixWindow_ExportsOnlyTheWindow",
         "Copy_IsIndependentOfTheSource",
         "Decimal_ConvertsToFloat64_OnExport",
+        "Decimal_Export_OwnsItsFloat64Temporary_AndFreesItTheMomentPythonLetsGo",
         "DisposedSource_IsRefusedNotDereferenced",
         "EveryMappableDtype_ExportsBitExact",
+        "ExportKeeper_Release_DisposesAnOwnedSource_AndLeavesABorrowedOneAlone",
         "ExtensionMethods_CoverTheSameSurface",
         "MemoryView_ContiguousOffsetWindow_ExportsExactlyThatWindow",
         "MemoryView_ExposesWritableRawBytes",
@@ -30873,7 +31392,7 @@
       "sourcePaths": [
         "test/NumSharp.Tests.Interop/PyTorchInteropEdgeCaseTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PyTorchInteropEdgeCaseTests.cs#L22",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PyTorchInteropEdgeCaseTests.cs#L23",
       "methodNames": [
         "AcceleratorTensor_ForceCopiesToCpu_WhenAnAcceleratorIsAvailable",
         "All15Dtypes_BoundaryValuesRoundTripThroughTorch",
@@ -30916,7 +31435,7 @@
       "sourcePaths": [
         "test/NumSharp.Tests.Interop/PyTorchInteropTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PyTorchInteropTests.cs#L19",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/PyTorchInteropTests.cs#L20",
       "methodNames": [
         "ExistingMemoryBridge_DirectVerbsAdaptTorchTensor_ViewAndCopySemantics",
         "NumSharpToTorch_All15Dtypes_MapOnPyTorch213",
@@ -30925,7 +31444,7 @@
         "NumSharpToTorch_PositiveStridedView_PreservesShapeStrideAndStorage",
         "NumSharpToTorch_UnsafeLayoutsRequireExplicitCopy",
         "PythonnetImplicitEncoderAndDecoder_WorkAcrossTorchFromNumpyAndTensorReturn",
-        "Runtime_IsLatestStablePyTorch213",
+        "Runtime_IsAtLeastTheGateFloor_AndTheFloorParserHandlesLocalVersions",
         "TorchTensor_IsNotABufferExporter_TheNumpyAdapterIsIntentional",
         "TorchToNumSharp_CopyIsDetached_AndForceHandlesAutogradTensor",
         "TorchToNumSharp_PositiveStridedCpuTensor_IsZeroCopyAndSurvivesTensorWrapper"
@@ -31224,6 +31743,45 @@
         "Svd_ByteExact_ShapesAndModes",
         "Svd_ByteExact_Stacked_AndHigherRank",
         "Svdvals_ByteExact_Dtypes_Layouts_Stacked_Complex"
+      ],
+      "methodPolicies": {}
+    },
+    {
+      "id": "NumSharp.Tests.Interop::NumSharp.Tests.Interop.TupleCodecTests",
+      "project": "NumSharp.Tests.Interop",
+      "type": "NumSharp.Tests.Interop.TupleCodecTests",
+      "class": "TupleCodecTests",
+      "area": "Python interoperability",
+      "methods": 13,
+      "declaredInvocations": 13,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 13
+      },
+      "categories": {},
+      "oracleKinds": {
+        "Live NumPy interop": 13
+      },
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests.Interop/TupleCodecTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/TupleCodecTests.cs#L26",
+      "methodNames": [
+        "Decode_Declines_OnArityMismatch_AndOnALIst",
+        "Decode_MixedNestedAndReferenceTuples_ByElementType",
+        "Decode_NDArrayElement_GoesThroughTheNumpyCodec",
+        "Decode_NamedTuple_IsATupleSubclass_AndDecodes",
+        "Decode_ScopeGet_AndModuleGetT_ReadATupleVariable",
+        "Decode_ShapeAndStrides_IntoValueTuples_ThroughDynamic",
+        "Encode_AsACallArgument_NumpyTakesTheShape_AndBroadcastToGetsATuple",
+        "Encode_BoundIntoAScope_IsAPythonTuple_NestedAndMixed",
+        "Encode_LeavesNoDanglingReference_OnTheElements",
+        "Encode_NDArrayElement_CrossesAsAZeroCopyNumpyView",
+        "Encode_ReferenceTuple_AndEightPlusElements_RideTheRestSlot",
+        "Encode_ValueTupleShape_ReachesNumpyAsATuple",
+        "Options_ConvertTuples_DefaultsOn_AndTheStandaloneCodecAnswersOnlyForTuples"
       ],
       "methodPolicies": {}
     },
@@ -31637,7 +32195,7 @@
       "sourcePaths": [
         "test/NumSharp.Tests.Oracle/Fuzz/NativeAllocationChokepointTests.cs"
       ],
-      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/NativeAllocationChokepointTests.cs#L54",
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Oracle/Fuzz/NativeAllocationChokepointTests.cs#L56",
       "methodNames": [
         "EveryRawNativeAllocation_IsAKnownChokepoint"
       ],
