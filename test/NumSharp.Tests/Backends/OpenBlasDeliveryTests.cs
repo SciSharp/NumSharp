@@ -9,7 +9,7 @@ using NumSharp.Interop.OpenBLAS;
 namespace NumSharp.Tests.Backends
 {
     /// <summary>
-    ///     The delivery/discovery model of <c>docs/OPENBLAS_DELIVERY_DESIGN.md</c>, runtime side:
+    ///     The delivery/discovery model of <c>docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md</c>, runtime side:
     ///     the <c>BundleAutoinstall</c> rename (+ deprecated env alias), the source marker
     ///     (<c>openblas.source.json</c>) flipping a staged folder between "required version
     ///     override" and "bundle", the hard-required no-fall-through contract, and the removal of

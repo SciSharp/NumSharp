@@ -98,7 +98,7 @@ namespace NumSharp.Tests.Fuzz
         // specific BLAS binary, dispatched to a specific CPU kernel, at a specific thread count.
         // A host that cannot load that library — or loads a different one — makes the tier
         // INCONCLUSIVE with the reason, never red: a machine without NumPy's wheel has nothing to
-        // be wrong about. See matmul_parity.host.jsonl for the pin and docs/GEMM_PARITY.md.
+        // be wrong about. See matmul_parity.host.jsonl for the pin and docs/stale-docs/GEMM_PARITY.md.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void MatmulParity()

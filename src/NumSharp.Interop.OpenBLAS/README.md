@@ -98,7 +98,7 @@ layout (portable, read-only, flattened publish).
 
 ### Discovery order
 
-(The delivery/discovery model is specified in `docs/OPENBLAS_DELIVERY_DESIGN.md`.)
+(The delivery/discovery model is specified in `docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md`.)
 
 1. An explicit path, or `NUMSHARP_OPENBLAS_LIBRARY` — **binding**, never substituted.
 2. Override path(s): `NUMSHARP_OPENBLAS_SEARCH_PATH` — one or more files/directories (path-separator
@@ -175,7 +175,7 @@ also bake a pinned version into *their own* nupkg with `<OpenBlasDelivery>packag
 nearest-wins rule makes that copy beat this package's transitive bundle). `OpenBlasDelivery=none`
 opts a reference out; `build` (the default) stages into the consuming app's output only.
 
-Full model: `docs/OPENBLAS_DELIVERY_DESIGN.md`. Integration gate:
+Full model: `docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md`. Integration gate:
 `tools/verify_build_override.sh` (scripted end-to-end nupkg-flow run; needs network once).
 
 ## What it does
@@ -327,4 +327,4 @@ it into a scratch consumer **by PackageReference** and proves the bundle loads i
 one path a ProjectReference test suite cannot exercise — which is how the macOS defect above shipped
 green), and `tools/verify_build_override.sh` drives the build-time version override end to end.
 
-Full design record, probe results and traps: [`docs/GEMM_PARITY.md`](https://github.com/SciSharp/NumSharp/blob/master/docs/GEMM_PARITY.md).
+Full design record, probe results and traps: [`docs/stale-docs/GEMM_PARITY.md`](https://github.com/SciSharp/NumSharp/blob/master/docs/stale-docs/GEMM_PARITY.md).

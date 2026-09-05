@@ -180,6 +180,7 @@ if [ "$IS_WIN" = 0 ]; then
     chmod -R a-w "$RO"
     RORUN="$(cd "$CONS" && dotnet "$RO/consumer.dll" 2>&1)"; echo "$RORUN" | sed 's/^/    /'
     echo "$RORUN" | grep -q "^enabled=True" || fail "the bundle must load from a read-only install: $RORUN"
+    echo "$RORUN" | grep -q "^bundled=True" || fail "a read-only install of the bundle is still the bundle: $RORUN"
     echo "$RORUN" | grep -q "^dot00=10" || fail "wrong product from the read-only install: $RORUN"
     [ ! -e "$RO/runtimes/$RID/.dylibs" ] || fail "nothing may be written into the read-only tree"
     if [ "$IS_MAC" = 1 ]; then
@@ -204,6 +205,7 @@ if [ "$IS_MAC" = 1 ]; then
 fi
 PUBRUN="$(cd "$CONS" && dotnet "$PUB/consumer.dll" 2>&1)"; echo "$PUBRUN" | sed 's/^/    /'
 echo "$PUBRUN" | grep -q "^enabled=True" || fail "the bundle must load from a flattened publish: $PUBRUN"
+echo "$PUBRUN" | grep -q "^bundled=True" || fail "the flattened bundle is still the bundle (identity is content, not layout): $PUBRUN"
 echo "$PUBRUN" | grep -q "^dot00=10" || fail "wrong product from the flattened publish: $PUBRUN"
 [ ! -e "$WORK/.dylibs" ] || fail "the loader must never write ../.dylibs OUTSIDE the application folder"
 if [ "$IS_MAC" = 1 ]; then

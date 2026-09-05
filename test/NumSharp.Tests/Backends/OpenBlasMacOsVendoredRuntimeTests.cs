@@ -466,6 +466,135 @@ namespace NumSharp.Tests.Backends
 
         #endregion
 
+        #region the bundle's identity is its content
+
+        [TestMethod]
+        public void BundledAssetPin_IsEmbedded_AndPinsEveryRid()
+        {
+            Assert.IsTrue(BundledAssetPin.Available, "the manifest pin must be embedded in the interop assembly");
+            Assert.AreEqual(8, BundledAssetPin.Hashes.Count, "one sha256 per RID: " + string.Join(", ", BundledAssetPin.Hashes));
+            foreach (var h in BundledAssetPin.Hashes)
+                Assert.IsTrue(h.Length == 64 && h.All(c => Uri.IsHexDigit(c)) && h == h.ToLowerInvariant(), h);
+
+            // Not a pinned binary: a random file, a missing file, a bare loader name.
+            var other = Path.Combine(_root, "not-openblas.dll");
+            File.WriteAllBytes(other, new byte[] { 1, 2, 3, 4 });
+            Assert.IsFalse(BundledAssetPin.IsPinnedBinary(other));
+            Assert.IsFalse(BundledAssetPin.IsPinnedBinary(Path.Combine(_root, "missing.dll")));
+            Assert.IsFalse(BundledAssetPin.IsPinnedBinary("libopenblas"));
+            Assert.IsFalse(BundledAssetPin.IsPinnedBinary(null));
+        }
+
+        [TestMethod]
+        public void BundledAssetPin_RecognizesTheStagedBundle_ByContent()
+        {
+            var lib = FindStagedBundleForThisRid();
+            if (lib == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            Assert.IsTrue(BundledAssetPin.IsPinnedBinary(lib), lib);
+
+            // The same bytes anywhere else are still the bundle; one changed byte is not.
+            var copy = Path.Combine(_root, Path.GetFileName(lib));
+            File.Copy(lib, copy);
+            Assert.IsTrue(BundledAssetPin.IsPinnedBinary(copy));
+            using (var f = new FileStream(copy, FileMode.Open, FileAccess.ReadWrite))
+            {
+                f.Position = f.Length - 1;
+                int b = f.ReadByte();
+                f.Position = f.Length - 1;
+                f.WriteByte((byte)(b ^ 0xFF));
+            }
+            File.SetLastWriteTimeUtc(copy, DateTime.UtcNow.AddSeconds(5)); // defeat the (path, length, mtime) cache on purpose
+            Assert.IsFalse(BundledAssetPin.IsPinnedBinary(copy), "a mutated copy must not read as the pinned binary");
+        }
+
+        /// <summary>
+        ///     The layout a RID-specific / single-file publish produces: the bundle and its vendored
+        ///     runtime flat in the app root, no runtimes/ tree. It IS the bundle there, and a source
+        ///     marker still overrides that answer.
+        /// </summary>
+        [TestMethod]
+        public void IsBundledLibrary_FlattenedPublishLayout_IsTheBundle_UnlessAMarkerSaysOtherwise()
+        {
+            var lib = FindStagedBundleForThisRid();
+            if (lib == null)
+                Assert.Inconclusive("no bundled OpenBLAS asset staged for this RID.");
+
+            var cache = Path.Combine(_root, "cache");
+            Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_CACHE_DIR", cache);
+
+            // Flatten native/ (and native/.dylibs/ on macOS) into an "app" folder, exactly as the SDK does.
+            var app = Path.Combine(_root, "app");
+            Directory.CreateDirectory(app);
+            var native = Path.GetDirectoryName(lib);
+            foreach (var f in Directory.GetFiles(native))
+                File.Copy(f, Path.Combine(app, Path.GetFileName(f)));
+            var nested = Path.Combine(native, ".dylibs");
+            if (Directory.Exists(nested))
+                foreach (var f in Directory.GetFiles(nested))
+                    File.Copy(f, Path.Combine(app, Path.GetFileName(f)));
+            var flatMain = Path.Combine(app, Path.GetFileName(lib));
+
+            var previousSearchPath = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_SEARCH_PATH");
+            var previousLibrary = Environment.GetEnvironmentVariable("NUMSHARP_OPENBLAS_LIBRARY");
+            try
+            {
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_SEARCH_PATH", null);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_LIBRARY", null);
+
+                OpenBlasNative.Load(flatMain);
+                Assert.AreEqual(Path.GetFullPath(flatMain), Path.GetFullPath(OpenBlasEngine.LibraryPath));
+                Assert.IsTrue(OpenBlasEngine.IsBundledLibrary,
+                    "the flattened bundle is still the bundle — identity is content, not the runtimes/<rid>/native layout");
+
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                {
+                    // ../.dylibs would be OUTSIDE the app here, so the image must come from the cache …
+                    StringAssert.StartsWith(OpenBlasEngine.LoadedImagePath, Path.GetFullPath(cache));
+                    Assert.IsFalse(Directory.Exists(Path.Combine(_root, ".dylibs")), "nothing may be written above the app");
+                }
+                else
+                {
+                    Assert.AreEqual(OpenBlasEngine.LibraryPath, OpenBlasEngine.LoadedImagePath);
+                }
+                // … and whatever was mapped is byte-identical to the file LibraryPath names.
+                Assert.IsTrue(MacOsVendoredRuntime.FilesIdentical(OpenBlasEngine.LibraryPath, OpenBlasEngine.LoadedImagePath));
+
+                // A root marker (the flattened-publish layout of a build-staged override) flips the
+                // answer live — same bytes, opposite contract — and clearing it flips it back.
+                var marker = Path.Combine(app, "openblas.source.json");
+                File.WriteAllText(marker, "{ \"mode\": \"version\", \"version\": \"0.3.31.22.0\" }");
+                var previousBase = AppContext.BaseDirectory;
+                try
+                {
+                    // The marker probe looks next to the app; point the marker at this folder explicitly.
+                    File.WriteAllText(Path.Combine(previousBase, "openblas.source.json"),
+                        "{ \"mode\": \"version\", \"version\": \"0.3.31.22.0\", \"path\": " +
+                        System.Text.Json.JsonSerializer.Serialize(app) + " }");
+                    Assert.IsFalse(OpenBlasEngine.IsBundledLibrary, "a marker-declared override folder is never the bundle, whatever the bytes");
+                }
+                finally
+                {
+                    File.Delete(Path.Combine(previousBase, "openblas.source.json"));
+                    File.Delete(marker);
+                }
+
+                Assert.IsTrue(OpenBlasEngine.IsBundledLibrary, "with the marker gone the same file reads as the bundle again");
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_SEARCH_PATH", previousSearchPath);
+                Environment.SetEnvironmentVariable("NUMSHARP_OPENBLAS_LIBRARY", previousLibrary);
+                OpenBlasEngine.Disable();
+                // Release the temp copy so the folder can be deleted (tests run sequentially; nothing
+                // is executing in the BLAS). The next test that needs a library re-discovers one.
+                OpenBlasNative.Unload();
+            }
+        }
+
+        #endregion
+
         #region the loader seam
 
         [TestMethod]
@@ -524,6 +653,23 @@ namespace NumSharp.Tests.Backends
             var path = Path.Combine(dir, name);
             File.WriteAllBytes(path, SyntheticMachO.Dylib("/DLC/scipy_openblas64/.dylibs/" + name, loads, new[] { "@loader_path/" }));
             return path;
+        }
+
+        /// <summary>The bundled main library for the RUNNING RID, as laid down next to the test output.</summary>
+        private static string FindStagedBundleForThisRid()
+        {
+            foreach (var rid in OpenBlasNative.RuntimeIdentifierCandidates())
+            {
+                var native = Path.Combine(AppContext.BaseDirectory, "runtimes", rid, "native");
+                if (!Directory.Exists(native))
+                    continue;
+                var main = Directory.GetFiles(native).FirstOrDefault(f =>
+                    Path.GetFileName(f).IndexOf("openblas", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (main != null)
+                    return main;
+            }
+
+            return null;
         }
 
         private static List<string> FindStagedMacOsDylibs()

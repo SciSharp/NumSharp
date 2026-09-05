@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # verify_build_override.sh — the BUILD-phase override delivery integration gate
-# (docs/OPENBLAS_DELIVERY_DESIGN.md §5–§8; manual, like test/oracle/verify_npy_interop.py)
+# (docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md §5–§8; manual, like test/oracle/verify_npy_interop.py)
 #
 # Packs the REAL nupkg, restores it into a scratch consumer from a local feed, and
 # proves the whole chain: buildTransitive import → PackageReference-metadata /

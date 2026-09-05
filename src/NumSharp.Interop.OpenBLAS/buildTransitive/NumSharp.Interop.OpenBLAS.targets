@@ -727,7 +727,7 @@ public class NumSharpOpenBlasFetchTask : Task
                     "NumSharp.Interop.OpenBLAS: could not resolve {0}=={1} from {2}: {3}. A version " +
                     "override is a hard requirement — the build fails rather than shipping a different " +
                     "binary. (Offline? Prime the cache once, or point OpenBlasFeed at a mirror; see " +
-                    "docs/OPENBLAS_DELIVERY_DESIGN.md §10.5.)",
+                    "docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md §10.5.)",
                     distribution, version, indexUrl, FirstLine(e));
                 return false;
             }

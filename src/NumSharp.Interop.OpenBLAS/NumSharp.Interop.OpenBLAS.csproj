@@ -53,7 +53,7 @@
   </ItemGroup>
 
   <!-- ==================================================================================
-       BUILD-phase override delivery (docs/OPENBLAS_DELIVERY_DESIGN.md §5–§7).
+       BUILD-phase override delivery (docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md §5–§7).
 
        buildTransitive/ flows to every consumer, direct OR transitive — that is what lets a
        package that merely depends on this one offer the identical <OpenBlasVersion> /
@@ -147,6 +147,15 @@
 
   <ItemGroup>
     <EmbeddedResource Remove="runtimes\**" />
+  </ItemGroup>
+
+  <!-- The manifest pin, EMBEDDED: OpenBlasEngine.IsBundledLibrary identifies the bundle BY CONTENT
+       (BundledAssetPin hashes the loaded file against these per-RID sha256s) rather than by folder
+       layout, which a RID-specific / single-file publish flattens away. tools/openblas-manifest.json
+       stays the one checked-in source; the buildTransitive copy above serves the build task, this
+       copy serves the runtime. -->
+  <ItemGroup>
+    <EmbeddedResource Include="tools/openblas-manifest.json" LogicalName="NumSharp.Interop.OpenBLAS.openblas-manifest.json" />
   </ItemGroup>
 
   <Target Name="_ReportBundledOpenBlas" BeforeTargets="Pack" Condition="'$(BundleOpenBlas)' == 'true'">

@@ -125,7 +125,7 @@ would only reach arrays created afterwards, while a property on the cached singl
 for arrays that already exist (probed: 38/38 construction/operation/IO paths reach the one
 `EngineCache<DefaultEngine>` instance).
 
-Three rules the review pinned, all with a reproduction (`docs/GEMM_PARITY.md` §9): read `Blas` into
+Three rules the review pinned, all with a reproduction (`docs/stale-docs/GEMM_PARITY.md` §9): read `Blas` into
 a **local** before calling it (test-then-call on a settable property was ~2 % NREs under concurrent
 `Disable()`); a failed `OpenBlasEngine.Enable` is a **no-op** (it used to unload the working library first,
 leaving `Enabled` reporting true while products silently reverted to managed kernels); and a backend
@@ -137,7 +137,7 @@ bit-identical to the per-element route (25/25 A/B), 0.80× → **6.47×** on 200
 
 | Package | Implements | Serves | Why |
 |---------|-----------|--------|-----|
-| `NumSharp.Interop.OpenBLAS` (`src/NumSharp.Interop.OpenBLAS/`) | `OpenBlasBackend : IBlasBackend` | `np.dot`, `np.matmul`, `np.inner`, `np.vdot`, `np.vecdot`, `np.matvec`, `np.vecmat` for float32/float64/**complex128** | matrix + vector products through OpenBLAS — faster on large matrices, and **byte-identical to NumPy**. **Bundles the binaries NumPy itself pins** (scipy-openblas 0.3.31.22.0, byte-identical to numpy 2.4.2's) as per-RID runtime assets, so parity needs no Python installed. See below and `docs/GEMM_PARITY.md`. |
+| `NumSharp.Interop.OpenBLAS` (`src/NumSharp.Interop.OpenBLAS/`) | `OpenBlasBackend : IBlasBackend` | `np.dot`, `np.matmul`, `np.inner`, `np.vdot`, `np.vecdot`, `np.matvec`, `np.vecmat` for float32/float64/**complex128** | matrix + vector products through OpenBLAS — faster on large matrices, and **byte-identical to NumPy**. **Bundles the binaries NumPy itself pins** (scipy-openblas 0.3.31.22.0, byte-identical to numpy 2.4.2's) as per-RID runtime assets, so parity needs no Python installed. See below and `docs/stale-docs/GEMM_PARITY.md`. |
 
 **`NumSharp.Interop.OpenBLAS`** exists because no portable algorithm can match NumPy's float matrix
 products: for f32/f64 mat@mat NumPy **always** calls cblas (since gh-23588 it copies non-blasable
@@ -172,7 +172,7 @@ OpenBLAS, and this is *the* one. **win-arm64 is scipy-openblas32**, because NumP
 LP64 there — it exports `scipy_cblas_sgemm`, a symbol scheme `Bind` lacked (added; binding a
 win-arm64 numpy's BLAS would have failed outright). Binaries are gitignored;
 `tools/openblas-manifest.json` is the checked-in pin and `tools/fetch_openblas.py` verifies **two**
-hashes per RID. Discovery order is fixed (`docs/OPENBLAS_DELIVERY_DESIGN.md` §3; runtime side
+hashes per RID. Discovery order is fixed (`docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md` §3; runtime side
 implemented, gate `OpenBlasDeliveryTests`): explicit path/`NUMSHARP_OPENBLAS_LIBRARY` (binding) →
 override path(s) (`NUMSHARP_OPENBLAS_SEARCH_PATH` env, then a build-recorded `OpenBlasPath` marker;
 non-binding) → build-staged **version override** (`openblas.source.json` marker, `mode:"version"` —
@@ -255,8 +255,11 @@ the CRT (`ucrtbase!_putenv_s` / `libc!setenv`); Windows' `SetEnvironmentVariable
 either.
 
 API: `OpenBlasEngine.Enable(library, threads, coreType)` / `OpenBlasEngine.Disable()` / `OpenBlasEngine.Enabled` / `OpenBlasEngine.Info` /
-`OpenBlasEngine.LibraryPath` / `OpenBlasEngine.CoreName` / `OpenBlasEngine.IsBundledLibrary` (marker-aware: a staged override in
-the same folder layout reports false) / `OpenBlasEngine.CoreType`; `NUMSHARP_OPENBLAS_SEARCH_PATH` adds
+`OpenBlasEngine.LibraryPath` / `OpenBlasEngine.LoadedImagePath` / `OpenBlasEngine.CoreName` / `OpenBlasEngine.IsBundledLibrary`
+(decided by CONTENT — the loaded file must hash to a manifest pin embedded in the assembly, `BundledAssetPin`, so a
+RID-specific/single-file publish that flattens the bundle into the app root still reports true — AND marker-aware: a
+build-staged override folder reports false even with identical bytes; both evaluated live) / `OpenBlasEngine.CoreType`;
+`NUMSHARP_OPENBLAS_CACHE_DIR` moves the per-user cache (macOS relocated dylibs + the build-override cache); `NUMSHARP_OPENBLAS_SEARCH_PATH` adds
 highest-priority (non-binding) discovery locations tried before bundled;
 `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` opts out of the module-load install (`OpenBlasEngine.BundleAutoinstall`;
 the pre-rename `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` and `NUMSHARP_BLAS_AUTOINSTALL` spellings are RETIRED

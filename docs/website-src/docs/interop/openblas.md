@@ -444,7 +444,8 @@ The whole public surface is the static `OpenBlasEngine` class (namespace `NumSha
 | `OpenBlasEngine.Info` | Path, symbol scheme, integer width, thread count and build string of the loaded library, or `null`. |
 | `OpenBlasEngine.LibraryPath` | Full path of the loaded library — the machine-readable form of "which binary answered?". |
 | `OpenBlasEngine.CoreName` | The `DYNAMIC_ARCH` micro-kernel OpenBLAS actually dispatched (e.g. `"Haswell"`). |
-| `OpenBlasEngine.IsBundledLibrary` | `true` when the loaded library is the package's bundled asset — marker-aware: a build-staged override in the same folder layout reports `false`. |
+| `OpenBlasEngine.IsBundledLibrary` | `true` when the loaded library is the package's bundled asset. Decided by **content** — the file must hash to a manifest pin embedded in the assembly — so the bundle reports `true` from a `runtimes/<rid>/native/` restore and from a RID-specific or single-file publish that flattened it into the app root alike; and marker-aware: a build-staged override folder reports `false` even when its bytes equal the bundle's. |
+| `OpenBlasEngine.LoadedImagePath` | The file the OS loader actually mapped. Equals `LibraryPath` except on macOS when the bundled dylib was relocated to the per-user cache so its vendored Fortran runtime resolves (see [The bundle](#1--the-bundle)); the copy is verified byte-identical, and `LibraryPath` — the file a parity pin hashes — keeps naming the original. |
 | `OpenBlasEngine.CoreType` | `"Haswell"` — a fixed micro-kernel to pin for cross-machine reproducibility (see [Reproducible results](#reproducible-results)). |
 
 Three semantics are load-bearing, each pinned by a test:
@@ -620,13 +621,13 @@ the seam and is gated today — an implementation only has to supply numerics.
 
 - [Interoperability](index.md) — the memory-bridge contract behind the other `NumSharp.Interop.*`
   packages (this one shares a *binary*, not a buffer)
-- [`docs/GEMM_PARITY.md`][gemm] — the engineering deep-dive: the ported routes, the design review,
+- [`docs/stale-docs/GEMM_PARITY.md`][gemm] — the engineering deep-dive: the ported routes, the design review,
   the delivery model, the probe results and traps
-- [`docs/OPENBLAS_DELIVERY_DESIGN.md`][delivery] — the delivery/discovery model: the two phases,
+- [`docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md`][delivery] — the delivery/discovery model: the two phases,
   the source marker, the transitive story, every resolved decision
 
 [gate-backend]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/MatmulParityBackendTests.cs
 [gate-delivery]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/OpenBlasDeliveryTests.cs
 [gate-build]: https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
-[gemm]: https://github.com/SciSharp/NumSharp/blob/master/docs/GEMM_PARITY.md
-[delivery]: https://github.com/SciSharp/NumSharp/blob/master/docs/OPENBLAS_DELIVERY_DESIGN.md
+[gemm]: https://github.com/SciSharp/NumSharp/blob/master/docs/stale-docs/GEMM_PARITY.md
+[delivery]: https://github.com/SciSharp/NumSharp/blob/master/docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md

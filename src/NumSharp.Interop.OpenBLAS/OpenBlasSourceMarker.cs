@@ -18,7 +18,7 @@ namespace NumSharp.Interop.OpenBLAS
     ///     than falling through), while the bundle is the zero-config parity default (probed after
     ///     the overrides, and a miss falls through to machine tooling). The marker is the one bit of
     ///     metadata that flips the folder between those roles. See
-    ///     <c>docs/OPENBLAS_DELIVERY_DESIGN.md</c> §8.
+    ///     <c>docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md</c> §8.
     ///     <para>Schema (all keys optional except <c>mode</c>):</para>
     ///     <code>
     ///     { "mode": "version|path|none", "distribution": "scipy-openblas64",

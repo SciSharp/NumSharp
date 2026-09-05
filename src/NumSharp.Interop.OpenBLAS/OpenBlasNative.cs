@@ -57,7 +57,7 @@ namespace NumSharp.Interop.OpenBLAS
     ///     NumSharp the SAME BLAS binary a given NumPy build calls, which is the only way to get
     ///     bit-identical <c>np.dot</c> / <c>np.matmul</c> results out of the two stacks (OpenBLAS'
     ///     multi-accumulator kernels are arch- and thread-count-specific and are not reproducible
-    ///     by any portable algorithm — see <c>docs/GEMM_PARITY.md</c>).
+    ///     by any portable algorithm — see <c>docs/stale-docs/GEMM_PARITY.md</c>).
     ///     <para>
     ///     Two symbol schemes are supported. NumPy's pip wheels ship an ILP64 build with the
     ///     symbols renamed <c>scipy_</c><i>name</i><c>64_</c> (e.g. <c>scipy_cblas_sgemm64_</c>),
@@ -326,7 +326,7 @@ namespace NumSharp.Interop.OpenBLAS
         /// </summary>
         /// <param name="path">
         ///     Explicit file path, a directory to search, or null to auto-discover. Discovery runs
-        ///     the delivery design's tier order (<c>docs/OPENBLAS_DELIVERY_DESIGN.md</c> §3):
+        ///     the delivery design's tier order (<c>docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md</c> §3):
         ///     override path(s) (<c>NUMSHARP_OPENBLAS_SEARCH_PATH</c>, then a build-recorded path marker) →
         ///     a build-staged version override (REQUIRED — a miss throws, never falls through) →
         ///     explicit OpenBLAS roots (<c>OPENBLAS_HOME</c>/<c>OPENBLAS_ROOT</c>) → the bundled

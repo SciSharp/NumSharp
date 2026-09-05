@@ -159,12 +159,12 @@ Target: retire duplicate semantic paths only after the retained route proves all
 
 - **CAP-PROD-01 — Managed product family (operational).** `dot`, `matmul`, `inner`, `vdot`, `vecdot`, `matvec`, `vecmat`, `outer`, `tensordot`, `einsum`, `multi_dot`, and `matrix_power` have managed paths. Managed `matmul` is stride-aware and includes SIMD plus generic dtype fallbacks. Evidence: [`LinearAlgebra/`](src/NumSharp.Core/LinearAlgebra/), [`Default.MatMul.cs`](src/NumSharp.Core/Backends/Default/Math/BLAS/Default.MatMul.cs), and [`products.jsonl`](test/NumSharp.Tests/Fuzz/corpus/products.jsonl).
 - **CAP-BLAS-01 — Optional try-shaped backend (operational).** `TensorEngine.Blas` is null by default. An `IBlasBackend` may accept a product; false means the managed engine continues. Engine code reads the settable property into a local before calling it so concurrent disable cannot create a test-then-call null race. Evidence: [`TensorEngine.cs`](src/NumSharp.Core/Backends/TensorEngine.cs), [`IBlasBackend.cs`](src/NumSharp.Core/Backends/IBlasBackend.cs), and [`Default.Dot.cs`](src/NumSharp.Core/Backends/Default/Math/BLAS/Default.Dot.cs).
-- **CAP-OPENBLAS-01 — NumPy-route-compatible matrix products (operational when load succeeds).** The optional package implements separate NumPy `dot` and `matmul` dispatchers for float32/float64, including whole-stack matmul. A module initializer installs the backend on the cached default engine; referencing the package is the normal opt-in, and explicit `Enable`/`Disable` controls it. Evidence: [`OpenBlasBackend.cs`](src/NumSharp.Interop.OpenBLAS/OpenBlasBackend.cs), [`OpenBlasEngine.Binding.cs`](src/NumSharp.Interop.OpenBLAS/OpenBlasEngine.Binding.cs), and [GEMM parity design](docs/GEMM_PARITY.md).
+- **CAP-OPENBLAS-01 — NumPy-route-compatible matrix products (operational when load succeeds).** The optional package implements separate NumPy `dot` and `matmul` dispatchers for float32/float64, including whole-stack matmul. A module initializer installs the backend on the cached default engine; referencing the package is the normal opt-in, and explicit `Enable`/`Disable` controls it. Evidence: [`OpenBlasBackend.cs`](src/NumSharp.Interop.OpenBLAS/OpenBlasBackend.cs), [`OpenBlasEngine.Binding.cs`](src/NumSharp.Interop.OpenBLAS/OpenBlasEngine.Binding.cs), and [GEMM parity design](docs/stale-docs/GEMM_PARITY.md).
 - **CAP-LAPACK-01 — Backend-only factorisations (partial).** `cholesky`, `det`, `slogdet`, `eig`/`eigh`, `inv`, `lstsq`, `qr`, `solve`, and `svd` delegate through default `IBlasBackend` methods. Core has no managed LU/QR/SVD/eigensolver fallback; when the backend declines, `TensorEngine` raises `NotSupportedException`. The shipped OpenBLAS backend currently implements only `dot`/`matmul`, so it does not satisfy these methods. Evidence: [`IBlasBackend.LinearAlgebra.cs`](src/NumSharp.Core/Backends/IBlasBackend.LinearAlgebra.cs), [`TensorEngine.LinearAlgebra.cs`](src/NumSharp.Core/Backends/TensorEngine.LinearAlgebra.cs), and [`OpenBlasBackend.cs`](src/NumSharp.Interop.OpenBLAS/OpenBlasBackend.cs).
 
 Backend implementer invariant: pair `(T*)a.GetData().Address + a.Shape.Offset` with `a.Shape.Strides`. Do not pair a densified `a.GetData<T>().Address` with the original strides.
 
-OpenBLAS parity has three inputs: library bytes, thread count, and dynamic-architecture core selection. The package pins and verifies the bundled library, but the default CPU dispatch intentionally follows the local NumPy unless the caller safely pins a core type. Discovery and override rules are specified in [OPENBLAS_DELIVERY_DESIGN.md](docs/OPENBLAS_DELIVERY_DESIGN.md).
+OpenBLAS parity has three inputs: library bytes, thread count, and dynamic-architecture core selection. The package pins and verifies the bundled library, but the default CPU dispatch intentionally follows the local NumPy unless the caller safely pins a core type. Discovery and override rules are specified in [OPENBLAS_DELIVERY_DESIGN.md](docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md).
 
 Target: keep Core independent of native libraries; keep optional product backends substitutable and failure-safe; publish a separate backend that implements factorisations or state their unavailability prominently at each API.
 
@@ -344,8 +344,8 @@ The interop test command requires a compatible discoverable CPython and NumPy. O
 
 Focused subsystem gates and operational details live in:
 
-- [GEMM parity](docs/GEMM_PARITY.md)
-- [OpenBLAS delivery design](docs/OPENBLAS_DELIVERY_DESIGN.md)
+- [GEMM parity](docs/stale-docs/GEMM_PARITY.md)
+- [OpenBLAS delivery design](docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md)
 - [FFT parity](docs/FFT_PARITY.md)
 - [Fuzz matrix](test/NumSharp.Tests/Fuzz/README.md)
 - [Python interop](src/NumSharp.Interop.pythonnet/README.md)

@@ -272,12 +272,23 @@ namespace NumSharp.Interop.OpenBLAS
         ///     discovered on the machine, staged by a build-time override, or named by the caller).
         /// </summary>
         /// <remarks>
-        ///     A build-staged version/path override lands in the same
-        ///     <c>runtimes/&lt;rid&gt;/native/</c> layout as the bundle — and the delivery design's
-        ///     "same binary" invariant can make the two content-identical — so the folder heuristic
-        ///     alone cannot tell them apart. The source marker the build writes
-        ///     (<c>openblas.source.json</c>) is what does: a folder it declares an override
-        ///     read-location is an override, not the bundle.
+        ///     <para>
+        ///     Decided by CONTENT: the loaded file must hash to one of the manifest-pinned bundled
+        ///     libraries (the pin is embedded in this assembly — <see cref="BundledAssetPin"/>), the
+        ///     same identity rule the host-pinned parity corpus uses. Folder layout is not the
+        ///     criterion, because it is not stable: a PackageReference restore keeps
+        ///     <c>runtimes/&lt;rid&gt;/native/</c>, while a RID-specific or single-file publish
+        ///     flattens the very same binary into the app root — and it is still the bundle there.
+        ///     (A build with no embedded pin falls back to that layout heuristic.)
+        ///     </para>
+        ///     <para>
+        ///     Content alone is not enough either, in the other direction: a build-staged version
+        ///     override can be content-identical to the bundle (the delivery design's "same binary"
+        ///     invariant) yet carries the opposite contract. The source marker the build writes
+        ///     (<c>openblas.source.json</c>) is what tells them apart — a folder it declares an
+        ///     override read-location is an override, not the bundle, whatever the bytes. Both checks
+        ///     are evaluated live, so removing a marker flips the answer without a reload.
+        ///     </para>
         /// </remarks>
         public static bool IsBundledLibrary
         {
@@ -287,13 +298,28 @@ namespace NumSharp.Interop.OpenBLAS
                 if (string.IsNullOrEmpty(path))
                     return false;
 
-                var dir = System.IO.Path.GetDirectoryName(path);
-                if (string.IsNullOrEmpty(dir) ||
-                    !System.IO.Path.GetFileName(dir).Equals("native", StringComparison.OrdinalIgnoreCase) ||
-                    dir.IndexOf("runtimes", StringComparison.OrdinalIgnoreCase) < 0)
+                string dir;
+                try
+                {
+                    if (!System.IO.File.Exists(path))
+                        return false; // a bare loader name resolved by the OS is never the bundle
+
+                    dir = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path));
+                }
+                catch (Exception e) when (e is ArgumentException or System.IO.IOException or NotSupportedException or System.Security.SecurityException)
+                {
+                    return false;
+                }
+
+                if (!string.IsNullOrEmpty(dir) && OpenBlasSourceMarker.DeclaresOverrideFor(dir))
                     return false;
 
-                return !OpenBlasSourceMarker.DeclaresOverrideFor(dir);
+                if (BundledAssetPin.Available)
+                    return BundledAssetPin.IsPinnedBinary(path);
+
+                return !string.IsNullOrEmpty(dir) &&
+                       System.IO.Path.GetFileName(dir).Equals("native", StringComparison.OrdinalIgnoreCase) &&
+                       dir.IndexOf("runtimes", StringComparison.OrdinalIgnoreCase) >= 0;
             }
         }
 
