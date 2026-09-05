@@ -113,13 +113,15 @@ internal sealed class ArenaView(ArcadeSession game, PlayerProfile profile) : Con
             var paddleTop = ToScreen(new Vector2(ArcadeSession.PaddleX - ArcadeSession.PaddleWidth / 2, game.PaddleY - ArcadeSession.PaddleHeight / 2));
             var paddle = new Rect(paddleTop.X, paddleTop.Y, ArcadeSession.PaddleWidth * _scale, ArcadeSession.PaddleHeight * _scale);
             if (!profile.HighContrast) context.DrawRectangle(BallGlow, null, paddle.Inflate(4 * _scale), 7 * _scale, 7 * _scale);
-            context.DrawRectangle(Brushes.White, null, paddle, 4 * _scale, 4 * _scale);
+            context.DrawRectangle(Brushes.White, null, paddle, ArcadeSession.PaddleCornerRadius * _scale, ArcadeSession.PaddleCornerRadius * _scale);
             context.DrawRectangle(Mint, null, new Rect(paddle.X + 4 * _scale, paddle.Y + 10 * _scale, 3 * _scale, paddle.Height - 20 * _scale), 1, 1);
             // Draw the solid ball last: particles and shockwaves must never obscure it.
             var ball = ToScreen(game.Ball); var ballRadius = ArcadeSession.Radius * _scale;
             if (!profile.HighContrast)
                 using (context.PushOpacity(.3)) context.DrawEllipse(tier > 0 ? accent : BallGlow, null, ball, ballRadius * (2.1 + tier * .3), ballRadius * (2.1 + tier * .3));
             context.DrawEllipse(Brushes.White, null, ball, ballRadius, ballRadius);
+            var spinMark = new Avalonia.Vector(Math.Cos(game.BallAngle) * ballRadius * .5, Math.Sin(game.BallAngle) * ballRadius * .5);
+            context.DrawLine(new Pen(Ink, Math.Max(1, 1.5 * _scale)), ball - spinMark, ball + spinMark);
         }
     }
 

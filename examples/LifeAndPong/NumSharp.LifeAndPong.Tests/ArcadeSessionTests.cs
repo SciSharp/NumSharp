@@ -179,9 +179,9 @@ public sealed class ArcadeSessionTests
         var random = new Random(101); var positive = 0; var negative = 0;
         for (var i = 0; i < 2048; i++)
         {
-            var fraction = (float)(random.NextDouble() * .04 - .02);
+            var fraction = (float)(random.NextDouble() * .10 - .05);
             var v = ArcadeSession.AddJitter(new Vector2(1000, 0), fraction);
-            Assert.AreEqual(1000f, v.Length(), .001f); Assert.IsTrue(Math.Abs(v.Y / v.X) <= .020001f);
+            Assert.AreEqual(1000f, v.Length(), .001f); Assert.IsTrue(Math.Abs(v.Y / v.X) <= .050001f);
             if (v.Y > 0) positive++; else negative++;
         }
         Assert.IsTrue(positive > 800 && negative > 800);

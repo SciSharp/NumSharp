@@ -11,7 +11,7 @@ dotnet test $tests -c Release --nologo
 if ($LASTEXITCODE -ne 0) { throw 'Game tests failed; release stopped.' }
 dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishTrimmed=false --nologo -o $bundle
 if ($LASTEXITCODE -ne 0) { throw 'Windows publish failed; release stopped.' }
-foreach ($name in @('README.md', 'SPECIFICATION.md', 'ARCADE_DESIGN.md', 'preview.png', 'preview.ready.png')) {
+foreach ($name in @('README.md', 'SPECIFICATION.md', 'ARCADE_DESIGN.md', 'PHYSICS.md', 'preview.png', 'preview.ready.png')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $bundle
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../../LICENSE') -Destination (Join-Path $bundle 'NumSharp-LICENSE.txt')

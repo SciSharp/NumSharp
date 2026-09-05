@@ -1,6 +1,7 @@
 # Life Arcade — adopted game-design baseline
 
-Status: adopted baseline, amended by owner steering `DEC-life-arcade-steering-005`.
+Status: adopted baseline, amended by owner steering `DEC-life-arcade-steering-005`
+and realistic-collision revision `DEC-life-arcade-physics-006`.
 Implementation and fresh QA are in progress; historical packages are not evidence of this revision.
 
 - Work: `WORK-legacy` — NumSharp Life Arcade
@@ -127,31 +128,32 @@ a padded area in the left 70%, with a clear approach strip of at least two
 ball diameters before the boundary. Top, bottom and left boundaries reflect. The
 right edge behind the player is the only loss boundary.
 
-- Fixed 120 Hz simulation, independent of render rate; collision stepping must
-  account for the smallest cell and moving paddle, not just ball travel.
-- Ball radius: 10 logical units. Player paddle: 18 by 144, near the right edge.
-- Rounded/circle-versus-rectangle contact normals determine reflection.
-- Paddle acceleration and inertia are retained. Its motion transfers tangential
-  velocity to the ball so a well-timed moving strike changes the next approach.
-- Initial ball speed: 640 logical units/second; ceiling: 1000.
-- On each distinct paddle or cell collision, add a uniformly sampled signed
-  perpendicular perturbation bounded to **2% of speed**, then renormalize.
-  Do not add jitter every frame or on ordinary wall reflections.
-- Jitter may not point the ball back inside a resolved contact; deterministic
-  outward correction and separation take priority, without drawing another
-  random sample. Stationary contacts conserve the selected speed.
-- Apply a minimum absolute horizontal component of 30% of speed after rebounds
-  to avoid nearly vertical play. This is explicit arcade assistance, not a
-  claim of perfectly Newtonian motion. Preserve direction except on the
-  return-assistance rule below.
-- Break ties at shared cell edges deterministically, remove contacted cells
-  atomically, and resolve the contact set once. Never bounce twice solely
-  because the ball still overlaps its previous contact.
+- The owner now requires realistic trajectories with **5% directional noise**.
+  The model is explicitly idealized 2D: no gravity, air drag or Magnus force.
+- The paddle controller runs at 120 Hz. Ball movement uses analytic swept
+  time-of-impact against rounded cells, the capsule paddle and wall planes.
+  Advance to each contact and consume the remaining frame time afterward.
+- Ball radius is 10. The 18 by 144 paddle has radius-9 caps; cells have radius-2
+  corners. Rendered solid geometry matches collision geometry.
+- Elastic normal impulses use relative velocity in the moving paddle frame.
+  Simultaneous contacts are solved as constraints, not averaged bounce normals.
+- The unit-mass ball is a solid disc. Paddle Coulomb friction is 0.08 and
+  transfers tangential momentum into translation and spin; stationary cell and
+  wall contacts are frictionless. A small ball mark reveals spin.
+- Once per resolved contact manifold, including walls, sample a signed
+  perpendicular component uniformly within +/-5%, then preserve the physical
+  post-impulse translational speed. Reduce that same sample if needed to avoid
+  pointing back into a contact. There is no per-frame noise or random resampling.
+- Remove minimum-angle clamps, automatic return steering, arbitrary tangential
+  boosts and per-hit target-speed normalization. Flight is straight between
+  impacts; moving-paddle work can change speed physically.
+- Sector difficulty sets **launch speed** from 640 to a maximum of 1000. This
+  is not a cap imposed on the result of an in-flight physical impact.
+- A tiny contact-separation tolerance prevents repeat collisions due to floating
+  point roundoff. A pathological unresolved-contact loop pauses with a visible
+  restart explanation rather than dropping time or secretly redirecting the ball.
 
-If six seconds of active SHATTER time pass without a cell hit, show **RETURN**.
-At the next wall contact, guide the rebound rightward with at least 45% of speed
-in the horizontal component. This prevents watching a useless orbit; it does
-not teleport, grant score, or move the paddle. Pause does not age this timer.
+The equations, idealizations and analytic verification cases are in [PHYSICS.md](PHYSICS.md).
 
 ## 6. Run structure and difficulty
 
@@ -168,15 +170,12 @@ match and no requirement to eradicate a board that is designed to regenerate.
   cells, and highest sector. Offer an immediate retry and a return to title.
 
 Advance a **sector every 40 ball-destroyed cells**. Life deaths do not count.
-Each sector increases target speed by 6%, capped at 1000, and Life rate by
+Each sector increases launch speed by 6%, capped at 1000, and Life rate by
 0.5 generations/second from a base of 6, capped at 10. Keep paddle size stable;
 the challenge comes from tempo and the evolving opponent, not shrinking input
-tolerance. Apply a pending sector change on the next paddle return or serve,
-never as an unexplained velocity jump inside the colony.
-
-On a lost life, launch at 85% of the current sector speed, with a floor of 640,
-and restore sector speed over the next three successful returns. A new run
-resets difficulty. No automatic extra lives in the first version.
+tolerance. Adopt a pending sector on the next paddle return or serve, but apply
+its speed only to a new launch. Do not rewrite the speed of an in-flight ball.
+A new run resets difficulty. No automatic extra lives in the first version.
 
 Randomness is seeded per run. Store the seed and gameplay version with local
 results for reproducible debugging. Save a small local high-score list and
@@ -280,8 +279,9 @@ The replacement implementation must prove:
    colony recovers, and never spawns during SHATTER or pause.
 6. Empty fields, stalled paths, simultaneous crossing/collision events and a
    miss during pending progression cannot strand the run.
-7. Speed limits, horizontal assistance and 2% jitter are independently tested
-   over deterministic seeds; cosmetic changes leave gameplay snapshots intact.
+7. Analytic impact times, corner/face reflection, moving-paddle work, friction/spin
+   energy, simultaneous contacts and bounded 5% noise are independently tested.
+   No angle clamp/return steering remains; cosmetics leave gameplay unchanged.
 8. All three lives, serves, pause/resume, game-over and retry work through real
    input routes, including lost focus, aliased keys and pointer capture loss.
 9. UI at default and minimum supported desktop sizes remains readable, with all

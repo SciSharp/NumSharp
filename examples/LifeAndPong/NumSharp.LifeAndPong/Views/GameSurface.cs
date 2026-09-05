@@ -124,7 +124,7 @@ public sealed class GameSurface : UserControl, IDisposable
     }
     private void StartOrResume()
     {
-        if (_confirmRestart || _session.State == RunState.GameOver)
+        if (_confirmRestart || _session.State == RunState.GameOver || _session.PhysicsIssue is not null)
             BeginNewRun();
         _session.LaunchOrResume(); Refresh(); Focus();
     }
@@ -227,7 +227,7 @@ public sealed class GameSurface : UserControl, IDisposable
         _restart.IsVisible = _session.State == RunState.Paused && !_confirmRestart; _cancel.IsVisible = _confirmRestart;
         _title.IsVisible = _session.State == RunState.GameOver;
         _message.Text = _profile.SaveError ?? "MOVE: W / S · ↑ / ↓ · MOUSE     SPACE: LAUNCH / PAUSE";
-        var phase = _session.State == RunState.Paused ? "PAUSED" : _session.ReturnAssist ? "RETURN" : _session.Frozen ? "SHATTER" : _session.Growing ? "GROW" : "COLONY";
+        var phase = _session.State == RunState.Paused ? "PAUSED" : _session.Frozen ? "SHATTER" : _session.Growing ? "GROW" : "COLONY";
         _phaseStatus.Text = $"{phase} · {_session.Life.LiveCount} LIVING · LIFE 70% / PLAYER 30%" + (_session.Replenishing ? " · NEW LIFE" : "");
         _phaseStatus.Foreground = _session.Frozen ? ArenaView.Coral : ArenaView.Mint;
         _hitFeedback.Text = _feedbackSeconds > 0 && _feedback is not null ? _feedback : _session.EffectTier > 0 ? $"{ArenaView.TierName(_session.EffectTier)} · {_session.Chain} CELLS THIS SHOT" : "20 SURGE · 50 OVERDRIVE · 100 SUPERNOVA";
@@ -243,7 +243,7 @@ public sealed class GameSurface : UserControl, IDisposable
             _overlayStats.Text = $"{_session.Lives} LIVES\nCELL AWARDS: +1, +2, +4, +6…\nPADDLE HIT RESETS THE COUNTER"; _primary.Content = _session.Lives == 3 ? "Start run  /  Space" : "Launch  /  Space";
         }
         else if (_session.State == RunState.Paused)
-        { _overlayTitle.Text = "TAKE A BREATH."; _overlayDetail.Text = "Everything is paused. Your colony and chain are safe."; _overlayStats.Text = $"SCORE {_session.Score:N0}   ·   NEXT CELL +{_session.NextAward}"; _primary.Content = "Resume  /  Space"; }
+        { _overlayTitle.Text = "TAKE A BREATH."; _overlayDetail.Text = _session.PhysicsIssue ?? "Everything is paused. Your colony and chain are safe."; _overlayStats.Text = $"SCORE {_session.Score:N0}   ·   NEXT CELL +{_session.NextAward}"; _primary.Content = _session.PhysicsIssue is null ? "Resume  /  Space" : "Restart run"; }
         else if (_session.State == RunState.GameOver)
         {
             _overlayTitle.Text = _session.Score >= _profile.Best && _session.Score > 0 ? "NEW PERSONAL BEST." : "ONE MORE RUN?";
