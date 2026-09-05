@@ -10,22 +10,46 @@
   href: broadcasting.md
 - name: Buffering & Memory
   href: buffering.md
-- name: NumSharp.Build Compiler
-  href: numsharp-build-compiler.md
 - name: Exceptions
   href: exceptions.md
 - name: NumPy Compliance & Compatibility
   href: compliance.md
+- name: Array API Standard
+  href: array-api-standard.md
+- name: NDIter (Kerneling NDArray)
+  href: NDIter.md
+- name: IL Generation
+  href: il-generation.md
+- name: NumSharp.Build Compiler
+  href: numsharp-build-compiler.md
+- name: Extending Libraries
+  href: extensions/index.md
+  expanded: false
+  items:
+  - name: NumSharp.Bitmap
+    href: extensions/bitmap.md
+- name: Interoperability
+  href: interop/index.md
+  expanded: true
+  items:
+  - name: Python & numpy (pythonnet)
+    href: interop/pythonnet-numpy.md
+  - name: PyTorch
+    href: interop/pytorch.md
+  - name: Pandas
+    href: interop/pandas.md
+  - name: Any library via np.frombuffer
+    href: interop/np-frombuffer.md
+  - name: Numpy.NET
+    href: interop/numpy-net.md
+  - name: OpenBLAS
+    href: interop/openblas.md
 - name: NumPy API Coverage & Support
   href: coverage-support-dashboard.md
   expanded: true
   items:
   - name: Dashboard
     href: coverage-support-dashboard.md
-- name: Array API Standard
-  href: array-api-standard.md
-- name: IL Generation
-  href: il-generation.md
 - name: Unit Tests & Oracle
   href: tests-oracle-dashboard.md
   expanded: true
@@ -61,27 +85,3 @@
       href: ../../../benchmark/history/latest/operand_results.md
     - name: OpenBLAS & LAPACK
       href: ../../../benchmark/history/latest/openblas_results.md
-- name: NDIter (Kerneling NDArray)
-  href: NDIter.md
-- name: Extending Libraries
-  href: extensions/index.md
-  expanded: false
-  items:
-  - name: NumSharp.Bitmap
-    href: extensions/bitmap.md
-- name: Interoperability
-  href: interop/index.md
-  expanded: true
-  items:
-  - name: Python & numpy (pythonnet)
-    href: interop/pythonnet-numpy.md
-  - name: PyTorch
-    href: interop/pytorch.md
-  - name: Pandas
-    href: interop/pandas.md
-  - name: Any library via np.frombuffer
-    href: interop/np-frombuffer.md
-  - name: Numpy.NET
-    href: interop/numpy-net.md
-  - name: OpenBLAS
-    href: interop/openblas.md
