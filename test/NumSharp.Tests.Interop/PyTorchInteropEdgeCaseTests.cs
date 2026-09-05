@@ -14,7 +14,8 @@ namespace NumSharp.Tests.Interop
     ///     Rare-scenario matrix for the PyTorch bridge. The core test class proves the public contract;
     ///     this class attacks its boundaries: degenerate shapes, storage offsets, every boundary value,
     ///     reverse dtype mapping, special tensor state, unsupported layouts/dtypes, ownership, GIL and
-    ///     concurrent churn. Every Python-side answer is produced by live PyTorch 2.13.x.
+    ///     concurrent churn. Every Python-side answer is produced by the live installed PyTorch
+    ///     (validated on 2.13.0 and 2.12.1; the gate is the <see cref="PyTorchTestGate"/> floor).
     /// </summary>
     [TestClass]
     public class PyTorchInteropEdgeCaseTests : InteropTestBase
@@ -779,9 +780,30 @@ namespace NumSharp.Tests.Interop
         }
     }
 
+    /// <summary>
+    ///     Gate for the live PyTorch claims. The bridge was validated against PyTorch 2.13.0 when it was
+    ///     added, but the gate is a VERSION FLOOR, not an exact-line pin: pinning <c>2.13.</c> made the
+    ///     whole Torch suite report Inconclusive on any host with a different (older OR newer) stable
+    ///     PyTorch — 27 tests green-by-skipping, the one failure mode a self-skipping suite hides. The
+    ///     floor is 2.3.0, the release that gave <c>torch.from_numpy</c> its unsigned 16/32/64-bit dtypes
+    ///     (the rows the dtype tests pin); everything else these tests exercise (<c>Tensor.numpy</c>,
+    ///     <c>expand</c>, conj/neg view bits, sparse/quantized/meta rejections) predates it.
+    /// </summary>
     internal static class PyTorchTestGate
     {
-        internal const string ValidatedTorchLine = "2.13.";
+        /// <summary>The oldest PyTorch whose <c>from_numpy</c> accepts every NumSharp dtype the tests map.</summary>
+        internal static readonly Version MinimumTorchVersion = new Version(2, 3, 0);
+
+        /// <summary>The installed PyTorch's numeric version (the local-version suffix like <c>+cu126</c> stripped).</summary>
+        internal static Version Parse(string torchVersion)
+        {
+            string numeric = torchVersion.Split('+')[0];
+            // "2.14.0a0" / "2.14.0rc1" style pre-release tags: keep the numeric prefix only.
+            int cut = 0;
+            while (cut < numeric.Length && (char.IsDigit(numeric[cut]) || numeric[cut] == '.'))
+                cut++;
+            return Version.Parse(numeric.Substring(0, cut).TrimEnd('.'));
+        }
 
         internal static void Require(PyModule scope)
         {
@@ -799,10 +821,10 @@ namespace NumSharp.Tests.Interop
                 scope.Exec("import torch");
                 using PyObject versionObject = scope.Eval("str(torch.__version__)");
                 string version = versionObject.As<string>();
-                if (!version.StartsWith(ValidatedTorchLine, StringComparison.Ordinal))
+                if (Parse(version) < MinimumTorchVersion)
                     Assert.Inconclusive(
-                        $"PyTorch {version} is installed; this live compatibility gate is pinned to the " +
-                        "latest stable 2.13.x line validated by this change.");
+                        $"PyTorch {version} is installed; the live compatibility gate needs {MinimumTorchVersion} or newer " +
+                        "(the release whose torch.from_numpy accepts unsigned 16/32/64-bit dtypes).");
             }
         }
     }

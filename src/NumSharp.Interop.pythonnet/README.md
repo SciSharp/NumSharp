@@ -11,6 +11,9 @@ Runtime.PythonDLL = "python312.dll";     // or the PYTHONNET_PYDLL env var
 PythonEngine.Initialize();
 ```
 
+> **Runnable tour:** [`examples/NumSharp.Interop.pythonnet.Examples`](../../examples/NumSharp.Interop.pythonnet.Examples/README.md)
+> — twelve single-file `dotnet run` scripts covering every feature below, each printing OK/FAIL per claim.
+
 ## The four verbs
 
 Everything is packaging over four operations on the static `NDArrayPythonInterop` engine:

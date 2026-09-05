@@ -15,10 +15,12 @@ adapted dynamically from the CPython environment. Torch is a built-in front door
 [Other Python libraries](#what-pythonnet-supports) · [Claims](#claims-ledger)
 
 > Verified live on CPython 3.12.12 · numpy 2.4.2 · pythonnet 3.0.5 ·
-> **PyTorch 2.13.0+cpu** · net8.0/net10.0. PyTorch 2.13.0 was the latest stable release when this
-> page was validated; 2.14 was still a release candidate. Every compatibility claim below is
-> reproduced against the real installed PyTorch by 28 live tests in `PyTorchInteropTests` and
-> `PyTorchInteropEdgeCaseTests` (the accelerator cell runs conditionally when CUDA or MPS exists).
+> **PyTorch 2.13.0+cpu** and **2.12.1+cu126** · net8.0/net10.0. PyTorch 2.13.0 was the latest stable
+> release when this page was validated; 2.14 was still a release candidate. Every compatibility claim
+> below is reproduced against the real installed PyTorch by 28 live tests in `PyTorchInteropTests` and
+> `PyTorchInteropEdgeCaseTests` (the accelerator cell runs conditionally when CUDA or MPS exists). The
+> gate is a version **floor** — PyTorch ≥ 2.3, the release whose `torch.from_numpy` accepts the unsigned
+> 16/32/64-bit dtypes — not an exact-line pin, so the suite runs against whatever stable PyTorch a host has.
 
 ---
 
@@ -29,7 +31,7 @@ Install the .NET bridge and PyTorch into the same CPython environment pythonnet 
 ```bash
 dotnet add package NumSharp.Interop.pythonnet
 
-# CPU wheel used by the compatibility gate
+# CPU wheel used by the compatibility gate (any PyTorch >= 2.3 works; 2.13.0 and 2.12.1+cu126 are validated)
 python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
 ```
 
@@ -350,7 +352,7 @@ direction-specific protocol instead of pretending those are the same capability.
 
 | # | Claim | Evidence | Gate |
 |---|---|---|---|
-| 1 | The validated runtime is stable PyTorch 2.13.x | live `torch.__version__` | [`Runtime_IsLatestStablePyTorch213`][gate] |
+| 1 | The installed PyTorch is at or above the gate floor (2.3), and the version parser survives CUDA/nightly spellings | live `torch.__version__`; `2.12.1+cu126`, `2.14.0a0+git…` parse | [`Runtime_IsAtLeastTheGateFloor_AndTheFloorParserHandlesLocalVersions`][gate] |
 | 2 | A contiguous tensor has NumSharp's exact pointer and shares writes both ways | `data_ptr` equality + mutations | [`NumSharpToTorch_Contiguous_IsZeroCopyAndMutatesBothWays`][gate] |
 | 3 | Positive strides survive NumSharp → Torch | shape `(3,2)`, stride `(4,2)`, skipped columns untouched | [`NumSharpToTorch_PositiveStridedView_PreservesShapeStrideAndStorage`][gate] |
 | 4 | All 15 NumSharp dtypes map on 2.13 | exhaustive dtype table | [`NumSharpToTorch_All15Dtypes_MapOnPyTorch213`][gate] |

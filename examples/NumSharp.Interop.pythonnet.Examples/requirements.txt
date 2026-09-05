@@ -1,0 +1,23 @@
+# Python side of the NumSharp.Interop.pythonnet examples (and of test/NumSharp.Tests.Interop).
+#
+#   python -m pip install -r requirements.txt
+#
+# pythonnet 3.0.5 — the NuGet floor the package resolves by default — drives CPython 3.7 through
+# 3.13; Python 3.14 needs pythonnet 3.1.0 (add your own PackageReference). The pins below are the
+# versions the examples were validated against; numpy is the ONLY hard requirement — every
+# third-party section in the examples self-skips when its package is missing.
+
+numpy==2.4.2          # required: the export side builds numpy views; the import side is numpy-agnostic
+
+# 09-pytorch.cs — any PyTorch >= 2.3 (the release whose torch.from_numpy accepts unsigned 16/32/64-bit
+# dtypes). Validated on 2.13.0+cpu and 2.12.1+cu126. The CPU wheel is enough:
+#   python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+# A CUDA/MPS build additionally exercises the accelerator -> CPU copy section.
+torch>=2.3,<3
+
+# 10-pandas.cs — Pandas 3 (mandatory Copy-on-Write: shared projections arrive read-only)
+pandas==3.0.5
+
+# 05-buffers-and-libraries.cs — optional buffer-protocol consumers
+pyarrow==23.0.1
+pillow==11.3.0

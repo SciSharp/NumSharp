@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
@@ -80,6 +82,75 @@ namespace NumSharp.Tests.Interop
             // the raw-bytes memoryview still refuses Decimal — there is no PEP 3118 format for it.
             ((Action)(() => { using (Gil()) { using var _ = NDArrayPythonInterop.ToMemoryView(dec); } }))
                 .Should().Throw<NotSupportedException>().WithMessage("*no PEP 3118 format*");
+        }
+
+        [TestMethod]
+        public void Decimal_Export_OwnsItsFloat64Temporary_AndFreesItTheMomentPythonLetsGo()
+        {
+            // ToNumpy(Decimal) builds the numpy view over a float64 TEMPORARY (source.astype(Double))
+            // that no caller can ever dispose. The keeper must OWN it: when the last Python view dies,
+            // the temporary's buffer is freed right there — not left to ~NDArray, which only ABANDONS
+            // its reference (no free at zero; the block is reclaimed a collection after the finalizer
+            // runs), i.e. one float64 buffer per Decimal export lingering for two GC cycles' worth of
+            // finalizer latency. Observed through the keeper seam: the temporary's slice is released
+            // synchronously inside Python's `del`, with no CLR collection in between.
+            int e0 = NDArrayPythonInterop.LiveExports;
+            var dec = np.arange(4).astype(NPTypeCode.Decimal);
+            ExportTo("own_dec", dec);
+            NDArrayPythonInterop.LiveExports.Should().Be(e0 + 1);
+
+            ExportKeeper keeper = PythonRuntimeInterop.LiveExportKeepers.Single(k => k.OwnsSource);
+            keeper.Source.Should().NotBeSameAs(dec, "the keeper pins the conversion, not the caller's Decimal array");
+            keeper.Source.typecode.Should().Be(NPTypeCode.Double);
+            IArraySlice temporary = keeper.Source.Storage.InternalArray;
+            temporary.IsReleased.Should().BeFalse("the temporary is alive while Python views it");
+
+            PyExec("del own_dec");   // CPython frees the view inside the statement -> weakref.finalize -> keeper.Release
+            NDArrayPythonInterop.LiveExports.Should().Be(e0, "the pin is dropped synchronously in Python's dealloc");
+            temporary.IsReleased.Should().BeTrue("the keeper DISPOSED the owned temporary — no GC, no finalizer");
+            keeper.Source.IsDisposed.Should().BeTrue();
+            dec.IsDisposed.Should().BeFalse("the caller's Decimal source is untouched");
+            ReadAt<decimal>(dec, 3).Should().Be(3m);
+
+            // A plain export never owns its source — the caller's array must survive the release.
+            var plain = np.arange(4).astype(NPTypeCode.Double);
+            ExportTo("own_plain", plain);
+            PythonRuntimeInterop.LiveExportKeepers.Single(k => ReferenceEquals(k.Source, plain)).OwnsSource.Should().BeFalse();
+            PyExec("del own_plain");
+            NDArrayPythonInterop.LiveExports.Should().Be(e0);
+            plain.IsDisposed.Should().BeFalse("a non-temporary source belongs to the caller");
+            ReadAt<double>(plain, 3).Should().Be(3.0);
+        }
+
+        [TestMethod]
+        public void ExportKeeper_Release_DisposesAnOwnedSource_AndLeavesABorrowedOneAlone()
+        {
+            // The keeper contract in isolation (no Python in the loop): with ownsSource the array's own
+            // ARC reference goes with the keeper's, so the buffer is freed at Release; without it only the
+            // keeper's reference is dropped and the caller still owns a live array.
+            var owned = np.arange(3).astype(NPTypeCode.Double);
+            IArraySlice ownedSlice = owned.Storage.InternalArray;
+            ownedSlice.TryAddRef().Should().BeTrue();
+            var keeper = new ExportKeeper(owned, ownedSlice, ownsSource: true);
+            PythonRuntimeInterop.TrackExport(keeper);
+
+            keeper.Release();
+            owned.IsDisposed.Should().BeTrue("Release disposes the owned temporary");
+            ownedSlice.IsReleased.Should().BeTrue("the keeper's reference and the array's own were the only two");
+            keeper.Release();   // idempotent — a late weakref.finalize callback after the orphan sweep must be harmless
+
+            var borrowed = np.arange(3).astype(NPTypeCode.Double);
+            IArraySlice borrowedSlice = borrowed.Storage.InternalArray;
+            borrowedSlice.TryAddRef().Should().BeTrue();
+            var borrowingKeeper = new ExportKeeper(borrowed, borrowedSlice);
+            PythonRuntimeInterop.TrackExport(borrowingKeeper);
+
+            borrowingKeeper.Release();
+            borrowed.IsDisposed.Should().BeFalse("a borrowed source is the caller's");
+            borrowedSlice.IsReleased.Should().BeFalse("the caller's own reference keeps the buffer");
+            ReadAt<double>(borrowed, 2).Should().Be(2.0);
+            borrowed.Dispose();
+            borrowedSlice.IsReleased.Should().BeTrue();
         }
 
         [TestMethod]

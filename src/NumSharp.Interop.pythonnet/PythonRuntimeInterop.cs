@@ -346,6 +346,18 @@ namespace NumSharp.Interop.PythonNet
         /// <summary>Number of Python buffers currently leased by live NumSharp views.</summary>
         internal static int LiveImports => Volatile.Read(ref _liveImports);
 
+        /// <summary>A snapshot of the live export keepers — a test seam (friend assemblies only).</summary>
+        internal static ExportKeeper[] LiveExportKeepers
+        {
+            get
+            {
+                var keys = _exports.Keys;
+                var snapshot = new ExportKeeper[keys.Count];
+                keys.CopyTo(snapshot, 0);
+                return snapshot;
+            }
+        }
+
         internal static void TrackExport(ExportKeeper keeper)
         {
             _exports.TryAdd(keeper, 0);
@@ -621,17 +633,32 @@ namespace NumSharp.Interop.PythonNet
     {
         private readonly NDArray _source;    // keeps the source NDArray (and its Shape/Storage) reachable
         private readonly IArraySlice _slice; // the buffer this keeper holds an ARC reference on
+        private readonly bool _ownsSource;   // the source is a conversion temporary (Decimal -> float64) only this keeper can dispose
         private int _released;
 
-        internal ExportKeeper(NDArray source, IArraySlice slice)
+        internal ExportKeeper(NDArray source, IArraySlice slice, bool ownsSource = false)
         {
             _source = source;
             _slice = slice;
+            _ownsSource = ownsSource;
         }
+
+        /// <summary>The NDArray whose buffer this keeper pins (a conversion temporary when <see cref="OwnsSource"/>).</summary>
+        internal NDArray Source => _source;
+
+        /// <summary>
+        ///     <c>true</c> when <see cref="Source"/> is a temporary the export created (the float64
+        ///     conversion of a <see cref="NPTypeCode.Decimal"/> array): nobody else holds it, so
+        ///     <see cref="Release"/> disposes it — its own ARC reference would otherwise only be
+        ///     ABANDONED by <c>~NDArray</c>, which does not free at zero, leaving the buffer to a
+        ///     later collection's finalizer pass instead of freeing it when Python lets go.
+        /// </summary>
+        internal bool OwnsSource => _ownsSource;
 
         /// <summary>
         ///     Idempotent. Drops this keeper's ARC reference on the NumSharp buffer; if it was the
         ///     last reference the unmanaged memory is freed synchronously on the calling thread.
+        ///     An owned conversion temporary is disposed here too, so its buffer is freed NOW.
         /// </summary>
         internal void Release()
         {
@@ -639,7 +666,10 @@ namespace NumSharp.Interop.PythonNet
                 return;
             _slice.Release();
             PythonRuntimeInterop.OnExportReleased(this);
-            GC.KeepAlive(_source);
+            if (_ownsSource)
+                _source.Dispose();   // CLR-only, like everything else here: safe under the GIL, on the sweep, at any engine phase
+            else
+                GC.KeepAlive(_source);
         }
     }
 

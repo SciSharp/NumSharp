@@ -8,19 +8,26 @@ using Python.Runtime;
 namespace NumSharp.Tests.Interop
 {
     /// <summary>
-    ///     Live proof against the latest stable PyTorch pinned when this bridge was added: 2.13.0.
-    ///     These tests are optional on hosts without that exact PyTorch feature line, but strict when
-    ///     it is present. They exercise PyTorch's real storage, striding and autograd behavior rather
-    ///     than a mock or a value-only serialization round-trip.
+    ///     Live proof against the installed PyTorch (validated on the 2.13.0 line the bridge was added
+    ///     with, and on 2.12.1). These tests are optional on hosts without a PyTorch at or above the
+    ///     <see cref="PyTorchTestGate"/> floor, but strict when one is present. They exercise PyTorch's
+    ///     real storage, striding and autograd behavior rather than a mock or a value-only
+    ///     serialization round-trip.
     /// </summary>
     [TestClass]
     public class PyTorchInteropTests : InteropTestBase
     {
         [TestMethod]
-        public void Runtime_IsLatestStablePyTorch213()
+        public void Runtime_IsAtLeastTheGateFloor_AndTheFloorParserHandlesLocalVersions()
         {
             RequireValidatedPyTorch();
-            PyStr("torch.__version__").Should().StartWith(PyTorchTestGate.ValidatedTorchLine);
+            PyTorchTestGate.Parse(PyStr("torch.__version__")).Should().BeGreaterThanOrEqualTo(PyTorchTestGate.MinimumTorchVersion);
+
+            // The parser must survive every spelling torch.__version__ takes in the wild.
+            PyTorchTestGate.Parse("2.13.0").Should().Be(new Version(2, 13, 0));
+            PyTorchTestGate.Parse("2.12.1+cu126").Should().Be(new Version(2, 12, 1), "a CUDA wheel carries a local-version suffix");
+            PyTorchTestGate.Parse("2.14.0a0+git1234").Should().Be(new Version(2, 14, 0), "a nightly carries a pre-release tag");
+            PyTorchTestGate.Parse("2.2.2").Should().BeLessThan(PyTorchTestGate.MinimumTorchVersion, "below the floor: the gate skips");
         }
 
         [TestMethod]

@@ -586,6 +586,9 @@ import route works uniformly across pythonnet 3.0.x.
 
 ## See also
 
+- [The examples](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharp.Interop.pythonnet.Examples)
+  — twelve single-file `dotnet run` scripts (bootstrap, verbs, layouts, dtypes, buffers, lifetime,
+  codec, GIL, PyTorch, Pandas, a custom adapter, application scenarios), each printing OK/FAIL per claim
 - [Any library via np.frombuffer](np-frombuffer.md) — reaching consumers that want bytes, not numpy
   arrays: `ToMemoryView` + the buffer protocol, torch/Pillow/Arrow/OpenCV verified
 - [Numpy.NET](numpy-net.md) — driving these same buffers through SciSharp's `Numpy.Bare` C# API

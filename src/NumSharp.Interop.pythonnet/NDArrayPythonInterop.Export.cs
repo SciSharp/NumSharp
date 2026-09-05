@@ -50,8 +50,17 @@ namespace NumSharp.Interop.PythonNet
             // beyond ~16 significant digits). The low-level maps (ToNumpyDtypeStr / ToBufferFormat /
             // ToMemoryView) stay honest and still refuse Decimal — there is no decimal dtype; only these
             // array-producing verbs convert.
+            //
+            // The converted array is a TEMPORARY nobody but this export can ever dispose: the numpy view
+            // is built over ITS buffer, so the ExportKeeper takes ownership of it (ownsSource) and
+            // disposes it when Python lets go. Without that, the temporary's own ARC reference would
+            // only ever be dropped by ~NDArray — which merely ABANDONS the buffer (no free at zero;
+            // the block is reclaimed a GC cycle after the finalizer runs) — so every Decimal export left
+            // its float64 buffer to two collections' worth of finalizer latency instead of freeing it
+            // the moment the last Python-side view died.
+            NDArray converted = null;
             if (source.typecode == NPTypeCode.Decimal)
-                source = source.astype(NPTypeCode.Double);
+                source = converted = source.astype(NPTypeCode.Double);
 
             _ = ToNumpyDtypeStr(source.typecode);   // dtype gate (Decimal already converted above)
 
@@ -62,6 +71,7 @@ namespace NumSharp.Interop.PythonNet
                 {
                     // Nothing to share — an empty array of the right dtype/shape IS the view.
                     using var emptyDims = MakeTuple(shape.Dimensions);
+                    converted?.Dispose();
                     return np.empty(emptyDims, source.typecode);
                 }
 
@@ -69,7 +79,10 @@ namespace NumSharp.Interop.PythonNet
                 // moves to the ExportKeeper (released by Python's weakref.finalize).
                 IArraySlice slice = source.Storage.InternalArray;
                 if (!slice.TryAddRef())
+                {
+                    converted?.Dispose();
                     throw new ObjectDisposedException(nameof(source), "the NumSharp buffer has already been released.");
+                }
 
                 PyObject arr = null;
                 ExportKeeper keeper = null;
@@ -78,7 +91,7 @@ namespace NumSharp.Interop.PythonNet
                     arr = BuildSharedView(source, slice, out PyObject baseBuffer);
                     using (baseBuffer)
                     {
-                        keeper = new ExportKeeper(source, slice);
+                        keeper = new ExportKeeper(source, slice, ownsSource: converted is not null);
                         RootOnPythonObject(baseBuffer, keeper);
                         PythonRuntimeInterop.TrackExport(keeper);
                     }
@@ -92,9 +105,12 @@ namespace NumSharp.Interop.PythonNet
                     // WILL be invoked when the base buffer dies — release through the keeper
                     // (idempotent) so a late finalize callback cannot double-release.
                     if (keeper is null)
+                    {
                         slice.Release();
+                        converted?.Dispose();
+                    }
                     else
-                        keeper.Release();
+                        keeper.Release();   // also disposes the converted temporary it owns
                     throw;
                 }
             }
@@ -136,9 +152,12 @@ namespace NumSharp.Interop.PythonNet
             // recommends (astype(NPTypeCode.Double)) and that Python's float(Decimal(...)) performs (lossy
             // beyond ~16 significant digits). The low-level maps (ToNumpyDtypeStr / ToBufferFormat /
             // ToMemoryView) stay honest and still refuse Decimal — there is no decimal dtype; only these
-            // array-producing verbs convert.
-            if (source.typecode == NPTypeCode.Decimal)
-                source = source.astype(NPTypeCode.Double);
+            // array-producing verbs convert. The conversion is a temporary that only this call can
+            // dispose: np.array copies out of it below, so it is released as soon as the copy exists
+            // (deterministically — see ToNumpy for why the finalizer alone would be too late).
+            using NDArray converted = source.typecode == NPTypeCode.Decimal ? source.astype(NPTypeCode.Double) : null;
+            if (converted is not null)
+                source = converted;
 
             _ = ToNumpyDtypeStr(source.typecode);   // dtype gate (Decimal already converted above)
 
