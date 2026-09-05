@@ -60,6 +60,20 @@ namespace NumSharp
                 : defaultValue;
         }
 
+        /// <summary>
+        ///     Shared nullable-integer reader: returns <c>null</c> when the variable is unset, blank, or
+        ///     not a valid invariant-culture integer — so callers can tell "unset" from an explicit value.
+        /// </summary>
+        private static int? GetIntOrNull(string name)
+        {
+            string v = Get(name);
+            if (v is null) return null;
+            return int.TryParse(v, System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out int parsed)
+                ? parsed
+                : (int?)null;
+        }
+
         #region Core — runtime
 
         /// <summary>
@@ -91,6 +105,25 @@ namespace NumSharp
         ///     Env <c>NUMSHARP_POOL_GC_PACING_MB</c>. <b>Default:</b> <c>16</c> (clamped to 1..1024).
         /// </summary>
         public static int PoolGcPacingMB => GetInt("NUMSHARP_POOL_GC_PACING_MB", 16);
+
+        #endregion
+
+        #region Core — threading (managed kernels; see TensorEngine.Threading)
+
+        /// <summary>
+        ///     Whether NumSharp's own multithreaded kernels are enabled at startup — the source of truth
+        ///     for <c>MultiThread.Enabled</c> / <see cref="np.multithreading(bool,int)"/>, which override
+        ///     it in-process. Env <c>NUMSHARP_MULTITHREADING</c>. <b>Default:</b> <c>false</c> (the managed
+        ///     kernels stay single-threaded, so summation order is unchanged unless opted in).
+        /// </summary>
+        public static bool NumSharpMultithreading => GetBool("NUMSHARP_MULTITHREADING", false);
+
+        /// <summary>
+        ///     Startup thread cap for NumSharp's own kernels — seeds <c>MultiThread.MaxThreads</c> and the
+        ///     <c>NumSharp</c> knob of <see cref="TensorEngine.Threading"/> as the source of truth. Env
+        ///     <c>NUMSHARP_NUM_THREADS</c>. <b>Default:</b> <c>null</c> (unset → the built-in cap of 8).
+        /// </summary>
+        public static int? NumSharpNumThreads => GetIntOrNull("NUMSHARP_NUM_THREADS");
 
         #endregion
 

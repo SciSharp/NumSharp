@@ -20,6 +20,17 @@ namespace NumSharp.Backends
         private static volatile bool _enabled = false;
         private static volatile int _maxThreads = 8;
 
+        static MultiThread()
+        {
+            // Source of truth: a threading env var already present when the process starts seeds the
+            // managed defaults. np.multithreading / TensorEngine.Threading override these in-process,
+            // and their env writes are process-scoped only. See TensorEngine.Threading.
+            _enabled = EnvVars.NumSharpMultithreading;
+            var t = EnvVars.NumSharpNumThreads;
+            if (t.HasValue)
+                _maxThreads = t.Value < 1 ? 1 : t.Value;
+        }
+
         /// <summary>Whether parallel kernels may use more than one thread. Default: <c>false</c>.</summary>
         public static bool Enabled
         {

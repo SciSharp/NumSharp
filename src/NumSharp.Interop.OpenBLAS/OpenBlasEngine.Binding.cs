@@ -137,6 +137,8 @@ namespace NumSharp.Interop.OpenBLAS
         /// </exception>
         public static void Enable(string library = null, int threads = 0, string coreType = null)
         {
+            EnsureThreadingRegistered();
+
             if (!OpenBlasNative.IsLoaded || (library != null && library != OpenBlasNative.LibraryPath))
             {
                 OpenBlasNative.Load(library, coreType);
@@ -151,10 +153,39 @@ namespace NumSharp.Interop.OpenBLAS
             }
 
             if (threads > 0)
-                OpenBlasNative.TrySetNumThreads(threads);
+                // Route through the unified surface so TensorEngine.Threading and OpenBLAS agree; the
+                // OpenBLAS knob's applier (registered above) is what actually calls
+                // openblas_set_num_threads — the same native effect Enable had before.
+                TensorEngine.Threading.SetThreads(TensorEngine.Threading.OpenBlas, threads);
 
             if (!(BackendFactory.GetEngine().Blas is OpenBlasBackend))
                 BackendFactory.GetEngine().Blas = new OpenBlasBackend();
+        }
+
+        private static int _threadingRegistered;
+
+        /// <summary>
+        ///     Upgrades <see cref="TensorEngine.Threading"/>'s OpenBLAS knob with a native reader and
+        ///     applier — the per-module extension point. Core registers the knob as a managed-only env
+        ///     var (it cannot reach a native <c>getenv</c>); this attaches a reader that reports the live
+        ///     <c>openblas_get_num_threads()</c> and an applier that pushes a change through the CRT and
+        ///     <c>openblas_set_num_threads</c>. Idempotent, and re-registration re-seeds from any
+        ///     pre-existing <c>OPENBLAS_NUM_THREADS</c> (the source of truth).
+        /// </summary>
+        private static void EnsureThreadingRegistered()
+        {
+            if (System.Threading.Interlocked.Exchange(ref _threadingRegistered, 1) == 1)
+                return;
+
+            TensorEngine.Threading.Register(
+                TensorEngine.Threading.OpenBlas,
+                "OPENBLAS_NUM_THREADS",
+                reader: () =>
+                {
+                    int n = OpenBlasNative.IsLoaded ? OpenBlasNative.GetNumThreads() : -1;
+                    return n > 0 ? n : (int?)null;
+                },
+                applier: OpenBlasNative.ApplyThreadCount);
         }
 
         /// <summary>

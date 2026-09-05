@@ -30,11 +30,18 @@ namespace NumSharp
         ///     np.multithreading(false);         // back to single-threaded
         ///     </code>
         ///     </example>
+        ///     <para>
+        ///     This is a facade over <see cref="TensorEngine.Threading"/>: the thread cap is routed through
+        ///     its <see cref="TensorEngine.Threading.NumSharp"/> knob (so <c>max_threads</c> also writes the
+        ///     process-scoped <c>NUMSHARP_NUM_THREADS</c> and is visible through that surface), while the
+        ///     enable flag sets <see cref="MultiThread.Enabled"/>. Both are seeded at startup from
+        ///     <c>NUMSHARP_MULTITHREADING</c> / <c>NUMSHARP_NUM_THREADS</c> as the source of truth.
+        ///     </para>
         /// </remarks>
         public static void multithreading(bool enabled, int max_threads = 8)
         {
             MultiThread.Enabled = enabled;
-            MultiThread.MaxThreads = max_threads;
+            TensorEngine.Threading.SetThreads(TensorEngine.Threading.NumSharp, max_threads);
         }
     }
 }

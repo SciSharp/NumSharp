@@ -1445,6 +1445,25 @@ namespace NumSharp.Interop.OpenBLAS
             return true;
         }
 
+        /// <summary>
+        ///     Applier for <c>TensorEngine.Threading</c>'s OpenBLAS knob — pushes a thread count to the
+        ///     native runtime through BOTH channels a change can need: the CRT env (so a getenv, e.g. at a
+        ///     future load, sees it) and <c>openblas_set_num_threads</c> (so an already-loaded library
+        ///     changes immediately). A null value (auto) is left to the library's own default and not
+        ///     forced.
+        /// </summary>
+        internal static void ApplyThreadCount(int? threads)
+        {
+            if (!threads.HasValue)
+                return;
+
+            TrySetNativeEnvironment("OPENBLAS_NUM_THREADS",
+                threads.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+            if (threads.Value > 0)
+                TrySetNumThreads(threads.Value);
+        }
+
         /// <summary>The BLAS worker-thread count, or -1 when the library does not report one.</summary>
         internal static int GetNumThreads()
         {
