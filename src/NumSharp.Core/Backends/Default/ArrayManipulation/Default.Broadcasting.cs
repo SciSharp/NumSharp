@@ -71,10 +71,10 @@ namespace NumSharp.Backends
             {
                 return Shape.Broadcast(leftShape, rightShape);
             }
-            catch (IncorrectShapeException)
+            catch (IncorrectShapeException ex)
             {
                 throw new IncorrectShapeException(
-                    $"operands could not be broadcast together with shapes {leftShape.ToPythonTuple()} {rightShape.ToPythonTuple()} ");
+                    $"operands could not be broadcast together with shapes {leftShape.ToPythonTuple()} {rightShape.ToPythonTuple()} ", ex);
             }
         }
 

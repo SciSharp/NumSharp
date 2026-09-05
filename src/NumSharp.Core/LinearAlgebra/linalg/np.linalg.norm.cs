@@ -290,7 +290,7 @@ namespace NumSharp
                 }
                 catch (Exception e) when (e is FormatException or InvalidCastException or OverflowException)
                 {
-                    throw new TypeError("'ord' must be None, a number or one of 'fro', 'f', 'nuc'");
+                    throw new TypeError("'ord' must be None, a number or one of 'fro', 'f', 'nuc'", e);
                 }
             }
 

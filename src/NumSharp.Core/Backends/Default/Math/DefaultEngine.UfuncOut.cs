@@ -265,14 +265,14 @@ namespace NumSharp.Backends
                 {
                     withOut = Shape.ResolveReturnShape(full, @out.Shape);
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
                     string shapes = string.Empty;
                     foreach (var inp in inputs)
                         shapes += NumPyShapeRepr(inp.Shape) + " ";
                     shapes += NumPyShapeRepr(@out.Shape) + " ";
                     throw new ArgumentException(
-                        $"operands could not be broadcast together with shapes {shapes}");
+                        $"operands could not be broadcast together with shapes {shapes}", e);
                 }
 
                 // out can absorb the inputs but may not be stretched itself.
@@ -293,7 +293,7 @@ namespace NumSharp.Backends
                 {
                     withWhere = Shape.ResolveReturnShape(full, where.Shape);
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
                     string shapes = string.Empty;
                     foreach (var inp in inputs)
@@ -302,7 +302,7 @@ namespace NumSharp.Backends
                         shapes += NumPyShapeRepr(@out.Shape) + " ";
                     shapes += NumPyShapeRepr(where.Shape) + " ";
                     throw new ArgumentException(
-                        $"operands could not be broadcast together with shapes {shapes}");
+                        $"operands could not be broadcast together with shapes {shapes}", e);
                 }
 
                 if (@out is not null && !withWhere.Equals(full))

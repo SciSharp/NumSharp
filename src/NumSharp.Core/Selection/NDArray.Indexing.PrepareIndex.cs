@@ -443,7 +443,7 @@ namespace NumSharp
             {
                 long v;
                 try { v = Convert.ToInt64(flat.GetValue(i), CultureInfo.InvariantCulture); }
-                catch (OverflowException) { throw new IndexError($"index out of bounds for axis {axis} with size {dim}"); }
+                catch (OverflowException ex) { throw new IndexError($"index out of bounds for axis {axis} with size {dim}", ex); }
                 if (v < -dim || v >= dim)
                     throw new IndexError($"index {v} is out of bounds for axis {axis} with size {dim}");
             }

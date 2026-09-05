@@ -482,11 +482,11 @@ namespace NumSharp.IO
             {
                 headerBytes = version.StrictHeaderEncoding.GetBytes(header);
             }
-            catch (EncoderFallbackException)
+            catch (EncoderFallbackException e)
             {
                 // Not encodable in latin-1 -> the caller falls through to version 3.0 (UTF-8), the same
                 // way NumPy catches UnicodeEncodeError.
-                throw new UnicodeEncodeException();
+                throw new UnicodeEncodeException(e);
             }
 
             int hlen = headerBytes.Length + 1; // + the terminating newline
@@ -531,7 +531,11 @@ namespace NumSharp.IO
         }
 
         /// <summary>Signals a header that latin-1 cannot encode, mirroring Python's UnicodeEncodeError.</summary>
-        private sealed class UnicodeEncodeException : Exception { }
+        private sealed class UnicodeEncodeException : Exception
+        {
+            public UnicodeEncodeException() { }
+            public UnicodeEncodeException(Exception innerException) : base(null, innerException) { }
+        }
 
         // Pick the oldest version that can hold this header — NumPy's _wrap_header_guess_version().
         private static byte[] WrapHeaderGuessVersion(string header)
@@ -591,10 +595,10 @@ namespace NumSharp.IO
                 {
                     wrapped = WrapHeader(header, version.Value);
                 }
-                catch (UnicodeEncodeException)
+                catch (UnicodeEncodeException e)
                 {
                     throw new InvalidOperationException(
-                        $"Header cannot be encoded in latin-1 for version={version.Value}; use version (3, 0).");
+                        $"Header cannot be encoded in latin-1 for version={version.Value}; use version (3, 0).", e);
                 }
             }
             else

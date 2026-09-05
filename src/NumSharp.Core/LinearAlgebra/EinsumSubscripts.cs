@@ -714,7 +714,7 @@ namespace NumSharp
                     catch (Exception e) when (e is FormatException or InvalidCastException or OverflowException
                                                   or ArgumentNullException)
                     {
-                        throw new TypeError("each subscript must be either an integer or an ellipsis");
+                        throw new TypeError("each subscript must be either an integer or an ellipsis", e);
                     }
                 }
 

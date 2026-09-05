@@ -135,10 +135,10 @@ namespace NumSharp.Backends
                     var emptySel = BooleanMaskResultShape(trueCount, arr, leadNdim);
                     string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                     try { np.broadcast_to(value, emptySel); }
-                    catch (IncorrectShapeException)
+                    catch (IncorrectShapeException ex)
                     {
                         throw new ValueError($"shape mismatch: value array of shape {Tup(value.Shape.dimensions)} " +
-                                             $"could not be broadcast to indexing result of shape {Tup(emptySel.dimensions)}");
+                                             $"could not be broadcast to indexing result of shape {Tup(emptySel.dimensions)}", ex);
                     }
                 }
                 return;

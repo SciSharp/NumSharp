@@ -234,11 +234,11 @@ namespace NumSharp
                         // Append the row straight into the batch buffer — no per-row string allocation.
                         PrintfFormatter.FormatRowInto(chunk, format, args, tcs);
                     }
-                    catch (PrintfArgumentException)
+                    catch (PrintfArgumentException ex)
                     {
                         // NumPy catches the TypeError from `format % tuple(row)` and re-raises this.
                         throw new TypeError(
-                            $"Mismatch between array dtype ('{tc.AsNumpyDtypeName()}') and format specifier ('{format}')");
+                            $"Mismatch between array dtype ('{tc.AsNumpyDtypeName()}') and format specifier ('{format}')", ex);
                     }
 
                     chunk.Append(newline);

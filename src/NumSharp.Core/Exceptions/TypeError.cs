@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     /// <summary>
@@ -8,5 +10,6 @@ namespace NumSharp
     {
         public TypeError() : base("TypeError") { }
         public TypeError(string message) : base(message) { }
+        public TypeError(string message, Exception innerException) : base(message, innerException) { }
     }
 }

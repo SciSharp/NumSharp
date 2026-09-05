@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     /// <summary>
@@ -9,5 +11,6 @@ namespace NumSharp
     {
         public IndexError() : base("IndexError") { }
         public IndexError(string message) : base(message) { }
+        public IndexError(string message, Exception innerException) : base(message, innerException) { }
     }
 }

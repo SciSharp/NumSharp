@@ -292,10 +292,10 @@ namespace NumSharp
                     selShape[boolAxis] = 0;                      // False -> empty axis
                     string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                     try { np.broadcast_to(values, (Shape)selShape); }
-                    catch (IncorrectShapeException)
+                    catch (IncorrectShapeException ex)
                     {
                         throw new ValueError($"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
-                                             $"could not be broadcast to indexing result of shape {Tup(selShape)}");
+                                             $"could not be broadcast to indexing result of shape {Tup(selShape)}", ex);
                     }
                 }
                 return;
@@ -839,9 +839,9 @@ namespace NumSharp
                     {
                         valuesTyped = np.broadcast_to(valuesTyped, (Shape)retShape).copy().MakeGeneric<T>();
                     }
-                    catch (IncorrectShapeException)
+                    catch (IncorrectShapeException ex)
                     {
-                        throw new ValueError($"could not broadcast input array from shape {Tup(values.Shape.dimensions)} into shape {Tup(retShape)}");
+                        throw new ValueError($"could not broadcast input array from shape {Tup(values.Shape.dimensions)} into shape {Tup(retShape)}", ex);
                     }
                 }
 
@@ -867,7 +867,7 @@ namespace NumSharp
                     {
                         typedValues = np.broadcast_to(typedValues, (Shape)retShape).copy().MakeGeneric<T>();
                     }
-                    catch (IncorrectShapeException)
+                    catch (IncorrectShapeException ex)
                     {
                         // NumPy: ValueError: shape mismatch: value array of shape (X,) could
                         // not be broadcast to indexing result of shape (Y, Z).
@@ -875,7 +875,7 @@ namespace NumSharp
                         string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                         throw new ValueError(
                             $"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
-                            $"could not be broadcast to indexing result of shape {Tup(retShape)}");
+                            $"could not be broadcast to indexing result of shape {Tup(retShape)}", ex);
                     }
                 }
 
@@ -935,13 +935,13 @@ namespace NumSharp
                 {
                     typed = np.broadcast_to(typed, (Shape)retShape).copy().MakeGeneric<T>();
                 }
-                catch (IncorrectShapeException)
+                catch (IncorrectShapeException ex)
                 {
                     if (isSubshaped)
                         throw new ValueError(
                             $"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
-                            $"could not be broadcast to indexing result of shape {Tup(retShape)}");
-                    throw new ValueError($"could not broadcast input array from shape {Tup(values.Shape.dimensions)} into shape {Tup(retShape)}");
+                            $"could not be broadcast to indexing result of shape {Tup(retShape)}", ex);
+                    throw new ValueError($"could not broadcast input array from shape {Tup(values.Shape.dimensions)} into shape {Tup(retShape)}", ex);
                 }
                 valuesCount = indexCount;
             }

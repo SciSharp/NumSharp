@@ -356,9 +356,9 @@ namespace NumSharp.Backends
                     {
                         string TupE(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                         try { np.broadcast_to(value, targetView.Shape).Dispose(); } // validate-only view — reclaim it
-                        catch (IncorrectShapeException)
+                        catch (IncorrectShapeException ex)
                         {
-                            throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(targetView.Shape.dimensions)}");
+                            throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(targetView.Shape.dimensions)}", ex);
                         }
                     }
                     return;
@@ -409,9 +409,9 @@ namespace NumSharp.Backends
                 if (subShape.size == 0)
                 {
                     try { np.broadcast_to(value, subShape).Dispose(); } // validate-only view — reclaim it
-                    catch (IncorrectShapeException)
+                    catch (IncorrectShapeException ex)
                     {
-                        throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(subShape.dimensions)}");
+                        throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(subShape.dimensions)}", ex);
                     }
 
                     return;
@@ -466,9 +466,9 @@ namespace NumSharp.Backends
             {
                 broadcasted = np.broadcast_to(vForBc, subShape);
             }
-            catch (IncorrectShapeException)
+            catch (IncorrectShapeException ex)
             {
-                throw new ValueError($"could not broadcast input array from shape {Tup(valueshape.dimensions)} into shape {Tup(subShape.dimensions)}");
+                throw new ValueError($"could not broadcast input array from shape {Tup(valueshape.dimensions)} into shape {Tup(subShape.dimensions)}", ex);
             }
 
             // A valid broadcast that needs stretching (value smaller than the region, or a
