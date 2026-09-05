@@ -64,9 +64,14 @@ dotnet add package NumSharp.Build
 ```
 
 Referencing the package is the whole opt-in: it wires the weave step into your build, and it is
-**not a dependency** — the package ships MSBuild targets and a build tool only (no `lib/`, no
-dependency entries), and `dotnet add package` installs it with `PrivateAssets="all"` automatically,
-so it never appears in your own package's dependency graph. The companion **Roslyn analyzer** ships
+**not a dependency** and **not contagious** — it weaves the project it is installed in and nothing
+downstream. The package ships MSBuild targets and a build tool only (no `lib/`, no dependency
+entries, `build/` never `buildTransitive/`), so a project that merely references your woven library —
+by `ProjectReference` or by package — is never woven and its own `[NDScoped]` stays inert.
+`dotnet add package` installs it with `PrivateAssets="all"` automatically, so it never appears in
+your own package's dependency graph; if you write the reference by hand (or under Central Package
+Management) add `PrivateAssets="all"` yourself — `dotnet pack` otherwise refuses to ship
+NumSharp.Build as a dependency of your package ([`NDW018`](#ndw018)). The companion **Roslyn analyzer** ships
 with the `NumSharp` package itself (not this one), so it is already active the moment you reference
 NumSharp: it flags a wrong or unsupported target (an `async` method under `[NDScoped]`, an
 unsupported return, …) as a build error in the editor — before the weave runs — so mistakes surface
@@ -610,6 +615,42 @@ undeclared, which the analyzer reads as "unknown" and stays silent on. Opt out w
 `-p:NumSharpDisableWeaverMissingWarning=true`, by adding `NDW013` to `$(MSBuildWarningsAsMessages)`,
 or — the intended fix — by installing the weaver.
 
+<a id="ndw018"></a>
+
+### NDW018 — NumSharp.Build would ship as a dependency of your package
+
+NumSharp.Build is **not contagious**: it weaves the project it is installed in and nothing
+downstream. Three layers keep it that way, and NDW018 is the third:
+
+1. **Weaving never flows.** The package ships `build/` targets only — never `buildTransitive/` — and
+   no `lib/`, so NuGet imports its weave target only into a project that references the package
+   directly. A project that merely references your woven library, by `ProjectReference` or by
+   package, never imports the targets, is never woven, and its own `[NDScoped]` stays inert. This
+   holds even in the worst case below, where the dependency *is* listed: NuGet records the default
+   `PrivateAssets` of `build` as `exclude="Build,Analyzers"` on that edge, so the consumer restores
+   the payload but never runs it.
+2. **`dotnet add package NumSharp.Build` writes `PrivateAssets="all"`** (the package is marked
+   `developmentDependency`), which keeps NumSharp.Build out of your own package's nuspec.
+3. **A hand-written reference is refused at pack time.** A `PackageReference` typed by hand — or
+   under Central Package Management — carries no `PrivateAssets`, so `dotnet pack` would list
+   NumSharp.Build as a dependency of your package and every consumer would restore the weaver's
+   payload. The packaged targets check the project's own `project.assets.json` (what the pack task
+   reads for the dependency list: the `NumSharp.Build` record must carry `"suppressParent": "All"`)
+   before `GenerateNuspec` and fail the pack:
+
+   ```
+   error NDW018: MyLib references NumSharp.Build without PrivateAssets="all", so packing would list
+   NumSharp.Build as a DEPENDENCY of MyLib ... Add PrivateAssets="all" to the PackageReference ...
+   ```
+
+   Only a packable project being packed is checked — an application that references the weaver has
+   nothing to leak and is never bothered — and `-p:NumSharpBuildAllowAsDependency=true` (or the
+   property in the project) ships it as a dependency on purpose. The package cannot fix this for you
+   silently: NuGet restores with `ExcludeRestorePackageImports=true`, so a props file shipped in the
+   package (setting `PrivateAssets` on your reference) never reaches the restore graph that pack
+   reads — measured before the guard was written — which is why it is an error with the one-line
+   fix rather than a quiet correction.
+
 ## Escape hatches
 
 | flag | effect |
@@ -663,6 +704,7 @@ Same code, same fix, whichever layer fires.
 | `NDW015` | an `out` parameter whose NDArray-carrying shape the out-escape cannot yield (`out List<NDArray>`, `out Task<NDArray>`, `out NDArray[,]`, `out T` with `T : NDArray`) | [hand-scope](#hand-scoping) and yield the final value explicitly |
 | [`NDW016`](#ndw016) | a class/struct stores NDArrays (a field or auto-property holding an NDArray, an array/tuple/collection/generic of them, a carrier struct, or another NDArray-owning type — ownership is contagious) but implements neither `IDisposable` nor `IAsyncDisposable` | implement `IDisposable`/`IAsyncDisposable` and dispose the members, make a transient result struct an `INDArrayCarrier`, give a `ref struct` a `Dispose()`, or mark a member / the type `[NDBorrowed]` when the arrays are owned elsewhere |
 | [`NDW017`](#ndw017) | a disposable type never disposes an NDArray-holding member on any path from its `Dispose`/`Dispose(bool)`/`DisposeAsync`/`DisposeAsyncCore` | dispose it there (directly, in a helper the path calls, in a `foreach`/`ForEach` over a collection, by handing it to a method), override an inherited `Dispose(bool)`, or mark it `[NDBorrowed]` |
+| [`NDW018`](#ndw018) | `dotnet pack` of a project whose reference to `NumSharp.Build` lacks `PrivateAssets="all"` — the weaver would ship as a **dependency** of your package and every consumer would restore it (a hand-written reference or Central Package Management; `dotnet add package` writes the metadata itself) | add `PrivateAssets="all"` to the `PackageReference`, restore and pack again; or `-p:NumSharpBuildAllowAsDependency=true` to ship it as a dependency on purpose (consumers are still never woven) |
 
 **An `[NDScoped]` method still allocates cold buffers in a loop.** Check the coverage gate — a method
 that carries the attribute but no `NDScope` local was not woven (a `-p:SkipNDScopeWeave=true` build,

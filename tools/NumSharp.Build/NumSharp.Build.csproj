@@ -33,6 +33,12 @@
        appear as a dependency of the consumer's own package. build/ (and deliberately
        NOT buildTransitive/) scopes the weave to exactly the project the package is
        installed on: a project that merely references a woven library is never woven.
+       NOT CONTAGIOUS, enforced: a reference written BY HAND (a csproj edit, Central
+       Package Management) carries no PrivateAssets and would make NuGet list this package
+       as a dependency of the author's nupkg, so build/NumSharp.Build.targets refuses that
+       pack (NDW018, naming the fix; NumSharpBuildAllowAsDependency=true opts out) — and
+       even a deliberately listed dependency weaves nothing downstream, since NuGet excludes
+       a transitive package's build assets (gate steps 9b-9d, 13).
        The [NDScoped] attribute itself ships in NumSharp.Core and is inert without this
        package, so adding/removing the package never changes results — only WHEN the
        transients' buffers are reclaimed.

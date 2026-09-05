@@ -25,7 +25,13 @@
 #   7  incremental rebuild → the weave is SKIPPED (per-TFM marker up to date)
 #   8  -t:Rebuild -p:SkipNDScopeWeave=true → no weave, and the consumer's own check now FAILS —
 #      proving both the escape hatch and that step 6 is non-vacuous
-#   9  pack the consumer → its nuspec depends on NumSharp but NOT on NumSharp.Build
+#   9  pack the consumer → its nuspec depends on NumSharp but NOT on NumSharp.Build; then the
+#      NOT-CONTAGIOUS guard (NDW018) for the references `dotnet add package` did NOT write: 9b a
+#      HAND-WRITTEN <PackageReference Include="NumSharp.Build"> without PrivateAssets FAILS to pack
+#      (no nupkg), 9c -p:NumSharpBuildAllowAsDependency=true packs it as a dependency on purpose AND
+#      a consumer of that nupkg is still NOT woven (weaving never flows, even then), 9d adding
+#      PrivateAssets="all" by hand packs clean (no NumSharp.Build dependency) and the Central Package
+#      Management spelling without PrivateAssets draws NDW018 too
 #  10  the REAL product path: a consumer taking NumSharp itself as a PackageReference (lib/
 #      resolution, not the P2P ref-assembly path) weaves and runs; 10b repeats it on net10.0
 #      (lib/net10.0 + the TFM-agnostic analyzers/ and build/ assets, everything from the nupkgs)
@@ -361,6 +367,139 @@ if "NumSharp.Build" in text:
     print("FAIL: NumSharp.Build leaked into the consumer's dependencies"); sys.exit(1)
 print("consumer nuspec OK: NumSharp present, NumSharp.Build absent")
 PY
+
+# ---------------------------------------------------------------- 9b-9d: the NOT-CONTAGIOUS guard (NDW018)
+# Step 9 covers the reference `dotnet add package` writes (PrivateAssets="all", from developmentDependency).
+# A HAND-WRITTEN reference has no such help: NuGet would list NumSharp.Build as a dependency of the
+# author's package (exclude="Build,Analyzers" — inert for weaving, but every consumer would restore the
+# weaver's payload). The packaged targets refuse that pack (NDW018) unless NumSharpBuildAllowAsDependency
+# is set — and even when it IS set, weaving must not reach the consumer.
+nuspec_deps() { # <nupkg> → prints the <dependency .../> lines
+  python - "$(winpath "$1")" <<'PY'
+import sys, zipfile, re
+z = zipfile.ZipFile(sys.argv[1])
+text = z.read(next(n for n in z.namelist() if n.endswith(".nuspec"))).decode("utf-8")
+for d in re.findall(r'<dependency [^>]*/>', text): print(d)
+PY
+}
+HW="$WORK/handwritten"
+mkdir -p "$HW"
+cp "$CONSUMER/nuget.config" "$HW/nuget.config"
+cat > "$HW/LibHW.csproj" <<EOF
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NumSharp" Version="$CVER" />
+    <PackageReference Include="NumSharp.Build" Version="$WVER" />
+  </ItemGroup>
+</Project>
+EOF
+cat > "$HW/LibHW.cs" <<'EOF'
+using NumSharp;
+public static class LibHW
+{
+    [NDScoped]
+    public static NDArray Twice(NDArray a) { var t = a + 0.0; return t * 2.0; }
+}
+EOF
+echo "9b: a hand-written reference (no PrivateAssets) builds and weaves, but refuses to PACK"
+(cd "$HW" && dotnet build -c Release -v n > build.log 2>&1) || { tail -30 "$HW/build.log"; fail "9b: hand-written-reference library did not build"; }
+grep -q "NumSharp.Build: LibHW.dll - woven 1" "$HW/build.log" || fail "9b: hand-written-reference library was not woven"
+if (cd "$HW" && dotnet pack -c Release --no-build -o "$HW/out" -v q --nologo > pack.log 2>&1); then
+  fail "9b: packing a library that references NumSharp.Build WITHOUT PrivateAssets succeeded — the not-contagious guard is missing"
+fi
+grep -q "error NDW018" "$HW/pack.log" || { tail -20 "$HW/pack.log"; fail "9b: the refused pack did not report NDW018"; }
+grep -q 'PrivateAssets="all"' "$HW/pack.log" || fail "9b: NDW018 does not name the fix (PrivateAssets=\"all\")"
+[ -z "$(ls "$HW/out"/*.nupkg 2>/dev/null)" ] || fail "9b: a nupkg was produced despite NDW018"
+echo "9b: NDW018 refused the pack; no nupkg written"
+
+echo "9c: -p:NumSharpBuildAllowAsDependency=true packs it as a dependency on purpose — and its consumer is STILL not woven"
+(cd "$HW" && dotnet pack -c Release --no-build -o "$HW/outc" -v q --nologo -p:NumSharpBuildAllowAsDependency=true > packc.log 2>&1) \
+  || { tail -30 "$HW/packc.log"; fail "9c: the opt-out knob did not let the pack through"; }
+nuspec_deps "$HW/outc/LibHW.1.0.0.nupkg" | grep -q 'id="NumSharp.Build"' || fail "9c: with the knob set, NumSharp.Build should be listed as a dependency"
+FEED2="$WORK/feed2"
+mkdir -p "$FEED2"
+cp "$FEED"/*.nupkg "$HW/outc/LibHW.1.0.0.nupkg" "$FEED2/"
+rm -rf "$GPF/libhw"
+AC="$WORK/appc"
+mkdir -p "$AC"
+cat > "$AC/nuget.config" <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="weaver-local2" value="$(winpath "$FEED2")" />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+  </packageSources>
+</configuration>
+EOF
+cat > "$AC/AppC.csproj" <<EOF
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><PackageReference Include="LibHW" Version="1.0.0" /></ItemGroup>
+</Project>
+EOF
+cat > "$AC/Program.cs" <<'EOF'
+using System;
+using System.Linq;
+using NumSharp;
+internal static class LocalC
+{
+    [NDScoped]  // inert here: AppC never installed the weaver, whatever LibHW's nuspec says
+    public static NDArray Same(NDArray a) { var t = a + 1.0; return t - 1.0; }
+}
+internal static class Program
+{
+    private static int Main()
+    {
+        bool libWoven = typeof(LibHW).GetMethod("Twice").GetMethodBody().LocalVariables.Any(v => v.LocalType == typeof(NDScope));
+        bool appWoven = typeof(LocalC).GetMethod("Same").GetMethodBody().LocalVariables.Any(v => v.LocalType == typeof(NDScope));
+        Console.WriteLine($"lib-woven={libWoven} app-woven={appWoven}");
+        return libWoven && !appWoven ? 0 : 1;
+    }
+}
+EOF
+(cd "$AC" && dotnet build -c Release -v n > build.log 2>&1) || { tail -30 "$AC/build.log"; fail "9c: consumer of the knob-packed library did not build"; }
+grep -q '"NumSharp.Build/' "$AC/obj/project.assets.json" || fail "9c: the consumer's restore graph should contain the leaked NumSharp.Build (that is what the knob allows)"
+if grep -q "NumSharp.Build: AppC.dll" "$AC/build.log"; then fail "9c: the weaver ran on the CONSUMER of a library that lists NumSharp.Build as a dependency"; fi
+if grep -q "NumSharp.Build.targets" "$AC/obj/AppC.csproj.nuget.g.targets"; then fail "9c: NumSharp.Build.targets was imported transitively into the consumer"; fi
+(cd "$AC" && dotnet run --no-build -c Release > run.log 2>&1) && grep -q "lib-woven=True app-woven=False" "$AC/run.log" \
+  || { cat "$AC/run.log" 2>/dev/null; fail "9c: consumer weave-isolation assertion failed"; }
+echo "9c: dependency listed on purpose, consumer restores it, consumer is NOT woven and imports no weaver targets"
+
+echo "9d: the fix the error names — PrivateAssets=\"all\" by hand — packs clean; the Central Package Management spelling without it draws NDW018"
+sed -i 's|<PackageReference Include="NumSharp.Build" Version="'"$WVER"'" />|<PackageReference Include="NumSharp.Build" Version="'"$WVER"'" PrivateAssets="all" />|' "$HW/LibHW.csproj"
+grep -q 'PrivateAssets="all"' "$HW/LibHW.csproj" || fail "9d: could not rewrite the hand-written reference"
+(cd "$HW" && dotnet pack -c Release -o "$HW/outd" -v q --nologo > packd.log 2>&1) || { tail -30 "$HW/packd.log"; fail "9d: pack with PrivateAssets=all failed"; }
+if nuspec_deps "$HW/outd/LibHW.1.0.0.nupkg" | grep -q 'id="NumSharp.Build"'; then fail "9d: NumSharp.Build still listed after PrivateAssets=all"; fi
+nuspec_deps "$HW/outd/LibHW.1.0.0.nupkg" | grep -q 'id="NumSharp"' || fail "9d: the NumSharp dependency went missing"
+CPM="$WORK/cpm"
+mkdir -p "$CPM"
+cp "$CONSUMER/nuget.config" "$CPM/nuget.config"
+cp "$HW/LibHW.cs" "$CPM/LibHW.cs"
+cat > "$CPM/Directory.Packages.props" <<EOF
+<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="NumSharp" Version="$CVER" />
+    <PackageVersion Include="NumSharp.Build" Version="$WVER" />
+  </ItemGroup>
+</Project>
+EOF
+cat > "$CPM/LibCPM.csproj" <<EOF
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NumSharp" />
+    <PackageReference Include="NumSharp.Build" />
+  </ItemGroup>
+</Project>
+EOF
+if (cd "$CPM" && dotnet pack -c Release -o "$CPM/out" -v q --nologo > pack.log 2>&1); then
+  fail "9d: a Central-Package-Management reference without PrivateAssets packed — NDW018 missed the CPM assets-file shape"
+fi
+grep -q "error NDW018" "$CPM/pack.log" || { tail -20 "$CPM/pack.log"; fail "9d: the refused CPM pack did not report NDW018"; }
+echo "9d: PrivateAssets=all packs clean (NumSharp.Build absent); CPM without it is refused with NDW018"
 
 # ---------------------------------------------------------------- steps 10-14: adversarial shapes
 

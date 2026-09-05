@@ -199,4 +199,61 @@
       <FileWrites Include="$(IntermediateOutputPath)NDScopeWeave.refs.rsp" />
     </ItemGroup>
   </Target>
+
+  <!-- ==================================================================================
+       NOT CONTAGIOUS — the pack-time guard (NDW018).
+
+       NumSharp.Build weaves the project it is installed in and nothing downstream. A library that
+       installs it must NOT hand it on: a consumer of that library's package gets no weaver (its own
+       [NDScoped] methods stay inert, exactly as if the package did not exist), and it should not even
+       see NumSharp.Build in its dependency graph. Three layers make that so, and this target is the
+       third:
+
+         1. This package ships no lib/ and no dependency entries, and build/ only (never
+            buildTransitive/), so NuGet applies its targets ONLY to a project that references it
+            directly — a project that merely references a woven library, by ProjectReference or by
+            package, never imports them and is never woven. (Measured: a consumer of a library whose
+            nuspec DID list NumSharp.Build still was not woven — NuGet records the default
+            PrivateAssets of `build` as exclude="Build,Analyzers" on the edge — so weaving cannot leak
+            even in the worst case below.)
+         2. developmentDependency=true makes `dotnet add package NumSharp.Build` (and the VS UI) write
+            PrivateAssets="all" on the reference, which keeps the package out of the referencing
+            project's own nuspec. That is the install path the docs teach.
+         3. A HAND-WRITTEN reference (a csproj edited by hand, or Central Package Management, where the
+            author writes <PackageReference Include="NumSharp.Build" /> and no PrivateAssets) has no
+            such help: `dotnet pack` would list NumSharp.Build as a DEPENDENCY of the author's package
+            and every consumer would restore the weaver's payload. This target refuses that pack.
+
+       The check reads the project's assets file (project.assets.json) rather than the PackageReference
+       item, because that file is what the pack task itself reads for the dependency list: the
+       project-section record for NumSharp.Build carries "suppressParent": "All" exactly when the
+       reference had PrivateAssets="all" at RESTORE time — so a stale restore, a pack that skipped
+       restore, or a PrivateAssets typed after the last restore is judged by what will actually be
+       packed. (An XML comment cannot spell the skip-restore switch itself: two dashes end it.) A
+       package cannot fix this for its consumers silently: NuGet restores with
+       ExcludeRestorePackageImports=true, so a props file shipped here (a PackageReference Update
+       setting PrivateAssets) never reaches the restore graph and the pack would still leak — measured,
+       twice, before this guard was written; erroring with the one-line fix is the honest option.
+
+       Scope: only a PACKABLE project being packed (GenerateNuspec) — an application that references
+       the weaver has nothing to leak and is never bothered. Opt-out for the deliberate case:
+       -p:NumSharpBuildAllowAsDependency=true (or the property in the project) packs it as a
+       dependency anyway; its consumers are still not woven (layer 1).
+       ================================================================================== -->
+  <Target Name="_NumSharpBuildRefuseContagiousPack"
+          BeforeTargets="GenerateNuspec"
+          Condition="'$(IsPackable)' == 'true' and '$(DesignTimeBuild)' != 'true' and '$(NumSharpBuildAllowAsDependency)' != 'true'">
+    <PropertyGroup>
+      <_NumSharpBuildAssetsFile>$(ProjectAssetsFile)</_NumSharpBuildAssetsFile>
+      <_NumSharpBuildLeaks>false</_NumSharpBuildLeaks>
+      <!-- A project-section dependency record — the key is the bare id ("NumSharp.Build", never the
+           "NumSharp.Build/1.2.3" form the targets/libraries sections use, and never the plain-string
+           value of a Central Package Management centralPackageVersions entry) — whose body lacks
+           "suppressParent": "All". One record per TargetFramework; any one without it leaks. -->
+      <_NumSharpBuildLeaks Condition="Exists('$(_NumSharpBuildAssetsFile)') and $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('$(_NumSharpBuildAssetsFile)')), '&quot;NumSharp\.Build&quot;\s*:\s*\{(?![^}]*&quot;suppressParent&quot;\s*:\s*&quot;All&quot;)[^}]*\}'))">true</_NumSharpBuildLeaks>
+    </PropertyGroup>
+    <Error Condition="'$(_NumSharpBuildLeaks)' == 'true'"
+           Code="NDW018"
+           Text="$(MSBuildProjectName) references NumSharp.Build without PrivateAssets=&quot;all&quot;, so packing would list NumSharp.Build as a DEPENDENCY of $(PackageId) and every consumer of your package would restore the weaver. NumSharp.Build is a build-time tool for the project it is installed in and is not meant to be inherited (consumers are never woven either way). Add PrivateAssets=&quot;all&quot; to the PackageReference — `dotnet add package NumSharp.Build` writes it for you — then restore and pack again; or set NumSharpBuildAllowAsDependency=true to pack it as a dependency on purpose. See https://scisharp.github.io/NumSharp/docs/numsharp-build-compiler.html#ndw018" />
+  </Target>
 </Project>

@@ -2,9 +2,15 @@
 
 Build-time IL weaver for [NumSharp](https://www.nuget.org/packages/NumSharp)'s `[NDScoped]`
 deterministic memory reclamation. Installing this package is the whole opt-in — it wires a
-post-compile step into **your** project's build, and it is **not a dependency**: it ships MSBuild
-targets + a tool only (no `lib/`, no dependency entries), and `dotnet add package` installs it with
-`PrivateAssets="all"`, so it never flows into your own package's dependency graph.
+post-compile step into **your** project's build, and it is **not a dependency** and **not
+contagious**: it weaves the project it is installed in and nothing downstream. It ships MSBuild
+targets + a tool only (no `lib/`, no dependency entries, `build/` never `buildTransitive/`), so a
+project that merely references your woven library — by project or by package — is never woven and
+its own `[NDScoped]` stays inert. `dotnet add package` installs it with `PrivateAssets="all"`, which
+keeps it out of your own package's dependency graph; if you write the reference by hand (or under
+Central Package Management), add `PrivateAssets="all"` yourself — `dotnet pack` refuses to ship
+NumSharp.Build as a dependency of your package otherwise (error NDW018, with the one-line fix;
+`-p:NumSharpBuildAllowAsDependency=true` overrides it on purpose).
 
 ## What it does
 
