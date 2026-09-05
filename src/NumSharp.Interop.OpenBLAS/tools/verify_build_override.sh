@@ -47,6 +47,7 @@ unset NUMSHARP_OPENBLAS_VERSION NUMSHARP_OPENBLAS_SEARCH_PATH NUMSHARP_OPENBLAS_
 
 step() { printf '\n== %s ==\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*|Windows_NT) OS_NAME=Windows ;; *) OS_NAME="$(uname -s)" ;; esac
 
 # The consumer csproj is REWRITTEN per scenario (not sed-mutated): each step states its
 # whole reference block, so no step depends on the previous one's edits.
@@ -117,12 +118,23 @@ OUT="$CONS/bin/Debug/net10.0"
 RID="$(cd "$CONS" && dotnet msbuild consumer.csproj -getProperty:NETCoreSdkPortableRuntimeIdentifier | tr -d '\r')"
 RID_MARKER="$OUT/runtimes/$RID/native/openblas.source.json"
 ROOT_MARKER="$OUT/openblas.source.json"
-CACHE="${LOCALAPPDATA:-$HOME/.cache}/NumSharp/openblas"
 
 step "1. default build: bundle ships, NO marker, no task"
 ( cd "$CONS" && run dotnet build -v q --nologo "-clp:ErrorsOnly" )
 ls "$OUT"/runtimes/"$RID"/native/*openblas* > /dev/null 2>&1 || fail "bundled asset did not reach the output"
 [ ! -f "$RID_MARKER" ] && [ ! -f "$ROOT_MARKER" ] || fail "a default build must write no marker"
+# Where the build puts the per-user cache is the PACKAGE's decision (its buildTransitive props;
+# readable only once the consumer has restored the package) — ask MSBuild rather than re-derive
+# the rule here. It caught the Linux/macOS drift: MSBuild synthesizes a LOCALAPPDATA property on
+# Unix, so an unguarded `$(LOCALAPPDATA)` rule landed the cache in ~/.local/share while every
+# other party expected ~/.cache.
+CACHE="$(cd "$CONS" && dotnet msbuild consumer.csproj -getProperty:NumSharpOpenBlasCacheDir | tr -d '\r')"
+[ -n "$CACHE" ] || fail "the package's props did not define NumSharpOpenBlasCacheDir"
+case "$OS_NAME" in
+    Windows) ;;
+    *) case "$CACHE" in "${XDG_CACHE_HOME:-$HOME/.cache}"/NumSharp/openblas) ;; *) fail "on Unix the build cache must be ~/.cache/NumSharp/openblas (the runtime loader's root), got $CACHE" ;; esac ;;
+esac
+echo "    cache: $CACHE"
 echo "ok"
 
 step "2. version override via PackageReference metadata ($PINNED): stage + marker + runtime override"
@@ -190,10 +202,18 @@ echo "ok"
 
 step "10. a poisoned cache entry is discarded and re-downloaded, never staged"
 write_csproj "$REF_VERSION"
-CACHED="$(find "$CACHE/scipy-openblas64/$PINNED/$RID" -type f ! -name '*.tmp' 2>/dev/null | head -1)"
+# -print -quit, not `| head -1`: under `set -o pipefail` a `find | head` pipeline can end with
+# find's SIGPIPE status (141) and abort the script with no message at all. The entry holds the
+# main library, the vendored runtime (Linux/macOS) and the .entry.json sidecar — poisoning ANY
+# of them must be detected, so whichever file comes first is fine.
+CACHED="$(find "$CACHE/scipy-openblas64/$PINNED/$RID" -type f ! -name '*.tmp' -print -quit 2>/dev/null || true)"
 [ -n "$CACHED" ] || fail "expected a cache entry from step 2 under $CACHE/scipy-openblas64/$PINNED/$RID"
+echo "    poisoning $CACHED"
 printf 'garbage' > "$CACHED"
-POISON="$(cd "$CONS" && dotnet build -t:Rebuild -v n --nologo 2>&1)"
+# The rebuild's output is what carries the diagnosis; a failed build must show it, not vanish
+# behind a captured substitution.
+POISON="$(cd "$CONS" && dotnet build -t:Rebuild -v n --nologo 2>&1)" \
+    || { echo "$POISON" | grep -i "error\|NumSharp.Interop.OpenBLAS:" | tail -30; fail "the rebuild after poisoning the cache failed (output above)"; }
 echo "$POISON" | grep -q "DISCARDING poisoned cache entry" || fail "the tampered entry must be detected and discarded"
 echo "$POISON" | grep -q "NumSharp.Interop.OpenBLAS: downloading" || fail "the discarded entry must be re-downloaded"
 grep -q '"mode": "version"' "$RID_MARKER" || fail "staging must complete after the self-heal"

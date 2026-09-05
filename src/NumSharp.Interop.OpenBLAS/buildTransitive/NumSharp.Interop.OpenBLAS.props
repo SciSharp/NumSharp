@@ -31,7 +31,12 @@
          uses on macOS for its relocated-dylib entries (dyld/<sha256>/), so one variable moves
          both caches. -->
     <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and '$(NUMSHARP_OPENBLAS_CACHE_DIR)' != ''">$(NUMSHARP_OPENBLAS_CACHE_DIR)</NumSharpOpenBlasCacheDir>
-    <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and '$(LOCALAPPDATA)' != ''">$(LOCALAPPDATA)\NumSharp\openblas</NumSharpOpenBlasCacheDir>
+    <!-- Windows ONLY: MSBuild on Linux/macOS SYNTHESIZES a LOCALAPPDATA property (~/.local/share)
+         even though no such environment variable exists there, which silently moved the Unix
+         cache away from the ~/.cache location the docs, the runtime loader
+         (MacOsVendoredRuntime.ResolveCacheRoot, which reads the real environment) and the
+         verify scripts all use. -->
+    <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and $([MSBuild]::IsOSPlatform('Windows')) and '$(LOCALAPPDATA)' != ''">$(LOCALAPPDATA)\NumSharp\openblas</NumSharpOpenBlasCacheDir>
     <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and '$(XDG_CACHE_HOME)' != ''">$(XDG_CACHE_HOME)/NumSharp/openblas</NumSharpOpenBlasCacheDir>
     <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and '$(HOME)' != ''">$(HOME)/.cache/NumSharp/openblas</NumSharpOpenBlasCacheDir>
     <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == ''">$(MSBuildProjectDirectory)/obj/numsharp-openblas-cache</NumSharpOpenBlasCacheDir>

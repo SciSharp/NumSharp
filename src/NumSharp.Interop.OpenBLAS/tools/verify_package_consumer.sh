@@ -54,6 +54,11 @@ unset NUMSHARP_OPENBLAS_VERSION NUMSHARP_OPENBLAS_SEARCH_PATH NUMSHARP_OPENBLAS_
 
 PY="$(command -v python3 || command -v python || true)"
 [ -n "$PY" ] || fail "python3 is required (fetch_openblas.py stages the bundled assets)"
+# Paths the CONSUMER prints are what the dotnet host resolved, i.e. realpaths: on macOS /var is a
+# symlink to /private/var, so a temp dir made as /var/... comes back as /private/var/... — compare
+# realpaths, never the spellings.
+real() { "$PY" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
+under() { case "$(real "$1")/" in "$(real "$2")"/*) return 0 ;; *) return 1 ;; esac; }
 
 VERSION="$(cd "$REPO" && dotnet msbuild src/NumSharp.Core/NumSharp.Core.csproj -getProperty:Version | tr -d '\r')"
 [ -n "$VERSION" ] || fail "could not read the package version"
@@ -185,8 +190,9 @@ if [ "$IS_WIN" = 0 ]; then
     [ ! -e "$RO/runtimes/$RID/.dylibs" ] || fail "nothing may be written into the read-only tree"
     if [ "$IS_MAC" = 1 ]; then
         IMG="$(echo "$RORUN" | sed -n 's/^image=//p')"
-        case "$IMG" in "$CACHE"/*) ;; *) fail "macOS read-only layout: the image must come from the cache under $CACHE, got $IMG" ;; esac
-        echo "$RORUN" | grep -q "^library=$RO/" || fail "LibraryPath must keep naming the install's own file (the parity pin hashes it): $RORUN"
+        LIB="$(echo "$RORUN" | sed -n 's/^library=//p')"
+        under "$IMG" "$CACHE" || fail "macOS read-only layout: the image must come from the cache under $CACHE, got $IMG"
+        under "$LIB" "$RO" || fail "LibraryPath must keep naming the install's own file (the parity pin hashes it): $RORUN"
         [ -f "$IMG" ] && cmp -s "$IMG" "$RO/runtimes/$RID/native/$(basename "$IMG")" || fail "the cached image must be byte-identical to the install's library"
         ls "$(dirname "$(dirname "$IMG")")/.dylibs/libgfortran.5.dylib" > /dev/null || fail "the cache entry must carry ../.dylibs/ beside native/"
         echo "    (mapped from the cache: $IMG)"
@@ -210,7 +216,7 @@ echo "$PUBRUN" | grep -q "^dot00=10" || fail "wrong product from the flattened p
 [ ! -e "$WORK/.dylibs" ] || fail "the loader must never write ../.dylibs OUTSIDE the application folder"
 if [ "$IS_MAC" = 1 ]; then
     IMG="$(echo "$PUBRUN" | sed -n 's/^image=//p')"
-    case "$IMG" in "$CACHE"/*) ;; *) fail "macOS flattened layout: the image must come from the cache, got $IMG" ;; esac
+    under "$IMG" "$CACHE" || fail "macOS flattened layout: the image must come from the cache, got $IMG"
 
     step "6. the cache entry is self-verifying: a tampered dependency is rebuilt, never mapped"
     ENTRY="$(dirname "$(dirname "$IMG")")"
