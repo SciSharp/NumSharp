@@ -139,6 +139,8 @@ namespace NumSharp.Interop.PythonNet
         ///     return values are auto-encoded as zero-copy numpy views, and
         ///     <c>PyObject.As&lt;NDArray&gt;()</c> decodes numpy arrays, other buffer exporters and
         ///     registered adapter sources through the view-first <see cref="NumpyCodecMode.Auto"/> policy.
+        ///     Also registers <see cref="TupleCodec"/> (C# tuples &lt;-&gt; Python tuples — shapes, axes,
+        ///     multi-indices; see <see cref="NumpyCodecOptions.ConvertTuples"/>).
         /// </summary>
         /// <returns><c>true</c> if the codec was registered by this call; <c>false</c> if it was already
         /// registered for the current engine session.</returns>
@@ -161,6 +163,12 @@ namespace NumSharp.Interop.PythonNet
             var codec = new NumpyCodec(options);
             PyObjectConversions.RegisterEncoder(codec);
             PyObjectConversions.RegisterDecoder(codec);
+            if (options.ConvertTuples)
+            {
+                PyObjectConversions.RegisterEncoder(TupleCodec.Instance);
+                PyObjectConversions.RegisterDecoder(TupleCodec.Instance);
+            }
+
             return true;
         }
 

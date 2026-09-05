@@ -1,12 +1,13 @@
 <#
 .SYNOPSIS
-    Runs every example script and fails on the first non-zero exit code.
+    Runs every tutorial script and fails on the first one that does not run to completion.
 
 .DESCRIPTION
-    Each *.cs file here is a self-contained .NET 10 file-based app that prints one OK/FAIL line per
-    claim and exits non-zero when any claim fails, so this is a gate as well as a tour. Needs the
-    .NET 10 SDK and a `python` on PATH with numpy (see requirements.txt); scripts that need
-    torch/pandas/pyarrow/pillow self-skip (exit 0) when the package is missing.
+    Each *.cs file here is a self-contained .NET 10 file-based app written to be read: it prints
+    nothing and asserts nothing, so a non-zero exit code means a line of the tutorial threw. The
+    asserted twins live in test/NumSharp.Tests.Interop/Examples. Needs the .NET 10 SDK and a
+    `python` on PATH with numpy (see requirements.txt); the parts that need torch/pandas/pyarrow/
+    pillow skip quietly when the package is missing.
 
 .PARAMETER Examples
     Base names to run (e.g. 02-four-verbs). Default: all, in numeric order.

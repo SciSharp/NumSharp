@@ -8,10 +8,13 @@
 //      SAME memory bridge. Pandas documents that to_numpy(copy=False) does not guarantee a view, so
 //      the View route proves two independent projections overlap before sharing; Copy/Auto take an
 //      owning snapshot otherwise. Pandas 3's Copy-on-Write exposes shared projections READ-ONLY, so
-//      view callers pass allowReadonly:true. NumSharp -> Pandas is the ordinary numpy encoder plus
-//      an explicit copy=False.
+//      view callers pass allowReadonly:true (the codec's Auto mode does). NumSharp -> Pandas is the
+//      ordinary numpy encoder plus an explicit copy=False.
 //
-//      Run:  dotnet run 10-pandas.cs        (self-skips when pandas is not installed)
+//      Read it top to bottom; the comments state what each line leaves behind. The same steps, with
+//      every statement asserted, are test/NumSharp.Tests.Interop/Examples/Example10_Pandas.cs.
+//
+//      Run:  dotnet run 10-pandas.cs        (exits quietly when pandas is not installed)
 
 using System.Diagnostics;
 using NumSharp;
@@ -19,187 +22,179 @@ using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 using var host = PythonHost.Start();
-using var py = new PyScope();
-var check = new Checklist();
+using var scope = NDScope.Open();
+dynamic py = host.Namespace;
 
-try { py.Exec("import pandas as pd"); }
-catch (PythonException) { Console.WriteLine("  (skip) python package 'pandas' is not installed — see requirements.txt"); return 0; }
-Console.WriteLine($"pandas {py.Str("pd.__version__")}");
+bool HasModule(string name) { using (Py.GIL()) return Throws(() => py.Exec($"import {name}")) is null; }
+if (!HasModule("pandas")) return;                             // see requirements.txt — Pandas 3
+using (Py.GIL()) py.Exec("import pandas as pd");
 
 // ==== Pandas -> NumSharp ============================================================================
-check.Section("Series: the ordinary verbs, through the adapter");
-py.Exec("s = pd.Series(np.arange(6, dtype='i8'))");
+// Series: the ordinary verbs, through the adapter
 using (Py.GIL())
 {
-    using PyObject s = py.Get("s");
-    check.Throws<InvalidOperationException>(() => s.AsNDArray(requireGIL: false).Dispose(), "bare AsNDArray() refuses: Pandas 3 exposes the shared projection read-only", "allowReadonly:true");
-    using NDArray view = s.AsNDArray(allowReadonly: true, requireGIL: false);
-    check.That(view.typecode == NPTypeCode.Int64 && view.shape.SequenceEqual(new long[] { 6 }) && !view.Shape.IsWriteable, "AsNDArray(allowReadonly: true): a NON-writeable int64 (6,) view");
-    check.That(py.Bool("s.to_numpy().ctypes.data == s.to_numpy().ctypes.data") && view.GetInt64(4) == 4, "...over Pandas' own stable storage (two to_numpy() projections overlap)");
-    py.Exec("s.iloc[2] = 77");
-    check.That(view.GetInt64(2) == 77, "a Pandas write is visible through the view");
-    using NDArray zeros = np.zeros(new Shape(6), NPTypeCode.Int64);
-    check.Throws<Exception>(() => np.copyto(view, zeros), "a NumSharp write through the read-only view is refused", "read-only");
-    using NDArray copy = s.ToNDArray(requireGIL: false);
-    copy[0] = 999L;
-    check.That(copy.Shape.IsWriteable && py.Long("s.iloc[0]") == 0, "ToNDArray(): an owning, writable, detached snapshot");
+    py.Exec("s = pd.Series(np.arange(6, dtype='i8'))");
+    using PyObject s = py.s;
+    Exception? readOnly = Throws(() => s.AsNDArray());                        // InvalidOperationException: ... Pandas 3 exposes the shared projection read-only; pass allowReadonly:true
+    NDArray view = s.AsNDArray(allowReadonly: true);                          // a NON-writeable Int64 (6,) view over Pandas' own stable storage (two to_numpy() projections overlap)
+    py.Exec("s.iloc[2] = 77");                                                // view[2] reads 77
+    Exception? guarded = Throws(() => np.copyto(view, np.zeros(new Shape(6), np.int64)));   // NumSharpException: assignment destination is read-only
+    NDArray copy = s.ToNDArray();                                             // an owning, writable, detached snapshot
+    copy[0] = 999L;                                                           // s.iloc[0] still reads 0
+    NDArray viaCodec = py.s;                                                  // the codec's Auto mode: the read-only view, by itself
 }
 
-check.Section("DataFrame: a homogeneous frame is ONE F-strided block");
-NDArrayPythonInterop.RegisterCodec();
-py.Exec("df = pd.DataFrame({'a': [1, 2, 3], 'b': [10, 20, 30]}, dtype='i8')");
+// DataFrame: a homogeneous frame is ONE F-strided block
 using (Py.GIL())
 {
-    using PyObject df = py.Get("df");
-    using NDArray view = df.As<NDArray>();                                   // the codec: Auto = verified view first
-    check.That(view.shape.SequenceEqual(new long[] { 3, 2 }) && view.Shape.Strides.SequenceEqual(new long[] { 1, 3 }) && view.Shape.IsFContiguous,
-               $"As<NDArray>(): shape ({string.Join(",", view.shape)}), element strides ({string.Join(",", view.Shape.Strides)}) — Fortran order, as Pandas stores blocks");
-    check.That(!view.Shape.IsWriteable && view.GetInt64(2, 1) == 30, "read-only (Copy-on-Write), values in place: [2,1] == 30");
-    py.Exec("df.iloc[1, 1] = 77");
-    check.That(view.GetInt64(1, 1) == 77, "a Pandas write is visible through the view");
+    py.Exec("df = pd.DataFrame({'a': [1, 2, 3], 'b': [10, 20, 30]}, dtype='i8')");
+    NDArray view = py.df;                                                     // shape (3,2), element strides (1,3): Fortran order, as Pandas stores blocks; read-only (Copy-on-Write); view[2, 1] == 30
+    py.Exec("df.iloc[1, 1] = 77");                                            // view[1, 1] reads 77
 }
 
-check.Section("Index, RangeIndex and nullable extension arrays");
-py.Exec("idx = pd.Index([4, 5, 6], dtype='i8')\nrng = pd.RangeIndex(5)\nnullable = pd.array([7, 8, 9], dtype='Int64')");
+// Index, RangeIndex and nullable extension arrays
 using (Py.GIL())
 {
-    using PyObject idx = py.Get("idx");
-    using NDArray iv = idx.AsNDArray(allowReadonly: true, requireGIL: false);
-    check.That(!iv.Shape.IsWriteable && iv.GetInt64(2) == 6, "pd.Index: read-only view (an Index is immutable)");
-    using PyObject rng = py.Get("rng");
-    using NDArray rv = rng.ToNDArray(requireGIL: false);
-    check.That(rv.typecode == NPTypeCode.Int64 && rv.GetInt64(4) == 4, "pd.RangeIndex: recognized through the Index MRO; materializes to int64 [0..4]");
-    using PyObject nullable = py.Get("nullable");
-    using NDArray nv = nullable.AsNDArray(allowReadonly: true, requireGIL: false);
-    check.That(nv.typecode == NPTypeCode.Int64 && nv.Shape.IsWriteable, "pd.array(dtype='Int64') without missing values exposes its stable typed buffer — writable");
-    nv[1] = 71L;
-    check.That(py.Long("nullable[1]") == 71, "...and a NumSharp write reaches the extension array");
+    py.Exec("idx = pd.Index([4, 5, 6], dtype='i8')\nrng = pd.RangeIndex(5)\nnullable = pd.array([7, 8, 9], dtype='Int64')");
+    NDArray iv = py.idx;                                                      // pd.Index: a read-only view (an Index is immutable); iv[2] == 6
+    NDArray rv = py.rng;                                                      // pd.RangeIndex: recognized through the Index MRO; no buffer to share, so Auto materializes int64 [0..4]
+    NDArray nv = py.nullable;                                                 // pd.array(dtype='Int64') without missing values exposes its stable typed buffer — writable
+    nv[1] = 71L;                                                              // nullable[1] reads 71
 }
 
-check.Section("what materializes: mixed blocks, missing values, categoricals, text");
-py.Exec("mixed = pd.DataFrame({'small': np.array([1, 2], dtype='i4'), 'real': np.array([3.5, 4.5], dtype='f8')})\n" +
-        "with_na = pd.array([1, None, 3], dtype='Int64')\n" +
-        "cat = pd.Series(pd.Categorical([3, 1, 3]))\n" +
-        "text = pd.Series(['a', 'b'])");
+// what materializes: mixed blocks, missing values, categoricals, text
 using (Py.GIL())
 {
-    using PyObject mixed = py.Get("mixed");
-    check.Throws<NotSupportedException>(() => mixed.AsNDArray(allowReadonly: true, requireGIL: false).Dispose(), "mixed dtypes: View declines (Pandas materialized a fresh array)", "cannot be proven");
-    using NDArray upcast = mixed.ToNDArray(requireGIL: false);
-    check.That(upcast.typecode == NPTypeCode.Double && upcast.GetDouble(1, 0) == 2.0 && upcast.GetDouble(0, 1) == 3.5, "ToNDArray(): Pandas' common-dtype upcast (int32 + float64 -> float64), detached");
-    using NDArray auto = mixed.As<NDArray>();
-    check.That(auto.Shape.IsWriteable && auto.typecode == NPTypeCode.Double, "the codec's Auto falls back to the owning copy");
-
-    using PyObject withNa = py.Get("with_na");
-    check.Throws<NotSupportedException>(() => withNa.AsNDArray(allowReadonly: true, requireGIL: false).Dispose(), "a nullable array WITH pd.NA: no stable buffer to share");
-    using NDArray naCopy = withNa.ToNDArray(requireGIL: false);
-    check.That(naCopy.typecode == NPTypeCode.Double && double.IsNaN(naCopy.GetDouble(1)), "...copies as float64 with NaN for the missing value");
-
-    using PyObject cat = py.Get("cat");
-    check.Throws<NotSupportedException>(() => cat.AsNDArray(allowReadonly: true, requireGIL: false).Dispose(), "categorical: View declines");
-    using NDArray catCopy = cat.ToNDArray(requireGIL: false);
-    check.That(catCopy.GetInt64(0) == 3 && catCopy.GetInt64(1) == 1, "...ToNDArray copies the category VALUES [3, 1, 3]");
-
-    using PyObject text = py.Get("text");
-    check.Throws<NotSupportedException>(() => text.ToNDArray(requireGIL: false).Dispose(), "object/string columns have no NumSharp dtype (both paths refuse)");
+    py.Exec("mixed = pd.DataFrame({'small': np.array([1, 2], dtype='i4'), 'real': np.array([3.5, 4.5], dtype='f8')})\n" +
+            "with_na = pd.array([1, None, 3], dtype='Int64')\n" +
+            "cat = pd.Series(pd.Categorical([3, 1, 3]))\n" +
+            "text = pd.Series(['a', 'b'])");
+    using PyObject mixed = py.mixed;
+    Exception? noView = Throws(() => mixed.AsNDArray(allowReadonly: true));   // NotSupportedException: ... cannot be proven — Pandas materialized a fresh array for the mixed blocks
+    NDArray upcast = mixed.ToNDArray();                                       // Pandas' common-dtype upcast (int32 + float64 -> float64), detached: upcast[1, 0] == 2.0, upcast[0, 1] == 3.5
+    NDArray auto = py.mixed;                                                  // the codec's Auto falls back to the owning copy (writable, Double)
+    using PyObject withNa = py.with_na;
+    Exception? noBuffer = Throws(() => withNa.AsNDArray(allowReadonly: true));   // NotSupportedException: a nullable array WITH pd.NA has no stable buffer to share
+    NDArray naCopy = withNa.ToNDArray();                                      // float64 with NaN for the missing value
+    using PyObject cat = py.cat;
+    Exception? categorical = Throws(() => cat.AsNDArray(allowReadonly: true));   // NotSupportedException: categorical — View declines
+    NDArray catCopy = cat.ToNDArray();                                        // the category VALUES: [3, 1, 3]
+    using PyObject text = py.text;
+    Exception? strings = Throws(() => text.ToNDArray());                      // NotSupportedException: object/string columns have no NumSharp dtype (both paths refuse)
 }
 
-check.Section("labels are metadata: only the value matrix crosses");
-py.Exec("labelled = pd.DataFrame([[1.0, 2.0], [3.0, 4.0]], index=pd.MultiIndex.from_tuples([('x', 1), ('x', 2)]), columns=['dup', 'dup'])");
+// labels are metadata: only the value matrix crosses
 using (Py.GIL())
 {
-    using PyObject labelled = py.Get("labelled");
-    using NDArray values = labelled.As<NDArray>();
-    check.That(values.shape.SequenceEqual(new long[] { 2, 2 }) && values.GetDouble(1, 0) == 3.0, "a MultiIndex + duplicate column names: still the (2,2) value block, row-major logical order");
+    py.Exec("labelled = pd.DataFrame([[1.0, 2.0], [3.0, 4.0]], index=pd.MultiIndex.from_tuples([('x', 1), ('x', 2)]), columns=['dup', 'dup'])");
+    NDArray values = py.labelled;                                             // a MultiIndex + duplicate column names: still the (2,2) value block, row-major logical order; values[1, 0] == 3.0
 }
 
-// ==== NumSharp -> Pandas ============================================================================
-check.Section("NumSharp -> Pandas: the numpy encoder + an explicit copy=False");
-using NDArray nd = np.arange(6).astype(NPTypeCode.Double);
-using (Py.GIL()) py.Module.Set("values", nd);                                       // the registered codec encodes a zero-copy numpy view
-py.Exec("series = pd.Series(values, copy=False)\nframe = pd.DataFrame(values.reshape(-1, 2), copy=False)");
-check.That(py.Bool("series.to_numpy().ctypes.data == values.ctypes.data"), "pd.Series(values, copy=False) sits on NumSharp's memory");
-check.That(!py.Bool("series.to_numpy().flags.writeable"), "...Pandas 3 marks the shared projection read-only (its Copy-on-Write rule)");
-nd[2] = 81.5;
-check.That(py.Float("series.iloc[2]") == 81.5 && py.Float("frame.iloc[1, 0]") == 81.5, "a NumSharp write is visible in the Series AND the DataFrame");
-py.Exec("series.iloc[2] = -7.25");
-check.That(nd.GetDouble(2) == -7.25, "a Pandas write reaches NumSharp (copy=False is a deliberate shared-memory opt-in; CoW cannot detach an external owner)");
-py.Exec("default_copy = pd.Series(values)");
-check.That(!py.Bool("default_copy.to_numpy().ctypes.data == values.ctypes.data"), "without copy=False Pandas 3 copies numpy input by default");
+// ==== NumSharp -> Pandas: the numpy encoder + an explicit copy=False ================================
+NDArray nd = np.arange(6).astype(np.float64);
+using (Py.GIL())
+{
+    py.values = nd;                                                           // the codec encodes a zero-copy numpy view
+    py.Exec("series = pd.Series(values, copy=False)\nframe = pd.DataFrame(values.reshape(-1, 2), copy=False)");
+    bool onNumSharpMemory = py.Eval("series.to_numpy().ctypes.data == values.ctypes.data");   // True: pd.Series(values, copy=False) sits on NumSharp's memory
+    bool writeable = py.Eval("series.to_numpy().flags.writeable");            // False: Pandas 3 marks the shared projection read-only (its Copy-on-Write rule)
+    nd[2] = 81.5;                                                             // series.iloc[2] and frame.iloc[1, 0] both read 81.5
+    py.Exec("series.iloc[2] = -7.25");                                        // nd[2] reads -7.25: copy=False is a deliberate shared-memory opt-in; CoW cannot detach an external owner
+    py.Exec("default_copy = pd.Series(values)");                              // without copy=False Pandas 3 copies numpy input by default: default_copy.to_numpy().ctypes.data != values.ctypes.data
+}
 
-check.Section("lifetime: a derived NumSharp view keeps Pandas storage alive after every Python name dies");
-py.Exec("tmp = pd.Series(np.arange(8, dtype='f8') * 1.5)");
+// lifetime: a derived NumSharp view keeps Pandas storage alive after every Python name dies
 NDArray slice;
 using (Py.GIL())
 {
-    using PyObject tmp = py.Get("tmp");
-    using NDArray whole = tmp.AsNDArray(allowReadonly: true, requireGIL: false);
-    slice = whole["2:5"];
+    py.Exec("tmp = pd.Series(np.arange(8, dtype='f8') * 1.5)");
+    using (var inner = NDScope.Open())
+    {
+        NDArray whole = py.tmp;                                               // a read-only view over the Series' projection
+        slice = inner.Returns(whole["2:5"]);                                  // yielded to the outer scope; `whole` is released when `inner` closes
+    }
+    py.Exec("del tmp\nimport gc; gc.collect()");
 }
-py.Exec("del tmp\nimport gc; gc.collect()");
-check.That(slice.GetDouble(0) == 3.0 && slice.GetDouble(2) == 6.0 && NDArrayPythonInterop.LiveImports == 1, "the slice still reads valid memory; the lease holds the projection");
+double s0 = slice.GetDouble(0), s2 = slice.GetDouble(2);                      // 3.0, 6.0 — the slice still reads valid memory; its lease holds the projection (LiveImports == 1)
 slice.Dispose();
 
-check.Section("registry: the adapter is built in");
-check.That(!PythonArrayAdapterRegistry.Register(PandasPythonArrayAdapter.Instance) && PandasPythonArrayAdapter.Instance.Name == "pandas",
-           "Register(PandasPythonArrayAdapter.Instance) returns false — already registered under the name 'pandas'");
+// registry: the adapter is built in
+bool alreadyThere = !PythonArrayAdapterRegistry.Register(PandasPythonArrayAdapter.Instance);   // true — already registered under the name "pandas"
 var noAdapters = new NumpyCodec(new NumpyCodecOptions { DecodeArrayAdapters = false });
 using (Py.GIL())
 {
-    using PyObject s = py.Get("s");
+    using PyObject s = py.s;
     using PyObject t = s.GetPythonType();
     using var seriesType = new PyType(t);
-    check.That(!noAdapters.CanDecode(seriesType, typeof(NDArray)), "a codec with DecodeArrayAdapters = false does not decode a Series");
+    bool decodes = noAdapters.CanDecode(seriesType, typeof(NDArray));       // false: a codec with DecodeArrayAdapters = false does not decode a Series
 }
 
-check.Section("counters");
-py.Exec("del series, frame, default_copy, values");
-check.That(Settle(() => NDArrayPythonInterop.LiveExports == 0 && NDArrayPythonInterop.LiveImports == 0),
-           $"every pin and lease released (exports {NDArrayPythonInterop.LiveExports}, imports {NDArrayPythonInterop.LiveImports})");
-
-return check.Exit();
-
-static bool Settle(Func<bool> done)
-{
-    var sw = Stopwatch.StartNew();
-    while (!done() && sw.ElapsedMilliseconds < 5000)
-    {
-        GC.Collect(); GC.WaitForPendingFinalizers();
-        using (Py.GIL())
-        {
-            Finalizer.Instance.Collect();                                  // pythonnet's DEFERRED decrefs: wrappers the CLR GC finalized (e.g. `dynamic` call arguments) release their Python reference here
-            PythonEngine.RunSimpleString("import gc; gc.collect()");
-        }
-        Thread.Sleep(20);
-    }
-    return done();
-}
+// ==== who frees what ================================================================================
+// When this script ends: `scope` releases every view above (the leases on the Pandas projections go back);
+// `host` drops the namespace, so values, series and frame die with their names and the export pin with them;
+// then the engine shuts down. LiveExports / LiveImports both read 0 afterwards.
 
 // =====================================================================================================
-//  Shared scaffolding — identical in every example (a single-file app cannot share source files).
+//  Scaffolding — identical in every example (a single-file app cannot share source files). Nothing
+//  below is specific to this script: Throws captures an exception the tutorial expects, PythonHost
+//  finds CPython, runs the engine and owns a Python namespace with numpy imported.
 // =====================================================================================================
 
-/// <summary>Finds a CPython that has numpy, starts the engine once, shuts it down crash-free on dispose.</summary>
+static Exception? Throws(Action act) { try { act(); return null; } catch (Exception e) { return e; } }
+
+/// <summary>
+///     Finds a CPython that has numpy, starts the engine once, registers the codec, opens a Python
+///     namespace with numpy imported, and shuts everything down crash-free on dispose.
+/// </summary>
 sealed class PythonHost : IDisposable
 {
+    /// <summary>
+    ///     A Python module where <c>import numpy as np</c> already ran. Hold it as <c>dynamic py</c> and use
+    ///     it under <c>Py.GIL()</c>: <c>py.x = nd</c> binds a NumSharp array as a zero-copy numpy view (the
+    ///     codec runs ToNumpy), <c>NDArray a = py.x</c> decodes one back (AsNDArray whenever a view is
+    ///     possible), <c>py.Exec("...")</c> runs statements, <c>double d = py.Eval("x.sum()")</c> reads a
+    ///     value, and <c>py.np</c> is numpy itself.
+    /// </summary>
+    public PyModule Namespace { get; private set; } = null!;
     bool _down;
 
-    public static PythonHost Start()
+    /// <param name="codec">Register the codec at startup — the normal choice. Two examples pass <c>false</c>
+    /// to show the registration order themselves.</param>
+    public static PythonHost Start(bool codec = true)
     {
-        string dll = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL") ?? Discover();
-        Runtime.PythonDLL = dll;                 // pythonnet needs the shared library, not the interpreter
-        PythonEngine.Initialize();               // once per process (CPython + numpy cannot re-initialize)
-        PythonEngine.BeginAllowThreads();        // release THIS thread's GIL so every thread can take it later
-        Console.WriteLine($"Python {PythonEngine.Version.Split(' ')[0]}  ({dll})");
-        return new PythonHost();
+        Runtime.PythonDLL = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL") ?? Discover();
+        PythonEngine.Initialize();                          // once per process (CPython + numpy cannot re-initialize)
+        PythonEngine.BeginAllowThreads();                   // release THIS thread's GIL so every thread can take it later
+        if (codec) NDArrayPythonInterop.RegisterCodec();    // NDArray <-> numpy and C# tuples <-> Python tuples at every pythonnet boundary; before any As<NDArray>()
+        var host = new PythonHost();
+        using (Py.GIL()) { host.Namespace = Py.CreateScope(); host.Namespace.Exec("import numpy as np"); }
+        return host;
     }
 
     public void Dispose()
     {
         if (_down) return;
         _down = true;
-        RuntimeData.FormatterType = typeof(NoopFormatter);   // pythonnet's opt-out of BinaryFormatter stashing (.NET 8+)
-        PythonEngine.Shutdown();                             // the interop's handler drains every lease first
+        using (Py.GIL()) Namespace.Dispose();               // a PyObject is disposed under the GIL — and never after Shutdown()
+        RuntimeData.FormatterType = typeof(NoopFormatter);  // pythonnet's opt-out of BinaryFormatter stashing (.NET 8+)
+        PythonEngine.Shutdown();                            // the interop's handler drains every lease first
+    }
+
+    /// <summary>
+    ///     Runs both collectors to completion — CLR GC + finalizers, pythonnet's deferred decrefs, Python's
+    ///     gc — plus one trivial conversion, which runs the interop's inline lease drain. The live counters
+    ///     are exact after this.
+    /// </summary>
+    public static void Drain()
+    {
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        using (Py.GIL())
+        {
+            Finalizer.Instance.Collect();                   // wrappers the CLR GC finalized (`dynamic` temporaries, for instance) release their Python reference here
+            PythonEngine.RunSimpleString("import gc; gc.collect()");
+            using NDArray probe = np.arange(1);
+            using PyObject conversion = probe.ToNumpyCopy();
+        }
     }
 
     // Ask the `python` on PATH where its shared library lives (what PYTHONNET_PYDLL would name).
@@ -241,62 +236,4 @@ sealed class PythonHost : IDisposable
                 return candidate;
         throw new InvalidOperationException("libpython not found; set PYTHONNET_PYDLL to its full path");
     }
-}
-
-/// <summary>A Python namespace with numpy imported, plus GIL-wrapped one-liners for reading it back.</summary>
-sealed class PyScope : IDisposable
-{
-    public PyModule Module { get; }
-
-    public PyScope(string setup = "import numpy as np")
-    {
-        using (Py.GIL()) { Module = Py.CreateScope(); Module.Exec(setup); }
-    }
-
-    public void Exec(string code) { using (Py.GIL()) Module.Exec(code); }
-    public void Set(string name, PyObject value) { using (Py.GIL()) Module.Set(name, value); }
-    public PyObject Get(string name) => Module.Get(name);                        // call under Py.GIL()
-    public T Eval<T>(string expr) { using (Py.GIL()) { using PyObject r = Module.Eval(expr); return r.As<T>(); } }
-    public string Str(string expr) => Eval<string>($"str({expr})");
-    public bool Bool(string expr) => Eval<bool>($"bool({expr})");
-    public long Long(string expr) => Eval<long>($"int({expr})");
-    public double Float(string expr) => Eval<double>($"float({expr})");
-    public void Dispose()
-    {
-        if (_disposed || !PythonEngine.IsInitialized) return;   // never touch the C-API after Shutdown()
-        _disposed = true;
-        using (Py.GIL()) Module.Dispose();
-    }
-
-    bool _disposed;
-}
-
-/// <summary>Evidence, not narration: one OK/FAIL line per claim; the exit code is 0 only when all hold.</summary>
-sealed class Checklist
-{
-    int _failed;
-
-    public void Section(string title) => Console.WriteLine($"\n-- {title} --");
-
-    public bool That(bool ok, string claim)
-    {
-        Console.WriteLine($"  {(ok ? "OK  " : "FAIL")} {claim}");
-        if (!ok) _failed++;
-        return ok;
-    }
-
-    public void Throws<T>(Action act, string claim, string? containing = null) where T : Exception
-    {
-        try { act(); That(false, $"{claim} — expected {typeof(T).Name}, nothing was thrown"); }
-        catch (T e) { That(containing is null || e.Message.Contains(containing), $"{claim}: {typeof(T).Name}: {FirstLine(e.Message)}"); }
-        catch (Exception e) { That(false, $"{claim} — expected {typeof(T).Name}, got {e.GetType().Name}: {FirstLine(e.Message)}"); }
-    }
-
-    public int Exit()
-    {
-        Console.WriteLine(_failed == 0 ? "\nALL OK" : $"\n{_failed} FAILED");
-        return _failed == 0 ? 0 : 1;
-    }
-
-    static string FirstLine(string s) { int i = s.IndexOfAny(new[] { '\r', '\n' }); return i < 0 ? s : s[..i]; }
 }

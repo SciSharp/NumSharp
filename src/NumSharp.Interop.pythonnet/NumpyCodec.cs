@@ -129,6 +129,17 @@ namespace NumSharp.Interop.PythonNet
         ///     ndarray; <c>str</c> (a char sequence), <c>dict</c>, and <c>range</c> are not accepted.
         /// </remarks>
         public bool DecodeArrayLike { get; init; } = true;
+
+        /// <summary>
+        ///     <c>true</c> (default): <see cref="NDArrayPythonInterop.RegisterCodec()"/> also registers
+        ///     <see cref="TupleCodec"/>, so a C# <see cref="ValueTuple"/> / <see cref="Tuple"/> crosses into
+        ///     Python as a <c>tuple</c> (<c>numpy.zeros((2, 3))</c>, <c>a.item((1, 2))</c>, a shape bound
+        ///     into a scope) and a Python <c>tuple</c> decodes into a C# tuple of the same arity
+        ///     (<c>(long, long) shape = a.shape</c>). pythonnet itself has no tuple conversion — a C# tuple
+        ///     would otherwise reach Python as an opaque wrapped CLR object. <c>false</c>: tuples are left
+        ///     to pythonnet's default handling (or to a tuple codec of your own).
+        /// </summary>
+        public bool ConvertTuples { get; init; } = true;
     }
 
     /// <summary>
@@ -163,23 +174,34 @@ namespace NumSharp.Interop.PythonNet
         public bool CanEncode(Type type) => typeof(NDArray).IsAssignableFrom(type);
 
         /// <inheritdoc/>
+        /// <remarks>
+        ///     The returned wrapper goes through <see cref="EncoderHandoff"/>: pythonnet takes its own reference
+        ///     from it and never disposes it, so without the handoff every implicit encode would keep the
+        ///     export pinned until the CLR finalizer ran.
+        /// </remarks>
         public PyObject TryEncode(object value)
         {
             var nd = (NDArray)value;
             try
             {
+                PyObject encoded;
                 switch (_options.EncodeMode)
                 {
                     case NumpyCodecMode.Copy:
-                        return NDArrayPythonInterop.ToNumpyCopy(nd);
+                        encoded = NDArrayPythonInterop.ToNumpyCopy(nd);
+                        break;
                     case NumpyCodecMode.View:
-                        return NDArrayPythonInterop.ToNumpy(nd);
+                        encoded = NDArrayPythonInterop.ToNumpy(nd);
+                        break;
                     default: // Auto: view-first, copy-fallback. On encode both need a numpy dtype, so the
                              // fallback is a no-op today (every dtype encodes — Decimal converts to
                              // float64); kept for a uniform contract and any future dtype divergence.
-                        try { return NDArrayPythonInterop.ToNumpy(nd); }
-                        catch (NotSupportedException) { return NDArrayPythonInterop.ToNumpyCopy(nd); }
+                        try { encoded = NDArrayPythonInterop.ToNumpy(nd); }
+                        catch (NotSupportedException) { encoded = NDArrayPythonInterop.ToNumpyCopy(nd); }
+                        break;
                 }
+
+                return EncoderHandoff.Hand(encoded);
             }
             catch (NotSupportedException)
             {

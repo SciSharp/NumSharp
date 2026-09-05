@@ -1,5 +1,6 @@
 #:project ../../src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj
 #:property PublishAot=false
+#:property AllowUnsafeBlocks=true
 // Outside this repository, replace the #:project line with the NuGet package:
 //   #:package NumSharp.Interop.pythonnet@0.60.0
 //
@@ -10,6 +11,9 @@
 //      overrides it, null follows it. The trap: a .NET body invoked FROM Python does NOT hold the
 //      GIL — pythonnet's binder releases it around managed code — so leave management ON there.
 //
+//      Read it top to bottom; the comments state what each line leaves behind. The same steps, with
+//      every statement asserted, are test/NumSharp.Tests.Interop/Examples/Example08_Gil.cs.
+//
 //      Run:  dotnet run 08-gil.cs
 
 using System.Diagnostics;
@@ -19,63 +23,54 @@ using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 using var host = PythonHost.Start();
-using var py = new PyScope();
-var check = new Checklist();
+using var scope = NDScope.Open();
+dynamic py = host.Namespace;
 
 // ==== the default: verbs acquire the GIL themselves ==================================================
-check.Section("verbs acquire the GIL themselves");
-check.That(NDArrayPythonInterop.RequireGIL, "NDArrayPythonInterop.RequireGIL defaults to true");
-using NDArray nd = np.arange(4).astype(NPTypeCode.Double);
-PyObject bare = nd.ToNumpy();                              // no Py.GIL() on this thread — the verb took it
+bool managed = NDArrayPythonInterop.RequireGIL;              // true by default
+NDArray nd = np.arange(4).astype(np.float64);
+PyObject bare = nd.ToNumpy();                                // no Py.GIL() on this thread — the verb took it (and released it) itself
 using (Py.GIL())
 {
-    py.Module.Set("g1", bare);
-    bare.Dispose();                                        // YOUR PyObject work (incl. Dispose) still needs the GIL
-    using PyObject nested = nd.ToNumpy();                  // re-entrant under an outer acquisition
-    py.Module.Set("g2", nested);
+    py.g1 = bare;
+    bare.Dispose();                                          // YOUR PyObject work — including Dispose — still needs the GIL
+    py.g2 = nd.ToNumpy();                                    // re-entrant under an outer acquisition
+    bool same = py.np.shares_memory(py.g1, py.g2);           // True: both produced the same shared view
 }
-check.That(py.Bool("np.shares_memory(g1, g2)"), "a bare call and a nested call both produced the same shared view");
 
 // ==== the hot loop: one acquisition, N conversions ==================================================
-check.Section("hot loop: requireGIL:false under ONE outer Py.GIL()");
-var batches = Enumerable.Range(0, 200).Select(i => np.arange(16).astype(NPTypeCode.Double) + i).ToArray();
+NDArray[] batches = Enumerable.Range(0, 200).Select(i => np.arange(16).astype(np.float64) + i).ToArray();
 double total = 0;
-var sw = Stopwatch.StartNew();
-using (Py.GIL())                                                        // ONE acquisition...
+using (Py.GIL())                                             // ONE acquisition...
     foreach (NDArray batch in batches)
-        using (PyObject p = batch.ToNumpy(requireGIL: false))            // ...N conversions inside, no PyGILState_Ensure/Release per call
-        using (PyObject s = p.InvokeMethod("sum"))
-            total += s.As<double>();
-double perCallNoGil = sw.Elapsed.TotalMilliseconds * 1000 / batches.Length;
-sw.Restart();
+    {
+        dynamic p = batch.ToNumpy(requireGIL: false);        // ...N conversions inside, with no PyGILState_Ensure/Release pair per call
+        total += (double)p.sum();
+    }
+// total == 200 * 120 + 16 * (0 + 1 + ... + 199) == 342400
 double total2 = 0;
 foreach (NDArray batch in batches)
-    using (Py.GIL())                                                    // the default shape: every call takes and releases the GIL
-    using (PyObject p = batch.ToNumpy())
-    using (PyObject s = p.InvokeMethod("sum"))
-        total2 += s.As<double>();
-double perCallDefault = sw.Elapsed.TotalMilliseconds * 1000 / batches.Length;
-check.That(total == total2 && total == batches.Length * 120.0 + 16.0 * (199 * 200 / 2), $"both loops computed the same 200 sums ({perCallNoGil:F1} us/call lifted vs {perCallDefault:F1} us/call default)");
-foreach (NDArray b in batches) b.Dispose();
+    using (Py.GIL())                                         // the default shape: every call takes and releases the GIL (measurably slower per call)
+    {
+        dynamic p = batch.ToNumpy();
+        total2 += (double)p.sum();                           // total2 == total
+    }
 
-check.Section("the process-wide opt-out: RequireGIL = false (null parameters follow it)");
-NDArrayPythonInterop.RequireGIL = false;                                 // every call site in the process MUST hold the GIL from now on
+// ==== the process-wide opt-out: RequireGIL = false (null parameters follow it) =====================
+NDArrayPythonInterop.RequireGIL = false;                     // from now on EVERY call site in the process must hold the GIL
 try
 {
     using (Py.GIL())
     {
-        using (PyObject arr = nd.ToNumpy()) py.Module.Set("g3", arr);   // null -> global false -> no-op guard
-        using PyObject src = py.Module.Eval("np.array([7, 8, 9], dtype='i4')");
-        using NDArray copied = src.ToNDArray();                          // null -> global false
-        check.That(copied.GetInt32(2) == 9 && py.Bool("np.shares_memory(g3, g1)"), "under the opt-out every verb runs on the caller's GIL");
-        using PyObject forced = nd.ToNumpy(requireGIL: true);            // an explicit true still acquires (re-entrantly)
-        check.That(forced is not null, "an explicit requireGIL:true overrides the global false");
+        py.g3 = nd.ToNumpy();                                // null -> global false -> the no-op guard; np.shares_memory(g3, g1) == True
+        using PyObject src = py.Eval("np.array([7, 8, 9], dtype='i4')");
+        NDArray copied = src.ToNDArray();                    // null -> global false; copied[2] == 9
+        using PyObject forced = nd.ToNumpy(requireGIL: true);   // an explicit true still acquires (re-entrantly)
     }
 }
-finally { NDArrayPythonInterop.RequireGIL = true; }                      // restore — the opt-out is a process-wide contract
+finally { NDArrayPythonInterop.RequireGIL = true; }          // restore — the opt-out is a process-wide contract
 
 // ==== proof that true REALLY acquires: contention ===================================================
-check.Section("requireGIL:true blocks while another thread owns the GIL");
 using var gilHeld = new ManualResetEventSlim(false);
 using var releaseGil = new ManualResetEventSlim(false);
 using var converted = new ManualResetEventSlim(false);
@@ -83,140 +78,143 @@ var holder = new Thread(() => { using (Py.GIL()) { gilHeld.Set(); releaseGil.Wai
 var converter = new Thread(() =>
 {
     gilHeld.Wait(15_000);
-    PyObject arr = nd.ToNumpy(requireGIL: true);                        // must BLOCK inside PyGILState_Ensure
+    PyObject arr = nd.ToNumpy(requireGIL: true);             // BLOCKS inside PyGILState_Ensure while the holder owns the GIL
     converted.Set();
     using (Py.GIL()) arr.Dispose();
 }) { IsBackground = true };
 holder.Start(); converter.Start();
-bool finishedEarly = converted.Wait(400);
+bool finishedEarly = converted.Wait(400);                    // false: the conversion is still waiting for the holder
 releaseGil.Set();
-converter.Join(15_000); holder.Join(15_000);
-check.That(!finishedEarly && converted.IsSet, "the conversion waited for the holder to release the GIL, then completed");
+converter.Join(15_000); holder.Join(15_000);                 // converted.IsSet == true: it completed once the holder let go
 
 // ==== worker threads with their own arrays ==========================================================
-check.Section("worker threads: each takes the GIL around its own Python work");
-NDArrayPythonInterop.RegisterCodec();
-py.Exec("def weigh(a):\n    return float((a * 0.5).sum())");
+using (Py.GIL()) py.Exec("def weigh(a):\n    return float((a * 0.5).sum())");
 var failures = new System.Collections.Concurrent.ConcurrentQueue<string>();
-var workers = Enumerable.Range(0, 3).Select(id => new Thread(() =>
+Thread[] workers = Enumerable.Range(0, 3).Select(id => new Thread(() =>
 {
-    try
+    using var workerScope = NDScope.Open();                  // a scope is per thread: the worker opens its own for its own arrays
+    for (int k = 0; k < 10; k++)
     {
-        for (int k = 0; k < 10; k++)
-        {
-            using NDArray batch = np.arange(6).astype(NPTypeCode.Double) + id;   // sum 15 + 6*id
-            double weighed;
-            using (Py.GIL())
-            {
-                dynamic weigh = py.Get("weigh");
-                weighed = (double)weigh(batch);                                   // the codec encodes the argument
-            }
-            if (weighed != (15.0 + 6 * id) * 0.5) failures.Enqueue($"worker {id}: {weighed}");
-        }
+        NDArray batch = np.arange(6).astype(np.float64) + id;    // sum 15 + 6 * id
+        double weighed;
+        using (Py.GIL())                                         // each worker takes the GIL around its own Python work
+            weighed = py.weigh(batch);                           // the codec encodes the argument; (15 + 6 * id) * 0.5 comes back
+        if (weighed != (15.0 + 6 * id) * 0.5) failures.Enqueue($"worker {id}: {weighed}");
     }
-    catch (Exception e) { failures.Enqueue($"worker {id}: {e.GetType().Name}: {e.Message}"); }
 }) { IsBackground = true }).ToArray();
-foreach (var w in workers) w.Start();
-foreach (var w in workers) w.Join(30_000);
-check.That(failures.IsEmpty, $"3 workers x 10 calls, no deadlock, no wrong answer {string.Join(" | ", failures)}");
+foreach (Thread w in workers) w.Start();
+foreach (Thread w in workers) w.Join(30_000);
+// failures is empty: 3 workers x 10 calls, no deadlock, no wrong answer
 
 // ==== the trap: a Python -> .NET callback body does NOT hold the GIL ================================
-check.Section("Python -> .NET callback bodies do not hold the GIL");
-// Ground truth from the C-API itself: PyGILState_Check() is safe to call without the GIL.
-IntPtr lib = NativeLibrary.Load(Runtime.PythonDLL!);
-var gilCheck = Marshal.GetDelegateForFunctionPointer<PyGILStateCheck>(NativeLibrary.GetExport(lib, "PyGILState_Check"));
 int inBody = -1;
 string? inside = null;
 using (Py.GIL())
 {
-    check.That(gilCheck() == 1, "PyGILState_Check() == 1 inside our own Py.GIL() block");
+    int here = PyGILState_Check();                           // 1: inside our own Py.GIL() block
     Action callback = () =>
     {
-        inBody = gilCheck();                                                     // pythonnet released the GIL around this body
+        inBody = PyGILState_Check();                         // 0: pythonnet's binder RELEASED the GIL around this managed body
         try
         {
-            using NDArray tmp = np.arange(4).astype(NPTypeCode.Double);
-            PyObject p = tmp.ToNumpy(requireGIL: true);                          // MUST manage the GIL itself here...
+            using NDArray tmp = np.arange(4).astype(np.float64);
+            PyObject p = tmp.ToNumpy(requireGIL: true);      // so the conversion MUST manage the GIL itself here...
             using (Py.GIL()) p.Dispose();
-            inside = "OK";
+            inside = "OK";                                   // ...and does; requireGIL: false in this spot would be an access violation
         }
         catch (Exception e) { inside = $"{e.GetType().Name}: {e.Message}"; }
     };
-    py.Module.Set("gil_cb", callback);
-    py.Module.Exec("gil_cb()");                                                  // Python calls back into .NET
+    py.gil_cb = callback;                                    // a .NET delegate becomes a Python callable
+    py.Exec("gil_cb()");                                     // Python calls back into .NET
 }
-check.That(inBody == 0, "PyGILState_Check() == 0 inside a .NET Action invoked from Python — the binder released it");
-check.That(inside == "OK", $"requireGIL:true inside the callback re-acquires and succeeds ({inside}); requireGIL:false there would be an access violation");
-NativeLibrary.Free(lib);
 
 // ==== the machinery is immune to the policy =========================================================
-check.Section("background lease disposal manages the GIL itself, even under the opt-out");
 NDArrayPythonInterop.RequireGIL = false;
 try
 {
     using (Py.GIL())
     {
-        py.Module.Exec("drainsrc = np.arange(8.0)");
-        using PyObject src = py.Module.Eval("drainsrc");
-        NDArray view = NDArrayPythonInterop.ToNDArrayView(src, allowReadonly: false, requireGIL: false);
-        check.That(NDArrayPythonInterop.LiveImports == 1, "a view taken GIL-less holds a lease");
-        view.Dispose();                                                          // enqueues the lease; the drain thread takes the GIL ITSELF
+        py.Exec("drainsrc = np.arange(8.0)");
+        using PyObject src = py.drainsrc;
+        NDArray view = NDArrayPythonInterop.ToNDArrayView(src, allowReadonly: false, requireGIL: false);   // a view taken GIL-less holds a lease: LiveImports == 1
+        view.Dispose();                                      // enqueues the lease release; the drain takes the GIL ITSELF
     }
-    check.That(Settle(() => NDArrayPythonInterop.LiveImports == 0), "the deferred drain released it without any caller-held GIL");
+    PythonHost.Drain();                                      // LiveImports == 0 — released without any caller-held GIL
 }
 finally { NDArrayPythonInterop.RequireGIL = true; }
 
-check.Section("counters");
-py.Exec("del g1, g2, g3");
-check.That(Settle(() => NDArrayPythonInterop.LiveExports == 0 && NDArrayPythonInterop.LiveImports == 0),
-           $"every pin and lease released (exports {NDArrayPythonInterop.LiveExports}, imports {NDArrayPythonInterop.LiveImports})");
+// ==== who frees what ================================================================================
+// As in the other examples: `scope`, then the namespace (g1, g2, g3 die with their names), then the engine.
 
-return check.Exit();
-
-static bool Settle(Func<bool> done)
+// Ground truth from the C-API itself — PyGILState_Check() is safe to call without the GIL.
+static unsafe int PyGILState_Check()
 {
-    var sw = Stopwatch.StartNew();
-    while (!done() && sw.ElapsedMilliseconds < 5000)
-    {
-        GC.Collect(); GC.WaitForPendingFinalizers();
-        using (Py.GIL())
-        {
-            Finalizer.Instance.Collect();                                  // pythonnet's DEFERRED decrefs: wrappers the CLR GC finalized (e.g. `dynamic` call arguments) release their Python reference here
-            PythonEngine.RunSimpleString("import gc; gc.collect()");
-        }
-        Thread.Sleep(20);
-    }
-    return done();
+    IntPtr lib = NativeLibrary.Load(Runtime.PythonDLL!);
+    var check = (delegate* unmanaged[Cdecl]<int>)NativeLibrary.GetExport(lib, "PyGILState_Check");
+    return check();
 }
 
-[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-delegate int PyGILStateCheck();
-
 // =====================================================================================================
-//  Shared scaffolding — identical in every example (a single-file app cannot share source files).
+//  Scaffolding — identical in every example (a single-file app cannot share source files). Nothing
+//  below is specific to this script: Throws captures an exception the tutorial expects, PythonHost
+//  finds CPython, runs the engine and owns a Python namespace with numpy imported.
 // =====================================================================================================
 
-/// <summary>Finds a CPython that has numpy, starts the engine once, shuts it down crash-free on dispose.</summary>
+static Exception? Throws(Action act) { try { act(); return null; } catch (Exception e) { return e; } }
+
+/// <summary>
+///     Finds a CPython that has numpy, starts the engine once, registers the codec, opens a Python
+///     namespace with numpy imported, and shuts everything down crash-free on dispose.
+/// </summary>
 sealed class PythonHost : IDisposable
 {
+    /// <summary>
+    ///     A Python module where <c>import numpy as np</c> already ran. Hold it as <c>dynamic py</c> and use
+    ///     it under <c>Py.GIL()</c>: <c>py.x = nd</c> binds a NumSharp array as a zero-copy numpy view (the
+    ///     codec runs ToNumpy), <c>NDArray a = py.x</c> decodes one back (AsNDArray whenever a view is
+    ///     possible), <c>py.Exec("...")</c> runs statements, <c>double d = py.Eval("x.sum()")</c> reads a
+    ///     value, and <c>py.np</c> is numpy itself.
+    /// </summary>
+    public PyModule Namespace { get; private set; } = null!;
     bool _down;
 
-    public static PythonHost Start()
+    /// <param name="codec">Register the codec at startup — the normal choice. Two examples pass <c>false</c>
+    /// to show the registration order themselves.</param>
+    public static PythonHost Start(bool codec = true)
     {
-        string dll = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL") ?? Discover();
-        Runtime.PythonDLL = dll;                 // pythonnet needs the shared library, not the interpreter
-        PythonEngine.Initialize();               // once per process (CPython + numpy cannot re-initialize)
-        PythonEngine.BeginAllowThreads();        // release THIS thread's GIL so every thread can take it later
-        Console.WriteLine($"Python {PythonEngine.Version.Split(' ')[0]}  ({dll})");
-        return new PythonHost();
+        Runtime.PythonDLL = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL") ?? Discover();
+        PythonEngine.Initialize();                          // once per process (CPython + numpy cannot re-initialize)
+        PythonEngine.BeginAllowThreads();                   // release THIS thread's GIL so every thread can take it later
+        if (codec) NDArrayPythonInterop.RegisterCodec();    // NDArray <-> numpy and C# tuples <-> Python tuples at every pythonnet boundary; before any As<NDArray>()
+        var host = new PythonHost();
+        using (Py.GIL()) { host.Namespace = Py.CreateScope(); host.Namespace.Exec("import numpy as np"); }
+        return host;
     }
 
     public void Dispose()
     {
         if (_down) return;
         _down = true;
-        RuntimeData.FormatterType = typeof(NoopFormatter);   // pythonnet's opt-out of BinaryFormatter stashing (.NET 8+)
-        PythonEngine.Shutdown();                             // the interop's handler drains every lease first
+        using (Py.GIL()) Namespace.Dispose();               // a PyObject is disposed under the GIL — and never after Shutdown()
+        RuntimeData.FormatterType = typeof(NoopFormatter);  // pythonnet's opt-out of BinaryFormatter stashing (.NET 8+)
+        PythonEngine.Shutdown();                            // the interop's handler drains every lease first
+    }
+
+    /// <summary>
+    ///     Runs both collectors to completion — CLR GC + finalizers, pythonnet's deferred decrefs, Python's
+    ///     gc — plus one trivial conversion, which runs the interop's inline lease drain. The live counters
+    ///     are exact after this.
+    /// </summary>
+    public static void Drain()
+    {
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        using (Py.GIL())
+        {
+            Finalizer.Instance.Collect();                   // wrappers the CLR GC finalized (`dynamic` temporaries, for instance) release their Python reference here
+            PythonEngine.RunSimpleString("import gc; gc.collect()");
+            using NDArray probe = np.arange(1);
+            using PyObject conversion = probe.ToNumpyCopy();
+        }
     }
 
     // Ask the `python` on PATH where its shared library lives (what PYTHONNET_PYDLL would name).
@@ -258,62 +256,4 @@ sealed class PythonHost : IDisposable
                 return candidate;
         throw new InvalidOperationException("libpython not found; set PYTHONNET_PYDLL to its full path");
     }
-}
-
-/// <summary>A Python namespace with numpy imported, plus GIL-wrapped one-liners for reading it back.</summary>
-sealed class PyScope : IDisposable
-{
-    public PyModule Module { get; }
-
-    public PyScope(string setup = "import numpy as np")
-    {
-        using (Py.GIL()) { Module = Py.CreateScope(); Module.Exec(setup); }
-    }
-
-    public void Exec(string code) { using (Py.GIL()) Module.Exec(code); }
-    public void Set(string name, PyObject value) { using (Py.GIL()) Module.Set(name, value); }
-    public PyObject Get(string name) => Module.Get(name);                        // call under Py.GIL()
-    public T Eval<T>(string expr) { using (Py.GIL()) { using PyObject r = Module.Eval(expr); return r.As<T>(); } }
-    public string Str(string expr) => Eval<string>($"str({expr})");
-    public bool Bool(string expr) => Eval<bool>($"bool({expr})");
-    public long Long(string expr) => Eval<long>($"int({expr})");
-    public double Float(string expr) => Eval<double>($"float({expr})");
-    public void Dispose()
-    {
-        if (_disposed || !PythonEngine.IsInitialized) return;   // never touch the C-API after Shutdown()
-        _disposed = true;
-        using (Py.GIL()) Module.Dispose();
-    }
-
-    bool _disposed;
-}
-
-/// <summary>Evidence, not narration: one OK/FAIL line per claim; the exit code is 0 only when all hold.</summary>
-sealed class Checklist
-{
-    int _failed;
-
-    public void Section(string title) => Console.WriteLine($"\n-- {title} --");
-
-    public bool That(bool ok, string claim)
-    {
-        Console.WriteLine($"  {(ok ? "OK  " : "FAIL")} {claim}");
-        if (!ok) _failed++;
-        return ok;
-    }
-
-    public void Throws<T>(Action act, string claim, string? containing = null) where T : Exception
-    {
-        try { act(); That(false, $"{claim} — expected {typeof(T).Name}, nothing was thrown"); }
-        catch (T e) { That(containing is null || e.Message.Contains(containing), $"{claim}: {typeof(T).Name}: {FirstLine(e.Message)}"); }
-        catch (Exception e) { That(false, $"{claim} — expected {typeof(T).Name}, got {e.GetType().Name}: {FirstLine(e.Message)}"); }
-    }
-
-    public int Exit()
-    {
-        Console.WriteLine(_failed == 0 ? "\nALL OK" : $"\n{_failed} FAILED");
-        return _failed == 0 ? 0 : 1;
-    }
-
-    static string FirstLine(string s) { int i = s.IndexOfAny(new[] { '\r', '\n' }); return i < 0 ? s : s[..i]; }
 }

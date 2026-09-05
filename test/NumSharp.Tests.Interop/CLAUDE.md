@@ -201,6 +201,44 @@ assert to a tolerance for cross-machine robustness); this project is the *byte-e
 
 ---
 
+## 7b. The example twins (`Examples/`)
+
+`examples/NumSharp.Interop.pythonnet.Examples/*.cs` are twelve silent, comment-annotated tutorial
+scripts (a `dynamic` Python namespace, one `NDScope` per script, the outcome of each line in a
+comment). **They assert nothing — `Examples/Example01_Bootstrap.cs` … `Example12_Scenarios.cs` are
+their proof**: one test class per script, one test method per section, the SAME code with every
+comment turned into an assertion, on top of `ExampleTestBase` (= `InteropTestBase` + the scripts'
+vocabulary: `py` as `dynamic`, `Throws`, `HasModule`, `Drain`). When a script changes, change its
+twin; when a twin's assertion changes, the script's comment is what it documents.
+
+Four traps the twins had to learn (each cost a red run):
+
+- **A numpy scalar is not a Python `int`.** `PyLong("r2[2]")` on an int64 array fails
+  (`'numpy.int64' value cannot be converted`); pythonnet's primitive conversions never consult
+  codecs. Use `PyLong("int(r2[2])")` / `.item()`. numpy floats ARE Python floats, so `PyFloat` is
+  fine on them — but a 0-d ndarray is neither: `PyFloat("float(z0)")`.
+- **A `dynamic` read hands out a CLR wrapper holding its own Python reference** until the GC (and
+  pythonnet's deferred-decref flush) reach it. Where a reference count is the subject — the
+  lifetime locks (`refcheck=True`), a weakref probe, a counter after `del` — read the object as
+  `using PyObject x = py.name;` and use the explicit verb. In a Debug build the JIT keeps a frame's
+  temporaries alive until the method returns, so such a block lives in its own
+  `[MethodImpl(NoInlining)]` method (the GC-realism rule above) and the counter is read after it
+  returns, through `WaitFor`/`Pump`.
+- **An implicit ENCODE used to pin its export until a GC**: pythonnet takes its own reference from
+  the wrapper an `IPyObjectEncoder` returns and never disposes the wrapper. `EncoderHandoff` now
+  disposes the previous encode's wrapper at the next encode on the thread, and at the next
+  conversion verb (`DrainPending` flushes the thread's slot) — so `py.win = window` in a loop keeps
+  ONE export live, and the suite's `Pump()` (a conversion) is what releases the last one. Pinned by
+  `EncoderHandoffTests`. A `dynamic` READ of an array (`py.win.std()`) is still a wrapper; loops
+  read a statistic through `py.Eval("win.std()")` instead.
+- **`RegisterArrayAdapter` and `RegisterCodec` are process-wide and sticky**, so a twin can only
+  pin the idempotent half (`false` on the second call); the ordering trap of the codec is the
+  script's live demonstration and `DocExamples_PythonnetNumpyPage`'s, not the twin's.
+
+`TupleCodecTests` pins the other package change the tour produced: C# tuples cross as Python
+tuples and back (`numpy.zeros((2, 3))`, `(long, long) shape = a.shape`) through `TupleCodec`,
+registered by `RegisterCodec()`.
+
 ## 8. Running
 
 ```bash

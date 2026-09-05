@@ -3,11 +3,13 @@
 // Outside this repository, replace the #:project line with the NuGet package:
 //   #:package NumSharp.Interop.pythonnet@0.60.0
 //
-// 12 — Scenarios: realistic application shapes driven end to end through the interop, each
-//      cross-checked against a pure-NumSharp recomputation and the live counters. An ML inference
-//      hand-off, an in-place image pipeline, a long-lived telemetry ring, a Python-owned dataset
-//      outliving its Python references under NumSharp kernels, a co-simulation with mixed ownership,
-//      a codec-driven service loop, generators, Python exceptions, JSON, and faulty inputs.
+// 12 — Scenarios: realistic application shapes driven end to end through the interop. An ML
+//      inference hand-off, an in-place image pipeline, a long-lived telemetry ring, a Python-owned
+//      dataset outliving its Python references under NumSharp kernels, a co-simulation with mixed
+//      ownership, a codec-driven service loop, generators, Python exceptions, JSON, and faulty inputs.
+//
+//      Read it top to bottom; the comments state what each line leaves behind. The same steps, with
+//      every statement asserted, are test/NumSharp.Tests.Interop/Examples/Example12_Scenarios.cs.
 //
 //      Run:  dotnet run 12-scenarios.cs
 
@@ -17,199 +19,198 @@ using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 using var host = PythonHost.Start();
-using var py = new PyScope();
-var check = new Checklist();
-NDArrayPythonInterop.RegisterCodec();
-
-void Export(string name, NDArray nd) { using (Py.GIL()) { using PyObject p = nd.ToNumpy(); py.Set(name, p); } }
-NDArray Import(string expr) { using (Py.GIL()) { using PyObject p = py.Module.Eval(expr); return p.ToNDArray(); } }
-NDArray View(string expr) { using (Py.GIL()) { using PyObject p = py.Module.Eval(expr); return p.AsNDArray(); } }
+using var scope = NDScope.Open();
+dynamic py = host.Namespace;
 
 // ==== 1. ML inference: C# owns feature engineering, Python owns the model ============================
-check.Section("ML inference: features cross zero-copy, predictions come back, every batch cross-checked");
-using NDArray weights = new NDArray(new double[] { 0.5, -1.0, 2.0, 0.25 });
-using (Py.GIL()) { using PyObject w = weights.ToNumpyCopy(); py.Set("w", w); }
-bool allBatches = true;
-for (int b = 0; b < 10; b++)
-{
-    using NDArray feats = np.arange(b, b + 12).astype(NPTypeCode.Double).reshape(3, 4) / 4.0;
-    Export("batch", feats);
-    py.Exec("pred = batch.dot(w) - batch.mean()");
-    using NDArray pred = Import("pred");
-    using NDArray expected = np.dot(feats, weights) - np.mean(feats);
-    for (int i = 0; i < 3; i++) allBatches &= Math.Abs(pred.GetDouble(i) - expected.GetDouble(i)) < 1e-9;
-}
-check.That(allBatches, "10 batches: python's batch.dot(w) - batch.mean() == NumSharp's np.dot/np.mean");
-
-// ==== 2. Image pipeline: Python edits a C#-owned uint8 image IN PLACE ================================
-check.Section("image pipeline: in-place brightness in Python, then crop statistics on a strided window");
-using NDArray img = np.arange(32 * 32 * 3).astype(NPTypeCode.Byte).reshape(32, 32, 3);
-Export("img", img);
-py.Exec("img[:] = np.minimum(img.astype('i2') + 7, 255).astype('u1')");        // numpy writes NumSharp's pixels
-byte original = (byte)(((5 * 32 + 7) * 3 + 1) % 256);
-check.That(img.GetByte(5, 7, 1) == (byte)Math.Min(255, original + 7), "pixel (5,7,1) was brightened in place — no copy anywhere");
-using NDArray crop = img["8:24, 8:24, :"];
-Export("crop", crop);
-check.That(py.Bool("np.shares_memory(crop, img)"), "the crop is a strided window over the same buffer");
-check.That(Math.Abs(py.Float("crop.mean()") - np.mean(crop).GetDouble()) < 1e-9, "both sides agree on the crop's mean");
-
-// ==== 3. Telemetry ring: hundreds of window exports, bounded live count ==============================
-check.Section("telemetry ring: 150 sliding-window exports drain as the scope name is rebound");
-using NDArray ring = np.zeros(new Shape(256));
-var rnd = new Random(42);
-int e0 = NDArrayPythonInterop.LiveExports;                                        // batch/img/crop are still bound in the scope
-int peak = 0;
-bool statsOk = true;
-for (int step = 0; step < 150; step++)
-{
-    int start = step * 17 % 192;
-    for (int k = 0; k < 16; k++) ring[start + k] = rnd.NextDouble() * 10;
-    using NDArray window = ring[$"{start}:{start + 16}"];
-    Export("w", window);                                                         // rebinding "w" drops the previous export
-    statsOk &= Math.Abs(py.Float("w.std()") - np.std(window).GetDouble()) < 1e-9;
-    peak = Math.Max(peak, NDArrayPythonInterop.LiveExports);
-}
-check.That(statsOk, "every window's std agrees with NumSharp's");
-py.Exec("del w");
-check.That(Settle(() => NDArrayPythonInterop.LiveExports == e0) && peak < e0 + 8, $"live exports never grew unbounded (peak {peak - e0} above the {e0} still bound) and drained back");
-
-// ==== 4. A Python dataset outlives its Python references under NumSharp kernels =====================
-check.Section("dataset hand-off: Python builds it, NumSharp keeps it alive and computes over it");
-py.Exec("ds = {'x': np.arange(12, dtype='f8').reshape(3, 4) * 0.5, 'y': np.arange(3, dtype='i8') * 10}");
-using NDArray x = View("ds['x']");
-using NDArray y = View("ds['y']");
-py.Exec("del ds\nimport gc; gc.collect()");                                      // only our leases keep the arrays now
-check.That(np.sum(x).GetDouble() == 33.0 && np.mean(x).GetDouble() == 2.75 && np.sum(y).GetInt64() == 30, "sum/mean kernels run over leased Python memory: 33.0, 2.75, 30");
-using NDArray scaled = x * 2.0;
-check.That(scaled.GetDouble(2, 3) == 11.0 && x.GetDouble(2, 3) == 5.5, "elementwise kernels read the lease and write fresh NumSharp memory");
-
-// ==== 5. Co-simulation: positions in C#, velocities in Python, both integrated in place =============
-check.Section("co-simulation: mixed ownership stays coherent over 20 steps");
-using NDArray pos = np.zeros(new Shape(8));
-Export("pos", pos);
-py.Exec("vel = np.arange(8, dtype='f8') - 3.5");
-using NDArray vel = View("vel");
-for (int step = 0; step < 20; step++)
-{
-    py.Exec("pos += vel * 0.1");                                                 // Python integrates C#-owned positions in place
-    using NDArray damped = vel * 0.9;
-    np.copyto(vel, damped);                                                      // C# damps Python-owned velocities in place
-}
-double decay = Math.Pow(0.9, 20);
-bool coherent = true;
-for (int i = 0; i < 8; i++)
-{
-    double v0 = i - 3.5;
-    coherent &= Math.Abs(pos.GetDouble(i) - v0 * (1 - decay)) < 1e-9 && Math.Abs(py.Float($"vel[{i}]") - v0 * decay) < 1e-9;
-}
-check.That(coherent, "positions (C# reads its own buffer) and velocities (Python reads its own) match the closed form");
-
-// ==== 6. A long-lived service through the codec: no explicit conversion calls ========================
-check.Section("service loop: 40 calls through the codec, results decoded back as views");
-py.Exec("def process(a):\n    return a * 2.0 + 1.0");
-bool loopOk = true;
-for (int i = 0; i < 40; i++)
-{
-    using NDArray batch = np.arange(6).astype(NPTypeCode.Double) + i;
-    using (Py.GIL())
-    {
-        dynamic process = py.Get("process");
-        using PyObject r = (PyObject)process(batch);                             // batch auto-encoded, r a fresh ndarray
-        using NDArray result = r.As<NDArray>();                                  // auto-decoded as a view of r
-        for (int j = 0; j < 6; j++) loopOk &= result.GetDouble(j) == (j + i) * 2.0 + 1.0;
-    }
-}
-check.That(loopOk, "every call's result is correct");
-
-// ==== 7. Generators stream chunks into NumSharp =====================================================
-check.Section("generators: each yielded array is copied out and stacked");
-py.Exec("def chunks(n):\n    for i in range(n):\n        yield np.arange(3, dtype='f8') + 10 * i");
-var rows = new List<NDArray>();
+NDArray weights = np.array(new double[] { 0.5, -1.0, 2.0, 0.25 });
 using (Py.GIL())
 {
-    using PyObject generator = py.Module.Eval("chunks(4)");
-    using var iterator = PyIter.GetIter(generator);
-    while (iterator.MoveNext())
+    py.w = weights.ToNumpyCopy();                                   // the model's weights live on the Python side
+    for (int b = 0; b < 10; b++)
+    using (NDScope.Open())                                          // one scope per batch: the batch's temporaries are released as it ends
     {
-        using PyObject chunk = iterator.Current;
-        rows.Add(chunk.ToNDArray());
+        NDArray feats = np.arange(b, b + 12).astype(np.float64).reshape(3, 4) / 4.0;   // C# engineers the features...
+        py.batch = feats;                                           // ...they cross zero-copy...
+        NDArray pred = py.Eval("batch.dot(w) - batch.mean()");      // ...Python's model predicts, and the prediction comes back (a view of numpy's fresh result)
+        NDArray expected = np.dot(feats, weights) - np.mean(feats); // == pred, to 1e-9, for every batch
     }
 }
-using NDArray stacked = np.vstack(rows.ToArray());
-check.That(stacked.shape.SequenceEqual(new long[] { 4, 3 }) && stacked.GetDouble(3, 2) == 32.0, "4 chunks -> (4,3), last element 30 + 2");
-foreach (NDArray r in rows) r.Dispose();
+
+// ==== 2. Image pipeline: Python edits a C#-owned uint8 image IN PLACE ================================
+NDArray img = np.arange(32 * 32 * 3).astype(np.uint8).reshape(32, 32, 3);
+NDArray crop = img["8:24, 8:24, :"];
+using (Py.GIL())
+{
+    py.img = img;
+    py.Exec("img[:] = np.minimum(img.astype('i2') + 7, 255).astype('u1')");   // numpy writes NumSharp's pixels: every pixel is 7 brighter, in place, no copy anywhere
+    py.crop = crop;                                                 // a strided window over the same buffer: np.shares_memory(crop, img) == True
+    double cropMean = py.crop.mean();                               // == np.mean(crop), to 1e-9 — both sides agree
+}
+
+// ==== 3. Telemetry ring: hundreds of window exports, a bounded live count ============================
+NDArray ring = np.zeros(new Shape(256));
+var rnd = new Random(42);
+using (Py.GIL())
+{
+    int baseline = NDArrayPythonInterop.LiveExports;               // batch, img and crop are still bound in the namespace
+    for (int step = 0; step < 150; step++)
+    using (NDScope.Open())
+    {
+        int start = step * 17 % 192;
+        for (int k = 0; k < 16; k++) ring[start + k] = rnd.NextDouble() * 10;
+        NDArray window = ring[$"{start}:{start + 16}"];
+        py.win = window;                                            // rebinding `win` drops the previous export: the live count never grows unbounded (it peaks a few above the baseline)
+        double std = py.Eval("win.std()");                          // == np.std(window), to 1e-9, every step — read through Eval: a dynamic `py.win` would hand out a wrapper that keeps the previous window's export alive until the GC gets to it
+    }
+    py.Exec("del win");
+    PythonHost.Drain();                                             // LiveExports is back at the baseline
+}
+
+// ==== 4. A Python dataset outlives its Python references under NumSharp kernels =====================
+NDArray x, y;
+using (Py.GIL())
+{
+    py.Exec("ds = {'x': np.arange(12, dtype='f8').reshape(3, 4) * 0.5, 'y': np.arange(3, dtype='i8') * 10}");
+    x = py.ds["x"];                                                 // two leases on Python's arrays
+    y = py.ds["y"];
+    py.Exec("del ds\nimport gc; gc.collect()");                     // only the leases keep the arrays alive now
+}
+double total = np.sum(x).GetDouble();                               // 33.0 — sum / mean kernels run over leased Python memory
+double mean = np.mean(x).GetDouble();                               // 2.75
+long ySum = np.sum(y).GetInt64();                                   // 30
+NDArray scaled = x * 2.0;                                           // elementwise kernels read the lease and write fresh NumSharp memory: scaled[2, 3] == 11.0, x[2, 3] == 5.5
+
+// ==== 5. Co-simulation: positions in C#, velocities in Python, both integrated in place =============
+NDArray pos = np.zeros(new Shape(8));
+NDArray vel;
+using (Py.GIL())
+{
+    py.pos = pos;
+    py.Exec("vel = np.arange(8, dtype='f8') - 3.5");
+    vel = py.vel;
+    for (int step = 0; step < 20; step++)
+    using (NDScope.Open())
+    {
+        py.Exec("pos += vel * 0.1");                                // Python integrates C#-owned positions in place
+        np.copyto(vel, vel * 0.9);                                  // C# damps Python-owned velocities in place
+    }
+}
+// after 20 steps: pos[i] == (i - 3.5) * (1 - 0.9^20) and vel[i] == (i - 3.5) * 0.9^20, to 1e-9 — mixed ownership stays coherent
+
+// ==== 6. A long-lived service through the codec: no explicit conversion calls ========================
+using (Py.GIL())
+{
+    py.Exec("def process(a):\n    return a * 2.0 + 1.0");
+    for (int i = 0; i < 40; i++)
+    using (NDScope.Open())
+    {
+        NDArray batch = np.arange(6).astype(np.float64) + i;
+        NDArray result = py.process(batch);                         // the batch is auto-encoded, the fresh ndarray auto-decoded as a view: result[j] == (j + i) * 2 + 1
+    }
+}
+
+// ==== 7. Generators stream chunks into NumSharp =====================================================
+using (Py.GIL())
+{
+    py.Exec("def chunks(n):\n    for i in range(n):\n        yield np.arange(3, dtype='f8') + 10 * i");
+    var rows = new List<NDArray>();
+    foreach (PyObject chunk in new PyIterable(py.chunks(4)))        // each yielded array...
+        rows.Add(chunk.ToNDArray());                                // ...is copied out (the generator's temporaries do not outlive the loop)
+    NDArray stacked = np.vstack(rows.ToArray());                    // (4,3); stacked[3, 2] == 32.0
+}
 
 // ==== 8. Exceptions, JSON, faulty inputs ============================================================
-check.Section("Python exceptions surface as PythonException; the engine stays usable");
-Export("ex", np.arange(3).astype(NPTypeCode.Double));
-check.Throws<PythonException>(() => py.Exec("raise ValueError('bad shape: ' + str(ex.shape))"), "a raise inside Python", "bad shape: (3,)");
-py.Exec("ex[0] = 7.5");
-check.That(py.Float("ex.sum()") == 10.5, "the same shared array keeps working afterwards");
-
-check.Section("JSON round trip through the stdlib");
-using NDArray series = np.arange(5).astype(NPTypeCode.Double) * 1.5;
-Export("jx", series);
-py.Exec("import json\npayload = json.dumps(jx.tolist())");
-check.That(py.Str("payload") == "[0.0, 1.5, 3.0, 4.5, 6.0]", $"json.dumps(jx.tolist()) == {py.Str("payload")}");
-using NDArray back = Import("np.asarray(json.loads(payload), dtype='f8')");
-check.That(back.GetDouble(4) == 6.0, "json.loads -> np.asarray -> ToNDArray is lossless");
-
-check.Section("faulty inputs leave no half-taken state");
-int e1 = NDArrayPythonInterop.LiveExports, i1 = NDArrayPythonInterop.LiveImports;
-check.Throws<InvalidOperationException>(() => View("b'abcd'").Dispose(), "a read-only source without allowReadonly");
-check.Throws<NotSupportedException>(() => Import("{'a': 1}").Dispose(), "a dict");
-check.Throws<NotSupportedException>(() => Import("np.zeros(2, dtype=[('x', 'i4'), ('y', 'f8')])").Dispose(), "a structured dtype");
-check.Throws<ObjectDisposedException>(() => { var dead = np.arange(3); dead.Dispose(); using (Py.GIL()) dead.ToNumpy().Dispose(); }, "a disposed NDArray");
-check.That(NDArrayPythonInterop.LiveExports == e1 && NDArrayPythonInterop.LiveImports == i1, "no pin or lease survived a failed conversion");
-
-check.Section("counters");
-py.Exec("del batch, pred, img, crop, pos, vel, ex, jx");
-check.That(Settle(() => NDArrayPythonInterop.LiveExports == 0 && NDArrayPythonInterop.LiveImports <= 3),
-           $"pins released; the only leases left are the three views this script still holds (exports {NDArrayPythonInterop.LiveExports}, imports {NDArrayPythonInterop.LiveImports})");
-
-return check.Exit();
-
-static bool Settle(Func<bool> done)
+using (Py.GIL())
 {
-    var sw = Stopwatch.StartNew();
-    while (!done() && sw.ElapsedMilliseconds < 5000)
-    {
-        GC.Collect(); GC.WaitForPendingFinalizers();
-        using (Py.GIL())
-        {
-            Finalizer.Instance.Collect();                                  // pythonnet's DEFERRED decrefs: wrappers the CLR GC finalized (e.g. `dynamic` call arguments) release their Python reference here
-            PythonEngine.RunSimpleString("import gc; gc.collect()");
-        }
-        Thread.Sleep(20);
-    }
-    return done();
+    py.ex = np.arange(3).astype(np.float64);
+    Exception? raised = Throws(() => py.Exec("raise ValueError('bad shape: ' + str(ex.shape))"));   // PythonException: bad shape: (3,) — a Python raise is a .NET exception; the engine stays usable
+    py.Exec("ex[0] = 7.5");
+    double sum = py.ex.sum();                                       // 10.5: the same shared array keeps working afterwards
+
+    py.jx = np.arange(5).astype(np.float64) * 1.5;
+    py.Exec("import json\npayload = json.dumps(jx.tolist())");      // "[0.0, 1.5, 3.0, 4.5, 6.0]"
+    NDArray back = py.Eval("np.asarray(json.loads(payload), dtype='f8')");   // json.loads -> np.asarray -> NDArray: back[4] == 6.0, lossless
+
+    int exports = NDArrayPythonInterop.LiveExports, imports = NDArrayPythonInterop.LiveImports;
+    using PyObject bytes = py.Eval("b'abcd'");
+    Exception? readOnly = Throws(() => bytes.AsNDArray());          // InvalidOperationException: a read-only source without allowReadonly
+    using PyObject dict = py.Eval("{'a': 1}");
+    Exception? notArrayLike = Throws(() => dict.ToNDArray());       // NotSupportedException: a dict
+    using PyObject rec = py.Eval("np.zeros(2, dtype=[('x', 'i4'), ('y', 'f8')])");
+    Exception? structured = Throws(() => rec.ToNDArray());          // NotSupportedException: a structured dtype
+    NDArray dead = np.arange(3);
+    dead.Dispose();
+    Exception? disposed = Throws(() => dead.ToNumpy());             // ObjectDisposedException: a disposed NDArray
+    // LiveExports == exports and LiveImports == imports: no pin or lease survives a failed conversion
 }
 
+// ==== who frees what ================================================================================
+// When this script ends: `scope` releases every array above — x, y, vel, back and the rest, so their leases
+// go back to Python; `host` drops the namespace, so w, batch, img, crop, pos, ex and jx die with their names
+// and the export pins with them; then the engine shuts down. LiveExports / LiveImports both read 0 afterwards.
+
 // =====================================================================================================
-//  Shared scaffolding — identical in every example (a single-file app cannot share source files).
+//  Scaffolding — identical in every example (a single-file app cannot share source files). Nothing
+//  below is specific to this script: Throws captures an exception the tutorial expects, PythonHost
+//  finds CPython, runs the engine and owns a Python namespace with numpy imported.
 // =====================================================================================================
 
-/// <summary>Finds a CPython that has numpy, starts the engine once, shuts it down crash-free on dispose.</summary>
+static Exception? Throws(Action act) { try { act(); return null; } catch (Exception e) { return e; } }
+
+/// <summary>
+///     Finds a CPython that has numpy, starts the engine once, registers the codec, opens a Python
+///     namespace with numpy imported, and shuts everything down crash-free on dispose.
+/// </summary>
 sealed class PythonHost : IDisposable
 {
+    /// <summary>
+    ///     A Python module where <c>import numpy as np</c> already ran. Hold it as <c>dynamic py</c> and use
+    ///     it under <c>Py.GIL()</c>: <c>py.x = nd</c> binds a NumSharp array as a zero-copy numpy view (the
+    ///     codec runs ToNumpy), <c>NDArray a = py.x</c> decodes one back (AsNDArray whenever a view is
+    ///     possible), <c>py.Exec("...")</c> runs statements, <c>double d = py.Eval("x.sum()")</c> reads a
+    ///     value, and <c>py.np</c> is numpy itself.
+    /// </summary>
+    public PyModule Namespace { get; private set; } = null!;
     bool _down;
 
-    public static PythonHost Start()
+    /// <param name="codec">Register the codec at startup — the normal choice. Two examples pass <c>false</c>
+    /// to show the registration order themselves.</param>
+    public static PythonHost Start(bool codec = true)
     {
-        string dll = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL") ?? Discover();
-        Runtime.PythonDLL = dll;                 // pythonnet needs the shared library, not the interpreter
-        PythonEngine.Initialize();               // once per process (CPython + numpy cannot re-initialize)
-        PythonEngine.BeginAllowThreads();        // release THIS thread's GIL so every thread can take it later
-        Console.WriteLine($"Python {PythonEngine.Version.Split(' ')[0]}  ({dll})");
-        return new PythonHost();
+        Runtime.PythonDLL = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL") ?? Discover();
+        PythonEngine.Initialize();                          // once per process (CPython + numpy cannot re-initialize)
+        PythonEngine.BeginAllowThreads();                   // release THIS thread's GIL so every thread can take it later
+        if (codec) NDArrayPythonInterop.RegisterCodec();    // NDArray <-> numpy and C# tuples <-> Python tuples at every pythonnet boundary; before any As<NDArray>()
+        var host = new PythonHost();
+        using (Py.GIL()) { host.Namespace = Py.CreateScope(); host.Namespace.Exec("import numpy as np"); }
+        return host;
     }
 
     public void Dispose()
     {
         if (_down) return;
         _down = true;
-        RuntimeData.FormatterType = typeof(NoopFormatter);   // pythonnet's opt-out of BinaryFormatter stashing (.NET 8+)
-        PythonEngine.Shutdown();                             // the interop's handler drains every lease first
+        using (Py.GIL()) Namespace.Dispose();               // a PyObject is disposed under the GIL — and never after Shutdown()
+        RuntimeData.FormatterType = typeof(NoopFormatter);  // pythonnet's opt-out of BinaryFormatter stashing (.NET 8+)
+        PythonEngine.Shutdown();                            // the interop's handler drains every lease first
+    }
+
+    /// <summary>
+    ///     Runs both collectors to completion — CLR GC + finalizers, pythonnet's deferred decrefs, Python's
+    ///     gc — plus one trivial conversion, which runs the interop's inline lease drain. The live counters
+    ///     are exact after this.
+    /// </summary>
+    public static void Drain()
+    {
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        using (Py.GIL())
+        {
+            Finalizer.Instance.Collect();                   // wrappers the CLR GC finalized (`dynamic` temporaries, for instance) release their Python reference here
+            PythonEngine.RunSimpleString("import gc; gc.collect()");
+            using NDArray probe = np.arange(1);
+            using PyObject conversion = probe.ToNumpyCopy();
+        }
     }
 
     // Ask the `python` on PATH where its shared library lives (what PYTHONNET_PYDLL would name).
@@ -251,62 +252,4 @@ sealed class PythonHost : IDisposable
                 return candidate;
         throw new InvalidOperationException("libpython not found; set PYTHONNET_PYDLL to its full path");
     }
-}
-
-/// <summary>A Python namespace with numpy imported, plus GIL-wrapped one-liners for reading it back.</summary>
-sealed class PyScope : IDisposable
-{
-    public PyModule Module { get; }
-
-    public PyScope(string setup = "import numpy as np")
-    {
-        using (Py.GIL()) { Module = Py.CreateScope(); Module.Exec(setup); }
-    }
-
-    public void Exec(string code) { using (Py.GIL()) Module.Exec(code); }
-    public void Set(string name, PyObject value) { using (Py.GIL()) Module.Set(name, value); }
-    public PyObject Get(string name) => Module.Get(name);                        // call under Py.GIL()
-    public T Eval<T>(string expr) { using (Py.GIL()) { using PyObject r = Module.Eval(expr); return r.As<T>(); } }
-    public string Str(string expr) => Eval<string>($"str({expr})");
-    public bool Bool(string expr) => Eval<bool>($"bool({expr})");
-    public long Long(string expr) => Eval<long>($"int({expr})");
-    public double Float(string expr) => Eval<double>($"float({expr})");
-    public void Dispose()
-    {
-        if (_disposed || !PythonEngine.IsInitialized) return;   // never touch the C-API after Shutdown()
-        _disposed = true;
-        using (Py.GIL()) Module.Dispose();
-    }
-
-    bool _disposed;
-}
-
-/// <summary>Evidence, not narration: one OK/FAIL line per claim; the exit code is 0 only when all hold.</summary>
-sealed class Checklist
-{
-    int _failed;
-
-    public void Section(string title) => Console.WriteLine($"\n-- {title} --");
-
-    public bool That(bool ok, string claim)
-    {
-        Console.WriteLine($"  {(ok ? "OK  " : "FAIL")} {claim}");
-        if (!ok) _failed++;
-        return ok;
-    }
-
-    public void Throws<T>(Action act, string claim, string? containing = null) where T : Exception
-    {
-        try { act(); That(false, $"{claim} — expected {typeof(T).Name}, nothing was thrown"); }
-        catch (T e) { That(containing is null || e.Message.Contains(containing), $"{claim}: {typeof(T).Name}: {FirstLine(e.Message)}"); }
-        catch (Exception e) { That(false, $"{claim} — expected {typeof(T).Name}, got {e.GetType().Name}: {FirstLine(e.Message)}"); }
-    }
-
-    public int Exit()
-    {
-        Console.WriteLine(_failed == 0 ? "\nALL OK" : $"\n{_failed} FAILED");
-        return _failed == 0 ? 0 : 1;
-    }
-
-    static string FirstLine(string s) { int i = s.IndexOfAny(new[] { '\r', '\n' }); return i < 0 ? s : s[..i]; }
 }

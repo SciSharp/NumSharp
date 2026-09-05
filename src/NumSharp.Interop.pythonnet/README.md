@@ -12,7 +12,9 @@ PythonEngine.Initialize();
 ```
 
 > **Runnable tour:** [`examples/NumSharp.Interop.pythonnet.Examples`](../../examples/NumSharp.Interop.pythonnet.Examples/README.md)
-> — twelve single-file `dotnet run` scripts covering every feature below, each printing OK/FAIL per claim.
+> — twelve single-file `dotnet run` tutorials covering every feature below, written for reading (a `dynamic`
+> Python namespace, one `NDScope` per script, the outcome of each line in a comment); their asserted twins
+> live in [`test/NumSharp.Tests.Interop/Examples`](../../test/NumSharp.Tests.Interop/Examples).
 
 ## The four verbs
 
@@ -160,6 +162,16 @@ using (Py.GIL())
 | `Copy` | Always an independent copy — no shared memory, no Py_buffer lock, total coverage. |
 
 Plus `DecodeArrayAdapters` (default `true`, including PyTorch and Pandas), `DecodeAnyBuffer` (default `true`) and `DecodeArrayLike` (default `true` for numeric builtin containers). NumPy `ndarray` subclasses decode via an `__mro__` walk.
+
+**Tuples.** pythonnet has no tuple conversion of its own — through `dynamic`, `numpy.zeros((2, 3))` used to hand numpy an opaque wrapped `System.ValueTuple`. `RegisterCodec()` therefore also registers `TupleCodec` (`NumpyCodecOptions.ConvertTuples`, default `true`): a C# `ValueTuple`/`Tuple` of any arity — nested, mixed, an `NDArray` element becoming a numpy view, `null` becoming `None` — crosses as a Python `tuple`, and a Python `tuple` (or a subclass such as a namedtuple or `torch.Size`) decodes into a C# tuple of the **same** arity; a length mismatch or a `list` is declined. So shapes, axes and multi-indices read the numpy way:
+
+```csharp
+dynamic z = numpy.zeros((2, 3));            // a C# tuple is the shape
+(long, long) strides = z.strides;           // (24, 8)
+double corner = z.item((1, 2));             // a tuple multi-index
+```
+
+**Implicit encodes do not linger.** pythonnet takes its own reference from the wrapper an encoder returns and never disposes that wrapper, which would leave every `scope.Set("x", nd)` / `py.x = nd` / `numpy.sum(nd)` export pinned until the CLR finalizer ran (a 150-iteration loop meant 150 live exports). The codec therefore hands its wrapper to a per-thread slot that is disposed at the next encode on that thread and at the next conversion verb, so a rebinding loop keeps exactly one export live. A `dynamic` *read* of a numpy array (`py.x.sum()`) is an ordinary pythonnet wrapper and still lives until the GC; where a reference count matters, read the object as `using PyObject` or read a scalar through `scope.Eval(...)`.
 
 > **`Auto` decode shares memory.** Under the default, `pyObj.As<NDArray>()` on a contiguous/strided-numpy source is a zero-copy view: mutations flow both ways, read-only sources decode as non-writeable views, and the view holds a `Py_buffer` lock on the source (a `bytearray` cannot be resized while it lives). Use `DecodeMode = Copy` when you want a detached snapshot that never touches the Python object.
 

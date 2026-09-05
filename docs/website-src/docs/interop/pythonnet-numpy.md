@@ -379,6 +379,16 @@ As<NDArray>(np.sqrt(c))   Double, writeable view:
 
 <sub>See here [`Codec_RegisterOnce_ThenSetAndAsJustWork`][gate]</sub>
 
+An implicit encode does not linger: pythonnet takes its own reference from the wrapper an encoder
+returns and never disposes that wrapper, which would keep every `scope.Set("x", nd)` / `py.x = nd` /
+`numpy.sum(nd)` export pinned until the CLR finalizer ran. The codec hands its wrapper to a per-thread
+slot that is disposed at the next encode on that thread and at the next conversion verb, so rebinding
+a name in a loop keeps exactly one export live. (A `dynamic` *read* of a numpy array is an ordinary
+pythonnet wrapper and lives until the GC; where a reference count matters, read the object as
+`using PyObject` or read a scalar through `scope.Eval(...)`.)
+
+<sub>See here [`RebindingANameThroughTheCodec_KeepsTheLiveExportCountBounded`][gate-handoff]</sub>
+
 ### When must I register it?
 
 **Before the first `As<NDArray>()` anywhere in the process — this is the one ordering trap.**
@@ -422,6 +432,33 @@ View-mode TryDecode: complex64 -> False (declined), float64 -> True (view)
 ```
 
 <sub>See here [`Codec_Modes_AutoViewCopy_AndTheDecimalConversion`][gate]</sub>
+
+### Do C# tuples cross as Python tuples?
+
+**Yes — `RegisterCodec()` also registers `TupleCodec`, because pythonnet has no tuple conversion of
+its own.** Without it a shape written the numpy way through `dynamic`, `numpy.zeros((2, 3))`, reaches
+numpy as an opaque wrapped `System.ValueTuple` ("expected a sequence of integers or a single integer"),
+and `(long, long) shape = a.shape` cannot convert. With it every place a tuple is idiomatic Python reads
+the same in C#:
+
+```csharp
+using (Py.GIL())
+{
+    dynamic numpy = Py.Import("numpy");
+    dynamic z = numpy.zeros((2, 3));                 // a C# tuple is the shape
+    (long, long) strides = z.strides;                // a Python tuple decodes into a C# one: (24, 8)
+    double corner = z.item((1, 2));                  // a tuple multi-index
+    dynamic b = numpy.broadcast_to(nd, (2, 4));      // an NDArray and a tuple in one call
+}
+```
+
+Any arity encodes (8+ elements ride the `Rest` slot), nested tuples and mixed element types too, and
+every element crosses through the registered codecs — an `NDArray` element becomes a numpy view, `null`
+becomes `None`. Decoding accepts a Python `tuple` or subclass (a namedtuple, `torch.Size`) into a C#
+tuple of the **same** arity; a length mismatch or a `list` is declined, never truncated. Opt out with
+`NumpyCodecOptions.ConvertTuples = false`.
+
+<sub>See here [`Encode_ValueTupleShape_ReachesNumpyAsATuple`][gate-tuples], [`Decode_ShapeAndStrides_IntoValueTuples_ThroughDynamic`][gate-tuples]</sub>
 
 ---
 
@@ -581,14 +618,18 @@ import route works uniformly across pythonnet 3.0.x.
 | 23 | Every dtype row maps as printed; the four specials convert or refuse | round-trips + verbatim errors | [`Dtypes_EveryRowRoundTrips`][gate] |
 | 24 | The version table is the guard's own mapping | table compared against `MinimumPythonnetFor` | [`Versions_TableIsTheGuardsOwnMapping`][gate] |
 | 25 | Every quoted Troubleshooting symptom is the message actually raised | verbatim assertion per row | [`Troubleshooting_SymptomsAreVerbatim`][gate] |
+| 26 | C# tuples cross as Python tuples and back, through the registered codec | `numpy.zeros((2, 3))` takes the shape; `(long, long) = a.shape` decodes | [`Encode_ValueTupleShape_ReachesNumpyAsATuple`][gate-tuples], [`Decode_ShapeAndStrides_IntoValueTuples_ThroughDynamic`][gate-tuples] |
+| 27 | An implicit encode's wrapper is released at the next encode / conversion, so a rebinding loop keeps one export live | 150 rebindings peak ≤ 2 above baseline; `sys.getrefcount` shows no lingering wrapper | [`RebindingANameThroughTheCodec_KeepsTheLiveExportCountBounded`][gate-handoff], [`TheHandedOffWrapperIsRedundant_PythonnetHoldsItsOwnReference`][gate-handoff] |
 
 ---
 
 ## See also
 
 - [The examples](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharp.Interop.pythonnet.Examples)
-  — twelve single-file `dotnet run` scripts (bootstrap, verbs, layouts, dtypes, buffers, lifetime,
-  codec, GIL, PyTorch, Pandas, a custom adapter, application scenarios), each printing OK/FAIL per claim
+  — twelve single-file `dotnet run` tutorials (bootstrap, verbs, layouts, dtypes, buffers, lifetime,
+  codec, GIL, PyTorch, Pandas, a custom adapter, application scenarios), written for reading, with a
+  `dynamic` Python namespace and one `NDScope` per script; every script has an asserted twin under
+  [`test/NumSharp.Tests.Interop/Examples`](https://github.com/SciSharp/NumSharp/tree/master/test/NumSharp.Tests.Interop/Examples)
 - [Any library via np.frombuffer](np-frombuffer.md) — reaching consumers that want bytes, not numpy
   arrays: `ToMemoryView` + the buffer protocol, torch/Pillow/Arrow/OpenCV verified
 - [Numpy.NET](numpy-net.md) — driving these same buffers through SciSharp's `Numpy.Bare` C# API
@@ -597,3 +638,5 @@ import route works uniformly across pythonnet 3.0.x.
 [gate]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/DocExamples.PythonnetNumpyPage.cs
 [gate-gil]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/GilPolicyTests.cs
 [gate-shutdown]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/ShutdownLeakTests.cs
+[gate-tuples]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/TupleCodecTests.cs
+[gate-handoff]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests.Interop/EncoderHandoffTests.cs

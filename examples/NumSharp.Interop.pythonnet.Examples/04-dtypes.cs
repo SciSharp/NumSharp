@@ -7,7 +7,10 @@
 //      public maps (ToNumpyDtypeStr / FromNumpyDtypeStr / ToBufferFormat / FromBufferFormat) spell
 //      the correspondence, and four element types get converted rather than misrepresented:
 //      Decimal (-> float64 on export), complex64 (widened on copy), UCS-4 text (narrowed on copy),
-//      big-endian (byte-swapped on copy). Every claim below is checked against live numpy.
+//      big-endian (byte-swapped on copy).
+//
+//      Read it top to bottom; the comments state what each line leaves behind. The same steps, with
+//      every statement asserted, are test/NumSharp.Tests.Interop/Examples/Example04_Dtypes.cs.
 //
 //      Run:  dotnet run 04-dtypes.cs
 
@@ -18,206 +21,209 @@ using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 using var host = PythonHost.Start();
-using var py = new PyScope();
-var check = new Checklist();
+using var scope = NDScope.Open();
+dynamic py = host.Namespace;
 
 // ==== the table: every dtype, both directions ======================================================
-check.Section("14 dtypes round-trip; numpy names them as the table says");
-var table = new (NPTypeCode Ns, string DtypeStr, string Pep, string NumpyName, NPTypeCode Back)[]
+//   NumSharp   dtype.str   PEP 3118   numpy name    back as
+//   Boolean    |b1         ?          bool          Boolean
+//   Byte       |u1         B          uint8         Byte
+//   SByte      |i1         b          int8          SByte
+//   Int16      <i2         h          int16         Int16
+//   UInt16     <u2         H          uint16        UInt16
+//   Int32      <i4         i          int32         Int32
+//   UInt32     <u4         I          uint32        UInt32
+//   Int64      <i8         q          int64         Int64
+//   UInt64     <u8         Q          uint64        UInt64
+//   Half       <f2         e          float16       Half
+//   Single     <f4         f          float32       Single
+//   Double     <f8         d          float64       Double
+//   Complex    <c16        Zd         complex128    Complex
+//   Char       <u2         H          uint16        UInt16     (a C# char is a UTF-16 code unit: uint16 on the numpy side)
+foreach (NPTypeCode tc in new[]
+         {
+             NPTypeCode.Boolean, NPTypeCode.Byte, NPTypeCode.SByte, NPTypeCode.Int16, NPTypeCode.UInt16, NPTypeCode.Int32, NPTypeCode.UInt32,
+             NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.Half, NPTypeCode.Single, NPTypeCode.Double, NPTypeCode.Complex, NPTypeCode.Char,
+         })
+using (Py.GIL())
 {
-    (NPTypeCode.Boolean, "|b1",  "?",  "bool",       NPTypeCode.Boolean),
-    (NPTypeCode.Byte,    "|u1",  "B",  "uint8",      NPTypeCode.Byte),
-    (NPTypeCode.SByte,   "|i1",  "b",  "int8",       NPTypeCode.SByte),
-    (NPTypeCode.Int16,   "<i2",  "h",  "int16",      NPTypeCode.Int16),
-    (NPTypeCode.UInt16,  "<u2",  "H",  "uint16",     NPTypeCode.UInt16),
-    (NPTypeCode.Int32,   "<i4",  "i",  "int32",      NPTypeCode.Int32),
-    (NPTypeCode.UInt32,  "<u4",  "I",  "uint32",     NPTypeCode.UInt32),
-    (NPTypeCode.Int64,   "<i8",  "q",  "int64",      NPTypeCode.Int64),
-    (NPTypeCode.UInt64,  "<u8",  "Q",  "uint64",     NPTypeCode.UInt64),
-    (NPTypeCode.Half,    "<f2",  "e",  "float16",    NPTypeCode.Half),
-    (NPTypeCode.Single,  "<f4",  "f",  "float32",    NPTypeCode.Single),
-    (NPTypeCode.Double,  "<f8",  "d",  "float64",    NPTypeCode.Double),
-    (NPTypeCode.Complex, "<c16", "Zd", "complex128", NPTypeCode.Complex),
-    (NPTypeCode.Char,    "<u2",  "H",  "uint16",     NPTypeCode.UInt16),   // a C# char is a UTF-16 code unit: uint16 on the numpy side
-};
-
-foreach (var (ns, dtypeStr, pep, numpyName, back) in table)
-{
-    bool ok = NDArrayPythonInterop.ToNumpyDtypeStr(ns) == dtypeStr && NDArrayPythonInterop.ToBufferFormat(ns) == pep;
-    using NDArray src = ns == NPTypeCode.Char ? np.array(new[] { 'a', 'b', 'c' }) : np.arange(3).astype(ns);
-    NDArray roundTrip;
-    using (Py.GIL())
-    {
-        using PyObject x = src.ToNumpy();                                          // zero-copy view
-        py.Set("x", x);
-        roundTrip = x.ToNDArray();                                                 // copy it straight back
-    }
-    ok &= py.Str("x.dtype.str") == dtypeStr && py.Str("x.dtype.name") == numpyName;
-    ok &= roundTrip.typecode == back;
-    ok &= py.Bool("np.array_equal(x, np.frombuffer(x.tobytes(), x.dtype))");      // the bytes ARE the values
-    roundTrip.Dispose();
-    check.That(ok, $"{ns,-8} <-> {dtypeStr,-4} '{pep,-2}' numpy '{numpyName}'{(back != ns ? $" (imports as {back})" : "")}");
+    NDArray src = tc == NPTypeCode.Char ? np.array(new[] { 'a', 'b', 'c' }) : np.arange(3).astype(tc);
+    string dtypeStr = NDArrayPythonInterop.ToNumpyDtypeStr(tc);                  // the dtype.str column
+    string format = NDArrayPythonInterop.ToBufferFormat(tc);                     // the PEP 3118 column
+    py.x = src;                                                                  // a zero-copy view...
+    string numpyName = py.x.dtype.name;                                          // ...named as the numpy-name column says
+    NDArray back = py.x;                                                         // ...and straight back: the back-as column
+    bool bytesAreTheValues = py.np.array_equal(py.x, py.np.frombuffer(py.x.tobytes(), py.x.dtype));   // True for every row
 }
 
-check.Section("the reverse maps");
-check.That(NDArrayPythonInterop.FromNumpyDtypeStr("<f8") == NPTypeCode.Double && NDArrayPythonInterop.FromNumpyDtypeStr("=i4") == NPTypeCode.Int32 &&
-           NDArrayPythonInterop.FromNumpyDtypeStr("|b1") == NPTypeCode.Boolean && NDArrayPythonInterop.FromNumpyDtypeStr("u2") == NPTypeCode.UInt16,
-           "FromNumpyDtypeStr accepts '<', '=', '|' and bare codes");
-check.That(NDArrayPythonInterop.FromBufferFormat("i", 4) == NPTypeCode.Int32 && NDArrayPythonInterop.FromBufferFormat("l", 8) == NPTypeCode.Int64 &&
-           NDArrayPythonInterop.FromBufferFormat("l", 4) == NPTypeCode.Int32 && NDArrayPythonInterop.FromBufferFormat("", 1) == NPTypeCode.Byte,
-           "FromBufferFormat disambiguates C 'l'/'i' by itemsize; an empty format is raw bytes");
-check.That(NDArrayPythonInterop.FromBufferFormat("u", 2) == NPTypeCode.Char, "a 2-byte wchar_t unit ('u', Windows) IS a UTF-16 code unit — viewable as Char");
-check.That(NDArrayPythonInterop.FromBufferFormat("g", 8) == NPTypeCode.Double, "MSVC's 8-byte long double ('g') is IEEE double — viewable");
-check.Throws<NotSupportedException>(() => NDArrayPythonInterop.FromBufferFormat("g", 16), "a 16-byte long double has no NumSharp dtype", "astype(np.float64)");
+// ==== the reverse maps =============================================================================
+NPTypeCode f8 = NDArrayPythonInterop.FromNumpyDtypeStr("<f8");                  // Double  — '<', '=', '|' and bare codes are all accepted:
+NPTypeCode i4 = NDArrayPythonInterop.FromNumpyDtypeStr("=i4");                  // Int32
+NPTypeCode b1 = NDArrayPythonInterop.FromNumpyDtypeStr("|b1");                  // Boolean
+NPTypeCode u2 = NDArrayPythonInterop.FromNumpyDtypeStr("u2");                   // UInt16
+NPTypeCode cInt = NDArrayPythonInterop.FromBufferFormat("i", 4);                // Int32   — C 'l' / 'i' disambiguate by itemsize:
+NPTypeCode cLong8 = NDArrayPythonInterop.FromBufferFormat("l", 8);              // Int64
+NPTypeCode cLong4 = NDArrayPythonInterop.FromBufferFormat("l", 4);              // Int32
+NPTypeCode raw = NDArrayPythonInterop.FromBufferFormat("", 1);                  // Byte    — an empty format is raw bytes
+NPTypeCode wchar = NDArrayPythonInterop.FromBufferFormat("u", 2);               // Char    — a 2-byte wchar_t IS a UTF-16 code unit
+NPTypeCode longDouble = NDArrayPythonInterop.FromBufferFormat("g", 8);          // Double  — MSVC's 8-byte long double is IEEE double
+Exception? extended = Throws(() => NDArrayPythonInterop.FromBufferFormat("g", 16));   // NotSupportedException: a 16-byte long double has no NumSharp dtype. Convert first: arr.astype(np.float64).
 
 // ==== bit-exactness: NaN payloads, signed zero, infinities, unsigned maxima ========================
-check.Section("special values cross bit-for-bit");
-using NDArray specials = np.array(new[]
+NDArray specials = np.array(new[]
 {
     -0.0, double.NegativeInfinity, double.NaN,
     BitConverter.Int64BitsToDouble(unchecked((long)0xfff8123456789abc)),   // a NaN with a payload
     double.Epsilon, double.MaxValue,
 });
-using (Py.GIL()) { using PyObject p = specials.ToNumpy(); py.Set("sp", p); }
-bool bitsOk = true;
-for (int i = 0; i < specials.size; i++)
-    bitsOk &= BitConverter.DoubleToInt64Bits(specials.GetDouble(i)) == py.Long($"sp.view('i8')[{i}]");
-check.That(bitsOk, "every float64 bit pattern (incl. NaN payload, -0.0) reads identically through numpy");
-using NDArray big = np.array(new[] { ulong.MaxValue, 0UL, 1UL << 63 });
-using (Py.GIL()) { using PyObject p = big.ToNumpy(); py.Set("bg", p); }
-check.That(py.Str("bg.tolist()") == "[18446744073709551615, 0, 9223372036854775808]", $"uint64 maxima: {py.Str("bg.tolist()")}");
-using NDArray h = np.array(new[] { Half.NaN, Half.PositiveInfinity, (Half)(-0.0), Half.Epsilon });
-using (Py.GIL()) { using PyObject p = h.ToNumpy(); py.Set("hf", p); }
-check.That(py.Str("hf.dtype") == "float16" && py.Bool("np.isnan(hf[0]) and np.isposinf(hf[1]) and np.signbit(hf[2])"), "float16 specials: NaN, +inf, -0.0 as numpy sees them");
-using NDArray cx = np.array(new[] { new Complex(1, -2), new Complex(double.NaN, double.PositiveInfinity) });
-using (Py.GIL()) { using PyObject p = cx.ToNumpy(); py.Set("cx", p); }
-check.That(py.Str("cx.dtype") == "complex128" && py.Str("cx[0]") == "(1-2j)" && py.Bool("np.isnan(cx[1].real) and np.isposinf(cx[1].imag)"), $"complex128: {py.Str("cx[0]")}, NaN+infj");
+using (Py.GIL())
+{
+    py.sp = specials;
+    long payload = py.Eval("int(sp.view('i8')[3])");                             // == unchecked((long)0xfff8123456789abc): the NaN payload survives...
+    long negativeZero = py.Eval("int(sp.view('i8')[0])");                        // == unchecked((long)0x8000000000000000): ...and so does the sign of -0.0,
+    // -inf (0xfff0000000000000), 5e-324 (0x0000000000000001) and 1.7976931348623157e+308 (0x7fefffffffffffff) — every bit pattern reads identically on both sides
+
+    py.bg = np.array(new[] { ulong.MaxValue, 0UL, 1UL << 63 });
+    string maxima = py.bg.tolist().ToString();                                    // [18446744073709551615, 0, 9223372036854775808]
+
+    py.hf = np.array(new[] { Half.NaN, Half.PositiveInfinity, (Half)(-0.0), Half.Epsilon });
+    string halfName = py.hf.dtype.name;                                           // "float16"; np.isnan(hf[0]), np.isposinf(hf[1]) and np.signbit(hf[2]) are all True
+
+    py.cx = np.array(new[] { new Complex(1, -2), new Complex(double.NaN, double.PositiveInfinity) });
+    string complexName = py.cx.dtype.name;                                        // "complex128"; cx[0] is (1-2j), cx[1] is (nan+infj)
+}
 
 // ==== the four conversions ==========================================================================
-check.Section("Decimal: no numpy dtype — the array verbs convert to float64, the low-level maps refuse");
-using NDArray dec = np.array(new[] { 1.5m, -2.25m, 1234567890.123456789m });
-check.Throws<NotSupportedException>(() => NDArrayPythonInterop.ToNumpyDtypeStr(NPTypeCode.Decimal), "ToNumpyDtypeStr(Decimal)", "no numpy dtype");
-check.Throws<NotSupportedException>(() => NDArrayPythonInterop.ToBufferFormat(NPTypeCode.Decimal), "ToBufferFormat(Decimal)", "no PEP 3118 format");
+// Decimal: no numpy dtype — the array verbs convert to float64, the low-level maps refuse
+NDArray dec = np.array(new[] { 1.5m, -2.25m, 1234567890.123456789m });
+Exception? noDtype = Throws(() => NDArrayPythonInterop.ToNumpyDtypeStr(NPTypeCode.Decimal));   // NotSupportedException: decimal has no numpy dtype (16-byte, non-IEEE). Convert first: nd.astype(NPTypeCode.Double).
+Exception? noFormat = Throws(() => NDArrayPythonInterop.ToBufferFormat(NPTypeCode.Decimal));  // NotSupportedException: decimal has no PEP 3118 format ...
 using (Py.GIL())
 {
-    using PyObject p = dec.ToNumpy(); py.Set("dc", p);
-    check.Throws<NotSupportedException>(() => dec.ToMemoryView().Dispose(), "ToMemoryView(Decimal) stays honest about the missing format", "no PEP 3118 format");
-}
-check.That(py.Str("dc.dtype") == "float64" && py.Float("dc[1]") == -2.25, $"ToNumpy(Decimal) -> float64 {py.Str("dc.tolist()")} (lossy past ~16 significant digits, by design)");
-py.Exec("dc[0] = 99.0");
-check.That((decimal)dec.GetValue(0) == 1.5m && py.Str("dc.flags['OWNDATA']") == "False",
-           "...a numpy view over the CONVERTED float64 temporary (OWNDATA=False, kept alive by the export pin) — writes never reach the Decimal source");
-
-check.Section("complex64: two float32 halves — widened to Complex (complex128) on copy, never viewed");
-using (Py.GIL())
-{
-    using PyObject c8 = py.Module.Eval("np.array([1+2j, 3-4j], dtype='c8')");
-    check.Throws<NotSupportedException>(() => c8.AsNDArray().Dispose(), "AsNDArray declines complex64", "complex64");
-    using NDArray widened = c8.ToNDArray();
-    check.That(widened.typecode == NPTypeCode.Complex && (Complex)widened.GetValue(1) == new Complex(3, -4), $"ToNDArray widens: {widened.GetValue(1)}");
-    check.Throws<NotSupportedException>(() => NDArrayPythonInterop.FromNumpyDtypeStr("<c8"), "FromNumpyDtypeStr('<c8') says why", "widens");
+    Exception? noMemoryView = Throws(() => dec.ToMemoryView());                   // NotSupportedException: the same — ToMemoryView stays honest about the missing format
+    py.dc = dec;                                                                  // ToNumpy(Decimal): a float64 view over a CONVERTED temporary
+    string decName = py.dc.dtype.name;                                            // "float64"; dc.tolist() == [1.5, -2.25, 1234567890.1234567] — lossy past ~16 significant digits, by design
+    py.Exec("dc[0] = 99.0");                                                      // dec[0] is still 1.5m: writes never reach the Decimal source
+    bool ownsData = py.dc.flags.owndata;                                          // False — the temporary is kept alive by the export pin, not by numpy
 }
 
-check.Section("UCS-4 text: numpy '<U1' (4-byte code points) — narrowed to Char (UTF-16) on copy");
+// complex64: two float32 halves — widened to Complex (complex128) on copy, never viewed
 using (Py.GIL())
 {
-    using PyObject u1 = py.Module.Eval("np.array(['a', 'Z', '\\u00e9'], dtype='U1')");
-    check.Throws<NotSupportedException>(() => u1.AsNDArray().Dispose(), "AsNDArray declines UCS-4", "UCS-4");
-    using NDArray narrowed = u1.ToNDArray();
-    check.That(narrowed.typecode == NPTypeCode.Char && (char)narrowed.GetValue(2) == 'é', $"ToNDArray narrows: '{narrowed.GetValue(0)}', '{narrowed.GetValue(1)}', '{narrowed.GetValue(2)}'");
-    using PyObject astral = py.Module.Eval("np.array(['\\U0001F600'], dtype='U1')");
-    check.Throws<NotSupportedException>(() => astral.ToNDArray().Dispose(), "a non-BMP code point needs a surrogate pair and is refused", "non-BMP");
+    using PyObject c8 = py.Eval("np.array([1+2j, 3-4j], dtype='c8')");
+    Exception? noView = Throws(() => c8.AsNDArray());                             // NotSupportedException: buffer format 'Zf' (complex64) has no exact NumSharp dtype. ToNDArray widens it ...
+    NDArray widened = c8.ToNDArray();                                             // typecode Complex; widened[1] == (3, -4)
+    Exception? noStr = Throws(() => NDArrayPythonInterop.FromNumpyDtypeStr("<c8"));   // the map says the same
 }
-// A 2-byte wchar_t buffer (array.array('u') on Windows) is UTF-16 already and views zero-copy as Char.
-if (py.Long("__import__('array').array('u').itemsize") == 2)
+
+// UCS-4 text: numpy '<U1' (4-byte code points) — narrowed to Char (UTF-16) on copy
+using (Py.GIL())
 {
-    py.Exec("import array\nwide = array.array('u', 'hi!')");
-    using (Py.GIL())
+    using PyObject u1 = py.Eval("np.array(['a', 'Z', '\\u00e9'], dtype='U1')");
+    Exception? noView = Throws(() => u1.AsNDArray());                             // NotSupportedException: buffer format '1w' (itemsize 4) is UCS-4 text ... a zero-copy view is impossible
+    NDArray narrowed = u1.ToNDArray();                                            // typecode Char: 'a', 'Z', 'é'
+    using PyObject astral = py.Eval("np.array(['\\U0001F600'], dtype='U1')");
+    Exception? nonBmp = Throws(() => astral.ToNDArray());                         // NotSupportedException: ... non-BMP code point U+1F600 ... needs a surrogate pair
+
+    long wcharSize = py.Eval("__import__('array').array('u').itemsize");
+    if (wcharSize == 2)                                                           // a 2-byte wchar_t buffer (Windows) is UTF-16 already: it views zero-copy as Char
     {
-        using PyObject wide = py.Get("wide");
-        using NDArray chars = wide.AsNDArray();
-        check.That(chars.typecode == NPTypeCode.Char && (char)chars.GetValue(1) == 'i', "array.array('u') (2-byte wchar_t) views zero-copy as Char");
-        chars[0] = 'H';
-        check.That(py.Str("wide.tounicode()") == "Hi!", $"the Char write is visible in Python: wide.tounicode() == '{py.Str("wide.tounicode()")}'");
+        py.Exec("import array\nwide = array.array('u', 'hi!')");
+        NDArray chars = py.wide;                                                  // typecode Char; chars[1] == 'i'
+        chars[0] = 'H';                                                           // wide.tounicode() is now "Hi!"
     }
+    // (a 4-byte wchar_t platform takes the UCS-4 copy route above)
 }
-else
-    Console.WriteLine("  (skip) array.array('u') is 4-byte on this platform — it takes the UCS-4 copy route above");
 
-check.Section("big-endian: no zero-copy view (a native read would swap every value) — byte-reversed on copy");
-check.Throws<NotSupportedException>(() => NDArrayPythonInterop.FromNumpyDtypeStr(">f8"), "FromNumpyDtypeStr('>f8') refuses with the fix", "newbyteorder('<')");
+// big-endian: no zero-copy view (a native read would swap every value) — byte-reversed on copy
+Exception? bigEndianStr = Throws(() => NDArrayPythonInterop.FromNumpyDtypeStr(">f8"));   // NotSupportedException: big-endian dtype '>f8' cannot be shared ... Byte-swap first: arr.astype(arr.dtype.newbyteorder('<')).
 using (Py.GIL())
 {
-    using PyObject be = py.Module.Eval("np.array([1, -2, 300000], dtype='>i4')");
-    check.Throws<NotSupportedException>(() => be.AsNDArray().Dispose(), "AsNDArray declines '>i4'", "big-endian");
-    using NDArray swapped = be.ToNDArray();
-    check.That(swapped.typecode == NPTypeCode.Int32 && swapped.GetInt32(2) == 300000 && swapped.GetInt32(1) == -2, $"ToNDArray byte-swaps: [{swapped.GetInt32(0)}, {swapped.GetInt32(1)}, {swapped.GetInt32(2)}]");
-    using PyObject bec = py.Module.Eval("np.array([1+2j], dtype='>c16')");
-    using NDArray swappedC = bec.ToNDArray();
-    check.That((Complex)swappedC.GetValue(0) == new Complex(1, 2), "complex128 big-endian: each 8-byte half reversed independently");
-    using PyObject be1 = py.Module.Eval("np.array([1, 2, 3], dtype='>i1')");
-    using NDArray oneByte = be1.AsNDArray();
-    check.That(oneByte.typecode == NPTypeCode.SByte && oneByte.GetValue(2) is sbyte and 3, "single-byte '>i1' views zero-copy regardless — byte order is meaningless at one byte");
+    using PyObject be = py.Eval("np.array([1, -2, 300000], dtype='>i4')");
+    Exception? noView = Throws(() => be.AsNDArray());                             // NotSupportedException: big-endian buffer format '>l' cannot be mapped ...
+    NDArray swapped = be.ToNDArray();                                             // typecode Int32: [1, -2, 300000]
+    using PyObject bec = py.Eval("np.array([1+2j], dtype='>c16')");
+    NDArray swappedComplex = bec.ToNDArray();                                     // (1, 2): each 8-byte half is reversed independently
+    using PyObject be1 = py.Eval("np.array([1, 2, 3], dtype='>i1')");
+    NDArray oneByte = be1.AsNDArray();                                            // typecode SByte, a zero-copy view: byte order is meaningless at one byte
 }
 
-check.Section("no NumSharp dtype at any byte order: refused on both paths");
+// no NumSharp dtype at any byte order: refused on both paths
 using (Py.GIL())
 {
-    using PyObject dt = py.Module.Eval("np.array(['2021-01-01'], dtype='M8[D]')");
-    check.Throws<NotSupportedException>(() => dt.AsNDArray(allowReadonly: true).Dispose(), "datetime64 view");
-    check.Throws<NotSupportedException>(() => dt.ToNDArray().Dispose(), "datetime64 copy");
-    using PyObject rec = py.Module.Eval("np.zeros(2, dtype=[('x', 'i4'), ('y', 'f8')])");
-    check.Throws<NotSupportedException>(() => rec.ToNDArray().Dispose(), "a structured dtype");
+    using PyObject dt = py.Eval("np.array(['2021-01-01'], dtype='M8[D]')");
+    Exception? datetimeView = Throws(() => dt.AsNDArray(allowReadonly: true));    // NotSupportedException: numpy dtype '<M8[D]' has no NumSharp dtype.
+    Exception? datetimeCopy = Throws(() => dt.ToNDArray());                       // NotSupportedException: ... (cannot include dtype 'M' in a buffer)
+    using PyObject rec = py.Eval("np.zeros(2, dtype=[('x', 'i4'), ('y', 'f8')])");
+    Exception? structured = Throws(() => rec.ToNDArray());                        // NotSupportedException: buffer format 'T{l:x:=d:y:}' (itemsize 12) has no NumSharp dtype.
 }
 
-check.Section("counters");
-py.Exec("del x, sp, bg, hf, cx, dc");
-check.That(Settle(() => NDArrayPythonInterop.LiveExports == 0 && NDArrayPythonInterop.LiveImports == 0),
-           $"every pin and lease released (exports {NDArrayPythonInterop.LiveExports}, imports {NDArrayPythonInterop.LiveImports})");
-
-return check.Exit();
-
-static bool Settle(Func<bool> done)
-{
-    var sw = Stopwatch.StartNew();
-    while (!done() && sw.ElapsedMilliseconds < 5000)
-    {
-        GC.Collect(); GC.WaitForPendingFinalizers();
-        using (Py.GIL())
-        {
-            Finalizer.Instance.Collect();                                  // pythonnet's DEFERRED decrefs: wrappers the CLR GC finalized (e.g. `dynamic` call arguments) release their Python reference here
-            PythonEngine.RunSimpleString("import gc; gc.collect()");
-        }
-        Thread.Sleep(20);
-    }
-    return done();
-}
+// ==== who frees what ================================================================================
+// When this script ends: `scope` releases every array above (the Decimal export's float64 temporary included —
+// it is owned by the export and freed the moment Python lets go of dc); `host` drops the namespace and the
+// pins with it; then the engine shuts down. LiveExports / LiveImports both read 0 afterwards.
 
 // =====================================================================================================
-//  Shared scaffolding — identical in every example (a single-file app cannot share source files).
+//  Scaffolding — identical in every example (a single-file app cannot share source files). Nothing
+//  below is specific to this script: Throws captures an exception the tutorial expects, PythonHost
+//  finds CPython, runs the engine and owns a Python namespace with numpy imported.
 // =====================================================================================================
 
-/// <summary>Finds a CPython that has numpy, starts the engine once, shuts it down crash-free on dispose.</summary>
+static Exception? Throws(Action act) { try { act(); return null; } catch (Exception e) { return e; } }
+
+/// <summary>
+///     Finds a CPython that has numpy, starts the engine once, registers the codec, opens a Python
+///     namespace with numpy imported, and shuts everything down crash-free on dispose.
+/// </summary>
 sealed class PythonHost : IDisposable
 {
+    /// <summary>
+    ///     A Python module where <c>import numpy as np</c> already ran. Hold it as <c>dynamic py</c> and use
+    ///     it under <c>Py.GIL()</c>: <c>py.x = nd</c> binds a NumSharp array as a zero-copy numpy view (the
+    ///     codec runs ToNumpy), <c>NDArray a = py.x</c> decodes one back (AsNDArray whenever a view is
+    ///     possible), <c>py.Exec("...")</c> runs statements, <c>double d = py.Eval("x.sum()")</c> reads a
+    ///     value, and <c>py.np</c> is numpy itself.
+    /// </summary>
+    public PyModule Namespace { get; private set; } = null!;
     bool _down;
 
-    public static PythonHost Start()
+    /// <param name="codec">Register the codec at startup — the normal choice. Two examples pass <c>false</c>
+    /// to show the registration order themselves.</param>
+    public static PythonHost Start(bool codec = true)
     {
-        string dll = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL") ?? Discover();
-        Runtime.PythonDLL = dll;                 // pythonnet needs the shared library, not the interpreter
-        PythonEngine.Initialize();               // once per process (CPython + numpy cannot re-initialize)
-        PythonEngine.BeginAllowThreads();        // release THIS thread's GIL so every thread can take it later
-        Console.WriteLine($"Python {PythonEngine.Version.Split(' ')[0]}  ({dll})");
-        return new PythonHost();
+        Runtime.PythonDLL = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL") ?? Discover();
+        PythonEngine.Initialize();                          // once per process (CPython + numpy cannot re-initialize)
+        PythonEngine.BeginAllowThreads();                   // release THIS thread's GIL so every thread can take it later
+        if (codec) NDArrayPythonInterop.RegisterCodec();    // NDArray <-> numpy and C# tuples <-> Python tuples at every pythonnet boundary; before any As<NDArray>()
+        var host = new PythonHost();
+        using (Py.GIL()) { host.Namespace = Py.CreateScope(); host.Namespace.Exec("import numpy as np"); }
+        return host;
     }
 
     public void Dispose()
     {
         if (_down) return;
         _down = true;
-        RuntimeData.FormatterType = typeof(NoopFormatter);   // pythonnet's opt-out of BinaryFormatter stashing (.NET 8+)
-        PythonEngine.Shutdown();                             // the interop's handler drains every lease first
+        using (Py.GIL()) Namespace.Dispose();               // a PyObject is disposed under the GIL — and never after Shutdown()
+        RuntimeData.FormatterType = typeof(NoopFormatter);  // pythonnet's opt-out of BinaryFormatter stashing (.NET 8+)
+        PythonEngine.Shutdown();                            // the interop's handler drains every lease first
+    }
+
+    /// <summary>
+    ///     Runs both collectors to completion — CLR GC + finalizers, pythonnet's deferred decrefs, Python's
+    ///     gc — plus one trivial conversion, which runs the interop's inline lease drain. The live counters
+    ///     are exact after this.
+    /// </summary>
+    public static void Drain()
+    {
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        using (Py.GIL())
+        {
+            Finalizer.Instance.Collect();                   // wrappers the CLR GC finalized (`dynamic` temporaries, for instance) release their Python reference here
+            PythonEngine.RunSimpleString("import gc; gc.collect()");
+            using NDArray probe = np.arange(1);
+            using PyObject conversion = probe.ToNumpyCopy();
+        }
     }
 
     // Ask the `python` on PATH where its shared library lives (what PYTHONNET_PYDLL would name).
@@ -259,62 +265,4 @@ sealed class PythonHost : IDisposable
                 return candidate;
         throw new InvalidOperationException("libpython not found; set PYTHONNET_PYDLL to its full path");
     }
-}
-
-/// <summary>A Python namespace with numpy imported, plus GIL-wrapped one-liners for reading it back.</summary>
-sealed class PyScope : IDisposable
-{
-    public PyModule Module { get; }
-
-    public PyScope(string setup = "import numpy as np")
-    {
-        using (Py.GIL()) { Module = Py.CreateScope(); Module.Exec(setup); }
-    }
-
-    public void Exec(string code) { using (Py.GIL()) Module.Exec(code); }
-    public void Set(string name, PyObject value) { using (Py.GIL()) Module.Set(name, value); }
-    public PyObject Get(string name) => Module.Get(name);                        // call under Py.GIL()
-    public T Eval<T>(string expr) { using (Py.GIL()) { using PyObject r = Module.Eval(expr); return r.As<T>(); } }
-    public string Str(string expr) => Eval<string>($"str({expr})");
-    public bool Bool(string expr) => Eval<bool>($"bool({expr})");
-    public long Long(string expr) => Eval<long>($"int({expr})");
-    public double Float(string expr) => Eval<double>($"float({expr})");
-    public void Dispose()
-    {
-        if (_disposed || !PythonEngine.IsInitialized) return;   // never touch the C-API after Shutdown()
-        _disposed = true;
-        using (Py.GIL()) Module.Dispose();
-    }
-
-    bool _disposed;
-}
-
-/// <summary>Evidence, not narration: one OK/FAIL line per claim; the exit code is 0 only when all hold.</summary>
-sealed class Checklist
-{
-    int _failed;
-
-    public void Section(string title) => Console.WriteLine($"\n-- {title} --");
-
-    public bool That(bool ok, string claim)
-    {
-        Console.WriteLine($"  {(ok ? "OK  " : "FAIL")} {claim}");
-        if (!ok) _failed++;
-        return ok;
-    }
-
-    public void Throws<T>(Action act, string claim, string? containing = null) where T : Exception
-    {
-        try { act(); That(false, $"{claim} — expected {typeof(T).Name}, nothing was thrown"); }
-        catch (T e) { That(containing is null || e.Message.Contains(containing), $"{claim}: {typeof(T).Name}: {FirstLine(e.Message)}"); }
-        catch (Exception e) { That(false, $"{claim} — expected {typeof(T).Name}, got {e.GetType().Name}: {FirstLine(e.Message)}"); }
-    }
-
-    public int Exit()
-    {
-        Console.WriteLine(_failed == 0 ? "\nALL OK" : $"\n{_failed} FAILED");
-        return _failed == 0 ? 0 : 1;
-    }
-
-    static string FirstLine(string s) { int i = s.IndexOfAny(new[] { '\r', '\n' }); return i < 0 ? s : s[..i]; }
 }

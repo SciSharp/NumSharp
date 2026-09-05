@@ -495,6 +495,7 @@ namespace NumSharp.Interop.PythonNet
         /// </summary>
         internal static void DrainPending()
         {
+            EncoderHandoff.Flush();   // the calling thread's outstanding encoder wrapper (takes the GIL itself)
             Interlocked.Exchange(ref _drainScheduled, 0);
             if (_pendingDisposals.IsEmpty)
                 return;
@@ -597,6 +598,7 @@ namespace NumSharp.Interop.PythonNet
             // pythonnet clears all registered codecs during shutdown (PyObjectConversions.Reset),
             // so a new engine session must register ours again.
             Volatile.Write(ref CodecRegistered, 0);
+            EncoderHandoff.SessionEnded();   // the encoder wrappers still in their per-thread slots belong to this dying interpreter
             Volatile.Write(ref _sessionLive, 0);
 
             bool anyOrphans;

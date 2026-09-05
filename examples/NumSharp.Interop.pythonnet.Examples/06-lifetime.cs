@@ -10,185 +10,211 @@
 //      NumSharp's memory-block refcount. Two counters make every live crossing observable, a live
 //      view locks reallocation on both sides, and engine shutdown drains everything crash-free.
 //
+//      NDScope is the other half of the story here: a scope releases every NDArray built inside it
+//      when it closes, so "the near side let go" is one `using` block instead of a Dispose per array.
+//
+//      Read it top to bottom; the comments state what each line leaves behind. The same steps, with
+//      every statement asserted, are test/NumSharp.Tests.Interop/Examples/Example06_Lifetime.cs.
+//
 //      Run:  dotnet run 06-lifetime.cs
 
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using NumSharp;
 using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
-var host = PythonHost.Start();                       // disposed EXPLICITLY below — the last section observes the shutdown sweep
-using var py = new PyScope("import numpy as np, weakref, gc");
-var check = new Checklist();
+var host = PythonHost.Start();                       // disposed EXPLICITLY below — the last section watches the shutdown sweep
+using var scope = NDScope.Open();
+dynamic py = host.Namespace;
+using (Py.GIL()) py.Exec("import weakref, gc");
 
-// ==== the counters ====================================================================================
-check.Section("LiveExports / LiveImports move by exactly one per crossing");
-check.That(NDArrayPythonInterop.LiveExports == 0 && NDArrayPythonInterop.LiveImports == 0, "both start at 0");
-using NDArray nd = np.arange(4).astype(NPTypeCode.Double);
-using (Py.GIL()) { using PyObject p = nd.ToNumpy(); py.Set("c1", p); }
-check.That(NDArrayPythonInterop.LiveExports == 1, "one export: LiveExports == 1");
-py.Exec("c2 = np.arange(3, dtype='i8')");
+// A note on `dynamic` in THIS example: every dynamic read (`py.c2`) hands out a CLR wrapper holding its own
+// Python reference, released only when the garbage collector gets to it. That is fine everywhere else; here,
+// where reference counts are the subject, the Python objects are read as `using PyObject` so the wrapper's
+// reference ends deterministically and only the interop's own pins and leases remain in the picture.
+
+// ==== the counters: LiveExports / LiveImports move by exactly one per crossing =========================
+int exports0 = NDArrayPythonInterop.LiveExports, imports0 = NDArrayPythonInterop.LiveImports;   // 0, 0
+NDArray nd = np.arange(4).astype(np.float64);
 NDArray leased;
-using (Py.GIL()) { using PyObject c2 = py.Get("c2"); leased = c2.AsNDArray(); }
-check.That(NDArrayPythonInterop.LiveImports == 1, "one import view: LiveImports == 1");
-leased.Dispose();                                    // deterministic: Dispose releases the lease without waiting for a GC
-check.That(Settle(() => NDArrayPythonInterop.LiveImports == 0), "Dispose() released the lease (LiveImports == 0)");
-py.Exec("del c1");
-check.That(Settle(() => NDArrayPythonInterop.LiveExports == 0), "del of the last numpy name released the pin (LiveExports == 0)");
+using (Py.GIL())
+{
+    py.c1 = nd;                                      // one export:      LiveExports == 1
+    py.Exec("c2 = np.arange(3, dtype='i8')");
+    using PyObject c2 = py.c2;
+    leased = c2.AsNDArray();                         // one import view: LiveImports == 1
+}
+leased.Dispose();                                    // deterministic: Dispose releases the lease without waiting for a GC...
+PythonHost.Drain();                                  // ...the release itself is marshaled to the GIL — LiveImports == 0 after the drain
+using (Py.GIL()) py.Exec("del c1");                  // the last numpy name dies -> the pin is released: LiveExports == 0
 
-// ==== Python outlives the NDArray ===================================================================
-check.Section("an export outlives every managed reference");
-ExportAndForget();                                   // the NDArray AND the PyObject wrapper die inside; only Python's name remains
-FullGc();
-check.That(NDArrayPythonInterop.LiveExports == 1, "after Dispose() + GC the pin is still held for Python");
-check.That(py.Str("orphan.tolist()") == "[0.0, 1.0, 2.0, 3.0]", $"Python still reads valid memory: {py.Str("orphan.tolist()")}");
-py.Exec("orphan[0] = 7.0");
-check.That(py.Str("orphan.tolist()") == "[7.0, 1.0, 2.0, 3.0]", "...and still writes it");
-py.Exec("child = orphan[2:]\ndel orphan");           // a DERIVED numpy view chains to the same base object
-FullGc();
-check.That(NDArrayPythonInterop.LiveExports == 1 && py.Str("child.tolist()") == "[2.0, 3.0]", "a derived view (orphan[2:]) keeps the buffer rooted after the original array died");
-py.Exec("del child");
-check.That(Settle(() => NDArrayPythonInterop.LiveExports == 0), "the last derived view releases the pin");
+// ==== an export outlives every managed reference ====================================================
+using (Py.GIL())
+using (NDScope.Open())                               // an inner scope: everything built in this block is released when it ends
+{
+    NDArray temp = np.arange(4).astype(np.float64);
+    py.orphan = temp;                                // Python's name is now the only holder of the export
+}                                                    // temp is disposed here — the NDArray AND its own reference on the buffer are gone
+PythonHost.Drain();
+int stillPinned = NDArrayPythonInterop.LiveExports;  // 1: the pin is held for Python
+using (Py.GIL())
+{
+    string values = py.Eval("str(orphan.tolist())"); // [0.0, 1.0, 2.0, 3.0] — Python still reads valid memory...
+    py.Exec("orphan[0] = 7.0");                      // ...and still writes it
+    py.Exec("child = orphan[2:]; del orphan");       // a DERIVED numpy view chains to the same base object
+}
+PythonHost.Drain();
+int derivedKeepsIt = NDArrayPythonInterop.LiveExports;   // 1: child alone keeps the buffer rooted; child.tolist() == [2.0, 3.0]
+using (Py.GIL()) py.Exec("del child");
+PythonHost.Drain();
+int released = NDArrayPythonInterop.LiveExports;     // 0: the last derived view released the pin
 
-// ==== the NDArray outlives Python's object ==========================================================
-check.Section("an import lease outlives every Python reference");
-py.Exec("keep = np.arange(6, dtype='f8') * 1.5\nwr = weakref.ref(keep)");
-NDArray derived = HoldWhilePythonForgets();          // returns only a SLICE of the imported view; original NDArray + Python name both dropped
-FullGc();
-check.That(NDArrayPythonInterop.LiveImports == 1, "the derived slice alone keeps the lease (disposal order is irrelevant; the refcount decides)");
-check.That(py.Bool("wr() is not None"), "the numpy exporter is still alive — Python forgot it, NumSharp holds it");
-check.That(derived.GetDouble(0) == 3.0 && derived.GetDouble(2) == 6.0, $"the slice reads valid memory: [{derived.GetDouble(0)}, {derived.GetDouble(1)}, {derived.GetDouble(2)}]");
-derived.Dispose();
-check.That(Settle(() => NDArrayPythonInterop.LiveImports == 0) && Settle(() => py.Bool("wr() is None")), "disposing the last view releases the lease AND lets Python free the exporter (no leak)");
+// ==== an import lease outlives every Python reference ===============================================
+NDArray slice;
+using (Py.GIL())
+{
+    py.Exec("keep = np.arange(6, dtype='f8') * 1.5\nwr = weakref.ref(keep)");
+    using (var inner = NDScope.Open())
+    {
+        using PyObject keep = py.keep;
+        NDArray whole = keep.AsNDArray();            // the import view: a lease on numpy's buffer
+        slice = inner.Returns(whole["2:5"]);         // yielded to the outer scope; `whole` itself is released when `inner` closes
+    }
+    py.Exec("del keep; gc.collect()");               // Python forgot the array...
+}
+PythonHost.Drain();
+int leaseHeld = NDArrayPythonInterop.LiveImports;    // 1: the slice alone keeps the lease (disposal ORDER is irrelevant; the refcount decides)
+double s0 = slice.GetDouble(0), s2 = slice.GetDouble(2);   // 3.0, 6.0 — the slice reads valid memory
+bool exporterAlive;
+using (Py.GIL()) exporterAlive = py.Eval("wr() is not None");   // true: NumSharp holds the exporter alive
+slice.Dispose();                                     // the last view over the lease...
+PythonHost.Drain();
+int leaseReleased = NDArrayPythonInterop.LiveImports;   // 0: ...releases it, and Python frees the exporter (wr() is None now)
 
 // ==== what a live view forbids ========================================================================
-check.Section("a live view locks reallocation on both sides");
-py.Exec("ba = bytearray(b'abcd')");
-NDArray held;
-using (Py.GIL()) { using PyObject ba = py.Get("ba"); held = ba.AsNDArray(); }
-check.Throws<PythonException>(() => py.Exec("ba.append(1)"), "CPython: BufferError while NumSharp leases the bytearray", "Existing exports of data: object cannot be re-sized");
-py.Exec("npa = np.arange(4, dtype='f8')");
-NDArray held2;
-using (Py.GIL()) { using PyObject npa = py.Get("npa"); held2 = npa.AsNDArray(); }
-check.Throws<PythonException>(() => py.Exec("npa.resize((8,), refcheck=True)"), "numpy: resize(refcheck=True) refuses while referenced", "cannot resize an array that references or is referenced");
-held.Dispose(); held2.Dispose();
-Settle(() => NDArrayPythonInterop.LiveImports == 0);
-py.Exec("ba.append(1)\nnpa.resize((8,), refcheck=True)");
-check.That(py.Long("len(ba)") == 5 && py.Long("npa.size") == 8, "both locks lift once the leases are released");
+using (Py.GIL())
+{
+    py.Exec("ba = bytearray(b'abcd')\nnpa = np.arange(4, dtype='f8')");
+    using (NDScope.Open())
+    {
+        using PyObject ba = py.ba, npa = py.npa;
+        NDArray held = ba.AsNDArray(), held2 = npa.AsNDArray();
+        Exception? bufferError = Throws(() => py.Exec("ba.append(1)"));                     // PythonException (BufferError): Existing exports of data: object cannot be re-sized
+        Exception? refcheck = Throws(() => py.Exec("npa.resize((8,), refcheck=True)"));     // PythonException (ValueError): cannot resize an array that references or is referenced
+    }
+    PythonHost.Drain();                              // both leases are gone...
+    py.Exec("ba.append(1)\nnpa.resize((8,), refcheck=True)");   // ...and both locks lift: len(ba) == 5, npa.size == 8
 
-using NDArray pinned = np.arange(8).astype(NPTypeCode.Double);
-using (Py.GIL()) { using PyObject p = pinned.ToNumpy(); py.Set("pin", p); }
-check.Throws<Exception>(() => pinned.resize(new Shape(16)), "mirror image: NumSharp's resize refuses while Python holds a view", "cannot resize an array that references or is referenced");
-py.Exec("del pin");
-Settle(() => NDArrayPythonInterop.LiveExports == 0);
-pinned.resize(new Shape(16));
-check.That(pinned.size == 16, "...and succeeds once the pin is gone");
+    NDArray pinned = np.arange(8).astype(np.float64);
+    py.pin = pinned;
+    Exception? mirror = Throws(() => pinned.resize(new Shape(16)));   // the mirror image — "cannot resize an array that references or is referenced" while Python holds a view
+    py.Exec("del pin");
+    PythonHost.Drain();
+    pinned.resize(new Shape(16));                    // succeeds once the pin is gone: pinned.size == 16
+}
 
 // ==== churn: everything returns to baseline ===========================================================
-check.Section("120 rounds of export/import/slice churn drain to zero");
-for (int i = 0; i < 120; i++) ChurnOnce(i);
-py.Exec("del h");
-check.That(Settle(() => NDArrayPythonInterop.LiveExports == 0 && NDArrayPythonInterop.LiveImports == 0, 15_000),
-           $"exports {NDArrayPythonInterop.LiveExports}, imports {NDArrayPythonInterop.LiveImports}");
+for (int i = 0; i < 120; i++)
+using (NDScope.Open())                               // one scope per round: the round's arrays are released as the round ends
+using (Py.GIL())
+{
+    NDArray a = np.arange(32).astype(np.float64) + i;
+    py.h = a;                                        // an export (rebinding `h` drops the previous one)
+    py.hc = a.ToNumpyCopy();                         // a copy export
+    py.Exec("h2 = np.arange(16, dtype='i8')");
+    NDArray view = py.h2;                            // an import view
+    NDArray sub = view["4:12"];                      // a derived slice over the lease
+    sub[0] = (long)i;
+}
+using (Py.GIL()) py.Exec("del h, hc, h2");
+PythonHost.Drain();
+int exportsAfterChurn = NDArrayPythonInterop.LiveExports, importsAfterChurn = NDArrayPythonInterop.LiveImports;   // 0, 0
 
 // ==== engine shutdown ================================================================================
-check.Section("engine shutdown: imports drained, orphaned exports swept");
 // Leave one export held ONLY by Python and one import still referenced by C# when the engine dies.
-NDArray orphanSource = np.arange(6).astype(NPTypeCode.Double);
-using (Py.GIL()) { using PyObject p = orphanSource.ToNumpy(); py.Set("shutdown_orphan", p); }
-orphanSource.Dispose();                              // Python is now the only holder of that buffer
-py.Exec("shutdown_import = np.arange(8) * 2.0");
 NDArray survivor;
-using (Py.GIL()) { using PyObject s = py.Get("shutdown_import"); survivor = s.AsNDArray(); }
-check.That(NDArrayPythonInterop.LiveExports == 1 && NDArrayPythonInterop.LiveImports == 1, "one orphan export + one live import going into Shutdown()");
-
-host.Dispose();                                      // RuntimeData.FormatterType = NoopFormatter; PythonEngine.Shutdown() — the scope (and the orphan's only holder) dies WITH the interpreter
-check.That(!PythonEngine.IsInitialized, "PythonEngine.Shutdown() completed without a crash");
-check.That(NDArrayPythonInterop.LiveImports == 0, "the shutdown handler force-drained every import lease (LiveImports == 0)");
-survivor.Dispose();                                  // must be a harmless no-op now — the lease was already claimed
-check.That(true, "disposing the still-referenced import view after shutdown is safe");
-var sw = Stopwatch.StartNew();
-while (NDArrayPythonInterop.LiveExports != 0 && sw.ElapsedMilliseconds < 10_000) Thread.Sleep(25);
-check.That(NDArrayPythonInterop.LiveExports == 0, "orphaned exports were swept right after the engine died (pythonnet runs no atexit pass, so weakref.finalize could never fire)");
-
-return check.Exit();
-
-[MethodImpl(MethodImplOptions.NoInlining)]           // debug JITs keep a frame's temporaries alive until it returns — so the dying references live in their OWN frame
-void ExportAndForget()
+using (Py.GIL())
 {
-    var temp = np.arange(4).astype(NPTypeCode.Double);
-    using (Py.GIL()) { using PyObject p = temp.ToNumpy(); py.Set("orphan", p); }
-    temp.Dispose();
-}
-
-[MethodImpl(MethodImplOptions.NoInlining)]
-NDArray HoldWhilePythonForgets()
-{
-    NDArray original;
-    using (Py.GIL()) { using PyObject k = py.Get("keep"); original = k.AsNDArray(); }
-    NDArray slice = original["2:5"];                 // shares the memory block, so it extends the lease
-    py.Exec("del keep");
-    return slice;                                    // `original` dies with this frame
-}
-
-[MethodImpl(MethodImplOptions.NoInlining)]
-void ChurnOnce(int i)
-{
-    var a = np.arange(32).astype(NPTypeCode.Double);
-    using (Py.GIL()) { using PyObject p = a.ToNumpy(); }             // export; wrapper dropped immediately
-    py.Exec("h = np.arange(16, dtype='i8')");
-    NDArray view;
-    using (Py.GIL()) { using PyObject h = py.Get("h"); view = h.AsNDArray(); }
-    NDArray sub = view["4:12"];
-    sub[0] = (long)i;
-    using (Py.GIL()) { using PyObject c = a.ToNumpyCopy(); }
-    if (i % 40 == 39) FullGc();
-}
-
-static void FullGc()
-{
-    GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
-    using (Py.GIL())
+    using (NDScope.Open())
     {
-        Finalizer.Instance.Collect();                                     // pythonnet's deferred decrefs
-        PythonEngine.RunSimpleString("import gc; gc.collect()");
-        using var t = np.arange(1).ToNumpyCopy();                         // any conversion runs the interop's inline drain
+        NDArray orphanSource = np.arange(6).astype(np.float64);
+        py.shutdown_orphan = orphanSource;           // Python becomes the only holder of that buffer when the inner scope closes
     }
+    py.Exec("shutdown_import = np.arange(8) * 2.0");
+    using PyObject s = py.shutdown_import;
+    survivor = s.AsNDArray();
+    NDScope.Detach(survivor);                        // keep it out of the outer scope: it must still be referenced when the engine dies
 }
+int exportsGoingIn = NDArrayPythonInterop.LiveExports, importsGoingIn = NDArrayPythonInterop.LiveImports;   // 1, 1
 
-static bool Settle(Func<bool> done, int timeoutMs = 5000)
-{
-    var sw = Stopwatch.StartNew();
-    while (!done() && sw.ElapsedMilliseconds < timeoutMs) { FullGc(); Thread.Sleep(20); }
-    return done();
-}
+host.Dispose();                                      // RuntimeData.FormatterType = NoopFormatter; PythonEngine.Shutdown() — the namespace (and the orphan's only holder) dies WITH the interpreter
+bool down = !PythonEngine.IsInitialized;             // true: Shutdown() completed without a crash
+int importsAfter = NDArrayPythonInterop.LiveImports; // 0: the shutdown handler force-drained every import lease
+survivor.Dispose();                                  // a harmless no-op now — the lease was already claimed
+// ...and within a moment LiveExports reads 0 too: the orphaned export is swept right after the engine dies (pythonnet runs
+// no atexit pass, so weakref.finalize could never fire; the interop's own sweep waits until the interpreter is provably gone).
 
 // =====================================================================================================
-//  Shared scaffolding — identical in every example (a single-file app cannot share source files).
+//  Scaffolding — identical in every example (a single-file app cannot share source files). Nothing
+//  below is specific to this script: Throws captures an exception the tutorial expects, PythonHost
+//  finds CPython, runs the engine and owns a Python namespace with numpy imported.
 // =====================================================================================================
 
-/// <summary>Finds a CPython that has numpy, starts the engine once, shuts it down crash-free on dispose.</summary>
+static Exception? Throws(Action act) { try { act(); return null; } catch (Exception e) { return e; } }
+
+/// <summary>
+///     Finds a CPython that has numpy, starts the engine once, registers the codec, opens a Python
+///     namespace with numpy imported, and shuts everything down crash-free on dispose.
+/// </summary>
 sealed class PythonHost : IDisposable
 {
+    /// <summary>
+    ///     A Python module where <c>import numpy as np</c> already ran. Hold it as <c>dynamic py</c> and use
+    ///     it under <c>Py.GIL()</c>: <c>py.x = nd</c> binds a NumSharp array as a zero-copy numpy view (the
+    ///     codec runs ToNumpy), <c>NDArray a = py.x</c> decodes one back (AsNDArray whenever a view is
+    ///     possible), <c>py.Exec("...")</c> runs statements, <c>double d = py.Eval("x.sum()")</c> reads a
+    ///     value, and <c>py.np</c> is numpy itself.
+    /// </summary>
+    public PyModule Namespace { get; private set; } = null!;
     bool _down;
 
-    public static PythonHost Start()
+    /// <param name="codec">Register the codec at startup — the normal choice. Two examples pass <c>false</c>
+    /// to show the registration order themselves.</param>
+    public static PythonHost Start(bool codec = true)
     {
-        string dll = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL") ?? Discover();
-        Runtime.PythonDLL = dll;                 // pythonnet needs the shared library, not the interpreter
-        PythonEngine.Initialize();               // once per process (CPython + numpy cannot re-initialize)
-        PythonEngine.BeginAllowThreads();        // release THIS thread's GIL so every thread can take it later
-        Console.WriteLine($"Python {PythonEngine.Version.Split(' ')[0]}  ({dll})");
-        return new PythonHost();
+        Runtime.PythonDLL = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL") ?? Discover();
+        PythonEngine.Initialize();                          // once per process (CPython + numpy cannot re-initialize)
+        PythonEngine.BeginAllowThreads();                   // release THIS thread's GIL so every thread can take it later
+        if (codec) NDArrayPythonInterop.RegisterCodec();    // NDArray <-> numpy and C# tuples <-> Python tuples at every pythonnet boundary; before any As<NDArray>()
+        var host = new PythonHost();
+        using (Py.GIL()) { host.Namespace = Py.CreateScope(); host.Namespace.Exec("import numpy as np"); }
+        return host;
     }
 
     public void Dispose()
     {
         if (_down) return;
         _down = true;
-        RuntimeData.FormatterType = typeof(NoopFormatter);   // pythonnet's opt-out of BinaryFormatter stashing (.NET 8+)
-        PythonEngine.Shutdown();                             // the interop's handler drains every lease first
+        using (Py.GIL()) Namespace.Dispose();               // a PyObject is disposed under the GIL — and never after Shutdown()
+        RuntimeData.FormatterType = typeof(NoopFormatter);  // pythonnet's opt-out of BinaryFormatter stashing (.NET 8+)
+        PythonEngine.Shutdown();                            // the interop's handler drains every lease first
+    }
+
+    /// <summary>
+    ///     Runs both collectors to completion — CLR GC + finalizers, pythonnet's deferred decrefs, Python's
+    ///     gc — plus one trivial conversion, which runs the interop's inline lease drain. The live counters
+    ///     are exact after this.
+    /// </summary>
+    public static void Drain()
+    {
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        using (Py.GIL())
+        {
+            Finalizer.Instance.Collect();                   // wrappers the CLR GC finalized (`dynamic` temporaries, for instance) release their Python reference here
+            PythonEngine.RunSimpleString("import gc; gc.collect()");
+            using NDArray probe = np.arange(1);
+            using PyObject conversion = probe.ToNumpyCopy();
+        }
     }
 
     // Ask the `python` on PATH where its shared library lives (what PYTHONNET_PYDLL would name).
@@ -230,62 +256,4 @@ sealed class PythonHost : IDisposable
                 return candidate;
         throw new InvalidOperationException("libpython not found; set PYTHONNET_PYDLL to its full path");
     }
-}
-
-/// <summary>A Python namespace with numpy imported, plus GIL-wrapped one-liners for reading it back.</summary>
-sealed class PyScope : IDisposable
-{
-    public PyModule Module { get; }
-
-    public PyScope(string setup = "import numpy as np")
-    {
-        using (Py.GIL()) { Module = Py.CreateScope(); Module.Exec(setup); }
-    }
-
-    public void Exec(string code) { using (Py.GIL()) Module.Exec(code); }
-    public void Set(string name, PyObject value) { using (Py.GIL()) Module.Set(name, value); }
-    public PyObject Get(string name) => Module.Get(name);                        // call under Py.GIL()
-    public T Eval<T>(string expr) { using (Py.GIL()) { using PyObject r = Module.Eval(expr); return r.As<T>(); } }
-    public string Str(string expr) => Eval<string>($"str({expr})");
-    public bool Bool(string expr) => Eval<bool>($"bool({expr})");
-    public long Long(string expr) => Eval<long>($"int({expr})");
-    public double Float(string expr) => Eval<double>($"float({expr})");
-    public void Dispose()
-    {
-        if (_disposed || !PythonEngine.IsInitialized) return;   // never touch the C-API after Shutdown()
-        _disposed = true;
-        using (Py.GIL()) Module.Dispose();
-    }
-
-    bool _disposed;
-}
-
-/// <summary>Evidence, not narration: one OK/FAIL line per claim; the exit code is 0 only when all hold.</summary>
-sealed class Checklist
-{
-    int _failed;
-
-    public void Section(string title) => Console.WriteLine($"\n-- {title} --");
-
-    public bool That(bool ok, string claim)
-    {
-        Console.WriteLine($"  {(ok ? "OK  " : "FAIL")} {claim}");
-        if (!ok) _failed++;
-        return ok;
-    }
-
-    public void Throws<T>(Action act, string claim, string? containing = null) where T : Exception
-    {
-        try { act(); That(false, $"{claim} — expected {typeof(T).Name}, nothing was thrown"); }
-        catch (T e) { That(containing is null || e.Message.Contains(containing), $"{claim}: {typeof(T).Name}: {FirstLine(e.Message)}"); }
-        catch (Exception e) { That(false, $"{claim} — expected {typeof(T).Name}, got {e.GetType().Name}: {FirstLine(e.Message)}"); }
-    }
-
-    public int Exit()
-    {
-        Console.WriteLine(_failed == 0 ? "\nALL OK" : $"\n{_failed} FAILED");
-        return _failed == 0 ? 0 : 1;
-    }
-
-    static string FirstLine(string s) { int i = s.IndexOfAny(new[] { '\r', '\n' }); return i < 0 ? s : s[..i]; }
 }

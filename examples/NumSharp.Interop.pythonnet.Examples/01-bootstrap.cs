@@ -4,7 +4,12 @@
 //   #:package NumSharp.Interop.pythonnet@0.60.0
 //
 // 01 — Bootstrap: find CPython, start the engine ONCE per process, verify the pythonnet/Python
-//      pairing, share the first buffer, prove any thread can convert, and shut down crash-free.
+//      pairing, register the codec, share the first buffer, prove any thread can convert, and shut
+//      down crash-free. Every other example starts the same way through PythonHost.Start() at the
+//      bottom of the file — this one walks through what that call does.
+//
+//      Read it top to bottom; the comments state what each line leaves behind. The same steps, with
+//      every statement asserted, are test/NumSharp.Tests.Interop/Examples/Example01_Bootstrap.cs.
 //
 //      Run:  dotnet run 01-bootstrap.cs        (needs `python` on PATH with numpy, or PYTHONNET_PYDLL)
 
@@ -13,110 +18,121 @@ using NumSharp;
 using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
-using var host = PythonHost.Start();
-var check = new Checklist();
+using var host = PythonHost.Start(codec: false);   // Runtime.PythonDLL = ...; PythonEngine.Initialize(); PythonEngine.BeginAllowThreads(); a namespace with `import numpy as np`
+using var scope = NDScope.Open();                  // every NDArray built on this thread is released when the scope closes — nothing is disposed by hand
+dynamic py = host.Namespace;                       // the Python namespace; talk to it under Py.GIL()
 
-// ---- 1. the pairing: every pythonnet release hard-caps the Python it can drive ------------------
-check.Section("engine + version guard");
-Version pythonnet = typeof(PythonEngine).Assembly.GetName().Version!;
-Version python = Version.Parse(PythonEngine.Version.Split(' ')[0]);
-Console.WriteLine($"  pythonnet {pythonnet.ToString(3)} drives Python {PythonEngine.MinSupportedVersion.ToString(2)} - " +
-                  $"{PythonEngine.MaxSupportedVersion.ToString(2)}; running Python {python.ToString(2)}");
-check.That(PythonEngine.IsInitialized, "PythonEngine.IsInitialized after Initialize()");
-check.That(python >= new Version(PythonEngine.MinSupportedVersion.Major, PythonEngine.MinSupportedVersion.Minor) &&
-           python <= new Version(PythonEngine.MaxSupportedVersion.Major, PythonEngine.MaxSupportedVersion.Minor),
-           "the running Python is inside the loaded pythonnet's supported range (the interop re-checks this on first use)");
+// ---- 1. the pairing: every pythonnet release hard-caps the Python it can drive --------------------
+Version pythonnet = typeof(PythonEngine).Assembly.GetName().Version!;           // 3.0.5
+Version python = Version.Parse(PythonEngine.Version.Split(' ')[0]);             // the running Python, e.g. 3.12.12
+Version floor = PythonEngine.MinSupportedVersion;                               // 3.7  — the same for the whole pythonnet 3 line
+Version ceiling = PythonEngine.MaxSupportedVersion;                             // 3.13 — what moves from release to release
+// PythonEngine.IsInitialized is true, and `python` lies inside [floor, ceiling]. The interop re-checks the
+// range on first use and raises an actionable error naming the pythonnet to install when it does not.
 
-// ---- 2. register the codec BEFORE the first As<NDArray>() anywhere in the process ---------------
-// pythonnet caches decoder lookups per (Python type, CLR type) pair — and caches MISSES. A decode
-// attempted before registration poisons that pair for the whole engine session. Register at startup.
-check.Section("codec registration order");
-check.That(NDArrayPythonInterop.RegisterCodec(), "RegisterCodec() returns true the first time in a session");
-check.That(!NDArrayPythonInterop.RegisterCodec(), "...and false afterwards (idempotent per session)");
+// ---- 2. register the codec BEFORE the first As<NDArray>() anywhere in the process ------------------
+// pythonnet caches decoder lookups per (Python type, CLR type) pair — and caches MISSES. A decode attempted
+// before registration poisons that pair for the whole engine session. Register at startup; PythonHost.Start()
+// does it for you in every other example.
+bool registered = NDArrayPythonInterop.RegisterCodec();    // true: NDArray <-> numpy and C# tuples <-> Python tuples now convert at every pythonnet boundary
+bool again = NDArrayPythonInterop.RegisterCodec();         // false: idempotent for the rest of the engine session
 
-// ---- 3. one buffer, both sides --------------------------------------------------------------------
-check.Section("first shared array");
-using NDArray nd = np.arange(6).reshape(2, 3);       // int64, C-contiguous, NumSharp-owned memory
+// ---- 3. one buffer, both sides ---------------------------------------------------------------------
+NDArray nd = np.arange(6).reshape(2, 3);           // int64, C-contiguous, NumSharp-owned memory
 NDArray copy, view;
-using (Py.GIL())                                      // your own PyObject work still needs the GIL
+using (Py.GIL())                                   // Python work runs under the GIL (the conversion verbs take it themselves, re-entrantly)
 {
-    using var scope = Py.CreateScope();
-    scope.Exec("import numpy as np");
-
-    using (PyObject x = nd.ToNumpy())                 // zero-copy numpy view of NumSharp's buffer
-        scope.Set("x", x);
-
-    scope.Exec("x[1, 2] = 99");                       // Python writes...
-    check.That(nd.GetInt64(1, 2) == 99, "a Python write through the view lands in NumSharp (nd[1,2] == 99)");
-
-    scope.Exec("r = np.sin(x / 3.0)");                // numpy computes a fresh float64 array...
-    using PyObject r = scope.Get("r");
-    copy = r.ToNDArray();                             // ...an independent C-contiguous copy of it
-    view = r.AsNDArray();                             // ...or a zero-copy view over numpy's buffer
-
-    check.That(copy.typecode == NPTypeCode.Double && copy.shape.SequenceEqual(new long[] { 2, 3 }), "ToNDArray: float64 (2,3), detached");
-    check.That(view.Shape.IsWriteable, "AsNDArray: writeable view over numpy's fresh result");
-
-    view[0, 0] = -1.0;                                // NumSharp writes through the view...
-    using PyObject probe = scope.Eval("float(r[0, 0])");
-    check.That(probe.As<double>() == -1.0, "...and numpy sees it (r[0,0] == -1.0)");
+    py.x = nd;                                     // zero-copy: x is a numpy view over nd's bytes (the codec ran ToNumpy)
+    py.Exec("x[1, 2] = 99");                       // Python writes...   nd is now [[0 1 2] [3 4 99]]
+    py.Exec("r = np.sin(x / 3.0)");                // numpy computes a fresh float64 (2,3) array...
+    using PyObject r = py.r;
+    copy = r.ToNDArray();                          // ...an independent C-contiguous copy of it (copy.typecode == Double, copy.shape == (2,3))
+    view = r.AsNDArray();                          // ...or a zero-copy view over numpy's buffer (view.Shape.IsWriteable == true)
+    view[0, 0] = -1.0;                             // NumSharp writes through the view...
+    double r00 = py.Eval("r[0, 0]");               // -1.0: numpy sees it
 }
 
-Console.WriteLine(nd.ToString());
-copy.Dispose();
-view.Dispose();                                       // releases the lease on numpy's buffer
-
-// ---- 4. BeginAllowThreads is what lets threads that never touched Python convert ----------------
-check.Section("any thread converts");
-Exception? failure = null;
+// ---- 4. BeginAllowThreads is what lets threads that never touched Python convert ------------------
+double sum = 0;
 var worker = new Thread(() =>
 {
-    try
+    using NDArray batch = np.arange(4).astype(np.float64);   // built on the worker: outside the main thread's scope, so disposed here
+    using (Py.GIL())                                          // a thread that never touched Python takes the GIL like any other
     {
-        using NDArray batch = np.arange(4).astype(NPTypeCode.Double);
-        using (Py.GIL())
-        using (PyObject p = batch.ToNumpy())
-        using (PyObject s = p.InvokeMethod("sum"))
-            if (s.As<double>() != 6.0) throw new Exception("wrong sum");
+        dynamic p = batch.ToNumpy();
+        sum = p.sum();                                        // 6.0
     }
-    catch (Exception e) { failure = e; }
 });
 worker.Start();
 worker.Join();
-check.That(failure is null, $"a fresh thread exported + summed under its own Py.GIL() {(failure is null ? "" : failure.Message)}");
 
-// ---- 5. observability: nothing leaks --------------------------------------------------------------
-check.Section("counters");
-check.That(NDArrayPythonInterop.LiveExports == 0, $"LiveExports == 0 after every Python view died (was {NDArrayPythonInterop.LiveExports})");
-check.That(NDArrayPythonInterop.LiveImports == 0, $"LiveImports == 0 after every NumSharp view was disposed (was {NDArrayPythonInterop.LiveImports})");
-
-return check.Exit();   // `using var host` shuts the engine down after this line
+// ---- 5. who frees what -----------------------------------------------------------------------------
+// When this script ends: `scope` releases nd, copy and view in one sweep (the lease on r's buffer goes back to
+// numpy); `host` drops the namespace, so x dies and the pin on nd's buffer with it, then shuts the engine down —
+// RuntimeData.FormatterType = NoopFormatter; PythonEngine.Shutdown(). NDArrayPythonInterop.LiveExports and
+// LiveImports both read 0 afterwards; 06-lifetime.cs watches them move.
 
 // =====================================================================================================
-//  Shared scaffolding — identical in every example (a single-file app cannot share source files).
+//  Scaffolding — identical in every example (a single-file app cannot share source files). Nothing
+//  below is specific to this script: Throws captures an exception the tutorial expects, PythonHost
+//  finds CPython, runs the engine and owns a Python namespace with numpy imported.
 // =====================================================================================================
 
-/// <summary>Finds a CPython that has numpy, starts the engine once, shuts it down crash-free on dispose.</summary>
+static Exception? Throws(Action act) { try { act(); return null; } catch (Exception e) { return e; } }
+
+/// <summary>
+///     Finds a CPython that has numpy, starts the engine once, registers the codec, opens a Python
+///     namespace with numpy imported, and shuts everything down crash-free on dispose.
+/// </summary>
 sealed class PythonHost : IDisposable
 {
+    /// <summary>
+    ///     A Python module where <c>import numpy as np</c> already ran. Hold it as <c>dynamic py</c> and use
+    ///     it under <c>Py.GIL()</c>: <c>py.x = nd</c> binds a NumSharp array as a zero-copy numpy view (the
+    ///     codec runs ToNumpy), <c>NDArray a = py.x</c> decodes one back (AsNDArray whenever a view is
+    ///     possible), <c>py.Exec("...")</c> runs statements, <c>double d = py.Eval("x.sum()")</c> reads a
+    ///     value, and <c>py.np</c> is numpy itself.
+    /// </summary>
+    public PyModule Namespace { get; private set; } = null!;
     bool _down;
 
-    public static PythonHost Start()
+    /// <param name="codec">Register the codec at startup — the normal choice. Two examples pass <c>false</c>
+    /// to show the registration order themselves.</param>
+    public static PythonHost Start(bool codec = true)
     {
-        string dll = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL") ?? Discover();
-        Runtime.PythonDLL = dll;                 // pythonnet needs the shared library, not the interpreter
-        PythonEngine.Initialize();               // once per process (CPython + numpy cannot re-initialize)
-        PythonEngine.BeginAllowThreads();        // release THIS thread's GIL so every thread can take it later
-        Console.WriteLine($"Python {PythonEngine.Version.Split(' ')[0]}  ({dll})");
-        return new PythonHost();
+        Runtime.PythonDLL = Environment.GetEnvironmentVariable("PYTHONNET_PYDLL") ?? Discover();
+        PythonEngine.Initialize();                          // once per process (CPython + numpy cannot re-initialize)
+        PythonEngine.BeginAllowThreads();                   // release THIS thread's GIL so every thread can take it later
+        if (codec) NDArrayPythonInterop.RegisterCodec();    // NDArray <-> numpy and C# tuples <-> Python tuples at every pythonnet boundary; before any As<NDArray>()
+        var host = new PythonHost();
+        using (Py.GIL()) { host.Namespace = Py.CreateScope(); host.Namespace.Exec("import numpy as np"); }
+        return host;
     }
 
     public void Dispose()
     {
         if (_down) return;
         _down = true;
-        RuntimeData.FormatterType = typeof(NoopFormatter);   // pythonnet's opt-out of BinaryFormatter stashing (.NET 8+)
-        PythonEngine.Shutdown();                             // the interop's handler drains every lease first
+        using (Py.GIL()) Namespace.Dispose();               // a PyObject is disposed under the GIL — and never after Shutdown()
+        RuntimeData.FormatterType = typeof(NoopFormatter);  // pythonnet's opt-out of BinaryFormatter stashing (.NET 8+)
+        PythonEngine.Shutdown();                            // the interop's handler drains every lease first
+    }
+
+    /// <summary>
+    ///     Runs both collectors to completion — CLR GC + finalizers, pythonnet's deferred decrefs, Python's
+    ///     gc — plus one trivial conversion, which runs the interop's inline lease drain. The live counters
+    ///     are exact after this.
+    /// </summary>
+    public static void Drain()
+    {
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        using (Py.GIL())
+        {
+            Finalizer.Instance.Collect();                   // wrappers the CLR GC finalized (`dynamic` temporaries, for instance) release their Python reference here
+            PythonEngine.RunSimpleString("import gc; gc.collect()");
+            using NDArray probe = np.arange(1);
+            using PyObject conversion = probe.ToNumpyCopy();
+        }
     }
 
     // Ask the `python` on PATH where its shared library lives (what PYTHONNET_PYDLL would name).
@@ -158,34 +174,4 @@ sealed class PythonHost : IDisposable
                 return candidate;
         throw new InvalidOperationException("libpython not found; set PYTHONNET_PYDLL to its full path");
     }
-}
-
-/// <summary>Evidence, not narration: one OK/FAIL line per claim; the exit code is 0 only when all hold.</summary>
-sealed class Checklist
-{
-    int _failed;
-
-    public void Section(string title) => Console.WriteLine($"\n-- {title} --");
-
-    public bool That(bool ok, string claim)
-    {
-        Console.WriteLine($"  {(ok ? "OK  " : "FAIL")} {claim}");
-        if (!ok) _failed++;
-        return ok;
-    }
-
-    public void Throws<T>(Action act, string claim, string? containing = null) where T : Exception
-    {
-        try { act(); That(false, $"{claim} — expected {typeof(T).Name}, nothing was thrown"); }
-        catch (T e) { That(containing is null || e.Message.Contains(containing), $"{claim}: {typeof(T).Name}: {FirstLine(e.Message)}"); }
-        catch (Exception e) { That(false, $"{claim} — expected {typeof(T).Name}, got {e.GetType().Name}: {FirstLine(e.Message)}"); }
-    }
-
-    public int Exit()
-    {
-        Console.WriteLine(_failed == 0 ? "\nALL OK" : $"\n{_failed} FAILED");
-        return _failed == 0 ? 0 : 1;
-    }
-
-    static string FirstLine(string s) { int i = s.IndexOfAny(new[] { '\r', '\n' }); return i < 0 ? s : s[..i]; }
 }
