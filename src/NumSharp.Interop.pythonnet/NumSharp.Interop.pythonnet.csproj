@@ -8,9 +8,10 @@
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
 
-    <!-- NuGet package (co-versioned with NumSharp) -->
+    <!-- NuGet package (co-versioned with NumSharp: the version is the repo-root Directory.Build.props
+         VersionPrefix, never a number in this file, so the nuspec dependency on NumSharp and this
+         package's own version cannot drift apart). -->
     <PackageId>NumSharp.Interop.pythonnet</PackageId>
-    <Version>0.60.0</Version>
     <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
@@ -21,9 +22,9 @@
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <!-- Packed explicitly (`dotnet pack`), never on build: see the release workflow. License
+         acceptance and the icon are repo-wide settings in ../../Directory.Build.props. -->
     <PackageOutputPath>../../packages</PackageOutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Symbols: embed the .pdb in the .nupkg (matches NumSharp.Core / NumSharp.Bitmap). The

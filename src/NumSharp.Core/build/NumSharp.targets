@@ -51,23 +51,40 @@
     <CompilerVisibleProperty Include="NumSharpDisableWeaverMissingWarning" />
   </ItemGroup>
 
+  <!-- Incremental, like the weaver's own NDScopeWeave target: Inputs/Outputs on a per-TFM marker,
+       so the scan (a full read of the intermediate assembly) is paid only when CoreCompile actually
+       produced a new assembly — never on the no-op incremental builds that make up most of a dev
+       loop. Like a compiler warning, NDW013 is therefore emitted by the build that recompiles the
+       project and not repeated by one that recompiled nothing. The marker sits in obj/ and is
+       registered in FileWrites, so Clean/Rebuild remove it and re-arm the scan. -->
   <Target Name="_NumSharpWarnWeaverMissing"
           AfterTargets="CoreCompile"
           Condition="'$(DesignTimeBuild)' != 'true'
                      and '$(NumSharpBuildActive)' != 'true'
                      and '$(NumSharpDisableWeaverMissingWarning)' != 'true'
-                     and '@(IntermediateAssembly)' != ''">
+                     and '@(IntermediateAssembly)' != ''"
+          Inputs="@(IntermediateAssembly)"
+          Outputs="$(IntermediateOutputPath)NumSharp.WeaverMissing.marker">
 
     <!-- Only pay the file read when the weaver is not active — the common case (weaver installed)
-         skips the scan entirely via the target Condition above. -->
+         skips the scan entirely via the target Condition above. ONE read: the assembly is decoded
+         once and tested for both weavable names by a single regex (NDScopedAttribute /
+         NDScopedAsyncAttribute — NDScopedCoveredAttribute does not match). The decoded text is never
+         stored in a property: a multi-megabyte property value would be echoed verbatim into every
+         diagnostic log and binlog that records property assignments. -->
     <PropertyGroup>
       <_NumSharpScopedAssembly>@(IntermediateAssembly->'%(FullPath)')</_NumSharpScopedAssembly>
       <_NumSharpUsesScoped>false</_NumSharpUsesScoped>
-      <_NumSharpUsesScoped Condition="Exists('$(_NumSharpScopedAssembly)') and ($([System.IO.File]::ReadAllText('$(_NumSharpScopedAssembly)').Contains('NDScopedAttribute')) or $([System.IO.File]::ReadAllText('$(_NumSharpScopedAssembly)').Contains('NDScopedAsyncAttribute')))">true</_NumSharpUsesScoped>
+      <_NumSharpUsesScoped Condition="Exists('$(_NumSharpScopedAssembly)') and $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('$(_NumSharpScopedAssembly)')), 'NDScoped(Async)?Attribute'))">true</_NumSharpUsesScoped>
     </PropertyGroup>
 
     <Warning Condition="'$(_NumSharpUsesScoped)' == 'true'"
              Code="NDW013"
              Text="$(MSBuildProjectName) uses [NDScoped]/[NDScopedAsync] but the NumSharp.Build package is not installed (or weaving is disabled), so the attributes are INERT — no NDScope is injected and the methods' NDArray temporaries are left to the finalizer instead of being reclaimed. Install the weaver with 'dotnet add package NumSharp.Build' (it is a build-time development dependency, not a runtime dependency), or remove the attributes and dispose the temporaries by hand. See https://scisharp.github.io/NumSharp/docs/ndscoped.html#ndw013" />
+
+    <Touch Files="$(IntermediateOutputPath)NumSharp.WeaverMissing.marker" AlwaysCreate="true" />
+    <ItemGroup>
+      <FileWrites Include="$(IntermediateOutputPath)NumSharp.WeaverMissing.marker" />
+    </ItemGroup>
   </Target>
 </Project>

@@ -7,9 +7,10 @@
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
 
-    <!-- NuGet package (co-versioned with NumSharp) -->
+    <!-- NuGet package (co-versioned with NumSharp: the version is the repo-root Directory.Build.props
+         VersionPrefix, never a number in this file, so the nuspec dependency on NumSharp and this
+         package's own version cannot drift apart). -->
     <PackageId>NumSharp.Interop.OpenBLAS</PackageId>
-    <Version>0.60.0</Version>
     <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
@@ -20,17 +21,24 @@
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <!-- Apache-2.0 covers this package's own code. The remaining terms cover the OpenBLAS runtime
-         assets it redistributes: OpenBLAS and its bundled LAPACK are BSD-3-Clause-Attribution, the
-         packaging is BSD-2-Clause (openblas-libs), and the statically linked libgfortran carries the
-         GCC Runtime Library Exception — which is precisely what permits redistribution inside a
-         larger work under other terms, and is the same basis on which NumPy and SciPy ship it in
-         every binary wheel. Declaring the compound expression keeps license scanners honest instead
-         of hiding native payload behind the managed project's license. Full text and per-artifact
-         checksums: THIRD-PARTY-NOTICES.txt. -->
-    <PackageLicenseExpression>Apache-2.0 AND BSD-3-Clause-Attribution AND BSD-2-Clause AND (GPL-3.0-or-later WITH GCC-exception-3.1)</PackageLicenseExpression>
+         assets it redistributes: OpenBLAS and its bundled LAPACK are BSD-3-Clause (the plain
+         3-clause BSD in OpenBLAS's LICENSE), the packaging is BSD-2-Clause (openblas-libs), and the
+         statically linked libgfortran carries the GCC Runtime Library Exception — which is precisely
+         what permits redistribution inside a larger work under other terms, and is the same basis on
+         which NumPy and SciPy ship it in every binary wheel. Declaring the compound expression keeps
+         license scanners honest instead of hiding native payload behind the managed project's
+         license. Full text and per-artifact checksums: THIRD-PARTY-NOTICES.txt.
+
+         EVERY identifier here MUST be OSI- or FSF-approved. nuget.org rejects a push whose license
+         expression contains any other SPDX id (learn.microsoft.com/nuget/nuget-org/licenses.nuget.org),
+         and it does so only at publish time — after the sibling packages of the same release have
+         already gone out. 'BSD-3-Clause-Attribution' (a DIFFERENT license, and unapproved) once sat
+         here and would have failed the release; https://licenses.nuget.org/<expression> answering
+         200 rather than 404 is the pre-flight check for any change to this line. -->
+    <PackageLicenseExpression>Apache-2.0 AND BSD-3-Clause AND BSD-2-Clause AND (GPL-3.0-or-later WITH GCC-exception-3.1)</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <!-- Packed explicitly (`dotnet pack`), never on build: see the release workflow. License
+         acceptance and the icon are repo-wide settings in ../../Directory.Build.props. -->
     <PackageOutputPath>../../packages</PackageOutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Symbols: embed the .pdb in the .nupkg (matches NumSharp.Core / NumSharp.Bitmap). The
@@ -80,10 +88,11 @@
        which downloads the pinned wheels and verifies two checksums per RID (the wheel's, then the
        extracted library's) against the checked-in tools/openblas-manifest.json.
 
-       A build with the assets absent is fine and produces today's asset-free package — the
-       fetch is a release step, not a prerequisite for working on the code. Set
-       BundleOpenBlas=false to skip them even when staged; set RequireOpenBlasAssets=true (CI
-       release) to turn a missing asset into a hard error instead of a warning.
+       A build with the assets absent is fine, and a pack without them simply produces an
+       asset-free package (with a pack-time warning) — the fetch is a release step, not a
+       prerequisite for working on the code. Set BundleOpenBlas=false to skip them even when
+       staged; set RequireOpenBlasAssets=true (CI release) to turn a missing asset into a hard
+       error instead of a warning.
        ================================================================================== -->
   <PropertyGroup>
     <OpenBlasRuntimesDir>$(MSBuildProjectDirectory)/runtimes</OpenBlasRuntimesDir>

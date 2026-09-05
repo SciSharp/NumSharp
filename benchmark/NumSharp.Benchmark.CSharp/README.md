@@ -1,6 +1,6 @@
 # NumSharp Benchmark Suite
 
-[![BenchmarkDotNet](https://img.shields.io/badge/benchmark-BenchmarkDotNet%200.14-blue)](https://benchmarkdotnet.org/)
+[![BenchmarkDotNet](https://img.shields.io/badge/benchmark-BenchmarkDotNet%200.15-blue)](https://benchmarkdotnet.org/)
 [![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](../../LICENSE)
 

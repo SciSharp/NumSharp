@@ -53,6 +53,84 @@
   </PropertyGroup>
 
   <!-- ====================================================================================
+       JIT optimization posture — TieredCompilation + TieredPGO, ON for the whole repo.
+
+       WHAT THESE ARE. Both are PROCESS-level runtime knobs, not per-assembly switches: they are
+       written into the ENTRY process's `<app>.runtimeconfig.json` as
+       `System.Runtime.TieredCompilation` / `System.Runtime.TieredPGO`. Setting them here turns
+       them on for every project in the repo that PRODUCES a runtimeconfig — the test hosts, the
+       benchmarks, `tools/`, and the file-based `dotnet run` scripts under the repo root
+       (Directory.Build.props is an implicit import for those). Those processes then start with
+       tiered compilation AND profile-guided optimization, so hot methods are recompiled to
+       PGO-guided tier-1 — the most-optimized code the JIT produces.
+
+       WHY BOTH ENABLED, AND NOT `TieredCompilation=false`. TieredPGO REQUIRES tiering: it
+       instruments the tier-0 code to gather the profile that guides tier-1. So "optimize
+       aggressively using BOTH" can only mean both switched ON. Disabling tiering would skip
+       tier-0 entirely — which also drops PGO and slows every first-call/startup — a different and
+       usually worse steady-state trade, so it is deliberately NOT done globally here.
+
+       SCOPE / REAL EFFECT. On the src/ class LIBRARIES (NumSharp.Core, NumSharp.Bitmap,
+       NumSharp.Interop.*) this is INERT: a library emits no runtimeconfig, and the CONSUMING
+       app's own runtimeconfig governs the whole process. A downstream consumer that wants this
+       posture sets the same two properties in THEIR application project. Both values are also
+       the .NET 8+ defaults, so this pins the intent and guarantees it across SDKs/environments
+       rather than changing measured behaviour — the only setting that would change behaviour is
+       turning tiering OFF, which "both" excludes.
+
+       A project overrides in its own body (imported AFTER this file, so it wins), and the
+       `== ''` guards also let a command-line `-p:` / global property win — e.g.
+       benchmark/NumSharp.Benchmark.Sandbox deliberately sets both false to measure cold tier-1.
+       ==================================================================================== -->
+  <PropertyGroup>
+    <TieredCompilation Condition="'$(TieredCompilation)' == ''">true</TieredCompilation>
+    <TieredPGO Condition="'$(TieredPGO)' == ''">true</TieredPGO>
+  </PropertyGroup>
+
+  <!-- ====================================================================================
+       Package version — ONE number for every project in the repository.
+
+       `VersionPrefix` is the single source of truth. The SDK derives everything else from it
+       (Microsoft.NET.DefaultAssemblyInfo.targets, Microsoft.NET.GenerateAssemblyInfo.targets,
+       NuGet.Build.Tasks.Pack.targets), so NO csproj declares Version / PackageVersion /
+       AssemblyVersion / FileVersion:
+
+           Version              = VersionPrefix[-VersionSuffix]        0.60.0 or 0.60.0-rc.1
+           PackageVersion       = Version                              the nupkg version — and the
+                                                                       version a ProjectReference
+                                                                       becomes as a nuspec dependency
+           AssemblyVersion      = Version minus pre-release/metadata   0.60.0.0
+           FileVersion          = AssemblyVersion
+           InformationalVersion = Version+<SourceRevisionId>           the git commit (SourceLink)
+
+       WHY. The per-csproj copies had drifted: NumSharp.Bitmap carried a 4-part 0.60.0.0 beside the
+       others' 0.60.0, and every package hard-coded <PackageVersion> next to a
+       `$(Version)-$(VersionSuffix)` conditional — so `-p:VersionSuffix=rc.1` produced an rc.1
+       ASSEMBLY inside a non-rc PACKAGE (an explicit PackageVersion is never re-derived). Deriving
+       every number from one prefix makes those mismatches unrepresentable and keeps the five
+       packages — NumSharp, NumSharp.Bitmap, NumSharp.Interop.pythonnet, NumSharp.Interop.OpenBLAS,
+       NumSharp.Build — co-versioned by construction, nuspec dependency ranges included.
+
+       The release pipeline overrides all of it from the git tag with ONE global property,
+       `-p:Version=<tag>` (a global property beats every conditional here and in the SDK), so this
+       value is only the local-dev default; bump it when a release is cut. `-p:VersionSuffix=rc.1`
+       still gives a local pre-release pack, now consistent across assembly and package.
+       ==================================================================================== -->
+  <PropertyGroup>
+    <VersionPrefix Condition="'$(VersionPrefix)' == ''">0.60.0</VersionPrefix>
+  </PropertyGroup>
+
+  <!-- ====================================================================================
+       License acceptance — OFF for every package, in ONE place so they cannot drift apart.
+       All five packages are Apache-2.0 (the OpenBLAS interop adds the permissive BSD and
+       GCC-exception terms of the binaries it bundles); a click-through prompt on install buys
+       nothing for a permissive license and is unusual for OSS on nuget.org.
+       ==================================================================================== -->
+  <PropertyGroup>
+    <PackageRequireLicenseAcceptance Condition="'$(PackageRequireLicenseAcceptance)' == ''">false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+
+  <!-- ====================================================================================
        Shared NuGet package icon — ONE brand asset for every shippable package, so it cannot
        drift the way the per-csproj `PackageIconUrl` did. That element is deprecated (NU5048)
        and renders NO icon on nuget.org; `PackageIcon` embeds a real image in the package.
@@ -61,8 +139,9 @@
        NumSharp.Interop.* — a new package inherits it for free instead of copy-pasting a fourth
        icon include. $(MSBuildThisFileDirectory) is the repo root, so the path resolves for a
        project in any subdirectory, and the checked-in 128×128 PNG travels to CI with the repo.
-       The <None> is inert for non-packable projects (tests/benchmarks never pack); only the four
-       `GeneratePackageOnBuild` packages embed it. Override `PackageIcon` in a project to change it.
+       The <None> is inert for non-packable projects (tests/benchmarks never pack); only the five
+       packable projects embed it, and only when packed explicitly with `dotnet pack` (nothing in
+       the repo packs on build). Override `PackageIcon` in a project to change it.
        ==================================================================================== -->
   <PropertyGroup>
     <PackageIcon Condition="'$(PackageIcon)' == ''">numsharp.icon128.png</PackageIcon>

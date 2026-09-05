@@ -196,11 +196,11 @@ jobs:
           # Tolerate absence: the interop packages do not exist on every branch.
           [ -f "$proj" ] || { echo "skip (absent): $proj"; continue; }
           echo "::group::pack $proj"
-          # GeneratePackageOnBuild=true (set in each csproj) + `dotnet pack` + multi-targeting
-          # yields NU5026 — the outer Pack runs before the per-TFM DLLs stage. Overriding it to
-          # false here restores the normal restore→build→pack ordering.
+          # A plain restore→build→pack. Nothing in the repo packs on build any more: the old
+          # GeneratePackageOnBuild=true in every csproj re-packed on every dotnet build/test (for
+          # the OpenBLAS package that re-zipped ~186 MB of runtimes each time) and, combined with
+          # `dotnet pack` + multi-targeting, drew NU5026.
           dotnet pack "$proj" --configuration Release --output artifacts/signing-check \
-            -p:GeneratePackageOnBuild=false \
             -p:NoWarn=${{ env.DOTNET_NOWARN }}
           echo "::endgroup::"
         done
@@ -409,17 +409,25 @@ jobs:
     - name: Stage OpenBLAS native assets
       run: python src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py
 
+    # ONE version property. The repo derives every other number from it (Directory.Build.props
+    # VersionPrefix + the SDK's GenerateAssemblyInfo/NuGet pack targets): PackageVersion = Version,
+    # AssemblyVersion = FileVersion = Version minus the pre-release tag (0.70.0-rc.1 → 0.70.0.0),
+    # InformationalVersion = Version+<commit>. Passing AssemblyVersion / FileVersion / PackageVersion
+    # separately, as this job once did, only created a second place for them to disagree.
+    #
+    # SourceRevisionId is the FULL commit SHA. The SDK's built-in SourceLink derives exactly that
+    # from git, and NuGet copies it verbatim into the nuspec <repository commit="…"> (which
+    # nuget.org links to and SourceLink resolves sources through) — a 7-char abbreviation here
+    # would have overridden a correct value with a short one. ContinuousIntegrationBuild=true maps
+    # the pdb source paths onto the deterministic /_/ root; release binaries ONLY, because a test
+    # locates repo files through [CallerFilePath] and needs real paths in the test jobs.
     - name: Get version info
       id: version
       shell: bash
       run: |
         VERSION="${GITHUB_REF#refs/tags/v}"
-        ASSEMBLY_VERSION="${VERSION%%-*}"
-        COMMIT_SHA="${GITHUB_SHA:0:7}"
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-        echo "ASSEMBLY_VERSION=$ASSEMBLY_VERSION" >> $GITHUB_OUTPUT
-        echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
-        echo "Building version $VERSION (assembly: $ASSEMBLY_VERSION) +$COMMIT_SHA"
+        echo "Building version $VERSION @ $GITHUB_SHA"
 
     - name: Build
       run: |
@@ -434,46 +442,38 @@ jobs:
           -t:Rebuild \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
-          -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
         dotnet build src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
           --configuration Release \
           -t:Rebuild \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
-          -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
         # Interop packs its NumSharp.Core ProjectReference as a NuGet dependency
         # on "NumSharp" $(Version), so the same -p:Version keeps the two in lockstep
-        # (the csproj's hardcoded 0.60.0 is only the local-dev default).
+        # (the Directory.Build.props VersionPrefix is only the local-dev default).
         dotnet build src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
           --configuration Release \
           -t:Rebuild \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
-          -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
-        # OpenBLAS: native assets were staged above; RequireOpenBlasAssets=true makes a missing
-        # bundle a hard error (GeneratePackageOnBuild packs during build, so it is enforced here too).
+        # OpenBLAS: native assets were staged above. Whether they are present is checked at PACK
+        # time (RequireOpenBlasAssets=true on the Pack step below turns a missing bundle into a
+        # hard error); nothing packs during the build.
         dotnet build src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj \
           --configuration Release \
           -t:Rebuild \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
-          -p:RequireOpenBlasAssets=true \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
-          -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
         # The weaver: a tools-only build-time package (no lib/, no dependencies — see
         # tools/verify_build_package.sh). Its pack target publishes the tool into tools/,
@@ -483,10 +483,8 @@ jobs:
           -t:Rebuild \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
-          -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
     - name: Pack
       run: |
@@ -498,9 +496,8 @@ jobs:
           --output artifacts/nuget \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
         dotnet pack src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
           --configuration Release \
@@ -508,9 +505,8 @@ jobs:
           --output artifacts/nuget \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
         dotnet pack src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
           --configuration Release \
@@ -518,9 +514,8 @@ jobs:
           --output artifacts/nuget \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
         dotnet pack src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj \
           --configuration Release \
@@ -529,9 +524,8 @@ jobs:
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:RequireOpenBlasAssets=true \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
         dotnet pack tools/NumSharp.Build/NumSharp.Build.csproj \
           --configuration Release \
@@ -539,9 +533,8 @@ jobs:
           --output artifacts/nuget \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
         echo "Packages built:"
         ls -la artifacts/nuget/

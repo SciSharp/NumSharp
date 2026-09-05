@@ -11,13 +11,13 @@ NumSharp's matrix products bit-identical to that NumPy's.
 
 Bundled components and their licenses:
 
-  OpenBLAS                               BSD-3-Clause-Attribution
+  OpenBLAS                               BSD-3-Clause
                                          https://github.com/OpenMathLib/OpenBLAS/
 
-  LAPACK                                 BSD-3-Clause-Attribution
+  LAPACK                                 BSD-3-Clause (the "modified BSD" of netlib LAPACK)
                                          https://github.com/OpenMathLib/OpenBLAS/
 
-  GCC runtime library (libgfortran)      GPL-3.0-with-GCC-exception
+  GCC runtime library (libgfortran)      GPL-3.0-or-later WITH GCC-exception-3.1
                                          https://gcc.gnu.org/git/?p=gcc.git;a=tree;f=libgfortran
 
   openblas-libs (packaging)              BSD-2-Clause

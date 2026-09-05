@@ -13,7 +13,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.14.*" />
+    <!-- Pinned (no floating version): the same BenchmarkDotNet across every benchmark project in
+         the repo, so a measurement never silently changes with a NuGet feed refresh. -->
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
   </ItemGroup>
 
   <ItemGroup>

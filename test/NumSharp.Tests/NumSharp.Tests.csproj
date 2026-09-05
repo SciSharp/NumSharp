@@ -28,9 +28,7 @@
 
   <ItemGroup>
     <PackageReference Include="MSTest" Version="3.8.3" />
-    <PackageReference Include="Codecov" Version="1.13.0" />
     <PackageReference Include="AwesomeAssertions" Version="9.3.0" />
-    <PackageReference Include="OpenCover" Version="4.7.922" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,8 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <PackageOutputPath>../../packages</PackageOutputPath>
     <Description>Windows-only extensions for System.Drawing.Bitmap for creating NDArray and Bitmap with or without copying. Uses GDI+ via System.Drawing.Common.</Description>
@@ -10,19 +8,18 @@
     <Copyright>2021 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <PackageReleaseNotes>Added complicated shape and bbp inference mechanism. Added argument 'discardAlpha' to all methods.</PackageReleaseNotes>
-    <AssemblyVersion>0.60.0.0</AssemblyVersion>
-    <FileVersion>0.60.0.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
     <LangVersion>latest</LangVersion>
-    <!-- Package icon is centralized in ../../Directory.Build.props (PackageIcon). -->
+    <!-- The package icon, license acceptance and the VERSION are centralized in
+         ../../Directory.Build.props (PackageIcon / PackageRequireLicenseAcceptance / VersionPrefix);
+         PackageVersion, AssemblyVersion and FileVersion all derive from that one prefix.
+         The package is packed explicitly (`dotnet pack`), never on build. -->
     <PackageId>NumSharp.Bitmap</PackageId>
     <Product>NumSharp.Bitmap</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp.Bitmap</RootNamespace>
-    <Version>0.60.0.0</Version>
-    <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. -->
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
@@ -30,7 +27,6 @@
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Configurations>Debug;Release;Publish</Configurations>
-    <PackageVersion>0.60.0</PackageVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 

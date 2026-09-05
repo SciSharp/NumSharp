@@ -19,9 +19,7 @@
 
   <ItemGroup>
     <PackageReference Include="MSTest" Version="3.8.3" />
-    <PackageReference Include="Codecov" Version="1.13.0" />
     <PackageReference Include="AwesomeAssertions" Version="9.3.0" />
-    <PackageReference Include="OpenCover" Version="4.7.922" />
     <!-- Addition over NumSharp.Tests: the embedded Python engine. This pin is exactly the
          library's floor (see NumSharp.Interop.pythonnet.csproj), so CI exercises the version a
          default `dotnet add package` actually resolves — NuGet takes lowest-applicable, not latest.

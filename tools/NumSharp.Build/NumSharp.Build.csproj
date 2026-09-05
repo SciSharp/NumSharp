@@ -47,8 +47,8 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <PackageId>NumSharp.Build</PackageId>
-    <Version>0.60.0</Version>
-    <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
+    <!-- Co-versioned with NumSharp: the version is the repo-root Directory.Build.props VersionPrefix
+         (never a number in this file); license acceptance and the icon come from there too. -->
     <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <Company>SciSharp STACK</Company>
     <Product>NumSharp</Product>
@@ -60,7 +60,6 @@
     <PackageTags>NumSharp, NDScope, NDScoped, NDScopedAsync, weaver, IL, Mono.Cecil, MSBuild, memory, pooling, NumPy, SciSharp</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageOutputPath>../../packages</PackageOutputPath>
 
     <DevelopmentDependency>true</DevelopmentDependency>

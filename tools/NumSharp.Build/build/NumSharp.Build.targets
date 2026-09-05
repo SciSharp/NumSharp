@@ -140,7 +140,9 @@
     <PropertyGroup>
       <_NDScopeWeaveAssembly>@(IntermediateAssembly->'%(FullPath)')</_NDScopeWeaveAssembly>
       <_NDScopeWeaveHasUsage>false</_NDScopeWeaveHasUsage>
-      <_NDScopeWeaveHasUsage Condition="Exists('$(_NDScopeWeaveAssembly)') and ($([System.IO.File]::ReadAllText('$(_NDScopeWeaveAssembly)').Contains('NDScopedAttribute')) or $([System.IO.File]::ReadAllText('$(_NDScopeWeaveAssembly)').Contains('NDScopedAsyncAttribute')))">true</_NDScopeWeaveHasUsage>
+      <!-- ONE read of the assembly, every weavable name in a single regex (the decoded text is never
+           stored in a property — a multi-megabyte value would be echoed into diagnostic logs/binlogs). -->
+      <_NDScopeWeaveHasUsage Condition="Exists('$(_NDScopeWeaveAssembly)') and $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('$(_NDScopeWeaveAssembly)')), 'NDScoped(Async|Exit)?Attribute'))">true</_NDScopeWeaveHasUsage>
       <_NDScopeWeaveHasUsage Condition="'$(_NDScopeWeaveHasUsage)' != 'true' and '@(ReferencePathWithRefAssemblies->WithMetadataValue('Filename','NumSharp'))' != ''">true</_NDScopeWeaveHasUsage>
     </PropertyGroup>
     <Message Condition="'$(_NDScopeWeaveHasUsage)' != 'true'"

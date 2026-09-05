@@ -1,8 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <PackageOutputPath>../../packages</PackageOutputPath>
     <Description>NumSharp is the fundamental library for scientific computing with .NET providing a similar API to python's numpy scientific library. NumSharp has full N-D, broadcasting and axis support.  If you want to use .NET to get started with machine learning, NumSharp will be your best tool.</Description>
@@ -10,19 +8,18 @@
     <Copyright>2021 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <PackageReleaseNotes></PackageReleaseNotes>
-    <AssemblyVersion>0.60.0</AssemblyVersion>
-    <FileVersion>0.60.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
     <LangVersion>latest</LangVersion>
-    <!-- Package icon is centralized in ../../Directory.Build.props (PackageIcon). -->
+    <!-- The package icon, license acceptance and the VERSION are centralized in
+         ../../Directory.Build.props (PackageIcon / PackageRequireLicenseAcceptance / VersionPrefix);
+         PackageVersion, AssemblyVersion and FileVersion all derive from that one prefix.
+         The package is packed explicitly (`dotnet pack`), never on build. -->
     <PackageId>NumSharp</PackageId>
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp</RootNamespace>
-    <Version>0.60.0</Version>
-    <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Strong-naming (key, DelaySign, SignAssembly) is set repo-wide in ../../Directory.Build.props. -->
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
@@ -31,8 +28,7 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Configurations>Debug;Release;Publish</Configurations>
     <AssemblyName>NumSharp</AssemblyName>
-    <PackageVersion>0.60.0</PackageVersion>
-	<GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- GenerateDocumentationFile turns on the whole XML-doc-comment validation family. NumSharp
          mirrors NumPy's API surface rather than curating per-member XML docs, so these are pure
          noise here; we still EMIT the .xml doc file (for IntelliSense), we just don't validate it.
@@ -133,19 +129,22 @@
        old staging (which moved here): GetTargetPath resolves the DLL WITHOUT a rebuild —
        safe under a no-build pack (the way CI packs: build with Rebuild, then pack with no
        rebuild; the P2P above built the DLL) — and RemoveProperties="TargetFramework" strips
-       the inner build's net8.0/net10.0 global so the analyzer resolves its own
+       a single-TFM pack's net8.0/net10.0 global so the analyzer resolves its own
        netstandard2.0 output.
 
-       TfmSpecificContentInPackage runs once PER TFM in TargetFrameworks; analyzers/ is a
-       TFM-agnostic folder, so the target stages on the net8.0 pass only (the repo's floor
-       TFM) — both passes adding the same file would draw NU5118.
+       analyzers/ is a TFM-agnostic folder, so the DLL is staged ONCE, as an ordinary
+       Pack="true" <None> item added just before NuGet collects the package files
+       (_GetPackageFiles, a dependency of GenerateNuspec). That target runs exactly once per
+       pack — in the OUTER build of a multi-targeting pack, and in the one inner build of a
+       single-TFM pack (`dotnet pack -p:TargetFramework=net10.0`; `dotnet pack` has no -f) —
+       which is what makes the staging independent of WHICH TFMs are being packed. The previous hook (TargetsForTfmSpecificContentInPackage,
+       which runs once PER TFM and was therefore conditioned on the net8.0 pass to avoid a
+       duplicate-file NU5118) silently shipped an analyzer-less nupkg from any single-TFM pack
+       that was not net8.0.
        ================================================================================== -->
-  <PropertyGroup>
-    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_NumSharpCorePackAnalyzer</TargetsForTfmSpecificContentInPackage>
-  </PropertyGroup>
-  <Target Name="_NumSharpCorePackAnalyzer" Condition="'$(TargetFramework)' == 'net8.0'">
+  <Target Name="_NumSharpCorePackAnalyzer" BeforeTargets="_GetPackageFiles">
     <MSBuild Projects="$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj"
-             Targets="GetTargetPath" Properties="Configuration=$(Configuration)" RemoveProperties="TargetFramework">
+             Targets="GetTargetPath" Properties="Configuration=$(Configuration)" RemoveProperties="TargetFramework;TargetFrameworks;RuntimeIdentifier">
       <Output TaskParameter="TargetOutputs" ItemName="_NumSharpCoreAnalyzer" />
     </MSBuild>
     <!-- Loud, actionable failure instead of a silently analyzer-less nupkg (the gates —
@@ -153,7 +152,7 @@
     <Error Condition="'@(_NumSharpCoreAnalyzer)' == '' or !Exists('@(_NumSharpCoreAnalyzer)')"
            Text="NumSharp pack: NumSharp.Build.Analyzer.dll not found (looked at '@(_NumSharpCoreAnalyzer)'). Build the solution (or NumSharp.Core, whose ProjectReference builds the analyzer) before packing with --no-build." />
     <ItemGroup>
-      <TfmSpecificPackageFile Include="@(_NumSharpCoreAnalyzer)" PackagePath="analyzers/dotnet/cs/" />
+      <None Include="@(_NumSharpCoreAnalyzer)" Pack="true" PackagePath="analyzers/dotnet/cs/" Visible="false" />
     </ItemGroup>
   </Target>
 

@@ -19,15 +19,15 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Bitmap", "src\NumS
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Interop.OpenBLAS", "src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj", "{3DF52F3C-1B78-46CF-9B82-BA2B876CCA33}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Interop.OpenBLAS", "src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj", "{3DF52F3C-1B78-46CF-9B82-BA2B876CCA33}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Interop.pythonnet", "src\NumSharp.Interop.pythonnet\NumSharp.Interop.pythonnet.csproj", "{AE525A8B-833C-4DC7-A537-3EC45C9B553E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Interop.pythonnet", "src\NumSharp.Interop.pythonnet\NumSharp.Interop.pythonnet.csproj", "{AE525A8B-833C-4DC7-A537-3EC45C9B553E}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{0C88DD14-F956-CE84-757C-A364CCF449FC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Tests.Interop", "test\NumSharp.Tests.Interop\NumSharp.Tests.Interop.csproj", "{32AF8082-0458-4DC4-8AC8-56677DC03C09}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Tests.Interop", "test\NumSharp.Tests.Interop\NumSharp.Tests.Interop.csproj", "{32AF8082-0458-4DC4-8AC8-56677DC03C09}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Tests.Oracle", "test\NumSharp.Tests.Oracle\NumSharp.Tests.Oracle.csproj", "{2926BF3B-491A-45E1-ADE8-F4CC0CECDB17}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Tests.Oracle", "test\NumSharp.Tests.Oracle\NumSharp.Tests.Oracle.csproj", "{2926BF3B-491A-45E1-ADE8-F4CC0CECDB17}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "NumSharp.Tests.Oracle.Python", "NumSharp.Tests.Oracle.Python", "{296CAFDF-6C4C-5222-8E96-3746EBAF8B3E}"
 	ProjectSection(SolutionItems) = preProject
@@ -62,12 +62,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "benchmark", "benchmark", "{
 		benchmark\.gitignore = benchmark\.gitignore
 		benchmark\CLAUDE.md = benchmark\CLAUDE.md
 		benchmark\README.md = benchmark\README.md
-		benchmark\_fullrun.log = benchmark\_fullrun.log
-		benchmark\benchmark-dashboard.md = benchmark\benchmark-dashboard.md
-		benchmark\benchmark-report.csv = benchmark\benchmark-report.csv
-		benchmark\benchmark-report.json = benchmark\benchmark-report.json
 		benchmark\benchmark-report.md = benchmark\benchmark-report.md
-		benchmark\numpy-results.json = benchmark\numpy-results.json
 		benchmark\run-benchmarks.ps1 = benchmark\run-benchmarks.ps1
 		benchmark\run_benchmark.py = benchmark\run_benchmark.py
 	EndProjectSection
@@ -122,11 +117,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "nditer", "nditer", "{93C28F
 		benchmark\nditer\nditer_sheet.py = benchmark\nditer\nditer_sheet.py
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "npyiter", "npyiter", "{72F44886-D194-5123-996F-4A1756EFB252}"
-	ProjectSection(SolutionItems) = preProject
-		benchmark\npyiter\run.log = benchmark\npyiter\run.log
-	EndProjectSection
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "operand", "operand", "{ACC1AB1D-D975-5113-94EC-221288B94F3A}"
 	ProjectSection(SolutionItems) = preProject
 		benchmark\operand\operand_bench.cs = benchmark\operand\operand_bench.cs
@@ -135,8 +125,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "operand", "operand", "{ACC1
 		benchmark\operand\operand_results.tsv = benchmark\operand\operand_results.tsv
 		benchmark\operand\operand_sheet.py = benchmark\operand\operand_sheet.py
 	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "results", "results", "{FFDE1D4F-AE65-5AA5-9DA9-BC135615732F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripts", "scripts", "{90A41C75-1499-5CA0-9061-520F24352218}"
 	ProjectSection(SolutionItems) = preProject
@@ -197,66 +185,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "cards", "cards", "{1F73D659
 		benchmark\nditer\cards\ops.png = benchmark\nditer\cards\ops.png
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "20260708-203314", "20260708-203314", "{E1504A84-49FA-54C5-81E5-387142B7F924}"
-	ProjectSection(SolutionItems) = preProject
-		benchmark\results\20260708-203314\numpy-arithmetic.json = benchmark\results\20260708-203314\numpy-arithmetic.json
-		benchmark\results\20260708-203314\numpy-broadcast.json = benchmark\results\20260708-203314\numpy-broadcast.json
-		benchmark\results\20260708-203314\numpy-creation.json = benchmark\results\20260708-203314\numpy-creation.json
-		benchmark\results\20260708-203314\numpy-logic.json = benchmark\results\20260708-203314\numpy-logic.json
-		benchmark\results\20260708-203314\numpy-manipulation.json = benchmark\results\20260708-203314\numpy-manipulation.json
-		benchmark\results\20260708-203314\numpy-random.json = benchmark\results\20260708-203314\numpy-random.json
-		benchmark\results\20260708-203314\numpy-reduction.json = benchmark\results\20260708-203314\numpy-reduction.json
-		benchmark\results\20260708-203314\numpy-results.json = benchmark\results\20260708-203314\numpy-results.json
-		benchmark\results\20260708-203314\numpy-slicing.json = benchmark\results\20260708-203314\numpy-slicing.json
-		benchmark\results\20260708-203314\numpy-sorting.json = benchmark\results\20260708-203314\numpy-sorting.json
-		benchmark\results\20260708-203314\numpy-unary.json = benchmark\results\20260708-203314\numpy-unary.json
-	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "20260708-211751", "20260708-211751", "{747BC754-321F-50B7-928D-BE204D242EAA}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "final-verify", "final-verify", "{7DFD3E49-20AA-5C7D-9236-D712360A9547}"
-	ProjectSection(SolutionItems) = preProject
-		benchmark\results\final-verify\benchmark-report.csharp-only.txt = benchmark\results\final-verify\benchmark-report.csharp-only.txt
-		benchmark\results\final-verify\benchmark-report.csv = benchmark\results\final-verify\benchmark-report.csv
-		benchmark\results\final-verify\benchmark-report.json = benchmark\results\final-verify\benchmark-report.json
-		benchmark\results\final-verify\benchmark-report.md = benchmark\results\final-verify\benchmark-report.md
-	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "pooled-csharp", "pooled-csharp", "{6F3190BC-4D63-5ADF-B386-33AF56B72B88}"
-	ProjectSection(SolutionItems) = preProject
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.AddBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.AddBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.DivideBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.DivideBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.FloorDivideBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.FloorDivideBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.ModuloBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.ModuloBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.MultiplyBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.MultiplyBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.SubtractBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.SubtractBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Broadcasting.BroadcastBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Broadcasting.BroadcastBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Creation.CreationBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Creation.CreationBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Logic.BoolLogicBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Logic.BoolLogicBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Logic.LogicBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Logic.LogicBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Manipulation.DimsBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Manipulation.DimsBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Manipulation.ReshapeBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Manipulation.ReshapeBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Manipulation.StackBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Manipulation.StackBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Random.RandomBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Random.RandomBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.CumulativeBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.CumulativeBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.MeanBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.MeanBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.MinMaxBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.MinMaxBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.NanReductionBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.NanReductionBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.ProdBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.ProdBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.SumBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.SumBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.VarStdBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Reduction.VarStdBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Slicing.SliceBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Slicing.SliceBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Sorting.SortingBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Sorting.SortingBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.ExpLogBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.ExpLogBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.MathBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.MathBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.ModfBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.ModfBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.PowerBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.PowerBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.TrigBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.TrigBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.TrigExtraBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.TrigExtraBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.UfuncWhereBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.UfuncWhereBenchmarks-report-full-compressed.json
-		benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.UnaryExtraBenchmarks-report-full-compressed.json = benchmark\results\pooled-csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.UnaryExtraBenchmarks-report-full-compressed.json
-	EndProjectSection
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "cards", "cards", "{7E745248-47A0-57DC-82FF-A18ACC391441}"
 	ProjectSection(SolutionItems) = preProject
 		benchmark\history\2026-06-23_e3b7c268\cards\cat.png = benchmark\history\2026-06-23_e3b7c268\cards\cat.png
@@ -269,49 +197,27 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "cards", "cards", "{DA820C53
 		benchmark\history\2026-06-29_2d16f477\cards\ops.png = benchmark\history\2026-06-29_2d16f477\cards\ops.png
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "csharp", "csharp", "{A823EAB5-2664-50F9-B2D0-861100AD9162}"
-	ProjectSection(SolutionItems) = preProject
-		benchmark\results\20260708-203314\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.AddBenchmarks-report-full-compressed.json = benchmark\results\20260708-203314\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.AddBenchmarks-report-full-compressed.json
-		benchmark\results\20260708-203314\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.DivideBenchmarks-report-full-compressed.json = benchmark\results\20260708-203314\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.DivideBenchmarks-report-full-compressed.json
-		benchmark\results\20260708-203314\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.FloorDivideBenchmarks-report-full-compressed.json = benchmark\results\20260708-203314\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.FloorDivideBenchmarks-report-full-compressed.json
-		benchmark\results\20260708-203314\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.ModuloBenchmarks-report-full-compressed.json = benchmark\results\20260708-203314\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.ModuloBenchmarks-report-full-compressed.json
-		benchmark\results\20260708-203314\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.MultiplyBenchmarks-report-full-compressed.json = benchmark\results\20260708-203314\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.MultiplyBenchmarks-report-full-compressed.json
-		benchmark\results\20260708-203314\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.SubtractBenchmarks-report-full-compressed.json = benchmark\results\20260708-203314\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Arithmetic.SubtractBenchmarks-report-full-compressed.json
-	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "csharp", "csharp", "{667A0EDE-8C13-540B-8F7B-60FB51741959}"
-	ProjectSection(SolutionItems) = preProject
-		benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.ExpLogBenchmarks-report-full-compressed.json = benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.ExpLogBenchmarks-report-full-compressed.json
-		benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.MathBenchmarks-report-full-compressed.json = benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.MathBenchmarks-report-full-compressed.json
-		benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.ModfBenchmarks-report-full-compressed.json = benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.ModfBenchmarks-report-full-compressed.json
-		benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.PowerBenchmarks-report-full-compressed.json = benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.PowerBenchmarks-report-full-compressed.json
-		benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.TrigBenchmarks-report-full-compressed.json = benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.TrigBenchmarks-report-full-compressed.json
-		benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.TrigExtraBenchmarks-report-full-compressed.json = benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.TrigExtraBenchmarks-report-full-compressed.json
-		benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.UfuncWhereBenchmarks-report-full-compressed.json = benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.UfuncWhereBenchmarks-report-full-compressed.json
-		benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.UnaryExtraBenchmarks-report-full-compressed.json = benchmark\results\20260708-211751\csharp\NumSharp.Benchmark.CSharp.Benchmarks.Unary.UnaryExtraBenchmarks-report-full-compressed.json
-	EndProjectSection
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Tools.ApiInventory", "coverage\NumSharp.Tools.ApiInventory\NumSharp.Tools.ApiInventory.csproj", "{69C4758B-DBFF-5961-B818-E9E68178073F}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Benchmark.CSharp", "benchmark\NumSharp.Benchmark.CSharp\NumSharp.Benchmark.CSharp.csproj", "{F026FC1E-D223-5F43-916C-C4F3D53B6F5C}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Benchmark.Sandbox", "benchmark\NumSharp.Benchmark.Sandbox\NumSharp.Benchmark.Sandbox.csproj", "{532F60D1-2DB1-5962-8B6F-F2B07C1FA9AB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Build", "tools\NumSharp.Build\NumSharp.Build.csproj", "{31FA6D6A-092E-4557-B741-A06F5D2F07AC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Build", "tools\NumSharp.Build\NumSharp.Build.csproj", "{31FA6D6A-092E-4557-B741-A06F5D2F07AC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Build.Analyzer", "tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj", "{0BD37849-3D68-420C-A9D8-9037F2173216}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Build.Analyzer", "tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj", "{0BD37849-3D68-420C-A9D8-9037F2173216}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Tests.Build.Analyzer", "test\NumSharp.Tests.Build.Analyzer\NumSharp.Tests.Build.Analyzer.csproj", "{A3CB7AB6-3F86-4DF6-A268-15279FAB6CD6}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Tests.Build.Analyzer", "test\NumSharp.Tests.Build.Analyzer\NumSharp.Tests.Build.Analyzer.csproj", "{A3CB7AB6-3F86-4DF6-A268-15279FAB6CD6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Tests.Build.Analyzer.Fixtures", "test\NumSharp.Tests.Build.Analyzer.Fixtures\NumSharp.Tests.Build.Analyzer.Fixtures.csproj", "{4AC36061-2CDD-4D68-ADA3-DF81BEB4E002}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Tests.Build.Analyzer.Fixtures", "test\NumSharp.Tests.Build.Analyzer.Fixtures\NumSharp.Tests.Build.Analyzer.Fixtures.csproj", "{4AC36061-2CDD-4D68-ADA3-DF81BEB4E002}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "LifeAndPong", "LifeAndPong", "{CCBC7770-7DEE-8440-9A59-D448056A8147}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.LifeAndPong", "examples\LifeAndPong\NumSharp.LifeAndPong\NumSharp.LifeAndPong.csproj", "{3E5B00B5-992D-4F4F-BF09-88E90561454A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.LifeAndPong", "examples\LifeAndPong\NumSharp.LifeAndPong\NumSharp.LifeAndPong.csproj", "{3E5B00B5-992D-4F4F-BF09-88E90561454A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.LifeAndPong.Desktop", "examples\LifeAndPong\NumSharp.LifeAndPong.Desktop\NumSharp.LifeAndPong.Desktop.csproj", "{22B2905E-8920-433F-8C74-7F4BB8C9D490}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.LifeAndPong.Desktop", "examples\LifeAndPong\NumSharp.LifeAndPong.Desktop\NumSharp.LifeAndPong.Desktop.csproj", "{22B2905E-8920-433F-8C74-7F4BB8C9D490}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.LifeAndPong.Tests", "examples\LifeAndPong\NumSharp.LifeAndPong.Tests\NumSharp.LifeAndPong.Tests.csproj", "{F6C4629A-FA81-49EA-B9E0-84FF034A05DF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.LifeAndPong.Tests", "examples\LifeAndPong\NumSharp.LifeAndPong.Tests\NumSharp.LifeAndPong.Tests.csproj", "{F6C4629A-FA81-49EA-B9E0-84FF034A05DF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -705,22 +611,14 @@ Global
 		{45D1840E-C12F-5575-82A7-3655D6ADC85D} = {3F0375DC-EF5E-52B3-AFE9-07A1E4761B40}
 		{951902FD-2D36-5615-895E-E05ACA398A0B} = {3F0375DC-EF5E-52B3-AFE9-07A1E4761B40}
 		{93C28F65-1F51-511E-86FB-E60E15D74293} = {3F0375DC-EF5E-52B3-AFE9-07A1E4761B40}
-		{72F44886-D194-5123-996F-4A1756EFB252} = {3F0375DC-EF5E-52B3-AFE9-07A1E4761B40}
 		{ACC1AB1D-D975-5113-94EC-221288B94F3A} = {3F0375DC-EF5E-52B3-AFE9-07A1E4761B40}
-		{FFDE1D4F-AE65-5AA5-9DA9-BC135615732F} = {3F0375DC-EF5E-52B3-AFE9-07A1E4761B40}
 		{90A41C75-1499-5CA0-9061-520F24352218} = {3F0375DC-EF5E-52B3-AFE9-07A1E4761B40}
 		{8281E841-4AC6-56C5-A28D-9964492C17BF} = {45D1840E-C12F-5575-82A7-3655D6ADC85D}
 		{08B2B461-188A-5634-9C24-9A84DE316301} = {45D1840E-C12F-5575-82A7-3655D6ADC85D}
 		{6CB9D2EE-F750-5A53-BCFB-3D42623FCBE2} = {45D1840E-C12F-5575-82A7-3655D6ADC85D}
 		{1F73D659-5BF1-53C3-925A-1315D270430E} = {93C28F65-1F51-511E-86FB-E60E15D74293}
-		{E1504A84-49FA-54C5-81E5-387142B7F924} = {FFDE1D4F-AE65-5AA5-9DA9-BC135615732F}
-		{747BC754-321F-50B7-928D-BE204D242EAA} = {FFDE1D4F-AE65-5AA5-9DA9-BC135615732F}
-		{7DFD3E49-20AA-5C7D-9236-D712360A9547} = {FFDE1D4F-AE65-5AA5-9DA9-BC135615732F}
-		{6F3190BC-4D63-5ADF-B386-33AF56B72B88} = {FFDE1D4F-AE65-5AA5-9DA9-BC135615732F}
 		{7E745248-47A0-57DC-82FF-A18ACC391441} = {08B2B461-188A-5634-9C24-9A84DE316301}
 		{DA820C53-D639-51C0-ACF9-BB3BC3C52A10} = {6CB9D2EE-F750-5A53-BCFB-3D42623FCBE2}
-		{A823EAB5-2664-50F9-B2D0-861100AD9162} = {E1504A84-49FA-54C5-81E5-387142B7F924}
-		{667A0EDE-8C13-540B-8F7B-60FB51741959} = {747BC754-321F-50B7-928D-BE204D242EAA}
 		{69C4758B-DBFF-5961-B818-E9E68178073F} = {A90AB93C-DF72-5814-A534-F795951EF500}
 		{F026FC1E-D223-5F43-916C-C4F3D53B6F5C} = {3F0375DC-EF5E-52B3-AFE9-07A1E4761B40}
 		{532F60D1-2DB1-5962-8B6F-F2B07C1FA9AB} = {3F0375DC-EF5E-52B3-AFE9-07A1E4761B40}
