@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Core", "src\NumSha
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NeuralNetwork.NumSharp", "Examples\NeuralNetwork.NumSharp\NeuralNetwork.NumSharp.csproj", "{B9253A77-0652-4091-A7F5-14E9FE2630FF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NeuralNetwork.NumSharp", "examples\NeuralNetwork.NumSharp\NeuralNetwork.NumSharp.csproj", "{B9253A77-0652-4091-A7F5-14E9FE2630FF}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NDScoping", "examples\NDScoping\NDScoping.csproj", "{C7A9E3D1-4B2F-4E6A-8C5D-9F0A1B2C3D4E}"
 EndProject
