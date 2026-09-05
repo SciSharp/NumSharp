@@ -51,7 +51,6 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated complex output.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft2.html</remarks>
-        [NDScoped]
         public NDArray rfft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
             => rfftn(a, s, axes ?? new[] { -2, -1 }, norm, @out);
 
@@ -93,7 +92,6 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Accepted for signature parity; NumPy passes <c>out=None</c> internally.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfft2.html</remarks>
-        [NDScoped]
         public NDArray irfft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
             => irfftn(a, s, axes ?? new[] { -2, -1 }, norm, @out: null);
 

@@ -39,7 +39,6 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): selects the loop and its output dtype.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.conj.html</remarks>
-        [NDScoped]
         public static NDArray conj(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => conjugate(x, @out, where, dtype);
     }

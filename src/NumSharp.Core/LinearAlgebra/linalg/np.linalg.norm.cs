@@ -33,7 +33,6 @@ namespace NumSharp
             ///     <c>axis</c> raises a third ("Improper number of dimensions to norm.").
             ///     </para>
             /// </remarks>
-            [NDScoped]
             public static NDArray norm(NDArray x, object ord = null, int? axis = null, bool keepdims = false)
                 => norm(x, ord, axis is null ? null : new[] {axis.Value}, keepdims);
 

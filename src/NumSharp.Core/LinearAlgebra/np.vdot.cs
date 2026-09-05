@@ -26,7 +26,6 @@ namespace NumSharp
         ///     follows it in the C source is unreachable.
         ///     </para>
         /// </remarks>
-        [NDScoped]
         public static NDArray vdot(NDArray a, NDArray b)
             => a.TensorEngine.Vdot(a, b);
     }
