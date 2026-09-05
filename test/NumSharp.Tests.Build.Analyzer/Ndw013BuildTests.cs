@@ -7,16 +7,67 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace NumSharp.Tests.Build.Analyzer
 {
     /// <summary>
-    ///     NDW013 is an MSBuild warning shipped in NumSharp.Core's <c>build/NumSharp.targets</c> (it must
-    ///     fire when the NumSharp.Build package is ABSENT), so — unlike the Roslyn analyzers — it can
-    ///     only be exercised by a real build. These tests generate a tiny project that imports that
-    ///     targets file and references the built NumSharp assembly, then invoke <c>dotnet build</c>.
-    ///     Categorised <c>AnalyzerBuild</c> so the fast in-process unit run can exclude them.
+    ///     The MSBuild half of NDW013: NumSharp.Core's <c>build/NumSharp.targets</c> (shipped in the NumSharp
+    ///     package, so it is present when the NumSharp.Build package is ABSENT) declares the two knobs the
+    ///     analyzer reads and carries a metadata text-scan FALLBACK that warns project-wide when the
+    ///     analyzer is not applied to the compile — and yields to the analyzer (the primary, per-member
+    ///     reporter; see <see cref="Ndw013AnalyzerTests"/>) when it is. Both are MSBuild behaviour, so —
+    ///     unlike the in-process analyzer tests — they can only be exercised by a real build. These tests
+    ///     generate a tiny project that imports that targets file and references the built NumSharp
+    ///     assembly (a bare Reference, so NuGet applies no analyzer unless the test adds one), then invoke
+    ///     <c>dotnet build</c>. Categorised <c>AnalyzerBuild</c> so the fast in-process unit run can exclude
+    ///     them.
     /// </summary>
     [TestClass]
     [TestCategory("AnalyzerBuild")]
     public class Ndw013BuildTests
     {
+        /// <summary>The project-wide sentence the MSBuild fallback prints — distinct from the analyzer's per-member "[NDScoped] on '…'" form.</summary>
+        private const string ScanForm = "T uses [NDScoped]/[NDScopedAsync]/[NDScopedExit]";
+
+        [TestMethod]
+        public void Ndw013_ComesFromTheAnalyzer_WhenItIsApplied_AndTheScanYields()
+        {
+            // The real product path: the NumSharp package applies the analyzer to the consumer's compile.
+            // Here the built analyzer DLL is added explicitly, which puts it in @(Analyzer) exactly as
+            // NuGet would. The analyzer reports NDW013 AT the attributed member (a source location), and
+            // the MSBuild fallback — seeing NumSharp.Build.Analyzer among the analyzers — stays silent, so
+            // the project sees the finding once, not once per member plus once project-wide.
+            var analyzerDll = typeof(NumSharp.Build.Analyzer.NDScopedTargetAnalyzer).Assembly.Location;
+            RunConsumer(
+                "using NumSharp;\npublic static class S { [NDScoped] public static NDArray F(NDArray a) => a + 1.0; }\n",
+                "",
+                output =>
+                {
+                    Assert.IsTrue(System.Text.RegularExpressions.Regex.IsMatch(output, @"S\.cs\(2,\d+\): warning NDW013"),
+                        "the analyzer's NDW013 carries the attributed member's source location:\n" + output);
+                    StringAssert.Contains(output, "[NDScoped] on 'S.F(NumSharp.NDArray)'", "the analyzer's per-member sentence");
+                    Assert.IsFalse(output.Contains(ScanForm), "the MSBuild fallback must yield when the analyzer is applied");
+                },
+                extraItems: $@"<Analyzer Include=""{analyzerDll}"" />");
+
+            // ... and the analyzer honours the same knob: weaver active -> silent.
+            RunConsumer(
+                "using NumSharp;\npublic static class S { [NDScoped] public static NDArray F(NDArray a) => a + 1.0; }\n",
+                "-p:NumSharpBuildActive=true",
+                output => Assert.IsFalse(output.Contains("NDW013"), "NDW013 must be silent when NumSharpBuildActive=true, analyzer applied"),
+                extraItems: $@"<Analyzer Include=""{analyzerDll}"" />");
+        }
+
+        [TestMethod]
+        public void Ndw013_Fallback_Fires_ForExitOnlyConsumer()
+        {
+            // [NDScopedExit] is weaver-dependent too (without the weaver the argument is never detached), so
+            // the fallback scan matches its type name as well — no analyzer here, the scan is the reporter.
+            RunConsumer(
+                "using NumSharp;\npublic class H : System.IDisposable { private NDArray _w; public void Adopt([NDScopedExit] NDArray w) => _w = w; public void Dispose() => _w?.Dispose(); }\n",
+                "",
+                output =>
+                {
+                    StringAssert.Contains(output, "NDW013", "NDW013 must fire for an [NDScopedExit]-only consumer when the weaver is absent");
+                    StringAssert.Contains(output, ScanForm, "without an analyzer the MSBuild fallback is the reporter");
+                });
+        }
         /// <summary>
         ///     The generated consumer must target the TFM of the RUNNING test host, because it
         ///     references the host's own NumSharp.dll (<c>typeof(NDArray).Assembly.Location</c>) —
@@ -139,8 +190,12 @@ namespace NumSharp.Tests.Build.Analyzer
                     "NDW013 must fire for an [NDScopedAsync]-only consumer when the weaver is absent"));
         }
 
-        /// <summary>Builds a throwaway consumer project (referencing the built NumSharp + importing the NDW013 targets) and hands the build output to <paramref name="assert"/>.</summary>
-        private static void RunConsumer(string source, string buildArgs, Action<string> assert)
+        /// <summary>
+        ///     Builds a throwaway consumer project (referencing the built NumSharp + importing the NDW013
+        ///     targets; <paramref name="extraItems"/> is spliced into its ItemGroup — e.g. an
+        ///     <c>&lt;Analyzer Include&gt;</c>) and hands the build output to <paramref name="assert"/>.
+        /// </summary>
+        private static void RunConsumer(string source, string buildArgs, Action<string> assert, string extraItems = "")
         {
             var dotnet = FindDotnet();
             if (dotnet == null)
@@ -161,6 +216,7 @@ namespace NumSharp.Tests.Build.Analyzer
   </PropertyGroup>
   <ItemGroup>
     <Reference Include=""NumSharp""><HintPath>{numsharpDll}</HintPath></Reference>
+    {extraItems}
   </ItemGroup>
   <Import Project=""{targets.Replace("\\", "/")}"" />
 </Project>");

@@ -385,7 +385,13 @@ assembly, before it is copied to the output:
   interfaces are walked for an [inherited](#inheritance--virtual-abstract-and-interface-members)
   attribute, which is why the target spawns the tool for every compile that references NumSharp —
   an override-only assembly has no attribute text for the cheap pre-scan to find. NumSharp.Core's
-  self-weave needs none of this — there the types are in-module.
+  self-weave runs the same target; there the types are in-module, so the list is merely the
+  resolver's probe set.
+- **One definition.** The `NDScopeWeave` target lives in exactly one file — this package's
+  `build/NumSharp.Build.targets`. NumSharp.Core's own self-weave imports that same file (adding only a
+  step that builds the tool from source and points `$(NumSharpBuildToolDll)` at it), and so does the
+  source-mode example `examples/NDScoping`; the consumer weave and the self-weave therefore cannot
+  drift apart, and a hardening added to the target reaches all three at once.
 - **Re-signing.** IL rewriting invalidates a compile-time strong-name signature, so on a
   strong-named project the weaver **re-signs** the assembly with the project's own key; identity
   (public-key token, version binding) is unchanged — [`StrongNameTests`][gate-sign] gates it for
@@ -559,34 +565,50 @@ its own build and carries `[NDBorrowed]` on its own borrowing types (`FlatIterat
 
 ### NDW013 — [NDScoped] used, but the weaver is not installed
 
-`[NDScoped]`/`[NDScopedAsync]` are **inert without the `NumSharp.Build` package**: the method keeps its
-original body, no scope is injected, and every transient it drops is left to the finalizer — a silent
-leak. NDW013 catches exactly that. It ships in **NumSharp itself** (a `build/NumSharp.targets` warning),
-not in the weaver package, precisely so it can fire when the weaver is **absent** — the attributes live
-in NumSharp, so the guard is present whenever they could be used:
+`[NDScoped]`/`[NDScopedAsync]` — and `[NDScopedExit]` on a parameter — are **inert without the
+`NumSharp.Build` package**: the method keeps its original body, no scope is injected, no argument is
+detached, and every transient it drops is left to the finalizer — a silent leak. NDW013 catches exactly
+that. NumSharp does not depend on or bundle the weaver (weaving is the explicit opt-in
+`dotnet add package NumSharp.Build`), so the guard ships in **NumSharp itself** — the attributes live
+there, which makes it present whenever they could be used and lets it fire when the weaver is
+**absent**. Two reporters share the one code:
 
-```
-warning NDW013: MyProject uses [NDScoped]/[NDScopedAsync] but the NumSharp.Build package is not
-installed (or weaving is disabled), so the attributes are INERT ... Install the weaver with
-'dotnet add package NumSharp.Build' ...
-```
+- **The analyzer — the primary reporter.** The Roslyn analyzer the NumSharp package applies to every
+  `PackageReference` compile reports NDW013 **at each member the weaver would have woven** — with a
+  source location, in the IDE as well as on the command line — when the build has declared the weaver
+  inactive: a method or property carrying `[NDScoped]`/`[NDScopedAsync]` itself, an override or
+  implementation [inheriting](#inheritance--virtual-abstract-and-interface-members) one from a
+  declaration in the same assembly or another (the shape no text scan can see — the override spells no
+  attribute of its own), and a method with an own or inherited `[NDScopedExit]` parameter. Abstract and
+  interface declarations are contracts (nothing is woven there; their inheritors are warned one by one),
+  a target the gate rejects draws its error alone, `[NDScopedCovered]` is the opt-out, and a member is
+  warned once whichever attribute earned it.
 
-It stays silent the moment the weaver is installed and weaving (the weaver's targets set
-`$(NumSharpBuildActive)=true`; under `-p:SkipNDScopeWeave=true` the attributes really are inert, so the
-warning correctly fires). Opt out with `-p:NumSharpDisableWeaverMissingWarning=true`, by adding `NDW013`
-to `$(MSBuildWarningsAsMessages)`, or — the intended fix — by installing the weaver.
+  ```
+  S.cs(3,30): warning NDW013: [NDScoped] on 'S.F(NumSharp.NDArray)' has no effect: the NumSharp.Build
+  package is not installed (or weaving is disabled), so the attribute is INERT — no NDScope is injected
+  ... Install the weaver with 'dotnet add package NumSharp.Build' ...
+  ```
 
-**The inherited case is reported by the analyzer, not the scan.** An override or implementation that
-[inherits](#inheritance--virtual-abstract-and-interface-members) `[NDScoped]`/`[NDScopedAsync]` from a
-declaration in **another** assembly (a NumSharp member, a library that used this weaver) carries no
-attribute text of its own, so the metadata scan cannot see it. The compile-time analyzer resolves the
-inheritance and reports the same NDW013 — a warning, **at the override** — when the build has declared
-the weaver inactive: NumSharp's targets expose `NumSharpBuildActive` (defaulted to `false`) and
-`NumSharpDisableWeaverMissingWarning` to the analyzer as `build_property.*` options, and the same
-opt-outs apply. A build that imports neither targets file (a source-mode `ProjectReference` to
-NumSharp.Core with no weaver import) leaves the property undeclared, which the analyzer reads as
-"unknown" and stays silent on. Same-assembly inheritance never draws the analyzer's NDW013 — the
-declaration's own attribute text already trips the scan once for the project.
+- **The MSBuild scan — the fallback.** `build/NumSharp.targets` in the NumSharp package also carries a
+  metadata text scan that warns once, project-wide, when the compile used any of the three attribute
+  names — for a compile the analyzer does not reach: a bare `<Reference HintPath>` to the NumSharp
+  assembly (no package, so NuGet applies nothing), or an analyzer item removed by hand. It yields
+  whenever `NumSharp.Build.Analyzer` is among the compile's analyzers, so a project never sees the
+  same finding twice (once per member and once project-wide). It cannot see an inherited target;
+  without the analyzer that shape goes unreported. (`ExcludeAssets="analyzers"` on the NumSharp
+  reference does **not** produce an analyzer-less compile: NuGet records the exclusion, but the .NET
+  SDK — observed on 10.0.101 — still applies the package's analyzers, so that consumer keeps the
+  per-member warning.)
+
+Both read the same two MSBuild properties, which NumSharp's targets expose to the analyzer as
+`build_property.*` options: the weaver's own targets set `$(NumSharpBuildActive)=true` when it is
+installed and weaving (under `-p:SkipNDScopeWeave=true` the attributes really are inert, so the warning
+correctly fires), and NumSharp's targets default it to `false`. A build that imports neither targets
+file (a source-mode `ProjectReference` to NumSharp.Core with no weaver import) leaves the property
+undeclared, which the analyzer reads as "unknown" and stays silent on. Opt out with
+`-p:NumSharpDisableWeaverMissingWarning=true`, by adding `NDW013` to `$(MSBuildWarningsAsMessages)`,
+or — the intended fix — by installing the weaver.
 
 ## Escape hatches
 
@@ -636,7 +658,7 @@ Same code, same fix, whichever layer fires.
 | `NDW010` | a plain synchronous method or a **synchronous** iterator marked `[NDScopedAsync]` | mark it `[NDScoped]` (synchronous bodies and synchronous iterators are its job) |
 | `NDW011` | a method carries BOTH `[NDScoped]` and `[NDScopedAsync]` | keep only the one that matches the method's scoping model |
 | [`NDW012`](#ndw012) | an NDArray is created but never returned, out/ref'd, stored, disposed, or yielded to an `NDScope` — a transient left to the finalizer | mark the method `[NDScoped]`/`[NDScopedAsync]`, dispose it (`using`/`.Dispose()`), yield it via `scope.Returns(...)`, or hand it to an egress; tune via `.editorconfig` (`dotnet_diagnostic.NDW012.severity`) |
-| [`NDW013`](#ndw013) | `[NDScoped]`/`[NDScopedAsync]` used — typed in the project (the MSBuild scan), or [inherited](#inheritance--virtual-abstract-and-interface-members) from a declaration in another assembly (the analyzer, at the override) — but the `NumSharp.Build` package is not installed (or `-p:SkipNDScopeWeave=true`) — the attributes are inert and the temporaries leak | install `NumSharp.Build`, or remove the attributes (mark an inheriting override `[NDScopedCovered]`) and dispose by hand; suppress with `-p:NumSharpDisableWeaverMissingWarning=true` |
+| [`NDW013`](#ndw013) | `[NDScoped]`/`[NDScopedAsync]`/`[NDScopedExit]` used — carried by the member itself, or [inherited](#inheritance--virtual-abstract-and-interface-members) from a declaration in this or another assembly — but the `NumSharp.Build` package is not installed (or `-p:SkipNDScopeWeave=true`): the attributes are inert and the temporaries leak. Reported per member by the analyzer; project-wide by the MSBuild fallback scan when no analyzer runs | install `NumSharp.Build`, or remove the attributes (mark an inheriting override `[NDScopedCovered]`; detach a retained argument by hand with `NDScope.Detach`) and dispose by hand; suppress with `-p:NumSharpDisableWeaverMissingWarning=true` |
 | `NDW014` | `[NDScopedExit]` on an unsupported parameter type (a `ref`/`out`/`in`, a scalar, a bare buffer, an `INDArrayCarrier` struct, or a tuple with an ND-carrying component `Detach` cannot see through) | hand-detach with `NDScope.Detach` |
 | `NDW015` | an `out` parameter whose NDArray-carrying shape the out-escape cannot yield (`out List<NDArray>`, `out Task<NDArray>`, `out NDArray[,]`, `out T` with `T : NDArray`) | [hand-scope](#hand-scoping) and yield the final value explicitly |
 | [`NDW016`](#ndw016) | a class/struct stores NDArrays (a field or auto-property holding an NDArray, an array/tuple/collection/generic of them, a carrier struct, or another NDArray-owning type — ownership is contagious) but implements neither `IDisposable` nor `IAsyncDisposable` | implement `IDisposable`/`IAsyncDisposable` and dispose the members, make a transient result struct an `INDArrayCarrier`, give a `ref struct` a `Dispose()`, or mark a member / the type `[NDBorrowed]` when the arrays are owned elsewhere |

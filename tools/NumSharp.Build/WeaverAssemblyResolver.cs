@@ -15,9 +15,11 @@ namespace NumSharp.Build;
 /// <remarks>
 ///     Exact paths win over directory probing (two packages can carry same-named assemblies; the
 ///     compile's pick is authoritative). The woven assembly's own directory remains a probe fallback
-///     for the bare self-weave invocation — NumSharp.Core's inline <c>NDScopeWeave</c> target passes
-///     no <c>--refs</c> because everything it needs is in-module. Resolved references are cached and
-///     disposed with the resolver; they are opened read-only, never written.
+///     for a bare invocation without <c>--refs</c> (the command line by hand). NumSharp.Core's
+///     self-weave runs the same packaged <c>NDScopeWeave</c> target as every consumer, so it too
+///     passes <c>--refs</c> — holding only Core's framework references, since everything the weave
+///     needs is in-module there. Resolved references are cached and disposed with the resolver;
+///     they are opened read-only, never written.
 /// </remarks>
 internal sealed class WeaverAssemblyResolver : DefaultAssemblyResolver
 {

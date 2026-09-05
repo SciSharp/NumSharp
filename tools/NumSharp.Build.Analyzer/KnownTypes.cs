@@ -14,6 +14,13 @@ namespace NumSharp.Build.Analyzer
         public INamedTypeSymbol SyncAttr;
         public INamedTypeSymbol AsyncAttr;
         public INamedTypeSymbol CoveredAttr;
+        /// <summary>
+        ///     <c>[NDScopedExit]</c> — the parameter-level "the callee retains this argument" mark the weaver
+        ///     turns into an <c>NDScope.Detach</c> at method entry. Weaver-dependent like the two scope
+        ///     attributes (inert without NumSharp.Build), so the NDW013 guard counts it as usage. Null
+        ///     against a NumSharp that predates it.
+        /// </summary>
+        public INamedTypeSymbol ExitAttr;
         /// <summary><c>[NDBorrowed]</c> — the ownership opt-out the holder analyzer honours (null against a NumSharp that predates it).</summary>
         public INamedTypeSymbol BorrowedAttr;
         public INamedTypeSymbol NDArray;
@@ -57,6 +64,7 @@ namespace NumSharp.Build.Analyzer
                 SyncAttr = sync,
                 AsyncAttr = asyncAttr,
                 CoveredAttr = c.GetTypeByMetadataName("NumSharp.NDScopedCoveredAttribute"),
+                ExitAttr = c.GetTypeByMetadataName("NumSharp.NDScopedExitAttribute"),
                 BorrowedAttr = c.GetTypeByMetadataName("NumSharp.NDBorrowedAttribute"),
                 NDArray = ndArray,
                 NDScope = c.GetTypeByMetadataName("NumSharp.NDScope"),

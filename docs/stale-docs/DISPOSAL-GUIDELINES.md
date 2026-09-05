@@ -135,9 +135,10 @@ nested scopes under concurrency, cross-thread hand-off, forced-GC antagonist), o
 The scope pattern is INJECTED AT BUILD TIME, so source files keep their 100% original bodies.
 A method (or property accessor) marked `[NDScoped]` (`src/NumSharp.Core/Backends/
 NDScopedAttribute.cs`, public — the attribute is consumer-facing) is rewritten post-compile by
-`tools/NumSharp.Build` — a Mono.Cecil console tool invoked by the `NDScopeWeave` target in
-`NumSharp.Core.csproj` after each per-TFM `CoreCompile` — into exactly the IL the hand-written
-pattern produces. The SAME transform ships to consumer projects as the **`NumSharp.Build`
+`tools/NumSharp.Build` — a Mono.Cecil console tool invoked by the `NDScopeWeave` target of
+`tools/NumSharp.Build/build/NumSharp.Build.targets` (the packaged targets file, which
+`NumSharp.Core.csproj` imports for its self-weave) after each per-TFM `CoreCompile` — into exactly
+the IL the hand-written pattern produces. The SAME transform ships to consumer projects as the **`NumSharp.Build`
 NuGet package** (tools + MSBuild targets only, `PrivateAssets="all"` on install — a weaver on
 the project it is installed on, never a runtime dependency; gate:
 `tools/verify_build_package.sh`, docs: `docs/website-src/docs/numsharp-build-compiler.md`); there the weaver

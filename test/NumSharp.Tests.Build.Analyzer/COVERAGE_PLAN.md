@@ -195,6 +195,16 @@ configuration space below.
 
 ## 7. NDW013 (MSBuild guard) matrix  *(P1)*  — technique T8, all `[TestCategory("AnalyzerBuild")]`
 
+> **2026-09-05 — the analyzer is now the PRIMARY NDW013 reporter** (per member, in-process:
+> `Ndw013AnalyzerTests` — own `[NDScoped]`/`[NDScopedAsync]`, inherited from this or another assembly,
+> `[NDScopedExit]` own/inherited/setter/constructor, contracts, rejections, the knobs). The MSBuild text
+> scan below is the FALLBACK for a compile without the analyzer (a bare `<Reference>` to the assembly, or
+> an analyzer item removed by hand — NOT `ExcludeAssets="analyzers"`, which the SDK does not honour for a
+> package's analyzers, observed on 10.0.101) and yields when `NumSharp.Build.Analyzer` is in `@(Analyzer)`
+> — pinned by `Ndw013BuildTests.Ndw013_ComesFromTheAnalyzer_WhenItIsApplied_AndTheScanYields` and
+> `verify_build_package.sh` step 17/17b. The rows below describe the fallback; N13-5's string-literal
+> false positive is the scan's alone.
+
 - N13-1 **multi-TFM** consumer (`net8.0;net10.0`) → warns once per TFM.
 - N13-2 `-p:SkipNDScopeWeave=true` **with** the weaver installed → **fires** (weaving disabled ⇒ attributes inert).
 - N13-3 `-p:NumSharpDisableWeaverMissingWarning=true` → silent.

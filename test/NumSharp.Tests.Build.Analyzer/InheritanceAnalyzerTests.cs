@@ -11,9 +11,10 @@ namespace NumSharp.Tests.Build.Analyzer
     ///     implementation of a <c>[NDScoped]</c>/<c>[NDScopedAsync]</c>/<c>[NDScopedCovered]</c> virtual,
     ///     abstract or interface member inherits the attribute (the weaver's <c>ScopeInheritance</c>
     ///     rule) — so the NDW012 leak pass exempts it, the target gate reads its declaration's attribute,
-    ///     an abstract declaration is a contract rather than NDW005, and the one inherited shape the
-    ///     MSBuild weaver-missing scan is blind to (a declaration in ANOTHER assembly) draws NDW013 from
-    ///     the analyzer when the build says the weaver is inactive.
+    ///     an abstract declaration is a contract rather than NDW005, and every inheriting override /
+    ///     implementation — a shape no metadata text scan can see, whether the declaration lives in
+    ///     THIS assembly or another — draws NDW013 from the analyzer when the build says the weaver is
+    ///     inactive (the analyzer is the primary NDW013 reporter; see <see cref="Ndw013AnalyzerTests"/>).
     /// </summary>
     [TestClass]
     public class InheritanceAnalyzerTests
@@ -29,7 +30,7 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(5, r.CountOf("NDW012"), "exactly the five UNSCOPED controls leak (an unscoped virtual's override, an unscoped generic base member, the unscoped interface member implemented implicitly and explicitly, an unrelated same-named method)");
             Assert.AreEqual(2, r.CountOf("NDW002"), "the hidden egress is reported on the scoped declaration AND on the override that inherits it");
             Assert.AreEqual(0, r.CountOf("NDW005"), "an abstract declaration carrying the attribute is the contract, never a body-less target");
-            Assert.AreEqual(0, r.CountOf("NDW013"), "same-assembly inheritance is the MSBuild scan's business (the declaration's attribute text is in the assembly); the analyzer's NDW013 is for cross-assembly declarations only");
+            Assert.AreEqual(0, r.CountOf("NDW013"), "no build property -> the weaver's presence is unknown -> NDW013 stays silent");
             Assert.AreEqual(7, r.Ndw.Length, "every inheriting override/implementation must add NO diagnostics");
         }
 
@@ -166,16 +167,29 @@ namespace NumSharp.Tests.Build.Analyzer
         }
 
         [TestMethod]
-        public async Task SameAssembly_Inheritance_NeverDrawsTheAnalyzersNdw013()
+        public async Task SameAssembly_Inheritance_DrawsNdw013_WhenTheBuildSaysTheWeaverIsInactive()
         {
-            // The declaration's attribute text IS in this assembly, so the MSBuild scan owns that case;
-            // the analyzer must not double-report it even when the build says the weaver is inactive.
+            // The analyzer is the PRIMARY NDW013 reporter (the MSBuild text scan yields to it), so every
+            // member the weaver would have woven is warned at its own declaration — an own attribute AND
+            // an inherited one, same assembly included. Over InheritanceScenarios.cs that is exactly 13:
+            //   own attribute, body, gate-clean ...... InheritanceBase.Virtual, InheritanceOptOut.ComputeAsync,
+            //                                         GenericBase<T>.Map                                    (3)
+            //   inherited, body, gate-clean .......... InheritanceDerived.{Compute, ComputeAsync, Value.get, Virtual},
+            //                                         InheritanceOptOut.Value.get, LeafGeneric.Map,
+            //                                         ImplicitImpl.{Apply, Current.get}, ExplicitImpl.{Apply, Current.get} (10)
+            // and NOT: the abstract/interface declarations (contracts, no body), the [NDScopedCovered] members
+            // and the override inheriting one (the opt-out), the unscoped controls, and RefEgress + its
+            // override (NDW002 rejections draw their error alone).
             var inactive = AnalyzerTestHarness.BuildProperties(("NumSharpBuildActive", "false"));
             var r = await AnalyzerTestHarness.RunAsync(
                 System.IO.File.ReadAllText(AnalyzerTestHarness.FixturePath("InheritanceScenarios.cs")),
                 AnalyzerTestHarness.FixturePath("InheritanceScenarios.cs"), ImmutableArray<MetadataReference>.Empty, inactive);
             Assert.IsTrue(r.CompileErrors.IsEmpty, "inheritance fixture must compile");
-            Assert.AreEqual(0, r.CountOf("NDW013"), "same-assembly inheritance is never the analyzer's NDW013");
+            Assert.AreEqual(13, r.CountOf("NDW013"), "every weavable member — own or inherited attribute — is warned once:\n  " +
+                string.Join("\n  ", r.Ndw.Where(d => d.Id == "NDW013").Select(d => $"L{AnalyzerTestHarness.LineOf(d)}: {d.GetMessage()}")));
+            Assert.AreEqual(3, r.Ndw.Count(d => d.Id == "NDW013" && d.GetMessage().Contains(" on '")), "three own-attribute reports");
+            Assert.AreEqual(10, r.Ndw.Count(d => d.Id == "NDW013" && d.GetMessage().Contains(" inherits ")), "ten inherited-attribute reports");
+            Assert.AreEqual(2, r.CountOf("NDW002"), "the rejections are unchanged by the inactive weaver");
         }
     }
 }

@@ -83,7 +83,9 @@ internal static class Program
 
         // The reference list: one assembly path per line (@(ReferencePathWithRefAssemblies) written
         // by the MSBuild target) — a response file, so a big dependency graph cannot overflow the
-        // command line. Consumer weaves resolve NDScope/NDArray through it; the self-weave passes none.
+        // command line. Consumer weaves resolve NDScope/NDArray through it; NumSharp.Core's
+        // self-weave (which runs the same packaged target) hands over only its framework references
+        // and resolves NDScope in-module first, so there the list is merely the resolver's probe set.
         string[] referencePaths = Array.Empty<string>();
         if (refsPath != null)
         {

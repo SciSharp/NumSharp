@@ -46,7 +46,12 @@
 #      analyzer (NDW016/NDW017): a type that stores an NDArray without IDisposable, and a disposable
 #      that never disposes its member, each draw a build WARNING; [NDBorrowed] silences both
 #  17  the WEAVER-MISSING guard (NDW013, shipped in NumSharp itself): a consumer that uses [NDScoped]
-#      but does NOT install NumSharp.Build draws a build WARNING; installing the weaver silences it
+#      but does NOT install NumSharp.Build draws a build WARNING — from the ANALYZER the NumSharp
+#      package applies (per member, with a source location) while the MSBuild fallback scan in
+#      build/NumSharp.targets stays silent (no double report); installing the weaver silences it;
+#      17b: a compile the analyzer does not reach (a bare <Reference> to the PACKAGED NumSharp.dll
+#      importing the PACKAGED build/NumSharp.targets) draws the project-wide MSBuild fallback scan
+#      instead — and NOT via ExcludeAssets="analyzers", which the SDK does not honour for analyzers
 #  18  the analyzer rides the NumSharp package ALONE: a consumer that references NumSharp but NOT
 #      NumSharp.Build still gets the compile-time gate (a bad [NDScoped] target FAILS the build,
 #      NDW003) and the NDW012 leak warning — no weaver install required
@@ -779,8 +784,11 @@ grep -q "Program.cs(3," "$OW/build.log" || fail "16b: NDW017 did not land on the
 echo "16b: NDW016/NDW017 warn on the storing type and the forgotten member; the disposing and [NDBorrowed] types are clean"
 
 step "17/18 weaver-missing guard (NDW013): [NDScoped] without the weaver warns; installing it silences"
-# NDW013 ships in the NumSharp package's build/NumSharp.targets, so a consumer that references NumSharp
-# but NOT NumSharp.Build still gets the "your [NDScoped] is inert" warning.
+# NDW013 ships in the NumSharp package: its analyzer (analyzers/dotnet/cs/, auto-applied to the consumer's
+# compile) reports it PER MEMBER with a source location, and its build/NumSharp.targets carries a
+# project-wide text-scan FALLBACK that yields whenever that analyzer is applied. So a consumer that
+# references NumSharp but NOT NumSharp.Build gets the "your [NDScoped] is inert" warning exactly once
+# per attributed member — from the analyzer — never a second, project-wide copy from the scan.
 NW="$WORK/noweaver"
 mkdir -p "$NW"
 cp "$CONSUMER/nuget.config" "$NW/nuget.config"
@@ -796,10 +804,53 @@ public static class S { [NDScoped] public static NDArray F(NDArray a) => a + 1.0
 EOF
 (cd "$NW" && dotnet build -c Release -v n > build.log 2>&1) || { tail -30 "$NW/build.log"; fail "no-weaver consumer build failed"; }
 grep -q "warning NDW013" "$NW/build.log" || { grep -i ndw013 "$NW/build.log"; fail "17: NDW013 did not fire without the weaver"; }
+# the ANALYZER is the reporter: the warning carries the attributed member's source location and sentence ...
+grep -qE 'S\.cs\([0-9]+,[0-9]+\): warning NDW013' "$NW/build.log" \
+  || { grep -i ndw013 "$NW/build.log" | head -5; fail "17: NDW013 did not come from the analyzer (no source location on the warning)"; }
+grep -q "\[NDScoped\] on 'S.F(NumSharp.NDArray)'" "$NW/build.log" \
+  || { grep -i ndw013 "$NW/build.log" | head -5; fail "17: the analyzer's per-member NDW013 sentence is missing"; }
+# ... and the MSBuild fallback scan stayed silent (its sentence is project-wide: "<project> uses [NDScoped]...")
+if grep -q "Consumer uses \[NDScoped\]" "$NW/build.log"; then
+  fail "17: the MSBuild fallback scan fired although the analyzer is applied — NDW013 reported twice"
+fi
 (cd "$NW" && dotnet add Consumer.csproj package NumSharp.Build --source "$FEEDW" > add.log 2>&1) || { tail -20 "$NW/add.log"; fail "17: dotnet add NumSharp.Build failed"; }
 (cd "$NW" && dotnet build -c Release -t:Rebuild -v n > build2.log 2>&1) || { tail -30 "$NW/build2.log"; fail "17: with-weaver build failed"; }
 if grep -q "warning NDW013" "$NW/build2.log"; then fail "17: NDW013 still fired after installing the weaver"; fi
-echo "17: NDW013 warns without the weaver and is silent once it is installed"
+echo "17: NDW013 warns (from the analyzer, per member, scan silent) without the weaver and is silent once it is installed"
+
+# 17b — the FALLBACK: a compile the analyzer does not reach has nothing to report NDW013 per member, so the
+# MSBuild text scan in the package's build/NumSharp.targets must fire (project-wide) instead. The
+# analyzer-less compile is a bare <Reference HintPath> to the PACKAGED NumSharp.dll (no PackageReference,
+# so NuGet applies nothing) that imports the PACKAGED build/NumSharp.targets by hand — both taken from the
+# copy step 10 restored into the global packages folder.
+#   NOT the way to get here: `ExcludeAssets="analyzers"` on the PackageReference. NuGet does record it
+#   (project.assets.json lists the include set WITHOUT Analyzers), but the SDK's ResolvePackageAssets
+#   (observed on 10.0.101) still hands analyzers/dotnet/cs/*.dll to csc — so such a consumer KEEPS the
+#   analyzer, keeps its per-member NDW013, and the scan correctly stays silent for it.
+NWX="$WORK/noweaver_noanalyzer"
+mkdir -p "$NWX"
+NPKG="$GPF/numsharp/$CVER"
+[ -f "$NPKG/lib/net8.0/NumSharp.dll" ] && [ -f "$NPKG/build/NumSharp.targets" ] \
+  || fail "17b: the restored NumSharp package (lib/net8.0/NumSharp.dll + build/NumSharp.targets) not found under $NPKG"
+NPKGW="$(winpath "$NPKG")"
+cat > "$NWX/Consumer.csproj" <<EOF
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Library</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <Reference Include="NumSharp"><HintPath>$NPKGW/lib/net8.0/NumSharp.dll</HintPath></Reference>
+  </ItemGroup>
+  <Import Project="$NPKGW/build/NumSharp.targets" />
+</Project>
+EOF
+cp "$NW/S.cs" "$NWX/S.cs"
+(cd "$NWX" && dotnet build -c Release -v n > build.log 2>&1) || { tail -30 "$NWX/build.log"; fail "17b: analyzer-less consumer build failed"; }
+if grep -q "NumSharp.Build.Analyzer" "$NWX/build.log"; then fail "17b: the analyzer reached an analyzer-less (bare Reference) compile"; fi
+grep -q "Consumer uses \[NDScoped\]" "$NWX/build.log" \
+  || { grep -i ndw013 "$NWX/build.log" | head -5; fail "17b: the MSBuild fallback scan did not fire for the analyzer-less consumer"; }
+if grep -qE 'S\.cs\([0-9]+,[0-9]+\): warning NDW013' "$NWX/build.log"; then
+  fail "17b: a per-member (analyzer) NDW013 appeared in an analyzer-less compile"
+fi
+echo "17b: without the analyzer (bare Reference to the packaged DLL), the packaged MSBuild fallback scan reports NDW013 project-wide"
 
 step "18/18 analyzer ships in NumSharp itself: diagnostics WITHOUT NumSharp.Build installed"
 # The whole point of staging the analyzer into the NumSharp package: a consumer referencing NumSharp

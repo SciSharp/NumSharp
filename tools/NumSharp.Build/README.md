@@ -87,8 +87,9 @@ public class Dense : Layer
 The nearest declaration up the chain wins, and an override's own attribute wins over it —
 `[NDScopedCovered]` on an override opts out of the inherited weave. The analyzer resolves the same
 graph (no NDW012 on an inheriting override; the target gate reads the declaration's attribute), and
-an override that inherits a scope from another assembly while the weaver is absent draws NDW013 from
-the analyzer, since the MSBuild text scan cannot see an attribute the assembly never spells.
+while this package is absent it reports NDW013 at every member that would have been woven — an own
+`[NDScoped]`/`[NDScopedAsync]`/`[NDScopedExit]` and an inherited one alike, the latter a shape no
+metadata text scan can see because the override never spells the attribute.
 
 **A companion Roslyn analyzer catches mistakes at compile time — and it ships with NumSharp
 itself, not with this package.** The `NumSharp` package carries the analyzer (under its
@@ -107,8 +108,11 @@ the analyzer project with `OutputItemType="Analyzer"`, or by setting `$(NumSharp
 at the built analyzer DLL — the parallel to `$(NumSharpBuildToolDll)`.
 
 With the package **absent**, `[NDScoped]` (which ships in NumSharp itself) is inert metadata: the
-method runs unscoped and transients fall back to the finalizer. Adding or removing the package never
-changes results — only *when* buffers are reclaimed.
+method runs unscoped and transients fall back to the finalizer. NumSharp does not depend on or bundle
+this package — weaving is an explicit opt-in — so NumSharp's own analyzer (and, where no analyzer
+runs, an MSBuild scan in its targets) reports **NDW013** at every attributed member in that state,
+naming this package as the fix. Adding or removing the package never changes results — only *when*
+buffers are reclaimed.
 
 ## Install
 

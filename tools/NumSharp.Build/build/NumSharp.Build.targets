@@ -24,15 +24,28 @@
        delay-signed and public-signed projects are written as-is (they carry no valid
        signature to restore).
 
-       Escape hatches (same as NumSharp.Core's own self-weave):
+       THIS FILE IS THE ONLY DEFINITION OF THE WEAVE STEP. NumSharp.Core's own self-weave
+       imports it too (src/NumSharp.Core/NumSharp.Core.csproj — which adds just a
+       build-the-tool-from-source step ahead of it and points $(NumSharpBuildToolDll) at the
+       result), as does the source-mode example examples/NDScoping. There is deliberately no
+       second copy anywhere: a hardening added here reaches the package consumer, the
+       self-weave and the example at once, and the three cannot drift apart. Keep every
+       Core-specific need expressible through the knobs below rather than by forking the
+       target.
+
+       Escape hatches (shared by every consumer and by NumSharp.Core's self-weave):
          -p:SkipNDScopeWeave=true      build without weaving — [NDScoped] methods run
                                        unscoped (the finalizer backstop); nothing else
-                                       changes, the attribute is inert.
+                                       changes, the attribute is inert (and the NDW013
+                                       guard says so, since $(NumSharpBuildActive) is then
+                                       not set).
          -p:NDScopeWeaveILVerify=true  additionally run the dotnet-ilverify global tool
                                        on the woven assembly (opt-in so machines without
                                        the tool still build).
          $(NumSharpBuildToolDll)      override the tool path (e.g. a locally built
-                                       weaver) — set it in the project file body.
+                                       weaver) — set it in the project file body, or (as
+                                       NumSharp.Core does) from a target that runs before
+                                       NDScopeWeave: the path is expanded at execution.
        ================================================================================== -->
   <!-- Forward slashes + NormalizePath: the path reaches Exec's SHELL (cmd on Windows, sh on
        Linux/macOS), and a raw backslash path breaks the Unix side — same convention as the
@@ -46,11 +59,13 @@
     <NumSharpBuildActive>true</NumSharpBuildActive>
   </PropertyGroup>
 
-  <!-- The compile-time analyzer reads the same two knobs (build_property.* in the generated
-       editorconfig) for the ONE NDW013 case the MSBuild text scan cannot see: an override that
-       INHERITS [NDScoped]/[NDScopedAsync] from a declaration in another assembly (no attribute
-       text of its own). NumSharp's build/NumSharp.targets declares them for package consumers;
-       this copy serves the source-mode consumer that imports only this file. -->
+  <!-- The compile-time analyzer (shipped in the NumSharp package) reads the same two knobs
+       (build_property.* in the generated editorconfig) as the PRIMARY NDW013 reporter: when they
+       say the weaver is inactive it warns at every member it would have woven — an own
+       [NDScoped]/[NDScopedAsync]/[NDScopedExit] and an inherited one alike, the latter the shape no
+       metadata text scan can see. NumSharp's build/NumSharp.targets declares them (defaulting
+       NumSharpBuildActive to false) for package consumers; this copy serves the source-mode consumer
+       that imports only this file, so the property is DECLARED there too (true here = silent). -->
   <ItemGroup>
     <CompilerVisibleProperty Include="NumSharpBuildActive" />
     <CompilerVisibleProperty Include="NumSharpDisableWeaverMissingWarning" />
@@ -74,9 +89,10 @@
        Compile-time analyzer — the SOURCE-mode half of the story.
 
        This package ships NO analyzer of its own: the compile-time analyzer rides the NumSharp
-       package itself (analyzers/dotnet/cs/ there — NuGet AUTO-APPLIES it, and honours
-       `ExcludeAssets="analyzers"` on the NumSharp reference), so a PackageReference consumer
-       already has the diagnostics and nothing here is needed. A SOURCE-mode consumer — one that
+       package itself (analyzers/dotnet/cs/ there — NuGet AUTO-APPLIES it; note that the .NET SDK
+       still applies a package's analyzers even under `ExcludeAssets="analyzers"`, observed on
+       10.0.101, so a PackageReference consumer cannot shed it that way), so a PackageReference
+       consumer already has the diagnostics and nothing here is needed. A SOURCE-mode consumer — one that
        IMPORTS these targets directly AND references NumSharp.Core by ProjectReference (the
        in-repo recipe, where no package delivers the analyzer) — opts in by pointing
        $(NumSharpBuildAnalyzerDll) at the built analyzer DLL, EXACTLY as it already points
@@ -85,9 +101,9 @@
        the IDE) for a csproj consumer too, not just the weaver's post-compile pass.
 
        Deliberately NO DEFAULT: an unset property adds nothing, so a real PackageReference build
-       never double-applies the analyzer and a consumer's `ExcludeAssets="analyzers"` opt-out is
-       never overridden. A top-level ItemGroup (not a target) so the analyzer is present for the
-       IDE's design-time analysis as well as the command-line build. -->
+       never double-applies the analyzer (the Include below also skips when NumSharp.Build.Analyzer
+       is already among @(Analyzer)). A top-level ItemGroup (not a target) so the analyzer is
+       present for the IDE's design-time analysis as well as the command-line build. -->
   <ItemGroup Condition="'$(NumSharpBuildAnalyzerDll)' != '' and Exists('$(NumSharpBuildAnalyzerDll)')">
     <Analyzer Include="$(NumSharpBuildAnalyzerDll)"
               Condition="'@(Analyzer->WithMetadataValue('Filename','NumSharp.Build.Analyzer'))' == ''" />
@@ -114,18 +130,19 @@
            Text="NumSharp.Build: tool not found at '$(NumSharpBuildToolDll)' — the NumSharp.Build package is incomplete or a NumSharpBuildToolDll override points nowhere. Restore the package, or build with -p:SkipNDScopeWeave=true to skip weaving." />
 
     <!-- Content pre-scan: spawn the tool only when the assembly can possibly need it. Using
-         either attribute compiles a TypeRef whose name lands as an ASCII run in the metadata
+         any of the attributes compiles a TypeRef whose name lands as an ASCII run in the metadata
          #Strings heap, and ASCII runs survive lossy UTF-8 decoding of arbitrary binary
-         intact — so a plain text scan is a reliable "was [NDScoped]/[NDScopedAsync] used?"
-         probe on a fresh compiler output (the Nucs.JsonSettings.Autosave marker-scan
-         technique). The probe matches the two WEAVABLE type names exactly — 'NDScopedAttribute'
-         and 'NDScopedAsyncAttribute' — rather than the bare shared prefix 'NDScoped'. Both must
-         be checked (the async name does NOT contain 'NDScopedAttribute' as a substring, so probing
-         the sync name alone would skip an async-only consumer), and matching the full names — not
-         the prefix — keeps [NDScopedCovered] (the analyzer-only hint attribute, inert at runtime and
-         needing NO weaver) from spawning the tool: 'NDScopedCoveredAttribute' contains neither
-         weavable name. A false POSITIVE (a matched name in a user string literal) merely spawns the
-         tool, which no-ops; there is no false negative on CoreCompile output.
+         intact — so a plain text scan is a reliable "was a weavable attribute used?" probe on a
+         fresh compiler output (the Nucs.JsonSettings.Autosave marker-scan technique). The probe
+         matches the three WEAVABLE type names exactly — 'NDScopedAttribute', 'NDScopedAsyncAttribute'
+         and 'NDScopedExitAttribute' (the regex NDScoped(Async|Exit)?Attribute) — rather than the
+         bare shared prefix 'NDScoped'. All three must be covered (neither the async nor the exit
+         name contains 'NDScopedAttribute' as a substring, so probing the sync name alone would skip
+         an async-only or exit-only consumer), and matching the full names — not the prefix — keeps
+         [NDScopedCovered] (the analyzer-only hint attribute, inert at runtime and needing NO weaver)
+         from spawning the tool: 'NDScopedCoveredAttribute' matches none of them. A false POSITIVE
+         (a matched name in a user string literal) merely spawns the tool, which no-ops; there is no
+         false negative on CoreCompile output.
 
          INHERITED targets are invisible to the text probe: an override/implementation of a
          scoped virtual, abstract or interface member declared in ANOTHER assembly (a NumSharp
@@ -147,7 +164,7 @@
     </PropertyGroup>
     <Message Condition="'$(_NDScopeWeaveHasUsage)' != 'true'"
              Importance="normal"
-             Text="NumSharp.Build: no [NDScoped]/[NDScopedAsync] usage detected in $(MSBuildProjectName) and NumSharp is not referenced; weave skipped" />
+             Text="NumSharp.Build: no [NDScoped]/[NDScopedAsync]/[NDScopedExit] usage detected in $(MSBuildProjectName) and NumSharp is not referenced; weave skipped" />
 
     <!-- The compile's reference list, one path per line: how the tool resolves NDScope /
          NDArray / INDArrayCarrier out of the referenced NumSharp assembly (reference

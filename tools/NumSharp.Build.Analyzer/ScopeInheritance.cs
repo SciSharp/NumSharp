@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Microsoft.CodeAnalysis;
 
@@ -38,7 +39,10 @@ namespace NumSharp.Build.Analyzer
     ///     twin of the weaver's <c>ScopeInheritance</c> (tools/NumSharp.Build), walking the SAME graph so
     ///     both layers classify a method identically: <c>[NDScoped]</c> / <c>[NDScopedAsync]</c> /
     ///     <c>[NDScopedCovered]</c> on a virtual, abstract or interface member is a contract every
-    ///     override and implementation inherits unless it carries a scope-family attribute of its own.
+    ///     override and implementation inherits unless it carries a scope-family attribute of its own —
+    ///     and <c>[NDScopedExit]</c> on a declaration's parameters is inherited BY POSITION by every
+    ///     override and implementation that marks no parameter of its own (the weaver's
+    ///     <c>EffectiveExitParameters</c> rule).
     ///     <para>
     ///     From the method outward: its explicit interface implementations, the implicit interface
     ///     implementations at its level (the interface member this type maps onto this very method —
@@ -47,7 +51,10 @@ namespace NumSharp.Build.Analyzer
     ///     or an attribute two levels up, is still found. A property-level attribute reaches its getter
     ///     (the weaver's getter rule); generic bases and interfaces are matched through Roslyn's
     ///     substituted symbols, and declarations in referenced assemblies (a consumer overriding a
-    ///     NumSharp member) are metadata symbols and walk the same way.
+    ///     NumSharp member) are metadata symbols and walk the same way. The walk is ONE routine
+    ///     (<see cref="FindNearest"/>) parameterised by what counts as a declaration — the scope
+    ///     attributes for <see cref="Inherited"/>, an attributed parameter for
+    ///     <see cref="InheritedExitSource"/> — exactly as the weaver's <c>FindNearest</c> is.
     ///     </para>
     /// </summary>
     internal static class ScopeInheritance
@@ -114,6 +121,62 @@ namespace NumSharp.Build.Analyzer
         /// </summary>
         public static ScopeDeclaration? Inherited(IMethodSymbol m, KnownTypes k)
         {
+            var source = FindNearest(m, k, HasOwnScope);
+            if (source == null)
+                return null;
+            var kinds = OwnKinds(source, k, out var carrier);
+            return new ScopeDeclaration(carrier, kinds, inherited: true);
+        }
+
+        private static bool HasOwnScope(IMethodSymbol d, KnownTypes k) => OwnKinds(d, k, out _) != ScopeKind.None;
+
+        // ----------------------------------------------------------------- [NDScopedExit]
+
+        /// <summary>
+        ///     The positions of <paramref name="m"/>'s OWN <c>[NDScopedExit]</c> parameters (the weaver's
+        ///     <c>OwnExitParameters</c>): empty when it marks none, or when the referenced NumSharp predates
+        ///     the attribute. A property setter's <c>value</c> (<c>[param: NDScopedExit]</c>) counts.
+        /// </summary>
+        public static int[] OwnExitParameters(IMethodSymbol m, KnownTypes k)
+        {
+            if (m == null || k.ExitAttr == null || m.Parameters.Length == 0)
+                return Array.Empty<int>();
+
+            List<int> indexes = null;
+            for (int i = 0; i < m.Parameters.Length; i++)
+            {
+                foreach (var a in m.Parameters[i].GetAttributes())
+                {
+                    if (a.AttributeClass == null || !SymbolEqualityComparer.Default.Equals(a.AttributeClass, k.ExitAttr))
+                        continue;
+                    (indexes ?? (indexes = new List<int>())).Add(i);
+                    break;
+                }
+            }
+
+            return indexes == null ? Array.Empty<int>() : indexes.ToArray();
+        }
+
+        /// <summary>True when <paramref name="m"/> itself marks at least one parameter <c>[NDScopedExit]</c>.</summary>
+        public static bool HasOwnExitParameter(IMethodSymbol m, KnownTypes k) => OwnExitParameters(m, k).Length > 0;
+
+        /// <summary>
+        ///     The nearest declaration up <paramref name="m"/>'s override/implementation graph that marks a
+        ///     parameter <c>[NDScopedExit]</c> — <paramref name="m"/> itself excluded — or null. Only
+        ///     meaningful when <paramref name="m"/> marks none of its own: an override that marks ANY
+        ///     parameter uses only its own marks (the weaver's <c>EffectiveExitParameters</c>).
+        /// </summary>
+        public static IMethodSymbol InheritedExitSource(IMethodSymbol m, KnownTypes k)
+            => k.ExitAttr == null ? null : FindNearest(m, k, HasOwnExitParameter);
+
+        // ----------------------------------------------------------------- the walk
+
+        /// <summary>
+        ///     The nearest declaration up <paramref name="m"/>'s override/implementation graph for which
+        ///     <paramref name="match"/> holds — <paramref name="m"/> itself excluded — or null.
+        /// </summary>
+        private static IMethodSymbol FindNearest(IMethodSymbol m, KnownTypes k, Func<IMethodSymbol, KnownTypes, bool> match)
+        {
             if (m == null || m.IsStatic)
                 return null;
             // Only an override or an interface implementation can inherit; the CLR-level hint for an
@@ -121,10 +184,11 @@ namespace NumSharp.Build.Analyzer
             // source symbol ONLY when spelled so — so instead every non-static instance method is
             // considered, and FindImplementationForInterfaceMember decides.
             var visited = new HashSet<ISymbol>(SymbolEqualityComparer.Default) { m.OriginalDefinition };
-            return Visit(m, k, visited, 0);
+            return Visit(m, k, visited, 0, match);
         }
 
-        private static ScopeDeclaration? Visit(IMethodSymbol node, KnownTypes k, HashSet<ISymbol> visited, int depth)
+        private static IMethodSymbol Visit(IMethodSymbol node, KnownTypes k, HashSet<ISymbol> visited, int depth,
+            Func<IMethodSymbol, KnownTypes, bool> match)
         {
             if (depth > MaxDepth)
                 return null;
@@ -136,9 +200,8 @@ namespace NumSharp.Build.Analyzer
                 var d = e.OriginalDefinition;
                 if (!visited.Add(d))
                     continue;
-                var kinds = OwnKinds(d, k, out var carrier);
-                if (kinds != ScopeKind.None)
-                    return new ScopeDeclaration(carrier, kinds, inherited: true);
+                if (match(d, k))
+                    return d;
             }
 
             if (node.IsStatic)
@@ -158,11 +221,11 @@ namespace NumSharp.Build.Analyzer
                         var impl = type.FindImplementationForInterfaceMember(im) as IMethodSymbol;
                         if (impl == null || !SymbolEqualityComparer.Default.Equals(impl.OriginalDefinition, node.OriginalDefinition))
                             continue;
-                        if (!visited.Add(im.OriginalDefinition))
+                        var d = im.OriginalDefinition;
+                        if (!visited.Add(d))
                             continue;
-                        var kinds = OwnKinds(im.OriginalDefinition, k, out var carrier);
-                        if (kinds != ScopeKind.None)
-                            return new ScopeDeclaration(carrier, kinds, inherited: true);
+                        if (match(d, k))
+                            return d;
                     }
                 }
             }
@@ -173,10 +236,9 @@ namespace NumSharp.Build.Analyzer
                 var b = node.OverriddenMethod.OriginalDefinition;
                 if (!visited.Add(b))
                     return null;
-                var kinds = OwnKinds(b, k, out var carrier);
-                if (kinds != ScopeKind.None)
-                    return new ScopeDeclaration(carrier, kinds, inherited: true);
-                return Visit(b, k, visited, depth + 1);
+                if (match(b, k))
+                    return b;
+                return Visit(b, k, visited, depth + 1, match);
             }
 
             return null;

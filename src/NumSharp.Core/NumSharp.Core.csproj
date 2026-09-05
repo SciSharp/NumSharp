@@ -161,53 +161,74 @@
   </Target>
 
   <!-- ==================================================================================
-       NDScope IL weaving (see DISPOSAL-GUIDELINES.md → "The weaver — [NDScoped]").
+       NDScope IL weaving — the SELF-WEAVE (see docs/website-src/docs/numsharp-build-compiler.md).
 
        After each inner (per-TargetFramework) compile, tools/NumSharp.Build rewrites the
-       intermediate assembly: every [NDScoped] method gets the ambient-reclamation-scope
-       pattern injected (scope = NDScope.Open() prologue, body wrapped in try/finally with
-       scope.Dispose(), every ret routed through scope.Returns, out-NDArray params yielded)
-       so the SOURCE keeps its 100% original body. The weaver re-signs with the repo key
-       (IL rewriting invalidates the compile-time strong-name signature — StrongNameTests
-       gates this) and rewrites the portable PDB in place.
+       intermediate assembly: every [NDScoped]/[NDScopedAsync] method gets the
+       ambient-reclamation-scope pattern injected (scope = NDScope.Open() prologue, body
+       wrapped in try/finally with scope.Dispose(), every ret routed through scope.Returns,
+       out-NDArray params yielded) and every [NDScopedExit] parameter its Detach, so the
+       SOURCE keeps its 100% original body. The weaver re-signs with the repo key (IL
+       rewriting invalidates the compile-time strong-name signature — StrongNameTests gates
+       this) and rewrites the portable PDB in place.
 
-       Incremental: Inputs/Outputs on a per-TFM marker file — when CoreCompile was skipped
-       the weave is skipped too; when it reran, the fresh (unwoven) dll is newer than the
-       marker and the weave reruns. The weaver itself is additionally idempotent (a method
-       whose body already opens an NDScope is skipped), so double-weaving is impossible
-       even if the marker is deleted by hand.
+       ONE DEFINITION OF THE WEAVE STEP. The NDScopeWeave target that does this is NOT
+       spelled here: it is the very target every NumSharp.Build package consumer runs,
+       imported below from ../../tools/NumSharp.Build/build/NumSharp.Build.targets — the
+       file that ships as the package's build/NumSharp.Build.targets. Core used to carry a
+       private copy of it, and the two drifted (the copy had no NDW000 tool check, no
+       reference-list response file, no content pre-scan, an unconditional key argument);
+       importing the packaged file makes the self-weave and the consumer weave the same
+       code path by construction, so a fix or a hardening lands in both at once. What the
+       packaged file does on Core: the pre-scan finds 'NDScopedAttribute' in Core's own
+       metadata (Core DEFINES it) and spawns the tool; the response file carries Core's
+       framework references only (the tool resolves NDScope in-module first, so that list
+       is merely the resolver's probe set); the key argument is emitted because Core is
+       genuinely full-signed (SignAssembly, no DelaySign/PublicSign, Open.snk resolved into
+       KeyOriginatorFile by ResolveKeySource); $(NumSharpBuildActive)=true is declared, so
+       the analyzer running over Core never raises NDW013 for Core's own attributes.
 
-       The weaver project is restored+built on demand via two separate MSBuild task calls
-       with DIFFERENT global-property sets — a Restore and Build sharing one property set
-       would reuse the pre-restore project evaluation and fail the first clean build.
+       The ONLY Core-specific piece is the one a package consumer never needs: the tool must
+       be BUILT FROM SOURCE before the imported target can run it. _NumSharpCoreBuildWeaver
+       (below) restores+builds tools/NumSharp.Build and points $(NumSharpBuildToolDll) — the
+       packaged target's tool-path knob, which the package would otherwise default to its
+       own tools/net8.0/any/ payload — at the build output, exactly as examples/NDScoping
+       points it at the same tool in source mode.
 
-       Escape hatches: -p:SkipNDScopeWeave=true skips entirely (the hand-written scope
-       sites keep working — weaving only ADDS scopes to attributed methods);
+       Incremental: both targets carry the SAME Inputs/Outputs (the per-TFM
+       NDScopeWeave.marker the imported target touches after weaving) so they are skipped
+       and run in lockstep — when CoreCompile was skipped neither runs; when it reran, the
+       fresh (unwoven) dll is newer than the marker and both run. The weaver itself is
+       additionally idempotent (a method whose body already opens an NDScope is skipped),
+       so double-weaving is impossible even if the marker is deleted by hand.
+
+       The weaver project is restored+built via two separate MSBuild task calls with
+       DIFFERENT global-property sets — a Restore and Build sharing one property set would
+       reuse the pre-restore project evaluation and fail the first clean build. It is built
+       Release whatever Core's own configuration is (a Debug Core still weaves with the
+       optimized tool).
+
+       Escape hatches (the imported target's, shared with every consumer):
+       -p:SkipNDScopeWeave=true skips entirely (the hand-written scope sites keep working —
+       weaving only ADDS scopes to attributed methods; the analyzer then reports NDW013 on
+       every attributed Core member, truthfully: they ARE inert in that build);
        -p:NDScopeWeaveILVerify=true additionally runs the dotnet-ilverify global tool on
        the woven assembly (kept opt-in so machines without the tool still build).
        ================================================================================== -->
   <PropertyGroup>
     <NumSharpBuildProject>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\NumSharp.Build.csproj</NumSharpBuildProject>
-    <!-- Host selection, same ladder as the packaged build/NumSharp.Build.targets: prefer
-         DOTNET_HOST_PATH (set by the dotnet CLI / .NET-Core MSBuild for exactly this
-         hand-off) over a bare PATH 'dotnet', so a VS devenv build of the solution does not
-         depend on PATH hygiene. -->
-    <NumSharpBuildDotnetHost Condition="'$(NumSharpBuildDotnetHost)' == '' and '$(DOTNET_HOST_PATH)' != ''">$(DOTNET_HOST_PATH)</NumSharpBuildDotnetHost>
-    <NumSharpBuildDotnetHost Condition="'$(NumSharpBuildDotnetHost)' == ''">dotnet</NumSharpBuildDotnetHost>
   </PropertyGroup>
 
   <!-- The marker path is spelled inline (not via a body-level property): IntermediateOutputPath
        is assigned by the SDK's .targets, which import AFTER the project body — a body-level
        property would capture it EMPTY. Target Inputs/Outputs expand at target-execution time,
-       where the per-TFM obj path is final. -->
-  <!-- BeforeTargets mirrors the packaged build/NumSharp.Build.targets anchor set:
-       _TimeStampAfterCompile keeps the SDK's post-compile timestamping consistent with the
-       rewritten assembly, AfterCompile lets AfterCompile-hooked rewriters see the woven IL;
-       MSBuild ignores anchors naming targets a project never defines. -->
-  <Target Name="NDScopeWeave"
-          AfterTargets="CoreCompile"
-          BeforeTargets="_TimeStampAfterCompile;AfterCompile;CopyFilesToOutputDirectory"
-          Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipNDScopeWeave)' != 'true'"
+       where the per-TFM obj path is final. BeforeTargets="NDScopeWeave" orders this right
+       before the imported weave target (after its DependsOnTargets, before its own
+       Inputs/Outputs check); the Condition mirrors the weave target's, because MSBuild runs a
+       BeforeTargets target even when the target it precedes is conditioned out. -->
+  <Target Name="_NumSharpCoreBuildWeaver"
+          BeforeTargets="NDScopeWeave"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipNDScopeWeave)' != 'true' and '@(IntermediateAssembly)' != ''"
           Inputs="@(IntermediateAssembly)"
           Outputs="$(IntermediateOutputPath)NDScopeWeave.marker">
 
@@ -217,23 +238,22 @@
              RemoveProperties="TargetFramework;TargetFrameworks;RuntimeIdentifier;Platform;Platforms" />
     <MSBuild Projects="$(NumSharpBuildProject)" Targets="Build" Properties="Configuration=Release;NDScopeWeaverInner=true"
              RemoveProperties="TargetFramework;TargetFrameworks;RuntimeIdentifier;Platform;Platforms">
-      <Output TaskParameter="TargetOutputs" ItemName="NumSharpBuildAssembly" />
+      <Output TaskParameter="TargetOutputs" ItemName="_NumSharpCoreWeaverAssembly" />
     </MSBuild>
 
-    <Exec Command="&quot;$(NumSharpBuildDotnetHost)&quot; exec &quot;@(NumSharpBuildAssembly)&quot; &quot;@(IntermediateAssembly)&quot; --snk &quot;$(AssemblyOriginatorKeyFile)&quot;" />
-
-    <!-- Opt-in IL verification of the woven output (dotnet tool install -g dotnet-ilverify). -->
-    <ItemGroup Condition="'$(NDScopeWeaveILVerify)' == 'true'">
-      <_NDScopeILVerifyRefDir Include="@(ReferencePathWithRefAssemblies->'%(RootDir)%(Directory)'->Distinct())" />
-    </ItemGroup>
-    <Exec Condition="'$(NDScopeWeaveILVerify)' == 'true'"
-          Command="ilverify &quot;@(IntermediateAssembly)&quot; @(_NDScopeILVerifyRefDir->'-r &quot;%(Identity)*.dll&quot;', ' ')" />
-
-    <Touch Files="$(IntermediateOutputPath)NDScopeWeave.marker" AlwaysCreate="true" />
-    <ItemGroup>
-      <FileWrites Include="$(IntermediateOutputPath)NDScopeWeave.marker" />
-    </ItemGroup>
+    <!-- A property set inside a target is global to the rest of the build, so the imported
+         NDScopeWeave target (which expands $(NumSharpBuildToolDll) at execution time, in its
+         NDW000 existence check and its Exec) sees the freshly built tool, not the package-layout
+         default the packaged file computed at evaluation. -->
+    <PropertyGroup>
+      <NumSharpBuildToolDll>@(_NumSharpCoreWeaverAssembly->'%(FullPath)')</NumSharpBuildToolDll>
+    </PropertyGroup>
+    <Error Condition="'$(NumSharpBuildToolDll)' == '' or !Exists('$(NumSharpBuildToolDll)')"
+           Text="NumSharp self-weave: building $(NumSharpBuildProject) produced no tool assembly (got '$(NumSharpBuildToolDll)')." />
   </Target>
+
+  <!-- The packaged weave target itself — the same file NumSharp.Build ships as build/NumSharp.Build.targets. -->
+  <Import Project="..\..\tools\NumSharp.Build\build\NumSharp.Build.targets" />
 
   <ItemGroup>
     <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
