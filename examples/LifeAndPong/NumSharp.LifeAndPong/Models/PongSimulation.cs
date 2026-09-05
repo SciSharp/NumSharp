@@ -55,6 +55,12 @@ public sealed class PongSimulation
 
     public bool IsPaused { get; private set; }
 
+    public bool IsReady { get; private set; }
+
+    public int Rally { get; private set; }
+
+    public int BestRally { get; private set; }
+
     public bool IsMatchOver { get; private set; }
 
     public float ServeCountdown => MathF.Max(0, _serveClock);
@@ -75,8 +81,26 @@ public sealed class PongSimulation
 
     public void TogglePause()
     {
+        if (IsReady)
+        {
+            IsReady = false;
+            return;
+        }
         if (!IsMatchOver)
             IsPaused = !IsPaused;
+    }
+
+    public void ReleaseInput()
+    {
+        _playerIntent = 0;
+        _pointerTargetY = null;
+    }
+
+    public void PauseForDeactivation()
+    {
+        ReleaseInput();
+        if (!IsReady && !IsMatchOver)
+            IsPaused = true;
     }
 
     public void ResetMatch()
@@ -84,7 +108,10 @@ public sealed class PongSimulation
         PlayerScore = 0;
         AiScore = 0;
         IsPaused = false;
+        IsReady = true;
         IsMatchOver = false;
+        Rally = 0;
+        BestRally = 0;
         PlayerY = WorldHeight / 2f;
         AiY = WorldHeight / 2f;
         PlayerVelocity = 0;
@@ -96,27 +123,29 @@ public sealed class PongSimulation
 
     public void Advance(float fixedDeltaSeconds)
     {
+        if (!float.IsFinite(fixedDeltaSeconds) || fixedDeltaSeconds > 0.1f)
+            throw new ArgumentOutOfRangeException(nameof(fixedDeltaSeconds));
         if (fixedDeltaSeconds <= 0)
             return;
-        if (IsPaused || IsMatchOver)
+        if (IsPaused || IsMatchOver || IsReady)
             return;
-
-        UpdatePaddles(fixedDeltaSeconds);
 
         if (_serveClock > 0)
         {
+            UpdatePaddles(fixedDeltaSeconds);
             _serveClock -= fixedDeltaSeconds;
             if (_serveClock <= 0)
                 LaunchServe();
             return;
         }
 
-        var travel = BallVelocity.Length() * fixedDeltaSeconds;
+        var travel = (BallVelocity.Length() + PlayerMaxSpeed) * fixedDeltaSeconds;
         var subSteps = Math.Max(1, (int)MathF.Ceiling(travel / (BallRadius * 0.45f)));
         var subDelta = fixedDeltaSeconds / subSteps;
 
         for (var step = 0; step < subSteps; step++)
         {
+            UpdatePaddles(subDelta);
             BallPosition += BallVelocity * subDelta;
             ResolveWalls();
             ResolvePaddle(PlayerX, PlayerY, PlayerVelocity, isLeft: true);
@@ -135,7 +164,7 @@ public sealed class PongSimulation
             }
         }
 
-        if (_serveClock <= 0)
+        if (_serveClock <= 0 && !IsMatchOver)
         {
             _trail.Add(BallPosition);
             if (_trail.Count > 18)
@@ -149,6 +178,7 @@ public sealed class PongSimulation
         BallVelocity = velocity;
         _serveClock = 0;
         IsPaused = false;
+        IsReady = false;
         IsMatchOver = false;
         _trail.Clear();
     }
@@ -215,9 +245,6 @@ public sealed class PongSimulation
 
     private void ResolvePaddle(float paddleX, float paddleY, float paddleVelocity, bool isLeft)
     {
-        if (isLeft ? BallVelocity.X >= 0 : BallVelocity.X <= 0)
-            return;
-
         var halfWidth = PaddleWidth / 2f;
         var halfHeight = PaddleHeight / 2f;
         var closestX = Math.Clamp(BallPosition.X, paddleX - halfWidth, paddleX + halfWidth);
@@ -226,17 +253,24 @@ public sealed class PongSimulation
         if (difference.LengthSquared() > BallRadius * BallRadius)
             return;
 
-        var impact = Math.Clamp((BallPosition.Y - paddleY) / halfHeight, -1f, 1f);
+        var distance = difference.Length();
+        // Reflect in the moving paddle's frame, using the circle/rectangle contact normal.
+        // This handles corner and paddle-end contacts without teleporting the ball sideways.
+        var normal = distance > 0.0001f
+            ? difference / distance
+            : new Vector2(isLeft ? 1f : -1f, 0);
+        var relativeVelocity = BallVelocity - new Vector2(0, paddleVelocity);
+        if (Vector2.Dot(relativeVelocity, normal) >= 0)
+            return;
         var speed = MathF.Min(BallMaxSpeed, MathF.Max(BallStartSpeed, BallVelocity.Length() * 1.045f));
-        var horizontalDirection = isLeft ? 1f : -1f;
-        Vector2 response = new(horizontalDirection, impact * 0.78f + paddleVelocity / PlayerMaxSpeed * 0.24f);
+        var response = Vector2.Reflect(relativeVelocity, normal) + new Vector2(0, paddleVelocity);
+        var tangent = new Vector2(-normal.Y, normal.X);
+        response += tangent * Vector2.Dot(new Vector2(0, paddleVelocity), tangent) * 0.18f;
         response = Vector2.Normalize(response) * speed;
         BallVelocity = ApplyDirectionalJitter(response);
-
-        var outside = isLeft
-            ? paddleX + halfWidth + BallRadius
-            : paddleX - halfWidth - BallRadius;
-        BallPosition = BallPosition with { X = outside };
+        BallPosition += normal * (BallRadius - distance + 0.01f);
+        Rally++;
+        BestRally = Math.Max(BestRally, Rally);
     }
 
     private Vector2 ApplyDirectionalJitter(Vector2 velocity)
@@ -268,6 +302,7 @@ public sealed class PongSimulation
 
     private void BeginServe(int horizontalDirection)
     {
+        Rally = 0;
         BallPosition = new Vector2(WorldWidth / 2f, WorldHeight / 2f);
         BallVelocity = new Vector2(horizontalDirection * BallStartSpeed, 0);
         _serveClock = 0.85f;

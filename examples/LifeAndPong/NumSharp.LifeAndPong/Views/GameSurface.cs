@@ -36,20 +36,30 @@ public sealed class GameSurface : Control, IDisposable
     private readonly DispatcherTimer _timer;
     private readonly List<ButtonHit> _buttonHits = new(10);
     private readonly double[] _lifeRates = [3, 6, 12, 24, 40];
+    private readonly HashSet<Key> _heldKeys = [];
+    private readonly bool _startAnimation;
 
     private long _lastTimestamp;
     private double _lifeAccumulator;
     private double _pongAccumulator;
     private int _lifeRateIndex = 2;
     private bool _lifeRunning = true;
-    private bool _upHeld;
-    private bool _downHeld;
     private bool _paintingLife;
     private bool _paintAlive;
     private bool _disposed;
     private IPointer? _capturedPointer;
     private Rect _lifeGridRect;
     private Rect _pongWorldRect;
+    private int _paintRow;
+    private int _paintColumn;
+    private int _selectedButton = -1;
+    private Point _hover = new(-1, -1);
+
+    internal LifeSimulation Life => _life;
+    internal PongSimulation Pong => _pong;
+    internal Rect LifeBounds => _lifeGridRect;
+    internal Rect PongBounds => _pongWorldRect;
+    internal Rect ButtonBounds(string id) => _buttonHits.First(b => b.Id == id).Bounds;
 
     public GameSurface()
         : this(startAnimation: true)
@@ -62,9 +72,23 @@ public sealed class GameSurface : Control, IDisposable
         ClipToBounds = true;
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(8) };
         _timer.Tick += OnFrame;
+        _startAnimation = startAnimation;
         _lastTimestamp = Stopwatch.GetTimestamp();
-        if (startAnimation)
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _lastTimestamp = Stopwatch.GetTimestamp();
+        if (_startAnimation && !_disposed)
             _timer.Start();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _timer.Stop();
+        SuspendPlay();
+        base.OnDetachedFromVisualTree(e);
     }
 
     public override void Render(DrawingContext context)
@@ -110,7 +134,10 @@ public sealed class GameSurface : Control, IDisposable
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+        if (_capturedPointer is not null && _capturedPointer != e.Pointer)
+            return;
         Focus();
+        _selectedButton = -1;
         var point = e.GetPosition(this);
 
         foreach (var button in _buttonHits)
@@ -126,6 +153,8 @@ public sealed class GameSurface : Control, IDisposable
         if (TryGetLifeCell(point, out var row, out var column))
         {
             _paintAlive = _life.ToggleCell(row, column);
+            _paintRow = row;
+            _paintColumn = column;
             _paintingLife = true;
             _capturedPointer = e.Pointer;
             e.Pointer.Capture(this);
@@ -141,18 +170,24 @@ public sealed class GameSurface : Control, IDisposable
     {
         base.OnPointerMoved(e);
         var point = e.GetPosition(this);
-        UpdatePointerPaddle(point);
+        _hover = point;
+        if (!_paintingLife)
+            UpdatePointerPaddle(point);
 
-        if (_paintingLife && TryGetLifeCell(point, out var row, out var column))
+        if (_paintingLife && _capturedPointer == e.Pointer && TryGetLifeCell(point, out var row, out var column))
         {
-            _life.SetCell(row, column, _paintAlive);
-            InvalidateVisual();
+            _life.PaintLine(_paintRow, _paintColumn, row, column, _paintAlive);
+            _paintRow = row;
+            _paintColumn = column;
         }
+        InvalidateVisual();
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        if (_capturedPointer != e.Pointer)
+            return;
         _paintingLife = false;
         _capturedPointer = null;
         e.Pointer.Capture(null);
@@ -161,6 +196,8 @@ public sealed class GameSurface : Control, IDisposable
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         base.OnPointerCaptureLost(e);
+        if (_capturedPointer != e.Pointer)
+            return;
         _paintingLife = false;
         _capturedPointer = null;
     }
@@ -174,59 +211,86 @@ public sealed class GameSurface : Control, IDisposable
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        var firstPress = _heldKeys.Add(e.Key);
+        if (e.Key == Key.Tab)
+        {
+            if (_buttonHits.Count == 0) return;
+            var direction = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1;
+            _selectedButton = _selectedButton < 0
+                ? direction > 0 ? 0 : _buttonHits.Count - 1
+                : (_selectedButton + direction + _buttonHits.Count) % _buttonHits.Count;
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key is Key.Enter or Key.Space && _selectedButton >= 0)
+        {
+            if (firstPress)
+                ActivateButton(_buttonHits[_selectedButton].Id);
+            e.Handled = true;
+            return;
+        }
         switch (e.Key)
         {
             case Key.W:
             case Key.Up:
-                _upHeld = true;
                 UpdateKeyboardIntent();
                 e.Handled = true;
                 break;
             case Key.S:
             case Key.Down:
-                _downHeld = true;
                 UpdateKeyboardIntent();
                 e.Handled = true;
                 break;
             case Key.Space:
-                _pong.TogglePause();
+                if (firstPress) _pong.TogglePause();
                 e.Handled = true;
                 break;
             case Key.R:
-                _pong.ResetMatch();
+                if (firstPress) { _pong.ResetMatch(); UpdateKeyboardIntent(); }
+                e.Handled = true;
+                break;
+            case Key.Escape:
+                SuspendPlay();
                 e.Handled = true;
                 break;
         }
+        InvalidateVisual();
     }
 
     protected override void OnKeyUp(KeyEventArgs e)
     {
         base.OnKeyUp(e);
+        _heldKeys.Remove(e.Key);
         switch (e.Key)
         {
             case Key.W:
             case Key.Up:
-                _upHeld = false;
                 UpdateKeyboardIntent();
                 e.Handled = true;
                 break;
             case Key.S:
             case Key.Down:
-                _downHeld = false;
                 UpdateKeyboardIntent();
                 e.Handled = true;
                 break;
         }
     }
 
-    internal bool HasTransientInputForTesting => _upHeld || _downHeld || _paintingLife || _capturedPointer is not null;
+    internal bool HasTransientInputForTesting => _heldKeys.Count != 0 || _paintingLife || _capturedPointer is not null;
+
+    internal void SuspendPlay()
+    {
+        ReleaseTransientInput();
+        _pong.PauseForDeactivation();
+        InvalidateVisual();
+    }
 
     internal void ReleaseTransientInput()
     {
-        _upHeld = false;
-        _downHeld = false;
+        _heldKeys.Clear();
         _paintingLife = false;
-        _pong.SetKeyboardIntent(0);
+        _pong.ReleaseInput();
 
         var pointer = _capturedPointer;
         _capturedPointer = null;
@@ -239,7 +303,13 @@ public sealed class GameSurface : Control, IDisposable
         var elapsed = Math.Min(0.05, (timestamp - _lastTimestamp) / (double)Stopwatch.Frequency);
         _lastTimestamp = timestamp;
 
-        if (_lifeRunning)
+        AdvanceSimulation(elapsed);
+        InvalidateVisual();
+    }
+
+    internal void AdvanceSimulation(double elapsed)
+    {
+        if (_lifeRunning && !_paintingLife)
         {
             _lifeAccumulator += elapsed;
             var interval = 1d / _lifeRates[_lifeRateIndex];
@@ -258,7 +328,6 @@ public sealed class GameSurface : Control, IDisposable
             _pongAccumulator -= FixedStep;
         }
 
-        InvalidateVisual();
     }
 
     private static void DrawHeader(DrawingContext context, Rect area, double scale)
@@ -270,7 +339,7 @@ public sealed class GameSurface : Control, IDisposable
         Rect badge = new(area.Right - badgeWidth, area.Y + 7 * scale, badgeWidth, 30 * scale);
         context.DrawRectangle(s_panelRaised, s_hairlinePen, badge, 15 * scale, 15 * scale);
         context.DrawEllipse(s_mint, null, new Point(badge.X + 16 * scale, badge.Center.Y), 3 * scale, 3 * scale);
-        DrawText(context, "120 HZ  /  LIVE", new Point(badge.X + 27 * scale, badge.Y + 8 * scale), 9.5 * scale, s_textSecondary, FontWeight.SemiBold, 0.9 * scale);
+        DrawText(context, "LIFE + PONG", new Point(badge.X + 27 * scale, badge.Y + 8 * scale), 9.5 * scale, s_textSecondary, FontWeight.SemiBold, 0.9 * scale);
     }
 
     private static void DrawAmbientGrid(DrawingContext context, Rect bounds)
@@ -311,7 +380,12 @@ public sealed class GameSurface : Control, IDisposable
         DrawText(context, $"{_lifeRates[_lifeRateIndex]:0}×", new Point(speedRight - 77 * scale, buttonY + 8 * scale), 10 * scale, s_textSecondary, FontWeight.Bold);
         DrawButton(context, "life-slower", "−", speedRight - 116 * scale, buttonY, 32 * scale, scale, s_mint, false);
 
-        Rect available = new(panel.X + inset, panel.Y + 113 * scale, panel.Width - inset * 2, panel.Height - 133 * scale);
+        DrawButton(context, "life-glider", "GLIDER", panel.X + inset, panel.Y + 107 * scale, 80 * scale, scale, s_mint, false);
+        DrawButton(context, "life-pulsar", "PULSAR", panel.X + inset + 88 * scale, panel.Y + 107 * scale, 80 * scale, scale, s_mint, false);
+        DrawText(context, "B3 / S23  ·  WRAPPING EDGES", new Point(panel.Right - 214 * scale, panel.Y + 117 * scale), 10 * scale, s_textSecondary, FontWeight.Medium);
+        DrawText(context, "DRAW OR ERASE: DRAG CELLS   ·   TAB + ENTER: CONTROLS", new Point(panel.X + inset, panel.Bottom - 30 * scale), 10 * scale, s_textSecondary, FontWeight.Medium);
+
+        Rect available = new(panel.X + inset, panel.Y + 156 * scale, panel.Width - inset * 2, panel.Height - 211 * scale);
         var cellSize = Math.Min(available.Width / _life.Columns, available.Height / _life.Rows);
         var gridWidth = cellSize * _life.Columns;
         var gridHeight = cellSize * _life.Rows;
@@ -358,11 +432,14 @@ public sealed class GameSurface : Control, IDisposable
 
         var buttonY = panel.Y + 67 * scale;
         var buttonX = panel.X + inset;
-        buttonX = DrawButton(context, "pong-pause", _pong.IsPaused ? "RESUME" : "PAUSE", buttonX, buttonY, 76 * scale, scale, s_coral, _pong.IsPaused);
+        buttonX = DrawButton(context, "pong-pause", _pong.IsReady ? "START" : _pong.IsPaused ? "RESUME" : "PAUSE", buttonX, buttonY, 76 * scale, scale, s_coral, _pong.IsReady || _pong.IsPaused);
         DrawButton(context, "pong-reset", "NEW MATCH", buttonX + 7 * scale, buttonY, 96 * scale, scale, s_coral, false);
         DrawText(context, "2% DIRECTIONAL JITTER", new Point(panel.Right - 175 * scale, buttonY + 8 * scale), 9 * scale, s_textSecondary, FontWeight.Bold, 0.5 * scale);
 
-        Rect available = new(panel.X + inset, panel.Y + 113 * scale, panel.Width - inset * 2, panel.Height - 133 * scale);
+        DrawText(context, $"RALLY {_pong.Rally:00}    BEST {_pong.BestRally:00}    ·    FIRST TO 7", new Point(panel.X + inset, panel.Y + 117 * scale), 11 * scale, s_textSecondary, FontWeight.Medium);
+        DrawText(context, "MOVE: W / S, ↑ / ↓, MOUSE   ·   SPACE: START / PAUSE", new Point(panel.X + inset, panel.Bottom - 30 * scale), 10 * scale, s_textSecondary, FontWeight.Medium);
+
+        Rect available = new(panel.X + inset, panel.Y + 156 * scale, panel.Width - inset * 2, panel.Height - 211 * scale);
         var worldScale = Math.Min(available.Width / PongSimulation.WorldWidth, available.Height / PongSimulation.WorldHeight);
         var worldWidth = PongSimulation.WorldWidth * worldScale;
         var worldHeight = PongSimulation.WorldHeight * worldScale;
@@ -431,7 +508,12 @@ public sealed class GameSurface : Control, IDisposable
     {
         string? title = null;
         string? detail = null;
-        if (_pong.IsMatchOver)
+        if (_pong.IsReady)
+        {
+            title = "READY TO PLAY";
+            detail = "SPACE OR START TO SERVE";
+        }
+        else if (_pong.IsMatchOver)
         {
             title = _pong.PlayerScore > _pong.AiScore ? "YOU WIN" : "AI WINS";
             detail = "PRESS R OR NEW MATCH";
@@ -450,7 +532,7 @@ public sealed class GameSurface : Control, IDisposable
         if (title is null)
             return;
 
-        Rect overlay = new(_pongWorldRect.Center.X - 100 * scale, _pongWorldRect.Center.Y - 47 * scale, 200 * scale, 94 * scale);
+        Rect overlay = new(_pongWorldRect.Center.X - 132 * scale, _pongWorldRect.Center.Y - 47 * scale, 264 * scale, 94 * scale);
         context.DrawRectangle(new SolidColorBrush(Color.FromArgb(205, 7, 10, 18)), new Pen(s_white22, 1), overlay, 16 * scale, 16 * scale);
         DrawTextCentered(context, title, new Point(overlay.Center.X, overlay.Y + 16 * scale), 27 * scale, s_textPrimary, FontWeight.Bold);
         DrawTextCentered(context, detail!, new Point(overlay.Center.X, overlay.Y + 58 * scale), 9 * scale, s_textSecondary, FontWeight.Bold, 1 * scale);
@@ -461,6 +543,8 @@ public sealed class GameSurface : Control, IDisposable
         Rect bounds = new(x, y, width, 29 * scale);
         _buttonHits.Add(new ButtonHit(id, bounds));
         context.DrawRectangle(active ? accent : s_panelRaised, new Pen(active ? accent : s_hairline, 1), bounds, 8 * scale, 8 * scale);
+        if (_selectedButton == _buttonHits.Count - 1 || bounds.Contains(_hover))
+            context.DrawRectangle(null, new Pen(accent, 1.5), bounds.Inflate(2), 10 * scale, 10 * scale);
         DrawTextCentered(context, label, bounds.Center.WithY(bounds.Y + 7.4 * scale), 9 * scale, active ? s_ink : s_textSecondary, FontWeight.Bold, 0.55 * scale);
         return bounds.Right;
     }
@@ -474,13 +558,23 @@ public sealed class GameSurface : Control, IDisposable
                 _lifeAccumulator = 0;
                 break;
             case "life-step":
+                _lifeRunning = false;
+                _lifeAccumulator = 0;
                 _life.Step();
                 break;
             case "life-seed":
                 _life.Reseed();
                 break;
             case "life-clear":
+                _lifeRunning = false;
+                _lifeAccumulator = 0;
                 _life.Clear();
+                break;
+            case "life-glider":
+            case "life-pulsar":
+                _lifeRunning = false;
+                _lifeAccumulator = 0;
+                _life.LoadPattern(id == "life-pulsar");
                 break;
             case "life-slower":
                 _lifeRateIndex = Math.Max(0, _lifeRateIndex - 1);
@@ -520,7 +614,9 @@ public sealed class GameSurface : Control, IDisposable
         _pong.SetPointerTarget(worldY);
     }
 
-    private void UpdateKeyboardIntent() => _pong.SetKeyboardIntent((_downHeld ? 1f : 0f) - (_upHeld ? 1f : 0f));
+    private void UpdateKeyboardIntent() => _pong.SetKeyboardIntent(
+        (_heldKeys.Contains(Key.S) || _heldKeys.Contains(Key.Down) ? 1f : 0f) -
+        (_heldKeys.Contains(Key.W) || _heldKeys.Contains(Key.Up) ? 1f : 0f));
 
     private Point WorldToScreen(System.Numerics.Vector2 value, double scale) =>
         new(_pongWorldRect.X + value.X * scale, _pongWorldRect.Y + value.Y * scale);

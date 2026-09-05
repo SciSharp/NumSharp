@@ -9,6 +9,7 @@ public sealed class LifeSimulation : IDisposable
 {
     private readonly Random _random;
     private NDArray _cells;
+    private NDArray _next;
     private bool _disposed;
 
     public LifeSimulation(int rows = 40, int columns = 48, int seed = 73021)
@@ -20,6 +21,7 @@ public sealed class LifeSimulation : IDisposable
         Columns = columns;
         _random = new Random(seed);
         _cells = np.zeros(new Shape(rows, columns), NPTypeCode.Byte);
+        _next = np.zeros(new Shape(rows, columns), NPTypeCode.Byte);
         Reseed();
     }
 
@@ -71,7 +73,7 @@ public sealed class LifeSimulation : IDisposable
     public void Reseed(double density = 0.22)
     {
         ThrowIfDisposed();
-        if (density is < 0 or > 1)
+        if (!double.IsFinite(density) || density is < 0 or > 1)
             throw new ArgumentOutOfRangeException(nameof(density));
 
         var data = _cells.GetData<byte>();
@@ -83,15 +85,6 @@ public sealed class LifeSimulation : IDisposable
             live += value;
         }
 
-        // A recognizable glider makes the seed feel intentional even in a busy field.
-        var centerRow = Rows / 2;
-        var centerColumn = Columns / 2;
-        SetRaw(data, centerRow - 1, centerColumn, true, ref live);
-        SetRaw(data, centerRow, centerColumn + 1, true, ref live);
-        SetRaw(data, centerRow + 1, centerColumn - 1, true, ref live);
-        SetRaw(data, centerRow + 1, centerColumn, true, ref live);
-        SetRaw(data, centerRow + 1, centerColumn + 1, true, ref live);
-
         Generation = 0;
         LiveCount = live;
     }
@@ -100,9 +93,8 @@ public sealed class LifeSimulation : IDisposable
     {
         ThrowIfDisposed();
 
-        var next = np.zeros(new Shape(Rows, Columns), NPTypeCode.Byte);
         var source = _cells.GetData<byte>();
-        var destination = next.GetData<byte>();
+        var destination = _next.GetData<byte>();
         var live = 0;
 
         for (var row = 0; row < Rows; row++)
@@ -127,9 +119,7 @@ public sealed class LifeSimulation : IDisposable
             }
         }
 
-        var previous = _cells;
-        _cells = next;
-        previous.Dispose();
+        (_cells, _next) = (_next, _cells);
         Generation++;
         LiveCount = live;
     }
@@ -140,20 +130,45 @@ public sealed class LifeSimulation : IDisposable
             return;
 
         _cells.Dispose();
+        _next.Dispose();
         _disposed = true;
     }
 
     private long IndexOf(int row, int column) => (long)row * Columns + column;
 
-    private void SetRaw(ArraySlice<byte> data, int row, int column, bool alive, ref int live)
+    public void LoadPattern(bool pulsar)
     {
-        var index = IndexOf(row, column);
-        var wasAlive = data[index] != 0;
-        if (wasAlive == alive)
-            return;
+        string[] pattern = pulsar
+            ? ["..###...###..", ".............", "#....#.#....#", "#....#.#....#", "#....#.#....#", "..###...###..", ".............", "..###...###..", "#....#.#....#", "#....#.#....#", "#....#.#....#", ".............", "..###...###.."]
+            : [".#.", "..#", "###"];
+        if (Rows < pattern.Length || Columns < pattern[0].Length)
+            throw new InvalidOperationException("The pattern does not fit the field.");
+        Clear();
+        for (var row = 0; row < pattern.Length; row++)
+            for (var column = 0; column < pattern[row].Length; column++)
+                if (pattern[row][column] == '#')
+                    SetCell((Rows - pattern.Length) / 2 + row, (Columns - pattern[0].Length) / 2 + column, true);
+    }
 
-        data[index] = alive ? (byte)1 : (byte)0;
-        live += alive ? 1 : -1;
+    public void PaintLine(int fromRow, int fromColumn, int toRow, int toColumn, bool alive)
+    {
+        ThrowIfDisposed();
+        ValidateCoordinates(fromRow, fromColumn);
+        ValidateCoordinates(toRow, toColumn);
+        var dx = Math.Abs(toColumn - fromColumn);
+        var dy = -Math.Abs(toRow - fromRow);
+        var sx = fromColumn < toColumn ? 1 : -1;
+        var sy = fromRow < toRow ? 1 : -1;
+        var error = dx + dy;
+        while (true)
+        {
+            SetCell(fromRow, fromColumn, alive);
+            if (fromRow == toRow && fromColumn == toColumn)
+                break;
+            var twice = error * 2;
+            if (twice >= dy) { error += dy; fromColumn += sx; }
+            if (twice <= dx) { error += dx; fromRow += sy; }
+        }
     }
 
     private void ValidateCoordinates(int row, int column)

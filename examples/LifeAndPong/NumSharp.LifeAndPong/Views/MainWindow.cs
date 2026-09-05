@@ -18,7 +18,8 @@ public sealed class MainWindow : Window
         Background = new SolidColorBrush(Color.Parse("#070A12"));
         Content = _surface;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Deactivated += (_, _) => _surface.ReleaseTransientInput();
+        Opened += (_, _) => _surface.Focus();
+        Deactivated += (_, _) => _surface.SuspendPlay();
         Closed += (_, _) => _surface.Dispose();
     }
 }

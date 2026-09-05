@@ -7,6 +7,54 @@ namespace NumSharp.LifeAndPong.Tests;
 public sealed class PongSimulationTests
 {
     [TestMethod]
+    public void Ready_Pause_And_Reset_Do_Not_Run_Away_From_The_Player()
+    {
+        var pong = new PongSimulation();
+        var position = pong.BallPosition;
+        for (var i = 0; i < 2400; i++) pong.Advance(1f / 120);
+        Assert.AreEqual(position, pong.BallPosition);
+        Assert.AreEqual(0, pong.AiScore);
+        pong.TogglePause();
+        for (var i = 0; i < 120; i++) pong.Advance(1f / 120);
+        Assert.AreNotEqual(position, pong.BallPosition);
+        pong.PauseForDeactivation();
+        position = pong.BallPosition;
+        pong.Advance(1f / 120);
+        Assert.AreEqual(position, pong.BallPosition);
+        pong.ResetMatch();
+        Assert.IsTrue(pong.IsReady);
+    }
+
+    [TestMethod]
+    public void Jitter_Remains_Bounded_Across_Many_Impacts_And_Seeds()
+    {
+        var negative = 0;
+        var positive = 0;
+        for (var seed = 0; seed < 512; seed++)
+        {
+            var pong = new PongSimulation(seed);
+            pong.SetBallForTesting(new Vector2(56.1f, pong.PlayerY), new Vector2(-500, 0));
+            pong.Advance(1f / 120);
+            Assert.AreEqual(522.5f, pong.BallVelocity.Length(), 0.01f);
+            Assert.IsTrue(pong.BallVelocity.X > 0);
+            Assert.IsTrue(MathF.Abs(pong.BallVelocity.Y / pong.BallVelocity.X) <= 0.02001f);
+            if (pong.BallVelocity.Y < 0) negative++; else positive++;
+        }
+        Assert.IsTrue(negative > 150 && positive > 150);
+    }
+
+    [TestMethod]
+    public void Paddle_End_Contact_Reflects_About_Its_Normal()
+    {
+        var pong = new PongSimulation(11);
+        var x = 36f;
+        pong.SetBallForTesting(new Vector2(x, pong.PlayerY - PongSimulation.PaddleHeight / 2 - 10.9f), new Vector2(0, 500));
+        pong.Advance(1f / 120);
+        Assert.IsTrue(pong.BallVelocity.Y < 0);
+        Assert.IsTrue(Math.Abs(pong.BallPosition.X - x) < 1);
+    }
+
+    [TestMethod]
     public void Top_Wall_Reflects_Without_Changing_Speed()
     {
         var pong = new PongSimulation(42);
