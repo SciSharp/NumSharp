@@ -2,9 +2,9 @@
 #:property PublishAot=false
 #:property AllowUnsafeBlocks=true
 #:property Nullable=disable
-// P1 verification for NeuralNetwork.NumSharp — training-loop parity.
+// Training-loop verification for NeuralNetwork.NumSharp — training-loop parity.
 // Run from THIS directory (file-based apps need a csproj-free CWD):
-//   cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_p1.cs
+//   cd examples/NeuralNetwork.NumSharp/tests && dotnet run VerifyTrainingLoopTests.cs
 //
 // Sections: weight/architecture serialization, gradient clipping, the four
 // callbacks (driven directly against Keras's documented state machine), and
@@ -50,7 +50,7 @@ try
 {
 
 // ======================================================================
-Console.WriteLine("--- P1 serialization (weights .npz + architecture JSON) ---");
+Console.WriteLine("--- serialization (weights .npz + architecture JSON) ---");
 // ======================================================================
 {
     np.random.seed(11);
@@ -61,7 +61,7 @@ Console.WriteLine("--- P1 serialization (weights .npz + architecture JSON) ---")
     };
 
     // A non-trainable buffer must ride along in the archive but never reach an
-    // optimizer — this is the slot BatchNorm's running stats use in P4.
+    // optimizer — this is the slot BatchNorm's running stats use (see VerifyLayersTests).
     model[0].NonTrainable["running_mean"] = np.array(new float[] { 0.25f, -1.5f, 7f });
 
     string ckpt = Path.Combine(tmpRoot, "weights.npz");
@@ -173,7 +173,7 @@ Console.WriteLine("--- P1 serialization (weights .npz + architecture JSON) ---")
 }
 
 // ======================================================================
-Console.WriteLine("--- P1 gradient clipping (Keras clipnorm / global_clipnorm / clipvalue) ---");
+Console.WriteLine("--- gradient clipping (Keras clipnorm / global_clipnorm / clipvalue) ---");
 // ======================================================================
 {
     // clip_by_norm: g=[3,4] has L2 norm 5. With clipnorm 2.5 the scale is 0.5.
@@ -242,7 +242,7 @@ Console.WriteLine("--- P1 gradient clipping (Keras clipnorm / global_clipnorm / 
 }
 
 // ======================================================================
-Console.WriteLine("--- P1 EarlyStopping (Keras state machine) ---");
+Console.WriteLine("--- EarlyStopping (Keras state machine) ---");
 // ======================================================================
 {
     // patience=2 on a min metric: improve, improve, then two flat epochs.
@@ -356,7 +356,7 @@ Console.WriteLine("--- P1 EarlyStopping (Keras state machine) ---");
 }
 
 // ======================================================================
-Console.WriteLine("--- P1 ReduceLROnPlateau ---");
+Console.WriteLine("--- ReduceLROnPlateau ---");
 // ======================================================================
 {
     var opt = new SGD(lr: 1f);
@@ -411,7 +411,7 @@ Console.WriteLine("--- P1 ReduceLROnPlateau ---");
 }
 
 // ======================================================================
-Console.WriteLine("--- P1 ModelCheckpoint ---");
+Console.WriteLine("--- ModelCheckpoint ---");
 // ======================================================================
 {
     np.random.seed(3);
@@ -455,7 +455,7 @@ Console.WriteLine("--- P1 ModelCheckpoint ---");
 }
 
 // ======================================================================
-Console.WriteLine("--- P1 CSVLogger ---");
+Console.WriteLine("--- CSVLogger ---");
 // ======================================================================
 {
     string csv = Path.Combine(tmpRoot, "log.csv");
@@ -497,7 +497,7 @@ Console.WriteLine("--- P1 CSVLogger ---");
 }
 
 // ======================================================================
-Console.WriteLine("--- P1 trainer (shuffle / validation / partial batch / verbose) ---");
+Console.WriteLine("--- trainer (shuffle / validation / partial batch / verbose) ---");
 // ======================================================================
 
 // Data where row i carries its own index in column 0, so a spy layer can

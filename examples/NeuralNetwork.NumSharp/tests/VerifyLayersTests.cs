@@ -2,13 +2,13 @@
 #:property PublishAot=false
 #:property AllowUnsafeBlocks=true
 #:property Nullable=disable
-// P4 verification for NeuralNetwork.NumSharp — regularization & normalization.
+// Layer verification for NeuralNetwork.NumSharp — regularization & normalization.
 // Run from THIS directory (file-based apps need a csproj-free CWD):
-//   cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_p4.cs
+//   cd examples/NeuralNetwork.NumSharp/tests && dotnet run VerifyLayersTests.cs
 //
 // The VALUES and GRADIENTS of Dropout / BatchNorm / LayerNorm / Embedding /
 // the regularizers are pinned against real Keras + jax.grad by
-// verify_edge_cases.cs. This gate covers what an oracle over single layers
+// VerifyKerasOracleTests.cs. This gate covers what an oracle over single layers
 // cannot see:
 //   * the Training flag actually being plumbed by the trainer and NeuralNet
 //   * running statistics updating in training and NOT in inference
@@ -54,7 +54,7 @@ try
 {
 
 // ======================================================================
-Console.WriteLine("--- P4 Training flag (the contract change) ---");
+Console.WriteLine("--- Training flag (the contract change) ---");
 // ======================================================================
 {
     // Default is INFERENCE, so a bare Forward never drops.
@@ -99,7 +99,7 @@ Console.WriteLine("--- P4 Training flag (the contract change) ---");
 }
 
 // ======================================================================
-Console.WriteLine("--- P4 Dropout ---");
+Console.WriteLine("--- Dropout ---");
 // ======================================================================
 {
     // Seeded determinism through np.random (MT19937).
@@ -136,7 +136,7 @@ Console.WriteLine("--- P4 Dropout ---");
 }
 
 // ======================================================================
-Console.WriteLine("--- P4 BatchNormalization (state machine + FD gradients) ---");
+Console.WriteLine("--- BatchNormalization (state machine + FD gradients) ---");
 // ======================================================================
 {
     var x = np.array(new float[,] { { 1f, 2f }, { 3f, 5f }, { 7f, 11f } });
@@ -194,7 +194,7 @@ Console.WriteLine("--- P4 BatchNormalization (state machine + FD gradients) ---"
 }
 
 // ======================================================================
-Console.WriteLine("--- P4 LayerNormalization ---");
+Console.WriteLine("--- LayerNormalization ---");
 // ======================================================================
 {
     var x = np.array(new float[,] { { 1f, 2f, -3f, 0.5f }, { 3f, 5f, 0.5f, -1f } });
@@ -229,7 +229,7 @@ Console.WriteLine("--- P4 LayerNormalization ---");
 }
 
 // ======================================================================
-Console.WriteLine("--- P4 Embedding ---");
+Console.WriteLine("--- Embedding ---");
 // ======================================================================
 {
     var w = np.array(new float[,] { { 0.1f, 0.2f }, { -0.3f, 0.4f }, { 0.5f, -0.6f } });
@@ -295,7 +295,7 @@ Console.WriteLine("--- P4 Embedding ---");
 }
 
 // ======================================================================
-Console.WriteLine("--- P4 Flatten / Reshape ---");
+Console.WriteLine("--- Flatten / Reshape ---");
 // ======================================================================
 {
     var x = np.reshape(np.arange(24).astype(NPTypeCode.Single), new Shape(2, 3, 4));
@@ -329,7 +329,7 @@ Console.WriteLine("--- P4 Flatten / Reshape ---");
 }
 
 // ======================================================================
-Console.WriteLine("--- P4 regularizers (wiring, not values) ---");
+Console.WriteLine("--- regularizers (wiring, not values) ---");
 // ======================================================================
 {
     var w = np.array(new float[,] { { 1f, -2f }, { 3f, -4f } });
@@ -388,7 +388,7 @@ Console.WriteLine("--- P4 regularizers (wiring, not values) ---");
 }
 
 // ======================================================================
-Console.WriteLine("--- P4 serialization of the new layers ---");
+Console.WriteLine("--- serialization of the new layers ---");
 // ======================================================================
 {
     np.random.seed(17);

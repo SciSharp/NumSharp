@@ -13,7 +13,7 @@
 // against expected_ns and REPORTED, never silent (MisalignedRegistry spirit).
 //
 // Run from THIS directory:
-//   cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_edge_cases.cs
+//   cd examples/NeuralNetwork.NumSharp/tests && dotnet run VerifyKerasOracleTests.cs
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -130,7 +130,7 @@ foreach (var c in doc.RootElement.GetProperty("cases").EnumerateArray())
                     Check(id + " limit", maxAbsAll <= lim.GetSingle() + 1e-6f, $"max={maxAbsAll} limit={lim.GetSingle()}");
                 break;
             }
-            // ---------------- P4 layers ----------------
+            // ---------------- normalization / embedding / regularizer layers ----------------
             case "dropout":
             {
                 float rate = (float)c.GetProperty("params").GetProperty("rate").GetDouble();
@@ -403,7 +403,7 @@ static int[] NestedShape(JsonElement e)
 }
 
 /// <summary>
-/// N-dimensional float32 reader — the P4 layers need 3-D (sequence embeddings)
+/// N-dimensional float32 reader — the layer cases need 3-D (sequence embeddings)
 /// where the original ToNDArray only handled 1-D and 2-D.
 /// </summary>
 static NDArray ToNDArrayND(JsonElement e)

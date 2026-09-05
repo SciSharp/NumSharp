@@ -6,7 +6,7 @@
 # f1/r2/rmse, NumPy for argmax tie-breaking.
 #
 # Output: tests/corpus/keras_edge_oracle.json — committed; the C# replay
-# (verify_edge_cases.cs) runs WITHOUT Python, house oracle philosophy.
+# (VerifyKerasOracleTests.cs) runs WITHOUT Python, house oracle philosophy.
 #
 # Regenerate:  python gen_keras_oracle.py   (from this directory)
 # Requires: keras>=3.15, jax, scikit-learn, numpy (float32 defaults matter).
@@ -363,7 +363,7 @@ for name, shapes in INIT_SHAPES.items():
         cases.append(row)
 
 # ======================================================================
-# 5. P4 layers — Dropout / BatchNormalization / LayerNormalization /
+# 5. Layers — Dropout / BatchNormalization / LayerNormalization /
 #    Embedding, values AND gradients, through the REAL Keras layers.
 #
 #    Gradients come from jax.grad over keras Layer.stateless_call, so the

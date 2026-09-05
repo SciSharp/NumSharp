@@ -1,11 +1,13 @@
 #:project ../NeuralNetwork.NumSharp.csproj
 #:property PublishAot=false
 #:property AllowUnsafeBlocks=true
-// P0 + P2 verification for NeuralNetwork.NumSharp (86 checks).
+// Component verification for NeuralNetwork.NumSharp (86 checks) — the reusable
+// building blocks: activations, losses, metrics, initializers, optimizer decay,
+// plus the core behavior fixes they rest on.
 // Run from THIS directory (file-based apps need a csproj-free CWD):
-//   cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_p0_p2.cs
+//   cd examples/NeuralNetwork.NumSharp/tests && dotnet run VerifyComponentsTests.cs
 // #:project resolves relative to this file.
-// Sections: P0 behavior fixes, activation values+FD gradients, loss values+FD
+// Sections: core behavior fixes, activation values+FD gradients, loss values+FD
 // gradients (NumPy 2.4.2 reference constants), metrics, initializers.
 using System;
 using System.Collections.Generic;
@@ -44,8 +46,8 @@ void CheckArr(string name, NDArray actual, float[] expected, float tol = 1e-5f)
 
 NDArray X() => np.array(new float[] { -3, -1.5f, -0.5f, 0, 0.5f, 1.5f, 3 });
 
-// ============================ P0 =============================
-Console.WriteLine("--- P0 fixes ---");
+// ============================ core behavior fixes =============================
+Console.WriteLine("--- behavior fixes ---");
 
 // astype(copy:false) no longer mutates; same-dtype returns self
 {
@@ -132,8 +134,8 @@ Console.WriteLine("--- P0 fixes ---");
     CheckClose("Evaluate partial batch 9/10", acc, 0.9f);
 }
 
-// ============================ P2: activations =============================
-Console.WriteLine("--- P2 activations (values vs NumPy + finite-difference gradients) ---");
+// ============================ activations =============================
+Console.WriteLine("--- activations (values vs NumPy + finite-difference gradients) ---");
 
 void ActCase(string name, Func<BaseActivation> make, float[] fwd, float[] der, int kinkIndex = -1)
 {
@@ -191,8 +193,8 @@ Check("resolver tanh..selu", BaseActivation.Get("tanh") is Tanh && BaseActivatio
     && BaseActivation.Get("swish") is SiLU && BaseActivation.Get("softplus") is Softplus
     && BaseActivation.Get("selu") is SELU);
 
-// ============================ P2: losses =============================
-Console.WriteLine("--- P2 losses (values vs NumPy + finite-difference gradients) ---");
+// ============================ losses =============================
+Console.WriteLine("--- losses (values vs NumPy + finite-difference gradients) ---");
 
 void LossFD(string name, BaseCost cost, NDArray preds, NDArray labels)
 {
@@ -255,8 +257,8 @@ void LossFD(string name, BaseCost cost, NDArray preds, NDArray labels)
     LossFD("logcosh", logcosh, preds, labels);
 }
 
-// ============================ P2: metrics =============================
-Console.WriteLine("--- P2 metrics ---");
+// ============================ metrics =============================
+Console.WriteLine("--- metrics ---");
 {
     var bp = np.array(new float[] { 0.9f, 0.6f, 0.4f, 0.2f, 0.7f, 0.51f });
     var bl = np.array(new float[] { 1f, 0f, 1f, 0f, 1f, 1f });
@@ -296,8 +298,8 @@ Console.WriteLine("--- P2 metrics ---");
     #pragma warning restore CS0618
 }
 
-// ============================ P2: initializers =============================
-Console.WriteLine("--- P2 initializers ---");
+// ============================ initializers =============================
+Console.WriteLine("--- initializers ---");
 {
     np.random.seed(7);
     var w1 = new HeNormal().Initialize(new Shape(256, 128));

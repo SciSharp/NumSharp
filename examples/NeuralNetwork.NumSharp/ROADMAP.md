@@ -34,7 +34,7 @@ present; `take_along_axis`, `sliding_window_view`, scatter-add, `einsum`,
 | Training loop | ✅ P1 | shuffle, `validationSplit`/`validationData`, callbacks, partial final batch, `verbose` 0/1/2, gradient clipping |
 
 **Known defects to fix before building on top (P0)** — ✅ ALL FIXED
-(verified by `tests/verify_p0_p2.cs`, 86 checks):
+(verified by `tests/VerifyComponentsTests.cs`, 86 checks):
 
 1. ~~`BaseActivation.Get("softmax")` returns `null`~~ — registered; resolver
    is now case-insensitive, `""`/`linear`/`none` → null, unknown names throw.
@@ -118,7 +118,7 @@ generalized `MlpTrainer.Train` (per-epoch shuffle, `validationSplit` /
 `NeuralNet` kept working and gained callbacks + `SaveWeights`/`LoadWeights`/
 `ToJson`/`FromJson`.
 
-Verified by `tests/verify_p1.cs` (**131 checks**, 0 failed); the P0/P2 gates
+Verified by `tests/VerifyTrainingLoopTests.cs` (**131 checks**, 0 failed); the P0/P2 gates
 stayed green (86 + 94). Demo convergence held exactly — final test accuracy
 99.90%, with epoch-1 loss moving 1.1247 → 1.1004 because the epoch now
 shuffles and runs 47 batches instead of 46 (the partial final batch used to be
@@ -183,7 +183,7 @@ Keras-exact truncated normals, Glorot/He/LeCun ×{uniform,normal}, Orthogonal
 via Gram-Schmidt, Zeros/Ones/Constant/RandomNormal/RandomUniform, `Get(name)`
 resolver) wired into both dense layers as opt-in `kernelInitializer`/
 `biasInitializer` params (null keeps the historical seeded defaults
-bit-for-bit). Verified by `tests/verify_p0_p2.cs`: NumPy 2.4.2 reference
+bit-for-bit). Verified by `tests/VerifyComponentsTests.cs`: NumPy 2.4.2 reference
 constants, finite-difference gradient grids, initializer statistics.
 Original planning table kept below for reference:
 
@@ -224,9 +224,9 @@ Shipped every row: the `Training` flag on `BaseLayer` (the contract change),
 running statistics included, via the `NonTrainable` slot P1 added for them.
 
 Verified two independent ways. The Keras oracle grew from 93 to **111 cases**
-(`verify_edge_cases.cs`: **160 checks**), with P4 layer gradients taken from
+(`VerifyKerasOracleTests.cs`: **160 checks**), with P4 layer gradients taken from
 `jax.grad` over `keras.Layer.stateless_call` — differentiating the ACTUAL Keras
-implementation rather than a re-derivation. `tests/verify_p4.cs` (**102
+implementation rather than a re-derivation. `tests/VerifyLayersTests.cs` (**102
 checks**) covers what a single-layer oracle cannot: flag plumbing, running-stat
 state machine, seed determinism, serialization round-trips, and independent
 finite-difference gradient checks. Total gate coverage is now **479 checks**
@@ -315,7 +315,7 @@ kernels later.
   proved its worth), optimizer trajectory pins vs hand-computed values, and a
   seeded 2-epoch convergence pin.
 - ✅ **Oracle-style parity — SHIPPED** (`tests/gen_keras_oracle.py` →
-  `tests/corpus/keras_edge_oracle.json` → `tests/verify_edge_cases.cs`):
+  `tests/corpus/keras_edge_oracle.json` → `tests/VerifyKerasOracleTests.cs`):
   real Keras 3 (JAX backend) values + jax.grad gradients, Keras metric
   classes, sklearn metrics — 93 committed edge cases (±inf/NaN/saturation/
   kinks/clip boundaries/ties/zero denominators), replayed with no Python;

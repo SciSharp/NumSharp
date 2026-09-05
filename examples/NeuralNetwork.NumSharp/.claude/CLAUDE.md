@@ -162,7 +162,7 @@ examples/NeuralNetwork.NumSharp/
 │                               Step counter must be monotonic across run.
 │                               Same non-mutating decay as SGD.
 │
-├── Callbacks/                 Keras keras.callbacks port (P1).
+├── Callbacks/                 Keras keras.callbacks port.
 │   ├── BaseCallback.cs        Hooks OnTrain{Begin,End}, OnEpoch{Begin,End},
 │   │                           OnBatchEnd + TrainingContext (Layers, Optimizer,
 │   │                           StopTraining flag = Keras model.stop_training).
@@ -176,7 +176,7 @@ examples/NeuralNetwork.NumSharp/
 │   └── CSVLogger.cs           columns frozen at epoch 0 (sorted keys), the
 │                               `epoch` column is 0-based (Keras writes it raw).
 │
-├── Serialization/             Weight + architecture persistence (P1).
+├── Serialization/             Weight + architecture persistence.
 │   ├── ModelWeights.cs        Save/Load one .npz; Capture/Restore in-memory
 │   │                           snapshots. Keys are `layer{i}/param/{name}` and
 │   │                           `layer{i}/state/{name}` — POSITIONAL, see below.
@@ -185,13 +185,15 @@ examples/NeuralNetwork.NumSharp/
 │
 ├── MnistMlp/                  The runnable experiment. Files described below.
 │
-├── tests/verify_p0_p2.cs      86-check verification script (dotnet-run file-
-│                               based app; excluded from the demo build via
-│                               csproj Compile Remove). See Testing below.
-├── tests/verify_p1.cs         131-check P1 gate (serialization, clipping, the
-│                               four callbacks, trainer behavior).
-├── tests/verify_p4.cs         102-check P4 gate (Training-flag plumbing, layer
-│                               state machines, FD gradients, serialization).
+├── tests/VerifyComponentsTests.cs   86-check gate (dotnet-run file-based app,
+│      excluded from the demo build via csproj Compile Remove). Activations,
+│      losses, metrics, initializers, optimizer decay. See Testing below.
+├── tests/VerifyKerasOracleTests.cs  160-check Keras 3 edge-case oracle replay
+│      (activations/losses/metrics/inits + the layers); no Python at test time.
+├── tests/VerifyTrainingLoopTests.cs 131-check gate (serialization, gradient
+│      clipping, the four callbacks, trainer behavior).
+├── tests/VerifyLayersTests.cs       102-check gate (Training-flag plumbing,
+│      layer state machines, FD gradients, serialization).
 ├── Open.snk                   Strong-name key shared with NumSharp.Core.
 └── NeuralNetwork.NumSharp.csproj   Exe, net8.0+net10.0, AllowUnsafeBlocks.
 ```
@@ -216,7 +218,7 @@ cache-hit on every subsequent forward/backward pass.
 
 | File | What it does |
 |---|---|
-| `Program.cs` | Entry point. Loads data, builds 2-FC model, runs fusion probe, trains via MlpTrainer, runs the **P1 showcase** (weights→.npz + architecture→JSON, rebuild-from-JSON and reload — random 8.9% → restored 99.90%, then a 12-epoch fit driven by EarlyStopping + ReduceLROnPlateau + ModelCheckpoint + CSVLogger with `validationSplit: 0.1` and `ClipNorm = 1.0`) and the **P4 showcase** (Dense→BatchNorm→Dropout→Dense + L2, 8 epochs; then the same input forwarded with `Training` false twice and true once, showing eval is deterministic and train differs), reports IL-kernel cache + delegate-slot counts. Both showcases are deliberately SEPARATE short runs so the headline 100-epoch numbers stay comparable across commits. |
+| `Program.cs` | Entry point. Loads data, builds 2-FC model, runs fusion probe, trains via MlpTrainer, runs the **serialization + callbacks showcase** (weights→.npz + architecture→JSON, rebuild-from-JSON and reload — random 8.9% → restored 99.90%, then a 12-epoch fit driven by EarlyStopping + ReduceLROnPlateau + ModelCheckpoint + CSVLogger with `validationSplit: 0.1` and `ClipNorm = 1.0`) and the **regularization + normalization showcase** (Dense→BatchNorm→Dropout→Dense + L2, 8 epochs; then the same input forwarded with `Training` false twice and true once, showing eval is deterministic and train differs), reports IL-kernel cache + delegate-slot counts. Both showcases are deliberately SEPARATE short runs so the headline 100-epoch numbers stay comparable across commits. |
 | `MnistLoader.cs` | IDX parser (big-endian) + learnable synthetic fallback (shared class templates across train/test, sigma=2.5 noise). |
 | `FullyConnectedFused.cs` | FC with bias + optional fused activation. Three NDIter kernels (two forward, one backward), cache keys are stable strings. |
 | `SoftmaxCrossEntropy.cs` | Combined loss computed in LOG space (log-softmax via log-sum-exp) so extreme logits give the true loss — a clipped softmax-then-log caps at -log(eps) ≈ 16.1 where e.g. logits (-1000, 0) should give 1000 (Keras from_logits=True parity, oracle-pinned). Caches softmax; (softmax-labels)/batch backward. Also ships `OneHot` helper. |
@@ -249,7 +251,7 @@ BOTH dictionaries, so a checkpoint carries running statistics.
 "unsupported"; a layer that wants JSON round-tripping overrides it AND registers
 a factory via `ModelArchitecture.Register`.
 
-## Training-loop contract (P1)
+## Training-loop contract
 
 `MlpTrainer.Train` is the full loop. Beyond the original positional arguments it
 takes `shuffle` (default **true**, Keras's default), `validationSplit`,
@@ -275,7 +277,7 @@ takes `shuffle` (default **true**, Keras's default), `validationSplit`,
   `StoppedEarly`. `Epochs` remains the number REQUESTED; `EpochsRun` is what
   actually ran.
 
-## Train/eval mode contract (P4)
+## Train/eval mode contract
 
 `BaseLayer.Training` is the Keras `training=` / PyTorch `model.eval()` analog,
 as a **flag** rather than a `Forward` parameter — the signature change would
@@ -310,7 +312,7 @@ order. Every mismatch is a hard error naming the slot; validation of ALL tensors
 completes before ANY is written, so a mismatch in a late layer cannot leave the
 model half-overwritten (a model with layer 0 from the checkpoint and layer 1 from
 the initializer trains to garbage without raising anything — this was a real bug
-the P1 gate caught).
+the training-loop gate caught).
 
 BaseCost contract:
 - `Forward(preds, labels)` → scalar NDArray (the loss)
@@ -348,7 +350,7 @@ swapped the input's storage in-place — silently flipping caller arrays from
 Single to Double. Fixed in core (`Default.Cast.cs`): `astype(copy:false)` now
 follows NumPy semantics — returns the input itself only when no conversion is
 needed, otherwise allocates a new array and NEVER touches the input (pinned by
-`NDArray.astype.Test.cs` and `tests/verify_p0_p2.cs`). The manual max-abs-diff
+`NDArray.astype.Test.cs` and `tests/VerifyComponentsTests.cs`). The manual max-abs-diff
 loop in `Program.MaxAbsDiff` predates the fix and is now just a plain
 correctness check, not a workaround.
 
@@ -360,7 +362,7 @@ calling `GetInt32` on Int64 storage throws `Memory corruption expected`.
 `np.array(...) != null` compiles and returns an `NDArray<bool>`, so
 `if (someNDArray != null)` is a type error at best and a silent wrong answer at
 worst. Use the pattern form: `x is null` / `x is not null`, which ignores
-operator overloads. Cost the P1 trainer 18 compile errors on first build.
+operator overloads. Cost the training-loop trainer 18 compile errors on first build.
 
 ### 5c. `dotnet run <script>.cs` caches on the SCRIPT, not the referenced project
 A file-based app is cached under
@@ -370,7 +372,7 @@ replays the OLD build, reporting a failure you have already fixed (or, worse,
 green on code you just broke). Clear it before trusting a gate run after a
 source-only change:
 ```bash
-rm -rf "$LOCALAPPDATA/Temp/dotnet/runfile/verify_"*
+rm -rf "$LOCALAPPDATA/Temp/dotnet/runfile/Verify"*
 ```
 
 ### 6. Adam step counter MUST be monotonic across the full run
@@ -399,7 +401,7 @@ kernels ~2x — never quote Debug numbers).
 
 **100-epoch training on 6000 synthetic / 1000 test (batch=128, Adam, sigma=2.5,
 `np.random.seed(1337)`, shuffled):**
-- **47** batches/epoch — was 46; P1 stopped flooring `n/batchSize`, so the
+- **47** batches/epoch — was 46; the training-loop work stopped flooring `n/batchSize`, so the
   6000th sample is no longer dropped every epoch
 - Epoch 1: loss **1.1004**, train_acc 73.03% (random init → partial fit)
 - Epoch 2: loss 0.0110, train_acc 99.83%
@@ -407,7 +409,7 @@ kernels ~2x — never quote Debug numbers).
 - Total training time: ~13–15 s (was ~70 s when this doc was first written —
   core's elementwise/GEMM work since then did most of that)
 
-P1 moved the epoch-1 loss from the previously-documented 1.1247 to 1.1004: the
+The training-loop work moved the epoch-1 loss from the previously-documented 1.1247 to 1.1004: the
 epoch now shuffles and covers 47 batches instead of 46, so it is a different
 (and slightly better-conditioned) epoch. Final test accuracy is unchanged at
 99.90% — convergence is the pin that matters, and it held.
@@ -443,14 +445,14 @@ gates, all dotnet-run file-based apps under `tests/` — **479 checks total**
 edge 5c: **clear the runfile cache first**, or a gate replays a stale build.
 
 ```bash
-rm -rf "$LOCALAPPDATA/Temp/dotnet/runfile/verify_"*
+rm -rf "$LOCALAPPDATA/Temp/dotnet/runfile/Verify"*
 cd examples/NeuralNetwork.NumSharp/tests
-for f in verify_p0_p2 verify_edge_cases verify_p1 verify_p4; do dotnet run $f.cs; done
+for f in VerifyComponentsTests VerifyKerasOracleTests VerifyTrainingLoopTests VerifyLayersTests; do dotnet run $f.cs; done
 ```
 
-### Gate 4: `tests/verify_p4.cs` — regularization & normalization (102 checks)
+### Gate 4: `tests/VerifyLayersTests.cs` — regularization & normalization (102 checks)
 
-The VALUES and GRADIENTS of the P4 layers are pinned against real Keras by
+The VALUES and GRADIENTS of the layers are pinned against real Keras by
 Gate 2; this gate covers what an oracle over single layers cannot see:
 
 - **The Training flag is actually plumbed** — a spy layer counts forwards per
@@ -474,11 +476,11 @@ Gate 2; this gate covers what an oracle over single layers cannot see:
   BatchNorm's running statistics are in the archive at all.
 
 ```bash
-cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_p4.cs
+cd examples/NeuralNetwork.NumSharp/tests && dotnet run VerifyLayersTests.cs
 # → RESULT: 102 passed, 0 failed
 ```
 
-### Gate 2: `tests/verify_edge_cases.cs` — the Keras edge-case oracle (160 checks)
+### Gate 2: `tests/VerifyKerasOracleTests.cs` — the Keras edge-case oracle (160 checks)
 
 House oracle philosophy scaled to this project: `tests/gen_keras_oracle.py`
 runs **real Keras 3 (JAX backend, float32)** — values AND `jax.grad`
@@ -491,9 +493,9 @@ and gradients at clip boundaries, |e|==delta Huber boundary, zero margins,
 label-conversion edges, ±300 log-cosh tails, from-logits parity for
 SoftmaxCrossEntropy at ±1000 logits; metric threshold-exact/tie/
 zero-denominator conventions; initializer std targets sampled from Keras's
-own initializers (5-seed means, conv-rank fans); and the **P4 layers**.
+own initializers (5-seed means, conv-rank fans); and the **normalization / embedding layers**.
 
-**P4 layer gradients come from `jax.grad` over `keras.Layer.stateless_call`**,
+**The layer gradients come from `jax.grad` over `keras.Layer.stateless_call`**,
 so the oracle differentiates the ACTUAL Keras implementation rather than a
 re-derivation of it. Every layer case carries a non-uniform upstream cotangent
 — a vector of ones hides an axis mix-up, and LayerNorm's gamma/beta gradients
@@ -518,25 +520,25 @@ and don't), and consequently Keras's CCE gradient carries a renormalization
 projection while ours is the exact gradient of OUR forward (FD-verified).
 
 ```bash
-cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_edge_cases.cs
+cd examples/NeuralNetwork.NumSharp/tests && dotnet run VerifyKerasOracleTests.cs
 # → RESULT: 160 passed, 0 failed, 2 excused-documented divergences
 # regenerate corpus (needs keras>=3.15 + jax + scikit-learn):
 KERAS_BACKEND=jax python gen_keras_oracle.py
 ```
 
-Bugs this oracle caught on first run. P2: `relu(-inf)` returned NaN (the
+Bugs this oracle caught on first run. In the activations & losses: `relu(-inf)` returned NaN (the
 `(x>0)*x` form), LeakyReLU's gradient at exactly 0 (Keras/JAX use `x >= 0`),
 and SoftmaxCrossEntropy capping extreme-logit losses at -log(eps) ≈ 16.1
-instead of the true value (now log-sum-exp). P4: **L1's subgradient at
+instead of the true value (now log-sum-exp). In the layers: **L1's subgradient at
 `w = 0`** — `np.sign(0)` is 0, but `jax.grad(abs)` at ±0.0 is **+1**, the same
 `x >= 0` convention as LeakyReLU. That is exactly where an L1 penalty spends
 its time, so the wrong value stalls every weight the penalty has already
 driven to zero. Fixed via `L1.SubGradient`; do not "simplify" it back to
 `np.sign`.
 
-### Gate 1: `tests/verify_p0_p2.cs` — behavior + formula checks (86 checks)
+### Gate 1: `tests/VerifyComponentsTests.cs` — behavior + formula checks (86 checks)
 
-- P0 behavior pins: astype(copy:false) non-mutation, allclose/where operand
+- Behavior pins: astype(copy:false) non-mutation, allclose/where operand
   dtypes, activation resolver (softmax registered, unknown throws), fused
   string ctor, SGD/Adam non-compounding decay from the base rate,
   Evaluate scoring the partial final batch
@@ -551,15 +553,15 @@ driven to zero. Fixed via `L1.SubGradient`; do not "simplify" it back to
   uniform bounds, orthogonality (QᵀQ=I tall / QQᵀ=I wide, gain²)
 
 ```bash
-cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_p0_p2.cs
+cd examples/NeuralNetwork.NumSharp/tests && dotnet run VerifyComponentsTests.cs
 # → RESULT: 86 passed, 0 failed
 ```
 (Must run from tests/ — a csproj in the CWD makes `dotnet run` pick the
 project instead of the file. The csproj excludes tests/** from compilation.)
 
-### Gate 3: `tests/verify_p1.cs` — training-loop parity (131 checks)
+### Gate 3: `tests/VerifyTrainingLoopTests.cs` — training-loop parity (131 checks)
 
-Pins P1's behavior, in five sections:
+Pins the training-loop behavior, in five sections:
 
 - **Serialization** — npz key layout and entry count, dtype preserved,
   round-trip into a differently-initialized model, load-is-a-copy (not an
@@ -591,7 +593,7 @@ Pins P1's behavior, in five sections:
   (`4/5`, not the batch-mean `0.5`), hook counts and ordering, and verbose 0/2.
 
 ```bash
-cd examples/NeuralNetwork.NumSharp/tests && dotnet run verify_p1.cs
+cd examples/NeuralNetwork.NumSharp/tests && dotnet run VerifyTrainingLoopTests.cs
 # → RESULT: 131 passed, 0 failed
 ```
 
