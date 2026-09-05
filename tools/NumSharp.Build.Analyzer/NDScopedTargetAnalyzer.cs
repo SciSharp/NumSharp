@@ -16,11 +16,22 @@ namespace NumSharp.Build.Analyzer
     ///     <c>[NDScoped]</c>, NDW010 = a plain sync method / synchronous iterator under
     ///     <c>[NDScopedAsync]</c>, NDW011 = both attributes), a hidden <c>ref</c>/<c>in</c> egress over
     ///     any NDArray-carrying shape (NDW002), an unsupported carrier return (NDW003), a body-less
-    ///     method (NDW005), a setter-only property (NDW006), and an <c>out</c> parameter whose
+    ///     <c>extern</c> (NDW005), a setter-only property (NDW006), and an <c>out</c> parameter whose
     ///     NDArray-carrying shape the out-escape cannot yield (NDW015). The IL-only rejections stay
     ///     with the weaver: NDW004 (an unrecognized state-machine shape), NDW007 (a tail-call prefix),
     ///     NDW008 (the referenced NumSharp predates the async seam), NDW014 (a bad
     ///     <c>[NDScopedExit]</c> parameter).
+    ///     </para>
+    ///     <para>
+    ///     A target may carry the attribute itself or INHERIT it (<see cref="ScopeInheritance"/>): an
+    ///     override or implementation of a scoped virtual/abstract/interface member with no scope-family
+    ///     attribute of its own is gated under its declaration's attribute — and an abstract/interface
+    ///     declaration carrying the attribute is that contract, never NDW005. The one inherited case
+    ///     the MSBuild weaver-missing scan (NDW013 in NumSharp's <c>build/NumSharp.targets</c>, a text
+    ///     probe for the attribute names) cannot see — a declaration in ANOTHER assembly, so the
+    ///     override carries no attribute text — is reported here as NDW013, a WARNING at the override,
+    ///     when the build says the weaver is not active (<c>build_property.NumSharpBuildActive</c>,
+    ///     exposed by both targets files; absent = unknown = silent).
     ///     </para>
     /// </summary>
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -45,7 +56,7 @@ namespace NumSharp.Build.Analyzer
 
         internal static readonly DiagnosticDescriptor Nw005 = Error("NDW005",
             "Scoped method has no body",
-            "{0} method '{1}' has no body (abstract/extern) — remove the attribute");
+            "{0} method '{1}' has no body (extern) — remove the attribute (an abstract or interface declaration may carry it: its overrides and implementations inherit the scope)");
 
         internal static readonly DiagnosticDescriptor Nw006 = Error("NDW006",
             "Scoped attribute on a setter-only property",
@@ -53,11 +64,11 @@ namespace NumSharp.Build.Analyzer
 
         internal static readonly DiagnosticDescriptor Nw009 = Error("NDW009",
             "async / Task-returning method marked [NDScoped]",
-            "[NDScoped] method '{0}' is {1} — mark it [NDScopedAsync] instead ([NDScoped] weaves synchronous methods and synchronous iterators; [NDScopedAsync] weaves async methods, async iterators and non-async Task/ValueTask returns)");
+            "{0} method '{1}' is {2} — mark it [NDScopedAsync] instead ([NDScoped] weaves synchronous methods and synchronous iterators; [NDScopedAsync] weaves async methods, async iterators and non-async Task/ValueTask returns)");
 
         internal static readonly DiagnosticDescriptor Nw010 = Error("NDW010",
             "synchronous method / iterator marked [NDScopedAsync]",
-            "[NDScopedAsync] method '{0}' is {1} — mark it [NDScoped] instead ([NDScopedAsync] weaves async methods, async iterators and non-async Task/ValueTask returns)");
+            "{0} method '{1}' is {2} — mark it [NDScoped] instead ([NDScopedAsync] weaves async methods, async iterators and non-async Task/ValueTask returns)");
 
         internal static readonly DiagnosticDescriptor Nw011 = Error("NDW011",
             "method carries both [NDScoped] and [NDScopedAsync]",
@@ -67,8 +78,17 @@ namespace NumSharp.Build.Analyzer
             "Scoped method has an unsupported 'out' NDArray-carrying parameter",
             "{0} method '{1}' has an 'out {2}' parameter '{3}' — an NDArray-carrying shape the scope's out-escape cannot yield (supported: NDArray, NDArray[], a ValueTuple/Tuple of supported shapes, an INDArrayCarrier struct, a bare IArraySlice/UnmanagedStorage); scope this method by hand");
 
+        /// <summary>
+        ///     The inherited-target half of NDW013 (the MSBuild half, in NumSharp's <c>build/NumSharp.targets</c>,
+        ///     covers attributes typed in the project itself). A WARNING, like its MSBuild twin.
+        /// </summary>
+        internal static readonly DiagnosticDescriptor Nw013 = new DiagnosticDescriptor("NDW013",
+            "Inherited [NDScoped] target, but the weaver is not installed",
+            "method '{0}' inherits {1} from '{2}' (declared in another assembly) but the NumSharp.Build package is not installed (or weaving is disabled), so the attribute is INERT here — no NDScope is injected and the method's NDArray temporaries are left to the finalizer. Install the weaver with 'dotnet add package NumSharp.Build', mark the override [NDScopedCovered] to opt out of the inherited scope, or dispose the temporaries by hand",
+            Category, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: null, helpLinkUri: HelpLink + "#ndw013");
+
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-            ImmutableArray.Create(Nw002, Nw003, Nw005, Nw006, Nw009, Nw010, Nw011, Nw015);
+            ImmutableArray.Create(Nw002, Nw003, Nw005, Nw006, Nw009, Nw010, Nw011, Nw013, Nw015);
 
         public override void Initialize(AnalysisContext context)
         {
@@ -80,21 +100,73 @@ namespace NumSharp.Build.Analyzer
                 if (known == null)
                     return; // NumSharp not referenced — nothing to analyze
 
-                start.RegisterSymbolAction(c => AnalyzeMethod((IMethodSymbol)c.Symbol, known, c.ReportDiagnostic), SymbolKind.Method);
+                bool weaverInactive = WeaverKnownInactive(start.Options.AnalyzerConfigOptionsProvider.GlobalOptions);
+
+                start.RegisterSymbolAction(c => AnalyzeMethod((IMethodSymbol)c.Symbol, known, weaverInactive, c.ReportDiagnostic), SymbolKind.Method);
                 start.RegisterSymbolAction(c => AnalyzeProperty((IPropertySymbol)c.Symbol, known, c.ReportDiagnostic), SymbolKind.Property);
             });
         }
 
-        private static void AnalyzeMethod(IMethodSymbol m, KnownTypes k, Action<Diagnostic> report)
+        /// <summary>
+        ///     True only when the build DECLARED the weaver inactive: <c>NumSharpBuildActive</c> is present
+        ///     (NumSharp's targets default it to 'false'; NumSharp.Build's set it to 'true' when weaving)
+        ///     and not 'true', and the documented opt-out <c>NumSharpDisableWeaverMissingWarning</c> is not
+        ///     set. An ABSENT property (a source-mode build importing neither targets file, NumSharp's own
+        ///     compile) is unknown, and unknown stays silent.
+        /// </summary>
+        private static bool WeaverKnownInactive(AnalyzerConfigOptions options)
         {
-            bool sync = HasAttr(m, k.SyncAttr);
-            bool async = HasAttr(m, k.AsyncAttr);
+            if (!options.TryGetValue("build_property.NumSharpBuildActive", out var active))
+                return false;
+            if (string.Equals(active?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (options.TryGetValue("build_property.NumSharpDisableWeaverMissingWarning", out var disabled) &&
+                string.Equals(disabled?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return true;
+        }
+
+        private static void AnalyzeMethod(IMethodSymbol m, KnownTypes k, bool weaverInactive, Action<Diagnostic> report)
+        {
+            var own = ScopeInheritance.KindsOf(m, k);
+            bool sync = (own & ScopeKind.Sync) != 0;
+            bool async = (own & ScopeKind.Async) != 0;
+            string label = null;
+
             if (!sync && !async)
-                return; // the overwhelmingly common case — bail before any type work
+            {
+                // No attribute on the method itself. [NDScopedCovered] is an opt-out (of an inherited
+                // scope too); a getter whose PROPERTY carries the attribute is AnalyzeProperty's target;
+                // otherwise an override/implementation may INHERIT its declaration's attribute — the
+                // overwhelmingly common plain method bails right here, before any type work.
+                if (own != ScopeKind.None)
+                    return;
+                if (m.MethodKind == MethodKind.PropertyGet && m.AssociatedSymbol != null &&
+                    ScopeInheritance.KindsOf(m.AssociatedSymbol, k) != ScopeKind.None)
+                    return;
+
+                var inherited = ScopeInheritance.Inherited(m, k);
+                if (!(inherited is ScopeDeclaration decl))
+                    return;
+                sync = (decl.Kinds & ScopeKind.Sync) != 0;
+                async = (decl.Kinds & ScopeKind.Async) != 0;
+                if (!sync && !async)
+                    return; // an inherited [NDScopedCovered]: the override is covered, nothing to gate
+                if (sync && async)
+                    return; // the declaration's own NDW011 reports it; its inheritors add nothing
+
+                label = (sync ? SyncName : AsyncName) + " (inherited from " + Display(decl.Source) + ")";
+
+                // NDW013 for the one inherited shape the MSBuild text probe is blind to: the declaration
+                // lives in another assembly, so this override carries no attribute text at all.
+                if (weaverInactive && !m.IsAbstract &&
+                    !SymbolEqualityComparer.Default.Equals(decl.Source.ContainingAssembly, m.ContainingAssembly))
+                    report(Diagnostic.Create(Nw013, Loc(m), Display(m), sync ? SyncName : AsyncName, Display(decl.Source)));
+            }
 
             bool hasBody = !m.IsAbstract && !m.IsExtern
                            && !(m.IsPartialDefinition && m.PartialImplementationPart == null);
-            AnalyzeTarget(m, sync, async, m.ReturnType, m.IsAsync, m.Parameters, hasBody, k, report);
+            AnalyzeTarget(m, sync, async, m.ReturnType, m.IsAsync, m.Parameters, hasBody, m.IsAbstract, k, report, label);
         }
 
         private static void AnalyzeProperty(IPropertySymbol p, KnownTypes k, Action<Diagnostic> report)
@@ -113,12 +185,15 @@ namespace NumSharp.Build.Analyzer
                 return;
             }
 
-            // The getter is synchronous (properties cannot be async) and never has ref parameters.
-            AnalyzeTarget(p, sync, async, p.Type, isAsync: false, ImmutableArray<IParameterSymbol>.Empty, hasBody: true, k, report);
+            // The getter is synchronous (properties cannot be async) and never has ref parameters. An
+            // abstract/interface property is the contract its overrides inherit.
+            AnalyzeTarget(p, sync, async, p.Type, isAsync: false, ImmutableArray<IParameterSymbol>.Empty,
+                hasBody: !p.IsAbstract, isAbstract: p.IsAbstract, k, report, label: null);
         }
 
         private static void AnalyzeTarget(ISymbol symbol, bool sync, bool async, ITypeSymbol returnType,
-            bool isAsync, ImmutableArray<IParameterSymbol> parameters, bool hasBody, KnownTypes k, Action<Diagnostic> report)
+            bool isAsync, ImmutableArray<IParameterSymbol> parameters, bool hasBody, bool isAbstract, KnownTypes k,
+            Action<Diagnostic> report, string label)
         {
             var loc = Loc(symbol);
             var name = Display(symbol);
@@ -130,6 +205,8 @@ namespace NumSharp.Build.Analyzer
                 return;
             }
 
+            label = label ?? (async ? AsyncName : SyncName);
+
             bool taskLike = TypeHelpers.IsTaskLike(returnType, k, out _);
 
             // Wrong attribute — mirrors the SyncScopeWeaver / AsyncScopeWeaver routing exactly. A
@@ -137,22 +214,23 @@ namespace NumSharp.Build.Analyzer
             // by NDW009 (valid under [NDScoped]) and IS caught by NDW010 (invalid under [NDScopedAsync]).
             if (sync && (isAsync || taskLike))
             {
-                report(Diagnostic.Create(Nw009, loc, name,
+                report(Diagnostic.Create(Nw009, loc, label, name,
                     isAsync ? "an async method" : "a Task/ValueTask-returning method"));
                 return;
             }
 
             if (async && !isAsync && !taskLike)
             {
-                report(Diagnostic.Create(Nw010, loc, name,
+                report(Diagnostic.Create(Nw010, loc, label, name,
                     TypeHelpers.IsEnumerableInterface(returnType, k) ? "a synchronous iterator" : "a plain synchronous method"));
                 return;
             }
 
-            string label = async ? AsyncName : SyncName;
-
-            // NDW005 — abstract / extern (no body to weave).
-            if (!hasBody)
+            // An abstract / interface declaration is the CONTRACT its overrides and implementations
+            // inherit — nothing to weave there, and nothing wrong. (Its signature is still gated above
+            // and below: a wrong attribute or a hidden egress is wrong for every inheritor.)
+            // NDW005 — a body-less NON-abstract target (extern, an unimplemented partial) can never be woven.
+            if (!hasBody && !isAbstract)
             {
                 report(Diagnostic.Create(Nw005, loc, label, name));
                 return;

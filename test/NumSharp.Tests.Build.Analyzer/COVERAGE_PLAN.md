@@ -21,7 +21,16 @@ and configuration space — with each new case landing as a fixture tag + an in-
   chain, `[NDScoped]`.
 - **Carriers** (`CarrierScenarios.cs`, 4): dropped tuple, deconstruction with an unused side, dropped
   `NDArray[]`, dropped `INDArrayCarrier` struct; + clean returned tuple/array and `[NDScoped]` carrier.
-- **Gate** (`GateScenarios.cs`, 7): NDW002/003/005/006/009/010/011.
+- **Gate** (`GateScenarios.cs`, 7): NDW002/003/005/006/009/010/011 (NDW005 is an `extern`; the abstract
+  declaration beside it is a clean contract).
+- **Inheritance** (`InheritanceScenarios.cs` + `InheritanceAnalyzerTests`, `WeaverInheritanceBuildTests`):
+  overrides/implementations inherit `[NDScoped]`/`[NDScopedAsync]`/`[NDScopedCovered]` (class chain incl.
+  a non-declaring level, generic instantiation, implicit/explicit/base-interface implementations,
+  property-level → getter) → NDW012-exempt; explicit attribute on the override wins; the gate reports a
+  hidden egress on the declaration AND the override; cross-assembly declarations (compiled to a
+  reference) inherit too and draw the analyzer's NDW013 only when `build_property.NumSharpBuildActive`
+  is declared and not `true`; the real-build test weaves an attribute-free consumer (7 inherited
+  targets, incl. an async state machine and an inherited `[NDScopedExit]`) and runs the woven code.
 - **Contract**: NDW012 severity == Warning + enabled-by-default; a real leak is a Warning not an Error;
   gate diagnostics are Errors (`AnalyzerContractTests`).
 - **Harness**: teeth (real leak warns / clean is silent / broken source reported / `[NDScoped]` exempt),

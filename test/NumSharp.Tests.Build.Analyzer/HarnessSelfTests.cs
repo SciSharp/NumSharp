@@ -98,6 +98,7 @@ namespace NumSharp.Tests.Build.Analyzer
         [DataRow("ScopeScenarios.cs", 1)]
         [DataRow("GateNegativeScenarios.cs", 4)]
         [DataRow("KnownLimitationScenarios.cs", 2)]
+        [DataRow("InheritanceScenarios.cs", 7)]
         [DataRow("HolderTypeScenarios.cs", 25)]
         [DataRow("DisposePathScenarios.cs", 14)]
         [DataRow("ContagionScenarios.cs", 9)]

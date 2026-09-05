@@ -60,10 +60,17 @@ namespace NumSharp
     ///     usage pre-scan match those two names precisely (not the shared <c>NDScoped</c> prefix), so a
     ///     project using only <c>[NDScopedCovered]</c> — which needs no weaver — draws neither.</para>
     ///
+    ///     <para><b>Inheritance, and the opt-out role.</b> Like the two scope attributes this one is
+    ///     inherited along the override/implementation chain: a virtual/abstract/interface member marked
+    ///     <c>[NDScopedCovered]</c> asserts coverage for every override too. And because the nearest
+    ///     scope-family attribute up the chain wins, placing it ON an override whose base declaration is
+    ///     <c>[NDScoped]</c>/<c>[NDScopedAsync]</c> is the way to opt that override OUT of the inherited
+    ///     weave — the override then rides its caller's ambient scope, on the same author's-assertion
+    ///     terms as any covered helper.</para>
     ///     <para>PUBLIC for the same reason as the scope attributes: a consumer that adopts the
     ///     <c>[NDScoped]</c> pattern can annotate its own always-ambient helpers to keep its build clean.</para>
     /// </remarks>
-    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
     public sealed class NDScopedCoveredAttribute : Attribute
     {
     }

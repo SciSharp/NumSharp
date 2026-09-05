@@ -48,8 +48,16 @@ namespace NumSharp
     ///     detaches too). PUBLIC because the attribute is consumer-facing; without the
     ///     <c>NumSharp.Build</c> package it is inert metadata (the argument is not detached — the
     ///     pre-weave behaviour, where a caller must avoid handing a scoped temp to a retainer).</para>
+    ///     <para><b>Inherited by overrides and implementations, by parameter position.</b> On a
+    ///     virtual, abstract or interface declaration the attribute is the contract: an override or
+    ///     implementation that declares no <c>[NDScopedExit]</c> parameter of its own takes the nearest
+    ///     such declaration's set (the same override/implementation walk the scope attributes use), so
+    ///     "this parameter is retained" is stated once, where the API is declared. An override that
+    ///     marks ANY parameter itself uses only its own marks. (<c>Inherited = true</c> documents the
+    ///     intent; reflection ignores the flag for parameters, and the weaver/analyzer implement the
+    ///     inheritance themselves.)</para>
     /// </remarks>
-    [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
+    [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = true)]
     public sealed class NDScopedExitAttribute : Attribute
     {
     }

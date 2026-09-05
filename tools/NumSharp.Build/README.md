@@ -63,6 +63,33 @@ NDArrays — nested tuples and `NDArray[]` components detach recursively — (a 
 build error (NDW014). A raw public-field store has no parameter to annotate — route it through a
 setter or call `NDScope.Detach` by hand.
 
+**On a virtual, abstract or interface member the attributes are a contract the inheritors inherit.**
+Every override and implementation — class overrides through any number of levels, implicit and
+explicit interface implementations, generic instantiations, and overrides in *another* assembly of
+a NumSharp member or of a library that used this weaver — is woven exactly as if it carried the
+attribute itself, so the scoping is stated once, where the API is declared:
+
+```csharp
+public abstract class Layer
+{
+    [NDScoped] public abstract NDArray Forward(NDArray x);        // the contract — never woven, never an error
+    public abstract void Adopt([NDScopedExit] NDArray weights);   // inherited by position
+}
+
+public class Dense : Layer
+{
+    public override NDArray Forward(NDArray x) { var h = x + 1.0; return h.copy(); } // woven
+    public override void Adopt(NDArray w) => _w = w;                                  // w is detached
+    private NDArray _w;
+}
+```
+
+The nearest declaration up the chain wins, and an override's own attribute wins over it —
+`[NDScopedCovered]` on an override opts out of the inherited weave. The analyzer resolves the same
+graph (no NDW012 on an inheriting override; the target gate reads the declaration's attribute), and
+an override that inherits a scope from another assembly while the weaver is absent draws NDW013 from
+the analyzer, since the MSBuild text scan cannot see an attribute the assembly never spells.
+
 **A companion Roslyn analyzer catches mistakes at compile time — and it ships with NumSharp
 itself, not with this package.** The `NumSharp` package carries the analyzer (under its
 `analyzers/dotnet/cs/`, applied automatically to any `PackageReference` compile), so it is already

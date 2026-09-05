@@ -32,7 +32,25 @@
        Opting out: install NumSharp.Build (the intended fix), set $(NumSharpBuildActive)=true by
        hand (you are weaving some other way), set $(NumSharpDisableWeaverMissingWarning)=true, or
        add NDW013 to $(MSBuildWarningsAsMessages).
+
+       INHERITED targets — the one case the text scan cannot see. An override/implementation of a
+       scoped virtual, abstract or interface member declared in ANOTHER assembly (a NumSharp class,
+       or any referenced library) inherits the attribute (the weaver's ScopeInheritance) but carries
+       no attribute text of its own, so this scan stays silent for it. That case is reported by the
+       compile-time analyzer instead (NDW013 at the override, NDScopedTargetAnalyzer), which reads
+       the two knobs below through the generated editorconfig: $(NumSharpBuildActive) is therefore
+       given an explicit 'false' default here — declared-but-empty and never-declared must stay
+       distinguishable, and an undeclared property (a source-mode build that imports neither
+       targets file) means "unknown", where the analyzer stays silent.
        ================================================================================== -->
+  <PropertyGroup>
+    <NumSharpBuildActive Condition="'$(NumSharpBuildActive)' == ''">false</NumSharpBuildActive>
+  </PropertyGroup>
+  <ItemGroup>
+    <CompilerVisibleProperty Include="NumSharpBuildActive" />
+    <CompilerVisibleProperty Include="NumSharpDisableWeaverMissingWarning" />
+  </ItemGroup>
+
   <Target Name="_NumSharpWarnWeaverMissing"
           AfterTargets="CoreCompile"
           Condition="'$(DesignTimeBuild)' != 'true'

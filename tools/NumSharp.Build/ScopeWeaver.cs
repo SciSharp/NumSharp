@@ -130,6 +130,15 @@ internal abstract class ScopeWeaver
         /// <summary>Whether the referenced NumSharp carries the whole <c>Detach</c> overload set the parameter-detach weave emits.</summary>
         public bool HasExitSurface => DetachOne != null && DetachMany != null && DetachTuple != null;
 
+        // ---- Declaration-site inheritance ---------------------------------------------------------
+        // The resolver that answers "which scope attribute / [NDScopedExit] parameters are in effect
+        // for this method" — its own, or the nearest virtual/abstract/interface declaration it
+        // overrides or implements (see ScopeInheritance). One per woven module; created by
+        // WeaveAssembly BEFORE the seam is resolved (target collection needs it, and a module with no
+        // targets must exit without resolving anything), then attached here so the per-target
+        // validation and the parameter-detach weave read the same memoized answers.
+        public ScopeInheritance Inheritance;
+
         /// <summary>Whether the referenced NumSharp carries the whole async/state-machine seam.</summary>
         public bool HasAsyncSurface =>
             OpenOrResume != null && Suspend != null && DisposeSlot != null && ExitIterator != null &&
@@ -254,20 +263,25 @@ internal abstract class ScopeWeaver
 
         int woven = 0, skipped = 0, errors = 0;
 
-        // Targets FIRST (a pure name match, no resolution): a consumer assembly with no scoped
-        // methods exits without resolving anything and — crucially — without rewriting the file, so
-        // its compile-time signature, determinism id and timestamps stay untouched. The two
-        // attributes are collected apart — [NDScoped] (synchronous bodies + synchronous iterators)
-        // is SyncScopeWeaver's, [NDScopedAsync] (async methods, async iterators, non-async
-        // Task/ValueTask returns) is AsyncScopeWeaver's.
-        var syncTargets = CollectTargets(module, SyncAttributeFullName, "[NDScoped]", stderr, ref errors);
-        var asyncTargets = CollectTargets(module, AsyncAttributeFullName, "[NDScopedAsync]", stderr, ref errors);
+        // Targets FIRST (before the seam is resolved): a consumer assembly with no scoped methods
+        // exits without resolving NDScope and — crucially — without rewriting the file, so its
+        // compile-time signature, determinism id and timestamps stay untouched. A method is a target
+        // by its OWN attribute or by INHERITANCE — an override/implementation of a scoped virtual,
+        // abstract or interface declaration (ScopeInheritance; the declaration may live in a
+        // referenced assembly, reached through the resolver). The two attributes are collected
+        // apart — [NDScoped] (synchronous bodies + synchronous iterators) is SyncScopeWeaver's,
+        // [NDScopedAsync] (async methods, async iterators, non-async Task/ValueTask returns) is
+        // AsyncScopeWeaver's.
+        var inheritance = new ScopeInheritance();
+        var syncTargets = CollectTargets(module, SyncAttributeFullName, "[NDScoped]", inheritance, verbose, stdout, stderr, ref errors);
+        var asyncTargets = CollectTargets(module, AsyncAttributeFullName, "[NDScopedAsync]", inheritance, verbose, stdout, stderr, ref errors);
 
         // Methods with an [NDScopedExit] PARAMETER — an orthogonal, param-level concern (a retained
         // argument the caller's scope must not dispose). A method may carry these with OR without a
         // method-level scope attribute; the scope weavers handle the ones that overlap, and a dedicated
-        // pass below covers the rest.
-        var exitTargets = CollectExitTargets(module);
+        // pass below covers the rest. Inherited exactly like the scope attributes: an override that
+        // declares no [NDScopedExit] parameter of its own takes its declaration's, by position.
+        var exitTargets = CollectExitTargets(module, inheritance);
 
         // A method carrying BOTH attributes has no single scoping model — fail loudly and drop it
         // from either pass rather than weave it twice.
@@ -314,6 +328,8 @@ internal abstract class ScopeWeaver
                 "reference list");
             return new WeaveResult(0, 0, errors + 1, false, false);
         }
+
+        refs.Inheritance = inheritance;
 
         // One weaver instance per attribute; each owns its sync/async policy and delegates to the
         // shared base transforms (synchronous bodies AND state machines are woven by base methods).
@@ -399,7 +415,12 @@ internal abstract class ScopeWeaver
             {
                 woven++;
                 if (verbose)
-                    stdout.WriteLine($"NumSharp.Build: woven ([NDScopedExit] parameters): {m.FullName}");
+                {
+                    var source = refs.Inheritance.ExitParametersSource(m);
+                    stdout.WriteLine(source is null
+                        ? $"NumSharp.Build: woven ([NDScopedExit] parameters): {m.FullName}"
+                        : $"NumSharp.Build: woven ([NDScopedExit] parameters inherited from {source.DeclaringType.FullName}::{source.Name}): {m.FullName}");
+                }
             }
             else
             {
@@ -412,15 +433,55 @@ internal abstract class ScopeWeaver
 
     // ----------------------------------------------------------------- target collection
 
+    /// <summary>
+    ///     Every method to weave under <paramref name="attributeName"/>: one that carries the attribute
+    ///     itself (on the method, or on its property — a property-level attribute resolves to the
+    ///     getter, NDW006 for a setter-only property), or one that INHERITS it — an override or
+    ///     implementation of a virtual/abstract/interface declaration carrying it, with no scope-family
+    ///     attribute of its own (an explicit <c>[NDScoped]</c>/<c>[NDScopedAsync]</c>/<c>[NDScopedCovered]</c>
+    ///     on the override wins, the last being the opt-out). A body-less attributed declaration
+    ///     (abstract method, interface member) is the CONTRACT its implementations inherit, not a weave
+    ///     target: nothing is injected there and it is not an error. Only an <c>extern</c> keeps the
+    ///     NDW005 rejection, from <see cref="Validate"/>.
+    /// </summary>
     private static List<MethodDefinition> CollectTargets(ModuleDefinition module, string attributeName, string label,
-                                                         TextWriter stderr, ref int errors)
+                                                         ScopeInheritance inheritance, bool verbose,
+                                                         TextWriter stdout, TextWriter stderr, ref int errors)
     {
+        var wanted = attributeName == SyncAttributeFullName ? ScopeKind.Sync : ScopeKind.Async;
         var targets = new List<MethodDefinition>();
         foreach (var type in AllTypes(module))
         {
             foreach (var method in type.Methods)
-                if (HasAttribute(method.CustomAttributes, attributeName))
+            {
+                var declaration = inheritance.EffectiveScope(method);
+                if (declaration is not { } decl || (decl.Kinds & wanted) == 0)
+                    continue;
+
+                if (!decl.Inherited)
+                {
+                    // The method's own attribute (or its property's). A body-less ABSTRACT declaration is
+                    // the contract — skip it; a body-less non-abstract one (extern) stays a target so
+                    // Validate reports NDW005.
+                    if (method.IsAbstract)
+                    {
+                        if (verbose)
+                            stdout.WriteLine($"NumSharp.Build: contract ({label} on an abstract/interface declaration; implementations inherit it): {method.FullName}");
+                        continue;
+                    }
+
                     targets.Add(method);
+                    continue;
+                }
+
+                // Inherited. A body-less override (an `abstract override`, an interface re-declaration)
+                // passes the contract further down; a declaration carrying BOTH scope attributes reports
+                // its own NDW011 — its inheritors add nothing.
+                if (!method.HasBody || (decl.Kinds & (ScopeKind.Sync | ScopeKind.Async)) == (ScopeKind.Sync | ScopeKind.Async))
+                    continue;
+
+                targets.Add(method);
+            }
 
             foreach (var property in type.Properties)
             {
@@ -435,7 +496,9 @@ internal abstract class ScopeWeaver
                     continue;
                 }
 
-                if (!targets.Contains(property.GetMethod))
+                // The getter of a property-level attribute is already collected above (its own
+                // declaration via the property); an abstract getter is the contract, skipped there too.
+                if (!property.GetMethod.IsAbstract && !targets.Contains(property.GetMethod))
                     targets.Add(property.GetMethod);
             }
         }
@@ -464,28 +527,27 @@ internal abstract class ScopeWeaver
     }
 
     /// <summary>
-    ///     Collects every method that has at least one <c>[NDScopedExit]</c> PARAMETER and a body to
-    ///     weave. A body-less declaration (abstract/interface) carries the attribute purely as a
-    ///     contract for implementers — there is nothing to inject there, so it is silently not a target
-    ///     (the CONCRETE override must re-declare the attribute to be woven, exactly as a method-level
-    ///     scope attribute must sit on the concrete method).
+    ///     Collects every method that has at least one <c>[NDScopedExit]</c> PARAMETER in effect — its
+    ///     own, or INHERITED by position from the nearest virtual/abstract/interface declaration it
+    ///     overrides or implements that declares one — and a body to weave. A body-less declaration
+    ///     (abstract/interface) carries the attribute purely as the contract its implementers inherit:
+    ///     there is nothing to inject there, so it is silently not a target.
     /// </summary>
-    private static List<MethodDefinition> CollectExitTargets(ModuleDefinition module)
+    private static List<MethodDefinition> CollectExitTargets(ModuleDefinition module, ScopeInheritance inheritance)
     {
         var targets = new List<MethodDefinition>();
         foreach (var type in AllTypes(module))
             foreach (var method in type.Methods)
-                if (method.HasBody && HasExitParam(method))
+                if (method.HasBody && inheritance.EffectiveExitParameters(method).Length > 0)
                     targets.Add(method);
         return targets;
     }
 
-    private static bool HasExitParam(MethodDefinition m)
+    /// <summary>The <c>[NDScopedExit]</c> parameters in effect for <paramref name="m"/> (own, else inherited by position) — see <see cref="ScopeInheritance.EffectiveExitParameters"/>.</summary>
+    private static IEnumerable<ParameterDefinition> ExitParameters(MethodDefinition m, Refs refs)
     {
-        foreach (var p in m.Parameters)
-            if (HasAttribute(p.CustomAttributes, ExitAttributeFullName))
-                return true;
-        return false;
+        foreach (var index in refs.Inheritance.EffectiveExitParameters(m))
+            yield return m.Parameters[index];
     }
 
     // ----------------------------------------------------------------- validation
@@ -501,7 +563,11 @@ internal abstract class ScopeWeaver
     {
         if (!m.HasBody)
         {
-            stderr.WriteLine($"NumSharp.Build : error NDW005: {label} method '{m.FullName}' has no body (abstract/extern)");
+            // Only an extern reaches here: an abstract/interface declaration is the contract its
+            // implementations inherit and is filtered out by CollectTargets, never rejected.
+            stderr.WriteLine(
+                $"NumSharp.Build : error NDW005: {label} method '{m.FullName}' has no body (extern) — remove the attribute " +
+                "(an abstract or interface declaration may carry it: its overrides and implementations inherit the scope)");
             return ValidationOutcome.Error;
         }
 
@@ -758,7 +824,7 @@ internal abstract class ScopeWeaver
     ///     skipped before any resolution so the classifier does not open BCL reference assemblies
     ///     for answers it already knows.
     /// </summary>
-    private static bool IsFrameworkType(TypeReference t)
+    internal static bool IsFrameworkType(TypeReference t)
     {
         var name = t.FullName;
         return name.StartsWith("System.", StringComparison.Ordinal)
@@ -1020,16 +1086,16 @@ internal abstract class ScopeWeaver
     internal static ValidationOutcome ValidateExitParams(MethodDefinition m, string label, Refs refs, TextWriter stderr)
     {
         bool any = false;
-        foreach (var p in m.Parameters)
+        var inheritedFrom = refs.Inheritance.ExitParametersSource(m);
+        var provenance = inheritedFrom is null ? "" : $" (inherited from {inheritedFrom.DeclaringType.FullName}::{inheritedFrom.Name})";
+        foreach (var p in ExitParameters(m, refs))
         {
-            if (!HasAttribute(p.CustomAttributes, ExitAttributeFullName))
-                continue;
             any = true;
 
             if (ClassifyExitParam(p.ParameterType) is null)
             {
                 stderr.WriteLine(
-                    $"NumSharp.Build : error NDW014: [NDScopedExit] on parameter '{p.Name}' of '{m.FullName}' has " +
+                    $"NumSharp.Build : error NDW014: [NDScopedExit] on parameter '{p.Name}' of '{m.FullName}'{provenance} has " +
                     $"type '{p.ParameterType.FullName}' — the attribute marks an NDArray-carrying BY-VALUE parameter " +
                     "the callee retains (NDArray, NDArray[], or a ValueTuple/Tuple of NDArrays), so the caller's scope " +
                     "will not dispose it; it is unsupported on this type (a ref/out/in parameter, a scalar, a bare " +
@@ -1253,11 +1319,8 @@ internal abstract class ScopeWeaver
         // required (Detach reaches the argument's own tracking scope).
         var anchor = body.Instructions[0];
         bool injected = false;
-        foreach (var p in m.Parameters)
+        foreach (var p in ExitParameters(m, refs))
         {
-            if (!HasAttribute(p.CustomAttributes, ExitAttributeFullName))
-                continue;
-
             var kind = ClassifyExitParam(p.ParameterType);
             if (kind is null)
                 continue; // already reported by ValidateExitParams; never reached on a validated method

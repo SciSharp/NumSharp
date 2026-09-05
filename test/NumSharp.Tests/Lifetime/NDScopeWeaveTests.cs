@@ -52,18 +52,26 @@ namespace NumSharp.Tests.Lifetime
         // A method/property is scoped by EITHER attribute — [NDScoped] (synchronous bodies +
         // synchronous iterators) or [NDScopedAsync] (async / async-iterator / non-async Task) — and
         // both leave the same signal: an NDScope local (in the method, or in the state machine's
-        // MoveNext for an async/iterator body).
+        // MoveNext for an async/iterator body). `inherit: true`: the attributes are INHERITED by
+        // overrides (a scoped virtual/abstract declaration is a contract the weaver applies to every
+        // override — ScopeInheritance), and both attributes declare Inherited = true, so reflection
+        // reports the base declaration's attribute on an override exactly as the weaver reads it. An
+        // override that opts out with its own [NDScopedCovered] is excluded (explicit wins); an
+        // abstract declaration has no body and is skipped by HasScopeLocal's caller below.
         private static bool IsScoped(MemberInfo m) =>
-            m.GetCustomAttribute<NDScopedAttribute>(inherit: false) != null ||
-            m.GetCustomAttribute<NDScopedAsyncAttribute>(inherit: false) != null;
+            m.GetCustomAttribute<NDScopedCoveredAttribute>(inherit: false) == null &&
+            (m.GetCustomAttribute<NDScopedAttribute>(inherit: true) != null ||
+             m.GetCustomAttribute<NDScopedAsyncAttribute>(inherit: true) != null);
 
         private static IEnumerable<MethodInfo> AllScopedMethods()
         {
             var seen = new HashSet<MethodInfo>();
             foreach (var type in AllTypes())
             {
+                // An abstract/interface declaration carrying the attribute is the CONTRACT its
+                // overrides inherit — it has no body to weave, so it is not a coverage subject.
                 foreach (var m in type.GetMethods(AllDeclared))
-                    if (IsScoped(m) && seen.Add(m))
+                    if (!m.IsAbstract && IsScoped(m) && seen.Add(m))
                         yield return m;
 
                 // A property-LEVEL attribute resolves to the getter (mirrors the weaver's
@@ -73,7 +81,7 @@ namespace NumSharp.Tests.Lifetime
                     if (!IsScoped(p))
                         continue;
                     var getter = p.GetGetMethod(nonPublic: true);
-                    if (getter != null && seen.Add(getter))
+                    if (getter != null && !getter.IsAbstract && seen.Add(getter))
                         yield return getter;
                 }
             }

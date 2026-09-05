@@ -46,12 +46,29 @@ namespace NumSharp
     ///     iterator scope seam).</para>
     ///     <para>A method whose body already opens an <see cref="NDScope"/> is skipped
     ///     (idempotence), so hand-scoped code may carry the attribute without double-wrapping.</para>
+    ///     <para><b>On a virtual, abstract or interface member the attribute is a CONTRACT its
+    ///     inheritors inherit.</b> Every override and every implementation (implicit or explicit,
+    ///     through a generic base or interface, in this assembly or in a consumer assembly overriding a
+    ///     NumSharp member) is woven exactly as if it carried the attribute itself — the declaration
+    ///     decides the scoping, the implementation keeps its 100% original body. The nearest
+    ///     declaration up the override/implementation chain wins, and an override that declares its OWN
+    ///     scope-family attribute keeps it: <c>[NDScoped]</c>/<c>[NDScopedAsync]</c> re-state or change
+    ///     the model, <see cref="NDScopedCoveredAttribute"/> opts the override OUT of the inherited
+    ///     weave (its transients then ride the caller's ambient scope — the author's assertion, as for
+    ///     any covered helper). A body-less attributed declaration (abstract method, interface member,
+    ///     abstract property) is never itself woven and never an error — NDW005 is reserved for an
+    ///     <c>extern</c>, which has neither a body nor inheritors. The compile-time analyzer applies the
+    ///     same resolution: an inheriting override draws no NDW012 for its transients, and its target
+    ///     gate (NDW002–NDW011) reads its declaration's attribute. <c>Inherited = true</c> below states the
+    ///     same for reflection (<c>GetCustomAttribute(inherit: true)</c> finds the base declaration's
+    ///     attribute on an override); the weaver and analyzer implement the inheritance themselves —
+    ///     they read metadata, not reflection.</para>
     ///     <para>PUBLIC because the attribute is consumer-facing: a project that installs the
     ///     <c>NumSharp.Build</c> package marks its own composition methods with it. Without the
     ///     package the attribute is inert metadata — the method runs unscoped, the pre-weave
     ///     finalizer-backstop behaviour.</para>
     /// </remarks>
-    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
     public sealed class NDScopedAttribute : Attribute
     {
     }

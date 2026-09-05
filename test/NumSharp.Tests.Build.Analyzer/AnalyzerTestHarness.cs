@@ -82,13 +82,23 @@ namespace NumSharp.Tests.Build.Analyzer
         }
 
         /// <summary>Runs both analyzers over <paramref name="source"/> and returns (NDW diagnostics, C# compile errors).</summary>
-        public static async Task<AnalyzerResult> RunAsync(string source, string displayPath)
+        public static Task<AnalyzerResult> RunAsync(string source, string displayPath)
+            => RunAsync(source, displayPath, ImmutableArray<MetadataReference>.Empty, null);
+
+        /// <summary>
+        ///     <see cref="RunAsync(string,string)"/> with extra metadata references (a "base library"
+        ///     compiled by <see cref="CompileToReference"/> — the cross-ASSEMBLY inheritance path) and,
+        ///     optionally, the <c>build_property.*</c> options MSBuild would hand the analyzer through the
+        ///     generated editorconfig (see <see cref="BuildProperties"/>).
+        /// </summary>
+        public static async Task<AnalyzerResult> RunAsync(string source, string displayPath,
+            ImmutableArray<MetadataReference> extraReferences, AnalyzerConfigOptionsProvider configOptions)
         {
             var tree = CSharpSyntaxTree.ParseText(SourceText.From(source), path: displayPath);
             var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true);
             var comp = CSharpCompilation.Create(
                 "AnalyzerFixture_" + Path.GetFileNameWithoutExtension(displayPath),
-                new[] { tree }, LazyRefs.Value, options);
+                new[] { tree }, LazyRefs.Value.AddRange(extraReferences), options);
 
             var compileErrors = comp.GetDiagnostics()
                 .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -96,11 +106,66 @@ namespace NumSharp.Tests.Build.Analyzer
 
             var analyzers = ImmutableArray.Create<DiagnosticAnalyzer>(
                 new NDArrayLeakAnalyzer(), new NDScopedTargetAnalyzer(), new NDArrayHolderAnalyzer());
-            var all = await comp.WithAnalyzers(analyzers).GetAnalyzerDiagnosticsAsync();
+            var withAnalyzers = configOptions is null
+                ? comp.WithAnalyzers(analyzers)
+                : comp.WithAnalyzers(analyzers, new AnalyzerOptions(ImmutableArray<AdditionalText>.Empty, configOptions));
+            var all = await withAnalyzers.GetAnalyzerDiagnosticsAsync();
             var ndw = all.Where(d => d.Id.StartsWith("NDW", StringComparison.Ordinal))
                          .OrderBy(LineOf).ThenBy(d => d.Id, StringComparer.Ordinal)
                          .ToImmutableArray();
             return new AnalyzerResult(ndw, compileErrors);
+        }
+
+        /// <summary>
+        ///     Compiles <paramref name="source"/> (against the framework + NumSharp) into an in-memory
+        ///     assembly and returns it as a metadata reference — a stand-in for a REFERENCED library that
+        ///     declared scoped virtual/abstract/interface members, so a fixture can override them from
+        ///     another assembly exactly as a consumer overriding a NumSharp member does.
+        /// </summary>
+        public static MetadataReference CompileToReference(string source, string assemblyName)
+        {
+            var tree = CSharpSyntaxTree.ParseText(SourceText.From(source), path: assemblyName + ".cs");
+            var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true);
+            var comp = CSharpCompilation.Create(assemblyName, new[] { tree }, LazyRefs.Value, options);
+            using var ms = new MemoryStream();
+            var emit = comp.Emit(ms);
+            if (!emit.Success)
+                throw new InvalidOperationException(
+                    $"base library '{assemblyName}' does not compile:\n  " +
+                    string.Join("\n  ", emit.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)));
+            return MetadataReference.CreateFromImage(ms.ToArray());
+        }
+
+        /// <summary>
+        ///     The <c>build_property.&lt;name&gt;</c> global options MSBuild's generated editorconfig exposes
+        ///     for <c>CompilerVisibleProperty</c> items — the channel NumSharp's targets use to tell the
+        ///     analyzer whether the weaver is active (NDW013 for inherited targets).
+        /// </summary>
+        public static AnalyzerConfigOptionsProvider BuildProperties(params (string name, string value)[] properties)
+            => new BuildPropertyOptionsProvider(properties);
+
+        private sealed class BuildPropertyOptionsProvider : AnalyzerConfigOptionsProvider
+        {
+            private readonly BuildPropertyOptions _global;
+
+            public BuildPropertyOptionsProvider((string name, string value)[] properties)
+            {
+                var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var (name, value) in properties)
+                    map["build_property." + name] = value;
+                _global = new BuildPropertyOptions(map);
+            }
+
+            public override AnalyzerConfigOptions GlobalOptions => _global;
+            public override AnalyzerConfigOptions GetOptions(SyntaxTree tree) => _global;
+            public override AnalyzerConfigOptions GetOptions(AdditionalText textFile) => _global;
+        }
+
+        private sealed class BuildPropertyOptions : AnalyzerConfigOptions
+        {
+            private readonly Dictionary<string, string> _map;
+            public BuildPropertyOptions(Dictionary<string, string> map) { _map = map; }
+            public override bool TryGetValue(string key, out string value) => _map.TryGetValue(key, out value);
         }
 
         public static Task<AnalyzerResult> RunFileAsync(string fileName)

@@ -46,6 +46,16 @@
     <NumSharpBuildActive>true</NumSharpBuildActive>
   </PropertyGroup>
 
+  <!-- The compile-time analyzer reads the same two knobs (build_property.* in the generated
+       editorconfig) for the ONE NDW013 case the MSBuild text scan cannot see: an override that
+       INHERITS [NDScoped]/[NDScopedAsync] from a declaration in another assembly (no attribute
+       text of its own). NumSharp's build/NumSharp.targets declares them for package consumers;
+       this copy serves the source-mode consumer that imports only this file. -->
+  <ItemGroup>
+    <CompilerVisibleProperty Include="NumSharpBuildActive" />
+    <CompilerVisibleProperty Include="NumSharpDisableWeaverMissingWarning" />
+  </ItemGroup>
+
   <PropertyGroup>
     <NumSharpBuildToolDll Condition="'$(NumSharpBuildToolDll)' == ''">$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)../tools/net8.0/any/NumSharp.Build.dll'))</NumSharpBuildToolDll>
 
@@ -115,17 +125,27 @@
          the prefix — keeps [NDScopedCovered] (the analyzer-only hint attribute, inert at runtime and
          needing NO weaver) from spawning the tool: 'NDScopedCoveredAttribute' contains neither
          weavable name. A false POSITIVE (a matched name in a user string literal) merely spawns the
-         tool, which no-ops; there is no false negative on CoreCompile output. This keeps
-         attribute-free consumers — and rebuilds where a foreign rewriter bumped the timestamp —
-         free of a per-build process spawn. -->
+         tool, which no-ops; there is no false negative on CoreCompile output.
+
+         INHERITED targets are invisible to the text probe: an override/implementation of a
+         scoped virtual, abstract or interface member declared in ANOTHER assembly (a NumSharp
+         class, or any referenced library that used the weaver) carries no attribute of its own —
+         its metadata names the base type, never the attribute — yet the weaver must weave it
+         (ScopeInheritance). Such an override can only exist in an assembly that references
+         NumSharp, so a compile whose reference list carries NumSharp spawns the tool as well; the
+         tool itself is the precise probe (it walks every virtual method's override graph and
+         exits without rewriting when nothing is a target). The text scan still keeps consumers
+         that do NOT reference NumSharp at all — a solution-wide package install reaching an
+         unrelated project — free of the per-build process spawn. -->
     <PropertyGroup>
       <_NDScopeWeaveAssembly>@(IntermediateAssembly->'%(FullPath)')</_NDScopeWeaveAssembly>
       <_NDScopeWeaveHasUsage>false</_NDScopeWeaveHasUsage>
       <_NDScopeWeaveHasUsage Condition="Exists('$(_NDScopeWeaveAssembly)') and ($([System.IO.File]::ReadAllText('$(_NDScopeWeaveAssembly)').Contains('NDScopedAttribute')) or $([System.IO.File]::ReadAllText('$(_NDScopeWeaveAssembly)').Contains('NDScopedAsyncAttribute')))">true</_NDScopeWeaveHasUsage>
+      <_NDScopeWeaveHasUsage Condition="'$(_NDScopeWeaveHasUsage)' != 'true' and '@(ReferencePathWithRefAssemblies->WithMetadataValue('Filename','NumSharp'))' != ''">true</_NDScopeWeaveHasUsage>
     </PropertyGroup>
     <Message Condition="'$(_NDScopeWeaveHasUsage)' != 'true'"
              Importance="normal"
-             Text="NumSharp.Build: no [NDScoped]/[NDScopedAsync] usage detected in $(MSBuildProjectName); weave skipped" />
+             Text="NumSharp.Build: no [NDScoped]/[NDScopedAsync] usage detected in $(MSBuildProjectName) and NumSharp is not referenced; weave skipped" />
 
     <!-- The compile's reference list, one path per line: how the tool resolves NDScope /
          NDArray / INDArrayCarrier out of the referenced NumSharp assembly (reference

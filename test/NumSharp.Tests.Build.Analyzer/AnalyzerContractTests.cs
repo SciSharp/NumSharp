@@ -93,5 +93,16 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(DiagnosticSeverity.Error, d.DefaultSeverity,
                 $"{id} is a target-gate error, distinct from the NDW012 leak warning");
         }
+
+        [TestMethod]
+        public void Ndw013_InheritedTargetWithoutWeaver_IsAWarning_LikeItsMsBuildTwin()
+        {
+            // The analyzer's NDW013 (an override inheriting [NDScoped] from ANOTHER assembly while the
+            // build says the weaver is inactive) shares its id and severity with the MSBuild warning in
+            // NumSharp's build/NumSharp.targets: a nudge about inert attributes, never a build error.
+            var d = new NDScopedTargetAnalyzer().SupportedDiagnostics.Single(x => x.Id == "NDW013");
+            Assert.AreEqual(DiagnosticSeverity.Warning, d.DefaultSeverity, "NDW013 is a warning");
+            Assert.IsTrue(d.IsEnabledByDefault, "NDW013 is on by default");
+        }
     }
 }

@@ -415,7 +415,12 @@ namespace NumSharp.Build.Analyzer
                             SymbolEqualityComparer.Default.Equals(cls, _k.CoveredAttr))
                             return true;
                     }
-                return false;
+
+                // INHERITED: an override/implementation of a scoped (or covered) virtual, abstract or
+                // interface declaration is woven — or covered — under that declaration's attribute
+                // exactly as if it carried it (ScopeInheritance, the weaver's rule), so its transients
+                // are reclaimed the same way and must not be flagged.
+                return ScopeInheritance.Inherited(method, _k) != null;
             }
 
             /// <summary>

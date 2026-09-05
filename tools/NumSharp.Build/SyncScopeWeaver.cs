@@ -14,6 +14,11 @@ namespace NumSharp.Build;
 ///     <see cref="AsyncScopeWeaver"/>; placing <c>[NDScoped]</c> on one of them is a build ERROR
 ///     (NDW009) that names the right attribute rather than a silent unwoven ship.
 ///     </para>
+///     <para>
+///     A target may carry the attribute itself or INHERIT it from the virtual/abstract/interface
+///     declaration it overrides or implements (<see cref="ScopeInheritance"/>); every diagnostic and
+///     log line names the inherited declaration so a rejection on an override reads back to its source.
+///     </para>
 /// </summary>
 internal sealed class SyncScopeWeaver : ScopeWeaver
 {
@@ -26,6 +31,7 @@ internal sealed class SyncScopeWeaver : ScopeWeaver
 
     internal override WeaveOutcome WeaveTarget(MethodDefinition method)
     {
+        var label = Label + ScopeInheritance.Provenance(_refs.Inheritance.EffectiveScope(method));
         var smKind = GetStateMachineKind(method, out var smType);
 
         // Async / async-iterator methods suspend across `await` and need the deferral seam — that is
@@ -33,7 +39,7 @@ internal sealed class SyncScopeWeaver : ScopeWeaver
         if (smKind is StateMachineKind.Async or StateMachineKind.AsyncIterator)
         {
             _stderr.WriteLine(
-                $"NumSharp.Build : error NDW009: {Label} method '{method.FullName}' is an {StateMachineLabel(smKind)} " +
+                $"NumSharp.Build : error NDW009: {label} method '{method.FullName}' is an {StateMachineLabel(smKind)} " +
                 "method — mark it [NDScopedAsync] instead (" + Label + " weaves synchronous methods and synchronous " +
                 "iterators; [NDScopedAsync] weaves async methods, async iterators and non-async Task/ValueTask returns)");
             return WeaveOutcome.Error;
@@ -43,7 +49,7 @@ internal sealed class SyncScopeWeaver : ScopeWeaver
         // regardless of the method's own shape — the detach lands in the visible method (this body, or
         // the stub for an iterator). Validate them up front so a bad parameter fails the same for every
         // shape.
-        if (ValidateExitParams(method, Label, _refs, _stderr) == ValidationOutcome.Error)
+        if (ValidateExitParams(method, label, _refs, _stderr) == ValidationOutcome.Error)
             return WeaveOutcome.Error;
 
         // A SYNCHRONOUS iterator compiles to a state machine too, but it is not asynchronous — it is
@@ -53,20 +59,20 @@ internal sealed class SyncScopeWeaver : ScopeWeaver
         {
             InjectParameterDetaches(method, _refs);
             return FromStateMachineOutcome(
-                WeaveStateMachineTarget(method, smType, smKind, Label, _refs, _stderr), method, smKind);
+                WeaveStateMachineTarget(method, smType, smKind, label, _refs, _stderr), method, smKind);
         }
 
         // A NON-async method returning Task/ValueTask gets the deferral egress — also [NDScopedAsync].
         if (Classify(method.ReturnType) == RetKind.TaskLike)
         {
             _stderr.WriteLine(
-                $"NumSharp.Build : error NDW009: {Label} method '{method.FullName}' returns a Task/ValueTask — " +
+                $"NumSharp.Build : error NDW009: {label} method '{method.FullName}' returns a Task/ValueTask — " +
                 "mark it [NDScopedAsync] instead (the deferral egress that protects operands an in-flight callee still " +
                 "holds lives on [NDScopedAsync])");
             return WeaveOutcome.Error;
         }
 
-        switch (Validate(method, Label, _stderr))
+        switch (Validate(method, label, _stderr))
         {
             case ValidationOutcome.AlreadyScoped:
                 // A hand-scoped body is left untouched — including its [NDScopedExit] parameters, which
@@ -84,7 +90,7 @@ internal sealed class SyncScopeWeaver : ScopeWeaver
         InjectParameterDetaches(method, _refs);
         WeaveMethod(method, _refs);
         if (_verbose)
-            _stdout.WriteLine($"NumSharp.Build: woven: {method.FullName}");
+            _stdout.WriteLine($"NumSharp.Build: woven{ScopeInheritance.Provenance(_refs.Inheritance.EffectiveScope(method))}: {method.FullName}");
         return WeaveOutcome.Woven;
     }
 }

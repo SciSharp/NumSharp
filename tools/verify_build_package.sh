@@ -488,11 +488,15 @@ internal static class Program
 EOF
 (cd "$ND" && dotnet build -c Release -v n > build.log 2>&1) \
   || { tail -30 "$ND/build.log"; fail "attribute-free consumer build failed"; }
-# The targets' content pre-scan skips the tool spawn entirely for an attribute-free assembly
-# (the ASCII metadata scan); the tool's own "no [NDScoped]/[NDScopedAsync] methods; nothing to do"
-# line is the fallback wording if the pre-scan is ever bypassed. Accept either — reject only silence.
-grep -Eq "no \[NDScoped\]/\[NDScopedAsync\] usage detected|no \[NDScoped\]/\[NDScopedAsync\] methods; nothing to do" "$ND/build.log" \
+# An attribute-free consumer that REFERENCES NumSharp still spawns the tool (it may hold an
+# override INHERITING [NDScoped] from a referenced declaration — no attribute text of its own for
+# the ASCII pre-scan to find), and the tool answers "no [NDScoped]/[NDScopedAsync]/[NDScopedExit]
+# methods; nothing to do" without rewriting the file; the pre-scan's own "usage detected" skip is
+# the wording for a project that does not reference NumSharp at all. Accept either — reject only
+# silence — and prove the no-op did not rewrite (no "woven" summary for this assembly).
+grep -Eq "no \[NDScoped\]/\[NDScopedAsync\] usage detected|no \[NDScoped\]/\[NDScopedAsync\](/\[NDScopedExit\])? methods; nothing to do" "$ND/build.log" \
   || fail "expected the no-op report (pre-scan skip or tool nothing-to-do)"
+! grep -Eq "Consumer\.dll .*woven [1-9]" "$ND/build.log" || fail "attribute-free consumer must not be rewritten"
 (cd "$ND" && dotnet run --no-build -c Release > run.log 2>&1) && grep -q "PLAIN-OK 4" "$ND/run.log" \
   || { cat "$ND/run.log"; fail "attribute-free consumer run failed"; }
 echo "no-op verified (assembly left unwritten)"

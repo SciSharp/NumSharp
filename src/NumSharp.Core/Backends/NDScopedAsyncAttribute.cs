@@ -49,12 +49,19 @@ namespace NumSharp
     ///     <c>Task&lt;T&gt;</c>; scope those by hand (NDW004 = an unrecognized, non-C# state-machine
     ///     shape; NDW008 = the referenced NumSharp predates the async seam).</para>
     ///     <para>A method whose body already opens an <see cref="NDScope"/> is skipped (idempotence).</para>
+    ///     <para><b>Inherited by overrides and implementations</b> exactly like
+    ///     <see cref="NDScopedAttribute"/>: on a virtual, abstract or interface member it is the contract
+    ///     every override/implementation is woven under (an <c>async</c> override of a non-async
+    ///     <c>Task</c>-returning declaration, or the reverse, each weave through their own shape — the
+    ///     attribute names the model, the override supplies the body). An override's own
+    ///     <c>[NDScoped]</c>/<c>[NDScopedAsync]</c>/<c>[NDScopedCovered]</c> wins over the inherited one;
+    ///     a body-less attributed declaration is the contract, not an NDW005.</para>
     ///     <para>PUBLIC because the attribute is consumer-facing: a project that installs the
     ///     <c>NumSharp.Build</c> package marks its own async/Task composition methods with it. Without
     ///     the package the attribute is inert metadata — the method runs unscoped, the pre-weave
     ///     finalizer-backstop behaviour.</para>
     /// </remarks>
-    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
     public sealed class NDScopedAsyncAttribute : Attribute
     {
     }

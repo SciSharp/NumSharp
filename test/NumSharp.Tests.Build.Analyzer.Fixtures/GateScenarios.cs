@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace NumSharp.Tests.Build.Analyzer.Fixtures
@@ -20,7 +21,13 @@ namespace NumSharp.Tests.Build.Analyzer.Fixtures
         }
 
         [NDScoped]
-        public abstract NDArray NoBody();                             // [NDW005]  abstract -> nothing to weave
+        [DllImport("nonexistent-native-library")]
+        public static extern NDArray NoBody();                        // [NDW005]  extern -> nothing to weave, nothing to inherit it
+
+        // An ABSTRACT declaration carrying the attribute is the CONTRACT its overrides inherit — not a
+        // body-less target, not NDW005 (InheritanceScenarios.cs has the inheriting side).
+        [NDScoped]
+        public abstract NDArray AbstractContract();
 
         [NDScoped]
         public static async Task<NDArray> AsyncUnderSync(NDArray a)   // [NDW009]  async wants [NDScopedAsync]
