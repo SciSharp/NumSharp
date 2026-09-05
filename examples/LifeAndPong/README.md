@@ -92,8 +92,9 @@ $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInv
 $actual -eq $expected
 ```
 
-The final expression must print `True`. Each invocation first runs the Release
-tests, then creates a new `artifacts\release-<GUID>` directory containing:
+The final expression must print `True`. The script runs the Release tests before
+publishing. Successful runs leave a new `artifacts\release-<GUID>` directory
+containing:
 
 - the self-contained `win-x64` application folder;
 - `NumSharp-LifeAndPong-win-x64.zip`; and
