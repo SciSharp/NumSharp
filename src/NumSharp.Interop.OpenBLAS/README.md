@@ -58,6 +58,44 @@ asset. Licences travel with them in `THIRD-PARTY-NOTICES.txt` (OpenBLAS and its 
 BSD-3-Clause; the statically linked libgfortran carries the GCC Runtime Library Exception, the same
 basis on which NumPy and SciPy ship it in every wheel).
 
+### The vendored Fortran runtime, and why macOS needs a loader step
+
+The Linux and macOS wheels do not statically link the GCC runtime: `libgfortran` (+ `libquadmath`,
+`libgcc_s`) travel beside the main library under content-hashed names, and the main library's
+`DT_NEEDED` / `LC_LOAD_DYLIB` entries name **those** files, so a system libgfortran can never
+satisfy them. The package co-stages them, pinned in the manifest like the main library. On Linux
+they sit beside the main in `native/` and its `$ORIGIN` RUNPATH finds them — nothing to do.
+
+macOS is different, and it is the one place the layout NuGet can deliver and the layout the binary
+expects disagree. `delocate` parks the deps in a `.dylibs/` folder **beside** the wheel's `lib/`
+and rewrites the dylib's load commands to `@loader_path/../.dylibs/<name>`; NuGet delivers native
+assets only from **under** `runtimes/<rid>/native/` (nested paths included — a sibling folder is
+silently dropped from every consumer). So the deps are packed nested, as
+`runtimes/osx-*/native/.dylibs/`, and the package's loader (`MacOsVendoredRuntime`) makes the dylib
+loadable at first load, after a plain `dlopen` has failed:
+
+- **In place** — for the NuGet layout (`runtimes/<rid>/native/`) it creates the relative directory
+  symlink `runtimes/<rid>/.dylibs → native/.dylibs` (or copies the files when a link cannot be
+  made). Nothing is written outside the app's own `runtimes/` tree, and it is free after the first
+  process. This is the normal outcome for a `dotnet build` or a portable publish.
+- **A per-user cache copy** — when that folder is read-only, or the layout is flattened (a
+  RID-specific / self-contained / single-file publish drops the sub-folder, leaving the deps beside
+  the main in the app root, where `../.dylibs` would be the *parent of the app*): the dylib and its
+  deps are copied to `<cache>/dyld/<sha256 of the dylib>/native/` + `.dylibs/` — the exact relative
+  layout the load commands encode — and that copy is what dyld maps. The entry is keyed by the
+  dylib's content hash, every file is byte-compared to its source on every hit, and writes go to a
+  temp directory renamed into place. Cache root: `NUMSHARP_OPENBLAS_CACHE_DIR`, else
+  `~/.cache/NumSharp/openblas` (the same root the build-time override cache uses).
+
+Either way `OpenBlasEngine.LibraryPath` keeps naming the file discovery chose — the one the parity
+pin hashes — while `OpenBlasEngine.LoadedImagePath` reports the file dyld actually mapped, and
+`OpenBlasEngine.Info` says `(mapped from …)` when the two differ. Pre-loading the deps by absolute
+path cannot replace this (dyld matches loaded images by path or install name, and delocate's deps
+carry the placeholder install name `/DLC/scipy_openblas64/.dylibs/…`), and relinking with
+`install_name_tool` would need macOS tooling, re-signing, and would change the bytes the pin hashes.
+Gate: `tools/verify_package_consumer.sh` — a PackageReference consumer, on all three OSes, in every
+layout (portable, read-only, flattened publish).
+
 ### Discovery order
 
 (The delivery/discovery model is specified in `docs/OPENBLAS_DELIVERY_DESIGN.md`.)
@@ -259,6 +297,7 @@ fine.
 | `NUMSHARP_OPENBLAS_SEARCH_PATH` | File(s)/dir(s) to scan for a CBLAS, path-separator delimited. Tried **first** (priority over the bundled asset), non-binding — falls through to the rest if it holds no BLAS. |
 | `NUMSHARP_OPENBLAS_USE_BUNDLED=0` | Skip the bundled asset; machine tooling becomes the discovery default. |
 | `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` | Skip the module-load auto-install; `OpenBlasEngine.Enable(...)` still works. (The pre-rename `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` and `NUMSHARP_BLAS_AUTOINSTALL` spellings are retired and ignored.) |
+| `NUMSHARP_OPENBLAS_CACHE_DIR` | Root of the per-user OpenBLAS cache. At runtime (macOS only) it holds the relocated dylib + vendored-runtime copies made when `.dylibs` cannot be materialized next to the dylib (read-only install, flattened publish) — under `dyld/<sha256>/`; at build time the version override's extracted-library cache. Default: `%LOCALAPPDATA%` / `$XDG_CACHE_HOME` / `~/.cache` + `NumSharp/openblas`. |
 | `NUMSHARP_OPENBLAS_VERSION` | **Build-time**: scipy-openblas version to download from PyPI and stage over the bundle — a hard requirement; beats `<OpenBlasVersion>` metadata. |
 | `NUMSHARP_OPENBLAS_DISTRIBUTION` / `NUMSHARP_OPENBLAS_PYPI_FEED_URL` / `NUMSHARP_OPENBLAS_SHA256` / `NUMSHARP_OPENBLAS_DELIVERY` | **Build-time**: distribution pick (`64`/`32`), PyPI mirror base (needs the sha), expected extracted-lib sha256, delivery mode (`none`/`build`/`package`); each beats its `OpenBlas*` metadata twin. |
 | `OPENBLAS_HOME` / `OPENBLAS_ROOT` | Explicit OpenBLAS install root (OpenBLAS' own convention). A deliberate signal, so it ranks **above the bundle** (discovery tier 4) — not byte-parity with NumPy. |
@@ -275,9 +314,17 @@ python src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py --check  # verify o
 ```
 
 Every artifact is checked **twice** against the committed `tools/openblas-manifest.json` — the
-wheel's SHA-256, then the extracted library's own SHA-256 — so a re-pointed URL or a mutated artifact
-fails loudly instead of quietly changing the bits the package produces. Building without the assets
-staged is fine and simply produces an asset-free package; `-p:RequireOpenBlasAssets=true` turns that
-into a hard error for release builds.
+wheel's SHA-256, then the extracted library's own SHA-256, and likewise each vendored runtime file
+(`vendored` per RID) — so a re-pointed URL or a mutated artifact fails loudly instead of quietly
+changing the bits the package produces, and a partial staging (main without its deps, or the macOS
+deps in the pre-fix `runtimes/<rid>/.dylibs/` sibling that NuGet drops) fails `--check` and is
+re-staged. Staged layout: `runtimes/<rid>/native/<main>`, the Linux deps beside it, the macOS deps
+under `native/.dylibs/`. Building without the assets staged is fine and simply produces an asset-free
+package; `-p:RequireOpenBlasAssets=true` turns that into a hard error for release builds.
+
+Two scripted gates, both run by CI: `tools/verify_package_consumer.sh` packs the real nupkg, restores
+it into a scratch consumer **by PackageReference** and proves the bundle loads in every layout (the
+one path a ProjectReference test suite cannot exercise — which is how the macOS defect above shipped
+green), and `tools/verify_build_override.sh` drives the build-time version override end to end.
 
 Full design record, probe results and traps: [`docs/GEMM_PARITY.md`](https://github.com/SciSharp/NumSharp/blob/master/docs/GEMM_PARITY.md).

@@ -204,6 +204,41 @@ name. Gate: `tools/verify_build_override.sh` (15-step scripted nupkg-flow run in
 mirror-needs-sha, invalid-knob, delivery=none, two-ref-conflict and poisoned-cache steps; network
 once, then cache) + `OpenBlasDeliveryTests` (20 — priority pins and hostile markers).
 
+**The vendored Fortran runtime, and the macOS loader step (2026-09-05).** The Linux/macOS wheels do
+not statically link the GCC runtime: `libgfortran`/`libquadmath`/`libgcc_s` ride beside the main
+under content-hashed names that the main's own `DT_NEEDED`/`LC_LOAD_DYLIB` entries name (a system
+libgfortran can never stand in), so `fetch_openblas.py` co-stages them and the manifest pins each
+(`vendored` per RID; a partial staging fails `--check` and is re-staged). Linux: beside the main in
+`native/`, found by its `$ORIGIN` RUNPATH. **macOS is the trap:** `delocate` parks the deps in a
+`.dylibs/` SIBLING of `lib/` and rewrites the dylib's load commands to `@loader_path/../.dylibs/<name>`,
+but NuGet delivers native assets ONLY from under `runtimes/<rid>/native/` (nested paths included; a
+sibling folder is silently dropped from every consumer). Mirroring the wheel's sibling layout produced
+a package that looked complete and loaded on NO Mac — and CI was green because every suite consumes
+the package by ProjectReference, where a Content item copied the sibling. The deps are now staged and
+packed NESTED (`runtimes/osx-*/native/.dylibs/`, the layout a ProjectReference build gets too, so CI
+exercises the consumer path), and `MacOsVendoredRuntime` (`src/NumSharp.Interop.OpenBLAS/`) makes the
+dylib loadable after a plain `dlopen` fails: it parses the Mach-O load commands (`MachOImage`, header
+only), plans the missing `@loader_path/` deps and their closure (sources: `<dir>/.dylibs/<name>`, then
+`<dir>/<name>` — a RID-specific publish FLATTENS the sub-folder away, probed), and materializes them
+**in place** for the `runtimes/<rid>/native` layout (relative dir symlink `runtimes/<rid>/.dylibs →
+native/.dylibs`, else per-file copy; never outside `runtimes/`) or, when that folder is read-only or
+the layout is flattened (`../.dylibs` would be the PARENT of the app), as a **per-user cache copy** of
+main + deps in the exact relative layout (`NUMSHARP_OPENBLAS_CACHE_DIR`, else
+`~/.cache/NumSharp/openblas/dyld/<sha256>/native/` + `.dylibs/`; content-hash keyed, every file
+byte-compared to its source on every hit, temp+rename). `OpenBlasEngine.LibraryPath` keeps naming the
+file discovery chose (the parity pin hashes THAT; the copy is verified identical); the new
+`OpenBlasEngine.LoadedImagePath` is what dyld mapped, and `Info` says `(mapped from …)`. Two dead
+ends, both verified: pre-loading the deps by absolute path (dyld matches by path/install name, and
+delocate's deps carry the placeholder `/DLC/scipy_openblas64/.dylibs/…`) and relinking with
+`install_name_tool` (macOS tooling + re-signing on a Linux staging runner; changes the pinned bytes).
+The build-time version override task co-extracts the vendored deps into its cache entry (`.entry.json`
+sidecar, all files hash-verified on every hit; a pre-sidecar main-only entry is discarded) and stages
+them with the main, so an override loads on Linux/macOS too. Gates: `OpenBlasMacOsVendoredRuntimeTests`
+(21, synthetic Mach-O images + the real staged dylibs, every OS) and the CI job
+`package-consumer-smoke` running `tools/verify_package_consumer.sh` on all three OSes — the real nupkg
+restored into a scratch consumer BY PACKAGEREFERENCE, loaded in the portable, read-only and flattened
+layouts (the path no ProjectReference suite can exercise).
+
 **Four load-bearing details:** the result bits depend on the BLAS **thread count** (1/2/4/24 threads
 give four different answers); they ALSO depend on the **DYNAMIC_ARCH kernel** the CPU dispatches, so
 bundling pins the build but *not* the answer — `OpenBlasEngine.Enable(coreType: OpenBlasEngine.CoreType)` pins that

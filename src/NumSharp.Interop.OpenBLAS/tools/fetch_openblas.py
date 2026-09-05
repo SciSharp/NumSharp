@@ -30,6 +30,21 @@ Nothing here runs during an ordinary `dotnet build`.  The staged binaries are gi
 MANIFEST is checked in, and it is the pin: every download is verified against it twice (the wheel's
 sha256, then the extracted library's own sha256), so a re-pointed URL or a mutated artifact fails
 loudly rather than silently changing the bits the package produces.
+
+STAGED LAYOUT
+-------------
+    runtimes/<rid>/native/<main library>            every RID
+    runtimes/<rid>/native/libgfortran-*.so.5 ...    Linux: the vendored GCC runtime beside the main
+                                                    (its RUNPATH is $ORIGIN)
+    runtimes/<rid>/native/.dylibs/*.dylib           macOS: the vendored GCC runtime NESTED under native/
+
+The macOS nesting is deliberate and load-bearing.  The wheel itself parks the deps in a .dylibs/
+SIBLING of lib/, and the main dylib's load commands say @loader_path/../.dylibs/<name>; but NuGet
+delivers native assets only from under runtimes/<rid>/native/ and silently drops a sibling folder,
+so staging the wheel's own layout produced a package that could not load on any macOS consumer.
+The nested folder IS delivered; the runtime loader (MacOsVendoredRuntime in the package) turns it
+into the sibling the load commands expect at first load.  The vendored files are pinned in the
+manifest ("vendored" per RID) so a partial staging fails `--check`.
 """
 
 import argparse
@@ -145,6 +160,18 @@ def refresh_manifest(distribution_version, numpy_version):
         with zipfile.ZipFile(os.path.join(CACHE_DIR, u["filename"])) as zf:
             member = pick_native_member(zf)
             payload = zf.read(member)
+            # The vendored Fortran runtime is pinned too: every byte the package redistributes is
+            # named in the manifest, and a staging that lost a dep (or carries a wrong one) fails
+            # `--check` instead of shipping a dylib that cannot load.
+            vendored = []
+            for dep in vendored_members(zf, member):
+                dep_blob = zf.read(dep)
+                vendored.append({
+                    "member": dep,
+                    "file": os.path.basename(dep),
+                    "sha256": sha256_bytes(dep_blob),
+                    "size": len(dep_blob),
+                })
         runtimes[rid] = {
             "distribution": dist,
             "wheel": u["filename"],
@@ -154,6 +181,7 @@ def refresh_manifest(distribution_version, numpy_version):
             "file": os.path.basename(member),
             "sha256": sha256_bytes(payload),
             "size": len(payload),
+            "vendored": vendored,
         }
 
     manifest = {
@@ -215,11 +243,14 @@ def write_notices(manifest):
     lines.append("permits redistribution as part of a larger work under other terms; this is the")
     lines.append("same basis on which NumPy and SciPy ship it in every binary wheel.")
     lines.append("")
-    lines.append("Bundled artifacts (sha256 of the extracted shared library):")
+    lines.append("Bundled artifacts (sha256 of the extracted shared library; the vendored GCC runtime")
+    lines.append("libraries each wheel carries beside it are listed indented under their RID):")
     lines.append("")
     for rid in sorted(manifest["runtimes"]):
         e = manifest["runtimes"][rid]
         lines.append("  %-18s %-28s %s" % (rid, e["file"], e["sha256"]))
+        for dep in e.get("vendored", []):
+            lines.append("  %-18s %-28s %s" % ("", dep["file"], dep["sha256"]))
     lines.append("")
     lines.append("Full OpenBLAS / LAPACK license text:")
     lines.append("  https://github.com/OpenMathLib/OpenBLAS/blob/develop/LICENSE")
@@ -248,13 +279,40 @@ def vendored_members(zf, main_member):
 
 
 def vendored_dest(rid, member):
-    """Where a vendored dep is staged, mirroring the wheel's own layout relative to the main library
-    so the main library's baked-in search path resolves it unchanged: Linux keeps the deps beside the
-    main in native/ (its RUNPATH is $ORIGIN), macOS keeps them in a .dylibs/ sibling of native/ (its
-    load commands are @loader_path/../.dylibs/…)."""
+    """Where a vendored dep is staged.
+
+    Linux keeps the deps beside the main in native/ (the main's RUNPATH is $ORIGIN), exactly as the
+    wheel lays them out. macOS is the exception: the wheel parks them in a .dylibs/ SIBLING of lib/
+    and the main dylib's load commands say @loader_path/../.dylibs/<name> — but NuGet delivers
+    native assets only from UNDER runtimes/<rid>/native/ (nested paths included; a sibling folder is
+    silently dropped from every consumer), so mirroring the wheel's sibling layout produced a package
+    that looked complete and loaded on no consumer machine. The deps are therefore staged NESTED, as
+    runtimes/<rid>/native/.dylibs/<name>, which NuGet does deliver; the runtime loader
+    (MacOsVendoredRuntime) materializes the ../.dylibs sibling the load commands expect at first
+    load — a relative symlink next to the dylib, or a verified per-user cache copy when that folder
+    is read-only or a RID-specific publish has flattened the layout."""
     norm = member.replace("\\", "/")
-    subdir = ".dylibs" if "/.dylibs/" in norm else "native"
+    subdir = os.path.join("native", ".dylibs") if "/.dylibs/" in norm else "native"
     return os.path.join(RUNTIMES_DIR, rid, subdir, os.path.basename(member))
+
+
+def legacy_sibling_dir(rid):
+    """The pre-fix staging location of the macOS deps (runtimes/<rid>/.dylibs/), which the recursive
+    pack glob would still sweep into the package as dead weight; removed whenever a RID is (re)staged."""
+    return os.path.join(RUNTIMES_DIR, rid, ".dylibs")
+
+
+def staged_ok(rid, entry):
+    """True when the main library AND every vendored dep recorded in the manifest are staged with the
+    pinned bytes. A manifest entry without a 'vendored' list (older pin) checks the main alone."""
+    dest = staged_path(rid, entry)
+    if not (os.path.isfile(dest) and sha256_bytes(open(dest, "rb").read()) == entry["sha256"]):
+        return False
+    for dep in entry.get("vendored", []):
+        ddest = vendored_dest(rid, dep["member"])
+        if not (os.path.isfile(ddest) and sha256_bytes(open(ddest, "rb").read()) == dep["sha256"]):
+            return False
+    return True
 
 
 def fetch(manifest, check_only=False):
@@ -262,7 +320,9 @@ def fetch(manifest, check_only=False):
     for rid in sorted(manifest["runtimes"]):
         entry = manifest["runtimes"][rid]
         dest = staged_path(rid, entry)
-        if os.path.isfile(dest) and sha256_bytes(open(dest, "rb").read()) == entry["sha256"]:
+        # Main + every pinned vendored dep must be present and byte-exact; a tree staged by an older
+        # script (main alone, or the deps in the pre-fix sibling folder) is re-staged, not accepted.
+        if staged_ok(rid, entry) and not os.path.isdir(legacy_sibling_dir(rid)):
             ok += 1
             continue
         if check_only:
@@ -283,17 +343,33 @@ def fetch(manifest, check_only=False):
             with open(dest, "wb") as fh:
                 fh.write(payload)
             # Co-stage the vendored Fortran runtime (libgfortran/libquadmath/libgcc_s) from the SAME
-            # already-verified wheel, mirroring its layout so the main library loads on a clean host.
+            # already-verified wheel — under native/ (see vendored_dest) so NuGet delivers it — and
+            # hold each file to the manifest's own pin when the manifest records one.
+            pinned = {d["member"]: d["sha256"] for d in entry.get("vendored", [])}
             for dep in vendored_members(zf, entry["member"]):
+                blob = zf.read(dep)
+                if dep in pinned and sha256_bytes(blob) != pinned[dep]:
+                    raise SystemExit(
+                        "CHECKSUM MISMATCH for the vendored dependency extracted from %s\n"
+                        "  member   %s\n  expected %s\n  actual   %s"
+                        % (entry["wheel"], dep, pinned[dep], sha256_bytes(blob)))
                 ddest = vendored_dest(rid, dep)
                 os.makedirs(os.path.dirname(ddest), exist_ok=True)
                 with open(ddest, "wb") as fh:
-                    fh.write(zf.read(dep))
+                    fh.write(blob)
                 print("  %-18s %s (vendored dep)" % ("", os.path.basename(dep)))
+            for dep in pinned:
+                if dep not in set(vendored_members(zf, entry["member"])):
+                    raise SystemExit("the wheel %s no longer carries the pinned vendored member %s"
+                                     % (entry["wheel"], dep))
+        legacy = legacy_sibling_dir(rid)
+        if os.path.isdir(legacy):
+            shutil.rmtree(legacy)
+            print("  %-18s removed the pre-fix sibling folder %s" % ("", os.path.relpath(legacy, PKG_ROOT)))
         ok += 1
 
     if check_only and missing:
-        print("MISSING staged runtime assets for: %s" % ", ".join(missing))
+        print("MISSING or incomplete staged runtime assets for: %s" % ", ".join(missing))
         print("Run: python %s" % os.path.relpath(__file__))
         return 1
     print("%d/%d runtime assets present and verified in %s"

@@ -123,14 +123,22 @@
          prove the bundled library actually loads. -->
     <Content Include="$(OpenBlasRuntimesDir)/$(BundledOpenBlasRid)/native/*" Pack="true" PackagePath="runtimes/$(BundledOpenBlasRid)/native/%(Filename)%(Extension)" Visible="false" Link="runtimes/$(BundledOpenBlasRid)/native/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
 
-    <!-- macOS carries the vendored Fortran runtime (libgfortran/libquadmath/libgcc_s) in a .dylibs/
-         SIBLING of native/, because the main dylib's load commands are @loader_path/../.dylibs/… .
-         Copy the current RID's .dylibs to the same relative place so the bundled dylib actually
-         loads. This glob is empty (a no-op) on Linux — whose deps sit beside the main in native/,
-         resolved by its $ORIGIN RUNPATH and already carried by the native item above — and on
-         Windows, whose library is self-contained. Other RIDs' .dylibs are packed by the recursive
-         None item above. -->
-    <Content Include="$(OpenBlasRuntimesDir)/$(BundledOpenBlasRid)/.dylibs/*" Pack="true" PackagePath="runtimes/$(BundledOpenBlasRid)/.dylibs/%(Filename)%(Extension)" Visible="false" Link="runtimes/$(BundledOpenBlasRid)/.dylibs/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- macOS: the vendored Fortran runtime (libgfortran/libquadmath/libgcc_s) is staged UNDER
+         native/, as native/.dylibs/, and packed the same way — NOT as the .dylibs/ sibling of
+         native/ the main dylib's load commands (@loader_path/../.dylibs/…) actually name.
+         NuGet delivers native assets only from under runtimes/<rid>/native/ (nested paths
+         included; a sibling folder is silently dropped from every consumer), so the sibling
+         layout looked complete in the package and loaded on NO consumer machine — it only ever
+         worked through THIS Content item's copy, which a ProjectReference build gets and a
+         PackageReference restore does not. The runtime loader (MacOsVendoredRuntime) now
+         materializes the sibling from native/.dylibs/ at first load (a relative symlink, or a
+         per-user cache copy when the folder is read-only or the layout is flattened), so a
+         ProjectReference build deliberately gets the SAME nested layout a package consumer gets:
+         CI then exercises the loader path a user hits. Empty (a no-op) on Linux — whose deps sit
+         beside the main in native/, resolved by its $ORIGIN RUNPATH and already carried by the
+         native item above — and on Windows, whose library is self-contained. Other RIDs'
+         native/.dylibs/ are packed by the recursive None item above. -->
+    <Content Include="$(OpenBlasRuntimesDir)/$(BundledOpenBlasRid)/native/.dylibs/*" Pack="true" PackagePath="runtimes/$(BundledOpenBlasRid)/native/.dylibs/%(Filename)%(Extension)" Visible="false" Link="runtimes/$(BundledOpenBlasRid)/native/.dylibs/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

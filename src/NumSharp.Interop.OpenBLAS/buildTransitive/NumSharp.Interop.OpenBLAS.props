@@ -27,7 +27,10 @@
 
     <!-- The global temp cache holding EXTRACTED native libraries (never wheels), shared by
          every project and repeated builds; keyed by (distribution, version, rid, sha256).
-         Design §7. -->
+         Design §7. NUMSHARP_OPENBLAS_CACHE_DIR (env) wins, and is the same root the RUNTIME
+         uses on macOS for its relocated-dylib entries (dyld/<sha256>/), so one variable moves
+         both caches. -->
+    <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and '$(NUMSHARP_OPENBLAS_CACHE_DIR)' != ''">$(NUMSHARP_OPENBLAS_CACHE_DIR)</NumSharpOpenBlasCacheDir>
     <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and '$(LOCALAPPDATA)' != ''">$(LOCALAPPDATA)\NumSharp\openblas</NumSharpOpenBlasCacheDir>
     <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and '$(XDG_CACHE_HOME)' != ''">$(XDG_CACHE_HOME)/NumSharp/openblas</NumSharpOpenBlasCacheDir>
     <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and '$(HOME)' != ''">$(HOME)/.cache/NumSharp/openblas</NumSharpOpenBlasCacheDir>

@@ -81,8 +81,19 @@ namespace NumSharp.Interop.OpenBLAS
         /// <summary>The symbol prefix/suffix pair that resolved, for diagnostics (e.g. "scipy_*64_").</summary>
         internal static string SymbolScheme { get; private set; }
 
+        /// <summary>
+        ///     The file the OS loader actually mapped. Equals <see cref="LibraryPath"/> except on
+        ///     macOS, when the bundled dylib had to be relocated to a per-user cache copy so its
+        ///     vendored Fortran runtime resolves (<see cref="MacOsVendoredRuntime"/>) — the copy is
+        ///     verified byte-identical to <see cref="LibraryPath"/>, which stays the file discovery
+        ///     chose and the one a parity pin hashes.
+        /// </summary>
+        internal static string LoadedImagePath { get; private set; }
+
         /// <summary>True when a library is loaded and every required symbol bound.</summary>
         internal static bool IsLoaded => _handle != IntPtr.Zero;
+
+        private static readonly bool IsMacOS = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
 
         #region function pointers — ILP64 (64-bit BLAS int)
 
@@ -440,6 +451,17 @@ namespace NumSharp.Interop.OpenBLAS
         ///     candidate that loads but fails to BIND throws (see <see cref="Bind"/> — the handle is
         ///     freed and the previous binding is untouched). The previous library is freed only
         ///     after its replacement has fully bound, so this either advances or changes nothing.
+        ///     <para>
+        ///     <b>macOS:</b> a dylib that fails to load gets ONE more chance. The bundled
+        ///     scipy-openblas dylib names its vendored Fortran runtime through
+        ///     <c>@loader_path/../.dylibs/…</c> — a folder NuGet never delivers where that load
+        ///     command points — so <see cref="MacOsVendoredRuntime.TryPrepare"/> materializes the
+        ///     dependencies where dyld will look (in place, or as a verified per-user cache copy of
+        ///     main + deps) and the load is retried against the image it names. The library the
+        ///     caller or discovery chose stays <see cref="LibraryPath"/>; the mapped file is
+        ///     <see cref="LoadedImagePath"/>. What happened is appended to the candidate's entry in
+        ///     <paramref name="tried"/>, so a final failure explains itself.
+        ///     </para>
         /// </remarks>
         private static bool TryLoadCandidates(IEnumerable<string> candidates, List<string> tried)
         {
@@ -447,8 +469,26 @@ namespace NumSharp.Interop.OpenBLAS
             {
                 tried.Add(candidate);
                 IntPtr handle;
+                string image = candidate;
                 if (!NativeLibrary.TryLoad(candidate, out handle))
-                    continue;
+                {
+                    string note = null;
+                    if (!IsMacOS || !MacOsVendoredRuntime.TryPrepare(candidate, out image, out note))
+                    {
+                        if (note != null)
+                            tried[tried.Count - 1] = candidate + " [" + note + "]";
+                        continue;
+                    }
+
+                    if (!NativeLibrary.TryLoad(image, out handle))
+                    {
+                        tried[tried.Count - 1] = candidate + " [" + note + "; still not loadable: " +
+                                                 DescribeLoadFailure(image) + "]";
+                        continue;
+                    }
+
+                    tried[tried.Count - 1] = candidate + " [" + note + "]";
+                }
 
                 var previous = _handle;
                 try
@@ -462,6 +502,8 @@ namespace NumSharp.Interop.OpenBLAS
                     throw; // previous binding untouched
                 }
 
+                LoadedImagePath = image;
+
                 if (previous != IntPtr.Zero && previous != handle)
                     NativeLibrary.Free(previous);
 
@@ -469,6 +511,27 @@ namespace NumSharp.Interop.OpenBLAS
             }
 
             return false;
+        }
+
+        /// <summary>
+        ///     The OS loader's own reason for refusing <paramref name="path"/> (dyld's
+        ///     "Library not loaded: …" text, for instance) — <see cref="NativeLibrary.TryLoad(string, out IntPtr)"/>
+        ///     discards it, so the throwing overload is used purely for its message.
+        /// </summary>
+        private static string DescribeLoadFailure(string path)
+        {
+            try
+            {
+                var handle = NativeLibrary.Load(path);
+                NativeLibrary.Free(handle);
+                return "(loaded on a second attempt)";
+            }
+            catch (Exception e)
+            {
+                string m = e.Message ?? e.GetType().Name;
+                int i = m.IndexOfAny(new[] { '\r', '\n' });
+                return i < 0 ? m : m.Substring(0, i);
+            }
         }
 
         /// <summary>Releases the loaded library and clears every bound symbol.</summary>
@@ -487,6 +550,7 @@ namespace NumSharp.Interop.OpenBLAS
 
                 _handle = IntPtr.Zero;
                 LibraryPath = null;
+                LoadedImagePath = null;
                 SymbolScheme = null;
                 IsIlp64 = false;
                 _sgemm64 = null; _dgemm64 = null; _sgemv64 = null; _dgemv64 = null;
@@ -963,10 +1027,12 @@ namespace NumSharp.Interop.OpenBLAS
         /// <remarks>
         ///     NuGet lays native assets out as <c>runtimes/&lt;rid&gt;/native/</c>, which is what a
         ///     plain <c>dotnet build</c> reproduces under the output directory. A RID-specific or
-        ///     self-contained publish instead FLATTENS them next to the app, so the app directory
-        ///     itself is probed too. Both the running assembly's directory and
-        ///     <see cref="AppContext.BaseDirectory"/> are used because they differ when NumSharp is
-        ///     loaded as a plugin or from a shadow-copied location.
+        ///     self-contained publish instead FLATTENS them next to the app — sub-folders included,
+        ///     so the macOS vendored runtime staged under <c>native/.dylibs/</c> lands BESIDE the
+        ///     main dylib there — so the app directory itself is probed too. Both the running
+        ///     assembly's directory and <see cref="AppContext.BaseDirectory"/> are used because they
+        ///     differ when NumSharp is loaded as a plugin or from a shadow-copied location. Making
+        ///     the macOS dylib loadable from either layout is <see cref="MacOsVendoredRuntime"/>'s job.
         /// </remarks>
         private static IEnumerable<string> BundledDirectories()
         {

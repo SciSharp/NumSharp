@@ -8,7 +8,9 @@
        no override            -> nothing runs; the bundled runtime assets ship as-is
        OpenBlasPath           -> a source marker records the read-in-place directory
        OpenBlasVersion        -> the pinned scipy-openblas wheel is downloaded from PyPI,
-                                 double-hash verified, the ONE native library extracted
+                                 double-hash verified, the native library AND the vendored
+                                 GCC runtime it loads (libgfortran/libquadmath/libgcc_s on
+                                 Linux and macOS; Windows is self-contained) extracted
                                  into a global temp cache (the wheel is then DELETED),
                                  staged over the bundle in the output, and a source
                                  marker flags the folder as a REQUIRED override
@@ -21,9 +23,11 @@
 
      The wheel→library extraction reproduces tools/fetch_openblas.py exactly (same RID →
      distribution/platform-tag map read from the same manifest, same /lib/ member pick,
-     same file name, same runtimes/<rid>/native/ layout) — that is the design's "same
-     binary" invariant (§5.4), and it is what lets an override transparently overwrite
-     the bundle in the same folder.
+     same file name, same runtimes/<rid>/native/ layout, same co-staging of the vendored
+     runtime — beside the main on Linux, under native/.dylibs/ on macOS, where the
+     package's loader materializes the ../.dylibs sibling the dylib's load commands name)
+     — that is the design's "same binary" invariant (§5.4), and it is what lets an
+     override transparently overwrite the bundle in the same folder.
      ================================================================================== -->
 <Project>
 
@@ -264,8 +268,9 @@ public class NumSharpOpenBlasFetchTask : Task
             foreach (string rid in rids)
             {
                 string staged;
+                List<KeyValuePair<string, string>> stagedVendored;
                 if (!StageRid(manifest, runtimes, rid, version, path, distribution, feed, sha256,
-                              out staged))
+                              out staged, out stagedVendored))
                     return false;
 
                 if (delivery == "package")
@@ -273,6 +278,14 @@ public class NumSharpOpenBlasFetchTask : Task
                     var lib = new TaskItem(staged);
                     lib.SetMetadata("PackagePath", "runtimes/" + rid + "/native/" + Path.GetFileName(staged));
                     packFiles.Add(lib);
+                    // The vendored runtime travels with the main, in the same relative layout
+                    // (Linux: beside it; macOS: native/.dylibs/ — NuGet delivers nested paths).
+                    foreach (var dep in stagedVendored)
+                    {
+                        var depItem = new TaskItem(dep.Value);
+                        depItem.SetMetadata("PackagePath", "runtimes/" + rid + "/native/" + dep.Key);
+                        packFiles.Add(depItem);
+                    }
                     var marker = new TaskItem(Path.Combine(Path.GetDirectoryName(staged), MarkerFileName));
                     marker.SetMetadata("PackagePath", "runtimes/" + rid + "/native/" + MarkerFileName);
                     packFiles.Add(marker);
@@ -424,9 +437,10 @@ public class NumSharpOpenBlasFetchTask : Task
     private bool StageRid(Dictionary<string, object> manifest, Dictionary<string, object> runtimes,
                           string rid, string version, string customPath,
                           string distributionOverride, string feed, string expectedSha,
-                          out string stagedFile)
+                          out string stagedFile, out List<KeyValuePair<string, string>> stagedVendored)
     {
         stagedFile = null;
+        stagedVendored = new List<KeyValuePair<string, string>>();
 
         object entryObj;
         if (string.IsNullOrEmpty(rid) || !runtimes.TryGetValue(rid, out entryObj))
@@ -463,10 +477,11 @@ public class NumSharpOpenBlasFetchTask : Task
 
         // ---- the global cache: extracted libraries only, keyed (distribution, version, rid, sha) ----
         string cacheRoot = Path.Combine(CacheDirectory, distribution, version, rid);
-        string cached = FindInCache(cacheRoot, sha);
+        List<KeyValuePair<string, string>> vendored;
+        string cached = FindInCache(cacheRoot, sha, out vendored);
         if (cached == null)
         {
-            if (!DownloadIntoCache(feedBase, distribution, version, rid, tag, sha, cacheRoot, out cached))
+            if (!DownloadIntoCache(feedBase, distribution, version, rid, tag, sha, cacheRoot, out cached, out vendored))
                 return false;
         }
         else
@@ -486,18 +501,28 @@ public class NumSharpOpenBlasFetchTask : Task
         Directory.CreateDirectory(destDir);
 
         string dest = Path.Combine(destDir, Path.GetFileName(cached));
-        if (!File.Exists(dest) || new FileInfo(dest).Length != new FileInfo(cached).Length ||
-            !HashFile(dest).Equals(stagedSha, StringComparison.OrdinalIgnoreCase))
-        {
-            File.Copy(cached, dest, true);
+        if (StageOne(cached, dest, stagedSha))
             Log.LogMessage(MessageImportance.High,
                 "NumSharp.Interop.OpenBLAS: staged {0} {1} ({2}) -> {3}",
                 distribution, version, rid, dest);
-        }
         else
-        {
             Log.LogMessage(MessageImportance.Normal,
                 "NumSharp.Interop.OpenBLAS: {0} already staged and verified", dest);
+
+        // The vendored runtime goes wherever the main went, in the wheel's relative layout —
+        // except that a flattened (RID-specific publish) layout drops the sub-folder, exactly
+        // as the SDK flattens the bundle's own native/.dylibs/ files beside the main; the
+        // package's loader looks in both places.
+        foreach (var dep in vendored)
+        {
+            string depDest = FlattenNative
+                ? Path.Combine(destDir, Path.GetFileName(dep.Value))
+                : Path.Combine(destDir, dep.Key.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(depDest));
+            if (StageOne(dep.Value, depDest, null))
+                Log.LogMessage(MessageImportance.Normal,
+                    "NumSharp.Interop.OpenBLAS: staged vendored {0} -> {1}", dep.Key, depDest);
+            stagedVendored.Add(new KeyValuePair<string, string>(dep.Key, depDest));
         }
 
         // ---- the source marker: next to the staged binary (its own directory is the read
@@ -547,8 +572,39 @@ public class NumSharpOpenBlasFetchTask : Task
         return dot < 0 ? tags : tags.Substring(0, dot);
     }
 
-    private string FindInCache(string cacheRoot, string expectedSha)
+    /// <summary>Copies <paramref name="source"/> to <paramref name="dest"/> unless an identical file is already there; true when it copied.</summary>
+    private static bool StageOne(string source, string dest, string expectedSha)
     {
+        if (File.Exists(dest) && new FileInfo(dest).Length == new FileInfo(source).Length)
+        {
+            string have = HashFile(dest);
+            if (expectedSha != null ? have.Equals(expectedSha, StringComparison.OrdinalIgnoreCase)
+                                    : have.Equals(HashFile(source), StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        File.Copy(source, dest, true);
+        return true;
+    }
+
+    /// <summary>
+    /// The sidecar a cache entry carries: { "main": "<file name>", "files": { "<relative path>": "<sha256>" } }
+    /// — the vendored runtime the wheel shipped beside the main, in the wheel's relative layout.
+    /// </summary>
+    private const string EntrySidecar = ".entry.json";
+
+    /// <summary>
+    /// A cache entry is a directory named by the MAIN library's sha256, holding the main plus its
+    /// vendored dependencies (Linux: beside it; macOS: under .dylibs/) as recorded in its sidecar.
+    /// A hit is only a hit when the main still hashes to the directory name AND every vendored
+    /// file to what the sidecar recorded; anything else — a truncated write (killed build), a
+    /// tampered file, or an entry written by an older build that carried the main alone (which
+    /// cannot load on Linux/macOS) — is discarded and re-downloaded (§10.6 — never silently
+    /// substitute; fetch_openblas.py treats its poisoned cache entries the same way).
+    /// </summary>
+    private string FindInCache(string cacheRoot, string expectedSha, out List<KeyValuePair<string, string>> vendored)
+    {
+        vendored = null;
         if (!Directory.Exists(cacheRoot))
             return null;
 
@@ -560,25 +616,20 @@ public class NumSharpOpenBlasFetchTask : Task
 
         foreach (string dir in dirs)
         {
-            if (!Directory.Exists(dir))
-                continue;
-            string f = Directory.GetFiles(dir).Where(p => !p.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
-                                              .FirstOrDefault();
-            if (f == null)
+            if (!Directory.Exists(dir) || dir.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            // The directory NAME is the content hash the entry claims — a hit is only a hit
-            // if the FILE still hashes to it. A truncated write (killed build) or a tampered
-            // entry must not be staged and must not be trusted forever: discard it and let
-            // the caller re-download (§10.6 — never silently substitute; fetch_openblas.py
-            // treats its poisoned cache entries the same way).
-            string actual = HashFile(f);
-            if (actual.Equals(Path.GetFileName(dir), StringComparison.OrdinalIgnoreCase))
-                return f;
+            string main;
+            List<KeyValuePair<string, string>> deps;
+            string problem = ValidateEntry(dir, out main, out deps);
+            if (problem == null)
+            {
+                vendored = deps;
+                return main;
+            }
 
             Log.LogMessage(MessageImportance.High,
-                "NumSharp.Interop.OpenBLAS: DISCARDING poisoned cache entry {0} (file hashes {1}, entry claims {2})",
-                f, actual, Path.GetFileName(dir));
+                "NumSharp.Interop.OpenBLAS: DISCARDING poisoned cache entry {0} ({1})", dir, problem);
             try
             {
                 Directory.Delete(dir, true);
@@ -594,12 +645,66 @@ public class NumSharpOpenBlasFetchTask : Task
         return null;
     }
 
+    /// <summary>Null when the entry is intact; otherwise what is wrong with it.</summary>
+    private static string ValidateEntry(string dir, out string main, out List<KeyValuePair<string, string>> deps)
+    {
+        main = null;
+        deps = new List<KeyValuePair<string, string>>();
+
+        string sidecar = Path.Combine(dir, EntrySidecar);
+        if (!File.Exists(sidecar))
+            return "no " + EntrySidecar + " sidecar — written by an older build that cached the main library alone";
+
+        Dictionary<string, object> doc;
+        try
+        {
+            doc = MiniJson.Parse(File.ReadAllText(sidecar)) as Dictionary<string, object>;
+        }
+        catch (Exception e)
+        {
+            return "unreadable sidecar: " + e.Message;
+        }
+
+        object mainObj;
+        if (doc == null || !doc.TryGetValue("main", out mainObj) || !(mainObj is string))
+            return "sidecar names no main library";
+
+        string mainPath = Path.Combine(dir, (string)mainObj);
+        if (!File.Exists(mainPath))
+            return "main library missing";
+
+        string actual = HashFile(mainPath);
+        if (!actual.Equals(Path.GetFileName(dir), StringComparison.OrdinalIgnoreCase))
+            return "main library hashes " + actual + ", entry claims " + Path.GetFileName(dir);
+
+        object filesObj;
+        if (doc.TryGetValue("files", out filesObj) && filesObj is Dictionary<string, object>)
+        {
+            foreach (var kv in (Dictionary<string, object>)filesObj)
+            {
+                string rel = kv.Key;
+                string p = Path.Combine(dir, rel.Replace('/', Path.DirectorySeparatorChar));
+                if (!File.Exists(p))
+                    return "vendored file missing: " + rel;
+                string sha = kv.Value as string;
+                if (sha != null && !HashFile(p).Equals(sha, StringComparison.OrdinalIgnoreCase))
+                    return "vendored file " + rel + " does not hash to what the sidecar recorded";
+                deps.Add(new KeyValuePair<string, string>(rel, p));
+            }
+        }
+
+        main = mainPath;
+        return null;
+    }
+
     // ---------------------------------------------------------------- download & extract
 
     private bool DownloadIntoCache(string feedBase, string distribution, string version, string rid,
-                                   string tag, string expectedSha, string cacheRoot, out string cached)
+                                   string tag, string expectedSha, string cacheRoot, out string cached,
+                                   out List<KeyValuePair<string, string>> vendored)
     {
         cached = null;
+        vendored = new List<KeyValuePair<string, string>>();
 
         string indexUrl = feedBase + "/pypi/" + distribution + "/" + version + "/json";
         Log.LogMessage(MessageImportance.High,
@@ -682,9 +787,13 @@ public class NumSharpOpenBlasFetchTask : Task
 
                 // The one shared library in a scipy-openblas wheel: prefer members under /lib/,
                 // take the LARGEST native file (the real library, not a stub) — exactly
-                // fetch_openblas.py's pick_native_member.
+                // fetch_openblas.py's pick_native_member. Every OTHER native member is the
+                // vendored GCC runtime the main loads (its DT_NEEDED / LC_LOAD_DYLIB name the
+                // content-hashed vendored file, so a system libgfortran can never satisfy it) —
+                // fetch_openblas.py's vendored_members, co-extracted here for the same reason.
                 libTemp = Path.GetTempFileName();
                 string memberName;
+                var depTemps = new List<KeyValuePair<string, string>>(); // (relative path, temp file)
                 // ZipArchive over a FileStream, NOT ZipFile.OpenRead: ZipFile lives in a different
                 // assembly per runtime and is not part of the factory's default references.
                 using (var wheelStream = File.OpenRead(wheelTemp))
@@ -701,43 +810,89 @@ public class NumSharpOpenBlasFetchTask : Task
                     using (var src = member.Open())
                     using (var dst = File.Create(libTemp))
                         src.CopyTo(dst);
+
+                    foreach (ZipArchiveEntry dep in VendoredMembers(zip, member))
+                    {
+                        string depTemp = Path.GetTempFileName();
+                        using (var src = dep.Open())
+                        using (var dst = File.Create(depTemp))
+                            src.CopyTo(dst);
+                        depTemps.Add(new KeyValuePair<string, string>(VendoredRelativePath(dep.FullName), depTemp));
+                    }
                 }
 
-                string libSha = HashFile(libTemp);
-                if (expectedSha != null && !libSha.Equals(expectedSha, StringComparison.OrdinalIgnoreCase))
-                {
-                    Log.LogError(
-                        "NumSharp.Interop.OpenBLAS: CHECKSUM MISMATCH for the library extracted from {0} " +
-                        "(member {1}): expected {2}, got {3}.",
-                        wheelName, memberName, expectedSha, libSha);
-                    return false;
-                }
-
-                string cacheDir = Path.Combine(cacheRoot, libSha.ToLowerInvariant());
-                Directory.CreateDirectory(cacheDir);
-                cached = Path.Combine(cacheDir, Path.GetFileName(memberName.Replace('\\', '/')));
-
-                // Unique temp INSIDE the final directory + rename, never a direct copy: a killed
-                // build cannot leave a half-written file under the content-hash name (which a
-                // later hit would otherwise have to detect and discard), and two builds racing
-                // the same entry cannot clobber each other mid-write — the loser keeps the
-                // winner's file, which carries the identical verified content by construction.
-                string tmp = cached + "." + Guid.NewGuid().ToString("N") + ".tmp";
-                File.Copy(libTemp, tmp);
                 try
                 {
-                    File.Move(tmp, cached);
-                }
-                catch (IOException)
-                {
-                    TryDelete(tmp);
-                    if (!File.Exists(cached))
-                        throw; // a genuine IO failure, not a lost race
-                }
+                    string libSha = HashFile(libTemp);
+                    if (expectedSha != null && !libSha.Equals(expectedSha, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Log.LogError(
+                            "NumSharp.Interop.OpenBLAS: CHECKSUM MISMATCH for the library extracted from {0} " +
+                            "(member {1}): expected {2}, got {3}.",
+                            wheelName, memberName, expectedSha, libSha);
+                        return false;
+                    }
 
-                Log.LogMessage(MessageImportance.High,
-                    "NumSharp.Interop.OpenBLAS: cached {0} (sha256 {1})", cached, libSha);
-                return true;
+                    string cacheDir = Path.Combine(cacheRoot, libSha.ToLowerInvariant());
+                    string mainName = Path.GetFileName(memberName.Replace('\\', '/'));
+
+                    // Build the WHOLE entry (main + vendored + sidecar) in a temp sibling and rename
+                    // it into place, never file by file into the final directory: a killed build
+                    // cannot leave a half-built entry under the content-hash name (which a later
+                    // hit would otherwise have to detect and discard), and two builds racing the
+                    // same entry cannot clobber each other mid-write — the loser keeps the winner's
+                    // entry, which carries the identical verified content by construction.
+                    string tmpDir = cacheDir + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                    Directory.CreateDirectory(tmpDir);
+                    File.Copy(libTemp, Path.Combine(tmpDir, mainName), true);
+                    var sidecar = new StringBuilder();
+                    sidecar.Append("{\n  \"main\": ").Append(MiniJson.Quote(mainName)).Append(",\n  \"files\": {");
+                    bool first = true;
+                    foreach (var dep in depTemps)
+                    {
+                        string target = Path.Combine(tmpDir, dep.Key.Replace('/', Path.DirectorySeparatorChar));
+                        Directory.CreateDirectory(Path.GetDirectoryName(target));
+                        File.Copy(dep.Value, target, true);
+                        sidecar.Append(first ? "\n    " : ",\n    ")
+                               .Append(MiniJson.Quote(dep.Key)).Append(": ").Append(MiniJson.Quote(HashFile(target)));
+                        first = false;
+                    }
+                    sidecar.Append(first ? "}\n}\n" : "\n  }\n}\n");
+                    File.WriteAllText(Path.Combine(tmpDir, EntrySidecar), sidecar.ToString());
+
+                    Directory.CreateDirectory(cacheRoot);
+                    try
+                    {
+                        Directory.Move(tmpDir, cacheDir);
+                    }
+                    catch (IOException)
+                    {
+                        TryDeleteDirectory(tmpDir);
+                        if (!Directory.Exists(cacheDir))
+                            throw; // a genuine IO failure, not a lost race
+                    }
+
+                    List<KeyValuePair<string, string>> deps;
+                    string main;
+                    string problem = ValidateEntry(cacheDir, out main, out deps);
+                    if (problem != null)
+                    {
+                        Log.LogError("NumSharp.Interop.OpenBLAS: the cache entry {0} could not be verified after writing it: {1}",
+                            cacheDir, problem);
+                        return false;
+                    }
+
+                    cached = main;
+                    vendored = deps;
+                    Log.LogMessage(MessageImportance.High,
+                        "NumSharp.Interop.OpenBLAS: cached {0} (sha256 {1}, {2} vendored file(s))", cached, libSha, deps.Count);
+                    return true;
+                }
+                finally
+                {
+                    foreach (var dep in depTemps)
+                        TryDelete(dep.Value);
+                }
             }
             finally
             {
@@ -748,24 +903,59 @@ public class NumSharpOpenBlasFetchTask : Task
         }
     }
 
+    /// <summary>Every native member of the wheel other than the main library — the vendored GCC runtime.</summary>
+    private static List<ZipArchiveEntry> VendoredMembers(ZipArchive zip, ZipArchiveEntry main)
+    {
+        return zip.Entries.Where(e => e != main && IsNativeMember(e)).ToList();
+    }
+
+    /// <summary>
+    /// Where a vendored member sits relative to the main library once staged: the wheel keeps the
+    /// Linux deps beside the main (RUNPATH $ORIGIN) and the macOS deps in .dylibs/ — kept as a
+    /// .dylibs/ sub-folder UNDER native/ (NuGet delivers nested paths, never a sibling folder),
+    /// exactly like fetch_openblas.py's vendored_dest; the package's loader materializes the
+    /// ../.dylibs sibling the dylib's load commands name.
+    /// </summary>
+    private static string VendoredRelativePath(string memberFullName)
+    {
+        string norm = memberFullName.Replace('\\', '/');
+        string baseName = Path.GetFileName(norm);
+        return norm.Contains("/.dylibs/") ? ".dylibs/" + baseName : baseName;
+    }
+
+    private static bool IsNativeMember(ZipArchiveEntry e)
+    {
+        string baseName = Path.GetFileName(e.FullName.Replace('\\', '/'));
+        if (string.IsNullOrEmpty(baseName) || baseName.StartsWith("."))
+            return false;
+        return baseName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+               baseName.EndsWith(".so", StringComparison.OrdinalIgnoreCase) ||
+               baseName.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase) ||
+               baseName.Contains(".so.");
+    }
+
+    private static void TryDeleteDirectory(string dir)
+    {
+        try
+        {
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, true);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
     private static ZipArchiveEntry PickNativeMember(ZipArchive zip)
     {
-        Func<ZipArchiveEntry, bool> isNative = e =>
-        {
-            string baseName = Path.GetFileName(e.FullName.Replace('\\', '/'));
-            if (string.IsNullOrEmpty(baseName) || baseName.StartsWith("."))
-                return false;
-            return baseName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
-                   baseName.EndsWith(".so", StringComparison.OrdinalIgnoreCase) ||
-                   baseName.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase) ||
-                   baseName.Contains(".so.");
-        };
-
         List<ZipArchiveEntry> candidates = zip.Entries
-            .Where(e => isNative(e) && e.FullName.Replace('\\', '/').Contains("/lib/"))
+            .Where(e => IsNativeMember(e) && e.FullName.Replace('\\', '/').Contains("/lib/"))
             .ToList();
         if (candidates.Count == 0)
-            candidates = zip.Entries.Where(isNative).ToList();
+            candidates = zip.Entries.Where(IsNativeMember).ToList();
 
         return candidates.OrderByDescending(e => e.Length).FirstOrDefault();
     }

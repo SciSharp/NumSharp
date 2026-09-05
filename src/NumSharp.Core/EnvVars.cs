@@ -168,6 +168,18 @@ namespace NumSharp
         /// </summary>
         public static bool OpenBlasBundleAutoinstall => GetBool("NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL", true);
 
+        /// <summary>
+        ///     Root of the per-user OpenBLAS cache. At RUNTIME (macOS only) it holds the relocated
+        ///     copies of the bundled dylib + its vendored Fortran runtime that the loader makes when the
+        ///     <c>.dylibs</c> folder cannot be materialized next to the dylib (read-only install, or a
+        ///     RID-specific/single-file publish's flattened layout) — under <c>dyld/&lt;sha256&gt;/</c>;
+        ///     at BUILD time it is the extracted-library cache of the version override (the
+        ///     buildTransitive props read the same variable). Env <c>NUMSHARP_OPENBLAS_CACHE_DIR</c>.
+        ///     <b>Default:</b> <c>null</c> → <c>%LOCALAPPDATA%</c> / <c>$XDG_CACHE_HOME</c> / <c>~/.cache</c>
+        ///     + <c>NumSharp/openblas</c>, else the temp directory. Example: <c>/var/cache/myapp/openblas</c>.
+        /// </summary>
+        public static string OpenBlasCacheDir => Get("NUMSHARP_OPENBLAS_CACHE_DIR");
+
         #endregion
 
         #region OpenBLAS backend — build-time (normally MSBuild buildTransitive; accessor reads the process env)

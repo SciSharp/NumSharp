@@ -346,9 +346,56 @@ jobs:
         path: ${{ github.workspace }}/**/TestResults/**/*.trx
         retention-days: 5
 
+  # The nupkg-CONSUMER gate for NumSharp.Interop.OpenBLAS, on all three OSes.
+  #
+  # Every other job consumes the package by ProjectReference, where a Content item copies files
+  # a PackageReference restore never sees — which is exactly how the macOS package shipped a
+  # dylib whose vendored Fortran runtime sat in a folder NuGet silently drops ("Library not
+  # loaded" on every Mac, green CI). This job packs the REAL nupkg into a local feed, restores
+  # it into a scratch consumer by PackageReference, and proves the bundled OpenBLAS LOADS in
+  # every layout a consumer can end up with: the portable runtimes/ tree, a read-only install,
+  # and a RID-specific (flattened) publish. macOS is the one that matters; Linux and Windows
+  # run the same script so a layout regression on any RID is caught by the PR that causes it.
+  package-consumer-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-latest, macos-latest ]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+
+    # fetch_openblas.py (stdlib-only) stages the pinned per-RID assets the script packs.
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Pack, restore by PackageReference, load in every layout
+      shell: bash
+      run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_package_consumer.sh
+
+    # The build-time version-override gate (15 steps; PyPI once, then the per-user cache). It
+    # never ran in CI before; it belongs here because the override task co-extracts the vendored
+    # Fortran runtime into its cache entry and stages it beside the override — a Linux/macOS-only
+    # branch a Windows developer box cannot exercise (the Windows DLL is self-contained).
+    - name: Build-time version override, end to end
+      shell: bash
+      run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
+
   validate-release:
-    # Interop now ships as a package, so a broken interop must block the release.
-    needs: [test, interop-test]
+    # Interop now ships as a package, so a broken interop must block the release — and so must a
+    # package that restores but cannot load its own bundled binary.
+    needs: [test, interop-test, package-consumer-smoke]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     outputs:

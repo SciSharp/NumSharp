@@ -91,8 +91,12 @@ namespace NumSharp.Interop.OpenBLAS
                     return null;
 
                 var config = OpenBlasNative.GetConfig();
+                var image = OpenBlasNative.LoadedImagePath;
+                bool relocated = !string.IsNullOrEmpty(image) &&
+                                 !string.Equals(image, OpenBlasNative.LibraryPath, StringComparison.Ordinal);
                 return $"{OpenBlasNative.LibraryPath} [symbols {OpenBlasNative.SymbolScheme}, " +
                        $"{(OpenBlasNative.IsIlp64 ? "ILP64" : "LP64")}, threads {OpenBlasNative.GetNumThreads()}]" +
+                       (relocated ? $" (mapped from {image})" : string.Empty) +
                        (config == null ? string.Empty : " " + config);
             }
         }
@@ -243,6 +247,25 @@ namespace NumSharp.Interop.OpenBLAS
         ///     this is the machine-readable form.
         /// </remarks>
         public static string LibraryPath => OpenBlasNative.IsLoaded ? OpenBlasNative.LibraryPath : null;
+
+        /// <summary>
+        ///     Full path of the file the OS loader actually mapped, or null when none is loaded.
+        /// </summary>
+        /// <remarks>
+        ///     Equals <see cref="LibraryPath"/> everywhere except on macOS when the bundled
+        ///     scipy-openblas dylib could not be loaded in place: its load commands name the vendored
+        ///     Fortran runtime through <c>@loader_path/../.dylibs/…</c>, a path NuGet never delivers,
+        ///     so when that folder cannot be created next to the dylib (a read-only install, or a
+        ///     RID-specific/single-file publish whose flattened layout puts <c>../.dylibs</c> OUTSIDE
+        ///     the application) the dylib and its dependencies are copied to a per-user cache
+        ///     (<c>NUMSHARP_OPENBLAS_CACHE_DIR</c>, else <c>~/.cache/NumSharp/openblas/dyld/&lt;sha256&gt;/</c>)
+        ///     in the exact relative layout the load commands encode, and THAT copy is mapped. It is
+        ///     verified byte-identical to <see cref="LibraryPath"/> on every load, which is why
+        ///     <see cref="LibraryPath"/> — the file a parity pin hashes — keeps naming the original.
+        ///     When the folder was writable the dependencies are symlinked in place instead and the
+        ///     two paths are equal.
+        /// </remarks>
+        public static string LoadedImagePath => OpenBlasNative.IsLoaded ? OpenBlasNative.LoadedImagePath : null;
 
         /// <summary>
         ///     True when the loaded library is the one this package bundles (as opposed to one

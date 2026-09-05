@@ -32,7 +32,10 @@ trap 'rm -rf "$WORK"' EXIT
 LOG="$WORK/build.log"
 run() { "$@" > "$LOG" 2>&1 || { cat "$LOG" >&2; fail "command failed: $*"; }; }
 
-VERSION="$(sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' "$PKG_DIR/NumSharp.Interop.OpenBLAS.csproj" | head -1)"
+# The version is the repo-root Directory.Build.props VersionPrefix (the csproj carries no
+# <Version> of its own any more) — ask MSBuild rather than grep a file that no longer has it.
+VERSION="$(cd "$REPO" && dotnet msbuild src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj -getProperty:Version | tr -d '\r')"
+[ -n "$VERSION" ] || fail "could not read the package version"
 PINNED="$(sed -n 's/.*"distribution_version": "\([^"]*\)".*/\1/p' "$HERE/openblas-manifest.json" | head -1)"
 FEED="$WORK/feed"; mkdir -p "$FEED"
 CONS="$WORK/consumer"; mkdir -p "$CONS"

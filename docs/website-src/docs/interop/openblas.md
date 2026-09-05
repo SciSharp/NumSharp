@@ -20,8 +20,10 @@ extending the seam and troubleshooting.
 
 > Bundles scipy-openblas 0.3.31.22.0 (OpenBLAS 0.3.31.dev — the build numpy 2.4.2 ships) · net8.0/net10.0.
 > Behaviour is covered by gates: [`MatmulParityBackendTests`][gate-backend] (30 tests),
-> [`OpenBlasDeliveryTests`][gate-delivery] (20), and the 15-step scripted build gate
-> [`verify_build_override.sh`][gate-build].
+> [`OpenBlasDeliveryTests`][gate-delivery] (20), the macOS vendored-runtime loader tests
+> (`OpenBlasMacOsVendoredRuntimeTests`, 21, on every OS), the 15-step scripted build gate
+> [`verify_build_override.sh`][gate-build], and the PackageReference consumer smoke
+> `verify_package_consumer.sh` (CI, all three OSes, every deployment layout).
 
 ## Why this package exists
 
@@ -210,7 +212,26 @@ build — discovery simply continues to machine tooling and, failing that, NumSh
 kernels. `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` skips the automatic install while leaving
 `OpenBlasEngine.Enable()` fully functional.
 
-<!-- Tests: BundledLibrary_ForThisRid_ReachesTheBuildOutput, AutoDiscovery_PrefersTheBundledLibrary, BundledLibrary_CanBeOptedOutOf (MatmulParityBackendTests) -->
+**The vendored Fortran runtime rides along.** The Linux and macOS wheels do not statically link
+the GCC runtime: `libgfortran` (+ `libquadmath`, `libgcc_s`) travel beside the main library under
+content-hashed names that the main's own load commands name, so a system libgfortran can never
+stand in. The package stages and pins them with the main. On Linux they sit beside it in `native/`
+and its `$ORIGIN` RUNPATH finds them. **On macOS the loader does one extra step**, because the
+layout NuGet can deliver and the layout the dylib expects disagree: the dylib says
+`@loader_path/../.dylibs/<name>` (a folder *beside* `native/`), while NuGet delivers native assets
+only from *under* `runtimes/<rid>/native/` and silently drops a sibling folder. The deps are
+therefore packed nested, as `native/.dylibs/`, and after a plain `dlopen` fails the loader
+(`MacOsVendoredRuntime`) reads the dylib's load commands and materializes the sibling: a relative
+directory symlink `runtimes/<rid>/.dylibs → native/.dylibs` when the tree is writable (the normal
+`dotnet build` / portable-publish case; nothing is written outside `runtimes/`), otherwise — a
+read-only install, or a RID-specific/single-file publish whose flattened layout puts `../.dylibs`
+*outside* the app — a per-user cache copy of the dylib plus its deps in the exact relative layout the
+load commands encode (`NUMSHARP_OPENBLAS_CACHE_DIR`, else `~/.cache/NumSharp/openblas/dyld/<sha256>/`;
+keyed by the dylib's content hash, every file byte-compared to its source on every hit). Either way
+`OpenBlasEngine.LibraryPath` keeps naming the file discovery chose — the one the parity pin hashes —
+and `OpenBlasEngine.LoadedImagePath` reports the file dyld actually mapped.
+
+<!-- Tests: BundledLibrary_ForThisRid_ReachesTheBuildOutput, AutoDiscovery_PrefersTheBundledLibrary, BundledLibrary_CanBeOptedOutOf (MatmulParityBackendTests); OpenBlasMacOsVendoredRuntimeTests (21); tools/verify_package_consumer.sh -->
 
 ### 2 · Version override (build-time, enforced)
 
@@ -570,6 +591,7 @@ the seam and is gated today — an implementation only has to supply numerics.
 | `NUMSHARP_OPENBLAS_SEARCH_PATH` | File(s)/dir(s) to scan for a CBLAS, path-separator delimited. Tried **first** (ahead of the bundled asset), non-binding — falls through when it holds no BLAS. Also the build-time read/download directory. |
 | `NUMSHARP_OPENBLAS_USE_BUNDLED=0` | Drop the bundled asset from discovery; machine tooling becomes the default. |
 | `NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL=0` | Skip the module-load auto-install; `OpenBlasEngine.Enable(...)` still works. (The pre-rename `NUMSHARP_BLAS_BUNDLE_AUTOINSTALL` and `NUMSHARP_BLAS_AUTOINSTALL` spellings are retired and ignored.) |
+| `NUMSHARP_OPENBLAS_CACHE_DIR` | Root of the per-user OpenBLAS cache: at runtime (macOS only) the relocated dylib + vendored-runtime copies under `dyld/<sha256>/`, made when the `.dylibs` folder cannot be materialized beside the dylib (read-only install, flattened publish); at build time the version override's extracted-library cache. Default: `%LOCALAPPDATA%` / `$XDG_CACHE_HOME` / `~/.cache` + `NumSharp/openblas`. |
 | `NUMSHARP_OPENBLAS_VERSION` | **Build-time**: scipy-openblas version to download from PyPI and stage over the bundle — a hard requirement; beats `<OpenBlasVersion>` metadata. |
 | `NUMSHARP_OPENBLAS_{DISTRIBUTION, FEED, SHA256, DELIVERY}` | **Build-time**: distribution pick (`64`/`32`), PyPI mirror base (needs the sha), expected extracted-lib sha256, delivery mode (`none`/`build`/`package`); each beats its `OpenBlas*` metadata twin. |
 | `OPENBLAS_HOME` / `OPENBLAS_ROOT` | Explicit OpenBLAS install root (OpenBLAS' own convention). A deliberate "use the OpenBLAS here" signal, so it ranks **above the bundle** (discovery tier 4) — not byte-parity with NumPy. |
@@ -582,6 +604,7 @@ the seam and is gated today — an implementation only has to supply numerics.
 | Symptom | Cause & fix |
 |---|---|
 | `OpenBlasEngine.Enabled` is `false` after referencing the package | No CBLAS could be found or loaded — an asset-free package build, an unsupported RID, or the opt-out variables. `OpenBlasEngine.Enable()` throws the actual reason; `OpenBlasEngine.Info` / `OpenBlasEngine.LibraryPath` say what, if anything, is loaded. |
+| macOS: `Enable()` reports the bundled dylib was tried with `Library not loaded: @loader_path/../.dylibs/…` | The vendored Fortran runtime could not be materialized where the dylib's load commands point: the `tried:` entry says why (a missing `native/.dylibs/` next to the dylib — an incomplete staging, `fetch_openblas.py --check` catches it — or a cache root that cannot be written). Point `NUMSHARP_OPENBLAS_CACHE_DIR` at a writable directory, or make `runtimes/<rid>/` writable so the loader can symlink the sibling in place. `OpenBlasEngine.LoadedImagePath` shows where a successful load was mapped from. |
 | `OpenBlasRequiredOverrideException` | The build pinned an `OpenBlasVersion` and the staged override cannot be loaded (or nothing matches its pinned sha). The pin is a contract — rebuild so the staging runs, or remove the pin. At module load this is one stderr line and an uninstalled backend, never a silent substitution. |
 | `PlatformNotSupportedException` from `Enable(coreType:)` | The named kernel needs an ISA this CPU lacks; running it would kill the process, so it is refused up front. |
 | Process dies with *illegal instruction* | An `OPENBLAS_CORETYPE` above this CPU was set in the raw environment, bypassing `Enable`'s check. Unset it or name a kernel the CPU can run. |
