@@ -1073,6 +1073,21 @@ namespace NumSharp.Interop.OpenBLAS
                 // single-file publish: Location is empty/unsupported, AppContext.BaseDirectory covers it
             }
 
+            // The runtime's own native-library search list. A single-file publish with
+            // IncludeNativeLibrariesForSelfExtract=true extracts the bundled asset into a per-app temp
+            // directory that is NEITHER AppContext.BaseDirectory NOR beside the (bundled) assembly — only
+            // this list (which the host builds from the extraction dir + the app dir) knows where it is.
+            // A plain path-form NativeLibrary.TryLoad never consults it, so it is probed explicitly.
+            if (AppContext.GetData("NATIVE_DLL_SEARCH_DIRECTORIES") is string nativeDirs)
+            {
+                foreach (var entry in nativeDirs.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var dir = entry.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    if (dir.Length > 0 && !bases.Contains(dir, StringComparer.OrdinalIgnoreCase))
+                        bases.Add(dir);
+                }
+            }
+
             return bases;
         }
 

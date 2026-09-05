@@ -861,10 +861,30 @@ namespace NumSharp
                                    => throw new NotSupportedException($"NumPy dtype '{typeStr}' is not supported by NumSharp"),
                 "c16" or "D"       => NPTypeCode.Complex, // complex128
                 "c"   or "S1"      => NPTypeCode.Char,
-                _ => throw new NotSupportedException($"dtype string '{dtype}' is not supported")
+                _ => ParseDtypeName(typeStr, dtype)
             };
 
             return (typeCode, needsByteSwap);
+        }
+
+        /// <summary>
+        ///     The NAME spellings — <c>"float64"</c>, <c>"int32"</c>, <c>"bool"</c>, <c>"complex128"</c>, <c>"float16"</c>
+        ///     (NumPy's most common way to write <c>np.frombuffer(b, dtype="float64")</c>) — parse through the same
+        ///     parser <see cref="np.dtype(string)"/> uses, so they behave exactly like their sized codes
+        ///     (<c>"&lt;f8"</c>). The sized/char codes above keep their own table because <see cref="np.dtype(string)"/>
+        ///     rejects <c>complex64</c> with its own message and the frombuffer parser must reject it identically;
+        ///     anything neither table knows keeps the verbatim "dtype string … is not supported".
+        /// </summary>
+        private static NPTypeCode ParseDtypeName(string typeStr, string dtype)
+        {
+            try
+            {
+                return np.dtype(typeStr).typecode;
+            }
+            catch (Exception e) when (e is NotSupportedException || e is ArgumentException)
+            {
+                throw new NotSupportedException($"dtype string '{dtype}' is not supported");
+            }
         }
 
         private static unsafe void ByteSwapInPlace(NDArray nd, NPTypeCode typeCode, long count)

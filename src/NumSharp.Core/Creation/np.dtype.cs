@@ -127,7 +127,7 @@ namespace NumSharp
         {
             this.type = type ?? throw new ArgumentNullException(nameof(type));
             this.typecode = type.GetTypeCode();
-            this.name = type.Name;
+            this.name = NumpyName(this.typecode);
             this.byteorder = '=';
             this.itemsize = this.typecode.SizeOf();
             this.TYPECHAR = this.typecode.ToTYPECHAR();
@@ -146,7 +146,7 @@ namespace NumSharp
 
             this.typecode = typecode;
             this.type = typecode.AsType();
-            this.name = this.type?.Name;
+            this.name = NumpyName(typecode);
             this.byteorder = '=';
             this.itemsize = typecode.SizeOf();
             this.TYPECHAR = typecode.ToTYPECHAR();
@@ -173,6 +173,20 @@ namespace NumSharp
         ///     The name of this dtype.
         /// </summary>
         public readonly string name;
+
+        /// <summary>
+        ///     NumPy's <c>dtype.name</c> spelling (<c>"float32"</c>, <c>"int64"</c>, <c>"bool"</c>, <c>"complex128"</c>) —
+        ///     the CLR <see cref="Type.Name"/> (<c>"Single"</c>) is not a NumPy name and does not round-trip through
+        ///     <see cref="np.dtype(string)"/>. The three NumSharp-only dtypes have no NumPy analog and get lowercase
+        ///     names of their own rather than the nearest NumPy stand-in (<c>uint16</c>/<c>float64</c>), which would misreport them.
+        /// </summary>
+        private static string NumpyName(NPTypeCode typecode) => typecode switch
+        {
+            NPTypeCode.Char => "char",
+            NPTypeCode.Decimal => "decimal",
+            NPTypeCode.String => "str",
+            _ => typecode.AsNumpyDtypeName(),
+        };
 
         /// <summary>
         ///     The actual type this dtype represents.

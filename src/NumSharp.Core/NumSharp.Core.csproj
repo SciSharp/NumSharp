@@ -63,7 +63,13 @@
     <!-- Ships into the NumSharp package so a downstream consumer imports the NDW013 guard: a build
          warning when [NDScoped]/[NDScopedAsync] is used but the NumSharp.Build package is not
          installed (the attributes are then inert and the temporaries leak). See build/NumSharp.targets. -->
-    <None Include="build/NumSharp.targets" Pack="true" PackagePath="build/" />
+    <!-- Under build/net8.0/, NOT the TFM-agnostic build/ root: NuGet treats a package that offers ANY
+         asset for a consumer's framework as compatible, so a root-level .targets made NumSharp "restore"
+         into netstandard2.0 / net6.0 / net7.0 projects with ZERO compile assets — the user then met a
+         bare CS0246 ("NumSharp could not be found") instead of NuGet's NU1202 naming the incompatibility.
+         Nearest-TFM selection hands build/net8.0/ to every net8.0+ consumer (net9.0, net10.0 included),
+         which is exactly the set lib/ serves; an older framework now gets no asset at all and NU1202. -->
+    <None Include="build/NumSharp.targets" Pack="true" PackagePath="build/net8.0/" />
   </ItemGroup>
 
   <!-- ==================================================================================

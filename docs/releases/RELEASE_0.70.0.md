@@ -148,6 +148,14 @@ Three living dashboards ship on the [documentation site](https://scisharp.github
 - `1088 B -> 192 B` per-`NDArray` object base size (896 B smaller) - `UnmanagedStorage`'s 15 per-dtype slice fields collapsed into one `StructLayout.Explicit` union - `8306fa63`.
 
 ### 🎯 Parity & Fixes
+- Release-candidate consumer QA (the packed 0.70.0 nupkgs consumed from real net8.0/net9.0/net10.0 projects against NumPy 2.4.2 output) - seven fixes:
+  - `np.frombuffer(bytes, "float64")` - NumPy dtype **names** (`"float64"`, `"int32"`, `"bool"`, `"complex128"`, `"float16"`) now parse like the sized codes (`"<f8"`); they threw `NotSupportedException`.
+  - `np.clip(float32, 1, 3)` / `ndarray.clip` and the arctan2-template ufuncs (`arctan2`, `copysign`, `logaddexp`, `logaddexp2`, `nextafter`) keep the array's float dtype for a weak C# int literal (NEP50), instead of promoting float32/float16 to float64.
+  - `np.dtype("f4").name` / `ToString()` render NumPy's name (`float32`), not the CLR type name (`Single`).
+  - `np.cov` / `np.corrcoef` take the BLAS product whenever the OpenBLAS backend is installed (the managed ≤16-variable Gram fast path is now no-backend only), so they are byte-identical to NumPy with the package as documented.
+  - `NumSharp.Interop.OpenBLAS` discovery probes the runtime's native search directories, so a single-file publish with `IncludeNativeLibrariesForSelfExtract=true` still finds the bundled binary (the backend silently vanished there).
+  - `poly1d.Call(x)` - the evaluation member NumPy spells `p(x)`.
+  - Package layout: `build/NumSharp.targets` and the OpenBLAS `buildTransitive/*` files ship under a `net8.0/` TFM folder, so a `netstandard2.0` / `net6.0` / `net7.0` consumer gets NuGet's `NU1202` at restore instead of a "compatible" restore with no `lib/` and a bare `CS0246` at compile.
 - `ndarray.flags` / `setflags` - full NumPy 2.4.2 parity across the whole layout/producer space, hardened by a 1104-case differential oracle (owndata/writeable/contiguity, squeeze-as-view, split-child contiguity, read-only reduction scalars) - `275f089c`, `53b5d82e`, `ca1b0fac`.
 - `searchsorted` - complex lexicographic order + `result_type` key promotion (no more silent key down-cast) + NaN-as-largest total order - `93abe13d`, `cc676ea8`, `f2cefba2`.
 - `np.take` / `np.put` index validation matches NumPy - a negative index under `mode='raise'` normalizes once (`np.take(a, [-1])` addresses the last element instead of throwing), and a non-castable float/complex index raises the verbatim `TypeError` instead of silently truncating - `fc10404d`, `88550d13`.

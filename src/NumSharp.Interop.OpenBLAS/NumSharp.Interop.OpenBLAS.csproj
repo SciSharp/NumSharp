@@ -65,9 +65,13 @@
        copy, not a second pin.
        ================================================================================== -->
   <ItemGroup>
-    <None Include="buildTransitive/NumSharp.Interop.OpenBLAS.props" Pack="true" PackagePath="buildTransitive/NumSharp.Interop.OpenBLAS.props" />
-    <None Include="buildTransitive/NumSharp.Interop.OpenBLAS.targets" Pack="true" PackagePath="buildTransitive/NumSharp.Interop.OpenBLAS.targets" />
-    <None Include="tools/openblas-manifest.json" Pack="true" PackagePath="buildTransitive/openblas-manifest.json" />
+    <!-- Under buildTransitive/net8.0/ (the three files stay side by side: the props probes the manifest via
+         $(MSBuildThisFileDirectory)), not the TFM-agnostic root — the same reason NumSharp packs
+         build/net8.0/NumSharp.targets: a root-level asset makes NuGet call the package "compatible" with a
+         netstandard2.0 / net6.0 consumer that gets no lib/ at all, swapping NU1202 for a bare CS0246. -->
+    <None Include="buildTransitive/NumSharp.Interop.OpenBLAS.props" Pack="true" PackagePath="buildTransitive/net8.0/NumSharp.Interop.OpenBLAS.props" />
+    <None Include="buildTransitive/NumSharp.Interop.OpenBLAS.targets" Pack="true" PackagePath="buildTransitive/net8.0/NumSharp.Interop.OpenBLAS.targets" />
+    <None Include="tools/openblas-manifest.json" Pack="true" PackagePath="buildTransitive/net8.0/openblas-manifest.json" />
   </ItemGroup>
 
   <ItemGroup>

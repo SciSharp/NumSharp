@@ -56,7 +56,7 @@ namespace NumSharp.Backends
             // out=/where= ride the shared binary Into-path (same compiled kernels).
             if (@out is not null || where is not null)
             {
-                var loopType = typeCode ?? PromoteATan2Binary(x1.GetTypeCode, x2.GetTypeCode);
+                var loopType = typeCode ?? PromoteATan2Binary(x1, x2);
                 return ExecuteBinaryUfuncInto(x1, x2, op,
                     x1.GetTypeCode, x2.GetTypeCode, loopType, @out, where);
             }
@@ -78,7 +78,7 @@ namespace NumSharp.Backends
         {
             var t1 = x1.GetTypeCode;
             var t2 = x2.GetTypeCode;
-            NPTypeCode resultType = typeCode ?? PromoteATan2Binary(t1, t2);
+            NPTypeCode resultType = typeCode ?? PromoteATan2Binary(x1, x2);
 
             if (x1.Shape.IsScalar && x2.Shape.IsScalar)
                 return ExecuteFloatTierScalarScalar(x1, x2, op, t1, t2, resultType);

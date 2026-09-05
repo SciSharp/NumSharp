@@ -969,8 +969,12 @@ echo "17: NDW013 warns (from the analyzer, per member, scan silent) without the 
 NWX="$WORK/noweaver_noanalyzer"
 mkdir -p "$NWX"
 NPKG="$GPF/numsharp/$CVER"
-[ -f "$NPKG/lib/net8.0/NumSharp.dll" ] && [ -f "$NPKG/build/NumSharp.targets" ] \
-  || fail "17b: the restored NumSharp package (lib/net8.0/NumSharp.dll + build/NumSharp.targets) not found under $NPKG"
+[ -f "$NPKG/lib/net8.0/NumSharp.dll" ] && [ -f "$NPKG/build/net8.0/NumSharp.targets" ] \
+  || fail "17b: the restored NumSharp package (lib/net8.0/NumSharp.dll + build/net8.0/NumSharp.targets) not found under $NPKG"
+# The targets sit under build/net8.0/ (NOT the TFM-agnostic build/ root) so that a netstandard2.0/net6.0
+# consumer gets NU1202 instead of a "compatible" restore with no lib/ — asserted here so the layout cannot
+# silently regress to the root.
+[ ! -f "$NPKG/build/NumSharp.targets" ] || fail "17b: build/NumSharp.targets must NOT sit at the TFM-agnostic build/ root (NU1202 regression for unsupported TFMs)"
 NPKGW="$(winpath "$NPKG")"
 cat > "$NWX/Consumer.csproj" <<EOF
 <Project Sdk="Microsoft.NET.Sdk">
@@ -978,7 +982,7 @@ cat > "$NWX/Consumer.csproj" <<EOF
   <ItemGroup>
     <Reference Include="NumSharp"><HintPath>$NPKGW/lib/net8.0/NumSharp.dll</HintPath></Reference>
   </ItemGroup>
-  <Import Project="$NPKGW/build/NumSharp.targets" />
+  <Import Project="$NPKGW/build/net8.0/NumSharp.targets" />
 </Project>
 EOF
 cp "$NW/S.cs" "$NWX/S.cs"

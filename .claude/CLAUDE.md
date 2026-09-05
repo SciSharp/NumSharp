@@ -831,7 +831,10 @@ division is Smith's-method `numer*(1/w_sum)` — reproduced as a reciprocal-mult
 division and decides finite-vs-inf when `fact ~ 0`. Differential-verified across 2556 cases (5 dtypes × shapes ×
 rowvar/bias/ddof × weight combos × y × layouts): bit-exact for small observation counts, otherwise within managed-GEMM
 tolerance (cov is **GEMM-bound** — as fast as `np.dot`, i.e. slower than NumPy's BLAS by default but byte-identical
-and BLAS-fast once `NumSharp.Interop.OpenBLAS` is referenced). Gate: `Statistics/np.cov.BattleTests.cs` (34). See
+and BLAS-fast once `NumSharp.Interop.OpenBLAS` is referenced — which holds ONLY because `TryGramCov`, the ≤16-variable
+managed Gram (syrk) fast path, is **gated to `TensorEngine.Blas is null`**: NumPy computes cov through BLAS, so with a
+backend installed the product must take `np.dot`; the 0.70.0 release QA caught the Gram path still winning with the
+backend present, 1–8 ULP off NumPy on 29/36 elements). Gate: `Statistics/np.cov.BattleTests.cs` (34). See
 `Statistics/np.cov.cs`.
 
 ### Math — NaN-Aware
@@ -1735,7 +1738,11 @@ reduces every pairwise contraction to a `matmul` (plus a single-operand einsum t
 sums, and transposes the terms first), or to a broadcast `multiply` when nothing is contracted. So
 the products land on `TensorEngine.Matmul`, which already dispatches on `Blas`: with
 `NumSharp.Interop.OpenBLAS` referenced the float32/float64/complex128 contractions are **byte-identical
-to NumPy**, and without it they fall to the managed GEMM (exactly as `np.matmul` itself does). There
+to NumPy's `einsum(..., optimize=True)`** — the route that also goes through tensordot/BLAS. NumPy's
+DEFAULT `einsum` (`optimize=False`) is its own C `sum_of_products` loop and is NOT BLAS-identical even
+inside NumPy (`np.einsum('ij,jk->ik', a, b)` ≠ `a @ b` bitwise there; probed 2.4.2, 0.70.0 release QA),
+so a float comparison against a plain NumPy `einsum` call is a ≤3-ULP comparison, not a byte one.
+Without the backend they fall to the managed GEMM (exactly as `np.matmul` itself does). There
 is deliberately **no `TryEinsum` seam** — einsum reaches a backend the indirect way `np.tensordot` and
 `np.linalg.multi_dot` do, through the product. The whole composition is a pure `np`-layer function —
 `np.EinsumContract` (`LinearAlgebra/np.einsum.Contract.cs`), sitting beside `np.tensordot` and

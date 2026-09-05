@@ -127,6 +127,15 @@ namespace NumSharp
         public poly1d deriv(int m = 1) => new poly1d(np.polyder(_coeffs, m));
 
         /// <summary>
+        ///     Evaluates the polynomial at <paramref name="x"/> — NumPy's <c>p(x)</c> (<c>poly1d.__call__</c>), which C#
+        ///     cannot spell as an invocation of the object itself; equivalent to <c>np.polyval(p, x)</c>.
+        /// </summary>
+        public NDArray Call(NDArray x) => np.polyval(_coeffs, x);
+
+        /// <summary>Evaluates the polynomial at a scalar — NumPy's <c>p(x)</c> for a Python float.</summary>
+        public double Call(double x) => np.polyval(_coeffs, np.array(new[] { x })).GetDouble(0);
+
+        /// <summary>
         ///     The coefficient of <c>x**k</c> (NumPy's <c>p[k]</c>): a 0-d zero of the coefficient dtype when
         ///     <paramref name="k"/> is out of <c>[0, order]</c>.
         /// </summary>

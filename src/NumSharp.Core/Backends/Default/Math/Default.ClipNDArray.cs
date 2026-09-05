@@ -286,8 +286,15 @@ namespace NumSharp.Backends
         private static NPTypeCode PromoteClipBound(NPTypeCode outType, NDArray bound)
         {
             if (bound is null) return outType;
-            if (bound.ndim == 0 && IsSameKind(outType, bound.typecode))
-                return outType;
+            if (bound.ndim == 0)
+            {
+                // NEP50: a 0-d bound is a scalar. A C# literal — np.clip(f32, 1, 3) — arrives as an int32 0-d array
+                // and must adopt the array's dtype exactly as a Python int does (NumPy: float32 stays float32),
+                // which is the value-kind rule np._FindCommonType applies to a scalar operand: a same-or-lower kind
+                // keeps outType, a HIGHER kind (a float bound on an int array) promotes the way NumPy's float64 does.
+                // The old same-kind-only test sent every int bound on a float array to float64.
+                return np._FindCommonType(new[] { outType }, new[] { bound.typecode });
+            }
             return np.result_type(outType, bound.typecode);
         }
 

@@ -147,7 +147,10 @@ namespace NumSharp
             // kernel computes it ~10x faster than routing the (M,K)@(K,M) product — with its
             // tiny inner loop and strided transposed operand — through the general GEMM.
             // Complex/float16, many variables, or a non-contiguous Xc fall back to np.dot.
-            NDArray c = resultType == NPTypeCode.Complex ? null : TryGramCov(Xc, w);
+            // With a BLAS backend installed the product MUST go through np.dot: NumPy computes cov through
+            // BLAS (gemm/syrk), so that is the only route that is byte-identical to it — the managed Gram
+            // kernel is the no-backend fast path and its accumulation order differs by ~1 ULP.
+            NDArray c = resultType == NPTypeCode.Complex || Xc.TensorEngine.Blas is not null ? null : TryGramCov(Xc, w);
             if (c is null)
             {
                 NDArray Xt = w is null ? Xc.T : (Xc * w).T;
