@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Media.Imaging;
+using Avalonia.VisualTree;
 using NumSharp.LifeAndPong.Models;
 using NumSharp.LifeAndPong.Views;
 
@@ -21,6 +22,7 @@ public sealed class VisualSmokeTests
             var window = new Window { Width = 1440, Height = 900, Content = surface };
             window.Show(); surface.Focus();
             Capture(window, "preview.ready.png");
+            AssertTextOutsideArena(window, surface);
             Assert.AreEqual(RunState.Ready, surface.Session.State);
             // Actual routed mouse input to a real accessible button: one click must launch.
             Click(window, surface.PrimaryButton.TranslatePoint(new Point(surface.PrimaryButton.Bounds.Width / 2, surface.PrimaryButton.Bounds.Height / 2), window)!.Value);
@@ -47,21 +49,69 @@ public sealed class VisualSmokeTests
             }
             Assert.IsTrue(surface.Session.Destroyed > 0);
             Capture(window, "preview.png");
+            AssertTextOutsideArena(window, surface);
             window.Width = 1120; window.Height = 700;
             Capture(window, "preview.minimum.png");
             Assert.IsTrue(surface.Arena.WorldBounds.Width > 800);
             surface.SuspendPlay(); Capture(window, "preview.paused.png");
+            AssertTextOutsideArena(window, surface);
             // Tab enters native controls and focus is visible; it must not launch accidentally.
             surface.Focus(); Press(window, Key.Tab); Release(window, Key.Tab);
             Assert.AreEqual(RunState.Paused, surface.Session.State);
             for (var i = surface.Session.Lives; i > 0; i--) ArcadeSessionTests.Miss(surface.Session);
             surface.AdvanceSimulation(1d / 120); Capture(window, "preview.gameover.png");
+            AssertTextOutsideArena(window, surface);
             Assert.AreEqual(RunState.GameOver, surface.Session.State);
             surface.Focus(); Press(window, Key.Enter); Release(window, Key.Enter);
             Assert.AreEqual(RunState.Playing, surface.Session.State); Assert.AreEqual(3, surface.Session.Lives); Assert.AreEqual(0L, surface.Session.Score);
             window.Content = null; Assert.IsFalse(surface.HasTransientInputForTesting); Assert.AreEqual(RunState.Paused, surface.Session.State);
             window.Close();
         }, CancellationToken.None);
+    }
+    [TestMethod]
+    public async Task Milestone_Styles_Escalate_Without_Text_Or_Gameplay_Mutation()
+    {
+        await using var session = HeadlessUnitTestSession.StartNew(typeof(HeadlessAppBuilder));
+        await session.Dispatch(() =>
+        {
+            var profile = new PlayerProfile();
+            using var surface = new GameSurface(false, profile, new SilentGameAudio());
+            var window = new Window { Width = 1440, Height = 900, Content = surface }; window.Show();
+            foreach (var threshold in new[] { 20, 50, 100 })
+            {
+                surface.Session.NewRun(101); surface.Arena.ClearEffects();
+                for (var count = 0; count < threshold; count++)
+                { ArcadeSessionTests.Hit(surface.Session); surface.AdvanceSimulation(1d / 120); }
+                surface.Session.Life.ReplenishTo(160); // Deterministic presentation fixture, not a claimed human record.
+                surface.AdvanceSimulation(0);
+                var state = (surface.Session.Ball, surface.Session.Velocity, surface.Session.Score, surface.Session.Life.Generation);
+                surface.Arena.AdvanceEffects(.12);
+                Assert.AreEqual(state, (surface.Session.Ball, surface.Session.Velocity, surface.Session.Score, surface.Session.Life.Generation));
+                Assert.IsTrue(surface.Arena.SparkCount > 0); Assert.AreEqual(ArcadeSession.TierForHits(threshold), surface.Arena.WaveCount);
+                Capture(window, $"preview.milestone{threshold}.png");
+                AssertTextOutsideArena(window, surface);
+                Assert.AreEqual(.7, (surface.Arena.PhaseBoundaryX - surface.Arena.WorldBounds.X) / surface.Arena.WorldBounds.Width, .00001);
+                ArcadeSessionTests.PaddleHit(surface.Session); surface.AdvanceSimulation(1d / 120);
+                Assert.AreEqual(0, surface.Arena.SparkCount); Assert.AreEqual(0, surface.Arena.WaveCount);
+            }
+            profile.ReducedMotion = true;
+            for (var i = 0; i < 100; i++) { ArcadeSessionTests.Hit(surface.Session); surface.AdvanceSimulation(1d / 120); }
+            Assert.AreEqual(0, surface.Arena.SparkCount); Assert.AreEqual(0, surface.Arena.WaveCount);
+            Assert.AreEqual(3, surface.Session.EffectTier);
+            Capture(window, "preview.milestone.reduced.png");
+            AssertTextOutsideArena(window, surface);
+            window.Close();
+        }, CancellationToken.None);
+    }
+    private static void AssertTextOutsideArena(Window window, GameSurface surface)
+    {
+        var arena = new Rect(surface.Arena.TranslatePoint(surface.Arena.WorldBounds.TopLeft, window)!.Value, surface.Arena.WorldBounds.Size);
+        foreach (var text in surface.GetVisualDescendants().OfType<TextBlock>())
+        {
+            if (!text.IsVisible || text.GetVisualAncestors().OfType<Control>().Any(control => !control.IsVisible) || text.Bounds.Width == 0) continue;
+            var bounds = new Rect(text.TranslatePoint(new Point(0, 0), window)!.Value, text.Bounds.Size);
+            Assert.IsFalse(bounds.Intersects(arena), $"Text intrudes into playfield: {text.Text}");
+        }
     }
 
     [TestMethod]

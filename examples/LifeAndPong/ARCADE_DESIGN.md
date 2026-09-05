@@ -1,7 +1,7 @@
 # Life Arcade — adopted game-design baseline
 
-Status: design adopted by the Lead under the owner's delegated design authority.
-This document specifies the **next game**, not the behavior of the existing executable.
+Status: adopted baseline, amended by owner steering `DEC-life-arcade-steering-005`.
+Implementation and fresh QA are in progress; historical packages are not evidence of this revision.
 
 - Work: `WORK-legacy` — NumSharp Life Arcade
 - Design job: `JOB-life-arcade-design-003`
@@ -12,8 +12,8 @@ This document specifies the **next game**, not the behavior of the existing exec
 
 ## 1. The game in one sentence
 
-Defend the right half with a paddle, send one ball into a living colony on the
-left, and build a doubling score chain by shattering cells without missing.
+Defend the right 30% with a paddle, send one ball into a living colony covering
+the left 70%, and build an escalating score within each shot into the colony.
 
 The colony is the opponent. There is **one arena, one ball, one player paddle,
 one score, and one shared rhythm**. There is no AI paddle and no separate Life
@@ -27,24 +27,26 @@ left; the ball bounces off and destroys cells; destruction earns escalating
 `1, 2, 4` rewards; a sparse colony receives new cells. The owner delegated the
 remaining design to the Lead.
 
-The following are **Lead design decisions**, not quotations of owner approval:
-doubling per-cell awards; a chain that survives successful returns and resets on
-a miss; a 256-point per-cell ceiling; three lives; population thresholds;
-sector progression; boundary behavior; anti-stall assistance; presentation and
-controls. Numeric values below are first-playtest tuning values, not evidence
-of a proven difficulty balance.
+The owner subsequently directed a 70/30 split, a per-paddle-contact reset,
+the award sequence `1, 2, n+2`, a text-free playfield, and escalating effects at
+20, 50 and 100 cells destroyed between paddle contacts. Interpret the explicit
+sequence as `+1, +2, +4, +6, +8, ...`, not powers of two. These requirements
+supersede the former rally-long doubling chain and 50/50 layout.
+
+Three lives, population thresholds, sector progression, boundary behavior,
+anti-stall assistance, effect art direction and controls remain Lead design
+decisions. Numeric tuning values are not evidence of a proven difficulty balance.
 
 ## 2. The central rhythm
 
-### GROW — ball in the right half
+### GROW — ball in the right 30%
 
 The colony advances through Conway B3/S23 generations and visibly breathes.
 The player anticipates the returning ball and moves the right-hand paddle to
 send it back. Breathing changes brightness and a subtle halo, **not collision
-geometry**. Births and deaths interpolate visually between authoritative grid
-states. Ordinary Life births, deaths and replenishment never award points.
+geometry**. Ordinary Life births, deaths and replenishment never award points.
 
-### SHATTER — ball in the left half
+### SHATTER — ball in the left 70%
 
 The current colony freezes immediately. It becomes a solid destructible field.
 The ball reflects from live cells, destroys contacted cells, emits a short
@@ -57,39 +59,43 @@ As the ball returns right, the damaged colony starts evolving from exactly the
 surviving cells. Damage therefore changes the future opponent. Replenishment
 can reinforce the survivors but does not replace the whole board.
 
-The phase is determined by the ball's **center crossing the center line**, with
-direction-aware crossing events. The center line is not a wall. A clear strip
-between the colony and center prevents new cells from touching the ball as the
+The phase is determined by the ball's **center crossing the 70% boundary**, with
+direction-aware crossing events. This boundary is not a wall. A clear strip
+between the colony and boundary prevents new cells from touching the ball as the
 phase changes. The simulation splits a time step at a crossing: it never runs
 a whole generation on the wrong side or accumulates a backlog while frozen.
 
-## 3. Scoring and the reason to keep a rally alive
+## 3. Scoring and cells per shot
 
 The awards for successive ball-destroyed cells are:
 
-`+1, +2, +4, +8, +16, +32, +64, +128, +256, +256, ...`
+`+1, +2, +4, +6, +8, +10, ...`
 
 These are **individual awards**, not cumulative totals. The first three hits
 produce a total score of `7`. The HUD shows both total score and **Next cell +N**.
 
-- The chain persists across center crossings and successful paddle returns.
+- A physical paddle-ball collision resets the next award to `+1`, the shot's
+  destroyed-cell count to zero, and its active effect tier to baseline.
+- Crossing the 70% boundary by itself does not reset the counter.
 - Missing the paddle resets the next award to `+1` and consumes one life.
 - Previously earned score is never confiscated.
 - Walls, paddle hits, Life deaths, births and spawns score zero.
-- The per-cell ceiling keeps long rallies valuable without exponential overflow
-  or unreadable numbers. Track total score in a saturating 64-bit integer.
+- There is no 256-point gameplay ceiling. The next award adds two after the
+  initial one-to-two step. Saturating 32-bit awards and 64-bit total score
+  prevent integer wraparound in extreme runs.
 - A cell can score once per live incarnation. A destroyed location that later
   becomes alive through Life or replenishment can legitimately score again.
 - Simultaneous distinct cell contacts score separately in deterministic contact
   order; repeated overlap with a now-dead cell cannot duplicate a reward.
 
-Resetting on every return right was considered and rejected: many honest shots
-will hit one exposed cell and rebound immediately, making doubling almost
-invisible. A rally-long chain rewards the player's sustained control instead.
+Twenty cell hits in one shot total 381 points; 50 total 2451; 100 total 9901.
+The milestone-hit awards are respectively +38, +98 and +198. Store best shot
+length separately from total cells destroyed. Keep old-version local records,
+but do not compare their scores with this changed ruleset.
 
 ## 4. The living opponent and replenishment
 
-The colony uses a bounded 28-column by 32-row field: 896 cells. Conway's B3/S23
+The colony uses a bounded 42-column by 32-row field: 1344 cells. Conway's B3/S23
 rules remain genuine; cells outside the field are dead, not wrapped to the
 opposite edge. A bounded colony makes the arcade's physical boundary legible.
 
@@ -99,7 +105,7 @@ must fit the grid and never silently erase survivors.
 
 When population drops below **64**, queue a replenishment burst:
 
-1. During active GROW time, show a subtle 250 ms birth cue at available sites.
+1. During active GROW time, show a subtle 250 ms birth cue in the external HUD.
 2. Recheck population. If it has recovered to at least 64 naturally, cancel.
 3. Otherwise add cells to bring population to **160**, preserving survivors.
 4. Use small separated growth-capable clusters first; fill remaining valid dead
@@ -116,9 +122,9 @@ ball; new life arrives in the next GROW interval. Spawn events award no points.
 
 ## 5. Physics: physical contacts, arcade pacing
 
-Use one logical 1600 by 900 arena split equally at x=800. The cell field occupies
-a padded area in the left half, with a clear approach strip of at least two
-ball diameters before the center. Top, bottom and left boundaries reflect. The
+Use one logical 1600 by 900 arena split 70/30 at x=1120. The cell field occupies
+a padded area in the left 70%, with a clear approach strip of at least two
+ball diameters before the boundary. Top, bottom and left boundaries reflect. The
 right edge behind the player is the only loss boundary.
 
 - Fixed 120 Hz simulation, independent of render rate; collision stepping must
@@ -187,18 +193,41 @@ widgets interrupt a run.
 Visual direction: an ink-dark field, mint living cells, warm amber/coral impact
 states, an unmistakable bright ball, and a slim player paddle. Use our own
 vector drawing, disciplined contrast, subtle depth and restrained particles.
-The phase has both a word and a visual change: **GROW / SHATTER**, not color alone.
+The phase has both a word in the external HUD and a visual change: **GROW / SHATTER**,
+not color alone. All text is outside the playfield in every state, including
+score feedback, phase labels, population counts, sector notices and menus.
+Start, pause, confirmation and game-over controls occupy a dock beside the
+arena rather than overlaying it. During play the dock collapses.
 
-- Breathing is a slow low-amplitude pulse. Growth fades in; frozen cells sharpen
+- Breathing is a slow low-amplitude pulse; frozen cells sharpen
   into a crisp stable target. Never pulse or resize the authoritative collider.
-- Show small `+N` labels near impacts and a clear next-award change in the HUD.
+- Show the latest `+N`, shot count and next award in the external HUD, never
+  floating over cells or the ball.
 - A short ball trail communicates direction without concealing the ball.
 - Use brief pitched impact sounds, rising along the combo ladder, and distinct
-  paddle, miss and replenishment cues. Cap pitch escalation with the award cap.
+  paddle, miss and replenishment cues. Cap pitch escalation independently of score.
   Audio is optional, locally generated/bundled, and independently mutable.
 - Screen movement is cosmetic and restrained. Reduced-motion disables shaking,
   breathing pulses and excessive particles; it preserves clear static phase cues.
   No full-screen flashing or mandatory hit-stop in the first version.
+
+### Shot milestones: 20 / 50 / 100
+
+Milestones count ball-destroyed cells since the last paddle hit, not lifetime
+score, natural Life deaths, or number of paddle returns. Each fires once per shot:
+
+- **20 — Surge:** golden impact shards, a brighter trail, one expanding ring,
+  corner energy marks and a short ascending three-note cue.
+- **50 — Overdrive:** violet/pink streak particles, dual-color trail, two
+  expanding rings, stronger corner marks and a four-note arpeggio.
+- **100 — Supernova:** prismatic shards, a three-color trail, three layered
+  shockwaves, full tier corner marks and a five-note octave-spanning cue.
+
+These tiers change neither ball trajectory nor collision rules. Draw the white
+ball last; bound particles and rings; avoid full-screen fills/flashes. The HUD
+names the tier outside the arena. Reduced-motion uses static tier colors/corner
+marks and HUD feedback without trails, particles or expanding rings. A paddle
+contact or miss immediately clears the active tier and residual attack effects.
 
 Desktop controls: W/S or Up/Down, or pointer targeting for the right paddle;
 Space to launch/pause/resume; Escape to pause/open the menu. An active run must
@@ -243,8 +272,8 @@ The replacement implementation must prove:
 1. Conway steps occur only during active GROW; transitions, pauses and long
    frames cannot advance the frozen board or replay missed generations.
 2. Destroyed cells mutate the next growing colony, and natural deaths score zero.
-3. First hit awards 1, second 2, third 4; total is 7; crossing/paddle hits preserve
-   the chain; a miss resets it; the 256 ceiling and total-score overflow are safe.
+3. Awards follow 1,2,4,6,8,...; first three total 7. Crossings preserve the
+   counter; each paddle contact and each miss reset it. Awards and score cannot overflow.
 4. Duplicate contacts cannot re-score cells. Shared corners, fast travel and
    moving-paddle end contacts have deterministic, non-tunneling outcomes.
 5. Low population queues a finite burst, preserves live cells, cancels if the
@@ -255,8 +284,10 @@ The replacement implementation must prove:
    over deterministic seeds; cosmetic changes leave gameplay snapshots intact.
 8. All three lives, serves, pause/resume, game-over and retry work through real
    input routes, including lost focus, aliased keys and pointer capture loss.
-9. UI at default and minimum supported desktop sizes remains readable, including
-   long scores, high-contrast and reduced-motion states.
+9. UI at default and minimum supported desktop sizes remains readable, with all
+   text outside the arena, including docked menus and milestone feedback.
+   Verify exact 70/30 geometry, extended-cell collisions, 20/50/100 event
+   thresholds, style resets, high-contrast and reduced-motion states.
 10. A fresh self-contained Windows ZIP contains the replacement game and matching
     instructions, with independent code QA and documentation QA approvals.
 
@@ -267,11 +298,8 @@ do not call the arcade balanced merely because automated tests pass.
 
 ## 10. Delivery state
 
-This turn adopts the game design and supplies a scripted visual study of the
-shared-arena rhythm. The study illustrates three separate hits awarding 1, 2
-and 4 across successive returns; it is **not the C#/NumSharp game or a physics
-acceptance test**. Its field and pacing are scaled for illustration.
-
-The existing Windows executable still implements the rejected separate-game
-interpretation. Rebuilding it to this baseline, playtesting the balance, and
-obtaining fresh code/documentation gates remain implementation work.
+The initial scripted visual study and the e6b99006 executable predate the latest
+owner steering. They are not current scoring/layout acceptance evidence. The
+revised C# build must pass fresh code and documentation gates. Milestone image
+fixtures exercise real event/rendering paths but do not claim human-earned
+20/50/100-hit records. Human difficulty balance remains subject to playtesting.

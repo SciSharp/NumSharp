@@ -3,18 +3,18 @@
 namespace NumSharp.LifeAndPong.Models;
 
 public enum RunState { Ready, Playing, Paused, GameOver }
-public enum ArcadeEventKind { Cell, Paddle, Wall, Birth, Miss, Sector, GameOver }
-public readonly record struct ArcadeEvent(ArcadeEventKind Kind, Vector2 Position, int Value = 0);
+public enum ArcadeEventKind { Cell, Paddle, Wall, Birth, Miss, Sector, GameOver, Milestone }
+public readonly record struct ArcadeEvent(ArcadeEventKind Kind, Vector2 Position, int Value = 0, int ShotHits = 0);
 
 /// <summary>Authoritative, seeded arcade state. Rendering and sound cannot advance this clock.</summary>
 public sealed class ArcadeSession : IDisposable
 {
-    public const float Width = 1600, Height = 900, Midline = 800;
+    public const float Width = 1600, Height = 900, ColonyFraction = .70f, Midline = Width * ColonyFraction;
     public const float Radius = 10, PaddleX = 1544, PaddleWidth = 18, PaddleHeight = 144;
     public const float CellPitch = 24, CellSize = 22, FieldX = 48, FieldY = 66;
-    public const int Columns = 28, Rows = 32, LowPopulation = 64, TargetPopulation = 160;
+    public const int Columns = 42, Rows = 32, LowPopulation = 64, TargetPopulation = 160;
     public const float Jitter = .02f;
-    public const string Version = "life-arcade-1";
+    public const string Version = "life-arcade-2";
     private const float MaxPaddleSpeed = 1180, Acceleration = 7000;
     private readonly Queue<ArcadeEvent> _events = new();
     private Random _random = null!;
@@ -39,6 +39,8 @@ public sealed class ArcadeSession : IDisposable
     public int Destroyed { get; private set; }
     public int Chain { get; private set; }
     public int BestChain { get; private set; }
+    public int EffectTier => TierForHits(Chain);
+    public static int TierForHits(int hits) => hits >= 100 ? 3 : hits >= 50 ? 2 : hits >= 20 ? 1 : 0;
     public int Sector { get; private set; }
     public int PendingSector => 1 + Destroyed / 40;
     public float SectorSpeed => MathF.Min(1000, 640 * MathF.Pow(1.06f, Math.Min(Sector - 1, 20)));
@@ -144,7 +146,7 @@ public sealed class ArcadeSession : IDisposable
         _birthClock += delta;
         if (_birthClock < .25) return;
         Life.ReplenishTo(TargetPopulation); _birthClock = 0; _birthCooldown = .75;
-        Emit(ArcadeEventKind.Birth, new Vector2(380, 450), Life.LiveCount);
+        Emit(ArcadeEventKind.Birth, new Vector2(Midline / 2, 450), Life.LiveCount);
     }
 
     private void MovePaddle(float dt)
@@ -187,6 +189,7 @@ public sealed class ArcadeSession : IDisposable
         response += tangent * Vector2.Dot(motion, tangent) * .18f;
         Velocity = Rebound(response, CurrentSpeed(), normal);
         Ball += normal * (depth + .02f);
+        NextAward = 1; Chain = 0;
         Emit(ArcadeEventKind.Paddle, Ball);
     }
 
@@ -258,11 +261,12 @@ public sealed class ArcadeSession : IDisposable
     {
         var award = NextAward;
         Score = Score > long.MaxValue - award ? long.MaxValue : Score + award;
-        NextAward = Math.Min(256, NextAward * 2);
+        NextAward = NextAward == 1 ? 2 : NextAward > int.MaxValue - 2 ? int.MaxValue : NextAward + 2;
         if (Destroyed < int.MaxValue - 1) Destroyed++;
         if (Chain < int.MaxValue) Chain++;
         BestChain = Math.Max(BestChain, Chain);
         Emit(ArcadeEventKind.Cell, position, award);
+        if (Chain is 20 or 50 or 100) Emit(ArcadeEventKind.Milestone, position, Chain);
     }
 
     private void AdoptSector()
@@ -287,7 +291,7 @@ public sealed class ArcadeSession : IDisposable
     private void Emit(ArcadeEventKind kind, Vector2 position, int value = 0)
     {
         if (_events.Count == 128) _events.Dequeue();
-        _events.Enqueue(new ArcadeEvent(kind, position, value));
+        _events.Enqueue(new ArcadeEvent(kind, position, value, Chain));
     }
     internal void SetBallForTesting(Vector2 ball, Vector2 velocity)
     {

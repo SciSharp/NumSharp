@@ -11,7 +11,7 @@ public sealed class PlayerProfile
     public bool ReducedMotion { get; set; }
     public bool HighContrast { get; set; }
     public List<RunResult> Results { get; private set; } = [];
-    public long Best => Results.Count == 0 ? 0 : Results.Max(r => r.Score);
+    public long Best => Results.Where(r => r.Version == ArcadeSession.Version).Select(r => r.Score).DefaultIfEmpty(0).Max();
     public string? SaveError { get; private set; }
     public PlayerProfile(string? path = null)
     {
@@ -24,7 +24,7 @@ public sealed class PlayerProfile
             if (data is null) return;
             Sound = data.Sound; ReducedMotion = data.ReducedMotion; HighContrast = data.HighContrast;
             Results = (data.Results ?? []).Where(r => r is not null && r.Score >= 0 && r.Chain >= 0 && r.Destroyed >= 0 && r.Sector >= 1)
-                .OrderByDescending(r => r.Score).Take(5).ToList();
+                .GroupBy(r => r.Version).SelectMany(group => group.OrderByDescending(r => r.Score).Take(5)).Take(50).ToList();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
         { SaveError = "Local scores could not be loaded. Play is still available."; }
@@ -33,7 +33,7 @@ public sealed class PlayerProfile
     public void Record(ArcadeSession session)
     {
         Results.Add(new RunResult(session.Score, session.BestChain, session.Destroyed, session.Sector, session.Seed, ArcadeSession.Version));
-        Results = Results.OrderByDescending(r => r.Score).Take(5).ToList(); Save();
+        Results = Results.GroupBy(r => r.Version).SelectMany(group => group.OrderByDescending(r => r.Score).Take(5)).Take(50).ToList(); Save();
     }
     public void Save()
     {

@@ -47,25 +47,66 @@ public sealed class ArcadeSessionTests
     {
         using var game = new ArcadeSession();
         Hold(game, true, .15);
-        game.SetBallForTesting(new Vector2(801, 500), new Vector2(-640, 0));
+        game.SetBallForTesting(new Vector2(ArcadeSession.Midline + 1, 500), new Vector2(-640, 0));
         game.Advance(.08);
         Assert.IsTrue(game.Frozen); Assert.AreEqual(0L, game.Life.Generation);
-        game.SetBallForTesting(new Vector2(799, 500), new Vector2(640, 0)); game.Advance(.03);
+        game.SetBallForTesting(new Vector2(ArcadeSession.Midline - 1, 500), new Vector2(640, 0)); game.Advance(.03);
         Assert.IsTrue(game.Growing); Assert.AreEqual(1L, game.Life.Generation);
     }
 
     [TestMethod]
-    public void Cell_Awards_Double_Across_Returns_Cap_And_Saturate()
+    public void Cell_Awards_Add_Two_And_Reset_Only_On_Paddle_Contact_Or_Miss()
     {
         using var game = new ArcadeSession();
         Hit(game); Assert.AreEqual(1L, game.Score);
         Hold(game, true, .02); Hit(game); Assert.AreEqual(3L, game.Score);
-        Hit(game); Assert.AreEqual(7L, game.Score); Assert.AreEqual(8, game.NextAward);
-        for (var i = 0; i < 12; i++) Hit(game);
-        Assert.AreEqual(256, game.NextAward);
-        var before = game.Score; Hit(game); Assert.AreEqual(before + 256, game.Score);
+        Hit(game); Assert.AreEqual(7L, game.Score); Assert.AreEqual(6, game.NextAward);
+        Hit(game); Assert.AreEqual(13L, game.Score); Assert.AreEqual(8, game.NextAward);
+        for (var i = 4; i < 100; i++) Hit(game);
+        Assert.AreEqual(9901L, game.Score); Assert.AreEqual(200, game.NextAward);
+        var before = game.Score;
+        PaddleHit(game); Assert.AreEqual(before, game.Score); Assert.AreEqual(1, game.NextAward); Assert.AreEqual(0, game.Chain); Assert.AreEqual(0, game.EffectTier);
+        Hit(game); Assert.AreEqual(before + 1, game.Score);
+        Hit(game);
         game.SetScoreForTesting(long.MaxValue - 2); Hit(game); Assert.AreEqual(long.MaxValue, game.Score);
         Miss(game); Assert.AreEqual(1, game.NextAward); Assert.AreEqual(0, game.Chain);
+    }
+
+    [TestMethod]
+    public void Colony_Really_Fills_Seventy_Percent_And_New_Columns_Collide()
+    {
+        using var game = new ArcadeSession();
+        Assert.AreEqual(.7, ArcadeSession.Midline / ArcadeSession.Width, .00001);
+        Assert.AreEqual(42, game.Life.Columns);
+        Assert.IsTrue(ArcadeSession.FieldX + ArcadeSession.Columns * ArcadeSession.CellPitch <= ArcadeSession.Midline - 2 * ArcadeSession.Radius);
+        game.Life.Clear(); game.Life.SetCell(15, 40, true);
+        game.SetBallForTesting(new Vector2(ArcadeSession.FieldX + 40 * 24 + 33.5f, ArcadeSession.FieldY + 15 * 24 + 12), new Vector2(-640, 0));
+        game.Advance(1d / 120);
+        Assert.AreEqual(1, game.Destroyed); Assert.IsFalse(game.Life.IsAlive(15, 40));
+        game.SetBallForTesting(new Vector2(900, 450), new Vector2(640, 0));
+        Assert.IsTrue(game.Frozen, "The newly added Life area is not player-side GROW.");
+    }
+
+    [TestMethod]
+    public void Milestones_Fire_Once_Per_Shot_At_20_50_100_And_Can_Be_Earned_Again()
+    {
+        using var game = new ArcadeSession();
+        for (var shot = 0; shot < 2; shot++)
+        {
+            var milestones = new List<int>();
+            for (var count = 1; count <= 102; count++)
+            {
+                Hit(game);
+                while (game.TryTakeEvent(out var item)) if (item.Kind == ArcadeEventKind.Milestone)
+                { milestones.Add(item.Value); Assert.AreEqual(count, item.ShotHits); }
+                Assert.AreEqual(count >= 100 ? 3 : count >= 50 ? 2 : count >= 20 ? 1 : 0, game.EffectTier);
+            }
+            CollectionAssert.AreEqual(new[] { 20, 50, 100 }, milestones);
+            PaddleHit(game);
+            Assert.AreEqual(0, game.EffectTier); Assert.AreEqual(1, game.NextAward);
+            while (game.TryTakeEvent(out _)) { }
+        }
+        Assert.AreEqual(102, game.BestChain);
     }
 
     [TestMethod]
@@ -193,12 +234,14 @@ public sealed class ArcadeSessionTests
     }
     internal static void Miss(ArcadeSession game)
     { game.SetBallForTesting(new Vector2(1612, 450), new Vector2(640, 0)); game.Advance(1d / 120); }
+    internal static void PaddleHit(ArcadeSession game)
+    { game.SetBallForTesting(new Vector2(1515, game.PaddleY), new Vector2(640, 0)); game.Advance(.035); }
     private static void Hold(ArcadeSession game, bool right, double seconds)
     {
         while (seconds > 1e-8)
         {
             var dt = Math.Min(1d / 120, seconds);
-            game.SetBallForTesting(new Vector2(right ? 1000 : 765, 450), new Vector2(right ? 640 : -640, 0));
+            game.SetBallForTesting(new Vector2(ArcadeSession.Midline + (right ? 150 : -35), 450), new Vector2(right ? 640 : -640, 0));
             game.Advance(dt); seconds -= dt;
         }
     }

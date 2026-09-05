@@ -27,17 +27,22 @@ public sealed class GameSurface : UserControl, IDisposable
     private readonly TextBlock _sector = Label("SECTOR 01", 13, ArenaView.Secondary);
     private readonly TextBlock _best = Label("BEST 0", 12, ArenaView.Secondary);
     private readonly TextBlock _message = Label("MOVE: W / S · ↑ / ↓ · MOUSE", 12, ArenaView.Secondary);
-    private readonly TextBlock _overlayTitle = Label("LIFE ARCADE", 34, Brushes.White);
-    private readonly TextBlock _overlayDetail = Label("", 16, ArenaView.Secondary);
+    private readonly TextBlock _phaseStatus = Label("COLONY · 70%", 12, ArenaView.Mint);
+    private readonly TextBlock _hitFeedback = Label("20 SURGE · 50 OVERDRIVE · 100 SUPERNOVA", 13, ArenaView.Coral);
+    private readonly TextBlock _overlayTitle = Label("LIFE ARCADE", 23, Brushes.White);
+    private readonly TextBlock _overlayDetail = Label("", 14, ArenaView.Secondary);
     private readonly TextBlock _overlayStats = Label("", 13, ArenaView.Mint);
     private readonly Border _overlay;
     private readonly Button _primary, _restart, _pause, _cancel, _title;
     private readonly CheckBox _sound, _motion, _contrast;
     private readonly ProgressBar _progress;
+    private readonly Grid _playLayout;
     private long _lastTimestamp;
     private double _accumulator;
     private bool _disposed, _confirmRestart, _recorded;
     private IPointer? _pointer;
+    private double _feedbackSeconds;
+    private string? _feedback;
 
     public GameSurface() : this(true, PlayerProfile.OpenLocal(), App.AudioFactory()) { }
     internal GameSurface(bool startAnimation) : this(startAnimation, new PlayerProfile(), new SilentGameAudio()) { }
@@ -67,11 +72,11 @@ public sealed class GameSurface : UserControl, IDisposable
         sectorGroup.Children.Add(_sector); sectorGroup.Children.Add(_progress);
         var hud = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*,Auto,Auto"), ColumnSpacing = 28, Margin = new Thickness(28, 18, 28, 14) };
         Add(hud, heading, 0); Add(hud, scoreGroup, 1); Add(hud, lifeGroup, 2); Add(hud, sectorGroup, 3); Add(hud, _pause, 4);
-        var menu = new StackPanel { Spacing = 16 };
+        var menu = new StackPanel { Spacing = 14 };
         menu.Children.Add(_overlayTitle); menu.Children.Add(_overlayDetail); menu.Children.Add(_overlayStats);
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+        var actions = new StackPanel { Spacing = 8 };
         actions.Children.Add(_primary); actions.Children.Add(_restart); actions.Children.Add(_cancel); actions.Children.Add(_title); menu.Children.Add(actions);
-        var options = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 18 };
+        var options = new StackPanel { Spacing = 8 };
         options.Children.Add(_sound); options.Children.Add(_motion); options.Children.Add(_contrast);
         menu.Children.Add(new Border { Background = ArenaView.Line, Height = 1, Margin = new Thickness(0, 2) }); menu.Children.Add(options);
         _overlay = new Border
@@ -80,18 +85,20 @@ public sealed class GameSurface : UserControl, IDisposable
             BorderBrush = ArenaView.Line,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(20),
-            Padding = new Thickness(30),
-            MaxWidth = 590,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            Child = menu
+            Padding = new Thickness(20),
+            Width = 320,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Child = new ScrollViewer { Content = menu, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled }
         };
-        var field = new Grid { Margin = new Thickness(22, 0, 22, 0) };
-        field.Children.Add(_arena); field.Children.Add(_overlay);
+        _playLayout = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(22, 0, 22, 0) };
+        _playLayout.Children.Add(_arena); Add(_playLayout, _overlay, 1);
+        var status = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 16, Margin = new Thickness(28, 0, 28, 10) };
+        status.Children.Add(_phaseStatus); Add(status, _hitFeedback, 1);
         var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(28, 8, 28, 16) };
         footer.Children.Add(_message); Add(footer, Label("GROW → SHATTER → REPEAT", 11, ArenaView.Mint), 1);
-        var layout = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
-        layout.Children.Add(hud); Grid.SetRow(field, 1); layout.Children.Add(field); Grid.SetRow(footer, 2); layout.Children.Add(footer);
+        var layout = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto") };
+        layout.Children.Add(hud); Grid.SetRow(status, 1); layout.Children.Add(status); Grid.SetRow(_playLayout, 2); layout.Children.Add(_playLayout); Grid.SetRow(footer, 3); layout.Children.Add(footer);
         Content = layout; _timer.Tick += OnFrame; Refresh();
     }
     internal ArcadeSession Session => _session;
@@ -99,6 +106,8 @@ public sealed class GameSurface : UserControl, IDisposable
     internal Button PrimaryButton => _primary;
     internal Button PauseButton => _pause;
     internal Button RestartButton => _restart;
+    internal Border MenuPanel => _overlay;
+    internal TextBlock HitFeedback => _hitFeedback;
     internal bool HasTransientInputForTesting => _held.Count > 0 || _pointer is not null;
     private static TextBlock Label(string text, double size, IBrush color) => new() { Text = text, FontSize = size, Foreground = color, FontWeight = FontWeight.Medium, TextWrapping = TextWrapping.Wrap };
     private static void Add(Grid grid, Control control, int column) { Grid.SetColumn(control, column); grid.Children.Add(control); }
@@ -183,10 +192,19 @@ public sealed class GameSurface : UserControl, IDisposable
         while (_accumulator >= step)
         {
             _session.Advance(step); _accumulator -= step;
-            while (_session.TryTakeEvent(out var item)) { _arena.OnEvent(item); if (_profile.Sound) _audio.Play(item); }
+            while (_session.TryTakeEvent(out var item))
+            {
+                _arena.OnEvent(item);
+                if (item.Kind == ArcadeEventKind.Cell) { _feedback = $"+{item.Value:N0} · {item.ShotHits} CELLS THIS SHOT"; _feedbackSeconds = .75; }
+                if (item.Kind == ArcadeEventKind.Milestone) { _feedback = $"{ArenaView.TierName(ArcadeSession.TierForHits(item.Value))} · {item.Value} CELLS"; _feedbackSeconds = 1.8; }
+                if (item.Kind is ArcadeEventKind.Paddle or ArcadeEventKind.Miss) { _feedback = null; _feedbackSeconds = 0; }
+                if (_profile.Sound) _audio.Play(item);
+            }
         }
         if (_session.State == RunState.GameOver && !_recorded) { _profile.Record(_session); _recorded = true; }
-        _arena.AdvanceEffects(_session.State == RunState.Paused ? 0 : Math.Min(.1, seconds)); Refresh();
+        var visualTime = _session.State == RunState.Paused ? 0 : Math.Min(.1, seconds);
+        _feedbackSeconds = Math.Max(0, _feedbackSeconds - visualTime);
+        _arena.AdvanceEffects(visualTime); Refresh();
     }
     private void Refresh()
     {
@@ -194,27 +212,36 @@ public sealed class GameSurface : UserControl, IDisposable
         var longScore = _session.Score >= 1_000_000_000_000;
         _score.Text = _session.Score.ToString(longScore ? "0" : "N0", CultureInfo.InvariantCulture); _score.FontSize = longScore ? 18 : 30;
         _score.TextWrapping = TextWrapping.NoWrap;
-        _next.Text = $"NEXT CELL +{_session.NextAward}  ·  CHAIN {_session.Chain}";
+        _next.Text = $"NEXT CELL +{_session.NextAward}  ·  SHOT {_session.Chain}";
         _lives.Text = string.Join("  ", Enumerable.Range(0, 3).Select(i => i < _session.Lives ? "●" : "○"));
         AutomationProperties.SetName(_lives, $"{_session.Lives} lives remaining");
         _sector.Text = $"SECTOR {_session.Sector:00}  ·  {_session.Destroyed % 40}/40"; _progress.Value = _session.Destroyed % 40; _best.Text = $"BEST {_profile.Best:N0}";
         _overlay.IsVisible = _session.State != RunState.Playing; _pause.IsEnabled = _session.State == RunState.Playing;
+        _playLayout.ColumnSpacing = _overlay.IsVisible ? 18 : 0;
         _restart.IsVisible = _session.State == RunState.Paused && !_confirmRestart; _cancel.IsVisible = _confirmRestart;
         _title.IsVisible = _session.State == RunState.GameOver;
         _message.Text = _profile.SaveError ?? "MOVE: W / S · ↑ / ↓ · MOUSE     SPACE: LAUNCH / PAUSE";
+        var phase = _session.State == RunState.Paused ? "PAUSED" : _session.ReturnAssist ? "RETURN" : _session.Frozen ? "SHATTER" : _session.Growing ? "GROW" : "COLONY";
+        _phaseStatus.Text = $"{phase} · {_session.Life.LiveCount} LIVING · LIFE 70% / PLAYER 30%" + (_session.Replenishing ? " · NEW LIFE" : "");
+        _phaseStatus.Foreground = _session.Frozen ? ArenaView.Coral : ArenaView.Mint;
+        _hitFeedback.Text = _feedbackSeconds > 0 && _feedback is not null ? _feedback : _session.EffectTier > 0 ? $"{ArenaView.TierName(_session.EffectTier)} · {_session.Chain} CELLS THIS SHOT" : "20 SURGE · 50 OVERDRIVE · 100 SUPERNOVA";
+        _hitFeedback.Foreground = _profile.HighContrast ? Brushes.White : ArenaView.TierBrush(_session.EffectTier);
+        _hitFeedback.RenderTransformOrigin = RelativePoint.Center;
+        var pulse = _profile.ReducedMotion || _feedbackSeconds <= 0 ? 1 : 1 + .04 * Math.Min(1, _feedbackSeconds);
+        _hitFeedback.RenderTransform = new ScaleTransform(pulse, pulse);
         if (_confirmRestart) { _overlayTitle.Text = "START OVER?"; _overlayDetail.Text = "This run will be discarded. Your saved best stays safe."; _overlayStats.Text = $"CURRENT SCORE  {_session.Score:N0}"; _primary.Content = "Restart"; }
         else if (_session.State == RunState.Ready)
         {
             _overlayTitle.Text = _session.Lives == 3 ? "LET IT LIVE.\nMAKE IT SHATTER." : "ONE MORE SHOT.";
             _overlayDetail.Text = _session.Lives == 3 ? "Your paddle is on the right. Defend while Life grows.\nSend the ball left to freeze and destroy the colony." : "Score kept. Chain reset. Take a breath, then launch.";
-            _overlayStats.Text = $"{_session.Lives} LIVES   ·   HIT CELLS: +1, +2, +4…   ·   DON'T MISS"; _primary.Content = _session.Lives == 3 ? "Start run  /  Space" : "Launch  /  Space";
+            _overlayStats.Text = $"{_session.Lives} LIVES\nCELL AWARDS: +1, +2, +4, +6…\nPADDLE HIT RESETS THE COUNTER"; _primary.Content = _session.Lives == 3 ? "Start run  /  Space" : "Launch  /  Space";
         }
         else if (_session.State == RunState.Paused)
         { _overlayTitle.Text = "TAKE A BREATH."; _overlayDetail.Text = "Everything is paused. Your colony and chain are safe."; _overlayStats.Text = $"SCORE {_session.Score:N0}   ·   NEXT CELL +{_session.NextAward}"; _primary.Content = "Resume  /  Space"; }
         else if (_session.State == RunState.GameOver)
         {
             _overlayTitle.Text = _session.Score >= _profile.Best && _session.Score > 0 ? "NEW PERSONAL BEST." : "ONE MORE RUN?";
-            _overlayDetail.Text = $"{_session.Score:N0} POINTS"; _overlayStats.Text = $"BEST CHAIN {_session.BestChain}   ·   {_session.Destroyed} CELLS   ·   SECTOR {_session.Sector}\nSEED {_session.Seed}"; _primary.Content = "Retry  /  Enter";
+            _overlayDetail.Text = $"{_session.Score:N0} POINTS"; _overlayStats.Text = $"BEST SHOT {_session.BestChain} CELLS\n{_session.Destroyed} TOTAL · SECTOR {_session.Sector}\nSEED {_session.Seed}"; _primary.Content = "Retry  /  Enter";
         }
         _arena.InvalidateVisual();
     }

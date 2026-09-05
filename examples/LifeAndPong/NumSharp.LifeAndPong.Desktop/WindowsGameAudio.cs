@@ -10,6 +10,8 @@ internal sealed class WindowsGameAudio : IGameAudio
     private readonly Channel<byte[]> _sounds = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
     private readonly byte[][] _notes = Enumerable.Range(0, 9).Select(i => Wave(330 * Math.Pow(2, i / 12d), .07)).ToArray();
     private readonly byte[] _paddle = Wave(220, .035), _miss = Wave(92, .15), _birth = Wave(660, .10), _sector = Wave(880, .12);
+    private readonly byte[][] _milestones = [Fanfare([440, 554.37, 659.25]), Fanfare([523.25, 659.25, 783.99, 1046.5]), Fanfare([659.25, 783.99, 1046.5, 1318.5, 1568])];
+    private long _milestoneUntil;
     private volatile bool _disposed;
     public bool Available => OperatingSystem.IsWindows();
     public WindowsGameAudio()
@@ -19,6 +21,13 @@ internal sealed class WindowsGameAudio : IGameAudio
     public void Play(ArcadeEvent item)
     {
         if (_disposed || !Available) return;
+        if (item.Kind == ArcadeEventKind.Milestone)
+        {
+            _milestoneUntil = Environment.TickCount64 + 350;
+            _sounds.Writer.TryWrite(_milestones[ArcadeSession.TierForHits(item.Value) - 1]);
+            return;
+        }
+        if (Environment.TickCount64 < _milestoneUntil && item.Kind is not (ArcadeEventKind.Paddle or ArcadeEventKind.Miss)) return;
         byte[]? sound = item.Kind switch
         {
             ArcadeEventKind.Cell => _notes[Math.Clamp((int)Math.Log2(Math.Max(1, item.Value)), 0, 8)],
@@ -59,6 +68,19 @@ internal sealed class WindowsGameAudio : IGameAudio
             var sample = Math.Sin(2 * Math.PI * frequency * t) + .18 * Math.Sin(4 * Math.PI * frequency * t);
             writer.Write((short)(sample * envelope * 5500));
         }
+        return memory.ToArray();
+    }
+    private static byte[] Fanfare(double[] notes)
+    {
+        // Original ascending arpeggios: each milestone adds another note and octave range.
+        var parts = notes.Select(note => Wave(note, .055)).ToArray();
+        var length = parts.Sum(part => part.Length - 44);
+        using var memory = new MemoryStream();
+        using var writer = new BinaryWriter(memory);
+        writer.Write(parts[0], 0, 44);
+        foreach (var part in parts) writer.Write(part, 44, part.Length - 44);
+        memory.Position = 4; writer.Write(36 + length);
+        memory.Position = 40; writer.Write(length);
         return memory.ToArray();
     }
     public void Dispose() { _disposed = true; _sounds.Writer.TryComplete(); }
