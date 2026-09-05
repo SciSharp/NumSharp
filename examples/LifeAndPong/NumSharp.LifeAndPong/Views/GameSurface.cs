@@ -47,17 +47,24 @@ public sealed class GameSurface : Control, IDisposable
     private bool _paintingLife;
     private bool _paintAlive;
     private bool _disposed;
+    private IPointer? _capturedPointer;
     private Rect _lifeGridRect;
     private Rect _pongWorldRect;
 
     public GameSurface()
+        : this(startAnimation: true)
+    {
+    }
+
+    internal GameSurface(bool startAnimation)
     {
         Focusable = true;
         ClipToBounds = true;
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(8) };
         _timer.Tick += OnFrame;
         _lastTimestamp = Stopwatch.GetTimestamp();
-        _timer.Start();
+        if (startAnimation)
+            _timer.Start();
     }
 
     public override void Render(DrawingContext context)
@@ -93,6 +100,7 @@ public sealed class GameSurface : Control, IDisposable
         if (_disposed)
             return;
 
+        ReleaseTransientInput();
         _timer.Stop();
         _timer.Tick -= OnFrame;
         _life.Dispose();
@@ -119,6 +127,7 @@ public sealed class GameSurface : Control, IDisposable
         {
             _paintAlive = _life.ToggleCell(row, column);
             _paintingLife = true;
+            _capturedPointer = e.Pointer;
             e.Pointer.Capture(this);
             InvalidateVisual();
             e.Handled = true;
@@ -145,7 +154,21 @@ public sealed class GameSurface : Control, IDisposable
     {
         base.OnPointerReleased(e);
         _paintingLife = false;
+        _capturedPointer = null;
         e.Pointer.Capture(null);
+    }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        _paintingLife = false;
+        _capturedPointer = null;
+    }
+
+    protected override void OnLostFocus(FocusChangedEventArgs e)
+    {
+        base.OnLostFocus(e);
+        ReleaseTransientInput();
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -194,6 +217,20 @@ public sealed class GameSurface : Control, IDisposable
                 e.Handled = true;
                 break;
         }
+    }
+
+    internal bool HasTransientInputForTesting => _upHeld || _downHeld || _paintingLife || _capturedPointer is not null;
+
+    internal void ReleaseTransientInput()
+    {
+        _upHeld = false;
+        _downHeld = false;
+        _paintingLife = false;
+        _pong.SetKeyboardIntent(0);
+
+        var pointer = _capturedPointer;
+        _capturedPointer = null;
+        pointer?.Capture(null);
     }
 
     private void OnFrame(object? sender, EventArgs e)
