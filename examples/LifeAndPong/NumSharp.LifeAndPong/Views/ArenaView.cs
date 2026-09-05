@@ -2,6 +2,7 @@ using System.Numerics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using NumSharp.LifeAndPong.Models;
 
 namespace NumSharp.LifeAndPong.Views;
@@ -173,7 +174,7 @@ internal sealed class ArenaView(ArcadeSession game, PlayerProfile profile) : Con
         }
     }
     internal void ClearEffects() { _sparks.Clear(); _waves.Clear(); _trail.Clear(); }
-    private static IBrush Brush(string hex) => new SolidColorBrush(Color.Parse(hex));
+    private static IBrush Brush(string hex) => new ImmutableSolidColorBrush(Color.Parse(hex));
     private sealed class Spark(Vector2 position, Vector2 velocity, double remaining, IBrush color, bool streak)
     {
         public Vector2 Position = position;
