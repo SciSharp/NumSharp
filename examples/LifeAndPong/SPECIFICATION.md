@@ -1,74 +1,214 @@
-# Life + Pong delivered product and design specification
+# Life Arcade implementation guide
 
-- Product baseline: `SPEC-numsharp-life-pong-001`
-- Delivered unit: `DU-life-pong-finish-002`
-- Adopted decision: `DEC-life-pong-finish-002`
-- Implementation: `996dba5d` (code QA approved in `E-01a0711f-cf00-7883-9a8a-1d109cda19cb`)
+This document maps the current Life Arcade behavior to its implementation and
+contributor operations. It describes source baseline
+`5f6b551aabf01e2539554eedd3bc40ebad759c09`; the hash identifies reviewed source
+and is not a public-release claim.
 
-## Delivered product
+Behavioral authority is split deliberately:
 
-The application is a self-contained NumSharp showcase in one custom-rendered Avalonia surface. An editable Conway simulation occupies the left panel while a player-versus-AI Pong match runs in the right panel. The two systems share one visual language and one input surface.
+- [ARCADE_DESIGN.md](ARCADE_DESIGN.md) owns the adopted game rules, scoring,
+  pacing, effects, accessibility, and acceptance targets.
+- [PHYSICS.md](PHYSICS.md) owns collision geometry, continuous-contact
+  resolution, paddle friction and spin, and the bounded 5% contact noise.
+- This guide owns the implementation map, lifecycle, persistence, platform
+  boundary, and contributor/release journey.
 
-The desktop window defaults to 1440 × 900 and has an enforced minimum of 1120 × 700. The source checkout retains approved previews as `preview.png` at the default size and `preview.minimum.png` at the minimum size; the player ZIP includes the primary preview.
+## Product model
 
-## Windows player delivery
+Life Arcade is one 1600 × 900 logical arena, one ball, one right-hand player
+paddle, and one Conway colony. The phase boundary is at x=1120: Life occupies
+70% of the width and the player occupies 30%. There is no left or AI paddle and
+no separate Life editor during a run.
 
-The player artifact is `NumSharp-LifeAndPong-win-x64.zip`. It is an untrimmed, self-contained Windows x64 publish, so the extracted application carries its .NET runtime and does not require a separate .NET installation. A player extracts the archive and launches `NumSharp.LifeAndPong.Desktop.exe` from the contained `NumSharp-LifeAndPong-win-x64` folder.
+The session has four states:
 
-This delivery is a portable folder and ZIP, not an installer. Windows x64 is the packaged and tested runtime. No Android or iOS binary is delivered, and other desktop operating systems were not run or validated for this release.
+- **Ready** — the ball is attached to the paddle and can be launched.
+- **Playing** — ball, paddle, phase clocks, scoring, and effects advance.
+- **Paused** — simulation and visual-effect clocks stop until resumed.
+- **GameOver** — reached after the third miss; the completed run is recorded.
 
-## Life behavior
+A new run starts with three lives, score zero, sector 1, a seeded 42 × 32
+bounded B3/S23 colony replenished to 160 cells, and ruleset version
+`life-arcade-3`.
 
-- A 48 × 40 toroidal Conway field follows B3/S23 rules.
-- The model owns two reusable NumSharp `NDArray` buffers with byte dtype (`NPTypeCode.Byte`): one current field and one next-generation field. Each step fills the next buffer and swaps the two references; it does not allocate another field buffer.
-- The startup field and subsequent Seed sequence are reproducible for the model's fixed random seed; repeated Seed actions advance that sequence and need not produce identical fields. Clear empties the field.
-- Glider and Pulsar load centered deterministic presets. The Pulsar is a period-three oscillator.
-- Run/pause, single-step, clear, reseed, preset selection, and generation rates of 3, 6, 12, 24, and 40 generations per second are available.
-- Step, Clear, Glider, and Pulsar explicitly pause Life and reset its accumulated generation time. Seed preserves the current run/pause state.
-- A pointer press toggles the first cell and establishes paint or erase mode. Captured pointer movement interpolates every cell between reported positions, avoiding gaps during fast drags. Evolution waits while a stroke is active.
-- Generation and live-cell counts remain visible.
+## Grow and shatter phases
 
-## Pong behavior
+`ArcadeSession` changes phase when the ball center crosses the 70% boundary.
+The crossing is a time-of-impact event within the current simulation step, not
+a wall or a render-only test.
 
-- A new match begins in Ready state. Start or `Space` begins the serve flow; New Match or `R` clears scores, rally state, paddle state, and returns to Ready.
-- The left paddle accepts mouse targeting over the arena and keyboard movement through either `W`/`S` or `Up`/`Down`. Aliases are held independently, and keyboard intent overrides an earlier pointer target.
-- `Space` starts, pauses, or resumes; `R` starts a new match. Both actions are limited to the first key-down of each press so operating-system key repeat cannot toggle them repeatedly.
-- Physics advances at a fixed 120 Hz. Adaptive micro-steps account for the combined ball and maximum paddle travel to keep high-speed and moving-paddle collisions from tunneling.
-- Paddles accelerate and decelerate rather than teleport. AI periodically predicts the ball's wall-reflected arrival point.
-- Paddle contact is a circle-versus-rectangle closest-point test. The ball reflects about the physical contact normal in the moving paddle's frame, returns to the world frame, and receives a bounded tangential contribution from paddle motion.
-- A paddle hit raises rally speed by 4.5% up to a 920-world-unit-per-second cap. It then adds a uniformly sampled signed perpendicular component bounded to 2% of speed and renormalizes the result to preserve the capped speed.
-- The ball reflects from the upper and lower walls. Points reset rally count and enter a short serve countdown. The first side to seven wins; current and best rally counts remain visible.
+- In **GROW**, while the ball is on the player side, Life advances at the
+  current sector rate. If population is below 64, a 250 ms active-GROW cue is
+  followed by replenishment to 160 cells and a 750 ms cooldown. Surviving cells
+  are preserved.
+- In **SHATTER**, while the ball is on the colony side, Life is frozen. The ball
+  collides with the frozen live-cell geometry; each distinct contacted live
+  cell is destroyed once.
+- Pausing stops both phases. Crossing back into GROW resumes evolution from the
+  damaged colony rather than restoring an earlier board.
 
-## Input and lifecycle behavior
+`LifeSimulation` stores the current and next generations in two reusable
+NumSharp byte NDArrays. The arcade constructs it with non-wrapping edges;
+outside cells are dead.
 
-- The surface receives initial focus when the desktop window opens.
-- `Tab` and `Shift`+`Tab` cycle through custom controls; `Enter` or `Space` activates the selected control. Pointer clicks use the same activation paths.
-- `Escape` and desktop-window deactivation clear held keys, pointer targeting, pointer capture, and an active Life stroke, then pause Pong. Detaching or disposing the surface also releases transient input. Life keeps its existing run/pause setting.
-- Losing surface focus releases transient input without inventing a missed key-up or continuing a captured stroke.
+## Scoring, lives, and progression
 
-## Visual system
+The successive awards for cells destroyed during one shot are:
 
-One custom Avalonia control renders the interface with vector primitives: a dark ink field, technical grid, mint Life accents, warm coral Pong accents, restrained bloom layers, rounded panels, focus/hover outlines, live statistics, rally state, visible control hints, and responsive scaling. The game requires no raster artwork or stock game widgets; the PNG files are documentation and QA previews.
-
-## Architecture and platform boundary
-
-The implementation targets .NET 10 and Avalonia 12.1.2. The shared `NumSharp.LifeAndPong` project owns application resources, both simulation models, rendering, and input. It supports the classic desktop lifetime and a single-view lifetime. The `NumSharp.LifeAndPong.Desktop` project contains only the executable desktop head and boots the classic desktop lifetime.
-
-This separation is mobile-ready at the project boundary, but mobile remains later scope: adding Android or iOS heads and validating touch layout/input are still required. The current binary and QA evidence cover Windows x64 only; cross-platform Avalonia code is not evidence that another desktop operating system has been tested.
-
-## Verification and release operations
-
-From the repository root, developers can launch and test with:
-
-```powershell
-dotnet run --project examples/LifeAndPong/NumSharp.LifeAndPong.Desktop
-dotnet test examples/LifeAndPong/NumSharp.LifeAndPong.Tests/NumSharp.LifeAndPong.Tests.csproj -c Release --nologo
+```text
++1, +2, +4, +6, +8, +10, ...
 ```
 
-Create a player ZIP with:
+The first three cells therefore add 7 total points. A physical paddle contact
+resets the shot count and next award to `+1`; a phase crossing does not. A miss
+also resets the chain, consumes one life, and preserves the accumulated score.
+Life births, ordinary Life deaths, walls, and paddle hits award no points.
 
-```powershell
-.\examples\LifeAndPong\publish-windows.ps1
+The implementation saturates awards and total score instead of wrapping.
+Presentation effects escalate at 20, 50, and 100 cells destroyed during one
+shot. These effects do not mutate simulation state. Sector progression is based
+on total cells destroyed, with the pending sector increasing every 40 cells and
+being adopted at a launch or paddle contact.
+
+## Physics boundary
+
+`ArcadeSession` advances at fixed 120 Hz steps and processes the earliest
+collision, phase crossing, paddle stop, or goal before consuming the remainder
+of the step. `CollisionMath` performs swept circle-versus-rounded-box queries,
+elastic manifold response, and isolated moving-paddle friction/spin response.
+
+After a resolved physical contact manifold, the session adds a uniformly drawn
+perpendicular perturbation bounded by 5%, renormalized to the computed physical
+speed and reduced if necessary to avoid pointing back into the contact. Noise
+is not applied during free flight. The exact equations, tolerances, and safety
+behavior are in [PHYSICS.md](PHYSICS.md).
+
+## Input, presentation, and accessibility
+
+`GameSurface` owns the accessible native menu controls around the custom-drawn
+arena, keyboard and pointer input, the fixed-step accumulator, event feedback,
+and presentation timers.
+
+- Mouse motion over the right 30%, `W`/`S`, and Up/Down control the paddle.
+- `Space` launches, pauses, or resumes. `Escape` pauses. `Enter` retries from
+  game over. Held key aliases are tracked independently.
+- Window deactivation, focus loss from the surface, detachment, and disposal
+  release transient input. Window deactivation also pauses play.
+- Restart requires confirmation while a run is paused. Sound, reduced motion,
+  and high contrast are menu options.
+- `ArenaView` renders the colony, ball, paddle, ball mark/spin, impacts,
+  milestones, and phase background. Text remains outside the playfield.
+- `MainWindow` supplies the classic desktop window, initial focus, 1440 × 900
+  default size, and 1120 × 700 minimum size.
+
+## Persistence and audio
+
+`PlayerProfile.OpenLocal()` reads and writes:
+
+```text
+%LOCALAPPDATA%\NumSharp\LifeArcade\profile.json
 ```
 
-`publish-windows.ps1` resolves paths from `$PSScriptRoot`, so it also works when invoked by its path from another working directory. It runs the Release tests before publishing, uses `--self-contained true` with trimming disabled, copies README, specification, primary preview, and NumSharp license into the player folder, and compresses the result. Each invocation writes to a unique `examples/LifeAndPong/artifacts/release-<GUID>/` directory and prints the ZIP SHA-256 hash plus Play and Share paths.
+The profile stores sound, reduced-motion, and high-contrast preferences plus
+run results. Results include score, best shot chain, total destroyed cells,
+sector, seed, and ruleset version. The UI calculates its best score only from
+`life-arcade-3` records. Older-version records can be retained without being
+compared with the current scoring system. Read/write failures are shown to the
+player and do not prevent play.
+
+The shared project depends only on `IGameAudio`. The desktop host supplies
+`WindowsGameAudio`, which generates its PCM cues in memory and plays them off
+the UI thread through `winmm.dll`. It reports audio unavailable on non-Windows
+systems; no downloaded sound assets are required.
+
+## Source ownership
+
+| Area | Owner in source |
+| --- | --- |
+| Rules, state, clocks, progression, collision orchestration | `Models/ArcadeSession.cs` |
+| NumSharp-backed Conway state and replenishment | `Models/LifeSimulation.cs` |
+| Swept geometry and physical response | `Models/CollisionMath.cs` |
+| Profile schema and audio abstraction | `Models/PlayerProfile.cs` |
+| Input, menus, HUD, event dispatch | `Views/GameSurface.cs` |
+| Arena drawing and effects | `Views/ArenaView.cs` |
+| Desktop lifecycle | `Views/MainWindow.cs` and the Desktop `Program.cs` |
+| Windows PCM implementation | `NumSharp.LifeAndPong.Desktop/WindowsGameAudio.cs` |
+| Model, physics, profile, and headless UI regressions | `NumSharp.LifeAndPong.Tests` |
+
+The shared game project references `src/NumSharp.Core`. The focused solution
+also includes NumSharp.Core and its build/analyzer dependency. Consequently,
+`examples/LifeAndPong` must remain inside a complete NumSharp checkout; copying
+this folder alone is not a supported build layout.
+
+## Build, test, and run
+
+The documented contributor baseline is a .NET 10 SDK selected by the local
+`global.json`. From `examples\LifeAndPong`:
+
+```powershell
+.\build.ps1
+dotnet run --project .\NumSharp.LifeAndPong.Desktop\NumSharp.LifeAndPong.Desktop.csproj -c Release --no-build
+```
+
+The equivalent explicit commands are:
+
+```powershell
+dotnet restore .\NumSharp.LifeAndPong.sln --nologo
+dotnet build .\NumSharp.LifeAndPong.sln -c Release --no-restore --nologo
+dotnet test .\NumSharp.LifeAndPong.Tests\NumSharp.LifeAndPong.Tests.csproj -c Release --no-build --no-restore --nologo
+```
+
+For IDE use, open `NumSharp.LifeAndPong.sln` and set
+`NumSharp.LifeAndPong.Desktop` as the startup project.
+
+## Windows packaging and automation
+
+`publish-windows.ps1` runs the Release tests and creates a self-contained,
+untrimmed `win-x64` portable application. Each invocation uses a new
+`artifacts\release-<GUID>` directory. The directory contains the unpacked app,
+`NumSharp-LifeAndPong-win-x64.zip`, and `SHA256SUMS` for that ZIP.
+
+The packaged app includes the runtime, every root-level Markdown file in this
+folder, `LICENSE`, `preview.png`, and `preview.ready.png`. Links among the
+packaged guides therefore use package-local filenames; repository resources use
+absolute upstream links.
+
+The automation definitions live at the NumSharp repository root, not under the
+example folder:
+
+- [Life Arcade Windows workflow](https://github.com/SciSharp/NumSharp/actions/workflows/life-arcade.yml)
+- [Life Arcade bug form](https://github.com/SciSharp/NumSharp/issues/new?template=life-arcade.yml)
+
+The checked-in workflow is the automation contract. This guide does not claim
+that a hosted workflow run or public binary release has occurred.
+
+## Platform and support limits
+
+- The package target and native audio implementation are Windows x64.
+- The source uses Avalonia's desktop boundary, but other desktop operating
+  systems have not been validated by this project's current acceptance record.
+- Android and iOS heads are not present.
+- The package is a portable ZIP, not an installer.
+- This example does not define a detached-source distribution or a separate
+  support/version lifecycle from the NumSharp repository.
+
+## Historical design trail
+
+The following identifiers are preserved for traceability only. They describe
+the superseded, separate Life-editor and two-paddle Pong product and are not
+evidence for current Life Arcade behavior or delivery status:
+
+- Product baseline `SPEC-numsharp-life-pong-001`
+- Delivered unit `DU-life-pong-finish-002`
+- Adopted decision `DEC-life-pong-finish-002`
+- Historical implementation `996dba5d`, reviewed in
+  `E-01a0711f-cf00-7883-9a8a-1d109cda19cb`
+
+The subsequent unified-arcade design lineage is recorded in
+[ARCADE_DESIGN.md](ARCADE_DESIGN.md): `WORK-legacy`,
+`JOB-life-arcade-design-003`, `SPEC-life-arcade-003`, and
+`DEC-life-arcade-003`, later amended by `DEC-life-arcade-steering-005` and
+`DEC-life-arcade-physics-006`. These identifiers document design history; the
+current source and the three authority documents named at the top of this guide
+define the implementation contributors should follow.

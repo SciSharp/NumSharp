@@ -1,81 +1,142 @@
-# NumSharp Life + Pong
+# NumSharp Life Arcade
 
-An interactive, custom-rendered Avalonia showcase for NumSharp. Conway's Game of Life runs on the left while a single-player Pong match runs on the right.
+Life Arcade is a single-player Avalonia game built on NumSharp. One ball moves
+between a living Conway colony in the left 70% of the arena and one player
+paddle in the right 30%.
 
-![NumSharp Life and Pong at 1440 × 900](preview.png)
+![Life Arcade at 1440 × 900](preview.png)
 
-The source checkout also records the responsive minimum-size layout in `preview.minimum.png` at 1120 × 700. The player ZIP includes the primary preview shown above.
+The folder name `LifeAndPong` is retained for source compatibility. The current
+application is the unified Life Arcade described here; it is not the older
+side-by-side Life editor and two-paddle Pong game.
 
-## Play the Windows release
+## Gameplay
 
-The `NumSharp-LifeAndPong-win-x64.zip` release is an unpack-and-play, self-contained Windows x64 build. It includes the .NET runtime; players do not need to install .NET separately.
+- Move the right paddle with the mouse over the player side, `W`/`S`, or the
+  Up/Down arrow keys.
+- Press `Space` to launch, pause, or resume. `Escape` pauses. At game over,
+  press `Enter` or choose **Retry**.
+- You begin with three lives. Missing the ball consumes one life but keeps the
+  score already earned.
+- While the ball is in the right 30%, the colony is in **GROW**: bounded Conway
+  B3/S23 generations run and sparse Life is replenished.
+- When the ball's center crosses into the left 70%, the colony is in
+  **SHATTER**: Life freezes, live cells become solid, and a contacted cell is
+  destroyed.
+- Cell awards within one shot are `+1, +2, +4, +6, +8, ...`. Physical contact
+  with the paddle resets the next award and shot counter. Effects escalate at
+  20, 50, and 100 destroyed cells in one shot.
+- Sound, reduced-motion, and high-contrast options are available from the menu.
+  Sound playback is implemented by the Windows desktop host.
 
-1. Extract the ZIP to a writable folder.
-2. Open the extracted `NumSharp-LifeAndPong-win-x64` folder.
-3. Run `NumSharp.LifeAndPong.Desktop.exe`.
+The adopted gameplay rules are maintained in [ARCADE_DESIGN.md](ARCADE_DESIGN.md),
+and the collision solver is specified in [PHYSICS.md](PHYSICS.md).
 
-The ZIP is a portable application folder, not an installer.
+## Contributor quickstart
 
-## Run from source
+Use a full NumSharp repository checkout. This folder is not a detached build:
+the game references `src/NumSharp.Core`, and its focused solution also includes
+the repository build tooling required by that project.
 
-Developers need the .NET 10 SDK. From the NumSharp repository root, run:
+Prerequisites for the documented path are Git, PowerShell, and a .NET 10 SDK.
+The local `global.json` requests SDK `10.0.100` and permits later .NET 10 feature
+bands.
 
 ```powershell
-dotnet run --project examples/LifeAndPong/NumSharp.LifeAndPong.Desktop
+git clone https://github.com/SciSharp/NumSharp.git
+cd .\NumSharp\examples\LifeAndPong
+dotnet --version
+.\build.ps1
+dotnet run --project .\NumSharp.LifeAndPong.Desktop\NumSharp.LifeAndPong.Desktop.csproj -c Release --no-build
 ```
 
-Run the dedicated Release test suite with:
+`build.ps1` resolves paths from its own directory, restores and builds the
+focused solution, and runs the game tests. It can also be invoked by its path
+from another current working directory.
+
+### Visual Studio
+
+Open `NumSharp.LifeAndPong.sln`. Set
+`NumSharp.LifeAndPong.Desktop` as the startup project, choose the desired build
+configuration, and run it. The solution deliberately contains the desktop app,
+shared game project, tests, NumSharp.Core, and the repository analyzer project.
+
+### Direct .NET commands
+
+From `examples\LifeAndPong`:
 
 ```powershell
-dotnet test examples/LifeAndPong/NumSharp.LifeAndPong.Tests/NumSharp.LifeAndPong.Tests.csproj -c Release --nologo
+dotnet restore .\NumSharp.LifeAndPong.sln --nologo
+dotnet build .\NumSharp.LifeAndPong.sln -c Release --no-restore --nologo
+dotnet test .\NumSharp.LifeAndPong.Tests\NumSharp.LifeAndPong.Tests.csproj -c Release --no-build --no-restore --nologo
+dotnet run --project .\NumSharp.LifeAndPong.Desktop\NumSharp.LifeAndPong.Desktop.csproj -c Release --no-build
 ```
 
-## Build the Windows ZIP
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the source map, change expectations,
+and pull-request checklist.
 
-From the repository root:
+## Create and verify a Windows package
+
+From `examples\LifeAndPong` on Windows:
 
 ```powershell
-.\examples\LifeAndPong\publish-windows.ps1
+.\publish-windows.ps1
+
+$releaseDir = Get-ChildItem .\artifacts -Directory -Filter 'release-*' |
+    Sort-Object LastWriteTimeUtc -Descending |
+    Select-Object -First 1
+$checksumFile = Join-Path $releaseDir.FullName 'SHA256SUMS'
+$archive = Join-Path $releaseDir.FullName 'NumSharp-LifeAndPong-win-x64.zip'
+$expected = ((Get-Content -LiteralPath $checksumFile -Raw).Trim() -split '\s+')[0]
+$actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+$actual -eq $expected
 ```
 
-The script also works from any current working directory when invoked by its path because it resolves inputs and outputs relative to its own location. Each run:
+The final expression must print `True`. Each invocation first runs the Release
+tests, then creates a new `artifacts\release-<GUID>` directory containing:
 
-- runs the Release test suite and stops on failure;
-- publishes an untrimmed, self-contained `win-x64` application;
-- creates a new `examples/LifeAndPong/artifacts/release-<GUID>/` directory, preserving earlier output;
-- produces both an unpacked `NumSharp-LifeAndPong-win-x64` folder and `NumSharp-LifeAndPong-win-x64.zip`; and
-- prints the ZIP SHA-256 hash plus the executable and archive paths.
+- the self-contained `win-x64` application folder;
+- `NumSharp-LifeAndPong-win-x64.zip`; and
+- `SHA256SUMS`, which records the ZIP digest.
 
-## Controls and lifecycle
+The application folder and ZIP include the .NET runtime, `LICENSE`, every
+Markdown guide at this folder's root, and `preview.png` plus
+`preview.ready.png`. The archive is a portable application, not an installer.
+After extracting it, start `NumSharp.LifeAndPong.Desktop.exe`.
 
-Press `Tab` or `Shift`+`Tab` to move through the custom controls. Press `Enter` or `Space` to activate the selected control. Mouse clicks activate the same controls.
+## Local data
 
-### Life
+Settings and results are stored in:
 
-- Click a cell to toggle it. Drag from a dead cell to paint or from a live cell to erase; skipped cells are filled by an interpolated stroke.
-- Use Run/Pause, Step, Seed, Clear, Glider, Pulsar, and the `-`/`+` generation-rate controls.
-- Step, Clear, Glider, and Pulsar leave Life paused so the result can be inspected. Seed replaces the field without changing its current run/pause setting.
-- Evolution pauses temporarily during a drag and resumes afterward if Life was running.
+```text
+%LOCALAPPDATA%\NumSharp\LifeArcade\profile.json
+```
 
-### Pong
+Scores are tagged with ruleset `life-arcade-3`. Records from other rulesets may
+remain in the file, but the displayed best score compares only current-ruleset
+results. If the profile cannot be read or written, play remains available and
+the application reports the local persistence error.
 
-- Choose Start or press `Space` from the initial Ready screen. `Space` then pauses or resumes; New Match or `R` resets the score and returns to Ready.
-- Move the mouse over the arena to target the left paddle, or use `W`/`S` and `Up`/`Down`. The letter and arrow aliases are tracked independently, so releasing one alias does not cancel another that remains held.
-- `Space` and `R` act once per physical press; keyboard repeat messages do not retrigger them.
-- Press `Escape`, or deactivate the window, to pause Pong and clear transient keyboard, pointer, and paint input. Life retains its existing run/pause setting.
-- The first side to seven points wins.
+## Project status and platform limits
 
-## Implementation notes
+- The checked-in source, tests, and packaging script are the supported
+  contributor artifacts; this guide does not assert that a public binary
+  release exists.
+- The portable package targets Windows x64. Windows audio uses `winmm.dll`.
+- Other desktop operating systems and mobile heads are not validated or
+  packaged by this project.
+- The default window is 1440 × 900 and the enforced minimum is 1120 × 700.
+- The repository-root [Life Arcade workflow](https://github.com/SciSharp/NumSharp/actions/workflows/life-arcade.yml)
+  defines the Windows build/package automation. A hosted run should be checked
+  at that link; local success is not evidence that GitHub Actions ran.
 
-Life owns a 48 × 40 toroidal field in two reusable NumSharp `NDArray` buffers created with byte dtype (`NPTypeCode.Byte`). The Conway B3/S23 kernel reads one buffer, writes the other, and swaps them after each generation without allocating another field buffer.
+## Project documents
 
-Pong advances through a fixed 120 Hz accumulator with adaptive micro-steps based on ball and paddle travel. Paddle collision uses the circle/rectangle closest-point normal: velocity is reflected in the moving paddle's frame, paddle motion contributes tangential transfer, and the result is renormalized to a rally speed capped at 920 world units per second. Each paddle impact then adds a uniformly sampled perpendicular component bounded to 2% and renormalizes without changing that speed.
-
-The shared `NumSharp.LifeAndPong` project contains the simulations, application resources, input, and custom vector-rendered view. `NumSharp.LifeAndPong.Desktop` is a thin classic-desktop host.
-
-## Supported scope and limitations
-
-- This delivery is packaged and tested for Windows x64. Other desktop operating systems have not been run or validated for this release.
-- Android and iOS heads remain future work; no mobile binary is included.
-- The supported window range starts at 1120 × 700; the default is 1440 × 900.
-- The release is a portable ZIP rather than an installer.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — contributor workflow and commands
+- [SPECIFICATION.md](SPECIFICATION.md) — current implementation guide
+- [ARCADE_DESIGN.md](ARCADE_DESIGN.md) — adopted gameplay behavior
+- [PHYSICS.md](PHYSICS.md) — adopted collision model
+- [SECURITY.md](SECURITY.md) — vulnerability-reporting guidance
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — link to the NumSharp conduct policy
+- [CHANGELOG.md](CHANGELOG.md) — unreleased changes only
+- [LICENSE](LICENSE) — Apache License 2.0
