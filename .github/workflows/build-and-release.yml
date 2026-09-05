@@ -39,7 +39,6 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
-        dotnet-quality: 'preview'
 
     - name: Build
       run: dotnet build test/NumSharp.Tests/NumSharp.Tests.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
@@ -171,7 +170,6 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
-        dotnet-quality: 'preview'
 
     # The key is committed and marked `binary` in .gitattributes (without which `* text=auto eol=lf`
     # would rewrite CRLF bytes inside it and corrupt the key). Assert both facts before building, so
@@ -244,7 +242,6 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
-        dotnet-quality: 'preview'
 
     # 3.12 sits inside pythonnet 3.0.5's supported range (PythonSession rejects
     # anything outside 3.7-3.13) and has numpy 2.x wheels on all three OSes.
@@ -394,7 +391,6 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
-        dotnet-quality: 'preview'
 
     - name: Setup Python (for OpenBLAS native-asset staging)
       uses: actions/setup-python@v5
@@ -652,7 +648,9 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: |
+          8.0.x
+          10.0.x
 
     - name: Push to NuGet
       run: |

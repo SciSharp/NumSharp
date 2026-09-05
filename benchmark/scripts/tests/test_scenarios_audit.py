@@ -57,9 +57,9 @@ class ScenarioAuditTests(unittest.TestCase):
         self.assertEqual({
             "scenarios": 499,
             "csharp": 499 * 15,
-            "python": 1296,
-            "comparable": 1296,
-            "csharp_only": 499 * 15 - 1296,
+            "python": 1699,
+            "comparable": 1699,
+            "csharp_only": 499 * 15 - 1699,
             "python_only": 0,
         }, self.audit["totals"])
 
@@ -79,20 +79,28 @@ class ScenarioAuditTests(unittest.TestCase):
         ]
         self.assertEqual([], missing)
 
+    def test_every_function_has_an_int32_comparison(self):
+        missing = [
+            row["identity"] for row in self.audit["rows"]
+            if not row["cells"]["int32"]["comparable"]
+        ]
+        self.assertEqual([], missing)
+
     def test_can_cast_exercises_every_csharp_source_dtype(self):
         row = self.by_identity["np.can_cast"]
         self.assertEqual("both", row["cells"]["float64"]["state"])
+        self.assertEqual("both", row["cells"]["int32"]["state"])
         self.assertTrue(all(
             row["cells"][dtype]["state"] == "csharp_only"
-            for dtype in EXPECTED_DTYPES if dtype != "float64"))
+            for dtype in EXPECTED_DTYPES if dtype not in {"int32", "float64"}))
 
     def test_nanmean_has_complete_csharp_coverage_without_inventing_numpy_cells(self):
         row = self.by_identity["np.nanmean"]
         self.assertEqual(
-            {"float16", "float32", "float64"},
+            {"int32", "float16", "float32", "float64"},
             {dtype for dtype, cell in row["cells"].items() if cell["state"] == "both"})
         self.assertEqual(
-            set(EXPECTED_DTYPES) - {"float16", "float32", "float64"},
+            set(EXPECTED_DTYPES) - {"int32", "float16", "float32", "float64"},
             {dtype for dtype, cell in row["cells"].items() if cell["state"] == "csharp_only"})
 
     def test_html_has_all_three_single_mark_lenses_and_filters(self):

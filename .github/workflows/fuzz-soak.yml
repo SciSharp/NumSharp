@@ -37,7 +37,6 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
-        dotnet-quality: 'preview'
 
     - name: Setup Python
       uses: actions/setup-python@v5
