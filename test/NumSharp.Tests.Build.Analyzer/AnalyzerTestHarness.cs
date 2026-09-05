@@ -26,6 +26,19 @@ namespace NumSharp.Tests.Build.Analyzer
     {
         private static readonly Lazy<ImmutableArray<MetadataReference>> LazyRefs = new(BuildReferences);
 
+        /// <summary>The framework + NumSharp metadata references every fixture compiles against.</summary>
+        public static ImmutableArray<MetadataReference> References => LazyRefs.Value;
+
+        /// <summary>
+        ///     The same references as file paths — what the IL weaver's <c>--refs</c> response file
+        ///     carries (the compiler's own reference list), for the in-process weaver harness.
+        /// </summary>
+        public static ImmutableArray<string> ReferenceFilePaths => LazyRefs.Value
+            .OfType<PortableExecutableReference>()
+            .Select(r => r.FilePath)
+            .Where(p => !string.IsNullOrEmpty(p))
+            .ToImmutableArray();
+
         private static ImmutableArray<MetadataReference> BuildReferences()
         {
             var refs = new List<MetadataReference>();

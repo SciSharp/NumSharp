@@ -31,6 +31,28 @@ and configuration space — with each new case landing as a fixture tag + an in-
   reference) inherit too and draw the analyzer's NDW013 only when `build_property.NumSharpBuildActive`
   is declared and not `true`; the real-build test weaves an attribute-free consumer (7 inherited
   targets, incl. an async state machine and an inherited `[NDScopedExit]`) and runs the woven code.
+- **The weaver itself, in-process** (`WeaverTestHarness`: Roslyn-compile a fixture with a portable PDB →
+  `ScopeWeaver.WeaveAssembly` → Mono.Cecil inspection → load + execute + assert `IsDisposed`):
+  `WeaverHarnessSelfTests` (teeth: unattributed untouched, attributed woven with scope local /
+  try-finally Dispose / Open / Returns and real reclamation, idempotence, hand-scoped skip, NDW002/003/
+  004/009/010/014/015, Release + Debug IL, re-signing with `Open.snk`, byte-identical re-weave);
+  `WeaverInheritanceTests` (the walk, shape by shape: chains through non-declaring levels, `new`
+  hiding vs override, sealed/abstract overrides, explicit-wins, generic instantiations + open generic
+  derived + nested generic args + overload discrimination + by-ref/pointer/params/optional signatures,
+  implicit/explicit/struct/generic/default-implementation/base-interface/hiding-interface members,
+  20-level interface chains, property-level vs accessor-level attributes, covariant returns, async and
+  iterator overrides, inherited `[NDScopedExit]` by position with own marks winning, NDW011 not
+  propagated, NDW002/006/009 at the override with provenance, cross-assembly declarations, an
+  unresolvable base, nested types, idempotence, 12×40 hierarchies, the reflection `inherit:true`
+  coverage invariant; pinned limitations: an interface listed on a derived class implemented by a base
+  method, static abstract members); `WeaverShapeTests` (every return/egress/body shape on BOTH Release
+  and Debug IL, executed, temps reclaimed, results alive; resultless tasks; out carriers; 300-local /
+  long-branch bodies; 64-thread parallel execution; values under forced GCs); `WeaverAnalyzerParityTests`
+  (both resolvers over the same fixtures agree per method, and each matches its own output — the scope
+  local, the NDW012 placement); `WeaverHierarchyFuzzTests` (40 seeded random chains + interface vs a
+  reference model, weaver AND analyzer); `WeaverCliTests` (the tool PROCESS: exit codes, rsp, `--snk`,
+  `--verbose`, NDW001 — unreachable in-process because Cecil resolves through the host's
+  TRUSTED_PLATFORM_ASSEMBLIES).
 - **Contract**: NDW012 severity == Warning + enabled-by-default; a real leak is a Warning not an Error;
   gate diagnostics are Errors (`AnalyzerContractTests`).
 - **Harness**: teeth (real leak warns / clean is silent / broken source reported / `[NDScoped]` exempt),

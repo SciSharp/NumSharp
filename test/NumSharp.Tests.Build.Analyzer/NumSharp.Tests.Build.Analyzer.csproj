@@ -42,6 +42,11 @@
     <!-- Referenced for the analyzer TYPES only (default ReferenceOutputAssembly), NOT applied as an
          analyzer to this project. -->
     <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" />
+    <!-- The IL weaver itself, for the IN-PROCESS weaver gates (WeaverTestHarness → ScopeWeaver.
+         WeaveAssembly on freshly compiled fixtures, Mono.Cecil inspection of the woven IL, then the
+         woven code executed and its reclamation asserted). It is an Exe project — referencing one
+         yields its DLL plus Mono.Cecil; nothing here runs it as a process. -->
+    <ProjectReference Include="..\..\tools\NumSharp.Build\NumSharp.Build.csproj" />
   </ItemGroup>
 
   <ItemGroup>

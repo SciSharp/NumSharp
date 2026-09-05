@@ -400,6 +400,14 @@ asserts every `[NDScoped]` method carries a local of type `NDScope` — a necess
 scoping. It turns a silently un-run weave (a broken target, or a `-p:SkipNDScopeWeave=true` build)
 red instead of letting those methods quietly revert to the finalizer backstop.
 
+The **weaver itself** is gated in-process (`test/NumSharp.Tests.Build.Analyzer`, `WeaverTestHarness`):
+a fixture is compiled with Roslyn, woven by `ScopeWeaver.WeaveAssembly` directly, read back through
+Mono.Cecil (the scope local, the try/finally `Dispose`, every `NDScope` call) and then loaded and
+executed so reclamation is asserted on real arrays — across every return, egress and body shape on
+both Release and Debug IL, the whole inheritance walk, a weaver-vs-analyzer parity check over the same
+fixtures, a seeded hierarchy fuzzer against a reference model, and the tool's process surface (exit
+codes, the reference response file, `--snk`, NDW001).
+
 ## When to use it
 
 - **Scope a call, not a caller loop.** The temporaries a scope holds are all alive simultaneously, and
@@ -643,7 +651,7 @@ the result you receive is still yours to `using` / `Dispose` / `NDScope.Attach` 
 *when* buffers are reclaimed, never the values). If you see a difference, it is a bug; the value is
 covered by NumSharp's differential-fuzz gate against NumPy.
 
-<!-- Tests: NDScopeWeaveTests.EveryScopedMethod_WasWoven; NDScopeTests; NDScopeWeaveCarrierTests; NDScopeWeaveNestingTests -->
+<!-- Tests: NDScopeWeaveTests.EveryScopedMethod_WasWoven; NDScopeTests; NDScopeWeaveCarrierTests; NDScopeWeaveNestingTests; WeaverHarnessSelfTests; WeaverInheritanceTests; WeaverShapeTests; WeaverAnalyzerParityTests; WeaverHierarchyFuzzTests; WeaverCliTests; WeaverInheritanceBuildTests -->
 
 [gate-contract]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeTests.cs
 [gate-coverage]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs
