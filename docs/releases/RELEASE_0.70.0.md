@@ -1,10 +1,16 @@
 # NumSharp 0.70.0
 
+It took a while but we are at 85% NumPy API coverage.
+This is a huge milestone for the .NET ecosystem as NumSharp grows to matureness.
+This branch also delivers integration with NumPy's OpenBLAS backend and full integration with Python giving a new angle of use cases for NumSharp to a point NumSharp is an unmanaged memory and math interop with the python ecosystem. I believe in integration rather than competition thus the large scale of support from PyTorch to Pillow.
+OpenBLAS is a rapidly developed ecosystem NumSharp will eventually replace with a simpler version but that requires porting of 100k-300k lines of code to achieve complete mathematical parity. OpenBLAS roughly powers 30% of NumPy's.
+
 *Deduplicated highlights from the journey3 branch - one line per feature; iteration commits folded in.*
 
 ### 📦 New NuGet Packages
 
 Three optional companion packages ship for the first time, co-versioned with **NumSharp** 0.70.0 (the two interop packages depend on **NumSharp.Core**; **NumSharp.Build** is a build-time development dependency that never enters your dependency graph).
+All packages are now published as signed NuGet packages.
 
 - **NumSharp.Interop.OpenBLAS** - new TensorEngine.Blas BLAS+LAPACK backend (NumPy's own dependency): powered by [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS), byte-identical to [NumPy](https://numpy.org) 2.4.2; Core stays 100% managed without it but lacks support for most of the functions.
   - Delivery - bundles the exact binaries NumPy 2.4.2 pinned dependency version (the [scipy-openblas64](https://pypi.org/project/scipy-openblas64/) / [scipy-openblas32](https://pypi.org/project/scipy-openblas32/) PyPI packages), per-RID for 8 platforms; enable/disable at runtime. Supports PyPI version pin and build-time download with auto-install at runtime.
@@ -96,7 +102,13 @@ Three living dashboards ship on the [documentation site](https://scisharp.github
   - `np.real`, `np.imag`, `np.angle`, `np.conjugate` / `np.conj` - complex component / phase accessors (post-FFT spectrum extractors) - `8b0ac701`, `d0081b6d`.
   - `np.iterable` - NumPy's pure iterability predicate - `ce560796` (+ `8cf54d35`).
   - `np.isfortran` - F-contiguity predicate (`a.flags.fnc`) - `30453696`.
+  - `np.logaddexp`, `np.logaddexp2`, `np.nextafter`, `np.copysign` - IEEE binary ufuncs (full `out=`/`where=`/`dtype=` surface); `nextafter`/`copysign` bit-exact, `logaddexp` ≤2 ULP vs NumPy 2.4.2 - `043370e0`, `26d014ed`.
+  - `np.interp` - 1-D linear interpolation (incl. `period` + complex `fp`), bit-exact vs NumPy 2.4.2 - `043370e0`.
+  - `np.nan_to_num`, `np.isposinf`, `np.isneginf` - NaN/±inf replacement + signed-infinity predicates, byte-identical to NumPy 2.4.2 - `480c2786`.
+  - `np.getbufsize`, `np.setbufsize` - thread-local ufunc buffer size with NumPy's verbatim validation, byte-exact - `6d471cf3`.
 - The `np.linalg` factorisation surface and complex128 `dot`/`matmul` are listed under **New NuGet Packages** above (they compute via the OpenBLAS backend) - `dc448acc`, `f5ec6276`, `d09e4376`, `6ee562da`.
+- `NDScope` - deterministic buffer reclamation: `using (var s = NDScope.Open())` returns the `NDArray` temporaries built inside the scope to the pool at exit (via `s.Returns(result)`) instead of waiting on the finalizer; Core weaves ~265 `np.*` methods with `[NDScoped]` so their transients are reclaimed eagerly, and the **NumSharp.Build** weaver applies the same to your own methods - `1b4e776b` (+ `99583e25`, `726ec48b`).
+- `DType` / `np.dtype` - a unified dtype descriptor (NumPy's `numpy.dtype` analog) that folds the three historical spellings - `System.Type`, `NPTypeCode`, and a NumPy dtype string (`"float32"` / `"f4"` / `"<f8"`, case-sensitive) - behind implicit conversions, plus 15 static spellings (`DType.Int32`, `DType.Single`, …); the ufunc, reduction and logic overloads migrated to it first (Creation/IO to follow) - `25a35f45` (+ `c4ebbfb4`, `8b13234e`).
 
 ### 🧩 ndarray surface
 - `ndarray` member parity with NumPy 2.4.2 -
@@ -117,6 +129,23 @@ Three living dashboards ship on the [documentation site](https://scisharp.github
 - `x40->x249` - typed `np.nditer<T>` / `nditer_chunks<T>`, allocation-free iteration (chunks + `Vector<T>` hits 249×) - `d58f3728`.
 - `x1.0->x4.5` - `take` / `put` / `place` element-copy specialization + gather prefetch (`take` went from x0.68 losing to winning everywhere) - `88550d13`.
 - `x1.04->x11.7` - float32 `exp` / `log` / `sin` / `cos` / `tanh` + `rad2deg` / `deg2rad` reimplemented as bit-exact NumPy kernel ports (`tanh` also replaces the float64 loop) - `ecdb4581`, `6bab5754`, `f5f21ff3`.
+- `x1.8->x60` - the whole float16 family on bit-level AVX2 / widen-compute-narrow kernels: `min`/`max`/`ptp`, `maximum`/`minimum`/`fmax`/`fmin`, the six comparisons, `nanmin`/`nanmax`, `clip`, `add`/`subtract`/`multiply`/`divide`, `floor`/`ceil`/`trunc`/`rint` - `a05b5b1e`, `f3405659`, `3a46cfec`, `c9e141c5`, `498a68f0`, `c8b0573d`, `c8babf28`.
+- `x2.0->x3.4` - the bool dtype family on byte-lane SIMD (bitwise/logical/comparisons; was x0.38-0.62); `sum(bool)` is a popcount (x23.6) and `argmax(bool)` a find-first scan (up to ~60,000x on sparse input) - `46dbb9c6`, `d967d99b` (+ `bd655743`).
+- `x0.9->x1.9` - SIMD `isnan` / `isinf` / `isfinite` for float32/float64 (was ~x0.10; 1K stays at the small-N alloc floor) - `7bd4f380` (+ `4dfe7619`).
+- `x1.0->x1.65` - float32/float64 `argmax` / `argmin` single-pass SIMD tournament (was ~x0.15) - `48f894ea`.
+- `x1.82->x3.12` - float32 `exp2` SIMD kernel (hybrid double-`2^r` + float scale; was ~x0.19) - `87a8bb8f`.
+- `x1.4->x6.5` - NDIter 2-D block kernel for narrow strided rows + NumPy-style axis coalescing (narrow rows were x0.4-0.82; a contiguous `(250000,4)` array times a scalar dropped 1.7 ms->251 µs) - `af25a746`, `ccadeef4`.
+- `x1.1->x10.5` - fancy indexing (`a[idx]`, `a[idx]=v`, `m[ridx]`) routed to the take/put kernels and `where=` masked ops scanned with SIMD (`a[idx64]` was x0.22, `a[idx32]` x0.81; masked all-false 27.7->1.5 µs) - `09d1fc59`.
+- `x1.06->x9.3` - NDIter fixed-cost cut (recycled state block, packed kernel key, direct external-loop advance, SIMD comparison `out=`, eager overlap-temp dispose): construction geomean x2.73->x5.8, every `out=` ufunc now beats NumPy at n=1 - `15154b00`.
+- `x2.88->x3.00` - `cov` / `corrcoef` via a managed symmetric-Gram (syrk) path at ≤16 variables (100K; was ~x0.56) - `d64f3df5`.
+- `x0.7->x1.85` - managed `matvec` / `vecmat` / matrix-vector `dot` gemv/gevm paths, no backend (was ~x0.1-0.2) - `4f666fc8`.
+- `x6` - `diff` / `ediff1d` fused adjacent-difference stencil (1K; ~4x fewer allocations at 100K) - `6e94dbcc`.
+- `x1.46->x4.8` - `fill_diagonal` / `diag` / `diagflat` diagonal-write IL kernel (`fill_diagonal` 10M was x0.40) - `a13238ac`.
+- `x1.4->x1.7` - streamed int64/uint64 `mean` axis reductions + unrolled flat `nanmin` / `nanmax` (were x0.16 / x0.26) - `8c09dc15`.
+- `x2.0->x2.3` - pre-state `cpblk` fast path for trivial same-layout `copyto` / `copy` / `clone` at small N - `7bfc27a2`.
+- `x1.8->x2.3` - small same-dtype single-broadcast ops routed to the direct SimdChunk kernel (1K; was ~x0.55) - `a3819869`.
+- `x0.6->x1.35` - buffer-pool GC pacing + burst-sized buckets lift the small-N elementwise floor for undisposed results (1K float32 `abs` was x0.29) - `160ecbba`.
+- `1088 B -> 192 B` per-`NDArray` object base size (896 B smaller) - `UnmanagedStorage`'s 15 per-dtype slice fields collapsed into one `StructLayout.Explicit` union - `8306fa63`.
 
 ### 🎯 Parity & Fixes
 - `ndarray.flags` / `setflags` - full NumPy 2.4.2 parity across the whole layout/producer space, hardened by a 1104-case differential oracle (owndata/writeable/contiguity, squeeze-as-view, split-child contiguity, read-only reduction scalars) - `275f089c`, `53b5d82e`, `ca1b0fac`.
@@ -141,6 +170,17 @@ Three living dashboards ship on the [documentation site](https://scisharp.github
   - `np.einsum` - a scalar (`ndim==0`) contraction keeps its `()` shape instead of promoting to `(1,)`.
   - `np.angle(deg: true)` - a 0-D `Half` / `Single` result keeps its float tier instead of promoting to `Double`.
 - Removed the last 64-dimension caps - axis reductions (`var`/`std`/`cumsum`/`cumprod`/`all`/`any`) and `ndarray.fill` now run at unlimited ndim like the rest of NumSharp - `8f34e8ff`, `7fa96750`.
+- The LU-based `np.linalg` factorisations - `det`, `slogdet`, `solve`, `inv` (+ `tensorinv`/`tensorsolve`/`matrix_power(n<0)`) - now compute in a backend-free Core via a managed LU (`allclose` to NumPy, faster for small matrices) instead of raising; an installed OpenBLAS backend still wins the seam for byte-parity - `48b00e00` (+ `03884ee9`).
+- `np.isclose` / `np.allclose` now compute in NumPy's exact `result_type` - fixes a complex128 correctness bug (the imaginary part was dropped, so `isclose([1+0j],[1+100j])` wrongly returned `True`) and evaluates float32 pairs in float32 (100K x0.18->x3.3) - `fbbda5f0`.
+- `np.sum(float16)` accumulates in a float32 shadow and narrows per orientation like NumPy's `HALF_add` - an axis sum now saturates (`sum(ones((4096,3),f16),axis=0)` = `[2048,2048,2048]`, was `[4096,...]`, a ~3.5% error) while a flat sum still reaches 4096 - `32732a0f`.
+- `np.power(x, negative_int)` - a strided/2-D/broadcast integer exponent no longer reads out of bounds (a Release memory-safety bug), and a bool base now raises NumPy's verbatim `ValueError` instead of silently computing - `02e6929f`.
+- Seven array-creation/ctor fixes match NumPy 2.4.2 - `new NDArray(buffer, shape, 'F')` lays out column-major, `np.arange(dtype=bool)` raises past length 2, `np.frombuffer` rejects complex64/`'c8'`, and `np.array`'s default `ndmin` is 0 - `5c7e3ad8`.
+- `np.isreal` / `np.iscomplex` now inspect the imaginary part (they returned all-`True` / all-`False` for complex regardless of value) and no longer emit garbage bytes on a strided real input - `fa491573`.
+- Axis reductions (`sum`/`mean`/`prod`/`min`/`max`/`std`/`var` + all `nan*`) preserve an F-contiguous input's layout (KEEPORDER allocation) instead of flipping it to C, matching NumPy - `0ae977d9` (issue #610).
+- `np.clip` on a non-contiguous Boolean array (strided/transposed/F-order/reversed) now clips instead of throwing `NotSupportedException` - `f6f5b657`.
+- Strided/broadcast/negative-stride float16 `add` / `subtract` / `multiply` / `divide` (and `kron`) no longer read the wrong elements - a stride-coalescer bug (merged adjacent axes by value, not magnitude) plus a bit-exact odometer kernel - `7f2c09a3`.
+- The float16 `maximum`/`minimum`/`nanmin`/`nanmax`/`clip` now return NaN operands verbatim (payload + sign preserved, was canonical `Half.NaN`), and a `clip` NaN-max-bound precedence bug that returned float32 fills (any dtype) is fixed - `f3405659`, `498a68f0`, `c9e141c5`.
+- complex128 unary ufuncs are now byte-identical to NumPy 2.4.2 on the **NaN sign** - `sqrt`/`log`/`exp`/`expm1`/`square`/`reciprocal`/`sin`/`cos`/`tan`/`sinh`/`cosh`/`tanh`/the `arc*` family/`abs`/`sign` emit NumPy's positive quiet NaN where it canonicalizes and propagate the operand's NaN sign where it does (was .NET's negative NaN); `square` is additionally made arch-consistent via a portable FMA off x86 (fixing a thousands-of-ULP Apple-silicon divergence), all gated by a new `nan` differential-fuzz tier - `760bb5bb` (+ `298e7c60`, `8e1f3cd9`, `2fd9d785`, `56a55712`).
 
 ### 🧰 Testing & Tooling
 - The NumPy differential-fuzz oracle gained new tiers - FFT transforms, ufunc `out=`/`where=` (3,727 cases over out × mask layouts), result-kinds + verbatim-error + iterator-trace, IEEE special-values (nan/±inf/±0/subnormal), and a truthful-vs-precise precision channel - `bc91dd25`, `6cd1de9b`, `0882edbb`, `359e9d3c`, `76f0c918`.
@@ -155,4 +195,7 @@ Three living dashboards ship on the [documentation site](https://scisharp.github
 - Every NumSharp assembly is now strong-named - `PublicKeyToken` changes from `null` to `cc7b13ffcd2ddd51` (published NumSharp had shipped unsigned since 2019); every consumer (TensorFlow.NET, Pandas.NET, Gym.NET) must recompile - `478d550d`.
 - Environment variables were hard-renamed to a consistent `NUMSHARP_<AREA>_<SETTING>` scheme with no back-compat aliases - `NUMSHARP_GUARD_PAGES` (shipped in 0.60.0) becomes `NUMSHARP_DEBUG_GUARD_PAGES`, and the OpenBLAS/pythonnet knobs take `_LIBRARY` / `_SEARCH_PATH` / `_USE_BUNDLED` / `_PYPI_FEED_URL` / `_REQUIRE_ENGINE` names - `079d1859`.
 - `NDArray.Normalize()` (a non-NumPy extension) is marked `[Obsolete]` in favour of `np.clip()` - `b701843e`.
-- `np.poly1d` is now `IDisposable` - it owns the coefficient array its constructor yields into it, so `Dispose()` releases it, and the copy-constructor `new poly1d(p)` now **copies** the coefficients instead of sharing one array between two owners (NumPy shares by refcount; two NumSharp owners would double-dispose). Found by the new NDW016 ownership analyzer, which also made `np.Broadcast.Dispose()` (what `foreach` calls when a loop ends) release the `broadcast_to` views it had built (they are rebuilt lazily on the next `iters`/enumeration, so the object stays re-enumerable) and `IndexCollector` an `IDisposable` that no longer strands its outgrown buffer.
+- A `bool` array combined with a weak integer literal now promotes to **int64** (was int32), matching NumPy's NEP50 - `np.left_shift(boolArr, 2)`, `boolArr + 2`, `boolArr & 2` etc. change result dtype; a narrower strong spelling like `(short)2` keeps its own kind - `46dbb9c6`.
+- `np.poly1d` is now `IDisposable` - it owns the coefficient array its constructor yields into it, so `Dispose()` releases it, and the copy-constructor `new poly1d(p)` now **copies** the coefficients instead of sharing one array between two owners (NumPy shares by refcount; two NumSharp owners would double-dispose). Found by the new NDW016 ownership analyzer, which also made `np.Broadcast.Dispose()` (what `foreach` calls when a loop ends) release the `broadcast_to` views it had built (they are rebuilt lazily on the next `iters`/enumeration, so the object stays re-enumerable) and `IndexCollector` an `IDisposable` that no longer strands its outgrown buffer - `4cc9cac5`.
+- The `dtype` argument is now **keyword-only** on the ufunc/reduction/logic surface (the Math ufuncs, the reductions, and the comparison/`isnan`/`isinf`/`isfinite` predicates) - `np.sqrt(x, typeof(float))` becomes `np.sqrt(x, dtype: ...)` (NumPy-faithful); `System.Type` / `NPTypeCode` / a dtype string all still bind via the new `DType` implicit conversion, and `power`/`floor_divide` drop their object-scalar-rhs-plus-`dtype` convenience overload - `c4ebbfb4`, `8b13234e`.
+
