@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 
-MODULE_PATH = Path(__file__).with_name("merge-backend-profiles.py")
+MODULE_PATH = Path(__file__).resolve().parent.parent / "merge-backend-profiles.py"
 SPEC = importlib.util.spec_from_file_location("merge_backend_profiles", MODULE_PATH)
 module = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader

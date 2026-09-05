@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 
-MODULE_PATH = Path(__file__).with_name("merge-results.py")
+MODULE_PATH = Path(__file__).resolve().parent.parent / "merge-results.py"
 BENCHMARK_ROOT = MODULE_PATH.parent.parent
 SPEC = importlib.util.spec_from_file_location("merge_results", MODULE_PATH)
 module = importlib.util.module_from_spec(SPEC)
@@ -119,13 +119,13 @@ class UniversalTierCoverageTests(unittest.TestCase):
 
         self.assertEqual(14, sum(row.category == "Conversion" for row in creation))
         self.assertEqual(9, sum(row.category == "Stack" for row in manipulation))
-        self.assertEqual(10, sum(row.category == "SetOperations" for row in manipulation))
+        self.assertEqual(20, sum(row.category == "SetOperations" for row in manipulation))  # 10 set/unique ops × int32 + float64
         self.assertEqual(22, sum(row.category == "ExtendedShape" for row in manipulation))
         self.assertEqual(6, sum(row.category == "Close" for row in logic))
         self.assertEqual(12, sum(row.category in {"Signal", "Histogram"} for row in statistics))
         self.assertEqual(40, len(sorting))       # 3 base + 7 formerly capped, across four dtypes
-        self.assertEqual(18, len(fft))
-        self.assertEqual(43, len(random))
+        self.assertEqual(26, len(fft))
+        self.assertEqual(52, len(random))
         self.assertEqual(42, len(ndarray))
         self.assertEqual(18, len(selection))     # 2 where + 16 formerly capped indexing cases
 

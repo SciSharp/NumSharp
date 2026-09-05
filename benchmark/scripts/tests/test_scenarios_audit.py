@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 HTML = REPO / "benchmark" / "scenarios.html"
 EXPECTED_DTYPES = [
     "bool", "uint8", "int8", "int16", "uint16", "int32", "uint32", "int64", "uint64",

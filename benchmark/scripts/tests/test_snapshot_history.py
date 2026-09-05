@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 
-MODULE_PATH = Path(__file__).with_name("snapshot_history.py")
+MODULE_PATH = Path(__file__).resolve().parent.parent / "snapshot_history.py"
 SPEC = importlib.util.spec_from_file_location("snapshot_history", MODULE_PATH)
 module = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader

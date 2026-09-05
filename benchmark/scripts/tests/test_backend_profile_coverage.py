@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / "backends" / "backend_profiles.py"
+MODULE_PATH = Path(__file__).resolve().parents[2] / "backends" / "backend_profiles.py"
 SPEC = importlib.util.spec_from_file_location("backend_profiles", MODULE_PATH)
 module = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
