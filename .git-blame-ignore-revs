@@ -32,3 +32,8 @@ e6fd25438ba488038494c60a2333b2850501ff64
 # NumSharp.UnitTest.Oracle -> NumSharp.Tests.Oracle, NumSharp.Interop.UnitTests -> NumSharp.Tests.Interop):
 # mechanical dir/csproj/assembly/namespace rename + reference updates, no logic change.
 2696a1411b145b3fca337b9923e8daf638418e76
+
+# Relocate vendored reference trees src/{numpy,pocketfft,OpenBLAS,dotnet} -> refs/
+# (submodule git mv + BCL-snapshot R100 renames) + rewrite all path references
+# across docs/code. Mechanical, no logic change.
+1e7a0c86c313b4913833bbe2f46517a352d08bcd
