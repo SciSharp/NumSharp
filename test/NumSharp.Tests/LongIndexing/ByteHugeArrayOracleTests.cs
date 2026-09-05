@@ -442,13 +442,73 @@ public class ByteHugeArrayOracleTests
     }
 
     // ────────────────────────────────────────────────────────────────────────────────────────
-    // Wide-output ops: the RESULT is int64/double at FULL size (~16-18 GB) — the exact class that
-    // was truncating its output shape via (int)a.size. Peak ≈ 2 GB input + ~18 GB out. Guard 24 GB.
+    // Scan + cast wide-output ops: the RESULT is int64/double at FULL size (~17 GB) while the input
+    // is a single 2 GB byte array, so peak ≈ 19 GB. These ride the standard long-based Direct
+    // scan/cast kernels (loop counters + count + Shape.Vector all long — verified 64-bit end to
+    // end), NOT the bespoke sort/select cores; confirmed on the real 2.1e9 array. Guard 24 GB.
     // ────────────────────────────────────────────────────────────────────────────────────────
     [TestMethod]
-    public void ByteHugeArray_WideOutputOps_SupportBeyondIntMaxValue()
+    public void ByteHugeArray_ScanAndCastOps_SupportBeyondIntMaxValue()
     {
         RequireAvailableMemory(24 * GB);
+        var results = new List<(string Op, bool Ok, string Err)>();
+
+        // np.cumsum flat — uint8 -> int64 running total at full size.
+        RunOp(results, "np.cumsum(axis=null)", () =>
+        {
+            using var a = np.ones(new Shape(N), np.uint8);
+            using var r = np.cumsum(a, axis: null);
+            Assert.AreEqual(N, r.size);
+            Assert.AreEqual(1L, r.GetInt64(0));
+            Assert.AreEqual(Over + 1, r.GetInt64(Over)); // running sum crosses 2^31 mid-array
+            Assert.AreEqual(N, r.GetInt64(N - 1));       // sum of N ones = N (> 2^31)
+        });
+
+        // np.cumprod flat.
+        RunOp(results, "np.cumprod(axis=null)", () =>
+        {
+            using var a = np.ones(new Shape(N), np.uint8);
+            using var r = np.cumprod(a, axis: null);
+            Assert.AreEqual(N, r.size);
+            Assert.AreEqual(1L, r.GetInt64(Over));
+            Assert.AreEqual(1L, r.GetInt64(N - 1));
+        });
+
+        // astype to wider dtypes — full-size int64 / double output, value read back past 2^31.
+        RunOp(results, "astype(int64)", () =>
+        {
+            using var a = np.zeros(new Shape(N), np.uint8);
+            a.SetByte((byte)123, Last);
+            a.SetByte((byte)45, Over);
+            using var r = a.astype(NPTypeCode.Int64);
+            Assert.AreEqual(N, r.size);
+            Assert.AreEqual(45L, r.GetInt64(Over));
+            Assert.AreEqual(123L, r.GetInt64(Last));
+        });
+        RunOp(results, "astype(double)", () =>
+        {
+            using var a = np.zeros(new Shape(N), np.uint8);
+            a.SetByte((byte)123, Last);
+            using var r = a.astype(NPTypeCode.Double);
+            Assert.AreEqual(N, r.size);
+            Assert.AreEqual(123.0, r.GetDouble(Last), 0.0);
+        });
+
+        Report(results, "ScanAndCastOps");
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────────────────
+    // argsort / argpartition over > 2^31 elements — the int64-INDEX-returning sort/select family.
+    // Validates the 64-bit sort/select core (RadixSort/QuickSelect) AND the output-shape (int)a.size
+    // fix. Their footprint is enormous: argsort(byte) widens keys to 4 bytes and carries two int64
+    // columns, so peak ≈ 71 GB at 2.1e9 (int64 output 17 + key/tmp 17 + idx/it 34 + input 2). The
+    // 72 GB guard reflects that — this runs only on a very-large-memory host. sort/partition (byte
+    // output, ~4 GB) already prove the same cores on the real 2.1e9 array in BoundedOutputOps.
+    // ────────────────────────────────────────────────────────────────────────────────────────
+    [TestMethod]
+    public void ByteHugeArray_ArgSortArgPartition_SupportBeyondIntMaxValue()
+    {
+        RequireAvailableMemory(72 * GB);
         var results = new List<(string Op, bool Ok, string Err)>();
 
         // np.argsort flat — validates AxisSort.ArgSort's Shape.Vector(a.size) (was new Shape((int)a.size)).
@@ -481,44 +541,7 @@ public class ByteHugeArrayOracleTests
             Assert.AreEqual(Last, r.GetInt64(N - 1)); // largest partitioned into last position
         });
 
-        // np.cumsum flat — int64 accumulator at full size.
-        RunOp(results, "np.cumsum(axis=null)", () =>
-        {
-            using var a = np.ones(new Shape(N), np.uint8);
-            using var r = np.cumsum(a, axis: null);
-            Assert.AreEqual(N, r.size);
-            Assert.AreEqual(1L, r.GetInt64(0));
-            Assert.AreEqual(N, r.GetInt64(N - 1));  // running sum of ones reaches N (> 2^31)
-        });
-
-        // np.cumprod flat.
-        RunOp(results, "np.cumprod(axis=null)", () =>
-        {
-            using var a = np.ones(new Shape(N), np.uint8);
-            using var r = np.cumprod(a, axis: null);
-            Assert.AreEqual(N, r.size);
-            Assert.AreEqual(1L, r.GetInt64(N - 1));
-        });
-
-        // astype to wider dtypes — full-size int64 / double output.
-        RunOp(results, "astype(int64)", () =>
-        {
-            using var a = np.zeros(new Shape(N), np.uint8);
-            a.SetByte((byte)123, Last);
-            using var r = a.astype(NPTypeCode.Int64);
-            Assert.AreEqual(N, r.size);
-            Assert.AreEqual(123L, r.GetInt64(Last));
-        });
-        RunOp(results, "astype(double)", () =>
-        {
-            using var a = np.zeros(new Shape(N), np.uint8);
-            a.SetByte((byte)123, Last);
-            using var r = a.astype(NPTypeCode.Double);
-            Assert.AreEqual(N, r.size);
-            Assert.AreEqual(123.0, r.GetDouble(Last), 0.0);
-        });
-
-        Report(results, "WideOutputOps");
+        Report(results, "ArgSortArgPartition");
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
