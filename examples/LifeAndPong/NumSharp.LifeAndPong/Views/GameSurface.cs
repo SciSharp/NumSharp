@@ -43,6 +43,7 @@ public sealed class GameSurface : UserControl, IDisposable
     private IPointer? _pointer;
     private double _feedbackSeconds;
     private string? _feedback;
+    private bool _milestoneFeedback;
 
     public GameSurface() : this(true, PlayerProfile.OpenLocal(), App.AudioFactory()) { }
     internal GameSurface(bool startAnimation) : this(startAnimation, new PlayerProfile(), new SilentGameAudio()) { }
@@ -55,7 +56,7 @@ public sealed class GameSurface : UserControl, IDisposable
         _pause = MakeButton("Pause / Esc", SuspendPlay, false);
         _restart = MakeButton("Restart run", () => { _confirmRestart = true; Refresh(); }, false);
         _cancel = MakeButton("Keep this run", () => { _confirmRestart = false; Refresh(); _primary.Focus(); }, false);
-        _title = MakeButton("Back to title", () => { _session.NewRun(Random.Shared.Next()); _recorded = false; _arena.ClearEffects(); Refresh(); Focus(); }, false);
+        _title = MakeButton("Back to title", () => { BeginNewRun(); Refresh(); Focus(); }, false);
         _sound = MakeOption("Sound", profile.Sound, value => profile.Sound = value); _sound.IsEnabled = audio.Available;
         if (!audio.Available) ToolTip.SetTip(_sound, "Sound is available in the Windows desktop release.");
         _motion = MakeOption("Reduced motion", profile.ReducedMotion, value => profile.ReducedMotion = value);
@@ -124,8 +125,13 @@ public sealed class GameSurface : UserControl, IDisposable
     private void StartOrResume()
     {
         if (_confirmRestart || _session.State == RunState.GameOver)
-        { _session.NewRun(Random.Shared.Next()); _recorded = false; _confirmRestart = false; _arena.ClearEffects(); }
+            BeginNewRun();
         _session.LaunchOrResume(); Refresh(); Focus();
+    }
+    private void BeginNewRun()
+    {
+        _session.NewRun(Random.Shared.Next()); _recorded = false; _confirmRestart = false;
+        _feedback = null; _feedbackSeconds = 0; _milestoneFeedback = false; _arena.ClearEffects();
     }
     internal void SuspendPlay() { ReleaseInput(); _session.Pause(); _accumulator = 0; Refresh(); }
     private void ReleaseInput() { _held.Clear(); _session.ReleaseInput(); var pointer = _pointer; _pointer = null; pointer?.Capture(null); }
@@ -195,9 +201,9 @@ public sealed class GameSurface : UserControl, IDisposable
             while (_session.TryTakeEvent(out var item))
             {
                 _arena.OnEvent(item);
-                if (item.Kind == ArcadeEventKind.Cell) { _feedback = $"+{item.Value:N0} · {item.ShotHits} CELLS THIS SHOT"; _feedbackSeconds = .75; }
-                if (item.Kind == ArcadeEventKind.Milestone) { _feedback = $"{ArenaView.TierName(ArcadeSession.TierForHits(item.Value))} · {item.Value} CELLS"; _feedbackSeconds = 1.8; }
-                if (item.Kind is ArcadeEventKind.Paddle or ArcadeEventKind.Miss) { _feedback = null; _feedbackSeconds = 0; }
+                if (item.Kind == ArcadeEventKind.Cell && (!_milestoneFeedback || _feedbackSeconds <= 0)) { _feedback = $"+{item.Value:N0} · {item.ShotHits} CELLS THIS SHOT"; _feedbackSeconds = .75; _milestoneFeedback = false; }
+                if (item.Kind == ArcadeEventKind.Milestone) { _feedback = $"{ArenaView.TierName(ArcadeSession.TierForHits(item.Value))} · {item.Value} CELLS"; _feedbackSeconds = 1.8; _milestoneFeedback = true; }
+                if (item.Kind is ArcadeEventKind.Paddle or ArcadeEventKind.Miss) { _feedback = null; _feedbackSeconds = 0; _milestoneFeedback = false; }
                 if (_profile.Sound) _audio.Play(item);
             }
         }

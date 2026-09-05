@@ -90,6 +90,8 @@ public sealed class VisualSmokeTests
                 Assert.IsTrue(surface.Arena.SparkCount > 0); Assert.AreEqual(ArcadeSession.TierForHits(threshold), surface.Arena.WaveCount);
                 Capture(window, $"preview.milestone{threshold}.png");
                 AssertTextOutsideArena(window, surface);
+                ArcadeSessionTests.Hit(surface.Session); surface.AdvanceSimulation(1d / 120);
+                Assert.IsTrue(surface.HitFeedback.Text!.Contains(ArenaView.TierName(ArcadeSession.TierForHits(threshold))), "A following cell must not immediately erase a milestone announcement.");
                 Assert.AreEqual(.7, (surface.Arena.PhaseBoundaryX - surface.Arena.WorldBounds.X) / surface.Arena.WorldBounds.Width, .00001);
                 ArcadeSessionTests.PaddleHit(surface.Session); surface.AdvanceSimulation(1d / 120);
                 Assert.AreEqual(0, surface.Arena.SparkCount); Assert.AreEqual(0, surface.Arena.WaveCount);
