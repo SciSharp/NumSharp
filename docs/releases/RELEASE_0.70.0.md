@@ -3,9 +3,29 @@
 It took a while but we are at 85% NumPy API coverage.
 This is a huge milestone for the .NET ecosystem as NumSharp grows to matureness.
 This branch also delivers integration with NumPy's OpenBLAS backend and full integration with Python giving a new angle of use cases for NumSharp to a point NumSharp is an unmanaged memory and math interop with the python ecosystem. I believe in integration rather than competition thus the large scale of support from PyTorch to Pillow.
-OpenBLAS is a rapidly developed ecosystem NumSharp will eventually replace with a simpler version but that requires porting of 100k-300k lines of code to achieve complete mathematical parity. OpenBLAS roughly powers 30% of NumPy's.
+OpenBLAS is a rapidly developed ecosystem NumSharp will eventually replace with a simpler version but that requires porting of 100k-300k lines of code to achieve complete mathematical parity. OpenBLAS roughly powers 30% of NumPy's backend.
 
-*Deduplicated highlights from the journey3 branch - one line per feature; iteration commits folded in.*
+### 🧭 Overview
+- NumPy 2.x API coverage **60.4% -> 87.1%** - **150 NumPy APIs newly available**, every figure from the [Supported Features Dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html).
+  - `np.*` - **+88 functions**
+  - `np.fft.*` - **fully ported +18 functions**
+  - `np.linalg.*` - **fully ported +31 functions**
+  - `ndarray.*` - **+16 functions**
+  - `np.random.*` - **fully ported**: the modern `default_rng` / PCG64 `Generator`, byte-identical streams.
+- **~40 NumPy-parity fixes**, **25 measured speedups** and **10 breaking changes** - every line traced to one of 186 cited commits out of the branch's 540.
+- **3 new NuGet packages**, all published signed:
+  - **NumSharp.Interop.OpenBLAS** - the full BLAS/LAPACK `np.linalg` surface, byte-identical to NumPy 2.4.2 (bundles NumPy's own pinned OpenBLAS for 8 RIDs).
+  - **NumSharp.Interop.pythonnet** - zero-copy interop with numpy, PyTorch, pandas, Pillow and any PEP 3118 buffer exporter via Python.NET.
+  - **NumSharp.Build** - the `[NDScoped]` IL weaver for deterministic memory reclamation; its Roslyn leak/ownership analyzer ships inside NumSharp.
+- **3 living dashboards** on the docs site - Supported Features, Benchmarks (456 benchmarkable APIs) and Tests & Oracle (a 116K+ test-case NumPy 2.4.2 differential-fuzz corpus, bit-exact).
+- **Deterministic memory reclamation** - NDArray is now IDisposable, `NDScope` and `[NDScoped]` for automated memory disposal and buffer caching reclamation.
+- `NDArray` object base size reduction `1088 B -> 192 B` (896 B smaller).
+- 116K Oracle unit tests and 14,000 unit tests + integration tests.
+- **Performance vs a warm NumPy** - NDIter **1.46x geomean**.
+
+## Detailed Breakdown
+<details>
+  <summary>Show All</summary>
 
 ### 📦 New NuGet Packages
 
@@ -13,7 +33,7 @@ Three optional companion packages ship for the first time, co-versioned with **N
 All packages are now published as signed NuGet packages.
 
 - **NumSharp.Interop.OpenBLAS** - new TensorEngine.Blas BLAS+LAPACK backend (NumPy's own dependency): powered by [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS), byte-identical to [NumPy](https://numpy.org) 2.4.2; Core stays 100% managed without it but lacks support for most of the functions.
-  - Delivery - bundles the exact binaries NumPy 2.4.2 pinned dependency version (the [scipy-openblas64](https://pypi.org/project/scipy-openblas64/) / [scipy-openblas32](https://pypi.org/project/scipy-openblas32/) PyPI packages), per-RID for 8 platforms; enable/disable at runtime. Supports PyPI version pin and build-time download with auto-install at runtime.
+  - Delivery - bundles the exact binaries NumPy 2.4.2 pinned dependency version (the [scipy-openblas64](https://pypi.org/project/scipy-openblas64/) / [scipy-openblas32](https://pypi.org/project/scipy-openblas32/) PyPI packages), per-RID for 8 platforms; enable/disable at runtime. Supports PyPI version pin and build-time download with auto-install at runtime. The Linux/macOS wheels' vendored Fortran runtime (`libgfortran`/`libquadmath`/`libgcc_s`) is co-staged, and on macOS materialized at load (in place, or in a per-user cache for read-only / single-file layouts) so a plain PackageReference restore loads on every platform.
   - Products - `dot`, `matmul`, `inner`, `vdot`, `vecdot`, `matvec`, `vecmat`, `tensordot`, `multi_dot`, `matrix_power`.
   - Linear systems & inverses - `solve`, `inv`, `det`, `slogdet`, `tensorsolve`, `tensorinv`.
   - Decompositions - `cholesky`, `qr`, `svd`, `svdvals`.
@@ -23,6 +43,7 @@ All packages are now published as signed NuGet packages.
 - **NumSharp.Interop.pythonnet** - zero-copy NumSharp ↔ Python via [Python.NET](https://github.com/pythonnet/pythonnet); any numpy / any Python, no Numpy.NET dependency.
   - Explicit - `arr.ToNumpy()` / `arr.ToPython()` out; `pyObj.AsNDArray()` / `pyObj.FromArrayLike()` in.
   - Implicit - `RegisterCodec()` once, then pythonnet's own `obj.ToPython()` / `pyObj.As<NDArray>()` round-trip transparently.
+  - Tuples - C# `ValueTuple`/`Tuple` cross as Python tuples (any arity, nested; an `NDArray` element becomes a numpy view) and a Python tuple / namedtuple / `torch.Size` decodes back into a same-arity C# tuple, so `(long, long) shape = py.a.shape` just works.
   - Mode Copy vs view - `Auto` (view when possible, else copy), `View` (share or decline), `Copy` (always independent).
   - Buffer protocol - `FromArrayLike` imports any PEP 3118 exporter, strided/offset/reversed included; read-only stays non-writeable:
     - numpy arrays ([numpy](https://numpy.org));
@@ -33,17 +54,12 @@ All packages are now published as signed NuGet packages.
   - Lifetime & GIL - GC-safe leases, optional GIL control, live export/import counters for leak checks.
   - Dependency - pythonnet 3.0.5+ (Python 3.7-3.13, and future 3.x).
 - **NumSharp.Build** - build-time IL weaver for `[NDScoped]` / `[NDScopedAsync]` deterministic memory reclamation: mark a method and the `NDArray` temporaries it drops return to NumSharp's buffer pool the moment it exits, instead of waiting on the finalizer - the source keeps its 100% original body; the scope is woven post-compile into the intermediate assembly.
-  - Not a dependency - MSBuild targets + a tool only (no `lib/`, no dependency entries); `dotnet add package NumSharp.Build` writes `PrivateAssets="all"` by itself, so installing it changes your **build**, never your package's dependency graph.
-  - Coverage - synchronous methods, `async` methods, iterators, and non-`async` `Task`/`ValueTask` returns are woven through their compiler state machines; incremental per-TFM, idempotent (double-weaving impossible), and a strong-named consumer is re-signed with its own key.
-  - Compile-time safety ships with **NumSharp itself**, not this package: the Roslyn analyzer rides the NumSharp nupkg's `analyzers/dotnet/cs/`, so referencing NumSharp alone reports a wrong or unsupported `[NDScoped]` target as a build **error** (NDW002-NDW011, NDW015), nudges on leaked `NDArray` temporaries (NDW012), and holds **types** to the same ownership contract: a class/struct that stores NDArrays (a field or auto-property holding an `NDArray`, an array/tuple/collection/generic of them, a carrier struct, or another NDArray-owning type - ownership is contagious) must be `IDisposable`/`IAsyncDisposable` (NDW016) and must dispose every such member on its `Dispose` path (NDW017); an instance of such a disposable is then an owned value for NDW012 (`new Holder(a + b);` or a never-closed `np.nditer(a)` warns), and `foreach` over a produced `NDArray` or such an instance is flagged (C# disposes only the enumerator). The runtime-inert `[NDBorrowed]` attribute (field / property / class / struct) states "this references an array owned elsewhere" and opts out. NumSharp also carries the NDW013 build warning for `[NDScoped]` used **without** the weaver installed (the attributes are then inert).
-  - Escape hatches - `-p:SkipNDScopeWeave=true` builds without weaving (nothing else changes); `-p:NDScopeWeaveILVerify=true` additionally runs `dotnet-ilverify` on the woven output.
-  - Gate - `tools/verify_build_package.sh`, an 18-step real-consumer nupkg flow (package shapes, weave + incrementality, transitive isolation, re-signing, state machines, the analyzer/weaver error layers, NDW012/NDW013, NDW016/NDW017 + `[NDBorrowed]`, and analyzer-via-NumSharp-alone).
 
 ### 📊 Dashboards & Docs
 
 Three living dashboards ship on the [documentation site](https://scisharp.github.io/NumSharp/), each generated from the same CI artifacts the release gates run on.
 
-- **[Supported Features Dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html)** - NumPy 2.x API coverage & support: every public NumPy API in scope, its NumSharp equivalent, known limitations and C# overloads, and the coverage-score math. Headline ~85% (478/560), with np.random / np.fft / np.linalg at 100%.
+- **[Supported Features Dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html)** - NumPy 2.x API coverage & support: every public NumPy API in scope, its NumSharp equivalent, known limitations and C# overloads, and the coverage-score math. Headline ~87% (488/560), with np.random / np.fft / np.linalg at 100%.
   - Surface scoreboard (top-level · ndarray · random · linalg · fft), a deterministic capability map, and a searchable API explorer.
 - **[Benchmark Dashboard](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html)** - the NumSharp-vs-NumPy performance lab: 18 op suites × all dtypes × three cache tiers (1K/100K/10M), plus six scans (iterator, layout, operand, cast, fusion, native OpenBLAS/LAPACK); 456/456 benchmarkable APIs have evidence.
   - NumPy÷NumSharp heatmaps with drill-down, published as release-tracked history snapshots (not scratch output).
@@ -59,7 +75,7 @@ Three living dashboards ship on the [documentation site](https://scisharp.github
   - `rfft`, `irfft`, `rfft2`, `irfft2`, `rfftn`, `irfftn` - real-input transforms.
   - `hfft`, `ihfft` - Hermitian-symmetric transforms.
   - `fftfreq`, `rfftfreq`, `fftshift`, `ifftshift` - sample-frequency & shift helpers.
-- `np.einsum` - Einstein summation, now computing and planning - `7d2d7a2f` (+ `d78e07db`, `b61b0998`), `bb63ba48`.
+- `np.einsum` - Einstein summation, now computing and planning - `7d2d7a2f` (+ `d78e07db`, `b61b0998`), `bb63ba48` (+ `5a55d065`).
   - `einsum` - contracts via the matrix products (rides OpenBLAS when the package is referenced).
   - `einsum_path` - greedy/optimal contraction planner, byte-exact info string.
 - `np.r_` / `np.c_` / `np.ix_` / `np.s_` / `np.index_exp` - the grid & slice-expression DSL, 131/131 bit-exact vs NumPy 2.4.2 - `00dfe402` (+ `3c63734d`, `7eea4f7f`, `c4e27523`).
@@ -109,6 +125,7 @@ Three living dashboards ship on the [documentation site](https://scisharp.github
 - The `np.linalg` factorisation surface and complex128 `dot`/`matmul` are listed under **New NuGet Packages** above (they compute via the OpenBLAS backend) - `dc448acc`, `f5ec6276`, `d09e4376`, `6ee562da`.
 - `NDScope` - deterministic buffer reclamation: `using (var s = NDScope.Open())` returns the `NDArray` temporaries built inside the scope to the pool at exit (via `s.Returns(result)`) instead of waiting on the finalizer; Core weaves ~265 `np.*` methods with `[NDScoped]` so their transients are reclaimed eagerly, and the **NumSharp.Build** weaver applies the same to your own methods - `1b4e776b` (+ `99583e25`, `726ec48b`).
 - `DType` / `np.dtype` - a unified dtype descriptor (NumPy's `numpy.dtype` analog) that folds the three historical spellings - `System.Type`, `NPTypeCode`, and a NumPy dtype string (`"float32"` / `"f4"` / `"<f8"`, case-sensitive) - behind implicit conversions, plus 15 static spellings (`DType.Int32`, `DType.Single`, …); the ufunc, reduction and logic overloads migrated to it first (Creation/IO to follow) - `25a35f45` (+ `c4ebbfb4`, `8b13234e`).
+- `TensorEngine.Threading` - one process-wide registry for every threading knob NumSharp and the native BLAS/OpenMP ecosystem expose (`NUMSHARP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `OMP`/`MKL`/`BLIS`/`NumExpr`/`vecLib`): `Register` / `Get` / `SetThreads` / `SetAll`; a variable already set in the environment is the source of truth a module default never overrides, every write stays process-scoped, and `np.multithreading` now routes through it (the OpenBLAS package plugs in a live reader/applier) - `659ed82a`.
 
 ### 🧩 ndarray surface
 - `ndarray` member parity with NumPy 2.4.2 -
@@ -148,7 +165,7 @@ Three living dashboards ship on the [documentation site](https://scisharp.github
 - `1088 B -> 192 B` per-`NDArray` object base size (896 B smaller) - `UnmanagedStorage`'s 15 per-dtype slice fields collapsed into one `StructLayout.Explicit` union - `8306fa63`.
 
 ### 🎯 Parity & Fixes
-- Release-candidate consumer QA (the packed 0.70.0 nupkgs consumed from real net8.0/net9.0/net10.0 projects against NumPy 2.4.2 output) - seven fixes:
+- Release-candidate consumer QA (the packed 0.70.0 nupkgs consumed from real net8.0/net9.0/net10.0 projects against NumPy 2.4.2 output) - seven fixes - `3893b41a`:
   - `np.frombuffer(bytes, "float64")` - NumPy dtype **names** (`"float64"`, `"int32"`, `"bool"`, `"complex128"`, `"float16"`) now parse like the sized codes (`"<f8"`); they threw `NotSupportedException`.
   - `np.clip(float32, 1, 3)` / `ndarray.clip` and the arctan2-template ufuncs (`arctan2`, `copysign`, `logaddexp`, `logaddexp2`, `nextafter`) keep the array's float dtype for a weak C# int literal (NEP50), instead of promoting float32/float16 to float64.
   - `np.dtype("f4").name` / `ToString()` render NumPy's name (`float32`), not the CLR type name (`Single`).
@@ -189,6 +206,9 @@ Three living dashboards ship on the [documentation site](https://scisharp.github
 - Strided/broadcast/negative-stride float16 `add` / `subtract` / `multiply` / `divide` (and `kron`) no longer read the wrong elements - a stride-coalescer bug (merged adjacent axes by value, not magnitude) plus a bit-exact odometer kernel - `7f2c09a3`.
 - The float16 `maximum`/`minimum`/`nanmin`/`nanmax`/`clip` now return NaN operands verbatim (payload + sign preserved, was canonical `Half.NaN`), and a `clip` NaN-max-bound precedence bug that returned float32 fills (any dtype) is fixed - `f3405659`, `498a68f0`, `c9e141c5`.
 - complex128 unary ufuncs are now byte-identical to NumPy 2.4.2 on the **NaN sign** - `sqrt`/`log`/`exp`/`expm1`/`square`/`reciprocal`/`sin`/`cos`/`tan`/`sinh`/`cosh`/`tanh`/the `arc*` family/`abs`/`sign` emit NumPy's positive quiet NaN where it canonicalizes and propagate the operand's NaN sign where it does (was .NET's negative NaN); `square` is additionally made arch-consistent via a portable FMA off x86 (fixing a thousands-of-ULP Apple-silicon divergence), all gated by a new `nan` differential-fuzz tier - `760bb5bb` (+ `298e7c60`, `8e1f3cd9`, `2fd9d785`, `56a55712`).
+- The sort/select core is 64-bit: `sort`, `argsort`, `partition`, `argpartition` (and the flat `cumsum`/`cumprod` output shapes) now handle arrays above `int.MaxValue` elements - `np.sort` silently returned **unsorted** data and `np.partition` threw `OverflowException` on a 2.1-billion-element array (int-indexed radix/introselect over managed scratch), caught by a new >int.MaxValue byte oracle; the Half/Complex/Decimal comparison path documents a clear `NotSupportedException` there instead of truncating - `ab15b165`, `85891751` (+ `7ea70490`).
+- NumPy-style errors now chain the underlying exception - every catch that re-wraps a low-level failure into a verbatim `ValueError` / `IndexError` / `TypeError` / `IncorrectShapeException` (broadcast, index bounds, dtype/format, latin-1 header) passes it through as `InnerException`, so the root cause and stack survive (message text unchanged) - `fe42db9b`.
+- Honestly.. many many more.
 
 ### 🧰 Testing & Tooling
 - The NumPy differential-fuzz oracle gained new tiers - FFT transforms, ufunc `out=`/`where=` (3,727 cases over out × mask layouts), result-kinds + verbatim-error + iterator-trace, IEEE special-values (nan/±inf/±0/subnormal), and a truthful-vs-precise precision channel - `bc91dd25`, `6cd1de9b`, `0882edbb`, `359e9d3c`, `76f0c918`.
@@ -207,3 +227,4 @@ Three living dashboards ship on the [documentation site](https://scisharp.github
 - `np.poly1d` is now `IDisposable` - it owns the coefficient array its constructor yields into it, so `Dispose()` releases it, and the copy-constructor `new poly1d(p)` now **copies** the coefficients instead of sharing one array between two owners (NumPy shares by refcount; two NumSharp owners would double-dispose). Found by the new NDW016 ownership analyzer, which also made `np.Broadcast.Dispose()` (what `foreach` calls when a loop ends) release the `broadcast_to` views it had built (they are rebuilt lazily on the next `iters`/enumeration, so the object stays re-enumerable) and `IndexCollector` an `IDisposable` that no longer strands its outgrown buffer - `4cc9cac5`.
 - The `dtype` argument is now **keyword-only** on the ufunc/reduction/logic surface (the Math ufuncs, the reductions, and the comparison/`isnan`/`isinf`/`isfinite` predicates) - `np.sqrt(x, typeof(float))` becomes `np.sqrt(x, dtype: ...)` (NumPy-faithful); `System.Type` / `NPTypeCode` / a dtype string all still bind via the new `DType` implicit conversion, and `power`/`floor_divide` drop their object-scalar-rhs-plus-`dtype` convenience overload - `c4ebbfb4`, `8b13234e`.
 
+</details>
