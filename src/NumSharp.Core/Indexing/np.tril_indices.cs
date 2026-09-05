@@ -37,7 +37,6 @@ namespace NumSharp
         /// <param name="k">Diagonal offset.</param>
         /// <exception cref="ArgumentException"><c>input array must be 2-d</c> (NumPy <c>ValueError</c>, verbatim).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tril_indices_from.html</remarks>
-        [NDScoped]
         public static NDArray<long>[] tril_indices_from(NDArray arr, int k = 0)
         {
             RequireTwoDimensional(arr);
@@ -51,7 +50,6 @@ namespace NumSharp
         /// <param name="k">Diagonal offset.</param>
         /// <exception cref="ArgumentException"><c>input array must be 2-d</c> (NumPy <c>ValueError</c>, verbatim).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.triu_indices_from.html</remarks>
-        [NDScoped]
         public static NDArray<long>[] triu_indices_from(NDArray arr, int k = 0)
         {
             RequireTwoDimensional(arr);
@@ -86,7 +84,7 @@ namespace NumSharp
         ///     Cost is <c>O(output)</c>, never <c>O(n·m)</c>.
         ///     </para>
         /// </remarks>
-        [NDScopedCovered] // only callers: the [NDScoped] tril/triu_indices(_from) entries (the iota ladder is scope-reclaimed)
+        [NDScopedCovered] // only reached via the [NDScoped] tril_indices/triu_indices entries (the iota ladder is scope-reclaimed)
         private static unsafe NDArray<long>[] TriangleIndices(int n, int k, int? m, bool lower)
         {
             // NumPy reaches these extents through tri()/arange(), where a negative count is an

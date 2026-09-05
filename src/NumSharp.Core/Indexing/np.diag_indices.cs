@@ -55,7 +55,6 @@ namespace NumSharp
         ///     hyper-cubic (both NumPy <c>ValueError</c>s, verbatim).
         /// </exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.diag_indices_from.html</remarks>
-        [NDScoped]
         public static NDArray<long>[] diag_indices_from(NDArray arr)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
