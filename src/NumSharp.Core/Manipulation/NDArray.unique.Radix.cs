@@ -61,10 +61,10 @@ namespace NumSharp
             {
                 var kb = GC.AllocateUninitializedArray<ulong>(count);
                 var kt = GC.AllocateUninitializedArray<ulong>(count);
-                var hist = GC.AllocateUninitializedArray<int>(8 * 256);
+                var hist = GC.AllocateUninitializedArray<long>(8 * 256);
                 for (int i = 0; i < count; i++) kb[i] = ToKey64(keys[i]);
                 fixed (ulong* pk = kb, pt = kt)
-                fixed (int* ph = hist)
+                fixed (long* ph = hist)
                 {
                     ulong* r = RadixSort.SortU64(pk, pt, count, ph);
                     for (int i = 0; i < count; i++) keys[i] = FromKey64<T>(r[i]);
@@ -74,10 +74,10 @@ namespace NumSharp
             {
                 var kb = GC.AllocateUninitializedArray<uint>(count);
                 var kt = GC.AllocateUninitializedArray<uint>(count);
-                var hist = GC.AllocateUninitializedArray<int>(4 * 256);
+                var hist = GC.AllocateUninitializedArray<long>(4 * 256);
                 for (int i = 0; i < count; i++) kb[i] = ToKey32(keys[i]);
                 fixed (uint* pk = kb, pt = kt)
-                fixed (int* ph = hist)
+                fixed (long* ph = hist)
                 {
                     uint* r = RadixSort.SortU32(pk, pt, count, b, ph);
                     for (int i = 0; i < count; i++) keys[i] = FromKey32<T>(r[i]);
@@ -101,11 +101,11 @@ namespace NumSharp
                 var kb = GC.AllocateUninitializedArray<ulong>(count);
                 var kt = GC.AllocateUninitializedArray<ulong>(count);
                 var it = GC.AllocateUninitializedArray<long>(count);
-                var hist = GC.AllocateUninitializedArray<int>(8 * 256);
+                var hist = GC.AllocateUninitializedArray<long>(8 * 256);
                 for (int i = 0; i < count; i++) kb[i] = ToKey64(keys[i]);
                 fixed (ulong* pk = kb, pkt = kt)
                 fixed (long* pperm = perm, pit = it)
-                fixed (int* ph = hist)
+                fixed (long* ph = hist)
                 {
                     long* sp = RadixSort.ArgSortU64(pk, pkt, pperm, pit, count, ph, out ulong* sk);
                     for (int i = 0; i < count; i++) { keys[i] = FromKey64<T>(sk[i]); perm[i] = sp[i]; }
@@ -116,11 +116,11 @@ namespace NumSharp
                 var kb = GC.AllocateUninitializedArray<uint>(count);
                 var kt = GC.AllocateUninitializedArray<uint>(count);
                 var it = GC.AllocateUninitializedArray<long>(count);
-                var hist = GC.AllocateUninitializedArray<int>(4 * 256);
+                var hist = GC.AllocateUninitializedArray<long>(4 * 256);
                 for (int i = 0; i < count; i++) kb[i] = ToKey32(keys[i]);
                 fixed (uint* pk = kb, pkt = kt)
                 fixed (long* pperm = perm, pit = it)
-                fixed (int* ph = hist)
+                fixed (long* ph = hist)
                 {
                     long* sp = RadixSort.ArgSortU32(pk, pkt, pperm, pit, count, b, ph, out uint* sk);
                     for (int i = 0; i < count; i++) { keys[i] = FromKey32<T>(sk[i]); perm[i] = sp[i]; }

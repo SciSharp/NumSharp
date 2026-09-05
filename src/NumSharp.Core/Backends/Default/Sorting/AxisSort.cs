@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends.Sorting
@@ -117,38 +118,57 @@ namespace NumSharp.Backends.Sorting
 
         private static void SortInPlace(NDArray target, int axis)
         {
-            int N = (int)target.shape[axis];
+            long N = target.shape[axis];
             if (N <= 1 || target.size == 0) return;
 
             var tc = target.GetTypeCode;
             int elsize = tc.SizeOf();
             long axisStride = (long)target.Shape.strides[axis] * elsize; // byte stride along the sort axis
 
-            // scratch (sized to the line length, reused across all lines) — only the width the
-            // chosen kernel touches; unused buffers stay Array.Empty (fix to a null pointer).
+            // A line length is a `long`, so an axis may exceed int.MaxValue. The radix scratch is
+            // therefore UNMANAGED (managed uint[]/ulong[] element counts cap at ~2^31); the histogram
+            // is long* because one byte-bucket can hold up to N counts. The scalar BCL path
+            // (Half/Complex/Decimal) sorts through managed Span/Array and so cannot exceed int range.
             int w = KeyWidth(tc);
             var ctx = new LineCtx { n = N, inStride = axisStride, outStride = axisStride };
-            var k32 = w == 4 ? new uint[N] : Array.Empty<uint>();
-            var t32 = w == 4 ? new uint[N] : Array.Empty<uint>();
-            var k64 = w == 8 ? new ulong[N] : Array.Empty<ulong>();
-            var t64 = w == 8 ? new ulong[N] : Array.Empty<ulong>();
-            // single-pass radix builds ALL byte-histograms at once: nbytes·256 ints (8·256 for the
-            // 8-byte path, 4·256 covers the ≤4-byte paths). Scalar BCL path (w==0) needs none.
-            var cnt = w == 0 ? Array.Empty<int>() : new int[(w == 8 ? 8 : 4) * 256];
 
-            fixed (uint* pk = k32, pt = t32)
-            fixed (ulong* pk6 = k64, pt6 = t64)
-            fixed (int* pc = cnt)
+            if (w == 0)
             {
-                ctx.k32 = pk; ctx.t32 = pt; ctx.k64 = pk6; ctx.t64 = pt6; ctx.count = pc;
+                if (N > int.MaxValue)
+                    throw new NotSupportedException(
+                        $"sort of a {tc} axis longer than int.MaxValue ({N}) is not supported: the scalar "
+                        + "comparison sort uses managed buffers, which cap at int.MaxValue elements.");
+                NDInnerLoopFunc scalarKern = GetSortKernel(tc);
+                DriveAllButAxis(new[] { target }, new[] { NDIterPerOpFlags.READWRITE }, axis, scalarKern, &ctx);
+                return;
+            }
+
+            // single-pass radix builds ALL byte-histograms at once: nbytes·256 longs (8·256 for the
+            // 8-byte path, 4·256 covers the ≤4-byte paths). BuildHist zeroes it, so Alloc (not AllocZeroed).
+            int histLen = (w == 8 ? 8 : 4) * 256;
+            void* pk = null, pt = null; long* pc = null;
+            try
+            {
+                pk = NativeMemory.Alloc((nuint)N, (nuint)w);
+                pt = NativeMemory.Alloc((nuint)N, (nuint)w);
+                pc = (long*)NativeMemory.Alloc((nuint)histLen, sizeof(long));
+                if (w == 4) { ctx.k32 = (uint*)pk; ctx.t32 = (uint*)pt; }
+                else { ctx.k64 = (ulong*)pk; ctx.t64 = (ulong*)pt; }
+                ctx.count = pc;
                 NDInnerLoopFunc kern = GetSortKernel(tc);
                 DriveAllButAxis(new[] { target }, new[] { NDIterPerOpFlags.READWRITE }, axis, kern, &ctx);
+            }
+            finally
+            {
+                if (pk != null) NativeMemory.Free(pk);
+                if (pt != null) NativeMemory.Free(pt);
+                if (pc != null) NativeMemory.Free(pc);
             }
         }
 
         private static void ArgSortInto(NDArray src, NDArray dst, int axis)
         {
-            int N = (int)src.shape[axis];
+            long N = src.shape[axis];
             var tc = src.GetTypeCode;
             int elsize = tc.SizeOf();
             var ctx = new LineCtx
@@ -159,27 +179,46 @@ namespace NumSharp.Backends.Sorting
             };
             if (N == 0) return;
 
-            // Only the key width the kernel touches; the index column (idx/it) is radix-only, so the
-            // scalar BCL argsort path (Half/Complex/Decimal, w==0) allocates none of it.
+            // Radix scratch is UNMANAGED so a line may exceed int.MaxValue (the index column idx/it
+            // and the key column are both element-sized and would otherwise cap at ~2^31). The scalar
+            // BCL argsort path (Half/Complex/Decimal, w==0) allocates its own managed buffers and so
+            // cannot exceed int range.
             int w = KeyWidth(tc);
-            var k32 = w == 4 ? new uint[N] : Array.Empty<uint>();
-            var t32 = w == 4 ? new uint[N] : Array.Empty<uint>();
-            var k64 = w == 8 ? new ulong[N] : Array.Empty<ulong>();
-            var t64 = w == 8 ? new ulong[N] : Array.Empty<ulong>();
-            var idx = w == 0 ? Array.Empty<long>() : new long[N];
-            var it = w == 0 ? Array.Empty<long>() : new long[N];
-            // single-pass radix builds ALL byte-histograms at once: nbytes·256 ints (8·256 for the
-            // 8-byte path, 4·256 covers the ≤4-byte paths). Scalar BCL path (w==0) needs none.
-            var cnt = w == 0 ? Array.Empty<int>() : new int[(w == 8 ? 8 : 4) * 256];
 
-            fixed (uint* pk = k32, pt = t32)
-            fixed (ulong* pk6 = k64, pt6 = t64)
-            fixed (long* pi = idx, pit = it)
-            fixed (int* pc = cnt)
+            if (w == 0)
             {
-                ctx.k32 = pk; ctx.t32 = pt; ctx.k64 = pk6; ctx.t64 = pt6; ctx.idx = pi; ctx.it = pit; ctx.count = pc;
+                if (N > int.MaxValue)
+                    throw new NotSupportedException(
+                        $"argsort of a {tc} axis longer than int.MaxValue ({N}) is not supported: the scalar "
+                        + "comparison sort uses managed buffers, which cap at int.MaxValue elements.");
+                NDInnerLoopFunc scalarKern = GetArgSortKernel(tc);
+                DriveAllButAxis(new[] { src, dst }, new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY }, axis, scalarKern, &ctx);
+                return;
+            }
+
+            // single-pass radix builds ALL byte-histograms at once: nbytes·256 longs. BuildHist zeroes it.
+            int histLen = (w == 8 ? 8 : 4) * 256;
+            void* pk = null, pt = null; long* pi = null, pit = null, pc = null;
+            try
+            {
+                pk = NativeMemory.Alloc((nuint)N, (nuint)w);
+                pt = NativeMemory.Alloc((nuint)N, (nuint)w);
+                pi = (long*)NativeMemory.Alloc((nuint)N, sizeof(long));
+                pit = (long*)NativeMemory.Alloc((nuint)N, sizeof(long));
+                pc = (long*)NativeMemory.Alloc((nuint)histLen, sizeof(long));
+                if (w == 4) { ctx.k32 = (uint*)pk; ctx.t32 = (uint*)pt; }
+                else { ctx.k64 = (ulong*)pk; ctx.t64 = (ulong*)pt; }
+                ctx.idx = pi; ctx.it = pit; ctx.count = pc;
                 NDInnerLoopFunc kern = GetArgSortKernel(tc);
                 DriveAllButAxis(new[] { src, dst }, new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY }, axis, kern, &ctx);
+            }
+            finally
+            {
+                if (pk != null) NativeMemory.Free(pk);
+                if (pt != null) NativeMemory.Free(pt);
+                if (pi != null) NativeMemory.Free(pi);
+                if (pit != null) NativeMemory.Free(pit);
+                if (pc != null) NativeMemory.Free(pc);
             }
         }
 
@@ -226,8 +265,8 @@ namespace NumSharp.Backends.Sorting
         private struct LineCtx
         {
             public uint* k32; public uint* t32; public ulong* k64; public ulong* t64;
-            public long* idx; public long* it; public int* count;
-            public long inStride; public long outStride; public int n;
+            public long* idx; public long* it; public long* count;
+            public long inStride; public long outStride; public long n;
         }
 
         // ============================ generic line kernels ============================
@@ -235,71 +274,71 @@ namespace NumSharp.Backends.Sorting
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void SortLine32<T, K>(byte* line, LineCtx* c) where T : unmanaged where K : struct, IKey32<T>
         {
-            K k = default; int n = c->n; long s = c->inStride;
-            for (int i = 0; i < n; i++) c->k32[i] = k.To(*(T*)(line + i * s));
+            K k = default; long n = c->n; long s = c->inStride;
+            for (long i = 0; i < n; i++) c->k32[i] = k.To(*(T*)(line + i * s));
             uint* r = RadixSort.SortU32(c->k32, c->t32, n, k.Bytes, c->count);
-            for (int i = 0; i < n; i++) *(T*)(line + i * s) = k.From(r[i]);
+            for (long i = 0; i < n; i++) *(T*)(line + i * s) = k.From(r[i]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void SortLine64<T, K>(byte* line, LineCtx* c) where T : unmanaged where K : struct, IKey64<T>
         {
-            K k = default; int n = c->n; long s = c->inStride;
-            for (int i = 0; i < n; i++) c->k64[i] = k.To(*(T*)(line + i * s));
+            K k = default; long n = c->n; long s = c->inStride;
+            for (long i = 0; i < n; i++) c->k64[i] = k.To(*(T*)(line + i * s));
             ulong* r = RadixSort.SortU64(c->k64, c->t64, n, c->count);
-            for (int i = 0; i < n; i++) *(T*)(line + i * s) = k.From(r[i]);
+            for (long i = 0; i < n; i++) *(T*)(line + i * s) = k.From(r[i]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ArgLine32<T, K>(byte* inLine, byte* outLine, LineCtx* c) where T : unmanaged where K : struct, IKey32<T>
         {
-            K k = default; int n = c->n; long si = c->inStride, so = c->outStride;
-            for (int i = 0; i < n; i++) { c->k32[i] = k.To(*(T*)(inLine + i * si)); c->idx[i] = i; }
+            K k = default; long n = c->n; long si = c->inStride, so = c->outStride;
+            for (long i = 0; i < n; i++) { c->k32[i] = k.To(*(T*)(inLine + i * si)); c->idx[i] = i; }
             long* r = RadixSort.ArgSortU32(c->k32, c->t32, c->idx, c->it, n, k.Bytes, c->count);
-            for (int i = 0; i < n; i++) *(long*)(outLine + i * so) = r[i];
+            for (long i = 0; i < n; i++) *(long*)(outLine + i * so) = r[i];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ArgLine64<T, K>(byte* inLine, byte* outLine, LineCtx* c) where T : unmanaged where K : struct, IKey64<T>
         {
-            K k = default; int n = c->n; long si = c->inStride, so = c->outStride;
-            for (int i = 0; i < n; i++) { c->k64[i] = k.To(*(T*)(inLine + i * si)); c->idx[i] = i; }
+            K k = default; long n = c->n; long si = c->inStride, so = c->outStride;
+            for (long i = 0; i < n; i++) { c->k64[i] = k.To(*(T*)(inLine + i * si)); c->idx[i] = i; }
             long* r = RadixSort.ArgSortU64(c->k64, c->t64, c->idx, c->it, n, c->count);
-            for (int i = 0; i < n; i++) *(long*)(outLine + i * so) = r[i];
+            for (long i = 0; i < n; i++) *(long*)(outLine + i * so) = r[i];
         }
 
         // ----- float radix with NaN-last partition -----
         private static void SortLineF32(byte* line, LineCtx* c)
         {
-            int n = c->n; long s = c->inStride; int m = 0;
-            for (int i = 0; i < n; i++) { float v = *(float*)(line + i * s); if (!float.IsNaN(v)) c->k32[m++] = FKey32(v); }
+            long n = c->n; long s = c->inStride; long m = 0;
+            for (long i = 0; i < n; i++) { float v = *(float*)(line + i * s); if (!float.IsNaN(v)) c->k32[m++] = FKey32(v); }
             uint* r = RadixSort.SortU32(c->k32, c->t32, m, 4, c->count);
-            for (int i = 0; i < m; i++) *(float*)(line + i * s) = FVal32(r[i]);
-            for (int i = m; i < n; i++) *(float*)(line + i * s) = float.NaN;
+            for (long i = 0; i < m; i++) *(float*)(line + i * s) = FVal32(r[i]);
+            for (long i = m; i < n; i++) *(float*)(line + i * s) = float.NaN;
         }
         private static void SortLineF64(byte* line, LineCtx* c)
         {
-            int n = c->n; long s = c->inStride; int m = 0;
-            for (int i = 0; i < n; i++) { double v = *(double*)(line + i * s); if (!double.IsNaN(v)) c->k64[m++] = FKey64(v); }
+            long n = c->n; long s = c->inStride; long m = 0;
+            for (long i = 0; i < n; i++) { double v = *(double*)(line + i * s); if (!double.IsNaN(v)) c->k64[m++] = FKey64(v); }
             ulong* r = RadixSort.SortU64(c->k64, c->t64, m, c->count);
-            for (int i = 0; i < m; i++) *(double*)(line + i * s) = FVal64(r[i]);
-            for (int i = m; i < n; i++) *(double*)(line + i * s) = double.NaN;
+            for (long i = 0; i < m; i++) *(double*)(line + i * s) = FVal64(r[i]);
+            for (long i = m; i < n; i++) *(double*)(line + i * s) = double.NaN;
         }
         private static void ArgLineF32(byte* inLine, byte* outLine, LineCtx* c)
         {
-            int n = c->n; long si = c->inStride, so = c->outStride; int m = 0;
-            for (int i = 0; i < n; i++) { float v = *(float*)(inLine + i * si); if (!float.IsNaN(v)) { c->k32[m] = FKey32(v); c->idx[m] = i; m++; } }
+            long n = c->n; long si = c->inStride, so = c->outStride; long m = 0;
+            for (long i = 0; i < n; i++) { float v = *(float*)(inLine + i * si); if (!float.IsNaN(v)) { c->k32[m] = FKey32(v); c->idx[m] = i; m++; } }
             long* r = RadixSort.ArgSortU32(c->k32, c->t32, c->idx, c->it, m, 4, c->count);
-            for (int i = 0; i < m; i++) *(long*)(outLine + i * so) = r[i];
-            int q = m; for (int i = 0; i < n; i++) if (float.IsNaN(*(float*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
+            for (long i = 0; i < m; i++) *(long*)(outLine + i * so) = r[i];
+            long q = m; for (long i = 0; i < n; i++) if (float.IsNaN(*(float*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
         }
         private static void ArgLineF64(byte* inLine, byte* outLine, LineCtx* c)
         {
-            int n = c->n; long si = c->inStride, so = c->outStride; int m = 0;
-            for (int i = 0; i < n; i++) { double v = *(double*)(inLine + i * si); if (!double.IsNaN(v)) { c->k64[m] = FKey64(v); c->idx[m] = i; m++; } }
+            long n = c->n; long si = c->inStride, so = c->outStride; long m = 0;
+            for (long i = 0; i < n; i++) { double v = *(double*)(inLine + i * si); if (!double.IsNaN(v)) { c->k64[m] = FKey64(v); c->idx[m] = i; m++; } }
             long* r = RadixSort.ArgSortU64(c->k64, c->t64, c->idx, c->it, m, c->count);
-            for (int i = 0; i < m; i++) *(long*)(outLine + i * so) = r[i];
-            int q = m; for (int i = 0; i < n; i++) if (double.IsNaN(*(double*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
+            for (long i = 0; i < m; i++) *(long*)(outLine + i * so) = r[i];
+            long q = m; for (long i = 0; i < n; i++) if (double.IsNaN(*(double*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
         }
 
         [MethodImpl(OptimizeAndInline)] private static uint FKey32(float v) { uint b = BitConverter.SingleToUInt32Bits(v); return b ^ ((uint)((int)b >> 31) | 0x80000000u); }
@@ -310,7 +349,9 @@ namespace NumSharp.Backends.Sorting
         // ----- scalar BCL introsort + exact NumPy comparators (Half / Complex / Decimal) -----
         private static void SortLineScalar<T, TCmp>(byte* line, LineCtx* c) where T : unmanaged where TCmp : struct, IComparer<T>
         {
-            int n = c->n; long s = c->inStride;
+            // c->n is a long, but this scalar (Half/Complex/Decimal) path is only reached after
+            // SortInPlace has guarded N <= int.MaxValue (managed Span/Array are int-capped).
+            int n = (int)c->n; long s = c->inStride;
             Span<T> buf = n <= 1024 ? stackalloc T[n] : new T[n];
             for (int i = 0; i < n; i++) buf[i] = *(T*)(line + i * s);
             buf.Sort(default(TCmp));
@@ -318,7 +359,8 @@ namespace NumSharp.Backends.Sorting
         }
         private static void ArgLineScalar<T, TCmp>(byte* inLine, byte* outLine, LineCtx* c) where T : unmanaged where TCmp : struct, IComparer<T>
         {
-            int n = c->n; long si = c->inStride, so = c->outStride;
+            // Guarded to N <= int.MaxValue upstream (ArgSortInto), as SortLineScalar above.
+            int n = (int)c->n; long si = c->inStride, so = c->outStride;
             var buf = new T[n]; var ix = new long[n];
             for (int i = 0; i < n; i++) { buf[i] = *(T*)(inLine + i * si); ix[i] = i; }
             Array.Sort(ix, new IndexedCmp<T, TCmp>(buf));

@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using NumSharp.Backends.Iteration;
 using NumSharp.Utilities;
 
@@ -224,14 +225,14 @@ namespace NumSharp.Backends.Sorting
         ///     An empty kth is NumPy's <c>np.array([], dtype=intp)</c> — a valid no-op (Python's
         ///     bare <c>[]</c> is float64 and raises; a typed C# int[] carries no such ambiguity).
         /// </summary>
-        private static int[] PrepKth(long[] kth, long axisLength, long size)
+        private static long[] PrepKth(long[] kth, long axisLength, long size)
         {
             // NumPy's np.partition(a, None) is a TypeError; a null C# array is the same caller bug
             // (house ArgumentNullException precedent: fill_diagonal/lexsort). Guarded HERE so it
             // fires at NumPy's kth-validation stage — after kind/order/axis, like every kth error.
             if (kth is null)
                 throw new ArgumentNullException(nameof(kth));
-            var ks = new int[kth.Length];
+            var ks = new long[kth.Length];
             for (int i = 0; i < kth.Length; i++)
             {
                 long k = kth[i];
@@ -239,7 +240,7 @@ namespace NumSharp.Backends.Sorting
                     k += axisLength;
                 if (size != 0 && (k < 0 || k >= axisLength))
                     throw new ValueError($"kth(={k}) out of bounds ({axisLength})");
-                ks[i] = (int)k;
+                ks[i] = k; // a kth position can exceed int.MaxValue for an axis longer than 2^31
             }
             if (ks.Length > 1)
                 Array.Sort(ks);
@@ -259,24 +260,33 @@ namespace NumSharp.Backends.Sorting
             int elsize = tc.SizeOf();
             var ctx = new PartCtx
             {
-                n = (int)N,
+                n = N,
                 inStride = (long)target.Shape.strides[axis] * elsize,
                 outStride = 0,
                 nKth = ks.Length,
             };
 
             // per-call scratch, reused across every line (the AxisSort buffer policy): the value
-            // gather buffer always, the NaN stash only for the float dtypes that compact.
-            var scratch = new byte[N * elsize];
-            var nans = NeedsNanTail(tc) ? new byte[N * elsize] : Array.Empty<byte>();
-            fixed (byte* ps = scratch, pn = nans)
-            fixed (int* pk = ks)
+            // gather buffer always, the NaN stash only for the float dtypes that compact. UNMANAGED
+            // so a line may exceed int.MaxValue (a managed byte[] element count caps at ~2^31).
+            void* ps = null, pn = null;
+            try
             {
-                ctx.scratch = ps;
-                ctx.nanTail = pn;
-                ctx.kth = pk;
-                NDInnerLoopFunc kern = GetPartitionKernel(tc);
-                AxisSort.DriveAllButAxis(new[] { target }, new[] { NDIterPerOpFlags.READWRITE }, axis, kern, &ctx);
+                ps = NativeMemory.Alloc((nuint)N, (nuint)elsize);
+                if (NeedsNanTail(tc)) pn = NativeMemory.Alloc((nuint)N, (nuint)elsize);
+                fixed (long* pk = ks)
+                {
+                    ctx.scratch = (byte*)ps;
+                    ctx.nanTail = (byte*)pn;
+                    ctx.kth = pk;
+                    NDInnerLoopFunc kern = GetPartitionKernel(tc);
+                    AxisSort.DriveAllButAxis(new[] { target }, new[] { NDIterPerOpFlags.READWRITE }, axis, kern, &ctx);
+                }
+            }
+            finally
+            {
+                if (ps != null) NativeMemory.Free(ps);
+                if (pn != null) NativeMemory.Free(pn);
             }
         }
 
@@ -291,25 +301,34 @@ namespace NumSharp.Backends.Sorting
             int elsize = tc.SizeOf();
             var ctx = new PartCtx
             {
-                n = (int)N,
+                n = N,
                 inStride = (long)src.Shape.strides[axis] * elsize,
                 outStride = (long)dst.Shape.strides[axis] * sizeof(long),
                 nKth = ks.Length,
             };
 
-            // argpartition always gathers (the source is read-only); idx is the answer column.
-            var scratch = new byte[N * elsize];
-            var idx = new long[N];
-            fixed (byte* ps = scratch)
-            fixed (long* pi = idx)
-            fixed (int* pk = ks)
+            // argpartition always gathers (the source is read-only); idx is the answer column. Both
+            // are UNMANAGED so a line may exceed int.MaxValue (the int64 idx column would otherwise
+            // cap at ~2^31 elements).
+            void* ps = null; long* pi = null;
+            try
             {
-                ctx.scratch = ps;
-                ctx.idx = pi;
-                ctx.kth = pk;
-                NDInnerLoopFunc kern = GetArgPartitionKernel(tc);
-                AxisSort.DriveAllButAxis(new[] { src, dst },
-                    new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY }, axis, kern, &ctx);
+                ps = NativeMemory.Alloc((nuint)N, (nuint)elsize);
+                pi = (long*)NativeMemory.Alloc((nuint)N, sizeof(long));
+                fixed (long* pk = ks)
+                {
+                    ctx.scratch = (byte*)ps;
+                    ctx.idx = pi;
+                    ctx.kth = pk;
+                    NDInnerLoopFunc kern = GetArgPartitionKernel(tc);
+                    AxisSort.DriveAllButAxis(new[] { src, dst },
+                        new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY }, axis, kern, &ctx);
+                }
+            }
+            finally
+            {
+                if (ps != null) NativeMemory.Free(ps);
+                if (pi != null) NativeMemory.Free(pi);
             }
         }
 
@@ -322,11 +341,11 @@ namespace NumSharp.Backends.Sorting
             public byte* scratch;   // N-element value gather buffer
             public byte* nanTail;   // N-element NaN stash (float dtypes only)
             public long* idx;       // N-element original-index column (argpartition only)
-            public int* kth;        // wrapped, validated, sorted ascending
+            public long* kth;       // wrapped, validated, sorted ascending (a position can exceed int.MaxValue)
             public int nKth;
             public long inStride;   // byte stride along the partition axis
             public long outStride;  // byte stride of the int64 output line (argpartition only)
-            public int n;
+            public long n;
         }
 
         // NumPy CDOUBLE_LT as a Comparison<Complex> for the QuickSelect comparator path.
@@ -340,7 +359,7 @@ namespace NumSharp.Backends.Sorting
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void PartLine<T>(byte* line, PartCtx* c) where T : unmanaged, IComparable<T>
         {
-            int n = c->n;
+            long n = c->n;
             long s = c->inStride;
             if (s == sizeof(T))
             {
@@ -348,9 +367,9 @@ namespace NumSharp.Backends.Sorting
                 return;
             }
             T* buf = (T*)c->scratch;
-            for (int i = 0; i < n; i++) buf[i] = *(T*)(line + i * s);
+            for (long i = 0; i < n; i++) buf[i] = *(T*)(line + i * s);
             QuickSelect.PartitionAtMany(buf, n, c->kth, c->nKth);
-            for (int i = 0; i < n; i++) *(T*)(line + i * s) = buf[i];
+            for (long i = 0; i < n; i++) *(T*)(line + i * s) = buf[i];
         }
 
         /// <summary>Float dtypes: stable NaN-compact (non-NaN prefix keeps encounter order, NaN bit
@@ -359,51 +378,51 @@ namespace NumSharp.Backends.Sorting
         /// which is where a full NaN-last sort would put them).</summary>
         private static void PartLineF32(byte* line, PartCtx* c)
         {
-            int n = c->n; long s = c->inStride;
+            long n = c->n; long s = c->inStride;
             float* buf = (float*)c->scratch; float* nans = (float*)c->nanTail;
-            int m = 0, q = 0;
-            for (int i = 0; i < n; i++) { float v = *(float*)(line + i * s); if (float.IsNaN(v)) nans[q++] = v; else buf[m++] = v; }
+            long m = 0, q = 0;
+            for (long i = 0; i < n; i++) { float v = *(float*)(line + i * s); if (float.IsNaN(v)) nans[q++] = v; else buf[m++] = v; }
             QuickSelect.PartitionAtMany(buf, m, c->kth, c->nKth);
-            for (int i = 0; i < m; i++) *(float*)(line + i * s) = buf[i];
-            for (int i = 0; i < q; i++) *(float*)(line + (m + i) * s) = nans[i];
+            for (long i = 0; i < m; i++) *(float*)(line + i * s) = buf[i];
+            for (long i = 0; i < q; i++) *(float*)(line + (m + i) * s) = nans[i];
         }
 
         private static void PartLineF64(byte* line, PartCtx* c)
         {
-            int n = c->n; long s = c->inStride;
+            long n = c->n; long s = c->inStride;
             double* buf = (double*)c->scratch; double* nans = (double*)c->nanTail;
-            int m = 0, q = 0;
-            for (int i = 0; i < n; i++) { double v = *(double*)(line + i * s); if (double.IsNaN(v)) nans[q++] = v; else buf[m++] = v; }
+            long m = 0, q = 0;
+            for (long i = 0; i < n; i++) { double v = *(double*)(line + i * s); if (double.IsNaN(v)) nans[q++] = v; else buf[m++] = v; }
             QuickSelect.PartitionAtMany(buf, m, c->kth, c->nKth);
-            for (int i = 0; i < m; i++) *(double*)(line + i * s) = buf[i];
-            for (int i = 0; i < q; i++) *(double*)(line + (m + i) * s) = nans[i];
+            for (long i = 0; i < m; i++) *(double*)(line + i * s) = buf[i];
+            for (long i = 0; i < q; i++) *(double*)(line + (m + i) * s) = nans[i];
         }
 
         private static void PartLineF16(byte* line, PartCtx* c)
         {
-            int n = c->n; long s = c->inStride;
+            long n = c->n; long s = c->inStride;
             Half* buf = (Half*)c->scratch; Half* nans = (Half*)c->nanTail;
-            int m = 0, q = 0;
-            for (int i = 0; i < n; i++) { Half v = *(Half*)(line + i * s); if (Half.IsNaN(v)) nans[q++] = v; else buf[m++] = v; }
+            long m = 0, q = 0;
+            for (long i = 0; i < n; i++) { Half v = *(Half*)(line + i * s); if (Half.IsNaN(v)) nans[q++] = v; else buf[m++] = v; }
             QuickSelect.PartitionAtMany(buf, m, c->kth, c->nKth);
-            for (int i = 0; i < m; i++) *(Half*)(line + i * s) = buf[i];
-            for (int i = 0; i < q; i++) *(Half*)(line + (m + i) * s) = nans[i];
+            for (long i = 0; i < m; i++) *(Half*)(line + i * s) = buf[i];
+            for (long i = 0; i < q; i++) *(Half*)(line + (m + i) * s) = nans[i];
         }
 
         /// <summary>Complex: NumPy's CDOUBLE_LT comparator drives the introselect directly — its NaN
         /// ordering ((1,NaN) before (NaN,1)) is positional, not a compactable any-NaN-last.</summary>
         private static void PartLineComplex(byte* line, PartCtx* c)
         {
-            int n = c->n; long s = c->inStride;
+            long n = c->n; long s = c->inStride;
             if (s == sizeof(Complex))
             {
                 QuickSelect.PartitionAtMany((Complex*)line, n, c->kth, c->nKth, ComplexLess);
                 return;
             }
             Complex* buf = (Complex*)c->scratch;
-            for (int i = 0; i < n; i++) buf[i] = *(Complex*)(line + i * s);
+            for (long i = 0; i < n; i++) buf[i] = *(Complex*)(line + i * s);
             QuickSelect.PartitionAtMany(buf, n, c->kth, c->nKth, ComplexLess);
-            for (int i = 0; i < n; i++) *(Complex*)(line + i * s) = buf[i];
+            for (long i = 0; i < n; i++) *(Complex*)(line + i * s) = buf[i];
         }
 
         // ============================ argpartition line kernels ============================
@@ -411,58 +430,58 @@ namespace NumSharp.Backends.Sorting
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ArgPartLine<T>(byte* inLine, byte* outLine, PartCtx* c) where T : unmanaged, IComparable<T>
         {
-            int n = c->n; long si = c->inStride, so = c->outStride;
+            long n = c->n; long si = c->inStride, so = c->outStride;
             T* buf = (T*)c->scratch; long* idx = c->idx;
-            for (int i = 0; i < n; i++) { buf[i] = *(T*)(inLine + i * si); idx[i] = i; }
+            for (long i = 0; i < n; i++) { buf[i] = *(T*)(inLine + i * si); idx[i] = i; }
             QuickSelect.PartitionAtMany(buf, idx, n, c->kth, c->nKth);
-            for (int i = 0; i < n; i++) *(long*)(outLine + i * so) = idx[i];
+            for (long i = 0; i < n; i++) *(long*)(outLine + i * so) = idx[i];
         }
 
         /// <summary>Float argpartition: NaN indices go to the tail in encounter order — the exact
         /// policy of <see cref="AxisSort"/>'s ArgLineF32/F64 argsort kernels.</summary>
         private static void ArgPartLineF32(byte* inLine, byte* outLine, PartCtx* c)
         {
-            int n = c->n; long si = c->inStride, so = c->outStride;
+            long n = c->n; long si = c->inStride, so = c->outStride;
             float* buf = (float*)c->scratch; long* idx = c->idx;
-            int m = 0;
-            for (int i = 0; i < n; i++) { float v = *(float*)(inLine + i * si); if (!float.IsNaN(v)) { buf[m] = v; idx[m] = i; m++; } }
+            long m = 0;
+            for (long i = 0; i < n; i++) { float v = *(float*)(inLine + i * si); if (!float.IsNaN(v)) { buf[m] = v; idx[m] = i; m++; } }
             QuickSelect.PartitionAtMany(buf, idx, m, c->kth, c->nKth);
-            for (int i = 0; i < m; i++) *(long*)(outLine + i * so) = idx[i];
-            int q = m;
-            for (int i = 0; i < n; i++) if (float.IsNaN(*(float*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
+            for (long i = 0; i < m; i++) *(long*)(outLine + i * so) = idx[i];
+            long q = m;
+            for (long i = 0; i < n; i++) if (float.IsNaN(*(float*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
         }
 
         private static void ArgPartLineF64(byte* inLine, byte* outLine, PartCtx* c)
         {
-            int n = c->n; long si = c->inStride, so = c->outStride;
+            long n = c->n; long si = c->inStride, so = c->outStride;
             double* buf = (double*)c->scratch; long* idx = c->idx;
-            int m = 0;
-            for (int i = 0; i < n; i++) { double v = *(double*)(inLine + i * si); if (!double.IsNaN(v)) { buf[m] = v; idx[m] = i; m++; } }
+            long m = 0;
+            for (long i = 0; i < n; i++) { double v = *(double*)(inLine + i * si); if (!double.IsNaN(v)) { buf[m] = v; idx[m] = i; m++; } }
             QuickSelect.PartitionAtMany(buf, idx, m, c->kth, c->nKth);
-            for (int i = 0; i < m; i++) *(long*)(outLine + i * so) = idx[i];
-            int q = m;
-            for (int i = 0; i < n; i++) if (double.IsNaN(*(double*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
+            for (long i = 0; i < m; i++) *(long*)(outLine + i * so) = idx[i];
+            long q = m;
+            for (long i = 0; i < n; i++) if (double.IsNaN(*(double*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
         }
 
         private static void ArgPartLineF16(byte* inLine, byte* outLine, PartCtx* c)
         {
-            int n = c->n; long si = c->inStride, so = c->outStride;
+            long n = c->n; long si = c->inStride, so = c->outStride;
             Half* buf = (Half*)c->scratch; long* idx = c->idx;
-            int m = 0;
-            for (int i = 0; i < n; i++) { Half v = *(Half*)(inLine + i * si); if (!Half.IsNaN(v)) { buf[m] = v; idx[m] = i; m++; } }
+            long m = 0;
+            for (long i = 0; i < n; i++) { Half v = *(Half*)(inLine + i * si); if (!Half.IsNaN(v)) { buf[m] = v; idx[m] = i; m++; } }
             QuickSelect.PartitionAtMany(buf, idx, m, c->kth, c->nKth);
-            for (int i = 0; i < m; i++) *(long*)(outLine + i * so) = idx[i];
-            int q = m;
-            for (int i = 0; i < n; i++) if (Half.IsNaN(*(Half*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
+            for (long i = 0; i < m; i++) *(long*)(outLine + i * so) = idx[i];
+            long q = m;
+            for (long i = 0; i < n; i++) if (Half.IsNaN(*(Half*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
         }
 
         private static void ArgPartLineComplex(byte* inLine, byte* outLine, PartCtx* c)
         {
-            int n = c->n; long si = c->inStride, so = c->outStride;
+            long n = c->n; long si = c->inStride, so = c->outStride;
             Complex* buf = (Complex*)c->scratch; long* idx = c->idx;
-            for (int i = 0; i < n; i++) { buf[i] = *(Complex*)(inLine + i * si); idx[i] = i; }
+            for (long i = 0; i < n; i++) { buf[i] = *(Complex*)(inLine + i * si); idx[i] = i; }
             QuickSelect.PartitionAtMany(buf, idx, n, c->kth, c->nKth, ComplexLess);
-            for (int i = 0; i < n; i++) *(long*)(outLine + i * so) = idx[i];
+            for (long i = 0; i < n; i++) *(long*)(outLine + i * so) = idx[i];
         }
 
         // ============================ dtype dispatch (one type-switch each) ============================
