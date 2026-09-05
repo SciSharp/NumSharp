@@ -89,8 +89,8 @@ internal sealed class ArenaView(ArcadeSession game, PlayerProfile profile) : Con
                         if (tier >= 2)
                         {
                             var offset = (2 + tier) * _scale * (1 - progress);
-                            context.DrawEllipse(tier == 3 ? Cyan : Pink, null, point + new Vector(0, offset), radius * .55, radius * .55);
-                            if (tier == 3) context.DrawEllipse(Gold, null, point - new Vector(0, offset), radius * .45, radius * .45);
+                            context.DrawEllipse(tier == 3 ? Cyan : Pink, null, point + new Avalonia.Vector(0, offset), radius * .55, radius * .55);
+                            if (tier == 3) context.DrawEllipse(Gold, null, point - new Avalonia.Vector(0, offset), radius * .45, radius * .45);
                         }
                     }
                 }

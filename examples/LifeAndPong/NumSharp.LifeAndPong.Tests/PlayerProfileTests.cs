@@ -6,6 +6,16 @@ namespace NumSharp.LifeAndPong.Tests;
 public sealed class PlayerProfileTests
 {
     [TestMethod]
+    public void Changed_Rules_Keep_Old_Records_But_Use_A_Separate_Personal_Best()
+    {
+        var profile = new PlayerProfile();
+        profile.Results.Add(new RunResult(900000, 100, 100, 3, 42, "life-arcade-1"));
+        Assert.AreEqual(0L, profile.Best);
+        using var game = new ArcadeSession(); game.SetScoreForTesting(381); profile.Record(game);
+        Assert.AreEqual(381L, profile.Best); Assert.AreEqual(2, profile.Results.Count);
+        Assert.IsTrue(profile.Results.Any(result => result.Version == "life-arcade-1"));
+    }
+    [TestMethod]
     public void Profile_RoundTrips_Settings_And_Only_Five_Best_Runs()
     {
         var directory = Path.Combine(Path.GetTempPath(), "life-arcade-profile-" + Guid.NewGuid().ToString("N"));
