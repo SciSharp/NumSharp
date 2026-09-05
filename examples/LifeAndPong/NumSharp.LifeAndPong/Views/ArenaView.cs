@@ -34,6 +34,7 @@ internal sealed class ArenaView(ArcadeSession game, PlayerProfile profile) : Con
     public override void Render(DrawingContext context)
     {
         base.Render(context);
+        if (game.IsDisposed) return;
         var width = Math.Max(1, Bounds.Width); var height = Math.Max(1, Bounds.Height);
         _scale = Math.Min(width / ArcadeSession.Width, height / ArcadeSession.Height);
         _world = new Rect((width - ArcadeSession.Width * _scale) / 2, (height - ArcadeSession.Height * _scale) / 2, ArcadeSession.Width * _scale, ArcadeSession.Height * _scale);
@@ -133,6 +134,7 @@ internal sealed class ArenaView(ArcadeSession game, PlayerProfile profile) : Con
         }
         if (item.Kind == ArcadeEventKind.Milestone)
         {
+            _waves.Clear();
             var tier = ArcadeSession.TierForHits(item.Value);
             AddSparks(item.Position, 12 + tier * 12, tier, true);
             for (var i = 0; i < tier; i++)

@@ -27,6 +27,7 @@ public sealed class ArcadeSession : IDisposable
 
     public ArcadeSession(int seed = 73021) => NewRun(seed);
     public LifeSimulation Life { get; private set; } = null!;
+    internal bool IsDisposed => _disposed;
     public int Seed { get; private set; }
     public RunState State { get; private set; }
     public Vector2 Ball { get; private set; }

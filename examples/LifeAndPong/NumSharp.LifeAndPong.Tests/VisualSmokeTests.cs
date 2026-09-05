@@ -113,6 +113,19 @@ public sealed class VisualSmokeTests
             Assert.IsFalse(bounds.Intersects(arena), $"Text intrudes into playfield: {text.Text}");
         }
     }
+    [TestMethod]
+    public async Task Pending_Render_After_Dispose_Does_Not_Read_Freed_NumSharp_Buffers()
+    {
+        await using var session = HeadlessUnitTestSession.StartNew(typeof(HeadlessAppBuilder));
+        await session.Dispatch(() =>
+        {
+            var surface = new GameSurface(false);
+            var window = new Window { Width = 1120, Height = 700, Content = surface }; window.Show();
+            surface.Arena.InvalidateVisual(); surface.Dispose();
+            using var frame = window.CaptureRenderedFrame(); Assert.IsNotNull(frame);
+            window.Close();
+        }, CancellationToken.None);
+    }
 
     [TestMethod]
     public async Task High_Contrast_Reduced_Motion_And_Long_Scores_Render()
