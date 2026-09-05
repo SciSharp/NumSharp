@@ -10,7 +10,7 @@ five subsystems whose result models cannot fit that matrix. Backend exceptions a
 | **operand** | `benchmark/operand/` | 1-D (contig/strided/reversed), scalar operand, mixed operand layouts (C+F, C+T), binary broadcast | case × dtype |
 | **cast** | `benchmark/cast/` | full `astype` src→dst × 8 layouts at 1M — no op-matrix coverage at all | 15×15 per-layout matrices |
 | **fusion** | `benchmark/fusion/` | `np.evaluate` fused vs unfused np.* chains (+ NumPy context) | fixed-expression report |
-| **backend profiles** | `benchmark/backends/` → `benchmark/openblas/` | all 39 backend-sensitive APIs under Managed C# and OpenBLAS; catches MissingBackendException and NotSupportedException | op × dtype × N × scenario, merged |
+| **backend profiles** | `benchmark/backends/` → `benchmark/openblas/` | every backend-sensitive API (the OpenBLAS-route set in `coverage/generated/summary.md`) under Managed C# and OpenBLAS; catches MissingBackendException and NotSupportedException | op × dtype × N × scenario, merged |
 
 ## The shared shape (the five appended subsystems)
 

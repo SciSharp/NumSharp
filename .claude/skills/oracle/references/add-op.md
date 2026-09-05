@@ -90,7 +90,9 @@ or a tuple of arrays — it belongs in **`OpRegistry.Kinds.cs`** (`ApplyDtype`/`
 generator must tag the case with `expected.kind` (`dtype`/`text`/`scalar`/`tuple`) via `_arr_expected(kind=…)` or
 `_tuple_expected(...)`. `FuzzCorpusTests.Kinds.cs` compares by kind (a tuple asserts ARITY then every slot; a dtype
 compares by NumPy dtype name; text is verbatim). Pattern-match an existing one: `result_type`/`promote_types`
-(dtype), `array_str`/`array_repr` (text), `nonzero_all`/`meshgrid` (tuple).
+(dtype), `array_str`/`array_repr` (text), `nonzero_all`/`meshgrid` (tuple). **A random/PCG64 stream op** (`default_rng`,
+`Generator.*`, `bytes`, `random_integers`) goes in the third partial **`OpRegistry.Generator.cs`**, paired with the
+`generator_parity` mode.
 
 ## 4. Regenerate the corpus
 
@@ -125,6 +127,12 @@ dotnet test --no-build -f net10.0 --filter "FullyQualifiedName~FuzzCorpusTests.<
 A pass means every new case (all layouts, the 13 NumPy dtypes, + Char woven via `char_tier` where the mode calls it)
 is bit-identical to NumPy. Decimal is a separate oracle (`gen_decimal_oracle.cs`), not part of a NumPy tier.
 If a case is red, go to `references/triage.md`.
+
+> **Your op now also enters the ZERO-LEAK gate.** `UndisposedIntermediateTests` (`[FuzzMatrix]`) replays the corpus
+> through `OpRegistry` and asserts the buffer pool balances — the `KnownEscapes` registry is empty, so if your op
+> strands a pooled intermediate it goes red **even with bit-exact values**. Run `FullyQualifiedName~UndisposedIntermediateTests`
+> too, and fix any leak in the op (dispose the intermediate / `[NDScoped]`) rather than allowlisting it. See
+> `references/triage.md` → "A red that is NOT a value divergence".
 
 ## 6. What you do NOT need to do
 

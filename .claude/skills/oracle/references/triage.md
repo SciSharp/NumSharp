@@ -82,14 +82,32 @@ A full `TestCategory=FuzzMatrix` run can end "Test host process crashed" (`Acces
 reported Passed. That's an intermittent teardown crash, not a red case. Re-run the specific `FuzzCorpusTests` class
 (it exits 0 cleanly) to confirm the tier is actually green.
 
-## Host-pinned tiers go Inconclusive, not red
+## Host-gated tiers go Inconclusive, not red
 
-`matmul_parity` and `random_parity_host` record bytes reproducible only on a specific host — the exact BLAS build +
-DYNAMIC_ARCH kernel + thread count NumPy used, or the win-amd64 CRT libm. When the host doesn't match (checked via
-`MatmulParityPin` by BLAS binary SHA-256 / core name, or an OS check), the tier asserts **`Inconclusive`**, never
-red — a machine without NumPy's wheel has nothing to be wrong about. Seeing "Inconclusive" on these two tiers
-off-host is expected, not a failure; regenerate the corpus on your host (`python gen_oracle.py matmul_parity` /
-`random_parity`) to gate against your machine.
+Two classes of tier record bytes reproducible only on the authoring host (win-amd64), so off-host they assert
+**`Inconclusive`** — never red. A machine without NumPy's exact wheel/libm has nothing to be wrong about.
+
+- **Explicit host PINS** — `matmul_parity`, `linalg_parity`, `random_parity_host`, `generator_parity_host`. Gated by
+  the exact BLAS build + DYNAMIC_ARCH kernel + thread count NumPy used (or the win-amd64 CRT), checked via
+  `MatmulParityPin` (BLAS binary SHA-256 / core name) or an OS check.
+- **`RunHostLibmCorpus` tiers** — `unary`, `nan`, `precision`, `fft`, `numpy_f32_kernels`. Their transcendental /
+  FFT-twiddle / `Vector<T>` cells depend on the win-amd64 CRT libm (`ucrtbase`) and host SIMD reduction widths.
+  The runner itself asserts `Inconclusive` off-Windows before replaying. Every PORTABLE cell in these tiers is a
+  deterministic NumSharp kernel and is green on every platform by construction.
+
+Seeing "Inconclusive" on these tiers off-host is expected, not a failure. To gate against YOUR machine, regenerate
+the corpus there (`python gen_oracle.py matmul_parity` / `python gen_nan_oracle.py` / …) — but remember the committed
+corpus is win-amd64-authored, so don't commit a Linux/macOS regeneration of these (see `regenerate.md` → host
+sensitivity).
+
+## A red that is NOT a value divergence: a leak
+
+Adding an op to `OpRegistry` also enters the **oracle-free leak gate** (`UndisposedIntermediateTests`,
+`[TestCategory("FuzzMatrix")]`). It disposes every result and asserts the buffer pool balances at ZERO
+(`KnownEscapes` is empty). So a `FuzzMatrix` red can be a *bit-exact* op that STRANDS a pooled buffer — the failure
+names the op and the take/return imbalance, not a byte diff. Fix the leak in the op (dispose the intermediate /
+`[NDScoped]`), never add a `KnownEscapes` entry. `NativeAllocationChokepointTests` is the static twin: a new raw
+`NativeMemory.*`/`Marshal.AllocHGlobal` site fails until pooled or allowlisted.
 
 ## Ledger
 
