@@ -7,6 +7,7 @@ namespace NumSharp.LifeAndPong;
 
 public sealed class App : Application
 {
+    public static Func<Models.IGameAudio> AudioFactory { get; set; } = () => new Models.SilentGameAudio();
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     public override void OnFrameworkInitializationCompleted()

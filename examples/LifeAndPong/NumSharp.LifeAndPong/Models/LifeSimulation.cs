@@ -11,14 +11,16 @@ public sealed class LifeSimulation : IDisposable
     private NDArray _cells;
     private NDArray _next;
     private bool _disposed;
+    private readonly bool _wrapEdges;
 
-    public LifeSimulation(int rows = 40, int columns = 48, int seed = 73021)
+    public LifeSimulation(int rows = 40, int columns = 48, int seed = 73021, bool wrapEdges = true)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(rows, 3);
         ArgumentOutOfRangeException.ThrowIfLessThan(columns, 3);
 
         Rows = rows;
         Columns = columns;
+        _wrapEdges = wrapEdges;
         _random = new Random(seed);
         _cells = np.zeros(new Shape(rows, columns), NPTypeCode.Byte);
         _next = np.zeros(new Shape(rows, columns), NPTypeCode.Byte);
@@ -112,6 +114,15 @@ public sealed class LifeSimulation : IDisposable
                     source[IndexOf(row, west)] + source[IndexOf(row, east)] +
                     source[IndexOf(south, west)] + source[IndexOf(south, column)] + source[IndexOf(south, east)];
 
+                if (!_wrapEdges && (row == 0 || column == 0 || row == Rows - 1 || column == Columns - 1))
+                {
+                    neighbors = 0;
+                    for (var dy = -1; dy <= 1; dy++)
+                        for (var dx = -1; dx <= 1; dx++)
+                            if ((dx != 0 || dy != 0) && (uint)(row + dy) < Rows && (uint)(column + dx) < Columns)
+                                neighbors += source[IndexOf(row + dy, column + dx)];
+                }
+
                 var alive = source[IndexOf(row, column)] != 0;
                 var value = neighbors == 3 || (alive && neighbors == 2) ? (byte)1 : (byte)0;
                 destination[IndexOf(row, column)] = value;
@@ -132,6 +143,40 @@ public sealed class LifeSimulation : IDisposable
         _cells.Dispose();
         _next.Dispose();
         _disposed = true;
+    }
+
+    public void ReplenishTo(int target)
+    {
+        ThrowIfDisposed();
+        target = Math.Clamp(target, 0, Rows * Columns);
+        // Growth-capable motifs, rotated and placed without erasing existing life.
+        (int Row, int Col)[][] motifs =
+        [
+            [(0, 1), (1, 2), (2, 0), (2, 1), (2, 2)],
+            [(0, 1), (1, 1), (2, 1)],
+            [(0, 1), (0, 2), (1, 0), (1, 3), (2, 1), (2, 2)]
+        ];
+        for (var attempt = 0; attempt < 160 && LiveCount < target && Rows >= 4 && Columns >= 4; attempt++)
+        {
+            var row = _random.Next(Rows - 3);
+            var col = _random.Next(Columns - 3);
+            var motif = motifs[_random.Next(motifs.Length)];
+            var rotate = _random.Next(4);
+            foreach (var cell in motif)
+            {
+                var y = cell.Row;
+                var x = cell.Col;
+                for (var k = 0; k < rotate; k++) (y, x) = (x, 3 - y);
+                if (LiveCount < target) SetCell(row + y, col + x, true);
+            }
+        }
+        // A finite shuffled scan guarantees completion even when motifs overlap.
+        var start = _random.Next(Rows * Columns);
+        for (var i = 0; i < Rows * Columns && LiveCount < target; i++)
+        {
+            var index = (start + i) % (Rows * Columns);
+            SetCell(index / Columns, index % Columns, true);
+        }
     }
 
     private long IndexOf(int row, int column) => (long)row * Columns + column;

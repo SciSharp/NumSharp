@@ -1,672 +1,223 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using NumSharp.LifeAndPong.Models;
 
 namespace NumSharp.LifeAndPong.Views;
 
-/// <summary>
-/// Custom vector surface for the complete split-screen experience.
-/// </summary>
-public sealed class GameSurface : Control, IDisposable
+/// <summary>Accessible native menu controls surrounding our own arcade drawing surface.</summary>
+public sealed class GameSurface : UserControl, IDisposable
 {
-    private static readonly FontFamily s_interfaceFont = new("avares://Avalonia.Fonts.Inter/Assets#Inter");
-    private static readonly IBrush s_ink = Solid("#070A12");
-    private static readonly IBrush s_panel = Solid("#0C1220");
-    private static readonly IBrush s_panelRaised = Solid("#111A2C");
-    private static readonly IBrush s_hairline = Solid("#22304A");
-    private static readonly IBrush s_textPrimary = Solid("#F4F7FB");
-    private static readonly IBrush s_textSecondary = Solid("#8B9AB2");
-    private static readonly IBrush s_mint = Solid("#68F6C6");
-    private static readonly IBrush s_mintDim = Solid("#183E38");
-    private static readonly IBrush s_coral = Solid("#FF7D6B");
-    private static readonly IBrush s_coralDim = Solid("#48251F");
-    private static readonly IBrush s_amber = Solid("#FFC857");
-    private static readonly IBrush s_white08 = Solid("#14FFFFFF");
-    private static readonly IBrush s_white14 = Solid("#24FFFFFF");
-    private static readonly IBrush s_white22 = Solid("#38FFFFFF");
-    private static readonly IPen s_hairlinePen = new Pen(s_hairline, 1);
-
-    private readonly LifeSimulation _life = new();
-    private readonly PongSimulation _pong = new();
-    private readonly DispatcherTimer _timer;
-    private readonly List<ButtonHit> _buttonHits = new(10);
-    private readonly double[] _lifeRates = [3, 6, 12, 24, 40];
-    private readonly HashSet<Key> _heldKeys = [];
-    private readonly bool _startAnimation;
-
+    private readonly ArcadeSession _session = new();
+    private readonly ArenaView _arena;
+    private readonly PlayerProfile _profile;
+    private readonly IGameAudio _audio;
+    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(8) };
+    private readonly HashSet<Key> _held = [];
+    private readonly bool _animate;
+    private readonly TextBlock _score = Label("0", 30, Brushes.White);
+    private readonly TextBlock _next = Label("NEXT CELL +1", 13, ArenaView.Mint);
+    private readonly TextBlock _lives = Label("●  ●  ●", 18, ArenaView.Coral);
+    private readonly TextBlock _sector = Label("SECTOR 01", 13, ArenaView.Secondary);
+    private readonly TextBlock _best = Label("BEST 0", 12, ArenaView.Secondary);
+    private readonly TextBlock _message = Label("MOVE: W / S · ↑ / ↓ · MOUSE", 12, ArenaView.Secondary);
+    private readonly TextBlock _overlayTitle = Label("LIFE ARCADE", 34, Brushes.White);
+    private readonly TextBlock _overlayDetail = Label("", 16, ArenaView.Secondary);
+    private readonly TextBlock _overlayStats = Label("", 13, ArenaView.Mint);
+    private readonly Border _overlay;
+    private readonly Button _primary, _restart, _pause, _cancel, _title;
+    private readonly CheckBox _sound, _motion, _contrast;
+    private readonly ProgressBar _progress;
     private long _lastTimestamp;
-    private double _lifeAccumulator;
-    private double _pongAccumulator;
-    private int _lifeRateIndex = 2;
-    private bool _lifeRunning = true;
-    private bool _paintingLife;
-    private bool _paintAlive;
-    private bool _disposed;
-    private IPointer? _capturedPointer;
-    private Rect _lifeGridRect;
-    private Rect _pongWorldRect;
-    private int _paintRow;
-    private int _paintColumn;
-    private int _selectedButton = -1;
-    private Point _hover = new(-1, -1);
+    private double _accumulator;
+    private bool _disposed, _confirmRestart, _recorded;
+    private IPointer? _pointer;
 
-    internal LifeSimulation Life => _life;
-    internal PongSimulation Pong => _pong;
-    internal Rect LifeBounds => _lifeGridRect;
-    internal Rect PongBounds => _pongWorldRect;
-    internal Rect ButtonBounds(string id) => _buttonHits.First(b => b.Id == id).Bounds;
-
-    public GameSurface()
-        : this(startAnimation: true)
+    public GameSurface() : this(true, PlayerProfile.OpenLocal(), App.AudioFactory()) { }
+    internal GameSurface(bool startAnimation) : this(startAnimation, new PlayerProfile(), new SilentGameAudio()) { }
+    internal GameSurface(bool animate, PlayerProfile profile, IGameAudio audio)
     {
+        _animate = animate; _profile = profile; _audio = audio; Focusable = true; Background = ArenaView.Ink;
+        if (animate) _session.NewRun(Random.Shared.Next());
+        _arena = new ArenaView(_session, profile);
+        _primary = MakeButton("Start run", StartOrResume, true);
+        _pause = MakeButton("Pause / Esc", SuspendPlay, false);
+        _restart = MakeButton("Restart run", () => { _confirmRestart = true; Refresh(); }, false);
+        _cancel = MakeButton("Keep this run", () => { _confirmRestart = false; Refresh(); _primary.Focus(); }, false);
+        _title = MakeButton("Back to title", () => { _session.NewRun(Random.Shared.Next()); _recorded = false; _arena.ClearEffects(); Refresh(); Focus(); }, false);
+        _sound = MakeOption("Sound", profile.Sound, value => profile.Sound = value); _sound.IsEnabled = audio.Available;
+        if (!audio.Available) ToolTip.SetTip(_sound, "Sound is available in the Windows desktop release.");
+        _motion = MakeOption("Reduced motion", profile.ReducedMotion, value => profile.ReducedMotion = value);
+        _contrast = MakeOption("High contrast", profile.HighContrast, value => profile.HighContrast = value);
+        _progress = new ProgressBar { Minimum = 0, Maximum = 40, Height = 3, Foreground = ArenaView.Mint, Background = ArenaView.Raised };
+        AutomationProperties.SetName(_progress, "Cells destroyed toward next sector");
+        var heading = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
+        heading.Children.Add(Label("NUMSHARP", 11, ArenaView.Mint)); heading.Children.Add(Label("LIFE ARCADE", 22, Brushes.White));
+        var scoreGroup = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
+        scoreGroup.Children.Add(_score); scoreGroup.Children.Add(_next);
+        var lifeGroup = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
+        lifeGroup.Children.Add(_lives); lifeGroup.Children.Add(_best);
+        var sectorGroup = new StackPanel { Spacing = 9, Width = 150, VerticalAlignment = VerticalAlignment.Center };
+        sectorGroup.Children.Add(_sector); sectorGroup.Children.Add(_progress);
+        var hud = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*,Auto,Auto"), ColumnSpacing = 28, Margin = new Thickness(28, 18, 28, 14) };
+        Add(hud, heading, 0); Add(hud, scoreGroup, 1); Add(hud, lifeGroup, 2); Add(hud, sectorGroup, 3); Add(hud, _pause, 4);
+        var menu = new StackPanel { Spacing = 16 };
+        menu.Children.Add(_overlayTitle); menu.Children.Add(_overlayDetail); menu.Children.Add(_overlayStats);
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+        actions.Children.Add(_primary); actions.Children.Add(_restart); actions.Children.Add(_cancel); actions.Children.Add(_title); menu.Children.Add(actions);
+        var options = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 18 };
+        options.Children.Add(_sound); options.Children.Add(_motion); options.Children.Add(_contrast);
+        menu.Children.Add(new Border { Background = ArenaView.Line, Height = 1, Margin = new Thickness(0, 2) }); menu.Children.Add(options);
+        _overlay = new Border
+        {
+            Background = new SolidColorBrush(Color.Parse("#F509141D")),
+            BorderBrush = ArenaView.Line,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(20),
+            Padding = new Thickness(30),
+            MaxWidth = 590,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = menu
+        };
+        var field = new Grid { Margin = new Thickness(22, 0, 22, 0) };
+        field.Children.Add(_arena); field.Children.Add(_overlay);
+        var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(28, 8, 28, 16) };
+        footer.Children.Add(_message); Add(footer, Label("GROW → SHATTER → REPEAT", 11, ArenaView.Mint), 1);
+        var layout = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
+        layout.Children.Add(hud); Grid.SetRow(field, 1); layout.Children.Add(field); Grid.SetRow(footer, 2); layout.Children.Add(footer);
+        Content = layout; _timer.Tick += OnFrame; Refresh();
     }
-
-    internal GameSurface(bool startAnimation)
+    internal ArcadeSession Session => _session;
+    internal ArenaView Arena => _arena;
+    internal Button PrimaryButton => _primary;
+    internal Button PauseButton => _pause;
+    internal Button RestartButton => _restart;
+    internal bool HasTransientInputForTesting => _held.Count > 0 || _pointer is not null;
+    private static TextBlock Label(string text, double size, IBrush color) => new() { Text = text, FontSize = size, Foreground = color, FontWeight = FontWeight.Medium, TextWrapping = TextWrapping.Wrap };
+    private static void Add(Grid grid, Control control, int column) { Grid.SetColumn(control, column); grid.Children.Add(control); }
+    private static Button MakeButton(string label, Action action, bool primary)
     {
-        Focusable = true;
-        ClipToBounds = true;
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(8) };
-        _timer.Tick += OnFrame;
-        _startAnimation = startAnimation;
-        _lastTimestamp = Stopwatch.GetTimestamp();
+        var button = new Button { Content = label, Padding = new Thickness(18, 12), CornerRadius = new CornerRadius(9), Background = primary ? ArenaView.Mint : ArenaView.Raised, Foreground = primary ? ArenaView.Ink : Brushes.White, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeight.SemiBold };
+        button.Click += (_, _) => action(); return button;
     }
-
+    private CheckBox MakeOption(string label, bool initial, Action<bool> change)
+    {
+        var box = new CheckBox { Content = label, IsChecked = initial, Foreground = Brushes.White, FontSize = 13 };
+        box.IsCheckedChanged += (_, _) => { change(box.IsChecked == true); _profile.Save(); _arena.InvalidateVisual(); Refresh(); }; return box;
+    }
+    private void StartOrResume()
+    {
+        if (_confirmRestart || _session.State == RunState.GameOver)
+        { _session.NewRun(Random.Shared.Next()); _recorded = false; _confirmRestart = false; _arena.ClearEffects(); }
+        _session.LaunchOrResume(); Refresh(); Focus();
+    }
+    internal void SuspendPlay() { ReleaseInput(); _session.Pause(); _accumulator = 0; Refresh(); }
+    private void ReleaseInput() { _held.Clear(); _session.ReleaseInput(); var pointer = _pointer; _pointer = null; pointer?.Capture(null); }
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
-    {
-        base.OnAttachedToVisualTree(e);
-        _lastTimestamp = Stopwatch.GetTimestamp();
-        if (_startAnimation && !_disposed)
-            _timer.Start();
-    }
-
+    { base.OnAttachedToVisualTree(e); _lastTimestamp = Stopwatch.GetTimestamp(); if (_animate && !_disposed) _timer.Start(); }
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
-    {
-        _timer.Stop();
-        SuspendPlay();
-        base.OnDetachedFromVisualTree(e);
-    }
-
-    public override void Render(DrawingContext context)
-    {
-        base.Render(context);
-        _buttonHits.Clear();
-
-        var bounds = Bounds;
-        context.FillRectangle(s_ink, bounds);
-        DrawAmbientGrid(context, bounds);
-
-        var scale = Math.Clamp(Math.Min(bounds.Width / 1440d, bounds.Height / 900d), 0.72, 1.25);
-        var margin = 28 * scale;
-        var headerHeight = 72 * scale;
-        var gap = 18 * scale;
-        var contentTop = margin + headerHeight;
-
-        DrawHeader(context, new Rect(margin, margin, bounds.Width - margin * 2, headerHeight - 12 * scale), scale);
-
-        var panelWidth = (bounds.Width - margin * 2 - gap) / 2;
-        var panelHeight = bounds.Height - contentTop - margin;
-        Rect lifePanel = new(margin, contentTop, panelWidth, panelHeight);
-        Rect pongPanel = new(margin + panelWidth + gap, contentTop, panelWidth, panelHeight);
-
-        DrawPanelShell(context, lifePanel, s_mint, scale);
-        DrawPanelShell(context, pongPanel, s_coral, scale);
-        DrawLife(context, lifePanel, scale);
-        DrawPong(context, pongPanel, scale);
-    }
-
-    public void Dispose()
-    {
-        if (_disposed)
-            return;
-
-        ReleaseTransientInput();
-        _timer.Stop();
-        _timer.Tick -= OnFrame;
-        _life.Dispose();
-        _disposed = true;
-    }
-
-    protected override void OnPointerPressed(PointerPressedEventArgs e)
-    {
-        base.OnPointerPressed(e);
-        if (_capturedPointer is not null && _capturedPointer != e.Pointer)
-            return;
-        Focus();
-        _selectedButton = -1;
-        var point = e.GetPosition(this);
-
-        foreach (var button in _buttonHits)
-        {
-            if (button.Bounds.Contains(point))
-            {
-                ActivateButton(button.Id);
-                e.Handled = true;
-                return;
-            }
-        }
-
-        if (TryGetLifeCell(point, out var row, out var column))
-        {
-            _paintAlive = _life.ToggleCell(row, column);
-            _paintRow = row;
-            _paintColumn = column;
-            _paintingLife = true;
-            _capturedPointer = e.Pointer;
-            e.Pointer.Capture(this);
-            InvalidateVisual();
-            e.Handled = true;
-            return;
-        }
-
-        UpdatePointerPaddle(point);
-    }
-
-    protected override void OnPointerMoved(PointerEventArgs e)
-    {
-        base.OnPointerMoved(e);
-        var point = e.GetPosition(this);
-        _hover = point;
-        if (!_paintingLife)
-            UpdatePointerPaddle(point);
-
-        if (_paintingLife && _capturedPointer == e.Pointer && TryGetLifeCell(point, out var row, out var column))
-        {
-            _life.PaintLine(_paintRow, _paintColumn, row, column, _paintAlive);
-            _paintRow = row;
-            _paintColumn = column;
-        }
-        InvalidateVisual();
-    }
-
-    protected override void OnPointerReleased(PointerReleasedEventArgs e)
-    {
-        base.OnPointerReleased(e);
-        if (_capturedPointer != e.Pointer)
-            return;
-        _paintingLife = false;
-        _capturedPointer = null;
-        e.Pointer.Capture(null);
-    }
-
-    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
-    {
-        base.OnPointerCaptureLost(e);
-        if (_capturedPointer != e.Pointer)
-            return;
-        _paintingLife = false;
-        _capturedPointer = null;
-    }
-
+    { _timer.Stop(); SuspendPlay(); base.OnDetachedFromVisualTree(e); }
     protected override void OnLostFocus(FocusChangedEventArgs e)
     {
         base.OnLostFocus(e);
-        ReleaseTransientInput();
+        if (!ReferenceEquals(e.Source, this)) return;
+        ReleaseInput();
+        if (_session.State == RunState.Playing) { _session.Pause(); _accumulator = 0; Refresh(); }
     }
-
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        base.OnKeyDown(e);
-        var firstPress = _heldKeys.Add(e.Key);
-        if (e.Key == Key.Tab)
+        base.OnKeyDown(e); if (e.Handled) return;
+        var first = _held.Add(e.Key);
+        if (e.Key is Key.W or Key.Up or Key.S or Key.Down) { UpdateIntent(); e.Handled = true; }
+        else if (e.Key == Key.Space)
         {
-            if (_buttonHits.Count == 0) return;
-            var direction = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1;
-            _selectedButton = _selectedButton < 0
-                ? direction > 0 ? 0 : _buttonHits.Count - 1
-                : (_selectedButton + direction + _buttonHits.Count) % _buttonHits.Count;
-            InvalidateVisual();
+            if (first)
+            {
+                if (_session.State == RunState.Playing) PauseFromKey(e.Key);
+                else StartOrResume();
+            }
             e.Handled = true;
-            return;
         }
-        if (e.Key is Key.Enter or Key.Space && _selectedButton >= 0)
-        {
-            if (firstPress)
-                ActivateButton(_buttonHits[_selectedButton].Id);
-            e.Handled = true;
-            return;
-        }
-        switch (e.Key)
-        {
-            case Key.W:
-            case Key.Up:
-                UpdateKeyboardIntent();
-                e.Handled = true;
-                break;
-            case Key.S:
-            case Key.Down:
-                UpdateKeyboardIntent();
-                e.Handled = true;
-                break;
-            case Key.Space:
-                if (firstPress) _pong.TogglePause();
-                e.Handled = true;
-                break;
-            case Key.R:
-                if (firstPress) { _pong.ResetMatch(); UpdateKeyboardIntent(); }
-                e.Handled = true;
-                break;
-            case Key.Escape:
-                SuspendPlay();
-                e.Handled = true;
-                break;
-        }
-        InvalidateVisual();
+        else if (e.Key == Key.Escape)
+        { if (first) { _confirmRestart = false; PauseFromKey(e.Key); } e.Handled = true; }
+        else if (e.Key == Key.Enter && _session.State == RunState.GameOver) { if (first) StartOrResume(); e.Handled = true; }
     }
-
+    private void UpdateIntent() => _session.SetIntent((_held.Contains(Key.S) || _held.Contains(Key.Down) ? 1 : 0) - (_held.Contains(Key.W) || _held.Contains(Key.Up) ? 1 : 0));
+    private void PauseFromKey(Key key)
+    {
+        ReleaseInput(); _held.Add(key); _session.Pause(); _accumulator = 0; Refresh();
+    }
     protected override void OnKeyUp(KeyEventArgs e)
+    { base.OnKeyUp(e); _held.Remove(e.Key); if (e.Key is Key.W or Key.Up or Key.S or Key.Down) UpdateIntent(); }
+    protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
-        base.OnKeyUp(e);
-        _heldKeys.Remove(e.Key);
-        switch (e.Key)
-        {
-            case Key.W:
-            case Key.Up:
-                UpdateKeyboardIntent();
-                e.Handled = true;
-                break;
-            case Key.S:
-            case Key.Down:
-                UpdateKeyboardIntent();
-                e.Handled = true;
-                break;
-        }
+        base.OnPointerPressed(e); if (e.Handled || _session.State is RunState.Paused or RunState.GameOver || (_pointer is not null && _pointer != e.Pointer)) return;
+        Focus(); _pointer = e.Pointer; e.Pointer.Capture(this); UpdatePointer(e.GetPosition(_arena));
     }
-
-    internal bool HasTransientInputForTesting => _heldKeys.Count != 0 || _paintingLife || _capturedPointer is not null;
-
-    internal void SuspendPlay()
+    protected override void OnPointerMoved(PointerEventArgs e)
+    { base.OnPointerMoved(e); if (_session.State is RunState.Ready or RunState.Playing && (_pointer is null || _pointer == e.Pointer)) UpdatePointer(e.GetPosition(_arena)); }
+    private void UpdatePointer(Point point)
     {
-        ReleaseTransientInput();
-        _pong.PauseForDeactivation();
-        InvalidateVisual();
+        var world = _arena.ToWorld(point);
+        if (world.X >= ArcadeSession.Midline && world.X <= ArcadeSession.Width && world.Y >= 0 && world.Y <= ArcadeSession.Height) _session.SetPointerTarget((float)world.Y);
     }
-
-    internal void ReleaseTransientInput()
-    {
-        _heldKeys.Clear();
-        _paintingLife = false;
-        _pong.ReleaseInput();
-
-        var pointer = _capturedPointer;
-        _capturedPointer = null;
-        pointer?.Capture(null);
-    }
-
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    { base.OnPointerReleased(e); if (_pointer != e.Pointer) return; _pointer = null; e.Pointer.Capture(null); _session.ReleaseInput(); }
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    { base.OnPointerCaptureLost(e); if (_pointer != e.Pointer) return; _pointer = null; _session.ReleaseInput(); }
     private void OnFrame(object? sender, EventArgs e)
     {
-        var timestamp = Stopwatch.GetTimestamp();
-        var elapsed = Math.Min(0.05, (timestamp - _lastTimestamp) / (double)Stopwatch.Frequency);
-        _lastTimestamp = timestamp;
-
-        AdvanceSimulation(elapsed);
-        InvalidateVisual();
+        var now = Stopwatch.GetTimestamp(); var dt = Math.Clamp(Stopwatch.GetElapsedTime(_lastTimestamp, now).TotalSeconds, 0, .05); _lastTimestamp = now; AdvanceSimulation(dt);
     }
-
-    internal void AdvanceSimulation(double elapsed)
+    internal void AdvanceSimulation(double seconds)
     {
-        if (_lifeRunning && !_paintingLife)
+        if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
+        const double step = 1d / 120; _accumulator += Math.Min(.1, seconds);
+        while (_accumulator >= step)
         {
-            _lifeAccumulator += elapsed;
-            var interval = 1d / _lifeRates[_lifeRateIndex];
-            while (_lifeAccumulator >= interval)
-            {
-                _life.Step();
-                _lifeAccumulator -= interval;
-            }
+            _session.Advance(step); _accumulator -= step;
+            while (_session.TryTakeEvent(out var item)) { _arena.OnEvent(item); if (_profile.Sound) _audio.Play(item); }
         }
-
-        _pongAccumulator += elapsed;
-        const double FixedStep = 1d / 120d;
-        while (_pongAccumulator >= FixedStep)
+        if (_session.State == RunState.GameOver && !_recorded) { _profile.Record(_session); _recorded = true; }
+        _arena.AdvanceEffects(_session.State == RunState.Paused ? 0 : Math.Min(.1, seconds)); Refresh();
+    }
+    private void Refresh()
+    {
+        if (_disposed) return;
+        var longScore = _session.Score >= 1_000_000_000_000;
+        _score.Text = _session.Score.ToString(longScore ? "0" : "N0", CultureInfo.InvariantCulture); _score.FontSize = longScore ? 18 : 30;
+        _score.TextWrapping = TextWrapping.NoWrap;
+        _next.Text = $"NEXT CELL +{_session.NextAward}  ·  CHAIN {_session.Chain}";
+        _lives.Text = string.Join("  ", Enumerable.Range(0, 3).Select(i => i < _session.Lives ? "●" : "○"));
+        AutomationProperties.SetName(_lives, $"{_session.Lives} lives remaining");
+        _sector.Text = $"SECTOR {_session.Sector:00}  ·  {_session.Destroyed % 40}/40"; _progress.Value = _session.Destroyed % 40; _best.Text = $"BEST {_profile.Best:N0}";
+        _overlay.IsVisible = _session.State != RunState.Playing; _pause.IsEnabled = _session.State == RunState.Playing;
+        _restart.IsVisible = _session.State == RunState.Paused && !_confirmRestart; _cancel.IsVisible = _confirmRestart;
+        _title.IsVisible = _session.State == RunState.GameOver;
+        _message.Text = _profile.SaveError ?? "MOVE: W / S · ↑ / ↓ · MOUSE     SPACE: LAUNCH / PAUSE";
+        if (_confirmRestart) { _overlayTitle.Text = "START OVER?"; _overlayDetail.Text = "This run will be discarded. Your saved best stays safe."; _overlayStats.Text = $"CURRENT SCORE  {_session.Score:N0}"; _primary.Content = "Restart"; }
+        else if (_session.State == RunState.Ready)
         {
-            _pong.Advance((float)FixedStep);
-            _pongAccumulator -= FixedStep;
+            _overlayTitle.Text = _session.Lives == 3 ? "LET IT LIVE.\nMAKE IT SHATTER." : "ONE MORE SHOT.";
+            _overlayDetail.Text = _session.Lives == 3 ? "Your paddle is on the right. Defend while Life grows.\nSend the ball left to freeze and destroy the colony." : "Score kept. Chain reset. Take a breath, then launch.";
+            _overlayStats.Text = $"{_session.Lives} LIVES   ·   HIT CELLS: +1, +2, +4…   ·   DON'T MISS"; _primary.Content = _session.Lives == 3 ? "Start run  /  Space" : "Launch  /  Space";
         }
-
-    }
-
-    private static void DrawHeader(DrawingContext context, Rect area, double scale)
-    {
-        DrawText(context, "NUMSHARP", new Point(area.X, area.Y - 2 * scale), 12 * scale, s_mint, FontWeight.Bold, 2.5 * scale);
-        DrawText(context, "LIFE / PONG LAB", new Point(area.X, area.Y + 19 * scale), 28 * scale, s_textPrimary, FontWeight.SemiBold);
-
-        var badgeWidth = 124 * scale;
-        Rect badge = new(area.Right - badgeWidth, area.Y + 7 * scale, badgeWidth, 30 * scale);
-        context.DrawRectangle(s_panelRaised, s_hairlinePen, badge, 15 * scale, 15 * scale);
-        context.DrawEllipse(s_mint, null, new Point(badge.X + 16 * scale, badge.Center.Y), 3 * scale, 3 * scale);
-        DrawText(context, "LIFE + PONG", new Point(badge.X + 27 * scale, badge.Y + 8 * scale), 9.5 * scale, s_textSecondary, FontWeight.SemiBold, 0.9 * scale);
-    }
-
-    private static void DrawAmbientGrid(DrawingContext context, Rect bounds)
-    {
-        var pen = new Pen(s_white08, 1);
-        const double Spacing = 44;
-        for (double x = 0; x < bounds.Width; x += Spacing)
-            context.DrawLine(pen, new Point(x, 0), new Point(x, bounds.Height));
-        for (double y = 0; y < bounds.Height; y += Spacing)
-            context.DrawLine(pen, new Point(0, y), new Point(bounds.Width, y));
-
-        context.DrawEllipse(new SolidColorBrush(Color.FromArgb(22, 104, 246, 198)), null, new Point(bounds.Width * 0.17, bounds.Height * 0.44), bounds.Width * 0.22, bounds.Width * 0.22);
-        context.DrawEllipse(new SolidColorBrush(Color.FromArgb(17, 255, 125, 107)), null, new Point(bounds.Width * 0.82, bounds.Height * 0.52), bounds.Width * 0.21, bounds.Width * 0.21);
-    }
-
-    private static void DrawPanelShell(DrawingContext context, Rect panel, IBrush accent, double scale)
-    {
-        context.DrawRectangle(new SolidColorBrush(Color.FromArgb(55, 0, 0, 0)), null, panel.Translate(new Vector(0, 8 * scale)), 22 * scale, 22 * scale);
-        context.DrawRectangle(s_panel, s_hairlinePen, panel, 22 * scale, 22 * scale);
-        context.DrawRectangle(accent, null, new Rect(panel.X + 22 * scale, panel.Y, 52 * scale, 3 * scale), 1.5 * scale, 1.5 * scale);
-    }
-
-    private void DrawLife(DrawingContext context, Rect panel, double scale)
-    {
-        var inset = 20 * scale;
-        DrawText(context, "CONWAY FIELD", new Point(panel.X + inset, panel.Y + 17 * scale), 16 * scale, s_textPrimary, FontWeight.SemiBold, 0.5 * scale);
-        DrawText(context, $"GEN {_life.Generation:000000}  ·  {_life.LiveCount:0000} LIVE", new Point(panel.X + inset, panel.Y + 43 * scale), 10 * scale, s_textSecondary, FontWeight.Medium, 0.6 * scale);
-
-        var buttonY = panel.Y + 67 * scale;
-        var buttonX = panel.X + inset;
-        buttonX = DrawButton(context, "life-run", _lifeRunning ? "PAUSE" : "RUN", buttonX, buttonY, 72 * scale, scale, s_mint, _lifeRunning);
-        buttonX = DrawButton(context, "life-step", "STEP", buttonX + 7 * scale, buttonY, 58 * scale, scale, s_mint, false);
-        buttonX = DrawButton(context, "life-seed", "SEED", buttonX + 7 * scale, buttonY, 62 * scale, scale, s_mint, false);
-        _ = DrawButton(context, "life-clear", "CLEAR", buttonX + 7 * scale, buttonY, 66 * scale, scale, s_mint, false);
-
-        var speedRight = panel.Right - inset;
-        DrawButton(context, "life-faster", "+", speedRight - 32 * scale, buttonY, 32 * scale, scale, s_mint, false);
-        DrawText(context, $"{_lifeRates[_lifeRateIndex]:0}×", new Point(speedRight - 77 * scale, buttonY + 8 * scale), 10 * scale, s_textSecondary, FontWeight.Bold);
-        DrawButton(context, "life-slower", "−", speedRight - 116 * scale, buttonY, 32 * scale, scale, s_mint, false);
-
-        DrawButton(context, "life-glider", "GLIDER", panel.X + inset, panel.Y + 107 * scale, 80 * scale, scale, s_mint, false);
-        DrawButton(context, "life-pulsar", "PULSAR", panel.X + inset + 88 * scale, panel.Y + 107 * scale, 80 * scale, scale, s_mint, false);
-        DrawText(context, "B3 / S23  ·  WRAPPING EDGES", new Point(panel.Right - 214 * scale, panel.Y + 117 * scale), 10 * scale, s_textSecondary, FontWeight.Medium);
-        DrawText(context, "DRAW OR ERASE: DRAG CELLS   ·   TAB + ENTER: CONTROLS", new Point(panel.X + inset, panel.Bottom - 30 * scale), 10 * scale, s_textSecondary, FontWeight.Medium);
-
-        Rect available = new(panel.X + inset, panel.Y + 156 * scale, panel.Width - inset * 2, panel.Height - 211 * scale);
-        var cellSize = Math.Min(available.Width / _life.Columns, available.Height / _life.Rows);
-        var gridWidth = cellSize * _life.Columns;
-        var gridHeight = cellSize * _life.Rows;
-        _lifeGridRect = new Rect(available.X + (available.Width - gridWidth) / 2, available.Y + (available.Height - gridHeight) / 2, gridWidth, gridHeight);
-
-        context.DrawRectangle(Solid("#08110F"), new Pen(s_mintDim, 1), _lifeGridRect, 10 * scale, 10 * scale);
-
-        var gridPen = new Pen(new SolidColorBrush(Color.FromArgb(24, 104, 246, 198)), Math.Max(0.65, scale * 0.7));
-        for (var column = 1; column < _life.Columns; column++)
+        else if (_session.State == RunState.Paused)
+        { _overlayTitle.Text = "TAKE A BREATH."; _overlayDetail.Text = "Everything is paused. Your colony and chain are safe."; _overlayStats.Text = $"SCORE {_session.Score:N0}   ·   NEXT CELL +{_session.NextAward}"; _primary.Content = "Resume  /  Space"; }
+        else if (_session.State == RunState.GameOver)
         {
-            var x = _lifeGridRect.X + column * cellSize;
-            context.DrawLine(gridPen, new Point(x, _lifeGridRect.Y), new Point(x, _lifeGridRect.Bottom));
+            _overlayTitle.Text = _session.Score >= _profile.Best && _session.Score > 0 ? "NEW PERSONAL BEST." : "ONE MORE RUN?";
+            _overlayDetail.Text = $"{_session.Score:N0} POINTS"; _overlayStats.Text = $"BEST CHAIN {_session.BestChain}   ·   {_session.Destroyed} CELLS   ·   SECTOR {_session.Sector}\nSEED {_session.Seed}"; _primary.Content = "Retry  /  Enter";
         }
-        for (var row = 1; row < _life.Rows; row++)
-        {
-            var y = _lifeGridRect.Y + row * cellSize;
-            context.DrawLine(gridPen, new Point(_lifeGridRect.X, y), new Point(_lifeGridRect.Right, y));
-        }
-
-        var pad = Math.Max(1.2, cellSize * 0.13);
-        for (var row = 0; row < _life.Rows; row++)
-        {
-            for (var column = 0; column < _life.Columns; column++)
-            {
-                if (!_life.IsAlive(row, column))
-                    continue;
-
-                Rect cell = new(
-                    _lifeGridRect.X + column * cellSize + pad,
-                    _lifeGridRect.Y + row * cellSize + pad,
-                    Math.Max(1, cellSize - pad * 2),
-                    Math.Max(1, cellSize - pad * 2));
-                context.DrawRectangle(new SolidColorBrush(Color.FromArgb(45, 104, 246, 198)), null, cell.Inflate(2 * scale), 3 * scale, 3 * scale);
-                context.DrawRectangle(s_mint, null, cell, 2 * scale, 2 * scale);
-            }
-        }
+        _arena.InvalidateVisual();
     }
-
-    private void DrawPong(DrawingContext context, Rect panel, double scale)
-    {
-        var inset = 20 * scale;
-        DrawText(context, "KINETIC PONG", new Point(panel.X + inset, panel.Y + 17 * scale), 16 * scale, s_textPrimary, FontWeight.SemiBold, 0.5 * scale);
-        DrawText(context, "PLAYER  /  PREDICTIVE AI", new Point(panel.X + inset, panel.Y + 43 * scale), 10 * scale, s_textSecondary, FontWeight.Medium, 0.6 * scale);
-
-        var buttonY = panel.Y + 67 * scale;
-        var buttonX = panel.X + inset;
-        buttonX = DrawButton(context, "pong-pause", _pong.IsReady ? "START" : _pong.IsPaused ? "RESUME" : "PAUSE", buttonX, buttonY, 76 * scale, scale, s_coral, _pong.IsReady || _pong.IsPaused);
-        DrawButton(context, "pong-reset", "NEW MATCH", buttonX + 7 * scale, buttonY, 96 * scale, scale, s_coral, false);
-        DrawText(context, "2% DIRECTIONAL JITTER", new Point(panel.Right - 175 * scale, buttonY + 8 * scale), 9 * scale, s_textSecondary, FontWeight.Bold, 0.5 * scale);
-
-        DrawText(context, $"RALLY {_pong.Rally:00}    BEST {_pong.BestRally:00}    ·    FIRST TO 7", new Point(panel.X + inset, panel.Y + 117 * scale), 11 * scale, s_textSecondary, FontWeight.Medium);
-        DrawText(context, "MOVE: W / S, ↑ / ↓, MOUSE   ·   SPACE: START / PAUSE", new Point(panel.X + inset, panel.Bottom - 30 * scale), 10 * scale, s_textSecondary, FontWeight.Medium);
-
-        Rect available = new(panel.X + inset, panel.Y + 156 * scale, panel.Width - inset * 2, panel.Height - 211 * scale);
-        var worldScale = Math.Min(available.Width / PongSimulation.WorldWidth, available.Height / PongSimulation.WorldHeight);
-        var worldWidth = PongSimulation.WorldWidth * worldScale;
-        var worldHeight = PongSimulation.WorldHeight * worldScale;
-        _pongWorldRect = new Rect(available.X + (available.Width - worldWidth) / 2, available.Y + (available.Height - worldHeight) / 2, worldWidth, worldHeight);
-
-        context.DrawRectangle(Solid("#110B0D"), new Pen(s_coralDim, 1), _pongWorldRect, 10 * scale, 10 * scale);
-        DrawArenaMarkings(context, worldScale, scale);
-
-        for (var i = 0; i < _pong.Trail.Count; i++)
-        {
-            var alpha = (i + 1f) / _pong.Trail.Count;
-            var trailPoint = WorldToScreen(_pong.Trail[i], worldScale);
-            var radius = PongSimulation.BallRadius * worldScale * (0.28 + alpha * 0.34);
-            context.DrawEllipse(new SolidColorBrush(Color.FromArgb((byte)(alpha * 78), 255, 125, 107)), null, trailPoint, radius, radius);
-        }
-
-        DrawPaddle(context, 36, _pong.PlayerY, worldScale, s_mint, true, scale);
-        DrawPaddle(context, PongSimulation.WorldWidth - 36, _pong.AiY, worldScale, s_coral, false, scale);
-
-        var ball = WorldToScreen(_pong.BallPosition, worldScale);
-        var ballRadius = PongSimulation.BallRadius * worldScale;
-        context.DrawEllipse(new SolidColorBrush(Color.FromArgb(35, 255, 200, 87)), null, ball, ballRadius * 2.1, ballRadius * 2.1);
-        context.DrawEllipse(new SolidColorBrush(Color.FromArgb(75, 255, 200, 87)), null, ball, ballRadius * 1.45, ballRadius * 1.45);
-        context.DrawEllipse(s_amber, null, ball, ballRadius, ballRadius);
-        context.DrawEllipse(s_textPrimary, null, new Point(ball.X - ballRadius * 0.25, ball.Y - ballRadius * 0.25), ballRadius * 0.26, ballRadius * 0.26);
-
-        DrawScore(context, worldScale, scale);
-        DrawPongOverlay(context, scale);
-    }
-
-    private void DrawArenaMarkings(DrawingContext context, double worldScale, double scale)
-    {
-        var centerX = _pongWorldRect.Center.X;
-        var dashPen = new Pen(s_white14, Math.Max(1, 1.2 * scale));
-        var dash = 10 * worldScale;
-        for (var y = _pongWorldRect.Y + 20 * worldScale; y < _pongWorldRect.Bottom - 20 * worldScale; y += dash * 2)
-            context.DrawLine(dashPen, new Point(centerX, y), new Point(centerX, Math.Min(y + dash, _pongWorldRect.Bottom)));
-
-        context.DrawEllipse(null, new Pen(s_white08, 1), _pongWorldRect.Center, 82 * worldScale, 82 * worldScale);
-        context.DrawLine(new Pen(s_coralDim, 2 * scale), new Point(_pongWorldRect.X, _pongWorldRect.Y), new Point(_pongWorldRect.Right, _pongWorldRect.Y));
-        context.DrawLine(new Pen(s_coralDim, 2 * scale), new Point(_pongWorldRect.X, _pongWorldRect.Bottom), new Point(_pongWorldRect.Right, _pongWorldRect.Bottom));
-    }
-
-    private void DrawPaddle(DrawingContext context, float worldX, float worldY, double worldScale, IBrush color, bool player, double scale)
-    {
-        Rect paddle = new(
-            _pongWorldRect.X + (worldX - PongSimulation.PaddleWidth / 2) * worldScale,
-            _pongWorldRect.Y + (worldY - PongSimulation.PaddleHeight / 2) * worldScale,
-            PongSimulation.PaddleWidth * worldScale,
-            PongSimulation.PaddleHeight * worldScale);
-        context.DrawRectangle(new SolidColorBrush(player ? Color.FromArgb(35, 104, 246, 198) : Color.FromArgb(35, 255, 125, 107)), null, paddle.Inflate(7 * scale), 7 * scale, 7 * scale);
-        context.DrawRectangle(color, null, paddle, 5 * scale, 5 * scale);
-        context.DrawRectangle(s_textPrimary, null, new Rect(paddle.X + paddle.Width * 0.25, paddle.Y + paddle.Height * 0.08, paddle.Width * 0.2, paddle.Height * 0.45), 2 * scale, 2 * scale);
-    }
-
-    private void DrawScore(DrawingContext context, double worldScale, double scale)
-    {
-        var player = _pong.PlayerScore.ToString(CultureInfo.InvariantCulture);
-        var ai = _pong.AiScore.ToString(CultureInfo.InvariantCulture);
-        var scoreY = _pongWorldRect.Y + 24 * worldScale;
-        DrawTextCentered(context, player, new Point(_pongWorldRect.Center.X - 62 * worldScale, scoreY), 40 * scale, s_mint, FontWeight.Bold);
-        DrawTextCentered(context, ai, new Point(_pongWorldRect.Center.X + 62 * worldScale, scoreY), 40 * scale, s_coral, FontWeight.Bold);
-    }
-
-    private void DrawPongOverlay(DrawingContext context, double scale)
-    {
-        string? title = null;
-        string? detail = null;
-        if (_pong.IsReady)
-        {
-            title = "READY TO PLAY";
-            detail = "SPACE OR START TO SERVE";
-        }
-        else if (_pong.IsMatchOver)
-        {
-            title = _pong.PlayerScore > _pong.AiScore ? "YOU WIN" : "AI WINS";
-            detail = "PRESS R OR NEW MATCH";
-        }
-        else if (_pong.IsPaused)
-        {
-            title = "PAUSED";
-            detail = "SPACE TO RESUME";
-        }
-        else if (_pong.ServeCountdown > 0)
-        {
-            title = Math.Max(1, (int)Math.Ceiling(_pong.ServeCountdown * 3)).ToString(CultureInfo.InvariantCulture);
-            detail = "SERVE";
-        }
-
-        if (title is null)
-            return;
-
-        Rect overlay = new(_pongWorldRect.Center.X - 132 * scale, _pongWorldRect.Center.Y - 47 * scale, 264 * scale, 94 * scale);
-        context.DrawRectangle(new SolidColorBrush(Color.FromArgb(205, 7, 10, 18)), new Pen(s_white22, 1), overlay, 16 * scale, 16 * scale);
-        DrawTextCentered(context, title, new Point(overlay.Center.X, overlay.Y + 16 * scale), 27 * scale, s_textPrimary, FontWeight.Bold);
-        DrawTextCentered(context, detail!, new Point(overlay.Center.X, overlay.Y + 58 * scale), 9 * scale, s_textSecondary, FontWeight.Bold, 1 * scale);
-    }
-
-    private double DrawButton(DrawingContext context, string id, string label, double x, double y, double width, double scale, IBrush accent, bool active)
-    {
-        Rect bounds = new(x, y, width, 29 * scale);
-        _buttonHits.Add(new ButtonHit(id, bounds));
-        context.DrawRectangle(active ? accent : s_panelRaised, new Pen(active ? accent : s_hairline, 1), bounds, 8 * scale, 8 * scale);
-        if (_selectedButton == _buttonHits.Count - 1 || bounds.Contains(_hover))
-            context.DrawRectangle(null, new Pen(accent, 1.5), bounds.Inflate(2), 10 * scale, 10 * scale);
-        DrawTextCentered(context, label, bounds.Center.WithY(bounds.Y + 7.4 * scale), 9 * scale, active ? s_ink : s_textSecondary, FontWeight.Bold, 0.55 * scale);
-        return bounds.Right;
-    }
-
-    private void ActivateButton(string id)
-    {
-        switch (id)
-        {
-            case "life-run":
-                _lifeRunning = !_lifeRunning;
-                _lifeAccumulator = 0;
-                break;
-            case "life-step":
-                _lifeRunning = false;
-                _lifeAccumulator = 0;
-                _life.Step();
-                break;
-            case "life-seed":
-                _life.Reseed();
-                break;
-            case "life-clear":
-                _lifeRunning = false;
-                _lifeAccumulator = 0;
-                _life.Clear();
-                break;
-            case "life-glider":
-            case "life-pulsar":
-                _lifeRunning = false;
-                _lifeAccumulator = 0;
-                _life.LoadPattern(id == "life-pulsar");
-                break;
-            case "life-slower":
-                _lifeRateIndex = Math.Max(0, _lifeRateIndex - 1);
-                break;
-            case "life-faster":
-                _lifeRateIndex = Math.Min(_lifeRates.Length - 1, _lifeRateIndex + 1);
-                break;
-            case "pong-pause":
-                _pong.TogglePause();
-                break;
-            case "pong-reset":
-                _pong.ResetMatch();
-                break;
-        }
-
-        InvalidateVisual();
-    }
-
-    private bool TryGetLifeCell(Point point, out int row, out int column)
-    {
-        row = -1;
-        column = -1;
-        if (!_lifeGridRect.Contains(point) || _lifeGridRect.Width <= 0 || _lifeGridRect.Height <= 0)
-            return false;
-
-        column = Math.Clamp((int)((point.X - _lifeGridRect.X) / _lifeGridRect.Width * _life.Columns), 0, _life.Columns - 1);
-        row = Math.Clamp((int)((point.Y - _lifeGridRect.Y) / _lifeGridRect.Height * _life.Rows), 0, _life.Rows - 1);
-        return true;
-    }
-
-    private void UpdatePointerPaddle(Point point)
-    {
-        if (!_pongWorldRect.Contains(point) || _pongWorldRect.Height <= 0)
-            return;
-
-        var worldY = (float)((point.Y - _pongWorldRect.Y) / _pongWorldRect.Height * PongSimulation.WorldHeight);
-        _pong.SetPointerTarget(worldY);
-    }
-
-    private void UpdateKeyboardIntent() => _pong.SetKeyboardIntent(
-        (_heldKeys.Contains(Key.S) || _heldKeys.Contains(Key.Down) ? 1f : 0f) -
-        (_heldKeys.Contains(Key.W) || _heldKeys.Contains(Key.Up) ? 1f : 0f));
-
-    private Point WorldToScreen(System.Numerics.Vector2 value, double scale) =>
-        new(_pongWorldRect.X + value.X * scale, _pongWorldRect.Y + value.Y * scale);
-
-    private static void DrawText(
-        DrawingContext context,
-        string text,
-        Point point,
-        double fontSize,
-        IBrush brush,
-        FontWeight weight,
-        double letterSpacing = 0)
-    {
-        _ = letterSpacing;
-        var formatted = new FormattedText(
-            text,
-            CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight,
-            new Typeface(s_interfaceFont, FontStyle.Normal, weight),
-            fontSize,
-            brush);
-        context.DrawText(formatted, point);
-    }
-
-    private static void DrawTextCentered(
-        DrawingContext context,
-        string text,
-        Point anchor,
-        double fontSize,
-        IBrush brush,
-        FontWeight weight,
-        double letterSpacing = 0)
-    {
-        _ = letterSpacing;
-        var formatted = new FormattedText(
-            text,
-            CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight,
-            new Typeface(s_interfaceFont, FontStyle.Normal, weight),
-            fontSize,
-            brush);
-        context.DrawText(formatted, new Point(anchor.X - formatted.Width / 2, anchor.Y));
-    }
-
-    private static SolidColorBrush Solid(string hex) => new(Color.Parse(hex));
-
-    private readonly record struct ButtonHit(string Id, Rect Bounds);
-}
-
-internal static class PointExtensions
-{
-    public static Point WithY(this Point point, double y) => new(point.X, y);
+    public void Dispose()
+    { if (_disposed) return; ReleaseInput(); _timer.Stop(); _timer.Tick -= OnFrame; _session.Dispose(); _audio.Dispose(); _disposed = true; }
 }

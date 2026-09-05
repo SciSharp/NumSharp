@@ -10,7 +10,7 @@ public sealed class MainWindow : Window
 
     public MainWindow()
     {
-        Title = "NumSharp · Life + Pong";
+        Title = "NumSharp · Life Arcade";
         Width = 1440;
         Height = 900;
         MinWidth = 1120;
