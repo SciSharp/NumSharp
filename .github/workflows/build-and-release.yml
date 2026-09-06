@@ -31,10 +31,10 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: |
           8.0.x
@@ -141,7 +141,7 @@ jobs:
           --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=AnalyzerBuild" --logger "trx"
 
     - name: Upload Test Results
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: test-results-${{ matrix.os }}
@@ -162,10 +162,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: |
           8.0.x
@@ -234,10 +234,10 @@ jobs:
       NUMSHARP_PYTHONNET_REQUIRE_ENGINE: '1'
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: |
           8.0.x
@@ -246,7 +246,7 @@ jobs:
     # 3.12 sits inside pythonnet 3.0.5's supported range (PythonSession rejects
     # anything outside 3.7-3.13) and has numpy 2.x wheels on all three OSes.
     - name: Setup Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: '3.12'
 
@@ -339,7 +339,7 @@ jobs:
       shell: bash
 
     - name: Upload Test Results
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: interop-test-results-${{ matrix.os }}
@@ -365,10 +365,10 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: |
           8.0.x
@@ -376,7 +376,7 @@ jobs:
 
     # fetch_openblas.py (stdlib-only) stages the pinned per-RID assets the script packs.
     - name: Setup Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: '3.12'
 
@@ -403,7 +403,7 @@ jobs:
       version: ${{ steps.check.outputs.version }}
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
 
@@ -430,17 +430,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: |
           8.0.x
           10.0.x
 
     - name: Setup Python (for OpenBLAS native-asset staging)
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: '3.12'
 
@@ -590,7 +590,7 @@ jobs:
       run: dotnet run .github/scripts/verify_strong_name.cs -- artifacts/nuget
 
     - name: Upload NuGet Packages
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: nuget-packages
         path: artifacts/nuget/*.nupkg
@@ -602,7 +602,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
 
@@ -611,7 +611,7 @@ jobs:
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
     - name: Download NuGet Packages
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v8
       with:
         name: nuget-packages
         path: artifacts
@@ -687,13 +687,13 @@ jobs:
 
     steps:
     - name: Download NuGet Packages
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v8
       with:
         name: nuget-packages
         path: artifacts
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: |
           8.0.x

@@ -29,17 +29,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: |
           8.0.x
           10.0.x
 
     - name: Setup Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: '3.12'
 
@@ -169,7 +169,7 @@ jobs:
 
     - name: Upload soak evidence
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: fuzz-soak-evidence
         path: |
@@ -180,7 +180,7 @@ jobs:
 
     - name: Upload failing corpora
       if: failure()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: fuzz-soak-failures
         path: failing-seed-*.jsonl
