@@ -6,10 +6,10 @@ Deterministic inventory of MSTest declarations and committed oracle evidence. It
 
 | Measure | Count |
 |---|---:|
-| MSTest method declarations | 14,386 |
+| MSTest method declarations | 14,416 |
 | DataRow cases / methods | 732 / 84 |
 | DynamicData methods (not expanded) | 34 |
-| Default-run declarations | 14,117 |
+| Default-run declarations | 14,147 |
 | Open-bug methods | 186 |
 | Oracle-tagged methods | 855 |
 | Oracle test classes | 18 |
@@ -24,7 +24,7 @@ Deterministic inventory of MSTest declarations and committed oracle evidence. It
 
 | Project | Methods |
 |---|---:|
-| `NumSharp.Tests` | 13,585 |
+| `NumSharp.Tests` | 13,615 |
 | `NumSharp.Tests.Interop` | 631 |
 | `NumSharp.Tests.Oracle` | 170 |
 

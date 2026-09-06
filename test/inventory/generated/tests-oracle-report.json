@@ -4,23 +4,23 @@
   "generatorVersion": "1.2.0",
   "numpyVersion": "2.4.2",
   "assemblyVersions": {
-    "NumSharp.Tests": "0.60.0.0",
-    "NumSharp.Tests.Interop": "0.60.0.0",
-    "NumSharp.Tests.Oracle": "0.60.0.0"
+    "NumSharp.Tests": "0.70.0.0",
+    "NumSharp.Tests.Interop": "0.70.0.0",
+    "NumSharp.Tests.Oracle": "0.70.0.0"
   },
   "summary": {
     "tests": {
-      "methods": 14386,
-      "declaredInvocations": 15034,
+      "methods": 14416,
+      "declaredInvocations": 15064,
       "dataRows": 732,
       "dataRowMethods": 84,
       "dynamicMethods": 34,
-      "sourceLocated": 14386,
+      "sourceLocated": 14416,
       "oracleMethods": 855,
       "fuzzMatrixMethods": 102,
       "npyOracleMethods": 13,
       "statuses": {
-        "active": 14117,
+        "active": 14147,
         "ignored": 11,
         "manual": 8,
         "open_bug": 186,
@@ -39,7 +39,7 @@
         "WindowsOnly": 75
       },
       "projects": {
-        "NumSharp.Tests": 13585,
+        "NumSharp.Tests": 13615,
         "NumSharp.Tests.Interop": 631,
         "NumSharp.Tests.Oracle": 170
       },
@@ -192,13 +192,13 @@
       "id": "NumSharp.Tests::Backends & kernels",
       "project": "NumSharp.Tests",
       "area": "Backends & kernels",
-      "methods": 3407,
-      "declaredInvocations": 3771,
+      "methods": 3431,
+      "declaredInvocations": 3795,
       "dataRows": 409,
       "dynamicMethods": 3,
       "oracleMethods": 38,
       "statuses": {
-        "active": 3375,
+        "active": 3399,
         "open_bug": 32
       },
       "categories": {
@@ -311,6 +311,7 @@
         "test/NumSharp.Tests/Backends/NDArray.setflags.Test.cs",
         "test/NumSharp.Tests/Backends/NDArrayMethodParityTests.cs",
         "test/NumSharp.Tests/Backends/OpenBlasDeliveryTests.cs",
+        "test/NumSharp.Tests/Backends/OpenBlasMacOsVendoredRuntimeTests.cs",
         "test/NumSharp.Tests/Backends/OwnDataFlagTests.cs",
         "test/NumSharp.Tests/Backends/ReadonlyWriteGuardTests.cs",
         "test/NumSharp.Tests/Backends/TensorEngineThreadingTests.cs",
@@ -636,13 +637,13 @@
       "id": "NumSharp.Tests::Issues",
       "project": "NumSharp.Tests",
       "area": "Issues",
-      "methods": 4,
-      "declaredInvocations": 4,
+      "methods": 10,
+      "declaredInvocations": 10,
       "dataRows": 0,
       "dynamicMethods": 0,
       "oracleMethods": 0,
       "statuses": {
-        "active": 2,
+        "active": 8,
         "open_bug": 2
       },
       "categories": {
@@ -651,7 +652,8 @@
       "sourceFiles": [
         "test/NumSharp.Tests/Issues/443.cs",
         "test/NumSharp.Tests/Issues/447.cs",
-        "test/NumSharp.Tests/Issues/448.cs"
+        "test/NumSharp.Tests/Issues/448.cs",
+        "test/NumSharp.Tests/Issues/Release070ConsumerQaTests.cs"
       ]
     },
     {
@@ -8451,6 +8453,54 @@
       "methodPolicies": {}
     },
     {
+      "id": "NumSharp.Tests::NumSharp.Tests.Backends.OpenBlasMacOsVendoredRuntimeTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Backends.OpenBlasMacOsVendoredRuntimeTests",
+      "class": "OpenBlasMacOsVendoredRuntimeTests",
+      "area": "Backends & kernels",
+      "methods": 24,
+      "declaredInvocations": 24,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 24
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Backends/OpenBlasMacOsVendoredRuntimeTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Backends/OpenBlasMacOsVendoredRuntimeTests.cs#L55",
+      "methodNames": [
+        "BundledAssetPin_IsEmbedded_AndPinsEveryRid",
+        "BundledAssetPin_RecognizesTheStagedBundle_ByContent",
+        "CacheRoot_HonorsTheEnvVariable_ThenThePlatformDefaults",
+        "Cache_FlattenedLayout_RelocatesMainAndDeps_KeyedByContentHash",
+        "Cache_RebuildsAStaleOrTamperedEntry_AndNeverTrustsItsName",
+        "Cache_RefusesADependencyThatEscapesTheEntry",
+        "Cache_TwoDifferentBinaries_NeverAlias",
+        "FindStagedDependency_PrefersNested_ThenFlat_AndRefusesPaths",
+        "InPlace_CompletesAPartialRealSiblingFolder_ByCopying",
+        "InPlace_NuGetLayout_MaterializesTheSibling_AndIsIdempotent",
+        "IsBundledLibrary_FlattenedPublishLayout_IsTheBundle_UnlessAMarkerSaysOtherwise",
+        "Layout_Classification",
+        "LoadedImagePath_IsExposed_AndTracksTheLoadedLibrary",
+        "MachO_FatFile_ReportsTheUnionOfSlices",
+        "MachO_ReadsBigEndian32Bit_AndWeakReexportUpward",
+        "MachO_ReadsInstallName_Dependencies_AndRunPaths_ThinLittleEndian",
+        "MachO_RejectsNonMachO_AndTruncatedHeaders_WithoutThrowing",
+        "MachO_TheStagedBundledDylib_NamesItsVendoredRuntimeThroughLoaderPath",
+        "NormalizeRelative_CollapsesDotsButKeepsClimbing",
+        "Plan_DeclinesAndNamesTheDep_WhenItIsStagedNowhere",
+        "Plan_FlattenedLayout_FindsTheDepsBesideTheMain",
+        "Plan_IgnoresAbsoluteAndRpathDependencies",
+        "Plan_IsEmpty_WhenEveryDependencyAlreadyResolves",
+        "Plan_NestedLayout_MapsEveryLoaderPathDep_AndFollowsTheDepsOwnDeps"
+      ],
+      "methodPolicies": {}
+    },
+    {
       "id": "NumSharp.Tests::NumSharp.Tests.Backends.OwnDataFlagTests",
       "project": "NumSharp.Tests",
       "type": "NumSharp.Tests.Backends.OwnDataFlagTests",
@@ -16060,6 +16110,36 @@
         "ReproducingTest1": "open_bug",
         "ReproducingTest2": "open_bug"
       }
+    },
+    {
+      "id": "NumSharp.Tests::NumSharp.Tests.Issues.Release070ConsumerQaTests",
+      "project": "NumSharp.Tests",
+      "type": "NumSharp.Tests.Issues.Release070ConsumerQaTests",
+      "class": "Release070ConsumerQaTests",
+      "area": "Issues",
+      "methods": 6,
+      "declaredInvocations": 6,
+      "dataRows": 0,
+      "dynamicMethods": 0,
+      "statuses": {
+        "active": 6
+      },
+      "categories": {},
+      "oracleKinds": {},
+      "corpusFiles": [],
+      "sourcePaths": [
+        "test/NumSharp.Tests/Issues/Release070ConsumerQaTests.cs"
+      ],
+      "sourceUrl": "https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Issues/Release070ConsumerQaTests.cs#L17",
+      "methodNames": [
+        "arctan2_template_family_keeps_the_float_dtype_for_weak_int_scalars",
+        "clip_with_weak_int_bounds_keeps_the_float_dtype",
+        "dtype_name_is_numpys_name_not_the_clr_type_name",
+        "frombuffer_accepts_numpy_dtype_names_like_np_dtype_does",
+        "openblas_probe_bases_include_the_runtimes_native_search_directories",
+        "poly1d_call_evaluates_like_numpys_p_of_x"
+      ],
+      "methodPolicies": {}
     },
     {
       "id": "NumSharp.Tests::NumSharp.Tests.Lifetime.BufferReleaseSweepTests",

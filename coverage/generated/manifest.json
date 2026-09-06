@@ -3,7 +3,7 @@
   "generator": "coverage/generate_coverage.py",
   "generator_version": "1.6.0",
   "numpy_version": "2.4.2",
-  "numsharp_assembly_version": "0.60.0.0",
+  "numsharp_assembly_version": "0.70.0.0",
   "artifact_files": [
     "coverage.json",
     "coverage.csv",

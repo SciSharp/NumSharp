@@ -4,9 +4,9 @@
   "generator_version": "1.2.0",
   "numpy_version": "2.4.2",
   "assembly_versions": {
-    "NumSharp.Tests": "0.60.0.0",
-    "NumSharp.Tests.Interop": "0.60.0.0",
-    "NumSharp.Tests.Oracle": "0.60.0.0"
+    "NumSharp.Tests": "0.70.0.0",
+    "NumSharp.Tests.Interop": "0.70.0.0",
+    "NumSharp.Tests.Oracle": "0.70.0.0"
   },
   "artifact_files": [
     "tests-oracle-report.json",
@@ -16,17 +16,17 @@
   ],
   "summary": {
     "tests": {
-      "methods": 14386,
-      "declaredInvocations": 15034,
+      "methods": 14416,
+      "declaredInvocations": 15064,
       "dataRows": 732,
       "dataRowMethods": 84,
       "dynamicMethods": 34,
-      "sourceLocated": 14386,
+      "sourceLocated": 14416,
       "oracleMethods": 855,
       "fuzzMatrixMethods": 102,
       "npyOracleMethods": 13,
       "statuses": {
-        "active": 14117,
+        "active": 14147,
         "ignored": 11,
         "manual": 8,
         "open_bug": 186,
@@ -45,7 +45,7 @@
         "WindowsOnly": 75
       },
       "projects": {
-        "NumSharp.Tests": 13585,
+        "NumSharp.Tests": 13615,
         "NumSharp.Tests.Interop": 631,
         "NumSharp.Tests.Oracle": 170
       },

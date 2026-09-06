@@ -1,6 +1,6 @@
 # NumPy ↔ NumSharp API coverage
 
-Compared with NumPy **2.4.2** using NumSharp assembly **0.60.0.0**.
+Compared with NumPy **2.4.2** using NumSharp assembly **0.70.0.0**.
 
 Headline API availability: **87.1%** (488 of 560 default-scope APIs). Including partial mappings, **87.5%** are addressed.
 
