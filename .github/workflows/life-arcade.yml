@@ -41,8 +41,8 @@ jobs:
         shell: pwsh
         working-directory: examples/LifeAndPong
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           global-json-file: examples/LifeAndPong/global.json
       - name: Build focused solution
@@ -50,7 +50,7 @@ jobs:
       - name: Package portable Windows app
         run: ./publish-windows.ps1
       - name: Upload Windows ZIP and checksum
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Life-Arcade-win-x64
           path: |
