@@ -127,6 +127,32 @@ def run(cmd, cwd=None, check=False, env=None):
     return subprocess.run([str(c) for c in cmd], cwd=str(cwd) if cwd else None, check=check, env=env)
 
 
+def run_numpy_suite(cmd, suite, strict, attempts=3):
+    """Run one NumPy suite subprocess, retrying an intermittent HARD crash.
+
+    numpy_benchmark.benchmark() already absorbs a single op that RAISES (the
+    catchable ``_UFuncNoLoopError`` from NumPy's intermittent ufunc-loop memory
+    corruption on long Windows runs), so a suite now exits non-zero only on a
+    genuine segfault / access violation — which a fresh process almost always
+    survives. Retry a few times before giving up.
+
+    On repeated failure: raise when ``strict`` (the pass/light gate — a crash
+    there is a real signal), else warn and return False so the REMAINING suites
+    still run. This replaces the old ``check=True`` that let one flaky suite
+    abort a multi-hour measurement and discard every suite after it."""
+    for attempt in range(1, attempts + 1):
+        proc = run(cmd, check=False)
+        if proc.returncode == 0:
+            return True
+        print(f"!! NumPy suite '{suite}' exited {proc.returncode} "
+              f"(attempt {attempt}/{attempts})", flush=True)
+    if strict:
+        raise RuntimeError(f"NumPy suite '{suite}' failed after {attempts} attempts")
+    print(f"!! SKIPPING NumPy suite '{suite}' after {attempts} attempts — "
+          f"continuing with the remaining suites", flush=True)
+    return False
+
+
 def append_section(report_md, src_md, title):
     """Append a subsystem's rendered *_results.md to the unified report as one
     section. The source's leading H1 (if any) is dropped so the report keeps a
@@ -335,8 +361,8 @@ def main(argv=None):
             # suite so no other suite emits unmatched N=1 rows.
             if s == "api":
                 cmd.append("--with-scalar")
-            run(cmd, check=True)
-            if tmp.exists():
+            ok = run_numpy_suite(cmd, s, strict=non_measure)
+            if ok and tmp.exists():
                 merged.extend(json.loads(tmp.read_text()))
         numpy_json.write_text(json.dumps(merged, indent=2))
         print(f"NumPy: {len(merged)} results across {len(args.suites)} suites")

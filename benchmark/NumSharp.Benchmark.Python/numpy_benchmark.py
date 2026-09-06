@@ -91,6 +91,12 @@ DTYPES = {
 ACTIVE_BENCHMARK_DEPTH = "measure"
 ACTIVE_DTYPES = set(DTYPES)
 
+# Full names ("np.abs (float16)") of ops that RAISED during this process (an intermittent
+# NumPy failure absorbed by benchmark()). main() drops EVERY tier of such an op so a partial
+# group (e.g. 1K+100K present, 10M skipped) never reaches merge-results.py's universal-tier
+# gate — which is check=True and would otherwise turn one flaky op into a whole-run failure.
+SKIPPED_OP_NAMES: set = set()
+
 # Common types for quick benchmarks
 COMMON_DTYPES = ['int32', 'int64', 'float32', 'float64']
 
@@ -124,6 +130,36 @@ class BenchmarkResult:
 
 def benchmark(func: Callable, n: int, warmup: int = 10, iterations: int = 50,
               min_measure_ms: float = 1.0, pilot_ms: float = 0.3) -> BenchmarkResult:
+    """Resilient front-end to ``_benchmark_impl``.
+
+    A single workload that RAISES — e.g. the intermittent NumPy ufunc-loop
+    memory-corruption ``_UFuncNoLoopError`` observed on long Windows measure runs
+    (``ufunc 'absolute' did not contain a loop ... Float16DType -> <corrupted>``) —
+    is logged to stderr and returned as a NaN-timed sentinel. ``run_suites()``
+    drops NaN-timed rows before serialization, so one flaky op can never abort a
+    multi-hour measurement. Previously the op threw, the suite subprocess exited
+    non-zero, and ``run_benchmark.py``'s ``check=True`` killed the ENTIRE run,
+    discarding every remaining suite.
+
+    A HARD crash (segfault / access violation from the same corruption) bypasses
+    Python entirely and still kills the process — that case is handled on the
+    orchestrator side by ``run_benchmark.py`` retrying the suite subprocess and
+    continuing past a suite that keeps crashing.
+    """
+    try:
+        return _benchmark_impl(func, n, warmup, iterations, min_measure_ms, pilot_ms)
+    except Exception as exc:  # deliberately broad: any single-op failure is non-fatal
+        fname = getattr(func, "__name__", None) or str(func)
+        print(f"[benchmark] SKIPPED {fname}: {type(exc).__name__}: {exc}",
+              file=sys.stderr, flush=True)
+        nan = float("nan")
+        return BenchmarkResult(name=fname, category="", suite="", dtype="", n=n,
+                               mean_ms=nan, stddev_ms=nan, min_ms=nan, max_ms=nan,
+                               iterations=0, ops_per_sec=0.0)
+
+
+def _benchmark_impl(func: Callable, n: int, warmup: int = 10, iterations: int = 50,
+                    min_measure_ms: float = 1.0, pilot_ms: float = 0.3) -> BenchmarkResult:
     """Run a benchmark with warmup, per-test adaptive batching, and a MIN-TIME budget.
 
     Min-time methodology (time-bound, NOT a fixed iteration count):
@@ -2284,7 +2320,22 @@ def run_suites(n: int, suite: str, dtypes_to_run: List[str], iterations: int) ->
         for dtype in selected(['int32', 'float64'], dtypes_to_run):
             results_all.extend(run_where_benchmarks(n, dtype, iterations))
 
-    return [row for row in results_all if row is not None and row.dtype in ACTIVE_DTYPES]
+    # Drop None (dtype-inactive) and NaN-timed sentinels (an op that raised and was
+    # skipped by benchmark()); a skipped op must not reach the JSON/merge as a fake 0-ratio row.
+    kept, skipped = [], []
+    for row in results_all:
+        if row is None or row.dtype not in ACTIVE_DTYPES:
+            continue
+        if isinstance(row.mean_ms, float) and math.isnan(row.mean_ms):
+            skipped.append(row.name)
+            SKIPPED_OP_NAMES.add(row.name)
+            continue
+        kept.append(row)
+    if skipped:
+        print(f"[run_suites] {len(skipped)} op(s) SKIPPED at N={n:,} (see stderr above): "
+              f"{', '.join(skipped[:12])}{' …' if len(skipped) > 12 else ''}",
+              file=sys.stderr, flush=True)
+    return kept
 
 
 OFFICIAL_SCENARIO_SUITES = (
@@ -2419,6 +2470,19 @@ def main():
     for n in sizes_to_run:
         print(f"\n{'#'*64}\n#  ARRAY SIZE  N = {n:,}\n{'#'*64}")
         all_results.extend(run_suites(n, args.suite, dtypes_to_run, args.iterations))
+
+    # An op that RAISED at ANY size (SKIPPED_OP_NAMES) is dropped at EVERY size, so a partial
+    # group (e.g. it succeeded at 1K/100K but the intermittent NumPy corruption hit it at 10M)
+    # never reaches merge-results.py's universal-tier gate — which is check=True and would turn
+    # one flaky op into a whole-run failure. Losing the other tiers of one rare flaky op is the
+    # correct trade for a completed measurement; the alternative was aborting the entire run.
+    if SKIPPED_OP_NAMES:
+        before = len(all_results)
+        all_results = [r for r in all_results if r.name not in SKIPPED_OP_NAMES]
+        print(f"\n[main] dropped {before - len(all_results)} row(s) for "
+              f"{len(SKIPPED_OP_NAMES)} skipped op(s) (all tiers): "
+              f"{', '.join(sorted(SKIPPED_OP_NAMES)[:12])}"
+              f"{' …' if len(SKIPPED_OP_NAMES) > 12 else ''}", file=sys.stderr, flush=True)
 
     # Tier-key invariant: MEMORY_HEAVY_LARGE_WORKLOAD (1M) is a PHYSICAL cap only, never a
     # published tier — a memory-heavy row must keep n=10M so every calc, geomean, and UI size
