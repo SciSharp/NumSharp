@@ -129,7 +129,9 @@ containing:
 The application folder and ZIP include the .NET runtime, `LICENSE`, every
 Markdown guide at this folder's root, and `preview.png` plus
 `preview.ready.png`. The archive is a portable application, not an installer.
-After extracting it, start `NumSharp.LifeAndPong.Desktop.exe`.
+The ZIP has one top-level `NumSharp-LifeAndPong-win-x64` application directory.
+After extraction, open that directory and start
+`NumSharp.LifeAndPong.Desktop.exe` from inside it.
 
 ## Local data
 

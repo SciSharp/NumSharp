@@ -21,10 +21,12 @@ an acceptance result; record what a human actually observes.
    review by running `publish-windows.ps1` as described in [README.md](README.md).
 2. Compare the ZIP with the adjacent `SHA256SUMS` file and require a `True`
    checksum result.
-3. Extract `NumSharp-LifeAndPong-win-x64.zip` to a new writable folder. Confirm
-   that the root contains `NumSharp.LifeAndPong.Desktop.exe`, the .NET runtime,
-   NumSharp assemblies, `LICENSE`, both packaged previews, and every root
-   Markdown guide including this one.
+3. Extract `NumSharp-LifeAndPong-win-x64.zip` to a new writable destination,
+   then open the resulting top-level `NumSharp-LifeAndPong-win-x64` application
+   directory. Confirm that this application directory contains
+   `NumSharp.LifeAndPong.Desktop.exe`, the .NET runtime, NumSharp assemblies,
+   `LICENSE`, both packaged previews, and every root Markdown guide including
+   this one.
 4. Record the code revision, documentation revision, ZIP SHA-256, Windows
    version, display scaling, window size, input device, and whether reduced
    motion, high contrast, or sound is enabled.
@@ -34,7 +36,8 @@ unless its independent publishing evidence exists.
 
 ## Complete player journey
 
-Perform the following through the extracted executable, without developer or
+Perform the following through the executable inside the extracted
+`NumSharp-LifeAndPong-win-x64` application directory, without developer or
 test-only controls:
 
 1. **Launch and Ready:** start `NumSharp.LifeAndPong.Desktop.exe`. From the Ready
