@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
+using System.Reflection;
 using System.Reflection.Emit;
-using System.Threading;
+using System.Runtime.Intrinsics.X86;
 
 // =============================================================================
 // DirectILKernelGenerator.Take.cs — IL kernel for np.take
@@ -54,32 +56,101 @@ namespace NumSharp.Backends.Kernels
 
     public static partial class DirectILKernelGenerator
     {
-        private static TakeKernel _takeKernel;
+        private static readonly ConcurrentDictionary<int, TakeKernel> _takeKernels = new();
+
+        // Software-prefetch tuning for the random-gather inner loop. NumPy's take is a scalar memcpy
+        // with no prefetch, so at scale (source larger than LLC) it stalls on gather latency; issuing
+        // a prefetch for the slab DIST indices ahead raises memory-level parallelism and is a pure win
+        // there, neutral when the source is already cache-resident (prefetch of a live line is free).
+        // Emitted only when SSE is available (x86); a no-op address never faults, so unnormalized
+        // future indices are safe to prefetch.
+        private const long PrefetchDistance = 32;
+        private static readonly MethodInfo _ssePrefetch0 = typeof(Sse).GetMethod(nameof(Sse.Prefetch0));
 
         /// <summary>
-        /// IL-emitted take kernel (singleton — same kernel handles any ndim,
-        /// any elemBytes, any innerSize, both axis=None and axis=k). Returns
-        /// <c>null</c> only when <see cref="Enabled"/> is false.
+        /// IL-emitted take kernel, generated once per (copy-width, prefetch) pair. <paramref name="copyKind"/>
+        /// is the <see cref="CopyKindFor"/> of the per-index slab size (1/2/4/8/16 for a typed MOV copy,
+        /// 0 for a runtime-sized <c>cpblk</c>); <paramref name="prefetch"/> emits the software-prefetch
+        /// inner body (a large-source win, a small-source pessimization — the caller gates it on the
+        /// gathered region exceeding cache). One kernel handles any ndim, both axis=None and axis=k.
+        /// Returns <c>null</c> only when <see cref="Enabled"/> is false.
         /// </summary>
-        public static TakeKernel GetTakeKernel()
+        public static TakeKernel GetTakeKernel(int copyKind, bool prefetch)
+            => GetTakeKernel(copyKind, prefetch, idx32: false);
+
+        /// <summary>
+        /// As <see cref="GetTakeKernel(int, bool)"/>, with the index width selectable:
+        /// <paramref name="idx32"/> generates a kernel that reads the <c>indices</c> argument as
+        /// <b>int32</b> values (the pointer is still typed <c>long*</c> by the delegate — the
+        /// caller reinterprets its <c>int*</c>), so an int32 index array is gathered in place
+        /// instead of being widened to a temporary int64 copy first.
+        /// </summary>
+        public static TakeKernel GetTakeKernel(int copyKind, bool prefetch, bool idx32)
         {
             if (!Enabled)
                 return null;
 
-            var cached = _takeKernel;
-            if (cached != null)
+            int key = (copyKind << 2) | (idx32 ? 2 : 0) | (prefetch ? 1 : 0);
+            if (_takeKernels.TryGetValue(key, out var cached))
                 return cached;
 
             try
             {
-                var k = GenerateTakeKernelIL();
-                Interlocked.CompareExchange(ref _takeKernel, k, null);
-                return _takeKernel;
+                var k = GenerateTakeKernelIL(copyKind, prefetch, idx32);
+                return _takeKernels.GetOrAdd(key, k);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetTakeKernel: {ex.GetType().Name}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetTakeKernel({copyKind},{prefetch},{idx32}): {ex.GetType().Name}: {ex.Message}");
                 return null;
+            }
+        }
+
+        // ---- shared element-copy specialization (used by Take / Put / Place) ----
+
+        /// <summary>
+        ///     The typed-copy width for a slab of <paramref name="bytes"/> bytes: 1/2/4/8/16 when the
+        ///     slab is exactly one primitive width (a single element for every NumSharp dtype, since all
+        ///     itemsizes are in {1,2,4,8,16}), else 0 meaning "use a runtime-sized cpblk". Selecting a
+        ///     typed width lets the copy compile to one or two MOVs instead of a per-element memcpy —
+        ///     the cpblk-of-a-tiny-runtime-size pathology that made the gather/scatter kernels ~2x slow.
+        /// </summary>
+        internal static int CopyKindFor(long bytes) => bytes switch
+        {
+            1 => 1,
+            2 => 2,
+            4 => 4,
+            8 => 8,
+            16 => 16,
+            _ => 0,
+        };
+
+        /// <summary>
+        ///     Emit the per-element copy for a gather/scatter inner body. For a fixed
+        ///     <paramref name="copyKind"/> width this is a typed load+store (one MOV, two for 16 bytes);
+        ///     for copyKind 0 it is <c>cpblk</c> with a runtime byte count pushed by
+        ///     <paramref name="pushByteCount"/>. Consumes nothing else; leaves the stack empty.
+        /// </summary>
+        internal static void EmitElementCopy(ILGenerator il, int copyKind, LocalBuilder dst, LocalBuilder src, Action pushByteCount)
+        {
+            switch (copyKind)
+            {
+                case 1:
+                    il.Emit(OpCodes.Ldloc, dst); il.Emit(OpCodes.Ldloc, src); il.Emit(OpCodes.Ldind_U1); il.Emit(OpCodes.Stind_I1); break;
+                case 2:
+                    il.Emit(OpCodes.Ldloc, dst); il.Emit(OpCodes.Ldloc, src); il.Emit(OpCodes.Ldind_U2); il.Emit(OpCodes.Stind_I2); break;
+                case 4:
+                    il.Emit(OpCodes.Ldloc, dst); il.Emit(OpCodes.Ldloc, src); il.Emit(OpCodes.Ldind_U4); il.Emit(OpCodes.Stind_I4); break;
+                case 8:
+                    il.Emit(OpCodes.Ldloc, dst); il.Emit(OpCodes.Ldloc, src); il.Emit(OpCodes.Ldind_I8); il.Emit(OpCodes.Stind_I8); break;
+                case 16:
+                    // Two 8-byte MOVs cover Complex/Decimal without needing SSE.
+                    il.Emit(OpCodes.Ldloc, dst); il.Emit(OpCodes.Ldloc, src); il.Emit(OpCodes.Ldind_I8); il.Emit(OpCodes.Stind_I8);
+                    il.Emit(OpCodes.Ldloc, dst); il.Emit(OpCodes.Ldc_I4_8); il.Emit(OpCodes.Add);
+                    il.Emit(OpCodes.Ldloc, src); il.Emit(OpCodes.Ldc_I4_8); il.Emit(OpCodes.Add);
+                    il.Emit(OpCodes.Ldind_I8); il.Emit(OpCodes.Stind_I8); break;
+                default:
+                    il.Emit(OpCodes.Ldloc, dst); il.Emit(OpCodes.Ldloc, src); pushByteCount(); il.Emit(OpCodes.Conv_U4); il.Emit(OpCodes.Cpblk); break;
             }
         }
 
@@ -105,10 +176,13 @@ namespace NumSharp.Backends.Kernels
         /// }
         /// </code>
         /// </summary>
-        private static TakeKernel GenerateTakeKernelIL()
+        private static TakeKernel GenerateTakeKernelIL(int copyKind, bool prefetch, bool idx32 = false)
         {
+            // Index element width: the `indices` argument is read as int32 (sign-extended) or int64.
+            long idxWidth = idx32 ? 4L : 8L;
+
             var dm = new DynamicMethod(
-                name: "IL_Take",
+                name: $"IL_Take_c{copyKind}_i{idxWidth}_{(prefetch ? "pf" : "np")}",
                 returnType: typeof(long),
                 parameterTypes: new[]
                 {
@@ -140,6 +214,8 @@ namespace NumSharp.Backends.Kernels
             var lblFail = il.DefineLabel();
             var lblIdxResolved = il.DefineLabel();
 
+            bool usePrefetch = prefetch && Sse.IsSupported && _ssePrefetch0 != null;
+
             // outer = 0
             il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locOuter);
@@ -168,14 +244,51 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locPair);
 
+            // Prefetch the slab that index (j + DIST) will gather, so its cache line is in flight
+            // before we reach it. Guarded by (j + DIST < indicesCount) so the index-array read never
+            // runs past its allocation; the prefetch target itself uses the RAW future index (no mode
+            // normalization) which is fine — an off / negative address just wastes the prefetch.
+            if (usePrefetch)
+            {
+                var lblSkipPf = il.DefineLabel();
+                il.Emit(OpCodes.Ldloc, locJ);
+                il.Emit(OpCodes.Ldc_I8, PrefetchDistance);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldarg_2);            // indicesCount
+                il.Emit(OpCodes.Bge, lblSkipPf);
+
+                il.Emit(OpCodes.Ldarg_0);            // src
+                il.Emit(OpCodes.Ldloc, locOuter);
+                il.Emit(OpCodes.Ldarg, 4);           // maxItem
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Ldarg_1);            // indices
+                il.Emit(OpCodes.Ldloc, locJ);
+                il.Emit(OpCodes.Ldc_I8, PrefetchDistance);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldc_I8, idxWidth);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                if (idx32) { il.Emit(OpCodes.Ldind_I4); il.Emit(OpCodes.Conv_I8); }
+                else il.Emit(OpCodes.Ldind_I8);      // indices[j + DIST]
+                il.Emit(OpCodes.Add);                // outer*maxItem + idxFuture
+                il.Emit(OpCodes.Ldarg, 5);           // innerSize
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);                // src + (outer*maxItem + idxFuture) * innerSize
+                il.Emit(OpCodes.Call, _ssePrefetch0);
+                il.MarkLabel(lblSkipPf);
+            }
+
             // idx = indices[j]
             il.Emit(OpCodes.Ldarg_1);
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Ldc_I8, idxWidth);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_I8);
+            if (idx32) { il.Emit(OpCodes.Ldind_I4); il.Emit(OpCodes.Conv_I8); }
+            else il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Stloc, locIdx);
 
             // ----- Mode dispatch -----
@@ -205,15 +318,12 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locDstSlab);
 
-            // cpblk(dstSlab, srcSlab, innerSize) — Cpblk byte count is uint32; for
-            // innerSize > 2^32 we'd need a chunked loop, but per-slab sizes that
-            // large don't arise in practice (would require > 4 GB per element which
-            // exceeds NDArray capacity).
-            il.Emit(OpCodes.Ldloc, locDstSlab);
-            il.Emit(OpCodes.Ldloc, locSrcSlab);
-            il.Emit(OpCodes.Ldarg, 5);
-            il.Emit(OpCodes.Conv_U4);
-            il.Emit(OpCodes.Cpblk);
+            // Element copy: a typed MOV (or two, for 16-byte Complex/Decimal) when the slab is one
+            // primitive width — the common gather case — else cpblk with the runtime innerSize (arg 5).
+            // For the typed widths innerSize == copyKind, so the slab addressing above stays correct.
+            // (Cpblk byte count is uint32; per-slab sizes > 2^32 can't arise — they'd need > 4 GB per
+            // element, beyond NDArray capacity.)
+            EmitElementCopy(il, copyKind, locDstSlab, locSrcSlab, () => il.Emit(OpCodes.Ldarg, 5));
 
             // j++
             il.Emit(OpCodes.Ldloc, locJ);
@@ -267,7 +377,21 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Beq, lblClip);
 
             // ----- RAISE -----
-            // if (idx < 0 || idx >= maxItem) goto fail
+            // NumPy's check_and_adjust_index (mapping.c): a negative index is normalized ONCE
+            // (idx += maxItem), then bounds-checked — so take([-1]) is the last element, while an
+            // index still out of range after the shift (idx < 0 || idx >= maxItem) fails. The
+            // original (pre-shift) value survives in indices[] for the caller's diagnostic.
+            //   if (idx < 0) idx += maxItem;
+            //   if (idx < 0 || idx >= maxItem) goto fail;
+            var lblRaiseBounds = il.DefineLabel();
+            il.Emit(OpCodes.Ldloc, locIdx);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Bge, lblRaiseBounds);
+            il.Emit(OpCodes.Ldloc, locIdx);
+            il.Emit(OpCodes.Ldarg, 4);               // maxItem
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locIdx);
+            il.MarkLabel(lblRaiseBounds);
             il.Emit(OpCodes.Ldloc, locIdx);
             il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Blt, lblFail);

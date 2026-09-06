@@ -6,12 +6,6 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
-        /// Element-wise power with array exponents: x1 ** x2
-        /// </summary>
-        public override NDArray Power(NDArray lhs, NDArray rhs, Type dtype)
-            => Power(lhs, rhs, dtype?.GetTypeCode());
-
-        /// <summary>
         /// Element-wise power: <c>x1 ** x2</c>, NumPy-aligned.
         ///
         /// Promotion / dispatch (NEP50, matches numpy 2.x):
@@ -30,21 +24,27 @@ namespace NumSharp.Backends
         /// The integer kernel calls <see cref="Utilities.NDIntegerPower"/> for
         /// exact dtype wrapping (replaces the previous double round-trip).
         /// </summary>
-        public override NDArray Power(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Power(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            // NumPy rule: signed integer exponents cannot be negative when the LOOP is
-            // integer**integer. The check is on the exponent, regardless of base value
-            // (NumPy throws even for base=1 or base=-1 where the answer would be exact).
-            // An explicit dtype= selects the loop, so power(2, -1, dtype=f64) = 0.5 is
-            // legal while power(2, -1, dtype=i64) still raises (probed 2.4.2).
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            // NumPy rule: signed integer exponents cannot be negative when the LOOP is an
+            // integer loop. The check is on the exponent, regardless of base value (NumPy throws
+            // even for base=1 or base=-1 where the answer would be exact). An explicit dtype=
+            // selects the loop, so power(2, -1, dtype=f64) = 0.5 is legal while
+            // power(2, -1, dtype=i64) still raises (probed 2.4.2).
+            //
+            // "Integer loop" is the PROMOTED result type, NOT "both operands integer": a bool base
+            // promotes to an integer loop (bool**int32 -> int32, bool**bool -> int8), so
+            // power(bool, negative_int) must raise too — while uint64**signed promotes to float64
+            // under NEP50 (power(uint64, -1) = 0.5, no raise). ResolvePowerResultType encodes exactly
+            // that promotion (the same one the compute path uses), so keying the guard off it —
+            // rather than off lhs.IsInteger(), which is false for a bool base — closes the bool-base
+            // gap without over-raising the uint64 case.
             bool loopIsInteger = typeCode.HasValue
                 ? typeCode.Value.IsInteger()
-                : lhs.GetTypeCode.IsInteger() && rhs.GetTypeCode.IsInteger();
-            if (loopIsInteger && lhs.GetTypeCode.IsInteger() && rhs.GetTypeCode.IsInteger() && IsSignedInteger(rhs.GetTypeCode))
-            {
-                if (ContainsNegative(rhs))
-                    throw new ArgumentException("Integers to negative integer powers are not allowed.");
-            }
+                : ResolvePowerResultType(lhs, rhs).IsInteger();
+            if (loopIsInteger && IsSignedInteger(rhs.GetTypeCode) && ContainsNegative(rhs))
+                throw new ArgumentException("Integers to negative integer powers are not allowed.");
 
             // ufunc out=/where=: skip the scalar-exponent fast paths (they return
             // fresh arrays) and route through the iterator with the provided out.
@@ -237,35 +237,46 @@ namespace NumSharp.Backends
             }
         }
 
+        // The scan reads by FLAT C-order index through Storage.GetAtIndex<T>, which maps the index
+        // through Shape.TransformOffset — so it is correct for every layout (contiguous, strided,
+        // broadcast stride-0, and non-zero offset). NDArray.GetXxx(long) is the COORDINATE overload
+        // (params long[]), so passing a flat index there reads [i] as a 1-D coordinate into axis 0
+        // and walks off a multi-dimensional or broadcast exponent — tripping the storage bounds
+        // assert ("index < Count, Memory corruption expected") on exactly the (4,5) strided/broadcast
+        // exponents this pre-scan is meant to reject.
         private static bool AnyNegativeSByte(NDArray nd)
         {
+            var storage = nd.Storage;
             long n = nd.size;
             for (long i = 0; i < n; i++)
-                if (nd.GetSByte(i) < 0) return true;
+                if (storage.GetAtIndex<sbyte>(i) < 0) return true;
             return false;
         }
 
         private static bool AnyNegativeInt16(NDArray nd)
         {
+            var storage = nd.Storage;
             long n = nd.size;
             for (long i = 0; i < n; i++)
-                if (nd.GetInt16(i) < 0) return true;
+                if (storage.GetAtIndex<short>(i) < 0) return true;
             return false;
         }
 
         private static bool AnyNegativeInt32(NDArray nd)
         {
+            var storage = nd.Storage;
             long n = nd.size;
             for (long i = 0; i < n; i++)
-                if (nd.GetInt32(i) < 0) return true;
+                if (storage.GetAtIndex<int>(i) < 0) return true;
             return false;
         }
 
         private static bool AnyNegativeInt64(NDArray nd)
         {
+            var storage = nd.Storage;
             long n = nd.size;
             for (long i = 0; i < n; i++)
-                if (nd.GetInt64(i) < 0) return true;
+                if (storage.GetAtIndex<long>(i) < 0) return true;
             return false;
         }
     }

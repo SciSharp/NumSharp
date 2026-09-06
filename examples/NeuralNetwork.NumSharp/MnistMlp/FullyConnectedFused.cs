@@ -1,4 +1,5 @@
 using System;
+using NeuralNetwork.NumSharp.Initializers;
 using NeuralNetwork.NumSharp.Layers;
 using NumSharp;
 using NumSharp.Backends;
@@ -47,7 +48,38 @@ namespace NeuralNetwork.NumSharp.MnistMlp
         private const string KeyBiasOnly    = "fcfused_bias_only_f32";
         private const string KeyReluBackward = "fcfused_relu_backward_f32";
 
-        public FullyConnectedFused(int inputDim, int outputDim, FusedActivation activation)
+        /// <summary>
+        /// Keras-style string-activation overload, mirroring
+        /// <see cref="Layers.FullyConnected"/>'s surface so the two dense layers
+        /// are constructed identically. Only activations with a fused kernel
+        /// resolve; anything else throws with a pointer at FullyConnected.
+        /// </summary>
+        public FullyConnectedFused(int inputDim, int outputDim, string act = "")
+            : this(inputDim, outputDim, ParseActivation(act))
+        {
+        }
+
+        private static FusedActivation ParseActivation(string act)
+        {
+            switch (act?.Trim().ToLowerInvariant())
+            {
+                case null:
+                case "":
+                case "linear":
+                case "none":
+                    return FusedActivation.None;
+                case "relu":
+                    return FusedActivation.ReLU;
+                default:
+                    throw new ArgumentException(
+                        $"Activation '{act}' has no fused kernel. Supported: relu " +
+                        "(or ''/'linear'/'none' for raw logits). Use FullyConnected for other activations.",
+                        nameof(act));
+            }
+        }
+
+        public FullyConnectedFused(int inputDim, int outputDim, FusedActivation activation,
+                                   BaseInitializer kernelInitializer = null, BaseInitializer biasInitializer = null)
             : base("fc_fused")
         {
             if (inputDim  <= 0) throw new ArgumentOutOfRangeException(nameof(inputDim));
@@ -57,15 +89,27 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             OutputDim  = outputDim;
             Activation = activation;
 
-            // He-normal for ReLU (preserves variance through the non-linearity);
-            // Xavier/Glorot for linear output (keeps logits in a reasonable range).
-            double stddev = activation == FusedActivation.ReLU
-                ? Math.Sqrt(2.0 /  inputDim)
-                : Math.Sqrt(2.0 / (inputDim + outputDim));
+            if (kernelInitializer != null)
+            {
+                Parameters["w"] = kernelInitializer.Initialize(new Shape(inputDim, outputDim));
+            }
+            else
+            {
+                // Historical default kept bit-for-bit (seeded runs stay reproducible):
+                // UNtruncated He-normal for ReLU (preserves variance through the
+                // non-linearity), Xavier/Glorot normal for linear output. Pass an
+                // Initializers.* instance for the Keras-exact (truncated) variants.
+                double stddev = activation == FusedActivation.ReLU
+                    ? Math.Sqrt(2.0 /  inputDim)
+                    : Math.Sqrt(2.0 / (inputDim + outputDim));
 
-            Parameters["w"] = np.random.normal(0.0, stddev, new Shape(inputDim, outputDim))
-                                       .astype(NPTypeCode.Single);
-            Parameters["b"] = np.zeros(new Shape(outputDim), NPTypeCode.Single);
+                Parameters["w"] = np.random.normal(0.0, stddev, new Shape(inputDim, outputDim))
+                                           .astype(NPTypeCode.Single);
+            }
+
+            Parameters["b"] = biasInitializer != null
+                ? biasInitializer.Initialize(new Shape(outputDim))
+                : np.zeros(new Shape(outputDim), NPTypeCode.Single);
         }
 
         // =================================================================
@@ -216,5 +260,11 @@ namespace NeuralNetwork.NumSharp.MnistMlp
                 outputType: NPTypeCode.Single,
                 cacheKey: KeyReluBackward);
         }
+
+        public override Serialization.LayerConfig GetConfig()
+            => new Serialization.LayerConfig("FullyConnectedFused")
+                .Set("input_dim", InputDim)
+                .Set("units", OutputDim)
+                .Set("activation", Activation == FusedActivation.ReLU ? "relu" : "linear");
     }
 }

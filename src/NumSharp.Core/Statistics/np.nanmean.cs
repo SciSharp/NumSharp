@@ -16,6 +16,7 @@ namespace NumSharp
         /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one.</param>
         /// <returns>A new array containing the mean values, with NaN values ignored. If all values along an axis are NaN, returns NaN for that slice.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanmean.html</remarks>
+        [NDScoped]
         public static NDArray nanmean(NDArray a, int? axis = null, bool keepdims = false)
         {
             var arr = a;
@@ -26,7 +27,7 @@ namespace NumSharp
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
             {
-                return a.Clone();
+                return a.Clone().MarkReductionScalar(); // 0-d input -> numpy scalar (read-only)
             }
 
             // Element-wise (axis=None): compute mean ignoring NaN
@@ -36,7 +37,9 @@ namespace NumSharp
             }
             else
             {
-                // Axis reduction: compute mean along axis ignoring NaN
+                // Axis reduction: compute mean along axis ignoring NaN. The result is allocated in
+                // KEEPORDER (F for an F-contig input) and filled by coordinate, so it matches NumPy's
+                // layout with no post-hoc copy (issue #610).
                 return nanmean_axis(arr, axis.Value, keepdims);
             }
         }
@@ -96,7 +99,7 @@ namespace NumSharp
                     keepdimsShape[i] = 1;
                 r.Storage.Reshape(new Shape(keepdimsShape));
             }
-            return r;
+            return r.MarkReductionScalar();
         }
 
         /// <summary>
@@ -143,7 +146,7 @@ namespace NumSharp
             NDArray result;
             if (arr.GetTypeCode == NPTypeCode.Single)
             {
-                result = new NDArray(NPTypeCode.Single, new Shape(outputShape));
+                result = Backends.DefaultEngine.AllocateReductionResult(NPTypeCode.Single, outputShape, arr.Shape);
                 long outputSize = result.size;
 
                 // Iterate over output positions
@@ -188,7 +191,7 @@ namespace NumSharp
             }
             else // Double
             {
-                result = new NDArray(NPTypeCode.Double, new Shape(outputShape));
+                result = Backends.DefaultEngine.AllocateReductionResult(NPTypeCode.Double, outputShape, arr.Shape);
                 long outputSize = result.size;
 
                 for (long outIdx = 0; outIdx < outputSize; outIdx++)
@@ -228,20 +231,10 @@ namespace NumSharp
                 }
             }
 
-            // Handle keepdims
+            // Handle keepdims: ExpandDimension re-inserts the reduced axis preserving the KEEPORDER
+            // layout (a reshape to a fresh C-shape would reset it to C).
             if (keepdims)
-            {
-                var keepdimsShapeDims = new long[arr.ndim];
-                int srcIdx = 0;
-                for (int i = 0; i < arr.ndim; i++)
-                {
-                    if (i == axis)
-                        keepdimsShapeDims[i] = 1;
-                    else
-                        keepdimsShapeDims[i] = outputShape[srcIdx++];
-                }
-                result = result.reshape(keepdimsShapeDims);
-            }
+                result.Storage.ExpandDimension(axis);
 
             return result;
         }
@@ -256,7 +249,7 @@ namespace NumSharp
             var outputShape = outputShapeList.ToArray();
             long axisLen = inputShape[axis];
 
-            var result = new NDArray(NPTypeCode.Half, new Shape(outputShape));
+            var result = Backends.DefaultEngine.AllocateReductionResult(NPTypeCode.Half, outputShape, arr.Shape);
             long outputSize = result.size;
 
             for (long outIdx = 0; outIdx < outputSize; outIdx++)
@@ -302,7 +295,7 @@ namespace NumSharp
             var outputShape = outputShapeList.ToArray();
             long axisLen = inputShape[axis];
 
-            var result = new NDArray(NPTypeCode.Complex, new Shape(outputShape));
+            var result = Backends.DefaultEngine.AllocateReductionResult(NPTypeCode.Complex, outputShape, arr.Shape);
             long outputSize = result.size;
 
             for (long outIdx = 0; outIdx < outputSize; outIdx++)
@@ -344,11 +337,9 @@ namespace NumSharp
         private static NDArray ApplyKeepdims(NDArray result, int ndim, int axis, long[] outputShape, bool keepdims)
         {
             if (!keepdims) return result;
-            var keepdimsShapeDims = new long[ndim];
-            int srcIdx = 0;
-            for (int i = 0; i < ndim; i++)
-                keepdimsShapeDims[i] = (i == axis) ? 1 : outputShape[srcIdx++];
-            return result.reshape(keepdimsShapeDims);
+            // ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout (issue #610).
+            result.Storage.ExpandDimension(axis);
+            return result;
         }
     }
 }

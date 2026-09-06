@@ -15,7 +15,26 @@ namespace NumSharp
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            return asarray(a, dtype, 'C');
+            var result = asarray(a, dtype, 'C');
+            // NumPy guarantees ndim >= 1: a 0-D input becomes a length-one VIEW sharing the
+            // scalar's storage (shape (1,), owndata=false), even when no dtype/layout copy is needed.
+            return result.ndim == 0 ? result.reshape(1) : result;
+        }
+
+        /// <summary>
+        ///     Return a C-contiguous array from a <see cref="MemoryView"/> (obtained from
+        ///     <see cref="NDArray.data"/>) — the consumer round-trip of <c>ndarray.data</c>. Matches NumPy's
+        ///     <c>np.ascontiguousarray(a.data)</c>: a zero-copy VIEW when the source is already C-contiguous,
+        ///     otherwise a C-order copy. Equivalent to <c>np.ascontiguousarray(buffer.obj, dtype)</c>.
+        /// </summary>
+        /// <param name="buffer">A <see cref="MemoryView"/> over an array.</param>
+        /// <param name="dtype">By default, the data-type is inferred from the source.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ascontiguousarray.html</remarks>
+        public static NDArray ascontiguousarray(MemoryView buffer, Type dtype = null)
+        {
+            if (buffer is null)
+                throw new ArgumentNullException(nameof(buffer));
+            return ascontiguousarray(buffer.obj, dtype);
         }
     }
 }

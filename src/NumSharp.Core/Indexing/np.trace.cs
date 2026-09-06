@@ -44,6 +44,7 @@ namespace NumSharp
         ///     reduction that goes through NumSharp's IL reduction kernels.
         ///     </para>
         /// </remarks>
+        [NDScoped] // reclaims the diagonal view, its contig copy and the natural result on the out= path
         public static NDArray trace(
             NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1,
             Type dtype = null, NDArray @out = null)
@@ -57,7 +58,9 @@ namespace NumSharp
             // 3-4x faster than the generic diagonal+ascontig+sum chain.
             if ((a.ndim == 2 || a.ndim == 3) && dtype is null && @out is null &&
                 TryTraceFast(a, offset, axis1, axis2, out var fast))
-                return fast;
+                // The 2-D fast result is 0-d — a numpy SCALAR (read-only) at the boundary;
+                // the general path below inherits the same from the engine Sum's exit.
+                return fast.MarkReductionScalar();
 
             // diagonal() validates ndim, axis values, and axis1!=axis2 and emits
             // a 1-D-extended view (the diagonal axis is the last dim of the result).
@@ -85,7 +88,7 @@ namespace NumSharp
                 // - N-D diagonal (3+D source) → axis=-1 reduces along the appended
                 //   diag axis, leaving the source's non-axis1/axis2 axes intact.
                 int? sumAxis = diagContig.ndim == 1 ? (int?)null : -1;
-                var result = a.TensorEngine.Sum(diagContig, axis: sumAxis, typeCode: sumDtype, keepdims: false);
+                var result = a.TensorEngine.Sum(diagContig, axis: sumAxis, dtype: sumDtype.AsType(), keepdims: false);
                 return DispatchOut(result, @out);
             }
             finally

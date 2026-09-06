@@ -50,8 +50,13 @@ namespace NumSharp.Backends
         ///     </list>
         ///     </para>
         /// </summary>
+        [NDScoped]
         public override unsafe NDArray<long>[] NonZero(NDArray nd)
         {
+            // Boundary scope: the yielded tuple is the column VIEWS; the shared multi-index base
+            // matrix (and the 0-d promotion view) are reclaimed at exit — ARC keeps the buffer
+            // alive through the yielded views until the caller releases them.
+
             // 0-d: NumPy 2.4 raises ValueError, but its own error message suggests
             // `np.atleast_1d(scalar).nonzero()`, which is exactly the result our
             // historical implementation has always produced. Preserve that semantic
@@ -93,26 +98,25 @@ namespace NumSharp.Backends
                 if (count == 0)
                     return MakeEmptyNonZeroResult(ndim);
 
-                // ndim == 1: flat index IS the coord — scan straight into result[0].
+                // NumPy's PyArray_Nonzero fills ONE (count, ndim) C-order multi-index buffer and
+                // the tuple entries are its COLUMNS — strided views (shape (count,), byte stride
+                // ndim*8, owndata=False) all sharing that base (probed 2.4.2: tuple[j].base is one
+                // (count, ndim) array; ndim==1 collapses to a unit-stride contiguous view of a
+                // (count, 1) base). The base matrix is byte-identical to np.argwhere's result, so
+                // the ndim>1 fill drives the SAME row-expand IL kernel (one sequential write
+                // stream — better locality than ndim separate column streams).
+                var multiIndex = new NDArray(NPTypeCode.Int64, new Shape(count, ndim), false);
+                long* resPtr = (long*)multiIndex.Storage.Address;
+
+                // ndim == 1: the (count, 1) matrix's single column IS the flat index list —
+                // scan straight into the base buffer.
                 if (ndim == 1)
                 {
-                    var result1d = new NDArray<long>[1] { new NDArray<long>(count) };
-                    flatKernel(basePtr, size, (long*)result1d[0].Address);
-                    return result1d;
+                    flatKernel(basePtr, size, resPtr);
+                    return MakeNonZeroColumnViews(multiIndex, count, ndim);
                 }
 
-                // ndim > 1: scan into a temp flat buffer then expand into ndim per-dim columns.
-                var perDim = new NDArray<long>[ndim];
-                for (int d = 0; d < ndim; d++)
-                    perDim[d] = new NDArray<long>(count);
-
-                // Pack the per-dim column pointers into a stack-local long** buffer the
-                // kernel can index into. .Address returns the raw unmanaged storage pointer
-                // for each NDArray<long> — no pinning needed.
-                long** colPtrs = stackalloc long*[ndim];
-                for (int d = 0; d < ndim; d++)
-                    colPtrs[d] = (long*)perDim[d].Address;
-
+                // ndim > 1: scan into a temp flat buffer then row-expand into the shared matrix.
                 var flatBuffer = new long[count];
                 fixed (long* flatPtr = flatBuffer)
                 fixed (long* dimsPtr = sourceShape.dimensions)
@@ -130,15 +134,15 @@ namespace NumSharp.Backends
 
                     fixed (long* dimStridesPtr = dimStrides)
                     {
-                        var perDimKernel = DirectILKernelGenerator.GetNonZeroPerDimKernel();
-                        if (perDimKernel == null)
-                            throw new NotSupportedException("np.nonzero: per-dim IL kernel unavailable");
+                        var expandKernel = DirectILKernelGenerator.GetArgwhereExpandKernel();
+                        if (expandKernel == null)
+                            throw new NotSupportedException("np.nonzero: row-expand IL kernel unavailable");
 
-                        perDimKernel(flatPtr, count, dimsPtr, dimStridesPtr, ndim, colPtrs);
+                        expandKernel(flatPtr, count, dimsPtr, dimStridesPtr, ndim, resPtr);
                     }
                 }
 
-                return perDim;
+                return MakeNonZeroColumnViews(multiIndex, count, ndim);
             }
             finally
             {
@@ -161,9 +165,32 @@ namespace NumSharp.Backends
 
         private static NDArray<long>[] MakeEmptyNonZeroResult(int ndim)
         {
+            // NumPy: even the empty result is columns of a shared (0, ndim) multi-index buffer —
+            // each tuple entry keeps byte stride ndim*8 and owndata=False (probed 2.4.2).
+            var emptyBase = new NDArray(NPTypeCode.Int64, new Shape(0, ndim), false);
+            var views = MakeNonZeroColumnViews(emptyBase, 0, ndim);
+            emptyBase.Dispose(); // each column view holds its own counted ref on the shared buffer
+            return views;
+        }
+
+        /// <summary>
+        ///     Wrap the shared (count, ndim) multi-index matrix as NumPy's nonzero tuple: entry
+        ///     <c>d</c> is the d-th COLUMN — a strided view (shape (count,), element stride ndim,
+        ///     element offset d) whose storage aliases the matrix, so <c>owndata=False</c> and all
+        ///     entries report one shared base, exactly like <c>PyArray_Nonzero</c>'s
+        ///     <c>ret[..., j]</c> views. ndim==1 collapses to a unit-stride view (C=F-contiguous),
+        ///     matching NumPy's (count, 1) base there; size-0 views keep the stride/offset pattern
+        ///     (never dereferenced).
+        /// </summary>
+        private static NDArray<long>[] MakeNonZeroColumnViews(NDArray multiIndex, long count, int ndim)
+        {
             var result = new NDArray<long>[ndim];
-            for (int i = 0; i < ndim; i++)
-                result[i] = new NDArray<long>(0);
+            for (int d = 0; d < ndim; d++)
+            {
+                var view = new Shape(new long[] { count }, new long[] { ndim }, d, count * (long)ndim);
+                result[d] = new NDArray<long>(multiIndex.Storage.Alias(view)) { TensorEngine = multiIndex.TensorEngine };
+            }
+
             return result;
         }
 
@@ -173,19 +200,25 @@ namespace NumSharp.Backends
         /// <remarks>
         /// NumPy-aligned: np.count_nonzero([0, 1, 0, 2]) = 2
         /// </remarks>
+        [NDScoped]
         public override long CountNonZero(NDArray nd)
         {
             if (nd.size == 0)
                 return 0;
 
+            // Scalar return — scope only: reclaims the per-dispatch MakeGeneric alias
+            // (a fresh wrapper over nd's storage that otherwise strands on the finalizer).
             return NpFunc.Invoke(nd.typecode, CountNonZeroDispatch<int>, nd);
         }
 
         /// <summary>
         /// Count non-zero elements along a specific axis.
         /// </summary>
+        [NDScoped]
         public override NDArray CountNonZero(NDArray nd, int axis, bool keepdims = false)
         {
+            // Boundary scope: reclaims the per-dispatch MakeGeneric alias; the result is yielded.
+
             var shape = nd.Shape;
 
             // Normalize axis

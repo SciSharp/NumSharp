@@ -384,12 +384,28 @@ namespace NumSharp.Backends
         /// Execute element-wise sum reduction using IL kernels.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        protected object sum_elementwise_il(NDArray arr, NPTypeCode? typeCode)
+        protected unsafe object sum_elementwise_il(NDArray arr, NPTypeCode? typeCode)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
                 return typeCode.HasValue ? Converts.ChangeType(arr.GetAtIndex(0), typeCode.Value) : arr.GetAtIndex(0);
 
             var retType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
+
+            // bool sum is a POPCOUNT: every nonzero byte contributes exactly 1 (the bool→accum
+            // convert normalizes `!= 0`, and NumPy's own bool sum counts truth values — probed:
+            // sum(frombuffer([0x80,0x01,0x00,0x02], bool)) == 3). Route the contiguous flat case
+            // through the count_nonzero SIMD popcount (CountTrueSimdHelper) instead of the scalar
+            // widen-accumulate loop the generic path takes (bool input ≠ int64 accumulator
+            // disables the SIMD reduction there) — ~20× NumPy, bit-identical count. Integer
+            // accumulators only: a float dtype= keeps the generic accumulate so its rounding
+            // behaviour (NumPy accumulates IN the loop dtype, e.g. float16 saturates) is
+            // untouched, and dtype=bool (NumPy's OR-reduce) keeps its existing path.
+            if (arr.GetTypeCode == NPTypeCode.Boolean && arr.Shape.IsContiguous && retType.IsInteger())
+            {
+                long cnt = DirectILKernelGenerator.CountTrueSimdHelper(
+                    (bool*)((byte*)arr.Address + arr.Shape.offset * arr.dtypesize), arr.size);
+                return Converts.ChangeType(cnt, retType);
+            }
 
             return retType switch
             {
@@ -535,22 +551,24 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Max/min for Half. The IL reduction kernel can't drive Half (OpCodes.Bgt/Blt don't
-        /// apply to the struct), so this stays out-of-IL — but Half DOES expose a hardware-backed
-        /// comparison order, so the contiguous buffer is scanned with Half's own operators rather
-        /// than bridging every element through (double). That boxing-free, no-round-trip scan is
-        /// ~9× the old iterator+double path. NaN propagates per NumPy (max/min with NaN → NaN):
-        /// once the accumulator is NaN, <c>x &gt; acc</c> is false and only another NaN re-sets it,
-        /// so the first NaN sticks. Non-contiguous / empty inputs keep the iterator fallback.
+        /// apply to the struct), but the flat extremum needs no float math at all: f16 ordering is
+        /// sign-magnitude on the raw bits, so the contiguous buffer rides the bit-level AVX2
+        /// key-transform kernel (<see cref="DirectILKernelGenerator.HalfMaxBitsContiguous"/> —
+        /// zero conversions, pmaxuw/pminuw over order keys). This replaced the scalar
+        /// Half-operator scan (two hardware F16C converts per element) at ~9× its speed AND
+        /// fixed its NaN rule: the scan's <c>x &gt; acc || IsNaN(x)</c> let a LATER NaN overwrite
+        /// the accumulator, where NumPy's fold <c>(ge(acc,x) || isnan(acc)) ? acc : x</c> sticks
+        /// at the FIRST NaN (payload + sign verbatim) — the kernel rescans for exactly that
+        /// element, and likewise returns the FIRST zero's sign on a ±0 extremum (npy_half ge/le
+        /// call -0 == +0, probed 2.4.2). Non-contiguous / empty inputs keep the iterator fallback.
         /// </summary>
         private unsafe object MaxElementwiseHalfFallback(NDArray arr)
         {
             long n = arr.size;
             if (arr.Shape.IsContiguous && n > 0)
             {
-                Half* p = (Half*)((byte*)arr.Address + arr.Shape.offset * 2);
-                Half acc = p[0];
-                for (long i = 1; i < n; i++) { Half x = p[i]; if (x > acc || Half.IsNaN(x)) acc = x; }
-                return acc;
+                ushort* p = (ushort*)((byte*)arr.Address + arr.Shape.offset * 2);
+                return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.HalfMaxBitsContiguous(p, n));
             }
 
             // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
@@ -562,10 +580,8 @@ namespace NumSharp.Backends
             long n = arr.size;
             if (arr.Shape.IsContiguous && n > 0)
             {
-                Half* p = (Half*)((byte*)arr.Address + arr.Shape.offset * 2);
-                Half acc = p[0];
-                for (long i = 1; i < n; i++) { Half x = p[i]; if (x < acc || Half.IsNaN(x)) acc = x; }
-                return acc;
+                ushort* p = (ushort*)((byte*)arr.Address + arr.Shape.offset * 2);
+                return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.HalfMinBitsContiguous(p, n));
             }
 
             // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
@@ -673,11 +689,42 @@ namespace NumSharp.Backends
                 NPTypeCode.Half => ArgMaxHalfFallback(arr),
                 NPTypeCode.Single => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Single),
                 NPTypeCode.Double => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Double),
-                NPTypeCode.Decimal => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Decimal),
+                // IL Bgt doesn't apply to the 16-byte decimal struct either — the emitted kernel
+                // silently mis-compared (argmax([3,9,1,5]) returned 0). Same fallback family as Half.
+                NPTypeCode.Decimal => ArgMaxDecimalFallback(arr),
+                // Char: unsigned 16-bit with a total order bit-identical to uint16 — the same
+                // zero-copy reinterpret MaxElementwiseCharFallback rides (indices are unchanged
+                // by a view over the same layout). This case used to throw NotSupportedException.
+                NPTypeCode.Char => ExecuteElementReduction<long>(arr.view(typeof(ushort)), ReductionOp.ArgMax, NPTypeCode.UInt16),
                 // B12: Complex IL kernel tiebreak is wrong; fallback uses lexicographic compare.
                 NPTypeCode.Complex => ArgMaxComplexFallback(arr),
                 _ => throw new NotSupportedException($"ArgMax not supported for type {inputType}")
             };
+        }
+
+        /// <summary>
+        /// Fallback argmax/argmin for Decimal (the IL arg kernels compare via OpCodes.Bgt/Blt,
+        /// which do not apply to the 16-byte decimal struct — the emitted kernel silently
+        /// mis-compared). Same NPY_CORDER ExecuteReducing route as the Half/Complex fallbacks:
+        /// the returned index must be the C-order flat position even on strided/transposed views.
+        /// Decimal has no NaN, so there is no NaN short-circuit. First occurrence wins (NumPy tiebreak).
+        /// </summary>
+        private unsafe long ArgMaxDecimalFallback(NDArray arr)
+        {
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
+            var a = iter.ExecuteReducing<DecimalArgMaxKernel, DecimalArgAccumulator>(
+                default, new DecimalArgAccumulator { BestIdx = -1, Cur = 0 });
+            return a.BestIdx;
+        }
+
+        private unsafe long ArgMinDecimalFallback(NDArray arr)
+        {
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
+            var a = iter.ExecuteReducing<DecimalArgMinKernel, DecimalArgAccumulator>(
+                default, new DecimalArgAccumulator { BestIdx = -1, Cur = 0 });
+            return a.BestIdx;
         }
 
         /// <summary>
@@ -768,7 +815,10 @@ namespace NumSharp.Backends
                 NPTypeCode.Half => ArgMinHalfFallback(arr),
                 NPTypeCode.Single => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Single),
                 NPTypeCode.Double => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Double),
-                NPTypeCode.Decimal => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Decimal),
+                // IL Blt doesn't apply to the 16-byte decimal struct — same fallback family as Half.
+                NPTypeCode.Decimal => ArgMinDecimalFallback(arr),
+                // Char via the zero-copy uint16 reinterpret (total order is bit-identical).
+                NPTypeCode.Char => ExecuteElementReduction<long>(arr.view(typeof(ushort)), ReductionOp.ArgMin, NPTypeCode.UInt16),
                 // B12: Complex IL kernel tiebreak is wrong; fallback uses lexicographic compare.
                 NPTypeCode.Complex => ArgMinComplexFallback(arr),
                 _ => throw new NotSupportedException($"ArgMin not supported for type {inputType}")
@@ -856,11 +906,26 @@ namespace NumSharp.Backends
         /// </summary>
         private unsafe object SumElementwiseHalfFallback(NDArray arr)
         {
-            if (TryHalfAccumulateContiguous(arr, isProd: false, out double s))
-                return (Half)s;
+            // Flat sum is always PINNED: fold the whole array in FLOAT32 with NumPy's pairwise_sum,
+            // narrow ONCE (bit-for-bit np.add.reduce(float16)). A float32 accumulator is what NumPy
+            // uses (widen each half on read), NOT the old Double — which diverged in the last ULP.
+            if (arr.size == 0) return (Half)0.0f; // NumPy: empty float16 sum = 0
 
-            // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
-            return (Half)HalfReduceViaNDIter(arr, isProd: false);
+            var shape = arr.Shape;
+            if (shape.IsContiguous || shape.IsFContiguous)
+            {
+                // Raw buffer is linearly contiguous (C- or F-order) → fold in memory order, which
+                // is exactly the order NumPy's iterator folds a contiguous array in.
+                ushort* p = (ushort*)((byte*)arr.Address + shape.offset * 2);
+                float acc = Kernels.ILKernelGenerator.PairwiseFoldHalf(p, arr.size, 1);
+                return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.SingleToHalfBits(acc));
+            }
+            // Strided / transposed / broadcast → materialize C-contiguous (Giesen SIMD copy is exact
+            // on the values), then fold in C order.
+            var c = np.ascontiguousarray(arr);
+            ushort* cp = (ushort*)((byte*)c.Address + c.Shape.offset * 2);
+            float acc2 = Kernels.ILKernelGenerator.PairwiseFoldHalf(cp, c.size, 1);
+            return BitConverter.UInt16BitsToHalf(Kernels.DirectILKernelGenerator.SingleToHalfBits(acc2));
         }
 
         /// <summary>

@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.1.2"
+GENERATOR_VERSION = "1.6.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -125,7 +125,7 @@ def load_numpy() -> Any:
 
 
 def load_numsharp_inventory() -> dict[str, Any]:
-    project = ROOT / "tools" / "NumSharp.ApiInventory" / "NumSharp.ApiInventory.csproj"
+    project = ROOT / "coverage" / "NumSharp.Tools.ApiInventory" / "NumSharp.Tools.ApiInventory.csproj"
     build_command = [
         "dotnet", "build", str(project), "--configuration", "Release", "--framework", "net8.0",
         "--nologo", "--verbosity", "quiet",
@@ -148,9 +148,27 @@ def load_numsharp_inventory() -> dict[str, Any]:
         sys.stderr.write(completed.stderr)
         raise SystemExit("Failed to reflect the NumSharp public API.")
     try:
-        return json.loads(completed.stdout)
+        data = json.loads(completed.stdout)
     except json.JSONDecodeError as error:
         raise SystemExit(f"NumSharp inventory emitted invalid JSON: {error}") from error
+    if data.get("schemaVersion") != 4 or not isinstance(data.get("modules"), dict) or not data["modules"]:
+        raise SystemExit("NumSharp inventory schema mismatch: expected schemaVersion 4 with a non-empty 'modules' map.")
+    if not isinstance(data.get("unannotatedSurface"), dict):
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 4 must carry the 'unannotatedSurface' index.")
+    if not isinstance(data.get("exportedTypes"), list):
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 4 must carry the 'exportedTypes' index.")
+    return data
+
+
+def surface_for_module(module_name: str) -> str:
+    """Map a [ModuleName] value onto this generator's NumPy surface key.
+
+    The tool discovers module hosts by scanning NumSharp.Core for [ModuleName("...")] — nothing is
+    hardcoded on the C# side, so the mapping here must be mechanical too: "np" and "ndarray" are
+    themselves; a dotted "np.random"/"np.linalg"/"np.fft" is its suffix ("random"/"linalg"/"fft"),
+    matching the numpy-side surface names public_exports() emits.
+    """
+    return module_name[3:] if module_name.startswith("np.") else module_name
 
 
 def load_overrides(path: Path) -> dict[str, Any]:
@@ -226,18 +244,20 @@ def documentation_url(surface: str, name: str, kind: str) -> str:
 class SourceLocator:
     """Locate public member declarations without requiring compiler-specific PDB paths."""
 
-    TYPE_PATTERNS = {
-        "np": re.compile(r"\bclass\s+np\b"),
-        "ndarray": re.compile(r"\bclass\s+NDArray(?:\s|<)"),
-        "random": re.compile(r"\bclass\s+NumPyRandom\b"),
-    }
+    def __init__(self, modules: dict[str, Any]) -> None:
+        # One class-declaration pattern per surface, derived from the CLR type hosting the module:
+        # the simple class name of "NumSharp.np+linalg" is "linalg", of "NumSharp.FourierModule" is
+        # "FourierModule". \b after the name still matches a generic partial ("class NDArray<T>").
+        self.patterns: dict[str, re.Pattern[str]] = {}
+        for module_name, type_data in modules.items():
+            simple = re.split(r"[.+]", type_data["type"])[-1].split("`")[0]
+            self.patterns[surface_for_module(module_name)] = re.compile(rf"\bclass\s+{re.escape(simple)}\b")
 
-    def __init__(self) -> None:
-        self.files: dict[str, list[tuple[Path, str]]] = {surface: [] for surface in self.TYPE_PATTERNS}
+        self.files: dict[str, list[tuple[Path, str]]] = {surface: [] for surface in self.patterns}
         source_root = ROOT / "src" / "NumSharp.Core"
         for path in source_root.rglob("*.cs"):
             text = path.read_text(encoding="utf-8-sig")
-            for surface, pattern in self.TYPE_PATTERNS.items():
+            for surface, pattern in self.patterns.items():
                 if pattern.search(text):
                     self.files[surface].append((path, text))
 
@@ -265,6 +285,27 @@ class SourceLocator:
     @staticmethod
     def github_urls(paths: list[str]) -> list[str]:
         return [NUMSHARP_SOURCE_BASE_URL + quote(path, safe="/") for path in paths]
+
+
+def locate_type_source(name: str) -> list[str]:
+    """Best-effort path to the .cs file declaring a NumSharp class, for crediting a type-match row.
+
+    Only NumPy CLASS exports reach here (Generator/PCG64/SeedSequence/BitGenerator/MT19937), so a
+    plain `class <Name>` scan over NumSharp.Core is enough — these are top-level types, not members.
+    """
+    pattern = re.compile(rf"\b(?:sealed\s+|abstract\s+|partial\s+|static\s+)*class\s+{re.escape(name)}\b")
+    source_root = ROOT / "src" / "NumSharp.Core"
+    # Sort by the POSIX string, not the default pathlib order: Path comparison is case-INSENSITIVE
+    # on Windows and case-SENSITIVE on Linux, so the "first declaring file" (e.g. Generator.Choice.cs
+    # vs Generator.Choice.Sampler.cs) would otherwise differ between a local Windows regen and the
+    # Linux CI, breaking the checked-in-dashboard diff.
+    for path in sorted(source_root.rglob("*.cs"), key=lambda p: p.as_posix()):
+        try:
+            if pattern.search(path.read_text(encoding="utf-8-sig")):
+                return [path.relative_to(ROOT).as_posix()]
+        except OSError:
+            continue
+    return []
 
 
 def category_for(surface: str, name: str, kind: str) -> str:
@@ -309,16 +350,26 @@ def category_for(surface: str, name: str, kind: str) -> str:
     return "Other"
 
 
-def member_maps(inventory: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+def member_maps(
+    inventory: dict[str, Any],
+) -> tuple[dict[str, dict[str, Any]], dict[str, list[dict[str, Any]]], dict[str, str]]:
+    """Index the tool's [ModuleName]-discovered modules by target id, surface, and target prefix.
+
+    Nothing here names a module: surfaces come from surface_for_module, and each target prefix is
+    the module's own CLR type name with nested '+' normalized to '.' — "NumSharp.np+linalg" hosts
+    "NumSharp.np.linalg.solve", "NumSharp.FourierModule" hosts "NumSharp.FourierModule.fft".
+    """
+    modules: dict[str, Any] = inventory["modules"]
     by_target: dict[str, dict[str, Any]] = {}
-    by_surface: dict[str, list[dict[str, Any]]] = {"np": [], "ndarray": [], "random": []}
-    source_locator = SourceLocator()
-    definitions = (
-        ("np", "NumSharp.np", inventory["np"]),
-        ("ndarray", "NumSharp.NDArray", inventory["ndArray"]),
-        ("random", "NumSharp.NumPyRandom", inventory["random"]),
-    )
-    for surface, prefix, type_data in definitions:
+    by_surface: dict[str, list[dict[str, Any]]] = {surface_for_module(name): [] for name in modules}
+    prefixes: dict[str, str] = {
+        surface_for_module(name): type_data["type"].replace("+", ".") for name, type_data in modules.items()
+    }
+    source_locator = SourceLocator(modules)
+    for module_name in sorted(modules, key=str.lower):
+        type_data = modules[module_name]
+        surface = surface_for_module(module_name)
+        prefix = prefixes[surface]
         for collection in ("methods", "properties", "fields"):
             for member in type_data[collection]:
                 source_paths = source_locator.locate(surface, member["name"], member["kind"])
@@ -337,7 +388,7 @@ def member_maps(inventory: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], d
         "sourcePaths": ["src/NumSharp.Core/Backends/NDArray.cs"],
         "sourceUrls": [NUMSHARP_SOURCE_BASE_URL + "src/NumSharp.Core/Backends/NDArray.cs"],
     }
-    return by_target, by_surface
+    return by_target, by_surface, prefixes
 
 
 def public_exports(np: Any) -> list[dict[str, Any]]:
@@ -381,13 +432,13 @@ def public_exports(np: Any) -> list[dict[str, Any]]:
     return exports
 
 
-def direct_target(row: dict[str, Any], targets: dict[str, dict[str, Any]]) -> str | None:
+def direct_target(row: dict[str, Any], targets: dict[str, dict[str, Any]], prefixes: dict[str, str]) -> str | None:
     surface = row["surface"]
     name = row["name"]
     kind = row["kind"]
     if row["id"] == "numpy.ndarray":
         return "NumSharp.NDArray"
-    prefix = {"np": "NumSharp.np", "ndarray": "NumSharp.NDArray", "random": "NumSharp.NumPyRandom"}.get(surface)
+    prefix = prefixes.get(surface)
     if prefix:
         candidate = f"{prefix}.{name}"
         member = targets.get(candidate)
@@ -396,9 +447,12 @@ def direct_target(row: dict[str, Any], targets: dict[str, dict[str, Any]]) -> st
     return None
 
 
-def auto_alternative(row: dict[str, Any], targets: dict[str, dict[str, Any]]) -> tuple[str | None, str | None]:
-    if row["surface"] in {"ndarray", "linalg"} and row["kind"] in CALLABLE_KINDS:
-        target = f"NumSharp.np.{row['name']}"
+def auto_alternative(
+    row: dict[str, Any], targets: dict[str, dict[str, Any]], prefixes: dict[str, str]
+) -> tuple[str | None, str | None]:
+    np_prefix = prefixes.get("np")
+    if np_prefix and row["surface"] in {"ndarray", "linalg"} and row["kind"] in CALLABLE_KINDS:
+        target = f"{np_prefix}.{row['name']}"
         if target in targets:
             noun = "instance method" if row["surface"] == "ndarray" else "linalg namespace function"
             return target, f"Available through the static NumSharp np API instead of the NumPy {noun}."
@@ -406,20 +460,55 @@ def auto_alternative(row: dict[str, Any], targets: dict[str, dict[str, Any]]) ->
 
 
 def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) -> tuple[list[dict[str, Any]], set[str]]:
-    targets, surfaces = member_maps(inventory)
+    targets, surfaces, prefixes = member_maps(inventory)
+    # Exported-type index (simple name -> full name) for crediting a NumPy CLASS export against a
+    # NumSharp type of the same name. A repeated simple name prefers the root NumSharp.<Name>.
+    numsharp_types_by_simple: dict[str, str] = {}
+    for full in inventory.get("exportedTypes", []):
+        simple = full.rsplit(".", 1)[-1].split("+")[-1]
+        if simple not in numsharp_types_by_simple or full == f"NumSharp.{simple}":
+            numsharp_types_by_simple[simple] = full
+    # Case-sensitive matching IS the parity contract: NumPy's public API is case-sensitive, so every
+    # match below (direct_target / auto_alternative / aliases / the stray gate) is an exact dict
+    # lookup on the C# spelling. We ALSO fold case here to DETECT near-misses — an in-scope NumPy
+    # export left "missing" for which a same-surface NumSharp member differs only by case — and
+    # report them (never counting them as covered). This is the guard against silently satisfying
+    # NumPy's `histogram` with a C#-style `Histogram`. Keyed (surface, lowercased name).
+    case_folded: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for surface, members in surfaces.items():
+        for member in members:
+            case_folded.setdefault((surface, member["name"].lower()), []).append(member)
     aliases = overrides.get("aliases", {})
     support_overrides = overrides.get("support", {})
+    stray_allowlist = overrides.get("stray_allowlist", {})
     seen_ids: set[str] = set()
     consumed_targets: set[str] = set()
     rows: list[dict[str, Any]] = []
 
-    for export in public_exports(np):
+    exports = public_exports(np)
+    # Guard the discovery loop: every NumPy surface compared here must have a [ModuleName]-annotated
+    # host in NumSharp.Core. Without this, dropping an annotation silently zeroes that surface back
+    # to all-missing — exactly the failure mode attribute discovery was built to end.
+    unbacked = sorted({export["surface"] for export in exports} - set(prefixes))
+    if unbacked:
+        raise SystemExit(
+            "NumPy surfaces without a [ModuleName]-annotated NumSharp host: "
+            + ", ".join(unbacked)
+            + ". Annotate the hosting type (e.g. [ModuleName(\"np.fft\")]) in NumSharp.Core."
+        )
+
+    for export in exports:
         row_id = export["id"]
         if row_id in seen_ids:
             raise SystemExit(f"Duplicate coverage id: {row_id}")
         seen_ids.add(row_id)
         alias = aliases.get(row_id)
-        target = direct_target(export, targets)
+        target = direct_target(export, targets, prefixes)
+        if alias and target:
+            sys.stderr.write(
+                f"WARNING: override alias for {row_id} is stale — {target} now matches directly; "
+                "delete the alias from overrides.json.\n"
+            )
         availability = "exact" if target else "missing"
         notes: list[str] = []
         if alias and not target:
@@ -430,12 +519,23 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
             if alias.get("notes"):
                 notes.append(alias["notes"])
         elif not target:
-            target, automatic_note = auto_alternative(export, targets)
+            target, automatic_note = auto_alternative(export, targets, prefixes)
             if target:
                 availability = "alias"
                 notes.append(automatic_note or "Available on an alternate NumSharp surface.")
 
-        support = "declared" if target else "missing"
+        # Type-match: a NumPy CLASS export credited to a NumSharp exported type of the same name
+        # (numpy.random.Generator -> NumSharp.Generator). Class exports are out of default scope, so
+        # this only fixes the Types catalog — it is what let Generator/PCG64/SeedSequence/
+        # BitGenerator/MT19937 read "missing" while NumSharp exports every one of them.
+        type_target = None
+        if not target and export["kind"] not in CALLABLE_KINDS:
+            type_target = numsharp_types_by_simple.get(export["name"])
+            if type_target:
+                availability = "type"
+                notes.append(f"NumSharp exports the {export['name']} type ({type_target}).")
+
+        support = "declared" if (target or type_target) else "missing"
         support_override = support_overrides.get(row_id)
         if support_override:
             support = support_override["status"]
@@ -450,32 +550,82 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
             obsolete = member.get("obsolete", False)
             source_paths = member.get("sourcePaths", [])
             source_urls = member.get("sourceUrls", [])
+        elif type_target:
+            consumed_targets.add(type_target)
+            signatures = [f"public class {export['name']}"]
+            obsolete = False
+            source_paths = locate_type_source(export["name"])
+            source_urls = SourceLocator.github_urls(source_paths)
         else:
             signatures = []
             obsolete = False
             source_paths = []
             source_urls = []
 
-        display_status = "missing" if not target else support if support in {"partial", "unsupported"} else "available"
-        rows.append({
+        # Case-insensitive near-miss detection: a still-missing in-scope export whose spelling matches
+        # a same-surface NumSharp member only when case is ignored. Reported, never counted — parity
+        # requires the exact NumPy spelling.
+        case_insensitive_matches: list[str] = []
+        if not target and export["in_default_scope"]:
+            case_insensitive_matches = sorted({
+                member["target"]
+                for member in case_folded.get((export["surface"], export["name"].lower()), [])
+                if member["name"] != export["name"]
+            })
+            if case_insensitive_matches:
+                notes.append(
+                    "Case-insensitive near-miss (NOT counted — NumPy parity is case-sensitive): "
+                    + ", ".join(case_insensitive_matches)
+                )
+
+        matched = target or type_target
+        display_status = "missing" if not matched else support if support in {"partial", "unsupported"} else "available"
+        row = {
             **export,
             "category": category_for(export["surface"], export["name"], export["kind"]),
             "availability": availability,
             "support": support,
             "status": display_status,
-            "numsharp_target": target,
+            "numsharp_target": matched,
             "numsharp_signatures": signatures,
             "numsharp_obsolete": obsolete,
             "numsharp_source_paths": source_paths,
             "numsharp_source_urls": source_urls,
             "notes": " ".join(dict.fromkeys(notes)),
-        })
+        }
+        if case_insensitive_matches:
+            row["case_insensitive_matches"] = case_insensitive_matches
+        rows.append(row)
 
     unknown_aliases = set(aliases) - seen_ids
     unknown_support = set(support_overrides) - seen_ids
-    if unknown_aliases or unknown_support:
-        unknown = ", ".join(sorted(unknown_aliases | unknown_support))
+    unknown_strays = set(stray_allowlist) - seen_ids
+    if unknown_aliases or unknown_support or unknown_strays:
+        unknown = ", ".join(sorted(unknown_aliases | unknown_support | unknown_strays))
         raise SystemExit(f"Overrides reference NumPy exports that were not discovered: {unknown}")
+
+    # Stray-host gate: an in-scope NumPy export left "missing" whose name nevertheless exists on an
+    # UNANNOTATED public type is a scan miss (the np.fft failure mode — implemented, but on a type
+    # the inventory never reflects), not a genuine gap. Fail loudly, naming the candidate hosts.
+    # Reviewed name coincidences go in overrides.json under "stray_allowlist" ({numpy id: note}).
+    member_hosts: dict[str, list[str]] = {}
+    for type_name, members in inventory["unannotatedSurface"].items():
+        for member in members:
+            member_hosts.setdefault(member, []).append(type_name)
+    strays = [
+        (row["id"], member_hosts[row["name"]])
+        for row in rows
+        if row["origin"] == "numpy" and row["in_default_scope"] and row["status"] == "missing"
+        and row["id"] not in stray_allowlist and row["name"] in member_hosts
+    ]
+    if strays:
+        details = "".join(f"  - {row_id} exists on: {', '.join(hosts)}\n" for row_id, hosts in strays)
+        raise SystemExit(
+            "Missing NumPy exports whose names exist on unannotated NumSharp types (scan misses?):\n"
+            + details
+            + "Annotate the hosting type with [ModuleName(\"...\")], or record a reviewed name "
+            "coincidence in overrides.json under \"stray_allowlist\"."
+        )
 
     for surface, members in surfaces.items():
         for member in members:
@@ -566,7 +716,7 @@ def csv_text(rows: list[dict[str, Any]]) -> str:
     columns = [
         "id", "origin", "surface", "category", "name", "kind", "in_default_scope", "status", "availability",
         "support", "numpy_signature", "numsharp_target", "numsharp_signatures", "numsharp_source_paths",
-        "numsharp_source_urls", "numsharp_obsolete", "notes", "documentation_url"
+        "numsharp_source_urls", "numsharp_obsolete", "case_insensitive_matches", "notes", "documentation_url"
     ]
     stream = io.StringIO(newline="")
     writer = csv.DictWriter(stream, fieldnames=columns, lineterminator="\n")
@@ -576,6 +726,7 @@ def csv_text(rows: list[dict[str, Any]]) -> str:
         flat["numsharp_signatures"] = " | ".join(row["numsharp_signatures"])
         flat["numsharp_source_paths"] = " | ".join(row["numsharp_source_paths"])
         flat["numsharp_source_urls"] = " | ".join(row["numsharp_source_urls"])
+        flat["case_insensitive_matches"] = " | ".join(row.get("case_insensitive_matches", []))
         writer.writerow(flat)
     return stream.getvalue()
 
@@ -615,6 +766,32 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
     for row in gaps[:50]:
         api = row["id"].replace("numpy.", "np.", 1).replace("np.ndarray.", "ndarray.", 1)
         lines.append(f"| [`{api}`]({row['documentation_url']}) | {row['surface']} | {row['status']} | {row['category']} |")
+
+    ci_rows = [
+        row for row in rows
+        if row["origin"] == "numpy" and row["in_default_scope"] and row.get("case_insensitive_matches")
+    ]
+    lines.extend([
+        "",
+        "## Case-insensitive near-misses",
+        "",
+        "NumPy's public API is case-sensitive, so a NumSharp member is credited only when the spelling "
+        "matches exactly. The generator additionally folds case to surface near-misses — in-scope NumPy "
+        "APIs left *missing* for which NumSharp exposes a same-surface member differing only by case. "
+        "These are **not** counted as available; rename to the exact NumPy spelling (or record a reviewed "
+        "alias) to close them.",
+        "",
+    ])
+    if ci_rows:
+        lines.append("| NumPy API | Surface | Differs only by case from |")
+        lines.append("|---|---|---|")
+        for row in sorted(ci_rows, key=lambda r: (r["surface"], r["name"].lower())):
+            api = row["id"].replace("numpy.", "np.", 1).replace("np.ndarray.", "ndarray.", 1)
+            targets_md = ", ".join(f"`{target}`" for target in row["case_insensitive_matches"])
+            lines.append(f"| [`{api}`]({row['documentation_url']}) | {row['surface']} | {targets_md} |")
+    else:
+        lines.append("_None detected._")
+
     lines.extend([
         "",
         "## Counting rules",
@@ -637,6 +814,7 @@ def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]
             "headline": "Available default-scope APIs divided by all default-scope NumPy APIs.",
             "default_scope": "Top-level NumPy callables; ndarray public methods and properties; callable exports of numpy.random, numpy.linalg, and numpy.fft.",
             "availability_note": "Compiled API availability is distinct from fully verified behavioral parity.",
+            "case_sensitivity": "NumPy API names are matched case-sensitively for parity. Case-insensitive near-misses are detected and reported (row field 'case_insensitive_matches'; the 'Case-insensitive near-misses' section of summary.md) but never counted as available.",
         },
         "summary": summary,
         "rows": rows,
@@ -686,6 +864,13 @@ def main() -> None:
     inventory = load_numsharp_inventory()
     overrides = load_overrides(args.overrides)
     rendered = render_outputs(np, inventory, overrides)
+    near_misses = [row for row in json.loads(rendered["coverage.json"])["rows"] if row.get("case_insensitive_matches")]
+    if near_misses:
+        print(f"Case-insensitive near-misses (NOT counted — NumPy parity is case-sensitive): {len(near_misses)}")
+        for row in near_misses:
+            print(f"  - {row['id']} ~ {', '.join(row['case_insensitive_matches'])}")
+    else:
+        print("Case-insensitive near-misses: none.")
     if args.check:
         check_outputs(args.output, rendered)
         print(f"Coverage artifact is current ({args.output}).")

@@ -7,6 +7,9 @@ items:
   - uid: NumSharp.ArrayFlags
     name: ArrayFlags
     type: Enum
+  - uid: NumSharp.AttributeError
+    name: AttributeError
+    type: Class
   - uid: NumSharp.AxisError
     name: AxisError
     type: Class
@@ -16,6 +19,9 @@ items:
   - uid: NumSharp.BackendType
     name: BackendType
     type: Enum
+  - uid: NumSharp.BitGenerator
+    name: BitGenerator
+    type: Class
   - uid: NumSharp.Char8
     name: Char8
     type: Struct
@@ -28,8 +34,23 @@ items:
   - uid: NumSharp.DateTime64
     name: DateTime64
     type: Struct
+  - uid: NumSharp.EinsumPath
+    name: EinsumPath
+    type: Struct
+  - uid: NumSharp.EnvVars
+    name: EnvVars
+    type: Class
+  - uid: NumSharp.FourierModule
+    name: FourierModule
+    type: Class
+  - uid: NumSharp.Generator
+    name: Generator
+    type: Class
   - uid: NumSharp.IIndex
     name: IIndex
+    type: Interface
+  - uid: NumSharp.INDArrayCarrier
+    name: INDArrayCarrier
     type: Interface
   - uid: NumSharp.INumSharpException
     name: INumSharpException
@@ -46,14 +67,23 @@ items:
   - uid: NumSharp.IndexError
     name: IndexError
     type: Class
-  - uid: NumSharp.Kwargs
-    name: Kwargs
+  - uid: NumSharp.KeyError
+    name: KeyError
+    type: Class
+  - uid: NumSharp.LinAlgError
+    name: LinAlgError
     type: Class
   - uid: NumSharp.MT19937
     name: MT19937
     type: Class
   - uid: NumSharp.MethodImplOptionsConstants
     name: MethodImplOptionsConstants
+    type: Class
+  - uid: NumSharp.MissingBackendException
+    name: MissingBackendException
+    type: Class
+  - uid: NumSharp.ModuleNameAttribute
+    name: ModuleNameAttribute
     type: Class
   - uid: NumSharp.NDArray
     name: NDArray
@@ -64,6 +94,24 @@ items:
   - uid: NumSharp.NDArray._Unsafe._Pinning
     name: NDArray._Unsafe._Pinning
     type: Struct
+  - uid: NumSharp.NDArrayFlags
+    name: NDArrayFlags
+    type: Class
+  - uid: NumSharp.NDScope
+    name: NDScope
+    type: Class
+  - uid: NumSharp.NDScopedAsyncAttribute
+    name: NDScopedAsyncAttribute
+    type: Class
+  - uid: NumSharp.NDScopedAttribute
+    name: NDScopedAttribute
+    type: Class
+  - uid: NumSharp.NDScopedCoveredAttribute
+    name: NDScopedCoveredAttribute
+    type: Class
+  - uid: NumSharp.NDScopedExitAttribute
+    name: NDScopedExitAttribute
+    type: Class
   - uid: NumSharp.NPTypeCode
     name: NPTypeCode
     type: Enum
@@ -73,20 +121,44 @@ items:
   - uid: NumSharp.NPTypeKind
     name: NPTypeKind
     type: Enum
+  - uid: NumSharp.NPY_SCALARKIND
+    name: NPY_SCALARKIND
+    type: Enum
+  - uid: NumSharp.NPY_TYPECHAR
+    name: NPY_TYPECHAR
+    type: Enum
+  - uid: NumSharp.NameError
+    name: NameError
+    type: Class
   - uid: NumSharp.NativeRandomState
     name: NativeRandomState
     type: Struct
-  - uid: NumSharp.NpzDictionary
-    name: NpzDictionary
-    type: Class
-  - uid: NumSharp.NpzDictionary`1
-    name: NpzDictionary<T>
-    type: Class
   - uid: NumSharp.NumPyRandom
     name: NumPyRandom
     type: Class
   - uid: NumSharp.NumSharpException
     name: NumSharpException
+    type: Class
+  - uid: NumSharp.OpenBlasMissingBackendException
+    name: OpenBlasMissingBackendException
+    type: Class
+  - uid: NumSharp.PCG64
+    name: PCG64
+    type: Class
+  - uid: NumSharp.PCG64.Pcg64StateData
+    name: PCG64.Pcg64StateData
+    type: Struct
+  - uid: NumSharp.PocketFFTDriver
+    name: PocketFFTDriver
+    type: Class
+  - uid: NumSharp.PolyfitResult
+    name: PolyfitResult
+    type: Struct
+  - uid: NumSharp.RuntimeError
+    name: RuntimeError
+    type: Class
+  - uid: NumSharp.SeedSequence
+    name: SeedSequence
     type: Class
   - uid: NumSharp.Shape
     name: Shape
@@ -115,12 +187,87 @@ items:
   - uid: NumSharp.np
     name: np
     type: Class
+  - uid: NumSharp.np.AxisConcatenator
+    name: np.AxisConcatenator
+    type: Class
   - uid: NumSharp.np.Broadcast
     name: np.Broadcast
     type: Class
+  - uid: NumSharp.np.CClass
+    name: np.CClass
+    type: Class
+  - uid: NumSharp.np.FlatIterator
+    name: np.FlatIterator
+    type: Class
+  - uid: NumSharp.np.IndexExpression
+    name: np.IndexExpression
+    type: Class
+  - uid: NumSharp.np.MGridClass
+    name: np.MGridClass
+    type: Class
+  - uid: NumSharp.np.MGridResult
+    name: np.MGridResult
+    type: Struct
+  - uid: NumSharp.np.MemoryView
+    name: np.MemoryView
+    type: Class
+  - uid: NumSharp.np.MeshgridResult
+    name: np.MeshgridResult
+    type: Struct
+  - uid: NumSharp.np.NDChunkIter`1
+    name: np.NDChunkIter<T>
+    type: Struct
+  - uid: NumSharp.np.NDChunkIter`1.Enumerator
+    name: np.NDChunkIter<T>.Enumerator
+    type: Struct
+  - uid: NumSharp.np.NDEnumerate
+    name: np.NDEnumerate
+    type: Class
+  - uid: NumSharp.np.NDEnumerate`1
+    name: np.NDEnumerate<T>
+    type: Class
+  - uid: NumSharp.np.NDIndex
+    name: np.NDIndex
+    type: Class
+  - uid: NumSharp.np.NDIterator
+    name: np.NDIterator
+    type: Class
+  - uid: NumSharp.np.NDRefIter`1
+    name: np.NDRefIter<T>
+    type: Struct
+  - uid: NumSharp.np.NDRefIter`1.Enumerator
+    name: np.NDRefIter<T>.Enumerator
+    type: Struct
+  - uid: NumSharp.np.OGridClass
+    name: np.OGridClass
+    type: Class
+  - uid: NumSharp.np.OGridResult
+    name: np.OGridResult
+    type: Struct
   - uid: NumSharp.np.PadFunc
     name: np.PadFunc
     type: Delegate
+  - uid: NumSharp.np.RClass
+    name: np.RClass
+    type: Class
+  - uid: NumSharp.np.UniqueAllResult
+    name: np.UniqueAllResult
+    type: Struct
+  - uid: NumSharp.np.UniqueCountsResult
+    name: np.UniqueCountsResult
+    type: Struct
+  - uid: NumSharp.np.UniqueInverseResult
+    name: np.UniqueInverseResult
+    type: Struct
+  - uid: NumSharp.np.UniqueResult
+    name: np.UniqueResult
+    type: Struct
+  - uid: NumSharp.np.linalg
+    name: np.linalg
+    type: Class
+  - uid: NumSharp.poly1d
+    name: poly1d
+    type: Class
 - uid: NumSharp.Backends
   name: NumSharp.Backends
   type: Namespace
@@ -131,6 +278,12 @@ items:
   - uid: NumSharp.Backends.DefaultEngine
     name: DefaultEngine
     type: Class
+  - uid: NumSharp.Backends.IBlasBackend
+    name: IBlasBackend
+    type: Interface
+  - uid: NumSharp.Backends.ISlidingDotBackend
+    name: ISlidingDotBackend
+    type: Interface
   - uid: NumSharp.Backends.MultiThread
     name: MultiThread
     type: Class
@@ -194,6 +347,15 @@ items:
     type: Struct
   - uid: NumSharp.Backends.Iteration.CumSumAxisKernel`1
     name: CumSumAxisKernel<T>
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.DecimalArgAccumulator
+    name: DecimalArgAccumulator
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.DecimalArgMaxKernel
+    name: DecimalArgMaxKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.DecimalArgMinKernel
+    name: DecimalArgMinKernel
     type: Struct
   - uid: NumSharp.Backends.Iteration.DelegateSlots
     name: DelegateSlots
@@ -478,6 +640,12 @@ items:
   - uid: NumSharp.Backends.Kernels.BinaryScalarKernelKey
     name: BinaryScalarKernelKey
     type: Struct
+  - uid: NumSharp.Backends.Kernels.ChooseFlatKernel
+    name: ChooseFlatKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.ChooseStridedKernel
+    name: ChooseStridedKernel
+    type: Delegate
   - uid: NumSharp.Backends.Kernels.ComparisonKernel
     name: ComparisonKernel
     type: Delegate
@@ -514,9 +682,15 @@ items:
   - uid: NumSharp.Backends.Kernels.CumulativeKernelKey
     name: CumulativeKernelKey
     type: Struct
+  - uid: NumSharp.Backends.Kernels.DiagWriteKernel
+    name: DiagWriteKernel
+    type: Delegate
   - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator
     name: DirectILKernelGenerator
     type: Class
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.AdjacentDiffKernel
+    name: DirectILKernelGenerator.AdjacentDiffKernel
+    type: Delegate
   - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.CastKernel
     name: DirectILKernelGenerator.CastKernel
     type: Delegate
@@ -529,11 +703,20 @@ items:
   - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.ClipMode
     name: DirectILKernelGenerator.ClipMode
     type: Enum
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.GemvKernel
+    name: DirectILKernelGenerator.GemvKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.GramKernel
+    name: DirectILKernelGenerator.GramKernel
+    type: Delegate
   - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.InnerCastLoop
     name: DirectILKernelGenerator.InnerCastLoop
     type: Delegate
   - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.MaskedCastKernel
     name: DirectILKernelGenerator.MaskedCastKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.NanToNumKernel
+    name: DirectILKernelGenerator.NanToNumKernel
     type: Delegate
   - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.QuantileKernel
     name: DirectILKernelGenerator.QuantileKernel
@@ -619,6 +802,9 @@ items:
   - uid: NumSharp.Backends.Kernels.ReductionTypeExtensions
     name: ReductionTypeExtensions
     type: Class
+  - uid: NumSharp.Backends.Kernels.SelectFusedKernel
+    name: SelectFusedKernel
+    type: Delegate
   - uid: NumSharp.Backends.Kernels.SimdDot
     name: SimdDot
     type: Class
@@ -630,6 +816,9 @@ items:
     type: Class
   - uid: NumSharp.Backends.Kernels.StridedUnaryKernel
     name: StridedUnaryKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.TakeAlongAxisKernel
+    name: TakeAlongAxisKernel
     type: Delegate
   - uid: NumSharp.Backends.Kernels.TakeKernel
     name: TakeKernel
@@ -712,12 +901,57 @@ items:
   - uid: NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool
     name: SizeBucketedBufferPool
     type: Class
-- uid: NumSharp.Extensions
-  name: NumSharp.Extensions
+- uid: NumSharp.Fourier
+  name: NumSharp.Fourier
   type: Namespace
   items:
-  - uid: NumSharp.Extensions.LinqExtensions
-    name: LinqExtensions
+  - uid: NumSharp.Fourier.Cfftp
+    name: Cfftp
+    type: Class
+  - uid: NumSharp.Fourier.CfftpF
+    name: CfftpF
+    type: Class
+  - uid: NumSharp.Fourier.Cmplx
+    name: Cmplx
+    type: Struct
+  - uid: NumSharp.Fourier.CmplxF
+    name: CmplxF
+    type: Struct
+  - uid: NumSharp.Fourier.Fftblue
+    name: Fftblue
+    type: Class
+  - uid: NumSharp.Fourier.FftblueF
+    name: FftblueF
+    type: Class
+  - uid: NumSharp.Fourier.PocketFFTComplexPlan
+    name: PocketFFTComplexPlan
+    type: Class
+  - uid: NumSharp.Fourier.PocketFFTComplexPlanF
+    name: PocketFFTComplexPlanF
+    type: Class
+  - uid: NumSharp.Fourier.PocketFFTPlanCache
+    name: PocketFFTPlanCache
+    type: Class
+  - uid: NumSharp.Fourier.PocketFFTPlanCacheF
+    name: PocketFFTPlanCacheF
+    type: Class
+  - uid: NumSharp.Fourier.PocketFFTRealPlan
+    name: PocketFFTRealPlan
+    type: Class
+  - uid: NumSharp.Fourier.PocketFFTRealPlanF
+    name: PocketFFTRealPlanF
+    type: Class
+  - uid: NumSharp.Fourier.PocketFFTUtil
+    name: PocketFFTUtil
+    type: Class
+  - uid: NumSharp.Fourier.Rfftp
+    name: Rfftp
+    type: Class
+  - uid: NumSharp.Fourier.RfftpF
+    name: RfftpF
+    type: Class
+  - uid: NumSharp.Fourier.SinCos2PiByN
+    name: SinCos2PiByN
     type: Class
 - uid: NumSharp.Generic
   name: NumSharp.Generic
@@ -725,6 +959,19 @@ items:
   items:
   - uid: NumSharp.Generic.NDArray`1
     name: NDArray<TDType>
+    type: Class
+- uid: NumSharp.IO
+  name: NumSharp.IO
+  type: Namespace
+  items:
+  - uid: NumSharp.IO.NpyFormat
+    name: NpyFormat
+    type: Class
+  - uid: NumSharp.IO.NpyFormat.FormatVersion
+    name: NpyFormat.FormatVersion
+    type: Struct
+  - uid: NumSharp.IO.NpzFile
+    name: NpzFile
     type: Class
 - uid: NumSharp.Statistics
   name: NumSharp.Statistics
@@ -765,6 +1012,9 @@ items:
   - uid: NumSharp.Utilities.Converts`1
     name: Converts<T>
     type: Class
+  - uid: NumSharp.Utilities.DecimalMath
+    name: DecimalMath
+    type: Class
   - uid: NumSharp.Utilities.Hashset`1
     name: Hashset<T>
     type: Class
@@ -797,6 +1047,9 @@ items:
     type: Class
   - uid: NumSharp.Utilities.NDExtendedCoordinatesIncrementor
     name: NDExtendedCoordinatesIncrementor
+    type: Class
+  - uid: NumSharp.Utilities.NDFloatMath
+    name: NDFloatMath
     type: Class
   - uid: NumSharp.Utilities.NDIntegerPower
     name: NDIntegerPower

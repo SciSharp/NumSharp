@@ -34,15 +34,67 @@ namespace NumSharp.Backends.Kernels
             // Specialized emitters for ops that can't be expressed as a single container call.
             switch (op)
             {
+                // 'positive' is identity at every numeric dtype — the loaded vector already IS the
+                // result (same contract as EmitUnaryScalarOperation's Positive branch), so emit
+                // nothing: the SIMD loop becomes a pure load→store copy. This is what lets a strided
+                // narrow-row positive engage the 2-D block kernel (and gives contiguous positive a
+                // SIMD copy instead of the scalar fallback). Gated by CanUseUnarySimd(Positive).
+                case UnaryOp.Positive:                                      return;
                 case UnaryOp.Square:     EmitVectorSquare(il, clrType);     return;
                 case UnaryOp.Reciprocal: EmitVectorReciprocal(il, clrType); return;
-                case UnaryOp.Deg2Rad:    EmitVectorScale(il, clrType, Math.PI / 180.0); return;
-                case UnaryOp.Rad2Deg:    EmitVectorScale(il, clrType, 180.0 / Math.PI); return;
+                // The float32 factor is the QUOTIENT OF FLOAT CONSTANTS, matching NumPy's
+                // RAD2DEG/DEG2RAD macros (evaluated at the operand's precision) — not the double
+                // quotient rounded to float, which is 1 ULP low for rad2deg. Must stay in step with
+                // EmitRad2DegCall / EmitDeg2RadCall on the scalar side, or a strided array and a
+                // contiguous one would disagree.
+                case UnaryOp.Deg2Rad:    EmitVectorScale(il, clrType, Math.PI / 180.0, (float)Math.PI / 180.0f); return;
+                case UnaryOp.Rad2Deg:    EmitVectorScale(il, clrType, 180.0 / Math.PI, 180.0f / (float)Math.PI); return;
                 case UnaryOp.BitwiseNot:
                     il.EmitCall(OpCodes.Call, VectorMethodCache.OnesComplement(VectorBits, clrType), null);
                     return;
+                // Boolean logical not over byte lanes: min(v,1) ^ 1. min normalizes any nonzero
+                // byte to 1 (NumPy's byte_to_true), xor 1 flips it — output always canonical 0/1,
+                // identical to the scalar `v == 0` tail (EmitUnaryScalarOperation) on every byte
+                // value. Gated to Boolean input by CanUseUnarySimd.
+                case UnaryOp.LogicalNot:
+                {
+                    var byteOnes = VectorMethodCache.CreateBroadcast(VectorBits, typeof(byte));
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.EmitCall(OpCodes.Call, byteOnes, null);                       // [v, 1]
+                    var min = VectorMethodCache.BinaryX86(VectorBits, "Min", typeof(byte))
+                              ?? VectorMethodCache.Generic(VectorBits, "Min", typeof(byte), paramCount: 2);
+                    il.EmitCall(OpCodes.Call, min, null);                            // [n]
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.EmitCall(OpCodes.Call, byteOnes, null);                       // [n, 1]
+                    var xor = VectorMethodCache.BinaryX86(VectorBits, "Xor", typeof(byte))
+                              ?? VectorMethodCache.Generic(VectorBits, "Xor", typeof(byte), paramCount: 2);
+                    il.EmitCall(OpCodes.Call, xor, null);                            // [r]
+                    return;
+                }
                 case UnaryOp.Negate when clrType == typeof(double) || clrType == typeof(float):
                     EmitVectorSignFlip(il, clrType);
+                    return;
+                // float32 exp has no Vector{N} BCL method to bind: it is NumPy's own polynomial,
+                // ported per width in NDFloatMath.Simd.cs. CanUseUnarySimd / the NDExpr gate have
+                // already established (via ExpVectorSimdAvailable) that this overload exists and
+                // that the host can run its FMA, so the call is safe here.
+                case UnaryOp.Exp when clrType == typeof(float):
+                    il.EmitCall(OpCodes.Call, CachedMethods.SingleExpVector, null);
+                    return;
+                case UnaryOp.Exp2 when clrType == typeof(float):
+                    il.EmitCall(OpCodes.Call, CachedMethods.SingleExp2Vector, null);
+                    return;
+                case UnaryOp.Log when clrType == typeof(float):
+                    il.EmitCall(OpCodes.Call, CachedMethods.SingleLogVector, null);
+                    return;
+                case UnaryOp.Sin when clrType == typeof(float):
+                    il.EmitCall(OpCodes.Call, CachedMethods.SingleSinVector, null);
+                    return;
+                case UnaryOp.Cos when clrType == typeof(float):
+                    il.EmitCall(OpCodes.Call, CachedMethods.SingleCosVector, null);
+                    return;
+                case UnaryOp.Tanh when clrType == typeof(float):
+                    il.EmitCall(OpCodes.Call, CachedMethods.SingleTanhVector, null);
                     return;
             }
 
@@ -133,13 +185,15 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Emit <c>x * factor</c> via <c>Vector.Multiply(Vector.Create(factor), x)</c> — used by
-        /// Deg2Rad and Rad2Deg with the appropriate scalar factor.
+        /// Deg2Rad and Rad2Deg with the appropriate scalar factor, given per precision.
         /// </summary>
-        private static void EmitVectorScale(ILGenerator il, Type clrType, double factor)
+        private static void EmitVectorScale(ILGenerator il, Type clrType, double factor, float factorF)
         {
-            // Stack: [x_vector] — push the scalar, broadcast, then multiply.
+            // Stack: [x_vector] — push the scalar, broadcast, then multiply. The float factor is
+            // passed in separately rather than cast from the double: for rad2deg the two differ by
+            // one ULP, and NumPy computes the constant at the operand's own precision.
             if (clrType == typeof(float))
-                il.Emit(OpCodes.Ldc_R4, (float)factor);
+                il.Emit(OpCodes.Ldc_R4, factorF);
             else
                 il.Emit(OpCodes.Ldc_R8, factor);
 

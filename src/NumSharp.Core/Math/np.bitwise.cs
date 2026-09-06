@@ -15,7 +15,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_and.html</remarks>
-        public static NDArray bitwise_and(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+        public static NDArray bitwise_and(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x1.TensorEngine.BitwiseAnd(x1, x2, dtype, @out, where);
 
         /// <summary>
@@ -28,7 +28,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_or.html</remarks>
-        public static NDArray bitwise_or(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+        public static NDArray bitwise_or(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x1.TensorEngine.BitwiseOr(x1, x2, dtype, @out, where);
 
         /// <summary>
@@ -41,7 +41,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <returns>Result. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_xor.html</remarks>
-        public static NDArray bitwise_xor(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+        public static NDArray bitwise_xor(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x1.TensorEngine.BitwiseXor(x1, x2, dtype, @out, where);
     }
 }

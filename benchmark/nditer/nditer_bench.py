@@ -1,10 +1,10 @@
 # =============================================================================
 # nditer_bench.py — NumPy side of THE canonical NDIter benchmark (identical
-# ids to nditer_bench.cs). Section-addressable via the NPYITER_SECTION env var
+# ids to nditer_bench.cs). Section-addressable via the NUMSHARP_BENCH_NDITER_SECTION env var
 # so the orchestrator (nditer_sheet.py) can run each category in its own
 # process. Emits machine-readable "id<TAB>milliseconds" rows on stdout.
 #
-# Run a section:  NPYITER_SECTION=elementwise python nditer_bench.py
+# Run a section:  NUMSHARP_BENCH_NDITER_SECTION=elementwise python nditer_bench.py
 # Run everything: python nditer_bench.py
 # =============================================================================
 import os
@@ -12,7 +12,7 @@ import sys
 import time
 import numpy as np
 
-SECTION = os.environ.get("NPYITER_SECTION", "all").strip().lower()
+SECTION = os.environ.get("NUMSHARP_BENCH_NDITER_SECTION", "all").strip().lower()
 
 
 def want(s):
@@ -30,8 +30,17 @@ def check(ok, what):
 
 
 def best_ms(body, iters, warm, rounds):
-    for _ in range(warm):
+    # Warmup; its timed tail (first call excluded — cache/alloc-cold) doubles as a per-call pilot.
+    body()
+    t0 = time.perf_counter()
+    for _ in range(max(2, warm) - 1):
         body()
+    per_call = (time.perf_counter() - t0) * 1000.0 / max(1, max(2, warm) - 1)
+    # Min-time policy: a call >20 ms/call runs EXACTLY 100 times (min over 100); everything else
+    # batches ~1 ms windows and accumulates enough to span ~200 ms total (time-bound, not a round count).
+    slow = per_call > 20.0
+    iters = 1 if slow else max(1, min(1_000_000, int(round(1.0 / max(per_call, 1e-6)))))
+    rounds = 100 if slow else max(2, int(200.0 / max(iters * per_call, 1e-9)) + 1)
     best = float("inf")
     for _ in range(rounds):
         t0 = time.perf_counter()

@@ -4,13 +4,19 @@
     <OutputType>Exe</OutputType>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <Platforms>AnyCPU;x64</Platforms>
-    <SignAssembly>true</SignAssembly>
-    <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
+    <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. -->
     <Configurations>Debug;Release</Configurations>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- tests/ holds standalone dotnet-run verification scripts (file-based
+         apps with their own #: directives) — they must not compile into the
+         demo executable. -->
+    <Compile Remove="tests\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />

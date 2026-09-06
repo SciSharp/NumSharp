@@ -5,8 +5,6 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Rint(NDArray nd, Type dtype) => Rint(nd, dtype?.GetTypeCode());
-
         /// <summary>
         /// Element-wise round-half-to-even (NumPy <c>np.rint</c>) using IL-generated kernels.
         ///
@@ -26,8 +24,9 @@ namespace NumSharp.Backends
         /// "No loop matching the specified signature ..."), inputs reach the loop via a same_kind
         /// cast, and a provided out receives a same_kind-cast write-back.
         /// </summary>
-        public override NDArray Rint(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Rint(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             return ExecuteUnaryOp(nd, UnaryOp.Round, ResolveUnaryFloatReturnType(nd, typeCode, "rint"), @out, where);
         }
     }

@@ -116,6 +116,11 @@ namespace NumSharp.Backends
             UnaryOp.ASin => "arcsin",
             UnaryOp.ACos => "arccos",
             UnaryOp.ATan => "arctan",
+            // NumPy's canonical ufunc name is 'arcsinh' even for the np.asinh alias
+            // (np.asinh is np.arcsinh, so ufunc.__name__ == 'arcsinh').
+            UnaryOp.Asinh => "arcsinh",
+            UnaryOp.Acosh => "arccosh",
+            UnaryOp.Atanh => "arctanh",
             UnaryOp.BitwiseNot => "invert",
             UnaryOp.LogicalNot => "logical_not",
             UnaryOp.Positive => "positive",
@@ -226,6 +231,28 @@ namespace NumSharp.Backends
         ///     participates in the output shape (verified: add((4,),(4,),
         ///     where=(2,4)-mask) returns shape (2,4)).
         /// </summary>
+        /// <summary>
+        /// True when two shapes have the same rank and identical dimensions — the case in
+        /// which the ufunc's broadcast and out/where joins are identity transforms, so the
+        /// out= routes skip <see cref="Broadcast"/> and <see cref="ResolveUfuncIterationShape"/>
+        /// (which allocate and cannot raise there). Strides are irrelevant to that decision:
+        /// <see cref="Shape.Equals(Shape)"/>, which the join validates with, compares dims only.
+        /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private static bool SameDims(in Shape a, in Shape b)
+        {
+            if (a.NDim != b.NDim)
+                return false;
+            var ad = a.dimensions;
+            var bd = b.dimensions;
+            if (ad is null || bd is null)
+                return ad is null && bd is null;
+            for (int i = 0; i < ad.Length; i++)
+                if (ad[i] != bd[i])
+                    return false;
+            return true;
+        }
+
         private static Shape ResolveUfuncIterationShape(
             Shape inputBroadcast, NDArray[] inputs, NDArray? @out, NDArray? where)
         {
@@ -238,14 +265,14 @@ namespace NumSharp.Backends
                 {
                     withOut = Shape.ResolveReturnShape(full, @out.Shape);
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
                     string shapes = string.Empty;
                     foreach (var inp in inputs)
                         shapes += NumPyShapeRepr(inp.Shape) + " ";
                     shapes += NumPyShapeRepr(@out.Shape) + " ";
                     throw new ArgumentException(
-                        $"operands could not be broadcast together with shapes {shapes}");
+                        $"operands could not be broadcast together with shapes {shapes}", e);
                 }
 
                 // out can absorb the inputs but may not be stretched itself.
@@ -266,7 +293,7 @@ namespace NumSharp.Backends
                 {
                     withWhere = Shape.ResolveReturnShape(full, where.Shape);
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
                     string shapes = string.Empty;
                     foreach (var inp in inputs)
@@ -275,7 +302,7 @@ namespace NumSharp.Backends
                         shapes += NumPyShapeRepr(@out.Shape) + " ";
                     shapes += NumPyShapeRepr(where.Shape) + " ";
                     throw new ArgumentException(
-                        $"operands could not be broadcast together with shapes {shapes}");
+                        $"operands could not be broadcast together with shapes {shapes}", e);
                 }
 
                 if (@out is not null && !withWhere.Equals(full))
@@ -312,21 +339,41 @@ namespace NumSharp.Backends
             NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode resultType,
             NDArray? @out, NDArray? where)
         {
+            // A read-only out is rejected FIRST — NumPy reports "output array is read-only"
+            // ahead of any where/cast/shape error (probed 2.4.2: the message wins even when the
+            // cast or shape is also invalid). The kernel writes @out.Address directly, bypassing
+            // the guarded setters, so without this an in-place ufunc corrupts a non-writeable
+            // target (a broadcast view, a read-only mmap('r') array, or a foreign read-only buffer).
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+
             ValidateWhereMask(where);
 
             string name = UfuncName(op);
             if (@out is not null)
                 ValidateOutCast(resultType, @out.typecode, name);
 
-            // Inputs broadcast first (their own incompatibility raises the
-            // pre-existing broadcast error), then out/where join per NumPy.
-            var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
-            var iterShape = ResolveUfuncIterationShape(
-                leftShape.Clean(), new[] { lhs, rhs }, @out, where);
+            NDArray target;
+            if (@out is not null && where is null && SameDims(lhs.Shape, rhs.Shape) && SameDims(lhs.Shape, @out.Shape))
+            {
+                // Identical dims on every operand (np.add(a, b, out=o), the hottest out= call):
+                // the input broadcast and the out join are identity transforms that cannot
+                // raise, so skip them — measured ~55 ns and two Shape allocations per call,
+                // more than the iterator's own construction after the single-block change.
+                target = @out;
+            }
+            else
+            {
+                // Inputs broadcast first (their own incompatibility raises the
+                // pre-existing broadcast error), then out/where join per NumPy.
+                var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
+                var iterShape = ResolveUfuncIterationShape(
+                    leftShape.Clean(), new[] { lhs, rhs }, @out, where);
 
-            // NumPy: 'where' without 'out' leaves unmasked slots uninitialized
-            // (it warns; values are unobservable). fillZeros:false matches.
-            var target = @out ?? new NDArray(resultType, iterShape.Clean(), false);
+                // NumPy: 'where' without 'out' leaves unmasked slots uninitialized
+                // (it warns; values are unobservable). fillZeros:false matches.
+                target = @out ?? new NDArray(resultType, iterShape.Clean(), false);
+            }
 
             if (target.size == 0)
                 return target;
@@ -334,8 +381,7 @@ namespace NumSharp.Backends
             // Kernel bodies — exactly the Tier-3B route's (shared cache).
             bool sameDtype = lhsType == rhsType && lhsType == resultType;
             bool simdViable = sameDtype
-                              && DirectILKernelGenerator.CanUseSimd(resultType)
-                              && DirectILKernelGenerator.CanUseSimdForOp(op);
+                              && DirectILKernelGenerator.CanUseSimdBinary(op, resultType);
 
             Action<ILGenerator> scalarBody;
             if (sameDtype)
@@ -353,7 +399,8 @@ namespace NumSharp.Backends
                 ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType)
                 : null;
 
-            string cacheKey = $"npy_binop_{op}_{lhsType}_{rhsType}_{resultType}";
+            // Packed key (no per-call string): npy_binop_{op}_{lhsType}_{rhsType}_{resultType}.
+            var cacheKey = InnerLoopKernelKey.Binary(op, lhsType, rhsType, resultType);
 
             // Iterator config. A dtype-mismatched out becomes a CAST operand:
             // the kernel writes the loop dtype into its buffer and the windowed
@@ -435,19 +482,32 @@ namespace NumSharp.Backends
             NPTypeCode lhsType, NPTypeCode rhsType,
             NDArray? @out, NDArray? where)
         {
+            // Read-only out is rejected before where/cast/shape (see the binary path).
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+
             ValidateWhereMask(where);
 
             string name = UfuncName(op);
             if (@out is not null)
                 ValidateOutCast(NPTypeCode.Boolean, @out.typecode, name);
 
-            var (leftShape, _) = Broadcast(lhs.Shape, rhs.Shape);
-            var iterShape = ResolveUfuncIterationShape(
-                leftShape.Clean(), new[] { lhs, rhs }, @out, where);
+            NDArray target;
+            if (@out is not null && where is null && SameDims(lhs.Shape, rhs.Shape) && SameDims(lhs.Shape, @out.Shape))
+            {
+                // Identical dims everywhere: broadcast + out join are identity (see the binary route).
+                target = @out;
+            }
+            else
+            {
+                var (leftShape, _) = Broadcast(lhs.Shape, rhs.Shape);
+                var iterShape = ResolveUfuncIterationShape(
+                    leftShape.Clean(), new[] { lhs, rhs }, @out, where);
 
-            // 'where' without 'out': unmasked slots stay uninitialized
-            // (NumPy warns; values are unobservable garbage).
-            var target = @out ?? new NDArray(NPTypeCode.Boolean, iterShape.Clean(), false);
+                // 'where' without 'out': unmasked slots stay uninitialized
+                // (NumPy warns; values are unobservable garbage).
+                target = @out ?? new NDArray(NPTypeCode.Boolean, iterShape.Clean(), false);
+            }
 
             if (target.size == 0)
                 return target;
@@ -483,7 +543,8 @@ namespace NumSharp.Backends
 
             // Vector body intentionally null: bool output breaks the Tier-3B
             // same-dtype invariant (unchanged from the no-out route).
-            string cacheKey = $"npy_cmp_{op}_{lhsType}_{rhsType}";
+            // Packed key (no per-call string): npy_cmp_{op}_{lhsType}_{rhsType}.
+            var cacheKey = InnerLoopKernelKey.Comparison(op, lhsType, rhsType);
 
             bool outNeedsCast = target.typecode != NPTypeCode.Boolean;
             var globalFlags = NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP;
@@ -507,6 +568,17 @@ namespace NumSharp.Backends
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
                     s_ufuncBinaryOutFlags,
                     opDtypes);
+
+                // Same-dtype inputs into a bool out that is contiguous in iteration order:
+                // run the whole-array SIMD comparison kernel (Vector.Compare + mask packing —
+                // the kernel the no-out route uses for contiguous inputs) through the
+                // iterator's post-coalesce strides. Same-dtype only, so the comparison happens
+                // in the operands' own dtype exactly as the scalar body's no-convert branch
+                // does. Everything else (mixed dtypes, cast out, strided/F out) keeps the
+                // Tier-3B scalar body. Measured: np.less(f64, f64, out=bool) at 100K
+                // 43.4 µs → SIMD (NumPy 11.4 µs).
+                if (!outNeedsCast && lhsType == rhsType && iter.TryExecuteComparison(op))
+                    return target;
 
                 iter.ExecuteElementWiseBinary(lhsType, rhsType, NPTypeCode.Boolean, scalarBody, null, cacheKey);
             }
@@ -549,16 +621,29 @@ namespace NumSharp.Backends
             NPTypeCode inputType, NPTypeCode outputType,
             NDArray? @out, NDArray? where)
         {
+            // Read-only out is rejected before where/cast/shape (see the binary path).
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+
             ValidateWhereMask(where);
 
             string name = UfuncName(op);
             if (@out is not null)
                 ValidateOutCast(outputType, @out.typecode, name);
 
-            var iterShape = ResolveUfuncIterationShape(
-                nd.Shape.Clean(), new[] { nd }, @out, where);
+            NDArray target;
+            if (@out is not null && where is null && SameDims(nd.Shape, @out.Shape))
+            {
+                // Identical dims: the out join is identity (see the binary route).
+                target = @out;
+            }
+            else
+            {
+                var iterShape = ResolveUfuncIterationShape(
+                    nd.Shape.Clean(), new[] { nd }, @out, where);
 
-            var target = @out ?? new NDArray(outputType, iterShape.Clean(), false);
+                target = @out ?? new NDArray(outputType, iterShape.Clean(), false);
+            }
 
             if (target.size == 0)
                 return target;
@@ -578,12 +663,12 @@ namespace NumSharp.Backends
             UnaryOp capOp = op;
             Action<ILGenerator> scalarBody;
             Action<ILGenerator>? vectorBody;
-            string cacheKey;
+            InnerLoopKernelKey cacheKey;   // packed key (no per-call string): npy_unop_{op}_{in}_{out}
             if (bufferedPromoting)
             {
                 scalarBody = il => DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capOut);
                 vectorBody = il => DirectILKernelGenerator.EmitUnaryVectorOperation(il, capOp, capOut);
-                cacheKey = $"npy_unop_{op}_{outputType}_{outputType}";
+                cacheKey = InnerLoopKernelKey.Unary(op, outputType, outputType);
             }
             else
             {
@@ -609,7 +694,7 @@ namespace NumSharp.Backends
                 vectorBody = simdViable
                     ? il => DirectILKernelGenerator.EmitUnaryVectorOperation(il, capOp, capIn)
                     : null;
-                cacheKey = $"npy_unop_{op}_{inputType}_{outputType}";
+                cacheKey = InnerLoopKernelKey.Unary(op, inputType, outputType);
             }
 
             // Buffering engages when the input promotes (bufferedPromoting) or

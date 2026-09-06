@@ -75,6 +75,7 @@ namespace NumSharp.Statistics
             }
         }
 
+        [NDScoped]
         public static NDArray Compute(
             NDArray a, double[] q, int[] axisArr, NDArray @out,
             bool overwrite_input, QuantileMethod method, bool keepdims, bool qIsScalar,
@@ -82,6 +83,10 @@ namespace NumSharp.Statistics
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (q is null) throw new ArgumentNullException(nameof(q));
+
+            // Boundary scope: the staging views/copies, the raw result behind the keepdims view,
+            // and every helper temp are reclaimed at exit; the yielded result (or the caller's
+            // untracked @out) is the only survivor.
 
             // np.nan* short-circuit a totally-empty input (some dimension is 0) to
             // np.nanmean(a, axis, keepdims) BEFORE any method/q dispatch. NumPy does this
@@ -290,7 +295,9 @@ namespace NumSharp.Statistics
                 np.copyto(@out, result);
                 return @out;
             }
-            return result;
+            // A fresh 0-d result (scalar q, axis=None — the np.median/percentile/quantile flat
+            // forms) is a numpy SCALAR at the boundary: read-only (PyArray_Return semantics).
+            return result.MarkReductionScalar();
         }
 
         /// <summary>
@@ -361,7 +368,9 @@ namespace NumSharp.Statistics
                 np.copyto(@out, result);
                 return @out;
             }
-            return result;
+            // A fresh 0-d result (scalar q, axis=None — the np.median/percentile/quantile flat
+            // forms) is a numpy SCALAR at the boundary: read-only (PyArray_Return semantics).
+            return result.MarkReductionScalar();
         }
 
         // ── helpers ─────────────────────────────────────────────────────────────────

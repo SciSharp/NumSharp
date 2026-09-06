@@ -7,7 +7,7 @@ using NumSharp.Utilities;
 
 namespace NumSharp.Benchmark
 {
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 50)]
+    [SimpleJob(RunStrategy.ColdStart, iterationCount: 50)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class npadd

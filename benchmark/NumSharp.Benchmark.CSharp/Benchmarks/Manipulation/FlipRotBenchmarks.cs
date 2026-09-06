@@ -14,11 +14,11 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Manipulation;
 /// [Benchmark(Description)] labels normalize 1:1 onto those names for the (op, dtype, N) merge join.
 /// </summary>
 [BenchmarkCategory("Manipulation", "FlipRot")]
-public class FlipRotBenchmarks : BenchmarkBase
+public class FlipRotBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _arr2D = null!;
 
-    [Params(ArraySizeSource.Medium, ArraySizeSource.Large)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]
@@ -27,7 +27,7 @@ public class FlipRotBenchmarks : BenchmarkBase
         np.random.seed(Seed);
         var rows = (int)Math.Sqrt(N);
         var cols = N / rows;
-        _arr2D = np.random.rand(rows, cols) * 100;
+        _arr2D = CreateRandomArray2D(rows, cols, DType);
     }
 
     [GlobalCleanup]

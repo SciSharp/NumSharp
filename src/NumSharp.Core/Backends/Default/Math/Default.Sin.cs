@@ -1,17 +1,16 @@
-﻿using System;
+using System;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Sin(NDArray nd, Type dtype) => Sin(nd, dtype?.GetTypeCode());
-
         /// <summary>
         /// Element-wise sine using IL-generated kernels.
         /// </summary>
-        public override NDArray Sin(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Sin(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             return ExecuteUnaryOp(nd, UnaryOp.Sin, ResolveUnaryFloatReturnType(nd, typeCode, "sin"), @out, where);
         }
     }

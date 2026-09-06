@@ -1,5 +1,3 @@
-# Benchmarks
-
 <link rel="stylesheet" href="https://unpkg.com/tippy.js@6.3.7/dist/tippy.css">
 
 <style>
@@ -46,9 +44,7 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 }
 
 .ns-bench-dashboard .bench-intro {
-  border-bottom: 1px solid var(--line);
-  padding: 0.25rem 0 1.2rem;
-  margin-bottom: 1.25rem;
+  padding: 0.25rem 0 0;
 }
 
 .ns-bench-dashboard .bench-kicker {
@@ -134,9 +130,9 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 
 .ns-bench-dashboard .section-head {
   display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 0.65rem;
   border-top: 1px solid var(--line);
   padding-top: 1.2rem;
   margin: 1.45rem 0 0.75rem;
@@ -155,9 +151,8 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 }
 
 .ns-bench-dashboard .read-guide {
-  border-top: 1px solid var(--line);
   margin: 1.45rem 0 0;
-  padding: 1rem 0 0.15rem;
+  padding: 0 0 0.15rem;
 }
 
 .ns-bench-dashboard .read-guide + section .section-head {
@@ -224,9 +219,7 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 }
 
 .ns-bench-dashboard .guide-block {
-  border-left: 3px solid color-mix(in srgb, var(--line) 70%, var(--quiet) 30%);
   min-width: 0;
-  padding-left: 0.7rem;
 }
 
 .ns-bench-dashboard .guide-block h3 {
@@ -403,6 +396,8 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 .ns-bench-dashboard .s-close { background: #d8a528; }
 .ns-bench-dashboard .s-slower { background: var(--slow); }
 .ns-bench-dashboard .s-much { background: var(--bad); }
+.ns-bench-dashboard .s-negligible { background: #8793a1; }
+.ns-bench-dashboard .s-failed { background: #7f1d1d; }
 .ns-bench-dashboard .s-nodata { background: #c7ccd1; }
 
 .ns-bench-dashboard .band-faster-100x { background: linear-gradient(90deg, #0e7490, #14b8a6); }
@@ -411,16 +406,22 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 .ns-bench-dashboard .band-faster-5 { background: linear-gradient(90deg, #08734f, #0d865c); }
 .ns-bench-dashboard .band-faster-2 { background: linear-gradient(90deg, #0d865c, #19996b); }
 .ns-bench-dashboard .band-faster-125 { background: linear-gradient(90deg, #19996b, #35ad7c); }
-.ns-bench-dashboard .band-faster-100 { background: linear-gradient(90deg, #35ad7c, #73c79d); }
-.ns-bench-dashboard .band-close-090 { background: linear-gradient(90deg, #9a680c, #bd8619); }
-.ns-bench-dashboard .band-close-075 { background: linear-gradient(90deg, #bd8619, #d8a528); }
-.ns-bench-dashboard .band-close-050 { background: linear-gradient(90deg, #d8a528, #e7bf55); }
+.ns-bench-dashboard .band-faster-100 { background: linear-gradient(90deg, #35ad7c, #63c28f); }
+.ns-bench-dashboard .band-close-090 { background: linear-gradient(90deg, #63c28f, #54b97e); }
+.ns-bench-dashboard .band-close-075 { background: linear-gradient(90deg, #54b97e, #8dbb68); }
+.ns-bench-dashboard .band-close-050 { background: linear-gradient(90deg, #8dbb68, #d8a528); }
 .ns-bench-dashboard .band-slower-040 { background: linear-gradient(90deg, #e19a65, #d6763f); }
 .ns-bench-dashboard .band-slower-030 { background: linear-gradient(90deg, #d6763f, #c75b25); }
 .ns-bench-dashboard .band-slower-020 { background: linear-gradient(90deg, #c75b25, #a93d13); }
 .ns-bench-dashboard .band-much-010 { background: linear-gradient(90deg, #cf5a50, #bd3237); }
 .ns-bench-dashboard .band-much-005 { background: linear-gradient(90deg, #bd3237, #9d1926); }
 .ns-bench-dashboard .band-much-000 { background: linear-gradient(90deg, #9d1926, #6f0c16); }
+.ns-bench-dashboard .band-negligible {
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.24) 0 0.25rem, transparent 0.25rem 0.5rem),
+    #8793a1;
+}
+.ns-bench-dashboard .band-failed { background: #7f1d1d; }
 .ns-bench-dashboard .band-nodata {
   background:
     repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.32) 0 0.25rem, transparent 0.25rem 0.5rem),
@@ -452,6 +453,15 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 .ns-bench-dashboard .bar-table {
   display: grid;
   gap: 0.5rem;
+}
+
+.ns-bench-dashboard .suite-scoreboard {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.ns-bench-dashboard .suite-tabs {
+  margin-bottom: 0.15rem;
 }
 
 .ns-bench-dashboard .bar-row {
@@ -653,6 +663,10 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
   grid-template-columns: minmax(15rem, 20rem) minmax(0, 1fr);
   min-height: 34rem;
   overflow: hidden;
+}
+
+.ns-bench-dashboard .function-explorer {
+  container-type: inline-size;
 }
 
 .ns-bench-dashboard .function-sidebar {
@@ -1164,19 +1178,29 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
   font-weight: 760;
 }
 
-.ns-bench-dashboard .link-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
+.ns-bench-dashboard .report-list {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
 }
 
-.ns-bench-dashboard .dash-link {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.45rem 0.65rem;
-  text-decoration: none;
-  font-weight: 650;
+.ns-bench-dashboard .report-list li {
+  color: var(--quiet);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  padding-left: 1rem;
+  position: relative;
+}
+
+.ns-bench-dashboard .report-list li::before {
+  color: var(--quiet);
+  content: "\2013";
+  left: 0;
+  position: absolute;
+}
+
+.ns-bench-dashboard .report-list a {
+  font-weight: 700;
 }
 
 .ns-bench-dashboard .is-coach-target {
@@ -1278,10 +1302,75 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   max-width: min(760px, calc(100vw - 24px));
 }
 
+.ns-tip-head {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.64rem 0.86rem 0.3rem;
+}
+
 .ns-tip-title {
   font-size: 0.92rem;
   font-weight: 760;
   padding: 0.76rem 0.86rem 0.3rem;
+}
+
+.ns-tip-head .ns-tip-title {
+  min-width: 0;
+  padding: 0;
+}
+
+.ns-tip-backend-switch {
+  background: color-mix(in srgb, var(--ns-tip-bg) 88%, var(--ns-tip-fg) 12%);
+  border: 1px solid color-mix(in srgb, var(--ns-tip-border) 84%, var(--ns-tip-fg) 16%);
+  border-radius: 7px;
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.ns-tip-backend-button {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--ns-tip-fg);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 760;
+  gap: 0.32rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0.42rem 0.58rem;
+  white-space: nowrap;
+}
+
+.ns-tip-backend-button + .ns-tip-backend-button {
+  border-left: 1px solid color-mix(in srgb, var(--ns-tip-border) 84%, transparent);
+}
+
+.ns-tip-backend-button:hover,
+.ns-tip-backend-button:focus-visible {
+  background: color-mix(in srgb, var(--ns-tip-fg) 8%, transparent);
+  outline: none;
+}
+
+.ns-tip-backend-button.is-active {
+  background: var(--ns-tip-fg);
+  color: var(--ns-tip-bg);
+}
+
+.ns-tip-backend-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.72;
+}
+
+.ns-tip-backend-panel[hidden] {
+  display: none;
 }
 
 .ns-tip-meta {
@@ -1347,6 +1436,35 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   max-height: min(420px, 68vh);
   overscroll-behavior: contain;
   overflow: auto;
+}
+
+.ns-load-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 0.58rem;
+  border-top: 1px solid var(--ns-tip-border, var(--bs-border-color));
+}
+
+.ns-load-more-button {
+  border: 1px solid var(--ns-tip-border, var(--bs-border-color));
+  border-radius: 0.42rem;
+  background: var(--ns-tip-tab-bg, var(--bs-tertiary-bg));
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.42rem 0.85rem;
+}
+
+.ns-load-more-button:hover,
+.ns-load-more-button:focus-visible {
+  background: var(--ns-tip-tab-active-bg, var(--bs-secondary-bg));
+  outline: none;
+}
+
+.ns-load-more-count {
+  color: var(--ns-tip-muted, var(--bs-secondary-color));
+  font-weight: 500;
 }
 
 .ns-tip-table {
@@ -1416,6 +1534,25 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
 .contribution + .next-article {
   display: none !important;
+}
+
+@container (max-width: 46rem) {
+  .ns-bench-dashboard .function-explorer-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .ns-bench-dashboard .function-sidebar {
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+  }
+
+  .ns-bench-dashboard .function-list {
+    max-height: 20rem;
+  }
+
+  .ns-bench-dashboard .function-detail-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 1200px) {
@@ -1525,6 +1662,64 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     columns: 1;
   }
 }
+
+.ns-bench-dashboard .snapshot-strip-simple {
+  gap: 0.3rem 0;
+}
+
+.ns-bench-dashboard .snapshot-meta {
+  color: var(--quiet);
+  font-size: 0.75rem;
+}
+
+.ns-bench-dashboard .snapshot-meta + .snapshot-meta::before {
+  color: color-mix(in srgb, var(--quiet) 70%, transparent);
+  content: "\00b7";
+  margin: 0 0.55rem;
+}
+
+.ns-bench-dashboard .backend-comparison {
+  background: color-mix(in srgb, var(--panel) 94%, var(--ink) 6%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.7rem;
+}
+
+.ns-bench-dashboard .backend-comparison-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: space-between;
+}
+
+.ns-bench-dashboard .backend-comparison-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.ns-bench-dashboard .backend-comparison-note {
+  color: var(--quiet);
+  font-size: 0.72rem;
+}
+
+.ns-bench-dashboard .backend-lens-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ns-bench-dashboard .backend-lens-table[hidden] {
+  display: none !important;
+}
+
+.ns-bench-dashboard .function-list-winner {
+  color: var(--quiet);
+  font-size: 0.68rem;
+  font-weight: 700;
+  grid-column: 1 / -1;
+  text-transform: uppercase;
+}
 </style>
 
 <div class="ns-bench-dashboard">
@@ -1532,38 +1727,37 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     <div class="bench-kicker">NumSharp performance lab</div>
     <h2 class="bench-title">Benchmark Dashboard</h2>
     <p class="bench-subtitle">
-      A compact operating view of the NumSharp vs NumPy benchmark suite: 14 official op suites,
-      all supported dtypes where applicable, three cache tiers, and five subsystem scans for iterator,
-      layout, operand, cast, and fusion behavior.
+      A compact operating view of the NumSharp vs NumPy benchmark suite: 18 official op suites,
+      all supported dtypes where applicable, three cache tiers, and six complementary scans for
+      iterator, layout, operand, cast, fusion, and native OpenBLAS/LAPACK behavior.
     </p>
-    <div class="snapshot-strip" aria-label="Benchmark snapshot details">
-      <span class="snapshot-pill">Snapshot: 2026-06-23</span>
-      <span class="snapshot-pill">Commit: e3b7c268</span>
-      <span class="snapshot-pill">NumPy: 2.4.2</span>
-      <span class="snapshot-pill">Ratio: NumPy_ms / NumSharp_ms</span>
-      <span class="snapshot-pill">Higher is better</span>
+    <div class="snapshot-strip snapshot-strip-simple" aria-label="Benchmark snapshot details">
+      <span class="snapshot-meta" data-snapshot-date>Snapshot 2026-08-24</span>
+      <span class="snapshot-meta" data-snapshot-commit>Commit 938d0449</span>
+      <span class="snapshot-meta" data-snapshot-numpy>NumPy 2.4.2</span>
+      <span class="snapshot-meta">Ratio NumPy / NumSharp</span>
     </div>
   </section>
 
   <section class="metric-grid" aria-label="Headline benchmark metrics">
     <article class="metric-card">
-      <div class="metric-label">Operation cells</div>
-      <div class="metric-value">1,851</div>
-      <p class="metric-note">op x dtype x size rows in the official matrix</p>
+      <div class="metric-label">API coverage</div>
+      <div class="metric-value metric-good">98.7%</div>
+      <p class="metric-note">455 / 461 benchmarkable NumSharp-compatible APIs have benchmark evidence</p>
     </article>
     <article class="metric-card">
-      <div class="metric-label">Large arrays</div>
-      <div class="metric-value metric-good">1.26x</div>
-      <p class="metric-note">10M-element geomean, 80% of NumPy time</p>
+      <div class="metric-label">Effective geomean</div>
+      <div class="metric-value metric-good" data-effective-geomean>—</div>
+      <p class="metric-note">Best valid implementation selected per comparable cell</p>
     </article>
     <article class="metric-card">
-      <div class="metric-label">Cache tier</div>
-      <div class="metric-value metric-near">0.90x</div>
-      <p class="metric-note">100K-element geomean, current main pressure point</p>
+      <div class="metric-label">Backends Supported</div>
+      <div class="metric-value metric-good">2/2</div>
+      <p class="metric-note">Managed C# Native Backend<br>OpenBLAS Backend</p>
     </article>
     <article class="metric-card">
       <div class="metric-label">Cast subsystem</div>
-      <div class="metric-value metric-good">1,439</div>
+      <div class="metric-value metric-good">1,187</div>
       <p class="metric-note">wins out of 1,568 comparable cast cells</p>
     </article>
   </section>
@@ -1586,13 +1780,13 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       </div>
       <div class="guide-primer-row">
         <div class="guide-primer-term">Drill-down</div>
-        <div class="guide-primer-detail">Click Status Mix segments, Suite Scoreboard rows, and Dtype Heatmap cards to open the internal top-25 best and worst benchmark rows for that grouping.</div>
+        <div class="guide-primer-detail">Click Status Mix segments, Suite Scoreboard rows, and Dtype Heatmap cards to open the first 25 best and worst benchmark rows; use Load More to reveal the rest.</div>
       </div>
     </div>
     <div class="guide-grid">
       <div class="guide-block">
         <h3>Cell</h3>
-        <p>One benchmark row: operation, dtype, and size tier. The dashboard uses best timed runs after warmup.</p>
+      <p>One benchmark row: operation, dtype, and size tier. The dashboard uses best timed runs after warmup. Allocation-heavy families retain the 10M tier label while both NumPy and NumSharp use a symmetric 1M physical-work cap; 1M is not a separate dashboard tier.</p>
       </div>
       <div class="guide-block">
         <h3>Reading Ratios</h3>
@@ -1602,10 +1796,10 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     <div class="guide-block guide-band-block">
       <h3>Performance Bands</h3>
       <div class="guide-band-row" aria-label="Performance color bands">
-        <span class="guide-band faster">Faster: 1.00x and above</span>
-        <span class="guide-band close">Close: 0.50x to 1.00x</span>
-        <span class="guide-band slower">Slower: 0.20x to 0.50x</span>
-        <span class="guide-band much">Much slower: below 0.20x</span>
+        <span class="guide-band faster">Faster: 1.05x and above</span>
+        <span class="guide-band close">Close: 0.80x to 1.05x</span>
+        <span class="guide-band slower">Slower: 0.33x to 0.80x</span>
+        <span class="guide-band much">Much slower: below 0.33x</span>
         <span class="guide-band nodata">No data: pending C# measurement</span>
       </div>
     </div>
@@ -1614,9 +1808,9 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   <section>
     <div class="section-head">
       <h2>Status Mix</h2>
-      <p class="section-note">All measured rows classified by NumPy / NumSharp, including sub-microsecond rows; only no-data cells are separate</p>
+      <p class="section-note">Credible rows are grouped by NumPy / NumSharp ratio; negligible and no-data cells are separate</p>
     </div>
-    <div class="status-bar" role="list" aria-label="Status mix ratio bands ordered from fastest measured rows to slowest measured rows, followed by no-data rows">
+    <div class="status-bar" role="list" aria-label="Status mix ratio bands ordered from fastest credible rows to slowest credible rows, followed by negligible, failed, and no-data rows">
       <span class="status-segment band-faster-100x tip-left" role="listitem" tabindex="0" style="--w:0.216%" aria-label="4 rows at 100x or faster" data-tip="4 faster rows, &gt;=100x&#10;1. np.zeros_like (float64) | dtype=float64 | N=10M | 2150.69x | NS &lt;0.1% NP&#10;2. np.zeros_like (int64) | dtype=int64 | N=10M | 1585.88x | NS 0.1% NP&#10;3. np.zeros_like (int32) | dtype=int32 | N=10M | 1230.61x | NS 0.1% NP&#10;4. np.zeros_like (float32) | dtype=float32 | N=10M | 1061.51x | NS 0.1% NP"></span>
       <span class="status-segment band-faster-20 tip-left" role="listitem" tabindex="0" style="--w:0.054%" aria-label="1 row at 20x to 100x faster" data-tip="1 faster row, 20-100x&#10;1. np.prod axis=1 (float64) | dtype=float64 | N=10M | 23.97x | NS 4.2% NP"></span>
       <span class="status-segment band-faster-10 tip-left" role="listitem" tabindex="0" style="--w:1.243%" aria-label="23 rows at 10x to 20x faster" data-tip="23 faster rows, 10-20x (top 10)&#10;1. np.dot(a, b) (float64) | dtype=float64 | N=100K | 14.17x | NS 7.1% NP&#10;2. np.prod (float64) | dtype=float64 | N=100K | 13.75x | NS 7.3% NP&#10;3. np.nanstd(a) (float64) | dtype=float64 | N=1K | 13.33x | NS 7.5% NP&#10;4. np.std (float32) | dtype=float32 | N=1K | 12.79x | NS 7.8% NP&#10;5. np.nanstd(a) (float16) | dtype=float16 | N=1K | 12.50x | NS 8.0% NP&#10;6. np.percentile(a, 50) (float64) | dtype=float64 | N=1K | 12.18x | NS 8.2% NP&#10;7. np.nanquantile(a, 0.5) (float32) | dtype=float32 | N=1K | 11.86x | NS 8.4% NP&#10;8. np.nanvar(a) (float16) | dtype=float16 | N=1K | 11.67x | NS 8.6% NP&#10;9. np.nanpercentile(a, 50) (float32) | dtype=float32 | N=1K | 11.51x | NS 8.7% NP&#10;10. np.nanpercentile(a, 50) (float64) | dtype=float64 | N=1K | 11.42x | NS 8.8% NP"></span>
@@ -1633,24 +1827,35 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       <span class="status-segment band-much-010 tip-right" role="listitem" tabindex="0" style="--w:3.944%" aria-label="73 much slower rows at 0.10x to 0.20x" data-tip="73 much slower rows, 0.10-0.20x (top 10)&#10;1. a + 5 (literal) (uint32) | dtype=uint32 | N=1K | 0.20x | NS 502.0% NP&#10;2. np.floor (float64) | dtype=float64 | N=100K | 0.20x | NS 501.8% NP&#10;3. np.left_shift(a, 2) (uint16) | dtype=uint16 | N=1K | 0.20x | NS 502.8% NP&#10;4. np.left_shift(a, 2) (uint32) | dtype=uint32 | N=1K | 0.20x | NS 502.6% NP&#10;5. np.sign (float64) | dtype=float64 | N=1K | 0.20x | NS 504.1% NP&#10;6. a * 2 (literal) (float32) | dtype=float32 | N=1K | 0.20x | NS 504.5% NP&#10;7. np.left_shift(a, 2) (int16) | dtype=int16 | N=1K | 0.20x | NS 510.5% NP&#10;8. np.add(a, b) (float64) | dtype=float64 | N=1K | 0.20x | NS 514.0% NP&#10;9. np.right_shift(a, 2) (uint16) | dtype=uint16 | N=1K | 0.20x | NS 511.7% NP&#10;10. np.exp2 (float32) | dtype=float32 | N=100K | 0.19x | NS 515.7% NP"></span>
       <span class="status-segment band-much-005 tip-right" role="listitem" tabindex="0" style="--w:2.215%" aria-label="41 much slower rows at 0.05x to 0.10x" data-tip="41 much slower rows, 0.05-0.10x (top 10)&#10;1. np.right_shift(a, 2) (int16) | dtype=int16 | N=100K | 0.10x | NS 1021.3% NP&#10;2. np.zeros_like (int32) | dtype=int32 | N=1K | 0.10x | NS 1051.8% NP&#10;3. np.zeros_like (int64) | dtype=int64 | N=1K | 0.10x | NS 1056.4% NP&#10;4. np.invert(a) (bool) | dtype=bool | N=100K | 0.09x | NS 1068.5% NP&#10;5. np.ones (float32) | dtype=float32 | N=1K | 0.09x | NS 1080.3% NP&#10;6. a[::-1] (reversed) | dtype=float64 | N=10M | 0.09x | NS 1091.4% NP&#10;7. a | b (uint64) | dtype=uint64 | N=1K | 0.09x | NS 1094.0% NP&#10;8. np.invert(a) (uint64) | dtype=uint64 | N=1K | 0.09x | NS 1161.5% NP&#10;9. np.isnan(a) (float32) | dtype=float32 | N=100K | 0.09x | NS 1177.4% NP&#10;10. np.full (float32) | dtype=float32 | N=1K | 0.08x | NS 1199.1% NP"></span>
       <span class="status-segment band-much-000 tip-right" role="listitem" tabindex="0" style="--w:0.756%" aria-label="14 much slower rows below 0.05x" data-tip="14 much slower rows, &lt;0.05x (slowest 10)&#10;1. np.empty (float64) | dtype=float64 | N=1K | 0.02x | NS 4784.9% NP&#10;2. np.empty (int32) | dtype=int32 | N=100K | 0.02x | NS 4659.1% NP&#10;3. np.empty (int64) | dtype=int64 | N=100K | 0.02x | NS 4388.7% NP&#10;4. np.empty (float64) | dtype=float64 | N=100K | 0.02x | NS 4137.0% NP&#10;5. np.empty (int64) | dtype=int64 | N=1K | 0.03x | NS 3888.0% NP&#10;6. np.empty (float32) | dtype=float32 | N=100K | 0.03x | NS 3787.7% NP&#10;7. np.zeros (float64) | dtype=float64 | N=1K | 0.03x | NS 3534.8% NP&#10;8. np.empty (int32) | dtype=int32 | N=1K | 0.03x | NS 3239.4% NP&#10;9. np.zeros (int32) | dtype=int32 | N=1K | 0.04x | NS 2881.0% NP&#10;10. np.copy (int64) | dtype=int64 | N=1K | 0.04x | NS 2479.3% NP"></span>
+      <span class="status-segment band-negligible tip-right" role="listitem" tabindex="0" style="--w:0%" aria-label="Negligible rows excluded from performance bands"></span>
+      <span class="status-segment band-failed tip-right" role="listitem" tabindex="0" style="--w:0%" aria-label="Failed benchmark rows"></span>
       <span class="status-segment band-nodata tip-right" role="listitem" tabindex="0" style="--w:3.73%" aria-label="69 no-data rows pending C# measurements" data-tip="69 no-data rows, pending C# measurements (first 10)&#10;1. matrix + scalar | dtype=float64 | N=1K | pending C#&#10;2. matrix + row_vector (N,M)+(M,) | dtype=float64 | N=1K | pending C#&#10;3. matrix + col_vector (N,M)+(N,1) | dtype=float64 | N=1K | pending C#&#10;4. np.broadcast_to(row, (N,M)) | dtype=float64 | N=1K | pending C#&#10;5. matrix + scalar | dtype=float64 | N=100K | pending C#&#10;6. matrix + row_vector (N,M)+(M,) | dtype=float64 | N=100K | pending C#&#10;7. matrix + col_vector (N,M)+(N,1) | dtype=float64 | N=100K | pending C#&#10;8. np.broadcast_to(row, (N,M)) | dtype=float64 | N=100K | pending C#&#10;9. reshape 1D-&gt;2D | dtype=float64 | N=1K | pending C#&#10;10. reshape 2D-&gt;1D | dtype=float64 | N=1K | pending C#"></span>
     </div>
     <div class="legend-grid">
-      <span class="legend-item"><span class="legend-swatch s-extreme"></span>4 x100+ faster</span>
-      <span class="legend-item"><span class="legend-swatch s-faster"></span>925 faster, 1.00-100x</span>
-      <span class="legend-item"><span class="legend-swatch s-close"></span>434 close, 0.50-1.00x</span>
-      <span class="legend-item"><span class="legend-swatch s-slower"></span>291 slower, 0.20-0.50x</span>
-      <span class="legend-item"><span class="legend-swatch s-much"></span>128 much slower, &lt;0.20x</span>
-      <span class="legend-item"><span class="legend-swatch s-nodata"></span>69 no data</span>
+      <span class="legend-item" data-status-summary="extreme"><span class="legend-swatch s-extreme"></span>4 x100+ faster</span>
+      <span class="legend-item" data-status-summary="faster"><span class="legend-swatch s-faster"></span>933 faster, 1.05-100x</span>
+      <span class="legend-item" data-status-summary="close"><span class="legend-swatch s-close"></span>523 close, 0.80-1.05x</span>
+      <span class="legend-item" data-status-summary="slower"><span class="legend-swatch s-slower"></span>954 slower, 0.33-0.80x</span>
+      <span class="legend-item" data-status-summary="much"><span class="legend-swatch s-much"></span>516 much slower, &lt;0.33x</span>
+      <span class="legend-item" data-status-summary="negligible"><span class="legend-swatch s-negligible"></span>Negligible</span>
+      <span class="legend-item" data-status-summary="failed"><span class="legend-swatch s-failed"></span>Failed</span>
+      <span class="legend-item" data-status-summary="nodata"><span class="legend-swatch s-nodata"></span>63 no data</span>
     </div>
   </section>
 
   <section>
     <div class="section-head">
       <h2>Suite Scoreboard</h2>
-      <p class="section-note">Geomean across credible rows. Parity marker is 1.0x.</p>
+      <p class="section-note" data-suite-scoreboard-note>Geomean across credible rows. Parity marker is 1.0x.</p>
     </div>
-    <div class="bar-table">
+    <div class="suite-scoreboard" data-suite-scoreboard>
+      <div class="dtype-tabs suite-tabs" role="tablist" aria-label="Suite scoreboard views">
+        <button class="dtype-tab suite-tab is-active" type="button" role="tab" id="suite-tab-overall" aria-controls="suite-scoreboard-table" aria-selected="true" data-suite-tier="overall">Geomean</button>
+        <button class="dtype-tab suite-tab" type="button" role="tab" id="suite-tab-n1k" aria-controls="suite-scoreboard-table" aria-selected="false" tabindex="-1" data-suite-tier="n1k">1K</button>
+        <button class="dtype-tab suite-tab" type="button" role="tab" id="suite-tab-n100k" aria-controls="suite-scoreboard-table" aria-selected="false" tabindex="-1" data-suite-tier="n100k">100K</button>
+        <button class="dtype-tab suite-tab" type="button" role="tab" id="suite-tab-n10m" aria-controls="suite-scoreboard-table" aria-selected="false" tabindex="-1" data-suite-tier="n10m">10M</button>
+      </div>
+      <div class="bar-table" id="suite-scoreboard-table" role="tabpanel" aria-labelledby="suite-tab-overall">
       <div class="bar-row">
         <span class="bar-label">Statistics</span>
         <span class="bar-track"><span class="bar-fill" style="--w:89.6%; --tone:var(--good)"></span></span>
@@ -1677,8 +1882,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       </div>
       <div class="bar-row">
         <span class="bar-label">Creation</span>
-        <span class="bar-track"><span class="bar-fill" style="--w:41.6%; --tone:var(--good)"></span></span>
-        <span class="bar-score metric-good">1.04x</span>
+        <span class="bar-track"><span class="bar-fill" style="--w:41.6%; --tone:var(--near)"></span></span>
+        <span class="bar-score metric-near">1.04x</span>
         <span class="bar-count">23 / 21</span>
       </div>
       <div class="bar-row">
@@ -1729,6 +1934,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         <span class="bar-score metric-slow">0.40x</span>
         <span class="bar-count">1 / 1</span>
       </div>
+      </div>
     </div>
   </section>
 
@@ -1751,8 +1957,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         <div class="dtype-cell heat-good" style="--heat-width:62%"><span class="dtype-name">int16</span><span class="dtype-score">1.39x</span><span class="dtype-count">66 rows</span><span class="dtype-meter"><span></span></span></div>
         <div class="dtype-cell heat-good" style="--heat-width:57%"><span class="dtype-name">float16</span><span class="dtype-score">1.28x</span><span class="dtype-count">224 rows</span><span class="dtype-meter"><span></span></span></div>
         <div class="dtype-cell heat-good" style="--heat-width:48%"><span class="dtype-name">uint32</span><span class="dtype-score">1.09x</span><span class="dtype-count">65 rows</span><span class="dtype-meter"><span></span></span></div>
-        <div class="dtype-cell heat-good" style="--heat-width:46%"><span class="dtype-name">complex128</span><span class="dtype-score">1.04x</span><span class="dtype-count">64 rows</span><span class="dtype-meter"><span></span></span></div>
-        <div class="dtype-cell heat-good" style="--heat-width:45%"><span class="dtype-name">float32</span><span class="dtype-score">1.01x</span><span class="dtype-count">233 rows</span><span class="dtype-meter"><span></span></span></div>
+        <div class="dtype-cell heat-near" style="--heat-width:46%"><span class="dtype-name">complex128</span><span class="dtype-score">1.04x</span><span class="dtype-count">64 rows</span><span class="dtype-meter"><span></span></span></div>
+        <div class="dtype-cell heat-near" style="--heat-width:45%"><span class="dtype-name">float32</span><span class="dtype-score">1.01x</span><span class="dtype-count">233 rows</span><span class="dtype-meter"><span></span></span></div>
         <div class="dtype-cell heat-near" style="--heat-width:42%"><span class="dtype-name">float64</span><span class="dtype-score">0.95x</span><span class="dtype-count">257 rows</span><span class="dtype-meter"><span></span></span></div>
         <div class="dtype-cell heat-near" style="--heat-width:41%"><span class="dtype-name">int32</span><span class="dtype-score">0.93x</span><span class="dtype-count">111 rows</span><span class="dtype-meter"><span></span></span></div>
         <div class="dtype-cell heat-near" style="--heat-width:33%"><span class="dtype-name">int64</span><span class="dtype-score">0.75x</span><span class="dtype-count">118 rows</span><span class="dtype-meter"><span></span></span></div>
@@ -1815,23 +2021,23 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     <div class="story-grid">
       <article class="story-card">
         <h3>NDIter</h3>
-        <strong class="metric-good">1.18x</strong>
-        <p>Iterator operation geomean. Strong reductions and dtype loops, with copy/cast and index math still visible as overhead canaries.</p>
+        <strong class="metric-good">1.46x</strong>
+        <p>Iterator operation geomean across 165 comparable cells: 108 wins and 57 losses, with no sections excluded by the access-violation policy.</p>
       </article>
       <article class="story-card">
         <h3>Layout</h3>
-        <strong class="metric-near">0.50-1.80x</strong>
-        <p>Layout scans expose the real split: large elementwise wins, while strided/broadcast reductions and decimal sums trail.</p>
+        <strong class="metric-near">0.54-9.24x</strong>
+        <p>Published geomeans by layout span 0.54x to 9.24x: large copy and elementwise paths win, while strided/broadcast reductions and decimal sums trail.</p>
       </article>
       <article class="story-card">
         <h3>Cast</h3>
-        <strong class="metric-good">1,439 wins</strong>
+        <strong class="metric-good">1,187 wins</strong>
         <p>The full src-to-dst astype grid is broadly ahead. Remaining lag clusters around same-type diagonal copy and bool conversion cases.</p>
       </article>
       <article class="story-card">
         <h3>Fusion</h3>
-        <strong class="metric-good">4.16x</strong>
-        <p>The best fixed expression speedup for fused <code>np.evaluate</code> over NumSharp's unfused chain; broadcast fusion reaches 3.60x.</p>
+        <strong class="metric-good">4.12x</strong>
+        <p>The best fixed expression speedup for fused <code>np.evaluate</code> over NumSharp's unfused chain; broadcast fusion reaches 4.10x.</p>
       </article>
     </div>
   </section>
@@ -1839,19 +2045,19 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   <section class="function-explorer" data-function-explorer aria-labelledby="function-explorer-title">
     <div class="section-head">
       <h2 id="function-explorer-title">Function Explorer</h2>
-      <p class="section-note">Search every named np.* API in the latest matrix, then inspect dtype, size, scenario, and raw timing rows</p>
+      <p class="section-note">Scores use credible rows only; negligible and no-data cells remain available in the raw tables</p>
     </div>
     <div class="function-explorer-shell">
       <aside class="function-sidebar" aria-label="np function list">
         <div class="function-controls">
-          <input class="function-search" type="search" placeholder="Search np.*" aria-label="Search np functions" data-function-search>
+          <input class="function-search" type="search" placeholder="Search API" aria-label="Search benchmarked APIs" data-function-search>
           <div class="function-filter-row">
             <select class="function-select" aria-label="Filter functions by suite" data-function-suite-filter>
               <option value="">All suites</option>
             </select>
             <select class="function-select" aria-label="Sort functions" data-function-sort>
+              <option value="best" selected>Best first</option>
               <option value="worst">Worst first</option>
-              <option value="best">Best first</option>
               <option value="name">Name</option>
               <option value="rows">Most rows</option>
             </select>
@@ -1868,7 +2074,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
   <section>
     <div class="section-head">
-      <h2>Optimization Priorities</h2>
+      <h2>Optimization Priorities Recommended</h2>
       <p class="section-note">Current optimization priorities from the latest snapshot</p>
     </div>
     <div class="priority-grid priority-grid-compact">
@@ -1909,16 +2115,17 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       <h2>Full Reports</h2>
       <p class="section-note">Detailed tables remain available for traceability</p>
     </div>
-    <div class="link-strip">
-      <a class="dash-link" href="../../../benchmark/history/latest/MANIFEST.md">Snapshot manifest</a>
-      <a class="dash-link" href="../../../benchmark/history/latest/benchmark-report.md">Unified report</a>
-      <a class="dash-link" href="../../../benchmark/history/latest/cast_results.md">Cast matrix</a>
-      <a class="dash-link" href="../../../benchmark/history/latest/nditer_results.md">NDIter results</a>
-      <a class="dash-link" href="../../../benchmark/history/latest/layout_results.md">Layout matrix</a>
-      <a class="dash-link" href="../../../benchmark/history/latest/operand_results.md">Operand layouts</a>
-      <a class="dash-link" href="../../../benchmark/history/latest/fusion_results.md">Fusion results</a>
-      <a class="dash-link" href="il-generation.md">IL generation</a>
-    </div>
+    <ul class="report-list">
+      <li><a href="../../../benchmark/history/latest/MANIFEST.md">Snapshot manifest</a> — snapshot provenance, versions, commit, and artifact inventory.</li>
+      <li><a href="../../../benchmark/history/latest/benchmark-report.md">Unified report</a> — unified operation matrix and subsystem results.</li>
+      <li><a href="../../../benchmark/history/latest/cast_results.md">Cast matrix</a> — source/destination dtype and layout cast matrix.</li>
+      <li><a href="../../../benchmark/history/latest/nditer_results.md">NDIter results</a> — NDIter construction, traversal, and operation timings.</li>
+      <li><a href="../../../benchmark/history/latest/layout_results.md">Layout matrix</a> — memory-layout benchmark matrix.</li>
+      <li><a href="../../../benchmark/history/latest/operand_results.md">Operand layouts</a> — scalar, mixed, broadcast, and operand-layout results.</li>
+      <li><a href="../../../benchmark/history/latest/fusion_results.md">Fusion results</a> — fused versus unfused expression timings.</li>
+      <li><a href="../../../benchmark/history/latest/openblas_results.md">OpenBLAS results</a> — native product, sliding-dot, and LAPACK timings.</li>
+      <li><a href="il-generation.md">IL generation</a> — IL-generation implementation and performance notes.</li>
+    </ul>
   </section>
 </div>
 
@@ -1993,7 +2200,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     });
   });
 
-  const reportUrl = new URL("data/benchmark-report.json", window.location.href);
+  const reportUrl = new URL(window.NUMSHARP_BENCHMARK_REPORT_URL || "data/benchmark-report.json", window.location.href);
+  reportUrl.searchParams.set("schema", "2");
   const topCount = 25;
   const tooltipHoverDelayMs = 5000;
   let tooltipId = 0;
@@ -2004,16 +2212,18 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     { className: "band-faster-5", title: "5x to 10x faster", min: 5, max: 10, sort: "desc" },
     { className: "band-faster-2", title: "2x to 5x faster", min: 2, max: 5, sort: "desc" },
     { className: "band-faster-125", title: "1.25x to 2x faster", min: 1.25, max: 2, sort: "desc" },
-    { className: "band-faster-100", title: "1.00x to 1.25x faster", min: 1, max: 1.25, sort: "desc" },
-    { className: "band-close-090", title: "0.90x to 1.00x", min: 0.9, max: 1, sort: "desc" },
-    { className: "band-close-075", title: "0.75x to 0.90x", min: 0.75, max: 0.9, sort: "desc" },
-    { className: "band-close-050", title: "0.50x to 0.75x", min: 0.5, max: 0.75, sort: "desc" },
-    { className: "band-slower-040", title: "0.40x to 0.50x", min: 0.4, max: 0.5, sort: "asc" },
-    { className: "band-slower-030", title: "0.30x to 0.40x", min: 0.3, max: 0.4, sort: "asc" },
-    { className: "band-slower-020", title: "0.20x to 0.30x", min: 0.2, max: 0.3, sort: "asc" },
-    { className: "band-much-010", title: "0.10x to 0.20x", min: 0.1, max: 0.2, sort: "asc" },
-    { className: "band-much-005", title: "0.05x to 0.10x", min: 0.05, max: 0.1, sort: "asc" },
-    { className: "band-much-000", title: "Below 0.05x", max: 0.05, sort: "asc" },
+    { className: "band-faster-100", title: "1.05x to 1.25x faster", min: 1.05, max: 1.25, sort: "desc" },
+    { className: "band-close-090", title: "0.95x to 1.05x", min: 0.95, max: 1.05, sort: "desc" },
+    { className: "band-close-075", title: "0.875x to 0.95x", min: 0.875, max: 0.95, sort: "desc" },
+    { className: "band-close-050", title: "0.80x to 0.875x", min: 0.8, max: 0.875, sort: "desc" },
+    { className: "band-slower-040", title: "0.60x to 0.80x", min: 0.6, max: 0.8, sort: "asc" },
+    { className: "band-slower-030", title: "0.45x to 0.60x", min: 0.45, max: 0.6, sort: "asc" },
+    { className: "band-slower-020", title: "0.33x to 0.45x", min: 0.33, max: 0.45, sort: "asc" },
+    { className: "band-much-010", title: "0.20x to 0.33x", min: 0.2, max: 0.33, sort: "asc" },
+    { className: "band-much-005", title: "0.10x to 0.20x", min: 0.1, max: 0.2, sort: "asc" },
+    { className: "band-much-000", title: "Below 0.10x", max: 0.1, sort: "asc" },
+    { className: "band-negligible", title: "Negligible", negligible: true, sort: "index" },
+    { className: "band-failed", title: "Failed", failed: true, sort: "index" },
     { className: "band-nodata", title: "No data", noData: true, sort: "index" }
   ];
 
@@ -2032,14 +2242,63 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     .replace(/'/g, "&#39;");
 
   const numberOrNull = (value) => {
+    if (value === null || value === undefined || value === "") return null;
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
   };
 
+  // Keep every geomean on the report generator's credibility contract. In particular, a
+  // non-null ratio is not necessarily comparable: sub-microsecond/view/lazy-allocation cells and
+  // >20x artifacts are deliberately published with status="negligible" so raw timing remains
+  // inspectable without letting call overhead masquerade as throughput.
+  const excludedGeomeanStatuses = new Set(["no_data", "negligible", "failed"]);
+  const isCredibleRow = (row) => Number.isFinite(row.ratio)
+    && row.ratio > 0
+    && !excludedGeomeanStatuses.has(row.status);
+  // Negligible rows have exactly one UI home: the dedicated status-band tooltip. Keep them out
+  // of the Function Explorer entirely, including its raw tab and timed-row denominator.
+  const isExplorerRow = (row) => row.status !== "negligible";
+
   const functionNameFromOperation = (operation) => {
-    const match = String(operation || "").match(/\bnp\.[A-Za-z_][A-Za-z0-9_]*/);
-    return match ? match[0] : null;
+    const value = String(operation || "");
+    const npMatch = value.match(/\bnp(?:\.[A-Za-z_][A-Za-z0-9_]*)+/);
+    if (npMatch) return npMatch[0];
+    const ndarrayMatch = value.match(/^\s*a\.([A-Za-z_][A-Za-z0-9_]*)/);
+    return ndarrayMatch ? `ndarray.${ndarrayMatch[1]}` : null;
   };
+
+  const o1FunctionNames = new Set([
+    "np.real", "np.asarray", "np.asanyarray", "np.asmatrix", "np.frombuffer",
+    "np.atleast_1d", "np.atleast_2d", "np.atleast_3d", "np.array_split", "np.split",
+    "np.dsplit", "np.hsplit", "np.vsplit", "np.unstack", "np.broadcast_arrays",
+    "np.broadcast_to", "np.diagonal", "np.expand_dims", "np.flip", "np.fliplr", "np.flipud",
+    "np.matrix_transpose", "np.moveaxis", "np.permute_dims", "np.ravel", "np.reshape",
+    "np.rollaxis", "np.rot90", "np.squeeze", "np.swapaxes", "np.transpose", "np.ix_", "np.size",
+    "np.iscomplexobj", "np.isrealobj", "np.isscalar", "np.isfortran", "np.can_cast",
+    "np.common_type", "np.isdtype", "np.issubdtype", "np.min_scalar_type", "np.mintypecode",
+    "np.promote_types", "np.result_type", "np.iterable", "np.nested_iters",
+    "np.format_float_positional", "np.format_float_scientific", "np.get_printoptions",
+    "np.printoptions", "np.set_printoptions", "np.einsum_path", "np.linalg.diagonal",
+    "np.linalg.matrix_transpose", "ndarray.T", "ndarray.conj", "ndarray.conjugate",
+    "ndarray.diagonal", "ndarray.getfield", "ndarray.item", "ndarray.ravel", "ndarray.reshape",
+    "ndarray.setflags", "ndarray.squeeze", "ndarray.swapaxes", "ndarray.to_device",
+    "ndarray.transpose", "ndarray.view"
+  ]);
+  const o1ExactOperations = new Set([
+    "np.diag", "np.diag(a2d)", "reshape 1d->2d", "reshape 1d->3d", "reshape 2d->1d",
+    "a[100:1000] (contiguous slice)", "a[10:100, :] (row slice 2d)",
+    "a[:, 10:100] (col slice 2d)", "a[::-1] (reversed)", "a[::-1]",
+    "a[::2] (strided slice)"
+  ]);
+  const isO1Operation = (operation) => {
+    const value = String(operation || "")
+      .replace(/\s*\((?:bool|u?int\d+|float\d+|complex\d+|decimal)\)\s*$/i, "")
+      .trim();
+    return o1FunctionNames.has(functionNameFromOperation(value))
+      || o1ExactOperations.has(value.toLowerCase());
+  };
+  const normalizeCredibilityStatus = (status, numSharpMs, available, operation) =>
+    available && (numSharpMs === 0 || isO1Operation(operation)) ? "negligible" : status;
 
   const formatRatio = (value) => Number.isFinite(value) ? `${value.toFixed(value >= 10 ? 2 : 3)}x` : "n/a";
   const formatMs = (value) => {
@@ -2059,6 +2318,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
   const formatBandLabel = (row) => {
     const ratio = row.ratio;
+    if (row.status === "negligible" && !Number.isFinite(ratio)) return "Negligible";
     if (!Number.isFinite(ratio)) return "No data";
     if (ratio >= 100) return "100x or faster";
     if (ratio >= 20) return "20x to 100x faster";
@@ -2066,25 +2326,25 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     if (ratio >= 5) return "5x to 10x faster";
     if (ratio >= 2) return "2x to 5x faster";
     if (ratio >= 1.25) return "1.25x to 2x faster";
-    if (ratio >= 1) return "1.00x to 1.25x faster";
-    if (ratio >= 0.9) return "0.90x to 1.00x";
-    if (ratio >= 0.75) return "0.75x to 0.90x";
-    if (ratio >= 0.5) return "0.50x to 0.75x";
-    if (ratio >= 0.4) return "0.40x to 0.50x";
-    if (ratio >= 0.3) return "0.30x to 0.40x";
-    if (ratio >= 0.2) return "0.20x to 0.30x";
+    if (ratio >= 1.05) return "1.05x to 1.25x faster";
+    if (ratio >= 0.95) return "0.95x to 1.05x";
+    if (ratio >= 0.875) return "0.875x to 0.95x";
+    if (ratio >= 0.8) return "0.80x to 0.875x";
+    if (ratio >= 0.6) return "0.60x to 0.80x";
+    if (ratio >= 0.45) return "0.45x to 0.60x";
+    if (ratio >= 0.33) return "0.33x to 0.45x";
+    if (ratio >= 0.2) return "0.20x to 0.33x";
     if (ratio >= 0.1) return "0.10x to 0.20x";
-    if (ratio >= 0.05) return "0.05x to 0.10x";
-    return "Below 0.05x";
+    return "Below 0.10x";
   };
 
   const performanceClass = (row) => {
     const ratio = row.ratio;
     if (!Number.isFinite(ratio)) return "ns-perf-empty";
     if (ratio >= 2) return "ns-perf-excellent";
-    if (ratio >= 1) return "ns-perf-good";
-    if (ratio >= 0.5) return "ns-perf-near";
-    if (ratio >= 0.2) return "ns-perf-slow";
+    if (ratio >= 0.95) return "ns-perf-good";
+    if (ratio >= 0.8) return "ns-perf-near";
+    if (ratio >= 0.33) return "ns-perf-slow";
     return "ns-perf-bad";
   };
 
@@ -2107,16 +2367,48 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     });
   };
 
+  const loadMoreMarkup = (rowCount) => rowCount > topCount ? `
+    <div class="ns-load-more-wrap">
+      <button class="ns-load-more-button" type="button" data-load-more>
+        Load More <span class="ns-load-more-count">(${rowCount - topCount} remaining)</span>
+      </button>
+    </div>` : "";
+
+  const rowVisibility = (index) => index >= topCount ? " hidden data-load-more-row" : "";
+
+  const revealRemainingRows = (button) => {
+    const scope = button.closest("[data-load-more-scope]") || button.parentElement?.parentElement;
+    if (!scope) return;
+    scope.querySelectorAll("[data-load-more-row][hidden]").forEach((row) => row.removeAttribute("hidden"));
+    button.closest(".ns-load-more-wrap")?.remove();
+  };
+
+  document.addEventListener("click", (event) => {
+    const button = event.target instanceof Element ? event.target.closest("[data-load-more]") : null;
+    if (!button) return;
+    event.preventDefault();
+    revealRemainingRows(button);
+  });
+
   const buildDataTable = (visibleRows, isNoData = false) => {
+    const availabilityLabel = (row) => {
+      const label = row.availability === "failed" ? "Benchmark failed"
+        : row.availability === "missing_backend" ? "Missing backend"
+        : row.availability === "not_supported" ? "Not supported"
+        : row.availability === "not_measured" ? "Not measured"
+        : "No comparable timing";
+      return `${label}${row.exceptionType ? ` · ${row.exceptionType}` : ""}`;
+    };
     const body = visibleRows.map((row, index) => isNoData
-      ? `<tr>
+      ? `<tr${rowVisibility(index)}>
           <td class="num">${index + 1}</td>
           <td class="op">${escapeHtml(row.operation)}</td>
           <td>${escapeHtml(row.suite)}</td>
           <td>${escapeHtml(row.dtype)}</td>
           <td class="num">${formatN(row.n)}</td>
+          <td>${escapeHtml(availabilityLabel(row))}</td>
         </tr>`
-      : `<tr>
+      : `<tr${rowVisibility(index)}>
           <td class="num">${index + 1}</td>
           <td class="op">${escapeHtml(row.operation)}</td>
           <td>${escapeHtml(row.suite)}</td>
@@ -2129,63 +2421,90 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         </tr>`).join("");
 
     const header = isNoData
-      ? `<tr><th class="num">#</th><th>Operation</th><th>Suite</th><th>Dtype</th><th class="num">N</th></tr>`
+      ? `<tr><th class="num">#</th><th>Operation</th><th>Suite</th><th>Dtype</th><th class="num">N</th><th>State</th></tr>`
       : `<tr><th class="num">#</th><th>Operation</th><th>Suite</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th><th>Band</th></tr>`;
 
     return `
-      <div class="ns-tip-scroll">
+      <div class="ns-tip-scroll" data-load-more-scope>
         <table class="ns-tip-table">
           <thead>${header}</thead>
           <tbody>${body}</tbody>
         </table>
+        ${loadMoreMarkup(visibleRows.length)}
       </div>`;
   };
 
-  const buildTooltipTable = (title, rows, options = {}) => {
+  const buildTooltipBackendPanel = (id, backend, rows, options = {}) => {
+    const isManaged = backend === "managed";
+    const label = isManaged ? "Managed Core" : "OpenBLAS";
     const isNoData = Boolean(options.noData);
-    const sortedRows = isNoData ? sortRows(rows, "index") : rows;
-    const visibleRows = sortedRows.slice(0, topCount);
-    const subtitle = isNoData
-      ? `${visibleRows.length} of ${rows.length} pending rows`
-      : `${Math.min(topCount, rows.length)} best and ${Math.min(topCount, rows.length)} worst of ${rows.length} rows · ratio = NumPy_ms / NumSharp_ms · higher is better`;
+    const hidden = isManaged ? "" : " hidden";
+    const activeClass = isManaged ? " is-active" : "";
 
-    if (visibleRows.length === 0) {
+    if (rows.length === 0) {
       return `
-        <div class="ns-tip">
-          <div class="ns-tip-title">${escapeHtml(title)}</div>
-          <div class="ns-tip-empty">No matching benchmark rows.</div>
+        <div class="ns-tip-backend-panel${activeClass}" id="${id}-${backend}" role="tabpanel"${hidden}>
+          <div class="ns-tip-meta">${label} · 0 ${isNoData ? "no-data" : "measured"} rows</div>
+          <div class="ns-tip-empty">No ${label} ${isNoData ? "unavailable records" : "measurements"} in this grouping.</div>
         </div>`;
     }
 
     if (isNoData) {
+      const visibleRows = sortRows(rows, "index");
       return `
-        <div class="ns-tip">
-          <div class="ns-tip-title">${escapeHtml(title)}</div>
-          <div class="ns-tip-meta">${escapeHtml(subtitle)}</div>
+        <div class="ns-tip-backend-panel${activeClass}" id="${id}-${backend}" role="tabpanel"${hidden}>
+          <div class="ns-tip-meta">${label} · ${Math.min(topCount, rows.length)} of ${rows.length} no-data rows</div>
           ${buildDataTable(visibleRows, true)}
         </div>`;
     }
 
-    const bestRows = sortRows(rows, "desc").slice(0, topCount);
-    const worstRows = sortRows(rows, "asc").slice(0, topCount);
-    const id = `ns-tip-${++tooltipId}`;
+    const bestRows = sortRows(rows, "desc");
+    const worstRows = sortRows(rows, "asc");
+    const rankingId = `${id}-${backend}-ranking`;
+    const subtitle = `${label} · ${Math.min(topCount, rows.length)} best and ${Math.min(topCount, rows.length)} worst of ${rows.length} rows · ratio = NumPy_ms / NumSharp_ms`;
 
     return `
-      <div class="ns-tip">
-        <div class="ns-tip-title">${escapeHtml(title)}</div>
+      <div class="ns-tip-backend-panel${activeClass}" id="${id}-${backend}" role="tabpanel"${hidden}>
         <div class="ns-tip-meta">${escapeHtml(subtitle)}</div>
-        <div class="ns-tip-switch" role="tablist" aria-label="${escapeHtml(title)} ranking">
-          <button class="ns-tip-switch-button is-active" type="button" role="tab" aria-selected="true" aria-controls="${id}-best" data-tip-tab-target="${id}-best">Best performers</button>
-          <button class="ns-tip-switch-button" type="button" role="tab" aria-selected="false" aria-controls="${id}-worst" data-tip-tab-target="${id}-worst" tabindex="-1">Worst performers</button>
+        <div class="ns-tip-switch" role="tablist" aria-label="${label} ranking">
+          <button class="ns-tip-switch-button is-active" type="button" role="tab" aria-selected="true" aria-controls="${rankingId}-best" data-tip-tab-target="${rankingId}-best">Best performers</button>
+          <button class="ns-tip-switch-button" type="button" role="tab" aria-selected="false" aria-controls="${rankingId}-worst" data-tip-tab-target="${rankingId}-worst" tabindex="-1">Worst performers</button>
         </div>
-        <div class="ns-tip-panel is-active" id="${id}-best" role="tabpanel">
+        <div class="ns-tip-panel is-active" id="${rankingId}-best" role="tabpanel">
           <div class="ns-tip-panel-note">Highest ratio in this grouping</div>
           ${buildDataTable(bestRows)}
         </div>
-        <div class="ns-tip-panel" id="${id}-worst" role="tabpanel" hidden>
+        <div class="ns-tip-panel" id="${rankingId}-worst" role="tabpanel" hidden>
           <div class="ns-tip-panel-note">Lowest ratio in this grouping</div>
           ${buildDataTable(worstRows)}
         </div>
+      </div>`;
+  };
+
+  const tooltipFunctionKey = (row) => {
+    if (row.functionName) return row.functionName;
+    return String(row.operation || "")
+      .replace(/\s*\((?:bool|u?int\d+|float\d+|complex\d+)\)\s*$/i, "")
+      .trim();
+  };
+
+  const countTooltipFunctions = (rows) => new Set(rows.map(tooltipFunctionKey).filter(Boolean)).size;
+
+  const buildTooltipTable = (title, managedRows, openBlasRows, options = {}) => {
+    const id = `ns-tip-${++tooltipId}`;
+    const managedFunctionCount = countTooltipFunctions(managedRows);
+    const openBlasFunctionCount = countTooltipFunctions(openBlasRows);
+    return `
+      <div class="ns-tip">
+        <div class="ns-tip-head">
+          <div class="ns-tip-title">${escapeHtml(title)}</div>
+          <div class="ns-tip-backend-switch" role="tablist" aria-label="${escapeHtml(title)} backend">
+            <button class="ns-tip-backend-button is-active" type="button" role="tab" aria-selected="true" aria-controls="${id}-managed" data-tip-backend-target="${id}-managed"><span>Managed Core</span><span class="ns-tip-backend-count">${managedFunctionCount}</span></button>
+            <button class="ns-tip-backend-button" type="button" role="tab" aria-selected="false" aria-controls="${id}-openblas" data-tip-backend-target="${id}-openblas" tabindex="-1"><span>OpenBLAS</span><span class="ns-tip-backend-count">${openBlasFunctionCount}</span></button>
+          </div>
+        </div>
+        ${buildTooltipBackendPanel(id, "managed", managedRows, options)}
+        ${buildTooltipBackendPanel(id, "openblas", openBlasRows, options)}
       </div>`;
   };
 
@@ -2201,14 +2520,188 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const bandForElement = (element) => bandDefinitions.find((band) => element.classList.contains(band.className));
 
   const rowMatchesBand = (row, band) => {
+    if (band.negligible) {
+      return row.status === "negligible";
+    }
+    if (band.failed) {
+      return row.status === "failed";
+    }
     if (band.noData) {
-      return row.status === "no_data" || row.ratio === null;
+      return row.status === "no_data";
     }
 
-    if (row.ratio === null) return false;
+    if (!isCredibleRow(row)) return false;
     if (band.min !== undefined && row.ratio < band.min) return false;
     if (band.max !== undefined && row.ratio >= band.max) return false;
     return true;
+  };
+
+  const updateStatusMix = (rows) => {
+    const counts = new Map();
+    const total = Math.max(rows.length, 1);
+
+    bandDefinitions.forEach((band) => {
+      const count = rows.filter((row) => rowMatchesBand(row, band)).length;
+      counts.set(band.className, count);
+      const segment = document.querySelector(`.status-segment.${band.className}`);
+      if (!segment) return;
+      segment.style.setProperty("--w", `${(count / total * 100).toFixed(3)}%`);
+      segment.setAttribute("aria-label", band.noData
+        ? `${count} no-data rows pending C# measurements`
+        : band.failed
+          ? `${count} failed benchmark rows`
+        : band.negligible
+          ? `${count} negligible rows excluded from performance rollups`
+          : `${count} credible rows at ${band.title}`);
+    });
+
+    const sum = (...classes) => classes.reduce((value, className) => value + (counts.get(className) || 0), 0);
+    const summaries = {
+      extreme: `${sum("band-faster-100x")} x100+ faster`,
+      faster: `${sum("band-faster-20", "band-faster-10", "band-faster-5", "band-faster-2", "band-faster-125", "band-faster-100")} faster, 1.05-100x`,
+      close: `${sum("band-close-090", "band-close-075", "band-close-050")} close, 0.80-1.05x`,
+      slower: `${sum("band-slower-040", "band-slower-030", "band-slower-020")} slower, 0.33-0.80x`,
+      much: `${sum("band-much-010", "band-much-005", "band-much-000")} much slower, <0.33x`,
+      negligible: `${sum("band-negligible")} negligible`,
+      failed: `${sum("band-failed")} failed`,
+      nodata: `${sum("band-nodata")} no data`
+    };
+
+    Object.entries(summaries).forEach(([key, text]) => {
+      const item = document.querySelector(`[data-status-summary="${key}"]`);
+      const textNode = item && Array.from(item.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
+      if (textNode) textNode.nodeValue = text;
+    });
+  };
+
+  const updateEffectiveRollups = (rows, suiteTier = null) => {
+    const credible = rows.filter(isCredibleRow);
+    const geomean = (items) => {
+      const ratios = items.map((row) => row.ratio).filter((ratio) => Number.isFinite(ratio) && ratio > 0);
+      return ratios.length ? Math.exp(ratios.reduce((sum, ratio) => sum + Math.log(ratio), 0) / ratios.length) : null;
+    };
+    const suiteKey = (value) => String(value || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+    const scoreTone = (score) => !Number.isFinite(score) ? ["metric-near", "var(--quiet)"]
+      : score >= 0.95 ? ["metric-good", "var(--good)"]
+      : score >= 0.8 ? ["metric-near", "var(--near)"]
+      : ["metric-slow", "var(--slow)"];
+
+    document.querySelectorAll(".bar-row").forEach((bar) => {
+      const key = suiteKey(bar.querySelector(".bar-label")?.textContent);
+      const suiteRows = credible.filter((row) => suiteKey(row.suite) === key && (suiteTier === null || row.n === suiteTier));
+      const score = geomean(suiteRows);
+      const scoreNode = bar.querySelector(".bar-score");
+      const fill = bar.querySelector(".bar-fill");
+      const count = bar.querySelector(".bar-count");
+      const [toneClass, toneColor] = scoreTone(score);
+      if (scoreNode) {
+        scoreNode.textContent = formatRatio(score);
+        scoreNode.className = `bar-score ${toneClass}`;
+      }
+      if (fill) {
+        fill.style.setProperty("--w", `${Math.max(0, Math.min(100, (score || 0) / 2.5 * 100)).toFixed(1)}%`);
+        fill.style.setProperty("--tone", toneColor);
+      }
+      if (count) {
+        const wins = suiteRows.filter((row) => row.ratio >= 1.05).length;
+        count.textContent = `${wins} / ${suiteRows.length - wins}`;
+      }
+    });
+
+    const heatClass = (score) => !Number.isFinite(score) ? "heat-empty"
+      : score >= 1.25 ? "heat-best"
+      : score >= 0.95 ? "heat-good"
+      : score >= 0.8 ? "heat-near"
+      : score >= 0.33 ? "heat-slow" : "heat-bad";
+    document.querySelectorAll(".dtype-panel").forEach((panel) => {
+      const tier = tierByPanel[panel.id];
+      panel.querySelectorAll(".dtype-cell").forEach((cell) => {
+        const dtype = cell.querySelector(".dtype-name")?.textContent.trim();
+        const dtypeRows = credible.filter((row) => row.dtype === dtype && (tier === null || row.n === tier));
+        const score = geomean(dtypeRows);
+        cell.className = `dtype-cell ${heatClass(score)}`;
+        cell.style.setProperty("--heat-width", `${Math.max(0, Math.min(100, (score || 0) / 2.25 * 100)).toFixed(0)}%`);
+        const scoreNode = cell.querySelector(".dtype-score");
+        const countNode = cell.querySelector(".dtype-count");
+        if (scoreNode) scoreNode.textContent = formatRatio(score);
+        if (countNode) countNode.textContent = `${dtypeRows.length} rows`;
+      });
+    });
+  };
+
+  const initializeSuiteScoreboard = (rows, managedRows, openBlasRows) => {
+    const root = document.querySelector("[data-suite-scoreboard]");
+    if (!root) return;
+
+    const tabs = Array.from(root.querySelectorAll("[data-suite-tier]"));
+    const panel = root.querySelector(".bar-table");
+    const note = document.querySelector("[data-suite-scoreboard-note]");
+    const tierByName = { overall: null, n1k: 1_000, n100k: 100_000, n10m: 10_000_000 };
+    const suiteKey = (value) => String(value || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+
+    const refreshTooltip = (element, tier) => {
+      const suite = element.querySelector(".bar-label")?.textContent.trim();
+      if (!suite) return;
+      const key = suiteKey(suite);
+      const matchesTier = (row) => tier === null || row.n === tier;
+      const suiteRows = managedRows.filter((row) =>
+        isCredibleRow(row) && suiteKey(row.suite) === key && matchesTier(row));
+      const nativeSuiteRows = openBlasRows.filter((row) =>
+        isCredibleRow(row) && suiteKey(row.suite) === key && matchesTier(row));
+      const title = tier === null ? `${suite} benchmark rows` : `${suite} at ${formatN(tier)} benchmark rows`;
+      const html = buildTooltipTable(title, suiteRows, nativeSuiteRows);
+      attachTooltip(element, html, title);
+
+      if (element._tippy) {
+        element.dataset.tooltipPinned = "false";
+        element.classList.remove("is-tooltip-open");
+        element._tippy.hide();
+        element._tippy.setContent(html);
+      }
+    };
+
+    const showTier = (name, focusTab = false) => {
+      const tier = tierByName[name];
+      if (tier === undefined) return;
+
+      tabs.forEach((tab) => {
+        const isActive = tab.dataset.suiteTier === name;
+        tab.classList.toggle("is-active", isActive);
+        tab.setAttribute("aria-selected", String(isActive));
+        tab.tabIndex = isActive ? 0 : -1;
+        if (isActive && focusTab) tab.focus();
+      });
+
+      root.dataset.activeSuiteTier = name;
+      if (panel) panel.setAttribute("aria-labelledby", `suite-tab-${name}`);
+      if (note) note.textContent = tier === null
+        ? "Geomean across credible rows. Parity marker is 1.0x."
+        : `Geomean across credible rows at ${formatN(tier)}. Parity marker is 1.0x.`;
+
+      updateEffectiveRollups(rows, tier);
+      root.querySelectorAll(".bar-row").forEach((element) => refreshTooltip(element, tier));
+    };
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => showTier(tab.dataset.suiteTier));
+      tab.addEventListener("keydown", (event) => {
+        const isForward = event.key === "ArrowRight" || event.key === "ArrowDown";
+        const isBackward = event.key === "ArrowLeft" || event.key === "ArrowUp";
+        const isHome = event.key === "Home";
+        const isEnd = event.key === "End";
+        if (!isForward && !isBackward && !isHome && !isEnd) return;
+
+        event.preventDefault();
+        let nextIndex = index;
+        if (isForward) nextIndex = (index + 1) % tabs.length;
+        if (isBackward) nextIndex = (index - 1 + tabs.length) % tabs.length;
+        if (isHome) nextIndex = 0;
+        if (isEnd) nextIndex = tabs.length - 1;
+        showTier(tabs[nextIndex].dataset.suiteTier, true);
+      });
+    });
+
+    showTier("overall");
   };
 
   const dtypeOrder = [
@@ -2219,18 +2712,18 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const ratioToneClass = (ratio) => {
     if (!Number.isFinite(ratio)) return "func-tone-empty";
     if (ratio >= 100) return "func-tone-extreme";
-    if (ratio >= 1) return "func-tone-good";
-    if (ratio >= 0.5) return "func-tone-near";
-    if (ratio >= 0.2) return "func-tone-slow";
+    if (ratio >= 0.95) return "func-tone-good";
+    if (ratio >= 0.8) return "func-tone-near";
+    if (ratio >= 0.33) return "func-tone-slow";
     return "func-tone-bad";
   };
 
   const ratioColor = (ratio) => {
     if (!Number.isFinite(ratio)) return "#87909a";
     if (ratio >= 100) return "#0e7490";
-    if (ratio >= 1) return "var(--good)";
-    if (ratio >= 0.5) return "var(--near)";
-    if (ratio >= 0.2) return "var(--slow)";
+    if (ratio >= 0.95) return "var(--good)";
+    if (ratio >= 0.8) return "var(--near)";
+    if (ratio >= 0.33) return "var(--slow)";
     return "var(--bad)";
   };
 
@@ -2276,17 +2769,20 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       groups.get(key).push(row);
     });
 
-    return Array.from(groups.entries()).map(([name, groupRows]) => ({
-      name,
-      rows: groupRows,
-      measuredRows: groupRows.filter((row) => row.ratio !== null),
-      score: geomeanRows(groupRows)
-    }));
+    return Array.from(groups.entries()).map(([name, groupRows]) => {
+      const credibleRows = groupRows.filter(isCredibleRow);
+      return {
+        name,
+        rows: groupRows,
+        credibleRows,
+        score: geomeanRows(credibleRows)
+      };
+    });
   };
 
   const buildFunctionTable = (rows) => {
     const body = rows.map((row, index) => `
-      <tr>
+      <tr${rowVisibility(index)}>
         <td class="num">${index + 1}</td>
         <td class="op">${escapeHtml(row.operation)}</td>
         <td>${escapeHtml(row.suite)}</td>
@@ -2298,7 +2794,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       </tr>`).join("");
 
     return `
-      <div class="function-table-scroll">
+      <div class="function-table-scroll" data-load-more-scope>
         <table class="function-table">
           <thead>
             <tr>
@@ -2314,6 +2810,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
           </thead>
           <tbody>${body || `<tr><td colspan="8">No matching benchmark rows.</td></tr>`}</tbody>
         </table>
+        ${loadMoreMarkup(rows.length)}
       </div>`;
   };
 
@@ -2343,25 +2840,27 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     });
 
     return Array.from(groups.values()).map((group) => {
-      const measuredRows = group.rows.filter((row) => row.ratio !== null);
-      const ratios = measuredRows.map((row) => row.ratio);
+      const timedRows = group.rows.filter((row) => row.ratio !== null);
+      const credibleRows = group.rows.filter(isCredibleRow);
+      const ratios = credibleRows.map((row) => row.ratio);
       const sizes = sortedSizes(group.rows.map((row) => row.n));
       const sizeStats = sizes.map((size) => {
-        const sizeRows = measuredRows.filter((row) => row.n === size);
+        const sizeRows = credibleRows.filter((row) => row.n === size);
         return { n: size, rows: sizeRows, score: geomeanRows(sizeRows) };
       });
 
       return {
         ...group,
-        measuredRows,
-        score: geomeanRows(measuredRows),
+        timedRows,
+        credibleRows,
+        score: geomeanRows(credibleRows),
         min: ratios.length ? Math.min(...ratios) : null,
         max: ratios.length ? Math.max(...ratios) : null,
         suites: uniqueSorted(group.rows.map((row) => row.suite)),
         dtypes: sortedDtypes(group.rows.map((row) => row.dtype)),
         sizes,
         sizeStats,
-        scenarios: summarizeGroups(measuredRows, scenarioForRow)
+        scenarios: summarizeGroups(credibleRows, scenarioForRow)
       };
     });
   };
@@ -2420,15 +2919,15 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       let tableNote = note;
       if (!tableRows) {
         if (mode === "worst") {
-          tableRows = sortRows(group.measuredRows, "asc").slice(0, topCount);
-          tableNote = `${Math.min(topCount, group.measuredRows.length)} slowest measured rows for ${group.name}`;
+          tableRows = sortRows(group.credibleRows, "asc");
+          tableNote = `${Math.min(topCount, group.credibleRows.length)} of ${group.credibleRows.length} slowest credible rows for ${group.name}`;
         } else if (mode === "raw") {
           tableRows = group.rows.slice().sort((a, b) =>
             String(a.operation).localeCompare(String(b.operation)) || String(a.dtype).localeCompare(String(b.dtype)) || (a.n ?? 0) - (b.n ?? 0));
           tableNote = `${tableRows.length} raw benchmark rows for ${group.name}`;
         } else {
-          tableRows = sortRows(group.measuredRows, "desc").slice(0, topCount);
-          tableNote = `${Math.min(topCount, group.measuredRows.length)} fastest measured rows for ${group.name}`;
+          tableRows = sortRows(group.credibleRows, "desc");
+          tableNote = `${Math.min(topCount, group.credibleRows.length)} of ${group.credibleRows.length} fastest credible rows for ${group.name}`;
         }
       }
 
@@ -2436,23 +2935,23 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       tableRoot.innerHTML = buildFunctionTable(tableRows);
     };
 
-    const renderHeatmap = (group) => {
+  const renderHeatmap = (group) => {
       if (group.dtypes.length === 0 || group.sizes.length === 0) {
-        return `<div class="function-empty">No dtype x size benchmark cells for this function.</div>`;
+        return `<div class="function-empty">No measured dtype x size cells for this function.</div>`;
       }
 
       const header = group.sizes.map((size) => `<th>${formatN(size)}</th>`).join("");
       const body = group.dtypes.map((dtype) => {
         const cells = group.sizes.map((size) => {
           const cellRows = group.rows.filter((row) => row.dtype === dtype && row.n === size);
-          const measuredCellRows = cellRows.filter((row) => row.ratio !== null);
-          const score = geomeanRows(measuredCellRows);
+          const credibleCellRows = cellRows.filter(isCredibleRow);
+          const score = geomeanRows(credibleCellRows);
           const isEmpty = cellRows.length === 0;
           const classes = `function-heat-cell ${ratioToneClass(score)}${isEmpty ? " is-empty" : ""}`;
           return `<td>
             <button class="${classes}" type="button" data-heat-dtype="${escapeHtml(dtype)}" data-heat-n="${size}" ${isEmpty ? "disabled" : ""}>
               <span class="function-heat-ratio">${formatRatio(score)}</span>
-              <span class="function-heat-count">${cellRows.length} rows</span>
+              <span class="function-heat-count">${credibleCellRows.length}/${cellRows.length} credible</span>
             </button>
           </td>`;
         }).join("");
@@ -2471,11 +2970,11 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
     const renderScenarios = (group) => {
       const scenarios = group.scenarios
-        .filter((scenario) => scenario.measuredRows.length > 0)
+        .filter((scenario) => scenario.credibleRows.length > 0)
         .sort((a, b) => scoreForSort(a, Number.POSITIVE_INFINITY) - scoreForSort(b, Number.POSITIVE_INFINITY));
 
       if (scenarios.length === 0) {
-        return `<div class="function-empty">No measured scenario rows.</div>`;
+        return `<div class="function-empty">No credible scenario rows.</div>`;
       }
 
       const maxScore = Math.max(...scenarios.map((scenario) => scenario.score || 0), 1);
@@ -2486,7 +2985,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
           <span class="function-scenario-label">${escapeHtml(scenario.name)}</span>
           <span class="function-scenario-track"><span class="function-scenario-fill" style="--w:${width.toFixed(1)}%"></span></span>
           <span class="function-scenario-score">${formatRatio(scenario.score)}</span>
-          <span class="function-scenario-count">${scenario.measuredRows.length}</span>
+          <span class="function-scenario-count">${scenario.credibleRows.length}</span>
         </div>`;
       }).join("")}</div>`;
     };
@@ -2495,14 +2994,14 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       activeName = group.name;
       const tone = ratioToneClass(group.score);
       const suiteText = group.suites.join(", ");
-      const best = sortRows(group.measuredRows, "desc")[0];
-      const worst = sortRows(group.measuredRows, "asc")[0];
+      const best = sortRows(group.credibleRows, "desc")[0];
+      const worst = sortRows(group.credibleRows, "asc")[0];
 
       detail.innerHTML = `
         <div class="function-detail-head">
           <div>
             <div class="function-title" role="heading" aria-level="3">${escapeHtml(group.name)}</div>
-            <p class="function-subtitle">${escapeHtml(suiteText)} · ${group.measuredRows.length} measured / ${group.rows.length} rows · ${group.dtypes.length} dtypes · ${group.sizes.length} size tiers</p>
+            <p class="function-subtitle">${escapeHtml(suiteText)} · ${group.credibleRows.length} credible / ${group.timedRows.length} timed / ${group.rows.length} rows · ${group.dtypes.length} dtypes · ${group.sizes.length} size tiers</p>
           </div>
           <span class="function-ratio-pill ${tone}">${formatRatio(group.score)}</span>
         </div>
@@ -2566,14 +3065,14 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         activeName = filtered[0]?.name || null;
       }
 
-      listMeta.textContent = `${filtered.length} of ${groups.length} np.* functions`;
+      listMeta.textContent = `${filtered.length} of ${groups.length} benchmarked functions`;
       list.innerHTML = filtered.map((group) => {
         const isActive = group.name === activeName;
         const tone = ratioToneClass(group.score);
         return `<button class="function-list-item ${tone}${isActive ? " is-active" : ""}" type="button" role="option" aria-selected="${String(isActive)}" data-function-name="${escapeHtml(group.name)}">
           <span class="function-list-name">${escapeHtml(group.name)}</span>
           <span class="function-list-score">${formatRatio(group.score)}</span>
-          <span class="function-list-detail">${group.measuredRows.length}/${group.rows.length} rows · ${escapeHtml(group.suites.join(", "))}</span>
+          <span class="function-list-detail">${group.credibleRows.length}/${group.timedRows.length} credible rows · ${escapeHtml(group.suites.join(", "))}</span>
           ${buildSparkline(group)}
         </button>`;
       }).join("") || `<div class="function-empty">No matching np.* functions.</div>`;
@@ -2595,52 +3094,115 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     renderList();
   };
 
-  const initializeBenchmarkTooltips = async () => {
-    let rawRows;
-    try {
-      const response = await fetch(reportUrl);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      rawRows = await response.json();
-    } catch (error) {
-      document.querySelectorAll("[data-tip]").forEach((element) => {
-        element.setAttribute("title", element.getAttribute("data-tip").replace(/\n/g, " | "));
-      });
-      console.warn("Benchmark tooltip data could not be loaded", error);
-      return;
-    }
-
-    const rows = rawRows.map((row, index) => ({
+  const profileRows = (combinedRows, profile) => combinedRows.flatMap((row, index) => {
+    const result = row.profiles?.[profile];
+    if (!result || result.availability !== "available" || result.numsharp_ms === null) return [];
+    const numSharpMs = numberOrNull(result.numsharp_ms);
+    return [{
       index,
       operation: row.operation || "",
       suite: row.suite || "",
       category: row.category || "",
       dtype: row.dtype || "",
       n: numberOrNull(row.n),
-      ratio: numberOrNull(row.ratio),
-      pctNumPy: numberOrNull(row.pct_numpy),
+      ratio: numberOrNull(result.ratio),
+      pctNumPy: numberOrNull(result.pct_numpy),
       numpyMs: numberOrNull(row.numpy_ms),
-      numSharpMs: numberOrNull(row.numsharp_ms),
-      status: row.status || "",
+      numSharpMs,
+      status: normalizeCredibilityStatus(result.status || "", numSharpMs, true, row.operation),
       functionName: functionNameFromOperation(row.operation || "")
-    }));
+    }];
+  });
 
-    const measuredRows = rows.filter((row) => row.ratio !== null);
-    initializeFunctionExplorer(rows);
+  const unavailableProfileRows = (combinedRows, profile) => combinedRows.flatMap((row, index) => {
+    const result = row.profiles?.[profile];
+    if (!result || result.availability === "available") return [];
+    return [{
+      index,
+      operation: row.operation || "",
+      suite: row.suite || "",
+      category: row.category || "",
+      dtype: row.dtype || "",
+      n: numberOrNull(row.n),
+      ratio: null,
+      pctNumPy: null,
+      numpyMs: numberOrNull(row.numpy_ms),
+      numSharpMs: null,
+      status: result.status === "failed" ? "failed" : "no_data",
+      availability: result.availability,
+      exceptionType: result.exception_type || "",
+      exceptionMessage: result.exception_message || "",
+      functionName: functionNameFromOperation(row.operation || "")
+    }];
+  });
+
+  const initializeBenchmarkTooltips = async () => {
+    let rawRows;
+    let nativeRows = [];
+    let managedRows = [];
+    let nativeUnavailableRows = [];
+    let managedUnavailableRows = [];
+    let legacyPayload = false;
+    try {
+      const response = await fetch(reportUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      const metadata = payload?.metadata || {};
+      if (metadata.snapshot_date) document.querySelector("[data-snapshot-date]").textContent = `Snapshot ${metadata.snapshot_date}`;
+      if (metadata.commit) document.querySelector("[data-snapshot-commit]").textContent = `Commit ${metadata.commit}`;
+      if (metadata.numpy_version) document.querySelector("[data-snapshot-numpy]").textContent = `NumPy ${metadata.numpy_version}`;
+      legacyPayload = Array.isArray(payload);
+      rawRows = legacyPayload ? payload : (payload.rows || []);
+      managedRows = legacyPayload ? [] : profileRows(rawRows, "managed");
+      nativeRows = legacyPayload ? [] : profileRows(rawRows, "openblas");
+      managedUnavailableRows = legacyPayload ? [] : unavailableProfileRows(rawRows, "managed");
+      nativeUnavailableRows = legacyPayload ? [] : unavailableProfileRows(rawRows, "openblas");
+    } catch (error) {
+      document.querySelectorAll("[data-tip]").forEach((element) => {
+        element.setAttribute("title", element.getAttribute("data-tip").replace(/\n/g, " | "));
+      });
+      console.warn("Benchmark timing data could not be loaded", error);
+      return;
+    }
+
+    const rows = rawRows.map((row, index) => {
+      const numSharpMs = numberOrNull(row.numsharp_ms);
+      const available = legacyPayload ? row.numsharp_ms !== null : Boolean(row.effective_profile);
+      return {
+        index,
+        operation: row.operation || "",
+        suite: row.suite || "",
+        category: row.category || "",
+        dtype: row.dtype || "",
+        n: numberOrNull(row.n),
+        ratio: numberOrNull(row.ratio),
+        pctNumPy: numberOrNull(row.pct_numpy),
+        numpyMs: numberOrNull(row.numpy_ms),
+        numSharpMs,
+        status: normalizeCredibilityStatus(row.status || "", numSharpMs, available, row.operation),
+        functionName: functionNameFromOperation(row.operation || "")
+      };
+    });
+
+    if (legacyPayload) managedRows = rows;
+
+    updateStatusMix(rows);
+    initializeSuiteScoreboard(rows, managedRows, nativeRows);
+    initializeFunctionExplorer(rows.filter(isExplorerRow));
 
     document.querySelectorAll(".status-segment").forEach((element) => {
       const band = bandForElement(element);
       if (!band) return;
-      const bandRows = rows.filter((row) => rowMatchesBand(row, band));
-      const title = band.noData ? "No-data benchmark rows" : `${band.title} benchmark rows`;
-      attachTooltip(element, buildTooltipTable(title, bandRows, { noData: band.noData }), title);
-    });
-
-    document.querySelectorAll(".bar-row").forEach((element) => {
-      const suite = element.querySelector(".bar-label")?.textContent.trim();
-      if (!suite) return;
-      const suiteRows = measuredRows.filter((row) => row.suite === suite);
-      const title = `${suite} benchmark rows`;
-      attachTooltip(element, buildTooltipTable(title, suiteRows), title);
+      const unavailableBand = band.noData || band.failed;
+      const bandRows = managedRows.filter((row) => rowMatchesBand(row, band)).concat(
+        unavailableBand ? managedUnavailableRows.filter((row) => rowMatchesBand(row, band)) : []);
+      const nativeBandRows = nativeRows.filter((row) => rowMatchesBand(row, band)).concat(
+        unavailableBand ? nativeUnavailableRows.filter((row) => rowMatchesBand(row, band)) : []);
+      const title = band.failed ? "Failed benchmark rows"
+        : band.noData ? "No-data benchmark rows"
+        : `${band.title} benchmark rows`;
+      attachTooltip(
+        element, buildTooltipTable(title, bandRows, nativeBandRows, { noData: unavailableBand }), title);
     });
 
     document.querySelectorAll(".dtype-cell").forEach((element) => {
@@ -2649,7 +3211,13 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       if (!dtype || !(panelId in tierByPanel)) return;
 
       const tier = tierByPanel[panelId];
-      const dtypeRows = measuredRows.filter((row) => {
+      const dtypeRows = managedRows.filter((row) => {
+        if (!isCredibleRow(row)) return false;
+        if (row.dtype !== dtype) return false;
+        return tier === null || row.n === tier;
+      });
+      const nativeDtypeRows = nativeRows.filter((row) => {
+        if (!isCredibleRow(row)) return false;
         if (row.dtype !== dtype) return false;
         return tier === null || row.n === tier;
       });
@@ -2657,7 +3225,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       const title = tier === null
         ? `${dtype} benchmark rows`
         : `${dtype} at ${formatN(tier)} benchmark rows`;
-      attachTooltip(element, buildTooltipTable(title, dtypeRows), title);
+      attachTooltip(element, buildTooltipTable(title, dtypeRows, nativeDtypeRows), title);
     });
 
     const targets = document.querySelectorAll("[data-benchmark-tooltip]");
@@ -2737,17 +3305,37 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
     const activateTooltipTab = (button) => {
       const tip = button.closest(".ns-tip");
+      const scope = button.closest(".ns-tip-backend-panel") || tip;
       const targetId = button.dataset.tipTabTarget;
-      if (!tip || !targetId) return;
+      if (!tip || !scope || !targetId) return;
 
-      tip.querySelectorAll(".ns-tip-switch-button").forEach((candidate) => {
+      scope.querySelectorAll(".ns-tip-switch-button").forEach((candidate) => {
         const isActive = candidate === button;
         candidate.classList.toggle("is-active", isActive);
         candidate.setAttribute("aria-selected", String(isActive));
         candidate.tabIndex = isActive ? 0 : -1;
       });
 
-      tip.querySelectorAll(".ns-tip-panel").forEach((panel) => {
+      scope.querySelectorAll(".ns-tip-panel").forEach((panel) => {
+        const isActive = panel.id === targetId;
+        panel.classList.toggle("is-active", isActive);
+        panel.hidden = !isActive;
+      });
+    };
+
+    const activateBackendTab = (button) => {
+      const tip = button.closest(".ns-tip");
+      const targetId = button.dataset.tipBackendTarget;
+      if (!tip || !targetId) return;
+
+      tip.querySelectorAll(".ns-tip-backend-button").forEach((candidate) => {
+        const isActive = candidate === button;
+        candidate.classList.toggle("is-active", isActive);
+        candidate.setAttribute("aria-selected", String(isActive));
+        candidate.tabIndex = isActive ? 0 : -1;
+      });
+
+      tip.querySelectorAll(".ns-tip-backend-panel").forEach((panel) => {
         const isActive = panel.id === targetId;
         panel.classList.toggle("is-active", isActive);
         panel.hidden = !isActive;
@@ -2756,11 +3344,14 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
 
     const handleTooltipTabKeydown = (event) => {
       const button = event.target instanceof Element
-        ? event.target.closest(".ns-tip-switch-button")
+        ? event.target.closest(".ns-tip-switch-button, .ns-tip-backend-button")
         : null;
       if (!button) return;
 
-      const buttons = Array.from(button.closest(".ns-tip-switch")?.querySelectorAll(".ns-tip-switch-button") || []);
+      const isBackend = button.classList.contains("ns-tip-backend-button");
+      const switchRoot = button.closest(isBackend ? ".ns-tip-backend-switch" : ".ns-tip-switch");
+      const buttonSelector = isBackend ? ".ns-tip-backend-button" : ".ns-tip-switch-button";
+      const buttons = Array.from(switchRoot?.querySelectorAll(buttonSelector) || []);
       if (buttons.length === 0) return;
 
       const currentIndex = buttons.indexOf(button);
@@ -2774,7 +3365,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       event.preventDefault();
       event.stopPropagation();
       buttons[nextIndex].focus();
-      activateTooltipTab(buttons[nextIndex]);
+      if (isBackend) activateBackendTab(buttons[nextIndex]);
+      else activateTooltipTab(buttons[nextIndex]);
     };
 
     const getTooltipScrollContainer = (target, popper) => {
@@ -2786,7 +3378,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         return directScroller;
       }
 
-      return popper.querySelector(".ns-tip-panel:not([hidden]) .ns-tip-scroll")
+      return popper.querySelector(".ns-tip-backend-panel:not([hidden]) .ns-tip-panel:not([hidden]) .ns-tip-scroll")
+        || popper.querySelector(".ns-tip-backend-panel:not([hidden]) > .ns-tip-scroll")
         || popper.querySelector(".ns-tip-scroll");
     };
 
@@ -2872,14 +3465,26 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         scheduleHideTooltip(element);
       });
       instance.popper.addEventListener("click", (event) => {
+        const loadMoreButton = event.target instanceof Element
+          ? event.target.closest("[data-load-more]")
+          : null;
+        if (loadMoreButton && containsNode(instance.popper, loadMoreButton)) {
+          event.preventDefault();
+          event.stopPropagation();
+          revealRemainingRows(loadMoreButton);
+          instance.popperInstance?.update?.();
+          return;
+        }
+
         const button = event.target instanceof Element
-          ? event.target.closest(".ns-tip-switch-button")
+          ? event.target.closest(".ns-tip-switch-button, .ns-tip-backend-button")
           : null;
         if (!button || !containsNode(instance.popper, button)) return;
 
         event.preventDefault();
         event.stopPropagation();
-        activateTooltipTab(button);
+        if (button.classList.contains("ns-tip-backend-button")) activateBackendTab(button);
+        else activateTooltipTab(button);
         instance.popperInstance?.update?.();
       });
       instance.popper.addEventListener("keydown", handleTooltipTabKeydown);
@@ -3035,8 +3640,12 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     initializeBreakdownCoaches();
 
     document.addEventListener("click", (event) => {
+      const eventPath = typeof event.composedPath === "function" ? event.composedPath() : [];
       const clickedInsideTooltip = targetElements.some((element) =>
-        containsNode(element, event.target) || containsNode(element._tippy?.popper, event.target));
+        containsNode(element, event.target)
+        || containsNode(element._tippy?.popper, event.target)
+        || eventPath.includes(element)
+        || eventPath.includes(element._tippy?.popper));
 
       if (!clickedInsideTooltip) {
         targetElements.forEach((element) => closeTooltip(element, true));
@@ -3051,5 +3660,356 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   };
 
   initializeBenchmarkTooltips();
+})();
+</script>
+
+<script>
+(() => {
+  const dashboard = document.querySelector(".ns-bench-dashboard");
+  const list = dashboard.querySelector("[data-function-list]");
+  const detail = dashboard.querySelector("[data-function-detail]");
+  const search = dashboard.querySelector("[data-function-search]");
+  const coreUrl = new URL(window.NUMSHARP_BENCHMARK_REPORT_URL || "data/benchmark-report.json", window.location.href);
+  coreUrl.searchParams.set("schema", "2");
+  let combinedRows = [];
+  let coreRows = [];
+  let nativeRows = [];
+  let effectiveRows = [];
+  let coreGroups = new Map();
+  let nativeGroups = new Map();
+  let effectiveGroups = new Map();
+  let ready = false;
+
+  const escapeHtml = (value) => String(value ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+  const functionName = (operation) => {
+    const value = String(operation || "");
+    const npMatch = value.match(/\bnp(?:\.[A-Za-z_][A-Za-z0-9_]*)+/);
+    if (npMatch) return npMatch[0];
+    const ndarrayMatch = value.match(/^\s*a\.([A-Za-z_][A-Za-z0-9_]*)/);
+    return ndarrayMatch ? `ndarray.${ndarrayMatch[1]}` : null;
+  };
+
+  // The backend overlay must use the same credibility gate as the primary Function Explorer.
+  // Available timings can still be intentionally negligible and therefore absent from rollups.
+  const excludedGeomeanStatuses = new Set(["no_data", "negligible", "failed"]);
+  const isCredibleRow = (row) => Number.isFinite(Number(row.ratio))
+    && Number(row.ratio) > 0
+    && !excludedGeomeanStatuses.has(row.status);
+  // Match the primary explorer: excluded measurements are inspectable only through the
+  // Negligible status-band tooltip, never through backend explorer groups or tables.
+  const isExplorerRow = (row) => row.status !== "negligible";
+  const o1FunctionNames = new Set([
+    "np.real", "np.asarray", "np.asanyarray", "np.asmatrix", "np.frombuffer",
+    "np.atleast_1d", "np.atleast_2d", "np.atleast_3d", "np.array_split", "np.split",
+    "np.dsplit", "np.hsplit", "np.vsplit", "np.unstack", "np.broadcast_arrays",
+    "np.broadcast_to", "np.diagonal", "np.expand_dims", "np.flip", "np.fliplr", "np.flipud",
+    "np.matrix_transpose", "np.moveaxis", "np.permute_dims", "np.ravel", "np.reshape",
+    "np.rollaxis", "np.rot90", "np.squeeze", "np.swapaxes", "np.transpose", "np.ix_", "np.size",
+    "np.iscomplexobj", "np.isrealobj", "np.isscalar", "np.isfortran", "np.can_cast",
+    "np.common_type", "np.isdtype", "np.issubdtype", "np.min_scalar_type", "np.mintypecode",
+    "np.promote_types", "np.result_type", "np.iterable", "np.nested_iters",
+    "np.format_float_positional", "np.format_float_scientific", "np.get_printoptions",
+    "np.printoptions", "np.set_printoptions", "np.einsum_path", "np.linalg.diagonal",
+    "np.linalg.matrix_transpose", "ndarray.T", "ndarray.conj", "ndarray.conjugate",
+    "ndarray.diagonal", "ndarray.getfield", "ndarray.item", "ndarray.ravel", "ndarray.reshape",
+    "ndarray.setflags", "ndarray.squeeze", "ndarray.swapaxes", "ndarray.to_device",
+    "ndarray.transpose", "ndarray.view"
+  ]);
+  const o1ExactOperations = new Set([
+    "np.diag", "np.diag(a2d)", "reshape 1d->2d", "reshape 1d->3d", "reshape 2d->1d",
+    "a[100:1000] (contiguous slice)", "a[10:100, :] (row slice 2d)",
+    "a[:, 10:100] (col slice 2d)", "a[::-1] (reversed)", "a[::-1]",
+    "a[::2] (strided slice)"
+  ]);
+  const isO1Operation = (operation) => {
+    const value = String(operation || "")
+      .replace(/\s*\((?:bool|u?int\d+|float\d+|complex\d+|decimal)\)\s*$/i, "")
+      .trim();
+    return o1FunctionNames.has(functionName(value)) || o1ExactOperations.has(value.toLowerCase());
+  };
+  const normalizeCredibilityStatus = (status, numSharpMs, available, operation) =>
+    available && (numSharpMs === 0 || isO1Operation(operation)) ? "negligible" : status;
+
+  const geomean = (rows) => {
+    const ratios = rows.map((row) => Number(row.ratio)).filter((ratio) => ratio > 0 && Number.isFinite(ratio));
+    return ratios.length ? Math.exp(ratios.reduce((sum, ratio) => sum + Math.log(ratio), 0) / ratios.length) : null;
+  };
+
+  const formatRatio = (ratio) => Number.isFinite(ratio)
+    ? `${ratio.toFixed(ratio >= 10 ? 2 : 3)}x`
+    : "n/a";
+
+  const formatN = (value) => {
+    if (!Number.isFinite(value)) return "n/a";
+    if (value >= 1000000 && value % 1000000 === 0) return `${value / 1000000}M`;
+    if (value >= 1000 && value % 1000 === 0) return `${value / 1000}K`;
+    return String(value);
+  };
+
+  const toneClass = (ratio) => {
+    if (!Number.isFinite(ratio)) return "func-tone-empty";
+    if (ratio >= 100) return "func-tone-extreme";
+    if (ratio >= 0.95) return "func-tone-good";
+    if (ratio >= .8) return "func-tone-near";
+    if (ratio >= .33) return "func-tone-slow";
+    return "func-tone-bad";
+  };
+
+  const rowsForProfile = (rows, profile) => rows.flatMap((row) => {
+    const result = row.profiles?.[profile];
+    if (!result) return [];
+    const numSharpMs = result.numsharp_ms === null ? null : Number(result.numsharp_ms);
+    return [{
+      name: functionName(row.operation),
+      operation: row.operation,
+      scenario: row.scenario || "",
+      suite: row.suite,
+      category: row.category,
+      n: Number(row.n),
+      dtype: row.dtype,
+      nsMs: numSharpMs,
+      numsharp_ms: numSharpMs,
+      numpyMs: row.numpy_ms === null ? null : Number(row.numpy_ms),
+      numpy_ms: row.numpy_ms === null ? null : Number(row.numpy_ms),
+      ratio: result.ratio === null ? null : Number(result.ratio),
+      status: normalizeCredibilityStatus(
+        result.status, numSharpMs, result.availability === "available", row.operation),
+      availability: result.availability,
+      exceptionType: result.exception_type,
+      exceptionMessage: result.exception_message
+    }];
+  });
+
+  const rowsForEffectiveProfile = (rows) => rows.flatMap((row) => {
+    if (!row.effective_profile || row.numsharp_ms === null) return [];
+    const numSharpMs = Number(row.numsharp_ms);
+    return [{
+      name: functionName(row.operation),
+      operation: row.operation,
+      scenario: row.scenario || "",
+      suite: row.suite,
+      category: row.category,
+      n: Number(row.n),
+      dtype: row.dtype,
+      nsMs: numSharpMs,
+      numsharp_ms: numSharpMs,
+      numpyMs: row.numpy_ms === null ? null : Number(row.numpy_ms),
+      numpy_ms: row.numpy_ms === null ? null : Number(row.numpy_ms),
+      ratio: row.ratio === null ? null : Number(row.ratio),
+      status: normalizeCredibilityStatus(row.status, numSharpMs, true, row.operation),
+      availability: "available",
+      effectiveProfile: row.effective_profile,
+      effectiveBackend: row.effective_backend || row.effective_profile
+    }];
+  });
+
+  const groupRows = (rows, selector) => {
+    const map = new Map();
+    rows.forEach((row) => {
+      const name = selector(row);
+      if (!name) return;
+      if (!map.has(name)) map.set(name, []);
+      map.get(name).push(row);
+    });
+    return map;
+  };
+
+  const scoresFor = (name) => {
+    const managedRows = coreGroups.get(name) || [];
+    const openblasRows = nativeGroups.get(name) || [];
+    const bestRows = (effectiveGroups.get(name) || []).filter(isCredibleRow);
+    const managedAvailable = managedRows.filter((row) => row.availability === "available" && isCredibleRow(row));
+    const openblasAvailable = openblasRows.filter((row) => row.availability === "available" && isCredibleRow(row));
+    const managed = geomean(managedAvailable);
+    const openblas = geomean(openblasAvailable);
+    const best = geomean(bestRows);
+    const managedWins = bestRows.filter((row) => row.effectiveBackend === "managed").length;
+    const openblasWins = bestRows.filter((row) => row.effectiveBackend === "openblas").length;
+    const winner = best === null ? "No credible rows"
+      : managedWins && openblasWins ? `Mixed · Core ${managedWins} / OpenBLAS ${openblasWins}`
+      : openblasWins ? "OpenBLAS"
+      : "Managed Core";
+    return { managedRows, openblasRows, bestRows, managedAvailable, openblasAvailable, managed, openblas, best, winner };
+  };
+
+  const unavailableMessage = (rows, profile) => {
+    const unavailable = rows.find((row) => row.availability !== "available");
+    if (!unavailable) return profile === "managed"
+      ? "Not measured in the Managed C# profile."
+      : "Not measured in the OpenBLAS profile.";
+    const label = unavailable.availability === "missing_backend" ? "Missing backend"
+      : unavailable.availability === "not_supported" ? "Not supported"
+      : unavailable.availability.replaceAll("_", " ");
+    return `${label}${unavailable.exceptionType ? ` · ${unavailable.exceptionType}` : ""}`;
+  };
+
+  const coreTable = (rows) => {
+    const available = rows.filter((row) => row.availability === "available" && isCredibleRow(row));
+    return available.length ? `
+    <div class="function-table-scroll backend-lens-table" data-backend-table="managed" data-load-more-scope>
+      <table class="function-table"><thead><tr><th>Operation</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th></tr></thead>
+      <tbody>${available.map((row, index) => `<tr${index >= 25 ? " hidden data-load-more-row" : ""}>
+        <td class="op">${escapeHtml(row.operation)}</td><td>${escapeHtml(row.dtype)}</td><td class="num">${formatN(Number(row.n))}</td>
+        <td class="num">${formatRatio(Number(row.ratio))}</td><td class="num">${Number(row.numpy_ms).toFixed(4)}</td><td class="num">${Number(row.numsharp_ms).toFixed(4)}</td>
+      </tr>`).join("")}</tbody></table>
+      ${available.length > 25 ? `<div class="ns-load-more-wrap"><button class="ns-load-more-button" type="button" data-load-more>Load More <span class="ns-load-more-count">(${available.length - 25} remaining)</span></button></div>` : ""}
+    </div>` : `<div class="function-empty backend-lens-table" data-backend-table="managed">${escapeHtml(unavailableMessage(rows, "managed"))}</div>`;
+  };
+
+  const nativeTable = (rows) => {
+    const available = rows.filter((row) => row.availability === "available" && isCredibleRow(row));
+    return available.length ? `
+    <div class="function-table-scroll backend-lens-table" data-backend-table="openblas" data-load-more-scope hidden>
+      <table class="function-table"><thead><tr><th>Operation / scenario</th><th>Dtype</th><th class="num">N</th><th class="num">Ratio</th><th class="num">NumPy ms</th><th class="num">NumSharp ms</th></tr></thead>
+      <tbody>${available.map((row, index) => `<tr${index >= 25 ? " hidden data-load-more-row" : ""}>
+        <td class="op">${escapeHtml(row.scenario || row.operation)}</td><td>${escapeHtml(row.dtype)}</td><td class="num">${formatN(row.n)}</td>
+        <td class="num">${formatRatio(row.ratio)}</td><td class="num">${row.numpyMs.toFixed(4)}</td><td class="num">${row.nsMs.toFixed(4)}</td>
+      </tr>`).join("")}</tbody></table>
+      ${available.length > 25 ? `<div class="ns-load-more-wrap"><button class="ns-load-more-button" type="button" data-load-more>Load More <span class="ns-load-more-count">(${available.length - 25} remaining)</span></button></div>` : ""}
+    </div>` : `<div class="function-empty backend-lens-table" data-backend-table="openblas" hidden>${escapeHtml(unavailableMessage(rows, "openblas"))}</div>`;
+  };
+
+  const comparisonHtml = (name) => {
+    const scores = scoresFor(name);
+    return `<div class="backend-comparison" data-backend-comparison="${escapeHtml(name)}">
+      <div class="backend-comparison-head">
+        <div><div class="backend-comparison-title">Backend comparison</div><div class="backend-comparison-note">Published value: ${formatRatio(scores.best)} · fastest backend selected independently for each matching scenario</div></div>
+        <div class="function-tabs backend-lens-tabs" role="tablist" aria-label="${escapeHtml(name)} backend timings">
+          <button class="function-tab is-active" type="button" role="tab" aria-selected="true" data-backend-lens="managed">Managed Core ${scores.managedAvailable.length} credible</button>
+          <button class="function-tab" type="button" role="tab" aria-selected="false" data-backend-lens="openblas">OpenBLAS ${scores.openblasAvailable.length} credible</button>
+        </div>
+      </div>
+      <div class="function-stat-strip">
+        <div class="function-stat"><span>Best per scenario</span><strong>${formatRatio(scores.best)}</strong></div>
+        <div class="function-stat"><span>Managed Core</span><strong>${formatRatio(scores.managed)}</strong></div>
+        <div class="function-stat"><span>OpenBLAS</span><strong>${formatRatio(scores.openblas)}</strong></div>
+        <div class="function-stat"><span>Cells won</span><strong>${escapeHtml(scores.winner)}</strong></div>
+      </div>
+      ${coreTable(scores.managedRows)}
+      ${nativeTable(scores.openblasRows)}
+    </div>`;
+  };
+
+  const wireComparisonTabs = (container) => {
+    container.querySelectorAll("[data-backend-lens]").forEach((button) => button.addEventListener("click", () => {
+      const lens = button.dataset.backendLens;
+      container.querySelectorAll("[data-backend-lens]").forEach((candidate) => {
+        const active = candidate.dataset.backendLens === lens;
+        candidate.classList.toggle("is-active", active);
+        candidate.setAttribute("aria-selected", String(active));
+      });
+      container.querySelectorAll("[data-backend-table]").forEach((table) => { table.hidden = table.dataset.backendTable !== lens; });
+    }));
+  };
+
+  const decorateDetail = () => {
+    if (!ready || detail.querySelector("[data-backend-comparison]")) return;
+    const name = detail.querySelector(".function-title")?.textContent?.trim();
+    if (!name || !nativeGroups.has(name)) return;
+    const scores = scoresFor(name);
+    const ratioPill = detail.querySelector(".function-ratio-pill");
+    if (ratioPill) {
+      ratioPill.textContent = formatRatio(scores.best);
+      ratioPill.className = `function-ratio-pill ${toneClass(scores.best)}`;
+    }
+    const anchor = detail.querySelector(".function-stat-strip") || detail.querySelector(".function-detail-head");
+    anchor.insertAdjacentHTML("afterend", comparisonHtml(name));
+    wireComparisonTabs(detail.querySelector("[data-backend-comparison]"));
+  };
+
+  const renderNativeOnlyDetail = (name) => {
+    const scores = scoresFor(name);
+    detail.innerHTML = `
+      <div class="function-detail-head">
+        <div><div class="function-title" role="heading" aria-level="3">${escapeHtml(name)}</div><p class="function-subtitle">Backend-required operation · real OpenBLAS timings · Managed Core unavailable</p></div>
+        <span class="function-ratio-pill ${toneClass(scores.best)}">${formatRatio(scores.best)}</span>
+      </div>
+      ${comparisonHtml(name)}`;
+    wireComparisonTabs(detail.querySelector("[data-backend-comparison]"));
+  };
+
+  const decorateList = () => {
+    if (!ready) return;
+    list.querySelectorAll("[data-function-name]").forEach((button) => {
+      const name = button.dataset.functionName;
+      if (!nativeGroups.has(name) || button.dataset.backendDecorated === "true") return;
+      const scores = scoresFor(name);
+      button.dataset.backendDecorated = "true";
+      const score = button.querySelector(".function-list-score");
+      if (score) score.textContent = formatRatio(scores.best);
+      button.insertAdjacentHTML("beforeend", `<span class="function-list-winner">Best available · ${escapeHtml(scores.winner)}</span>`);
+    });
+
+    const query = search.value.trim().toLowerCase();
+    const existing = new Set([
+      ...Array.from(list.querySelectorAll("[data-function-name]")).map((button) => button.dataset.functionName),
+      ...Array.from(list.querySelectorAll("[data-native-only-name]")).map((button) => button.dataset.nativeOnlyName)
+    ]);
+    nativeGroups.forEach((rows, name) => {
+      if (existing.has(name) || (query && !name.toLowerCase().includes(query))) return;
+      const scores = scoresFor(name);
+      list.insertAdjacentHTML("beforeend", `<button class="function-list-item ${toneClass(scores.best)}" type="button" role="option" aria-selected="false" data-native-only-name="${escapeHtml(name)}">
+        <span class="function-list-name">${escapeHtml(name)}</span><span class="function-list-score">${formatRatio(scores.best)}</span>
+        <span class="function-list-detail">${scores.openblasAvailable.length}/${rows.length} credible rows · OpenBLAS required</span><span class="function-list-winner">Best available · OpenBLAS</span>
+      </button>`);
+    });
+    dashboard.querySelector("[data-function-list-meta]").textContent = `${list.querySelectorAll(".function-list-item").length} benchmarked functions · one credible effective score`;
+  };
+
+  const updateHeadline = () => {
+    const effectiveRatios = combinedRows
+      .filter(isCredibleRow)
+      .map((row) => Number(row.ratio));
+    dashboard.querySelector("[data-effective-geomean]").textContent = formatRatio(geomean(effectiveRatios.map((ratio) => ({ ratio }))));
+  };
+
+  const listObserver = new MutationObserver(() => decorateList());
+  listObserver.observe(list, { childList: true });
+  const detailObserver = new MutationObserver(() => decorateDetail());
+  detailObserver.observe(detail, { childList: true });
+  list.addEventListener("click", (event) => {
+    const nativeOnly = event.target instanceof Element ? event.target.closest("[data-native-only-name]") : null;
+    if (!nativeOnly) return;
+    list.querySelectorAll(".function-list-item").forEach((button) => { button.classList.remove("is-active"); button.setAttribute("aria-selected", "false"); });
+    nativeOnly.classList.add("is-active");
+    nativeOnly.setAttribute("aria-selected", "true");
+    renderNativeOnlyDetail(nativeOnly.dataset.nativeOnlyName);
+  });
+
+  fetch(coreUrl).then((response) => {
+    if (!response.ok) throw new Error(`Benchmark report HTTP ${response.status}`);
+    return response.json();
+  }).then((payload) => {
+    combinedRows = (Array.isArray(payload) ? payload : (payload.rows || [])).map((row) => ({
+      ...row,
+      status: normalizeCredibilityStatus(
+        row.status, row.numsharp_ms === null ? null : Number(row.numsharp_ms),
+        Boolean(row.effective_profile) || (Array.isArray(payload) && row.numsharp_ms !== null), row.operation)
+    }));
+    coreRows = Array.isArray(payload)
+      ? payload.map((row) => ({
+          ...row,
+          name: functionName(row.operation),
+          availability: row.numsharp_ms === null ? "not_measured" : "available",
+          status: normalizeCredibilityStatus(
+            row.status, Number(row.numsharp_ms), row.numsharp_ms !== null, row.operation)
+        }))
+      : rowsForProfile(combinedRows, "managed");
+    nativeRows = Array.isArray(payload) ? [] : rowsForProfile(combinedRows, "openblas");
+    effectiveRows = Array.isArray(payload) ? coreRows : rowsForEffectiveProfile(combinedRows);
+    coreRows = coreRows.filter(isExplorerRow);
+    nativeRows = nativeRows.filter(isExplorerRow);
+    effectiveRows = effectiveRows.filter(isExplorerRow);
+    coreGroups = groupRows(coreRows, (row) => functionName(row.operation));
+    nativeGroups = groupRows(nativeRows, (row) => row.name);
+    effectiveGroups = groupRows(effectiveRows, (row) => row.name);
+    ready = true;
+    updateHeadline();
+    decorateList();
+    decorateDetail();
+  }).catch((error) => console.warn("Backend benchmark data failed to load", error));
 })();
 </script>

@@ -1,0 +1,15 @@
+# Fixture-only: the gate diagnostics (NDW002/003/005/006/009/010/011) are ERRORS, and this project
+# deliberately contains code that triggers them. Turn them to `none` HERE so `dotnet build` on the
+# fixture stays green while still emitting the intentional NDW012/NDW016/NDW017 ownership WARNINGS. NumSharp.Tests.Build.Analyzer
+# asserts the gate diagnostics in-process (it applies no editorconfig), so nothing is lost.
+[*.cs]
+dotnet_diagnostic.NDW002.severity = none
+dotnet_diagnostic.NDW003.severity = none
+dotnet_diagnostic.NDW005.severity = none
+dotnet_diagnostic.NDW006.severity = none
+dotnet_diagnostic.NDW009.severity = none
+dotnet_diagnostic.NDW010.severity = none
+dotnet_diagnostic.NDW011.severity = none
+dotnet_diagnostic.NDW012.severity = warning
+dotnet_diagnostic.NDW016.severity = warning
+dotnet_diagnostic.NDW017.severity = warning

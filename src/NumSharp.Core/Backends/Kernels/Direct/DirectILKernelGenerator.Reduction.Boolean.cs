@@ -52,6 +52,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for All reduction with early-exit.
         /// Returns true if ALL elements are non-zero.
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe bool AllSimdHelper<T>(void* input, long totalSize) where T : unmanaged
         {
             if (totalSize == 0)
@@ -135,6 +136,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for Any reduction with early-exit.
         /// Returns true if ANY element is non-zero.
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe bool AnySimdHelper<T>(void* input, long totalSize) where T : unmanaged
         {
             if (totalSize == 0)

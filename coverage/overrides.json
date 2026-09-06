@@ -57,22 +57,6 @@
       "target": "NumSharp.np.vstack",
       "notes": "NumPy documents row_stack as an alias of vstack."
     },
-    "numpy.random": {
-      "target": "NumSharp.np.random",
-      "notes": "NumSharp exposes random through np.random."
-    },
-    "numpy.ndarray.itemsize": {
-      "target": "NumSharp.NDArray.dtypesize",
-      "notes": "The element size is exposed as dtypesize in NumSharp."
-    },
-    "numpy.ndarray.data": {
-      "target": "NumSharp.NDArray.Data",
-      "notes": "NumSharp exposes typed unmanaged data through the generic Data<T>() method rather than NumPy's buffer-view property."
-    },
-    "numpy.ndarray.round": {
-      "target": "NumSharp.np.round_",
-      "notes": "Use the static np.round_ API; NumSharp does not expose ndarray.round as an instance member."
-    },
     "numpy.random.ranf": {
       "target": "NumSharp.NumPyRandom.random_sample",
       "notes": "NumPy documents ranf as an alias of random_sample."
@@ -81,27 +65,15 @@
       "target": "NumSharp.NumPyRandom.random_sample",
       "notes": "NumPy documents sample as an alias of random_sample."
     },
-    "numpy.random.random_integers": {
-      "target": "NumSharp.NumPyRandom.randint",
-      "notes": "Use randint and adjust the upper bound; deprecated random_integers includes the high endpoint."
-    },
     "numpy.shape": {
       "target": "NumSharp.NDArray.Shape",
       "notes": "NumSharp exposes shape as an NDArray Shape property rather than the top-level NumPy tuple-returning helper."
-    },
-    "numpy.linalg.matrix_power": {
-      "target": "NumSharp.NDArray.matrix_power",
-      "notes": "Matrix power is available as an NDArray instance method rather than under an linalg namespace."
     }
   },
   "support": {
     "numpy.ndarray.data": {
       "status": "partial",
       "notes": "Data<T>() returns a typed NumSharp ArraySlice and is not NumPy's Python buffer object."
-    },
-    "numpy.random.random_integers": {
-      "status": "partial",
-      "notes": "The available randint alternative has an exclusive upper bound, while random_integers historically used an inclusive upper bound."
     },
     "numpy.shape": {
       "status": "partial",
@@ -111,5 +83,8 @@
       "status": "unsupported",
       "notes": "The public compatibility symbol exists, but NumSharp does not implement a Complex64 storage dtype."
     }
+  },
+  "stray_allowlist": {
+    "numpy.ndim": "Name coincidence: the ndim on Broadcast/NDIterator/UniqueResult is those objects' rank property (iterator protocol / result struct), not the top-level np.ndim(a) helper — which NumSharp does not implement."
   }
 }

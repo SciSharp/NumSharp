@@ -11,6 +11,7 @@ namespace NumSharp
         /// <param name="x2">Input array.</param>
         /// <returns>Boolean result of the logical AND operation applied to the elements of x1 and x2; the shape is determined by broadcasting.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_and.html</remarks>
+        [NDScoped]
         public static NDArray<bool> logical_and(NDArray x1, NDArray x2)
         {
             // Convert to boolean (nonzero = true) then AND
@@ -26,6 +27,7 @@ namespace NumSharp
         /// <param name="x2">Input array.</param>
         /// <returns>Boolean result of the logical OR operation applied to the elements of x1 and x2; the shape is determined by broadcasting.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_or.html</remarks>
+        [NDScoped]
         public static NDArray<bool> logical_or(NDArray x1, NDArray x2)
         {
             // Convert to boolean (nonzero = true) then OR
@@ -40,6 +42,7 @@ namespace NumSharp
         /// <param name="x">Logical NOT is applied to the elements of x.</param>
         /// <returns>Boolean result with the same shape as x.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_not.html</remarks>
+        [NDScoped]
         public static NDArray<bool> logical_not(NDArray x)
         {
             // For boolean arrays, logical_not == bitwise invert (~True == False).
@@ -60,6 +63,7 @@ namespace NumSharp
         /// <param name="x2">Input array.</param>
         /// <returns>Boolean result of the logical XOR operation applied to the elements of x1 and x2; the shape is determined by broadcasting.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_xor.html</remarks>
+        [NDScoped]
         public static NDArray<bool> logical_xor(NDArray x1, NDArray x2)
         {
             // Convert to boolean (nonzero = true) then XOR

@@ -21,6 +21,7 @@ namespace NumSharp.Backends
         public NDArray<bool> Any(NDArray nd, int[] axis, bool keepdims)
             => ReduceLogicalMultiAxis(nd, axis, keepdims, reduceAll: false);
 
+        [NDScoped]
         private NDArray<bool> ReduceLogicalAxis(NDArray nd, int axis, bool keepdims, bool reduceAll)
         {
             if (nd is null)
@@ -29,7 +30,7 @@ namespace NumSharp.Backends
             if (nd.ndim == 0)
             {
                 if (axis == 0 || axis == -1)
-                    return np.array(reduceAll ? All(nd) : Any(nd)).MakeGeneric<bool>();
+                    return np.array(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
 
                 throw new AxisError(axis, 0);
             }
@@ -97,6 +98,7 @@ namespace NumSharp.Backends
         //   2. Adjacent axes on a C-contig input → reshape to fuse them, then a single
         //      axis reduction. Saves N-1 redundant kernel invocations.
         //   3. Otherwise → chain single-axis reductions with keepdims=true.
+        [NDScoped]
         private NDArray<bool> ReduceLogicalMultiAxis(NDArray nd, int[] axis, bool keepdims, bool reduceAll)
         {
             if (nd is null)
@@ -115,7 +117,7 @@ namespace NumSharp.Backends
                 if (axis.Length != 1 || (axis[0] != 0 && axis[0] != -1))
                     throw new AxisError(axis.Length > 0 ? axis[0] : 0, 0);
 
-                return np.array(reduceAll ? All(nd) : Any(nd)).MakeGeneric<bool>();
+                return np.array(reduceAll ? All(nd) : Any(nd)).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
             }
 
             int ndim = nd.ndim;
@@ -127,7 +129,7 @@ namespace NumSharp.Backends
             if (normalized.Length == ndim)
             {
                 bool scalar = reduceAll ? All(nd) : Any(nd);
-                var result = np.array(scalar).MakeGeneric<bool>();
+                var result = np.array(scalar).AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
                 if (keepdims)
                 {
                     var dims = new long[ndim];
@@ -187,6 +189,7 @@ namespace NumSharp.Backends
 
         // Fuse a contiguous run of reduced axes into a single axis via reshape, then
         // run one single-axis reduction. Caller has verified C-contiguous storage.
+        [NDScopedCovered] // engine multi-axis All/Any is reached only from the [NDScoped] np.all/np.any entries (the fused reshape view is scope-reclaimed)
         private NDArray<bool> ReduceContiguousAxisRun(NDArray nd, int[] sortedAxes, bool keepdims, bool reduceAll)
         {
             int ndim = nd.ndim;
@@ -227,7 +230,7 @@ namespace NumSharp.Backends
             if (nd.GetTypeCode == NPTypeCode.Boolean)
             {
                 // Already bool — return a copy so callers can't mutate the input.
-                return nd.copy().MakeGeneric<bool>();
+                return nd.copy().AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
             }
 
             // (nd != 0) returns an NDArray<bool> with element-wise non-zero check,
@@ -257,7 +260,7 @@ namespace NumSharp.Backends
                 ? np.ones(resultShape, NPTypeCode.Boolean)
                 : np.zeros(resultShape, NPTypeCode.Boolean);
 
-            return result.MakeGeneric<bool>();
+            return result.AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
         }
 
         private static void ExecuteLogicalAxis<T>(NDArray nd, NDArray<bool> result, int axis, bool reduceAll)

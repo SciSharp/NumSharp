@@ -23,6 +23,10 @@ namespace NumSharp
         /// <summary>
         /// Element-wise greater-than comparison with scalar (>).
         /// </summary>
+        // Scope: reclaims the np.asanyarray temp and the null-branch MakeGeneric strand while
+        // yielding the typed result (see NDArray.Equals.cs). The NDArray×NDArray operator above
+        // owns no temp and stays unscoped on its hot path.
+        [NDScoped]
         public static NDArray<bool> operator >(NDArray lhs, object rhs)
         {
             if (lhs is null)
@@ -34,6 +38,7 @@ namespace NumSharp
         /// <summary>
         /// Element-wise greater-than comparison with scalar on left (>).
         /// </summary>
+        [NDScoped]
         public static NDArray<bool> operator >(object lhs, NDArray rhs)
         {
             if (rhs is null)
@@ -61,6 +66,7 @@ namespace NumSharp
         /// <summary>
         /// Element-wise greater-than-or-equal comparison with scalar (>=).
         /// </summary>
+        [NDScoped]
         public static NDArray<bool> operator >=(NDArray lhs, object rhs)
         {
             if (lhs is null)
@@ -72,6 +78,7 @@ namespace NumSharp
         /// <summary>
         /// Element-wise greater-than-or-equal comparison with scalar on left (>=).
         /// </summary>
+        [NDScoped]
         public static NDArray<bool> operator >=(object lhs, NDArray rhs)
         {
             if (rhs is null)

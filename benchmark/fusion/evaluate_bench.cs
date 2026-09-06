@@ -38,8 +38,13 @@ var bf = b.astype(np.float32);
 
 double Best(Func<double> run, int rounds = 9)
 {
-    double best = double.MaxValue;
-    for (int i = 0; i < rounds; i++)
+    // First round doubles as the pilot for the min-time policy: a call >20 ms runs EXACTLY 100 times,
+    // else enough single-call rounds to span ~200 ms total (min over them; capped defensively).
+    GC.Collect();
+    GC.WaitForPendingFinalizers();
+    double best = run();
+    rounds = best > 20.0 ? 100 : Math.Min(100_000, Math.Max(2, (int)Math.Ceiling(200.0 / Math.Max(best, 1e-9))));
+    for (int i = 1; i < rounds; i++)
     {
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -97,7 +102,7 @@ _ = a * b + c;
 _ = (a - b) / (a + b);
 _ = np.sum(a * b);
 
-Console.WriteLine($"\n4M float64, best of 9:");
+Console.WriteLine($"\n4M float64, best window (min over ~200 ms):");
 
 double tFusedMulAdd = Best(() => Time(() => np.evaluate((NDExpr)a * b + c)));
 double tUnfusedMulAdd = Best(() => Time(() => { var _ = a * b + c; }));

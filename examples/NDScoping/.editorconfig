@@ -1,0 +1,16 @@
+# NDScoping example — analyzer configuration (layers on top of the repo-root .editorconfig).
+#
+# NDW012 (the NDArray leak analyzer) is silenced for this example ON PURPOSE:
+#   * Level 0 is the "leak to the finalizer" BASELINE the whole tour exists to motivate — flagging it
+#     would contradict the lesson.
+#   * The driver and probe deliberately hold NDArrays without disposing them so they can OBSERVE
+#     reclamation through the public NDArray.IsDisposed signal.
+# The example proves reclamation at RUNTIME, not via the leak analyzer (a separate feature). NDW013
+# (the "[NDScoped] without the weaver package" MSBuild nudge) is silenced too — this project wires the
+# weaver in source mode, so the nudge does not apply.
+#
+# The NDW002-011 target-shape diagnostics are LEFT at their default (error): the main project trips
+# none of them, and the sibling CounterExamples project trips them on purpose to demonstrate the gate.
+[*.cs]
+dotnet_diagnostic.NDW012.severity = none
+dotnet_diagnostic.NDW013.severity = none

@@ -17,8 +17,8 @@ namespace NumSharp
         /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
         /// <returns>Array interpretation of a. If a is an ndarray or a subclass of ndarray, it is returned as-is and no copy is performed.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
-        public static NDArray asanyarray(in object a, Type dtype = null)
-            => asanyarray(in a, dtype, 'K');
+        public static NDArray asanyarray(in object a, Type dtype = null, string device = null)
+            => asanyarray(in a, dtype, 'K', device);
 
         /// <summary>
         ///     Convert the input to an ndarray with a specified memory layout.
@@ -26,10 +26,12 @@ namespace NumSharp
         /// <param name="a">Input data.</param>
         /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
         /// <param name="order">'C', 'F', 'A' or 'K' (default — resolved against a).</param>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array interpretation of a in the requested layout.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
-        public static NDArray asanyarray(in object a, Type dtype, char order)
+        public static NDArray asanyarray(in object a, Type dtype, char order, string device = null)
         {
+            ValidateDevice(device);
             NDArray ret;
             switch (a) {
                 case null:
@@ -124,6 +126,26 @@ namespace NumSharp
                     ret = ret.copy(physical);
             }
             return ret;
+        }
+
+        /// <summary>
+        ///     Convert a <see cref="MemoryView"/> (obtained from <see cref="NDArray.data"/>) to an ndarray,
+        ///     passing ndarray subclasses through — the consumer round-trip of <c>ndarray.data</c>. Matches
+        ///     NumPy's <c>np.asanyarray(a.data)</c> (a zero-copy VIEW sharing memory, copying only if a
+        ///     dtype/layout change forces it). A dedicated overload is required because a <see cref="MemoryView"/>
+        ///     is not otherwise resolvable by the <c>object</c> converter above. Equivalent to
+        ///     <c>np.asanyarray(buffer.obj, …)</c>.
+        /// </summary>
+        /// <param name="buffer">A <see cref="MemoryView"/> over an array.</param>
+        /// <param name="dtype">By default, the data-type is inferred from the source.</param>
+        /// <param name="order">'C', 'F', 'A' or 'K' (default).</param>
+        /// <param name="device">Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
+        public static NDArray asanyarray(MemoryView buffer, Type dtype = null, char order = 'K', string device = null)
+        {
+            if (buffer is null)
+                throw new ArgumentNullException(nameof(buffer));
+            return asanyarray(buffer.obj, dtype, order, device);
         }
 
         /// <summary>

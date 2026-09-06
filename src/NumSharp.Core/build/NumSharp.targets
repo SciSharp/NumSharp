@@ -1,0 +1,114 @@
+<Project>
+  <!-- ==================================================================================
+       NumSharp — the consumer-side "you marked [NDScoped] but nothing weaves it" guard (NDW013).
+
+       Imported into any project that references the NumSharp package (NuGet places
+       build/<id>.targets — here build/NumSharp.targets — at the end of the import chain, per
+       TargetFramework). NDW013 is a BUILD WARNING raised when a project USES the weaver-dependent
+       attributes — [NDScoped] / [NDScopedAsync] on a member, [NDScopedExit] on a parameter — but the
+       NumSharp.Build package is NOT installed (or weaving is turned off), because in that state the
+       attributes are INERT: the method keeps its original body, no scope is injected, no argument is
+       detached, and every transient it drops is left to the finalizer — a silent leak the author
+       almost certainly did not intend.
+
+       WHY THIS LIVES IN NumSharp (not in NumSharp.Build). The whole point is to warn when the
+       weaver package is ABSENT, so the check must ship in something that is ALWAYS present when
+       the attributes could be used. The attributes live in NumSharp.Core, so a project can only use
+       them if it references NumSharp — which means this file is imported exactly when it is needed.
+       The weaver's own build/NumSharp.Build.targets sets $(NumSharpBuildActive)=true when it is
+       installed and weaving (see that file), so the guard stays silent whenever the weaver will
+       actually run. NumSharp does NOT depend on (or bundle) NumSharp.Build: weaving is the explicit
+       opt-in `dotnet add package NumSharp.Build`, and NDW013 is what points a consumer at it.
+
+       TWO REPORTERS, ONE CODE. The NumSharp package ships the compile-time analyzer
+       (analyzers/dotnet/cs/NumSharp.Build.Analyzer.dll — NuGet applies it to every PackageReference
+       compile), and that analyzer is the PRIMARY NDW013 reporter: it reads the two knobs declared
+       below through the generated editorconfig (build_property.NumSharpBuildActive /
+       build_property.NumSharpDisableWeaverMissingWarning) and, when the build has declared the
+       weaver inactive, reports NDW013 AT EACH attributed member — with a source location, in the
+       IDE as well as on the command line, and for the shapes no text scan can see: an override or
+       implementation that INHERITS the attribute from a virtual/abstract/interface declaration
+       (in this assembly or another), and a parameter inheriting [NDScopedExit] by position. The
+       target below is the FALLBACK for a compile the analyzer does not reach: a project that
+       references the NumSharp assembly directly (a <Reference HintPath>, no package — NuGet applies
+       nothing) or that removed the analyzer item by hand. (`ExcludeAssets="analyzers"` is NOT such a
+       compile: NuGet records the exclusion, but the .NET SDK — observed on 10.0.101 — still hands
+       the package's analyzers/dotnet/cs/*.dll to csc, so that consumer keeps the analyzer and its
+       per-member NDW013.) It yields to the analyzer whenever NumSharp.Build.Analyzer is among the
+       compile's @(Analyzer) items, so a project never sees the same finding twice (once per member
+       from the analyzer AND once project-wide from here).
+
+       The fallback's detection is the same ASCII metadata scan the weaver uses: compiling with any
+       of the attributes lands its TypeRef name as an ASCII run in the assembly's #Strings heap, and
+       ASCII runs survive a lossy UTF-8 read of arbitrary binary intact — so a plain text scan of the
+       fresh CoreCompile output is a reliable "was a weaver-dependent attribute used?" probe. It
+       matches the three WEAVABLE type names exactly — 'NDScopedAttribute', 'NDScopedAsyncAttribute'
+       and 'NDScopedExitAttribute' — rather than the bare shared prefix 'NDScoped', so
+       [NDScopedCovered] (the analyzer-only hint attribute, which needs NO weaver and is inert at
+       runtime) does NOT trip this guard: 'NDScopedCoveredAttribute' contains none of the weavable
+       names as a substring. A false POSITIVE (a matched name appearing in a user string literal)
+       only prints an advisory warning; a false negative does not happen on real compiler output.
+       The scan cannot see an INHERITED target (the override carries no attribute text of its own);
+       that shape is the analyzer's, and a compile without the analyzer simply misses it.
+
+       Opting out: install NumSharp.Build (the intended fix), set $(NumSharpBuildActive)=true by
+       hand (you are weaving some other way), set $(NumSharpDisableWeaverMissingWarning)=true, or
+       add NDW013 to $(MSBuildWarningsAsMessages) — every knob is honoured by both reporters.
+
+       $(NumSharpBuildActive) is given an explicit 'false' default here: declared-but-not-true and
+       never-declared must stay distinguishable to the analyzer, because an undeclared property (a
+       source-mode build that imports neither this file nor the weaver's) means "unknown", where
+       the analyzer stays silent.
+       ================================================================================== -->
+  <PropertyGroup>
+    <NumSharpBuildActive Condition="'$(NumSharpBuildActive)' == ''">false</NumSharpBuildActive>
+  </PropertyGroup>
+  <ItemGroup>
+    <CompilerVisibleProperty Include="NumSharpBuildActive" />
+    <CompilerVisibleProperty Include="NumSharpDisableWeaverMissingWarning" />
+  </ItemGroup>
+
+  <!-- The @(Analyzer) test runs at target-execution time, after ResolveLockFileAnalyzers /
+       ResolveProjectReferences have populated the item (both precede CoreCompile), so it sees the
+       analyzer NuGet applied from the NumSharp package as well as a source-mode
+       <ProjectReference OutputItemType="Analyzer"> or an explicit <Analyzer Include>.
+
+       Incremental, like the weaver's own NDScopeWeave target: Inputs/Outputs on a per-TFM marker,
+       so the scan (a full read of the intermediate assembly) is paid only when CoreCompile actually
+       produced a new assembly — never on the no-op incremental builds that make up most of a dev
+       loop. Like a compiler warning, NDW013 is therefore emitted by the build that recompiles the
+       project and not repeated by one that recompiled nothing. The marker sits in obj/ and is
+       registered in FileWrites, so Clean/Rebuild remove it and re-arm the scan. -->
+  <Target Name="_NumSharpWarnWeaverMissing"
+          AfterTargets="CoreCompile"
+          Condition="'$(DesignTimeBuild)' != 'true'
+                     and '$(NumSharpBuildActive)' != 'true'
+                     and '$(NumSharpDisableWeaverMissingWarning)' != 'true'
+                     and '@(IntermediateAssembly)' != ''
+                     and '@(Analyzer->WithMetadataValue('Filename','NumSharp.Build.Analyzer'))' == ''"
+          Inputs="@(IntermediateAssembly)"
+          Outputs="$(IntermediateOutputPath)NumSharp.WeaverMissing.marker">
+
+    <!-- Only pay the file read when the weaver is not active AND the analyzer is not applied — the
+         common cases (weaver installed, or the analyzer present) skip the scan entirely via the
+         target Condition above. ONE read: the assembly is decoded once and tested for the three
+         weavable names by a single regex (NDScopedAttribute / NDScopedAsyncAttribute /
+         NDScopedExitAttribute — NDScopedCoveredAttribute does not match). The decoded text is never
+         stored in a property: a multi-megabyte property value would be echoed verbatim into every
+         diagnostic log and binlog that records property assignments. -->
+    <PropertyGroup>
+      <_NumSharpScopedAssembly>@(IntermediateAssembly->'%(FullPath)')</_NumSharpScopedAssembly>
+      <_NumSharpUsesScoped>false</_NumSharpUsesScoped>
+      <_NumSharpUsesScoped Condition="Exists('$(_NumSharpScopedAssembly)') and $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('$(_NumSharpScopedAssembly)')), 'NDScoped(Async|Exit)?Attribute'))">true</_NumSharpUsesScoped>
+    </PropertyGroup>
+
+    <Warning Condition="'$(_NumSharpUsesScoped)' == 'true'"
+             Code="NDW013"
+             Text="$(MSBuildProjectName) uses [NDScoped]/[NDScopedAsync]/[NDScopedExit] but the NumSharp.Build package is not installed (or weaving is disabled), so the attributes are INERT — no NDScope is injected, no argument is detached, and the methods' NDArray temporaries are left to the finalizer instead of being reclaimed. Install the weaver with 'dotnet add package NumSharp.Build' (it is a build-time development dependency, not a runtime dependency), or remove the attributes and dispose the temporaries by hand. See https://scisharp.github.io/NumSharp/docs/numsharp-build-compiler.html#ndw013" />
+
+    <Touch Files="$(IntermediateOutputPath)NumSharp.WeaverMissing.marker" AlwaysCreate="true" />
+    <ItemGroup>
+      <FileWrites Include="$(IntermediateOutputPath)NumSharp.WeaverMissing.marker" />
+    </ItemGroup>
+  </Target>
+</Project>

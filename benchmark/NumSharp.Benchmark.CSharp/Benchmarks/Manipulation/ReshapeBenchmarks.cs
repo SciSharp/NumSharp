@@ -8,27 +8,31 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Manipulation;
 /// Benchmarks for reshape and transpose operations.
 /// </summary>
 [BenchmarkCategory("Manipulation", "Reshape")]
-public class ReshapeBenchmarks : BenchmarkBase
+public class ReshapeBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _arr1D = null!;
     private NDArray _arr2D = null!;
     private NDArray _arr3D = null!;
+    private NDArray _arr1DFor3D = null!;
+    private NDArray _arr1DFor2D = null!;
 
-    [Params(ArraySizeSource.Medium, ArraySizeSource.Large)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _arr1D = np.random.rand(N) * 100;
+        _arr1D = CreateRandomArray(N, DType);
 
         var rows = (int)Math.Sqrt(N);
         var cols = N / rows;
-        _arr2D = np.random.rand(rows, cols) * 100;
+        _arr2D = CreateRandomArray2D(rows, cols, DType);
+        _arr1DFor2D = CreateRandomArray(rows * cols, DType);
 
         var d = (int)Math.Pow(N, 1.0 / 3);
-        _arr3D = np.random.rand(d, d, d) * 100;
+        _arr3D = CreateRandomArray3D(d, d, d, DType);
+        _arr1DFor3D = CreateRandomArray(d * d * Math.Max(1, N / (d * d)), DType);
     }
 
     [GlobalCleanup]
@@ -37,6 +41,8 @@ public class ReshapeBenchmarks : BenchmarkBase
         _arr1D = null!;
         _arr2D = null!;
         _arr3D = null!;
+        _arr1DFor3D = null!;
+        _arr1DFor2D = null!;
         GC.Collect();
     }
 
@@ -50,7 +56,7 @@ public class ReshapeBenchmarks : BenchmarkBase
     {
         var rows = (int)Math.Sqrt(N);
         var cols = N / rows;
-        return _arr1D.reshape(rows, cols);
+        return _arr1DFor2D.reshape(rows, cols);
     }
 
     [Benchmark(Description = "reshape 2D -> 1D")]
@@ -62,7 +68,7 @@ public class ReshapeBenchmarks : BenchmarkBase
     public NDArray Reshape_1D_to_3D()
     {
         var d = (int)Math.Pow(N, 1.0 / 3);
-        return _arr1D.reshape(d, d, -1);
+        return _arr1DFor3D.reshape(d, d, -1);
     }
 
     [Benchmark(Description = "np.reshape(a, shape)")]
@@ -71,7 +77,7 @@ public class ReshapeBenchmarks : BenchmarkBase
     {
         var rows = (int)Math.Sqrt(N);
         var cols = N / rows;
-        return np.reshape(_arr1D, new Shape(rows, cols));
+        return np.reshape(_arr1DFor2D, new Shape(rows, cols));
     }
 
     // ========================================================================

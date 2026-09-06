@@ -197,6 +197,7 @@ namespace NumSharp.Backends.Kernels
             return true;
         }
 
+        [MethodImpl(OptimizeAndInline)]
         private static bool ScanRunSingle(byte* p, long len, long stride)
         {
             float* fp = (float*)p;
@@ -233,6 +234,7 @@ namespace NumSharp.Backends.Kernels
             return true;
         }
 
+        [MethodImpl(OptimizeAndInline)]
         private static bool ScanRunDouble(byte* p, long len, long stride)
         {
             double* dp = (double*)p;

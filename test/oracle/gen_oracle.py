@@ -17,9 +17,11 @@ Case schema:
 
 operand-descriptor = {dtype, shape, strides(elements), offset(elements), bufferSize(elements), buffer(hex of base)}
 """
+import io
 import json
 import os
 import sys
+import tempfile
 import warnings
 
 import numpy as np
@@ -120,6 +122,10 @@ UNARY_OPS = {
     "sqrt": np.sqrt, "cbrt": np.cbrt, "square": np.square, "reciprocal": np.reciprocal,
     "floor": np.floor, "ceil": np.ceil, "trunc": np.trunc,
     "sin": np.sin, "cos": np.cos, "tan": np.tan, "exp": np.exp, "log": np.log,
+    # Complex-number accessors (real inputs are valid too). These are central post-FFT paths and
+    # must see the same full dtype x layout matrix as every other unary operation.
+    "conjugate": np.conjugate, "conj": np.conj, "real": np.real, "imag": np.imag,
+    "angle": np.angle, "angle_deg": lambda a: np.angle(a, deg=True),
 }
 # All 13 NumPy-representable dtypes (W1: was a 7-dtype subset — now exercises float16 as an
 # INPUT and the narrow integers int8/int16/uint16/uint32/uint64 through every unary kernel).
@@ -134,6 +140,9 @@ UNARY_EXTRA_OPS = {
     "log2": np.log2, "log10": np.log10, "log1p": np.log1p,
     "sinh": np.sinh, "cosh": np.cosh, "tanh": np.tanh,
     "arcsin": np.arcsin, "arccos": np.arccos, "arctan": np.arctan,
+    "arcsinh": np.arcsinh, "asinh": np.asinh,
+    "arccosh": np.arccosh, "acosh": np.acosh,
+    "arctanh": np.arctanh, "atanh": np.atanh,
     "deg2rad": np.deg2rad, "rad2deg": np.rad2deg,
     "positive": np.positive,
     "rint": np.rint,   # round-half-to-even; float-tier dtype like the others in this group
@@ -223,9 +232,12 @@ def gen_reduce(ops, dtypes, layout_names):
             operand = describe(base, view)
             for opname, f in ops.items():
                 for axis in _axes(view.ndim):
-                    if opname in ("argmax", "argmin") and axis is None:
-                        continue  # NumSharp has no flatten-argmax overload
                     for keepdims in (False, True):
+                        if opname in ("argmax", "argmin") and axis is None and keepdims:
+                            continue  # NumSharp's flat argmax/argmin form (long) has no keepdims;
+                                      # the keepdims=False flat cells replay via
+                                      # NDArray.Scalar(np.argmax(a)) — the exact path whose Decimal
+                                      # IL compare was silently wrong (G13)
                         try:
                             r = np.asarray(f(view, axis, keepdims))
                         except Exception:
@@ -259,6 +271,12 @@ NAN_REDUCE_OPS = {
     "nanstd": lambda a, ax, kd: np.nanstd(a, axis=ax, keepdims=kd),
     "nanvar": lambda a, ax, kd: np.nanvar(a, axis=ax, keepdims=kd),
     "nanmedian": lambda a, ax, kd: np.nanmedian(a, axis=ax, keepdims=kd),
+    # issue #623: NaN-ignoring arg-reductions. All-NaN slices raise ValueError -> the gen's
+    # try/except skips those cells (the error text is unit-test-pinned). Result is int64 indices,
+    # deterministic (first-occurrence argmax/argmin contract) -> full bit-compare. Unlike
+    # argmax/argmin these DO take axis=None here: np.nanarg* has the int?-axis NDArray overload.
+    "nanargmax": lambda a, ax, kd: np.nanargmax(a, axis=ax, keepdims=kd),
+    "nanargmin": lambda a, ax, kd: np.nanargmin(a, axis=ax, keepdims=kd),
 }
 NAN_REDUCE_DTYPES = list(ALL_DTYPES)   # widened: every dtype (NaN-erroring combos skipped by the gen)
 
@@ -297,6 +315,55 @@ def gen_binary(ops, dt_pairs, pair_layout_names):
     return cases
 
 
+# np.interp(x, xp, fp, left, right, period) — 1-D linear interpolation. Bit-exact with NumPy
+# (managed binary_search_with_guess + slope port). Operands [x, xp, fp]; params carry left/right/period.
+def gen_interp():
+    cases = []
+    n = [0]
+
+    def emit(x, xp, fp, params, cid, layout="c_contiguous_1d"):
+        kwargs = {k: params[k] for k in ("left", "right", "period") if k in params}
+        try:
+            r = np.asarray(np.interp(x, xp, fp, **kwargs))
+        except Exception:
+            return
+        # asarray (not ascontiguousarray) so a 0-D x stays 0-D — ascontiguousarray min-1-D-promotes it.
+        def _cc(a):
+            a = np.asarray(a)
+            return a if a.flags["C_CONTIGUOUS"] else np.ascontiguousarray(a)
+        xa = _cc(x); xpa = _cc(xp); fpa = _cc(fp)
+        cases.append({
+            "id": f"interp/{cid}/{n[0]}",
+            "op": "interp",
+            "params": params,
+            "operands": [describe(xa, xa), describe(xpa, xpa), describe(fpa, fpa)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": layout,
+            "valueclass": "mixed",
+        })
+        n[0] += 1
+
+    xp = np.array([1., 2., 3.], np.float64)
+    fp = np.array([3., 2., 0.], np.float64)
+    xq = np.array([0., 1., 1.5, 2.72, 3.14], np.float64)
+    emit(xq, xp, fp, {}, "basic")
+    emit(np.array([-1., 5.]), xp, fp, {"left": -100.0, "right": 99.0}, "leftright")
+    emit(np.array([-1., 5.]), xp, fp, {"left": -100.0}, "leftonly")
+    emit(np.array([np.nan, 2.5, np.inf, -np.inf]), xp, fp, {}, "nan_inf_x")
+    emit(np.array([0., 2., 5.]), np.array([2.]), np.array([9.]), {}, "single_point")
+    emit(np.array([-180., -170., -185., 185., -10., -5., 0., 365.]),
+         np.array([190., -190., 350., -350.]), np.array([5., 10., 3., 4.]), {"period": 360.0}, "period")
+    emit(np.linspace(0., 10., 25), np.arange(11.), np.sin(np.arange(11.)), {}, "sine")
+    emit(np.asarray(2.5), xp, fp, {}, "scalar0d")
+    emit(np.array([[0.5, 2.5], [1.5, 3.5]]), xp, fp, {}, "highdim_2d", "c_contiguous_2d")
+    emit(np.array([2], np.int64), np.array([1, 2, 3], np.int64), np.array([30, 20, 0], np.int64), {}, "int_inputs")
+    emit(np.array([1.5, 4.0]), np.array([2., 3., 5.]), np.array([1j, 0, 2 + 3j]), {}, "complex_fp")
+    emit(np.array([1.5, 2.5]), xp, np.array([np.inf, 0., np.inf]), {}, "inf_fp")
+    emit(np.array([1.5]), np.array([1., 1., 2.]), np.array([10., 20., 30.]), {}, "equal_dx")
+    return cases
+
+
 # T12 — statistics. NumPy is the oracle for value, dtype (median/average/percentile/quantile ->
 # float64; ptp preserves; count_nonzero -> int64), and keepdims shape.
 STAT_REDUCE_OPS = {
@@ -310,10 +377,11 @@ STAT_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_cont
 CNZ_DTYPES = list(ALL_DTYPES)          # widened: count_nonzero is dtype-agnostic
 # clip dtypes. complex128 IS supported by NumPy's clip (probed 2.4.2: lexicographic
 # real-then-imag ordering, NaN-poisoning comparisons — np.clip([1+2j,5+1j,-3+0j],0,2) ->
-# [1+2j, 2+0j, 0+0j]); included below. bool is CARVED OUT: NumSharp's general
-# (strided/transposed/F-contig) clip kernel throws "clip not supported for
-# Boolean" (only the contiguous path handles bool) — reproduced under [OpenBugs] (Clip_Bool_Strided_*).
-CLIP_DTYPES = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
+# [1+2j, 2+0j, 0+0j]); included below. bool is included too (fixed): NumSharp's general
+# (strided/transposed/F-contig) clip kernel now handles Boolean by riding the Byte Min/Max
+# path — bool bounds are (False, True) so the clip is an IDENTITY, gating that the strided
+# path reads/writes each bool element in the right C-order position (the exact bug it had).
+CLIP_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
                "float16", "float32", "float64", "complex128"]
 QUANTILE_SPECS = [
     ("percentile", lambda a, q, ax: np.percentile(a, q, axis=ax), [0.0, 25.0, 50.0, 75.0, 100.0]),
@@ -398,7 +466,11 @@ def gen_clip(dtypes, layout_names):
         for s in dtypes:
             dt = np.dtype(s)
             base, view = fn(dt)
-            lo_v, hi_v = (1, 100) if dt.kind == "u" else (-10, 10)
+            # bool has only two orderable values, so any scalar bound pair either passes the
+            # array through (False, True) or saturates it to a constant — (False, True) makes clip
+            # the identity, which is the informative case: it verifies the strided/transposed read
+            # maps to the right C-order output slot (the bug that carved bool out originally).
+            lo_v, hi_v = (0, 1) if dt.kind == "b" else (1, 100) if dt.kind == "u" else (-10, 10)
             lo = np.array(lo_v, dtype=dt).reshape(())
             hi = np.array(hi_v, dtype=dt).reshape(())
             try:
@@ -481,6 +553,19 @@ SCAN_OPS = {
 SCAN_DTYPES = list(ALL_DTYPES)         # widened: cumsum/cumprod/diff are dtype-general (bool->int upcast)
 SCAN_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
                 "transposed_3d", "strided_2d_cols", "one_element_1d", "negstride_1d"]
+
+# T11b — NaN-aware cumulative scans (nancumsum/nancumprod). NumPy's nancumsum/nancumprod are
+# _replace_nan(a, 0|1) then cumsum/cumprod, so the oracle rides gen_scan over the SAME layouts and
+# dtype set: the float pool front-loads nan/+-inf and the complex pool carries a NaN in BOTH the real
+# and imaginary lanes, so every float/complex slice exercises the NaN -> identity replacement (nan->0
+# for sum, nan->1 for prod; a complex element with EITHER lane NaN collapses to 0+0j / 1+0j). NumPy is
+# the oracle for value, the NEP50 accumulator dtype (nancumsum(int32)->int64), and the
+# leading-NaN/all-NaN-slice -> identity contract. Char has no NaN, so nancum(char) == cum(char) (already
+# gated by the scan tier's char cumsum) and is not re-woven here.
+NAN_SCAN_OPS = {
+    "nancumsum": lambda a, ax: np.nancumsum(a, axis=ax),
+    "nancumprod": lambda a, ax: np.nancumprod(a, axis=ax),
+}
 
 
 def gen_scan(ops, dtypes, layout_names):
@@ -593,17 +678,18 @@ LOGIC_BIN_PAIRS = [
     ("complex128", "complex128"),
 ]
 
-# G5 (F5) — iscomplex/isreal: REAL dtypes × CONTIGUOUS layouts ONLY (this is the verified-green
-# envelope). CARVED (both documented bugs already pinned in OpenBugs.DtypeCoverage.cs —
-# IsComplex_IgnoresImaginaryPart / IsReal_IgnoresImaginaryPart, ≈:119/:130):
-#   * complex128 input — NumSharp never inspects the imaginary part (iscomplex -> all False,
-#     isreal -> all True, both wrong for nonzero-imag values);
-#   * strided/F-contiguous/transposed REAL input — same op emits garbage bytes on the
-#     non-contiguous path.
+# G5 (F5) — iscomplex/isreal: FULL coverage — ALL dtypes (complex128 included) × EVERY layout.
+# Ported to NumPy's own structure (_type_check_impl): isreal(x) = imag(x) == 0; iscomplex(x) =
+# imag(x) != 0 for a complex dtype, else all-False. The complex128 pool carries nonzero imaginary
+# parts (real + rolled-imag, with NaN/Inf/-0 among them), so this tier now exercises the imaginary
+# inspection that was previously CARVED. The former carve had two causes, both fixed:
+#   * complex128 input — NumSharp now inspects the imaginary lane (np.imag strided view) instead of
+#     returning all-False/all-True regardless of value;
+#   * strided/F-contiguous/transposed REAL input — the non-contiguous path emitted garbage bytes
+#     because np.ones/np.zeros were handed the view's Shape (strides+offset); it now builds a fresh
+#     C-contiguous bool array from the DIMENSIONS only.
 ISCOMPLEX_OPS = {"iscomplex": np.iscomplex, "isreal": np.isreal}
-ISCOMPLEX_DTYPES = [d for d in ALL_DTYPES if d != "complex128"]
-ISCOMPLEX_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d",
-                     "one_element_1d", "scalar_0d"]
+ISCOMPLEX_DTYPES = list(ALL_DTYPES)
 
 # Group A Batch 1: logical_and/or/xor (binary -> bool, truthiness of each element),
 # logical_not (unary -> bool), arctan2 (binary -> float; NumPy promotes int -> float64,
@@ -619,6 +705,15 @@ ARCTAN2_PAIRS = [
     ("float32", "float32"), ("float64", "float64"), ("float16", "float16"),
     ("int32", "int32"), ("int32", "float64"), ("uint8", "int8"), ("float32", "float64"),
 ]
+
+# logaddexp / logaddexp2 / nextafter: binary float-tier ufuncs with arctan2's promotion
+# (ee->e, ff->f, dd->d, gg->g). nextafter is bit-exact; logaddexp/logaddexp2 diverge <=2 ULP
+# (managed fdlibm log1p vs NumPy's closed ucrtbase log1p) — excused in MisalignedRegistry.
+LOGADDEXP_OPS = {"logaddexp": np.logaddexp, "logaddexp2": np.logaddexp2}
+NEXTAFTER_OP = {"nextafter": np.nextafter}
+# copysign: magnitude of x1 with the sign of x2. Same float-tier promotion; BIT-EXACT
+# (Math.CopySign is the IEEE bit op), so no MisalignedRegistry excuse (NaN payloads are tokenized).
+COPYSIGN_OP = {"copysign": np.copysign}
 
 
 # np.place(arr, mask, vals) mutates arr in-place where mask is True, cycling through vals.
@@ -793,6 +888,184 @@ def gen_matmul_edges(dtypes):
     return cases
 
 
+# G15 — a zero-sized extent on a STACKED (>=3-D) operand. The gufunc signature is
+# (n?,k),(k,m?)->(n?,m?), so a zero lands in one of two places and they behave differently:
+# a zero in a stack dim (or in n / m) makes the RESULT empty, while a zero in k alone leaves it
+# NON-empty and every entry is an EMPTY SUM, i.e. exactly zero (matmul_inner_noblas stores 0
+# into the cell before its zero-trip accumulation loop). A stack `0` also broadcasts against `1`
+# to 0, never to 1 — np.broadcast_shapes((0,), (1,)) is (0,).
+# The whole family used to throw out of NumSharp's BatchedMatmul; the 2-D k=0 case above and the
+# N-D `dot` routes below were already correct and are pinned here so they stay that way.
+MATMUL_ZERODIM_CASES = [
+    # (op, shapeA, shapeB) — every position of a zero, 3-D
+    ("matmul", (0, 3, 4), (0, 4, 5)),      # zero stack dim   -> (0,3,5) empty
+    ("matmul", (2, 3, 0), (2, 0, 5)),      # zero k           -> (2,3,5) ALL ZEROS
+    ("matmul", (2, 0, 4), (2, 4, 5)),      # zero n           -> (2,0,5) empty
+    ("matmul", (2, 3, 4), (2, 4, 0)),      # zero m           -> (2,3,0) empty
+    ("matmul", (0, 0, 0), (0, 0, 0)),
+    ("matmul", (0, 3, 0), (0, 0, 5)),      # stack + k
+    ("matmul", (2, 0, 0), (2, 0, 5)),      # n + k
+    ("matmul", (2, 0, 4), (2, 4, 0)),      # n + m
+    ("matmul", (2, 3, 0), (2, 0, 0)),      # k + m
+    # a zero stack dim against a broadcast 2-D operand, both orders
+    ("matmul", (0, 3, 4), (4, 5)),
+    ("matmul", (3, 4), (0, 4, 5)),
+    ("matmul", (0, 3, 0), (0, 5)),
+    ("matmul", (3, 0), (0, 0, 5)),
+    # 0 against 1 in a stack dim stretches to 0, not 1
+    ("matmul", (0, 3, 4), (1, 4, 5)),
+    ("matmul", (1, 3, 4), (0, 4, 5)),
+    ("matmul", (1, 1, 3, 4), (0, 1, 4, 5)),
+    ("matmul", (1, 0, 3, 4), (2, 1, 4, 5)),   # a 0 and a >1 stretch in the same call
+    # 4-D
+    ("matmul", (0, 2, 3, 4), (0, 2, 4, 5)),
+    ("matmul", (2, 0, 3, 4), (2, 0, 4, 5)),
+    ("matmul", (2, 3, 4, 0), (2, 3, 0, 5)),   # zero k -> (2,3,4,5) ALL ZEROS
+    ("matmul", (2, 3, 0, 4), (2, 3, 4, 5)),
+    ("matmul", (2, 3, 4, 5), (2, 3, 5, 0)),
+    ("matmul", (0, 2, 3, 4), (4, 5)),
+    ("matmul", (2, 0, 3, 4), (4, 5)),
+    # 1-D promotion around a zero extent (the inserted axis is squeezed back out)
+    ("matmul", (0, 3, 4), (4,)),
+    ("matmul", (3,), (0, 3, 4)),
+    ("matmul", (2, 3, 0), (0,)),              # zero k -> (2,3) ALL ZEROS
+    ("matmul", (0,), (2, 0, 5)),              # zero k -> (2,5) ALL ZEROS
+    ("matmul", (2, 0, 4), (4,)),
+    ("matmul", (4,), (2, 4, 0)),
+    # np.dot's N-D route (dotfunc, NOT the gufunc) over the same degenerate shapes
+    ("dot", (0, 3, 4), (4, 5)),
+    ("dot", (2, 3, 0), (0, 5)),               # -> (2,3,5) ALL ZEROS
+    ("dot", (0, 3, 4), (0, 4, 5)),
+    ("dot", (2, 3, 0), (2, 0, 5)),            # -> (2,3,2,5) ALL ZEROS
+    ("dot", (2, 0, 4), (4, 5)),
+]
+
+# The zero-sized operand carries no bytes, so a layout sweep over it is meaningless; the F pass
+# exists for the operands that DO have data (the k=0 pair's outer dims, the broadcast 2-D side).
+MATMUL_ZERODIM_LAYOUTS = ["C", "F"]
+
+
+def gen_matmul_zerodim(dtypes):
+    cases = []
+    n = 0
+    for (op, shA, shB) in MATMUL_ZERODIM_CASES:
+        f = _MATMUL_FNS[op]
+        for dt in dtypes:
+            A = _mm_fill(shA, dt)
+            B = _mm_fill(shB, dt)
+            for lay in MATMUL_ZERODIM_LAYOUTS:
+                baseA, viewA = _mm_layout(A, lay)
+                baseB, viewB = _mm_layout(B, lay)
+                r = np.asarray(f(viewA, viewB))
+                sa = "x".join(map(str, shA))
+                sb = "x".join(map(str, shB))
+                cases.append({
+                    "id": f"{op}/zerodim_{lay}/{dt}/{sa}@{sb}/{n}",
+                    "op": op,
+                    "params": {},
+                    "operands": [describe(baseA, viewA), describe(baseB, viewB)],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": f"zerodim_{lay}",
+                    "valueclass": "degenerate",
+                })
+                n += 1
+    return cases
+
+
+# G16 — float16 contraction DEPTH. The matmul tier carries float16 already, but every shape in
+# it has k <= 4, where a half accumulator and a float32 one agree exactly — so it could never see
+# that NumPy accumulates half products in FLOAT32 and narrows once (`float sum = 0; ... *(op) =
+# npy_float_to_half(sum)` in matmul_inner_noblas). Half is the ONLY float dtype NumPy does not
+# send to cblas (USEBLAS=0 in matmul.c.src), so unlike float32/float64 this loop is reproducible
+# exactly and belongs in the portable corpus rather than the host-pinned matmul_parity tier.
+#
+# Accumulating in half does not merely lose a ulp, it SATURATES: half's spacing above 2048 is 2,
+# so ones(4096).ones(4096) stalls at 2048 where NumPy returns 4096.
+MATMUL_HALF_KS = [8, 64, 256, 1024, 3000, 4096]
+
+
+def _half_vals(n, vc):
+    if vc == "ones":
+        return np.ones(n)
+    if vc == "tiny":          # 1.0 then values under half's resolution at 1.0 (2**-11)
+        return np.concatenate([[1.0], np.full(max(n - 1, 0), 2.0 ** -11)])[:n]
+    if vc == "ramp":
+        return ((np.arange(n) % 11) - 5) * 0.5
+    if vc == "alt":           # cancelling signs — the sum stays small while partials do not
+        return np.where(np.arange(n) % 2 == 0, 3.5, -3.25)
+    raise ValueError(vc)
+
+
+def gen_matmul_half_depth():
+    cases = []
+    n = 0
+    h = np.dtype("float16")
+    for K in MATMUL_HALF_KS:
+        for vc in ("ones", "tiny", "ramp", "alt"):
+            A = _half_vals(3 * K, vc).astype(h).reshape(3, K)
+            B = _half_vals(K * 2, vc).astype(h).reshape(K, 2)
+            for la, lb in (("C", "C"), ("F", "C"), ("C", "F")):
+                baseA, viewA = _mm_layout(A, la)
+                baseB, viewB = _mm_layout(B, lb)
+                for op in ("matmul", "dot"):
+                    r = np.asarray(_MATMUL_FNS[op](viewA, viewB))
+                    cases.append({
+                        "id": f"{op}/halfdepth_{la}{lb}_{vc}/float16/k{K}/{n}",
+                        "op": op, "params": {},
+                        "operands": [describe(baseA, viewA), describe(baseB, viewB)],
+                        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                        "layout": f"halfdepth_{la}{lb}", "valueclass": vc,
+                    })
+                    n += 1
+
+            # 1-D inner product (its own kernel) and the batched stack (the gufunc outer loop)
+            v1 = _half_vals(K, vc).astype(h)
+            v2 = _half_vals(K, vc).astype(h)[::-1].copy()
+            for op in ("matmul", "dot"):
+                r = np.asarray(_MATMUL_FNS[op](v1, v2))
+                cases.append({
+                    "id": f"{op}/halfdepth_vec_{vc}/float16/k{K}/{n}",
+                    "op": op, "params": {},
+                    "operands": [describe(v1, v1), describe(v2, v2)],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": "halfdepth_vec", "valueclass": vc,
+                })
+                n += 1
+
+            bA = _half_vals(2 * 3 * K, vc).astype(h).reshape(2, 3, K)
+            bB = _half_vals(2 * K * 2, vc).astype(h).reshape(2, K, 2)
+            r = np.asarray(np.matmul(bA, bB))
+            cases.append({
+                "id": f"matmul/halfdepth_batch_{vc}/float16/k{K}/{n}",
+                "op": "matmul", "params": {},
+                "operands": [describe(bA, bA), describe(bB, bB)],
+                "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                             "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                "layout": "halfdepth_batch", "valueclass": vc,
+            })
+            n += 1
+
+            # MIXED operands that still promote to float16 (bool / int8 / uint8) — a separate
+            # kernel in NumSharp, and it needs the same float32 accumulator.
+            for other in ("int8", "uint8", "bool"):
+                o = np.dtype(other)
+                Bm = (np.ones(K * 2) if o.kind == "b" else ((np.arange(K * 2) % 5) + 1)).astype(o).reshape(K, 2)
+                r = np.asarray(np.matmul(A, Bm))
+                cases.append({
+                    "id": f"matmul/halfdepth_mixed_{other}_{vc}/float16/k{K}/{n}",
+                    "op": "matmul", "params": {},
+                    "operands": [describe(A, A), describe(Bm, Bm)],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": "halfdepth_mixed", "valueclass": vc,
+                })
+                n += 1
+    return cases
+
+
 # T9 — bitwise & shift. NumPy defines bitwise_and/or/xor & invert for integer + bool; the shifts
 # for integers. Float/complex raise TypeError (gen_binary/gen_unary skip those automatically).
 BITWISE_BIN_OPS = {
@@ -858,6 +1131,8 @@ def gen_manip(dtypes, layout_names):
             nd = view.ndim
             jobs = [
                 ("ravel", {}, lambda v: np.ravel(v)),
+                ("copy", {}, lambda v: np.copy(v, order="K")),
+                ("resize", {"shape": [2, 3]}, lambda v: np.resize(v, (2, 3))),
                 ("transpose", {}, lambda v: np.transpose(v)),
                 ("expand_dims", {"axis": 0}, lambda v: np.expand_dims(v, 0)),
                 ("squeeze", {}, lambda v: np.squeeze(v)),
@@ -868,6 +1143,10 @@ def gen_manip(dtypes, layout_names):
                 ("atleast_2d", {}, lambda v: np.atleast_2d(v)),
                 ("atleast_3d", {}, lambda v: np.atleast_3d(v)),
                 ("flip", {}, lambda v: np.flip(v)),            # reverse ALL axes (0-d -> scalar)
+                # byteswap: reverse each element's bytes (dtype preserved, values reinterpreted).
+                # ndarray METHOD (no np.byteswap); not-inplace never raises, so no nd/sz guard.
+                # Complex swaps its two halves; 1-byte dtypes are a value no-op (still a copy).
+                ("byteswap", {}, lambda v: v.byteswap()),
             ]
             if sz > 0:
                 jobs.append(("reshape", {"shape": [sz]}, lambda v, sz=sz: v.reshape(sz)))
@@ -882,6 +1161,26 @@ def gen_manip(dtypes, layout_names):
                 jobs.append(("trim_zeros", {"trim": "b"}, lambda v: np.trim_zeros(v, "b")))
                 jobs.append(("trim_zeros", {"trim": "fb", "axis": 0},
                              lambda v: np.trim_zeros(v, "fb", axis=0)))
+                # tril/triu apply to the LAST TWO axes; a 1-D input squares up to (n, n)
+                # (NumPy's `tri(*m.shape[-2:])` quirk) and a 0-d input raises, so nd >= 1.
+                # Same-shape for nd >= 2, so no corpus blow-up; k spans keep/drop/saturate.
+                jobs.append(("tril", {}, lambda v: np.tril(v)))
+                jobs.append(("triu", {}, lambda v: np.triu(v)))
+                jobs.append(("tril", {"k": 1}, lambda v: np.tril(v, 1)))
+                jobs.append(("triu", {"k": 1}, lambda v: np.triu(v, 1)))
+                jobs.append(("tril", {"k": -1}, lambda v: np.tril(v, -1)))
+                jobs.append(("triu", {"k": -1}, lambda v: np.triu(v, -1)))
+            if nd in (1, 2):
+                # diag's two branches differ in kind: 1-D CONSTRUCTS an (n+|k|)^2 matrix,
+                # 2-D EXTRACTS a read-only diagonal view. Both stay small here (n <= 8).
+                jobs.append(("diag", {}, lambda v: np.diag(v)))
+                jobs.append(("diag", {"k": 1}, lambda v: np.diag(v, 1)))
+                jobs.append(("diag", {"k": -1}, lambda v: np.diag(v, -1)))
+            if sz <= 8:
+                # diagflat squares the FULL size, so it is capped here to keep the corpus
+                # small; gen_diag_tri covers the bigger/strided shapes at controlled sizes.
+                jobs.append(("diagflat", {}, lambda v: np.diagflat(v)))
+                jobs.append(("diagflat", {"k": 2}, lambda v: np.diagflat(v, 2)))
             if nd >= 2:
                 jobs.append(("swapaxes", {"a1": 0, "a2": nd - 1}, lambda v, nd=nd: np.swapaxes(v, 0, nd - 1)))
                 jobs.append(("moveaxis", {"src": 0, "dst": nd - 1}, lambda v, nd=nd: np.moveaxis(v, 0, nd - 1)))
@@ -979,6 +1278,331 @@ def gen_concat_stack(dtypes):
             n += 1
     if skipped:
         print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+# ---------------------------------------------------------------------------
+# np.r_ / np.c_ / np.ix_ — the index-expression DSL (numpy/lib/_index_tricks_impl.py).
+#
+# These ops take an INDEX EXPRESSION, not a plain operand list, so the corpus carries the
+# non-array parts in `params` and the array parts as ordinary operands:
+#
+#   params.kind       "r" | "c"                     which concatenator
+#   params.directive  str | null                    NumPy's leading special directive
+#   params.exprs      [str, ...]                    slice expressions, in NumSharp spelling
+#   params.scalars    [[kind, value], ...]          weak python-scalar tail; kind i|f|b
+#   operands          the array entries, in order
+#
+# The C# side rebuilds  [directive?] + exprs + operands + scalars  and indexes np.r_/np.c_.
+# C# has no slice literal, so every expression is paired with the Python slice it must mean —
+# the pair is what keeps NumSharp's string grammar honest against NumPy's syntax.
+# ---------------------------------------------------------------------------
+
+# (NumSharp spelling, Python slice) — arange branch, then the imaginary-step linspace branch.
+R_SLICE_EXPRS = [
+    ("0:5", slice(0, 5)),
+    ("0:5:2", slice(0, 5, 2)),
+    ("5:0:-1", slice(5, 0, -1)),
+    ("5:0", slice(5, 0)),
+    ("-3:0", slice(-3, 0)),
+    ("3:-3:-1", slice(3, -3, -1)),
+    (":5", slice(None, 5)),
+    (":5:2", slice(None, 5, 2)),
+    ("2:", slice(2, None)),
+    ("5::2", slice(5, None, 2)),
+    ("::2", slice(None, None, 2)),
+    (":", slice(None, None)),
+    ("0.0:1.0:0.25", slice(0.0, 1.0, 0.25)),
+    ("0:1:0.3", slice(0, 1, 0.3)),
+    ("2.5:", slice(2.5, None)),
+    ("-1:1:6j", slice(-1, 1, 6j)),
+    ("0:1:5j", slice(0, 1, 5j)),
+    ("0:5:0j", slice(0, 5, 0j)),
+    ("0:5:1j", slice(0, 5, 1j)),
+    ("0:3:2j", slice(0, 3, 2j)),
+    ("1:2:-3j", slice(1, 2, -3j)),
+]
+
+# Weak python-scalar tails. The kind letter picks the C# boxed type (long / double / bool)
+# so the NEP50 weak-vs-strong mapping is under the gate, not just the values.
+_SCALAR_KIND = {"i": int, "f": float, "b": bool, "u": int}
+
+
+def _scalar_py(entry):
+    kind, value = entry
+    return _SCALAR_KIND[kind](value)
+
+
+def gen_index_tricks(dtypes):
+    """np.r_ / np.c_ / np.ix_ — the index-expression DSL.
+
+    Four groups:
+      1. r_/c_ over ARRAY entries at 1-D and 2-D layouts x dtype, bare and with a leading
+         directive, plus weak-scalar tails (the NEP50 promotion matrix).
+      2. r_ over pure SLICE expressions — no operands at all, since the dtype comes from the
+         literals (int64 for integer literals, float64 the moment one is written as a float
+         or the step is imaginary). Also directive x slice, which exercises the slice branch's
+         swapaxes(-1, trans1d) rather than the array branch's defaxes permutation.
+      3. ix_ over 1..3 one-dimensional operands, incl. bool masks (the nonzero branch);
+         `which` selects the recorded tuple element, as gen_nonzero does.
+      4. Weak-integer OVERFLOW: NumPy raises OverflowError rather than wrapping, so these
+         carry expects_throw.
+    """
+    cases = []
+    n = 0
+
+    def emit(opname, params, operands, r, layout):
+        nonlocal n
+        r = np.asarray(r)
+        cases.append({
+            "id": f"{opname}/{layout}/{n}",
+            "op": opname,
+            "params": params,
+            "operands": operands,
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": layout,
+            "valueclass": "mixed",
+        })
+        n += 1
+
+    def emit_throw(opname, params, operands, layout):
+        nonlocal n
+        cases.append({
+            "id": f"{opname}/{layout}/{n}",
+            "op": opname,
+            "params": params,
+            "operands": operands,
+            "expects_throw": True,
+            "layout": layout,
+            "valueclass": "mixed",
+        })
+        n += 1
+
+    def build(kind, directive, exprs, arrays, scalars):
+        """The Python index expression a NumSharp `np.r_[...]` / `np.c_[...]` must equal."""
+        key = []
+        if directive is not None:
+            key.append(directive)
+        key.extend(sl for _, sl in exprs)
+        key.extend(arrays)
+        key.extend(_scalar_py(s) for s in scalars)
+        obj = np.r_ if kind == "r" else np.c_
+        return obj[tuple(key)]
+
+    def params_of(kind, directive, exprs, scalars):
+        return {"kind": kind, "directive": directive,
+                "exprs": [s for s, _ in exprs], "scalars": scalars}
+
+    # -- 1. r_ / c_ over array entries -------------------------------------------------
+    for dt in dtypes:
+        b1 = _cbase((8,), np.dtype(dt))
+        b2 = _cbase((3, 4), np.dtype(dt))
+        b2t = _cbase((4, 3), np.dtype(dt))
+        b2w = _cbase((3, 8), np.dtype(dt))
+        b2o = _cbase((5, 4), np.dtype(dt))
+
+        views1 = [
+            ("c_1d", b1, b1),
+            ("step_1d", b1, b1[::2]),
+            ("negstride_1d", b1, b1[::-1]),
+            ("offset_1d", b1, b1[2:7]),
+        ]
+        views2 = [
+            ("c_2d", b2, b2),
+            ("f_2d", b2t, b2t.T),
+            ("strided_2d", b2w, b2w[:, ::2]),
+            ("negstride_2d", b2, b2[::-1]),
+            ("offset_2d", b2o, b2o[1:4]),
+        ]
+
+        for (tag, base, view) in views1:
+            desc = describe(base, view)
+            for kind in ("r", "c"):
+                for directive in (None, "0,2", "0,2,0", "1,2,0", "0,3,1", "r", "c"):
+                    try:
+                        r = build(kind, directive, [], [view, view], [])
+                    except Exception:
+                        continue
+                    emit(f"{kind}_", params_of(kind, directive, [], []),
+                         [desc, desc], r, f"{tag}/{directive}/{dt}")
+
+            # Weak-scalar tails: the NEP50 promotion matrix (weak int / float / bool
+            # adopting an array dtype), which no other tier reaches.
+            for scalars in ([["i", 0]], [["f", 1.5]], [["i", 5], ["i", 6]], [["b", True]]):
+                for kind in ("r", "c"):
+                    try:
+                        r = build(kind, None, [], [view], scalars)
+                    except Exception:
+                        continue
+                    emit(f"{kind}_", params_of(kind, None, [], scalars),
+                         [desc], r, f"{tag}/scalars/{dt}")
+
+        for (tag, base, view) in views2:
+            desc = describe(base, view)
+            for kind in ("r", "c"):
+                for directive in (None, "-1", "0", "0,3,0", "0,3,1", "r"):
+                    try:
+                        r = build(kind, directive, [], [view, view], [])
+                    except Exception:
+                        continue
+                    emit(f"{kind}_", params_of(kind, directive, [], []),
+                         [desc, desc], r, f"{tag}/{directive}/{dt}")
+
+        # Mixed slice-expression + array entries: the two branches meet in one concatenate,
+        # so the slice's strong int64/float64 must promote against the operand dtype. The
+        # C# side builds exprs before operands, so the expression leads here too.
+        desc1 = describe(b1, b1)
+        for expr in [("0:3", slice(0, 3)), ("0:1:5j", slice(0, 1, 5j))]:
+            for kind in ("r", "c"):
+                try:
+                    r = (np.r_ if kind == "r" else np.c_)[(expr[1], b1)]
+                except Exception:
+                    continue
+                emit(f"{kind}_", params_of(kind, None, [expr], []),
+                     [desc1], r, f"mixed/{expr[0]}/{dt}")
+
+    # -- 2. r_ / c_ over pure slice expressions (no operands, dtype from the literals) ---
+    for (s, sl) in R_SLICE_EXPRS:
+        for kind in ("r", "c"):
+            try:
+                r = (np.r_ if kind == "r" else np.c_)[(sl,)]
+            except Exception:
+                continue
+            emit(f"{kind}_", params_of(kind, None, [(s, sl)], []), [], r, f"expr/{s}")
+
+    # Two expressions concatenated, and directive x expression (the slice branch's
+    # ndmin + swapaxes(-1, trans1d) path, which differs from the array branch's transpose).
+    for (s1, sl1) in R_SLICE_EXPRS[:8]:
+        for (s2, sl2) in [("0:3", slice(0, 3)), ("1:2:3j", slice(1, 2, 3j))]:
+            try:
+                r = np.r_[(sl1, sl2)]
+            except Exception:
+                continue
+            emit("r_", params_of("r", None, [(s1, sl1), (s2, sl2)], []), [], r,
+                 f"expr2/{s1}+{s2}")
+
+    for directive in ("0,2", "0,2,0", "1,2,0", "0,3,0", "0,3,1", "0,3,2", "0,4,1", "r", "c"):
+        for (s, sl) in [("0:3", slice(0, 3)), ("-1:1:4j", slice(-1, 1, 4j))]:
+            for kind in ("r", "c"):
+                try:
+                    r = (np.r_ if kind == "r" else np.c_)[(directive, sl)]
+                except Exception:
+                    continue
+                emit(f"{kind}_", params_of(kind, directive, [(s, sl)], []), [], r,
+                     f"expr_dir/{directive}/{s}")
+
+    # Slice expressions with a weak-scalar tail — arange/linspace strong dtype vs weak literal.
+    for (s, sl) in [("0:3", slice(0, 3)), ("0:1:3j", slice(0, 1, 3j))]:
+        for scalars in ([["i", 7]], [["f", 1.5]], [["b", True]]):
+            try:
+                r = np.r_[tuple([sl] + [_scalar_py(x) for x in scalars])]
+            except Exception:
+                continue
+            emit("r_", params_of("r", None, [(s, sl)], scalars), [], r, f"expr_scalar/{s}")
+
+    # All-weak keys: no array anywhere, so the NEP50 defaults decide (int64/float64/bool).
+    for scalars in ([["i", 1], ["i", 2]], [["b", True], ["b", False]],
+                    [["i", 1], ["f", 2.0]], [["b", True], ["i", 2]], [["f", 3.5]]):
+        for kind in ("r", "c"):
+            r = (np.r_ if kind == "r" else np.c_)[tuple(_scalar_py(x) for x in scalars)]
+            emit(f"{kind}_", params_of(kind, None, [], scalars), [], r,
+                 "weak_only/" + "".join(k for k, _ in scalars))
+
+    # -- 3. ix_ ------------------------------------------------------------------------
+    for dt in dtypes:
+        b = _cbase((8,), np.dtype(dt))
+        seqs = [
+            ("c_1d", b, b[:4]),
+            ("step_1d", b, b[::2]),
+            ("negstride_1d", b, b[::-1]),
+            ("offset_1d", b, b[3:7]),
+            ("empty_1d", b, b[4:4]),
+        ]
+        for (tag, base, view) in seqs:
+            # 1-seq, 2-seq and 3-seq forms: the output rank equals the number of sequences,
+            # and `which` walks every slot so each reshape target is compared.
+            other = _cbase((3,), np.dtype("int64"))
+            groups = [
+                ("n1", [describe(base, view)], [view]),
+                ("n2", [describe(base, view), describe(other, other)], [view, other]),
+                ("n3", [describe(base, view), describe(other, other), describe(base, view)],
+                 [view, other, view]),
+            ]
+            for (gtag, descs, arrays) in groups:
+                try:
+                    out = np.ix_(*arrays)
+                except Exception:
+                    continue
+                for which in range(len(out)):
+                    emit("ix_", {"which": which}, descs, out[which], f"{tag}/{gtag}/{dt}")
+
+    # bool operands take ix_'s nonzero branch (mask -> intp indices).
+    for mask in [[True, False, True, True], [False, False, False], [True], [True, True]]:
+        m = np.array(mask, dtype=bool)
+        other = np.array([1, 2], dtype=np.int64)
+        out = np.ix_(m, other)
+        for which in range(len(out)):
+            emit("ix_", {"which": which},
+                 [describe(m, m), describe(other, other)], out[which],
+                 f"boolmask/{len(mask)}")
+        out1 = np.ix_(m)
+        emit("ix_", {"which": 0}, [describe(m, m)], out1[0], f"boolmask1/{len(mask)}")
+
+    # -- 4. weak-integer overflow: NumPy raises OverflowError, it does NOT wrap ----------
+    for (dt, value) in [("int8", 1000), ("int8", -1000), ("uint8", -1), ("uint8", 300),
+                        ("int16", -40000), ("uint16", -1), ("int32", 2 ** 40),
+                        ("uint64", -1), ("bool", 2)]:
+        b = _cbase((4,), np.dtype(dt))
+        try:
+            _ = np.r_[(b, value)]
+        except OverflowError:
+            emit_throw("r_", params_of("r", None, [], [["i", value]]),
+                       [describe(b, b)], f"overflow/{dt}/{value}")
+        except Exception:
+            continue
+
+    # -- 5. edge sweep: ndmin at NumPy's ceiling, and the uint64 weak-integer default ----
+    # `ndmin` reaches array(..., ndmin=n) from a user-typed directive, so it is swept over
+    # every entry kind. Only ndmin=64 is emitted, and deliberately so: past it NumPy raises
+    # `ndmin must be <= ndmax (64)` (NPY_MAXDIMS) while NumSharp has no 64-dimension ceiling
+    # anywhere and happily builds the array, so there is no NumPy answer to bit-compare and
+    # `expects_throw` would assert a limitation NumSharp does not have. That divergence is
+    # pinned instead by np.r_.Test.cs -> R_HighNdmin_IsSupportedAndCheap, which asserts the
+    # rank AND guards the O(ndim) expansion (the per-axis loop it replaced was quadratic:
+    # 27.6 s at ndmin=100_000, unbounded at 2**31-1). Do not re-add the >64 rows here.
+    b1 = _cbase((2,), np.dtype("int64"))
+    for ndmin in (64,):
+        for (tag, exprs, operands, scalars) in [
+            ("array", [], [describe(b1, b1)], []),
+            ("slice", [("0:3", slice(0, 3))], [], []),
+            ("scalar", [], [], [["i", 5]]),
+        ]:
+            directive = f"0,{ndmin}"
+            try:
+                r = build("r", directive, exprs, [b1] if operands else [], scalars)
+            except ValueError:
+                emit_throw("r_", params_of("r", directive, exprs, scalars), operands,
+                           f"ndmin_cap/{ndmin}/{tag}")
+                continue
+            except Exception:
+                continue
+            emit("r_", params_of("r", directive, exprs, scalars), operands, r,
+                 f"ndmin_cap/{ndmin}/{tag}")
+
+    # An all-literal key whose integer does not fit int64 lifts the default to uint64
+    # (result_type(2**63) and result_type(2**64-1) are both uint64). The "u" scalar kind
+    # boxes it as a C# ulong, which is the only C# type that can carry the value.
+    for value in (2 ** 63, 2 ** 64 - 1, 2 ** 63 - 1):
+        kind = "u" if value >= 2 ** 63 else "i"
+        for concat in ("r", "c"):
+            try:
+                r = build(concat, None, [], [], [[kind, value]])
+            except Exception:
+                continue
+            emit(f"{concat}_", params_of(concat, None, [], [[kind, value]]), [], r,
+                 f"weak_uint64/{value}")
+
     return cases
 
 
@@ -1088,8 +1712,29 @@ def gen_argsort(dtypes):
 
 
 def gen_searchsorted(dtypes):
+    """np.searchsorted differential corpus (NumPy 2.4.2 is the oracle). Families:
+
+      base    — sorted DISTINCT a + distinct v, same dtype, left/right (kernel baseline; UNCHANGED).
+      dup     — a WITH duplicates + keys below/at/in-gap/above: first-vs-last occurrence (left/right
+                MUST differ) AND the out-of-range clamp to 0 / len(a).
+      mixed   — a.dtype != v.dtype: NumPy searches in result_type(a, v) and NEVER casts the key DOWN
+                to a's dtype (the cc676ea8 promotion path — fractional/out-of-range/negative keys that
+                would wrap or truncate under a naive down-cast).
+      sorter  — UNSORTED a + argsort(a) as `sorter` (the separate argbinsearch IL-kernel path).
+      nan     — NaN keys, and a NaN in a's tail: NaN sorts LAST and must not corrupt the carried bound.
+      cplx    — complex with equal real / differing imag / NaN component: NumPy's CDOUBLE_LT is
+                NaN-aware LEXICOGRAPHIC (real then imag), the same order np.sort uses.
+      strided — non-contiguous (::2), offset slice, and negative-stride a (the contiguousA=false /
+                arrStride!=elemSize kernel path; NumPy is the oracle even for a reversed view).
+      empty   — empty a (all zeros), scalar v (0-d result), empty v (empty result).
+
+    The cross-cutting families (mixed/sorter/nan/cplx/strided/empty) are gated on len(dtypes) > 1
+    so char_tier's single-dtype uint16->char weave only picks up the same-dtype base/dup families.
+    """
     cases = []
     n = 0
+
+    # Family: base (UNCHANGED — keep the original 26 cases byte-identical).
     for dt in dtypes:
         a = np.sort(_distinct(8, dt))
         v = _distinct(6, dt)
@@ -1106,6 +1751,177 @@ def gen_searchsorted(dtypes):
                 "valueclass": "distinct",
             })
             n += 1
+
+    def emit(a_pair, v_pair, side, tag, vclass, sorter_pair=None):
+        """Serialize one (a, v[, sorter]) searchsorted case; NumPy computes the oracle result."""
+        nonlocal n
+        a_base, a_view = a_pair
+        v_base, v_view = v_pair
+        ops = [describe(a_base, a_view), describe(v_base, v_view)]
+        s_view = None
+        if sorter_pair is not None:
+            s_base, s_view = sorter_pair
+            ops.append(describe(s_base, s_view))
+        r = np.asarray(np.searchsorted(a_view, v_view, side=side, sorter=s_view))
+        cases.append({
+            "id": f"searchsorted/{tag}/{side}/{n}",
+            "op": "searchsorted",
+            "params": {"side": side},
+            "operands": ops,
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": f"searchsorted_{tag}",
+            "valueclass": vclass,
+        })
+        n += 1
+
+    # Family: duplicates (first-vs-last) + out-of-range clamp. Runs per dtype (incl. the char weave).
+    # min(a)=1 so key 0 probes below-min for unsigned too; key 9 probes above-max.
+    for dt in dtypes:
+        a = np.sort(np.array([1, 2, 2, 4, 4, 4, 6, 8], dtype=dt))
+        v = np.array([0, 1, 2, 3, 4, 5, 8, 9], dtype=dt)
+        for side in ("left", "right"):
+            emit((a, a), (v, v), side, f"dup/{dt}", "dup")
+
+    # Cross-cutting families — skipped under the single-dtype char-weave call.
+    if len(dtypes) > 1:
+        # mixed dtype: (a_vals, a_dtype, v_vals, v_dtype, tag). The keys are chosen to expose a
+        # naive down-cast to a's dtype (fractional, out-of-a's-range, negative-into-unsigned).
+        mixed = [
+            ([1, 2, 3, 4, 5, 6, 7, 8], "int32",      [0.5, 2.5, 4.0, 8.5, 9.0], "float64", "i32_f64"),
+            ([0, 1, 2, 3, 4, 5, 6, 7], "int8",       [-200, 3, 100, 127, 300],  "int64",   "i8_i64_oob"),
+            ([10, 20, 30, 40, 50],     "int8",       [5.0, 15.5, 45.0, 100.0],  "float64", "i8_f64"),
+            ([1, 2, 3, 4, 5],          "uint8",      [-5, 0, 3, 300],           "int16",   "u8_i16_neg"),
+            ([1, 2, 3, 4, 5, 6, 7, 8], "float32",    [0.5, 2.25, 8.75, 9.0],    "float64", "f32_f64"),
+            ([1, 2, 3, 4, 5],          "int64",      [0, 3, 5, 6],              "uint64",  "i64_u64"),
+            ([0, 0, 1, 1],             "bool",       [-1, 0, 1, 2],             "int32",   "bool_i32"),
+            ([1, 2, 3, 4, 5],          "complex128", [0.5, 2.0, 5.5],           "float64", "c128_f64"),
+            ([1, 2, 3, 4, 5, 6, 7, 8], "float64",    [-1, 3, 8, 9],             "int32",   "f64_i32"),
+            ([1, 2, 3, 4, 5],          "uint16",     [-1, 3, 70000],            "int32",   "u16_i32_oob"),
+        ]
+        for (av, adt, vv, vdt, tag) in mixed:
+            a = np.sort(np.array(av, dtype=adt))
+            v = np.array(vv, dtype=vdt)
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"mixed/{tag}", "mixed")
+
+        # sorter: UNSORTED a (with duplicates) + argsort(a). Exercises the argbinsearch kernel.
+        for dt in ("int32", "int64", "uint8", "int16", "float32", "float64", "float16", "complex128"):
+            a = np.array([5, 1, 3, 1, 5, 2, 3, 4], dtype=dt)
+            sorter = np.argsort(a, kind="stable").astype(np.int64)   # NumPy sorter dtype is intp (int64)
+            v = np.array([1, 3, 5, 0, 6], dtype=dt)
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"sorter/{dt}", "sorter", sorter_pair=(sorter, sorter))
+
+        # NaN keys (carry reset), and a NaN sitting in a's sorted tail.
+        for dt in ("float16", "float32", "float64"):
+            a = np.sort(np.array([-2, 0, 1.5, 3, 10], dtype=dt))
+            v = np.array([np.nan, 1.0, np.nan, 100.0, -5.0, 3.0], dtype=dt)
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"nan/{dt}", "nan")
+        for dt in ("float32", "float64"):
+            a = np.array([1.0, 2.0, 3.0, np.nan], dtype=dt)          # sorted: NaN last
+            v = np.array([2.5, np.nan, 0.0, 5.0], dtype=dt)
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"nan_in_a/{dt}", "nan")
+
+        # complex lexicographic (CDOUBLE_LT): equal real / differing imag / NaN component.
+        ca1 = np.sort(np.array([1 + 0j, 2 + 1j, 2 + 3j, 2 + 5j, 3 + 0j, 3 + 2j], dtype=np.complex128))
+        cv1 = np.array([2 + 2j, 2 + 4j, 2 + 3j, 3 + 1j, 0.5 + 0j,
+                        complex(2, np.nan), complex(np.nan, 0)], dtype=np.complex128)
+        ca2 = np.sort(np.array([0 + 0j, 0 + 1j, 0 + 2j, 1 + 0j, 1 + 1j], dtype=np.complex128))
+        cv2 = np.array([0 + 1.5j, 0 - 1j, 1 + 0.5j, complex(0, np.nan)], dtype=np.complex128)
+        for (a, v, tag) in ((ca1, cv1, "c1"), (ca2, cv2, "c2")):
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"cplx/{tag}", "cplx")
+
+        # strided a: non-contiguous (::2), offset slice, negative-stride (reversed => descending;
+        # NumPy is still the oracle — it searches the same strided memory).
+        for dt in ("int32", "float64", "uint8", "complex128"):
+            base = np.arange(16).astype(dt)     # already sorted
+            view = base[::2]                    # ascending, stride 2 (non-contiguous)
+            v = np.array([1, 4, 7, 10, 15, 0], dtype=dt)
+            for side in ("left", "right"):
+                emit((base, view), (v, v), side, f"strided/{dt}", "strided")
+        for dt in ("int32", "float64"):
+            base = np.arange(20).astype(dt)
+            view = base[3:15]                   # offset 3, contiguous
+            v = np.array([0, 5, 14, 19, 10], dtype=dt)
+            for side in ("left", "right"):
+                emit((base, view), (v, v), side, f"offset/{dt}", "strided")
+        base = np.arange(8, dtype=np.int32)
+        view = base[::-1]                       # [7..0], stride -1 (descending; oracle = NumPy)
+        v = np.array([3, 0, 7, 5], dtype=np.int32)
+        for side in ("left", "right"):
+            emit((base, view), (v, v), side, "negstride/int32", "strided")
+
+        # empty a (all zeros), scalar v (0-d result), empty v (empty result).
+        for dt in ("int32", "float64"):
+            a = np.array([], dtype=dt)
+            v = np.array([1, 2, 3], dtype=dt)
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"empty_a/{dt}", "empty")
+        for dt in ("int32", "float64"):
+            a = np.sort(_distinct(8, dt))
+            v = np.array(3, dtype=dt)           # 0-d scalar key -> 0-d result
+            for side in ("left", "right"):
+                emit((a, a), (v, v), side, f"scalar_v/{dt}", "scalar")
+        for dt in ("int32", "float64"):
+            a = np.sort(_distinct(8, dt))
+            v = np.array([], dtype=dt)          # empty v -> empty result
+            emit((a, a), (v, v), "left", f"empty_v/{dt}", "empty")
+
+    return cases
+
+
+# digitize applies to numeric non-complex dtypes (complex x raises TypeError).
+DIGITIZE_DTYPES = ["float64", "float32", "int64", "int32", "int16", "uint8"]
+
+
+def gen_digitize(dtypes):
+    """np.digitize: searchsorted + monotonicity. Same-dtype inc/dec bins x right, a mixed-dtype
+    promotion lock (float x into int bins), and NaN-in-x cases (which pin searchsorted's
+    NaN-as-largest total order — the carry/bisect fix)."""
+    cases = []
+    n = 0
+
+    def emit(x, bins, right, tag, vclass):
+        nonlocal n
+        r = np.asarray(np.digitize(x, bins, right=right))
+        cases.append({
+            "id": f"digitize/{tag}/right={right}/{n}",
+            "op": "digitize",
+            "params": {"right": bool(right)},
+            "operands": [describe(x, x), describe(bins, bins)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "digitize",
+            "valueclass": vclass,
+        })
+        n += 1
+
+    for dt in dtypes:
+        inc = np.sort(_distinct(6, dt))               # increasing, distinct edges
+        dec = inc[::-1].copy()                        # decreasing edges
+        x = _distinct(8, dt)                          # spans below/in/above the bin range
+        for right in (False, True):
+            emit(x, inc, right, f"inc/{dt}", "distinct")
+            emit(x, dec, right, f"dec/{dt}", "distinct")
+
+    # Mixed dtype: float64 x into int32 bins — locks the result_type(bins, x) promotion
+    # (a naive cast of x into the bins dtype would truncate).
+    xf = np.array([1.2, 10.0, 12.4, 15.5, 20.0, -1.0], dtype=np.float64)
+    bi = np.array([0, 5, 10, 15, 20], dtype=np.int32)
+    for right in (False, True):
+        emit(xf, bi, right, "mixed", "mixed")
+
+    # NaN in x — a NaN sorts to the end (len(bins)) and must not corrupt a following key.
+    for dt in ("float64", "float32"):
+        binsf = np.array([0, 1, 2.5, 4, 10], dtype=np.dtype(dt))
+        xn = np.array([np.nan, 1.0, np.nan, 6.0, -1.0, 100.0], dtype=np.dtype(dt))
+        for right in (False, True):
+            emit(xn, binsf, right, f"nan/{dt}", "nan")
+
     return cases
 
 
@@ -1126,6 +1942,64 @@ def gen_nonzero(dtypes):
             "valueclass": "mixed",
         })
         n += 1
+    return cases
+
+
+# bincount input must be NON-NEGATIVE integers (cast to int64); complex/float raise, so exclude them.
+# Char has no NumPy dtype (it rides the uint16 proxy at runtime; uint16 here covers its value semantics).
+BINCOUNT_DTYPES = ["bool", "uint8", "int8", "int16", "uint16", "int32", "uint32", "int64", "uint64"]
+
+
+def gen_bincount(dtypes):
+    """np.bincount: count occurrences of each non-negative int (int64 result) + optional float64
+    weighted sum + minlength. Covers integer/bool input dtypes, contiguous / reversed / strided
+    input views (NumSharp copies to contiguous int64 — order-independent counting), the minlength
+    pad, and the weighted path (a sequential accumulation that must be BIT-EXACT with NumPy).
+    Small arrays are enough for value parity: the privatized count path is bit-identical to the
+    plain scatter (integer add is associative), proven separately in the unit tests."""
+    cases = []
+    n = 0
+
+    def emit(params, operands, r, tag):
+        nonlocal n
+        cases.append({
+            "id": f"bincount/{tag}/{n}",
+            "op": "bincount",
+            "params": params,
+            "operands": operands,
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "bincount",
+            "valueclass": "nonneg",
+        })
+        n += 1
+
+    for dt in dtypes:
+        # A pool WITH repeats (so counts exceed 1). bool only holds 0/1.
+        if dt == "bool":
+            a = np.array([True, False, True, True, False, True, True, False], dtype=bool)
+        else:
+            a = np.array([0, 1, 1, 2, 2, 2, 3, 0, 1, 2, 3, 3, 3, 0], dtype=np.dtype(dt))
+        emit({"minlength": 0}, [describe(a, a)], np.asarray(np.bincount(a)), f"count/{dt}")
+        emit({"minlength": 10}, [describe(a, a)], np.asarray(np.bincount(a, minlength=10)), f"minlen/{dt}")
+        # reversed + strided input views -> exercise the copy-to-contiguous path.
+        rev = a[::-1]
+        emit({"minlength": 0}, [describe(a, rev)], np.asarray(np.bincount(rev)), f"rev/{dt}")
+        strd = a[::2]
+        emit({"minlength": 0}, [describe(a, strd)], np.asarray(np.bincount(strd)), f"strided/{dt}")
+
+    # Weighted (float64 output). x fixed int64; weights span float64/float32/int32 (all cast to f64).
+    xw = np.array([0, 1, 1, 2, 0, 2, 3], dtype=np.int64)
+    for wdt in ("float64", "float32", "int32"):
+        if wdt == "int32":
+            w = np.array([1, 2, 3, 4, 5, 6, 7], dtype=np.int32)
+        else:
+            w = np.array([0.5, 1.5, -2.0, 3.25, 4.0, 0.0, 7.5], dtype=np.dtype(wdt))
+        emit({"minlength": 0}, [describe(xw, xw), describe(w, w)],
+             np.asarray(np.bincount(xw, weights=w)), f"weighted/{wdt}")
+        emit({"minlength": 9}, [describe(xw, xw), describe(w, w)],
+             np.asarray(np.bincount(xw, weights=w, minlength=9)), f"weighted_ml/{wdt}")
+
     return cases
 
 
@@ -1508,9 +2382,9 @@ NANQ_DTYPES = ["float16", "float32", "float64"]  # NaN only exists in float; poo
 
 # Group A Batch 3: searching (flatnonzero/argwhere -> int64 coords) + whole-array bool reductions
 # (allclose/array_equal, wrapped to a 0-D bool via np.asarray). All GREEN.
-# CARVED (-> [OpenBugs]): iscomplex/isreal (NumSharp ignores the imaginary part for complex input and
-# emits garbage bytes on strided real input) and unique (mishandles offset/strided views + NaN-complex
-# ordering). flatnonzero/argwhere stay.
+# iscomplex/isreal are now GREEN at FULL coverage (ported to NumPy's imag(x)==0 / imag!=0 structure —
+# see the ISCOMPLEX_* block above; the two OpenBugs pins were removed). unique stays CARVED (-> [OpenBugs]):
+# it mishandles offset/strided views + NaN-complex ordering. flatnonzero/argwhere stay.
 NZ_OPS = {"flatnonzero": np.flatnonzero, "argwhere": np.argwhere}
 NZ_DTYPES = ["bool", "int32", "uint8", "float64", "complex128"]
 ALLCLOSE_OPS = {"allclose": lambda a, b: np.asarray(np.allclose(a, b)),
@@ -1543,6 +2417,184 @@ def gen_sort(dtypes):
                 "valueclass": "distinct",
             })
             n += 1
+    return cases
+
+
+# G12 (issue #623) — partition/argpartition via the DERIVED kth-values compare: the arrangement
+# BETWEEN kth anchors is introselect-implementation-specific on both sides (NumPy's median-of-3 vs
+# NumSharp's QuickSelect pick different pivots), so whole-output bytes are NOT contractual. What IS
+# contractual — and deterministic for any input multiset, ties included — is the VALUE at every kth
+# position (== sorted[kth]): the corpus pins take(partition(a, ks), ks) and the take_along_axis
+# gather of argpartition at ks. The two-sided <=/>= invariant is unit-test-pinned
+# (Sorting/np.partition.Test.cs).
+def gen_partition_family(dtypes):
+    cases = []
+    n = 0
+
+    def emit(op, params, a, r, tag, dt):
+        nonlocal n
+        cases.append({
+            "id": f"{op}/{tag}/{dt}/{n}",
+            "op": op,
+            "params": params,
+            "operands": [describe(a, a)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "distinct",
+        })
+        n += 1
+
+    def part_take(a, ks, axis):
+        p = np.partition(a, ks, axis=axis)
+        return np.take(p, ks, axis=axis) if axis is not None else np.take(p, ks)
+
+    def argpart_take(a, ks, axis):
+        g = np.argpartition(a, ks, axis=axis)
+        if axis is None:
+            return np.take(np.take(np.asarray(a).ravel(), g), ks)
+        return np.take(np.take_along_axis(np.asarray(a), g, axis=axis), ks, axis=axis)
+
+    for dt in dtypes:
+        a1 = _distinct(8, dt)
+        a2 = _distinct(12, dt).reshape(3, 4)
+        for ks in ([3], [-2], [1, 5]):
+            try:
+                emit("partition", {"kth": ks, "axis": -1}, a1, part_take(a1, ks, -1), "1d", dt)
+                emit("argpartition", {"kth": ks, "axis": -1}, a1, argpart_take(a1, ks, -1), "1d", dt)
+            except Exception:
+                continue
+        for ax in (0, 1, -1):
+            try:
+                emit("partition", {"kth": [1], "axis": ax}, a2, part_take(a2, [1], ax), "2d", dt)
+                emit("argpartition", {"kth": [1], "axis": ax}, a2, argpart_take(a2, [1], ax), "2d", dt)
+            except Exception:
+                continue
+        try:
+            emit("partition", {"kth": [5], "axis": None}, a2, part_take(a2, [5], None), "flat", dt)
+            emit("argpartition", {"kth": [5], "axis": None}, a2, argpart_take(a2, [5], None), "flat", dt)
+        except Exception:
+            continue
+    return cases
+
+
+def gen_partition_nan():
+    """Float/complex NaN partition (main tier only — not re-run by char_tier): kth in the non-NaN
+    region AND in the NaN tail (NaN bytes are tokenized by BitDiff, so payload policy differences
+    — NumSharp preserves original bits, unit-test-pinned — do not enter the compare)."""
+    cases = []
+    n = 0
+
+    def emit(op, params, a, r, tag, dt):
+        nonlocal n
+        cases.append({
+            "id": f"{op}/{tag}/{dt}/{n}",
+            "op": op,
+            "params": params,
+            "operands": [describe(a, a)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "nan",
+        })
+        n += 1
+
+    nan = float("nan")
+    for dt in ("float16", "float32", "float64"):
+        a = np.array([nan, 4.0, -1.0, nan, 2.5, 0.5, -3.0, 6.0], dtype=np.dtype(dt))
+        for ks in ([2], [7], [1, 6]):
+            try:
+                p = np.partition(a, ks)
+                emit("partition", {"kth": ks, "axis": -1}, a, np.take(p, ks), "nan_1d", dt)
+                g = np.argpartition(a, ks)
+                emit("argpartition", {"kth": ks, "axis": -1}, a, np.take(np.take(a, g), ks), "nan_1d", dt)
+            except Exception:
+                continue
+    c = np.array([complex(nan, 1), 2 + 3j, complex(1, nan), 0 + 1j, -1 + 0j])
+    for ks in ([1], [3]):
+        p = np.partition(c, ks)
+        emit("partition", {"kth": ks, "axis": -1}, c, np.take(p, ks), "nan_1d", "complex128")
+        g = np.argpartition(c, ks)
+        emit("argpartition", {"kth": ks, "axis": -1}, c, np.take(np.take(c, g), ks), "nan_1d", "complex128")
+    return cases
+
+
+# G12 (issue #623) — lexsort IS stable on both sides (NumPy: successive mergesort passes;
+# NumSharp: successive stable-radix argsorts), so the raw int64 index output is fully
+# deterministic EVEN WITH TIES — which is exactly what the primary keys here carry, making the
+# secondary key + the stability guarantee the thing each case pins.
+def gen_lexsort(dtypes):
+    cases = []
+    n = 0
+
+    def emit(keys, axis, tag, dt):
+        nonlocal n
+        try:
+            r = np.lexsort(tuple(keys), axis=axis)
+        except Exception:
+            return
+        cases.append({
+            "id": f"lexsort/{tag}/{dt}/axis={axis}/{n}",
+            "op": "lexsort",
+            "params": {"axis": axis},
+            "operands": [describe(k, k) for k in keys],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "ties",
+        })
+        n += 1
+
+    sec = _distinct(8, "int64")
+    for dt in dtypes:
+        prim = np.array([1, 0, 1, 0, 1, 1, 0, 0]).astype(np.dtype(dt))   # deliberate ties
+        emit([sec, prim], -1, "1d_2key", dt)                              # LAST key is primary
+        emit([prim], -1, "1d_1key", dt)                                   # single key == stable argsort
+    k0 = _distinct(12, "int64").reshape(3, 4)
+    k1 = np.array([1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1]).astype("float64").reshape(3, 4)
+    for ax in (0, 1, -1):
+        emit([k0, k1], ax, "2d_2key", "int64+float64")
+    return cases
+
+
+# G12 (issue #623) — sort_complex: copy + sort along the LAST axis in the input's own dtype, then
+# up-cast to complex. int8/uint8/int16/uint16 are EXCLUDED from the tier: NumPy up-casts those to
+# complex64, a WIDTH NumSharp's single Complex (complex128) does not have — the values are
+# identical (probed 2.4.2), so those four cells are unit-test-pinned instead
+# (Sorting/np.sort_complex.Test.cs). Excluding uint16 also keeps char_tier from weaving a
+# width-mismatched char case.
+SORT_COMPLEX_DTYPES = [d for d in ALL_DTYPES if d not in ("int8", "uint8", "int16", "uint16")]
+
+
+def gen_sort_complex(dtypes):
+    cases = []
+    n = 0
+
+    def emit(a, tag, dt):
+        nonlocal n
+        try:
+            r = np.sort_complex(a)
+        except Exception:
+            return
+        cases.append({
+            "id": f"sort_complex/{tag}/{dt}/{n}",
+            "op": "sort_complex",
+            "params": {},
+            "operands": [describe(a, a)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "nan" if "nan" in tag else "distinct",
+        })
+        n += 1
+
+    for dt in dtypes:
+        emit(_distinct(8, dt), "1d", dt)
+        emit(_distinct(12, dt).reshape(3, 4), "2d", dt)
+    nan = float("nan")
+    for dt in ("float16", "float32", "float64"):
+        emit(np.array([nan, 2.0, -1.0, np.inf, -np.inf, 0.5], dtype=np.dtype(dt)), "nan_1d", dt)
+    emit(np.array([complex(nan, 1), 2 + 3j, complex(1, nan), 0 + 1j]), "nan_1d", "complex128")
     return cases
 
 
@@ -1732,6 +2784,171 @@ def gen_trace_diag(dtypes):
     return cases
 
 
+def gen_diag_tri(dtypes):
+    """The diag/tri family that gen_manip's layout x dtype loop cannot express.
+
+    Three groups, all appended after gen_trace_diag so existing ids stay stable:
+      1. `tri` — a pure GENERATOR (no array input). The operand is a 1-element carrier
+         whose dtype selects tri's dtype; N/M/k come from params.
+      2. `diag`/`diagflat`/`tril`/`triu` on hand-built strided / F / negative-stride /
+         offset 2-D views at controlled sizes (diagflat squares its input, so gen_manip
+         caps it at size 8 — the bigger and non-contiguous shapes live here).
+      3. `fill_diagonal` (mutating; result IS the mutated operand, like place/copyto) and
+         the index-tuple generators (`*_indices`, `*_indices_from`, `mask_indices`), which
+         return a tuple — `which` selects the element recorded, as gen_nonzero does.
+    """
+    cases = []
+    n = 0
+
+    def emit(opname, params, operands, r, layout):
+        nonlocal n
+        r = np.asarray(r)
+        cases.append({
+            "id": f"{opname}/{layout}/{n}",
+            "op": opname,
+            "params": params,
+            "operands": operands,
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": layout,
+            "valueclass": "mixed",
+        })
+        n += 1
+
+    # -- 1. tri: dtype rides the carrier operand; N/M/k sweep the clamp/saturate corners.
+    for dt in dtypes:
+        carrier = _cbase((1,), np.dtype(dt))
+        for (N, M, k) in [(4, None, 0), (3, 5, 0), (3, 5, 1), (3, 5, -1), (5, 3, 2),
+                          (5, 3, -2), (4, 4, 10), (4, 4, -10), (0, None, 0), (3, 0, 0),
+                          (0, 3, 0), (-2, None, 0), (3, -2, 0), (1, 1, 0)]:
+            try:
+                r = np.tri(N, M, k, dtype=np.dtype(dt))
+            except Exception:
+                continue
+            emit("tri", {"N": N, "M": M, "k": k}, [describe(carrier, carrier)], r,
+                 f"{N}x{M}k{k}/{dt}")
+
+    # -- 2. diag / diagflat / tril / triu over non-contiguous 2-D views.
+    for dt in dtypes:
+        b_tall = _cbase((6, 4), np.dtype(dt))
+        b_wide = _cbase((4, 6), np.dtype(dt))
+        b_sq = _cbase((5, 5), np.dtype(dt))
+        b_1d = _cbase((9,), np.dtype(dt))
+        views = [
+            ("sliced_T", b_tall, b_tall[1:5].T),          # offset + transposed
+            ("strided_cols", b_wide, b_wide[:, ::2]),     # last-axis stride != 1
+            ("negstride_cols", b_wide, b_wide[:, ::-1]),  # negative last-axis stride
+            ("negstride_rows", b_sq, b_sq[::-1]),         # negative row stride
+            ("f_order", b_sq, b_sq.T),                    # F-contiguous
+            ("offset_sub", b_sq, b_sq[1:4, 1:4]),         # offset sub-block
+            ("strided_1d", b_1d, b_1d[::3]),              # 1-D step view
+            ("negstride_1d", b_1d, b_1d[::-2]),           # 1-D negative step
+        ]
+        for (tag, base, view) in views:
+            for k in (0, 1, -1, 3):
+                for opname, f in (("diag", np.diag), ("diagflat", np.diagflat),
+                                  ("tril", np.tril), ("triu", np.triu)):
+                    try:
+                        r = np.asarray(f(view, k))
+                    except Exception:
+                        continue
+                    emit(opname, {"k": k}, [describe(base, view)], r, f"{tag}/{dt}")
+
+    # -- 3a. fill_diagonal: mutating. NumPy's flat-slice addressing is layout-independent,
+    # so (as gen_place does) the oracle mutates a C-contiguous COPY of the view while the
+    # harness mutates the real view — both must land on the same logical contents.
+    for dt in dtypes:
+        for (tag, shape) in [("square", (4, 4)), ("tall", (6, 3)), ("wide", (3, 6)),
+                             ("cube", (3, 3, 3)), ("tall_narrow", (7, 2))]:
+            base = _cbase(shape, np.dtype(dt))
+            for wrap in (False, True):
+                for val in ([7], [1, 2, 3], [1, 2, 3, 4, 5]):
+                    after = np.array(base, copy=True)
+                    try:
+                        np.fill_diagonal(after, np.array(val, dtype=np.dtype(dt)), wrap)
+                    except Exception:
+                        continue
+                    emit("fill_diagonal", {"val": val, "wrap": wrap},
+                         [describe(base, base)], after, f"{tag}/{dt}/w{int(wrap)}")
+
+        # non-contiguous destinations — the alias-block writer must honour real strides.
+        nb = _cbase((5, 8), np.dtype(dt))
+        for (tag, mk) in [("dst_strided", lambda b: b[:, ::2]),
+                          ("dst_negstride", lambda b: b[:, ::-1]),
+                          ("dst_T", lambda b: b.T),
+                          ("dst_offset", lambda b: b[1:4, 1:5])]:
+            base = np.array(nb, copy=True)
+            view = mk(base)
+            after_base = np.array(nb, copy=True)
+            try:
+                np.fill_diagonal(mk(after_base), np.array([9], dtype=np.dtype(dt)), False)
+            except Exception:
+                continue
+            # Record the mutated VIEW's contents (the harness returns the view too).
+            emit("fill_diagonal", {"val": [9], "wrap": False},
+                 [describe(base, view)], mk(after_base), f"{tag}/{dt}")
+
+    # -- 3b. index-tuple generators. Results are int64 coordinates, so one dtype suffices
+    # for the array-taking forms; `which` picks the tuple element being recorded.
+    idx_dt = np.dtype("int32")
+    carrier = _cbase((1,), idx_dt)
+    for (nn, ndim) in [(4, 2), (3, 3), (1, 2), (0, 2), (5, 4), (3, 1), (-1, 2)]:
+        for which in range(max(ndim, 0)):
+            try:
+                r = np.diag_indices(nn, ndim)[which]
+            except Exception:
+                continue
+            emit("diag_indices", {"n": nn, "ndim": ndim, "which": which},
+                 [describe(carrier, carrier)], r, f"{nn}nd{ndim}w{which}")
+
+    for (nn, k, m) in [(4, 0, None), (4, 1, None), (4, -1, None), (4, 0, 6), (4, 0, 2),
+                       (5, 2, 3), (3, 10, None), (3, -10, None), (0, 0, None),
+                       (3, 0, 0), (1, 0, None), (-2, 0, None), (3, 0, -2)]:
+        for opname, f in (("tril_indices", np.tril_indices), ("triu_indices", np.triu_indices)):
+            for which in (0, 1):
+                try:
+                    r = f(nn, k, m)[which]
+                except Exception:
+                    continue
+                emit(opname, {"n": nn, "k": k, "m": m, "which": which},
+                     [describe(carrier, carrier)], r, f"{nn}k{k}m{m}w{which}")
+
+    for shape in [(4, 4), (3, 5), (5, 3), (0, 0), (1, 1)]:
+        arr = _cbase(shape, idx_dt)
+        for k in (0, 1, -1):
+            for opname, f in (("tril_indices_from", np.tril_indices_from),
+                              ("triu_indices_from", np.triu_indices_from)):
+                for which in (0, 1):
+                    try:
+                        r = f(arr, k)[which]
+                    except Exception:
+                        continue
+                    emit(opname, {"k": k, "which": which}, [describe(arr, arr)], r,
+                         f"{shape[0]}x{shape[1]}k{k}w{which}")
+        if shape[0] == shape[1]:
+            for which in (0, 1):
+                try:
+                    r = np.diag_indices_from(arr)[which]
+                except Exception:
+                    continue
+                emit("diag_indices_from", {"which": which}, [describe(arr, arr)], r,
+                     f"{shape[0]}x{shape[1]}w{which}")
+
+    # mask_indices takes a FUNCTION — the name is serialised and re-bound C#-side.
+    for (fname, fobj) in [("triu", np.triu), ("tril", np.tril), ("diag", np.diag)]:
+        for nn in (4, 3, 1, 0):
+            for k in (0, 1, -1):
+                try:
+                    res = np.mask_indices(nn, fobj, k)
+                except Exception:
+                    continue
+                for which in range(len(res)):
+                    emit("mask_indices", {"n": nn, "func": fname, "k": k, "which": which},
+                         [describe(carrier, carrier)], res[which], f"{fname}{nn}k{k}w{which}")
+
+    return cases
+
+
 def gen_ediff1d(dtypes, layout_names):
     """np.ediff1d — consecutive differences of the FLATTENED array (n-1 elements)."""
     cases = []
@@ -1859,6 +3076,17 @@ def gen_groupa():
                 continue
             emit("convolve", {"mode": mode}, [describe(av, av), describe(vv, vv)], r)
 
+        # correlate — 1-D, all three modes, BOTH size relations. correlate is non-commutative:
+        # (vv, av) has len(a) < len(v), so the engine correlates(v, a) and reverses the output.
+        # complex128 additionally exercises the conjugation of the second argument.
+        for mode in ["valid", "same", "full"]:
+            for (ea, ev) in [(av, vv), (vv, av)]:
+                try:
+                    r = np.correlate(ea, ev, mode)
+                except Exception:
+                    continue
+                emit("correlate", {"mode": mode}, [describe(ea, ea), describe(ev, ev)], r)
+
         # append — flatten form (axis=None) + along axis 0.
         vals1 = _cbase((4,), d)
         emit("append", {}, [describe(a2, a2), describe(vals1, vals1)], np.append(a2, vals1))
@@ -1868,6 +3096,26 @@ def gen_groupa():
         # insert — insert a row at obj=1 along axis 0.
         insvals = _cbase((4,), d)
         emit("insert", {"obj": 1, "axis": 0}, [describe(a2, a2), describe(insvals, insvals)], np.insert(a2, 1, insvals, 0))
+
+        # Public shape/join surface that previously had no direct value oracle.
+        cs0 = _cbase((4,), d)
+        cs1 = np.roll(cs0, 1)
+        emit("column_stack", {}, [describe(cs0, cs0), describe(cs1, cs1)],
+             np.column_stack((cs0, cs1)))
+
+        b0 = _cbase((2, 2), d)
+        b1 = b0 + np.array(10, dtype=d)
+        b2 = b0 + np.array(20, dtype=d)
+        b3 = b0 + np.array(30, dtype=d)
+        emit("block", {}, [describe(x, x) for x in (b0, b1, b2, b3)],
+             np.block([[b0, b1], [b2, b3]]))
+
+        bv = _cbase((3,), d)
+        emit("broadcast_to", {"shape": [4, 3]}, [describe(bv, bv)],
+             np.broadcast_to(bv, (4, 3)))
+        bs = _cbase((), d)
+        emit("broadcast_to", {"shape": [2, 3]}, [describe(bs, bs)],
+             np.broadcast_to(bs, (2, 3)))
 
         # split / hsplit / vsplit / dsplit — one case per output piece.
         s = _cbase((6,), d)
@@ -1891,14 +3139,247 @@ def gen_groupa():
         np.put(pc, pidx, pvals)
         emit("put", {}, [describe(pa, pa), describe(pidx, pidx), describe(pvals, pvals)], pc)
 
+        # take — NEGATIVE indices under RAISE (NumPy's check_and_adjust_index normalizes
+        # idx += n before the bounds test). Regression pin: the IL kernel used to reject every
+        # negative index. axis 0 (== flat on a 1-D operand) and axis 1.
+        nidx1 = np.array([-1, -6, 0, -3], dtype=np.int64)
+        emit("take", {"axis": 0}, [describe(base1, base1), describe(nidx1, nidx1)], np.take(base1, nidx1, 0))
+        nidx2 = np.array([-1, -4, 1], dtype=np.int64)
+        emit("take", {"axis": 1}, [describe(a2, a2), describe(nidx2, nidx2)], np.take(a2, nidx2, 1))
+
+        # take — wrap / clip modes over a positive-OOB + negative index mix.
+        midx = np.array([7, -8, 2], dtype=np.int64)
+        emit("take", {"axis": 0, "mode": "wrap"}, [describe(base1, base1), describe(midx, midx)],
+             np.take(base1, midx, 0, mode="wrap"))
+        emit("take", {"axis": 0, "mode": "clip"}, [describe(base1, base1), describe(midx, midx)],
+             np.take(base1, midx, 0, mode="clip"))
+
+        # take_along_axis — per-slice gather (indices match arr ndim; non-axis dims broadcast).
+        # argsort-produced indices reproduce a sort; plus axis=None-flatten, negative-wrap,
+        # J != M along the axis, broadcast indices on a non-axis dim, and a transposed (non-contig)
+        # source. Result dtype == arr dtype; a negative index normalizes once (idx += n) as in
+        # advanced indexing.
+        tla1 = np.argsort(base1)                                        # (6,)
+        emit("take_along_axis", {"axis": 0}, [describe(base1, base1), describe(tla1, tla1)],
+             np.take_along_axis(base1, tla1, axis=0))
+        flatidx = np.array([5, 0, 3, 3, 1, 2, 0], dtype=np.int64)       # axis=None -> flatten a2
+        emit("take_along_axis", {"axis": None}, [describe(a2, a2), describe(flatidx, flatidx)],
+             np.take_along_axis(a2, flatidx, axis=None))
+        ai1 = np.argsort(a2, axis=1)                                    # (3,4)
+        emit("take_along_axis", {"axis": 1}, [describe(a2, a2), describe(ai1, ai1)],
+             np.take_along_axis(a2, ai1, axis=1))
+        ai0 = np.argsort(a2, axis=0)                                    # (3,4)
+        emit("take_along_axis", {"axis": 0}, [describe(a2, a2), describe(ai0, ai0)],
+             np.take_along_axis(a2, ai0, axis=0))
+        jidx = np.array([[0, 3, 1, 2, 0], [3, 3, 2, 1, 0], [1, 0, 2, 3, 3]], dtype=np.int64)  # (3,5), M=4
+        emit("take_along_axis", {"axis": -1}, [describe(a2, a2), describe(jidx, jidx)],
+             np.take_along_axis(a2, jidx, axis=-1))
+        nidxt = np.array([[-1, -2, -3, -4], [-4, -3, -2, -1], [0, -1, 0, -1]], dtype=np.int64)  # neg-wrap
+        emit("take_along_axis", {"axis": 1}, [describe(a2, a2), describe(nidxt, nidxt)],
+             np.take_along_axis(a2, nidxt, axis=1))
+        bidx0 = np.array([[0, 1, 2, 0]], dtype=np.int64)               # (1,4) broadcast over axis 0
+        emit("take_along_axis", {"axis": 0}, [describe(a2, a2), describe(bidx0, bidx0)],
+             np.take_along_axis(a2, bidx0, axis=0))
+        bidx1 = np.array([[2], [0], [1]], dtype=np.int64)              # (3,1) keepdims-argmax style
+        emit("take_along_axis", {"axis": 1}, [describe(a2, a2), describe(bidx1, bidx1)],
+             np.take_along_axis(a2, bidx1, axis=1))
+        ci2 = np.argsort(a3, axis=2)
+        emit("take_along_axis", {"axis": 2}, [describe(a3, a3), describe(ci2, ci2)],
+             np.take_along_axis(a3, ci2, axis=2))
+        ci0 = np.argsort(a3, axis=0)
+        emit("take_along_axis", {"axis": 0}, [describe(a3, a3), describe(ci0, ci0)],
+             np.take_along_axis(a3, ci0, axis=0))
+        t3b = a3.transpose(1, 0, 2)                                    # (3,2,4) non-contig source
+        ti = np.argsort(t3b, axis=2)
+        emit("take_along_axis", {"axis": 2}, [describe(a3, t3b), describe(ti, ti)],
+             np.take_along_axis(t3b, ti, axis=2))
+
+        # put — NEGATIVE indices under RAISE (same normalization as take).
+        npa = _cbase((6,), d)
+        npidx = np.array([-1, -6], dtype=np.int64)
+        npvals = _cbase((2,), d)
+        npc = npa.copy()
+        np.put(npc, npidx, npvals)
+        emit("put", {}, [describe(npa, npa), describe(npidx, npidx), describe(npvals, npvals)], npc)
+
+        # select — bool conds + choices (dt) + 0-d default (dt). NumPy is the oracle for
+        # first-match precedence, result dtype and broadcast. Conds are standalone bool arrays
+        # (dtype-independent) so complex choices work too.
+        selA = np.array([True, True, False, False, True, False])
+        selB = np.array([False, True, True, True, False, False])
+        chA = _cbase((6,), d)
+        chB = _cbase((6,), d) + 10   # NEP50 weak-int add keeps dtype d; distinct from chA
+        seldef = _cbase((), d)       # 0-d strong default
+        emit("select", {"nc": 1}, [describe(selA, selA), describe(chA, chA), describe(seldef, seldef)],
+             np.select([selA], [chA], seldef))
+        emit("select", {"nc": 2},
+             [describe(selA, selA), describe(selB, selB), describe(chA, chA), describe(chB, chB), describe(seldef, seldef)],
+             np.select([selA, selB], [chA, chB], seldef))
+
+        # choose — an int64 index selects, element-wise, among `nc` choice arrays (dtype d).
+        # NumPy is the oracle for the per-position gather, the broadcast, and the mode arithmetic.
+        # Operands are [index, choice0..choice_{nc-1}]; "nc" is the choice count. The result is a
+        # pure byte-gather, so it is bit-exact once the operands are replayed from recorded bytes.
+        ch0 = _cbase((6,), d)
+        ch1 = _cbase((6,), d) + 10
+        ch2 = _cbase((6,), d) + 20
+        cidx3 = np.array([2, 0, 1, 2, 1, 0], dtype=np.int64)
+        emit("choose", {"nc": 3, "mode": "raise"},
+             [describe(cidx3, cidx3), describe(ch0, ch0), describe(ch1, ch1), describe(ch2, ch2)],
+             np.choose(cidx3, [ch0, ch1, ch2]))
+        cidx2 = np.array([0, 1, 1, 0, 1, 0], dtype=np.int64)
+        emit("choose", {"nc": 2, "mode": "raise"},
+             [describe(cidx2, cidx2), describe(ch0, ch0), describe(ch1, ch1)],
+             np.choose(cidx2, [ch0, ch1]))
+        # out-of-range indices exercise wrap (modulo, sign-corrected) and clip (saturate).
+        coob = np.array([3, -1, 5, 0, -4, 2], dtype=np.int64)
+        emit("choose", {"nc": 3, "mode": "wrap"},
+             [describe(coob, coob), describe(ch0, ch0), describe(ch1, ch1), describe(ch2, ch2)],
+             np.choose(coob, [ch0, ch1, ch2], mode="wrap"))
+        emit("choose", {"nc": 3, "mode": "clip"},
+             [describe(coob, coob), describe(ch0, ch0), describe(ch1, ch1), describe(ch2, ch2)],
+             np.choose(coob, [ch0, ch1, ch2], mode="clip"))
+        # 2-D index + 2-D choices — the strided odometer over the full result shape.
+        ci2 = (np.arange(12).reshape(3, 4) % 3).astype(np.int64)
+        cd0 = _cbase((3, 4), d)
+        cd1 = _cbase((3, 4), d) + 5
+        cd2 = _cbase((3, 4), d) + 9
+        emit("choose", {"nc": 3, "mode": "raise"},
+             [describe(ci2, ci2), describe(cd0, cd0), describe(cd1, cd1), describe(cd2, cd2)],
+             np.choose(ci2, [cd0, cd1, cd2]))
+
+        # --- neighbouring selection ops (strengthen the family `choose` sits in) ---
+        # compress along axis 1 (the corpus above only had axis 0).
+        ccond = np.array([True, False, True, True], dtype=bool)
+        emit("compress", {"axis": 1}, [describe(ccond, ccond), describe(a2, a2)], np.compress(ccond, a2, 1))
+        # take along axis 2 of a 3-D source (the corpus above only had axis 0 / 1).
+        tidx3 = np.array([0, 2, 1, 3], dtype=np.int64)
+        emit("take", {"axis": 2}, [describe(a3, a3), describe(tidx3, tidx3)], np.take(a3, tidx3, 2))
+
+    # select — layout coverage: a TRANSPOSED cond+choice, a BROADCAST cond over a 2-D choice,
+    # and an all-false fall-through to the default. int32 payload; the kernel is dtype-agnostic
+    # (per-dtype value coverage is in the loop above).
+    sd = np.dtype("int32")
+    sm = _cbase((3, 4), sd)
+    smask = (np.arange(12).reshape(3, 4) % 3 == 0)          # standalone bool cond
+    sdef = _cbase((), sd)
+    emit("select", {"nc": 1}, [describe(smask, smask.T), describe(sm, sm.T), describe(sdef, sdef)],
+         np.select([smask.T], [sm.T], sdef))
+    svec = np.array([True, False, True, False])              # (4,) cond broadcast over (3,4) choice
+    emit("select", {"nc": 1}, [describe(svec, svec), describe(sm, sm), describe(sdef, sdef)],
+         np.select([svec], [sm], sdef))
+    sfalse = np.zeros((6,), dtype=bool)                     # all-false -> default everywhere
+    sch = _cbase((6,), sd)
+    emit("select", {"nc": 1}, [describe(sfalse, sfalse), describe(sch, sch), describe(sdef, sdef)],
+         np.select([sfalse], [sch], sdef))
+
+    # choose — layout + broadcast coverage (int32 payload; the gather is dtype-agnostic, so the
+    # per-dtype value coverage is in the loop above). Reversed (negative-stride) index, a
+    # column-reversed choice VIEW, a (3,1)x(1,4) broadcast, a scalar (0-d) choice broadcast, and
+    # a 0-d index against 0-d choices (0-d result).
+    cd = np.dtype("int32")
+    lidx = np.array([0, 1, 0, 1, 1, 0], dtype=np.int64)
+    lch0 = _cbase((6,), cd)
+    lch1 = _cbase((6,), cd) + 10
+    emit("choose", {"nc": 2, "mode": "raise"},
+         [describe(lidx, lidx[::-1]), describe(lch0, lch0), describe(lch1, lch1)],
+         np.choose(lidx[::-1], [lch0, lch1]))
+    tci = (np.arange(12).reshape(3, 4) % 2).astype(np.int64)
+    tc0 = _cbase((3, 4), cd)
+    tc1 = _cbase((3, 4), cd) + 100
+    emit("choose", {"nc": 2, "mode": "raise"},
+         [describe(tci, tci), describe(tc0, tc0[:, ::-1]), describe(tc1, tc1)],
+         np.choose(tci, [tc0[:, ::-1], tc1]))
+    bidx = np.array([[0], [1], [0]], dtype=np.int64)        # (3,1) index
+    bc0 = _cbase((1, 4), cd)                                # (1,4) choices -> broadcast to (3,4)
+    bc1 = _cbase((1, 4), cd) + 50
+    emit("choose", {"nc": 2, "mode": "raise"},
+         [describe(bidx, bidx), describe(bc0, bc0), describe(bc1, bc1)],
+         np.choose(bidx, [bc0, bc1]))
+    sidx = np.array([0, 1, 0, 1, 0], dtype=np.int64)
+    sc0 = np.array(7, dtype=cd)                             # 0-d scalar choice
+    sc1 = _cbase((5,), cd) + 20
+    emit("choose", {"nc": 2, "mode": "raise"},
+         [describe(sidx, sidx), describe(sc0, sc0), describe(sc1, sc1)],
+         np.choose(sidx, [sc0, sc1]))
+    zidx = np.array(1, dtype=np.int64)                      # 0-d index + 0-d choices -> 0-d result
+    zc0 = np.array(3, dtype=cd)
+    zc1 = np.array(9, dtype=cd)
+    emit("choose", {"nc": 2, "mode": "raise"},
+         [describe(zidx, zidx), describe(zc0, zc0), describe(zc1, zc1)],
+         np.choose(zidx, [zc0, zc1]))
+
     # ravel_multi_index / unravel_index — index<->coord transforms (int64, dtype-independent).
-    row = np.array([0, 1, 2, 0], dtype=np.int64)
-    col = np.array([1, 3, 0, 2], dtype=np.int64)
-    emit("ravel_multi_index", {"dims": [3, 4]}, [describe(row, row), describe(col, col)],
-         np.ravel_multi_index((row, col), (3, 4)))
-    flat = np.array([0, 5, 11, 7], dtype=np.int64)
-    for pi, part in enumerate(np.unravel_index(flat, (3, 4))):
-        emit("unravel_index", {"shape": [3, 4], "piece": pi}, [describe(flat, flat)], part)
+    index_specs = [
+        ([3, 4], np.array([0, 1, 2, 0], dtype=np.int64),
+         np.array([1, 3, 0, 2], dtype=np.int64), "raise", "C"),
+        ([3, 4], np.array([0, 1, 2, 0], dtype=np.int64),
+         np.array([1, 3, 0, 2], dtype=np.int64), "raise", "F"),
+        ([3, 4], np.array([-1, 3, 4, 1], dtype=np.int64),
+         np.array([4, -1, 8, 2], dtype=np.int64), "wrap", "C"),
+        ([3, 4], np.array([-1, 3, 4, 1], dtype=np.int64),
+         np.array([4, -1, 8, 2], dtype=np.int64), "clip", "C"),
+    ]
+    for dims, row, col, mode, order in index_specs:
+        emit("ravel_multi_index", {"dims": dims, "mode": mode, "order": order},
+             [describe(row, row), describe(col, col)],
+             np.ravel_multi_index((row, col), tuple(dims), mode=mode, order=order))
+
+    unravel_specs = [
+        (np.array([0, 5, 11, 7], dtype=np.int64), [3, 4], "C"),
+        (np.array([0, 5, 11, 7], dtype=np.int64), [3, 4], "F"),
+        (np.array([0, 7, 23, 13], dtype=np.int64), [2, 3, 4], "C"),
+    ]
+    for flat, shape, order in unravel_specs:
+        for pi, part in enumerate(np.unravel_index(flat, tuple(shape), order=order)):
+            emit("unravel_index", {"shape": shape, "order": order, "piece": pi},
+                 [describe(flat, flat)], part)
+
+    # ---- isin + set operations (arraysetops; NumPy _arraysetops_impl.py). --------------------
+    # Value-dependent 2-operand ops: element/test (and ar1/ar2) must SHARE values for membership
+    # to bite, so the fixtures are explicit overlapping arrays (not the arange-like pools). NaN in
+    # the float set exercises "NaN is never a member". intersect1d(return_indices) returns a tuple
+    # and is unit-tested; here only the single-array forms ride the corpus.
+    def _setop_pair(dt):
+        d = np.dtype(dt)
+        if d.kind in "iu":
+            a = np.array([0, 1, 2, 3, 4, 5, 2, 4], dtype=d)          # has duplicates
+            b = np.array([1, 3, 5, 7], dtype=d)
+        elif d.kind == "c":
+            a = np.array([1 + 1j, 2 + 0j, 3 + 1j, 0 + 0j, 2 + 0j, 5 + 5j], dtype=d)
+            b = np.array([2 + 0j, 3 + 1j, 9 + 9j], dtype=d)
+        else:                                                        # float: include NaN
+            a = np.array([0.0, 1.5, 2.0, np.nan, 4.0, 5.0, 2.0], dtype=d)
+            b = np.array([1.5, np.nan, 5.0, 7.0], dtype=d)
+        return a, b
+
+    for dt in ["int32", "float64", "uint8", "complex128"]:
+        a, b = _setop_pair(dt)
+        empty = np.array([], dtype=np.dtype(dt))
+        au_a, au_b = np.unique(a), np.unique(b)                      # unique => valid assume_unique contract
+        emit("isin", {}, [describe(a, a), describe(b, b)], np.isin(a, b))
+        emit("isin", {"invert": True}, [describe(a, a), describe(b, b)], np.isin(a, b, invert=True))
+        emit("isin", {"assume_unique": True}, [describe(au_a, au_a), describe(au_b, au_b)],
+             np.isin(au_a, au_b, assume_unique=True))
+        emit("isin", {}, [describe(a, a), describe(empty, empty)], np.isin(a, empty))          # empty test
+        emit("union1d", {}, [describe(a, a), describe(b, b)], np.union1d(a, b))
+        emit("intersect1d", {}, [describe(a, a), describe(b, b)], np.intersect1d(a, b))
+        emit("setxor1d", {}, [describe(a, a), describe(b, b)], np.setxor1d(a, b))
+        emit("setdiff1d", {}, [describe(a, a), describe(b, b)], np.setdiff1d(a, b))
+
+    # isin — kind selection (int-only for 'table') and non-contiguous element layouts (transposed,
+    # negative-stride) so the reshape-to-C-order path is gated, not just contiguous elements.
+    di = np.dtype("int32")
+    e2 = np.array([[0, 2, 4], [6, 1, 3]], dtype=di)                  # (2,3)
+    t2 = np.array([1, 2, 3, 4], dtype=di)
+    emit("isin", {"kind": "sort"}, [describe(e2, e2), describe(t2, t2)], np.isin(e2, t2, kind="sort"))
+    emit("isin", {"kind": "table"}, [describe(e2, e2), describe(t2, t2)], np.isin(e2, t2, kind="table"))
+    emit("isin", {}, [describe(e2, e2.T), describe(t2, t2)], np.isin(e2.T, t2))            # transposed element
+    emit("isin", {"invert": True}, [describe(e2, e2.T), describe(t2, t2)], np.isin(e2.T, t2, invert=True))
+    e1 = np.arange(6, dtype=di)
+    emit("isin", {}, [describe(e1, e1[::-1]), describe(t2, t2)], np.isin(e1[::-1], t2))     # negative-stride
+    e1s = np.arange(12, dtype=di)
+    emit("isin", {}, [describe(e1s, e1s[::2]), describe(t2, t2)], np.isin(e1s[::2], t2))    # strided
 
     return cases
 
@@ -1945,6 +3426,289 @@ CHAR_LOGIC_UNARY = {"isnan": np.isnan, "isinf": np.isinf, "isfinite": np.isfinit
 CHAR_COPYTO_CROSS = [(_C, "int32"), ("int32", _C), (_C, "float64"), ("float64", _C)]
 
 
+# ---------------------------------------------------------------------------
+# The NumPy-ported float32 kernels - the bit-exact tier.
+#
+# exp/log/sin/cos at a float32 result are no longer "close enough": NDFloatMath ports the kernels
+# NumPy 2.4.2 actually runs (simd_exp_FLOAT, simd_log_FLOAT, simd_sincos_f32), and rad2deg now forms
+# its constant at float precision the way NumPy's RAD2DEG macro does - so the MisalignedRegistry's
+# blanket "unary ~ULP" excuse is carved out for all of them and every case here must match BIT-for-
+# BIT. The generic unary tier cannot carry that claim: its shared float pool is dominated by huge
+# magnitudes (1e20, 3.5e38, ...) that saturate or reduce to nothing, leaving barely a dozen values
+# that reach a polynomial at all. This tier feeds each kernel the inputs that discriminate.
+#
+# Layouts are built by hand (rather than through LAYOUTS) because the VALUES, not the shapes, are
+# the point here; shape/stride coverage still spans contiguous, 2-D, F-view (transpose of a C base),
+# strided, reversed, offset, broadcast, 0-d, empty and the narrow-integer inputs that share the
+# same NumPy loop.
+# ---------------------------------------------------------------------------
+
+# exp: every special, both saturation boundaries +-1 ULP, the subnormal-output band, NumPy's own
+# worst-error input (0xc2781e37, 2.52 ULP) and the FMA-contraction tie (0xc26d0e6c, where
+# x*log2(e) is exactly -85.5 so fused and unfused rounding of the quadrant disagree).
+_EXP_F32_SPECIAL_BITS = [
+    0x7fc00000, 0x7fc00001, 0xffc00000, 0x7f800001,   # NaN: canonical, payload, negative, signalling
+    0x7f800000, 0xff800000,                           # +-inf
+    0x00000000, 0x80000000,                           # +-0
+    0x00000001, 0x80000001, 0x007fffff, 0x00800000,   # subnormal inputs / smallest normal
+    0x42b17216, 0x42b17217, 0x42b17218, 0x42b17219,   # xmax = 0x42b17218, +-1 ULP
+    0xc2cff1b3, 0xc2cff1b4, 0xc2cff1b5, 0xc2cff1b6,   # xmin = 0xc2cff1b5, +-1 ULP
+    0xc2aea8f6, 0xc2b00000, 0xc2c00000, 0xc2ce0000,   # subnormal-output band: -87.33, -88, -96, -103
+    0xc2781e37, 0xc26d0e6c,
+    0x3f800000, 0xbf800000, 0x40000000, 0xc0000000,
+]
+
+# log: the mantissa/exponent seams. NumPy splits the mantissa at 1/sqrt(2), rescales subnormals by
+# 2^100, and returns a NEGATIVE NaN for a negative argument (but a POSITIVE one for a NaN argument).
+_LOG_F32_SPECIAL_BITS = [
+    0x7fc00000, 0xffc00000, 0x7f800001,                # NaN spellings
+    0x7f800000, 0xff800000,                            # +-inf
+    0x00000000, 0x80000000,                            # +-0 -> -inf
+    0xbf800000, 0xc2c80000,                            # negatives -> -NaN
+    0x00000001, 0x00000002, 0x007fffff, 0x00800000,    # subnormals and the smallest normal
+    0x3f800000, 0x3f3504f3, 0x3f3504f4, 0x3f3504f2,    # 1.0 and the 1/sqrt(2) split, +-1 ULP
+    0x3f000000, 0x40000000, 0x402df854, 0x7f7fffff,    # 0.5, 2, e, max finite
+    0x3f486945,                                        # NumPy's documented worst case (3.83 ULP)
+]
+
+# sin/cos: the quadrant seams and the Cody-Waite cutoffs past which NumPy hands over to libc - a
+# DIFFERENT cutoff per function (117435.992 for sine, 71476.0625 for cosine).
+_TRIG_F32_SPECIAL_BITS = [
+    0x7fc00000, 0xffc00000, 0x7f800000, 0xff800000,    # NaN, +-inf
+    0x00000000, 0x80000000,                            # +-0
+    0x3fc90fdb, 0xbfc90fdb, 0x40490fdb, 0xc0490fdb,    # +-pi/2, +-pi
+    0x40c90fdb, 0x41490fdb, 0x3f490fdb,                # 2pi, 4pi, pi/4
+    0x47e55dfe, 0x47e55dff, 0x47e55e00,                # sine's Cody-Waite limit, +-1 ULP
+    0x478b9a07, 0x478b9a08, 0x478b9a09,                # cosine's limit, +-1 ULP
+    0x4b000000, 0x50000000, 0x7f7fffff,                # far past both limits (libc fallback)
+    0x00000001, 0x3f800000, 0xbf800000,
+]
+
+
+# tanh: NumPy's kernel picks its polynomial from a 32-entry table indexed by the exponent of |x|,
+# so the interesting inputs are the SUBINTERVAL SEAMS - a wrong index shows up only there. Index is
+# clamp(bits & 0x7fe00000 - 0x3d400000, 0, 0x3e00000) >> 21, so seam k sits at bits
+# 0x3d400000 + k*0x200000; the saturation cut (past which the answer is exactly +-1) is 0x7f000000.
+_TANH_F32_SPECIAL_BITS = [
+    0x7fc00000, 0x7fc00001, 0xffc00000, 0x7f800001,   # NaN: canonical, payload, negative, signalling
+    0x7f800000, 0xff800000,                           # +-inf -> +-1
+    0x00000000, 0x80000000,                           # +-0   -> +-0 (the sign must survive)
+    0x00000001, 0x80000001, 0x007fffff, 0x00800000,   # subnormals / smallest normal
+    0x7f7fffff, 0xff7fffff,                           # +-FLT_MAX (saturated)
+    0x3f800000, 0xbf800000, 0x40000000, 0xc0000000,   # +-1, +-2
+]
+
+
+def _f32(bits):
+    return np.array(bits, dtype=np.uint32).view(np.float32)
+
+
+def _f64(bits):
+    return np.array(bits, dtype=np.uint64).view(np.float64)
+
+
+def _tanh_f32_values():
+    rng = np.random.RandomState(20260728)
+    seams = []
+    for k in range(33):                                    # every subinterval seam, +-1 ULP
+        b = 0x3d400000 + k * 0x200000
+        if b < 0x7f800000:
+            seams += [b - 1, b, b + 1]
+    seams += [0x7effffff, 0x7f000000, 0x7f000001]          # the saturation cut, +-1 ULP
+    seams += [b | 0x80000000 for b in list(seams)]         # tanh is odd - mirror every seam
+    return np.concatenate([
+        _f32(_TANH_F32_SPECIAL_BITS),
+        _f32(seams),
+        np.linspace(-10.0, 10.0, 121).astype(np.float32),
+        rng.uniform(-20.0, 20.0, 96).astype(np.float32),
+    ])
+
+
+def _tanh_f64_values():
+    """The float64 half of the same kernel: 16 subintervals, seams every 0x0008.. in the exponent."""
+    rng = np.random.RandomState(20260729)
+    seams = []
+    for k in range(17):
+        b = 0x3fc0000000000000 + k * 0x0008000000000000
+        if b < 0x7ff0000000000000:
+            seams += [b - 1, b, b + 1]
+    seams += [0x7fdfffffffffffff, 0x7fe0000000000000, 0x7fe0000000000001]
+    seams += [b | 0x8000000000000000 for b in list(seams)]
+    specials = [
+        0x7ff8000000000000, 0xfff8000000000000, 0x7ff0000000000001,   # NaN variants
+        0x7ff0000000000000, 0xfff0000000000000,                       # +-inf
+        0x0000000000000000, 0x8000000000000000,                       # +-0
+        0x0000000000000001, 0x000fffffffffffff, 0x0010000000000000,   # subnormals / smallest normal
+        0x7fefffffffffffff, 0xffefffffffffffff,                       # +-DBL_MAX
+        0x3ff0000000000000, 0xbff0000000000000,                       # +-1
+    ]
+    return np.concatenate([
+        _f64(specials),
+        _f64(seams),
+        np.linspace(-10.0, 10.0, 121),
+        rng.uniform(-20.0, 20.0, 96),
+    ])
+
+
+def _exp_f32_values():
+    rng = np.random.RandomState(20260725)
+    return np.concatenate([
+        _f32(_EXP_F32_SPECIAL_BITS),
+        np.linspace(-104.0, 88.7, 121).astype(np.float32),
+        np.linspace(-3.0, 3.0, 61).astype(np.float32),
+        rng.uniform(-104.0, 88.7, 96).astype(np.float32),
+    ])
+
+
+def _log_f32_values():
+    rng = np.random.RandomState(20260726)
+    return np.concatenate([
+        _f32(_LOG_F32_SPECIAL_BITS),
+        np.logspace(-38, 38, 121).astype(np.float32),          # the whole exponent range
+        np.linspace(0.5, 2.0, 61).astype(np.float32),          # around the polynomial's centre
+        np.abs(rng.uniform(0, 1, 96) * 10.0 ** rng.uniform(-30, 30, 96)).astype(np.float32),
+    ])
+
+
+def _trig_f32_values():
+    rng = np.random.RandomState(20260727)
+    quads = np.concatenate([np.float32(np.pi / 2) * k + np.linspace(-1e-3, 1e-3, 5).astype(np.float32)
+                            for k in range(-6, 7)]).astype(np.float32)
+    return np.concatenate([
+        _f32(_TRIG_F32_SPECIAL_BITS),
+        quads,                                                  # every quadrant boundary
+        np.linspace(-20.0, 20.0, 121).astype(np.float32),
+        rng.uniform(-1e5, 1e5, 96).astype(np.float32),          # straddles both libc cutoffs
+        rng.uniform(-1e7, 1e7, 32).astype(np.float32),          # well past them
+    ])
+
+
+def gen_numpy_f32_kernels():
+    cases = []
+    n = 0
+
+    def emit(op, f, layout, base, view):
+        nonlocal n
+        r = f(view)
+        cases.append({
+            "id": f"{op}/{layout}/{view.dtype.name}/{n}",
+            "op": op, "params": {},
+            "operands": [describe(base, view)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": layout, "valueclass": "kernel_edges",
+        })
+        n += 1
+
+    jobs = [
+        ("exp", np.exp, _exp_f32_values()),
+        ("log", np.log, _log_f32_values()),
+        ("sin", np.sin, _trig_f32_values()),
+        ("cos", np.cos, _trig_f32_values()),
+        ("rad2deg", np.rad2deg, _trig_f32_values()),
+        ("deg2rad", np.deg2rad, _trig_f32_values()),
+        ("tanh", np.tanh, _tanh_f32_values()),
+    ]
+
+    for op, f, v in jobs:
+        emit(op, f, "contig1d", v, v)
+        emit(op, f, "strided2", v, v[::2])
+        emit(op, f, "reversed", v, v[::-1])
+        emit(op, f, "offset", v, v[7:])
+        emit(op, f, "offset_strided3", v, v[5::3])
+
+        rows = 4
+        cols = (v.size // rows) * rows
+        m = np.ascontiguousarray(v[:cols].reshape(rows, cols // rows))
+        emit(op, f, "contig2d", m, m)
+        # NB: an F-CONTIGUOUS operand is spelled as the transpose of a C base, never as an
+        # asfortranarray base - describe() serializes base.tobytes() in C order, so an F-ordered
+        # base would record bytes that disagree with its own strides.
+        emit(op, f, "transposed", m, m.T)
+        emit(op, f, "row_reversed", m, m[:, ::-1])
+        emit(op, f, "col_strided", m, m[:, ::2])
+
+        one = np.ascontiguousarray(v[:16].reshape(1, 16))
+        emit(op, f, "broadcast", one, np.broadcast_to(one, (3, 16)))
+
+        for bits in (0x7fc00000, 0x7f800000, 0xff800000, 0x80000000, 0x3f800000):
+            z = np.array([bits], dtype=np.uint32).view(np.float32).reshape(())
+            emit(op, f, "zerod", z, z)
+
+        e = np.zeros(0, dtype=np.float32)
+        emit(op, f, "empty", e, e)
+
+        # The narrow integer dtypes whose NumPy loop is this SAME 'f->f' kernel (int32 and wider
+        # promote to the float64 loop instead).
+        for dt in ("int16", "uint16"):
+            iv = np.array([0, 1, 2, 3, 5, 11, 87, 88, 89, 90, -1, -5, -87, -88, -103, -104],
+                          dtype=np.int64).astype(dt)
+            emit(op, f, "int_contig", iv, iv)
+            emit(op, f, "int_reversed", iv, iv[::-1])
+    return cases
+
+
+def gen_numpy_f64_kernels():
+    """
+    tanh is the only one of the ported kernels that also replaces a FLOAT64 loop: NumPy ships its
+    own table-driven tanh at both widths (loops_hyperbolic), where exp/log/sin/cos delegate to the
+    platform's scalar npy_* at f8 and already agree. Hence a tier of its own rather than more rows
+    in numpy_f32_kernels.jsonl - the layouts mirror it exactly, only the dtype axis differs.
+    """
+    cases = []
+    n = 0
+
+    def emit(op, f, layout, base, view):
+        nonlocal n
+        r = f(view)
+        cases.append({
+            "id": f"{op}/{layout}/{view.dtype.name}/{n}",
+            "op": op, "params": {},
+            "operands": [describe(base, view)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": layout, "valueclass": "kernel_edges",
+        })
+        n += 1
+
+    for op, f, v in [("tanh", np.tanh, _tanh_f64_values())]:
+        emit(op, f, "contig1d", v, v)
+        emit(op, f, "strided2", v, v[::2])
+        emit(op, f, "reversed", v, v[::-1])
+        emit(op, f, "offset", v, v[7:])
+        emit(op, f, "offset_strided3", v, v[5::3])
+
+        rows = 4
+        cols = (v.size // rows) * rows
+        m = np.ascontiguousarray(v[:cols].reshape(rows, cols // rows))
+        emit(op, f, "contig2d", m, m)
+        # NB: an F-CONTIGUOUS operand is spelled as the transpose of a C base, never as an
+        # asfortranarray base - describe() serializes base.tobytes() in C order, so an F-ordered
+        # base would record bytes that disagree with its own strides.
+        emit(op, f, "transposed", m, m.T)
+        emit(op, f, "row_reversed", m, m[:, ::-1])
+        emit(op, f, "col_strided", m, m[:, ::2])
+
+        one = np.ascontiguousarray(v[:16].reshape(1, 16))
+        emit(op, f, "broadcast", one, np.broadcast_to(one, (3, 16)))
+
+        for bits in (0x7ff8000000000000, 0x7ff0000000000000, 0xfff0000000000000,
+                     0x8000000000000000, 0x3ff0000000000000):
+            z = np.array([bits], dtype=np.uint64).view(np.float64).reshape(())
+            emit(op, f, "zerod", z, z)
+
+        e = np.zeros(0, dtype=np.float64)
+        emit(op, f, "empty", e, e)
+
+        # int32 and wider promote to THIS float64 loop (int16/uint16 take the 'f->f' one instead,
+        # which is why they live in the float32 tier).
+        for dt in ("int32", "uint32", "int64", "uint64"):
+            iv = np.array([0, 1, 2, 3, 5, 9, 10, 11, 19, 20, 21, 100, 1000], dtype=np.int64).astype(dt)
+            emit(op, f, "int_contig", iv, iv)
+            emit(op, f, "int_reversed", iv, iv[::-1])
+    return cases
+
+
 def char_tier(mode):
     """Relabelled Char cases to append into tier-file `mode` (woven coverage)."""
     L = list(LAYOUTS.keys())
@@ -1976,6 +3740,7 @@ def char_tier(mode):
         raw = gen_manip([_C], L) + gen_concat_stack([_C]) + gen_pad([_C])
     elif mode == "sort":
         raw = gen_argsort([_C]) + gen_searchsorted([_C]) + gen_nonzero([_C])
+        raw += gen_partition_family([_C]) + gen_lexsort([_C])          # G12 (sort_complex carved: u16->c64 width)
     elif mode == "tail":
         raw = gen_tail([_C])
     elif mode == "astype_full":
@@ -1999,6 +3764,3445 @@ def char_tier(mode):
     return _relabel_dtype(raw, _C, "char")
 
 
+# ---------------------------------------------------------------------------
+# T-parity — np.dot / np.matmul BYTE parity for the opt-in BLAS backend
+# (np.parity_matmul). Unlike every other tier this one is HOST-PINNED: NumPy
+# computes float matrix products with cblas, and scipy-openblas' sgemm/dgemm
+# accumulate in an arch-specific multi-accumulator scheme whose bits depend on
+# the BLAS binary, the CPU kernel it dispatches to, AND the thread count. The
+# expected bytes below are therefore only reproducible on a host that loads the
+# SAME library and dispatches the same way, which is why the tier ships a
+# `matmul_parity.host.jsonl` pin and the C# gate goes Inconclusive (never red)
+# when the host does not match. Same precedent as the MSVC-pinned cast kernels.
+#
+# The ordinary `matmul` tier cannot cover this: its operands are tiny integers
+# and its largest contraction is k=4, where every summation order agrees. Real
+# divergence starts at k=10 (45% of elements on the MLP shapes) and reaches 94%
+# at k=784, so this tier sweeps k across the blocking boundaries with random
+# float values, in every layout the two dispatchers route differently.
+MATMUL_PARITY_DTYPES = ["float32", "float64", "complex128"]
+
+# k values: 1..4 (agreeing region), the powers of two and their +-1 neighbours
+# (OpenBLAS panel edges), NumSharp's own KC=256 boundary, and the MLP's 784.
+MATMUL_PARITY_KS = [1, 2, 3, 4, 5, 7, 8, 9, 10, 15, 16, 17, 31, 32, 33, 63, 64, 65,
+                    127, 128, 129, 255, 256, 257, 511, 512, 784]
+
+
+def _mp_values(shape, dt, rng, valueclass="normal"):
+    """Operand values. Random by default — regular ramps hide reassociation error.
+
+    complex128 draws an INDEPENDENT real and imaginary part (a real-only .astype would zero the
+    imag and never exercise zgemm/zdotc's cross terms); every value class applies to both parts.
+    """
+    n = int(np.prod(shape)) if shape else 1
+    ndt = np.dtype(dt)
+
+    def draw():
+        if valueclass == "wide":
+            # Magnitudes spanning ~40 decades: summation order dominates the result.
+            return rng.standard_normal(n) * (10.0 ** rng.randint(-18, 18, n))
+        return rng.standard_normal(n)
+
+    a = draw() + 1j * draw() if ndt.kind == "c" else draw()
+
+    if valueclass == "specials" and n >= 4:
+        if ndt.kind == "c":
+            a[0] = complex(np.inf, 1.0)
+            a[1] = complex(-np.inf, np.nan)
+            a[2] = complex(np.nan, np.inf)
+            a[3] = complex(0.0, -0.0)
+        else:
+            a[0] = np.inf
+            a[1] = -np.inf
+            a[2] = np.nan
+            a[3] = 0.0
+
+    return np.ascontiguousarray(a.astype(ndt).reshape(shape))
+
+
+def _mp_layout(arr, kind, rng):
+    """(base, view) holding EXACTLY arr's values in the requested memory layout.
+
+    Every kind produces a genuine view into a C-contiguous base (what the corpus
+    descriptor can express), so the C# side rebuilds the same strides NumPy had —
+    which is what selects the route in both dispatchers.
+    """
+    if kind == "C" or arr.ndim == 0:
+        base = np.ascontiguousarray(arr)
+        return base, base
+    if kind == "F":
+        base = np.ascontiguousarray(arr.T)          # transposed data, C-contiguous
+        return base, base.T
+    if kind == "neg":                               # 1-D reversed
+        base = np.ascontiguousarray(arr[::-1])
+        return base, base[::-1]
+    if kind == "negrow":
+        base = np.ascontiguousarray(arr[::-1])
+        return base, base[::-1]
+    if kind == "negcol":
+        base = np.ascontiguousarray(arr[:, ::-1])
+        return base, base[:, ::-1]
+    if kind == "stride2":                           # last axis step 2 — never blasable
+        shape = arr.shape[:-1] + (arr.shape[-1] * 2,)
+        base = _mp_values(shape, arr.dtype, rng)
+        base[..., ::2] = arr
+        return base, base[..., ::2]
+    if kind == "slice":                             # row stride > ncols, offset != 0
+        m, n = arr.shape
+        base = _mp_values((m + 3, n + 7), arr.dtype, rng)
+        base[2:2 + m, 5:5 + n] = arr
+        return base, base[2:2 + m, 5:5 + n]
+    raise ValueError(kind)
+
+
+def _mp_case(cases, op, name, A, ar, B, br, rng, valueclass="normal"):
+    """Emit one parity case: apply the layout recipes, ask NumPy, record."""
+    baseA, viewA = _mp_layout(A, ar, rng)
+    baseB, viewB = _mp_layout(B, br, rng)
+    f = np.dot if op == "dot" else np.matmul
+    r = np.asarray(f(viewA, viewB))
+    cases.append({
+        "id": f"{op}/{name}/{ar}{br}/{A.dtype.name}x{B.dtype.name}/{len(cases)}",
+        "op": op,
+        "params": {},
+        "operands": [describe(baseA, viewA), describe(baseB, viewB)],
+        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+        "layout": f"{ar}{br}",
+        "valueclass": valueclass,
+    })
+
+
+_MP_PRODUCT_FNS = {"inner": np.inner, "vdot": np.vdot, "vecdot": np.vecdot,
+                   "matvec": np.matvec, "vecmat": np.vecmat}
+
+
+def _mp_prod_case(cases, op, name, A, ar, B, br, rng, valueclass="normal"):
+    """Emit one parity case for the CBLAS product family beyond dot/matmul.
+
+    Same host-pinned, backend-enabled gate as _mp_case, but for inner/vdot/vecdot/matvec/vecmat —
+    whose managed fallbacks (Multiply+ReduceAdd for vecdot, conj+dotu for complex vdot, conj+gemv
+    for complex vecmat) reassociate the sum differently than NumPy's cblas dot/dotc/gemm and so are
+    NOT byte-identical here. Deep contraction lengths and every routing layout make that show.
+    OpRegistry dispatches vecdot with axis=-1 by default, matching np.vecdot's last-axis core.
+    """
+    baseA, viewA = _mp_layout(A, ar, rng)
+    baseB, viewB = _mp_layout(B, br, rng)
+    r = np.asarray(_MP_PRODUCT_FNS[op](viewA, viewB))
+    cases.append({
+        "id": f"{op}/{name}/{ar}{br}/{A.dtype.name}x{B.dtype.name}/{len(cases)}",
+        "op": op,
+        "params": {},
+        "operands": [describe(baseA, viewA), describe(baseB, viewB)],
+        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+        "layout": f"{ar}{br}",
+        "valueclass": valueclass,
+    })
+
+
+def gen_matmul_parity():
+    cases = []
+    rng = np.random.RandomState(20260725)
+
+    def V(shape, dt, vc="normal"):
+        return _mp_values(shape, dt, rng, vc)
+
+    for dt in MATMUL_PARITY_DTYPES:
+        # --- k sweep: the blocking boundaries the `matmul` tier (k<=4) never crosses.
+        for k in MATMUL_PARITY_KS:
+            _mp_case(cases, "dot", f"ksweep_k{k}", V((6, k), dt), "C", V((k, 5), dt), "C", rng)
+
+        # --- the MLP sites, shrunk in M/N but at the real contraction depths.
+        _mp_case(cases, "dot", "mlp_k784", V((8, 784), dt), "C", V((784, 8), dt), "C", rng)
+        _mp_case(cases, "dot", "mlp_k128", V((16, 128), dt), "C", V((128, 10), dt), "C", rng)
+        _mp_case(cases, "dot", "mlp_k10", V((16, 10), dt), "C", V((10, 16), dt), "C", rng)
+        _mp_case(cases, "dot", "mlp_xT", V((784, 12), dt), "F", V((12, 12), dt), "C", rng)
+        _mp_case(cases, "dot", "mlp_hT", V((128, 12), dt), "F", V((12, 10), dt), "C", rng)
+        _mp_case(cases, "matmul", "mlp_k784", V((8, 784), dt), "C", V((784, 8), dt), "C", rng)
+        _mp_case(cases, "matmul", "mlp_k10", V((16, 10), dt), "C", V((10, 16), dt), "C", rng)
+
+        # --- full layout matrix. The copy-if-not-blasable rule, the F-order transpose
+        # equivalence and np.dot's own _bad_strides copy all key off these strides.
+        A = V((12, 40), dt)
+        B = V((40, 9), dt)
+        for la in ("C", "F", "negrow", "negcol", "stride2", "slice"):
+            for lb in ("C", "F", "negrow", "negcol", "stride2", "slice"):
+                _mp_case(cases, "dot", "layout", A, la, B, lb, rng)
+                _mp_case(cases, "matmul", "layout", A, la, B, lb, rng)
+
+        # --- the four special-shape routes (dm==1 / dn==1 / dp==1). np.dot and
+        # np.matmul genuinely disagree here when the matrix is not blasable, so both
+        # are recorded.
+        for op in ("dot", "matmul"):
+            _mp_case(cases, op, "vecvec", V((500,), dt), "C", V((500,), dt), "C", rng)
+            _mp_case(cases, op, "vecvec_neg", V((37,), dt), "neg", V((37,), dt), "C", rng)
+            _mp_case(cases, op, "vecvec_str", V((37,), dt), "stride2", V((37,), dt), "C", rng)
+            _mp_case(cases, op, "rowcol", V((1, 500), dt), "C", V((500, 1), dt), "C", rng)
+            for lm in ("C", "F", "negrow", "stride2", "slice"):
+                _mp_case(cases, op, "matvec", V((30, 44), dt), lm, V((44,), dt), "C", rng)
+                _mp_case(cases, op, "vecmat", V((44,), dt), "C", V((44, 30), dt), lm, rng)
+            _mp_case(cases, op, "matvec_strided_v", V((30, 44), dt), "C", V((44,), dt), "stride2", rng)
+            _mp_case(cases, op, "colrow", V((11, 1), dt), "C", V((1, 9), dt), "C", rng)
+            _mp_case(cases, op, "onerow", V((1, 1), dt), "C", V((1, 9), dt), "C", rng)
+            _mp_case(cases, op, "colone", V((11, 1), dt), "C", V((1, 1), dt), "C", rng)
+            _mp_case(cases, op, "matcol", V((13, 29), dt), "C", V((29, 1), dt), "C", rng)
+            _mp_case(cases, op, "rowmat", V((1, 29), dt), "C", V((29, 13), dt), "C", rng)
+
+        # --- syrk: `a @ a.T` shares a DATA POINTER, which both dispatchers shortcut to
+        # cblas_?syrk (upper triangle + mirror) instead of gemm. The corpus descriptor
+        # gives every operand its own buffer, so the self-product cannot be expressed as
+        # two operands — the op name carries the transpose instead and OpRegistry forms
+        # `a @ a.T` from the single stored operand, preserving the shared pointer.
+        for suffix, fn in (("aat", lambda v: (v, v.T)), ("ata", lambda v: (v.T, v))):
+            for lay in ("C", "F"):
+                S = V((16, 24), dt)
+                baseS, viewS = _mp_layout(S, lay, rng)
+                lhs, rhs = fn(viewS)
+                for op in ("dot", "matmul"):
+                    r = np.asarray((np.dot if op == "dot" else np.matmul)(lhs, rhs))
+                    cases.append({
+                        "id": f"{op}_{suffix}/syrk/{lay}/{dt}/{len(cases)}",
+                        "op": f"{op}_{suffix}",
+                        "params": {},
+                        "operands": [describe(baseS, viewS)],
+                        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                        "layout": f"syrk_{lay}",
+                        "valueclass": "normal",
+                    })
+
+        # --- stacked matmul (the gufunc's outer loop) + N-D dot (the dotfunc route,
+        # which NumPy does NOT send to gemm).
+        _mp_case(cases, "matmul", "batch3", V((3, 8, 20), dt), "C", V((3, 20, 6), dt), "C", rng)
+        _mp_case(cases, "matmul", "batch4", V((2, 3, 5, 12), dt), "C", V((2, 3, 12, 4), dt), "C", rng)
+        _mp_case(cases, "matmul", "batch_bcast", V((3, 8, 20), dt), "C", V((20, 6), dt), "C", rng)
+        _mp_case(cases, "matmul", "batch_vec", V((3, 8, 20), dt), "C", V((20,), dt), "C", rng)
+        _mp_case(cases, "dot", "nd_3d_1d", V((3, 8, 20), dt), "C", V((20,), dt), "C", rng)
+        _mp_case(cases, "dot", "nd_3d_2d", V((3, 8, 20), dt), "C", V((20, 7), dt), "C", rng)
+        _mp_case(cases, "dot", "nd_2d_3d", V((9, 20), dt), "C", V((4, 20, 5), dt), "C", rng)
+        _mp_case(cases, "dot", "nd_3d_3d", V((2, 5, 20), dt), "C", V((3, 20, 4), dt), "C", rng)
+
+        # --- degenerate extents.
+        _mp_case(cases, "dot", "k0", V((5, 0), dt), "C", V((0, 3), dt), "C", rng)
+        _mp_case(cases, "matmul", "k0", V((5, 0), dt), "C", V((0, 3), dt), "C", rng)
+        _mp_case(cases, "dot", "m0", V((0, 3), dt), "C", V((3, 4), dt), "C", rng)
+        _mp_case(cases, "dot", "n0", V((5, 3), dt), "C", V((3, 0), dt), "C", rng)
+
+        # --- value classes that punish reassociation, plus inf/NaN propagation.
+        _mp_case(cases, "dot", "wide_k300", V((6, 300), dt, "wide"), "C",
+                 V((300, 5), dt, "wide"), "C", rng, "wide")
+        _mp_case(cases, "dot", "specials", V((6, 40), dt, "specials"), "C",
+                 V((40, 5), dt, "specials"), "C", rng, "specials")
+        _mp_case(cases, "dot", "vecvec_wide", V((400,), dt, "wide"), "C",
+                 V((400,), dt, "wide"), "C", rng, "wide")
+
+        # --- the CBLAS product family beyond dot/matmul. Backend byte-parity for inner (dot on the
+        # swapaxes'd operand), vdot (the CONJUGATING zdotc for complex), vecdot (per-inner dotc, was
+        # Multiply+ReduceAdd), matvec (gemv / per-row dotu) and vecmat (complex gemm-ConjTrans /
+        # real gemv, else per-col dotc). Deep K (44/300) so reassociation shows; the F/stride2
+        # layouts and the dn==1 shapes drive the blasable-vs-portable route split; the 3-D operands
+        # exercise the gufunc's broadcast-of-leading-axes outer loop.
+        for kk in (44, 300):
+            _mp_prod_case(cases, "inner", f"vec_k{kk}", V((kk,), dt), "C", V((kk,), dt), "C", rng)
+            _mp_prod_case(cases, "vdot", f"vec_k{kk}", V((kk,), dt), "C", V((kk,), dt), "C", rng)
+            _mp_prod_case(cases, "vecdot", f"k{kk}", V((kk,), dt), "C", V((kk,), dt), "C", rng)
+        _mp_prod_case(cases, "inner", "mat", V((6, 120), dt), "C", V((5, 120), dt), "C", rng)
+        _mp_prod_case(cases, "inner", "matF", V((6, 120), dt), "F", V((5, 120), dt), "C", rng)
+        _mp_prod_case(cases, "vdot", "frob", V((8, 30), dt), "C", V((8, 30), dt), "C", rng)
+        _mp_prod_case(cases, "vdot", "frobF", V((8, 30), dt), "F", V((8, 30), dt), "C", rng)
+        for lm in ("C", "F", "stride2"):
+            _mp_prod_case(cases, "matvec", f"mv_{lm}", V((30, 60), dt), lm, V((60,), dt), "C", rng)
+            _mp_prod_case(cases, "vecmat", f"vm_{lm}", V((60,), dt), "C", V((60, 30), dt), lm, rng)
+        # gufunc outer loop over broadcast leading axes (stacked, and vector-vs-batch broadcast).
+        _mp_prod_case(cases, "vecdot", "batch", V((7, 90), dt), "C", V((7, 90), dt), "C", rng)
+        _mp_prod_case(cases, "vecdot", "bcast", V((90,), dt), "C", V((7, 90), dt), "C", rng)
+        _mp_prod_case(cases, "matvec", "batch", V((5, 30, 60), dt), "C", V((5, 60), dt), "C", rng)
+        _mp_prod_case(cases, "matvec", "bcast", V((5, 30, 60), dt), "C", V((60,), dt), "C", rng)
+        _mp_prod_case(cases, "vecmat", "batch", V((5, 60), dt), "C", V((5, 60, 30), dt), "C", rng)
+        _mp_prod_case(cases, "vecmat", "bcast", V((60,), dt), "C", V((5, 60, 30), dt), "C", rng)
+        # non-blasable core (dn==1 / dm==1) -> per-row/col dot instead of gemv/gemm.
+        _mp_prod_case(cases, "matvec", "dn1", V((30, 1), dt), "C", V((1,), dt), "C", rng)
+        _mp_prod_case(cases, "vecmat", "dn1", V((1,), dt), "C", V((1, 30), dt), "C", rng)
+        # complex vecmat/vecdot with WIDE magnitudes — the conjugating path under reassociation stress.
+        _mp_prod_case(cases, "vecdot", "wide", V((256,), dt, "wide"), "C",
+                      V((256,), dt, "wide"), "C", rng, "wide")
+        _mp_prod_case(cases, "vdot", "wide", V((256,), dt, "wide"), "C",
+                      V((256,), dt, "wide"), "C", rng, "wide")
+
+    # --- blocked / multi-threaded kernel sizes (f32 only for corpus weight; f64 smaller).
+    _mp_case(cases, "dot", "big", _mp_values((64, 256), "float32", rng), "C",
+             _mp_values((256, 64), "float32", rng), "C", rng)
+    _mp_case(cases, "dot", "big", _mp_values((48, 192), "float64", rng), "C",
+             _mp_values((192, 48), "float64", rng), "C", rng)
+
+    # --- mixed dtype: NumPy casts to the common type first (a C-contiguous copy).
+    _mp_case(cases, "dot", "mixed", _mp_values((12, 40), "float32", rng), "C",
+             _mp_values((40, 9), "float64", rng), "C", rng)
+    _mp_case(cases, "dot", "mixed", _mp_values((12, 40), "float64", rng), "C",
+             _mp_values((40, 9), "float32", rng), "C", rng)
+    return cases
+
+
+def blas_identity():
+    """Identify the BLAS NumPy will call, so the replay can refuse a mismatched host.
+
+    The bits this tier records depend on the library build, the DYNAMIC_ARCH kernel it
+    picks for this CPU, and the worker-thread count — all three are read straight out of
+    the loaded binary through the same OpenBLAS entry points NumSharp's parity backend uses.
+    """
+    import ctypes
+    import glob
+    import hashlib
+    import platform
+
+    info = {"numpy": np.__version__, "platform": platform.platform(),
+            "machine": platform.machine()}
+    roots = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(np.__file__))), "numpy.libs")]
+    patterns = ["*scipy_openblas*.dll", "*scipy_openblas*.so*", "*scipy_openblas*.dylib",
+                "*openblas*.dll", "*openblas*.so*", "*openblas*.dylib"]
+    lib = None
+    for root in roots:
+        for pat in patterns:
+            hits = sorted(glob.glob(os.path.join(root, pat)))
+            if hits:
+                lib = hits[-1]
+                break
+        if lib:
+            break
+    if lib is None:
+        info["blas_library"] = ""
+        return info
+
+    info["blas_library"] = os.path.basename(lib)
+    # The library's CONTENT hash, which is what the claim is actually about. The file NAME is a
+    # poor proxy for it in both directions: pip's delvewheel/auditwheel mangle the name per build
+    # (numpy ships libscipy_openblas64_-<hash>.dll), while NumSharp's bundled copy of the very same
+    # bytes is plainly libscipy_openblas64_.dll. Comparing names alone therefore excuses a host that
+    # is genuinely bit-identical, and would accept a differently-built library that happened to be
+    # named the same. The C# gate prefers this field and keeps the name as a fallback for corpora
+    # generated before it existed.
+    with open(lib, "rb") as fh:
+        info["blas_library_sha256"] = hashlib.sha256(fh.read()).hexdigest()
+    try:
+        dll = ctypes.CDLL(lib)
+        for prefix, suffix in (("scipy_", "64_"), ("", "64_"), ("", "")):
+            try:
+                cfg = getattr(dll, f"{prefix}openblas_get_config{suffix}")
+                core = getattr(dll, f"{prefix}openblas_get_corename{suffix}")
+                thr = getattr(dll, f"{prefix}openblas_get_num_threads{suffix}")
+            except AttributeError:
+                continue
+            cfg.restype = ctypes.c_char_p
+            core.restype = ctypes.c_char_p
+            thr.restype = ctypes.c_int
+            info["blas_config"] = cfg().decode("ascii", "replace")
+            info["blas_corename"] = core().decode("ascii", "replace")
+            info["blas_threads"] = int(thr())
+            break
+    except OSError as e:
+        info["blas_error"] = str(e)
+    return info
+
+
+# ---------------------------------------------------------------------------
+# T-linalg — the LAPACK FACTORISATION family byte-parity for the opt-in BLAS
+# backend (linalg_parity). SAME host-pinned model as matmul_parity: NumPy's
+# np.linalg.{cholesky,eig,eigvals,eigh,eigvalsh,svd,svdvals,pinv,matrix_rank,
+# cond,lstsq,qr} and np.linalg.norm{2,-2,'nuc'} all delegate to scipy-openblas
+# LAPACK, whose result bits depend on the library build, the DYNAMIC_ARCH kernel
+# and the worker-thread count. NumSharp.Core ships NO managed LU/QR/SVD/eigen
+# solver, so these are computable ONLY through NumSharp.Interop.OpenBLAS — and
+# byte-identical to NumPy exactly when the three levers agree.
+#
+# It is deliberately a SEPARATE tier from matmul_parity because it is pinned at
+# threads=1 (the config the interop live-parity suite proves deterministic — see
+# test/NumSharp.Tests.Interop/*LiveParityTests.cs) rather than the ambient max,
+# and its results are TUPLES (svd/eig/eigh/qr/lstsq) as well as arrays.
+#
+# Only the BYTE-REPRODUCIBLE surface is recorded (empirically probed on this host,
+# 25/26 byte-exact). Three factorisation outputs are NOT byte-reproducible and are
+# deliberately EXCLUDED (covered instead by the interop suite's reconstruction /
+# tolerance checks, and documented in Fuzz/README.md):
+#   * complex-HERMITIAN eigh EIGENVECTORS — heevd does not canonicalize the phase
+#     and it is not reproducible across processes; complex-Hermitian eigenVALUES
+#     (eigvalsh, and eigh's [0] slot for REAL-symmetric input) are recorded.
+#   * float32 eig with COMPLEX eigenvalues — NumPy yields complex64, NumSharp
+#     complex128 (no complex64 dtype); float32 eig is recorded only for matrices
+#     with all-REAL eigenvalues.
+#   * cond/norm ORDERS that are not SVD-based (fro/1/-1/inf) — they compose an
+#     elementwise reduction whose summation order rounds 1 ULP off NumPy; only the
+#     SVD-based orders (cond None/2/-2, norm 2/-2/'nuc') are recorded.
+LINALG_PARITY_DTYPES = ["float64", "complex128", "float32"]
+
+
+def _set_openblas_threads(n):
+    """Force the loaded scipy-openblas to <n> threads so the recorded bytes are a
+    deterministic single-threaded function of the input, independent of the ambient
+    OPENBLAS_NUM_THREADS. Mirrors blas_identity()'s ctypes probe; best-effort."""
+    import ctypes
+    import glob
+    root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(np.__file__))), "numpy.libs")
+    for pat in ("*scipy_openblas*.dll", "*scipy_openblas*.so*", "*scipy_openblas*.dylib",
+                "*openblas*.dll", "*openblas*.so*", "*openblas*.dylib"):
+        hits = sorted(glob.glob(os.path.join(root, pat)))
+        if not hits:
+            continue
+        try:
+            dll = ctypes.CDLL(hits[-1])
+        except OSError:
+            continue
+        for name in ("scipy_openblas_set_num_threads64_", "openblas_set_num_threads64_",
+                     "openblas_set_num_threads"):
+            fn = getattr(dll, name, None)
+            if fn is not None:
+                fn(ctypes.c_int(n))
+                return True
+    return False
+
+
+def _lp_operand(a, layout, rng):
+    """(base, view) holding EXACTLY a's values in the requested memory layout, reusing
+    the matmul_parity layout recipes. C/F work for any rank; the strided/reversed recipes
+    are 2-D only (guarded by the caller)."""
+    if layout == "C" or a.ndim == 0:
+        base = np.ascontiguousarray(a)
+        return base, base
+    return _mp_layout(a, layout, rng)
+
+
+def _lp_arr(cases, op, name, a, params, fn, dt, layout, rng):
+    """Record ONE array-result factorisation case (cholesky/eigvals/eigvalsh/svdvals/
+    pinv/matrix_rank/cond/norm, and svd(compute_uv=False)/qr(mode='r'))."""
+    base, view = _lp_operand(a, layout, rng)
+    r = np.asarray(fn(view))
+    cases.append({
+        "id": f"{op}/{name}/{dt}/{layout}/{len(cases)}",
+        "op": op, "params": params,
+        "operands": [describe(base, view)],
+        "expected": _arr_expected(r),
+        "layout": layout, "valueclass": "linalg",
+    })
+
+
+def _lp_tuple(cases, op, name, a, params, fn, dt, layout, rng):
+    """Record ONE tuple-result factorisation case (svd/eig/eigh/qr) — every slot, so
+    ARITY is asserted too."""
+    base, view = _lp_operand(a, layout, rng)
+    r = [np.asarray(x) for x in fn(view)]
+    cases.append({
+        "id": f"{op}/{name}/{dt}/{layout}/{len(cases)}",
+        "op": op, "params": params,
+        "operands": [describe(base, view)],
+        "expected": _tuple_expected(r),
+        "layout": layout, "valueclass": "linalg",
+    })
+
+
+def _lp_lstsq(cases, name, a, b, dt):
+    """lstsq takes TWO operands and returns a 4-tuple (solution, residuals, rank, s)."""
+    ba, va = np.ascontiguousarray(a), np.ascontiguousarray(a)
+    bb, vb = np.ascontiguousarray(b), np.ascontiguousarray(b)
+    r = [np.asarray(x) for x in np.linalg.lstsq(va, vb, rcond=None)]
+    cases.append({
+        "id": f"lstsq/{name}/{dt}/C/{len(cases)}",
+        "op": "lstsq", "params": {"rcond": None},
+        "operands": [describe(ba, va), describe(bb, vb)],
+        "expected": _tuple_expected(r),
+        "layout": "C", "valueclass": "linalg",
+    })
+
+
+def _lp_arr2(cases, op, name, a, b, params, fn, dt, layout, rng):
+    """A TWO-operand array-result factorisation (solve/tensorsolve): `a` carried in the
+    requested layout (reusing the matmul_parity recipes), `b` always C-contiguous. Mirrors
+    _lp_lstsq's operand shape but for a single array result rather than the 4-tuple."""
+    base_a, view_a = _lp_operand(a, layout, rng)
+    base_b, view_b = np.ascontiguousarray(b), np.ascontiguousarray(b)
+    r = np.asarray(fn(view_a, view_b))
+    cases.append({
+        "id": f"{op}/{name}/{dt}/{layout}/{len(cases)}",
+        "op": op, "params": params,
+        "operands": [describe(base_a, view_a), describe(base_b, view_b)],
+        "expected": _arr_expected(r),
+        "layout": layout, "valueclass": "linalg",
+    })
+
+
+def _lp_poly_fit(cases, x, y, deg, dt):
+    """polyfit reaches lstsq (backend); default return is the coefficient array."""
+    bx, vx = np.ascontiguousarray(x), np.ascontiguousarray(x)
+    by, vy = np.ascontiguousarray(y), np.ascontiguousarray(y)
+    r = np.asarray(np.polyfit(vx, vy, deg))
+    cases.append({
+        "id": f"polyfit/deg{deg}/{dt}/C/{len(cases)}",
+        "op": "polyfit", "params": {"deg": deg},
+        "operands": [describe(bx, vx), describe(by, vy)],
+        "expected": _arr_expected(r),
+        "layout": "C", "valueclass": "linalg",
+    })
+
+
+def gen_linalg_parity():
+    # Deterministic single-thread bytes regardless of ambient OPENBLAS_NUM_THREADS.
+    _set_openblas_threads(1)
+    cases = []
+    rng = np.random.RandomState(20260821)
+
+    # ---- reference operands (integer-valued so every dtype cast is exact) -----------------
+    SPD3 = np.array([[4., 2, 1], [2, 5, 3], [1, 3, 6]])                       # symmetric PD
+    SPD4 = np.array([[4., 1, 0, 1], [1, 5, 2, 0], [0, 2, 6, 1], [1, 0, 1, 7]])
+    HPD2 = np.array([[2 + 0j, 1 - 1j], [1 + 1j, 3 + 0j]])                     # Hermitian PD
+    HPD3 = np.array([[3 + 0j, 1 - 1j, 0], [1 + 1j, 4 + 0j, 0 - 1j], [0, 0 + 1j, 5 + 0j]])
+    HERM_NPD = np.array([[1 + 0j, 0 - 2j], [0 + 2j, 5 + 0j]])                 # Hermitian, not used for chol
+    SYM_NPD = np.array([[0., 1, 2], [1, 3, 1], [2, 1, 0]])                    # symmetric, indefinite
+    REAL_EIG = np.array([[2., 0, 0], [1, 3, 0], [4, 5, 6]])                   # non-sym, all-real eigs
+    CPLX_EIG = np.array([[1., -1], [1, 1]])                                   # non-sym, complex eigs
+    CPLX_EIG3 = np.array([[1., 2, 0], [0, 3, 1], [2, 0, 4]])                  # non-sym, complex eigs
+    CPLX_IN = np.array([[1 + 0j, 2 - 1j], [0 + 1j, 3 + 0j]])                  # complex input (zgeev)
+    TALL = np.array([[1., 2, 3], [4, 5, 6], [7, 8, 10], [1, 0, 2]])          # 4x3
+    WIDE = np.array([[1., 2, 3, 4], [5, 6, 7, 8], [9, 10, 12, 11]])          # 3x4
+    SQR = np.array([[4., 1, 2], [0, 3, 1], [1, 0, 5]])                        # 3x3 non-symmetric
+    CTALL = np.array([[1 + 2j, 3 - 1j], [4 + 0j, 1 + 1j], [-2 + 1j, 0 + 3j], [1 + 0j, 2 - 2j]])  # 4x2
+    RANKDEF = np.array([[1., 2, 3], [2, 4, 6], [1, 1, 1]])                    # rank 2
+
+    def cast(a, dt):
+        return np.ascontiguousarray(a).astype(dt)
+
+    # ---- layout sweeps ---------------------------------------------------------------------
+    LAYOUTS_2D = ["C", "F", "negrow", "negcol", "stride2", "slice"]
+
+    # ==========================  cholesky  ==============================================
+    for dt in LINALG_PARITY_DTYPES:
+        srcs = [("spd3", SPD3), ("spd4", SPD4)] + \
+               ([("hpd2", HPD2), ("hpd3", HPD3)] if dt == "complex128" else [])
+        for nm, a in srcs:
+            for upper in (False, True):
+                _lp_arr(cases, "cholesky", f"{nm}_u{int(upper)}", cast(a, dt),
+                        {"upper": upper}, lambda v, u=upper: np.linalg.cholesky(v, upper=u), dt, "C", rng)
+    # integer / bool widen to float64
+    for dt in ("int32", "int64", "uint8", "bool"):
+        _lp_arr(cases, "cholesky", "spd3_widen", cast(np.array([[4., 0, 0], [0, 9, 0], [0, 0, 16]]), dt),
+                {"upper": False}, lambda v: np.linalg.cholesky(v), dt, "C", rng)
+    # layouts (float64) + batched + degenerate
+    for lay in LAYOUTS_2D:
+        _lp_arr(cases, "cholesky", "spd3_lay", SPD3, {"upper": False},
+                lambda v: np.linalg.cholesky(v), "float64", lay, rng)
+    _lp_arr(cases, "cholesky", "batch", np.stack([SPD3, SPD3 * 2.0, SPD3 + np.eye(3)]),
+            {"upper": False}, lambda v: np.linalg.cholesky(v), "float64", "C", rng)
+    _lp_arr(cases, "cholesky", "1x1", np.array([[4.0]]), {"upper": False},
+            lambda v: np.linalg.cholesky(v), "float64", "C", rng)
+    _lp_arr(cases, "cholesky", "empty00", np.zeros((0, 0)), {"upper": False},
+            lambda v: np.linalg.cholesky(v), "float64", "C", rng)
+
+    # ==========================  eigvalsh / eigh  =======================================
+    for dt in LINALG_PARITY_DTYPES:
+        for nm, a in [("spd3", SPD3), ("sym_npd", SYM_NPD)]:
+            for uplo in ("L", "U"):
+                _lp_arr(cases, "eigvalsh", f"{nm}_{uplo}", cast(a, dt), {"UPLO": uplo},
+                        lambda v, u=uplo: np.linalg.eigvalsh(v, UPLO=u), dt, "C", rng)
+                # eigh: REAL-symmetric eigenVECTORS are reproducible -> tuple (both slots).
+                _lp_tuple(cases, "eigh", f"{nm}_{uplo}", cast(a, dt), {"UPLO": uplo},
+                          lambda v, u=uplo: np.linalg.eigh(v, UPLO=u), dt, "C", rng)
+    # complex-Hermitian: eigenVALUES only (eigenvectors' heevd phase is not reproducible).
+    for nm, a in [("hpd2", HPD2), ("hpd3", HPD3), ("herm_npd", HERM_NPD)]:
+        for uplo in ("L", "U"):
+            _lp_arr(cases, "eigvalsh", f"{nm}_{uplo}", np.ascontiguousarray(a), {"UPLO": uplo},
+                    lambda v, u=uplo: np.linalg.eigvalsh(v, UPLO=u), "complex128", "C", rng)
+    # integer / bool widen; batched; layouts (real symmetric)
+    for dt in ("int32", "int64", "bool"):
+        _lp_arr(cases, "eigvalsh", "diag_widen", cast(np.diag([4., 9, 16]), dt), {"UPLO": "L"},
+                lambda v: np.linalg.eigvalsh(v), dt, "C", rng)
+    _lp_arr(cases, "eigvalsh", "batch", np.stack([SPD3, SPD3 * 2.0, SPD3 + np.eye(3)]), {"UPLO": "L"},
+            lambda v: np.linalg.eigvalsh(v), "float64", "C", rng)
+    _lp_tuple(cases, "eigh", "batch", np.stack([SPD3, SPD3 * 2.0]), {"UPLO": "L"},
+              lambda v: np.linalg.eigh(v), "float64", "C", rng)
+    for lay in ("F", "negrow", "negcol"):
+        _lp_arr(cases, "eigvalsh", "spd3_lay", SPD3, {"UPLO": "L"},
+                lambda v: np.linalg.eigvalsh(v), "float64", lay, rng)
+
+    # ==========================  eig / eigvals  =========================================
+    # float64 + complex128 over real-eig / complex-eig / complex-input matrices.
+    for dt in ("float64", "complex128"):
+        srcs = [("realeig", REAL_EIG), ("cplxeig", CPLX_EIG), ("cplxeig3", CPLX_EIG3)]
+        if dt == "complex128":
+            srcs += [("cplxin", CPLX_IN)]
+        for nm, a in srcs:
+            _lp_arr(cases, "eigvals", f"{nm}", cast(a, dt), {}, lambda v: np.linalg.eigvals(v), dt, "C", rng)
+            _lp_tuple(cases, "eig", f"{nm}", cast(a, dt), {}, lambda v: np.linalg.eig(v), dt, "C", rng)
+    # float32: only REAL-eig matrices (complex-eig float32 -> complex64, a dtype divergence).
+    _lp_arr(cases, "eigvals", "realeig", cast(REAL_EIG, "float32"), {}, lambda v: np.linalg.eigvals(v), "float32", "C", rng)
+    _lp_tuple(cases, "eig", "realeig", cast(REAL_EIG, "float32"), {}, lambda v: np.linalg.eig(v), "float32", "C", rng)
+    # batched: one complex-eig + one real-eig -> whole result complex on both sides.
+    _lp_tuple(cases, "eig", "batch", np.stack([CPLX_EIG, np.array([[2., 0], [0, 3]])]), {},
+              lambda v: np.linalg.eig(v), "float64", "C", rng)
+    _lp_arr(cases, "eigvals", "batch", np.stack([REAL_EIG, REAL_EIG + np.eye(3)]), {},
+            lambda v: np.linalg.eigvals(v), "float64", "C", rng)
+
+    # ==========================  svd / svdvals  =========================================
+    for dt in LINALG_PARITY_DTYPES:
+        rects = [("tall", TALL), ("wide", WIDE), ("sqr", SQR)] + \
+                ([("ctall", CTALL)] if dt == "complex128" else [])
+        for nm, a in rects:
+            for full in (False, True):
+                _lp_tuple(cases, "svd", f"{nm}_f{int(full)}", cast(a, dt), {"full_matrices": full},
+                          lambda v, f=full: np.linalg.svd(v, full_matrices=f), dt, "C", rng)
+            # compute_uv=False -> just S (array kind)
+            _lp_arr(cases, "svd", f"{nm}_novec", cast(a, dt), {"full_matrices": False, "compute_uv": False},
+                    lambda v: np.linalg.svd(v, compute_uv=False), dt, "C", rng)
+            _lp_arr(cases, "svdvals", f"{nm}", cast(a, dt), {}, lambda v: np.linalg.svdvals(v), dt, "C", rng)
+    # layouts (float64 tall) + batched + degenerate
+    for lay in LAYOUTS_2D:
+        _lp_tuple(cases, "svd", "tall_lay", TALL, {"full_matrices": False},
+                  lambda v: np.linalg.svd(v, full_matrices=False), "float64", lay, rng)
+        _lp_arr(cases, "svdvals", "tall_lay", TALL, {}, lambda v: np.linalg.svdvals(v), "float64", lay, rng)
+    _lp_tuple(cases, "svd", "batch", np.stack([TALL, TALL + 1.0, TALL * 2.0]), {"full_matrices": False},
+              lambda v: np.linalg.svd(v, full_matrices=False), "float64", "C", rng)
+    _lp_arr(cases, "svdvals", "batch", np.stack([TALL, TALL + 1.0]), {},
+            lambda v: np.linalg.svdvals(v), "float64", "C", rng)
+    _lp_tuple(cases, "svd", "1x1", np.array([[7.0]]), {"full_matrices": True},
+              lambda v: np.linalg.svd(v, full_matrices=True), "float64", "C", rng)
+    _lp_tuple(cases, "svd", "empty03", np.zeros((0, 3)), {"full_matrices": True},
+              lambda v: np.linalg.svd(v, full_matrices=True), "float64", "C", rng)
+    _lp_tuple(cases, "svd", "empty30", np.zeros((3, 0)), {"full_matrices": True},
+              lambda v: np.linalg.svd(v, full_matrices=True), "float64", "C", rng)
+
+    # ==========================  pinv  ==================================================
+    for dt in LINALG_PARITY_DTYPES:
+        rects = [("tall", TALL), ("wide", WIDE), ("sqr", SQR)] + \
+                ([("ctall", CTALL)] if dt == "complex128" else [])
+        for nm, a in rects:
+            _lp_arr(cases, "pinv", f"{nm}", cast(a, dt), {}, lambda v: np.linalg.pinv(v), dt, "C", rng)
+    _lp_arr(cases, "pinv", "tall_rcond", TALL, {"rcond": 1e-10},
+            lambda v: np.linalg.pinv(v, rcond=1e-10), "float64", "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_arr(cases, "pinv", "tall_lay", TALL, {}, lambda v: np.linalg.pinv(v), "float64", lay, rng)
+    _lp_arr(cases, "pinv", "batch", np.stack([TALL, TALL + 1.0]), {},
+            lambda v: np.linalg.pinv(v), "float64", "C", rng)
+
+    # ==========================  matrix_rank  ===========================================
+    RANK_FULL = np.array([[1., 2, 3], [4, 5, 6], [7, 8, 10]])
+    for dt in ("float64", "float32", "complex128", "int64"):
+        _lp_arr(cases, "matrix_rank", "full", cast(RANK_FULL, dt), {},
+                lambda v: np.linalg.matrix_rank(v), dt, "C", rng)
+    _lp_arr(cases, "matrix_rank", "def", RANKDEF, {}, lambda v: np.linalg.matrix_rank(v), "float64", "C", rng)
+    _lp_arr(cases, "matrix_rank", "def_tol", RANKDEF, {"tol": 0.5},
+            lambda v: np.linalg.matrix_rank(v, tol=0.5), "float64", "C", rng)
+    _lp_arr(cases, "matrix_rank", "def_rtol", RANKDEF, {"rtol": 0.1},
+            lambda v: np.linalg.matrix_rank(v, rtol=0.1), "float64", "C", rng)
+    _lp_arr(cases, "matrix_rank", "batch",
+            np.stack([RANK_FULL, np.eye(3), RANKDEF]), {},
+            lambda v: np.linalg.matrix_rank(v), "float64", "C", rng)
+
+    # ==========================  cond (SVD-based orders None/2/-2)  ======================
+    for dt in ("float64", "complex128"):
+        a = SPD3 if dt == "float64" else HPD3
+        for pk, pv, pf in [("none", None, None), ("2", 2, 2), ("neg2", -2, -2)]:
+            params = {} if pv is None else {"p": pv}
+            _lp_arr(cases, "cond", f"{dt[:4]}_{pk}", cast(a, dt), params,
+                    lambda v, pp=pf: np.linalg.cond(v) if pp is None else np.linalg.cond(v, pp), dt, "C", rng)
+    _lp_arr(cases, "cond", "batch", np.stack([SPD3, SPD3 + np.eye(3)]), {},
+            lambda v: np.linalg.cond(v), "float64", "C", rng)
+
+    # ==========================  norm (matrix orders 2/-2/'nuc')  =======================
+    for dt in ("float64", "complex128"):
+        rects = [("tall", TALL), ("sqr", SQR)] + ([("ctall", CTALL)] if dt == "complex128" else [])
+        for nm, a in rects:
+            for ok, ov in [("2", 2), ("neg2", -2), ("nuc", "nuc")]:
+                _lp_arr(cases, "norm", f"{nm}_{ok}", cast(a, dt), {"ord": ov},
+                        lambda v, o=ov: np.linalg.norm(v, o), dt, "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_arr(cases, "norm", "tall_2_lay", TALL, {"ord": 2}, lambda v: np.linalg.norm(v, 2), "float64", lay, rng)
+        _lp_arr(cases, "norm", "tall_nuc_lay", TALL, {"ord": "nuc"}, lambda v: np.linalg.norm(v, "nuc"), "float64", lay, rng)
+    # stacked over an axis tuple + keepdims
+    STACK234 = np.arange(24.0).reshape(2, 3, 4)
+    _lp_arr(cases, "norm", "stack_2_ax", STACK234, {"ord": 2, "axis": [1, 2]},
+            lambda v: np.linalg.norm(v, 2, axis=(1, 2)), "float64", "C", rng)
+    _lp_arr(cases, "norm", "stack_nuc_ax", STACK234, {"ord": "nuc", "axis": [1, 2]},
+            lambda v: np.linalg.norm(v, "nuc", axis=(1, 2)), "float64", "C", rng)
+    _lp_arr(cases, "norm", "stack_nuc_kd", STACK234, {"ord": "nuc", "axis": [1, 2], "keepdims": True},
+            lambda v: np.linalg.norm(v, "nuc", axis=(1, 2), keepdims=True), "float64", "C", rng)
+
+    # ==========================  qr (reduced/complete/r/raw)  ===========================
+    for dt in LINALG_PARITY_DTYPES:
+        rects = [("tall", TALL), ("wide", WIDE), ("sqr", SQR)] + \
+                ([("ctall", CTALL)] if dt == "complex128" else [])
+        for nm, a in rects:
+            for mode in ("reduced", "complete", "raw"):
+                _lp_tuple(cases, "qr", f"{nm}_{mode}", cast(a, dt), {"mode": mode},
+                          lambda v, m=mode: np.linalg.qr(v, mode=m), dt, "C", rng)
+            # r-mode returns just R (array kind)
+            _lp_arr(cases, "qr", f"{nm}_r", cast(a, dt), {"mode": "r"},
+                    lambda v: np.linalg.qr(v, mode="r"), dt, "C", rng)
+    for dt in ("int64", "bool"):
+        _lp_tuple(cases, "qr", "tall_widen", cast(TALL, dt), {"mode": "reduced"},
+                  lambda v: np.linalg.qr(v, mode="reduced"), dt, "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_tuple(cases, "qr", "tall_lay", TALL, {"mode": "reduced"},
+                  lambda v: np.linalg.qr(v, mode="reduced"), "float64", lay, rng)
+    _lp_tuple(cases, "qr", "batch", np.arange(3 * 5 * 3.0).reshape(3, 5, 3) + np.eye(5, 3), {"mode": "reduced"},
+              lambda v: np.linalg.qr(v, mode="reduced"), "float64", "C", rng)
+    _lp_tuple(cases, "qr", "30_reduced", np.zeros((3, 0)), {"mode": "reduced"},
+              lambda v: np.linalg.qr(v, mode="reduced"), "float64", "C", rng)
+    _lp_tuple(cases, "qr", "1x1_complete", np.array([[5.0]]), {"mode": "complete"},
+              lambda v: np.linalg.qr(v, mode="complete"), "float64", "C", rng)
+
+    # ==========================  lstsq  =================================================
+    OVER = np.array([[0., 1], [1, 1], [2, 1], [3, 1]])          # 4x2 overdetermined
+    Y1 = np.array([-1., 0.2, 0.9, 2.1])                          # 1-D b
+    Y2 = np.array([[-1., -2], [0.2, 0.4], [0.9, 1.8], [2.1, 4.2]])  # 2-D b
+    UNDER = np.array([[1., 2, 3], [4, 5, 6]])                    # 2x3 underdetermined
+    SQ2 = np.array([[1., 2], [3, 5]])                            # 2x2 square
+    RD = np.array([[1., 2], [2, 4], [3, 6]])                     # 3x2 rank-deficient
+    CA = np.array([[1 + 0j, 1 + 0j], [1 + 0j, 0 + 1j], [1 + 0j, 2 + 0j], [0 + 0j, 1 + 0j]])
+    CB = np.array([1 + 1j, 2 + 0j, 3 + 0j, 0 + 1j])
+    _lp_lstsq(cases, "over_y1", OVER, Y1, "float64")
+    _lp_lstsq(cases, "over_y2", OVER, Y2, "float64")
+    _lp_lstsq(cases, "under", UNDER, np.array([1., 2]), "float64")
+    _lp_lstsq(cases, "square", SQ2, np.array([1., 2]), "float64")
+    _lp_lstsq(cases, "rankdef", RD, np.array([1., 2, 3]), "float64")
+    _lp_lstsq(cases, "complex", CA, CB, "complex128")
+    for dt in ("float32", "int32"):
+        _lp_lstsq(cases, f"over_{dt}", OVER.astype(dt) if dt != "int32" else OVER.astype("int32"),
+                  Y1.astype(dt) if dt != "int32" else Y1.astype("int32"), dt)
+
+    # ==========================  polynomial backend ops  ================================
+    # roots (eigenvalues of the companion matrix), polyfit (lstsq) and poly of a 2-D matrix
+    # (char poly via eigvals) all reach the LAPACK seam and THROW without the backend, so they
+    # ride this host-pinned tier rather than the portable poly.jsonl. Small operands, threads=1.
+    for dt in ("float64", "float32", "complex128"):
+        rp = np.array([1, -6, 11, -6]).astype(dt)          # roots 1,2,3
+        _lp_arr(cases, "roots", "cubic", rp, {}, lambda v: np.roots(v), dt, "C", rng)
+    _lp_arr(cases, "roots", "quad_complex", np.array([1., 0, 1]), {},   # roots ±i
+            lambda v: np.roots(v), "float64", "C", rng)
+    _lp_arr(cases, "roots", "leading_zeros", np.array([0., 0, 1, -3, 2]), {},
+            lambda v: np.roots(v), "float64", "C", rng)
+    # poly of a 2-D matrix -> characteristic polynomial (eigvals path)
+    for dt in ("float64", "complex128"):
+        Mp = np.array([[1, 2], [3, 4]]).astype(dt)
+        _lp_arr(cases, "poly", "mat2", Mp, {}, lambda v: np.poly(v), dt, "C", rng)
+    _lp_arr(cases, "poly", "mat3", np.array([[2., 0, 0], [1, 3, 0], [4, 5, 6]]), {},
+            lambda v: np.poly(v), "float64", "C", rng)
+    # polyfit -> least-squares coefficients (lstsq path); default return is the coeff array.
+    xf = np.array([0., 1, 2, 3, 4])
+    yf = np.array([1., 3, 2, 5, 4])
+    for deg in (1, 2, 3):
+        _lp_poly_fit(cases, xf, yf, deg, "float64")
+    _lp_poly_fit(cases, xf.astype(np.float32), yf.astype(np.float32), 2, "float32")
+
+    # ==========================  LU-factorisation family  ===============================
+    # solve/inv/det/slogdet/tensorinv/tensorsolve all reach getrf/gesv. Unlike the eigen/SVD
+    # factorisations there is NO sign- or phase-ambiguity: LU with partial pivoting is a
+    # deterministic function of the input, so EVERY output is byte-reproducible (probed 2/2
+    # per case, cross-process). float32 upcasts to double and rounds back once (_commonType),
+    # so it is byte-identical too; int/bool widen to float64. These are the OpenBLAS-dependent
+    # linalg members with no managed fallback and, until now, no committed differential-fuzz
+    # gate at all.
+    INV2 = np.array([[2., 1], [1, 3]])                         # 2x2 invertible
+    DINV = np.diag([2., 3, 4])                                 # diagonal invertible (int/bool widen -> chol/eye)
+    B1 = np.array([1., 2, 3])                                  # solve RHS: a vector (b.ndim == 1)
+    B2 = np.array([[1., 4], [2, 5], [3, 6]])                  # solve RHS: a 3x2 stack of columns
+    CB = np.array([1 + 1j, 2 + 0j])                            # complex vector RHS
+    CB2 = np.array([[1 + 1j, 0], [2 + 0j, 1 - 1j]])           # complex matrix RHS
+    BASE6 = np.array([[10, 1, 0, 2, 0, 1], [0, 11, 1, 0, 1, 0], [1, 0, 12, 0, 0, 1],
+                      [0, 2, 0, 13, 1, 0], [1, 0, 0, 1, 14, 0], [0, 1, 0, 0, 1, 15]], float)  # invertible 6x6
+
+    # ---- inv ----
+    for dt in LINALG_PARITY_DTYPES:
+        srcs = [("sqr", SQR), ("inv2", INV2)] + ([("cplxin", CPLX_IN)] if dt == "complex128" else [])
+        for nm, a in srcs:
+            _lp_arr(cases, "inv", nm, cast(a, dt), {}, lambda v: np.linalg.inv(v), dt, "C", rng)
+    for dt in ("int32", "int64", "uint8", "bool"):
+        _lp_arr(cases, "inv", "diag_widen", cast(DINV, dt), {}, lambda v: np.linalg.inv(v), dt, "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_arr(cases, "inv", "sqr_lay", SQR, {}, lambda v: np.linalg.inv(v), "float64", lay, rng)
+    _lp_arr(cases, "inv", "batch", np.stack([SQR, SQR + np.eye(3)]), {},
+            lambda v: np.linalg.inv(v), "float64", "C", rng)
+    _lp_arr(cases, "inv", "1x1", np.array([[4.0]]), {}, lambda v: np.linalg.inv(v), "float64", "C", rng)
+
+    # ---- det (single -> 0-D scalar; a stack -> 1-D; a singular operand -> exactly the LU product) ----
+    for dt in LINALG_PARITY_DTYPES:
+        srcs = [("sqr", SQR), ("inv2", INV2)] + ([("cplxin", CPLX_IN)] if dt == "complex128" else [])
+        for nm, a in srcs:
+            _lp_arr(cases, "det", nm, cast(a, dt), {}, lambda v: np.linalg.det(v), dt, "C", rng)
+    for dt in ("int32", "int64", "bool"):
+        _lp_arr(cases, "det", "diag_widen", cast(DINV, dt), {}, lambda v: np.linalg.det(v), dt, "C", rng)
+    _lp_arr(cases, "det", "singular", RANKDEF, {}, lambda v: np.linalg.det(v), "float64", "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_arr(cases, "det", "sqr_lay", SQR, {}, lambda v: np.linalg.det(v), "float64", lay, rng)
+    _lp_arr(cases, "det", "batch", np.stack([SQR, SQR + np.eye(3), RANKDEF]), {},
+            lambda v: np.linalg.det(v), "float64", "C", rng)
+    _lp_arr(cases, "det", "1x1", np.array([[7.0]]), {}, lambda v: np.linalg.det(v), "float64", "C", rng)
+
+    # ---- slogdet (tuple: sign, logabsdet; a complex sign is a unit-modulus complex, not +-1;
+    #               a singular operand gives (0, -inf)) ----
+    for dt in LINALG_PARITY_DTYPES:
+        srcs = [("sqr", SQR)] + ([("cplxin", CPLX_IN)] if dt == "complex128" else [])
+        for nm, a in srcs:
+            _lp_tuple(cases, "slogdet", nm, cast(a, dt), {}, lambda v: np.linalg.slogdet(v), dt, "C", rng)
+    for dt in ("int32", "int64", "bool"):
+        _lp_tuple(cases, "slogdet", "diag_widen", cast(DINV, dt), {}, lambda v: np.linalg.slogdet(v), dt, "C", rng)
+    _lp_tuple(cases, "slogdet", "singular", RANKDEF, {}, lambda v: np.linalg.slogdet(v), "float64", "C", rng)
+    _lp_tuple(cases, "slogdet", "batch", np.stack([SQR, RANKDEF]), {},
+              lambda v: np.linalg.slogdet(v), "float64", "C", rng)
+    _lp_tuple(cases, "slogdet", "1x1", np.array([[7.0]]), {}, lambda v: np.linalg.slogdet(v), "float64", "C", rng)
+
+    # ---- solve (b is a stack of VECTORS iff EXACTLY 1-D, else a stack of MATRICES — NumPy 2.0) ----
+    for dt in ("float64", "float32"):
+        _lp_arr2(cases, "solve", "sqr_vec", cast(SQR, dt), cast(B1, dt), {},
+                 lambda va, vb: np.linalg.solve(va, vb), dt, "C", rng)
+        _lp_arr2(cases, "solve", "sqr_mat", cast(SQR, dt), cast(B2, dt), {},
+                 lambda va, vb: np.linalg.solve(va, vb), dt, "C", rng)
+    _lp_arr2(cases, "solve", "cplx_vec", CPLX_IN, CB, {},
+             lambda va, vb: np.linalg.solve(va, vb), "complex128", "C", rng)
+    _lp_arr2(cases, "solve", "cplx_mat", CPLX_IN, CB2, {},
+             lambda va, vb: np.linalg.solve(va, vb), "complex128", "C", rng)
+    _lp_arr2(cases, "solve", "int_widen", cast(SQR, "int64"), cast(B1, "int64"), {},
+             lambda va, vb: np.linalg.solve(va, vb), "int64", "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_arr2(cases, "solve", "sqr_lay", SQR, B1, {},
+                 lambda va, vb: np.linalg.solve(va, vb), "float64", lay, rng)
+    _lp_arr2(cases, "solve", "batch_mat", np.stack([SQR, SQR + np.eye(3)]), np.stack([B2, B2 + 1.0]), {},
+             lambda va, vb: np.linalg.solve(va, vb), "float64", "C", rng)
+    _lp_arr2(cases, "solve", "bcast_vec", np.stack([SQR, SQR + np.eye(3)]), B1, {},
+             lambda va, vb: np.linalg.solve(va, vb), "float64", "C", rng)
+    _lp_arr2(cases, "solve", "1x1", np.array([[4.0]]), np.array([2.0]), {},
+             lambda va, vb: np.linalg.solve(va, vb), "float64", "C", rng)
+
+    # ---- tensorinv (reshape -> inv -> reshape; `ind` LEADING axes form the row side) ----
+    for dt in LINALG_PARITY_DTYPES:
+        _lp_arr(cases, "tensorinv", "ind2", cast(BASE6.reshape(2, 3, 3, 2), dt), {"ind": 2},
+                lambda v: np.linalg.tensorinv(v, ind=2), dt, "C", rng)
+        _lp_arr(cases, "tensorinv", "ind1", cast(BASE6.reshape(6, 2, 3), dt), {"ind": 1},
+                lambda v: np.linalg.tensorinv(v, ind=1), dt, "C", rng)
+
+    # ---- tensorsolve (reshape -> solve -> reshape; `axes` move to the rightmost, in order) ----
+    TB = np.arange(1.0, 7.0).reshape(2, 3)
+    for dt in LINALG_PARITY_DTYPES:
+        _lp_arr2(cases, "tensorsolve", "std", cast(BASE6.reshape(2, 3, 6), dt), cast(TB, dt), {},
+                 lambda va, vb: np.linalg.tensorsolve(va, vb), dt, "C", rng)
+    _lp_arr2(cases, "tensorsolve", "axes", BASE6.reshape(6, 2, 3), TB, {"axes": [0]},
+             lambda va, vb: np.linalg.tensorsolve(va, vb, axes=[0]), "float64", "C", rng)
+
+    # ---- matrix_power with NEGATIVE n (= inv(a) ** |n| -> LAPACK gesv). Positive/zero n is a
+    #      portable managed product and lives in products.jsonl; negative n THROWS without the
+    #      backend, so its byte gate belongs here next to inv. int/bool widen to float64. ----
+    for dt in ("float64", "float32", "complex128"):
+        src = CPLX_IN if dt == "complex128" else SQR
+        for n in (-1, -2, -3):
+            _lp_arr(cases, "matrix_power", f"n{n}", cast(src, dt), {"n": n},
+                    lambda v, k=n: np.linalg.matrix_power(v, k), dt, "C", rng)
+    _lp_arr(cases, "matrix_power", "int_widen", cast(SQR, "int64"), {"n": -2},
+            lambda v: np.linalg.matrix_power(v, -2), "int64", "C", rng)
+    for lay in LAYOUTS_2D:
+        _lp_arr(cases, "matrix_power", "sqr_lay", SQR, {"n": -1},
+                lambda v: np.linalg.matrix_power(v, -1), "float64", lay, rng)
+
+    return cases
+# =====================================================================================
+# Result KINDS and ERROR parity.
+#
+# The corpus could originally express exactly ONE comparable thing: a single array, checked
+# as (dtype, shape, C-contiguous bytes). Three classes of op fell outside that shape and so
+# outside the gate entirely — tuple-returning, dtype/scalar-returning, and text-returning —
+# and every raising case was reduced to "NumSharp threw something".
+#
+#   expected.kind  : array (default) | scalar | dtype | text | tuple
+#   error          : {"type": <python class>, "text": str(e)}   — NumPy's exception, verbatim
+#
+# The generators below emit those kinds. They write their own tier files rather than
+# interleaving rows into the existing ones: the value tiers are large and shared, and
+# rewriting 87K committed lines to add error rows would bury the change in churn.
+# =====================================================================================
+
+
+def _exc(e):
+    """NumPy's exception recorded verbatim — the Python class name and str(e)."""
+    return {"type": type(e).__name__, "text": str(e)}
+
+
+def _arr_expected(r, kind=None):
+    """(dtype, shape, bytes) for one array result — the historical `expected` shape."""
+    r = np.asarray(r)
+    # Shape BEFORE ascontiguousarray, which forces ndim>=1 and would corrupt a 0-D result.
+    exp = {"dtype": r.dtype.name,
+           "shape": [int(d) for d in r.shape],
+           "buffer": np.ascontiguousarray(r).tobytes().hex()}
+    if kind:
+        exp["kind"] = kind
+    return exp
+
+
+def _tuple_expected(arrays):
+    """kind=tuple — every slot recorded, so ARITY is asserted as well as the values."""
+    return {"kind": "tuple", "slots": [_arr_expected(a) for a in arrays]}
+
+
+def _case(op, params, operands, expected, layout, valueclass="mixed", cid=None):
+    c = {"id": cid, "op": op, "params": params, "operands": operands,
+         "expected": expected, "layout": layout, "valueclass": valueclass}
+    return c
+
+
+# ---- multi-output public surface ----------------------------------------------------
+
+def gen_multioutput():
+    """Public APIs whose observable contract is a tuple/list of arrays.
+
+    Older tiers often selected one result with a ``piece`` parameter. That proves the chosen
+    values but cannot detect a wrong ARITY or a broken sibling result. This tier records every
+    slot and lets the tuple comparator assert arity, dtype, shape and bytes for all of them.
+    """
+    cases = []
+    n = 0
+
+    def emit_tuple(opname, params, arrays, result, layout="multioutput"):
+        nonlocal n
+        operands = [describe(a, a) for a in arrays]
+        cases.append(_case(opname, params, operands, _tuple_expected(list(result)), layout, "tuple",
+                           cid=f"{opname}/{layout}/{n}"))
+        n += 1
+
+    def emit_array(opname, params, array, result, layout="multioutput"):
+        nonlocal n
+        cases.append(_case(opname, params, [describe(array, array)], _arr_expected(result),
+                           layout, "array", cid=f"{opname}/{layout}/{n}"))
+        n += 1
+
+    for dt in ["int32", "float64", "uint8", "complex128"]:
+        d = np.dtype(dt)
+
+        a6 = _cbase((6,), d)
+        emit_tuple("split", {"sections": 3, "axis": 0}, [a6], np.split(a6, 3), f"split/{dt}")
+
+        a7 = _cbase((7,), d)
+        emit_tuple("array_split", {"sections": 3, "axis": 0}, [a7], np.array_split(a7, 3),
+                   f"array_split/{dt}")
+
+        h = _cbase((3, 4), d)
+        emit_tuple("hsplit", {"sections": 2}, [h], np.hsplit(h, 2), f"hsplit/{dt}")
+
+        v = _cbase((4, 3), d)
+        emit_tuple("vsplit", {"sections": 2}, [v], np.vsplit(v, 2), f"vsplit/{dt}")
+
+        dd = _cbase((2, 3, 4), d)
+        emit_tuple("dsplit", {"sections": 2}, [dd], np.dsplit(dd, 2), f"dsplit/{dt}")
+        emit_tuple("unstack", {"axis": 0}, [dd], np.unstack(dd, axis=0), f"unstack0/{dt}")
+        emit_tuple("unstack", {"axis": -1}, [dd], np.unstack(dd, axis=-1), f"unstack-1/{dt}")
+
+        # Array-API unique_* family. inverse_indices must retain the ORIGINAL 2-D input shape;
+        # all index/count outputs are intp. unique_values(integer/complex, sorted=False) has a
+        # deliberately platform-specific hash order in NumPy, so only its portable float path is
+        # byte-gated here; the other three functions are sorted and portable for every dtype.
+        if d.kind == "c":
+            u = np.array([[2 + 1j, 1 + 0j, 2 + 1j], [0 + 0j, 1 + 0j, 3 - 1j]], dtype=d)
+        else:
+            u = np.array([[2, 1, 2], [0, 1, 3]], dtype=d)
+        emit_tuple("unique_counts", {}, [u], np.unique_counts(u), f"unique_counts/{dt}")
+        emit_tuple("unique_inverse", {}, [u], np.unique_inverse(u), f"unique_inverse/{dt}")
+        emit_tuple("unique_all", {}, [u], np.unique_all(u), f"unique_all/{dt}")
+        if d.kind == "f":
+            emit_array("unique_values", {}, u, np.unique_values(u), f"unique_values/{dt}")
+
+    # unique_values(sorted=False) is portable for floating dtypes. Add both narrow widths and an
+    # adversarial signed-zero/NaN payload class so this public op is not represented by one row.
+    for dt in ["float16", "float32"]:
+        u = np.array([[2, 1, 2], [0, 1, 3]], dtype=dt)
+        emit_array("unique_values", {}, u, np.unique_values(u), f"unique_values/{dt}")
+    u_special = np.array([np.nan, -0.0, 0.0, 2.0, np.nan, -1.0], dtype=np.float64)
+    emit_array("unique_values", {}, u_special, np.unique_values(u_special), "unique_values/special")
+
+    # Broadcasting returns one view per operand and preserves each operand's dtype.
+    ba = np.arange(3, dtype=np.int32).reshape(3, 1)
+    bb = np.arange(4, dtype=np.float64).reshape(1, 4)
+    emit_tuple("broadcast_arrays", {}, [ba, bb], np.broadcast_arrays(ba, bb), "broadcast2")
+    bc = np.array(2 + 3j, dtype=np.complex128)
+    emit_tuple("broadcast_arrays", {}, [ba, bb, bc], np.broadcast_arrays(ba, bb, bc), "broadcast3")
+    bd = np.arange(6, dtype=np.float32).reshape(2, 1, 3)
+    be = np.arange(4, dtype=np.int16).reshape(1, 4, 1)
+    emit_tuple("broadcast_arrays", {}, [bd, be], np.broadcast_arrays(bd, be), "broadcast_rank3")
+    bf = np.array(True, dtype=bool)
+    bg = np.arange(5, dtype=np.uint64)
+    emit_tuple("broadcast_arrays", {}, [bf, bg], np.broadcast_arrays(bf, bg), "broadcast_scalar")
+
+    # meshgrid's indexing/sparse/copy parameters change both shape and result arity/slots.
+    mx = np.array([1, 2, 4], dtype=np.int32)
+    my = np.array([0.5, 1.5], dtype=np.float64)
+    for indexing in ["xy", "ij"]:
+        for sparse in [False, True]:
+            emit_tuple("meshgrid", {"indexing": indexing, "sparse": sparse, "copy": True},
+                       [mx, my], np.meshgrid(mx, my, indexing=indexing, sparse=sparse, copy=True),
+                       f"meshgrid/{indexing}/sparse={int(sparse)}")
+
+    # unravel_index returns one coordinate array per dimension.
+    flat = np.array([0, 5, 11, 7], dtype=np.int64)
+    emit_tuple("unravel_index_all", {"shape": [3, 4]}, [flat], np.unravel_index(flat, (3, 4)),
+               "unravel2")
+    emit_tuple("unravel_index_all", {"shape": [3, 4], "order": "F"}, [flat],
+               np.unravel_index(flat, (3, 4), order="F"), "unravel2F")
+    flat3 = np.array([0, 7, 23, 13], dtype=np.int64)
+    emit_tuple("unravel_index_all", {"shape": [2, 3, 4]}, [flat3],
+               np.unravel_index(flat3, (2, 3, 4)), "unravel3")
+    scalar_flat = np.array(5, dtype=np.int64)
+    emit_tuple("unravel_index_all", {"shape": [2, 3]}, [scalar_flat],
+               np.unravel_index(scalar_flat, (2, 3)), "unravel_scalar")
+
+    # modf's two outputs have independent signed-zero/inf behavior; use both contiguous and
+    # negative-stride operands at the two dtypes NumSharp currently implements.
+    for dt in ["float32", "float64"]:
+        mbase = np.array([-np.inf, -2.5, -0.0, 0.0, 1.25, np.inf], dtype=dt)
+        emit_tuple("modf", {}, [mbase], np.modf(mbase), f"modf/c/{dt}")
+        mrev = mbase[::-1]
+        cases.append(_case("modf", {}, [describe(mbase, mrev)], _tuple_expected(np.modf(mrev)),
+                           f"modf/neg/{dt}", "tuple", cid=f"modf/neg/{dt}/{n}"))
+        n += 1
+
+    # np.average(..., returned=True): the second slot (sum of weights) has its own shape/dtype
+    # contract and was wholly invisible while only the first average result was gated.
+    for dt in ["int32", "float64"]:
+        a = _cbase((3, 4), np.dtype(dt))
+        emit_tuple("average_returned", {"axis": None, "keepdims": False, "weighted": False},
+                   [a], np.average(a, returned=True), f"average/all/{dt}")
+        w = np.arange(1, 13, dtype=np.float64).reshape(3, 4)
+        emit_tuple("average_returned", {"axis": 1, "keepdims": True, "weighted": True},
+                   [a, w], np.average(a, axis=1, weights=w, returned=True, keepdims=True),
+                   f"average/weighted/{dt}")
+
+    return cases
+
+
+# ---- deterministic creation ---------------------------------------------------------
+
+def gen_creation(dtypes):
+    """Deterministic creation APIs, including zero-operand calls.
+
+    ``empty``/``empty_like`` have undefined initial bytes, so each result is immediately filled
+    with zero on BOTH sides before serialization. That turns their deterministic shape/dtype/
+    writeability contract into an ordinary byte comparison; the sibling flags oracle continues
+    to own order/stride/ownership parity.
+    """
+    cases = []
+    n = 0
+
+    def emit(opname, params, operands, result, layout="creation"):
+        nonlocal n
+        cases.append(_case(opname, params, [describe(a, a) for a in operands],
+                           _arr_expected(result), layout, "creation",
+                           cid=f"{opname}/{layout}/{n}"))
+        n += 1
+
+    for dt in dtypes:
+        d = np.dtype(dt)
+        # Bool arange is defined only for result length <= 2 in NumPy 2.x.
+        stop = 2 if d.kind == "b" else 7
+        emit("arange", {"start": 0.0, "stop": float(stop), "step": 1.0, "dtype": dt}, [],
+             np.arange(0, stop, 1, dtype=d), f"arange/{dt}")
+        emit("linspace", {"start": -2.0, "stop": 3.0, "num": 7, "endpoint": True, "dtype": dt}, [],
+             np.linspace(-2.0, 3.0, 7, endpoint=True, dtype=d), f"linspace/{dt}")
+        emit("linspace", {"start": 0.0, "stop": 1.0, "num": 5, "endpoint": False, "dtype": dt}, [],
+             np.linspace(0.0, 1.0, 5, endpoint=False, dtype=d), f"linspace_noend/{dt}")
+
+        shape = [2, 3]
+        emit("zeros", {"shape": shape, "dtype": dt}, [], np.zeros(shape, dtype=d), f"zeros/{dt}")
+        emit("ones", {"shape": shape, "dtype": dt}, [], np.ones(shape, dtype=d), f"ones/{dt}")
+        emit("full", {"shape": shape, "fill": 3, "dtype": dt}, [], np.full(shape, 3, dtype=d),
+             f"full/{dt}")
+        empty = np.empty(shape, dtype=d)
+        empty.fill(0)
+        emit("empty", {"shape": shape, "dtype": dt}, [], empty, f"empty/{dt}")
+        emit("eye", {"n": 3, "m": 4, "k": -1, "dtype": dt, "order": "C"}, [],
+             np.eye(3, 4, k=-1, dtype=d, order="C"), f"eye/{dt}")
+        emit("identity", {"n": 4, "dtype": dt}, [], np.identity(4, dtype=d), f"identity/{dt}")
+
+        # Like-creators must preserve the source shape/dtype while resolving K-order. Values are
+        # checked here; the sibling layout oracle checks the resulting strides/flags.
+        for lname in ["c_contiguous_2d", "f_contiguous_2d", "strided_2d_cols"]:
+            base, view = LAYOUTS[lname](d)
+            operand = describe(base, view)
+            for opname, params, result in [
+                ("empty_like", {}, np.empty_like(view)),
+                ("zeros_like", {}, np.zeros_like(view)),
+                ("ones_like", {}, np.ones_like(view)),
+                ("full_like", {"fill": 2}, np.full_like(view, 2)),
+            ]:
+                if opname == "empty_like":
+                    result.fill(0)
+                cases.append(_case(opname, params, [operand], _arr_expected(result),
+                                   f"{opname}/{lname}/{dt}", "creation",
+                                   cid=f"{opname}/{lname}/{dt}/{n}"))
+                n += 1
+
+    # Coordinate-grid creators. Sparse mode is a tuple; dense mode is one array.
+    for dt in ["int32", "float64"]:
+        dims = [2, 3, 4]
+        emit("indices", {"dimensions": dims, "dtype": dt}, [],
+             np.indices(dims, dtype=np.dtype(dt)), f"indices/{dt}")
+        sparse = np.indices(dims, dtype=np.dtype(dt), sparse=True)
+        cases.append(_case("indices_sparse", {"dimensions": dims, "dtype": dt}, [],
+                           _tuple_expected(sparse), f"indices_sparse/{dt}", "creation",
+                           cid=f"indices_sparse/{dt}/{n}"))
+        n += 1
+
+    return cases
+
+
+# ---- array conversion ---------------------------------------------------------------
+
+CONVERSION_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d",
+                      "strided_step2_1d", "negstride_1d", "scalar_0d", "empty_2d",
+                      "broadcast_1d_to_2d"]
+
+
+def gen_conversion(dtypes):
+    """Value/error half of the as*/array/require/frombuffer/fromstring surface.
+
+    The sibling flags + layout oracles own strides/ownership/writeability; this tier owns the
+    dtype/shape/bytes and the finite-check error. Together they cover the whole observable result.
+    """
+    cases = []
+    n = 0
+
+    def add_result(opname, params, operands, result, layout, dt):
+        nonlocal n
+        cases.append(_case(opname, params, operands, _arr_expected(result), layout, "conversion",
+                           cid=f"{opname}/{layout}/{dt}/{n}"))
+        n += 1
+
+    for lname in CONVERSION_LAYOUTS:
+        fn = LAYOUTS[lname]
+        for dt in dtypes:
+            base, view = fn(np.dtype(dt))
+            operand = describe(base, view)
+            one = [operand]
+
+            add_result("array", {}, one, np.array(view, copy=True, order="K"), lname, dt)
+            add_result("asarray", {}, one, np.asarray(view), lname, dt)
+            add_result("asanyarray", {}, one, np.asanyarray(view), lname, dt)
+            add_result("ascontiguousarray", {}, one, np.ascontiguousarray(view), lname, dt)
+            add_result("asfortranarray", {}, one, np.asfortranarray(view), lname, dt)
+            add_result("require", {"requirements": ["C"]}, one,
+                       np.require(view, requirements=["C"]), lname + "/reqC", dt)
+            add_result("require", {"requirements": ["F"]}, one,
+                       np.require(view, requirements=["F"]), lname + "/reqF", dt)
+
+            if view.ndim <= 2:
+                add_result("asmatrix", {}, one, np.asmatrix(view), lname, dt)
+
+            try:
+                finite = np.asarray_chkfinite(view)
+            except Exception as e:
+                cases.append(_error_case("asarray_chkfinite", {}, one, e, lname,
+                                         cid=f"asarray_chkfinite/{lname}/{dt}/err/{n}"))
+                n += 1
+            else:
+                add_result("asarray_chkfinite", {}, one, finite, lname, dt)
+
+    # frombuffer: the operand supplies deterministic raw bytes; count+byte-offset exercise the
+    # byte-oriented API rather than reducing this to another astype case.
+    for dt in dtypes:
+        d = np.dtype(dt)
+        raw_arr = _fill(6, d)
+        result = np.frombuffer(raw_arr.tobytes(), dtype=d, count=4, offset=d.itemsize)
+        add_result("frombuffer", {"dtype": dt, "count": 4, "offset": int(d.itemsize)},
+                   [describe(raw_arr, raw_arr)], result, "frombuffer", dt)
+
+        # fromfile has the same binary contract but crosses a real file descriptor on the NumPy
+        # side and the public Stream overload on replay. The operand is the file's exact bytes.
+        # Windows does not permit NumPy to reopen an already-open NamedTemporaryFile, so close
+        # the descriptor before np.fromfile and remove the exact path in finally.
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(raw_arr.tobytes())
+            temp_name = f.name
+        try:
+            result = np.fromfile(temp_name, dtype=d, count=4, offset=d.itemsize)
+        finally:
+            os.unlink(temp_name)
+        add_result("fromfile", {"dtype": dt, "count": 4, "offset": int(d.itemsize), "sep": ""},
+                   [describe(raw_arr, raw_arr)], result, "fromfile/binary", dt)
+
+        text = "0,1,3,5"
+        result = np.fromstring(text, dtype=d, count=-1, sep=",")
+        add_result("fromstring", {"dtype": dt, "count": -1, "sep": ",", "text": text},
+                   [], result, "fromstring", dt)
+
+        # Text I/O is an artifact oracle: loadtxt materializes the parsed array, while savetxt
+        # records the emitted text verbatim. Safe small values make the cases portable for every
+        # NumPy dtype, including complex128.
+        text2d = "0,1,2\n3,4,5\n"
+        result = np.loadtxt(io.StringIO(text2d), dtype=d, delimiter=",")
+        add_result("loadtxt", {"dtype": dt, "delimiter": ",", "text": text2d},
+                   [], result, "loadtxt", dt)
+
+        saved = np.arange(6).astype(d).reshape(2, 3)
+        fmt = "%d" if d.kind in "bui" else "%.6g"
+        out = io.StringIO()
+        np.savetxt(out, saved, fmt=fmt, delimiter=",", newline="\n",
+                   header="head", footer="foot", comments="# ")
+        cases.append(_case("savetxt",
+                           {"fmt": fmt, "delimiter": ",", "newline": "\n",
+                            "header": "head", "footer": "foot", "comments": "# "},
+                           [describe(saved, saved)], {"kind": "text", "value": out.getvalue()},
+                           "savetxt", "conversion", cid=f"savetxt/{dt}/{n}"))
+        n += 1
+
+    return cases
+
+
+# ---- iterator traces ----------------------------------------------------------------
+#
+# np.ndindex / np.ndenumerate / np.nditer / np.broadcast return no array, which is why they
+# were left out of this corpus. But what they actually promise is an ORDER, and the
+# materialized trace of that order IS an array — so it bit-compares like anything else.
+# Nothing else in the corpus can see a traversal-order drift: every other tier consumes
+# NDIter's output already reduced to a value.
+
+NDINDEX_SHAPES = [(), (1,), (3,), (0,), (2, 3), (3, 1), (1, 3), (0, 3), (3, 0),
+                  (2, 2, 2), (2, 1, 3), (4, 1, 1), (5, 2), (1, 1, 1, 1), (2, 3, 4)]
+
+# Layouts whose iteration order is NOT the memory order — where an order bug actually shows.
+ITER_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
+                "f_contiguous_3d", "transposed_2d", "transposed_3d", "strided_step2_1d",
+                "negstride_1d", "negstride_2d_offset", "strided_2d_cols", "strided_outer_2d",
+                "simple_slice_offset_1d", "sliced_composed", "broadcast_1d_to_2d",
+                "broadcast_row_partial", "scalar_0d", "one_element_1d", "highrank_5d",
+                "singleton_dim_3d", "newaxis_inserted", "reshape_view_2d"]
+
+ITER_DTYPES = ["bool", "int8", "uint16", "int32", "int64", "float16", "float32",
+               "float64", "complex128"]
+
+ITER_ORDERS = ["C", "F", "A", "K"]
+
+
+def gen_ndindex():
+    cases = []
+    for i, shp in enumerate(NDINDEX_SHAPES):
+        idxs = list(np.ndindex(*shp))
+        ndim = len(shp)
+        arr = np.array(idxs, dtype=np.intp).reshape(len(idxs), ndim)
+        cases.append(_case("ndindex", {"shape": [int(d) for d in shp]}, [],
+                           _arr_expected(arr), "generator", "index",
+                           cid=f"ndindex/{'x'.join(str(d) for d in shp) or '0d'}/{i}"))
+    return cases
+
+
+def gen_ndenumerate(dtypes, layout_names):
+    """(index, value) for every element — always LOGICAL C-order, whatever the layout."""
+    cases = []
+    n = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            pairs = list(np.ndenumerate(view))
+            idx = np.array([p[0] for p in pairs], dtype=np.intp).reshape(len(pairs), view.ndim)
+            vals = np.array([p[1] for p in pairs], dtype=view.dtype) if pairs \
+                else np.empty(0, view.dtype)
+            cases.append(_case("ndenumerate", {}, [describe(base, view)],
+                               _tuple_expected([idx, vals]), ln, "index",
+                               cid=f"ndenumerate/{ln}/{s}/{n}"))
+            n += 1
+    return cases
+
+
+def gen_nditer(dtypes, layout_names, orders):
+    """
+    The four observable streams of an nditer pass: values in iteration order, the
+    multi_index stream, the tracked flat index (c_index / f_index), and — under
+    external_loop — the CHUNK LENGTHS, i.e. how the iterator coalesced the dimensions.
+    """
+    cases = []
+    n = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            for order in orders:
+                # values
+                try:
+                    with np.nditer(view, order=order) as it:
+                        vals = np.array([x.copy() for x in it], dtype=view.dtype)
+                    cases.append(_case("nditer", {"order": order}, [operand],
+                                       _arr_expected(vals), ln, "iter",
+                                       cid=f"nditer/{ln}/{s}/{order}/{n}"))
+                    n += 1
+                except Exception as e:
+                    cases.append(_error_case("nditer", {"order": order}, [operand], e, ln,
+                                             cid=f"nditer/{ln}/{s}/{order}/{n}"))
+                    n += 1
+                    continue
+
+                # multi_index + the values it labels
+                try:
+                    rows, mvals = [], []
+                    with np.nditer(view, flags=["multi_index"], order=order) as it:
+                        while not it.finished:
+                            rows.append(it.multi_index)
+                            mvals.append(it[0].copy())
+                            it.iternext()
+                    midx = np.array(rows, dtype=np.intp).reshape(len(rows), view.ndim)
+                    mv = np.array(mvals, dtype=view.dtype) if mvals else np.empty(0, view.dtype)
+                    cases.append(_case("nditer_multi_index", {"order": order}, [operand],
+                                       _tuple_expected([midx, mv]), ln, "iter",
+                                       cid=f"nditer_multi_index/{ln}/{s}/{order}/{n}"))
+                    n += 1
+                except Exception:
+                    pass
+
+                # tracked flat index, both spellings
+                for flag in ("c_index", "f_index"):
+                    try:
+                        seen = []
+                        with np.nditer(view, flags=[flag], order=order) as it:
+                            while not it.finished:
+                                seen.append(it.index)
+                                it.iternext()
+                        cases.append(_case("nditer_index", {"order": order, "index": flag}, [operand],
+                                           _arr_expected(np.array(seen, dtype=np.intp)), ln, "iter",
+                                           cid=f"nditer_index/{flag}/{ln}/{s}/{order}/{n}"))
+                        n += 1
+                    except Exception:
+                        pass
+
+                # external_loop: concatenated values + chunk lengths
+                try:
+                    chunks, lens = [], []
+                    with np.nditer(view, flags=["external_loop"], order=order) as it:
+                        while not it.finished:
+                            chunk = it[0]
+                            lens.append(len(chunk))
+                            chunks.append(chunk.copy())
+                            it.iternext()
+                    flatv = np.concatenate(chunks) if chunks else np.empty(0, view.dtype)
+                    cases.append(_case("nditer_extloop", {"order": order}, [operand],
+                                       _tuple_expected([flatv, np.array(lens, dtype=np.intp)]),
+                                       ln, "iter",
+                                       cid=f"nditer_extloop/{ln}/{s}/{order}/{n}"))
+                    n += 1
+                except Exception:
+                    pass
+    return cases
+
+
+def gen_nditer_pair(dt_pairs, pair_layout_names, orders):
+    """Two operands walked in lockstep — broadcasting resolved inside the iterator."""
+    cases = []
+    n = 0
+    for ln in pair_layout_names:
+        fn = PAIR_LAYOUTS[ln]
+        for (sa, sb) in dt_pairs:
+            ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
+            operands = [describe(ba, va), describe(bb, vb)]
+            for order in orders:
+                try:
+                    sa_vals, sb_vals = [], []
+                    with np.nditer([va, vb], order=order) as it:
+                        while not it.finished:
+                            sa_vals.append(it[0].copy())
+                            sb_vals.append(it[1].copy())
+                            it.iternext()
+                    arr_a = np.array(sa_vals, dtype=va.dtype) if sa_vals else np.empty(0, va.dtype)
+                    arr_b = np.array(sb_vals, dtype=vb.dtype) if sb_vals else np.empty(0, vb.dtype)
+                    cases.append(_case("nditer_pair", {"order": order}, operands,
+                                       _tuple_expected([arr_a, arr_b]), ln, "iter",
+                                       cid=f"nditer_pair/{ln}/{sa},{sb}/{order}/{n}"))
+                    n += 1
+                except Exception:
+                    pass
+    return cases
+
+
+def gen_broadcast(dt_pairs, pair_layout_names):
+    """np.broadcast: the resolved shape and the per-operand value streams."""
+    cases = []
+    n = 0
+    for ln in pair_layout_names:
+        fn = PAIR_LAYOUTS[ln]
+        for (sa, sb) in dt_pairs:
+            ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
+            operands = [describe(ba, va), describe(bb, vb)]
+            try:
+                b = np.broadcast(va, vb)
+                shp = np.array(b.shape, dtype=np.intp)
+                tuples = list(b)
+                arr_a = np.array([t[0] for t in tuples], dtype=va.dtype) if tuples \
+                    else np.empty(0, va.dtype)
+                arr_b = np.array([t[1] for t in tuples], dtype=vb.dtype) if tuples \
+                    else np.empty(0, vb.dtype)
+            except Exception:
+                continue
+            cases.append(_case("broadcast_shape", {}, operands, _arr_expected(shp), ln, "iter",
+                               cid=f"broadcast_shape/{ln}/{sa},{sb}/{n}"))
+            cases.append(_case("broadcast_values", {}, operands,
+                               _tuple_expected([arr_a, arr_b]), ln, "iter",
+                               cid=f"broadcast_values/{ln}/{sa},{sb}/{n}"))
+            n += 1
+    return cases
+
+
+def gen_iter():
+    cases = gen_ndindex()
+    cases += gen_ndenumerate(ITER_DTYPES, ITER_LAYOUTS)
+    cases += gen_nditer(ITER_DTYPES, ITER_LAYOUTS, ITER_ORDERS)
+    cases += gen_nditer_pair(DT_PAIRS[:12], list(PAIR_LAYOUTS.keys()), ["C", "K"])
+    cases += gen_broadcast(DT_PAIRS[:12], list(PAIR_LAYOUTS.keys()))
+    cases += gen_nested_iters()
+    return cases
+
+
+def gen_nested_iters():
+    """Materialize nested_iters' observable value stream.
+
+    Object-returning APIs become oracle-friendly when their protocol is reduced to the trace they
+    promise. Two axis partitions cover both two-level and three-level recursion; values retain the
+    operand dtype so the ordinary byte comparator still owns dtype and order.
+    """
+    cases = []
+    n = 0
+    for dt in ["int32", "float64", "complex128"]:
+        a = np.arange(12).astype(np.dtype(dt)).reshape(2, 3, 2)
+        for axes in [[[1], [0, 2]], [[0], [1], [2]]]:
+            iters = np.nested_iters(a, axes, flags=["multi_index"], order="C")
+            values = []
+
+            def walk(level):
+                for _ in iters[level]:
+                    if level == len(iters) - 1:
+                        values.append(iters[level][0].copy())
+                    else:
+                        walk(level + 1)
+
+            try:
+                walk(0)
+            finally:
+                for it in iters:
+                    it.close()
+
+            result = np.array(values, dtype=a.dtype)
+            cases.append(_case("nested_iters", {"axes": axes, "order": "C"},
+                               [describe(a, a)], _arr_expected(result), "nested", "iter",
+                               cid=f"nested_iters/{dt}/{len(axes)}level/{n}"))
+            n += 1
+    return cases
+
+
+# ---- dtype / scalar / text / tuple results ------------------------------------------
+
+DTYPE_TEXT_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "transposed_2d",
+                      "strided_step2_1d", "negstride_1d", "scalar_0d", "one_element_1d",
+                      "empty_2d", "broadcast_1d_to_2d", "highrank_5d", "c_contiguous_3d"]
+
+MIN_SCALAR_VALUES = [0, 1, -1, 127, 128, 255, 256, -128, -129, 32767, 65535, 2 ** 31 - 1,
+                     2 ** 31, 2 ** 63 - 1, 0.5, -0.5, 1e10, 1e-10, True, False]
+
+CASTING_RULES = ["no", "equiv", "safe", "same_kind", "unsafe"]
+
+
+def gen_dtype_text():
+    """
+    The three non-array result kinds, plus the tuple kind on real multi-output ops.
+
+    The promotion helpers (result_type / promote_types / min_scalar_type) are the NEP50
+    table itself; until now it was only ever gated INDIRECTLY, through the dtype of some
+    binary op's result.
+    """
+    cases = []
+    n = 0
+
+    # --- dtype-returning: the promotion table, gated directly ---
+    for a in ALL_DTYPES:
+        for b in ALL_DTYPES:
+            r = np.promote_types(a, b)
+            cases.append(_case("promote_types", {"a": a, "b": b}, [],
+                               {"kind": "dtype", "value": r.name}, "generator", "dtype",
+                               cid=f"promote_types/{a},{b}/{n}"))
+            n += 1
+            r2 = np.result_type(np.dtype(a), np.dtype(b))
+            cases.append(_case("result_type_dtypes", {"a": a, "b": b}, [],
+                               {"kind": "dtype", "value": r2.name}, "generator", "dtype",
+                               cid=f"result_type_dtypes/{a},{b}/{n}"))
+            n += 1
+
+    for v in MIN_SCALAR_VALUES:
+        r = np.min_scalar_type(v)
+        if r.name not in ALL_DTYPES:      # e.g. float16 for tiny floats is fine; longdouble is not
+            continue
+        cases.append(_case("min_scalar_type", {"value": v}, [],
+                           {"kind": "dtype", "value": r.name}, "generator", "dtype",
+                           cid=f"min_scalar_type/{v}/{n}"))
+        n += 1
+
+    # dtype construction itself (canonical name) and common_type over real operand arrays.
+    for dt in ALL_DTYPES:
+        r = np.dtype(dt)
+        cases.append(_case("dtype", {"dtype": dt}, [],
+                           {"kind": "dtype", "value": r.name}, "generator", "dtype",
+                           cid=f"dtype/{dt}/{n}"))
+        n += 1
+
+    # result_type over real arrays (operand dtypes, not just dtype tokens)
+    for ln in ["pp_contig_contig", "pp_contig_fortran", "pp_scalar_right", "pp_broadcast_row"]:
+        fn = PAIR_LAYOUTS[ln]
+        for (sa, sb) in DT_PAIRS:
+            ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
+            r = np.result_type(va, vb)
+            cases.append(_case("result_type_arrays", {}, [describe(ba, va), describe(bb, vb)],
+                               {"kind": "dtype", "value": r.name}, ln, "dtype",
+                               cid=f"result_type_arrays/{ln}/{sa},{sb}/{n}"))
+            n += 1
+
+    for (sa, sb) in DT_PAIRS:
+        a = _cbase((3,), np.dtype(sa))
+        b = _cbase((3,), np.dtype(sb))
+        try:
+            r = np.common_type(a, b)
+        except Exception as e:
+            cases.append(_error_case("common_type", {}, [describe(a, a), describe(b, b)], e,
+                                     "common_type", kind="dtype",
+                                     cid=f"common_type/{sa},{sb}/err/{n}"))
+        else:
+            cases.append(_case("common_type", {}, [describe(a, a), describe(b, b)],
+                               {"kind": "dtype", "value": np.dtype(r).name},
+                               "common_type", "dtype", cid=f"common_type/{sa},{sb}/{n}"))
+        n += 1
+
+    # --- scalar-returning predicates (wrapped 0-d, the np.allclose pattern) ---
+    for frm in ALL_DTYPES:
+        for to in ALL_DTYPES:
+            for rule in CASTING_RULES:
+                r = np.can_cast(np.dtype(frm), np.dtype(to), casting=rule)
+                cases.append(_case("can_cast", {"from": frm, "to": to, "casting": rule}, [],
+                                   _arr_expected(np.bool_(r), "scalar"), "generator", "predicate",
+                                   cid=f"can_cast/{frm}->{to}/{rule}/{n}"))
+                n += 1
+
+    # NumPy 2.x dtype predicates. The concrete issubdtype matrix gates the exact scalar-type
+    # relation; abstract categories are covered by isdtype's named kinds.
+    for dt in ALL_DTYPES:
+        for kind in ["bool", "integral", "real floating", "complex floating", "numeric"]:
+            r = np.isdtype(np.dtype(dt), kind)
+            cases.append(_case("isdtype", {"dtype": dt, "kind_name": kind}, [],
+                               _arr_expected(np.bool_(r), "scalar"), "generator", "predicate",
+                               cid=f"isdtype/{dt}/{kind}/{n}"))
+            n += 1
+        for other in ALL_DTYPES:
+            r = np.issubdtype(np.dtype(dt), np.dtype(other))
+            cases.append(_case("issubdtype", {"a": dt, "b": other}, [],
+                               _arr_expected(np.bool_(r), "scalar"), "generator", "predicate",
+                               cid=f"issubdtype/{dt},{other}/{n}"))
+            n += 1
+
+    for chars in ["fd", "if", "q", "Qf", "eF", "?"]:
+        cases.append(_case("mintypecode", {"typechars": chars}, [],
+                           {"kind": "text", "value": np.mintypecode(chars)},
+                           "generator", "text", cid=f"mintypecode/{chars}/{n}"))
+        n += 1
+
+    for ln in DTYPE_TEXT_LAYOUTS:
+        fn = LAYOUTS[ln]
+        for s in ITER_DTYPES:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            for opname, val in (("isscalar", np.isscalar(view)),
+                                ("iscomplexobj", np.iscomplexobj(view)),
+                                ("isrealobj", np.isrealobj(view)),
+                                ("isfortran", np.isfortran(view)),
+                                ("iterable", np.iterable(view))):
+                cases.append(_case(opname, {}, [operand], _arr_expected(np.bool_(val), "scalar"),
+                                   ln, "predicate", cid=f"{opname}/{ln}/{s}/{n}"))
+                n += 1
+            cases.append(_case("size", {"axis": None}, [operand],
+                               _arr_expected(np.int64(np.size(view)), "scalar"), ln, "predicate",
+                               cid=f"size/{ln}/{s}/{n}"))
+            n += 1
+
+            # --- text-returning: printing, held verbatim ---
+            for opname, f in (("array_str", np.array_str), ("array_repr", np.array_repr)):
+                cases.append(_case(opname, {}, [operand],
+                                   {"kind": "text", "value": f(view)}, ln, "text",
+                                   cid=f"{opname}/{ln}/{s}/{n}"))
+                n += 1
+
+            # --- tuple-returning: nonzero over ANY rank (all slots + arity) ---
+            # 0-d raises in NumPy 2.x ("Calling nonzero on 0d arrays is not allowed"), which
+            # is worth pinning as an error case rather than skipping.
+            try:
+                nz = np.nonzero(view)
+            except Exception as e:
+                cases.append(_error_case("nonzero_all", {}, [operand], e, ln, kind="tuple",
+                                         cid=f"nonzero_all/{ln}/{s}/err/{n}"))
+                n += 1
+            else:
+                cases.append(_case("nonzero_all", {}, [operand], _tuple_expected(nz), ln, "tuple",
+                                   cid=f"nonzero_all/{ln}/{s}/{n}"))
+                n += 1
+
+    return cases
+
+
+# ---- ufunc out= / where= ------------------------------------------------------------
+#
+# The elementwise core accepts out=/where= on ~40 ufuncs, but the corpus reached them only
+# through maximum_out / minimum_out / clip_out (11 cases each), all with a CONTIGUOUS out and
+# no mask at all. Everything the parameters actually promise was ungated:
+#
+#   * `where` masking is defined by what does NOT change. Recording the out array's PRIOR
+#     contents as an operand and re-checking them afterwards is the whole assertion.
+#   * a STRIDED / OFFSET / NEGSTRIDE / F-order / TRANSPOSED out is where a kernel that walks
+#     the buffer instead of the view corrupts elements outside the window — invisible to a
+#     view-shaped comparison, which is why every case also records the full base buffer.
+#   * `out` joins the broadcast but is never STRETCHED, and a read-only (broadcast) out must
+#     be refused: those land as error cases with NumPy's message.
+
+OUT_VIEW_KINDS = ["c", "f", "strided", "negstride", "offset", "transposed", "broadcast"]
+
+# (name, builder) — masks over the result shape, plus the broadcast and scalar spellings.
+WHERE_KINDS = [None, "all_true", "all_false", "alternating", "checker", "row_broadcast",
+               "scalar_true", "scalar_false", "strided_mask"]
+
+OUT_SHAPES = [(6,), (4, 5), (2, 3, 4)]
+
+# ufunc -> the input dtypes to drive it with (its natural domain).
+OUT_BINARY_UFUNCS = {
+    "add": ["int32", "float64", "float32", "uint8"],
+    "subtract": ["int32", "float64"],
+    "multiply": ["int64", "float32"],
+    "divide": ["float64", "int32"],
+    "power": ["float64", "int32"],
+    "mod": ["int32", "float64"],
+    "floor_divide": ["int32", "float64"],
+    "arctan2": ["float64", "float32"],
+    "bitwise_and": ["int32", "uint8", "bool"],
+    "bitwise_or": ["int64"],
+    "bitwise_xor": ["uint16"],
+    "less": ["int32", "float64"],
+    "greater_equal": ["float32"],
+    "equal": ["int32"],
+}
+
+OUT_UNARY_UFUNCS = {
+    "sqrt": ["float64", "float32"],
+    "negative": ["int32", "float64"],
+    "abs": ["int32", "float64"],
+    "square": ["float64", "int32"],
+    "exp": ["float64", "float32"],
+    "log": ["float64"],
+    "sin": ["float64", "float32"],
+    "floor": ["float64"],
+    "ceil": ["float32"],
+    "rint": ["float64"],
+    "sign": ["int32", "float64"],
+    "reciprocal": ["float64", "int32"],
+    "invert": ["int32", "uint8"],
+    "isnan": ["float64"],
+}
+
+
+def _out_view(shape, dt, kind):
+    """
+    A (base, view) pair whose VIEW has exactly `shape` in the requested layout. The base is
+    always larger than or equal to the view so the elements outside the window are real and
+    can be checked for corruption.
+    """
+    dt = np.dtype(dt)
+    n = int(np.prod(shape)) if shape else 1
+    if kind == "c":
+        base = _fill(n, dt).reshape(shape)
+        return base, base
+    if kind == "f":
+        # The BASE must stay C-contiguous: describe() serializes it with base.tobytes(), which
+        # is a C-order walk, while the recorded strides/offset are PHYSICAL. An F-ordered base
+        # (np.asfortranarray) makes those two disagree and every F case reads as a divergence
+        # that is really a corpus bug. F-contiguity is expressed the way layout_catalog does it
+        # — a transposed view over a C base (see its f_contiguous_2d).
+        base = _fill(n, dt).reshape(tuple(reversed(shape)))
+        return base, base.T
+    if kind == "strided":                      # every other column of a doubly-wide base
+        wide_shape = tuple(shape[:-1]) + (shape[-1] * 2,)
+        base = _fill(int(np.prod(wide_shape)), dt).reshape(wide_shape)
+        return base, base[..., ::2]
+    if kind == "negstride":
+        base = _fill(n, dt).reshape(shape)
+        return base, base[..., ::-1]
+    if kind == "offset":                       # window starts 3 elements into the buffer
+        base = _fill(n + 3, dt)
+        return base, base[3:].reshape(shape)
+    if kind == "transposed":
+        # A NON-reversing permutation, so this stays distinct from "f" (whose .T reverses every
+        # axis). Only meaningful at rank >= 3; lower ranks are covered by "f".
+        if len(shape) < 3:
+            return None
+        src = (shape[1], shape[0]) + tuple(shape[2:])
+        base = _fill(n, dt).reshape(src)
+        return base, base.transpose(1, 0, *range(2, len(shape)))
+    if kind == "broadcast":                    # read-only: NumPy must REFUSE this as out
+        base = _fill(int(shape[-1]), dt)
+        return base, np.broadcast_to(base, shape)
+    raise ValueError(kind)
+
+
+def _where_mask(shape, kind):
+    """The mask operand, or None for NumPy's default where=True."""
+    if kind is None:
+        return None
+    n = int(np.prod(shape)) if shape else 1
+    if kind == "all_true":
+        return np.ones(shape, dtype=bool)
+    if kind == "all_false":
+        return np.zeros(shape, dtype=bool)
+    if kind == "alternating":
+        return (np.arange(n) % 2 == 0).reshape(shape)
+    if kind == "checker":
+        return (np.arange(n) % 3 != 0).reshape(shape)
+    if kind == "row_broadcast":                # (1, …, k) stretched over the leading axes
+        if len(shape) < 2:
+            return None
+        m = np.zeros((1,) * (len(shape) - 1) + (shape[-1],), dtype=bool)
+        m[..., ::2] = True
+        return m
+    if kind == "scalar_true":
+        return np.array(True)
+    if kind == "scalar_false":
+        return np.array(False)
+    if kind == "strided_mask":
+        wide = np.zeros(tuple(shape[:-1]) + (shape[-1] * 2,), dtype=bool)
+        wide[..., ::4] = True
+        return wide[..., ::2]
+    raise ValueError(kind)
+
+
+def gen_out_where():
+    cases = []
+    n = 0
+
+    def emit(opname, ufunc, f, inputs, shape, out_kind, where_kind, dts):
+        """Build out/where, capture the PRIOR state, run, and record both slots."""
+        nonlocal n
+        # The natural result dtype, so `out` needs no cast (the cast rules are their own axis).
+        try:
+            probe = f(*inputs)
+        except Exception:
+            return
+        built = _out_view(shape, probe.dtype, out_kind)
+        if built is None:
+            return
+        out_base, out_view = built
+        if out_view.shape != tuple(shape):
+            return
+        mask = _where_mask(shape, where_kind)
+        if where_kind is not None and mask is None:
+            return
+
+        operands = [describe(_cbase(i.shape, i.dtype) if i.base is None else i.base, i)
+                    for i in inputs]
+        # PRIOR contents recorded here, BEFORE the ufunc writes — this is what "masked-off
+        # slots keep their prior contents" is checked against.
+        operands.append(describe(out_base, out_view))
+        if mask is not None:
+            mask_base = mask if mask.base is None else mask.base
+            operands.append(describe(mask_base, mask))
+
+        params = {"ufunc": ufunc, "where": mask is not None}
+        cid = f"{opname}/{ufunc}/{'x'.join(map(str, shape))}/{dts}/out={out_kind}/where={where_kind}/{n}"
+        try:
+            returned = f(*inputs, out=out_view, **({"where": mask} if mask is not None else {}))
+        except Exception as e:
+            cases.append(_error_case(opname, params, operands, e, f"out_{out_kind}",
+                                     kind="tuple", cid=cid))
+            n += 1
+            return
+
+        cases.append(_case(opname, params, operands,
+                           _tuple_expected([np.asarray(returned), out_base.ravel()]),
+                           f"out_{out_kind}", "outwhere", cid=cid))
+        n += 1
+
+    for shape in OUT_SHAPES:
+        cnt = int(np.prod(shape))
+        for ufunc, dts in OUT_BINARY_UFUNCS.items():
+            f = getattr(np, "remainder" if ufunc == "mod" else ufunc)
+            # The full out x where cross product for `add`; a representative slice for the rest,
+            # so the tier stays a few thousand cases rather than tens of thousands.
+            wheres = WHERE_KINDS if ufunc == "add" else [None, "alternating", "all_false", "row_broadcast"]
+            for s in dts:
+                a = _fill(cnt, np.dtype(s)).reshape(shape)
+                b = np.roll(_fill(cnt, np.dtype(s)), 1).reshape(shape)
+                for out_kind in OUT_VIEW_KINDS:
+                    for wk in wheres:
+                        emit("out_binary", ufunc, f, (a, b), shape, out_kind, wk, s)
+
+        for ufunc, dts in OUT_UNARY_UFUNCS.items():
+            f = getattr(np, "absolute" if ufunc == "abs" else ufunc)
+            wheres = WHERE_KINDS if ufunc == "sqrt" else [None, "alternating", "all_false"]
+            for s in dts:
+                x = _fill(cnt, np.dtype(s)).reshape(shape)
+                for out_kind in OUT_VIEW_KINDS:
+                    for wk in wheres:
+                        emit("out_unary", ufunc, f, (x,), shape, out_kind, wk, s)
+
+    return cases
+
+
+# ---- error parity -------------------------------------------------------------------
+#
+# Every value generator SKIPS the cells where NumPy raises ("error-parity is tested
+# separately" — it was not, beyond 24 hand-picked cases that asserted only that SOMETHING
+# was thrown). This re-runs the same deterministic matrices and keeps exactly the skipped
+# cells, recording NumPy's exception type and message verbatim.
+
+# Flood guard, set generously: the deterministic matrices raise in ~700 cells spread over ~22
+# distinct messages, so nothing is dropped today and every (layout, dtype) instance is kept —
+# the message is only half the claim, the other half is that NumSharp raises on the same CELLS.
+# If a future matrix makes one message explode, the cap trims it and gen_errors_full reports it.
+ERROR_INSTANCES_PER_MESSAGE = 1000
+
+
+def _error_case(op, params, operands, exc, layout, cid=None, kind=None):
+    expected = {"kind": kind} if kind else {}
+    return {"id": cid, "op": op, "params": params, "operands": operands,
+            "expected": expected, "expects_throw": True, "error": _exc(exc),
+            "layout": layout, "valueclass": "error"}
+
+
+def gen_errors_full():
+    cases = []
+    seen = {}
+    n = 0
+
+    def keep(op, exc):
+        """Cap identical (op, type, message) triples so one broken cell can't flood the tier."""
+        k = (op, type(exc).__name__, str(exc))
+        seen[k] = seen.get(k, 0) + 1
+        return seen[k] <= ERROR_INSTANCES_PER_MESSAGE
+
+    def unary_matrix(ops_map, dtypes, layout_names):
+        nonlocal n
+        for ln in layout_names:
+            fn = LAYOUTS[ln]
+            for s in dtypes:
+                base, view = fn(np.dtype(s))
+                operand = None
+                for opname, f in ops_map.items():
+                    try:
+                        f(view)
+                    except Exception as e:
+                        if not keep(opname, e):
+                            continue
+                        operand = operand or describe(base, view)
+                        cases.append(_error_case(opname, {}, [operand], e, ln,
+                                                 cid=f"{opname}/{ln}/{s}/err/{n}"))
+                        n += 1
+
+    def binary_matrix(ops_map, dt_pairs, pair_layout_names):
+        nonlocal n
+        for ln in pair_layout_names:
+            fn = PAIR_LAYOUTS[ln]
+            for (sa, sb) in dt_pairs:
+                ba, va, bb, vb = fn(np.dtype(sa), np.dtype(sb))
+                operands = None
+                for opname, f in ops_map.items():
+                    try:
+                        f(va, vb)
+                    except Exception as e:
+                        if not keep(opname, e):
+                            continue
+                        operands = operands or [describe(ba, va), describe(bb, vb)]
+                        cases.append(_error_case(opname, {}, operands, e, ln,
+                                                 cid=f"{opname}/{ln}/{sa},{sb}/err/{n}"))
+                        n += 1
+
+    def reduce_matrix(ops_map, dtypes, layout_names):
+        nonlocal n
+        for ln in layout_names:
+            fn = LAYOUTS[ln]
+            for s in dtypes:
+                base, view = fn(np.dtype(s))
+                operand = None
+                for opname, f in ops_map.items():
+                    for axis in _axes(view.ndim):
+                        if opname in ("argmax", "argmin") and axis is None:
+                            continue
+                        for keepdims in (False, True):
+                            try:
+                                np.asarray(f(view, axis, keepdims))
+                            except Exception as e:
+                                if not keep(opname, e):
+                                    continue
+                                operand = operand or describe(base, view)
+                                cases.append(_error_case(
+                                    opname, {"axis": axis, "keepdims": keepdims}, [operand], e, ln,
+                                    cid=f"{opname}/{ln}/{s}/axis={axis}/kd={int(keepdims)}/err/{n}"))
+                                n += 1
+
+    unary_matrix(UNARY_OPS, UNARY_DTYPES, list(LAYOUTS.keys()))
+    unary_matrix(UNARY_EXTRA_OPS, ALL_DTYPES, list(LAYOUTS.keys()))
+    unary_matrix(INVERT_OP, ALL_DTYPES, list(LAYOUTS.keys()))
+    binary_matrix(BINARY_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+    binary_matrix(DIVMOD_POWER_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+    binary_matrix(COMPARISON_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+    binary_matrix(BITWISE_BIN_OPS, BITWISE_DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+    reduce_matrix(REDUCE_OPS, REDUCE_DTYPES, REDUCE_LAYOUTS)
+
+    # Iterator construction errors — the zero-sized-operand guard and ndindex's negative dims.
+    for shp in [(-1,), (2, -3), (-1, -1)]:
+        try:
+            list(np.ndindex(*shp))
+        except Exception as e:
+            cases.append(_error_case("ndindex", {"shape": [int(d) for d in shp]}, [], e,
+                                     "generator", cid=f"ndindex/neg/{shp}/err/{n}"))
+            n += 1
+
+    for ln in ["empty_2d", "empty_composed"]:
+        if ln not in LAYOUTS:
+            continue
+        base, view = LAYOUTS[ln](np.dtype("int32"))
+        for order in ["C", "K"]:
+            try:
+                with np.nditer(view, order=order) as it:
+                    _ = [x.copy() for x in it]
+            except Exception as e:
+                cases.append(_error_case("nditer_values", {"order": order},
+                                         [describe(base, view)], e, ln,
+                                         cid=f"nditer_values/{ln}/empty/{order}/err/{n}"))
+                n += 1
+
+    distinct = len({(c["op"], c["error"]["type"], c["error"]["text"]) for c in cases})
+    dropped = sum(max(0, v - ERROR_INSTANCES_PER_MESSAGE) for v in seen.values())
+    print(f"  ({len(cases)} raising cells over {distinct} distinct NumPy messages"
+          + (f"; {dropped} instances dropped by the per-message cap" if dropped else "") + ")")
+    return cases
+
+
+# =====================================================================================
+# IEEE special-value parity ("specials" tier). The float/complex value pools already
+# front-load nan/±inf/-0.0 (layout_catalog._FLOAT_POOL), so the elementwise/reduce tiers
+# INCIDENTALLY exercise them — but three gaps motivated a DEDICATED, auditable tier:
+#   (a) matmul/dot/outer draw from _mm_fill (clean integer/half ramps, NO specials), so
+#       NaN/±inf PROPAGATION through the managed GEMM — the one product path a plain test
+#       run takes, since NumSharp.Core ships no BLAS — was never gated against NumPy.
+#   (b) the binary PAIR layouts align A[i] with B[i] drawn from the SAME pool in the SAME
+#       order, so the cross-operand INTERACTIONS that are the whole point of IEEE arithmetic
+#       (inf+(-inf), 0*inf, 0/0, inf/inf, 1**inf, max*max->inf) never occur.
+#   (c) per-dtype max/tiny(min-normal) and the smallest SUBNORMAL were absent entirely.
+# This tier arranges operands to FORCE those interactions, across float16/float32/float64/
+# complex128 and the contiguous/2-D/F-contiguous/strided/negative-stride paths where a
+# NaN-dropping SIMD kernel (cf. the clip MAXPS/MINPD bug, W11-A) would hide. It reuses the
+# existing OpRegistry op names, so it needs no new harness wiring.
+#
+# What this proves and what it does NOT: BitDiff tokenizes NaN (any payload -> "NaN") and
+# bit-compares ±0.0 / ±inf, so a green tier asserts exactly the CONTRACTUAL part of IEEE
+# parity — is-NaN, the sign of a zero, the sign of an infinity — not the (non-contractual)
+# NaN payload bits. The matmul operands are deliberately built so every output cell is
+# order-independent (a NaN anywhere -> NaN; an inf against all-positive-finite -> +inf; no
+# inf-inf cancellation inside a dot), so a divergence there is a real propagation bug, not a
+# summation-reassociation artefact of managed-vs-BLAS.
+SPECIAL_DTYPES = ["float16", "float32", "float64", "complex128"]
+
+
+def _float_special_pool(dt):
+    """Per-dtype special-value vector: nan, ±inf, ±0, and — sized to the dtype — ±max,
+    ±tiny (smallest normal) and ±smallest subnormal, plus a spread of ordinary magnitudes
+    that drive the transcendental edges (sqrt(-1), log(0), log(-1), reciprocal(0),
+    arcsin(2), (-1)**0.5, tan(pi/2)). Built as float64 then narrowed: nan/±inf/-0 survive
+    astype, and the extremes come from np.finfo(dt) so nothing overflows to inf by accident
+    (verified: exactly two infinities for every dtype)."""
+    dt = np.dtype(dt)
+    fi = np.finfo(dt)
+    base = [np.nan, np.inf, -np.inf, 0.0, -0.0, 1.0, -1.0, 2.0, -2.0, 0.5, -0.5, 3.0, -8.0, 27.0,
+            0.25, -0.25, float(np.pi), float(-np.pi), 100.0, -100.0]
+    ext = [float(fi.max), -float(fi.max), float(fi.tiny), -float(fi.tiny),
+           float(fi.smallest_subnormal), -float(fi.smallest_subnormal)]
+    return np.array(base + ext, dtype=np.float64).astype(dt)
+
+
+def _complex_special_pool():
+    """Complex specials: the float pool paired component-wise with a rolled copy (so a NaN
+    real meets an inf imag, etc.), plus the pure combos a component-paired build cannot reach
+    (nan+0j, 0+nanj, inf-infj, -inf+nanj, nan+infj) — the cases where npy_c* and
+    System.Numerics.Complex most often disagree."""
+    f = _float_special_pool("float64")
+    z = (f + 1j * np.roll(f, 3)).astype("complex128")
+    combos = np.array([complex(np.nan, 0.0), complex(0.0, np.nan), complex(np.nan, np.nan),
+                       complex(np.inf, np.inf), complex(np.inf, -np.inf), complex(-np.inf, np.nan),
+                       complex(np.nan, np.inf), complex(0.0, -0.0), complex(1.0, np.inf)], dtype="complex128")
+    return np.concatenate([z, combos])
+
+
+def _special_pool(dt):
+    return _complex_special_pool() if np.dtype(dt).kind == "c" else _float_special_pool(dt)
+
+
+def _binary_special_pairs(dt):
+    """Aligned (A, B) float vectors whose element-wise pairing FORCES the IEEE interactions
+    the ordinary pair layouts never produce: inf+(-inf)=nan, 0*inf=nan, 0/0=nan, inf/inf=nan,
+    1**inf, max*max->inf, and the signed-zero / subnormal / tiny boundaries."""
+    dt = np.dtype(dt)
+    fi = np.finfo(dt)
+    mx = float(fi.max); ti = float(fi.tiny); sub = float(fi.smallest_subnormal)
+    inf = np.inf; nan = np.nan
+    pairs = [(inf, inf), (inf, -inf), (-inf, inf), (-inf, -inf), (0.0, inf), (inf, 0.0), (-0.0, inf), (0.0, -inf),
+             (0.0, 0.0), (-0.0, 0.0), (0.0, -0.0), (-0.0, -0.0), (nan, 1.0), (1.0, nan), (nan, nan), (nan, inf), (inf, nan),
+             (1.0, inf), (1.0, -inf), (inf, 1.0), (-1.0, 0.5), (0.5, -0.5), (2.0, 3.0), (-2.0, 3.0), (2.0, -3.0), (-8.0, 3.0),
+             (mx, mx), (mx, 2.0), (2.0, mx), (mx, -mx), (ti, ti), (sub, sub), (ti, 2.0), (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0)]
+    A = np.array([a for a, _ in pairs], dtype=np.float64).astype(dt)
+    B = np.array([b for _, b in pairs], dtype=np.float64).astype(dt)
+    return A, B
+
+
+def _binary_special_operands(dt):
+    if np.dtype(dt).kind == "c":
+        z = _complex_special_pool()
+        return z, np.roll(z, 5)   # misalign so a nan/inf real meets a different component
+    return _binary_special_pairs(dt)
+
+
+def _special_1d_layouts(v):
+    """(tag, base, view) memory-layout variants of the 1-D special vector v, each a genuine
+    VIEW sharing base's bytes (describe() validates that). Covers contiguous 1-D/2-D, an
+    F-contiguous 2-D, a step-2 strided view and a negative-stride view — the SIMD-full /
+    scalar-tail / strided / reversed kernel paths a NaN-dropping SIMD min/max would split on."""
+    out = [("contig_1d", v, v)]
+    n = len(v); m = n - (n % 2)
+    if m >= 4:
+        c2 = np.ascontiguousarray(v[:m].reshape(2, m // 2)); out.append(("contig_2d", c2, c2))
+        fb = np.ascontiguousarray(v[:m].reshape(m // 2, 2)); out.append(("f_contig_2d", fb, fb.T))
+        inter = np.empty(2 * m, dtype=v.dtype); inter[0::2] = v[:m]; inter[1::2] = v[:m][::-1]
+        out.append(("strided_1d", inter, inter[0::2]))
+    neg = v.copy(); out.append(("negstride_1d", neg, neg[::-1]))
+    return out
+
+
+def _special_pair_layouts(A, B):
+    """(tag, baseA, viewA, baseB, viewB) for the binary specials — contiguous, both-strided
+    and both-negative-stride. base/view MUST share a buffer, so the negative-stride variant
+    reverses ONE copy (an early bug reversed a second copy -> a non-view operand)."""
+    out = [("pp_contig", A, A, B, B)]
+    nA = len(A) - (len(A) % 2)
+    iA = np.empty(2 * nA, dtype=A.dtype); iA[0::2] = A[:nA]; iA[1::2] = A[:nA][::-1]
+    iB = np.empty(2 * nA, dtype=B.dtype); iB[0::2] = B[:nA]; iB[1::2] = B[:nA][::-1]
+    out.append(("pp_strided", iA, iA[0::2], iB, iB[0::2]))
+    na = A.copy(); nb = B.copy()
+    out.append(("pp_negstride", na, na[::-1], nb, nb[::-1]))
+    return out
+
+
+def _mm_special_layout(arr, layout):
+    """(base, view) for a matmul operand — like _mm_layout, but WITHOUT its
+    `assert np.array_equal(view, arr)` self-check, which is vacuously False whenever arr
+    holds a NaN. Same construction: an F-contiguous view is the C-contiguous transpose
+    viewed back through .T, so base.tobytes() is its raw memory."""
+    if layout == "F" and arr.ndim >= 2:
+        base = np.ascontiguousarray(arr.T)
+        return base, base.T
+    base = np.ascontiguousarray(arr)
+    return base, base
+
+
+# The op sets: exactly the elementwise-math / reduction / scan / product ops whose dtype
+# family (float + complex) carries IEEE special values. Integer/bool-only ops (bitwise,
+# shift) have no NaN and are deliberately absent; NumPy-raising cells (complex floor/ceil/
+# trunc/cbrt/floor_divide/mod, complex ORDER comparisons, complex arctan2) are skipped by the
+# try/except, exactly as the other gen_* tiers do.
+SPECIAL_UNARY_OPS = {
+    "negative": np.negative, "positive": np.positive, "abs": np.abs, "sign": np.sign, "sqrt": np.sqrt,
+    "cbrt": np.cbrt, "square": np.square, "reciprocal": np.reciprocal, "floor": np.floor, "ceil": np.ceil,
+    "trunc": np.trunc, "rint": np.rint, "sin": np.sin, "cos": np.cos, "tan": np.tan, "exp": np.exp, "log": np.log,
+    "exp2": np.exp2, "expm1": np.expm1, "log2": np.log2, "log10": np.log10, "log1p": np.log1p, "sinh": np.sinh,
+    "cosh": np.cosh, "tanh": np.tanh, "arcsin": np.arcsin, "arccos": np.arccos, "arctan": np.arctan,
+    "arcsinh": np.arcsinh, "arccosh": np.arccosh, "arctanh": np.arctanh,
+    "deg2rad": np.deg2rad, "rad2deg": np.rad2deg, "isnan": np.isnan, "isinf": np.isinf, "isfinite": np.isfinite,
+}
+SPECIAL_BINARY_OPS = {
+    "add": lambda a, b: a + b, "subtract": lambda a, b: a - b, "multiply": lambda a, b: a * b, "divide": lambda a, b: a / b,
+    "floor_divide": lambda a, b: a // b, "mod": lambda a, b: a % b, "power": lambda a, b: a ** b, "arctan2": np.arctan2,
+    "maximum": np.maximum, "minimum": np.minimum, "fmax": np.fmax, "fmin": np.fmin,
+    "equal": lambda a, b: a == b, "not_equal": lambda a, b: a != b, "less": lambda a, b: a < b, "greater": lambda a, b: a > b,
+    "less_equal": lambda a, b: a <= b, "greater_equal": lambda a, b: a >= b, "isclose": np.isclose,
+    "logical_and": np.logical_and, "logical_or": np.logical_or, "logical_xor": np.logical_xor,
+}
+SPECIAL_REDUCE_OPS = {
+    "sum": lambda a, ax, kd: np.sum(a, axis=ax, keepdims=kd), "prod": lambda a, ax, kd: np.prod(a, axis=ax, keepdims=kd),
+    "min": lambda a, ax, kd: np.min(a, axis=ax, keepdims=kd), "max": lambda a, ax, kd: np.max(a, axis=ax, keepdims=kd),
+    "mean": lambda a, ax, kd: np.mean(a, axis=ax, keepdims=kd), "all": lambda a, ax, kd: np.all(a, axis=ax, keepdims=kd),
+    "any": lambda a, ax, kd: np.any(a, axis=ax, keepdims=kd), "argmax": lambda a, ax, kd: np.argmax(a, axis=ax, keepdims=kd),
+    "argmin": lambda a, ax, kd: np.argmin(a, axis=ax, keepdims=kd), "nansum": lambda a, ax, kd: np.nansum(a, axis=ax, keepdims=kd),
+    "nanprod": lambda a, ax, kd: np.nanprod(a, axis=ax, keepdims=kd), "nanmax": lambda a, ax, kd: np.nanmax(a, axis=ax, keepdims=kd),
+    "nanmin": lambda a, ax, kd: np.nanmin(a, axis=ax, keepdims=kd), "nanmean": lambda a, ax, kd: np.nanmean(a, axis=ax, keepdims=kd),
+}
+SPECIAL_SCAN_OPS = {
+    "cumsum": lambda a, ax: np.cumsum(a, axis=ax), "cumprod": lambda a, ax: np.cumprod(a, axis=ax),
+}
+
+
+def gen_specials():
+    cases = []
+    n = 0
+    skipped = 0
+
+    def emit(op, params, operands, r, tag, dt):
+        nonlocal n
+        # Read the shape BEFORE ascontiguousarray (which forces ndim>=1, corrupting 0-D results).
+        exp_shape = [int(d) for d in r.shape]
+        exp_buf = np.ascontiguousarray(r).tobytes().hex()
+        cases.append({
+            "id": f"{op}/{tag}/{dt}/{n}",
+            "op": op,
+            "params": params,
+            "operands": operands,
+            "expected": {"dtype": r.dtype.name, "shape": exp_shape, "buffer": exp_buf},
+            "layout": tag,
+            "valueclass": "specials",
+        })
+        n += 1
+
+    # --- unary elementwise math over the special pool, every layout -----------------------
+    for dt in SPECIAL_DTYPES:
+        v = _special_pool(dt)
+        for tag, base, view in _special_1d_layouts(v):
+            od = describe(base, view)
+            for opname, f in SPECIAL_UNARY_OPS.items():
+                try:
+                    r = np.asarray(f(view))
+                except Exception:
+                    skipped += 1
+                    continue
+                emit(opname, {}, [od], r, f"un_{tag}", dt)
+
+    # --- binary elementwise math over the FORCED interaction pairs ------------------------
+    for dt in SPECIAL_DTYPES:
+        A, B = _binary_special_operands(dt)
+        for tag, ba, va, bb, vb in _special_pair_layouts(A, B):
+            oa = describe(ba, va); ob = describe(bb, vb)
+            for opname, f in SPECIAL_BINARY_OPS.items():
+                try:
+                    r = np.asarray(f(va, vb))
+                except Exception:
+                    skipped += 1
+                    continue
+                emit(opname, {}, [oa, ob], r, f"bin_{tag}", dt)
+
+    # --- reductions (incl. the nan* family) over special slices, axis + keepdims ----------
+    for dt in SPECIAL_DTYPES:
+        v = _special_pool(dt)
+        for tag, base, view in _special_1d_layouts(v):
+            od = describe(base, view)
+            for opname, f in SPECIAL_REDUCE_OPS.items():
+                for axis in _axes(view.ndim):
+                    for keepdims in (False, True):
+                        if opname in ("argmax", "argmin") and axis is None and keepdims:
+                            continue  # flat argmax/argmin (long) has no keepdims — mirror gen_reduce
+                        try:
+                            r = np.asarray(f(view, axis, keepdims))
+                        except Exception:
+                            skipped += 1
+                            continue
+                        emit(opname, {"axis": axis, "keepdims": keepdims}, [od], r, f"red_{tag}", dt)
+
+    # --- cumulative scans over special slices ---------------------------------------------
+    for dt in SPECIAL_DTYPES:
+        v = _special_pool(dt)
+        for tag, base, view in _special_1d_layouts(v):
+            od = describe(base, view)
+            for opname, f in SPECIAL_SCAN_OPS.items():
+                for axis in _axes(view.ndim):
+                    try:
+                        r = np.asarray(f(view, axis))
+                    except Exception:
+                        skipped += 1
+                        continue
+                    emit(opname, {"axis": axis}, [od], r, f"scan_{tag}", dt)
+
+    # --- matmul / dot / outer: NaN/inf PROPAGATION through the managed GEMM (the gap) ------
+    # A carries a finite row, a NaN row and an inf row; B is all-positive-finite with no
+    # zeros, so every output cell is order-independent: finite, NaN (from the NaN row) or
+    # +inf (from the inf row). This isolates propagation from summation reassociation.
+    for dt in SPECIAL_DTYPES:
+        A = np.array([[1, 2, 3], [np.nan, 1, 1], [np.inf, 2, 1]], dtype=np.dtype(dt))
+        B = np.array([[1, 2], [2, 1], [1, 1]], dtype=np.dtype(dt))
+        for la in ("C", "F"):
+            for lb in ("C", "F"):
+                bA, vA = _mm_special_layout(A, la); bB, vB = _mm_special_layout(B, lb)
+                for op, f in (("matmul", np.matmul), ("dot", np.dot)):
+                    r = np.asarray(f(vA, vB))
+                    emit(op, {}, [describe(bA, vA), describe(bB, vB)], r, f"mm_{la}{lb}", dt)
+        # 1-D inner product (its own kernel) — a NaN, an inf and a finite vector.
+        for name, a1, b1 in (("nan", [np.nan, 1, 1], [1, 2, 3]),
+                             ("inf", [np.inf, 1, 1], [1, 2, 3]),
+                             ("fin", [1, 2, 3], [1, 2, 3])):
+            a = np.array(a1, dtype=np.dtype(dt)); b = np.array(b1, dtype=np.dtype(dt))
+            r = np.asarray(np.dot(a, b))
+            emit("dot", {}, [describe(a, a), describe(b, b)], r, f"mm_vec_{name}", dt)
+        # outer product — every cell is one product, so specials map straight through.
+        a = np.array([1, np.inf, np.nan, 2], dtype=np.dtype(dt)); b = np.array([1, 2, -1], dtype=np.dtype(dt))
+        r = np.asarray(np.outer(a, b))
+        emit("outer", {}, [describe(a, a), describe(b, b)], r, "mm_outer", dt)
+
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+# =====================================================================================
+# Truthful-vs-precise ("precision" tier). The vision is BYTE-IDENTICAL parity to NumPy,
+# so the gate hierarchy is: bit-exact to NumPy ("precise") PASSES, always, without ever
+# consulting mathematical truth — matching NumPy's documented 2.52-ulp-wrong f32 exp IS
+# the contract. But when a case DIVERGES from NumPy, the parity bytes alone cannot say
+# which side lost precision. Each case here therefore carries a THIRD buffer,
+# expected.truth: the correctly-rounded mathematical reference (exact Fraction
+# arithmetic for sum/mean/var/cumsum/prod; mpmath at 200-bit precision for std's sqrt
+# and for expm1/log1p) — generator-side only, so the no-Python-in-CI rule holds. The
+# harness adjudicates a divergence by ULP distance to truth (MisalignedRegistry P1/P2):
+# NOT-LESS-truthful than NumPy -> excused as "prefer-precise" PARITY DEBT (the fix is
+# to port NumPy's algorithm, exactly as exp/log/sin/cos/tanh were ported — being MORE
+# accurate than NumPy is still a divergence, never a win); LESS truthful than NumPy
+# (beyond slack) -> genuine precision LOSS, which falls through to the scoped known-bug
+# branches or FAILS.
+#
+# The inputs are precision-ADVERSARIAL, because the ordinary pools cannot stress
+# accumulation: at the corpus' 8-36 element sizes a f32 sum can sit at most ~1 ulp from
+# exact, while the same values at N=2049 put a naive f32 loop 512 ulp off truth and
+# NumPy's pairwise ~2 (measured). Closed-form deterministic arrays, no RNG: wide-
+# magnitude sums whose unit elements straddle ulp/2 of the big element, cancellation
+# triples, mixed-magnitude pseudo-noise, large-mean variance (the naive E[x^2]-E[x]^2
+# killer — NumSharp's two-pass var measured EXACT on it), near-1 products, and the
+# expm1/log1p small-|x| band (the S1 defect's home, quantified at ~6.7e7 ulp vs truth).
+def _prec_hash01(i):
+    """Deterministic pseudo-noise in [0,1) — Knuth multiplicative hash, no RNG state."""
+    return ((i * 2654435761) % (2 ** 32)) / (2 ** 32)
+
+
+def _prec_arrays():
+    """(name, 1-D ndarray) adversarial operands. Values are what the dtype actually
+    STORES (astype applied), so the exact-rational truth taken from them is the truth of
+    the array the ops see, construction rounding excluded."""
+    out = []
+    out.append(("wide", np.concatenate([np.array([1e8], np.float32),
+                                        np.ones(2048, np.float32)])))          # ones < ulp(1e8)/2
+    out.append(("cancel", np.tile(np.array([2.0 ** 24, 1.0, -2.0 ** 24], np.float32), 342)))
+    out.append(("wide", np.concatenate([np.array([2.0 ** 53]),
+                                        np.ones(2047)]).astype(np.float64)))   # ones == ulp/2 ties
+    out.append(("mixed", np.array([(_prec_hash01(i) - 0.5) * 2.0 ** ((i * 7) % 30)
+                                   for i in range(1024)], np.float64)))
+    out.append(("largemean", (np.float64(1e8) + (np.arange(1024) % 2)).astype(np.float64)))
+    out.append(("largemean", np.array([1000.0 + _prec_hash01(i) for i in range(512)], np.float32)))
+    return out
+
+
+def _prec_prod_array(dt):
+    """Near-1 factors: every multiply rounds, so the accumulation order is observable
+    while the product stays in range. Exact rational product is the truth."""
+    return np.array([1.0 + (((i * 37) % 61) - 30) * 2.0 ** -20 for i in range(64)], np.dtype(dt))
+
+
+def _prec_band_array(dt):
+    """The expm1/log1p small-|x| band plus anchors — finite only (non-finite semantics
+    live in the specials tier; this tier is about ACCURACY on defined inputs)."""
+    fi = np.finfo(np.dtype(dt))
+    vals = [1e-30, -1e-30, 1e-25, 1e-20, -1e-20, 1e-15, 1e-12, -1e-12, 1e-10, 1e-8,
+            -1e-8, 3e-8, 1e-6, -1e-6, 1e-4, 1e-3, -1e-3, 0.03125, -0.03125, 0.5, -0.5,
+            1.0, 2.0, -0.9999, 0.0, -0.0, float(fi.tiny), -float(fi.tiny),
+            float(fi.smallest_subnormal), -float(fi.smallest_subnormal)]
+    return np.array(vals, np.float64).astype(dt)
+
+
+def _prec_layouts(v):
+    """contig + negstride views — the two traversal orders the reduce kernels take; the
+    exact-rational truth is order-independent, NumPy's expected is computed per view."""
+    neg = v.copy()
+    return [("contig_1d", v, v), ("negstride_1d", neg, neg[::-1])]
+
+
+def gen_precision():
+    try:
+        import mpmath as mp
+    except ImportError:
+        print("gen_precision needs mpmath (pip install mpmath) — generator-time only, never CI")
+        sys.exit(2)
+    mp.mp.prec = 200
+    from fractions import Fraction
+
+    def fr(view):
+        return [Fraction(float(x)) for x in view.tolist()]   # exact rational of each stored value
+
+    def round1(x, dt):
+        """ONE float64 rounding of an exact value, then the dtype cast. For float32 this
+        double-rounds (<=1 ulp off correctly-rounded) — inside the harness' +8 slack."""
+        return np.array([float(x)], dtype=np.float64).astype(dt)
+
+    def t_scalar(x, dt):
+        return round1(x, dt).reshape(())
+
+    def t_cumsum(view, dt):
+        run, out = Fraction(0), []
+        for f in fr(view):
+            run += f
+            out.append(float(run))
+        return np.array(out, np.float64).astype(dt)
+
+    def t_std(view, dt):
+        fs = fr(view)
+        m = sum(fs) / len(fs)
+        var = sum((f - m) ** 2 for f in fs) / len(fs)
+        s = mp.sqrt(mp.mpf(var.numerator) / mp.mpf(var.denominator))
+        return t_scalar(float(s), dt)
+
+    def t_unary(view, dt, f):
+        return np.array([float(f(mp.mpf(float(x)))) for x in view.tolist()],
+                        np.float64).astype(dt)
+
+    cases = []
+    n = 0
+
+    def emit(op, params, operands, r, truth, tag, dt, arrname):
+        nonlocal n
+        truth = np.asarray(truth).astype(r.dtype)
+        assert truth.shape == r.shape, f"truth shape {truth.shape} != result {r.shape} ({op}/{arrname})"
+        cases.append({
+            "id": f"{op}/{tag}/{dt}/{arrname}/{n}",
+            "op": op,
+            "params": params,
+            "operands": operands,
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex(),
+                         "truth": np.ascontiguousarray(truth).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "precision",
+        })
+        n += 1
+
+    # --- accumulation: sum / mean / var / std / cumsum over the adversarial arrays -----
+    for arrname, arr in _prec_arrays():
+        dt = arr.dtype
+        for tag, base, view in _prec_layouts(arr):
+            od = [describe(base, view)]
+            fs = fr(view)
+            m = sum(fs) / len(fs)
+            rk = {"axis": None, "keepdims": False}
+            emit("sum", rk, od, np.asarray(np.sum(view)), t_scalar(sum(fs), dt), tag, dt.name, arrname)
+            emit("mean", rk, od, np.asarray(np.mean(view)), t_scalar(m, dt), tag, dt.name, arrname)
+            emit("var", rk, od, np.asarray(np.var(view)),
+                 t_scalar(sum((f - m) ** 2 for f in fs) / len(fs), dt), tag, dt.name, arrname)
+            emit("std", rk, od, np.asarray(np.std(view)), t_std(view, dt), tag, dt.name, arrname)
+            emit("cumsum", {"axis": None}, od, np.asarray(np.cumsum(view)),
+                 t_cumsum(view, dt), tag, dt.name, arrname)
+
+    # --- near-1 products ---------------------------------------------------------------
+    for dt in ("float32", "float64"):
+        arr = _prec_prod_array(dt)
+        for tag, base, view in _prec_layouts(arr):
+            od = [describe(base, view)]
+            p = Fraction(1)
+            for f in fr(view):
+                p *= f
+            emit("prod", {"axis": None, "keepdims": False}, od,
+                 np.asarray(np.prod(view)), t_scalar(p, np.dtype(dt)), tag, dt, "near1")
+
+    # --- expm1 / log1p over the small-|x| band -----------------------------------------
+    for dt in ("float32", "float64"):
+        arr = _prec_band_array(dt)
+        for tag, base, view in _prec_layouts(arr):
+            od = [describe(base, view)]
+            emit("expm1", {}, od, np.expm1(view), t_unary(view, np.dtype(dt), mp.expm1),
+                 tag, dt, "band")
+            emit("log1p", {}, od, np.log1p(view), t_unary(view, np.dtype(dt), mp.log1p),
+                 tag, dt, "band")
+
+    # --- AXIS reductions over 2-D adversarial arrays -----------------------------------
+    # The flat cases above never touch the axis kernels (Reduction.Axis.*), which are
+    # different code AND different NumPy behavior: NumPy's axis-0 (outer-axis) reduction
+    # is a NAIVE sequential accumulation per column — on the wide-magnitude input it
+    # loses ALL the unit elements (1024 ULP from truth) — while axis-1 runs pairwise
+    # (~8 ULP). Probed: NumSharp bit-matches BOTH, including reproducing the naive
+    # axis-0 order. These cases pin that parity and protect the prefer-precise policy:
+    # a future "improved" axis accumulation would diverge from NumPy and must surface
+    # as P1 parity debt, not pass silently. The transposed view routes the SAME logical
+    # reduction through the strided source path.
+    def t_axis_slices(view, axis, dt, stat):
+        outs = []
+        m = view.shape[1] if axis == 0 else view.shape[0]
+        for j in range(m):
+            sl = view[:, j] if axis == 0 else view[j, :]
+            fs = fr(sl)
+            mean = sum(fs) / len(fs)
+            if stat == "sum":
+                outs.append(float(sum(fs)))
+            elif stat == "mean":
+                outs.append(float(mean))
+            elif stat == "var":
+                outs.append(float(sum((f - mean) ** 2 for f in fs) / len(fs)))
+            else:  # std
+                var = sum((f - mean) ** 2 for f in fs) / len(fs)
+                outs.append(float(mp.sqrt(mp.mpf(var.numerator) / mp.mpf(var.denominator))))
+        return np.array(outs, np.float64).astype(dt)
+
+    def axis_cases(arr, axis, tag, arrname):
+        dt = arr.dtype
+        base = np.ascontiguousarray(arr)
+        od = [describe(base, base)]
+        for stat, f in (("sum", np.sum), ("mean", np.mean), ("var", np.var), ("std", np.std)):
+            for kd in ((False, True) if stat == "sum" else (False,)):
+                r = np.asarray(f(base, axis=axis, keepdims=kd))
+                truth = t_axis_slices(base, axis, dt, stat).reshape(r.shape)
+                emit(stat, {"axis": axis, "keepdims": kd}, od, r, truth, tag, dt.name, arrname)
+
+    for dtn, big in (("float64", 2.0 ** 53), ("float32", 1e8)):
+        ndt = np.dtype(dtn)
+        colwise = np.ones((2049, 4), ndt); colwise[0, :] = big     # each COLUMN adversarial
+        rowwise = np.ones((4, 2049), ndt); rowwise[:, 0] = big     # each ROW adversarial
+        axis_cases(colwise, 0, "axis0_2d", "wide")
+        axis_cases(rowwise, 1, "axis1_2d", "wide")
+        # transposed view: logical == rowwise, memory == colwise (strided reduce source)
+        baseT = np.ascontiguousarray(colwise)
+        odT = [describe(baseT, baseT.T)]
+        for stat, f in (("sum", np.sum), ("var", np.var)):
+            r = np.asarray(f(baseT.T, axis=1))
+            truth = t_axis_slices(baseT.T, 1, ndt, stat).reshape(r.shape)
+            emit(stat, {"axis": 1, "keepdims": False}, odT, r, truth, "transposed_2d", dtn, "wide")
+        # cumsum along each axis (smaller N so the full-array expected/truth stay lean)
+        cw = np.ones((257, 4), ndt); cw[0, :] = big
+        rw = np.ones((4, 257), ndt); rw[:, 0] = big
+        for arr2, ax, tag in ((cw, 0, "axis0_2d"), (rw, 1, "axis1_2d")):
+            b2 = np.ascontiguousarray(arr2)
+            r = np.asarray(np.cumsum(b2, axis=ax))
+            m = b2.shape[1] if ax == 0 else b2.shape[0]
+            cols = []
+            for j in range(m):
+                sl = b2[:, j] if ax == 0 else b2[j, :]
+                run, outs = Fraction(0), []
+                for fv in fr(sl):
+                    run += fv
+                    outs.append(float(run))
+                cols.append(outs)
+            t = np.empty_like(r, dtype=np.float64)
+            for j in range(m):
+                if ax == 0:
+                    t[:, j] = cols[j]
+                else:
+                    t[j, :] = cols[j]
+            emit("cumsum", {"axis": ax}, [describe(b2, b2)], r, t.astype(ndt), tag, dtn, "wide")
+
+    return cases
+
+
+# =====================================================================================
+# np.random byte-parity ("random_parity" tiers). The documented claim — MT19937 with
+# 1-to-1 seed/state parity, "byte-identical sequences to NumPy 2.4.2" — was guarded only
+# by STATISTICAL tests (mean within 0.01), which would pass with a completely different
+# generator. These tiers pin the actual seeded streams: seed -> draw -> record bytes.
+#
+# TWO FILES, split by libm dependence, because CI replays on three OSes:
+#   * random_parity.jsonl — the PORTABLE subset: distributions whose math is pure
+#     MT19937 bit manipulation + exactly-rounded IEEE arithmetic (uniform, rand,
+#     random_sample, randint, permutation, shuffle, choice). Bit-exact on every host;
+#     hard-gated everywhere.
+#   * random_parity_host.jsonl — every distribution whose transform consumes libm
+#     (log/exp/pow/cos in the gauss polar method, exponential inversion, gamma/zipf/
+#     poisson/binomial REJECTION loops — where a 1-ulp libm difference can flip an
+#     accept/reject decision and shift the whole stream). NumPy calls the CRT and
+#     NumSharp calls Math.* (the same CRT on Windows, glibc elsewhere), so these bytes
+#     are win-amd64-authored: the C# gate runs them hard on Windows and reports
+#     Inconclusive elsewhere (the matmul_parity pattern; same class as the MSVC cast
+#     pins in "Host-dependent values").
+#
+# int-output distributions (randint/permutation/poisson/binomial/...) are ALSO
+# host-dtype-pinned by NumPy itself: legacy RandomState uses C long, so this corpus
+# (authored on win-amd64) records int32 — regenerating on Linux would record int64.
+# NumSharp's int32 matches the Windows authoring host. Sequential-draw cases
+# ("draws": 2) pin stream ADVANCEMENT, not just the first block.
+_RND_SEEDS = [42, 987654321]
+_RND_SIZES = [[7], [2, 3]]
+
+# (dist, args) — generic dists callable as np.random.<dist>(*args, size=...).
+_RND_PORTABLE_GENERIC = [
+    ("uniform", [0.0, 1.0]), ("uniform", [-3.0, 7.0]),
+]
+_RND_HOST_GENERIC = [
+    ("normal", [0.0, 1.0]), ("normal", [5.0, 2.5]),
+    ("lognormal", [0.0, 1.0]),
+    ("exponential", [1.0]), ("exponential", [2.5]),
+    ("standard_t", [3.5]),
+    ("standard_gamma", [2.0]), ("standard_gamma", [0.5]),   # shape<1: different sampler branch
+    ("gamma", [2.0, 3.0]), ("gamma", [2.0, 1.0]),   # shape>=1 matches (scale path included);
+                                                    # shape<1 via gamma() is CARVED, see below
+    ("beta", [2.0, 3.0]), ("beta", [0.5, 0.5]),
+    ("chisquare", [3.0]),
+    ("gumbel", [0.5, 2.0]),
+    ("laplace", [0.0, 1.0]),
+    ("logistic", [0.0, 1.0]),
+    ("power", [2.5]),
+    ("rayleigh", [1.5]),
+    ("triangular", [0.0, 3.0, 10.0]),
+    ("vonmises", [0.5, 2.0]),
+    ("wald", [3.0, 2.0]),
+    ("weibull", [1.79]),
+    ("poisson", [5.0]), ("poisson", [0.3]),
+    ("geometric", [0.35]),
+    ("zipf", [3.0]),
+    ("logseries", [0.6]),
+    ("noncentral_chisquare", [3.0, 1.5]),
+    ("noncentral_f", [5.0, 7.0, 1.5]),
+]
+# Stream-advancement pins: draw the same spec twice, record the SECOND block.
+_RND_DRAWS2 = {"uniform", "randint", "normal", "standard_gamma", "poisson"}
+
+# CARVED — the tier's findings on arrival (2026-08-14): eight samplers where NumSharp's
+# STREAM diverges from NumPy's (a different algorithm / draw order / accept-reject
+# boundary, not mere rounding), so the documented 1-to-1 claim does not hold for them
+# today. Each is carved from the green corpus and pinned under [OpenBugs]
+# (OpenBugs.Random.cs, RandomParity_* — remove the pin and re-add the spec when fixed):
+#   * gamma(shape<1, scale)    — gross divergence while standard_gamma(shape<1) AND
+#     gamma(shape>=1, any scale) match byte-for-byte: the two-arg gamma routes shape<1
+#     differently than NumSharp's own (correct) standard_gamma.
+#   * f(dfnum, dfden)          — not NumPy's (chisq/df)/(chisq/df) composition.
+#   * pareto(a)                — not NumPy's expm1(standard_exponential/a).
+#   * standard_cauchy()        — not NumPy's gauss/gauss ratio.
+#   * binomial(n, p)           — counts drift on BOTH internal algorithms (inversion at
+#     small n*p and BTPE at large): accept/reject boundaries land differently.
+#   * negative_binomial(n, p)  — poisson(gamma(n, (1-p)/p)) chain: occasional count
+#     flips downstream of ~ULP lambda differences (incl. one gross 21-vs-29).
+#   * multinomial(n, pvals)    — the internal per-category binomial loop consumes the
+#                                stream differently (values gross-diverge; dtype int32 matches).
+#   * multivariate_normal      — different factorization/transform (sign flips + values).
+# The small-ULP samplers (chisquare/wald/noncentral_f/dirichlet — arithmetic-ordering
+# noise on an IDENTICAL stream, measured ≤5/≤24/≤3/≤3 ULP) stay IN the tier under the
+# scoped R1 registry envelope (8 ULP; 32 for wald).
+#
+# int-output samplers: legacy RandomState returns C long — int32 on win-amd64, int64 on
+# Linux — while NumSharp fixes int64 (the Linux-NumPy shape). The corpus records these
+# WIDENED to int64 so the VALUE stream stays hard-gated and the dtype policy is
+# documented here rather than silently failing per-host. Two exceptions, both matching
+# win-amd64 NumPy unwidened: randint (NumSharp defaults int32) and PLAIN choice —
+# NumSharp's choice returns int32 without `p` but int64 WITH `p` (an internal
+# inconsistency worth its own fix; the with-p cases are widened so their values gate).
+_RND_INT64_CAST = {"permutation", "poisson", "zipf", "logseries", "hypergeometric", "geometric"}
+
+
+def gen_random_parity():
+    portable = []
+    host = []
+    n = 0
+
+    def emit(into, dist, params, r):
+        nonlocal n
+        r = np.asarray(r)
+        if dist in _RND_INT64_CAST or (dist == "choice" and "p" in params):
+            r = r.astype(np.int64)   # widen C-long (int32 here) to NumSharp's fixed int64 — see above
+        into.append({
+            "id": f"rnd/{dist}/seed{params['seed']}/{n}",
+            "op": "rnd",
+            "params": params,
+            "operands": [],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "rnd",
+            "valueclass": "stream",
+        })
+        n += 1
+
+    def run(dist, args, seed, size, draws=1, extra=None):
+        np.random.seed(seed)
+        r = None
+        for _ in range(draws):
+            if dist == "rand":
+                r = np.random.rand(*size)
+            elif dist == "randn":
+                r = np.random.randn(*size)
+            elif dist == "random_sample":
+                r = np.random.random_sample(tuple(size))
+            elif dist == "randint":
+                r = np.random.randint(int(args[0]), int(args[1]), tuple(size))
+            elif dist == "permutation":
+                r = np.random.permutation(int(args[0]))
+            elif dist == "shuffle":
+                # arange default dtype (int64 in NumPy 2.x, matching NumSharp's np.arange);
+                # the STREAM consumption is dtype-independent.
+                r = np.arange(int(args[0]))
+                np.random.shuffle(r)
+            elif dist == "choice":
+                r = np.random.choice(int(args[0]), tuple(size),
+                                     p=extra.get("p") if extra else None)
+            elif dist == "multinomial":
+                r = np.random.multinomial(int(args[0]), extra["pvals"], tuple(size))
+            elif dist == "dirichlet":
+                r = np.random.dirichlet(extra["alpha"], tuple(size))
+            elif dist == "multivariate_normal":
+                d = len(extra["mean"])
+                cov = np.array(extra["cov"]).reshape(d, d)
+                r = np.random.multivariate_normal(extra["mean"], cov, tuple(size))
+            else:
+                r = getattr(np.random, dist)(*args, tuple(size))
+        return r
+
+    def cases_for(into, dist, args, sized=True, extra=None):
+        specs = []
+        if sized:
+            specs.append((_RND_SEEDS[0], _RND_SIZES[0]))
+            specs.append((_RND_SEEDS[0], _RND_SIZES[1]))
+            specs.append((_RND_SEEDS[1], _RND_SIZES[0]))
+        else:
+            specs.append((_RND_SEEDS[0], None))
+            specs.append((_RND_SEEDS[1], None))
+        for seed, size in specs:
+            params = {"dist": dist, "seed": seed, "size": size, "args": args}
+            if extra:
+                params.update(extra)
+            emit(into, dist, params, run(dist, args, seed, size or [], extra=extra))
+        if dist in _RND_DRAWS2:
+            seed, size = _RND_SEEDS[0], _RND_SIZES[0]
+            params = {"dist": dist, "seed": seed, "size": size, "args": args, "draws": 2}
+            if extra:
+                params.update(extra)
+            emit(into, dist, params, run(dist, args, seed, size, draws=2, extra=extra))
+
+    # --- portable: pure MT19937 bits + exactly-rounded arithmetic ---------------------
+    for dist, args in _RND_PORTABLE_GENERIC:
+        cases_for(portable, dist, args)
+    cases_for(portable, "rand", [])
+    cases_for(portable, "random_sample", [])
+    for lo, hi in ((0, 100), (-50, 50), (0, 2)):
+        cases_for(portable, "randint", [lo, hi])
+    for nperm in (10, 1):
+        cases_for(portable, "permutation", [nperm], sized=False)
+    cases_for(portable, "shuffle", [10], sized=False)
+    cases_for(portable, "choice", [10])
+    cases_for(portable, "choice", [4], extra={"p": [0.1, 0.2, 0.3, 0.4]})
+
+    # Public state-management surface. These are deliberately their OWN op keys rather than
+    # being inferred from rnd: seed is checked through a portable draw, get_state through a
+    # canonical full-state trace, and set_state by restoring a captured 624-word state before a
+    # draw. This catches a state shape/position/cache drift that identical first draws can hide.
+    for seed in [0, 42, 2 ** 31, 2 ** 32 - 1]:
+        np.random.seed(seed)
+        r = np.random.random_sample((8,))
+        portable.append(_case("seed", {"seed": seed, "size": [8]}, [], _arr_expected(r),
+                              "rnd/state", "stream", cid=f"seed/{seed}/{n}"))
+        n += 1
+
+    def state_text(state):
+        alg, key, pos, has_gauss, cached = state
+        bits = int(np.asarray(cached, dtype=np.float64).view(np.uint64))
+        return f"{alg}|{int(pos)}|{int(has_gauss)}|{bits:016x}|" + \
+               ",".join(str(int(x)) for x in key)
+
+    for seed, draws in [(0, 0), (1, 1), (42, 5), (2 ** 32 - 1, 17)]:
+        np.random.seed(seed)
+        if draws:
+            np.random.random_sample((draws,))
+        portable.append(_case("get_state", {"seed": seed, "draws": draws}, [],
+                              {"kind": "text", "value": state_text(np.random.get_state())},
+                              "rnd/state", "stream", cid=f"get_state/{seed}/{draws}/{n}"))
+        n += 1
+
+    for source_seed, advance in [(0, 0), (42, 1), (24680, 7), (2 ** 32 - 1, 17)]:
+        np.random.seed(source_seed)
+        if advance:
+            np.random.random_sample((advance,))
+        state = np.random.get_state()
+        np.random.set_state(state)
+        restored = np.random.random_sample((8,))
+        portable.append(_case("set_state",
+                              {"pos": int(state[2]), "has_gauss": int(state[3]),
+                               "cached_gaussian": float(state[4]), "size": [8]},
+                              [describe(state[1], state[1])], _arr_expected(restored),
+                              "rnd/state", "stream",
+                              cid=f"set_state/{source_seed}/{advance}/{n}"))
+        n += 1
+
+    # --- host-libm: transform / rejection samplers ------------------------------------
+    # standard_cauchy / multinomial / multivariate_normal are CARVED (see _RND_INT64_CAST
+    # comment block) — gross stream divergence, pinned in OpenBugs.Random.cs.
+    for dist, args in _RND_HOST_GENERIC:
+        cases_for(host, dist, args)
+    cases_for(host, "randn", [])
+    cases_for(host, "standard_normal", [])
+    cases_for(host, "standard_exponential", [])
+    cases_for(host, "hypergeometric", [10, 7, 8])
+    cases_for(host, "dirichlet", [], extra={"alpha": [2.0, 3.0, 5.0]})
+    return portable, host
+
+
+# =====================================================================================
+# CBLAS product family ("products" tier). inner / vdot / vecdot / matvec / vecmat /
+# tensordot / linalg.multi_dot / linalg.matrix_power had NO value gate at all — only
+# their ERROR contracts were unit-tested — yet they carry exactly the cells that regress
+# silently: vdot/vecdot conjugate the FIRST operand (complex), vecdot reduces in the
+# LOOP dtype (int32 stays int32, not NEP50's int64), tensordot's axes forms, and
+# matrix_power's binary-exponentiation dtype rules.
+#
+# Two value classes:
+#   * SMALL-EXACT (the bulk): _mm_fill operands (small ints / halves / tiny complex) at
+#     contraction depth <= 4, where every float sum is exact and therefore
+#     order-independent — bit-equal is expected even against NumPy's BLAS-backed
+#     dot/inner/vdot. Integer dtypes are modular and exact by construction.
+#   * DEEP-TRUTH (f32/f64, K=2049): mixed-magnitude pseudo-noise where summation order
+#     shows. NumPy routes inner/vdot through BLAS while NumSharp runs managed kernels,
+#     so bit-parity is not the contract there — each case carries expected.truth (exact
+#     Fraction dot products) and the P1/P2 prefer-precise branches adjudicate exactly as
+#     in the precision tier.
+PRODUCT_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32",
+                  "int64", "uint64", "float16", "float32", "float64", "complex128"]
+
+
+def _prod_noise(k):
+    """Deterministic mixed-magnitude values (2^0..2^9 spread) — enough for summation
+    order to show at K=2049 without overflowing a float32 dot."""
+    return np.array([(_prec_hash01(i) - 0.5) * 2.0 ** ((i * 5) % 10) for i in range(k)],
+                    np.float64)
+
+
+def gen_products():
+    from fractions import Fraction
+    cases = []
+    n = 0
+    skipped = 0
+
+    def emit(op, params, pairs, r, tag, dt, truth=None):
+        nonlocal n
+        exp = {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+               "buffer": np.ascontiguousarray(r).tobytes().hex()}
+        if truth is not None:
+            truth = np.asarray(truth).astype(r.dtype)
+            assert truth.shape == r.shape
+            exp["truth"] = np.ascontiguousarray(truth).tobytes().hex()
+        cases.append({
+            "id": f"{op}/{tag}/{dt}/{n}",
+            "op": op,
+            "params": params,
+            "operands": [describe(b, v) for (b, v) in pairs],
+            "expected": exp,
+            "layout": tag,
+            "valueclass": "products",
+        })
+        n += 1
+
+    def try_emit(op, params, pairs, f, tag, dt, truth=None):
+        nonlocal skipped
+        try:
+            r = np.asarray(f())
+        except Exception:
+            skipped += 1   # NumPy raises (e.g. matrix_power on bool) — error parity is elsewhere
+            return
+        emit(op, params, pairs, r, tag, dt, truth)
+
+    # --- small-exact family across every dtype ----------------------------------------
+    for dt in PRODUCT_DTYPES:
+        A34 = _mm_fill((3, 4), dt)
+        B24 = _mm_fill((2, 4), dt)
+        M43 = _mm_fill((4, 3), dt)
+        v4 = _mm_fill((4,), dt)
+        w4 = v4[::-1].copy()
+        C = lambda a: (np.ascontiguousarray(a), np.ascontiguousarray(a))
+
+        try_emit("inner", {}, [C(A34), C(B24)], lambda: np.inner(A34, B24), "2d", dt)
+        try_emit("inner", {}, [C(v4), C(w4)], lambda: np.inner(v4, w4), "1d", dt)
+        try_emit("vdot", {}, [C(v4), C(w4)], lambda: np.vdot(v4, w4), "1d", dt)
+        try_emit("vdot", {}, [C(A34), C(np.ascontiguousarray(_mm_fill((3, 4), dt)[::-1]))],
+                 lambda: np.vdot(A34, _mm_fill((3, 4), dt)[::-1]), "2d_flat", dt)
+        try_emit("vecdot", {"axis": -1}, [C(B24), C(np.ascontiguousarray(B24[::-1]))],
+                 lambda: np.vecdot(B24, B24[::-1], axis=-1), "ax-1", dt)
+        try_emit("vecdot", {"axis": 0}, [C(M43), C(np.ascontiguousarray(M43[::-1]))],
+                 lambda: np.vecdot(M43, M43[::-1], axis=0), "ax0", dt)
+        try_emit("vecdot", {"keepdims": True}, [C(B24), C(np.ascontiguousarray(B24[::-1]))],
+                 lambda: np.vecdot(B24, B24[::-1], keepdims=True), "kd", dt)
+        try_emit("matvec", {}, [C(A34), C(v4)], lambda: np.matvec(A34, v4), "2d", dt)
+        bA = _mm_fill((2, 3, 4), dt); bv = _mm_fill((2, 4), dt)
+        try_emit("matvec", {}, [C(bA), C(bv)], lambda: np.matvec(bA, bv), "batched", dt)
+        try_emit("vecmat", {}, [C(v4), C(M43)], lambda: np.vecmat(v4, M43), "2d", dt)
+        bM = _mm_fill((2, 4, 3), dt)
+        try_emit("vecmat", {}, [C(bv), C(bM)], lambda: np.vecmat(bv, bM), "batched", dt)
+        T23 = _mm_fill((2, 3), dt); T34 = _mm_fill((3, 4), dt); T23b = _mm_fill((2, 3), dt)[::-1].copy()
+        try_emit("tensordot", {"axes": 1}, [C(T23), C(T34)], lambda: np.tensordot(T23, T34, 1), "int1", dt)
+        try_emit("tensordot", {"axes": 2}, [C(T23), C(T23b)], lambda: np.tensordot(T23, T23b, 2), "int2", dt)
+        try_emit("tensordot", {"axes": 0}, [C(v4), C(_mm_fill((3,), dt))],
+                 lambda: np.tensordot(v4, _mm_fill((3,), dt), 0), "int0", dt)
+        try_emit("tensordot", {"axesA": [1], "axesB": [0]}, [C(T23), C(T34)],
+                 lambda: np.tensordot(T23, T34, ([1], [0])), "pair", dt)
+        try_emit("tensordot", {"axesA": [0, 1], "axesB": [0, 1]}, [C(T23), C(T23b)],
+                 lambda: np.tensordot(T23, T23b, ([0, 1], [0, 1])), "pair2", dt)
+        D1 = _mm_fill((2, 3), dt); D2 = _mm_fill((3, 4), dt); D3 = _mm_fill((4, 2), dt)
+        try_emit("multi_dot", {}, [C(D1), C(D2), C(D3)],
+                 lambda: np.linalg.multi_dot([D1, D2, D3]), "chain3", dt)
+        vfirst = _mm_fill((3,), dt)
+        try_emit("multi_dot", {}, [C(vfirst), C(D2), C(D3)],
+                 lambda: np.linalg.multi_dot([vfirst, D2, D3]), "vec_first", dt)
+        S33 = _mm_fill((3, 3), dt)
+        for pw in (0, 2, 3):
+            try_emit("matrix_power", {"n": pw}, [C(S33)],
+                     lambda: np.linalg.matrix_power(S33, pw), f"n{pw}", dt)
+
+        # kron — Kronecker product. Values are plain a[i]*b[j], so the clean _mm_fill ramps map
+        # straight through (exact for every product dtype; integer/half products don't overflow at
+        # these sizes). Covers 1d/2d, both mixed-rank orders (the ndmin promotion), a 3-D operand,
+        # and a 0-d scalar operand (kron's multiply shortcut). Small sizes take the direct dispatch
+        # path; the tile fast-path is bit-identical (unit-test-pinned at size).
+        K22 = _mm_fill((2, 2), dt); K222 = _mm_fill((2, 2, 2), dt)
+        ksc = np.array(_mm_fill((2,), dt)[1])                       # 0-d scalar of this dtype
+        try_emit("kron", {}, [C(v4), C(w4)], lambda: np.kron(v4, w4), "1d", dt)
+        try_emit("kron", {}, [C(T23), C(T34)], lambda: np.kron(T23, T34), "2d", dt)
+        try_emit("kron", {}, [C(v4), C(T23)], lambda: np.kron(v4, T23), "1d_2d", dt)
+        try_emit("kron", {}, [C(T23), C(v4)], lambda: np.kron(T23, v4), "2d_1d", dt)
+        try_emit("kron", {}, [C(K222), C(K22)], lambda: np.kron(K222, K22), "3d_2d", dt)
+        try_emit("kron", {}, [C(T23), C(ksc)], lambda: np.kron(T23, ksc), "scalar_b", dt)
+
+    # Array-API norm spellings. Use Pythagorean fixtures whose sqrt is exact, isolating the
+    # axis/keepdims/dtype contracts from platform-libm noise and from the SVD-only matrix orders.
+    for dt in ("int32", "float32", "float64", "complex128"):
+        d = np.dtype(dt)
+        nv = np.array([3, 4], dtype=d)
+        nm = np.array([[3, 0], [0, 4]], dtype=d)
+        C = lambda a: (np.ascontiguousarray(a), np.ascontiguousarray(a))
+        try_emit("vector_norm", {"axis": None, "keepdims": False}, [C(nv)],
+                 lambda: np.linalg.vector_norm(nv), "default", dt)
+        try_emit("vector_norm", {"axis": 0, "keepdims": True}, [C(nv)],
+                 lambda: np.linalg.vector_norm(nv, axis=0, keepdims=True), "axis0_kd", dt)
+        try_emit("matrix_norm", {"keepdims": False, "ord": "fro"}, [C(nm)],
+                 lambda: np.linalg.matrix_norm(nm, ord="fro"), "fro", dt)
+        try_emit("matrix_norm", {"keepdims": True, "ord": 1}, [C(nm)],
+                 lambda: np.linalg.matrix_norm(nm, ord=1, keepdims=True), "ord1_kd", dt)
+
+    # --- F-layout spot checks (the stride-aware read path) ----------------------------
+    for dt in ("int32", "float64"):
+        A = _mm_fill((3, 4), dt); B = _mm_fill((2, 4), dt)
+        baseA, viewA = _mm_layout(A, "F")
+        try_emit("inner", {}, [(baseA, viewA), (np.ascontiguousarray(B), B)],
+                 lambda: np.inner(viewA, B), "F", dt)
+        # kron reading a non-contiguous (F) operand — exercises the reshape-materialisation path.
+        try_emit("kron", {}, [(baseA, viewA), (np.ascontiguousarray(B), B)],
+                 lambda: np.kron(viewA, B), "F", dt)
+
+    # --- deep-truth (f32/f64, K=2049): Fraction-exact references ----------------------
+    K = 2049
+    for dt in ("float32", "float64"):
+        ndt = np.dtype(dt)
+        a2 = _prod_noise(2 * K).reshape(2, K).astype(ndt)
+        b3 = _prod_noise(3 * K)[::-1].reshape(3, K).astype(ndt)
+        v = _prod_noise(K).astype(ndt)
+        w = _prod_noise(K)[::-1].copy().astype(ndt)
+        mk = np.ascontiguousarray(b3.T)      # (K,3)
+
+        def frdot(x, y):
+            return sum(Fraction(float(a)) * Fraction(float(b)) for a, b in zip(x.tolist(), y.tolist()))
+
+        t = np.array([[float(frdot(a2[i], b3[j])) for j in range(3)] for i in range(2)])
+        try_emit("inner", {}, [C(a2), C(b3)], lambda: np.inner(a2, b3), "deep", dt, truth=t)
+        t = np.array(float(frdot(v, w)))
+        try_emit("vdot", {}, [C(v), C(w)], lambda: np.vdot(v, w), "deep", dt, truth=t)
+        t = np.array([float(frdot(a2[i], a2[1 - i])) for i in range(2)])
+        try_emit("vecdot", {"axis": -1}, [C(a2), C(np.ascontiguousarray(a2[::-1]))],
+                 lambda: np.vecdot(a2, a2[::-1], axis=-1), "deep", dt, truth=t)
+        t = np.array([float(frdot(b3[i], v)) for i in range(3)])
+        try_emit("matvec", {}, [C(b3), C(v)], lambda: np.matvec(b3, v), "deep", dt, truth=t)
+        t = np.array([float(frdot(v, mk[:, j])) for j in range(3)])
+        try_emit("vecmat", {}, [C(v), C(mk)], lambda: np.vecmat(v, mk), "deep", dt, truth=t)
+        t = np.array([[float(frdot(a2[i], mk[:, j])) for j in range(3)] for i in range(2)])
+        try_emit("tensordot", {"axes": 1}, [C(a2), C(mk)],
+                 lambda: np.tensordot(a2, mk, 1), "deep", dt, truth=t)
+
+    # --- cross: the lone product-family gap. The cross product is multiply-subtract
+    #     (a1*b2 - a2*b1, ...), NO long reduction, so it is bit-exact for float/complex/
+    #     int64 at every value and every layout (it reads through strides). int32 and
+    #     narrower widen to int64 in NumPy 2.x's cross — a dtype divergence deliberately
+    #     left out; the product logic is dtype-agnostic and the four dtypes here cover it.
+    CROSS_DTYPES = ["float64", "float32", "complex128", "int64"]
+    for dt in CROSS_DTYPES:
+        ndt = np.dtype(dt)
+
+        def cv(vals, _ndt=ndt):
+            a = np.array(vals, dtype=np.float64)
+            if _ndt.kind == "c":
+                a = a + 1j * a[::-1]
+            return np.ascontiguousarray(a.astype(_ndt))
+
+        a3, b3 = cv([1, 2, 3]), cv([4, 5, 6])
+        emit("cross", {}, [C(a3), C(b3)], np.cross(a3, b3), "3v", dt)
+        A23 = np.ascontiguousarray(np.stack([cv([1, 2, 3]), cv([-2, 0, 4])]))
+        B23 = np.ascontiguousarray(np.stack([cv([4, 5, 6]), cv([1, -1, 2])]))
+        emit("cross", {}, [C(A23), C(B23)], np.cross(A23, B23), "batch", dt)
+    # axis params: vectors laid out along axis 0 (columns).
+    Ac = np.ascontiguousarray(np.array([[1., 4], [2, 5], [3, 6]]))
+    Bc = np.ascontiguousarray(np.array([[7., 1], [8, 0], [9, 2]]))
+    emit("cross", {"axisa": 0, "axisb": 0, "axisc": 0}, [C(Ac), C(Bc)],
+         np.cross(Ac, Bc, axisa=0, axisb=0, axisc=0), "axis0", "float64")
+    # strided/reversed reads of the cross operand (F / negrow / negcol).
+    A23f = np.ascontiguousarray(np.array([[1., 2, 3], [4, 5, 6]]))
+    B23f = np.ascontiguousarray(np.array([[7., 8, 9], [1, 0, 2]]))
+    for lay in ("F", "negrow", "negcol"):
+        baseA, viewA = _mm_layout(A23f, lay)
+        emit("cross", {}, [(baseA, viewA), (np.ascontiguousarray(B23f), B23f)],
+             np.cross(viewA, B23f), f"lay_{lay}", "float64")
+
+    # --- cov / corrcoef: covariance is a normalized dot product, so byte-exact for SMALL
+    #     observation counts (the dot is an exact short float sum). The UNWEIGHTED param
+    #     surface (rowvar/bias/ddof/y/complex/int-widen) is recorded here; WEIGHTED cov
+    #     (fweights/aweights) rounds 1 ULP off in the `fact` normalization and is left to
+    #     cov's tolerance battle-tests. A second operand IS the `y` variable (OpRegistry
+    #     keys off the operand count).
+    Mcov = np.array([[0., 2, 1, 4], [3, 1, 5, 2]])
+    x1, y1 = np.array([1., 2, 3, 4]), np.array([2., 1, 4, 3])
+    Mc = np.array([[1 + 1j, 2 - 1j, 3 + 0j], [0 + 2j, 1 + 0j, 2 - 2j]])
+    emit("cov", {}, [C(Mcov)], np.cov(Mcov), "2x4", "float64")
+    emit("cov", {"bias": True}, [C(Mcov)], np.cov(Mcov, bias=True), "bias", "float64")
+    emit("cov", {"ddof": 0}, [C(Mcov)], np.cov(Mcov, ddof=0), "ddof0", "float64")
+    emit("cov", {"ddof": 2}, [C(Mcov)], np.cov(Mcov, ddof=2), "ddof2", "float64")
+    emit("cov", {"rowvar": False}, [C(Mcov)], np.cov(Mcov, rowvar=False), "colvar", "float64")
+    emit("cov", {}, [C(x1)], np.cov(x1), "1d", "float64")
+    emit("cov", {}, [C(x1), C(y1)], np.cov(x1, y1), "xy", "float64")
+    emit("cov", {}, [C(Mcov.astype(np.int64))], np.cov(Mcov.astype(np.int64)), "int", "int64")
+    emit("cov", {}, [C(Mc)], np.cov(Mc), "complex", "complex128")
+    emit("corrcoef", {}, [C(Mcov)], np.corrcoef(Mcov), "2x4", "float64")
+    emit("corrcoef", {"rowvar": False}, [C(Mcov)], np.corrcoef(Mcov, rowvar=False), "colvar", "float64")
+    emit("corrcoef", {}, [C(x1), C(y1)], np.corrcoef(x1, y1), "xy", "float64")
+    emit("corrcoef", {}, [C(Mc)], np.corrcoef(Mc), "complex", "complex128")
+
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+# ---------------------------------------------------------------------------
+# T-poly — the PORTABLE polynomial family (poly.jsonl). These are pure array
+# arithmetic / convolution / Horner with NO backend and NO long reduction, so
+# they are bit-exact everywhere (probed: Horner order, leading-zero normalisation
+# and polynomial division all match NumPy byte-for-byte). The three BACKEND
+# polynomial ops — roots (eigvals of the companion matrix), polyfit (lstsq) and
+# poly of a 2-D matrix (eigvals) — ride the host-pinned linalg_parity tier instead.
+def gen_poly():
+    cases = []
+    n = 0
+
+    def add(op, params, operands, r, tag, dt):
+        nonlocal n
+        exp = _tuple_expected([np.asarray(x) for x in r]) if isinstance(r, tuple) \
+            else _arr_expected(np.asarray(r))
+        cases.append({"id": f"{op}/{tag}/{dt}/{n}", "op": op, "params": params,
+                      "operands": operands, "expected": exp, "layout": tag, "valueclass": "poly"})
+        n += 1
+
+    def C(a):
+        a = np.ascontiguousarray(a)
+        return describe(a, a)
+
+    for dt in ["float64", "float32", "complex128", "int64"]:
+        ndt = np.dtype(dt)
+
+        def cast(vals, _ndt=ndt):
+            a = np.array(vals, dtype=np.float64)
+            if _ndt.kind == "c":
+                a = a + 1j * (0.5 * a[::-1])
+            return np.ascontiguousarray(a.astype(_ndt))
+
+        # poly (1-D roots -> coefficients, the convolution branch)
+        add("poly", {}, [C(cast([1, 2, 3]))], np.poly(cast([1, 2, 3])), "roots3", dt)
+        add("poly", {}, [C(cast([1, -1, 2, -2]))], np.poly(cast([1, -1, 2, -2])), "roots4", dt)
+        # polyval (Horner)
+        p, x = cast([1, -2, 3]), cast([0, 1, 2, 3])
+        add("polyval", {}, [C(p), C(x)], np.polyval(p, x), "vec", dt)
+        add("polyval", {}, [C(cast([2, 0, -1, 5])), C(cast([-1, 0.5, 2]))],
+            np.polyval(cast([2, 0, -1, 5]), cast([-1, 0.5, 2])), "vec2", dt)
+        # vander
+        xv = cast([1, 2, 3, 4])
+        add("vander", {"N": 3}, [C(xv)], np.vander(xv, 3), "N3", dt)
+        add("vander", {}, [C(xv)], np.vander(xv), "default", dt)
+        add("vander", {"increasing": True}, [C(xv)], np.vander(xv, increasing=True), "inc", dt)
+        # polyder
+        pd = cast([1, 2, 3, 4, 5])
+        add("polyder", {}, [C(pd)], np.polyder(pd), "m1", dt)
+        add("polyder", {"m": 2}, [C(pd)], np.polyder(pd, 2), "m2", dt)
+        # polyint (always float-returning; k = integration constant)
+        add("polyint", {}, [C(pd)], np.polyint(pd), "m1", dt)
+        add("polyint", {"m": 2}, [C(pd)], np.polyint(pd, 2), "m2", dt)
+        add("polyint", {"k": 3.0}, [C(cast([1, 2, 3]))], np.polyint(cast([1, 2, 3]), k=3.0), "k", dt)
+        # polyadd / polysub / polymul (different-length operands)
+        a1, a2 = cast([1, 2, 3]), cast([4, 5])
+        add("polyadd", {}, [C(a1), C(a2)], np.polyadd(a1, a2), "difflen", dt)
+        add("polysub", {}, [C(a1), C(a2)], np.polysub(a1, a2), "difflen", dt)
+        add("polymul", {}, [C(a1), C(a2)], np.polymul(a1, a2), "conv", dt)
+        # polydiv -> (quotient, remainder) tuple
+        add("polydiv", {}, [C(cast([1, 2, 3, 4])), C(cast([1, 1]))],
+            np.polydiv(cast([1, 2, 3, 4]), cast([1, 1])), "div", dt)
+        # poly1d: leading-zero normalisation, and construction from roots
+        add("poly1d_coeffs", {}, [C(cast([0, 0, 1, 2, 3]))],
+            np.poly1d(cast([0, 0, 1, 2, 3])).coeffs, "norm", dt)
+        add("poly1d_fromroots", {}, [C(cast([1, 2, 3]))],
+            np.poly1d(cast([1, 2, 3]), r=True).coeffs, "fromroots", dt)
+
+    # layouts (float64): polyval and vander read their operands through strides.
+    xL = np.array([1., 2, 3, 4])
+    pL = np.array([1., -2, 3])
+    for lay in ("F", "negrow"):
+        # a 1-D operand: reverse it (F == C for 1-D, so use a reversed view for a real stride).
+        base = np.ascontiguousarray(xL[::-1]); view = base[::-1]
+        add("vander", {"N": 3}, [describe(base, view)], np.vander(view, 3), f"vander_{lay}", "float64")
+        base2 = np.ascontiguousarray(pL[::-1]); view2 = base2[::-1]
+        add("polyval", {}, [describe(base2, view2), C(xL)], np.polyval(view2, xL), f"polyval_{lay}", "float64")
+
+    return cases
+
+
+# ---------------------------------------------------------------------------
+# T-einsum — np.einsum + np.einsum_path (einsum.jsonl). einsum is byte-exact vs
+# NumPy for INTEGER/complex-integer contractions (order-independent) and for
+# SMALL-EXACT float contractions (short exact sums), plus the whole VIEW path
+# (transpose/diagonal/no-sum) — probed. Larger float contractions differ (NumSharp
+# routes them through matmul; NumPy's default einsum uses its own C iterator), so
+# operands are kept small-exact. einsum_path returns the info STRING (text kind);
+# it is shape-derived (no values) and byte-identical to NumPy for non-ellipsis
+# subscripts (the ellipsis placeholder letters are NumPy's one hash-randomised
+# divergence and are avoided here).
+def gen_einsum():
+    cases = []
+    n = 0
+
+    def add(op, params, operands, expected, tag, dt):
+        nonlocal n
+        cases.append({"id": f"{op}/{tag}/{dt}/{n}", "op": op, "params": params,
+                      "operands": operands, "expected": expected, "layout": tag, "valueclass": "einsum"})
+        n += 1
+
+    def C(a):
+        a = np.ascontiguousarray(a)
+        return describe(a, a)
+
+    for dt in ["float64", "complex128", "int64"]:
+        ndt = np.dtype(dt)
+
+        # NONZERO value pool: a signed zero would diverge in the outer/hadamard einsums, where
+        # NumPy's sop accumulator (seeded +0.0) absorbs the sign of a `-x * 0 = -0.0` term into
+        # +0.0 while NumSharp's element-wise multiply keeps the raw -0.0. Avoiding zero operands
+        # keeps the contraction gate strictly byte-exact; zero/negative accumulation is already
+        # gated by the products tier.
+        _re = np.array([1, 2, 3, -1, -2, 4, 5], dtype=np.float64)
+        _im = np.array([1, -1, 2, -2, 3], dtype=np.float64)
+
+        def sm(shape, off=0, _ndt=ndt):
+            k = int(np.prod(shape))
+            a = _re[(np.arange(k) + off) % len(_re)]
+            if _ndt.kind == "c":
+                a = a + 1j * _im[(np.arange(k) + off) % len(_im)]
+            return np.ascontiguousarray(a.astype(_ndt).reshape(shape))
+
+        E = lambda s, *ops: _arr_expected(np.asarray(np.einsum(s, *ops)))
+        M23, M34, M33 = sm((2, 3)), sm((3, 4), 2), sm((3, 3))
+        v3, w3 = sm((3,)), sm((3,), 4)
+        B1, B2 = sm((2, 2, 3)), sm((2, 3, 2), 1)
+        cases_specs = [
+            ("ij,jk->ik", (M23, M34), "matmul"),
+            ("ij->ji", (M23,), "transpose"),
+            ("ii->i", (M33,), "diag"),
+            ("ii->", (M33,), "trace"),
+            ("ij->i", (M23,), "rowsum"),
+            ("ij->j", (M23,), "colsum"),
+            ("ij->", (M23,), "fullsum"),
+            ("i,i->", (v3, w3), "dot"),
+            ("i,j->ij", (v3, sm((2,), 3)), "outer"),
+            ("ij,ij->ij", (M23, sm((2, 3), 5)), "hadamard"),
+            ("ij,ij->", (M23, sm((2, 3), 5)), "frobenius"),
+            ("bij,bjk->bik", (B1, B2), "batched"),
+            ("ij->ij", (M23,), "copy"),
+        ]
+        for subs, ops, tag in cases_specs:
+            add("einsum", {"subscripts": subs}, [C(o) for o in ops], E(subs, *ops), tag, dt)
+
+    # einsum_path — the contraction planner's info string (text kind). Shape-only.
+    def path(subs, shapes, optimize, tag):
+        nonlocal n
+        ops = [np.zeros(s) for s in shapes]
+        _, rep = np.einsum_path(subs, *ops, optimize=optimize)
+        cases.append({"id": f"einsum_path/{tag}/{n}", "op": "einsum_path",
+                      "params": {"subscripts": subs, "optimize": optimize},
+                      "operands": [C(o) for o in ops],
+                      "expected": {"kind": "text", "value": rep}, "layout": tag, "valueclass": "einsum"})
+        n += 1
+
+    path("ij,jk,kl->il", [(4, 5), (5, 6), (6, 7)], "greedy", "chain3_greedy")
+    path("ij,jk,kl->il", [(4, 5), (5, 6), (6, 7)], "optimal", "chain3_optimal")
+    path("ij,jk->ik", [(3, 4), (4, 5)], "greedy", "matmul")
+    path("ea,fb,abcd,gc,hd->efgh", [(5, 4), (5, 4), (4, 4, 4, 4), (5, 4), (5, 4)], "greedy", "tensor5_greedy")
+    path("ea,fb,abcd,gc,hd->efgh", [(5, 4), (5, 4), (4, 4, 4, 4), (5, 4), (5, 4)], "optimal", "tensor5_optimal")
+
+    return cases
+
+
+# ============================================================================
+# FFT tier (np.fft.*) — the differential gate for the managed pocketfft engine
+# (src/NumSharp.Core/Fourier/). NumPy 2.4.2 is the oracle.
+#
+# DTYPE POLICY (probed 2.4.2): the forward/complex transforms return complex128
+# for float64/complex128/int/bool input and complex64 for float32/float16;
+# irfft/hfft return float64 (float32/float16 -> float32/float16). NumSharp has
+# ONE complex type (complex128) and no complex64, so it promotes float32/float16
+# to double and returns complex128 / float64 — a bit-verified equality with
+# NumPy's OWN double computation (np.fft.fft(x32) == np.fft.fft(x32.astype(f8))
+# was confirmed byte-identical to NumSharp). That makes float64/complex128/int/
+# bool the CONTRACTUAL (bit-exact) cells, and float32/float16 the ONE documented
+# divergence — recorded here as-produced (complex64/float32/float16) and excused
+# in MisalignedRegistry as a dtype-ONLY difference (values = the correctly-
+# rounded double result). complex64 has no NumSharp NPTypeCode, so its cases
+# reach the harness through CompareArray's unmappable-dtype -> Dtype route.
+# ============================================================================
+
+# Clean, discriminating FFT values — NO NaN/inf. Every output bin sums the WHOLE
+# signal, so a single NaN blanks the entire spectrum and stops discriminating the
+# butterflies / twiddles / Bluestein chirp. Deterministic; small magnitudes keep
+# float16 (11-bit mantissa) representable so its cells are honest.
+_FFT_POOL = [1.0, -2.0, 3.5, 0.0, -0.5, 2.25, -1.75, 4.0, 6.5, -3.0, 0.25, 5.0,
+             -4.5, 7.0, -1.0, 2.0, 0.75, -6.0, 3.0, -0.25, 8.0, -2.5, 1.25, -3.75]
+
+FFT_REAL_DTYPES = ["float64", "float32", "float16", "int32", "bool"]      # rfft/ihfft (real input)
+FFT_ANY_DTYPES = FFT_REAL_DTYPES + ["complex128"]                          # fft/ifft/irfft/hfft
+
+
+def _fft_fill(n, dt):
+    dt = np.dtype(dt)
+    if dt.kind == "c":
+        r = np.array(_FFT_POOL, dtype=np.float64)
+        vals = (r + 1j * np.roll(r, 3)).astype(dt)
+    elif dt.kind == "b":
+        vals = (np.arange(len(_FFT_POOL)) % 2 == 0)
+    elif dt.kind in "iu":
+        vals = np.array([int(round(v)) for v in _FFT_POOL], dtype=dt)
+    else:  # float16 / float32 / float64
+        vals = np.array(_FFT_POOL, dtype=np.float64).astype(dt)
+    if len(vals) < n:
+        vals = np.tile(vals, (n + len(vals) - 1) // len(vals))
+    return np.ascontiguousarray(vals[:n].copy())
+
+
+def _fft_base(shape, dt):
+    n = int(np.prod(shape)) if len(shape) else 1
+    return np.ascontiguousarray(_fft_fill(n, dt).reshape(shape))
+
+
+def _fft_layouts_1d(dt):
+    """(name, base, view) for 1-D transforms — copy_input over C / strided / reversed / offset."""
+    L = []
+    b = _fft_base((8,), dt);   L.append(("c1d", b, b))
+    b = _fft_base((16,), dt);  L.append(("strided2_1d", b, b[::2]))
+    b = _fft_base((8,), dt);   L.append(("neg_1d", b, b[::-1]))
+    b = _fft_base((10,), dt);  L.append(("offset_1d", b, b[2:9]))          # len 7 (radix-7, offset)
+    return L
+
+
+def _fft_layouts_nd(dt):
+    """(name, base, view) for multi-axis transforms — C / F / col-strided / reversed / bcast / 3-D."""
+    L = []
+    b = _fft_base((4, 5), dt);   L.append(("c2d", b, b))
+    b = _fft_base((5, 4), dt);   L.append(("f2d", b, b.T))                 # (4,5) F-contiguous
+    b = _fft_base((4, 10), dt);  L.append(("strided_cols", b, b[:, ::2]))  # (4,5) column-strided
+    b = _fft_base((4, 5), dt);   L.append(("neg2d", b, b[::-1, ::-1]))
+    b = _fft_base((5,), dt);     L.append(("bcast_row", b, np.broadcast_to(b, (4, 5))))
+    b = _fft_base((2, 3, 4), dt); L.append(("c3d", b, b))
+    b = _fft_base((2, 3, 4), dt); L.append(("transp3d", b, b.transpose(2, 0, 1)))  # (4,2,3)
+    return L
+
+
+def _fft_expected(r):
+    r = np.asarray(r)
+    shape = [int(d) for d in r.shape]                                       # BEFORE ascontiguousarray
+    return {"dtype": r.dtype.name, "shape": shape,
+            "buffer": np.ascontiguousarray(r).tobytes().hex()}
+
+
+# 1-D transforms: (valid input dtypes, callable(view, n, axis, norm)).
+_FFT_1D_OPS = {
+    "fft":   (FFT_ANY_DTYPES,  lambda v, n, ax, nm: np.fft.fft(v, n, ax, nm)),
+    "ifft":  (FFT_ANY_DTYPES,  lambda v, n, ax, nm: np.fft.ifft(v, n, ax, nm)),
+    "rfft":  (FFT_REAL_DTYPES, lambda v, n, ax, nm: np.fft.rfft(v, n, ax, nm)),
+    "irfft": (FFT_ANY_DTYPES,  lambda v, n, ax, nm: np.fft.irfft(v, n, ax, nm)),
+    "hfft":  (FFT_ANY_DTYPES,  lambda v, n, ax, nm: np.fft.hfft(v, n, ax, nm)),
+    "ihfft": (FFT_REAL_DTYPES, lambda v, n, ax, nm: np.fft.ihfft(v, n, ax, nm)),
+}
+
+# N-D transforms: op -> valid input dtypes. The call goes through _fft_nd_call, which OMITS a
+# None argument rather than passing it — because NumPy's 2-D forms DEFAULT axes to (-2,-1) but
+# treat an EXPLICIT axes=None as "all axes" (fftn behaviour). NumSharp coalesces a null axes to
+# (-2,-1) (its default), so the generator must exercise NumPy's DEFAULT (omit axes), not the
+# axes=None path NumSharp cannot express. Same reasoning for s / norm.
+_FFT_ND_OPS = {
+    "fft2":   FFT_ANY_DTYPES,  "ifft2":  FFT_ANY_DTYPES,
+    "fftn":   FFT_ANY_DTYPES,  "ifftn":  FFT_ANY_DTYPES,
+    "rfft2":  FFT_REAL_DTYPES, "irfft2": FFT_ANY_DTYPES,
+    "rfftn":  FFT_REAL_DTYPES, "irfftn": FFT_ANY_DTYPES,
+}
+
+
+def _fft_nd_call(op, view, s, axes, norm):
+    kw = {}
+    if s is not None:
+        kw["s"] = list(s)
+    if axes is not None:
+        kw["axes"] = list(axes)
+    if norm is not None:
+        kw["norm"] = norm
+    return getattr(np.fft, op)(view, **kw)
+
+
+def gen_fft():
+    cases = []
+    n = [0]
+
+    def emit(op, params, operands, r, layout, dt):
+        cases.append({
+            "id": f"{op}/{layout}/{dt}/{n[0]}",
+            "op": op, "params": params, "operands": operands,
+            "expected": _fft_expected(r), "layout": layout, "valueclass": "fft",
+        })
+        n[0] += 1
+
+    def try_emit(op, params, operands, call, layout, dt):
+        try:
+            r = call()
+        except Exception:
+            return False                       # NumPy raised (e.g. rfft(complex)) — error parity is separate
+        emit(op, params, operands, r, layout, dt)
+        return True
+
+    # ---- 1-D core -----------------------------------------------------------
+    for op, (dtypes, f) in _FFT_1D_OPS.items():
+        for dt in dtypes:
+            # (a) default n/axis/norm across every layout — copy_input over each memory descriptor.
+            for lname, base, view in (_fft_layouts_1d(dt) + _fft_layouts_nd(dt)):
+                try_emit(op, {"n": None, "axis": -1, "norm": None}, [describe(base, view)],
+                         lambda f=f, view=view: f(view, None, -1, None), lname, dt)
+            # (b) n sweep on a contiguous 1-D signal. Beyond {4 truncate, 12 zero-pad, 13 prime
+            # (Bluestein)} the perfect-square sizes force EACH mixed-radix codelet's distinct ido>1
+            # branch — 9=3²(pass3), 25=5²(pass5), 49=7²(pass7), 64=8²(pass8), 121=11²(pass11),
+            # 169=13²(passg ido>1); pass4 ido>1 is already hit by 12=4·3. Load-bearing: pass7/pass11's
+            # ido>1 branch had a transcription bug (special_mul on ca/cb instead of ca±cb, the PM) that
+            # {4,12,13} never reached — undetected until the float32 port exercised n=98/259
+            # (FFT_PARITY.md §7). The squares gate the whole codelet family against that bug class.
+            b = _fft_base((8,), dt)
+            for nn in (4, 9, 12, 13, 25, 49, 64, 121, 169):
+                try_emit(op, {"n": nn, "axis": -1, "norm": None}, [describe(b, b)],
+                         lambda f=f, b=b, nn=nn: f(b, nn, -1, None), "c1d_n", dt)
+            # (c) norm sweep (ortho, forward, explicit backward) on the same signal.
+            for nm in ("ortho", "forward", "backward"):
+                try_emit(op, {"n": None, "axis": -1, "norm": nm}, [describe(b, b)],
+                         lambda f=f, b=b, nm=nm: f(b, None, -1, nm), "c1d_norm", dt)
+            # (d) axis sweep on 2-D and 3-D contiguous inputs (middle/negative axes).
+            b2 = _fft_base((4, 5), dt)
+            for ax in (0, 1, -2):
+                try_emit(op, {"n": None, "axis": ax, "norm": None}, [describe(b2, b2)],
+                         lambda f=f, b2=b2, ax=ax: f(b2, None, ax, None), f"c2d_ax{ax}", dt)
+            b3 = _fft_base((2, 3, 4), dt)
+            for ax in (0, 1, -1):
+                try_emit(op, {"n": None, "axis": ax, "norm": None}, [describe(b3, b3)],
+                         lambda f=f, b3=b3, ax=ax: f(b3, None, ax, None), f"c3d_ax{ax}", dt)
+
+    # ---- N-D ----------------------------------------------------------------
+    for op, dtypes in _FFT_ND_OPS.items():
+        for dt in dtypes:
+            # (a) default s/axes over the multi-axis layouts (axes OMITTED -> the op's real default).
+            for lname, base, view in _fft_layouts_nd(dt):
+                try_emit(op, {"s": None, "axes": None, "norm": None}, [describe(base, view)],
+                         lambda op=op, view=view: _fft_nd_call(op, view, None, None, None), lname, dt)
+            b2 = _fft_base((4, 5), dt)
+            # (b) s sweep: [2,3] truncate, [6,6] pad, [-1,3] the -1 "full length" sentinel.
+            for s in ([2, 3], [6, 6], [-1, 3]):
+                try_emit(op, {"s": s, "axes": None, "norm": None}, [describe(b2, b2)],
+                         lambda op=op, b2=b2, s=s: _fft_nd_call(op, b2, s, None, None), "c2d_s", dt)
+            # (c) norm sweep.
+            for nm in ("ortho", "forward"):
+                try_emit(op, {"s": None, "axes": None, "norm": nm}, [describe(b2, b2)],
+                         lambda op=op, b2=b2, nm=nm: _fft_nd_call(op, b2, None, None, nm), "c2d_norm", dt)
+            # (d) explicit axes (order + negative) on a 3-D input.
+            b3 = _fft_base((2, 3, 4), dt)
+            for ax in ([0, 1], [2, 0], [-1, -2]):
+                try_emit(op, {"s": None, "axes": ax, "norm": None}, [describe(b3, b3)],
+                         lambda op=op, b3=b3, ax=ax: _fft_nd_call(op, b3, None, ax, None), "c3d_axes", dt)
+
+    # ---- helpers ------------------------------------------------------------
+    # fftfreq / rfftfreq: pure generators (float64), no operand. n even/odd/prime/tiny, d varied.
+    for nn in (8, 7, 13, 1, 2, 16):
+        for d in (1.0, 0.5, 2.0):
+            emit("fftfreq", {"n": nn, "d": d}, [], np.fft.fftfreq(nn, d), "freq", "float64")
+            emit("rfftfreq", {"n": nn, "d": d}, [], np.fft.rfftfreq(nn, d), "freq", "float64")
+
+    # fftshift / ifftshift: dtype-preserving cyclic roll. layouts x dtypes x axes {None,int,tuple}.
+    for dt in ("int32", "float64", "complex128", "float32"):
+        for lname, base, view in (_fft_layouts_1d(dt) + _fft_layouts_nd(dt)):
+            nd = view.ndim
+            specs = [("axes", None)]                      # all axes
+            if nd >= 1:
+                specs.append(("axis", 0))                 # single-int overload
+            if nd >= 2:
+                specs.append(("axis", -1))
+                specs.append(("axes", [0, nd - 1]))       # tuple
+            for kind, ax in specs:
+                params = {"axis": ax} if kind == "axis" else {"axes": ax}
+                np_ax = tuple(ax) if isinstance(ax, list) else ax
+                try_emit("fftshift", params, [describe(base, view)],
+                         lambda view=view, np_ax=np_ax: np.fft.fftshift(view, axes=np_ax), lname, dt)
+                try_emit("ifftshift", params, [describe(base, view)],
+                         lambda view=view, np_ax=np_ax: np.fft.ifftshift(view, axes=np_ax), lname, dt)
+
+    return cases
+
+
+# =====================================================================================
+# np.random PCG64 Generator byte-parity ("generator_parity" tiers). The legacy
+# random_parity tiers above pin the MT19937 RandomState streams; these pin the MODERN
+# default_rng(seed) -> Generator(PCG64) streams (a DIFFERENT bit generator + different
+# algorithms: Lemire bounded integers, ziggurat normal/exponential), plus the two new
+# RandomState helpers np.random.random_integers and np.random.bytes.
+#
+# TWO FILES, same split as random_parity:
+#   * generator_parity.jsonl      — PORTABLE: pure PCG64 bits + exactly-rounded IEEE
+#     (random, integers, uniform, permutation, shuffle, choice, bytes) + the RandomState
+#     helpers random_integers/bytes (pure MT19937 bits). Hard-gated on every host.
+#   * generator_parity_host.jsonl — HOST-libm: the ziggurat / rejection samplers whose
+#     transform consumes log1p/exp/pow (standard_normal, standard_exponential, normal,
+#     exponential, standard_gamma, gamma). Byte-exact on win-amd64 (Kahan log1p + Math.*
+#     == ucrtbase); reported Inconclusive off-Windows (the random_parity_host pattern).
+#
+# Every case seeds a FRESH default_rng / RandomState, so replaying never mutates global
+# np.random state (matches the fresh-instance isolation the rnd tier uses). Op key "grnd";
+# pairs 1:1 with OpRegistry.GeneratorDraw. int-output methods are int64 on BOTH sides
+# (Generator.integers defaults int64; NumSharp matches) except random_integers, which is
+# C-long == int32 on the win-amd64 authoring host (NumSharp matches, same as randint).
+_GEN_DTYPE = {
+    "float64": np.float64, "float32": np.float32,
+    "int8": np.int8, "int16": np.int16, "int32": np.int32, "int64": np.int64,
+    "uint8": np.uint8, "uint16": np.uint16, "uint32": np.uint32, "uint64": np.uint64,
+    "bool": np.bool_,
+}
+_GRND_SEEDS = [42, 987654321]
+_GRND_SIZES = [[7], [2, 3]]
+
+
+def gen_generator_parity():
+    portable = []
+    host = []
+    n = 0
+
+    def emit(into, method, params, r):
+        nonlocal n
+        r = np.asarray(r)
+        into.append({
+            "id": f"grnd/{method}/{params.get('dtype', '-')}/seed{params['seed']}/{n}",
+            "op": "grnd",
+            "params": params,
+            "operands": [],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "grnd",
+            "valueclass": "stream",
+        })
+        n += 1
+
+    def run(method, params):
+        seed = params["seed"]
+        args = params.get("args", [])
+        size = tuple(params["size"]) if "size" in params else ()
+        dtype = params.get("dtype")
+        npdt = _GEN_DTYPE[dtype] if dtype else None
+        draws = params.get("draws", 1)
+
+        # ---- RandomState helpers (fresh instance, MT19937) ----
+        if method == "random_integers":
+            rs = np.random.RandomState(seed)
+            hi = None if len(args) < 2 else int(args[1])
+            r = None
+            for _ in range(draws):
+                r = rs.random_integers(int(args[0]), hi, size if size else None)
+            return np.asarray(r)
+        if method == "rs_bytes":
+            rs = np.random.RandomState(seed)
+            r = None
+            for _ in range(draws):
+                r = np.frombuffer(rs.bytes(int(args[0])), dtype=np.uint8)
+            return r
+
+        # ---- Generator (PCG64) ----
+        rng = np.random.default_rng(seed)
+        r = None
+        for _ in range(draws):
+            if method == "random":
+                r = rng.random(size, dtype=npdt or np.float64)
+            elif method == "integers":
+                r = rng.integers(int(args[0]), int(args[1]), size,
+                                 dtype=npdt or np.int64, endpoint=params.get("endpoint", False))
+            elif method == "uniform":
+                r = rng.uniform(args[0], args[1], size)
+            elif method == "permutation":
+                r = rng.permutation(int(args[0]))
+            elif method == "shuffle":
+                r = np.arange(int(args[0]))
+                rng.shuffle(r)
+            elif method == "choice":
+                r = rng.choice(int(args[0]), size, replace=params.get("replace", True),
+                               p=params.get("p"), shuffle=params.get("cshuffle", True))
+            elif method == "bytes":
+                r = np.frombuffer(rng.bytes(int(args[0])), dtype=np.uint8)
+            elif method == "standard_normal":
+                r = rng.standard_normal(size, dtype=npdt or np.float64)
+            elif method == "standard_exponential":
+                r = rng.standard_exponential(size, dtype=npdt or np.float64,
+                                             method=params.get("emethod", "zig"))
+            elif method == "normal":
+                r = rng.normal(args[0], args[1], size)
+            elif method == "exponential":
+                r = rng.exponential(args[0], size)
+            elif method == "standard_gamma":
+                r = rng.standard_gamma(args[0], size, dtype=npdt or np.float64)
+            elif method == "gamma":
+                r = rng.gamma(args[0], args[1], size)
+            else:
+                raise ValueError(f"unknown generator method '{method}'")
+        return np.asarray(r)
+
+    def cases(into, method, base_params, sized=True, draws2=False):
+        specs = ([(_GRND_SEEDS[0], _GRND_SIZES[0]), (_GRND_SEEDS[0], _GRND_SIZES[1]),
+                  (_GRND_SEEDS[1], _GRND_SIZES[0])]
+                 if sized else [(_GRND_SEEDS[0], None), (_GRND_SEEDS[1], None)])
+        for seed, size in specs:
+            p = dict(base_params, method=method, seed=seed)
+            if size is not None:
+                p["size"] = size
+            emit(into, method, p, run(method, p))
+        if draws2:
+            p = dict(base_params, method=method, seed=_GRND_SEEDS[0],
+                     size=_GRND_SIZES[0], draws=2)
+            emit(into, method, p, run(method, p))
+
+    # ---- PORTABLE: pure PCG64 bits + exactly-rounded IEEE ----
+    cases(portable, "random", {"args": [], "dtype": "float64"}, draws2=True)
+    cases(portable, "random", {"args": [], "dtype": "float32"})
+    cases(portable, "uniform", {"args": [-3.0, 7.0]})
+    for dt in ("int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"):
+        cases(portable, "integers", {"args": [0, 100], "dtype": dt})
+    cases(portable, "integers", {"args": [-50, 50], "dtype": "int32"}, draws2=True)
+    cases(portable, "integers", {"args": [0, 100], "dtype": "int32", "endpoint": True})
+    cases(portable, "integers", {"args": [0, 2], "dtype": "bool"})
+    cases(portable, "permutation", {"args": [10]}, sized=False)
+    cases(portable, "shuffle", {"args": [12]}, sized=False)
+    cases(portable, "choice", {"args": [10]})
+    cases(portable, "choice", {"args": [10], "replace": False})
+    cases(portable, "choice", {"args": [4], "p": [0.1, 0.2, 0.3, 0.4]})
+    for length in (1, 8, 13):
+        cases(portable, "bytes", {"args": [length]}, sized=False)
+    # RandomState helpers (portable MT19937 bits)
+    cases(portable, "random_integers", {"args": [1, 6]})
+    cases(portable, "random_integers", {"args": [5]}, sized=False)  # high=None -> [1, low]
+    for length in (1, 10):
+        cases(portable, "rs_bytes", {"args": [length]}, sized=False)
+
+    # ---- HOST-libm: ziggurat / rejection samplers ----
+    cases(host, "standard_normal", {"args": [], "dtype": "float64"}, draws2=True)
+    cases(host, "standard_normal", {"args": [], "dtype": "float32"})
+    cases(host, "standard_exponential", {"args": [], "dtype": "float64", "emethod": "zig"}, draws2=True)
+    cases(host, "standard_exponential", {"args": [], "dtype": "float64", "emethod": "inv"})
+    cases(host, "standard_exponential", {"args": [], "dtype": "float32", "emethod": "zig"})
+    cases(host, "normal", {"args": [5.0, 2.5]})
+    cases(host, "exponential", {"args": [2.5]})
+    cases(host, "standard_gamma", {"args": [2.0], "dtype": "float64"})
+    cases(host, "standard_gamma", {"args": [0.5], "dtype": "float64"})  # shape<1 branch
+    cases(host, "standard_gamma", {"args": [2.0], "dtype": "float32"})
+    cases(host, "gamma", {"args": [2.0, 3.0]})
+
+    return portable, host
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -2009,10 +7213,29 @@ def write_jsonl(path, cases):
 
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
-    corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.UnitTest", "Fuzz", "corpus"))
+    corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
     mode = sys.argv[1] if len(sys.argv) > 1 else "smoke"
 
-    if mode == "smoke":
+    if mode == "conversion":
+        cases = gen_conversion(ALL_DTYPES)
+        cases += _relabel_dtype(gen_conversion(["uint16"]), "uint16", "char")
+        write_jsonl(os.path.join(corpus_dir, "conversion.jsonl"), cases)
+    elif mode == "creation":
+        cases = gen_creation(ALL_DTYPES)
+        cases += _relabel_dtype(gen_creation(["uint16"]), "uint16", "char")
+        write_jsonl(os.path.join(corpus_dir, "creation.jsonl"), cases)
+    elif mode == "multioutput":
+        write_jsonl(os.path.join(corpus_dir, "multioutput.jsonl"), gen_multioutput())
+    elif mode == "iter":
+        # Iterator traces — see gen_iter. Order/layout resolution has no other gate.
+        write_jsonl(os.path.join(corpus_dir, "iter.jsonl"), gen_iter())
+    elif mode == "dtype_text":
+        write_jsonl(os.path.join(corpus_dir, "dtype_text.jsonl"), gen_dtype_text())
+    elif mode == "out_where":
+        write_jsonl(os.path.join(corpus_dir, "out_where.jsonl"), gen_out_where())
+    elif mode == "errors_full":
+        write_jsonl(os.path.join(corpus_dir, "errors_full.jsonl"), gen_errors_full())
+    elif mode == "smoke":
         srcs = ["float64", "int32", "float32"]
         dsts = ["int32", "float64", "uint8", "int16"]
         layouts = list(LAYOUTS.keys())
@@ -2053,7 +7276,10 @@ def main():
     elif mode == "matmul":
         cases = gen_matmul(MATMUL_SHAPE_CASES, MATMUL_DTYPES, MATMUL_LAYOUTS)
         cases += gen_matmul_edges(MATMUL_EDGE_DTYPES)                  # G14: negstride + k=0
+        cases += gen_matmul_zerodim(MATMUL_EDGE_DTYPES)                # G15: stacked zero extents
+        cases += gen_matmul_half_depth()                               # G16: float16 contraction depth
         cases += gen_trace_diag(TRACE_DTYPES)                          # Group A: trace/diagonal
+        cases += gen_diag_tri(TRACE_DTYPES)                            # diag/tri family
         cases += char_tier("matmul")                                   # G9
         write_jsonl(os.path.join(corpus_dir, "matmul.jsonl"), cases)
     elif mode == "rounding":
@@ -2080,11 +7306,24 @@ def main():
         cases += gen_ediff1d(EDIFF_DTYPES, list(LAYOUTS.keys()))        # Group A: ediff1d
         cases += char_tier("scan")
         write_jsonl(os.path.join(corpus_dir, "scan.jsonl"), cases)
+    elif mode == "nanscan":
+        # nancumsum is complex ADD (portable, bit-exact); nancumprod is complex MULTIPLY, whose
+        # win-amd64 NumPy result is MSVC-FMA-contracted (numpy computes in1r*in2i + in1i*in2r and MSVC
+        # fuses one product), ~1-2 ULP off .NET's non-fused System.Numerics.Complex operator* — the same
+        # host-FMA class as the GEMM/float-kernel pins, and genuinely non-portable-bit-exact for a complex
+        # product without BLAS. complex128 is therefore CARVED from nancumprod (plain cumprod hides this by
+        # short-circuiting the NaN-laced pool to NaN; nancumprod replaces NaN->1 and exposes the real
+        # product chain) and covered by the NanCumProd_Complex unit test on exact-representable values.
+        # complex128 nancumsum and every other dtype for both ops stay bit-exact.
+        cases = gen_scan(NAN_SCAN_OPS, [d for d in SCAN_DTYPES if d != "complex128"], SCAN_LAYOUTS)
+        cases += gen_scan({"nancumsum": NAN_SCAN_OPS["nancumsum"]}, ["complex128"], SCAN_LAYOUTS)
+        write_jsonl(os.path.join(corpus_dir, "nanscan.jsonl"), cases)
     elif mode == "stat":
         cases = gen_reduce(STAT_REDUCE_OPS, STAT_DTYPES, STAT_LAYOUTS)
         cases += gen_count_nonzero(CNZ_DTYPES, STAT_LAYOUTS)
         cases += gen_quantile(QUANTILE_SPECS, STAT_DTYPES, STAT_LAYOUTS)
         cases += gen_clip(CLIP_DTYPES, STAT_LAYOUTS)
+        cases += gen_interp()                                  # np.interp (1-D linear interpolation)
         cases += char_tier("stat")
         write_jsonl(os.path.join(corpus_dir, "stat.jsonl"), cases)
     elif mode == "logic":
@@ -2093,8 +7332,11 @@ def main():
         cases += gen_binary(LOGICAL_BIN_OPS, LOGICAL_PAIRS, list(PAIR_LAYOUTS.keys()))   # Group A B1
         cases += gen_unary(LOGICAL_NOT_OP, ALL_DTYPES, list(LAYOUTS.keys()))             # Group A B1
         cases += gen_binary(ARCTAN2_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # Group A B1
+        cases += gen_binary(LOGADDEXP_OPS, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))      # logaddexp/logaddexp2
+        cases += gen_binary(NEXTAFTER_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))       # nextafter (bit-exact)
+        cases += gen_binary(COPYSIGN_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # copysign (bit-exact)
         cases += gen_binary(ALLCLOSE_OPS, ALLCLOSE_PAIRS, list(PAIR_LAYOUTS.keys()))     # Group A B3
-        cases += gen_unary(ISCOMPLEX_OPS, ISCOMPLEX_DTYPES, ISCOMPLEX_LAYOUTS)           # G5
+        cases += gen_unary(ISCOMPLEX_OPS, ISCOMPLEX_DTYPES, list(LAYOUTS.keys()))         # G5 (full)
         cases += char_tier("logic")                                                       # G9
         write_jsonl(os.path.join(corpus_dir, "logic.jsonl"), cases)
     elif mode == "modf":
@@ -2104,16 +7346,23 @@ def main():
         cases = gen_manip(MANIP_DTYPES, list(LAYOUTS.keys()))
         cases += gen_concat_stack(MANIP_DTYPES)
         cases += gen_pad(MANIP_DTYPES)
+        cases += gen_index_tricks(MANIP_DTYPES)        # r_ / c_ / ix_ index-expression DSL
         cases += char_tier("manip")
         write_jsonl(os.path.join(corpus_dir, "manip.jsonl"), cases)
     elif mode == "sort":
         cases = gen_argsort(SORT_DTYPES)
         cases += gen_sort(SORT_DTYPES)                                  # Group A B2: value sort
         cases += gen_searchsorted(SORT_DTYPES)
+        cases += gen_digitize(DIGITIZE_DTYPES)                          # digitize = searchsorted + monotonicity
         cases += gen_nonzero(SORT_DTYPES)
+        cases += gen_bincount(BINCOUNT_DTYPES)                          # counting: bincount (+ weights/minlength)
         cases += gen_unary(NZ_OPS, NZ_DTYPES, list(LAYOUTS.keys()))     # Group A B3: flatnonzero/argwhere
         cases += gen_unique(["bool", "int32", "uint8", "int64", "float64", "float32", "complex128"])  # B3: unique
         cases += gen_sort_special()                                     # G11: NaN + strided/negstride
+        cases += gen_partition_family(SORT_DTYPES)                      # G12: issue #623 kth-values compare
+        cases += gen_partition_nan()                                    # G12: float/complex NaN partition
+        cases += gen_lexsort(SORT_DTYPES)                               # G12: stable multi-key indices
+        cases += gen_sort_complex(SORT_COMPLEX_DTYPES)                  # G12: sort in own dtype -> Complex
         cases += char_tier("sort")
         write_jsonl(os.path.join(corpus_dir, "sort.jsonl"), cases)
     elif mode == "tail":
@@ -2136,8 +7385,53 @@ def main():
     elif mode == "groupa":
         cases = gen_groupa()                                            # Group A B4-6
         write_jsonl(os.path.join(corpus_dir, "groupa.jsonl"), cases)
+    elif mode == "numpy_f32":
+        cases = gen_numpy_f32_kernels()                                 # bit-exact float32 kernel tier
+        write_jsonl(os.path.join(corpus_dir, "numpy_f32_kernels.jsonl"), cases)
+        cases = gen_numpy_f64_kernels()                                 # bit-exact float64 kernel tier (tanh)
+        write_jsonl(os.path.join(corpus_dir, "numpy_f64_kernels.jsonl"), cases)
+    elif mode == "matmul_parity":
+        cases = gen_matmul_parity()                                     # np.parity_matmul byte gate
+        write_jsonl(os.path.join(corpus_dir, "matmul_parity.jsonl"), cases)
+        # The host pin travels with the corpus: these bytes are only reproducible on a
+        # host whose BLAS binary + dispatched kernel + thread count match. The C# gate
+        # reports Inconclusive (never red) when they do not.
+        write_jsonl(os.path.join(corpus_dir, "matmul_parity.host.jsonl"), [blas_identity()])
+    elif mode == "linalg_parity":
+        cases = gen_linalg_parity()                                     # LAPACK factorisation byte gate
+        write_jsonl(os.path.join(corpus_dir, "linalg_parity.jsonl"), cases)
+        # Host-pinned like matmul_parity, but at threads=1 (the deterministic config the
+        # interop live-parity suite proves) — gen_linalg_parity() forces single-thread, so
+        # blas_identity() records blas_threads=1 and the C# gate enables the backend at 1.
+        write_jsonl(os.path.join(corpus_dir, "linalg_parity.host.jsonl"), [blas_identity()])
+    elif mode == "poly":
+        cases = gen_poly()                                             # portable polynomial family
+        write_jsonl(os.path.join(corpus_dir, "poly.jsonl"), cases)
+    elif mode == "einsum":
+        cases = gen_einsum()                                           # np.einsum + einsum_path
+        write_jsonl(os.path.join(corpus_dir, "einsum.jsonl"), cases)
+    elif mode == "specials":
+        cases = gen_specials()                                          # IEEE special-value parity tier
+        write_jsonl(os.path.join(corpus_dir, "specials.jsonl"), cases)
+    elif mode == "precision":
+        cases = gen_precision()                                         # truthful-vs-precise tier (needs mpmath)
+        write_jsonl(os.path.join(corpus_dir, "precision.jsonl"), cases)
+    elif mode == "products":
+        cases = gen_products()                                          # CBLAS product family values
+        write_jsonl(os.path.join(corpus_dir, "products.jsonl"), cases)
+    elif mode == "random_parity":
+        portable, host = gen_random_parity()                            # seeded MT19937 stream bytes
+        write_jsonl(os.path.join(corpus_dir, "random_parity.jsonl"), portable)
+        write_jsonl(os.path.join(corpus_dir, "random_parity_host.jsonl"), host)
+    elif mode == "generator_parity":
+        portable, host = gen_generator_parity()                         # seeded PCG64 Generator stream bytes
+        write_jsonl(os.path.join(corpus_dir, "generator_parity.jsonl"), portable)
+        write_jsonl(os.path.join(corpus_dir, "generator_parity_host.jsonl"), host)
+    elif mode == "fft":
+        cases = gen_fft()                                               # np.fft.* differential tier
+        write_jsonl(os.path.join(corpus_dir, "fft.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft)")
         sys.exit(2)
 
 

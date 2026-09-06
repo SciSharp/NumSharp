@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Threading.Tasks;
+using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 using NumSharp.Utilities;
 
@@ -38,6 +39,7 @@ namespace NumSharp
         /// present, not exactly one advanced index, a multi-dim advanced index / k-D
         /// mask, or a newaxis mixed in (not modelled for assignment).
         /// </summary>
+        [NDScopedCovered] // only caller: the [NDScoped] SetIndices(object[], values) dispatch
         private bool TrySetSliceWithSingleAdvanced(object[] indicesObjects, NDArray values)
         {
             var normalized = new object[indicesObjects.Length];
@@ -79,6 +81,19 @@ namespace NumSharp
                 }
             }
             if (advCount != 1 || !sawRealSlice)
+                return false;
+
+            // A 0-D BOOLEAN is NumPy's HAS_0D_BOOL: it consumes NO source axis and contributes an
+            // axis of its own, length 1 (True) or 0 (False). This helper maps its one advanced item
+            // ONTO a source axis, so it cannot express that — and when the other items already
+            // consume every axis, the axis-mapping loop below stops at `curAxis < ndim` and the
+            // bool is silently DROPPED: `a[-1, 2:, -2, np.array(False)] = v`, a no-op in NumPy,
+            // became a real write at `a[-1, 2:, -2]`. (It only looked correct when an axis was left
+            // over, which placed the empty nonzero() index and emptied the grid by accident.)
+            // TryBuild0dBoolWithBasic deliberately hands a NON-CONSECUTIVE advanced block to
+            // TryBuildMultiAdvancedGrid, which carries MixKind.ZeroBool and models it properly —
+            // this helper runs in between and must not intercept it on the way there.
+            if (advObj is NDArray adv0dBool && adv0dBool.typecode == NPTypeCode.Boolean && adv0dBool.ndim == 0)
                 return false;
 
             // A 0-D integer array as the SOLE advanced index behaves like a scalar int
@@ -162,8 +177,14 @@ namespace NumSharp
             return true;
         }
 
+        [NDScoped]
         protected void SetIndices(object[] indicesObjects, NDArray values)
         {
+            // Boundary scope (void method — writes land in `this`, nothing escapes): reclaims the
+            // normalization coercions, the boolean-mask MakeGeneric aliases and their nonzero()
+            // components, the slice/scalar index arrays, and the mixed-advanced grid temps built
+            // by the Try* helpers below. `this`/`values` were made outside: never touched.
+
             indicesObjects = NormalizeIndexInputs(indicesObjects);    // tuple spread + mask/sequence coercion
             var indicesLen = indicesObjects.Length;
             if (indicesLen == 1)
@@ -271,10 +292,10 @@ namespace NumSharp
                     selShape[boolAxis] = 0;                      // False -> empty axis
                     string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                     try { np.broadcast_to(values, (Shape)selShape); }
-                    catch (IncorrectShapeException)
+                    catch (IncorrectShapeException ex)
                     {
                         throw new ValueError($"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
-                                             $"could not be broadcast to indexing result of shape {Tup(selShape)}");
+                                             $"could not be broadcast to indexing result of shape {Tup(selShape)}", ex);
                     }
                 }
                 return;
@@ -520,6 +541,10 @@ namespace NumSharp
             //return ret;
         }
 
+        // NDScoped (void method — nothing escapes): reclaims the per-dispatch MakeGeneric alias,
+        // the computed-offsets buffer, and the broadcast/materialized value temps inside
+        // SetIndices<T>. src/values were made outside: never touched.
+        [NDScoped]
         protected static void SetIndices(NDArray src, NDArray[] indices, NDArray values)
         {
             // #region Compute
@@ -715,6 +740,28 @@ namespace NumSharp
                 }
             }
 
+            // Kernel route — ONE index array into a C-contiguous destination (a[idx] = v, m[ridx] = v,
+            // m[ridx] = row): validate every index first (NumPy's mapiter_trivial_set does exactly that
+            // before its first store, so a bad index leaves the array untouched), then let the put
+            // kernels scatter straight from the index buffer at its own width — one typed MOV (or one
+            // slab cpblk) per index, a wrapping values cursor for a scalar / single-sub-array value
+            // instead of a materialised broadcast copy (docs/NDITER_PERF_DISCOVERY.md §7 lever 1).
+            // Everything else keeps the general route below: several index arrays, a non-contiguous
+            // destination, a strided / reversed / narrow-dtype index view, a zero-byte slab.
+            if (ndsCount == 1 && source.Shape.IsContiguous && DirectILKernelGenerator.Enabled
+                && FancyIndexKernelRoute.TryGetIndexPointer(indices[0], out void* kernelIdxPtr, out bool kernelIdx32))
+            {
+                long slabElements = 1;
+                if (isSubshaped)
+                    for (int i = 0; i < subShape.Length; i++)
+                        slabElements *= subShape[i];
+                long slabBytes = slabElements * InfoOf<T>.Size;
+                if (slabBytes > 0 && TryScatterKernel(source, srcShape, kernelIdxPtr, kernelIdx32, indices[0].size,
+                        srcShape.dimensions[0], slabBytes, retShape, subShape, isSubshaped, values))
+                    return;
+                // false: the IL kernels are unavailable on this host — general route.
+            }
+
             //when -----------------------------------------
             //indices point to an ndarray
             //TODO: if (isSubshaped && !source.Shape.IsContiguous)
@@ -728,8 +775,10 @@ namespace NumSharp
             //prepare indices getters
             var indexGetters = PrepareIndexGetters(srcShape, indices);
 
-            //figure out the largest possible abosulte offset (true max reachable, neg-stride safe)
-            long largestOffset = LargestReachableOffset(srcShape, source.size);
+            //figure out the largest possible abosulte offset (true max reachable, neg-stride safe;
+            //disengaged for a zero-sized destination, which dereferences nothing — see
+            //OffsetBackstopUpperBound)
+            long largestOffset = OffsetBackstopUpperBound(srcShape, source.size);
 
             //compute coordinates
             if (indices.Length > 1)
@@ -790,9 +839,9 @@ namespace NumSharp
                     {
                         valuesTyped = np.broadcast_to(valuesTyped, (Shape)retShape).copy().MakeGeneric<T>();
                     }
-                    catch (IncorrectShapeException)
+                    catch (IncorrectShapeException ex)
                     {
-                        throw new ValueError($"could not broadcast input array from shape {Tup(values.Shape.dimensions)} into shape {Tup(retShape)}");
+                        throw new ValueError($"could not broadcast input array from shape {Tup(values.Shape.dimensions)} into shape {Tup(retShape)}", ex);
                     }
                 }
 
@@ -818,7 +867,7 @@ namespace NumSharp
                     {
                         typedValues = np.broadcast_to(typedValues, (Shape)retShape).copy().MakeGeneric<T>();
                     }
-                    catch (IncorrectShapeException)
+                    catch (IncorrectShapeException ex)
                     {
                         // NumPy: ValueError: shape mismatch: value array of shape (X,) could
                         // not be broadcast to indexing result of shape (Y, Z).
@@ -826,19 +875,89 @@ namespace NumSharp
                         string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                         throw new ValueError(
                             $"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
-                            $"could not be broadcast to indexing result of shape {Tup(retShape)}");
+                            $"could not be broadcast to indexing result of shape {Tup(retShape)}", ex);
                     }
                 }
 
-                //non linear is handled before calculating computedOffsets
-                SetIndicesND(source, computedOffsets, indices, ndsCount, retShape: retShape, subShape: subShape, typedValues);
+                // A non-contiguous destination (transposed / row- or col-strided / negative-stride /
+                // F-contig) has non-contiguous sub-arrays, so the block-copy fast path (SetIndicesND)
+                // would scatter each subShape as if it were contiguous — landing rows at the wrong
+                // physical offsets and corrupting the view (e.g. an F-contig a[[0,2]] = v wrote row 2
+                // as three consecutive buffer slots instead of the strided column). Route it through
+                // the strided element-scatter, mirroring the getter's FetchIndicesNDNonLinear.
+                if (!source.Shape.IsContiguous)
+                    SetIndicesNDNonLinear(source, indices, ndsCount, retShape: retShape, subShape: subShape, typedValues);
+                else
+                    SetIndicesND(source, computedOffsets, indices, ndsCount, retShape: retShape, subShape: subShape, typedValues);
             }
 
             //return default;
         }
 
         /// <summary>
-        ///     Accepts collapsed 
+        ///     The kernel scatter behind <see cref="SetIndices{T}"/>'s single-index-array route: a SIMD
+        ///     bounds scan over the whole index array FIRST (so an out-of-range index raises before any
+        ///     element is written — NumPy's <c>mapiter_trivial_set</c> "check the indices beforehand"),
+        ///     then the put kernel with a wrapping values cursor. The value resolves without a copy
+        ///     when it is a scalar (a 1-D destination), exactly the selection shape, or exactly one
+        ///     trailing sub-array (<c>m[ridx] = row</c>); any other broadcastable value is materialised
+        ///     to the selection shape as the general route does, with the same two NumPy error texts.
+        ///     Returns false — having written nothing — only when the IL kernels are unavailable.
+        /// </summary>
+        private static unsafe bool TryScatterKernel<T>(
+            NDArray<T> source, Shape srcShape, void* idxPtr, bool idx32, long indexCount, long axisLength,
+            long slabBytes, long[] retShape, long[] subShape, bool isSubshaped, NDArray values) where T : unmanaged
+        {
+            long bad = FancyIndexKernelRoute.FirstOutOfRange(idxPtr, idx32, indexCount, axisLength);
+            if (bad >= 0)
+                throw new IndexError($"index {FancyIndexKernelRoute.ReadIndex(idxPtr, idx32, bad)} is out of bounds for axis 0 with size {axisLength}");
+
+            string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+            var typed = values.AsOrMakeGeneric<T>();
+            long valuesCount;
+            if (!isSubshaped && typed.size == 1)
+            {
+                valuesCount = 1;                                   // scalar fill: the values cursor never moves
+            }
+            else if (typed.Shape.IsContiguous && typed.Shape.dimensions.SequenceEqual(retShape))
+            {
+                valuesCount = indexCount;                          // exactly the selection: a straight copy
+            }
+            else if (isSubshaped && typed.Shape.IsContiguous && typed.Shape.dimensions.SequenceEqual(subShape))
+            {
+                valuesCount = 1;                                   // one sub-array for every selected row
+            }
+            else
+            {
+                // The value must BROADCAST to the indexing-result shape; materialise it C-contiguous at
+                // exactly retShape (the same ValueError texts as the general route, per branch).
+                try
+                {
+                    typed = np.broadcast_to(typed, (Shape)retShape).copy().MakeGeneric<T>();
+                }
+                catch (IncorrectShapeException ex)
+                {
+                    if (isSubshaped)
+                        throw new ValueError(
+                            $"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
+                            $"could not be broadcast to indexing result of shape {Tup(retShape)}", ex);
+                    throw new ValueError($"could not broadcast input array from shape {Tup(values.Shape.dimensions)} into shape {Tup(retShape)}", ex);
+                }
+                valuesCount = indexCount;
+            }
+
+            byte* dstBase = (byte*)source.Storage.Address + srcShape.offset * InfoOf<T>.Size;
+            byte* valuesPtr = (byte*)typed.Storage.Address + typed.Shape.offset * InfoOf<T>.Size;
+            long status = FancyIndexKernelRoute.Scatter(dstBase, idxPtr, idx32, indexCount, valuesPtr, valuesCount, axisLength, slabBytes);
+            if (status == -2)
+                return false;
+            if (status >= 0)   // unreachable after the scan above; a hard stop rather than a silent partial write
+                throw new IndexError($"index {FancyIndexKernelRoute.ReadIndex(idxPtr, idx32, status)} is out of bounds for axis 0 with size {axisLength}");
+            return true;
+        }
+
+        /// <summary>
+        ///     Accepts collapsed
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="dst"></param>
@@ -907,52 +1026,92 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Accepts collapsed 
+        ///     Subshaped fancy scatter (<paramref name="ndsCount"/> &lt; <c>dst.ndim</c>) into a NON-contiguous
+        ///     destination (transposed / row- or col-strided / negative-stride / F-contig). The contiguous
+        ///     fast path (<see cref="SetIndicesND{T}"/>) block-copies one CONTIGUOUS <paramref name="subShape"/>
+        ///     per selected offset, but a strided destination's sub-arrays are not contiguous in the buffer,
+        ///     so scatter element-by-element through the destination strides from the C-contiguous (already
+        ///     broadcast to <paramref name="retShape"/>) value buffer. Exact scatter mirror of the getter's
+        ///     <c>FetchIndicesNDNonLinear</c>: same odometer over the trailing <paramref name="subShape"/>
+        ///     axes, only the copy direction is reversed. NumPy likewise assigns a scalar / lower-rank /
+        ///     broadcast value into a strided destination through the view's own strides.
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="source"></param>
-        /// <param name="offsets"></param>
-        /// <param name="retShape"></param>
-        /// <param name="absolute">Is the given <paramref name="offsets"/> already point to the offset of <paramref name="source"/>.</param>
-        /// <returns></returns>
+        /// <param name="dst">Destination array (a non-contiguous view aliasing the base buffer).</param>
+        /// <param name="indices">One flat integer index array per consumed leading axis (broadcast together).</param>
+        /// <param name="ndsCount">Number of leading axes the indices consume (&lt; <c>dst.ndim</c>).</param>
+        /// <param name="retShape">Indexing-result shape <c>(num_offsets,) + subShape</c>; the value's shape.</param>
+        /// <param name="subShape">The trailing (untouched) axes each selected offset writes across.</param>
+        /// <param name="values">Value buffer, C-contiguous and exactly <paramref name="retShape"/>.</param>
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
-        protected static unsafe void SetIndicesNDNonLinear<T>(NDArray<T> source, NDArray[] indices, int ndsCount, long[] retShape, long[] subShape, NDArray<T> values) where T : unmanaged
+        protected static unsafe void SetIndicesNDNonLinear<T>(NDArray<T> dst, NDArray[] indices, int ndsCount, long[] retShape, long[] subShape, NDArray<T> values) where T : unmanaged
         {
-            throw new NotImplementedException("SetIndicesNDNonLinear is yet to be implemented.");
-//            //facts:
-//            //indices are always offsetted to 
-//            //handle pointers pointing to subshape
-//            var subShapeNDim = subShape.Length;
+            long subShapeSize = 1;
+            for (int s = 0; s < subShape.Length; s++)
+                subShapeSize *= subShape[s];
 
-//            var size = indices[0].size; //first is ok because they are broadcasted t oeac
-//            T* srcAddr = source.Address;
+            long size = indices[0].size; // number of selected (broadcast) fancy multi-indices
+            if (subShapeSize == 0 || size == 0)                // empty trailing axis / empty index: nothing to scatter
+                return;
 
-//            T* dstAddr = (T*)dst.Address;
+            var dstShape = dst.Shape;
+            int subNdim = subShape.Length;
+            var indexGetters = PrepareIndexGetters(dstShape, indices);
 
-//            var srcDims = indices.Length;
-//            var indexGetters = PrepareIndexGetters(source.Shape, indices);
+            T* dstAddr = dst.Address;          // buffer base; offsets are relative to it (offset folded in)
+            T* valuesAddr = values.Address;    // C-contiguous value block, exactly retShape (C-order)
+            long dstBuf = dst.Shape.BufferSize;     // element capacity of the destination buffer
+            long valBuf = values.Shape.BufferSize;  // element capacity of the value buffer
 
-//            //compute coordinates
-//            Parallel.For(0, size, i => //TODO: make parallel.for
-//            {
-//                int* index = stackalloc int[srcDims];
+            // Snapshot the leading (consumed) and trailing (sub-array) strides once. The per-element
+            // walk then advances the destination offset INCREMENTALLY (section D "Incremental coord
+            // advance") — one add per step in the common single-sub-axis case — instead of paying a
+            // full GetOffset (a loop over every axis) for each of the size*subShapeSize elements.
+            var strides = dstShape.strides;
+            long baseOffset = dstShape.offset;
+            long* leadStride = stackalloc long[ndsCount == 0 ? 1 : ndsCount];
+            for (int k = 0; k < ndsCount; k++) leadStride[k] = strides[k];
+            long* subStride = stackalloc long[subNdim == 0 ? 1 : subNdim];
+            long* subCoord = stackalloc long[subNdim == 0 ? 1 : subNdim];
+            for (int s = 0; s < subNdim; s++) subStride[s] = strides[ndsCount + s];
 
-//                //load indices
-//                //index[0] = i;
-//                for (int k = 0; k < srcDims; k++)
-//                    index[k] = indexGetters[k](i); //replace with memory access or iterators
-//#if DEBUG
-//                var from = source[index, srcDims];
-//                var to = dst[i];
+            // The scatter is memory-latency bound (a strided destination write is a cache miss per
+            // sub-array element — NumPy hits the same wall and is only ~1.3x faster on the dense
+            // case), so this stays a single straightforward loop; the incremental offset advance
+            // above is what keeps the per-element cost off the critical path.
+            long vpos = 0;                     // value cursor: contiguous over retShape (C-order)
+            for (long i = 0; i < size; i++)
+            {
+                // Sub-array base offset from the leading fancy indices (each validated/wrapped to
+                // [0, dim-1] by PrepareIndexGetters).
+                long baseOff = baseOffset;
+                for (int k = 0; k < ndsCount; k++)
+                    baseOff += indexGetters[k](i) * leadStride[k];
 
-//                //assign
-//                dst[i] = from;
-//#else
-//                dst[i] = source[index, srcDims];
-//#endif
-//            });
+                long off = baseOff;
+                for (int s = 0; s < subNdim; s++)
+                    subCoord[s] = 0;
 
-//            return dst.MakeGeneric<T>();
+                for (long j = 0; j < subShapeSize; j++)
+                {
+                    // Memory-safety guard (see SetIndicesND): a miscomputed retShape/subShape would
+                    // write past the pinned destination buffer or read past the value buffer.
+                    if (off < 0 || off >= dstBuf || vpos >= valBuf)
+                        throw new IndexOutOfRangeException(IndexingOobMessage("SetIndicesNDNonLinear", vpos, off, 1, valBuf, dstBuf, retShape, subShape));
+                    dstAddr[off] = valuesAddr[vpos++];
+
+                    // Odometer over the trailing subShape axes (last axis fastest), carrying the
+                    // offset by +stride on advance and -stride*extent on each axis rollover.
+                    for (int s = subNdim - 1; s >= 0; s--)
+                    {
+                        off += subStride[s];
+                        if (++subCoord[s] < subShape[s])
+                            break;
+                        subCoord[s] = 0;
+                        off -= subStride[s] * subShape[s];
+                    }
+                }
+            }
         }
     }
 }

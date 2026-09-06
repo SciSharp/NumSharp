@@ -7,6 +7,7 @@ namespace NumSharp
     /// <summary>
     /// API bridge between NumSharp and Python NumPy
     /// </summary>
+    [ModuleName("np")]
     public static partial class np
     {
         public static BackendType BackendEngine { get; set; }

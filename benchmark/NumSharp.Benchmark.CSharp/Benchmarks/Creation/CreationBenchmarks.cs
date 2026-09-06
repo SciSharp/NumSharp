@@ -33,7 +33,7 @@ public class CreationBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.CommonTypes;
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
@@ -74,11 +74,14 @@ public class CreationBenchmarks : TypedBenchmarkBase
 
     [Benchmark(Description = "np.arange(N)")]
     [BenchmarkCategory("Range")]
-    public void Arange() { using var _ = np.arange(N); }
+    // NumPy 2.x (and NumSharp) allow arange(dtype=bool) only when the result length is <= 2; every
+    // benchmark size is larger, so bool has nothing valid to time here (np.arange(N, bool) raises the
+    // same TypeError on both sides). Skip it so the body-smoke runner doesn't trip on that raise.
+    public void Arange() { if (DType == NPTypeCode.Boolean) return; using var _ = np.arange(N, DType); }
 
     [Benchmark(Description = "np.linspace(0, N, N)")]
     [BenchmarkCategory("Range")]
-    public void Linspace() { using var _ = np.linspace(0, N, N); }
+    public void Linspace() { using var _ = np.linspace(0, N, N, typeCode: DType); }
 
     // ========================================================================
     // Copy / Conversion
@@ -91,10 +94,6 @@ public class CreationBenchmarks : TypedBenchmarkBase
     [Benchmark(Description = "a.copy()")]
     [BenchmarkCategory("Copy")]
     public void CopyMethod() { using var _ = _source.copy(); }
-
-    [Benchmark(Description = "np.copy(a) [asarray equivalent]")]
-    [BenchmarkCategory("Convert")]
-    public void AsArray() { using var _ = np.copy(_source); }
 
     // ========================================================================
     // Like-based

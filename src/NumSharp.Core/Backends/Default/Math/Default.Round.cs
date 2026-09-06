@@ -6,10 +6,6 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Round(NDArray nd, Type dtype) => Round(nd, dtype?.GetTypeCode());
-
-        public override NDArray Round(NDArray nd, int decimals, Type dtype) => Round(nd, decimals, dtype?.GetTypeCode());
-
         /// <summary>
         /// np.round with decimals==0 is the 'rint' ufunc; integer inputs take
         /// NumPy's identity-copy path (probed: round_(i4) -> int32 unchanged,
@@ -21,8 +17,9 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise round using IL-generated kernels.
         /// </summary>
-        public override NDArray Round(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Round(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);
 
             var inputType = nd.GetTypeCode;
@@ -43,8 +40,9 @@ namespace NumSharp.Backends
         /// Element-wise round with specified decimal places.
         /// Note: This overload uses traditional loop implementation for precision control.
         /// </summary>
-        public override NDArray Round(NDArray nd, int decimals, NPTypeCode? typeCode = null, NDArray @out = null)
+        public override NDArray Round(NDArray nd, int decimals, DType dtype = null, NDArray @out = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // decimals==0 routes to the rint ufunc path (out-cast errors there
             // name 'rint'); decimals!=0 is a multiply -> rint -> divide
             // COMPOSITION in NumPy, proven by the probed cast error naming
@@ -53,7 +51,7 @@ namespace NumSharp.Backends
             // compute path; a provided out gets the composition's validation
             // then a masked identity copy through the shared Into machinery.
             if (decimals == 0)
-                return Round(nd, typeCode, @out, null);
+                return Round(nd, dtype, @out, null);
 
             // NumPy's integer path: round(int_array, decimals >= 0) is an
             // identity COPY (probed: round(i4, 2) -> int32 unchanged,

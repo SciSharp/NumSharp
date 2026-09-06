@@ -19,7 +19,7 @@ namespace NumSharp.Backends.Kernels
     /// - Doubles capacity below 1 billion elements
     /// - 33% growth above 1 billion (matches Hashset/LongList pattern)
     /// </remarks>
-    public unsafe struct IndexCollector
+    public unsafe struct IndexCollector : IDisposable
     {
         private const long LargeGrowthThreshold = 1_000_000_000L;
         private const long MaxCapacity = 0x7FFFFFC7L; // Array.MaxLength
@@ -99,16 +99,32 @@ namespace NumSharp.Backends.Kernels
                 newCapacity * sizeof(long),
                 _count * sizeof(long));
 
+            var old = _storage;
             _storage = newStorage;
             _capacity = newCapacity;
+            old.Dispose(); // the outgrown buffer goes back to the pool now, not at its finalizer
+        }
+
+        /// <summary>
+        ///     Releases the growable buffer unless <see cref="ToResult"/> already handed it out.
+        ///     Idempotent; the collector is unusable afterwards.
+        /// </summary>
+        public void Dispose()
+        {
+            var s = _storage;
+            _storage = null;
+            _capacity = 0;
+            _count = 0;
+            s?.Dispose();
         }
 
         /// <summary>
         /// Returns the collected indices as an NDArray, trimmed to actual count.
         /// </summary>
         /// <remarks>
-        /// If count equals capacity, returns storage directly (no copy).
-        /// Otherwise, creates a properly-sized copy.
+        /// If count equals capacity, returns storage directly (no copy) and gives up ownership of it.
+        /// Otherwise, creates a properly-sized copy and releases the growable buffer — the result is
+        /// the caller's; the collector holds nothing afterwards (Dispose is then a no-op).
         /// </remarks>
         public NDArray<long> ToResult()
         {
@@ -117,8 +133,10 @@ namespace NumSharp.Backends.Kernels
 
             if (_count == _capacity)
             {
-                // Perfect fit - return storage directly
-                return _storage;
+                // Perfect fit - hand the storage itself to the caller
+                var handed = _storage;
+                _storage = null;
+                return handed;
             }
 
             // Need to trim - create properly sized result
@@ -128,6 +146,7 @@ namespace NumSharp.Backends.Kernels
                 result.Address,
                 _count * sizeof(long),
                 _count * sizeof(long));
+            Dispose();
             return result;
         }
     }

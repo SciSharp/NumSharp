@@ -218,7 +218,7 @@ namespace NumSharp.Backends
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape));
                 }
-                return r;
+                return r.MarkReductionScalar();
             }
             else
             {
@@ -256,7 +256,7 @@ namespace NumSharp.Backends
                     keepdimsShape[i] = 1;
                 r.Storage.Reshape(new Shape(keepdimsShape));
             }
-            return r;
+            return r.MarkReductionScalar();
         }
 
         private static float NanReduceScalarFloat(NDArray arr, ReductionOp op)
@@ -382,8 +382,9 @@ namespace NumSharp.Backends
             for (int d = 0, od = 0; d < arr.ndim; d++)
                 if (d != axis) outputDims[od++] = shape.dimensions[d];
 
-            var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
-            var result = new NDArray(inputType, outputShape, false);
+            // KEEPORDER: allocate the result in the input's memory order (F for an F-contig input),
+            // so the strided-output kernel fills it in place with no post-hoc copy (issue #610).
+            var result = AllocateReductionResult(inputType, outputDims, shape);
 
             long axisSize = shape.dimensions[axis];
             long outputSize = result.size > 0 ? result.size : 1;
@@ -396,13 +397,9 @@ namespace NumSharp.Backends
                 kernel((void*)inputAddr, (void*)result.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
             }
 
+            // ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout.
             if (keepdims)
-            {
-                var ks = new long[arr.ndim];
-                for (int d = 0, sd = 0; d < arr.ndim; d++)
-                    ks[d] = (d == axis) ? 1 : result.shape[sd++];
-                result.Storage.Reshape(new Shape(ks));
-            }
+                result.Storage.ExpandDimension(axis);
             return result;
         }
 
@@ -418,8 +415,11 @@ namespace NumSharp.Backends
             for (int d = 0, od = 0; d < arr.ndim; d++)
                 if (d != axis) outputDims[od++] = shape.dimensions[d];
 
-            var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
-            var result = new NDArray(inputType, outputShape, false);
+            // KEEPORDER: allocate in the input's memory order (F for an F-contig input); SetAtIndex
+            // writes each element through the result's strides, so the F-order buffer fills correctly
+            // (issue #610). outputDimStrides below are a C-order decomposition of the LOGICAL output
+            // index used only to locate the INPUT slice — independent of the output's physical layout.
+            var result = AllocateReductionResult(inputType, outputDims, shape);
 
             long axisSize = shape.dimensions[axis];
             long outputSize = result.size > 0 ? result.size : 1;
@@ -468,13 +468,9 @@ namespace NumSharp.Backends
                 result.SetAtIndex(reduced, outIdx);
             }
 
+            // ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout.
             if (keepdims)
-            {
-                var ks = new long[arr.ndim];
-                for (int d = 0, sd = 0; d < arr.ndim; d++)
-                    ks[d] = (d == axis) ? 1 : result.shape[sd++];
-                result.Storage.Reshape(new Shape(ks));
-            }
+                result.Storage.ExpandDimension(axis);
             return result;
         }
 
@@ -657,7 +653,7 @@ namespace NumSharp.Backends
                     for (int i = 0; i < arr.ndim; i++) ks[i] = 1;
                     r.Storage.Reshape(new Shape(ks));
                 }
-                return r;
+                return r.MarkReductionScalar();
             }
 
             // Axis reduction via iterator: iterate per slice and sum with NaN-skip.

@@ -37,6 +37,7 @@ namespace NumSharp
         ///     Return elements chosen from `x` or `y` depending on `condition`.
         ///     Scalar overload for x.
         /// </summary>
+        [NDScoped]
         public static NDArray where(NDArray condition, object x, NDArray y)
         {
             return where_internal(condition, asanyarray(x), y);
@@ -46,6 +47,7 @@ namespace NumSharp
         ///     Return elements chosen from `x` or `y` depending on `condition`.
         ///     Scalar overload for y.
         /// </summary>
+        [NDScoped]
         public static NDArray where(NDArray condition, NDArray x, object y)
         {
             return where_internal(condition, x, asanyarray(y));
@@ -55,6 +57,7 @@ namespace NumSharp
         ///     Return elements chosen from `x` or `y` depending on `condition`.
         ///     Scalar overload for both x and y.
         /// </summary>
+        [NDScoped]
         public static NDArray where(NDArray condition, object x, object y)
         {
             return where_internal(condition, asanyarray(x), asanyarray(y));
@@ -63,8 +66,12 @@ namespace NumSharp
         /// <summary>
         /// Internal implementation of np.where.
         /// </summary>
+        [NDScoped]
         private static NDArray where_internal(NDArray condition, NDArray x, NDArray y)
         {
+            // Boundary scope: reclaims the broadcast_arrays wrappers, the bool/dtype astype
+            // conversions and the scalar-promotion temps at exit; only `result` is yielded.
+
             // Detect "originally scalar" on the user-supplied operands BEFORE broadcasting
             // expands them into stride-0 views. The scalar fast path below dispatches
             // specialised IL kernels that hoist the scalar into Vector.Create<T>(value) once

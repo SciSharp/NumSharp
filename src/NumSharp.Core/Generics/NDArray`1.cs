@@ -227,7 +227,8 @@ namespace NumSharp.Generic
         /// <value></value>
         public new NDArray<TDType> this[string slice]
         {
-            [MethodImpl(Inline)]
+            // NDScoped: the untyped base view is reclaimed once the yielded typed alias owns the data.
+            [MethodImpl(Inline), NDScoped]
             get
             {
                 return base[slice].MakeGeneric<TDType>();
@@ -246,8 +247,8 @@ namespace NumSharp.Generic
         /// <value></value>
         public new NDArray<TDType> this[params Slice[] slices]
         {
-            [MethodImpl(Inline)]
-            get => base[slices].MakeGeneric<TDType>();
+            [MethodImpl(Inline), NDScoped]
+            get { return base[slices].MakeGeneric<TDType>(); }
 
             [MethodImpl(Inline)]
             set => base[slices] = value;
@@ -268,6 +269,7 @@ namespace NumSharp.Generic
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flat.html</remarks>
         public new NDArray<TDType> flat
         {
+            [NDScoped]
             get
             {
                 return base.flat.MakeGeneric<TDType>();
@@ -281,6 +283,7 @@ namespace NumSharp.Generic
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.T.html</remarks>
         public new NDArray<TDType> T
         {
+            [NDScoped]
             get
             {
                 return transpose().MakeGeneric<TDType>();
@@ -291,8 +294,8 @@ namespace NumSharp.Generic
         [MethodImpl(Inline)]
         public static implicit operator ArraySlice<TDType>(NDArray<TDType> nd) => nd.Array;
 
-        [MethodImpl(Inline)]
-        public static explicit operator NDArray<TDType>(TDType[] tArray) => new NDArray(tArray).MakeGeneric<TDType>();
+        [MethodImpl(Inline), NDScoped]
+        public static explicit operator NDArray<TDType>(TDType[] tArray) { return new NDArray(tArray).MakeGeneric<TDType>(); }
 
     }
 }

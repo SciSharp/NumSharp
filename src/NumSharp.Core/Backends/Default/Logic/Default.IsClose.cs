@@ -50,53 +50,90 @@ namespace NumSharp.Backends
             // if equal_nan:
             //     result |= isnan(x) & isnan(y)
 
-            // Convert to double for comparison (NumPy casts to inexact type). astype(copy:false)
-            // returns the input itself when no conversion is needed, so x/y are caller-owned and are
-            // NEVER disposed here. Every other local below is a FRESH allocation owned by this method
-            // (each elementwise operator/ufunc returns a new array), so each is wrapped in `using`:
-            // its unmanaged buffer is released synchronously instead of riding the finalizer queue.
-            // In a tight isclose/allclose loop the un-disposed temps (≈5 float64 + several bool
-            // arrays per call) accumulated as live allocations until GC, ballooning the process
-            // working set (the np.allclose / np.isclose leak guards). MakeGeneric<bool>() takes its
-            // own refcount on the final buffer, so disposing the backing temp leaves it alive.
-            var x = a.astype(NPTypeCode.Double, copy: false);
-            var y = b.astype(NPTypeCode.Double, copy: false);
-
-            // Vectorized computation using existing np operations
-            using var xMinusY = x - y;
-            using var diff = np.abs(xMinusY);            // |a - b|
-            using var absY = np.abs(y);
-            using var rtolAbsY = rtol * absY;
-            using var tolerance = atol + rtolAbsY;       // atol + rtol * |b|
-
-            // Core formula: |a - b| <= tolerance AND diff is finite AND y is finite, OR exact equality
-            // Note: We explicitly check diffFinite because NumSharp's <= operator has a bug where
-            // NaN <= value returns True instead of False (IEEE 754 requires False for all NaN comparisons)
-            using var diffFinite = np.isfinite(diff);      // diff must be finite for tolerance check
-            using var withinTolerance = diff <= tolerance; // |a - b| <= (atol + rtol * |b|)
-            using var yFinite = np.isfinite(y);            // Only apply tolerance to finite values
-            using var exactEqual = x == y;                 // Handles infinities (inf == inf is true)
-
-            // Combine: (within tolerance & diff finite & y finite) | exact equality
-            using var withinAndFinite = withinTolerance & diffFinite;
-            using var toleranceMet = withinAndFinite & yFinite;
-
-            // The final combined array is captured in a `using` too: MakeGeneric<bool>() shares its
-            // storage and takes its own refcount, so disposing the backing temp on return leaves the
-            // returned array alive while keeping that last buffer off the finalizer queue as well.
-            if (!equal_nan)
+            // Compute in NumPy's exact dtype, not blanket float64. NumPy's isclose forces the
+            // REFERENCE operand inexact via result_type(b, 1.0) and then evaluates the whole formula
+            // in result_type(x, y): so (f32,f32)->float32, (f16,f16)->float16, (complex,complex)->
+            // complex128, while bool + every integer -> float64. Casting both operands through
+            // InexactPromote and letting the elementwise operators do the NEP50 promotion reproduces
+            // that (mixed pairs too, verified bit-exact vs NumPy 2.4.2). The prior code cast BOTH to
+            // Double unconditionally, which (a) did 2x the memory work NumPy does for float32/float16
+            // — the isclose/allclose float32 perf gap — and (b) was WRONG for complex, dropping the
+            // imaginary part (isclose([1+0j],[1+100j]) returned True where NumPy returns False).
+            // float64/int/bool/char/decimal still map to Double, so their cast is byte-identical to
+            // before. astype(copy:false) returns the input itself when no conversion is needed and a
+            // FRESH array otherwise — it never mutates a/b (NumPy semantics). So x/y are caller-owned
+            // when they alias a/b and method-owned temps when a conversion happened; the finally
+            // block below disposes exactly the converted case. Every other local is a FRESH
+            // allocation owned by this method (each elementwise operator/ufunc returns a new array),
+            // so each is wrapped in `using`: its unmanaged buffer is released synchronously instead
+            // of riding the finalizer queue. In a tight isclose/allclose loop the un-disposed temps
+            // accumulated as live allocations until GC, ballooning the process working set (the
+            // np.allclose / np.isclose leak guards). MakeGeneric<bool>() takes its own refcount on
+            // the final buffer, so disposing the backing temp leaves it alive.
+            var x = a.astype(InexactPromote(a.typecode), copy: false);
+            var y = b.astype(InexactPromote(b.typecode), copy: false);
+            try
             {
-                using var close = toleranceMet | exactEqual;
-                return close.MakeGeneric<bool>();
-            }
+                // Vectorized computation using existing np operations
+                using var xMinusY = x - y;
+                using var diff = np.abs(xMinusY);            // |a - b|
+                using var absY = np.abs(y);
+                using var rtolAbsY = rtol * absY;
+                using var tolerance = atol + rtolAbsY;       // atol + rtol * |b|
 
-            // Handle NaN comparison if requested: result | (isnan(x) & isnan(y))
-            using var toleranceClose = toleranceMet | exactEqual;
-            using var nanX = np.isnan(x);
-            using var nanY = np.isnan(y);
-            using var bothNan = nanX & nanY;
-            using var close2 = toleranceClose | bothNan;
-            return close2.MakeGeneric<bool>();
+                // Core formula: |a - b| <= tolerance AND diff is finite AND y is finite, OR exact equality
+                // Note: We explicitly check diffFinite because NumSharp's <= operator has a bug where
+                // NaN <= value returns True instead of False (IEEE 754 requires False for all NaN comparisons)
+                using var diffFinite = np.isfinite(diff);      // diff must be finite for tolerance check
+                using var withinTolerance = diff <= tolerance; // |a - b| <= (atol + rtol * |b|)
+                using var yFinite = np.isfinite(y);            // Only apply tolerance to finite values
+                using var exactEqual = x == y;                 // Handles infinities (inf == inf is true)
+
+                // Combine: (within tolerance & diff finite & y finite) | exact equality
+                using var withinAndFinite = withinTolerance & diffFinite;
+                using var toleranceMet = withinAndFinite & yFinite;
+
+                // The final combined array is captured in a `using` too: MakeGeneric<bool>() shares its
+                // storage and takes its own refcount, so disposing the backing temp on return leaves the
+                // returned array alive while keeping that last buffer off the finalizer queue as well.
+                if (!equal_nan)
+                {
+                    using var close = toleranceMet | exactEqual;
+                    return close.MakeGeneric<bool>();
+                }
+
+                // Handle NaN comparison if requested: result | (isnan(x) & isnan(y))
+                using var toleranceClose = toleranceMet | exactEqual;
+                using var nanX = np.isnan(x);
+                using var nanY = np.isnan(y);
+                using var bothNan = nanX & nanY;
+                using var close2 = toleranceClose | bothNan;
+                return close2.MakeGeneric<bool>();
+            }
+            finally
+            {
+                // Dispose only the astype-converted temps — when no conversion happened x/y ARE
+                // the caller's arrays and must stay alive.
+                if (!ReferenceEquals(x, a))
+                    x.Dispose();
+                if (!ReferenceEquals(y, b))
+                    y.Dispose();
+            }
         }
+
+        /// <summary>
+        /// NumPy's <c>result_type(dtype, 1.0)</c> — the "make the reference operand inexact" step of
+        /// <c>np.isclose</c>. A float or complex dtype keeps itself; bool and every integer promote to
+        /// float64. NumSharp's non-NumPy dtypes (Char/Decimal) also fall through to float64, preserving
+        /// the pre-change behaviour for them. Casting BOTH operands through this (and letting the
+        /// elementwise operators promote) reproduces isclose's exact computation dtype
+        /// <c>result_type(x, result_type(y, 1.0))</c> — so float32/float16/complex compute at native
+        /// precision instead of being widened to float64.
+        /// </summary>
+        private static NPTypeCode InexactPromote(NPTypeCode tc) => tc switch
+        {
+            NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex => tc,
+            _ => NPTypeCode.Double,
+        };
     }
 }

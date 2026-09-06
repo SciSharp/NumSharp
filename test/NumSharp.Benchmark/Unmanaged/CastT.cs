@@ -20,8 +20,8 @@ namespace NumSharp.Benchmark.Unmanaged
     //| 'Unsafe.As<T, double>(ref value)' | Job-LTSICV |  Throughput |           16 |    90.26 us |   4.679 us |   3.095 us |    89.34 us |    86.36 us |    95.58 us |  0.84 |    0.14 |
     //|  'FastCast<TOut>(Holder<T> @in;)' | Job-LTSICV |  Throughput |           16 | 1,715.69 us | 150.547 us |  89.588 us | 1,717.07 us | 1,577.88 us | 1,817.06 us | 16.20 |    2.70 |
 
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 10)]
-    [SimpleJob(RunStrategy.Throughput, targetCount: 10)]
+    [SimpleJob(RunStrategy.ColdStart, iterationCount: 10)]
+    [SimpleJob(RunStrategy.Throughput, iterationCount: 10)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class CastT

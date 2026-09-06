@@ -87,7 +87,7 @@ Examples:
 ### Test Location
 
 ```
-test/NumSharp.UnitTest/{Category}/{FunctionName}Tests.cs
+test/NumSharp.Tests/{Category}/{FunctionName}Tests.cs
 ```
 
 ---
@@ -281,7 +281,7 @@ NDArray view2 = nd[1, Slice.All, Slice.Index(-1)];
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 
-namespace NumSharp.UnitTest.Math
+namespace NumSharp.Tests.Math
 {
     [TestClass]
     public class np_sum_Tests
@@ -346,7 +346,7 @@ namespace NumSharp.UnitTest.Math
 ### Running Tests
 
 ```bash
-cd test/NumSharp.UnitTest
+cd test/NumSharp.Tests
 dotnet test
 ```
 

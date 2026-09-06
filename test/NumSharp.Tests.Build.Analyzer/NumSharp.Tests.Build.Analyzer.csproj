@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ==================================================================================
+       NumSharp.Tests.Build.Analyzer — the assertion gate for the NumSharp Roslyn analyzers
+       (NDW012 leak warning + the NDW016/NDW017 type-level ownership warnings + the
+       NDW002/003/005/006/009/010/011/015 [NDScoped]-target gate), plus a build-based check for the
+       NDW013 weaver-missing MSBuild warning.
+
+       It runs the analyzers IN-PROCESS over the crafted files in NumSharp.Tests.Build.Analyzer.Fixtures and
+       asserts every diagnostic lands on exactly the `// [NDWxxx]`-tagged lines (a missing warning AND
+       an unexpected one both fail). The fixture .cs files are copied into this project's output via a
+       glob below — the fixture project itself is not built or referenced, so it need not be in the
+       solution and its intentional warnings never touch a normal build.
+       ================================================================================== -->
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Platforms>AnyCPU</Platforms>
+    <Configurations>Debug;Release;Publish</Configurations>
+    <!-- This project does NOT apply the analyzer to its own compile (it only references it for the
+         DiagnosticAnalyzer TYPES and drives it manually), so its own code is never analyzed. -->
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
+    <DocumentationFile />
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="3.8.3" />
+    <!-- The compilation/analysis APIs the harness uses in-process. Pinned to the version the analyzer
+         was built against so the DiagnosticAnalyzer contract unifies. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+    <!-- Referenced for the analyzer TYPES only (default ReferenceOutputAssembly), NOT applied as an
+         analyzer to this project. -->
+    <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" />
+    <!-- The IL weaver itself, for the IN-PROCESS weaver gates (WeaverTestHarness → ScopeWeaver.
+         WeaveAssembly on freshly compiled fixtures, Mono.Cecil inspection of the woven IL, then the
+         woven code executed and its reclamation asserted). It is an Exe project — referencing one
+         yields its DLL plus Mono.Cecil; nothing here runs it as a process. -->
+    <ProjectReference Include="..\..\tools\NumSharp.Build\NumSharp.Build.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The fixture source files travel into bin/**/Fixtures/ as DATA the tests read at runtime. They
+         are NOT compiled into this assembly (they live outside the project cone and are <None>). A glob
+         so every scenario file is copied automatically — adding a fixture needs no csproj edit. -->
+    <None Include="..\NumSharp.Tests.Build.Analyzer.Fixtures\*.cs"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="Fixtures\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

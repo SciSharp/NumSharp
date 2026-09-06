@@ -58,6 +58,31 @@ namespace NumSharp.Backends.Kernels
 
         internal static readonly ConcurrentDictionary<SearchKernelKey, SearchSortedKernel> _searchCache = new();
 
+        // Resolved once (fail-fast at type load) so kernel emission never pays the GetMethod cost.
+        private static readonly MethodInfo _numpyComplexLess =
+            typeof(DirectILKernelGenerator).GetMethod(nameof(NumpyComplexLess),
+                BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("NumpyComplexLess not found");
+
+        /// <summary>
+        /// NumPy's <c>CDOUBLE_LT</c> (npysort_common.h): NaN-aware lexicographic complex "less-than",
+        /// returning 1/0 for the IL comparator convention. The real parts compare first; when they are
+        /// equal (or BOTH real parts are NaN) the imaginary parts break the tie; and any NaN component
+        /// sorts LAST. This is the SAME total order <c>np.sort</c> / <c>np.sort_complex</c> apply
+        /// (see <c>AxisSort.ComplexCmp</c>), so <c>searchsorted</c> stays consistent with a
+        /// complex-sorted array — a real-only compare did not.
+        /// </summary>
+        internal static int NumpyComplexLess(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            double ar = a.Real, ai = a.Imaginary, br = b.Real, bi = b.Imaginary;
+            bool aiN = double.IsNaN(ai), biN = double.IsNaN(bi);
+            if (ar < br) return (!aiN || biN) ? 1 : 0;                        // a.im not NaN, OR b.im NaN
+            if (ar > br) return (biN && !aiN) ? 1 : 0;                        // b.im NaN AND a.im not NaN
+            if (ar == br || (double.IsNaN(ar) && double.IsNaN(br)))           // reals equal, or both real-NaN
+                return (ai < bi || (biN && !aiN)) ? 1 : 0;
+            return double.IsNaN(br) ? 1 : 0;                                  // b.real is NaN
+        }
+
         /// <summary>
         /// Get or generate a searchsorted kernel.
         /// </summary>
@@ -108,13 +133,13 @@ namespace NumSharp.Backends.Kernels
         {
             int elemSize = GetTypeSize(key.Type);
 
-            // Complex: load only the Real (double) component for comparison.
-            // System.Numerics.Complex memory layout puts Real first (m_real, m_imaginary),
-            // so ldind.r8 on a Complex* yields Real directly while the element stride remains 16 bytes.
-            // Matches the legacy NumSharp behavior (Converts.ToDouble(Complex) -> Real).
-            bool isComplex = key.Type == NPTypeCode.Complex;
-            var compareType = isComplex ? NPTypeCode.Double : key.Type;
-            var compareClrType = isComplex ? typeof(double) : GetClrType(key.Type);
+            // Compare in the element's OWN dtype. Complex loads the full 16-byte struct and compares
+            // lexicographically (real, then imaginary) via NumPy's CDOUBLE_LT (see EmitLess), so
+            // searchsorted agrees with np.sort / np.sort_complex — which use the same total order.
+            // (A real-only compare diverged whenever two elements shared a real part but differed in
+            //  imag, or a key carried a NaN imaginary component.)
+            var compareType = key.Type;
+            var compareClrType = GetClrType(key.Type);
 
             // ---- locals ----
             var locI       = il.DeclareLocal(typeof(long));   // outer key index
@@ -179,11 +204,11 @@ namespace NumSharp.Backends.Kernels
 
             // ---- monotonic bound update ----
             // bool ascending = cmp(lastKey, key)
-            //   side='left':  cmp = a < b   (key strictly ascending)
-            //   side='right': cmp = a <= b  (key non-descending)
-            il.Emit(OpCodes.Ldloc, locLastKey);
-            il.Emit(OpCodes.Ldloc, locKey);
-            EmitCmpForSide(il, compareType, key.LeftSide);   // pushes int 0/1
+            //   side='left':  cmp = less(a, b)
+            //   side='right': cmp = less_equal(a, b) = !less(b, a)
+            // less is NaN-aware for float tags (NaN sorts last), so a NaN key never reports
+            // "ascending" against a following finite key — it resets the carried bound (numpy parity).
+            EmitCmpForSide(il, compareType, key.LeftSide, locLastKey, locKey);   // ascending? -> int 0/1
             il.Emit(OpCodes.Brtrue, lblAscending);
 
             // descending branch: L = 0; R = min(prevR + 1, arrLen)
@@ -269,9 +294,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locMidVal);
 
             // if (cmp(midVal, key)) L = m + 1; else R = m;
-            il.Emit(OpCodes.Ldloc, locMidVal);
-            il.Emit(OpCodes.Ldloc, locKey);
-            EmitCmpForSide(il, compareType, key.LeftSide);
+            EmitCmpForSide(il, compareType, key.LeftSide, locMidVal, locKey);
             il.Emit(OpCodes.Brfalse, lblMoveLeft);
 
             // L = m + 1
@@ -316,44 +339,84 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit the comparison that drives bisect direction for the requested side.
-        /// Pushes int32 (0 or 1) on the stack.
-        ///   side='left':  result = (a <  b)
-        ///   side='right': result = (a <= b)
-        /// Stack on entry: ..., a, b
-        /// Stack on exit:  ..., int32
+        /// Emit the comparison that drives bisect direction / carry for the requested side,
+        /// reading the two operands from <paramref name="a"/> and <paramref name="b"/> locals
+        /// (they are reloaded, which the NaN-aware form requires). Pushes int32 (0 or 1).
+        ///
+        /// Mirrors NumPy binsearch.cpp + numpy_tag.h: both side comparators derive from a single
+        /// <c>less</c> functor —
+        ///   side='left'  cmp(a,b) = less(a, b)
+        ///   side='right' cmp(a,b) = less_equal(a, b) = !less(b, a)
+        /// For the float tags <c>less</c> is NaN-aware ("NaN sorts last"): finite &lt; NaN is true,
+        /// NaN &lt; finite / NaN &lt; NaN are false. So a NaN key bisects to the end and never carries
+        /// a stale bound into a following key. Integer/char/bool have no NaN and collapse to ordered '&lt;'.
         /// </summary>
-        private static void EmitCmpForSide(ILGenerator il, NPTypeCode type, bool leftSide)
+        private static void EmitCmpForSide(ILGenerator il, NPTypeCode type, bool leftSide, LocalBuilder a, LocalBuilder b)
         {
-            // Half / Decimal / Complex need operator calls.
-            string opName = leftSide ? "op_LessThan" : "op_LessThanOrEqual";
-            if (type == NPTypeCode.Half)
-            {
-                il.EmitCall(OpCodes.Call, ScalarMethodCache.BinaryOp(typeof(Half), opName), null);
-                return;
-            }
-            if (type == NPTypeCode.Decimal)
-            {
-                il.EmitCall(OpCodes.Call, ScalarMethodCache.BinaryOp(typeof(decimal), opName), null);
-                return;
-            }
-
-            // Boolean: bool < bool is not valid IL — promote to int (already 0/1 in IL eval stack).
-            // Char: stored as ushort.
-            // Numeric types: clt/clt.un and inverse for <=.
-            bool isUnsigned = IsUnsigned(type) || type == NPTypeCode.Char || type == NPTypeCode.Boolean;
-
             if (leftSide)
             {
-                // a < b
-                il.Emit(isUnsigned ? OpCodes.Clt_Un : OpCodes.Clt);
+                EmitLess(il, type, a, b);            // less(a, b)
             }
             else
             {
-                // a <= b  ==  !(a > b)
-                il.Emit(isUnsigned ? OpCodes.Cgt_Un : OpCodes.Cgt);
+                EmitLess(il, type, b, a);            // less(b, a)
                 il.Emit(OpCodes.Ldc_I4_0);
-                il.Emit(OpCodes.Ceq);
+                il.Emit(OpCodes.Ceq);                // !less(b, a)  ==  less_equal(a, b)
+            }
+        }
+
+        /// <summary>
+        /// Emit NumPy's <c>less(x, y)</c> functor (numpy_tag.h), leaving int32 0/1 on the stack.
+        /// Float tags: <c>(x &lt; y) | (x==x &amp; y!=y)</c> — the second term makes NaN sort last
+        /// (finite &lt; NaN true, NaN &lt; finite false, NaN &lt; NaN false), matching
+        /// FLOAT_LT / DOUBLE_LT / HALF_LT. Complex uses NumPy's CDOUBLE_LT (NaN-aware lexicographic
+        /// real-then-imag) via <see cref="NumpyComplexLess"/>. Decimal has no NaN and uses its
+        /// ordered operator; integer/char/bool use the ordered clt / clt.un.
+        /// </summary>
+        private static void EmitLess(ILGenerator il, NPTypeCode type, LocalBuilder x, LocalBuilder y)
+        {
+            switch (type)
+            {
+                case NPTypeCode.Complex:
+                    il.Emit(OpCodes.Ldloc, x); il.Emit(OpCodes.Ldloc, y);
+                    il.EmitCall(OpCodes.Call, _numpyComplexLess, null);   // CDOUBLE_LT -> int 0/1
+                    return;
+
+                case NPTypeCode.Single:
+                case NPTypeCode.Double:
+                    // (x < y) | (x==x & y!=y)      [ceq/clt are ordered: NaN operand -> 0]
+                    il.Emit(OpCodes.Ldloc, x); il.Emit(OpCodes.Ldloc, y); il.Emit(OpCodes.Clt);
+                    il.Emit(OpCodes.Ldloc, x); il.Emit(OpCodes.Ldloc, x); il.Emit(OpCodes.Ceq);   // x==x  (0 if x NaN)
+                    il.Emit(OpCodes.Ldloc, y); il.Emit(OpCodes.Ldloc, y); il.Emit(OpCodes.Ceq);
+                    il.Emit(OpCodes.Ldc_I4_0); il.Emit(OpCodes.Ceq);                              // y!=y  (1 if y NaN)
+                    il.Emit(OpCodes.And);
+                    il.Emit(OpCodes.Or);
+                    return;
+
+                case NPTypeCode.Half:
+                {
+                    var hlt = ScalarMethodCache.BinaryOp(typeof(Half), "op_LessThan");
+                    var heq = ScalarMethodCache.BinaryOp(typeof(Half), "op_Equality");
+                    il.Emit(OpCodes.Ldloc, x); il.Emit(OpCodes.Ldloc, y); il.EmitCall(OpCodes.Call, hlt, null);
+                    il.Emit(OpCodes.Ldloc, x); il.Emit(OpCodes.Ldloc, x); il.EmitCall(OpCodes.Call, heq, null);
+                    il.Emit(OpCodes.Ldloc, y); il.Emit(OpCodes.Ldloc, y); il.EmitCall(OpCodes.Call, heq, null);
+                    il.Emit(OpCodes.Ldc_I4_0); il.Emit(OpCodes.Ceq);
+                    il.Emit(OpCodes.And);
+                    il.Emit(OpCodes.Or);
+                    return;
+                }
+
+                case NPTypeCode.Decimal:
+                    il.Emit(OpCodes.Ldloc, x); il.Emit(OpCodes.Ldloc, y);
+                    il.EmitCall(OpCodes.Call, ScalarMethodCache.BinaryOp(typeof(decimal), "op_LessThan"), null);
+                    return;
+
+                default:
+                    // integers, char, bool — ordered '<', no NaN.
+                    bool isUnsigned = IsUnsigned(type) || type == NPTypeCode.Char || type == NPTypeCode.Boolean;
+                    il.Emit(OpCodes.Ldloc, x); il.Emit(OpCodes.Ldloc, y);
+                    il.Emit(isUnsigned ? OpCodes.Clt_Un : OpCodes.Clt);
+                    return;
             }
         }
     }

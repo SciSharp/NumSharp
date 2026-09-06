@@ -26,6 +26,7 @@ namespace NumSharp
         /// <param name="axis">Axis along which to repeat values. <c>null</c> (NumPy <c>None</c>) flattens the input.</param>
         /// <returns>Output array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
+        [NDScoped] // calculating overload: reclaims the ravel/ascontiguousarray/reshape temps
         public static NDArray repeat(NDArray a, long repeats, int? axis = null)
         {
             if (a is null)
@@ -49,6 +50,7 @@ namespace NumSharp
         /// <param name="axis">Axis along which to repeat. <c>null</c> flattens the input.</param>
         /// <returns>A new array with elements repeated according to <paramref name="repeats"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
+        [NDScoped] // calculating overload: reclaims the ravel temps
         public static NDArray repeat(NDArray a, NDArray repeats, int? axis = null)
         {
             if (a is null)

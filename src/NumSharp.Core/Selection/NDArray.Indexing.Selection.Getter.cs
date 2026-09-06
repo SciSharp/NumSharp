@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Threading.Tasks;
+using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 using NumSharp.Utilities;
 
@@ -111,6 +112,11 @@ namespace NumSharp
             return np.array(longs, copy: false);
         }
 
+        // NDScoped: reclaims the normalization coercions, the mask MakeGeneric aliases, the
+        // slice/scalar index arrays, the mixed-advanced grid and the premature-slicing views
+        // built below; every return is yielded (an input passthrough — e.g. a view over `this` —
+        // passes through as a no-op).
+        [NDScoped]
         private NDArray FetchIndices(object[] indicesObjects)
         {
             indicesObjects = NormalizeIndexInputs(indicesObjects);    // tuple spread + mask/sequence coercion
@@ -675,6 +681,7 @@ namespace NumSharp
         /// applicable: no slice/newaxis present, not exactly one advanced index, or a
         /// multi-dimensional advanced index / k-D boolean mask (multiple advanced axes).
         /// </summary>
+        [NDScopedCovered] // designed to run under the [NDScoped] FetchIndices(object[]) dispatch (currently unreferenced — superseded by TryBuildMultiAdvancedGrid)
         private bool TryFetchSliceWithSingleAdvanced(object[] indicesObjects, out NDArray result)
         {
             result = null;
@@ -811,6 +818,7 @@ namespace NumSharp
         /// (caller falls back) when there is no explicit slice/newaxis, fewer than two
         /// advanced axes, the tuple over-indexes the rank, or an item is unrecognized.
         /// </summary>
+        [NDScopedCovered] // only callers: the [NDScoped] FetchIndices(object[]) / SetIndices(object[], values) dispatches
         private bool TryBuildMultiAdvancedGrid(object[] indicesObjects, out NDArray[] grid)
         {
             grid = null;
@@ -1064,6 +1072,7 @@ namespace NumSharp
             return true;
         }
 
+        [NDScoped]
         protected static NDArray FetchIndices(NDArray src, NDArray[] indices, NDArray @out, bool extraDim)
         {
             // #region Compute
@@ -1078,6 +1087,10 @@ namespace NumSharp
             // #endregion
 
 #region Compute
+
+            // NDScoped: reclaims the per-dispatch MakeGeneric alias, the computed-offsets
+            // buffer, and every gather temp inside FetchIndices<T>; the yielded result (or the
+            // caller's untracked @out) is the only survivor.
 
             switch (src.typecode)
             {
@@ -1239,6 +1252,44 @@ namespace NumSharp
                 }
             }
 
+            // Kernel route — ONE index array over a C-contiguous source (a[idx], m[ridx], a[idx2d]):
+            // the take kernels gather straight from the index buffer at its own width (int32 or
+            // int64, offset honoured), one typed MOV (or one slab cpblk) per index, no offset
+            // delegate, no materialised offset array, no second pass — NumPy's mapiter_trivial_get
+            // shape, ~3-4x the route below at 100K (docs/NDITER_PERF_DISCOVERY.md §7 lever 1). The
+            // general route stays for everything else: several index arrays, a non-contiguous
+            // source, a strided / reversed / narrow-dtype index view, a caller-supplied @out, or a
+            // zero-byte slab (an empty trailing axis — nothing to gather, shape only).
+            if (ndsCount == 1 && @out is null && source.Shape.IsContiguous && DirectILKernelGenerator.Enabled
+                && FancyIndexKernelRoute.TryGetIndexPointer(indices[0], out void* kernelIdxPtr, out bool kernelIdx32))
+            {
+                long slabElements = 1;
+                if (isSubshaped)
+                    for (int i = 0; i < subShape.Length; i++)
+                        slabElements *= subShape[i];
+                long slabBytes = slabElements * InfoOf<T>.Size;
+                long indexCount = indices[0].size;
+                long axisLength = srcShape.dimensions[0];
+                if (slabBytes > 0)
+                {
+                    // Allocated at the FINAL retShape (fresh, C-contiguous, owned — flags.owndata=True
+                    // like NumPy's fancy result); the kernel fills it flat.
+                    var gathered = new NDArray<T>(retShape, false);
+                    byte* srcBase = (byte*)source.Storage.Address + srcShape.offset * InfoOf<T>.Size;
+                    long fail = FancyIndexKernelRoute.Gather(srcBase, kernelIdxPtr, kernelIdx32, indexCount, axisLength, slabBytes, (byte*)gathered.Address);
+                    if (fail == -1)
+                        return gathered;
+                    if (fail >= 0)
+                    {
+                        // Same NumPy-verbatim text the general route raises (the single index array is
+                        // axis 0); the partially filled result is a scope-reclaimed temp.
+                        long badIndex = FancyIndexKernelRoute.ReadIndex(kernelIdxPtr, kernelIdx32, fail);
+                        throw new IndexError($"index {badIndex} is out of bounds for axis 0 with size {axisLength}");
+                    }
+                    // -2: the IL kernels are unavailable on this host — fall through to the general route.
+                }
+            }
+
             //when -----------------------------------------
             //indices point to an ndarray
             if (isSubshaped && (!source.Shape.IsContiguous || (!(@out is null) && !@out.Shape.IsContiguous)))
@@ -1255,8 +1306,9 @@ namespace NumSharp
             //prepare indices getters
             var indexGetters = PrepareIndexGetters(srcShape, indices);
 
-            //figure out the largest possible abosulte offset
-            long largestOffset = LargestReachableOffset(srcShape, source.size);
+            //figure out the largest possible abosulte offset (disengaged for a zero-sized source,
+            //which dereferences nothing — see OffsetBackstopUpperBound)
+            long largestOffset = OffsetBackstopUpperBound(srcShape, source.size);
 
             //compute coordinates
             if (indices.Length > 1)
@@ -1291,15 +1343,15 @@ namespace NumSharp
             {
                 var idxAddr = computedOffsets.Address;
                 var srcAddr = source.Address;
-                var dst = new NDArray<T>(Shape.Vector(computedOffsets.size), false);
+                // Allocate at the FINAL retShape and fill flat (the fresh buffer is C-contiguous either
+                // way) — a terminal dst.reshape(retShape) would hand back a VIEW of the hidden temp and
+                // misreport flags.owndata=False, where NumPy's fancy result OWNS its data.
+                var dst = new NDArray<T>(retShape ?? new[] { computedOffsets.size }, false);
                 T* dstAddr = dst.Address;
                 //indices point to a scalar
                 var len = dst.size;
                 for (long i = 0; i < len; i++)
                     dstAddr[i] = srcAddr[idxAddr[i]];
-
-                if (retShape != null)
-                    return dst.reshape(retShape);
 
                 return dst;
             }
@@ -1369,7 +1421,12 @@ namespace NumSharp
                 Buffer.MemoryCopy(srcAddr + so, dstAddr + doff, copySize, copySize);
             }
 
-            return dst.MakeGeneric<T>();
+            // Return the owned result INSTANCE, not a MakeGeneric alias of it — the alias is pure
+            // type-plumbing but it chains _baseStorage to the (invisible) fresh buffer, misreporting
+            // flags.owndata=False where NumPy's fancy result owns its data. A caller-supplied @out that
+            // is not already generic still needs the typed wrapper (a view of the user's array — its
+            // owndata=False is then genuinely true).
+            return dst as NDArray<T> ?? dst.MakeGeneric<T>();
         }
 
         /// <summary>
@@ -1473,6 +1530,36 @@ namespace NumSharp
         ///     the previous <c>GetOffset(size-1 corner)</c> was the MINIMUM corner for a negative-stride
         ///     view, so valid early-row offsets were falsely rejected as out of bounds.
         /// </summary>
+        /// <summary>
+        ///     Upper bound for the gather/scatter offset backstop — <see cref="LargestReachableOffset"/>,
+        ///     except DISENGAGED for a source that holds no element.
+        /// </summary>
+        /// <remarks>
+        ///     That flat-offset comparison is NOT what makes a fancy index valid: every index value has
+        ///     already been checked against ITS OWN axis extent (<c>-dim &lt;= idx &lt; dim</c>) — up front and
+        ///     axis-major by <c>ScanFancyBounds</c> (<c>NDArray.Indexing.PrepareIndex.cs</c>, NumPy's
+        ///     <c>mapping.c</c> order and verbatim <c>IndexError</c>), and again per value inside
+        ///     <see cref="PrepareIndexGetters"/>. That layer is what rejects <c>np.zeros((3,0))[[5]]</c> and
+        ///     <c>np.zeros((0,3))[[0]]</c>, and it keeps doing so. This bound is only the memory-safety
+        ///     backstop for the DEREFERENCE that follows.
+        ///
+        ///     A zero-sized source has no dereference to guard, so the backstop has nothing to say. The
+        ///     empty extent is either an INDEXED axis — where the per-axis layer above already rejected
+        ///     every possible index value, leaving only an empty index array whose loop body never runs —
+        ///     or a TRAILING one, which makes every gathered/scattered block <c>subShapeSize == 0</c>: zero
+        ///     bytes copied, no address read. Meanwhile <see cref="LargestReachableOffset"/> reports
+        ///     <c>size - 1 == -1</c> there, below every offset it is compared against, so leaving it engaged
+        ///     rejected every VALID empty gather — <c>np.zeros((3,0))[[0,1]]</c> threw
+        ///     <c>IndexOutOfRangeException</c> where NumPy returns <c>(2,0)</c>.
+        ///
+        ///     Only the UPPER half is disengaged. The <c>&lt; 0</c> half stays live unconditionally: a negative
+        ///     computed offset (an exotic strided / negative-stride view whose <c>GetOffset</c> underflows
+        ///     below the buffer base) would read or write BEFORE the buffer — a wild access that can land in
+        ///     the GC heap.
+        /// </remarks>
+        private static long OffsetBackstopUpperBound(Shape shape, long size)
+            => size == 0 ? long.MaxValue : LargestReachableOffset(shape, size);
+
         private static long LargestReachableOffset(Shape shape, long size)
         {
             if (shape.IsContiguous)

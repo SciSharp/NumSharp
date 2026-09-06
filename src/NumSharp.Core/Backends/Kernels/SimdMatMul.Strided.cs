@@ -62,7 +62,12 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            if (M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD)
+            // gevm (M == 1): route the single-output-row product to the per-k SIMD daxpy
+            // (SimpleStrided) instead of packing panels; needs B's inner axis contiguous for
+            // the vectorised daxpy. Small M == 1 already lands here, so only large M == 1 moves
+            // off the blocked path — same kernel, identical bytes.
+            if ((M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD)
+                || (M == 1 && bStride1 == 1))
             {
                 MatMulFloatSimpleStrided(A, aStride0, aStride1, B, bStride0, bStride1, C, M, N, K);
                 return;
@@ -78,7 +83,11 @@ namespace NumSharp.Backends.Kernels
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void MatMulFloatContiguousCore(float* A, float* B, float* C, long M, long N, long K)
         {
-            if (M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD)
+            // gevm (M == 1): the simple IKJ path IS the optimal per-k SIMD daxpy (accumulate y
+            // += x[k]*B[k,:] row by row); the blocked path's packing is wasted on one output
+            // row. Small M == 1 already takes Simple, so only large M == 1 is redirected off
+            // Blocked — with the identical Simple kernel, so no result bytes change.
+            if ((M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD) || M == 1)
                 MatMulFloatSimple(A, B, C, M, N, K);
             else
                 MatMulFloatBlocked(A, B, C, M, N, K);

@@ -17,6 +17,7 @@ namespace NumSharp
         /// <param name="ddof">Means Delta Degrees of Freedom. The divisor used in calculations is N - ddof, where N represents the number of non-NaN elements. By default ddof is zero.</param>
         /// <returns>A new array containing the variance. If all values along an axis are NaN, returns NaN for that slice.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanvar.html</remarks>
+        [NDScoped]
         public static NDArray nanvar(NDArray a, int? axis = null, bool keepdims = false, int ddof = 0)
         {
             var arr = a;
@@ -31,26 +32,26 @@ namespace NumSharp
                 if (arr.GetTypeCode == NPTypeCode.Single)
                 {
                     float val = arr.GetSingle();
-                    return NDArray.Scalar(float.IsNaN(val) ? float.NaN : 0f);
+                    return NDArray.Scalar(float.IsNaN(val) ? float.NaN : 0f).MarkReductionScalar();
                 }
                 else if (arr.GetTypeCode == NPTypeCode.Double)
                 {
                     double val = arr.GetDouble();
-                    return NDArray.Scalar(double.IsNaN(val) ? double.NaN : 0.0);
+                    return NDArray.Scalar(double.IsNaN(val) ? double.NaN : 0.0).MarkReductionScalar();
                 }
                 else if (arr.GetTypeCode == NPTypeCode.Half)
                 {
                     Half val = arr.GetHalf();
-                    return NDArray.Scalar(Half.IsNaN(val) ? Half.NaN : (Half)0);
+                    return NDArray.Scalar(Half.IsNaN(val) ? Half.NaN : (Half)0).MarkReductionScalar();
                 }
                 else if (arr.GetTypeCode == NPTypeCode.Complex)
                 {
                     // NumPy: nanvar of complex returns float64.
                     Complex val = arr.GetComplex();
                     bool isNaN = double.IsNaN(val.Real) || double.IsNaN(val.Imaginary);
-                    return NDArray.Scalar(isNaN ? double.NaN : 0.0);
+                    return NDArray.Scalar(isNaN ? double.NaN : 0.0).MarkReductionScalar();
                 }
-                return NDArray.Scalar(0.0);
+                return NDArray.Scalar(0.0).MarkReductionScalar();
             }
 
             // Element-wise (axis=None): compute variance ignoring NaN
@@ -60,7 +61,9 @@ namespace NumSharp
             }
             else
             {
-                // Axis reduction: compute variance along axis ignoring NaN
+                // Axis reduction: compute variance along axis ignoring NaN. The result is allocated
+                // in KEEPORDER (F for an F-contig input) and filled by coordinate, so it matches
+                // NumPy's layout with no post-hoc copy (issue #610).
                 return nanvar_axis(arr, axis.Value, keepdims, ddof);
             }
         }
@@ -170,7 +173,7 @@ namespace NumSharp
                     keepdimsShape[i] = 1;
                 r.Storage.Reshape(new Shape(keepdimsShape));
             }
-            return r;
+            return r.MarkReductionScalar();
         }
 
         /// <summary>
@@ -215,7 +218,7 @@ namespace NumSharp
             NDArray result;
             if (arr.GetTypeCode == NPTypeCode.Single)
             {
-                result = new NDArray(NPTypeCode.Single, new Shape(outputShape));
+                result = Backends.DefaultEngine.AllocateReductionResult(NPTypeCode.Single, outputShape, arr.Shape);
                 long outputSize = result.size;
 
                 for (long outIdx = 0; outIdx < outputSize; outIdx++)
@@ -288,7 +291,7 @@ namespace NumSharp
             }
             else // Double
             {
-                result = new NDArray(NPTypeCode.Double, new Shape(outputShape));
+                result = Backends.DefaultEngine.AllocateReductionResult(NPTypeCode.Double, outputShape, arr.Shape);
                 long outputSize = result.size;
 
                 for (long outIdx = 0; outIdx < outputSize; outIdx++)
@@ -359,20 +362,9 @@ namespace NumSharp
                 }
             }
 
-            // Handle keepdims
+            // Handle keepdims: ExpandDimension re-inserts the reduced axis preserving KEEPORDER.
             if (keepdims)
-            {
-                var keepdimsShapeDims = new long[arr.ndim];
-                int srcIdx = 0;
-                for (int i = 0; i < arr.ndim; i++)
-                {
-                    if (i == axis)
-                        keepdimsShapeDims[i] = 1;
-                    else
-                        keepdimsShapeDims[i] = outputShape[srcIdx++];
-                }
-                result = result.reshape(keepdimsShapeDims);
-            }
+                result.Storage.ExpandDimension(axis);
 
             return result;
         }
@@ -387,7 +379,7 @@ namespace NumSharp
             var outputShape = outputShapeList.ToArray();
             long axisLen = inputShape[axis];
 
-            var result = new NDArray(NPTypeCode.Half, new Shape(outputShape));
+            var result = Backends.DefaultEngine.AllocateReductionResult(NPTypeCode.Half, outputShape, arr.Shape);
             long outputSize = result.size;
 
             for (long outIdx = 0; outIdx < outputSize; outIdx++)
@@ -451,7 +443,7 @@ namespace NumSharp
             long axisLen = inputShape[axis];
 
             // NumPy: nanvar of complex returns float64.
-            var result = new NDArray(NPTypeCode.Double, new Shape(outputShape));
+            var result = Backends.DefaultEngine.AllocateReductionResult(NPTypeCode.Double, outputShape, arr.Shape);
             long outputSize = result.size;
 
             for (long outIdx = 0; outIdx < outputSize; outIdx++)

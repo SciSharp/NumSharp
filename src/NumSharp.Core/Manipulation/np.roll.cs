@@ -18,6 +18,7 @@ namespace NumSharp
         /// Matches NumPy's algorithm: empty_like + slice-copy pairs.
         /// https://numpy.org/doc/stable/reference/generated/numpy.roll.html
         /// </remarks>
+        [NDScoped]
         public static NDArray roll(NDArray a, long shift, int? axis = null)
         {
             if (axis == null)

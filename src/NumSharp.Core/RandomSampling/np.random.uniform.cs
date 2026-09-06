@@ -50,6 +50,7 @@ namespace NumSharp
         /// <param name="high">Upper boundary array.</param>
         /// <param name="dtype">The dtype of the output NDArray.</param>
         /// <returns>Drawn samples.</returns>
+        [NDScoped] // reclaims the rand draw, its astype, the (high-low) diff and the pre-cast ret
         public NDArray uniform(NDArray low, NDArray high, Type dtype = null)
         {
             if (!low.shape.SequenceEqual(high.shape))

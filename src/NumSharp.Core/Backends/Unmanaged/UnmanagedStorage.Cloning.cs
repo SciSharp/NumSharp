@@ -1,6 +1,5 @@
 ﻿using System;
 using NumSharp.Backends.Iteration;
-using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -35,13 +34,19 @@ namespace NumSharp.Backends
         public UnmanagedStorage Alias()
         {
             var r = new UnmanagedStorage();
-            r._shape = _shape;
+            // A fresh view re-reports ALIGNED even when the source was setflags(align: false)-cleared:
+            // NumPy recomputes alignment for every new array object from the data pointer, and NumSharp
+            // data is always genuinely aligned — the cleared bit belongs to the source array alone.
+            r._shape = (_shape._flags & (int)ArrayFlags.ALIGNED) == 0
+                ? _shape.WithFlags(flagsToSet: ArrayFlags.ALIGNED)
+                : _shape;
             r._typecode = _typecode;
             r._dtype = _dtype;
             if (InternalArray != null)
                 r.SetInternalArray(InternalArray);
             r.Count = _shape.size; //incase shape is sliced
             r._baseStorage = _baseStorage ?? this;
+            r.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             r.Engine = Engine;
             return r;
         }
@@ -75,17 +80,15 @@ namespace NumSharp.Backends
             r._typecode = _typecode;
             r._dtype = _dtype;
             // Hot path: when this storage is already wired (InternalArray + Address
-            // set), copy the IArraySlice surface and the *single* live type-specific
-            // field directly instead of routing through SetInternalArray's full
-            // 15-case typecode dispatch. The aliased storage exposes the same
-            // backing buffer; the type-specific field is still needed for typed
-            // accessors elsewhere in UnmanagedStorage, so we mirror parent's slot
-            // via an IL-emitted delegate cached per dtype (no switch in hot path).
+            // set), copy the IArraySlice surface and the typed-slice union directly
+            // instead of routing through SetInternalArray's full 15-case typecode
+            // dispatch. The union holds the single live lane, so one 64 B struct
+            // assignment mirrors the parent's typed slice whatever the dtype.
             if (InternalArray != null)
             {
                 r.InternalArray = InternalArray;
                 r.Address = Address;
-                DirectILKernelGenerator.GetStorageAliasFieldCopier(_typecode)(r, this);
+                r._slices = _slices;
             }
 
             // A view inherits writeability from what it aliases: any view of a read-only array (a
@@ -95,9 +98,26 @@ namespace NumSharp.Backends
             if (!_shape.IsWriteable && shape.IsWriteable)
                 shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
 
+            // The mirror half of NumPy's inherit-the-writeable-bit rule: a child carved from an
+            // ALREADY-broadcast parent whose writeable was re-enabled (ndarray.setflags(write: true))
+            // re-inherits that override — the child's computed False came from the broadcastness it
+            // INHERITED, not from a fresh protection decision, and the user explicitly opted in on
+            // the parent (probed 2.4.2: slice/step/T/squeeze of a setflags-writeable broadcast_to
+            // all report writeable=True). A broadcast INTRODUCED over a non-broadcast parent keeps
+            // the computed read-only default (np.broadcast_to additionally clears explicitly).
+            else if (_shape.IsBroadcasted && _shape.IsWriteable && shape.IsBroadcasted && !shape.IsWriteable)
+                shape = shape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
+
+            // ALIGNED is the opposite: a fresh view re-reports it even when the source (whose shape a
+            // caller may pass verbatim, e.g. einsum's identity view) was setflags(align: false)-cleared —
+            // NumPy recomputes alignment per new array object, and NumSharp data is always aligned.
+            if ((shape._flags & (int)ArrayFlags.ALIGNED) == 0)
+                shape = shape.WithFlags(flagsToSet: ArrayFlags.ALIGNED);
+
             r._shape = shape;
             r.Count = shape.size; //incase shape is sliced
             r._baseStorage = _baseStorage ?? this;
+            r.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             r.Engine = Engine;
             return r;
         }
@@ -129,22 +149,30 @@ namespace NumSharp.Backends
         public UnmanagedStorage Alias(ref Shape shape)
         {
             var r = new UnmanagedStorage();
-            // A view inherits writeability from what it aliases (see Alias(Shape)).
-            r._shape = (!_shape.IsWriteable && shape.IsWriteable)
+            // A view inherits writeability from what it aliases, and re-reports ALIGNED (see Alias(Shape));
+            // the broadcast-writeable override re-inherits the same way (see Alias(Shape)).
+            var aliasShape = (!_shape.IsWriteable && shape.IsWriteable)
                 ? shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)
-                : shape;
+                : (_shape.IsBroadcasted && _shape.IsWriteable && shape.IsBroadcasted && !shape.IsWriteable)
+                    ? shape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE)
+                    : shape;
+            if ((aliasShape._flags & (int)ArrayFlags.ALIGNED) == 0)
+                aliasShape = aliasShape.WithFlags(flagsToSet: ArrayFlags.ALIGNED);
+            r._shape = aliasShape;
             r._typecode = _typecode;
             r._dtype = _dtype;
             if (InternalArray != null)
                 r.SetInternalArray(InternalArray);
             r.Count = shape.size; //incase shape is sliced
             r._baseStorage = _baseStorage ?? this;
+            r.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             r.Engine = Engine;
             return r;
         }
 
         /// <summary>
-        /// Creates an alias (view) of this storage with a different dtype, reinterpreting bytes.
+        /// Creates an alias (view) of this storage with a different dtype, reinterpreting bytes —
+        /// the storage half of NumPy's <c>ndarray.view(dtype)</c>.
         /// </summary>
         /// <typeparam name="T">The new dtype to interpret the bytes as.</typeparam>
         /// <returns>
@@ -158,19 +186,27 @@ namespace NumSharp.Backends
         /// will show the IEEE 754 bit patterns, not converted values.
         /// </para>
         /// <para>
-        /// <b>Shape Adjustment:</b> If the new type has a different size, the last dimension
-        /// is adjusted. E.g., float64[3] viewed as float32 becomes float32[6].
+        /// <b>Same itemsize:</b> The dtype tag changes and the shape, strides and offset are kept
+        /// verbatim, so ANY layout works (C/F-contiguous, sliced, strided, transposed, negative-stride,
+        /// broadcast, 0-d). A read-only source (broadcast) stays read-only.
         /// </para>
         /// <para>
-        /// <b>Contiguous Requirement:</b> Only contiguous arrays can be viewed with different
-        /// dtype when sizes differ.
+        /// <b>Different itemsize (NumPy 2.x rule):</b> only the LAST axis must be contiguous
+        /// (byte-stride == old itemsize) — the whole array need NOT be C-contiguous. That last axis is
+        /// resized by the size ratio while every outer axis keeps its byte stride, so
+        /// <c>a[::2].view(...)</c> and other outer-strided/offset views are supported, matching NumPy.
+        /// Read-only (broadcast) sources stay read-only.
         /// </para>
         /// </remarks>
         /// <exception cref="InvalidOperationException">
-        /// If the array is not contiguous and type sizes differ.
+        /// If the last axis is not contiguous and type sizes differ (NumPy raises ValueError). NumSharp
+        /// stores strides/offset in ELEMENTS rather than bytes, so the rare misaligned strided+offset
+        /// view whose byte offset/stride is not a whole multiple of the new itemsize is also refused here
+        /// (NumPy, which carries a byte pointer, would allow it).
         /// </exception>
         /// <exception cref="ArgumentException">
-        /// If the total byte size is not divisible by the new type size.
+        /// If the array is 0-d, or the last axis's byte size is not divisible by the new itemsize
+        /// (NumPy raises ValueError with the same wording).
         /// </exception>
         public unsafe UnmanagedStorage AliasAs<T>() where T : unmanaged
         {
@@ -179,62 +215,89 @@ namespace NumSharp.Backends
 
             int oldSize = DTypeSize;
             int newSize = sizeof(T);
-            long totalBytes = _shape.size * oldSize;
 
-            // Check byte alignment
-            if (totalBytes % newSize != 0)
-                throw new ArgumentException(
-                    $"Cannot view {_dtype.Name}[{_shape.size}] ({totalBytes} bytes) as {typeof(T).Name} " +
-                    $"because {totalBytes} is not divisible by {newSize}.");
-
-            // For different sizes, array must be contiguous
-            if (oldSize != newSize && !_shape.IsContiguous)
-                throw new InvalidOperationException(
-                    "Cannot view non-contiguous array with different dtype size. " +
-                    "Use copy() first to make it contiguous.");
-
-            long newCount = totalBytes / newSize;
-
-            // Compute new shape - adjust last dimension if sizes differ
-            Shape newShape;
+            // Same itemsize: pure reinterpret. Keep dims/strides/offset (any layout — NumPy allows the
+            // same-size view on non-contiguous / broadcast / negative-stride arrays), only the dtype tag
+            // changes. The wrap spans the WHOLE backing slice so a strided view that drops elements still
+            // addresses every in-bounds coordinate via Shape.offset + strides.
             if (oldSize == newSize)
+                return WrapReinterpreted<T>(_shape, InternalArray.Count);
+
+            // Different itemsize — NumPy 2.x view(dtype) rules (numpy/_core/src/multiarray/getset.c
+            // array_descr_set): only the LAST axis has to be contiguous; every outer axis keeps its byte
+            // stride and the last axis is rescaled by the size ratio.
+            var dims = _shape.dimensions;
+            if (dims.Length == 0)
+                throw new ArgumentException("Changing the dtype of a 0d array is only supported if the itemsize is unchanged");
+
+            var oldStrides = _shape.strides; // element strides in the OLD dtype
+            int last = dims.Length - 1;
+            // The last axis is contiguous iff its byte-stride == old itemsize, i.e. its element stride is
+            // 1. A length-≤1 last axis is trivially contiguous (its stride is never stepped).
+            bool lastContiguous = dims[last] <= 1 || oldStrides[last] == 1;
+            if (!lastContiguous)
+                throw new InvalidOperationException("To change to a dtype of a different size, the last axis must be contiguous");
+
+            long lastAxisBytes = dims[last] * oldSize;
+            if (lastAxisBytes % newSize != 0)
+                throw new ArgumentException("When changing to a larger dtype, its size must be a divisor of the total size in bytes of the last axis of the array.");
+
+            // Reinterpret the outer axes' byte strides and the base offset as new-dtype elements. NumSharp
+            // stores these in ELEMENTS (NumPy in bytes), so a value that is not a whole multiple of the new
+            // itemsize cannot be represented — refuse it (extremely rare; offset 0 and the common strided
+            // cases always divide). This is strictly MORE permissive than before, never less.
+            long byteOffset = _shape.offset * oldSize;
+            if (byteOffset % newSize != 0)
+                throw new InvalidOperationException("To change to a dtype of a different size, the last axis must be contiguous");
+
+            var newDims = new long[dims.Length];
+            var newStrides = new long[dims.Length];
+            for (int i = 0; i < last; i++)
             {
-                newShape = _shape;
+                newDims[i] = dims[i];
+                long outerByteStride = oldStrides[i] * oldSize;
+                if (outerByteStride % newSize != 0)
+                    throw new InvalidOperationException("To change to a dtype of a different size, the last axis must be contiguous");
+                newStrides[i] = outerByteStride / newSize;
             }
-            else
-            {
-                // NumPy adjusts the last dimension
-                var dims = _shape.dimensions;
-                if (dims.Length == 0)
-                {
-                    // Scalar - can only view as same size type
-                    throw new ArgumentException("Cannot view scalar array as different-sized type.");
-                }
+            newDims[last] = lastAxisBytes / newSize;
+            newStrides[last] = 1;
+            long newOffset = byteOffset / newSize;
 
-                var newDims = new long[dims.Length];
-                Array.Copy(dims, newDims, dims.Length);
+            // Span the whole backing buffer in new-dtype units (floor: a trailing partial element is never
+            // addressed, since each last-axis run is a whole number of new elements).
+            long newBufferCount = InternalArray.BytesLength / newSize;
+            var newShape = new Shape(newDims, newStrides, newOffset, newBufferCount);
+            return WrapReinterpreted<T>(newShape, newBufferCount);
+        }
 
-                // Last dimension gets adjusted by the size ratio
-                long lastDimBytes = dims[dims.Length - 1] * oldSize;
-                if (lastDimBytes % newSize != 0)
-                    throw new ArgumentException(
-                        $"Cannot view: last axis size ({dims[dims.Length - 1]}) * itemsize ({oldSize}) " +
-                        $"= {lastDimBytes} bytes is not divisible by new itemsize ({newSize}).");
+        /// <summary>
+        /// Builds a byte-reinterpreting alias: a new storage of dtype <typeparamref name="T"/> over the
+        /// SAME memory, carrying <paramref name="shape"/> (dims/strides/offset) and a non-owning wrap of
+        /// <paramref name="wrapCount"/> new-dtype elements. A read-only source stays read-only, and the
+        /// ultimate owner is rooted through <c>_baseStorage</c> so the shared buffer outlives the view.
+        /// </summary>
+        private unsafe UnmanagedStorage WrapReinterpreted<T>(Shape shape, long wrapCount) where T : unmanaged
+        {
+            // A view inherits non-writeability: a view of a read-only array (broadcast, 'r' memmap) must
+            // stay read-only. The freshly-built strided/same-size shape may have defaulted WRITEABLE back on.
+            if (!_shape.IsWriteable && shape.IsWriteable)
+                shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
 
-                newDims[dims.Length - 1] = lastDimBytes / newSize;
-                newShape = new Shape(newDims);
-            }
+            // ALIGNED re-reports on the fresh view (the same-itemsize path passes `_shape` verbatim, which
+            // may carry a setflags(align: false) clear) — see Alias(Shape).
+            if ((shape._flags & (int)ArrayFlags.ALIGNED) == 0)
+                shape = shape.WithFlags(flagsToSet: ArrayFlags.ALIGNED);
 
-            // Create a wrapped ArraySlice pointing to the same memory
-            var newSlice = ArraySlice.Wrap<T>((T*)InternalArray.Address, newCount);
-
+            var newSlice = ArraySlice.Wrap<T>((T*)InternalArray.Address, wrapCount);
             var r = new UnmanagedStorage();
-            r._shape = newShape;
+            r._shape = shape;
             r._typecode = InfoOf<T>.NPTypeCode;
             r._dtype = typeof(T);
             r.SetInternalArray(newSlice);
-            r.Count = newCount;
+            r.Count = shape.size;
             r._baseStorage = _baseStorage ?? this;
+            r.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             r.Engine = Engine;
             return r;
         }
@@ -284,6 +347,69 @@ namespace NumSharp.Backends
                 default:
                     throw new NotSupportedException($"Type code {typeCode} is not supported.");
             }
+        }
+
+        /// <summary>
+        ///     Creates a <see cref="double"/> (float64) VIEW onto one lane — real or imaginary — of a
+        ///     <see cref="System.Numerics.Complex"/> storage, reproducing NumPy's <c>a.real</c> / <c>a.imag</c>:
+        ///     a strided float64 view that SHARES memory (and writeability) with the Complex base.
+        /// </summary>
+        /// <param name="imaginary"><c>false</c> selects the real lane, <c>true</c> the imaginary lane.</param>
+        /// <returns>
+        ///     A float64 <see cref="UnmanagedStorage"/> aliasing this storage's chosen lane. Writes through
+        ///     to the Complex base; the base is kept alive via <c>_baseStorage</c>.
+        /// </returns>
+        /// <remarks>
+        ///     <para>
+        ///     A <see cref="System.Numerics.Complex"/> is two consecutive float64s (real, then imaginary),
+        ///     laid out exactly like NumPy's <c>complex128</c>. A lane is therefore a plain strided float64
+        ///     view: every Complex element stride is doubled (a Complex spans two float64s) and the base
+        ///     offset is doubled, plus one for the imaginary lane. This works for EVERY layout
+        ///     (contiguous / F-contiguous / transposed / strided / negative-stride / sliced-offset /
+        ///     broadcast), because it operates on the raw contiguous backing buffer and mirrors whatever
+        ///     strides/offset the Complex shape carries — the same strided-lane read the FFT driver uses.
+        ///     </para>
+        ///     <para>
+        ///     A lane of a read-only Complex (a broadcast view, or an <c>'r'</c> memmap) stays read-only.
+        ///     </para>
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">If this storage is not a Complex storage.</exception>
+        public unsafe UnmanagedStorage AliasComplexLane(bool imaginary)
+        {
+            if (_typecode != NPTypeCode.Complex)
+                throw new InvalidOperationException(
+                    $"AliasComplexLane requires a Complex storage but got {_typecode}.");
+
+            // The backing buffer holds `bufferSize` Complex values == 2*bufferSize float64 lanes.
+            long doubleCount = _shape.bufferSize * 2;
+
+            // float64 element strides = Complex element strides * 2 (a Complex is two float64s wide).
+            long[] cstr = _shape.strides;
+            long[] dstr = new long[cstr.Length];
+            for (int i = 0; i < cstr.Length; i++)
+                dstr[i] = cstr[i] * 2;
+
+            long laneOffset = _shape.offset * 2 + (imaginary ? 1 : 0);
+            var laneShape = new Shape((long[])_shape.dimensions.Clone(), dstr, laneOffset, doubleCount);
+
+            // Inherit read-only-ness: a lane of a non-writeable Complex must not become writeable
+            // (the internal Shape ctor defaults WRITEABLE on). Same guard as Alias(Shape).
+            if (!_shape.IsWriteable && laneShape.IsWriteable)
+                laneShape = laneShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+
+            // Non-owning float64 slice over the SAME memory; lifetime handed to the Complex owner.
+            var slice = ArraySlice.Wrap<double>((double*)InternalArray.Address, doubleCount);
+
+            var r = new UnmanagedStorage();
+            r._shape = laneShape;
+            r._typecode = NPTypeCode.Double;
+            r._dtype = typeof(double);
+            r.SetInternalArray(slice);
+            r.Count = laneShape.size; // logical element count (bufferSize may be larger for a sliced/broadcast view)
+            r._baseStorage = _baseStorage ?? this;
+            r.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
+            r.Engine = Engine;
+            return r;
         }
 
         #endregion

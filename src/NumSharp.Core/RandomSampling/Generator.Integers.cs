@@ -1,0 +1,351 @@
+using System;
+using NumSharp.Generic;
+
+namespace NumSharp
+{
+    public sealed partial class Generator
+    {
+        /// <summary>
+        ///     Return random integers from <paramref name="low"/> (inclusive) to <paramref name="high"/>
+        ///     (exclusive, or inclusive when <paramref name="endpoint"/> is true).
+        /// </summary>
+        /// <param name="low">Lowest integer drawn (or the highest, one above, when <paramref name="high"/> is null).</param>
+        /// <param name="high">If provided, one above the largest integer drawn (or the largest when <paramref name="endpoint"/>).</param>
+        /// <param name="size">Output shape. If default/scalar a single value is returned.</param>
+        /// <param name="dtype">Desired integer dtype. Default is int64.</param>
+        /// <param name="endpoint">If true, sample from the closed interval <c>[low, high]</c>.</param>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.integers.html
+        ///     <br/>
+        ///     Uses Lemire's method (NumPy's Generator default, <c>use_masked=False</c>) — NOT the
+        ///     legacy masked rejection of <c>RandomState.randint</c> — so the stream is byte-identical
+        ///     to <c>default_rng(seed).integers(...)</c>.
+        /// </remarks>
+        public NDArray integers(long low, long? high = null, Shape size = default, Type dtype = null, bool endpoint = false)
+        {
+            dtype = dtype ?? typeof(long);
+            NPTypeCode tc = dtype.GetTypeCode();
+
+            long lo, hiArg;
+            if (high == null)
+            {
+                hiArg = low;
+                lo = 0;
+            }
+            else
+            {
+                lo = low;
+                hiArg = high.Value;
+            }
+
+            // Internal generator produces on the closed interval; subtract 1 for the half-open case.
+            long highInclusive = endpoint ? hiArg : hiArg - 1;
+
+            ComputeOffRng(tc, dtype, lo, highInclusive, endpoint, out int width, out ulong off, out ulong rng);
+            return FillIntegers(dtype, tc, size, width, off, rng);
+        }
+
+        /// <summary>
+        ///     Unsigned overload of <see cref="integers(long, long?, Shape, Type, bool)"/> — the only way
+        ///     to reach the upper half of the <c>uint64</c> range (values above <see cref="long.MaxValue"/>),
+        ///     which NumPy addresses with arbitrary-precision Python ints. The full <c>[0, 2**64)</c> range
+        ///     is drawn as <c>integers(0UL, ulong.MaxValue, dtype: np.uint64, endpoint: true)</c>.
+        /// </summary>
+        /// <remarks>
+        ///     Anything expressible in the signed domain is forwarded verbatim to the signed overload, so
+        ///     only genuinely-large uint64 requests take the dedicated path — which, like NumPy, rejects a
+        ///     non-uint64 dtype whose range cannot hold the requested high (<c>high is out of bounds…</c>).
+        /// </remarks>
+        public NDArray integers(ulong low, ulong? high = null, Shape size = default, Type dtype = null, bool endpoint = false)
+        {
+            // Everything that fits the signed domain goes through the (byte-exact, well-tested) signed path.
+            if (low <= long.MaxValue && (high is null || high.Value <= (ulong)long.MaxValue))
+                return integers((long)low, high is null ? (long?)null : (long)high.Value, size, dtype, endpoint);
+
+            // Values exceed the signed range: only uint64 can represent them (NumPy's per-dtype bound check).
+            dtype = dtype ?? typeof(long);
+            NPTypeCode tc = dtype.GetTypeCode();
+            if (tc != NPTypeCode.UInt64)
+                throw new ValueError($"high is out of bounds for {tc.AsNumpyDtypeName()}");
+
+            ulong lo, hiArg;
+            if (high is null) { hiArg = low; lo = 0UL; }
+            else { lo = low; hiArg = high.Value; }
+
+            // hiArg > long.MaxValue on this path (else we forwarded above), so hiArg - 1 cannot underflow.
+            ulong hiInclusive = endpoint ? hiArg : hiArg - 1UL;
+            if (lo > hiInclusive)
+                throw new ValueError(FormatBoundsErrorU(endpoint, lo));
+
+            ulong off = lo;
+            ulong rng = hiInclusive - lo;
+            return FillIntegers(dtype, tc, size, 64, off, rng);
+        }
+
+        // Shared result builder: size==0 -> empty, size==None -> scalar, else a filled dtype array.
+        private NDArray FillIntegers(Type dtype, NPTypeCode tc, Shape size, int width, ulong off, ulong rng)
+        {
+            // size == 0 -> empty array of the requested dtype (drawn no state).
+            if (!IsNoSize(size) && size.size == 0)
+                return new NDArray(dtype, size);
+
+            if (IsNoSize(size))
+            {
+                var scalar = new NDArray(dtype, Shape.Vector(1));
+                FillBounded(scalar, 1, width, off, rng);
+                var value = scalar.GetAtIndex(0);
+                return NDArray.Scalar(value, tc);
+            }
+
+            var nd = new NDArray(dtype, size);
+            FillBounded(nd, nd.size, width, off, rng);
+            return nd;
+        }
+
+        /// <summary>
+        ///     Return random bytes.
+        /// </summary>
+        /// <param name="length">Number of random bytes.</param>
+        /// <returns>
+        ///     A 1-D <see cref="NDArray{T}"/> of <see cref="byte"/> (dtype <c>uint8</c>), length
+        ///     <paramref name="length"/> — the NumSharp analogue of NumPy's <c>bytes</c> object.
+        /// </returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.bytes.html
+        ///     <br/>
+        ///     Byte-identical to NumPy: draws <c>ceil(length/4)</c> uint32 words from PCG64 (via the
+        ///     32-bit buffered path), packs them little-endian, and truncates to <paramref name="length"/>.
+        ///     As with <see cref="NumPyRandom.bytes"/>, the result is an unmanaged-backed
+        ///     <see cref="NDArray{T}"/>, so — matching NumPy's 64-bit <c>npy_intp</c> length — it is
+        ///     NOT capped at <see cref="Array.MaxLength"/> and a request over 2 GiB still succeeds.
+        /// </remarks>
+        public NDArray<byte> bytes(long length)
+            => NumPyRandom.BytesCore(length, static bg => bg.NextUInt32(), _bitGenerator);
+
+        // ---- off/rng computation + validation (numpy _bounded_integers.pyx.in scalar path) ----
+
+        private static void ComputeOffRng(NPTypeCode tc, Type dtype, long lo, long highInclusive, bool endpoint,
+                                          out int width, out ulong off, out ulong rng)
+        {
+            // (lb, ub, width). ub is the EXCLUSIVE upper bound; only meaningful (and checkable
+            // against a long input) for the <= 32-bit widths.
+            long lb;
+            long ub;
+            switch (tc)
+            {
+                case NPTypeCode.Boolean: lb = 0; ub = 2; width = 1; break;
+                case NPTypeCode.Byte: lb = 0; ub = 0x100L; width = 8; break;
+                case NPTypeCode.SByte: lb = -0x80L; ub = 0x80L; width = 8; break;
+                case NPTypeCode.UInt16: lb = 0; ub = 0x10000L; width = 16; break;
+                case NPTypeCode.Int16: lb = -0x8000L; ub = 0x8000L; width = 16; break;
+                case NPTypeCode.UInt32: lb = 0; ub = 0x100000000L; width = 32; break;
+                case NPTypeCode.Int32: lb = -0x80000000L; ub = 0x80000000L; width = 32; break;
+                case NPTypeCode.UInt64: lb = 0; ub = long.MaxValue; width = 64; break; // ub 2^64 unreachable by long
+                case NPTypeCode.Int64: lb = long.MinValue; ub = long.MaxValue; width = 64; break; // ub 2^63 unreachable
+                default:
+                    throw new TypeError($"Unsupported dtype dtype('{tc.AsNumpyDtypeName()}') for integers");
+            }
+
+            if (lo < lb)
+                throw new ValueError($"low is out of bounds for {tc.AsNumpyDtypeName()}");
+            // For 64-bit widths a long can never exceed the exclusive bound, so skip that check.
+            if (width <= 32 && highInclusive > ub)
+                throw new ValueError($"high is out of bounds for {tc.AsNumpyDtypeName()}");
+            if (lo > highInclusive)
+                throw new ValueError(FormatBoundsError(endpoint, lo));
+
+            ulong widthMask = width >= 64 ? ulong.MaxValue : ((1UL << width) - 1UL);
+            off = unchecked((ulong)lo) & widthMask;
+            rng = unchecked((ulong)(highInclusive - lo)) & widthMask;
+        }
+
+        private static string FormatBoundsError(bool closed, long low)
+        {
+            if (low == 0)
+                return closed ? "high < 0" : "high <= 0";
+            return closed ? "low > high" : "low >= high";
+        }
+
+        // Unsigned twin of FormatBoundsError for the uint64-large path.
+        private static string FormatBoundsErrorU(bool closed, ulong low)
+        {
+            if (low == 0)
+                return closed ? "high < 0" : "high <= 0";
+            return closed ? "low > high" : "low >= high";
+        }
+
+        // ---- the per-width bounded fills (numpy random_bounded_uintX_fill, use_masked=False) ----
+
+        private unsafe void FillBounded(NDArray nd, long cnt, int width, ulong off, ulong rng)
+        {
+            void* addr = (void*)nd.Address;
+            switch (width)
+            {
+                case 1: FillBoundedBool((byte*)addr, cnt, (byte)off, (byte)rng); break;
+                case 8: FillBoundedUInt8((byte*)addr, cnt, (byte)off, (byte)rng); break;
+                case 16: FillBoundedUInt16((ushort*)addr, cnt, (ushort)off, (ushort)rng); break;
+                case 32: FillBoundedUInt32((uint*)addr, cnt, (uint)off, (uint)rng); break;
+                default: FillBoundedUInt64((ulong*)addr, cnt, off, rng); break;
+            }
+        }
+
+        private unsafe void FillBoundedUInt64(ulong* outp, long cnt, ulong off, ulong rng)
+        {
+            if (rng == 0)
+            {
+                for (long i = 0; i < cnt; i++) outp[i] = off;
+            }
+            else if (rng <= 0xFFFFFFFFUL)
+            {
+                if (rng == 0xFFFFFFFFUL)
+                    for (long i = 0; i < cnt; i++) outp[i] = off + _bitGenerator.NextUInt32();
+                else
+                {
+                    uint r = (uint)rng;
+                    for (long i = 0; i < cnt; i++) outp[i] = off + LemireUint32(r);
+                }
+            }
+            else if (rng == 0xFFFFFFFFFFFFFFFFUL)
+            {
+                for (long i = 0; i < cnt; i++) outp[i] = off + _bitGenerator.NextUInt64();
+            }
+            else
+            {
+                for (long i = 0; i < cnt; i++) outp[i] = off + LemireUint64(rng);
+            }
+        }
+
+        private unsafe void FillBoundedUInt32(uint* outp, long cnt, uint off, uint rng)
+        {
+            if (rng == 0)
+                for (long i = 0; i < cnt; i++) outp[i] = off;
+            else if (rng == 0xFFFFFFFFu)
+                for (long i = 0; i < cnt; i++) outp[i] = off + _bitGenerator.NextUInt32();
+            else
+                for (long i = 0; i < cnt; i++) outp[i] = off + LemireUint32(rng);
+        }
+
+        private unsafe void FillBoundedUInt16(ushort* outp, long cnt, ushort off, ushort rng)
+        {
+            uint buf = 0;
+            int bcnt = 0;
+            if (rng == 0)
+                for (long i = 0; i < cnt; i++) outp[i] = off;
+            else if (rng == 0xFFFF)
+                for (long i = 0; i < cnt; i++) outp[i] = (ushort)(off + BufferedUint16(ref buf, ref bcnt));
+            else
+                for (long i = 0; i < cnt; i++) outp[i] = (ushort)(off + LemireUint16(rng, ref buf, ref bcnt));
+        }
+
+        private unsafe void FillBoundedUInt8(byte* outp, long cnt, byte off, byte rng)
+        {
+            uint buf = 0;
+            int bcnt = 0;
+            if (rng == 0)
+                for (long i = 0; i < cnt; i++) outp[i] = off;
+            else if (rng == 0xFF)
+                for (long i = 0; i < cnt; i++) outp[i] = (byte)(off + BufferedUint8(ref buf, ref bcnt));
+            else
+                for (long i = 0; i < cnt; i++) outp[i] = (byte)(off + LemireUint8(rng, ref buf, ref bcnt));
+        }
+
+        private unsafe void FillBoundedBool(byte* outp, long cnt, byte off, byte rng)
+        {
+            uint buf = 0;
+            int bcnt = 0;
+            for (long i = 0; i < cnt; i++)
+            {
+                if (rng == 0) { outp[i] = off; continue; }
+                if (bcnt == 0) { buf = _bitGenerator.NextUInt32(); bcnt = 31; }
+                else { buf >>= 1; bcnt -= 1; }
+                outp[i] = (byte)((buf & 0x1u) != 0 ? 1 : 0);
+            }
+        }
+
+        // ---- 32-bit buffer splitters (numpy buffered_uint16 / buffered_uint8) ----
+
+        private ushort BufferedUint16(ref uint buf, ref int bcnt)
+        {
+            if (bcnt == 0) { buf = _bitGenerator.NextUInt32(); bcnt = 1; }
+            else { buf >>= 16; bcnt -= 1; }
+            return (ushort)buf;
+        }
+
+        private byte BufferedUint8(ref uint buf, ref int bcnt)
+        {
+            if (bcnt == 0) { buf = _bitGenerator.NextUInt32(); bcnt = 3; }
+            else { buf >>= 8; bcnt -= 1; }
+            return (byte)buf;
+        }
+
+        // ---- Lemire bounded generators (numpy bounded_lemire_uintX) ----
+
+        private ulong LemireUint64(ulong rng)
+        {
+            ulong rngExcl = rng + 1;
+            UInt128 m = (UInt128)_bitGenerator.NextUInt64() * rngExcl;
+            ulong leftover = (ulong)m;
+            if (leftover < rngExcl)
+            {
+                ulong threshold = (ulong.MaxValue - rng) % rngExcl;
+                while (leftover < threshold)
+                {
+                    m = (UInt128)_bitGenerator.NextUInt64() * rngExcl;
+                    leftover = (ulong)m;
+                }
+            }
+            return (ulong)(m >> 64);
+        }
+
+        private uint LemireUint32(uint rng)
+        {
+            uint rngExcl = rng + 1;
+            ulong m = (ulong)_bitGenerator.NextUInt32() * rngExcl;
+            uint leftover = (uint)m;
+            if (leftover < rngExcl)
+            {
+                uint threshold = (uint.MaxValue - rng) % rngExcl;
+                while (leftover < threshold)
+                {
+                    m = (ulong)_bitGenerator.NextUInt32() * rngExcl;
+                    leftover = (uint)m;
+                }
+            }
+            return (uint)(m >> 32);
+        }
+
+        private ushort LemireUint16(ushort rng, ref uint buf, ref int bcnt)
+        {
+            ushort rngExcl = (ushort)(rng + 1);
+            uint m = (uint)BufferedUint16(ref buf, ref bcnt) * rngExcl;
+            ushort leftover = (ushort)m;
+            if (leftover < rngExcl)
+            {
+                ushort threshold = (ushort)((ushort)(ushort.MaxValue - rng) % rngExcl);
+                while (leftover < threshold)
+                {
+                    m = (uint)BufferedUint16(ref buf, ref bcnt) * rngExcl;
+                    leftover = (ushort)m;
+                }
+            }
+            return (ushort)(m >> 16);
+        }
+
+        private byte LemireUint8(byte rng, ref uint buf, ref int bcnt)
+        {
+            byte rngExcl = (byte)(rng + 1);
+            uint m = (uint)BufferedUint8(ref buf, ref bcnt) * rngExcl;
+            byte leftover = (byte)m;
+            if (leftover < rngExcl)
+            {
+                byte threshold = (byte)((byte)(byte.MaxValue - rng) % rngExcl);
+                while (leftover < threshold)
+                {
+                    m = (uint)BufferedUint8(ref buf, ref bcnt) * rngExcl;
+                    leftover = (byte)m;
+                }
+            }
+            return (byte)(m >> 8);
+        }
+    }
+}

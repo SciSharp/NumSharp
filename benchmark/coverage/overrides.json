@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "manual_coverage": {
+    "numpy.astype": {
+      "kind": "subsystem",
+      "evidence": "benchmark/cast/cast_matrix_bench.cs",
+      "notes": "The cast subsystem measures the full source-dtype x destination-dtype x layout matrix."
+    },
+    "numpy.ndarray.astype": {
+      "kind": "subsystem",
+      "evidence": "benchmark/cast/cast_matrix_bench.cs",
+      "notes": "The cast subsystem invokes ndarray.astype directly."
+    },
+    "numpy.ndarray.byteswap": {
+      "kind": "op_matrix",
+      "evidence": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Manipulation/ByteswapBenchmarks.cs",
+      "notes": "The historical description says np.byteswap(a), but the measured call is ndarray.byteswap()."
+    },
+    "numpy.linalg.cholesky": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.cond": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.det": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.eig": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.eigh": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.eigvals": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.eigvalsh": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.inv": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.lstsq": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.matrix_rank": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.pinv": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.qr": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.slogdet": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.solve": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.svd": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.svdvals": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.tensorinv": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.linalg.tensorsolve": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs"
+    },
+    "numpy.polyfit": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs",
+      "notes": "Composes np.linalg.lstsq and therefore requires the LAPACK backend."
+    },
+    "numpy.roots": {
+      "kind": "subsystem",
+      "evidence": "benchmark/backends/backend_profile_bench.cs",
+      "notes": "Composes np.linalg.eigvals and therefore requires the LAPACK backend."
+    }
+  },
+  "blocked": {},
+  "excluded": {
+    "numpy.shape": "Partial cross-surface property mapping; there is no comparable NumSharp np.shape call.",
+    "numpy.random.get_state": "State snapshot API; no array kernel or size-dependent throughput.",
+    "numpy.random.seed": "Global state mutation; timing is dominated by synchronization and is not an array-throughput comparison.",
+    "numpy.random.set_state": "Global state mutation; timing is dominated by synchronization and is not an array-throughput comparison."
+  }
+}

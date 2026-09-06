@@ -21,7 +21,11 @@ namespace NumSharp
 
             var list = new NDArray[len];
             for (i = 0; i < len; i++)
-                list[i] = new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(ndArrays[i].Storage, outputShapes[i]));
+                // NumPy 2.4.2 parity: broadcast_arrays results are WRITEABLE (unlike broadcast_to),
+                // even for stretched (stride-0) dimensions. NumPy emits a FutureWarning that a future
+                // version will change this, but 2.4.2 still returns writeable=True. Force the flag on so
+                // even a broadcasted subshape (which Shape.Broadcast marks read-only) stays writeable.
+                list[i] = new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(ndArrays[i].Storage, outputShapes[i].WithFlags(flagsToSet: ArrayFlags.WRITEABLE)));
 
             return list;
         }
@@ -36,8 +40,9 @@ namespace NumSharp
         public static (NDArray Lhs, NDArray Rhs) broadcast_arrays(NDArray lhs, NDArray rhs)
         {
             var (leftShape, rightShape) = Shape.Broadcast(lhs.Shape, rhs.Shape);
-            return (new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(lhs.Storage, leftShape)),
-                new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(rhs.Storage, rightShape)));
+            // NumPy 2.4.2 parity: broadcast_arrays results are WRITEABLE (see the params overload above).
+            return (new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(lhs.Storage, leftShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE))),
+                new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(rhs.Storage, rightShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE))));
         }
     }
 }

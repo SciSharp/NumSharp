@@ -310,6 +310,66 @@ namespace NumSharp.Backends.Iteration
         private void* _opArraysBlock;
 
         // =========================================================================
+        // Inline arena (single-block state allocation)
+        // =========================================================================
+        //
+        // NDIterRef.AllocateStateBlock allocates the state header and a trailing arena in ONE
+        // native block, and AllocateDimArrays carves the dimension + per-operand arrays out of
+        // that arena instead of calling the allocator twice more. Measured: the three
+        // calloc/free pairs were 78 ns of a 161 ns three-operand construction (one 616-byte
+        // calloc/free is 29 ns), i.e. the allocator was ~half of the iterator's fixed setup
+        // cost. The block is recycled through a small per-thread cache
+        // (NDIterRef.ReleaseStateBlock) so the construct→execute→dispose pattern pays no
+        // allocator call at all — NumPy's NpyIter is likewise one malloc'd blob.
+        //
+        // A state whose arrays exceed the arena (very high ndim × nop) falls back to the
+        // separate blocks exactly as before; a state built on the stack
+        // (CreateCopyState/CreateReductionState) has no arena and keeps the original path.
+
+        /// <summary>Start of the inline arena (null when this state has none).</summary>
+        private byte* _arenaBase;
+
+        /// <summary>Capacity of the inline arena in bytes.</summary>
+        private int _arenaCapacity;
+
+        /// <summary>Bytes of the inline arena carved by <see cref="AllocateDimArrays"/> (0 = untouched).</summary>
+        private int _arenaUsed;
+
+        /// <summary>True when this state owns an inline arena (allocated by <c>NDIterRef.AllocateStateBlock</c>).</summary>
+        internal readonly bool HasInlineArena => _arenaBase != null;
+
+        /// <summary>
+        /// Attach the trailing arena of a single-block allocation. Must be called on a
+        /// zeroed header before <see cref="AllocateDimArrays"/>; the arena itself must be
+        /// zeroed (AllocateDimArrays relies on AllocZeroed semantics for every array it
+        /// carves: Coords, BaseOffsets, Buffers, ... start at zero).
+        /// </summary>
+        internal void AttachInlineArena(byte* arena, int capacity)
+        {
+            _arenaBase = arena;
+            _arenaCapacity = capacity;
+            _arenaUsed = 0;
+        }
+
+        /// <summary>
+        /// Return the block to a pristine state so it can host a fresh iterator: the header
+        /// and the CARVED part of the arena are re-zeroed (never the whole arena — only what
+        /// the last iterator touched), the arena descriptor survives. Any external blocks
+        /// and buffers must already have been released (FreeBuffers / FreeDimArrays).
+        /// </summary>
+        internal void ResetForRecycle()
+        {
+            byte* arena = _arenaBase;
+            int capacity = _arenaCapacity;
+            int used = _arenaUsed;
+            if (used > 0)
+                NativeMemory.Clear(arena, (nuint)used);
+            this = default;
+            _arenaBase = arena;
+            _arenaCapacity = capacity;
+        }
+
+        // =========================================================================
         // Allocation and Deallocation
         // =========================================================================
 
@@ -330,47 +390,24 @@ namespace NumSharp.Backends.Iteration
             StridesNDim = stridesNDim;
 
             // =========================================================================
-            // Allocate dimension-dependent arrays
+            // Size the dimension-dependent arrays
             // =========================================================================
-            if (ndim == 0 && stridesNDim == 0)
-            {
-                // Scalar case - no dimension arrays needed
-                Shape = null;
-                Coords = null;
-                Perm = null;
-                Strides = null;
-                _dimArraysBlock = null;
-            }
-            else
-            {
-                // Allocate all dimension arrays in one contiguous block for cache efficiency
-                // Layout: [Shape: ndim longs][Coords: ndim longs][Strides: stridesNDim*nop longs][Perm: ndim sbytes]
-                long shapeBytes = ndim * sizeof(long);
-                long coordsBytes = ndim * sizeof(long);
-                long stridesBytes = stridesNDim * nop * sizeof(long);
-                long permBytes = ndim * sizeof(sbyte);
+            // Dimension arrays live in one contiguous block for cache efficiency.
+            // Layout: [Shape: ndim longs][Coords: ndim longs][Strides: stridesNDim*nop longs][Perm: ndim sbytes]
+            bool hasDimArrays = !(ndim == 0 && stridesNDim == 0);
+            long shapeBytes = ndim * sizeof(long);
+            long coordsBytes = ndim * sizeof(long);
+            long stridesBytes = stridesNDim * nop * sizeof(long);
+            long permBytes = ndim * sizeof(sbyte);
 
-                // Align perm to 8 bytes for cleaner memory layout
-                long permBytesAligned = (permBytes + 7) & ~7L;
+            // Align perm to 8 bytes for cleaner memory layout (and so the operand block that
+            // follows it inside an inline arena stays 8-byte aligned).
+            long permBytesAligned = (permBytes + 7) & ~7L;
 
-                long totalDimBytes = shapeBytes + coordsBytes + stridesBytes + permBytesAligned;
-
-                byte* dimBlock = (byte*)NativeMemory.AllocZeroed((nuint)totalDimBytes);
-                _dimArraysBlock = dimBlock;
-
-                Shape = (long*)dimBlock;
-                Coords = (long*)(dimBlock + shapeBytes);
-                Strides = (long*)(dimBlock + shapeBytes + coordsBytes);
-                Perm = (sbyte*)(dimBlock + shapeBytes + coordsBytes + stridesBytes);
-
-                // Initialize Perm to identity permutation
-                // Perm[internal_axis] = original_axis
-                for (int d = 0; d < ndim; d++)
-                    Perm[d] = (sbyte)d;
-            }
+            long totalDimBytes = hasDimArrays ? shapeBytes + coordsBytes + stridesBytes + permBytesAligned : 0;
 
             // =========================================================================
-            // Allocate per-operand arrays (NUMSHARP DIVERGENCE: unlimited operands)
+            // Size the per-operand arrays (NUMSHARP DIVERGENCE: unlimited operands)
             // =========================================================================
             // Layout: All long* arrays first (8-byte aligned), then int* arrays, then smaller types
             // This ensures proper alignment for all array types.
@@ -399,8 +436,58 @@ namespace NumSharp.Backends.Iteration
 
             long totalOpBytes = byteArraysStart + byteArraysBytes;
 
-            byte* opBlock = (byte*)NativeMemory.AllocZeroed((nuint)totalOpBytes);
-            _opArraysBlock = opBlock;
+            // =========================================================================
+            // Obtain the memory: carve the inline arena when it fits, else allocate
+            // =========================================================================
+            // The arena is zeroed (AllocZeroed at block creation, ResetForRecycle on reuse),
+            // so carved arrays carry the same all-zero initial contents as the AllocZeroed
+            // blocks they replace. Both blocks are carved from ONE arena, dim block first:
+            // totalDimBytes is a multiple of 8, so the operand block keeps its alignment.
+            byte* dimBlock;
+            byte* opBlock;
+            if (_arenaBase != null && _arenaUsed == 0 && totalDimBytes + totalOpBytes <= _arenaCapacity)
+            {
+                dimBlock = hasDimArrays ? _arenaBase : null;
+                opBlock = _arenaBase + totalDimBytes;
+                _arenaUsed = (int)(totalDimBytes + totalOpBytes);
+                _dimArraysBlock = null;   // not separately owned — freed with the block
+                _opArraysBlock = null;
+            }
+            else
+            {
+                dimBlock = hasDimArrays ? (byte*)NativeMemory.AllocZeroed((nuint)totalDimBytes) : null;
+                _dimArraysBlock = dimBlock;
+                opBlock = (byte*)NativeMemory.AllocZeroed((nuint)totalOpBytes);
+                _opArraysBlock = opBlock;
+            }
+
+            // =========================================================================
+            // Lay out the dimension-dependent arrays
+            // =========================================================================
+            if (!hasDimArrays)
+            {
+                // Scalar case - no dimension arrays needed
+                Shape = null;
+                Coords = null;
+                Perm = null;
+                Strides = null;
+            }
+            else
+            {
+                Shape = (long*)dimBlock;
+                Coords = (long*)(dimBlock + shapeBytes);
+                Strides = (long*)(dimBlock + shapeBytes + coordsBytes);
+                Perm = (sbyte*)(dimBlock + shapeBytes + coordsBytes + stridesBytes);
+
+                // Initialize Perm to identity permutation
+                // Perm[internal_axis] = original_axis
+                for (int d = 0; d < ndim; d++)
+                    Perm[d] = (sbyte)d;
+            }
+
+            // =========================================================================
+            // Lay out the per-operand arrays
+            // =========================================================================
 
             // Assign long* arrays (9 arrays, each nop elements)
             long* longPtr = (long*)opBlock;

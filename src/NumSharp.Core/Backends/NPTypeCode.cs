@@ -166,6 +166,18 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Convert a nullable <see cref="NPTypeCode"/> into its <see cref="Type"/>, or
+        ///     <c>null</c> when the code is null — the "infer / preserve dtype" sentinel the
+        ///     dtype-carrying APIs use. Lets a call site pass either an <see cref="NPTypeCode"/>
+        ///     or an <see cref="NPTypeCode"/>? to a <see cref="Type"/>-typed dtype parameter
+        ///     uniformly via <c>x.AsType()</c>.
+        /// </summary>
+        [DebuggerNonUserCode]
+        [MethodImpl(OptimizeAndInline)]
+        public static Type AsType(this NPTypeCode? typeCode)
+            => typeCode.HasValue ? typeCode.Value.AsType() : null;
+
+        /// <summary>
         ///     Checks if given <see cref="Type"/> has a match in <see cref="NPTypeCode"/>.
         /// </summary>
         [DebuggerNonUserCode]
@@ -408,7 +420,7 @@ namespace NumSharp
         /// </summary>
         [DebuggerNonUserCode]
         [MethodImpl(OptimizeAndInline)]
-        internal static NPTypeCode ToTypeCode(this NPY_TYPECHAR typeCode)
+        public static NPTypeCode ToTypeCode(this NPY_TYPECHAR typeCode)
         {
             switch (typeCode)
             {
@@ -480,7 +492,7 @@ namespace NumSharp
         /// </summary>
         [DebuggerNonUserCode]
         [MethodImpl(OptimizeAndInline)]
-        internal static NPY_TYPECHAR ToTYPECHAR(this NPTypeCode typeCode)
+        public static NPY_TYPECHAR ToTYPECHAR(this NPTypeCode typeCode)
         {
             switch (typeCode)
             {
@@ -549,7 +561,7 @@ namespace NumSharp
         /// <summary>
         ///     Returns the equivalent numpy's name, e.g. <see cref="NPTypeCode.Int32"/> is np.int32, therefore the return is "int32".
         /// </summary>
-        internal static string AsNumpyDtypeName(this NPTypeCode typeCode)
+        public static string AsNumpyDtypeName(this NPTypeCode typeCode)
         {
             switch (typeCode)
             {

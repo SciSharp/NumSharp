@@ -54,6 +54,9 @@ namespace NumSharp.Backends
                 var promoted = np.atleast_1d(nd);
                 var nz = NonZero(promoted);
                 long n0 = nz[0].size;
+                foreach (var col in nz)
+                    col.Dispose();
+                promoted.Dispose();
                 return new NDArray(NPTypeCode.Int64, new Shape(n0, 0), false);
             }
 

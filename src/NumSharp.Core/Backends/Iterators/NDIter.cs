@@ -33,7 +33,11 @@ namespace NumSharp.Backends.Iteration
     {
         private NDIterState* _state;
         private bool _ownsState;
-        private NDArray[]? _operands;
+        // Borrowed: an iterator walks the caller's operands and never owns them (NumPy's nditer
+        // contract). The one array it substitutes itself — a COPY_IF_OVERLAP temporary — is written
+        // back and released by ResolveWritebacks, not by any owner-of-the-slot rule. (An ALLOCATE
+        // output is yielded to the caller through the operands array.)
+        [NDBorrowed] private NDArray[]? _operands;
         private NDIterNextFunc? _cachedIterNext;
 
         /// <summary>
@@ -43,9 +47,9 @@ namespace NumSharp.Backends.Iteration
         /// copies the temporary back (NumPy's WRITEBACKIFCOPY resolved at
         /// NDIter_Deallocate). Not duplicated by <see cref="Copy"/> and not
         /// carried by <c>TransferStateOwnership</c> — the write-back belongs to
-        /// the constructing NDIterRef.
+        /// the constructing NDIterRef. Borrowed: the entries ARE the user's operands.
         /// </summary>
-        private NDArray?[]? _writebackOriginals;
+        [NDBorrowed] private NDArray?[]? _writebackOriginals;
 
         // =========================================================================
         // Factory Methods
@@ -109,8 +113,9 @@ namespace NumSharp.Backends.Iteration
             if (opFlags == null || opFlags.Length < nop)
                 throw new ArgumentException("OpFlags array must contain at least nop elements", nameof(opFlags));
 
-            // Allocate state on heap for ref struct lifetime
-            var statePtr = (NDIterState*)NativeMemory.AllocZeroed((nuint)sizeof(NDIterState));
+            // Allocate state on heap for ref struct lifetime — one block carrying the header and
+            // the arena the dimension/operand arrays are carved from (recycled per thread).
+            var statePtr = AllocateStateBlock();
 
             try
             {
@@ -126,12 +131,89 @@ namespace NumSharp.Backends.Iteration
             }
             catch
             {
-                // Free dimension arrays if they were allocated
-                statePtr->FreeDimArrays();
-                NativeMemory.Free(statePtr);
+                // Tear down whatever Initialize managed to build (buffers, external dimension
+                // arrays) and hand the block back to the cache / allocator.
+                FreeState(statePtr);
                 throw;
             }
         }
+
+        // =========================================================================
+        // State block allocation — single block + per-thread recycling
+        // =========================================================================
+        //
+        // Every heap NDIterState is ONE native allocation: the header followed by
+        // StateArenaBytes of arena that NDIterState.AllocateDimArrays carves its dimension
+        // and per-operand arrays from (see the arena notes in NDIter.State.cs). Freed blocks
+        // are parked in a small per-thread cache and handed to the next construction after
+        // ResetForRecycle re-zeroed only what the previous iterator used. Measured on the
+        // three-operand 1-D construction: 161 ns → ~90 ns; the three calloc/free pairs it
+        // replaces were 78 ns of that (one 616-byte calloc/free is 29 ns). The cache is
+        // bounded (StateBlockCacheSlots blocks per thread, ~1.9 KB each) and blocks are
+        // uniform, so there is no size-class logic; a block freed on another thread simply
+        // joins that thread's cache. States allocated elsewhere (no arena) are freed
+        // directly, so ReleaseStateBlock is safe for any pointer FreeState accepts.
+
+        /// <summary>Bytes reserved after the state header for the dimension + per-operand arrays.</summary>
+        internal const int StateArenaBytes = 1536;
+
+        /// <summary>Blocks parked per thread by <see cref="ReleaseStateBlock"/>.</summary>
+        internal const int StateBlockCacheSlots = 4;
+
+        private sealed class StateBlockCache
+        {
+            public readonly nint[] Slots = new nint[StateBlockCacheSlots];
+            public int Count;
+        }
+
+        [ThreadStatic]
+        private static StateBlockCache? t_stateBlocks;
+
+        /// <summary>
+        /// Obtain a zeroed state header with an attached, zeroed inline arena — from the
+        /// per-thread cache when one is parked there, else a fresh single allocation.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static NDIterState* AllocateStateBlock()
+        {
+            var cache = t_stateBlocks;
+            if (cache is not null && cache.Count > 0)
+                return (NDIterState*)cache.Slots[--cache.Count];
+
+            var block = (NDIterState*)NativeMemory.AllocZeroed((nuint)(sizeof(NDIterState) + StateArenaBytes));
+            block->AttachInlineArena((byte*)block + sizeof(NDIterState), StateArenaBytes);
+            return block;
+        }
+
+        /// <summary>
+        /// Release a state header whose buffers and external dimension arrays have already
+        /// been freed: single-block states are re-zeroed and parked in the per-thread cache
+        /// (or freed when it is full); states without an inline arena are freed directly.
+        /// </summary>
+        internal static void ReleaseStateBlock(NDIterState* state)
+        {
+            if (state == null)
+                return;
+
+            if (!state->HasInlineArena)
+            {
+                NativeMemory.Free(state);
+                return;
+            }
+
+            var cache = t_stateBlocks ??= new StateBlockCache();
+            if (cache.Count < StateBlockCacheSlots)
+            {
+                state->ResetForRecycle();
+                cache.Slots[cache.Count++] = (nint)state;
+                return;
+            }
+
+            NativeMemory.Free(state);
+        }
+
+        /// <summary>Blocks currently parked in the calling thread's cache (diagnostics/tests).</summary>
+        internal static int CachedStateBlockCount => t_stateBlocks?.Count ?? 0;
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private void Initialize(
@@ -731,15 +813,21 @@ namespace NumSharp.Backends.Iteration
                         NDIterCoalescing.ReorderAxesForCoalescing(ref *_state, effectiveOrder, forCoalescing: false);
 
                         // NumPy coalesces UNCONDITIONALLY after order resolution
-                        // (npyiter_coalesce_axes has no contiguity guard), which
-                        // absorbs every size-1 axis via the strict trivial branch.
-                        // NumSharp's full coalesce is gated on all-contiguous, so
-                        // absorb the size-1 axes here explicitly — a trailing one
-                        // would sit innermost (stride 0 under the fill invariant),
-                        // collapsing EXLOOP to one-element inner loops and failing
-                        // the buffer-manager linearity test. Safe on this branch
-                        // only: no multi-index/flat-index is tracked.
-                        NDIterCoalescing.RemoveUnitAxes(ref *_state);
+                        // (npyiter_coalesce_axes has no contiguity guard): every
+                        // size-1 axis is absorbed via the strict trivial branch AND
+                        // every adjacent pair that all operands walk contiguously
+                        // is merged — a C-contiguous (R, w) operand next to a 0-d
+                        // scalar (strides 0, 0) collapses to ONE 1-D chunk, a
+                        // trailing-narrow x[:, :, :w] to (R, w), a uniformly strided
+                        // a[:, ::2] to one strided 1-D chunk. CoalesceAxes cannot
+                        // do this here (it assumes the ascending pre-coalesce
+                        // layout its own sort produces), so this branch used to
+                        // only strip the size-1 axes and left every such case
+                        // paying one kernel call per row. CoalesceAxesIterationOrder
+                        // is the iteration-order merge (innermost axis last) and
+                        // subsumes RemoveUnitAxes. Safe on this branch only: no
+                        // multi-index/flat-index is tracked.
+                        NDIterCoalescing.CoalesceAxesIterationOrder(ref *_state);
                     }
                 }
                 else
@@ -800,7 +888,9 @@ namespace NumSharp.Backends.Iteration
             if ((flags & NDIterGlobalFlags.BUFFERED) != 0)
             {
                 _state->ItFlags |= (uint)NDIterFlags.BUFFER;
-                _state->BufferSize = bufferSize > 0 ? bufferSize : NDIterBufferManager.DefaultBufferSize;
+                // An explicit buffersize wins; otherwise use the per-thread ufunc default
+                // (np.getbufsize()/np.setbufsize()), which is 8192 unless the caller changed it.
+                _state->BufferSize = bufferSize > 0 ? bufferSize : NDIterBufferManager.CurrentBufferSize;
 
                 bool isReduce = (_state->ItFlags & (uint)NDIterFlags.REDUCE) != 0;
 
@@ -1424,7 +1514,19 @@ namespace NumSharp.Backends.Iteration
                 var original = originals[iop];
                 if (original is null)
                     continue;
-                np.copyto(original, ops[iop]);
+                var temp = ops[iop];
+                np.copyto(original, temp);
+
+                // The forced-copy temporary has served its purpose: put the user's original
+                // back in the operand slot (NumPy's operands revert to the originals once
+                // WRITEBACKIFCOPY resolves) and release the temp NOW. It used to be dropped
+                // here and reclaimed only by a later GC + finalizer pass — one leaked pooled
+                // buffer per in-place ufunc call (np.add(a, b, out=a) is COPY_IF_OVERLAP's
+                // bread and butter), which is exactly the finalizer buffer-lifetime tax the
+                // small-N benchmarks keep surfacing. Views taken over the temp (GetIterView)
+                // keep their own reference on the storage block, so this only drops ours.
+                ops[iop] = original;
+                temp.Dispose();
             }
         }
 
@@ -1576,39 +1678,45 @@ namespace NumSharp.Backends.Iteration
         /// orders), requires actual positive strides for contiguity.</param>
         private bool CheckAllOperandsContiguous(bool cOrder, bool allowFlip = true)
         {
-            if (_operands is null)
-                return false;
+            // Contiguity must be judged on the ITERATOR's effective layout, not the raw operand's.
+            // With op_axes the iterator spans a SUBSET of the operand's axes: axes [0,2] of a
+            // C-contiguous (2,3,2) give iterator strides (6,1) over shape (2,2), which is NOT
+            // contiguous — yet the full operand still IS C-contiguous. Reading arr.shape/arr.strides
+            // reported that operand contiguity and wrongly enabled coalescing for the op_axes subset,
+            // so the ascending for-coalescing sort ran, CoalesceAxes could not merge (1*2 != 6), and
+            // the iterator was left in F-order (np.nested_iters' bare value stream diverged from
+            // NumPy's memory order). NumPy itself judges contiguity from the axisdata (the iterator's
+            // own strides), never the base operand. The iterator state already carries the op_axes
+            // remapping plus any broadcast fill / negative-stride flip that ran just above, so for a
+            // PLAIN operand this is exactly equivalent to the old operand-based check (iterator strides
+            // == operand strides there); it only changes the op_axes and other virtual-layout cases.
+            if (_state->NDim <= 1)
+                return true;  // 0-D / 1-D iteration is trivially contiguous
+
+            int stridesNDim = _state->StridesNDim;
+            var shape = _state->Shape;
+            var strides = _state->Strides;
 
             for (int op = 0; op < _state->NOp; op++)
             {
-                var arr = _operands[op];
-                if (arr is null)
-                    continue;
+                int baseIdx = op * stridesNDim;
 
-                // Check if operand is contiguous in the requested order
-                var arrShape = arr.shape;
-                if (arr.ndim == 0 || arr.size <= 1)
-                    continue;  // Trivially contiguous
-
-                // Get strides from the original array
-                var strides = arr.strides;
-
-                // Check contiguity using actual strides.
+                // Check contiguity using the iterator's per-operand strides.
                 // Negative strides are only treated as "contiguous" when FlipNegativeStrides
-                // will run (K-order / A-order without FORCEDORDER). For forced C/F order,
-                // negative strides break contiguity because the iterator will traverse
-                // logical order, not memory order.
+                // will run (K-order / A-order without FORCEDORDER); it has already run by this
+                // point, so the state strides are positive there — Math.Abs keeps a plain
+                // reversed operand contiguous. For forced C/F order, negative strides break
+                // contiguity because the iterator traverses logical order, not memory order.
                 long expected = 1;
                 if (cOrder)
                 {
                     // C-order: last axis fastest, check from end to start
-                    for (int axis = arr.ndim - 1; axis >= 0; axis--)
+                    for (int axis = _state->NDim - 1; axis >= 0; axis--)
                     {
-                        long dim = arrShape[axis];
+                        long dim = shape[axis];
                         if (dim == 1)
                             continue;  // Size-1 dimensions are always contiguous
-                        // Check stride (abs if flipping, actual if not)
-                        long stride = allowFlip ? Math.Abs(strides[axis]) : strides[axis];
+                        long stride = allowFlip ? Math.Abs(strides[baseIdx + axis]) : strides[baseIdx + axis];
                         if (stride != expected)
                             return false;
                         expected *= dim;
@@ -1617,13 +1725,12 @@ namespace NumSharp.Backends.Iteration
                 else
                 {
                     // F-order: first axis fastest, check from start to end
-                    for (int axis = 0; axis < arr.ndim; axis++)
+                    for (int axis = 0; axis < _state->NDim; axis++)
                     {
-                        long dim = arrShape[axis];
+                        long dim = shape[axis];
                         if (dim == 1)
                             continue;  // Size-1 dimensions are always contiguous
-                        // Check stride (abs if flipping, actual if not)
-                        long stride = allowFlip ? Math.Abs(strides[axis]) : strides[axis];
+                        long stride = allowFlip ? Math.Abs(strides[baseIdx + axis]) : strides[baseIdx + axis];
                         if (stride != expected)
                             return false;
                         expected *= dim;
@@ -2122,6 +2229,18 @@ namespace NumSharp.Backends.Iteration
             return true;
         }
 
+        /// <summary>
+        /// Advance an EXTERNAL_LOOP iterator past the inner loop the kernel just consumed:
+        /// one outer-odometer step (ripple carry over axes NDim-2..0). This is the per-chunk
+        /// cost every strided-row op pays, so the state's array pointers are hoisted into
+        /// locals — through <c>ref state</c> the JIT must assume each <c>DataPtrs[op]</c>
+        /// store may alias the pointer FIELDS and reload them per operand per axis — and the
+        /// kernel drivers (<see cref="ForEach"/>, <c>ExecuteGenericMulti</c>,
+        /// <see cref="ExecuteReducing{TKernel, TAccum}"/>) call it DIRECTLY rather than
+        /// through the cached <see cref="NDIterNextFunc"/> delegate, letting it inline into
+        /// the driver loop. It stays a valid delegate target for <see cref="GetIterNext"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool ExternalLoopNext(ref NDIterState state)
         {
             // For external loop, we advance outer dimensions
@@ -2129,38 +2248,69 @@ namespace NumSharp.Backends.Iteration
             if (state.IterIndex >= state.IterEnd)
                 return false;
 
-            state.IterIndex += state.Shape[state.NDim - 1];
+            int ndim = state.NDim;
+            long* shape = state.Shape;
+
+            state.IterIndex += shape[ndim - 1];
 
             if (state.IterIndex >= state.IterEnd)
                 return false;
 
+            int nop = state.NOp;
+            int stridesNDim = state.StridesNDim;
+            long* strides = state.Strides;
+            long* dataPtrs = state.DataPtrs;
+            int* srcElementSizes = state.SrcElementSizes;
+            long* coords = state.Coords;
+
             // Advance outer coordinates. DataPtrs traverse SOURCE-array memory,
             // so multiply element strides by the SOURCE element size (the buffer
             // dtype's ElementSizes diverges under a buffered cast — bug (b)).
-            for (int axis = state.NDim - 2; axis >= 0; axis--)
+            for (int axis = ndim - 2; axis >= 0; axis--)
             {
-                state.Coords[axis]++;
+                long coord = ++coords[axis];
+                long dim = shape[axis];
 
-                if (state.Coords[axis] < state.Shape[axis])
+                if (coord < dim)
                 {
                     // Update data pointers
-                    for (int op = 0; op < state.NOp; op++)
+                    for (int op = 0; op < nop; op++)
                     {
-                        long stride = state.GetStride(axis, op);
-                        state.DataPtrs[op] += stride * state.SrcElementSizes[op];
+                        long stride = strides[op * stridesNDim + axis];
+                        dataPtrs[op] += stride * srcElementSizes[op];
                     }
                     return true;
                 }
 
                 // Carry
-                state.Coords[axis] = 0;
-                for (int op = 0; op < state.NOp; op++)
+                coords[axis] = 0;
+                long back = dim - 1;
+                for (int op = 0; op < nop; op++)
                 {
-                    long stride = state.GetStride(axis, op);
-                    state.DataPtrs[op] -= stride * (state.Shape[axis] - 1) * state.SrcElementSizes[op];
+                    long stride = strides[op * stridesNDim + axis];
+                    dataPtrs[op] -= stride * back * srcElementSizes[op];
                 }
             }
 
+            return true;
+        }
+
+        /// <summary>
+        /// True when the iterator's advance function would resolve to
+        /// <see cref="ExternalLoopNext"/> (see <see cref="GetIterNext"/>): EXTERNAL_LOOP, not
+        /// a single iteration, and not windowed-buffered. The kernel drivers use it to call
+        /// the advancer directly instead of through the delegate.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool IsPlainExternalLoopAdvance()
+        {
+            uint f = _state->ItFlags;
+            if ((f & (uint)NDIterFlags.EXLOOP) == 0)
+                return false;
+            if ((f & (uint)NDIterFlags.ONEITERATION) != 0)
+                return false;
+            if ((f & (uint)NDIterFlags.BUFFER) != 0 && (f & (uint)NDIterFlags.REDUCE) == 0)
+                return false;
             return true;
         }
 
@@ -3727,8 +3877,8 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public NDIterRef Copy()
         {
-            // Allocate new state on heap
-            var newStatePtr = (NDIterState*)NativeMemory.AllocZeroed((nuint)sizeof(NDIterState));
+            // Allocate new state on heap (single block + arena, like AdvancedNew)
+            var newStatePtr = AllocateStateBlock();
 
             try
             {
@@ -3831,7 +3981,7 @@ namespace NumSharp.Backends.Iteration
                 if ((newStatePtr->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
                     NDIterBufferManager.FreeBuffers(ref *newStatePtr);
                 newStatePtr->FreeDimArrays();
-                NativeMemory.Free(newStatePtr);
+                ReleaseStateBlock(newStatePtr);
                 throw;
             }
         }
@@ -3876,7 +4026,8 @@ namespace NumSharp.Backends.Iteration
                 // NUMSHARP DIVERGENCE: Unlike NumPy's fixed arrays, we allocate dynamically
                 _state->FreeDimArrays();
 
-                NativeMemory.Free(_state);
+                // Park the block for the next construction on this thread (or free it).
+                ReleaseStateBlock(_state);
                 _state = null;
                 _ownsState = false;
             }
@@ -3919,7 +4070,7 @@ namespace NumSharp.Backends.Iteration
             if ((state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
                 NDIterBufferManager.FreeBuffers(ref *state);
             state->FreeDimArrays();
-            NativeMemory.Free(state);
+            ReleaseStateBlock(state);
         }
     }
 
@@ -4014,6 +4165,27 @@ namespace NumSharp.Backends.Iteration
                 && dst.Shape.size == dst.InternalArray.Count)
             {
                 dst.InternalArray.Fill(src.GetValue(0));
+                return true;
+            }
+
+            // Trivial flat copy — SKIP the iterator state build. When src and dst share an identical
+            // gap-free layout (same dims AND strides, C- or F-contiguous), the i-th logical element
+            // sits at the same buffer offset on both sides, so the whole copy is a single
+            // Buffer.MemoryCopy on the offset-adjusted raw pointers. This is the SAME block copy the
+            // post-state Contiguous CopyKernel does (IsSameFlatLayout is already trusted for that
+            // tier below), but it bypasses CreateCopyState — the dimension-array allocation + broadcast/
+            // stride analysis that otherwise runs even here, measured at ~330ns and ~97% of a small
+            // (n<=1000) copyto/astype (that fixed cost is what put copy/cast at 0.32-0.80x vs NumPy
+            // below 10K elements). Overlap is already resolved by the caller — Copy(UnmanagedStorage,…)
+            // clones an aliasing src that needs a temp before reaching here — and Buffer.MemoryCopy is
+            // the identical primitive the cpblk kernel emits, so this is byte- and overlap-identical.
+            if (IsSameFlatLayout(src.Shape, dst.Shape) && dst.Shape.size > 0)
+            {
+                int itemLen = dst.InternalArray.ItemLength;
+                byte* sp = src.Address + src.Shape.offset * itemLen;
+                byte* dp = dst.Address + dst.Shape.offset * itemLen;
+                long bytes = dst.Shape.size * itemLen;
+                Buffer.MemoryCopy(sp, dp, bytes, bytes);
                 return true;
             }
 
@@ -4148,6 +4320,16 @@ namespace NumSharp.Backends.Iteration
             Shape outShape;
             if (srcShape.NDim == 0)
                 outShape = Shape.NewScalar();
+            else if ((order == 'K' || order == 'k') && !srcShape.IsContiguous && !srcShape.IsFContiguous)
+            {
+                // True KEEPORDER (PyArray_NewLikeArray NPY_KEEPORDER): a neither-contiguous source
+                // allocates along its SORTED STRIDE PERM rather than collapsing to C — a 3-D
+                // transpose keeps its exact stride order (a neither-contiguous owned result) and a
+                // broadcast's stride-0 axes sort slowest (F-ish layout). Probed NumPy 2.4.2 via
+                // copy/astype/np.sort order='K'. Sources that ARE C- or F-contiguous fall through
+                // to the binary resolve below, which is exact for them.
+                outShape = srcShape.KeepOrder();
+            }
             else
             {
                 char physical = OrderResolver.Resolve(order, srcShape);
@@ -4174,93 +4356,118 @@ namespace NumSharp.Backends.Iteration
             // (NDMemOverlap = NumPy solve_may_share_memory) directly on the storages — NOT via
             // throwaway NDArray wrappers, which under ARC would retain the buffers. A cross-dtype
             // copy targets a distinct buffer, so the bounds test short-circuits to No for free.
+            UnmanagedStorage overlapTemp = null;
             if (NeedsAssignmentTemp(dst.Shape, src.Shape)
                 && NDMemOverlap.StoragesMayShareMemory(src, dst))
             {
+                // Reassigning the parameter here drops the clone on method exit, leaking its pooled
+                // buffer to a future GC + finalizer pass. The clone is a bare UnmanagedStorage — NOT
+                // an NDArray — so NO [NDScoped] ambient scope reclaims it (NDScope.Track fires only
+                // from NDArray.InitializeArc); capture it so the finally returns its buffer to the
+                // pool. The buffer is a fresh, private copy this method owns outright.
                 src = src.Clone();
+                overlapTemp = src;
             }
 
-            // Same-dtype fast path: SIMD copy kernel, broadcast + stride aware.
-            if (TryCopySameType(dst, src))
-                return;
-
-            // Cross-dtype: per-element cast via NDIterCasting.ConvertValue,
-            // driven by the same coalesced broadcast state used by TryCopySameType.
-            NumSharpException.ThrowIfNotWriteable(dst.Shape);
-
-            // Scalar-broadcast cross-dtype fast path: the source is a single value (ALL strides 0),
-            // so convert it ONCE with the same NumPy-faithful NDIterCasting.ConvertValue the scalar
-            // fallback below uses, then typed-fill the whole contiguous dst — instead of casting the
-            // identical value per element. Whole-buffer C/F-contiguous dst only (offset 0, size ==
-            // Count); the fill is order-independent. dst[0] is written first (offset 0 ⇒ buffer[0]),
-            // then read back boxed as dst's dtype and replicated across every slot via IArraySlice.Fill.
-            if (src.Shape.IsScalarBroadcast
-                && (dst.Shape.IsContiguous || dst.Shape.IsFContiguous)
-                && dst.Shape.offset == 0
-                && dst.Shape.size > 0
-                && dst.Shape.size == dst.InternalArray.Count)
-            {
-                byte* sp = src.Address + src.Shape.offset * src.InternalArray.ItemLength;
-                NDIterCasting.ConvertValue(sp, (void*)dst.Address, src.TypeCode, dst.TypeCode);
-                dst.InternalArray.Fill(dst.GetValue(0));
-                return;
-            }
-
-            var state = CreateCopyState(src, dst);
             try
             {
-                if (state.Size == 0)
+                // Same-dtype fast path: SIMD copy kernel, broadcast + stride aware.
+                if (TryCopySameType(dst, src))
                     return;
 
-                // SIMD fast path 1: both src and dst contiguous, no broadcast.
-                // IL-generated contig cast kernel — minimal overhead for the common case.
-                if (state.IsContiguousCopy && state.Size > 0)
+                // Cross-dtype: per-element cast via NDIterCasting.ConvertValue,
+                // driven by the same coalesced broadcast state used by TryCopySameType.
+                NumSharpException.ThrowIfNotWriteable(dst.Shape);
+
+                // Scalar-broadcast cross-dtype fast path: the source is a single value (ALL strides 0),
+                // so convert it ONCE with the same NumPy-faithful NDIterCasting.ConvertValue the scalar
+                // fallback below uses, then typed-fill the whole contiguous dst — instead of casting the
+                // identical value per element. Whole-buffer C/F-contiguous dst only (offset 0, size ==
+                // Count); the fill is order-independent. dst[0] is written first (offset 0 ⇒ buffer[0]),
+                // then read back boxed as dst's dtype and replicated across every slot via IArraySlice.Fill.
+                if (src.Shape.IsScalarBroadcast
+                    && (dst.Shape.IsContiguous || dst.Shape.IsFContiguous)
+                    && dst.Shape.offset == 0
+                    && dst.Shape.size > 0
+                    && dst.Shape.size == dst.InternalArray.Count)
                 {
-                    var castKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
-                        .TryGetCastKernel(src.TypeCode, dst.TypeCode);
-                    if (castKernel != null)
-                    {
-                        castKernel((void*)state.GetDataPointer(0), (void*)state.GetDataPointer(1), state.Size);
-                        return;
-                    }
+                    byte* sp = src.Address + src.Shape.offset * src.InternalArray.ItemLength;
+                    NDIterCasting.ConvertValue(sp, (void*)dst.Address, src.TypeCode, dst.TypeCode);
+                    dst.InternalArray.Fill(dst.GetValue(0));
+                    return;
                 }
 
-                // SIMD fast path 2: strided/broadcast cast. IL kernel walks outer dims via incremental
-                // coord advance and uses the same SIMD body as the contig kernel for any inner axis
-                // with stride==1 for both src and dst. Falls back internally to scalar strided inner
-                // loop when the innermost axis has non-unit stride for either side.
-                if (state.Size > 0)
+                var state = CreateCopyState(src, dst);
+                try
                 {
-                    var stridedKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
-                        .TryGetStridedCastKernel(src.TypeCode, dst.TypeCode);
-                    if (stridedKernel != null)
-                    {
-                        stridedKernel(
-                            (void*)state.GetDataPointer(0),
-                            (void*)state.GetDataPointer(1),
-                            state.GetStridesPointer(0),
-                            state.GetStridesPointer(1),
-                            state.GetShapePointer(),
-                            state.NDim);
+                    if (state.Size == 0)
                         return;
-                    }
-                }
 
-                // Scalar dispatch: Decimal/Complex/Half/Char/Boolean involved.
-                NDIterCasting.CopyStridedToStridedWithCast(
-                    (void*)state.GetDataPointer(0),
-                    state.GetStridesPointer(0),
-                    src.TypeCode,
-                    (void*)state.GetDataPointer(1),
-                    state.GetStridesPointer(1),
-                    dst.TypeCode,
-                    state.GetShapePointer(),
-                    state.NDim,
-                    state.Size);
+                    // SIMD fast path 1: both src and dst contiguous, no broadcast.
+                    // IL-generated contig cast kernel — minimal overhead for the common case.
+                    if (state.IsContiguousCopy && state.Size > 0)
+                    {
+                        var castKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
+                            .TryGetCastKernel(src.TypeCode, dst.TypeCode);
+                        if (castKernel != null)
+                        {
+                            castKernel((void*)state.GetDataPointer(0), (void*)state.GetDataPointer(1), state.Size);
+                            return;
+                        }
+                    }
+
+                    // SIMD fast path 2: strided/broadcast cast. IL kernel walks outer dims via incremental
+                    // coord advance and uses the same SIMD body as the contig kernel for any inner axis
+                    // with stride==1 for both src and dst. Falls back internally to scalar strided inner
+                    // loop when the innermost axis has non-unit stride for either side.
+                    if (state.Size > 0)
+                    {
+                        var stridedKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
+                            .TryGetStridedCastKernel(src.TypeCode, dst.TypeCode);
+                        if (stridedKernel != null)
+                        {
+                            stridedKernel(
+                                (void*)state.GetDataPointer(0),
+                                (void*)state.GetDataPointer(1),
+                                state.GetStridesPointer(0),
+                                state.GetStridesPointer(1),
+                                state.GetShapePointer(),
+                                state.NDim);
+                            return;
+                        }
+                    }
+
+                    // Scalar dispatch: Decimal/Complex/Half/Char/Boolean involved.
+                    NDIterCasting.CopyStridedToStridedWithCast(
+                        (void*)state.GetDataPointer(0),
+                        state.GetStridesPointer(0),
+                        src.TypeCode,
+                        (void*)state.GetDataPointer(1),
+                        state.GetStridesPointer(1),
+                        dst.TypeCode,
+                        state.GetShapePointer(),
+                        state.NDim,
+                        state.Size);
+                }
+                finally
+                {
+                    state.FreeDimArrays();
+                }
             }
             finally
             {
-                state.FreeDimArrays();
+                // Return the overlap-copy clone's pooled buffer (see the capture above). The clone was
+                // never InitializeArc'd — a bare UnmanagedStorage carries no counted reference — so its
+                // block sits at refcount 0 and a lone Release() is a no-op stray. Take the one owning
+                // reference the clone implicitly holds, then release it: the 0 → 1 → 0 transition frees
+                // the buffer straight back to SizeBucketedBufferPool (the finalizer would eventually do
+                // the same via Abandon, but eagerly here reclaims the pool slot for warm reuse).
+                var overlapBlock = overlapTemp?.InternalArray;
+                if (overlapBlock is not null)
+                {
+                    overlapBlock.TryAddRef();
+                    overlapBlock.Release();
+                }
             }
         }
 

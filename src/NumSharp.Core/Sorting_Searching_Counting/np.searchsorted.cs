@@ -19,7 +19,11 @@ namespace NumSharp
         public static long searchsorted(NDArray a, int v, string side = "left", NDArray sorter = null)
         {
             ValidateSearchSorted(a, side, sorter);
-            return SearchSortedScalar(a, Converts.ChangeType(v, a.typecode), side == "left", sorter);
+            // NumPy searches in result_type(a, v), NEVER casts the key down to a's dtype
+            // (see the NDArray overload below). A C# int literal is a strong int32 scalar.
+            NPTypeCode common = promote_types(a.typecode, NPTypeCode.Int32);
+            NDArray aP = a.typecode == common ? a : a.astype(common);
+            return SearchSortedScalar(aP, Converts.ChangeType(v, common), side == "left", sorter);
         }
 
         /// <summary>
@@ -28,7 +32,11 @@ namespace NumSharp
         public static long searchsorted(NDArray a, double v, string side = "left", NDArray sorter = null)
         {
             ValidateSearchSorted(a, side, sorter);
-            return SearchSortedScalar(a, Converts.ChangeType(v, a.typecode), side == "left", sorter);
+            // A C# double is a strong float64 scalar; NumPy searches a float32 array for a
+            // Python float in float64 too (probed 2.4.2), so promote_types(a, Double) matches.
+            NPTypeCode common = promote_types(a.typecode, NPTypeCode.Double);
+            NDArray aP = a.typecode == common ? a : a.astype(common);
+            return SearchSortedScalar(aP, Converts.ChangeType(v, common), side == "left", sorter);
         }
 
         /// <summary>
@@ -43,15 +51,24 @@ namespace NumSharp
         /// <param name="sorter">Optional indices that sort <paramref name="a"/> into ascending order (typically <c>argsort(a)</c>).</param>
         /// <returns>Array of insertion points with the same shape as <paramref name="v"/>, or a scalar if <paramref name="v"/> is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
+        [NDScoped]
         public static NDArray searchsorted(NDArray a, NDArray v, string side = "left", NDArray sorter = null)
         {
             ValidateSearchSorted(a, side, sorter);
             bool leftSide = side == "left";
 
+            // NumPy (PyArray_SearchSorted) promotes BOTH the sorted array `a` and the keys `v`
+            // to their common dtype (result_type) and searches there. It must never cast the
+            // keys DOWN to a's dtype — that would truncate/wrap them, e.g.
+            //   searchsorted([1,2,3,4] int, 2.5) == 2, not floor(2.5) giving index 1;
+            //   searchsorted([1,2,3,4] int8, 300) == 4, not (int8)300 giving a wrapped key.
+            NPTypeCode common = promote_types(a.typecode, v.typecode);
+            NDArray aP = a.typecode == common ? a : a.astype(common);
+
             if (v.Shape.IsScalar)
             {
-                object scalar = Converts.ChangeType(v.Storage.GetAtIndex(0), a.typecode);
-                long idx = SearchSortedScalar(a, scalar, leftSide, sorter);
+                object scalar = Converts.ChangeType(v.Storage.GetAtIndex(0), common);
+                long idx = SearchSortedScalar(aP, scalar, leftSide, sorter);
                 return NDArray.Scalar(idx);
             }
 
@@ -60,22 +77,22 @@ namespace NumSharp
             if (v.size == 0)
                 return new NDArray(NPTypeCode.Int64, outShape, false);
 
-            // Promote v to a's dtype and force contiguous (NumPy: PyArray_CARRAY_RO).
-            NDArray vTyped = EnsureContiguousOfType(v, a.typecode);
+            // Promote v to the common dtype and force contiguous (NumPy: PyArray_CARRAY_RO).
+            NDArray vTyped = EnsureContiguousOfType(v, common);
             NDArray sorterTyped = (sorter is null) ? null : EnsureContiguousInt64(sorter);
             NDArray output = new NDArray(NPTypeCode.Int64, outShape, false);
 
-            int elemSize = DirectILKernelGenerator.GetTypeSize(a.typecode);
+            int elemSize = DirectILKernelGenerator.GetTypeSize(common);
             unsafe
             {
-                bool contigA = a.Shape.IsContiguous;
-                var kernel = DirectILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null, contigA);
-                long arrStride = contigA ? elemSize : a.Shape.strides[0] * elemSize;
-                void* arrPtr = (void*)((byte*)a.Storage.Address + a.Shape.offset * elemSize);
+                bool contigA = aP.Shape.IsContiguous;
+                var kernel = DirectILKernelGenerator.GetSearchSortedKernel(common, leftSide, sorter is not null, contigA);
+                long arrStride = contigA ? elemSize : aP.Shape.strides[0] * elemSize;
+                void* arrPtr = (void*)((byte*)aP.Storage.Address + aP.Shape.offset * elemSize);
                 void* keyPtr = (void*)vTyped.Address;
                 void* sorterPtr = sorterTyped is null ? null : (void*)sorterTyped.Address;
                 long* retPtr = (long*)output.Address;
-                kernel(arrPtr, a.size, arrStride, keyPtr, vTyped.size, sorterPtr, retPtr);
+                kernel(arrPtr, aP.size, arrStride, keyPtr, vTyped.size, sorterPtr, retPtr);
             }
 
             return output;

@@ -139,9 +139,13 @@ namespace NumSharp
                     }
                     else
                     {
+                        // order 'C' explicitly: astype's default 'K' now keeps a broadcast
+                        // source's perm layout (stride-0 axes innermost — NumPy astype parity),
+                        // but the IL kernel below walks these buffers LINEARLY in C order, and
+                        // NumPy's own ravel_multi_index materialises via PyArray_ContiguousFromAny.
                         c = src.GetTypeCode == NPTypeCode.Int64
                             ? np.ascontiguousarray(src)
-                            : src.astype(NPTypeCode.Int64);
+                            : src.astype(NPTypeCode.Int64, true, 'C');
                         ownCast[d] = !ReferenceEquals(c, src);
                     }
                     casts[d] = c;

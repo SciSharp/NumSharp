@@ -83,9 +83,11 @@ namespace NumSharp
             //compute offset
             offset = GetOffset(dims, ndims);
 
-            // Use bufferSize for bounds checking (NumPy-aligned: no ViewInfo dependency)
+            // Use bufferSize for bounds checking (NumPy-aligned: no ViewInfo dependency).
+            // A sub-view with a zero-sized extent addresses no element, so the backstop must not
+            // fire — see the remarks on Shape.AddressesAnElement.
             long boundSize = bufferSize > 0 ? bufferSize : size;
-            if (offset >= boundSize)
+            if (offset >= boundSize && AddressesAnElement(dim))
                 throw new IndexOutOfRangeException($"The offset {offset} is out of range in Shape {boundSize}");
 
             if (ndims == dimensions.Length)

@@ -97,9 +97,22 @@ namespace NumSharp.Backends
             }
 
             // NumPy-aligned layout preservation: comparisons preserve F-contig.
-            // copy('F') returns an NDArray; wrap it back as NDArray<bool> via MakeGeneric.
+            // copy('F') returns an NDArray; wrap its storage in place as NDArray<bool> via
+            // AsGeneric (the copy is a fresh bool array we own — no need for MakeGeneric's alias).
             if (ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-                return result.copy('F').MakeGeneric<bool>();
+            {
+                var fResult = result.copy('F');
+                result.Dispose();   // C-contig kernel output now dead (mechanism-3 leak)
+                var fGeneric = fResult.AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
+                // AsGeneric wraps fResult's storage in a NEW NDArray<bool> (fResult is a base NDArray,
+                // so `this as NDArray<bool>` misses the zero-alloc branch) — orphaning fResult itself,
+                // whose ARC reference on the shared buffer then leaks to the finalizer. Drop it: the
+                // returned wrapper holds the surviving reference, so the caller's Dispose frees the
+                // buffer to the pool. This is the residual copy('F')-path drop the scope gate flagged.
+                if (!ReferenceEquals(fGeneric, fResult))
+                    fResult.Dispose();
+                return fGeneric;
+            }
 
             return result;
         }
@@ -225,21 +238,21 @@ namespace NumSharp.Backends
             // Dispatch based on rhs type
             return rhsType switch
             {
-                NPTypeCode.Boolean => NDArray.Scalar(((Func<TLhs, bool, bool>)func)(lhsVal, rhs.GetBoolean(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.SByte => NDArray.Scalar(((Func<TLhs, sbyte, bool>)func)(lhsVal, rhs.GetSByte(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Byte => NDArray.Scalar(((Func<TLhs, byte, bool>)func)(lhsVal, rhs.GetByte(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Int16 => NDArray.Scalar(((Func<TLhs, short, bool>)func)(lhsVal, rhs.GetInt16(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.UInt16 => NDArray.Scalar(((Func<TLhs, ushort, bool>)func)(lhsVal, rhs.GetUInt16(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Int32 => NDArray.Scalar(((Func<TLhs, int, bool>)func)(lhsVal, rhs.GetInt32(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.UInt32 => NDArray.Scalar(((Func<TLhs, uint, bool>)func)(lhsVal, rhs.GetUInt32(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Int64 => NDArray.Scalar(((Func<TLhs, long, bool>)func)(lhsVal, rhs.GetInt64(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.UInt64 => NDArray.Scalar(((Func<TLhs, ulong, bool>)func)(lhsVal, rhs.GetUInt64(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Char => NDArray.Scalar(((Func<TLhs, char, bool>)func)(lhsVal, rhs.GetChar(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Half => NDArray.Scalar(((Func<TLhs, Half, bool>)func)(lhsVal, rhs.GetHalf(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Single => NDArray.Scalar(((Func<TLhs, float, bool>)func)(lhsVal, rhs.GetSingle(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Double => NDArray.Scalar(((Func<TLhs, double, bool>)func)(lhsVal, rhs.GetDouble(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Decimal => NDArray.Scalar(((Func<TLhs, decimal, bool>)func)(lhsVal, rhs.GetDecimal(Array.Empty<long>()))).MakeGeneric<bool>(),
-                NPTypeCode.Complex => NDArray.Scalar(((Func<TLhs, System.Numerics.Complex, bool>)func)(lhsVal, rhs.GetComplex(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.Boolean => NDArray.Scalar(((Func<TLhs, bool, bool>)func)(lhsVal, rhs.GetBoolean(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.SByte => NDArray.Scalar(((Func<TLhs, sbyte, bool>)func)(lhsVal, rhs.GetSByte(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Byte => NDArray.Scalar(((Func<TLhs, byte, bool>)func)(lhsVal, rhs.GetByte(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Int16 => NDArray.Scalar(((Func<TLhs, short, bool>)func)(lhsVal, rhs.GetInt16(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.UInt16 => NDArray.Scalar(((Func<TLhs, ushort, bool>)func)(lhsVal, rhs.GetUInt16(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Int32 => NDArray.Scalar(((Func<TLhs, int, bool>)func)(lhsVal, rhs.GetInt32(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.UInt32 => NDArray.Scalar(((Func<TLhs, uint, bool>)func)(lhsVal, rhs.GetUInt32(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Int64 => NDArray.Scalar(((Func<TLhs, long, bool>)func)(lhsVal, rhs.GetInt64(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.UInt64 => NDArray.Scalar(((Func<TLhs, ulong, bool>)func)(lhsVal, rhs.GetUInt64(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Char => NDArray.Scalar(((Func<TLhs, char, bool>)func)(lhsVal, rhs.GetChar(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Half => NDArray.Scalar(((Func<TLhs, Half, bool>)func)(lhsVal, rhs.GetHalf(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Single => NDArray.Scalar(((Func<TLhs, float, bool>)func)(lhsVal, rhs.GetSingle(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Double => NDArray.Scalar(((Func<TLhs, double, bool>)func)(lhsVal, rhs.GetDouble(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Decimal => NDArray.Scalar(((Func<TLhs, decimal, bool>)func)(lhsVal, rhs.GetDecimal(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
+                NPTypeCode.Complex => NDArray.Scalar(((Func<TLhs, System.Numerics.Complex, bool>)func)(lhsVal, rhs.GetComplex(Array.Empty<long>()))).AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison scalar dispatch expected a Boolean result."),
                 _ => throw new NotSupportedException($"RHS type {rhsType} not supported")
             };
         }
@@ -294,48 +307,54 @@ namespace NumSharp.Backends
         // NumPy raises the no-loop TypeError for any non-bool dtype= (probed
         // 2.4.2: equal(a, b, dtype=f64/i32) raises; dtype=bool is a no-op).
 
-        public override NDArray Compare(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Compare(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateBoolLoopDtype(typeCode, "equal");
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.Equal);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Equal, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
         }
 
-        public override NDArray NotEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray NotEqual(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateBoolLoopDtype(typeCode, "not_equal");
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.NotEqual);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.NotEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
         }
 
-        public override NDArray Less(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Less(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateBoolLoopDtype(typeCode, "less");
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.Less);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Less, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
         }
 
-        public override NDArray LessEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray LessEqual(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateBoolLoopDtype(typeCode, "less_equal");
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.LessEqual);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.LessEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
         }
 
-        public override NDArray Greater(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Greater(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateBoolLoopDtype(typeCode, "greater");
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.Greater);
             return ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Greater, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
         }
 
-        public override NDArray GreaterEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray GreaterEqual(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateBoolLoopDtype(typeCode, "greater_equal");
             if (@out is null && where is null)
                 return ExecuteComparisonOp(lhs, rhs, ComparisonOp.GreaterEqual);
@@ -454,7 +473,8 @@ namespace NumSharp.Backends
             // Vector body intentionally null: the Tier 3B 4×-unrolled wrapper
             // requires same-dtype-across-all-operands and bool output breaks
             // that invariant. Inner-loop factory falls to scalar-strided body.
-            string cacheKey = $"npy_cmp_{op}_{lhsType}_{rhsType}";
+            // Packed key (no per-call string): npy_cmp_{op}_{lhsType}_{rhsType}.
+            var cacheKey = InnerLoopKernelKey.Comparison(op, lhsType, rhsType);
 
             try
             {
@@ -481,7 +501,19 @@ namespace NumSharp.Backends
             }
 
             if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-                return result.copy('F').MakeGeneric<bool>();
+            {
+                var fResult = result.copy('F');
+                result.Dispose();   // C-contig kernel output now dead (mechanism-3 leak)
+                var fGeneric = fResult.AsGeneric<bool>() ?? throw new InvalidOperationException("Comparison expected a Boolean result.");
+                // AsGeneric wraps fResult's storage in a NEW NDArray<bool> (fResult is a base NDArray,
+                // so `this as NDArray<bool>` misses the zero-alloc branch) — orphaning fResult itself,
+                // whose ARC reference on the shared buffer then leaks to the finalizer. Drop it: the
+                // returned wrapper holds the surviving reference, so the caller's Dispose frees the
+                // buffer to the pool. This is the residual copy('F')-path drop the scope gate flagged.
+                if (!ReferenceEquals(fGeneric, fResult))
+                    fResult.Dispose();
+                return fGeneric;
+            }
 
             return result;
         }

@@ -485,6 +485,7 @@ namespace NumSharp.Backends.Iteration
             UnaryOp.Sin or UnaryOp.Cos or UnaryOp.Tan or
             UnaryOp.Sinh or UnaryOp.Cosh or UnaryOp.Tanh or
             UnaryOp.ASin or UnaryOp.ACos or UnaryOp.ATan or
+            UnaryOp.Asinh or UnaryOp.Acosh or UnaryOp.Atanh or
             UnaryOp.Deg2Rad or UnaryOp.Rad2Deg => true,
             _ => false,
         };

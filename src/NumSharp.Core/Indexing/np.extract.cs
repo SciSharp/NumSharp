@@ -47,6 +47,7 @@ namespace NumSharp
         ///     Note that <see cref="place"/> is the inverse operation.
         ///     </para>
         /// </remarks>
+        [NDScoped] // reclaims the ravel view/copy handed to take (and the flatnonzero indices on the throw path)
         public static NDArray extract(NDArray condition, NDArray arr)
         {
             if (condition is null) throw new ArgumentNullException(nameof(condition));

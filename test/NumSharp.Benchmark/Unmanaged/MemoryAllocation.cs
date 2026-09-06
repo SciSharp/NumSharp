@@ -31,7 +31,7 @@ namespace NumSharp.Benchmark.Unmanaged
     //|       MarshalAllocHGlobal1m |    388.98 us |    222.2 us |    146.95 us |    333.550 us |    330.700 us |     801.9 us |   1.26 |    0.38 |
     //|        GCHandleAllocArray1m | 80,076.03 us | 34,242.3 us | 22,649.13 us | 77,455.100 us | 60,317.500 us | 137,219.7 us | 287.64 |  143.92 |
 
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 10)]
+    [SimpleJob(RunStrategy.ColdStart, iterationCount: 10)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public unsafe class MemoryAllocation

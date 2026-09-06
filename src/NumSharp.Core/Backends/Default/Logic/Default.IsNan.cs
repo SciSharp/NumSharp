@@ -1,4 +1,5 @@
-﻿using NumSharp.Backends.Kernels;
+﻿using System;
+using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 
 namespace NumSharp.Backends
@@ -18,8 +19,9 @@ namespace NumSharp.Backends
         /// - Infinity: Returns False (Inf is not NaN)
         /// - Empty arrays: Returns empty bool array
         /// </remarks>
-        public override NDArray IsNan(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray IsNan(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // typeCode is validate-only: isnan has bool-output loops only
             // (NumPy: dtype=bool is a no-op, anything else raises no-loop).
             ValidateBoolLoopDtype(typeCode, "isnan");
@@ -28,8 +30,19 @@ namespace NumSharp.Backends
             // contract). The IL kernel handles:
             // - Float/Double: calls float.IsNaN/double.IsNaN
             // - All other types: returns false (integers cannot be NaN)
+            //
+            // AsGeneric (NOT MakeGeneric): the engine result is a freshly-produced
+            // array we own, so we wrap its storage in place rather than aliasing it
+            // — the same cheap bool-return the sibling comparison ops use
+            // (ExecuteComparisonOp → NDArray<bool>). MakeGeneric's Storage.Alias()
+            // allocated a second UnmanagedStorage + ArraySlice per call for no
+            // reason (measured ~0.08 µs of pure overhead on the small-N f32 floor,
+            // the regime where this op is bounded by per-call cost, not the kernel).
             if (@out is null && where is null)
-                return ExecuteUnaryOp(a, UnaryOp.IsNan, NPTypeCode.Boolean).MakeGeneric<bool>();
+            {
+                using var result = ExecuteUnaryOp(a, UnaryOp.IsNan, NPTypeCode.Boolean);
+                return result.AsGeneric<bool>();
+            }
 
             // ufunc out=/where=: rides the shared unary Into-path with a
             // Boolean loop dtype (the predicate body emits bool at the INPUT

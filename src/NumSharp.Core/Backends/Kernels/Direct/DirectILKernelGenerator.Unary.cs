@@ -136,8 +136,32 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Generate a unary kernel for the specified key.
         /// </summary>
-        private static UnaryKernel GenerateUnaryKernel(UnaryKernelKey key)
+        private static unsafe UnaryKernel GenerateUnaryKernel(UnaryKernelKey key)
         {
+            // Half sign-bit family — sign / negate / abs are defined ENTIRELY on the f16 bit
+            // pattern (no float32 round-trip), so they vectorize over raw ushort lanes and are the
+            // f16 ops that actually beat NumPy (everything else is capped by this runtime's lack of
+            // vectorized F16C). negate = bits ^ 0x8000, abs = bits & 0x7fff, sign = the select chain —
+            // all bit-identical to NumPy over every f16 value. Contiguous only; strided/broadcast keep
+            // the scalar bit helpers. Other dtypes are untouched (float/int negate/abs already SIMD).
+            if (key.IsContiguous && key.InputType == NPTypeCode.Half && key.OutputType == NPTypeCode.Half)
+            {
+                switch (key.Op)
+                {
+                    case UnaryOp.Sign:   return HalfSignContiguous;
+                    case UnaryOp.Negate: return HalfNegateContiguous;
+                    case UnaryOp.Abs:    return HalfAbsContiguous;
+                    // floor/ceil/trunc/rint are exponent-based mantissa masking — every result
+                    // is exactly representable, so the bit kernel is exactly NumPy's
+                    // widen→roundf→narrow scalar loop, minus the conversions
+                    // (Unary.Round.Half.cs; probed over all 65,536 patterns).
+                    case UnaryOp.Floor:    return HalfFloorContiguous;
+                    case UnaryOp.Ceil:     return HalfCeilContiguous;
+                    case UnaryOp.Truncate: return HalfTruncContiguous;
+                    case UnaryOp.Round:    return HalfRintContiguous;
+                }
+            }
+
             // UnaryKernel signature:
             // void(void* input, void* output, long* strides, long* shape, int ndim, long totalSize)
             var dm = new DynamicMethod(
@@ -186,7 +210,8 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static bool IsPredicateOp(UnaryOp op)
         {
-            return op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf;
+            return op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf
+                || op == UnaryOp.IsPosInf || op == UnaryOp.IsNegInf;
         }
 
         /// <summary>
@@ -197,6 +222,14 @@ namespace NumSharp.Backends.Kernels
             // SIMD only for same-type operations
             if (!key.IsSameType)
                 return false;
+
+            // 'positive' is identity — a pure load→store copy vectorizes for every SIMD-capable
+            // dtype (Int64/UInt64 included: there is no abs/negate emulation, just a copy). The
+            // vector body emits nothing (EmitUnaryVectorOperation Positive branch). This upgrades
+            // contiguous positive off the scalar fallback AND lets a strided narrow-row positive
+            // engage the 2-D block kernel.
+            if (key.Op == UnaryOp.Positive)
+                return CanUseSimd(key.InputType);
 
             // BitwiseNot works for integer types only (and bool). Char is excluded:
             // there is no Vector<char> in the BCL (CanUseSimd(Char) is false for the same
@@ -211,9 +244,12 @@ namespace NumSharp.Backends.Kernels
                        key.InputType != NPTypeCode.Char;
             }
 
-            // LogicalNot is boolean-only, no SIMD (uses scalar comparison)
+            // LogicalNot is boolean-only. It rides the byte lanes (there is no Vector<bool>):
+            // min(v,1) ^ 1 gives NumPy's BOOL_logical_not exactly — any nonzero byte is True,
+            // output canonical 0/1 (matches the scalar `ceq 0` tail bit-for-bit, non-canonical
+            // frombuffer bools included).
             if (key.Op == UnaryOp.LogicalNot)
-                return false;
+                return key.InputType == NPTypeCode.Boolean && VectorBits != 0;
 
             // Negate / Abs SIMD also works on signed/unsigned integer types in .NET 8+.
             // Vector.Negate on unsigned does two's-complement wrap (matches NumPy scalar
@@ -258,9 +294,52 @@ namespace NumSharp.Backends.Kernels
                 return RoundingVectorSimdAvailable(key.Op, key.InputType);
             }
 
+            // exp is float32-only here and needs hardware FMA (the rounding of the fused
+            // multiply-add is part of NumPy's answer, not an optimization) — see
+            // ExpVectorSimdAvailable. Double keeps the scalar Math.Exp loop.
+            if (key.Op == UnaryOp.Exp || key.Op == UnaryOp.Exp2 ||
+                key.Op == UnaryOp.Log ||
+                key.Op == UnaryOp.Sin || key.Op == UnaryOp.Cos ||
+                key.Op == UnaryOp.Tanh)
+                return NumPyFloatKernelSimdAvailable(key.Op, key.InputType);
+
             return key.Op == UnaryOp.Sqrt || key.Op == UnaryOp.Reciprocal ||
                    key.Op == UnaryOp.Deg2Rad || key.Op == UnaryOp.Rad2Deg;
         }
+
+        /// <summary>
+        /// Whether the active SIMD width can lower one of the NumPy-ported float32 kernels
+        /// (<c>exp</c>, <c>log</c>, <c>sin</c>, <c>cos</c>) for element type <paramref name="t"/>.
+        /// True only for float32 on a host whose <see cref="VectorBits"/> width has hardware FMA
+        /// (<see cref="NumSharp.Utilities.NDFloatMath.IsExpVectorAccelerated"/>) — NumPy gates its
+        /// own vector exp identically, compiling it only for AVX2+FMA3 / AVX-512F. Everything else
+        /// takes the scalar entry point, which computes the SAME bits, just one lane at a time; the
+        /// gate is therefore purely about speed, never about results. Shared by the direct kernel
+        /// (<see cref="CanUseUnarySimd"/>), the strided gather kernel and the fused NDExpr path, so
+        /// none of them can emit a vector call this host cannot execute.
+        /// </summary>
+        internal static bool NumPyFloatKernelSimdAvailable(UnaryOp op, NPTypeCode t)
+        {
+            if (VectorBits == 0) return false;
+            if (t != NPTypeCode.Single) return false;
+            var m = op == UnaryOp.Exp ? CachedMethods.SingleExpVector
+                  : op == UnaryOp.Exp2 ? CachedMethods.SingleExp2Vector
+                  : op == UnaryOp.Log ? CachedMethods.SingleLogVector
+                  : op == UnaryOp.Sin ? CachedMethods.SingleSinVector
+                  : op == UnaryOp.Cos ? CachedMethods.SingleCosVector
+                  : op == UnaryOp.Tanh ? CachedMethods.SingleTanhVector
+                  : null;
+            if (m == null) return false;
+            // tanh asks for MORE than the others: its coefficients are selected per lane, so the
+            // vector form needs a gather/table read (AVX2) on top of the FMA they all need.
+            return op == UnaryOp.Tanh
+                ? NumSharp.Utilities.NDFloatMath.IsTanhVectorAccelerated(VectorBits)
+                : NumSharp.Utilities.NDFloatMath.IsExpVectorAccelerated(VectorBits);
+        }
+
+        /// <summary>Back-compat alias for the exp-only spelling of the shared gate.</summary>
+        internal static bool ExpVectorSimdAvailable(NPTypeCode t)
+            => NumPyFloatKernelSimdAvailable(UnaryOp.Exp, t);
 
         /// <summary>
         /// Whether the active SIMD width can lower a rounding-family op (<c>Floor</c>/<c>Ceil</c>/
@@ -475,7 +554,12 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit scalar loop for contiguous unary operations (no SIMD).
+        /// Emit scalar loop for contiguous unary operations (no SIMD). 4×-unrolled: the four
+        /// per-element op chains are independent, so a per-element dependency (most importantly the
+        /// Half↔float F16C conversions and the transcendental call latency, which the non-unrolled
+        /// loop exposed one-at-a-time) pipelines across the four lanes — the same "independent
+        /// accumulators break the carried dependency" lever the SIMD loops use, applied to a scalar
+        /// body the BCL has no vector form for. The remainder loop handles totalSize % 4.
         /// </summary>
         private static void EmitUnaryScalarLoop(ILGenerator il, UnaryKernelKey key,
             int inputSize, int outputSize)
@@ -484,34 +568,80 @@ namespace NumSharp.Backends.Kernels
             //       long* strides (2), long* shape (3),
             //       int ndim (4), long totalSize (5)
 
-            var locI = il.DeclareLocal(typeof(long)); // loop counter
+            const int Unroll = 4;
+            var locI = il.DeclareLocal(typeof(long));         // loop counter
+            var locUnrollEnd = il.DeclareLocal(typeof(long)); // totalSize - Unroll
 
-            var lblLoop = il.DefineLabel();
-            var lblLoopEnd = il.DefineLabel();
+            var lblUnroll = il.DefineLabel();
+            var lblUnrollEnd = il.DefineLabel();
+            var lblTail = il.DefineLabel();
+            var lblTailEnd = il.DefineLabel();
+
+            // unrollEnd = totalSize - Unroll
+            il.Emit(OpCodes.Ldarg_S, (byte)5);
+            il.Emit(OpCodes.Ldc_I8, (long)Unroll);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locUnrollEnd);
 
             // i = 0
             il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
 
-            il.MarkLabel(lblLoop);
+            // ---- unrolled body: while (i <= totalSize - Unroll) ----
+            il.MarkLabel(lblUnroll);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locUnrollEnd);
+            il.Emit(OpCodes.Bgt, lblUnrollEnd);
 
-            // if (i >= totalSize) goto end
+            for (int k = 0; k < Unroll; k++)
+                EmitUnaryScalarElement(il, key, inputSize, outputSize, locI, k);
+
+            // i += Unroll
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)Unroll);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblUnroll);
+            il.MarkLabel(lblUnrollEnd);
+
+            // ---- remainder: while (i < totalSize) ----
+            il.MarkLabel(lblTail);
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldarg_S, (byte)5); // totalSize
-            il.Emit(OpCodes.Bge, lblLoopEnd);
+            il.Emit(OpCodes.Bge, lblTailEnd);
 
-            // output[i] = op(input[i])
-            // Load output address
-            il.Emit(OpCodes.Ldarg_1); // output
+            EmitUnaryScalarElement(il, key, inputSize, outputSize, locI, 0);
+
             il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblTail);
+            il.MarkLabel(lblTailEnd);
+        }
+
+        /// <summary>
+        /// Emit one element of the scalar unary loop: <c>output[i + k] = op(input[i + k])</c>, where
+        /// <paramref name="k"/> is a compile-time constant offset (0 for the non-unrolled/remainder
+        /// case). Factored out of <see cref="EmitUnaryScalarLoop"/> so the 4× unroll emits four
+        /// independent bodies with no shared intermediate.
+        /// </summary>
+        private static void EmitUnaryScalarElement(ILGenerator il, UnaryKernelKey key,
+            int inputSize, int outputSize, System.Reflection.Emit.LocalBuilder locI, int k)
+        {
+            // Load output address: output + (i + k) * outputSize
+            il.Emit(OpCodes.Ldarg_1);
+            il.Emit(OpCodes.Ldloc, locI);
+            if (k != 0) { il.Emit(OpCodes.Ldc_I8, (long)k); il.Emit(OpCodes.Add); }
             il.Emit(OpCodes.Ldc_I8, (long)outputSize);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
 
-            // Load input[i]
-            il.Emit(OpCodes.Ldarg_0); // input
+            // Load input[i + k]: input + (i + k) * inputSize, then dereference
+            il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldloc, locI);
+            if (k != 0) { il.Emit(OpCodes.Ldc_I8, (long)k); il.Emit(OpCodes.Add); }
             il.Emit(OpCodes.Ldc_I8, (long)inputSize);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Conv_I);
@@ -522,36 +652,22 @@ namespace NumSharp.Backends.Kernels
             // and the operation itself produces bool. For other ops, convert first.
             if (IsPredicateOp(key.Op))
             {
-                // Perform operation on input type - produces bool
                 EmitUnaryScalarOperation(il, key.Op, key.InputType);
             }
             else if (key.Op == UnaryOp.Abs && key.InputType == NPTypeCode.Complex)
             {
-                // Special case: Complex abs returns magnitude (double), not Real part
-                // NumPy: np.abs(complex) returns float64 array of magnitudes
+                // Complex abs returns magnitude (double), not the Real part.
                 il.EmitCall(OpCodes.Call, CachedMethods.ComplexAbs, null);
-                // Result is double - convert to output type if needed
                 if (key.OutputType != NPTypeCode.Double)
                     EmitConvertTo(il, NPTypeCode.Double, key.OutputType);
             }
             else
             {
-                // Convert to output type, then perform operation
                 EmitConvertTo(il, key.InputType, key.OutputType);
                 EmitUnaryScalarOperation(il, key.Op, key.OutputType);
             }
 
-            // Store result
             EmitStoreIndirect(il, key.OutputType);
-
-            // i++
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, 1L);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locI);
-
-            il.Emit(OpCodes.Br, lblLoop);
-            il.MarkLabel(lblLoopEnd);
         }
 
         /// <summary>

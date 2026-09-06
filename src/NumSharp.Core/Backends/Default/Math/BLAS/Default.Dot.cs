@@ -21,6 +21,17 @@ namespace NumSharp.Backends
             //If a is an N - D array and b is a 1 - D array, it is a sum product over the last axis of a and b.
             //If a is an N - D array and b is an M - D array(where M >= 2), it is a sum product over the last axis of a and the second-to - last axis of b:
             //  dot(a, b)[i, j, k, m] = sum(a[i, j,:] * b[k,:, m])
+            // An external BLAS, when one is installed (see TensorEngine.Blas). np.dot is NOT
+            // matmul's dispatcher — the two disagree on e.g. a strided matrix times a vector — so
+            // a backend gets its own entry point here, ahead of every shape branch below.
+            // Read the property ONCE: it is settable at any time from any thread, and testing it
+            // then calling it would be a null-dereference every time a concurrent OpenBlasEngine.Disable()
+            // landed between the two reads (measured: ~2% of products under a hostile flipper).
+            var blas = Blas;
+            NDArray blasResult;
+            if (blas != null && blas.TryDot(left, right, out blasResult))
+                return blasResult;
+
             var leftshape = left.Shape;
             var rightshape = right.Shape;
             var isLeftScalar = leftshape.IsScalar;
@@ -69,7 +80,10 @@ namespace NumSharp.Backends
                 // Reshape 1D to row vector (1, n), multiply, squeeze back to 1D
                 var leftReshaped = left.reshape(1, leftshape[0]);
                 var result = MultiplyMatrix(leftReshaped, right);
-                return result.reshape(rightshape[1]);
+                var squeezed = result.reshape(rightshape[1]);
+                leftReshaped.Dispose(); // row-vector alias of the input — the input keeps its own ref
+                result.Dispose();       // the returned view holds its own counted ref on the product buffer
+                return squeezed;
             }
 
             //left cant be 0 or 1 by this point

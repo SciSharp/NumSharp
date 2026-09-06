@@ -125,6 +125,65 @@ public abstract class BenchmarkBase
         NPTypeCode.Complex => new System.Numerics.Complex(value, 0),
         _ => throw new ArgumentException($"Unsupported type: {dtype}")
     };
+
+    /// <summary>
+    /// Execute an operation for a dtype whose NumPy-compatible contract is rejection, and turn
+    /// that expected rejection into a successful benchmark result. This keeps unsupported cells
+    /// executable/auditable without pretending they perform an elementwise kernel. Such C#-only
+    /// evidence has no NumPy timing peer and therefore never enters comparison rollups.
+    /// </summary>
+    protected static object VerifyUnsupportedDtype(Func<object> operation)
+    {
+        try
+        {
+            var unexpected = operation();
+            (unexpected as IDisposable)?.Dispose();
+            throw new InvalidOperationException("The dtype was expected to be rejected, but the operation succeeded.");
+        }
+        catch (TypeError)
+        {
+            return UnsupportedDtypeEvidence.Instance;
+        }
+        catch (NotSupportedException)
+        {
+            return UnsupportedDtypeEvidence.Instance;
+        }
+        catch (InvalidCastException)
+        {
+            return UnsupportedDtypeEvidence.Instance;
+        }
+        catch (IncorrectTypeException)
+        {
+            return UnsupportedDtypeEvidence.Instance;
+        }
+    }
+
+    /// <summary>
+    /// Record a known unsupported dtype without invoking a path that cannot safely report a
+    /// managed exception (for example, a process-fatal invalid kernel combination).
+    /// </summary>
+    protected static object RecordUnsafeUnsupportedDtype() => UnsupportedDtypeEvidence.Instance;
+
+    private sealed class UnsupportedDtypeEvidence
+    {
+        public static readonly UnsupportedDtypeEvidence Instance = new();
+        private UnsupportedDtypeEvidence() { }
+    }
+}
+
+/// <summary>
+/// Base for official scenarios whose class does not already provide its own dtype parameter.
+/// Dtype-agnostic APIs still receive the parameter so the audit can state explicitly that the
+/// function is executable for every requested dtype; array-bearing classes consume it in setup.
+/// Experimental microbenchmarks deliberately remain on <see cref="BenchmarkBase"/> so their case
+/// counts are not multiplied by the official function × dtype matrix.
+/// </summary>
+public abstract class OfficialBenchmarkBase : BenchmarkBase
+{
+    [ParamsSource(nameof(ScenarioTypes))]
+    public NPTypeCode DType { get; set; }
+
+    public static IEnumerable<NPTypeCode> ScenarioTypes => TypeParameterSource.AllNumericTypes;
 }
 
 /// <summary>

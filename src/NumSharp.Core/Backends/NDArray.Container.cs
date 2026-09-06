@@ -30,6 +30,7 @@ namespace NumSharp
         /// arr.Contains(10); // false
         /// </code>
         /// </example>
+        [NDScoped] // bool boundary: reclaims asanyarray's fresh conversion while an NDArray-typed value passes through untracked
         public bool Contains(object value)
         {
             if (value is null)

@@ -85,11 +85,20 @@ Param-reading helpers (all on `JsonElement p["…"]`): `.GetInt32()`, `.GetDoubl
 operands FuzzCorpus rebuilt from the recorded bytes. Mutating ops (`place`/`put`/`copyto`) return the mutated
 operand as the result.
 
+**If your op does NOT return one array** — it returns a dtype (promotion helpers), a string (printing), a scalar,
+or a tuple of arrays — it belongs in **`OpRegistry.Kinds.cs`** (`ApplyDtype`/`ApplyText`/`ApplyTuple`), and the
+generator must tag the case with `expected.kind` (`dtype`/`text`/`scalar`/`tuple`) via `_arr_expected(kind=…)` or
+`_tuple_expected(...)`. `FuzzCorpusTests.Kinds.cs` compares by kind (a tuple asserts ARITY then every slot; a dtype
+compares by NumPy dtype name; text is verbatim). Pattern-match an existing one: `result_type`/`promote_types`
+(dtype), `array_str`/`array_repr` (text), `nonzero_all`/`meshgrid` (tuple). **A random/PCG64 stream op** (`default_rng`,
+`Generator.*`, `bytes`, `random_integers`) goes in the third partial **`OpRegistry.Generator.cs`**, paired with the
+`generator_parity` mode.
+
 ## 4. Regenerate the corpus
 
 ```bash
 cd test/oracle
-python gen_oracle.py <mode>          # e.g. manip  -> writes ../NumSharp.UnitTest/Fuzz/corpus/manip.jsonl
+python gen_oracle.py <mode>          # e.g. manip  -> writes ../NumSharp.Tests.Oracle/Fuzz/corpus/manip.jsonl
 ```
 
 Sanity-check the op landed (compact JSON — parse it, don't grep for `"op": "…"`):
@@ -98,7 +107,7 @@ Sanity-check the op landed (compact JSON — parse it, don't grep for `"op": "�
 python - <<'PY'
 import json, collections
 c = collections.Counter()
-for line in open("../NumSharp.UnitTest/Fuzz/corpus/manip.jsonl", encoding="utf-8"):
+for line in open("../NumSharp.Tests.Oracle/Fuzz/corpus/manip.jsonl", encoding="utf-8"):
     if line.strip(): c[json.loads(line)["op"]] += 1
 print({k: c[k] for k in ["flip","fliplr","trim_zeros"]})
 PY
@@ -106,14 +115,24 @@ PY
 
 ## 5. Build + run the gate
 
+The harness + corpus live in the **`NumSharp.Tests.Oracle`** project (not `NumSharp.Tests` — the corpus glob and the
+`FuzzCorpusTests` gate moved there):
+
 ```bash
-cd ../NumSharp.UnitTest
+cd ../NumSharp.Tests.Oracle
 dotnet build -c Debug -f net10.0            # the csproj glob copies corpus/*.jsonl into bin/.../Fuzz/corpus/
 dotnet test --no-build -f net10.0 --filter "FullyQualifiedName~FuzzCorpusTests.<Tier>"
 ```
 
-A pass means every new case (all layouts, all 15 dtypes, Char woven via `char_tier`) is bit-identical to NumPy.
+A pass means every new case (all layouts, the 13 NumPy dtypes, + Char woven via `char_tier` where the mode calls it)
+is bit-identical to NumPy. Decimal is a separate oracle (`gen_decimal_oracle.cs`), not part of a NumPy tier.
 If a case is red, go to `references/triage.md`.
+
+> **Your op now also enters the ZERO-LEAK gate.** `UndisposedIntermediateTests` (`[FuzzMatrix]`) replays the corpus
+> through `OpRegistry` and asserts the buffer pool balances — the `KnownEscapes` registry is empty, so if your op
+> strands a pooled intermediate it goes red **even with bit-exact values**. Run `FullyQualifiedName~UndisposedIntermediateTests`
+> too, and fix any leak in the op (dispose the intermediate / `[NDScoped]`) rather than allowlisting it. See
+> `references/triage.md` → "A red that is NOT a value divergence".
 
 ## 6. What you do NOT need to do
 
@@ -131,13 +150,18 @@ When no existing `gen_<mode>` fits (a new op family with its own fixtures — mi
    `write_jsonl(corpus_dir + "/<newmode>.jsonl", gen_<newmode>(...) [+ char_tier("<newmode>")])`, and add the
    `char_tier` branch if you want Char coverage.
 3. **New test method** — add `[FuzzMatrix] public void <Tier>() => RunCorpus("<newmode>.jsonl");` in
-   `FuzzCorpusTests.cs`.
+   `FuzzCorpusTests.cs`. Recommended: also add a `MinCases["<newmode>.jsonl"] = <~80% of the count>` floor in that
+   file, so a silently truncated regeneration fails loudly instead of passing with a fraction of its cells (unlisted
+   files default to a floor of 1).
 4. **Register the opnames** in `OpRegistry.cs` as usual, regenerate (`python gen_oracle.py <newmode>`), build, run.
 
 ## Adding a new DTYPE or LAYOUT
 
 - **Dtype**: widen the mode's dtype axis toward `ALL_DTYPES` in `gen_oracle.py` (most tiers already use it). Char
   and Decimal are handled by their own paths (see `regenerate.md`). Then regenerate + rerun.
-- **Layout**: add a `(base, view)` builder to `layout_catalog.py` AND mirror it under the same name in
-  `test/NumSharp.UnitTest/Fuzz/LayoutCatalog.cs` (the C# side must rebuild the identical view). Regenerate every
-  affected tier.
+- **Layout**: add a `(base, view)` builder to `layout_catalog.py`, then regenerate every affected tier — **that is
+  all.** There is **no** C# `LayoutCatalog.cs` to mirror: `FuzzCorpus.Reconstruct` rebuilds the operand purely from
+  the serialized `(dtype, shape, element-strides, offset, base-bytes)`, so any new `(shape, strides, offset)` is
+  replayed generically. (`layout_catalog.py`'s header still claims a 1:1 C# mirror — that comment is stale.) The one
+  rule the builder must keep: `view` must be a genuine view into `base`'s buffer (`describe()` self-validates this at
+  generation time), so C# can alias the same bytes.

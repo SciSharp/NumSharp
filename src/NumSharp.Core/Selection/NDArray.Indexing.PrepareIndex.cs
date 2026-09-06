@@ -41,6 +41,7 @@ namespace NumSharp
         internal enum IndexKind : byte { Ellipsis, NewAxis, Slice, Integer, Fancy, Bool, ZeroDBool }
 
         /// <summary>One classified index item produced by <see cref="PrepareIndex"/>.</summary>
+        [NDBorrowed] // an index array the caller passed in (or an ambient-scoped temp), never owned here
         internal readonly struct IndexOp
         {
             public readonly IndexKind Kind;
@@ -66,6 +67,7 @@ namespace NumSharp
         }
 
         /// <summary>Result of <see cref="PrepareIndex"/>: the classified op list + NumPy <c>index_type</c> + dims.</summary>
+        [NDBorrowed] // holds IndexOps, which reference the caller's index arrays
         internal readonly struct PreparedIndex
         {
             public readonly IndexOp[] Ops;
@@ -87,6 +89,7 @@ namespace NumSharp
         ///     op list + <see cref="IndexType"/> for valid ones. No bounds checking of integer index VALUES
         ///     (NumPy defers that to the gather), and no gather is performed here.
         /// </summary>
+        [NDScopedCovered] // only callers: the [NDScoped] FetchIndices(object[]) / SetIndices(object[], values) dispatches (mask nonzero components + aliases are scope-reclaimed)
         internal static PreparedIndex PrepareIndex(Shape shape, object[] raw)
         {
             int arrayNdim = shape.NDim;
@@ -440,7 +443,7 @@ namespace NumSharp
             {
                 long v;
                 try { v = Convert.ToInt64(flat.GetValue(i), CultureInfo.InvariantCulture); }
-                catch (OverflowException) { throw new IndexError($"index out of bounds for axis {axis} with size {dim}"); }
+                catch (OverflowException ex) { throw new IndexError($"index out of bounds for axis {axis} with size {dim}", ex); }
                 if (v < -dim || v >= dim)
                     throw new IndexError($"index {v} is out of bounds for axis {axis} with size {dim}");
             }

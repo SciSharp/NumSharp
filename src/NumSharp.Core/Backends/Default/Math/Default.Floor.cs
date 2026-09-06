@@ -5,14 +5,13 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Floor(NDArray nd, Type dtype) => Floor(nd, dtype?.GetTypeCode());
-
         /// <summary>
         /// Element-wise floor using IL-generated kernels.
         /// NumPy: for integer dtypes, floor is a no-op that preserves the input dtype.
         /// </summary>
-        public override NDArray Floor(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Floor(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);
 
             // NumPy registers IDENTITY loops for floor on every bool/

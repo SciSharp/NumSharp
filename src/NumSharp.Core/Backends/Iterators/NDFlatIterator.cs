@@ -19,6 +19,7 @@ namespace NumSharp.Backends.Iteration
     ///     The broadcast expansion is the same Shape/stride machinery NDIter uses; element access
     ///     resolves the (possibly stride-0) coordinates per step, so no buffer is materialized.
     /// </summary>
+    [NDBorrowed] // reads the view it is handed; the view's owner (np.Broadcast) disposes it
     public sealed class NDFlatIterator : IEnumerable<object>, IEnumerable
     {
         private readonly NDArray _view;

@@ -454,7 +454,13 @@ namespace NumSharp
             typemap_arr_scalar.Add((np.@bool, np.@char), np.@char);  // bug 5: bool array + char scalar -> char (was missing -> KeyNotFoundException)
             typemap_arr_scalar.Add((np.@bool, np.int16), np.int16);
             typemap_arr_scalar.Add((np.@bool, np.uint16), np.uint16);
-            typemap_arr_scalar.Add((np.@bool, np.int32), np.int32);
+            // bool array + C# int scalar -> int64, NOT int32. The C# `int` literal is the weak
+            // Python int literal (house NEP50 mapping), and NumPy 2.4.2 promotes bool + weak int
+            // to the DEFAULT integer because int is a different KIND than bool (probed:
+            // (np.array([True]) + 2).dtype == int64; same for *, &, |, ^, <<, >>). The narrower
+            // C#-only spellings ((short)2, (byte)2, ...) keep their strong np.int16/np.uint8
+            // reading above, matching the oracle's weak-int-boxes-as-long convention.
+            typemap_arr_scalar.Add((np.@bool, np.int32), np.int64);
             typemap_arr_scalar.Add((np.@bool, np.uint32), np.uint32);
             typemap_arr_scalar.Add((np.@bool, np.int64), np.int64);
             typemap_arr_scalar.Add((np.@bool, np.uint64), np.uint64);
@@ -1062,7 +1068,7 @@ namespace NumSharp
             {
                 var len = N - start;
                 var sub = new NPTypeCode[len];
-                Array.Copy(dtypelist, start, sub, len, len);
+                Array.Copy(dtypelist, start, sub, 0, len);
                 dtypelist = sub;
                 N = sub.Length;
             }
@@ -1095,7 +1101,7 @@ namespace NumSharp
                 var len = N - start;
                 var sub = new List<NPTypeCode>(len);
                 for (int i = start; i < N; i++)
-                    sub[i - start] = dtypelist[i];
+                    sub.Add(dtypelist[i]);
                 dtypelist = sub;
                 N = sub.Count;
             }

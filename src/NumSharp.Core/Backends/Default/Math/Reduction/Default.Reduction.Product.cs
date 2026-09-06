@@ -6,8 +6,9 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null)
+        public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             var shape = arr.Shape;
 
             if (shape.IsEmpty)
@@ -24,7 +25,7 @@ namespace NumSharp.Backends
                     var emptyType = typeCode ?? arr.typecode.GetAccumulatingType();
                     var r = NDArray.Scalar(emptyType.GetOneValue());
                     if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
-                    return r;
+                    return r.MarkReductionScalar();
                 }
                 var axis = NormalizeAxis(axis_.Value, arr.ndim);
                 var resultShape = Shape.GetAxis(shape, axis);
@@ -47,7 +48,7 @@ namespace NumSharp.Backends
                 var r = NDArray.Scalar(result);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
-                return r;
+                return r.MarkReductionScalar();
             }
 
             var axis2 = NormalizeAxis(axis_.Value, arr.ndim);

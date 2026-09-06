@@ -27,6 +27,9 @@ namespace NumSharp
         /// <param name="x1">Input array (integer types only).</param>
         /// <param name="x2">Number of bits to shift (scalar or array-like).</param>
         /// <returns>Array with bits shifted right.</returns>
+        // Scope: reclaims the np.asanyarray(x2) temp for a scalar/array-like shift count
+        // (the a>>obj operator analog); an NDArray-input passthrough stays untracked.
+        [NDScoped]
         public static NDArray right_shift(NDArray x1, object x2) => x1.TensorEngine.RightShift(x1, np.asanyarray(x2));
     }
 }

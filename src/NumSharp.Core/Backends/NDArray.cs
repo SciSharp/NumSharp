@@ -39,6 +39,7 @@ namespace NumSharp
     /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html</remarks>
     [DebuggerTypeProxy(nameof(NDArrayDebuggerProxy))]
     [SuppressMessage("ReSharper", "ParameterHidesMember")]
+    [ModuleName("ndarray")]
     public partial class NDArray : IIndex, ICloneable, IEnumerable, IDisposable
     {
         protected TensorEngine tensorEngine;
@@ -57,6 +58,14 @@ namespace NumSharp
         // so concurrent Dispose calls don't double-Release.
         // ---------------------------------------------------------------
         private int _disposed;
+
+        // Ambient-scope back-pointer: the NDScope currently responsible for reclaiming this
+        // array (null when untracked or yielded to the caller). Written by NDScope.Track /
+        // Returns / Detach on the constructing thread only; makes Returns O(1) and makes
+        // yielding an untracked array (an input passthrough, a caller's @out) a provable no-op.
+        // Borrowed: the scope owns (tracks) this array, not the other way round.
+        [NDBorrowed] internal NDScope TrackingScope;
+        internal int TrackingIndex;
 
         /// <summary>
         ///     <c>true</c> if <see cref="Dispose"/> has been called on this
@@ -80,6 +89,7 @@ namespace NumSharp
         /// </remarks>
         private void InitializeArc()
         {
+            NDScope.Track(this);   // ambient-scope registration (a thread-static read when no scope is open)
             var arr = Storage?.InternalArray;
             if (arr is null) return;
             arr.TryAddRef();
@@ -104,13 +114,21 @@ namespace NumSharp
 
         /// <summary>
         ///     Finalizer safety net: runs only when the user never called
-        ///     <see cref="Dispose"/>. Drops this NDArray's reference so the
-        ///     refcount can still reach zero even without explicit cleanup.
+        ///     <see cref="Dispose"/>. Drops this NDArray's reference via
+        ///     <see cref="IArraySlice.Abandon"/> — decrement WITHOUT the eager
+        ///     free-at-zero that <see cref="Dispose"/> performs. This NDArray
+        ///     being unreachable proves nothing about OTHER reachable aliases
+        ///     of the same buffer (a bare <see cref="UnmanagedStorage"/> /
+        ///     <see cref="IArraySlice"/> obtained via <see cref="GetData()"/>
+        ///     holds no counted reference), so freeing here read as a
+        ///     use-after-free through such aliases. The memory block's own
+        ///     finalizer frees (and pools) the buffer in the GC cycle after
+        ///     the last alias dies.
         /// </summary>
         ~NDArray()
         {
             if (Volatile.Read(ref _disposed) == 0)
-                Storage?.InternalArray?.Release();
+                Storage?.InternalArray?.Abandon();
         }
 
         /// <summary>
@@ -236,7 +254,7 @@ namespace NumSharp
         protected internal NDArray(NPTypeCode typeCode, TensorEngine engine)
         {
             tensorEngine = engine;
-            Storage = TensorEngine.GetStorage(typeCode);
+            Storage = TensorEngine.GetStorage(typeCode.AsType());
         }
 
         /// <summary>
@@ -266,10 +284,14 @@ namespace NumSharp
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(Array values, Shape shape = default, char order = 'C') : this(values.GetType().GetElementType())
         {
-            // Note: F-order not supported, order parameter is accepted but ignored (C-order only)
-
             if (shape.IsEmpty)
                 shape = Shape.ExtractShape(values);
+
+            // Honor an explicit 'F' request: the (row-major) values buffer is reinterpreted as
+            // column-major by rebuilding the shape with F-contiguous strides — mirroring NumPy's
+            // ndarray(buffer=..., order='F'). 'C' (the default) keeps the extracted C-order layout.
+            if (order == 'F' && shape.NDim > 1)
+                shape = new Shape(shape.dimensions, 'F');
 
             Storage.Allocate(values.ResolveRank() != 1 ? ArraySlice.FromArray(Arrays.Flatten(values), false) : ArraySlice.FromArray(values, false), shape);
             InitializeArc();
@@ -286,10 +308,13 @@ namespace NumSharp
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(IArraySlice values, Shape shape = default, char order = 'C') : this(values.TypeCode)
         {
-            // Note: F-order not supported, order parameter is accepted but ignored (C-order only)
-
             if (shape.IsEmpty)
                 shape = Shape.Vector(values.Count);
+
+            // Honor an explicit 'F' request: reinterpret the buffer as column-major by rebuilding
+            // the shape with F-contiguous strides (NumPy's ndarray(buffer=..., order='F')).
+            if (order == 'F' && shape.NDim > 1)
+                shape = new Shape(shape.dimensions, 'F');
 
             Storage.Allocate(values, shape);
             InitializeArc();
@@ -372,7 +397,7 @@ namespace NumSharp
         /// <param name="size">The size as a single dimension shape</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(NPTypeCode dtype, int size, bool fillZeros) : this(dtype, Shape.Vector(size), true) { }
+        public NDArray(NPTypeCode dtype, int size, bool fillZeros) : this(dtype, Shape.Vector(size), fillZeros) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
@@ -476,9 +501,53 @@ namespace NumSharp
 
         public int dtypesize => Storage.DTypeSize;
 
+        /// <summary>
+        ///     Length of one array element in bytes — NumPy's <c>ndarray.itemsize</c>. This is a pure
+        ///     property of the <see cref="dtype"/> and is independent of shape, strides, offset or layout,
+        ///     so every view of a given dtype (C/F-contiguous, sliced, strided, transposed, negative-stride,
+        ///     broadcast, 0-d or empty) reports the same value. Byte-identical to NumPy for the 13 dtypes
+        ///     with a NumPy analog (e.g. float64→8, complex128→16, int8/bool→1); the two NumSharp-only
+        ///     dtypes report their in-memory element size (Char→2, Decimal→16). Alias of the legacy
+        ///     <see cref="dtypesize"/>; the product <see cref="size"/> * <c>itemsize</c> is <see cref="nbytes"/>.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.itemsize.html</remarks>
+        public int itemsize => Storage.DTypeSize;
+
+        /// <summary>
+        ///     Total bytes consumed by the elements of the array — the LOGICAL element count
+        ///     (<see cref="size"/>) times the itemsize (<see cref="dtypesize"/>), matching NumPy's
+        ///     <c>PyArray_NBYTES = PyArray_ITEMSIZE * PyArray_SIZE</c>. Because it uses the logical size,
+        ///     a broadcast view reports its logical byte size (e.g. a <c>(1000,1000)</c> stride-0 view of
+        ///     one int32 reports <c>4000000</c>), not its one-element backing buffer; a 0-d array reports
+        ///     one itemsize and an empty array reports 0. Does not include the array object's own overhead.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.nbytes.html</remarks>
+        public long nbytes => Storage.Shape.Size * (long)Storage.DTypeSize;
+
         public char order => Storage.Shape.Order;
 
-        public long[] strides => Storage.Shape.Strides;
+        /// <summary>
+        ///     The strides of the array, in BYTES per axis — matching NumPy's <c>ndarray.strides</c>
+        ///     (<c>PyArray_STRIDES</c>): the number of bytes to step in memory to advance one element
+        ///     along each dimension. Equal to the element strides times the <see cref="dtypesize"/>
+        ///     (itemsize), so a stride-0 broadcast axis stays 0 and a negative-stride (reversed) view
+        ///     stays negative. A 0-d array reports an empty array. A fresh array is returned on each
+        ///     access. Internal kernels that need ELEMENT strides must read
+        ///     <see cref="Shape"/>.<see cref="View.Shape.Strides"/> instead.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.strides.html</remarks>
+        public long[] strides
+        {
+            get
+            {
+                long[] elementStrides = Storage.Shape.Strides;
+                int itemsize = Storage.DTypeSize;
+                var byteStrides = new long[elementStrides.Length];
+                for (int i = 0; i < elementStrides.Length; i++)
+                    byteStrides[i] = elementStrides[i] * itemsize;
+                return byteStrides;
+            }
+        }
 
         /// <summary>
         ///     A 1-D iterator over the array.
@@ -490,9 +559,26 @@ namespace NumSharp
             {
                 if (ndim == 1 || Shape.IsScalar) //because it is already flat, there is no need to clone even if it is already sliced.
                     return new NDArray(Storage);
+                // flat's documented contract is the raveled C-order IMAGE — a materialized copy
+                // for ANY non-contiguous layout (its ~15 internal consumers walk the buffer
+                // linearly). reshape must NOT be used here: it now returns nocopy strided VIEWS
+                // for combinable layouts (NumPy reshape parity), which would both write through
+                // and break the linear walks.
+                if (!Shape.IsContiguous)
+                    return new NDArray(new UnmanagedStorage(Storage.CloneData(), Shape.Vector(size))) { TensorEngine = TensorEngine };
                 return this.reshape(new Shape(size));
             }
         }
+
+        /// <summary>
+        ///     A write-through, C-order flat iterator over the array — the NumSharp analog of NumPy's
+        ///     <c>flatiter</c> (the type of NumPy's <c>ndarray.flat</c>). Unlike <see cref="flat"/> (a
+        ///     raveled <see cref="NDArray"/> that COPIES for a non-contiguous layout, dropping writes),
+        ///     this reads and writes through to the base in logical C-order for every memory layout.
+        ///     A fresh iterator is returned on each access (its cursor starts at 0).
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.flatiter.html</remarks>
+        public np.FlatIterator flatiter => new np.FlatIterator(this);
 
         /// <summary>
         ///     The transposed array. <br></br>
@@ -522,6 +608,40 @@ namespace NumSharp
                     throw new System.ArgumentException("matrix transpose with ndim < 2 is undefined");
                 return TensorEngine.SwapAxes(this, -1, -2);
             }
+        }
+
+        /// <summary>
+        ///     The device on which this array lives. NumSharp — like NumPy — is single-device and always
+        ///     CPU-resident, so this is always the string <c>"cpu"</c>. Exposed for Array-API conformance,
+        ///     so code such as <c>xp.zeros(shape, device: x.device)</c> ports from NumPy unchanged.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.device.html</remarks>
+        public string device => "cpu";
+
+        /// <summary>
+        ///     Array-API device transfer. NumSharp has only the CPU device, so the sole accepted target is
+        ///     <c>"cpu"</c>, for which the SAME array is returned with no copy — matching NumPy, which returns
+        ///     <c>self</c>. Any other device raises.
+        /// </summary>
+        /// <param name="device">Target device. Must be <c>"cpu"</c>.</param>
+        /// <param name="stream">Accepted for Array-API signature parity; must be <c>null</c> (NumSharp models no streams).</param>
+        /// <returns>This array, unchanged.</returns>
+        /// <exception cref="ArgumentNullException">If <paramref name="device"/> is <c>null</c> (NumPy raises <c>TypeError</c>).</exception>
+        /// <exception cref="ArgumentException">If <paramref name="device"/> is not <c>"cpu"</c>, or <paramref name="stream"/> is non-null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.to_device.html</remarks>
+        public NDArray to_device(string device, object stream = null)
+        {
+            // NumPy parses `device` as a required str first, so a null device is a TypeError before the
+            // stream check; then stream, then the device value (conversion_utils.c / array_api_standard.c).
+            if (device is null)
+                throw new ArgumentNullException(nameof(device), "to_device() argument 1 must be str, not None");
+            if (stream != null)
+                throw new ArgumentException("The stream argument in to_device() is not supported");
+            // Single quotes around 'cpu' here — the creation-path device= message uses double quotes.
+            // The asymmetry is deliberate and matches NumPy 2.x verbatim.
+            if (!string.Equals(device, "cpu", StringComparison.Ordinal))
+                throw new ArgumentException($"Unsupported device: {device}. Only 'cpu' is accepted.");
+            return this;
         }
 
         /// <summary>
@@ -582,7 +702,7 @@ namespace NumSharp
         ///     Copy of the array, cast to a specified type.
         /// </summary>
         /// <param name="dtype">The dtype to cast this array.</param>
-        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
@@ -592,7 +712,7 @@ namespace NumSharp
         ///     Copy of the array, cast to a specified type and memory layout.
         /// </summary>
         /// <param name="dtype">The dtype to cast this array.</param>
-        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <param name="order">
         ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
         ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
@@ -610,18 +730,22 @@ namespace NumSharp
         public NDArray astype(Type dtype, bool copy, char order, string casting = "unsafe")
         {
             ValidateAstypeCasting(dtype.GetTypeCode(), casting);
-            char physical = OrderResolver.Resolve(order, this.Shape);
             var casted = TensorEngine.Cast(this, dtype, copy);
-            if (physical == 'F' && casted.Shape.NDim > 1 && !casted.Shape.IsFContiguous)
-                return casted.copy('F');
-            return casted;
+            // 'K' (astype's default) is fully handled by Cast's KEEPORDER allocation — including
+            // the neither-contiguous sorted-stride-perm layouts (3-D transpose, broadcast) that a
+            // binary C/F resolve cannot express; re-imposing the collapsed order here would both
+            // undo that layout and force a copy out of a satisfied `copy: false` call.
+            if (order == 'K' || order == 'k')
+                return casted;
+            char physical = OrderResolver.Resolve(order, this.Shape);
+            return RelayoutAstype(casted, physical);
         }
 
         /// <summary>
         ///     Copy of the array, cast to a specified type.
         /// </summary>
         /// <param name="typeCode">The dtype to cast this array.</param>
-        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="typeCode"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         public NDArray astype(NPTypeCode typeCode, bool copy = true) => astype(typeCode, copy, 'K');
@@ -630,7 +754,7 @@ namespace NumSharp
         ///     Copy of the array, cast to a specified type and memory layout.
         /// </summary>
         /// <param name="typeCode">The dtype to cast this array.</param>
-        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <param name="order">
         ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
         ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
@@ -647,10 +771,36 @@ namespace NumSharp
         public NDArray astype(NPTypeCode typeCode, bool copy, char order, string casting = "unsafe")
         {
             ValidateAstypeCasting(typeCode, casting);
+            var casted = TensorEngine.Cast(this, typeCode.AsType(), copy);
+            // 'K' (astype's default) is fully handled by Cast's KEEPORDER allocation — see the
+            // Type-overload twin above for why re-imposing a collapsed C/F order here is wrong.
+            if (order == 'K' || order == 'k')
+                return casted;
             char physical = OrderResolver.Resolve(order, this.Shape);
-            var casted = TensorEngine.Cast(this, typeCode, copy);
-            if (physical == 'F' && casted.Shape.NDim > 1 && !casted.Shape.IsFContiguous)
+            return RelayoutAstype(casted, physical);
+        }
+
+        /// <summary>
+        ///     Force the cast result into the astype-requested physical layout. NumPy's
+        ///     <c>astype(order=…)</c> ALWAYS honours the order — <c>order='C'</c> on an F-contiguous
+        ///     source produces a C-contiguous result, and <c>order='F'</c> on a C-contiguous source an
+        ///     F-contiguous one (probed on 2.4.2). <see cref="Backends.TensorEngine.Cast"/> preserves the
+        ///     source layout (a same-dtype copy of an F array stays F), so the requested order must be
+        ///     re-imposed here — previously only the 'F' half existed, so <c>F.astype(t, order:'C')</c>
+        ///     silently kept F. Both orders coincide for ndim ≤ 1, so no re-layout is needed there.
+        /// </summary>
+        private static NDArray RelayoutAstype(NDArray casted, char physical)
+        {
+            // Guard the empty sentinel (`new NDArray(typecode)`, null dimensions) and 0-/1-D shapes
+            // by reading the raw dimensions field — Shape.NDim/IsContiguous NRE on a null-dims shape,
+            // and both C and F coincide for ndim ≤ 1, so no re-layout is possible or needed there.
+            var dims = casted.Shape.dimensions;
+            if (dims is null || dims.Length <= 1)
+                return casted;
+            if (physical == 'F' && !casted.Shape.IsFContiguous)
                 return casted.copy('F');
+            if (physical == 'C' && !casted.Shape.IsContiguous)
+                return casted.copy('C');
             return casted;
         }
 
@@ -1537,6 +1687,7 @@ namespace NumSharp
 
         #endregion
 
+        [NDBorrowed] // the debugger's view of an array it does not own
         private class NDArrayDebuggerProxy
         {
             private readonly NDArray NDArray;

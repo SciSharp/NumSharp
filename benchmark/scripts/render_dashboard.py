@@ -21,8 +21,14 @@ import datetime
 import json
 import math
 import os
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+from credibility import o1_display_exclusion_reason
+
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 SRC = os.path.join(REPO, "benchmark", "benchmark-report.json")
 OUT = os.path.join(REPO, "benchmark", "benchmark-dashboard.md")
@@ -58,7 +64,18 @@ def pct_str(pct):
 
 def main():
     with open(SRC, encoding="utf-8") as f:
-        data = json.load(f)
+        payload = json.load(f)
+    # Schema v2 wraps the canonical effective rows with metadata and profile provenance. Keep
+    # accepting the historical flat list so old snapshots can still be rendered by hand.
+    data = payload.get("rows", []) if isinstance(payload, dict) else payload
+    for row in data:
+        # Old schema-v2 snapshots called an available, overhead-subtracted 0 ns result "no_data".
+        # The merge now emits "negligible" directly; normalize old files so rerendering them does
+        # not claim that a benchmark which ran was pending.
+        if row.get("status") == "no_data" and row.get("numsharp_ms") == 0:
+            row["status"] = "negligible"
+        if row.get("numsharp_ms") is not None and o1_display_exclusion_reason(row.get("operation", "")):
+            row["status"] = "negligible"
 
     total = len(data)
     negligible = sum(1 for r in data if r["status"] == "negligible")
@@ -68,7 +85,7 @@ def main():
             and r.get("numsharp_ms") is not None and r.get("numpy_ms") is not None]
     for r in cred:
         # Consume the merge's CANONICAL ratio/pct (merge-results.py computes them from the
-        # full-precision means, BEFORE rounding numpy_ms/numsharp_ms to 4dp for storage).
+        # full-precision best-window (min) values, BEFORE rounding numpy_ms/numsharp_ms for storage).
         # Re-deriving them here by dividing the rounded ms drifts from benchmark-report.md by
         # up to a few % on ~1/6 of rows (e.g. nansum read 12.63× here vs 12.65× there; zeros
         # 88087% vs 87957%). Reading the stored fields makes the dashboard and the report agree
@@ -158,7 +175,7 @@ def main():
         out(row(r))
     out()
     out("note · speedup = NumPy ÷ NumSharp on one runner (>1.0× = NumSharp faster) · %NumPy🕐 = share of")
-    out("       NumPy's time NumSharp uses · negligible rows (<1µs / >20× = overhead, lazy alloc, views) excluded")
+    out("       NumPy's time NumSharp uses · negligible rows (O(1)-in-N / <1µs / >20×) excluded")
 
     sheet = "\n".join(L)
     with open(OUT, "w", encoding="utf-8") as f:

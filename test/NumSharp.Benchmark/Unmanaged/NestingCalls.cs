@@ -23,7 +23,7 @@ namespace NumSharp.Benchmark.Unmanaged
     //|          Switchcase | 378.8 us | 1.252 us |  17.00 us | 375.4 us | 357.3 us |   841.9 us |  2.96 |    0.23 |
     //|             Inlined | 128.7 us | 1.048 us |  14.22 us | 125.2 us | 125.1 us |   389.6 us |  1.00 |    0.00 |
 
-    [SimpleJob(RunStrategy.ColdStart, warmupCount: 5, targetCount: 2000)]
+    [SimpleJob(RunStrategy.ColdStart, warmupCount: 5, iterationCount: 2000)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class NestingCalls

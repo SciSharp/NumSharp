@@ -40,6 +40,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">If <paramref name="trim"/> contains unexpected characters, or an axis is repeated.</exception>
         /// <exception cref="AxisOutOfRangeException">If an axis is out of bounds for <paramref name="filt"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
+        [NDScoped]
         public static NDArray trim_zeros(NDArray filt, string trim, int[] axis)
         {
             // NumPy lower-cases and validates the trim spec against the four accepted spellings.

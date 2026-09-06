@@ -1,4 +1,5 @@
-﻿using NumSharp.Backends.Kernels;
+﻿using System;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
 {
@@ -7,8 +8,9 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise negation using IL-generated kernels.
         /// </summary>
-        public override NDArray Negate(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Negate(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy rejects boolean negative (unary `-` / np.negative) at LOOP
             // resolution: there is no negative ufunc loop for the bool dtype.
             // An explicit dtype= picks the loop, so negative(bool, dtype=f64)

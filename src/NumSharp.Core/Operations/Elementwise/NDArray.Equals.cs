@@ -57,6 +57,12 @@ namespace NumSharp
         /// <summary>
         /// Element-wise equal comparison with scalar (==).
         /// </summary>
+        // Scope: np.asanyarray(rhs) mints a temp for a scalar/array-like operand, and the
+        // null/empty early returns strand an untyped Scalar/empty wrapper under MakeGeneric —
+        // [NDScoped] reclaims both while yielding the typed result (an NDArray-input passthrough
+        // is never tracked, rule R2). The NDArray×NDArray operator above owns no temp (the engine
+        // returns a bool-typed result AsGeneric passes through) and stays unscoped on that hot path.
+        [NDScoped]
         public static NDArray<bool> operator ==(NDArray lhs, object rhs)
         {
             if (rhs is null)
@@ -75,6 +81,7 @@ namespace NumSharp
         /// <summary>
         /// Element-wise equal comparison with scalar on left (==).
         /// </summary>
+        [NDScoped]
         public static NDArray<bool> operator ==(object lhs, NDArray rhs)
         {
             if (lhs is null)
@@ -123,7 +130,7 @@ namespace NumSharp
                     return false;
 
                 //compare all values
-                var cmp = (this == rhs);
+                using var cmp = (this == rhs);
                 var len = cmp.size;
                 var ptr = cmp.Address; //this never a slice so we can use unmanaged memory.
                 for (long i = 0; i < len; i++)

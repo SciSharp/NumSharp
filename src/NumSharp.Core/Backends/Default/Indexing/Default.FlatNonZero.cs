@@ -47,7 +47,12 @@ namespace NumSharp.Backends
             // `np.atleast_1d(scalar).nonzero()`, which is what our NonZero already
             // does. Preserve symmetry with NonZero — recurse via atleast_1d.
             if (nd.ndim == 0)
-                return FlatNonZero(np.atleast_1d(nd));
+            {
+                var promoted = np.atleast_1d(nd);
+                var flat = FlatNonZero(promoted);
+                promoted.Dispose(); // 1-element view wrapper of the scalar's buffer
+                return flat;
+            }
 
             long size = nd.size;
 

@@ -36,6 +36,16 @@ public static class ArraySizeSource
     public const int Large = 10_000_000;
 
     /// <summary>
+    /// Physical work cap for allocation-heavy families that still publish under the universal
+    /// 10M tier. This is deliberately not a dashboard/report tier: N remains <see cref="Large"/>
+    /// for joins and display while the benchmark body operates on one million elements.
+    /// </summary>
+    public const int MemoryHeavyLargeWorkload = 1_000_000;
+
+    public static int ResolveMemoryHeavyWorkload(int tierN)
+        => tierN == Large ? MemoryHeavyLargeWorkload : tierN;
+
+    /// <summary>
     /// Standard array sizes for comprehensive benchmarks.
     /// Includes scalar for overhead measurement, tiny for common collections,
     /// and the three cache-tier sizes.
@@ -60,7 +70,7 @@ public static class ArraySizeSource
     /// <summary>
     /// All sizes including intermediate steps for detailed analysis.
     /// </summary>
-    public static IEnumerable<int> AllSizes => new[] { Scalar, Tiny, Small, 10_000, Medium, 1_000_000, Large };
+    public static IEnumerable<int> AllSizes => new[] { Scalar, Tiny, Small, 10_000, Medium, MemoryHeavyLargeWorkload, Large };
 
     /// <summary>
     /// 2D array sizes as (rows, cols) tuples.

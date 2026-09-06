@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ==================================================================================
+     NumSharp.Interop.OpenBLAS — consumer-side defaults (delivery design §5).
+
+     Ships in buildTransitive/, so NuGet imports it into every project that references the
+     package DIRECTLY OR TRANSITIVELY. It only declares defaults; all real work happens in
+     the sibling .targets, and ONLY when an override is actually configured — a default
+     build stages nothing and touches no network (the bundle already ships as ordinary
+     runtime assets).
+
+     The override knobs live as METADATA on a PackageReference (any reference, not just
+     this package's — see the .targets' scan) or as environment variables, which WIN:
+
+         NUMSHARP_OPENBLAS_VERSION       beats  <OpenBlasVersion>
+         NUMSHARP_OPENBLAS_SEARCH_PATH          beats  <OpenBlasPath>
+         NUMSHARP_OPENBLAS_DISTRIBUTION  beats  <OpenBlasDistribution>
+         NUMSHARP_OPENBLAS_PYPI_FEED_URL          beats  <OpenBlasFeed>
+         NUMSHARP_OPENBLAS_SHA256        beats  <OpenBlasSha256>
+         NUMSHARP_OPENBLAS_DELIVERY      beats  <OpenBlasDelivery>
+     ================================================================================== -->
+<Project>
+
+  <PropertyGroup>
+    <!-- Master switch: NumSharpOpenBlasEnabled=false turns the whole build-side machinery
+         off (the runtime discovery and the bundled assets are unaffected). -->
+    <NumSharpOpenBlasEnabled Condition="'$(NumSharpOpenBlasEnabled)' == ''">true</NumSharpOpenBlasEnabled>
+
+    <!-- The global temp cache holding EXTRACTED native libraries (never wheels), shared by
+         every project and repeated builds; keyed by (distribution, version, rid, sha256).
+         Design §7. NUMSHARP_OPENBLAS_CACHE_DIR (env) wins, and is the same root the RUNTIME
+         uses on macOS for its relocated-dylib entries (dyld/<sha256>/), so one variable moves
+         both caches. -->
+    <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and '$(NUMSHARP_OPENBLAS_CACHE_DIR)' != ''">$(NUMSHARP_OPENBLAS_CACHE_DIR)</NumSharpOpenBlasCacheDir>
+    <!-- Windows ONLY: MSBuild on Linux/macOS SYNTHESIZES a LOCALAPPDATA property (~/.local/share)
+         even though no such environment variable exists there, which silently moved the Unix
+         cache away from the ~/.cache location the docs, the runtime loader
+         (MacOsVendoredRuntime.ResolveCacheRoot, which reads the real environment) and the
+         verify scripts all use. -->
+    <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and $([MSBuild]::IsOSPlatform('Windows')) and '$(LOCALAPPDATA)' != ''">$(LOCALAPPDATA)\NumSharp\openblas</NumSharpOpenBlasCacheDir>
+    <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and '$(XDG_CACHE_HOME)' != ''">$(XDG_CACHE_HOME)/NumSharp/openblas</NumSharpOpenBlasCacheDir>
+    <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == '' and '$(HOME)' != ''">$(HOME)/.cache/NumSharp/openblas</NumSharpOpenBlasCacheDir>
+    <NumSharpOpenBlasCacheDir Condition="'$(NumSharpOpenBlasCacheDir)' == ''">$(MSBuildProjectDirectory)/obj/numsharp-openblas-cache</NumSharpOpenBlasCacheDir>
+
+    <!-- The shared extraction contract (design §5.4): the same manifest the maintainer's
+         fetch_openblas.py pins. Packed next to this file; the second probe is the in-repo
+         source layout (tools/), so the targets are testable without packing. -->
+    <NumSharpOpenBlasManifest Condition="'$(NumSharpOpenBlasManifest)' == '' and Exists('$(MSBuildThisFileDirectory)openblas-manifest.json')">$(MSBuildThisFileDirectory)openblas-manifest.json</NumSharpOpenBlasManifest>
+    <NumSharpOpenBlasManifest Condition="'$(NumSharpOpenBlasManifest)' == '' and Exists('$(MSBuildThisFileDirectory)../tools/openblas-manifest.json')">$(MSBuildThisFileDirectory)../tools/openblas-manifest.json</NumSharpOpenBlasManifest>
+  </PropertyGroup>
+
+</Project>

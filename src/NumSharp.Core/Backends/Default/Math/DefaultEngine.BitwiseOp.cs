@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
@@ -20,8 +21,9 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute bitwise AND operation.
         /// </summary>
-        public override NDArray BitwiseAnd(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray BitwiseAnd(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);
             ValidateBitwiseLoop(np._FindCommonType(lhs, rhs), "bitwise_and");
             // ufunc dtype= selects among the bool/int loops (probed 2.4.2:
@@ -39,8 +41,9 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute bitwise OR operation.
         /// </summary>
-        public override NDArray BitwiseOr(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray BitwiseOr(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);
             ValidateBitwiseLoop(np._FindCommonType(lhs, rhs), "bitwise_or");
             // ufunc dtype= selects among the bool/int loops (probed 2.4.2:
@@ -58,8 +61,9 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute bitwise XOR operation.
         /// </summary>
-        public override NDArray BitwiseXor(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray BitwiseXor(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             ValidateWhereMask(where);
             ValidateBitwiseLoop(np._FindCommonType(lhs, rhs), "bitwise_xor");
             // ufunc dtype= selects among the bool/int loops (probed 2.4.2:

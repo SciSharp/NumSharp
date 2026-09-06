@@ -7,18 +7,18 @@
     <Platforms>AnyCPU;x64</Platforms>
     <ApplicationIcon />
     <Win32Resource />
-    <SignAssembly>true</SignAssembly>
-    <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
+    <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. Signed because
+         NumSharp.Core grants it InternalsVisibleTo, which now names a PublicKey. -->
     <Configurations>Debug;Release;Publish</Configurations>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
-    <PackageReference Include="BenchmarkDotNet" Version="0.12.1" />
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-    <PackageReference Include="Microsoft.Windows.Compatibility" Version="5.0.2" />
-    <!-- System.Memory and System.Runtime.CompilerServices.Unsafe are built into net8.0+ -->
+    <PackageReference Include="System.Drawing.Common" Version="10.0.11" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="10.0.11" />
+    <!-- System.Memory, System.Runtime.CompilerServices.Unsafe and Microsoft.CSharp are built into
+         net8.0+ (a PackageReference to any of them draws the .NET 10 SDK's NU1510 pruning warning). -->
   </ItemGroup>
 
   <ItemGroup>

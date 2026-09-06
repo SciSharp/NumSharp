@@ -1,3 +1,4 @@
+using System;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
@@ -11,27 +12,27 @@ namespace NumSharp.Backends
         // in DirectILKernelGenerator's EmitScalarOperation / EmitVectorOperation.
 
         /// <summary>Element-wise maximum, NaN-propagating (np.maximum).</summary>
-        public override NDArray Maximum(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Maximum(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Maximum, @out, where, typeCode);
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Maximum, @out, where, dtype?.GetTypeCode());
         }
 
         /// <summary>Element-wise minimum, NaN-propagating (np.minimum).</summary>
-        public override NDArray Minimum(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray Minimum(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Minimum, @out, where, typeCode);
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Minimum, @out, where, dtype?.GetTypeCode());
         }
 
         /// <summary>Element-wise maximum, NaN-ignoring (np.fmax).</summary>
-        public override NDArray FMax(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray FMax(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.FMax, @out, where, typeCode);
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.FMax, @out, where, dtype?.GetTypeCode());
         }
 
         /// <summary>Element-wise minimum, NaN-ignoring (np.fmin).</summary>
-        public override NDArray FMin(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray FMin(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.FMin, @out, where, typeCode);
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.FMin, @out, where, dtype?.GetTypeCode());
         }
     }
 }

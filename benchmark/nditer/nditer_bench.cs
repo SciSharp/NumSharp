@@ -14,10 +14,10 @@
 //   pathology         : the known regression canaries (bcast-reduce 54x, etc.)
 //   dividends         : NumSharp-only wins (fusion / reuse / parallel banding)
 //
-// The benchmark is SECTION-ADDRESSABLE via the NPYITER_SECTION env var so the
+// The benchmark is SECTION-ADDRESSABLE via the NUMSHARP_BENCH_NDITER_SECTION env var so the
 // orchestrator can run each category in its own short-lived process (crash
 // isolation — the full mixed run intermittently AVs under GC pressure). With
-// NPYITER_SECTION unset or "all", it runs everything in one process.
+// NUMSHARP_BENCH_NDITER_SECTION unset or "all", it runs everything in one process.
 //
 // Run ONLY with:  dotnet run -c Release - < benchmark/nditer/nditer_bench.cs
 // =============================================================================
@@ -38,7 +38,7 @@ if ((dbgScript?.IsJITOptimizerDisabled ?? false) || (dbgCore?.IsJITOptimizerDisa
     return;
 }
 
-string section = (Environment.GetEnvironmentVariable("NPYITER_SECTION") ?? "all").Trim().ToLowerInvariant();
+string section = (EnvVars.BenchNditerSection ?? "all").Trim().ToLowerInvariant();
 bool Want(string s) => section == "all" || section == s;
 
 int fails = 0;
@@ -46,14 +46,25 @@ void Check(bool ok, string what) { if (!ok) { fails++; Console.Error.WriteLine($
 
 double BestMs(Action body, int iters, int warm, int rounds)
 {
-    for (int i = 0; i < warm; i++) body();
+    // Warmup; its timed tail (first call excluded — JIT/pool-cold) doubles as a per-call pilot.
+    body();
+    var pilot = Stopwatch.StartNew();
+    for (int i = 1; i < Math.Max(2, warm); i++) body();
+    pilot.Stop();
+    double perCall = pilot.Elapsed.TotalMilliseconds / Math.Max(1, Math.Max(2, warm) - 1);
+    // Min-time policy: a call >20 ms/call runs EXACTLY 100 times (min over 100); everything else
+    // batches ~1 ms windows and accumulates enough of them to span ~200 ms total (time-bound, not a
+    // fixed round count — the caller's iters/rounds hints are superseded).
+    bool slow = perCall > 20.0;
+    int it = slow ? 1 : Math.Clamp((int)Math.Round(1.0 / Math.Max(perCall, 1e-6)), 1, 1_000_000);
+    int rds = slow ? 100 : Math.Max(2, (int)Math.Ceiling(200.0 / Math.Max(it * perCall, 1e-9)));
     double best = double.MaxValue;
-    for (int r = 0; r < rounds; r++)
+    for (int r = 0; r < rds; r++)
     {
         var sw = Stopwatch.StartNew();
-        for (int i = 0; i < iters; i++) body();
+        for (int i = 0; i < it; i++) body();
         sw.Stop();
-        best = Math.Min(best, sw.Elapsed.TotalMilliseconds / iters);
+        best = Math.Min(best, sw.Elapsed.TotalMilliseconds / it);
     }
     return best;
 }
@@ -217,14 +228,25 @@ unsafe
 
                 var add3 = new[] { a, b, o };
                 var ru = NDIterRef.MultiNew(3, add3, EXL, KO, SAFE, RO_RO_WO);
-                for (int i = 0; i < warm; i++) { ru.Reset(); ru.ForEach(K.AddF64); }
+                // Hand-rolled (the row reuses ONE iterator across all calls, so the body can't be
+                // handed to BestMs as a fresh-state lambda) but under the SAME sample rule: warmup's
+                // timed tail (first call excluded) is the per-call pilot; min-time policy: >20 ms/call
+                // runs EXACTLY 100 times, else enough ~1 ms windows to span ~200 ms total.
+                ru.Reset(); ru.ForEach(K.AddF64);
+                var pilotRu = Stopwatch.StartNew();
+                for (int i = 1; i < Math.Max(2, warm); i++) { ru.Reset(); ru.ForEach(K.AddF64); }
+                pilotRu.Stop();
+                double perCallRu = pilotRu.Elapsed.TotalMilliseconds / Math.Max(1, Math.Max(2, warm) - 1);
+                bool slowRu = perCallRu > 20.0;
+                int itRu = slowRu ? 1 : Math.Clamp((int)Math.Round(1.0 / Math.Max(perCallRu, 1e-6)), 1, 1_000_000);
+                int rdsRu = slowRu ? 100 : Math.Max(2, (int)Math.Ceiling(200.0 / Math.Max(itRu * perCallRu, 1e-9)));
                 double best = double.MaxValue;
-                for (int r = 0; r < rounds; r++)
+                for (int r = 0; r < rdsRu; r++)
                 {
                     var sw = Stopwatch.StartNew();
-                    for (int i = 0; i < iters; i++) { ru.Reset(); ru.ForEach(K.AddF64); }
+                    for (int i = 0; i < itRu; i++) { ru.Reset(); ru.ForEach(K.AddF64); }
                     sw.Stop();
-                    best = Math.Min(best, sw.Elapsed.TotalMilliseconds / iters);
+                    best = Math.Min(best, sw.Elapsed.TotalMilliseconds / itRu);
                 }
                 ru.Dispose();
                 Row($"reuse@{tag}", best);

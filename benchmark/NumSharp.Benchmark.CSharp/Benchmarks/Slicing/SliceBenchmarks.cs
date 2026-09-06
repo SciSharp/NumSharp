@@ -9,7 +9,7 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Slicing;
 /// Tests contiguous vs strided slices and their impact on subsequent operations.
 /// </summary>
 [BenchmarkCategory("Slicing")]
-public class SliceBenchmarks : BenchmarkBase
+public class SliceBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _arr1D = null!;
     private NDArray _arr2D = null!;
@@ -17,8 +17,10 @@ public class SliceBenchmarks : BenchmarkBase
     private NDArray _stridedSlice = null!;
     private NDArray _rowSlice = null!;
     private NDArray _colSlice = null!;
+    // Proportional slice range so copy/multiply work scales with N (see below).
+    private string _sliceRange = null!;
 
-    [Params(ArraySizeSource.Medium, ArraySizeSource.Large)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]
@@ -26,11 +28,15 @@ public class SliceBenchmarks : BenchmarkBase
     {
         np.random.seed(Seed);
 
-        _arr1D = np.random.rand(N) * 100;
+        _arr1D = CreateRandomArray(N, DType);
+
+        // Middle 80% of the array ([N/10 : 9N/10]) — a real O(N) span, unlike the fixed
+        // "100:1000" that did the same ~900 elements at every N (non-comparable across sizes).
+        _sliceRange = $"{N / 10}:{N / 10 * 9}";
 
         var rows = (int)Math.Sqrt(N);
         var cols = N / rows;
-        _arr2D = np.random.rand(rows, cols) * 100;
+        _arr2D = CreateRandomArray2D(rows, cols, DType);
 
         // Pre-slice for operation benchmarks
         _contiguousSlice = _arr1D["100:1000"];           // Contiguous view
@@ -99,9 +105,9 @@ public class SliceBenchmarks : BenchmarkBase
     // Slice + Operation (combined)
     // ========================================================================
 
-    [Benchmark(Description = "a[100:1000] * 2")]
+    [Benchmark(Description = "a[N/10:9N/10] * 2")]
     [BenchmarkCategory("SliceOp")]
-    public NDArray SliceAndOp_Contiguous() => _arr1D["100:1000"] * 2;
+    public NDArray SliceAndOp_Contiguous() => _arr1D[_sliceRange] * 2;
 
     [Benchmark(Description = "a[::2] * 2")]
     [BenchmarkCategory("SliceOp")]
@@ -111,11 +117,11 @@ public class SliceBenchmarks : BenchmarkBase
     // Copy vs View
     // ========================================================================
 
-    [Benchmark(Description = "a[100:1000].copy()")]
+    [Benchmark(Description = "a[N/10:9N/10].copy()")]
     [BenchmarkCategory("Copy")]
-    public NDArray SliceCopy() => _arr1D["100:1000"].copy();
+    public NDArray SliceCopy() => _arr1D[_sliceRange].copy();
 
-    [Benchmark(Description = "np.copy(a[100:1000])")]
+    [Benchmark(Description = "np.copy(a[N/10:9N/10])")]
     [BenchmarkCategory("Copy")]
-    public NDArray NpCopy() => np.copy(_arr1D["100:1000"]);
+    public NDArray NpCopy() => np.copy(_arr1D[_sliceRange]);
 }

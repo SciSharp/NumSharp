@@ -46,13 +46,14 @@ namespace NumSharp
         /// <summary>
         ///     Long-index overload of <see cref="insert(NDArray, int, NDArray, int?)"/>.
         /// </summary>
+        [NDScoped] // reclaims PrepareAxisContext's ravel work array and the pre-order intermediate WithSourceOrder supersedes (np.delete's exact pattern)
         public static NDArray insert(NDArray arr, long obj, NDArray values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
             var ctx = PrepareAxisContext(arr, axis);
-            return InsertSingleIndex(ctx.work, obj, values, ctx.axis, scalarObj: true);
+            return WithSourceOrder(arr, InsertSingleIndex(ctx.work, obj, values, ctx.axis, scalarObj: true));
         }
 
         /// <summary>
@@ -78,6 +79,7 @@ namespace NumSharp
         ///     Python <c>slice.indices(N)</c> into an indices array, then the
         ///     multi-index branch runs.
         /// </summary>
+        [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, Slice obj, NDArray values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -90,7 +92,7 @@ namespace NumSharp
             // Slice obj is never treated as scalar for the broadcast quirk
             // (matches NumPy: ``isinstance(obj, slice)`` short-circuits the
             // scalar check).
-            return InsertMultiIndex(ctx.work, indices, values, ctx.axis);
+            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, indices, values, ctx.axis));
         }
 
         /// <summary>
@@ -109,6 +111,7 @@ namespace NumSharp
         ///     (NumPy parity: <c>np.insert(arr, [1], v) != np.insert(arr, 1, v)</c>
         ///     when v has multiple axes, even though both have one insertion point).
         /// </summary>
+        [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, int[] obj, NDArray values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -119,7 +122,7 @@ namespace NumSharp
             for (int i = 0; i < obj.Length; i++) longs[i] = obj[i];
 
             var ctx = PrepareAxisContext(arr, axis);
-            return InsertMultiIndex(ctx.work, longs, values, ctx.axis);
+            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, longs, values, ctx.axis));
         }
 
         /// <summary>
@@ -136,6 +139,7 @@ namespace NumSharp
         /// <summary>
         ///     long[]-obj overload.
         /// </summary>
+        [NDScoped] // same transient set as the long-obj overload
         public static NDArray insert(NDArray arr, long[] obj, NDArray values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -143,7 +147,7 @@ namespace NumSharp
             if (values is null) throw new ArgumentNullException(nameof(values));
 
             var ctx = PrepareAxisContext(arr, axis);
-            return InsertMultiIndex(ctx.work, (long[])obj.Clone(), values, ctx.axis);
+            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, (long[])obj.Clone(), values, ctx.axis));
         }
 
         /// <summary>
@@ -178,6 +182,7 @@ namespace NumSharp
         ///             "index array argument obj to insert must be one dimensional or scalar".</item>
         ///     </list>
         /// </summary>
+        [NDScoped] // same transient set as the long-obj overload, plus the bool-mask flatnonzero temp
         public static NDArray insert(NDArray arr, NDArray obj, NDArray values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -194,7 +199,7 @@ namespace NumSharp
                         nameof(obj));
                 using var nzIdx = np.flatnonzero(obj);
                 long[] indices = ToInt64Vector(nzIdx, "insert");
-                return InsertMultiIndex(ctx.work, indices, values, ctx.axis);
+                return WithSourceOrder(arr, InsertMultiIndex(ctx.work, indices, values, ctx.axis));
             }
 
             if (obj.ndim > 1)
@@ -206,7 +211,7 @@ namespace NumSharp
             if (obj.ndim == 0)
             {
                 long idx = ToInt64Scalar(obj, "insert");
-                return InsertSingleIndex(ctx.work, idx, values, ctx.axis, scalarObj: true);
+                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, idx, values, ctx.axis, scalarObj: true));
             }
 
             // 1-D with size==1 still uses the single-index broadcast path but
@@ -214,9 +219,9 @@ namespace NumSharp
             // the moveaxis quirk).
             long[] objIndices = ToInt64Vector(obj, "insert");
             if (objIndices.Length == 1)
-                return InsertSingleIndex(ctx.work, objIndices[0], values, ctx.axis, scalarObj: false);
+                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, objIndices[0], values, ctx.axis, scalarObj: false));
 
-            return InsertMultiIndex(ctx.work, objIndices, values, ctx.axis);
+            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, objIndices, values, ctx.axis));
         }
 
         // ---------------------------- impl ----------------------------

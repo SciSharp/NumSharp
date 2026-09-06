@@ -8,14 +8,17 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override unsafe NDArray ReduceCumMul(NDArray arr, int? axis_, NPTypeCode? typeCode = null)
+        public override unsafe NDArray ReduceCumMul(NDArray arr, int? axis_, DType dtype = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy: cumprod on boolean arrays treats True as 1 and False as 0, returning int64
             // Convert boolean input to int64 to match NumPy behavior
             if (arr.GetTypeCode == NPTypeCode.Boolean)
             {
                 var int64Arr = arr.astype(NPTypeCode.Int64, copy: true);
-                return ReduceCumMul(int64Arr, axis_, typeCode ?? NPTypeCode.Int64);
+                var cum = ReduceCumMul(int64Arr, axis_, (typeCode ?? NPTypeCode.Int64).AsType());
+                int64Arr.Dispose();
+                return cum;
             }
 
             var shape = arr.Shape;
@@ -38,11 +41,20 @@ namespace NumSharp.Backends
                 }
 
                 return new NDArray(emptyRetType,
-                    axis_ == null ? Shape.Vector((int)shape.size) : new Shape(shape.dimensions), false);
+                    axis_ == null ? Shape.Vector(shape.size) : new Shape(shape.dimensions), false);
             }
 
-            if (shape.IsScalar || shape.size == 1 && shape.dimensions.Length == 1)
-                return typeCode.HasValue ? Cast(arr, typeCode.Value, copy: true) : arr.Clone();
+            // 0-d scalar or single-element 1-D: cumprod is the value itself, promoted to the
+            // accumulator dtype and shaped 1-D — cumprod NEVER returns 0-d (NumPy: cumprod(0-d) -> (1,),
+            // cumprod([x]) -> [x] int64). Mirrors ReduceCumAdd; previously this returned the input dtype
+            // AND a 0-d shape for a 0-d input (NEP50-skip + missing (1,) reshape).
+            if (shape.IsScalar || (shape.size == 1 && shape.dimensions.Length == 1))
+            {
+                var single = Cast(arr, typeCode ?? arr.GetTypeCode.GetAccumulatingType(), copy: true);
+                if (single.ndim != 1)
+                    single.Storage.Reshape(Shape.Vector(1));   // 0-d -> (1,)
+                return single;
+            }
 
             if (axis_ == null)
             {
@@ -80,12 +92,12 @@ namespace NumSharp.Backends
             // handle negative strides or offset-based views correctly.
             if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
             {
-                bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.strides[axis] == 1);
+                bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.Shape.Strides[axis] == 1);
                 var key = new CumulativeAxisKernelKey(inputArr.GetTypeCode, retTypeCode, ReductionOp.CumProd, innerAxisContiguous);
                 var kernel = DirectILKernelGenerator.TryGetCumulativeAxisKernel(key);
                 if (kernel != null)
                 {
-                    fixed (long* inputStrides = arr.strides)
+                    fixed (long* inputStrides = arr.Shape.Strides)
                     fixed (long* shapePtr = arr.shape)
                     {
                         kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);

@@ -1,0 +1,177 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>NumSharp.Interop.OpenBLAS</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+
+    <!-- NuGet package (co-versioned with NumSharp: the version is the repo-root Directory.Build.props
+         VersionPrefix, never a number in this file, so the nuspec dependency on NumSharp and this
+         package's own version cannot drift apart). -->
+    <PackageId>NumSharp.Interop.OpenBLAS</PackageId>
+    <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
+    <Product>NumSharp</Product>
+    <Company>SciSharp STACK</Company>
+    <Copyright>2021 © SciSharp STACK Team</Copyright>
+    <Description>Optional external-CBLAS matrix-product backend for NumSharp. Reference the package and np.dot / np.matmul compute float32/float64 products through OpenBLAS instead of NumSharp's managed SIMD GEMM — faster on large matrices, and BIT-IDENTICAL to NumPy, via a route-for-route port of NumPy's two matrix-product dispatchers. Ships the prebuilt OpenBLAS binaries NumPy itself bundles (scipy-openblas 0.3.31.22.0, the version numpy 2.4.2 pins) as per-RID runtime assets, so the same binary is loaded on Windows, Linux and macOS with no Python installed; a locally discovered or explicitly named CBLAS still takes precedence. NumSharp.Core itself stays 100% managed C# with no native dependency: with this package absent, every kernel is NumSharp's own.</Description>
+    <PackageTags>NumSharp;NumPy;BLAS;OpenBLAS;cblas;gemm;matmul;interop;scientific-computing;bit-exact</PackageTags>
+    <PackageProjectUrl>https://scisharp.github.io/NumSharp/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <!-- Apache-2.0 covers this package's own code. The remaining terms cover the OpenBLAS runtime
+         assets it redistributes: OpenBLAS and its bundled LAPACK are BSD-3-Clause (the plain
+         3-clause BSD in OpenBLAS's LICENSE), the packaging is BSD-2-Clause (openblas-libs), and the
+         statically linked libgfortran carries the GCC Runtime Library Exception — which is precisely
+         what permits redistribution inside a larger work under other terms, and is the same basis on
+         which NumPy and SciPy ship it in every binary wheel. Declaring the compound expression keeps
+         license scanners honest instead of hiding native payload behind the managed project's
+         license. Full text and per-artifact checksums: THIRD-PARTY-NOTICES.txt.
+
+         EVERY identifier here MUST be OSI- or FSF-approved. nuget.org rejects a push whose license
+         expression contains any other SPDX id (learn.microsoft.com/nuget/nuget-org/licenses.nuget.org),
+         and it does so only at publish time — after the sibling packages of the same release have
+         already gone out. 'BSD-3-Clause-Attribution' (a DIFFERENT license, and unapproved) once sat
+         here and would have failed the release; https://licenses.nuget.org/<expression> answering
+         200 rather than 404 is the pre-flight check for any change to this line. -->
+    <PackageLicenseExpression>Apache-2.0 AND BSD-3-Clause AND BSD-2-Clause AND (GPL-3.0-or-later WITH GCC-exception-3.1)</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Packed explicitly (`dotnet pack`), never on build: see the release workflow. License
+         acceptance and the icon are repo-wide settings in ../../Directory.Build.props. -->
+    <PackageOutputPath>../../packages</PackageOutputPath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Symbols: embed the .pdb in the .nupkg (matches NumSharp.Core / NumSharp.Bitmap). The
+         release pipeline uploads/pushes only *.nupkg, so a separate .snupkg would be dropped. -->
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" Condition="Exists('THIRD-PARTY-NOTICES.txt')" />
+    <None Remove="runtimes\**" />
+  </ItemGroup>
+
+  <!-- ==================================================================================
+       BUILD-phase override delivery (docs/stale-docs/OPENBLAS_DELIVERY_DESIGN.md §5–§7).
+
+       buildTransitive/ flows to every consumer, direct OR transitive — that is what lets a
+       package that merely depends on this one offer the identical <OpenBlasVersion> /
+       <OpenBlasPath> override experience to ITS consumers (§6). The manifest is packed
+       BESIDE the targets because it is the shared extraction contract (§5.4): the inline
+       build task must read the exact same RID → distribution/wheel map the maintainer's
+       fetch_openblas.py used, or the "same binary" invariant is a coincidence.
+       tools/openblas-manifest.json stays the single checked-in source; this is a pack-time
+       copy, not a second pin.
+       ================================================================================== -->
+  <ItemGroup>
+    <!-- Under buildTransitive/net8.0/ (the three files stay side by side: the props probes the manifest via
+         $(MSBuildThisFileDirectory)), not the TFM-agnostic root — the same reason NumSharp packs
+         build/net8.0/NumSharp.targets: a root-level asset makes NuGet call the package "compatible" with a
+         netstandard2.0 / net6.0 consumer that gets no lib/ at all, swapping NU1202 for a bare CS0246. -->
+    <None Include="buildTransitive/NumSharp.Interop.OpenBLAS.props" Pack="true" PackagePath="buildTransitive/net8.0/NumSharp.Interop.OpenBLAS.props" />
+    <None Include="buildTransitive/NumSharp.Interop.OpenBLAS.targets" Pack="true" PackagePath="buildTransitive/net8.0/NumSharp.Interop.OpenBLAS.targets" />
+    <None Include="tools/openblas-manifest.json" Pack="true" PackagePath="buildTransitive/net8.0/openblas-manifest.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- In-repo: ProjectReference (packs as a NuGet dependency on "NumSharp" $(Version)). -->
+    <ProjectReference Include="../NumSharp.Core/NumSharp.Core.csproj" />
+  </ItemGroup>
+
+  <!-- ==================================================================================
+       Bundled OpenBLAS runtime assets.
+
+       These are the EXACT prebuilt artifacts NumPy bundles (scipy-openblas 0.3.31.22.0, the
+       version pinned by numpy's own requirements/ci_requirements.txt) — verified byte-identical
+       to the library in numpy 2.4.2's numpy.libs/. That is what makes bundling coherent with the
+       parity claim: this is not "a" BLAS, it is THE binary the reference stack calls.
+
+       They are NOT in git (186 MB unpacked). Stage them with:
+           python tools/fetch_openblas.py
+       which downloads the pinned wheels and verifies two checksums per RID (the wheel's, then the
+       extracted library's) against the checked-in tools/openblas-manifest.json.
+
+       A build with the assets absent is fine, and a pack without them simply produces an
+       asset-free package (with a pack-time warning) — the fetch is a release step, not a
+       prerequisite for working on the code. Set BundleOpenBlas=false to skip them even when
+       staged; set RequireOpenBlasAssets=true (CI release) to turn a missing asset into a hard
+       error instead of a warning.
+       ================================================================================== -->
+  <PropertyGroup>
+    <OpenBlasRuntimesDir>$(MSBuildProjectDirectory)/runtimes</OpenBlasRuntimesDir>
+    <BundleOpenBlas Condition="'$(BundleOpenBlas)' == ''">true</BundleOpenBlas>
+    <RequireOpenBlasAssets Condition="'$(RequireOpenBlasAssets)' == ''">false</RequireOpenBlasAssets>
+    <!-- The RID whose asset is copied next to the build output, so the library is loadable when
+         running from a plain `dotnet build` (tests, samples) and not only from a restored package. -->
+    <BundledOpenBlasRid Condition="'$(BundledOpenBlasRid)' == '' and '$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</BundledOpenBlasRid>
+    <BundledOpenBlasRid Condition="'$(BundledOpenBlasRid)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</BundledOpenBlasRid>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(BundleOpenBlas)' == 'true'">
+    <!-- Every RID goes into the package under runtimes/<rid>/native/, the layout NuGet resolves
+         per-machine: a RID-specific publish copies only the matching one.
+
+         PackagePath names the full destination FILE. Naming a directory (a trailing '/') makes
+         pack append the item's recursive path on top of it, which silently produced
+         runtimes/linux-x64/native/linux-x64/native/lib... — a path no RID resolution ever matches,
+         so the package would have looked complete and loaded nothing.
+
+         The current RID is excluded here and packed by the Content item below instead: a file
+         carried by two item types gets one set of pack metadata, and Pack="false" won — which
+         dropped the host's own RID (the one most likely to be tested) out of the package. -->
+    <None Include="$(OpenBlasRuntimesDir)/**/*" Exclude="$(OpenBlasRuntimesDir)/$(BundledOpenBlasRid)/**/*" Pack="true" PackagePath="runtimes/%(RecursiveDir)%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="Never" />
+
+    <!-- The CURRENT RID's asset is packed the same way AND copied to bin/. Content (not None) so
+         it flows to projects that ProjectReference this one — the unit tests need it on disk to
+         prove the bundled library actually loads. -->
+    <Content Include="$(OpenBlasRuntimesDir)/$(BundledOpenBlasRid)/native/*" Pack="true" PackagePath="runtimes/$(BundledOpenBlasRid)/native/%(Filename)%(Extension)" Visible="false" Link="runtimes/$(BundledOpenBlasRid)/native/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+
+    <!-- macOS: the vendored Fortran runtime (libgfortran/libquadmath/libgcc_s) is staged UNDER
+         native/, as native/.dylibs/, and packed the same way — NOT as the .dylibs/ sibling of
+         native/ the main dylib's load commands (@loader_path/../.dylibs/…) actually name.
+         NuGet delivers native assets only from under runtimes/<rid>/native/ (nested paths
+         included; a sibling folder is silently dropped from every consumer), so the sibling
+         layout looked complete in the package and loaded on NO consumer machine — it only ever
+         worked through THIS Content item's copy, which a ProjectReference build gets and a
+         PackageReference restore does not. The runtime loader (MacOsVendoredRuntime) now
+         materializes the sibling from native/.dylibs/ at first load (a relative symlink, or a
+         per-user cache copy when the folder is read-only or the layout is flattened), so a
+         ProjectReference build deliberately gets the SAME nested layout a package consumer gets:
+         CI then exercises the loader path a user hits. Empty (a no-op) on Linux — whose deps sit
+         beside the main in native/, resolved by its $ORIGIN RUNPATH and already carried by the
+         native item above — and on Windows, whose library is self-contained. Other RIDs'
+         native/.dylibs/ are packed by the recursive None item above. -->
+    <Content Include="$(OpenBlasRuntimesDir)/$(BundledOpenBlasRid)/native/.dylibs/*" Pack="true" PackagePath="runtimes/$(BundledOpenBlasRid)/native/.dylibs/%(Filename)%(Extension)" Visible="false" Link="runtimes/$(BundledOpenBlasRid)/native/.dylibs/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="runtimes\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Remove="runtimes\**" />
+  </ItemGroup>
+
+  <!-- The manifest pin, EMBEDDED: OpenBlasEngine.IsBundledLibrary identifies the bundle BY CONTENT
+       (BundledAssetPin hashes the loaded file against these per-RID sha256s) rather than by folder
+       layout, which a RID-specific / single-file publish flattens away. tools/openblas-manifest.json
+       stays the one checked-in source; the buildTransitive copy above serves the build task, this
+       copy serves the runtime. -->
+  <ItemGroup>
+    <EmbeddedResource Include="tools/openblas-manifest.json" LogicalName="NumSharp.Interop.OpenBLAS.openblas-manifest.json" />
+  </ItemGroup>
+
+  <Target Name="_ReportBundledOpenBlas" BeforeTargets="Pack" Condition="'$(BundleOpenBlas)' == 'true'">
+    <ItemGroup>
+      <_BundledOpenBlasAsset Include="$(OpenBlasRuntimesDir)/**/native/*" />
+    </ItemGroup>
+    <Error Condition="'$(RequireOpenBlasAssets)' == 'true' and '@(_BundledOpenBlasAsset)' == ''"
+           Text="No bundled OpenBLAS runtime assets found under $(OpenBlasRuntimesDir). Run: python tools/fetch_openblas.py" />
+    <Warning Condition="'$(RequireOpenBlasAssets)' != 'true' and '@(_BundledOpenBlasAsset)' == ''"
+             Text="Packing NumSharp.Interop.OpenBLAS WITHOUT bundled OpenBLAS binaries (none staged under $(OpenBlasRuntimesDir)). The package will fall back to discovering a CBLAS on the consumer's machine. Run `python tools/fetch_openblas.py` to bundle them." />
+    <Message Importance="high" Condition="'@(_BundledOpenBlasAsset)' != ''"
+             Text="NumSharp.Interop.OpenBLAS: bundling @(_BundledOpenBlasAsset->Count()) OpenBLAS runtime asset(s)." />
+  </Target>
+
+</Project>

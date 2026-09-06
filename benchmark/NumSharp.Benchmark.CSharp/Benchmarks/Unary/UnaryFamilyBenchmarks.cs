@@ -1,0 +1,113 @@
+using BenchmarkDotNet.Attributes;
+using NumSharp;
+using NumSharp.Benchmark.CSharp.Infrastructure;
+
+namespace NumSharp.Benchmark.CSharp.Benchmarks.Unary;
+
+/// <summary>
+/// Remaining public unary families: inverse trig, hyperbolic, angle conversion, conjugation,
+/// component extraction, and rint/modf. Inputs are domain-shaped exactly like the NumPy twin.
+/// </summary>
+[BenchmarkCategory("Unary", "Families")]
+public class UnaryFamilyBenchmarks : TypedBenchmarkBase
+{
+    private NDArray _a = null!;
+    private NDArray _unit = null!;
+    private NDArray _acosh = null!;
+    private NDArray _atanh = null!;
+    private NDArray _other = null!;
+
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
+    public override int N { get; set; }
+
+    [ParamsSource(nameof(Types))]
+    public new NPTypeCode DType { get; set; }
+
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        np.random.seed(Seed);
+        _a = ((np.random.rand(N) * 8) - 4).astype(DType);
+        _unit = ((np.random.rand(N) * 2) - 1).astype(DType);
+        _acosh = ((np.random.rand(N) * 8) + 1).astype(DType);
+        _atanh = ((np.random.rand(N) * 1.8) - 0.9).astype(DType);
+        _other = ((np.random.rand(N) * 8) - 4).astype(DType);
+    }
+
+    [GlobalCleanup]
+    public void Cleanup()
+    {
+        _a = null!;
+        _unit = null!;
+        _acosh = null!;
+        _atanh = null!;
+        _other = null!;
+        GC.Collect();
+    }
+
+    [Benchmark(Description = "np.absolute(a)")] public NDArray Absolute() => np.absolute(_a);
+    [Benchmark(Description = "np.arcsin(a)")] public NDArray Arcsin() => np.arcsin(_unit);
+    [Benchmark(Description = "np.arccos(a)")] public NDArray Arccos() => np.arccos(_unit);
+    [Benchmark(Description = "np.arctan(a)")] public NDArray Arctan() => np.arctan(_a);
+    [Benchmark(Description = "np.arctan2(a, b)")] public object Arctan2() => DType != NPTypeCode.Complex
+        ? np.arctan2(_a, _other)
+        : RecordUnsafeUnsupportedDtype();
+    [Benchmark(Description = "np.sinh(a)")] public NDArray Sinh() => np.sinh(_unit);
+    [Benchmark(Description = "np.cosh(a)")] public NDArray Cosh() => np.cosh(_unit);
+    [Benchmark(Description = "np.tanh(a)")] public NDArray Tanh() => np.tanh(_a);
+    [Benchmark(Description = "np.arcsinh(a)")] public NDArray Arcsinh() => np.arcsinh(_a);
+    [Benchmark(Description = "np.asinh(a)")] public NDArray Asinh() => np.asinh(_a);
+    [Benchmark(Description = "np.arccosh(a)")] public NDArray Arccosh() => np.arccosh(_acosh);
+    [Benchmark(Description = "np.acosh(a)")] public NDArray Acosh() => np.acosh(_acosh);
+    [Benchmark(Description = "np.arctanh(a)")] public NDArray Arctanh() => np.arctanh(_atanh);
+    [Benchmark(Description = "np.atanh(a)")] public NDArray Atanh() => np.atanh(_atanh);
+    [Benchmark(Description = "np.deg2rad(a)")] public object Deg2Rad() => AngleConversion(() => np.deg2rad(_a));
+    [Benchmark(Description = "np.radians(a)")] public object Radians() => AngleConversion(() => np.radians(_a));
+    [Benchmark(Description = "np.rad2deg(a)")] public object Rad2Deg() => AngleConversion(() => np.rad2deg(_a));
+    [Benchmark(Description = "np.degrees(a)")] public object Degrees() => AngleConversion(() => np.degrees(_a));
+
+    private object AngleConversion(Func<NDArray> operation) => DType != NPTypeCode.Complex
+        ? operation()
+        : VerifyUnsupportedDtype(operation);
+    [Benchmark(Description = "np.angle(a)")] public NDArray Angle() => np.angle(_a);
+    [Benchmark(Description = "np.conjugate(a)")] public NDArray Conjugate() => np.conjugate(_a);
+    [Benchmark(Description = "np.conj(a)")] public NDArray Conj() => np.conj(_a);
+    [Benchmark(Description = "np.real(a)")] public NDArray Real() => np.real(_a);
+    // np.imag(real) has no imaginary lane to view, so it returns a FRESH, owned, lazily-allocated
+    // zeros array — O(1)-fast. BenchmarkDotNet then runs thousands of invocations per iteration, and
+    // on Windows each committed-but-untouched buffer charges commit, OOMing the 10M case before
+    // finalizers reclaim them. Dispose per invocation to bound resident memory (matches
+    // CreationBenchmarks and the NumPy twin's discard-each-result loop). Safe because inputs here are
+    // always real (Half/Single/Double), so the result is a fresh owned array and never aliases _a —
+    // unlike np.real, whose real-input result IS a view of _a and must NOT be disposed.
+    [Benchmark(Description = "np.imag(a)")] public void Imag() { using var _ = np.imag(_a); }
+    [Benchmark(Description = "np.rint(a)")] public NDArray Rint() => np.rint(_a);
+    [Benchmark(Description = "np.round(a)")] public NDArray Round() => np.round_(_a);
+}
+
+[BenchmarkCategory("Unary", "Modf")]
+public class ModfBenchmarks : TypedBenchmarkBase
+{
+    private NDArray _a = null!;
+
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
+    public override int N { get; set; }
+
+    [ParamsSource(nameof(Types))]
+    public new NPTypeCode DType { get; set; }
+
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
+
+    [GlobalSetup]
+    public void Setup() => _a = CreateRandomArray(N, DType);
+
+    [GlobalCleanup]
+    public void Cleanup() { _a = null!; GC.Collect(); }
+
+    [Benchmark(Description = "np.modf(a)")]
+    public object Modf() => DType is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal
+        ? np.modf(_a)
+        : VerifyUnsupportedDtype(() => np.modf(_a));
+}

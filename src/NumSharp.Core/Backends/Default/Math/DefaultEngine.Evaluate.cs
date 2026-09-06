@@ -69,6 +69,7 @@ namespace NumSharp.Backends
         /// Evaluate a tree whose array leaves are embedded NDArrays
         /// (<see cref="NDExpr.Arr"/> / implicit conversion).
         /// </summary>
+        [NDScoped] // engine boundary: any leaf wrappers BindArrays mints are reclaimed; the fused result (or @out) is yielded
         public override unsafe NDArray Evaluate(NDExpr expr, NDArray @out = null)
         {
             if (expr is null) throw new ArgumentNullException(nameof(expr));

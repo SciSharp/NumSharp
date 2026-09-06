@@ -25,6 +25,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// SIMD helper to count true values in a boolean array.
         /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe long CountTrueSimdHelper(bool* mask, long size)
         {
             if (size == 0)
@@ -98,6 +99,7 @@ namespace NumSharp.Backends.Kernels
         /// Copies from src to dst where mask[i] is true.
         /// </summary>
         /// <returns>Number of elements copied</returns>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe long CopyMaskedElementsHelper<T>(T* src, bool* mask, T* dst, long size)
             where T : unmanaged
         {

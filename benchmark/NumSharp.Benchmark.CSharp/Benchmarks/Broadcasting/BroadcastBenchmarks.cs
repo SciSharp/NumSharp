@@ -9,7 +9,7 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Broadcasting;
 /// Tests various broadcasting patterns: scalar, row, column, and general.
 /// </summary>
 [BenchmarkCategory("Broadcasting")]
-public class BroadcastBenchmarks : BenchmarkBase
+public class BroadcastBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _matrix = null!;
     private NDArray _rowVector = null!;
@@ -18,24 +18,27 @@ public class BroadcastBenchmarks : BenchmarkBase
     private NDArray _tensor3D = null!;
     private NDArray _broadcast2D = null!;
 
-    [Params(1000, 3162)]  // 1M and ~10M elements when squared
-    public int MatrixSize { get; set; }
+    private int _matrixSize;
+
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
+    public override int N { get; set; }
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        var n = MatrixSize;
+        var n = (int)Math.Sqrt(N);
+        _matrixSize = n;
 
-        _matrix = (np.random.rand(n, n) * 100).astype(np.float64);
-        _rowVector = (np.random.rand(n) * 100).astype(np.float64);
-        _colVector = (np.random.rand(n, 1) * 100).astype(np.float64);
-        _scalar = np.array(42.0);
+        _matrix = CreateRandomArray2D(n, n, DType);
+        _rowVector = CreateRandomArray(n, DType);
+        _colVector = CreateRandomArray(n, DType, seed: 43).reshape(n, 1);
+        _scalar = NDArray.Scalar(GetScalar(DType), DType);
 
         // 3D tensor for more complex broadcasting
         var d = (int)Math.Pow(n * n, 1.0 / 3);  // ~same total elements
-        _tensor3D = (np.random.rand(d, d, d) * 100).astype(np.float64);
-        _broadcast2D = (np.random.rand(d, d) * 100).astype(np.float64);
+        _tensor3D = CreateRandomArray3D(d, d, d, DType);
+        _broadcast2D = CreateRandomArray2D(d, d, DType, seed: 43);
     }
 
     [GlobalCleanup]
@@ -102,15 +105,13 @@ public class BroadcastBenchmarks : BenchmarkBase
     [BenchmarkCategory("BroadcastTo")]
     public NDArray BroadcastTo_Row()
     {
-        var n = MatrixSize;
-        return np.broadcast_to(_rowVector, new Shape(n, n));
+        return np.broadcast_to(_rowVector, new Shape(_matrixSize, _matrixSize));
     }
 
     [Benchmark(Description = "np.broadcast_to(col, (N,M))")]
     [BenchmarkCategory("BroadcastTo")]
     public NDArray BroadcastTo_Col()
     {
-        var n = MatrixSize;
-        return np.broadcast_to(_colVector, new Shape(n, n));
+        return np.broadcast_to(_colVector, new Shape(_matrixSize, _matrixSize));
     }
 }

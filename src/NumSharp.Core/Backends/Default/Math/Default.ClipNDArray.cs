@@ -29,11 +29,10 @@ namespace NumSharp.Backends
         //   is inherent, not a kernel-dodge copy).
         // =============================================================================
 
-        public override NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, Type dtype, NDArray @out = null)
-            => ClipNDArray(lhs, min, max, dtype?.GetTypeCode(), @out);
-
-        public override unsafe NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, NPTypeCode? typeCode = null, NDArray @out = null)
+        [NDScoped]
+        public override unsafe NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, DType dtype = null, NDArray @out = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // ---- Output dtype (explicit `dtype=` wins; otherwise NEP-50 weak-scalar promote)
             NPTypeCode outType;
             if (typeCode.HasValue)
@@ -56,6 +55,10 @@ namespace NumSharp.Backends
                         $"Cannot cast ufunc 'clip' output from dtype('{outType.AsNumpyDtypeName()}') to dtype('{@out.GetTypeCode.AsNumpyDtypeName()}') with casting rule 'same_kind'.");
             }
 
+            // Boundary scope: the bound casts, dtype-converted source, NaN fill and any relay
+            // buffer are reclaimed at exit; the yielded result (or the caller's untracked @out)
+            // is the only survivor.
+
             // ---- Empty input — bypass the kernel entirely
             if (lhs.size == 0)
                 return @out ?? Cast(lhs, outType, copy: true);
@@ -68,12 +71,18 @@ namespace NumSharp.Backends
                 return @out;
             }
 
-            // ---- Special-case NaN scalar bounds on float dtypes (NumPy: entire
+            // ---- Special-case NaN scalar bounds on float32/float64 (NumPy: entire
             //      result is NaN). The IL kernel uses Vector.Min/Max which on x86
             //      do not propagate NaN-in-bounds in the second-operand position
             //      consistently across vendors, so we short-circuit here.
+            //      Single/Double ONLY — a && bound tighter than || here once made ANY
+            //      dtype with a NaN max-bound take this float32 fill (a Half array came
+            //      back as a float32 all-NaN — wrong dtype AND payload). Half now rides
+            //      its bit-level clip kernel, which propagates the bound's exact NaN
+            //      bits per element like NumPy's _NPY_MIN/_NPY_MAX chain (probed 2.4.2:
+            //      clip(5f16, 1, nan) = the bound's NaN bits, not a canonical fill).
             if ((outType == NPTypeCode.Single || outType == NPTypeCode.Double)
-                && ScalarIsNaN(min) || ScalarIsNaN(max))
+                && (ScalarIsNaN(min) || ScalarIsNaN(max)))
             {
                 var nan = outType == NPTypeCode.Double
                     ? np.full(lhs.Shape, double.NaN)
@@ -185,7 +194,9 @@ namespace NumSharp.Backends
         // Strided clip: read src and (array) bounds through their own strides in C-order, writing
         // a C-contiguous dst. Per-element semantics mirror the IL kernel's scalar tail exactly —
         // Math.Max/Min for sized numerics + decimal, NaN-aware helpers for Half / Complex, numeric
-        // ordering for Char (read as UInt16) — so results are identical to the contiguous path.
+        // ordering for Char (read as UInt16), Boolean read as Byte (bool storage is 0/1, so the
+        // unsigned Byte Max/Min gives the same false<true ordering as the contiguous path's 0/1
+        // scalar-select) — so results are identical to the contiguous path.
         private static unsafe void ClipStrided(NDArray src, NDArray dst, NDArray loCast, NDArray hiCast,
             NPTypeCode outType, DirectILKernelGenerator.ClipMode mode, DirectILKernelGenerator.ClipBoundsKind kind)
         {
@@ -198,17 +209,23 @@ namespace NumSharp.Backends
 
             byte* sBase = (byte*)src.Address + src.Shape.offset * src.dtypesize;
             bool srcC = src.Shape.IsContiguous && src.Shape.offset == 0;
-            var srcStr = src.strides;
+            var srcStr = src.Shape.Strides;
 
             byte* loBase = loCast is null ? null : (byte*)loCast.Address + loCast.Shape.offset * loCast.dtypesize;
             byte* hiBase = hiCast is null ? null : (byte*)hiCast.Address + hiCast.Shape.offset * hiCast.dtypesize;
-            long[] loStr = loCast?.strides;
-            long[] hiStr = hiCast?.strides;
+            long[] loStr = loCast?.Shape.Strides;
+            long[] hiStr = hiCast?.Shape.Strides;
             bool loC = !arr || loCast is null || (loCast.Shape.IsContiguous && loCast.Shape.offset == 0);
             bool hiC = !arr || hiCast is null || (hiCast.Shape.IsContiguous && hiCast.Shape.offset == 0);
 
             switch (outType)
             {
+                // Boolean rides the Byte kernel: bool is one byte storing 0/1 (loaded as Ldind_U1
+                // by the contiguous IL path), and unsigned Byte Max/Min reproduces false<true
+                // ordering exactly — clip(bool, lo, hi) = Min(Max(v, lo), hi) with lo/hi read as
+                // bytes. Fixes "clip not supported for Boolean" on the strided/transposed/F-order
+                // path (the contiguous path already handled bool via its 0/1 scalar select).
+                case NPTypeCode.Boolean: ClipStridedT<byte>(sBase, (byte*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
                 case NPTypeCode.Byte:    ClipStridedT<byte>(sBase, (byte*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
                 case NPTypeCode.SByte:   ClipStridedT<sbyte>(sBase, (sbyte*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
                 case NPTypeCode.Int16:   ClipStridedT<short>(sBase, (short*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
@@ -269,8 +286,15 @@ namespace NumSharp.Backends
         private static NPTypeCode PromoteClipBound(NPTypeCode outType, NDArray bound)
         {
             if (bound is null) return outType;
-            if (bound.ndim == 0 && IsSameKind(outType, bound.typecode))
-                return outType;
+            if (bound.ndim == 0)
+            {
+                // NEP50: a 0-d bound is a scalar. A C# literal — np.clip(f32, 1, 3) — arrives as an int32 0-d array
+                // and must adopt the array's dtype exactly as a Python int does (NumPy: float32 stays float32),
+                // which is the value-kind rule np._FindCommonType applies to a scalar operand: a same-or-lower kind
+                // keeps outType, a HIGHER kind (a float bound on an int array) promotes the way NumPy's float64 does.
+                // The old same-kind-only test sent every int bound on a float array to float64.
+                return np._FindCommonType(new[] { outType }, new[] { bound.typecode });
+            }
             return np.result_type(outType, bound.typecode);
         }
 

@@ -28,13 +28,18 @@ namespace NumSharp
         /// <param name="keepdims">If True, the reduced axes are left in the result as dimensions with size one.</param>
         /// <returns>A new boolean ndarray is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
+        [NDScoped] // boundary for the engine reduction tree (reshape/chained-axis temps); the reduced result is yielded
         public static NDArray<bool> any(NDArray nd, int axis, bool keepdims = false)
         {
             if (nd is null)
                 throw new ArgumentNullException(nameof(nd));
 
             if (nd.TensorEngine is DefaultEngine defaultEngine)
-                return defaultEngine.Any(nd, axis, keepdims);
+            {
+                var reduced = defaultEngine.Any(nd, axis, keepdims);
+                reduced.MarkReductionScalar(); // 1-D input reduced to 0-d -> numpy scalar (read-only)
+                return reduced;
+            }
 
             var result = nd.TensorEngine.Any(nd, axis);
             if (keepdims && nd.ndim > 0)
@@ -58,6 +63,7 @@ namespace NumSharp
         /// <param name="keepdims">If True, the reduced axes are left in the result as dimensions with size one.</param>
         /// <returns>A new boolean ndarray is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
+        [NDScoped] // boundary for the engine multi-axis tree (axis-run reshape view, chained single-axis intermediates)
         public static NDArray<bool> any(NDArray nd, int[] axis, bool keepdims = false)
         {
             if (nd is null)
@@ -66,7 +72,11 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(axis));
 
             if (nd.TensorEngine is DefaultEngine defaultEngine)
-                return defaultEngine.Any(nd, axis, keepdims);
+            {
+                var reduced = defaultEngine.Any(nd, axis, keepdims);
+                reduced.MarkReductionScalar(); // every axis reduced away -> numpy scalar (read-only)
+                return reduced;
+            }
 
             if (axis.Length == 0)
                 return DefaultEngine.CastToBoolPreservingShape(nd);
@@ -127,13 +137,16 @@ namespace NumSharp
         ///     and contribute the identity value (False for <c>any</c>). Pass <c>null</c> for no mask.</param>
         /// <returns>The reduced array, or <paramref name="out"/> when supplied.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
+        [NDScoped] // reclaims the where-mask effective array and the reduced temp on the out= path
         public static NDArray any(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
             NDArray<bool> reduced = ReduceAnyWithWhere(a, axis, keepdims, @where);
-            return @out is null ? reduced : WriteToOut(reduced, @out);
+            // A fresh 0-d result is a numpy SCALAR (np.bool_) at the boundary: read-only
+            // (PyArray_Return semantics); out= returns the writeable out array itself.
+            return @out is null ? reduced.MarkReductionScalar() : WriteToOut(reduced, @out);
         }
 
         /// <summary>
@@ -146,6 +159,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask, broadcastable against <paramref name="a"/>.</param>
         /// <returns>The reduced array, or <paramref name="out"/> when supplied.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
+        [NDScoped] // reclaims the where-mask effective array and the reduced temp on the out= path
         public static NDArray any(NDArray a, int[] axis, NDArray @out, bool keepdims = false, NDArray @where = null)
         {
             if (a is null)

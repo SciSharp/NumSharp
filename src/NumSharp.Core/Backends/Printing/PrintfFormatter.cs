@@ -106,6 +106,201 @@ namespace NumSharp.Backends.Printing
             return sb.ToString();
         }
 
+        /// <summary>
+        ///     Sequential-argument variant of <see cref="Format"/> — the port of CPython's
+        ///     <c>str.__mod__</c> applied to a TUPLE, as used by <c>numpy.savetxt</c>'s per-row
+        ///     <c>format % tuple(row)</c>. Every conversion spec consumes the NEXT value from
+        ///     <paramref name="args"/> (whereas <see cref="Format"/> feeds its single value to every
+        ///     spec); <c>%%</c> is a literal and consumes nothing.
+        /// </summary>
+        /// <exception cref="PrintfArgumentException">
+        ///     The number of conversion specs does not match <paramref name="args"/>.Count, or a
+        ///     <c>%c</c> conversion targets a non-integral value — the two conditions under which
+        ///     CPython's <c>%</c> operator raises a <see cref="TypeError"/> mid-row. NumPy's real
+        ///     branch catches this and reports the dtype/format mismatch; its complex branch lets it
+        ///     surface (a <see cref="PrintfArgumentException"/> IS a <see cref="TypeError"/>).
+        /// </exception>
+        public static string FormatRow(string format, System.Collections.Generic.IReadOnlyList<object> args,
+            System.Collections.Generic.IReadOnlyList<NPTypeCode> tcs)
+        {
+            var sb = new StringBuilder(format.Length + 16);
+            FormatRowInto(sb, format, args, tcs);
+            return sb.ToString();
+        }
+
+        /// <summary>
+        ///     <see cref="FormatRow"/> appending directly into <paramref name="sb"/> — the allocation-free
+        ///     form used on <c>np.savetxt</c>'s hot per-row path (no intermediate row string, the caller's
+        ///     batch buffer absorbs every row).
+        /// </summary>
+        public static void FormatRowInto(StringBuilder sb, string format,
+            System.Collections.Generic.IReadOnlyList<object> args,
+            System.Collections.Generic.IReadOnlyList<NPTypeCode> tcs)
+        {
+            int i = 0, n = format.Length, argIdx = 0, argCount = args.Count;
+            while (i < n)
+            {
+                char ch = format[i];
+                if (ch != '%')
+                {
+                    sb.Append(ch);
+                    i++;
+                    continue;
+                }
+
+                i++;
+                if (i < n && format[i] == '%') // "%%" -> literal '%', consumes no argument
+                {
+                    sb.Append('%');
+                    i++;
+                    continue;
+                }
+
+                // flags
+                bool left = false, plus = false, space = false, zero = false, alt = false;
+                while (i < n)
+                {
+                    char f = format[i];
+                    if (f == '-') left = true;
+                    else if (f == '+') plus = true;
+                    else if (f == ' ') space = true;
+                    else if (f == '0') zero = true;
+                    else if (f == '#') alt = true;
+                    else break;
+                    i++;
+                }
+
+                // width
+                int width = 0;
+                while (i < n && format[i] >= '0' && format[i] <= '9')
+                {
+                    width = width * 10 + (format[i] - '0');
+                    i++;
+                }
+
+                // .precision
+                int precision = -1;
+                if (i < n && format[i] == '.')
+                {
+                    i++;
+                    precision = 0;
+                    while (i < n && format[i] >= '0' && format[i] <= '9')
+                    {
+                        precision = precision * 10 + (format[i] - '0');
+                        i++;
+                    }
+                }
+
+                // length modifiers are meaningless here (a scalar per spec) — skip them.
+                while (i < n && (format[i] == 'l' || format[i] == 'h' || format[i] == 'L'))
+                    i++;
+
+                if (i >= n) // dangling '%...' with no conversion char — emit verbatim.
+                {
+                    sb.Append('%');
+                    break;
+                }
+
+                char conv = format[i];
+                i++;
+
+                if (argIdx >= argCount)
+                    throw new PrintfArgumentException("not enough arguments for format string");
+
+                object value = args[argIdx];
+                NPTypeCode tc = tcs[argIdx];
+                argIdx++;
+
+                // Integer/char conversions validate their operand exactly as CPython's `%` operator does on
+                // a NumPy scalar — this is where savetxt on the wrong dtype raises. A TypeError is caught by
+                // savetxt's real branch and reported as the dtype/format mismatch (PrintfArgumentException IS
+                // a TypeError); a ValueError/OverflowError propagates uncaught.
+                switch (conv)
+                {
+                    case 'c':
+                        // %c takes a true integer (int/uint/char) whose value is a valid code point; bool and
+                        // every non-integral scalar raise TypeError ("Mismatch..."), and an out-of-range int
+                        // raises OverflowError. Probed: "%c"%np.bool_(True) and "%c"%np.float64(1) both raise
+                        // TypeError; "%c"%np.int8(-1) raises OverflowError.
+                        if (IsTrueIntegerTc(tc))
+                        {
+                            TryToBigInteger(value, tc, out BigInteger cp);
+                            if (cp < 0 || cp > 0x10FFFF)
+                                throw new OverflowException("%c arg not in range(0x110000)");
+                            break;
+                        }
+                        throw new PrintfArgumentException("%c requires int or char");
+                    case 'x':
+                    case 'X':
+                    case 'o':
+                        // Hex/octal accept only true integers; bool AND non-integral floats raise TypeError.
+                        if (IsTrueIntegerTc(tc))
+                            break;
+                        throw new PrintfArgumentException(
+                            $"%{conv} format: an integer is required, not {(tc == NPTypeCode.Boolean ? "numpy.bool" : "float")}");
+                    case 'd':
+                    case 'i':
+                    case 'u':
+                        // Integers and bool pass; a FINITE float truncates, but nan/inf raise (uncaught).
+                        if (!IsIntegralTc(tc))
+                        {
+                            double dv = ToReal(value);
+                            if (double.IsNaN(dv))
+                                throw new ValueError("cannot convert float NaN to integer");
+                            if (double.IsInfinity(dv))
+                                throw new OverflowException("cannot convert float infinity to integer");
+                        }
+                        break;
+                }
+
+                sb.Append(Apply(conv, left, plus, space, zero, alt, width, precision, value, tc));
+            }
+
+            if (argIdx != argCount)
+                throw new PrintfArgumentException("not all arguments converted during string formatting");
+        }
+
+        private static bool IsIntegralTc(NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Boolean:
+                case NPTypeCode.SByte:
+                case NPTypeCode.Byte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                case NPTypeCode.UInt64:
+                case NPTypeCode.Char:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        // A "true" integer for the %x/%X/%o/%c operand rules — every integral dtype EXCEPT Boolean, which
+        // CPython's `%` operator rejects for those conversions on a NumPy scalar (a bool is not an int there).
+        private static bool IsTrueIntegerTc(NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.SByte:
+                case NPTypeCode.Byte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                case NPTypeCode.UInt64:
+                case NPTypeCode.Char:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         private static string Apply(char conv, bool left, bool plus, bool space, bool zero, bool alt,
             int width, int precision, object value, NPTypeCode tc)
         {
@@ -121,13 +316,13 @@ namespace NumSharp.Backends.Printing
                 case 'd':
                 case 'i':
                 case 'u':
-                    return FormatInteger(value, tc, 10, false, false, left, plus, space, zero, false, width);
+                    return FormatInteger(value, tc, 10, false, false, left, plus, space, zero, false, width, precision);
                 case 'x':
-                    return FormatInteger(value, tc, 16, false, false, left, plus, space, zero, alt, width);
+                    return FormatInteger(value, tc, 16, false, false, left, plus, space, zero, alt, width, precision);
                 case 'X':
-                    return FormatInteger(value, tc, 16, true, false, left, plus, space, zero, alt, width);
+                    return FormatInteger(value, tc, 16, true, false, left, plus, space, zero, alt, width, precision);
                 case 'o':
-                    return FormatInteger(value, tc, 8, false, false, left, plus, space, zero, alt, width);
+                    return FormatInteger(value, tc, 8, false, false, left, plus, space, zero, alt, width, precision);
                 case 'f':
                 case 'F':
                     return FormatFixed(ToReal(value), conv == 'F', precision < 0 ? 6 : precision,
@@ -191,7 +386,7 @@ namespace NumSharp.Backends.Printing
         }
 
         private static string FormatInteger(object value, NPTypeCode tc, int radix, bool upper, bool _,
-            bool left, bool plus, bool space, bool zero, bool alt, int width)
+            bool left, bool plus, bool space, bool zero, bool alt, int width, int precision)
         {
             // Non-finite floats have no integer form; Python raises, but a file writer should not abort —
             // fall back to the nan/inf text (still readable, never crashes mid-file).
@@ -212,6 +407,13 @@ namespace NumSharp.Backends.Printing
                 _ => mag.ToString(CI)
             };
 
+            // Python's `.precision` on an integer conversion (d/i/u/x/X/o) is the MINIMUM number of digits:
+            // the magnitude is left-zero-filled to `precision` chars ("%.5d" % 42 == "00042"). The digit run
+            // for 0 is "0", so ".0" never shrinks it ("%.0d" % 0 == "0"). Unlike C, Python still honors the
+            // '0' flag together with a precision ("%08.3d" % 7 == "00000007").
+            if (precision >= 0 && digits.Length < precision)
+                digits = new string('0', precision - digits.Length) + digits;
+
             string prefix = "";
             if (alt)
             {
@@ -222,7 +424,24 @@ namespace NumSharp.Backends.Printing
             }
 
             string sign = neg ? "-" : Sign(false, plus, space);
-            return Pad(prefix + digits, sign, width, left, zero);
+            return PadInteger(sign, prefix, digits, width, left, zero);
+        }
+
+        // Width-pad an integer field. Zero-fill goes BETWEEN the alt prefix (0x/0o) and the digits, after the
+        // sign — "%#08x" % 255 == "0x0000ff", "%08.3d" % -7 == "-0000007" — which the generic Pad (which would
+        // place the zeros before the prefix) cannot express. Left-justify always space-pads on the right.
+        private static string PadInteger(string sign, string prefix, string digits, int width, bool left, bool zero)
+        {
+            int len = sign.Length + prefix.Length + digits.Length;
+            if (len >= width)
+                return sign + prefix + digits;
+
+            int deficit = width - len;
+            if (left)
+                return sign + prefix + digits + new string(' ', deficit);
+            if (zero)
+                return sign + prefix + new string('0', deficit) + digits;
+            return new string(' ', deficit) + sign + prefix + digits;
         }
 
         private static string ToBaseString(BigInteger mag, int radix, bool upper)

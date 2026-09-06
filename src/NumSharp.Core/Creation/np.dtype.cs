@@ -8,10 +8,97 @@ using NumSharp.Backends;
 
 namespace NumSharp
 {
+    /// <summary>
+    ///     NumSharp's data-type descriptor — the reference type that stands in for NumPy's <c>numpy.dtype</c>,
+    ///     and the <b>single dtype spelling</b> every dtype-taking API in NumSharp accepts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    ///     <b>Why it exists.</b> NumPy funnels every <c>dtype=</c> argument through one coercion point,
+    ///     <c>numpy.dtype(...)</c>, so a Python type (<c>float</c>), a NumPy scalar type (<c>np.float32</c>),
+    ///     a <c>np.dtype</c> instance and a dtype <b>string</b> (<c>'float32'</c>, <c>'f4'</c>, <c>'&lt;f8'</c>)
+    ///     are ALL valid there. NumSharp historically had three separate spellings — a C# <see cref="System.Type"/>,
+    ///     an <see cref="NPTypeCode"/> enum, and this descriptor from <see cref="np.dtype(string)"/> — which forced
+    ///     two-or-three overloads per function. <see cref="DType"/> collapses them: it is the one type every
+    ///     dtype-taking overload accepts, and each of the other spellings converts to it IMPLICITLY, so a caller
+    ///     writes whichever is convenient and it binds the single overload — mirroring NumPy's one <c>dtype=</c>.
+    /// </para>
+    /// <para>
+    ///     <b>The four spellings, all implicit.</b> The following are equivalent and all bind the one
+    ///     <c>DType</c> overload (e.g. <c>np.sqrt(x, dtype: …)</c>):
+    ///     <list type="bullet">
+    ///       <item><description><b><see cref="System.Type"/></b> — <c>typeof(float)</c> (NumPy's Python/NumPy scalar type).</description></item>
+    ///       <item><description><b><see cref="NPTypeCode"/></b> — <c>NPTypeCode.Single</c> (NumSharp's compact enum; no NumPy counterpart).</description></item>
+    ///       <item><description><b>NumPy dtype string</b> — <c>"float32"</c> / <c>"f4"</c> / <c>"&lt;f8"</c> (NumPy's <c>dtype='float32'</c> — see the casing rules below).</description></item>
+    ///       <item><description><b><see cref="DType"/> itself</b> — <c>DType.Single</c>, <c>np.dtype("f4")</c>, <c>DType.From(...)</c>.</description></item>
+    ///     </list>
+    ///     A <see cref="DType"/> also converts back to <see cref="System.Type"/> and <see cref="NPTypeCode"/>
+    ///     implicitly, so it drops straight into code expecting either.
+    /// </para>
+    /// <para>
+    ///     <b>None / infer is <see langword="null"/>.</b> A <see langword="null"/> <see cref="DType"/> is the
+    ///     "none/infer" state — the analog of NumPy's <c>dtype=None</c>. This is precisely why <see cref="DType"/>
+    ///     is a <b>class, not a struct</b>: a nullable <c>DType dtype = null</c> parameter is a drop-in replacement
+    ///     for the old <c>Type dtype = null</c> parameter, so the engine's existing null idioms keep working
+    ///     verbatim — <c>dtype?.GetTypeCode()</c> yields <c>NPTypeCode?</c> (null when none) and <c>dtype == null</c>
+    ///     tests the none state. Converting a <see langword="null"/>/<see cref="NPTypeCode.Empty"/> spelling yields
+    ///     a <see langword="null"/> <see cref="DType"/> (never a throwing conversion); the explicit
+    ///     <see cref="DType(System.Type)"/> / <see cref="DType(NPTypeCode)"/> constructors, by contrast, reject
+    ///     null/Empty (use a <see langword="null"/> <see cref="DType"/> for none).
+    /// </para>
+    /// <para>
+    ///     <b>NumPy string casing (source of truth: NumPy 2.4.2).</b> Strings are parsed by
+    ///     <see cref="np.dtype(string)"/> with NumPy's exact, <b>case-sensitive</b> spelling — the single-character
+    ///     codes differ by case:
+    ///     <list type="table">
+    ///       <listheader><term>code</term><description>type</description></listheader>
+    ///       <item><term>?</term><description>bool</description></item>
+    ///       <item><term>b / B</term><description>int8 / uint8</description></item>
+    ///       <item><term>h / H</term><description>int16 / uint16</description></item>
+    ///       <item><term>i / I</term><description>int32 / uint32</description></item>
+    ///       <item><term>q / Q</term><description>int64 / uint64</description></item>
+    ///       <item><term>e / f / d</term><description>float16 / float32 / float64</description></item>
+    ///       <item><term>D</term><description>complex128</description></item>
+    ///     </list>
+    ///     Sized forms (<c>"i4"</c>, <c>"f8"</c>, <c>"c16"</c>), lowercase names (<c>"float64"</c>, <c>"int32"</c>,
+    ///     <c>"complex128"</c>) and byte-order prefixes (<c>"&lt;f8"</c>, <c>"&gt;i4"</c>, <c>"=u2"</c>, <c>"|b1"</c>)
+    ///     are all accepted; the prefix is stripped because NumSharp is host-endian only.
+    /// </para>
+    /// <para>
+    ///     <b>Deliberately narrowed to NumSharp's capability</b> (the same narrowing as <see cref="np.dtype(string)"/>):
+    ///     only NumSharp's <b>15 element types</b> are representable. Two consequences differ from NumPy and are
+    ///     intentional — (1) <b>complex64</b> (<c>'F'</c>, <c>"c8"</c>, <c>"complex64"</c>) is rejected with
+    ///     <see cref="NotSupportedException"/> (NumSharp has only complex128), as are structured / datetime /
+    ///     void / object / (byte)string dtypes; (2) NumSharp additionally accepts a <b>superset</b> of NumPy's
+    ///     casing — the C# / <see cref="NPTypeCode"/> PascalCase names (<c>"Int32"</c>, <c>"Single"</c>,
+    ///     <c>"Boolean"</c>, <c>"SByte"</c>, <c>"Decimal"</c>, <c>"Char"</c>) that NumPy 2.4.2 rejects — as a
+    ///     convenience for C# callers. Byte order is always native (<c>'='</c>); <see cref="newbyteorder"/> throws.
+    /// </para>
+    /// <para>
+    ///     <b>Descriptor surface</b> (mirrors <c>numpy.dtype</c>): <see cref="type"/> (the C# <see cref="System.Type"/>),
+    ///     <see cref="typecode"/> (<see cref="NPTypeCode"/>), <see cref="name"/>, <see cref="kind"/>
+    ///     ('b'/'i'/'u'/'f'/'c'/'S'…), <see cref="char"/> (the type char code), <see cref="itemsize"/> (bytes) and
+    ///     <see cref="byteorder"/>. Equality is by <see cref="typecode"/> and null-safe.
+    /// </para>
+    /// <example>
+    /// <code>
+    /// np.sqrt(x, dtype: typeof(float));      // Type
+    /// np.sqrt(x, dtype: NPTypeCode.Single);  // NPTypeCode enum
+    /// np.sqrt(x, dtype: "float32");          // NumPy string  (== NumPy's dtype='float32')
+    /// np.sqrt(x, dtype: DType.Single);       // DType spelling
+    /// np.sqrt(x);                            // dtype omitted  == None / infer
+    ///
+    /// DType d  = np.dtype("&lt;f8");           // full descriptor: d.type==typeof(double), d.kind=='f', d.itemsize==8
+    /// Type t   = DType.Double;               // implicit DType -&gt; Type
+    /// NPTypeCode c = (DType)"int32";         // implicit string -&gt; DType -&gt; NPTypeCode
+    /// bool same = DType.Single == (DType)"f4"; // true — value equality by typecode
+    /// </code>
+    /// </example>
+    /// </remarks>
     /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype</remarks>
-    public class DType
+    public class DType : IEquatable<DType>
     {
-        protected internal static readonly FrozenDictionary<NPTypeCode, char> _kind_list_map = new Dictionary<NPTypeCode, char>()
+        internal static readonly FrozenDictionary<NPTypeCode, char> _kind_list_map = new Dictionary<NPTypeCode, char>()
         {
             {NPTypeCode.Complex, 'c'},
             {NPTypeCode.Boolean, '?'},
@@ -31,16 +118,39 @@ namespace NumSharp
             {NPTypeCode.String, 'S'},
         }.ToFrozenDictionary();
 
-        /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
+        /// <summary>
+        ///     Builds a descriptor for a C# <see cref="System.Type"/>. Identical to <see cref="From(System.Type)"/>.
+        ///     For the "none/infer" state use a <see langword="null"/> <see cref="DType"/> (this ctor throws on a
+        ///     <see langword="null"/> type; the implicit <c>Type</c>→<c>DType</c> conversion yields <see langword="null"/>).
+        /// </summary>
         public DType(Type type)
         {
             this.type = type ?? throw new ArgumentNullException(nameof(type));
-            typecode = type.GetTypeCode();
-            name = type.Name;
-            byteorder = '=';
-            itemsize = typecode.SizeOf();
-            TYPECHAR = typecode.ToTYPECHAR();
-            kind = _kind_list_map[typecode];
+            this.typecode = type.GetTypeCode();
+            this.name = NumpyName(this.typecode);
+            this.byteorder = '=';
+            this.itemsize = this.typecode.SizeOf();
+            this.TYPECHAR = this.typecode.ToTYPECHAR();
+            this.kind = _kind_list_map[this.typecode];
+        }
+
+        /// <summary>
+        ///     Builds a descriptor for an <see cref="NPTypeCode"/>. Identical to <see cref="From(NPTypeCode)"/>.
+        ///     For the "none/infer" state use a <see langword="null"/> <see cref="DType"/> (this ctor throws on
+        ///     <see cref="NPTypeCode.Empty"/>; the implicit <c>NPTypeCode</c>→<c>DType</c> conversion yields <see langword="null"/>).
+        /// </summary>
+        public DType(NPTypeCode typecode)
+        {
+            if (typecode == NPTypeCode.Empty)
+                throw new ArgumentException("NPTypeCode.Empty has no dtype; use a null DType for the none/infer state.", nameof(typecode));
+
+            this.typecode = typecode;
+            this.type = typecode.AsType();
+            this.name = NumpyName(typecode);
+            this.byteorder = '=';
+            this.itemsize = typecode.SizeOf();
+            this.TYPECHAR = typecode.ToTYPECHAR();
+            this.kind = _kind_list_map[typecode];
         }
 
         /// <summary>
@@ -52,32 +162,46 @@ namespace NumSharp
         ///     '&gt;'	big-endian<br></br>
         ///     '|'	not applicable<br></br>
         /// </summary>
-        public char byteorder;
+        public readonly char byteorder;
 
         /// <summary>
         ///     The size of the dtype in bytes.
         /// </summary>
-        public int itemsize;
+        public readonly int itemsize;
 
         /// <summary>
         ///     The name of this dtype.
         /// </summary>
-        public string name;
+        public readonly string name;
+
+        /// <summary>
+        ///     NumPy's <c>dtype.name</c> spelling (<c>"float32"</c>, <c>"int64"</c>, <c>"bool"</c>, <c>"complex128"</c>) —
+        ///     the CLR <see cref="Type.Name"/> (<c>"Single"</c>) is not a NumPy name and does not round-trip through
+        ///     <see cref="np.dtype(string)"/>. The three NumSharp-only dtypes have no NumPy analog and get lowercase
+        ///     names of their own rather than the nearest NumPy stand-in (<c>uint16</c>/<c>float64</c>), which would misreport them.
+        /// </summary>
+        private static string NumpyName(NPTypeCode typecode) => typecode switch
+        {
+            NPTypeCode.Char => "char",
+            NPTypeCode.Decimal => "decimal",
+            NPTypeCode.String => "str",
+            _ => typecode.AsNumpyDtypeName(),
+        };
 
         /// <summary>
         ///     The actual type this dtype represents.
         /// </summary>
-        public Type type;
+        public readonly Type type;
 
         /// <summary>
         ///     The NumSharp type code.
         /// </summary>
-        public NPTypeCode typecode;
+        public readonly NPTypeCode typecode;
 
         /// <summary>
         ///     A unique character code for each of the 21 different built-in types.
         /// </summary>
-        internal NPY_TYPECHAR TYPECHAR;
+        internal readonly NPY_TYPECHAR TYPECHAR;
 
         /// <summary>
         ///     A character code (one of ‘biufcmMOSUV’) identifying the general kind of data.<br></br><br></br>
@@ -93,12 +217,110 @@ namespace NumSharp
         ///     U   Unicode<br></br>
         ///     V   void<br></br>
         /// </summary>
-        public char kind;
+        public readonly char kind;
 
         /// <summary>
         /// A unique character code for each of the 21 different built-in types.
         /// </summary>
         public char @char => (char)TYPECHAR;
+
+        // ---- factories (public ctors are identical) ----
+
+        /// <summary>Builds a descriptor from a C# <see cref="System.Type"/>. Same as <c>new DType(type)</c>.</summary>
+        public static DType From(Type type) => new DType(type);
+
+        /// <summary>Builds a descriptor from an <see cref="NPTypeCode"/>. Same as <c>new DType(typecode)</c>.</summary>
+        public static DType From(NPTypeCode typecode) => new DType(typecode);
+
+        /// <summary>Builds a descriptor from a NumPy dtype <b>string</b> (NumPy's case-sensitive spelling). Same as <see cref="np.dtype(string)"/>.</summary>
+        public static DType From(string dtype) => np.dtype(dtype);
+
+        /// <summary>
+        ///     Returns this descriptor's <see cref="NPTypeCode"/>. Combined with a nullable <see cref="DType"/>
+        ///     this keeps the old <c>Type dtype</c> idiom drop-in: <c>dtype?.GetTypeCode()</c> yields
+        ///     <c>NPTypeCode?</c> (<see langword="null"/> for the none/infer state where <c>dtype == null</c>).
+        /// </summary>
+        public NPTypeCode GetTypeCode() => typecode;
+
+        // ---- one static spelling per NPTypeCode (the 15 NumSharp element types) ----
+
+        /// <summary>The <see cref="System.Boolean"/> descriptor.</summary>
+        public static DType Boolean => new DType(NPTypeCode.Boolean);
+        /// <summary>The <see cref="System.Byte"/> (uint8) descriptor.</summary>
+        public static DType Byte => new DType(NPTypeCode.Byte);
+        /// <summary>The <see cref="System.SByte"/> (int8) descriptor.</summary>
+        public static DType SByte => new DType(NPTypeCode.SByte);
+        /// <summary>The <see cref="System.Int16"/> descriptor.</summary>
+        public static DType Int16 => new DType(NPTypeCode.Int16);
+        /// <summary>The <see cref="System.UInt16"/> descriptor.</summary>
+        public static DType UInt16 => new DType(NPTypeCode.UInt16);
+        /// <summary>The <see cref="System.Int32"/> descriptor.</summary>
+        public static DType Int32 => new DType(NPTypeCode.Int32);
+        /// <summary>The <see cref="System.UInt32"/> descriptor.</summary>
+        public static DType UInt32 => new DType(NPTypeCode.UInt32);
+        /// <summary>The <see cref="System.Int64"/> descriptor.</summary>
+        public static DType Int64 => new DType(NPTypeCode.Int64);
+        /// <summary>The <see cref="System.UInt64"/> descriptor.</summary>
+        public static DType UInt64 => new DType(NPTypeCode.UInt64);
+        /// <summary>The <see cref="System.Char"/> descriptor.</summary>
+        public static DType Char => new DType(NPTypeCode.Char);
+        /// <summary>The <see cref="System.Half"/> (float16) descriptor.</summary>
+        public static DType Half => new DType(NPTypeCode.Half);
+        /// <summary>The <see cref="System.Single"/> (float32) descriptor.</summary>
+        public static DType Single => new DType(NPTypeCode.Single);
+        /// <summary>The <see cref="System.Double"/> (float64) descriptor.</summary>
+        public static DType Double => new DType(NPTypeCode.Double);
+        /// <summary>The <see cref="System.Decimal"/> descriptor.</summary>
+        public static DType Decimal => new DType(NPTypeCode.Decimal);
+        /// <summary>The <see cref="System.Numerics.Complex"/> (complex128) descriptor.</summary>
+        public static DType Complex => new DType(NPTypeCode.Complex);
+
+        // ---- implicit conversions: DType is the single spelling Type / NPTypeCode / NumPy-string collapse into ----
+
+        /// <summary>A C# <see cref="System.Type"/> converts to a descriptor (<see langword="null"/> ⇒ none).</summary>
+        public static implicit operator DType(Type type) => type == null ? null : new DType(type);
+
+        /// <summary>An <see cref="NPTypeCode"/> converts to a descriptor (<see cref="NPTypeCode.Empty"/> ⇒ none).</summary>
+        public static implicit operator DType(NPTypeCode typecode) => typecode == NPTypeCode.Empty ? null : new DType(typecode);
+
+        /// <summary>A nullable <see cref="NPTypeCode"/> converts to a descriptor (<see langword="null"/>/<see cref="NPTypeCode.Empty"/> ⇒ none).</summary>
+        public static implicit operator DType(NPTypeCode? typecode) => typecode.HasValue ? (DType)typecode.Value : null;
+
+        /// <summary>
+        ///     A NumPy dtype <b>string</b> converts to a descriptor via <see cref="np.dtype(string)"/> — NumPy's exact,
+        ///     case-sensitive spelling (<c>"f4"</c>, <c>"float32"</c>, <c>"&lt;f8"</c>, <c>"F"</c>). <see langword="null"/> ⇒ none.
+        /// </summary>
+        public static implicit operator DType(string dtype) => dtype == null ? null : np.dtype(dtype);
+
+        /// <summary>A descriptor converts back to its <see cref="System.Type"/> (none/<see langword="null"/> ⇒ null).</summary>
+        public static implicit operator Type(DType dtype) => dtype?.type;
+
+        /// <summary>A descriptor converts back to its <see cref="NPTypeCode"/> (none/<see langword="null"/> ⇒ <see cref="NPTypeCode.Empty"/>).</summary>
+        public static implicit operator NPTypeCode(DType dtype) => dtype is null ? NPTypeCode.Empty : dtype.typecode;
+
+        // ---- value equality (by typecode, null-safe) ----
+
+        /// <inheritdoc/>
+        public bool Equals(DType other) => other is not null && typecode == other.typecode;
+
+        /// <inheritdoc/>
+        public override bool Equals(object obj) => Equals(obj as DType);
+
+        /// <inheritdoc/>
+        public override int GetHashCode() => (int)typecode;
+
+        /// <summary>Value equality by <see cref="typecode"/> (null-safe).</summary>
+        public static bool operator ==(DType left, DType right)
+        {
+            if (left is null) return right is null;
+            return right is not null && left.typecode == right.typecode;
+        }
+
+        /// <summary>Value inequality by <see cref="typecode"/> (null-safe).</summary>
+        public static bool operator !=(DType left, DType right) => !(left == right);
+
+        /// <inheritdoc/>
+        public override string ToString() => name ?? "None";
 
         /// <summary>
         ///     Return a new dtype with a different byte order.
@@ -379,7 +601,7 @@ namespace NumSharp
         }
     }
 
-    internal enum NPY_SCALARKIND
+    public enum NPY_SCALARKIND
     {
         NPY_NOSCALAR = -1,
         NPY_BOOL_SCALAR,
@@ -393,7 +615,7 @@ namespace NumSharp
     /// <summary>
     ///     https://numpy.org/doc/stable/reference/c-api/dtype.html#enumerated-types
     /// </summary>
-    internal enum NPY_TYPECHAR
+    public enum NPY_TYPECHAR
     {
         NPY_BOOLLTR = '?',
         NPY_BYTELTR = 'b',

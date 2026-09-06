@@ -19,12 +19,13 @@ namespace NumSharp
         /// <param name="max">NumPy 2.x keyword alias for <paramref name="a_max"/>. Cannot be combined with <paramref name="a_max"/>.</param>
         /// <returns>An array with the elements of a, but where values &lt; min are replaced with min, and those &gt; max with max.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.clip.html</remarks>
+        [NDScoped]
         public static NDArray clip(
             NDArray a,
             NDArray a_min = null,
             NDArray a_max = null,
             NDArray @out = null,
-            NPTypeCode? dtype = null,
+            DType dtype = null,
             NDArray min = null,
             NDArray max = null)
         {
@@ -32,6 +33,12 @@ namespace NumSharp
                 throw new ArgumentException("clip(): cannot specify both 'a_min' and 'min'.");
             if (a_max is not null && max is not null)
                 throw new ArgumentException("clip(): cannot specify both 'a_max' and 'max'.");
+
+            // A read-only out refuses FIRST — probed 2.4.2: NumPy's clip ufunc reports
+            // "output array is read-only" ahead of any broadcast/shape error, and even ahead of
+            // the no-bounds identity path (clip(a, out=ro) with neither bound still raises).
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
 
             var lo = a_min ?? min;
             var hi = a_max ?? max;
@@ -54,17 +61,5 @@ namespace NumSharp
             }
             return result;
         }
-
-        /// <summary>
-        ///     Clip (limit) the values in an array, returning a result of the requested CLR <see cref="Type"/>.
-        /// </summary>
-        /// <param name="a">Array containing elements to clip.</param>
-        /// <param name="a_min">Minimum value. If null, clipping is not performed on lower interval edge.</param>
-        /// <param name="a_max">Maximum value. If null, clipping is not performed on upper interval edge.</param>
-        /// <param name="dtype">The dtype the returned ndarray should be of.</param>
-        /// <returns>An array with the elements of a, but where values &lt; a_min are replaced with a_min, and those &gt; a_max with a_max.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.clip.html</remarks>
-        public static NDArray clip(NDArray a, NDArray a_min, NDArray a_max, Type dtype)
-            => a.TensorEngine.ClipNDArray(a, a_min, a_max, dtype);
     }
 }

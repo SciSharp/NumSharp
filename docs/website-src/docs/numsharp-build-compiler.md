@@ -1,0 +1,726 @@
+# NumSharp.Build Compiler — build-time `[NDScoped]` memory reclamation
+
+`NumSharp.Build` is the optional build-time compiler package that makes a composition method eagerly
+return its transients' pooled buffers instead of waiting on the finalizer. Mark a method `[NDScoped]`
+and, at build time, the weaver rewrites it to open an `NDScope` — an ambient reclamation scope that
+tracks every `NDArray` the method constructs (whatever C# construct constructs it — an operator, a
+cast, an initializer, a helper call) and disposes the ones it does not return the moment the method
+exits, on the exception path included. **Your source keeps its 100 % original body**; the scope is
+injected into the compiled IL, so the reclamation is invisible in the code and free of boilerplate.
+
+NumSharp.Core already uses this compiler on its own build — **265+ members** carry `[NDScoped]`
+(effectively the whole hot `np.*` entry surface, plus ~30 `[NDScopedCovered]` helpers riding their
+callers' scopes). This package packages the same transform so you can apply it to *your* composition
+methods, and
+`NumSharp.Core` stays 100 % managed with nothing to install: with the package absent, an `[NDScoped]`
+method simply runs unscoped and its transients fall back to the finalizer — the exact pre-weave
+behaviour.
+
+`[NDScoped]` covers **synchronous** methods and **synchronous iterators** (`yield return`). For a
+method that suspends across `await` — an `async` method, an async iterator, or a non-`async` method
+returning `Task`/`ValueTask` — use the companion **`[NDScopedAsync]`** attribute instead: it weaves
+the compiler state machine (or the deferral egress) so temps survive awaits and are reclaimed at the
+invocation's completion. Choosing the wrong attribute is a build error, not a silent miss — see
+[Which returns are woven](#which-returns-are-woven).
+
+**On this page:** [Why it exists](#why-this-package-exists) · [Quick start](#quick-start) ·
+[What the weaver injects](#what-the-weaver-injects) · [Which members can carry the attribute](#which-members-can-carry-the-attribute) ·
+[Which returns are woven](#which-returns-are-woven) ·
+[Retained arguments (`[NDScopedExit]`)](#retained-arguments--ndscopedexit) ·
+[The `NDScope` API](#the-ndscope-api) · [Hand-scoping](#hand-scoping) ·
+[How the build step works](#how-the-build-step-works) · [When to use it](#when-to-use-it) ·
+[Leak detection (NDW012 / NDW013)](#leak-detection--ndw012--ndw013) ·
+[Escape hatches](#escape-hatches) · [Troubleshooting](#troubleshooting)
+
+> Mono.Cecil transform, invoked after each per-`TargetFramework` compile · net8.0 / net10.0.
+> Behaviour is covered by gates: [`NDScopeTests`][gate-contract] (the scope contract),
+> [`NDScopeWeaveTests`][gate-coverage] (every attributed method was woven),
+> [`NDScopeWeaveCarrierTests`][gate-carrier] and [`NDScopeWeaveNestingTests`][gate-nesting]
+> (tuple / carrier / storage egress — recursive component dispatch included — and nesting),
+> [`NDScopeAsyncTests`][gate-async] (the async/iterator seam), [`NDScopeExitTests`][gate-exit]
+> (retained arguments), and [`StrongNameTests`][gate-sign] (identity survives the re-sign).
+
+## Why this package exists
+
+A dropped `NDArray`'s buffer is reclaimed only when its finalizer runs. In a tight loop the finalizer
+lags the allocation rate, so most calls miss the warm buffer pool and pay a cold `NativeMemory.Alloc`
+plus a first-touch page fault, on top of ~950 ns of finalization per dropped result. NumPy does not
+have this problem: it is refcounted, so an intermediate array's memory is freed **deterministically**
+the instant the last reference drops.
+
+A NumSharp composition — `np.cross`, `np.linalg.norm`, a polynomial fit, your own helper built out of
+`np.*` calls — allocates a handful of intermediate `NDArray`s, keeps one as its result, and drops the
+rest. Under the finalizer backstop those dropped intermediates linger. `[NDScoped]` closes the gap:
+it makes the method's boundary a **deterministic reclamation point**, so every transient it owns is
+returned to the pool the moment the method exits — matching NumPy's refcount discipline at the one
+place it matters, the composition boundary, without asking the caller to dispose anything.
+
+This is the same lever NumSharp.Core pulls internally. The package lets you pull it in your code.
+
+## Quick start
+
+```bash
+dotnet add package NumSharp.Build
+```
+
+Referencing the package is the whole opt-in: it wires the weave step into your build, and it is
+**not a dependency** and **not contagious** — it weaves the project it is installed in and nothing
+downstream. The package ships MSBuild targets and a build tool only (no `lib/`, no dependency
+entries, `build/` never `buildTransitive/`), so a project that merely references your woven library —
+by `ProjectReference` or by package — is never woven and its own `[NDScoped]` stays inert.
+`dotnet add package` installs it with `PrivateAssets="all"` automatically, so it never appears in
+your own package's dependency graph; if you write the reference by hand (or under Central Package
+Management) add `PrivateAssets="all"` yourself — `dotnet pack` otherwise refuses to ship
+NumSharp.Build as a dependency of your package ([`NDW018`](#ndw018)). The companion **Roslyn analyzer** ships
+with the `NumSharp` package itself (not this one), so it is already active the moment you reference
+NumSharp: it flags a wrong or unsupported target (an `async` method under `[NDScoped]`, an
+unsupported return, …) as a build error in the editor — before the weave runs — so mistakes surface
+immediately, weaver installed or not. Now mark any method that owns `NDArray` transients
+`[NDScoped]` and keep the body exactly as you wrote it —
+
+```csharp
+using NumSharp;
+
+[NDScoped]
+public static NDArray Normalize(NDArray a)
+{
+    var mean = np.mean(a);           // transient
+    var std  = np.std(a);            // transient
+    var centered = a - mean;         // transient
+    return centered / std;           // the one you keep
+}
+```
+
+At build time the method is rewritten to what the hand-written pattern spells — a scope opened at the
+top, the whole body wrapped in `try`/`finally`, the result routed through `scope.Returns(...)` — so
+`mean`, `std` and `centered` are reclaimed on return while the result survives (see
+[What the weaver injects](#what-the-weaver-injects)). The *input* `a` is never touched: it was
+constructed before the scope opened, so it is never tracked.
+
+If the `NumSharp.Build` package is **absent**, the `[NDScoped]` attribute is inert and `Normalize`
+runs exactly as its source reads — unscoped, the finalizer backstop. Adding or removing the package
+never changes results, only *when* the transients' buffers come back.
+
+<!-- Tests: NDScopeTests.TempsReclaimed_ResultSurvives; NDScopeWeaveTests.EveryScopedMethod_WasWoven -->
+
+## What the weaver injects
+
+Per `[NDScoped]` method, the transform is exactly the hand-written scope pattern, applied to the
+compiled IL:
+
+```csharp
+[NDScoped]                                          // what you WRITE — the original body, unchanged
+public static NDArray<bool> logical_and(NDArray x1, NDArray x2)
+{
+    var b1 = x1.typecode == NPTypeCode.Boolean ? x1 : (x1 != 0);
+    var b2 = x2.typecode == NPTypeCode.Boolean ? x2 : (x2 != 0);
+    return (b1 & b2).MakeGeneric<bool>();
+}
+
+// what the built assembly CARRIES (logically):
+public static NDArray<bool> logical_and(NDArray x1, NDArray x2)
+{
+    using var scope = NDScope.Open();               // 1. prologue, OUTSIDE the protected region
+    try                                             // 2. the whole original body becomes the try
+    {
+        var b1 = x1.typecode == NPTypeCode.Boolean ? x1 : (x1 != 0);
+        var b2 = x2.typecode == NPTypeCode.Boolean ? x2 : (x2 != 0);
+        return scope.Returns((b1 & b2).MakeGeneric<bool>());   // 3. every ret routed through Returns
+    }
+    finally { scope.Dispose(); }                    // 4. dispose reclaims every tracked, un-yielded array
+}
+```
+
+Three properties make the rewrite trivially safe:
+
+- **The CLR forbids `ret` inside a protected region.** Wrapping the body in `try`/`finally` forces
+  every original return through a rewritable seam; bodies that already contain `try`/`using` compile
+  their inner returns to `leave`-chains, and only the real `ret` instructions are touched (mutated in
+  place, so branches and nested-handler boundaries that referenced them stay valid).
+- **`scope.Returns(x)` is the one egress rule.** It re-tracks the yielded array into the *parent*
+  scope (so an enclosing scope still reclaims it if the caller drops it) and is a provable no-op for
+  an array the scope never tracked — an input passthrough, a caller-supplied `out`. So *"wrap every
+  egress in `Returns`"* is a safe blanket rule; the weaver applies it for you.
+- **Inputs are never tracked.** They were constructed before the scope opened, so a passthrough
+  (`ravel()` returning its operand) or a caller-owned array is never at risk.
+
+`out` parameters are yielded the same way before each successful return (their contents are undefined
+after a throw, so only the success path escapes them) — the full carrier vocabulary: `out NDArray`(`<T>`),
+`out NDArray[]`, an `out` `ValueTuple`/`Tuple` of supported shapes (boxed through `Returns(ITuple)`),
+an `out` `INDArrayCarrier` struct (`YieldTo` through the byref, no box), and an `out`
+`IArraySlice`/`UnmanagedStorage` (counted-ref protection). An `out` shape that carries NDArrays but
+cannot be yielded — a `List<NDArray>`, a `Task<NDArray>`, a multi-dimensional array, a `T : NDArray` —
+is **build error NDW015**, never a silent sweep.
+
+<!-- Tests: NDScopeTests.OutParameter_Egress_ViaReturns; NDScopeWeaveNestingTests -->
+
+## Which members can carry the attribute
+
+`[NDScoped]`/`[NDScopedAsync]` target **methods and properties** (`AttributeTargets.Method |
+Property`), and "method" is broader than it sounds:
+
+| member | supported? |
+|---|---|
+| ordinary static/instance methods | ✔ woven |
+| **user-defined operators** (`operator +`, …) and **conversion operators** (`op_Implicit` / `op_Explicit`) | ✔ woven — they are static methods; NumSharp's own binary-operator overloads are scoped exactly this way |
+| property **getters** (property-level attribute resolves to the getter; NDW006 if setter-only) and accessors directly | ✔ woven |
+| **local functions** | ✔ woven — the attribute lands on the compiler-generated method and the weaver collects it |
+| `async` methods / async iterators / `yield return` iterators | ✔ woven through their state machines (see below) |
+| **virtual / abstract / interface members** | ✔ the attribute is a **contract**: every override and implementation is woven (see [Inheritance](#inheritance--virtual-abstract-and-interface-members)); the abstract/interface declaration itself has no body and is never woven — and never an error |
+| **constructors / finalizers** | ✘ not an attribute target (C# rejects it) — and a ctor's egress is typically a *field*, which the weave cannot express; [hand-scope](#hand-scoping) with `_field = scope.Returns(...)` |
+| lambdas | ✘ not attributable — a lambda that runs *while* the scope is open is covered by the ambient scope; one that **escapes and runs later** (a stored delegate, deferred LINQ) runs unscoped (finalizer backstop) |
+
+Two runtime facts make the coverage syntax-agnostic: tracking hooks `NDArray` **construction** (the
+single `InitializeArc` funnel), so any C# construct that creates an array under the scope — a cast
+operator, an object/collection initializer, a collection expression, a `Deconstruct`, LINQ executing
+inside the method — is tracked with no per-construct support; and inputs were constructed *before*
+the scope opened, so they are structurally untouchable whatever syntax reads them.
+
+### Inheritance — virtual, abstract and interface members
+
+`[NDScoped]` / `[NDScopedAsync]` (and `[NDScopedCovered]`, and the `[NDScopedExit]` parameter
+attribute) placed on a **virtual, abstract or interface member is a contract its inheritors inherit**:
+every override and every implementation is woven exactly as if it carried the attribute itself, and
+keeps its 100 % original body. State the scoping once, where the API is declared:
+
+```csharp
+public abstract class Layer
+{
+    [NDScoped] public abstract NDArray Forward(NDArray x);          // the contract
+    [NDScoped] public virtual NDArray Twice(NDArray x) => x * 2.0;   // scoped body AND contract
+    public abstract void Adopt([NDScopedExit] NDArray weights);     // "this parameter is retained"
+}
+
+public interface IOp { [NDScoped] NDArray Apply(NDArray a); }
+
+public class Dense : Layer, IOp
+{
+    public override NDArray Forward(NDArray x) { var h = x + 1.0; return h.copy(); } // woven: inherits Forward's [NDScoped]
+    public override NDArray Twice(NDArray x)   { var h = x * 3.0; return h.copy(); } // woven: inherits Twice's
+    public NDArray Apply(NDArray a)            { var h = a - 1.0; return h.copy(); } // woven: implements IOp.Apply
+    public override void Adopt(NDArray w) => _w = w;                                  // woven: w is detached, by position
+    private NDArray _w;
+}
+```
+
+The rules, all of them what the CLR's own slot resolution implies:
+
+- **What inherits.** Class overrides (`override`, through any number of levels — a base that does not
+  declare the slot is climbed past), **implicit** interface implementations (a public method matching
+  the member's name and signature, base interfaces of a listed interface included), **explicit**
+  interface implementations, covariant-return overrides, and generic instantiations
+  (`Derived : Base<int>` matches `Base<T>.M(T)` against `M(int)`). A property-level attribute on a base
+  property reaches its getter override. The declaration may live in **another assembly** — a consumer
+  overriding a NumSharp member, or a member of any library that used this weaver, is woven in the
+  consumer's build (the weaver walks the base chain through the compile's reference list).
+- **Nearest declaration wins, and an explicit attribute on the override wins over it.** An override
+  carrying its own `[NDScoped]`/`[NDScopedAsync]` re-states (or changes) the model; an override marked
+  **`[NDScopedCovered]` opts out** of the inherited weave (its transients then ride the caller's ambient
+  scope, on the covered author's assertion). `[NDScopedCovered]` on the declaration is inherited the
+  same way — its overrides are covered, not woven.
+- **The declaration is the contract, not a target.** An abstract or interface declaration has no
+  body: nothing is injected there, and it is **not** NDW005 — that error is now an `extern`'s alone
+  (no body, no inheritors). The declaration's *signature* is still gated (a hidden `ref` egress on the
+  contract is NDW002 on the declaration **and** on every override that inherits it), and an
+  `async`/iterator override weaves through its own state machine under the inherited model.
+- **`[NDScopedExit]` inherits by parameter position.** An override that marks no parameter of its own
+  takes the nearest attributed declaration's set; an override that marks any parameter uses only its
+  own marks.
+- **The analyzer resolves the same graph**: an inheriting override draws no NDW012 for its
+  transients, its target gate reads the declaration's attribute (the diagnostic names the declaration it
+  was inherited from), and reflection agrees — the attributes declare `Inherited = true`, so
+  `GetCustomAttribute(inherit: true)` on an override finds the base declaration's attribute (the
+  coverage gate uses exactly that).
+- **One thing the MSBuild NDW013 scan cannot see** is an override-only assembly: it inherits a scope
+  from *another* assembly and carries no attribute text of its own. The weaver's targets therefore
+  spawn the tool for any compile that references NumSharp (the tool exits without rewriting when nothing
+  inherits), and the missing-weaver nudge for that case comes from the analyzer instead — see
+  [NDW013](#ndw013).
+
+## Which returns are woven
+
+The weaver dispatches on the method's return shape. Every carrier of `NDArray`s NumSharp returns is
+handled; a shape whose egress it cannot see is a **build error**, not a silent miss.
+
+> **Two attributes, one per scoping model.** `[NDScoped]` weaves **synchronous** methods (every row
+> below except the `[NDScopedAsync]`-tagged ones) **and synchronous iterators** (`yield return`).
+> `[NDScopedAsync]` weaves the shapes that suspend across `await` or defer disposal to a task's
+> completion: **`async` methods, async iterators, and non-`async` `Task`/`ValueTask` returns**. A
+> method has exactly one scoping model — marking it with the wrong attribute is a build **error**
+> (NDW009 = an async/Task shape under `[NDScoped]`; NDW010 = a plain synchronous method or
+> synchronous iterator under `[NDScopedAsync]`; NDW011 = both attributes on one method), never a
+> silent unwoven ship.
+
+| return / signature | weaver action |
+|---|---|
+| `NDArray` / `NDArray<T>` | value routed through `scope.Returns<T>(T)` at every `ret` |
+| `NDArray[]` / `NDArray<T>[]` | `scope.Returns<T>(T[])` — a tuple-of-arrays result (`nonzero`, `meshgrid`, `split`, …) |
+| `ValueTuple` of 2–4 `NDArray`s (`(NDArray, NDArray)` — `modf` / `qr` / `svd` / `lstsq` / …) | each component yielded through the matching strongly-typed `Returns<T1,…>` overload (no boxing) |
+| any other `ValueTuple` / `Tuple` (any arity — Rest-packed 8+ flatten — a non-`NDArray` component, or a reference `Tuple`) | `scope.Returns(ITuple)` — each component dispatches by its **runtime type**: bare `NDArray`s, `NDArray[]` elements, **nested tuples (recursively)**, `INDArrayCarrier` structs and bare buffers are all yielded; components carrying no `NDArray` are skipped. A component that carries NDArrays in a shape the dispatch cannot see through (`List<NDArray>`, `Task<NDArray>`, `T : NDArray`) is **error NDW003** |
+| a result-struct carrier implementing `INDArrayCarrier` (`UniqueResult`, `MeshgridResult`, `PolyfitResult`, …) | `retVar.YieldTo(scope)` via a boxing-free `constrained.callvirt` — the struct's own method re-parents each `NDArray` it holds |
+| bare `IArraySlice` / `UnmanagedStorage` (a lower-layer buffer, not wrapped in an `NDArray`) | `scope.Returns(slice/storage)` takes a **counted ARC reference** so the scope's reclamation of an intermediate `NDArray` sharing the buffer can't free it under the caller |
+| `void` / scalar (`long`, `bool`, `double`, `string`, enums, …) | scope only; `out` params of any supported carrier shape still escaped |
+| **`[NDScopedAsync]`** — non-`async` `Task` / `ValueTask`[`<T>`] (`T` any supported shape above, or none) | `scope.ReturnsTask` / `ReturnsValueTask` — a completed task's result is yielded immediately; an incomplete task **defers reclamation to its completion** (the in-flight callee may still hold tracked temps); an incomplete `ValueTask` is `Preserve()`d and the caller receives the multi-observable form |
+| **`[NDScopedAsync]`** — `async` method (`Task`, `Task<T>`, `ValueTask`[`<T>`], `void`, custom task-like) | woven through the compiler **state machine**: one scope spans the logical invocation — suspended before every `await`'s continuation is scheduled, resumed on the thread that continues — so temps survive awaits and everything is reclaimed at `SetResult` / `SetException`, the result routed through `Returns` first |
+| **`[NDScoped]`** synchronous iterator (`IEnumerable`[`<T>`] / `IEnumerator`[`<T>`]) / **`[NDScopedAsync]`** async iterator (`IAsyncEnumerable<T>`) | state-machine weave; every `yield return`ed element is routed through `Returns` (the **consumer** owns it), hoisted state is reclaimed at the end of iteration or at the enumerator's `Dispose()` (early `break` included) |
+| `ref` / `in` parameter over **any** NDArray-carrying shape (`ref NDArray`(`[]`), a tuple with an `NDArray` component, a carrier struct, a `List<NDArray>`, a `T : NDArray`) | **error NDW002** — a hidden egress the weaver can't see; scope by hand |
+| an unsupported carrier (a bespoke reference type, a collection, a struct that does NOT implement `INDArrayCarrier`, a **nested task** `Task<Task<…>>`, or a tuple with an unsupported ND-carrying component) — returned directly, inside a `Task<T>`, produced by an `async` method, or `yield return`ed | **error NDW003** — its members would be handed back disposed; add `INDArrayCarrier`, or scope by hand |
+| an `out` parameter whose NDArray-carrying shape the out-escape cannot yield (`out List<NDArray>`, `out Task<NDArray>`, `out NDArray[,]`, `out T` with `T : NDArray`) | **error NDW015** — the caller would receive it with its arrays already swept; scope by hand |
+
+A result struct opts in by implementing the `INDArrayCarrier` interface — one explicit method that
+yields each `NDArray` it holds:
+
+```csharp
+public readonly struct MyResult : INDArrayCarrier
+{
+    public NDArray Values { get; }
+    public NDArray Counts { get; }
+
+    void INDArrayCarrier.YieldTo(NDScope scope)   // called by the weaver at each return
+    {
+        scope.Returns(Values);
+        scope.Returns(Counts);
+    }
+}
+```
+
+The interface exists because a struct's members can live behind **private** fields (auto-property
+backing fields), and the CLR grants a nested type access to its enclosing type's privates but not the
+reverse — so the woven method cannot read them directly. The struct yields its own members from the
+inside; the weaver just calls `YieldTo`. The opt-in is **struct-only** by design (record structs
+included): a *class* wrapping NDArrays is aliasable and mutable, so "sweep the temps, re-parent the
+members at return" has no sound ownership story — a class carrier is NDW003 whatever it implements;
+hand-scope it or restructure it as a result struct. A conversion operator on your type does not
+change this: `return myWrapper;` invokes no conversion, so the weaver classifies the *declared*
+return type.
+
+<!-- Tests: NDScopeWeaveCarrierTests (tuple / ITuple / carrier / storage egress); NDScopeWeaveTests.EveryScopedMethod_WasWoven -->
+
+<a id="retained-arguments--ndscopedexit"></a>
+
+## Retained arguments — `[NDScopedExit]`
+
+A scope auto-protects the **return value** and **`out` parameters** — everything else it tracked is
+swept at exit. So an array handed to something that *keeps* it — a field store, a property, a
+long-lived collection, a captured closure — would be disposed under the retainer. Mark the retaining
+**parameter** and the weaver detaches the argument from the caller's ambient scope at the callee's
+entry:
+
+```csharp
+public NDArray Weights { get; private set; }
+public void Adopt([NDScopedExit] NDArray w) => Weights = w;   // w survives the caller's scope
+```
+
+- Works **with or without** a method-level scope attribute (the callee runs inside the caller's
+  ambient scope, so the injected `NDScope.Detach(param)` reaches it with zero call-site plumbing),
+  and is a no-op when no scope is open.
+- Covers `NDArray`(`<T>`), `NDArray[]`, and `ValueTuple`/`Tuple` of NDArrays — **nested tuples and
+  `NDArray[]` components detach recursively**.
+- A **property setter's `value` parameter** counts — which also covers the *object-initializer*
+  spelling (`new Wrapper { Prop = temp }` compiles to a setter call), and a **constructor parameter**
+  covers `new Wrapper(temp)`.
+- A raw **public-field** store (`obj.field = temp`) has no parameter to annotate — route it through a
+  setter or call `NDScope.Detach` by hand.
+- An unsupported parameter type — `ref`/`out`/`in`, a scalar, a bare buffer, an `INDArrayCarrier`
+  struct, or a tuple with an ND-carrying component `Detach` cannot see through — is **error NDW014**.
+
+Detachment trades eager reclamation for survival: the retainer now owns the array (dispose it there,
+or let the finalizer backstop reclaim it).
+
+<!-- Tests: NDScopeExitTests (Detach overloads incl. recursive tuples; callee-detaches semantics) -->
+
+## The `NDScope` API
+
+The runtime type the weaver targets. You rarely touch it directly — the attribute does — but it is
+public, so you can hand-scope (below) or manage a scope yourself.
+
+| member | purpose |
+|---|---|
+| `NDScope.Open()` | opens a scope on the current thread; nests (the previous scope resumes on dispose) |
+| `scope.Returns(x)` / `Returns(x[])` | yield the result (or a tuple of arrays): re-tracks it into the **parent** scope, so an enclosing scope still reclaims a dropped inner result. The one egress rule. |
+| `scope.Returns((a, b[, …]))` / `Returns(ITuple)` | the `ValueTuple` / `Tuple` egress — yields every `NDArray` the tuple carries (components dispatch by runtime type: bare arrays, `NDArray[]` elements, nested tuples recursively, carrier structs, bare buffers) |
+| `scope.Returns(slice)` / `Returns(storage)` | protect a returned bare `IArraySlice` / `UnmanagedStorage` with a counted reference |
+| `NDScope.Attach(nd)` | adopt an array the scope did not construct into the current scope (the hot-loop pattern — attach a received result instead of a per-item `using`) |
+| `NDScope.Detach(nd)` / `Detach(nd[])` / `Detach(ITuple)` | permanently un-track an array (for one being cached into a static / long-lived field) — the array/tuple overloads detach every element, nested tuples and `NDArray[]` components recursively; also the egress `[NDScopedExit]` weaves |
+| `scope.Dispose()` | dispose every tracked, un-yielded array and reinstate the parent scope |
+
+Two properties are load-bearing:
+
+- **Tracked disposal is ordinary ARC release** — the buffer frees only at refcount 0. So releasing a
+  base whose *view* was yielded never corrupts: the yielded view keeps the buffer alive. It is the
+  same safety a hand-written `Dispose` gives, with the bookkeeping automated.
+- **Scopes are `[ThreadStatic]` and nest per thread.** A scope is opened, used and disposed on **one**
+  thread — a **hand-written** scope must not span `await`; only the weaver's state-machine seam may
+  carry a scope across suspensions (it uninstalls the scope before each continuation is scheduled
+  and re-installs it on the resuming thread). Arrays constructed on other
+  threads (parallel kernel workers) see no scope and fall back to the finalizer; a parallel region
+  that wants eager reclamation opens its own scope inside each worker body.
+
+## Hand-scoping
+
+When a method's egress isn't expressible as a return value plus `out` params — a `ref`/`in` flow over
+an ND-carrying shape (NDW002), an unsupported carrier like a class wrapper or `List<NDArray>`
+(NDW003/NDW015), a constructor whose egress is a field, or a mid-method handback that must free
+before a later allocation — write the scope by hand instead of the attribute. The attribute and a
+hand-written scope are the same thing; the weaver **skips** a method that already opens an `NDScope`
+(idempotence), so a hand-scoped method may still carry `[NDScoped]` without double-wrapping.
+
+```csharp
+public static NDArray WeightedMean(NDArray a, NDArray w)
+{
+    using var scope = NDScope.Open();
+    var num = np.sum(a * w);                 // two transients: the product and the sum
+    var den = np.sum(w);
+    return scope.Returns(num / den);         // the one egress, yielded
+}
+```
+
+## How the build step works
+
+The weave runs as an MSBuild target after each per-`TargetFramework` compile, on the intermediate
+assembly, before it is copied to the output:
+
+- **A Mono.Cecil transform** rewrites every `[NDScoped]` method into the IL above. Instructions are
+  only inserted or mutated in place, so the original sequence points survive and source stepping
+  still lands on the right lines — the rewritten portable **PDB** is preserved.
+- **Cross-assembly resolution.** In your project `NDScope` and the attribute live in the
+  *referenced* NumSharp assembly, so the target hands the weaver the compiler's own reference list
+  (a response file of `@(ReferencePathWithRefAssemblies)`); the weaver resolves the types through
+  it and emits cross-assembly member references. The same list is how an override's base chain and
+  interfaces are walked for an [inherited](#inheritance--virtual-abstract-and-interface-members)
+  attribute, which is why the target spawns the tool for every compile that references NumSharp —
+  an override-only assembly has no attribute text for the cheap pre-scan to find. NumSharp.Core's
+  self-weave runs the same target; there the types are in-module, so the list is merely the
+  resolver's probe set.
+- **One definition.** The `NDScopeWeave` target lives in exactly one file — this package's
+  `build/NumSharp.Build.targets`. NumSharp.Core's own self-weave imports that same file (adding only a
+  step that builds the tool from source and points `$(NumSharpBuildToolDll)` at it), and so does the
+  source-mode example `examples/NDScoping`; the consumer weave and the self-weave therefore cannot
+  drift apart, and a hardening added to the target reaches all three at once.
+- **Re-signing.** IL rewriting invalidates a compile-time strong-name signature, so on a
+  strong-named project the weaver **re-signs** the assembly with the project's own key; identity
+  (public-key token, version binding) is unchanged — [`StrongNameTests`][gate-sign] gates it for
+  NumSharp itself. An unsigned project is simply written unsigned; delay- and public-signed
+  projects are left as-is (they carry no valid signature to restore).
+- **Idempotent & incremental.** A body that already opens an `NDScope` is skipped, so re-weaving is a
+  no-op; the target is incremental on a per-`TargetFramework` marker, so an unchanged assembly is not
+  re-woven.
+
+A **coverage gate** ([`NDScopeWeaveTests`][gate-coverage]) reflects over the shipped assembly and
+asserts every `[NDScoped]` method carries a local of type `NDScope` — a necessary consequence of
+scoping. It turns a silently un-run weave (a broken target, or a `-p:SkipNDScopeWeave=true` build)
+red instead of letting those methods quietly revert to the finalizer backstop.
+
+The **weaver itself** is gated in-process (`test/NumSharp.Tests.Build.Analyzer`, `WeaverTestHarness`):
+a fixture is compiled with Roslyn, woven by `ScopeWeaver.WeaveAssembly` directly, read back through
+Mono.Cecil (the scope local, the try/finally `Dispose`, every `NDScope` call) and then loaded and
+executed so reclamation is asserted on real arrays — across every return, egress and body shape on
+both Release and Debug IL, the whole inheritance walk, a weaver-vs-analyzer parity check over the same
+fixtures, a seeded hierarchy fuzzer against a reference model, and the tool's process surface (exit
+codes, the reference response file, `--snk`, NDW001).
+
+## When to use it
+
+- **Scope a call, not a caller loop.** The temporaries a scope holds are all alive simultaneously, and
+  batch-disposing thousands of same-size buffers overflows their pool bucket. Put `[NDScoped]` on the
+  *composition method*, not on a loop that calls it a million times.
+- **Reach for it on transient-owning compositions** — a method built from several `np.*` calls that
+  keeps one result and drops the rest. A single-kernel wrapper or a pure view / passthrough owns no
+  transients, so scoping it buys nothing (and the weaver leaves such shapes as a plain scope).
+- **Hot loops should still `using` the results they receive.** `[NDScoped]` reclaims a method's
+  *internal* transients; the *result* it hands you is yours to dispose (or `NDScope.Attach` into your
+  own scope). The two-audience contract — a callee that cleans up after itself, a caller that cleans
+  up what it receives — is unchanged.
+
+This mirrors [buffer ownership](buffering.md#ownership-who-frees-the-memory): the scope is the
+deterministic-reclamation layer above the raw ARC-refcounted buffers that page describes, and it is
+woven with the same [IL-emission machinery](il-generation.md) NumSharp uses for its kernels.
+
+## Leak detection — NDW012 &amp; NDW013
+
+Two diagnostics catch the two ways an `NDArray` transient can go unreclaimed at build time, so a leak
+surfaces in the editor and on every build instead of only as a runtime finalizer cost.
+
+<a id="ndw012"></a>
+
+### NDW012 — an NDArray is created but never disposed or scoped
+
+The `NumSharp` package ships a Roslyn analyzer that **warns** when a method creates an
+`NDArray` (or any carrier of one — `NDArray[]`, a `ValueTuple`/`Tuple` of NDArrays, an
+`INDArrayCarrier` result struct) and then never returns it, assigns it to an `out`/`ref` parameter,
+stores it, disposes it, or yields it through an `NDScope` — so its pooled buffer is left to the
+finalizer. Referencing NumSharp is the whole opt-in (no weaver install needed); NumSharp.Core runs
+the same analyzer on its own build.
+
+```csharp
+public NDArray Bad(NDArray a, NDArray b)
+{
+    var t = a + b;              // ⚠ NDW012: 't' is created but only read, never disposed/returned
+    np.add(a, b);               // ⚠ NDW012: the result is dropped on the floor
+    return np.sum(a * b);       // ⚠ NDW012: the 'a * b' temporary is handed to np.sum and never reclaimed
+}
+```
+
+**The fixes the message points at** — any one of them clears the warning:
+
+- mark the method **`[NDScoped]`** (or **`[NDScopedAsync]`**) — the weaver reclaims every transient it
+  constructs, and a passthrough/aliased input is a provable no-op, so this is the safe blanket fix;
+- open an **`NDScope`** by hand and yield the result through `scope.Returns(...)`;
+- **dispose** the value with a `using` declaration or `.Dispose()`;
+- hand it to an `out`/`ref` parameter, a field, or another API (a legitimate egress).
+
+A method that is already `[NDScoped]`/`[NDScopedAsync]`, or that opens an `NDScope` itself, is
+**exempt** — nothing it constructs leaks. Returning the value, storing it, or passing it to a
+non-NumSharp API are all egress and never flagged.
+
+**Two limits, by design.** The analysis is per-method: a private helper whose temporaries are actually
+reclaimed by a **caller's ambient `[NDScoped]` scope** (the "scope the boundary, not the helpers"
+pattern) is still flagged in isolation — scope the boundary (which covers the helper), or mark the
+helper **`[NDScopedCovered]`** (an analyzer-only, runtime-inert assertion that it always runs under a
+caller's open scope — the sanctioned fix). And it deliberately does **not** flag a temporary that is only ever read through
+a member call (`var t = a + b; return t.sum();`): so much of NumSharp is fluent reinterpret/view chains
+(`x.MakeGeneric<T>()`, `x.reshape(...)`, `x[...]`) whose result shares the receiver's buffer that
+telling a view apart from a fresh result syntactically is impossible, and following the receiver is the
+choice that keeps those chains from flooding with false positives. Tune it per project in
+`.editorconfig` (`dotnet_diagnostic.NDW012.severity = none|suggestion|warning|error`); on NumSharp.Core
+turn it off entirely with `-p:EnableNDArrayLeakAnalyzer=false`.
+
+**Ownership is contagious.** An instance of a *disposable type that stores NDArrays* — your own
+holder class, NumSharp's `np.nditer` iterator, an `NpzFile` — is an owned value exactly like a bare
+NDArray: constructing one (or getting one from a factory) and dropping it is NDW012, `using` /
+`.Dispose()` / `.Close()` (NumSharp's `close()` too) reclaims it, and returning / storing / handing it
+off escapes it. A `foreach` over a produced NDArray or such an instance is also flagged: C# disposes the
+*enumerator* it obtains, never the enumerable, so `foreach (var x in np.nditer(a))` leaves the iterator
+open — hold it in a `using` first.
+
+<a id="ndw016"></a>
+
+### NDW016 — a type stores NDArrays but is not disposable
+
+NDW012 treats a value **stored into a field or property** as a legitimate escape: the storing type owns
+it now. NDW016 closes that hand-off. A class or struct that declares instance fields or auto-properties
+holding NDArrays — an `NDArray` (or subclass), an `NDArray[]` of any rank, a tuple or collection of
+them (`List<NDArray>`, `Dictionary<K, NDArray>`, `(NDArray, int)`), any generic instantiated over one
+(`Lazy<NDArray>`, `Task<NDArray>`, your own `Box<NDArray>`), an `INDArrayCarrier` result struct, or
+**another type that stores them** — and implements neither `IDisposable` nor `IAsyncDisposable` can
+never reclaim those buffers promptly:
+
+```csharp
+public class Model                          // ⚠ NDW016: 'Model' stores NDArrays in '_weights' and 'Cache' …
+{
+    private NDArray _weights;
+    public List<NDArray> Cache { get; set; }
+}
+```
+
+The fix is the one the message names: implement `IDisposable` (or `IAsyncDisposable`) and dispose the
+members there (NDW017 then checks that you actually do), give a transient result struct
+`INDArrayCarrier` so a scope can yield through it, give a `ref struct` the `public void Dispose()`
+pattern — or, when a member only *references* an array owned elsewhere (a view over a caller's
+array, a shared lookup table, an operand an iterator walks), mark it **`[NDBorrowed]`**. The attribute
+goes on a field, a property, or a whole class/struct ("every array this type references is
+borrowed"); it is runtime-inert and analyzer-only, like `[NDScopedCovered]`. Static members, computed
+properties (`NDArray View => _a.T`), delegates, comparers, observers and weak references never make a
+type an owner; a static class, an interface, an `[NDBorrowed]` type and an `INDArrayCarrier` are exempt.
+
+**Contagion.** Because a member whose type stores NDArrays is itself a holder, the diagnostic walks
+up the object graph one level per fix: a class storing a `Batch` (which owns arrays) warns until it
+disposes the batch; a class storing *that* class warns until it disposes it, and so on. A type that
+stores NDArrays but is **not yet disposable** still counts as a holder — its owner's message tells you
+to make it disposable first. Marking a disposable type `[NDBorrowed]` (it owns unmanaged state of its
+own but only borrows its arrays) stops the contagion at that type.
+
+<a id="ndw017"></a>
+
+### NDW017 — a disposable type never disposes an NDArray-holding member
+
+The type *is* disposable, but this member is not disposed on any path reachable from its
+`Dispose()` / `Dispose(bool)` / `DisposeAsync()` / `DisposeAsyncCore()`:
+
+```csharp
+public class Model : IDisposable
+{
+    private NDArray _weights;
+    private List<NDArray> _cache;           // ⚠ NDW017: 'Model' implements IDisposable but never disposes '_cache' …
+    public void Dispose() => _weights?.Dispose();
+}
+```
+
+The path analysis follows same-type helpers the Dispose methods call (`Release()`, a chain of them, a
+property setter, a delegate over a method, a local function) and recognises every ordinary spelling
+of disposal: `_a.Dispose()`, `_a?.Dispose()`, `((IDisposable)_a).Dispose()`, `(_a as IDisposable)?.Dispose()`,
+`using (_a)` / `using var x = _a`, `Interlocked.Exchange(ref _a, null)?.Dispose()`, a local copy
+disposed later, `foreach` / `for` / `Array.ForEach` / `List.ForEach` / `Parallel.ForEach` over an array,
+list or dictionary member (values, pairs, deconstructed pairs, nested collections), tuple components
+(`_pair.a?.Dispose()`, `var (a, b) = _pair;`), carrier fields, `Lazy<T>.Value`, NumSharp's `close()`,
+and handing the member (or a component of it) to **any** method (`Free(_list)`, `DisposeAll(_map.Values)`)
+— the callee is assumed to dispose it. What does **not** count: `_a = null`, `_list.Clear()`, a
+finalizer (the backstop prompt disposal exists to avoid), a helper that nothing on the Dispose path
+calls, and an argument merely *computed from* the member (`Log(_a.ToString())`, `Print(x.size)`).
+A type whose `Dispose` is inherited from a base and never overridden is told so — override
+`Dispose(bool)` or reimplement `IDisposable`; a member whose type stores arrays but is not itself
+disposable is told to make that type disposable first. `[NDBorrowed]` excludes a member here too.
+
+Both are **warnings** (never errors), enabled by default, tunable per project in `.editorconfig`
+(`dotnet_diagnostic.NDW016.severity` / `dotnet_diagnostic.NDW017.severity`); NumSharp.Core runs them on
+its own build and carries `[NDBorrowed]` on its own borrowing types (`FlatIterator`, `MemoryView`,
+`NDEnumerate`, the typed `nditer` enumerables, an iterator's operand slots, `NpzFile`'s hand-out cache).
+
+<a id="ndw013"></a>
+
+### NDW013 — [NDScoped] used, but the weaver is not installed
+
+`[NDScoped]`/`[NDScopedAsync]` — and `[NDScopedExit]` on a parameter — are **inert without the
+`NumSharp.Build` package**: the method keeps its original body, no scope is injected, no argument is
+detached, and every transient it drops is left to the finalizer — a silent leak. NDW013 catches exactly
+that. NumSharp does not depend on or bundle the weaver (weaving is the explicit opt-in
+`dotnet add package NumSharp.Build`), so the guard ships in **NumSharp itself** — the attributes live
+there, which makes it present whenever they could be used and lets it fire when the weaver is
+**absent**. Two reporters share the one code:
+
+- **The analyzer — the primary reporter.** The Roslyn analyzer the NumSharp package applies to every
+  `PackageReference` compile reports NDW013 **at each member the weaver would have woven** — with a
+  source location, in the IDE as well as on the command line — when the build has declared the weaver
+  inactive: a method or property carrying `[NDScoped]`/`[NDScopedAsync]` itself, an override or
+  implementation [inheriting](#inheritance--virtual-abstract-and-interface-members) one from a
+  declaration in the same assembly or another (the shape no text scan can see — the override spells no
+  attribute of its own), and a method with an own or inherited `[NDScopedExit]` parameter. Abstract and
+  interface declarations are contracts (nothing is woven there; their inheritors are warned one by one),
+  a target the gate rejects draws its error alone, `[NDScopedCovered]` is the opt-out, and a member is
+  warned once whichever attribute earned it.
+
+  ```
+  S.cs(3,30): warning NDW013: [NDScoped] on 'S.F(NumSharp.NDArray)' has no effect: the NumSharp.Build
+  package is not installed (or weaving is disabled), so the attribute is INERT — no NDScope is injected
+  ... Install the weaver with 'dotnet add package NumSharp.Build' ...
+  ```
+
+- **The MSBuild scan — the fallback.** `build/NumSharp.targets` in the NumSharp package also carries a
+  metadata text scan that warns once, project-wide, when the compile used any of the three attribute
+  names — for a compile the analyzer does not reach: a bare `<Reference HintPath>` to the NumSharp
+  assembly (no package, so NuGet applies nothing), or an analyzer item removed by hand. It yields
+  whenever `NumSharp.Build.Analyzer` is among the compile's analyzers, so a project never sees the
+  same finding twice (once per member and once project-wide). It cannot see an inherited target;
+  without the analyzer that shape goes unreported. (`ExcludeAssets="analyzers"` on the NumSharp
+  reference does **not** produce an analyzer-less compile: NuGet records the exclusion, but the .NET
+  SDK — observed on 10.0.101 — still applies the package's analyzers, so that consumer keeps the
+  per-member warning.)
+
+Both read the same two MSBuild properties, which NumSharp's targets expose to the analyzer as
+`build_property.*` options: the weaver's own targets set `$(NumSharpBuildActive)=true` when it is
+installed and weaving (under `-p:SkipNDScopeWeave=true` the attributes really are inert, so the warning
+correctly fires), and NumSharp's targets default it to `false`. A build that imports neither targets
+file (a source-mode `ProjectReference` to NumSharp.Core with no weaver import) leaves the property
+undeclared, which the analyzer reads as "unknown" and stays silent on. Opt out with
+`-p:NumSharpDisableWeaverMissingWarning=true`, by adding `NDW013` to `$(MSBuildWarningsAsMessages)`,
+or — the intended fix — by installing the weaver.
+
+<a id="ndw018"></a>
+
+### NDW018 — NumSharp.Build would ship as a dependency of your package
+
+NumSharp.Build is **not contagious**: it weaves the project it is installed in and nothing
+downstream. Three layers keep it that way, and NDW018 is the third:
+
+1. **Weaving never flows.** The package ships `build/` targets only — never `buildTransitive/` — and
+   no `lib/`, so NuGet imports its weave target only into a project that references the package
+   directly. A project that merely references your woven library, by `ProjectReference` or by
+   package, never imports the targets, is never woven, and its own `[NDScoped]` stays inert. This
+   holds even in the worst case below, where the dependency *is* listed: NuGet records the default
+   `PrivateAssets` of `build` as `exclude="Build,Analyzers"` on that edge, so the consumer restores
+   the payload but never runs it.
+2. **`dotnet add package NumSharp.Build` writes `PrivateAssets="all"`** (the package is marked
+   `developmentDependency`), which keeps NumSharp.Build out of your own package's nuspec.
+3. **A hand-written reference is refused at pack time.** A `PackageReference` typed by hand — or
+   under Central Package Management — carries no `PrivateAssets`, so `dotnet pack` would list
+   NumSharp.Build as a dependency of your package and every consumer would restore the weaver's
+   payload. The packaged targets check the project's own `project.assets.json` (what the pack task
+   reads for the dependency list: the `NumSharp.Build` record must carry `"suppressParent": "All"`)
+   before `GenerateNuspec` and fail the pack:
+
+   ```
+   error NDW018: MyLib references NumSharp.Build without PrivateAssets="all", so packing would list
+   NumSharp.Build as a DEPENDENCY of MyLib ... Add PrivateAssets="all" to the PackageReference ...
+   ```
+
+   Only a packable project being packed is checked — an application that references the weaver has
+   nothing to leak and is never bothered — and `-p:NumSharpBuildAllowAsDependency=true` (or the
+   property in the project) ships it as a dependency on purpose. The package cannot fix this for you
+   silently: NuGet restores with `ExcludeRestorePackageImports=true`, so a props file shipped in the
+   package (setting `PrivateAssets` on your reference) never reaches the restore graph that pack
+   reads — measured before the guard was written — which is why it is an error with the one-line
+   fix rather than a quiet correction.
+
+## Escape hatches
+
+| flag | effect |
+|---|---|
+| `-p:SkipNDScopeWeave=true` | build **without** weaving — every `[NDScoped]` method runs unscoped (the finalizer backstop, the pre-weave status quo). Nothing else changes; the attribute is inert. |
+| `-p:NDScopeWeaveILVerify=true` | additionally run `dotnet-ilverify` on the woven output (opt-in, so machines without the tool still build). The weave adds **zero** ILVerify findings over the unwoven baseline. |
+
+## Troubleshooting
+
+**A `[NDScoped]` / `[NDScopedAsync]` build error.** A shape whose egress cannot be seen is refused
+rather than mis-woven. Two layers report it: the **NumSharp package** ships a **Roslyn analyzer** that
+flags the SOURCE-detectable mistakes at **compile time** — in the editor, with a red squiggle, and as
+a build error that runs before (and preempts) the weave — and the **IL weaver** (this package) reports
+the rest post-compile.
+The analyzer covers **NDW002, NDW003, NDW005, NDW006, NDW009, NDW010, NDW011, NDW015** (the
+`[NDScoped]`-target gate) plus **NDW012** (the [leak warning](#ndw012), a separate always-on analyzer)
+and **NDW016 / NDW017** (the [type-level ownership warnings](#ndw016), a third always-on analyzer);
+the weaver covers the IL-only **NDW001, NDW004, NDW007, NDW008, NDW014** (a resolution failure, an
+unrecognized state machine, a tail-call, a NumSharp too old for the async seam, or a bad
+`[NDScopedExit]` parameter). **NDW013** also ships in NumSharp itself
+so it can warn when `[NDScoped]` is used [without the weaver installed](#ndw013).
+Same code, same fix, whichever layer fires.
+
+> **A `PackageReference` consumer gets the analyzer automatically** — NuGet applies it from the
+> **NumSharp** package's `analyzers/dotnet/cs/`, so referencing NumSharp alone is enough (no weaver
+> install required). A **source-mode consumer** — one that references NumSharp.Core by
+> `ProjectReference` and `<Import>`s `build/NumSharp.Build.targets` directly, so no package delivers
+> the analyzer — turns it on the same way it points the tool at a built weaver: either reference the
+> analyzer project with
+> `<ProjectReference "…/NumSharp.Build.Analyzer.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />`,
+> or set `<NumSharpBuildAnalyzerDll>…/NumSharp.Build.Analyzer.dll</NumSharpBuildAnalyzerDll>` at a
+> built analyzer DLL (the parallel to `<NumSharpBuildToolDll>`). Without either, a source-mode build
+> still fails on a bad target — via the **weaver** post-compile — just not in the editor.
+
+| code | meaning | fix |
+|---|---|---|
+| `NDW001` | the project has `[NDScoped]`/`[NDScopedAsync]` methods but `NumSharp.NDScope` could not be resolved from the assembly or its references | reference the `NumSharp` package (the attributes and the scope live there); if you invoke the weaver by hand, pass `--refs` with the compile's reference list |
+| `NDW002` | a `ref`/`in` parameter over any NDArray-carrying shape (`ref NDArray`(`[]`), a tuple with an `NDArray` component, a carrier struct, a `List<NDArray>`) — a hidden egress | [hand-scope](#hand-scoping) and yield it explicitly |
+| `NDW003` | an unsupported carrier return (a bespoke reference type, a collection, a struct without `INDArrayCarrier`, a nested `Task<Task<…>>`, or a tuple with an unsupported ND-carrying component) | implement `INDArrayCarrier` on the struct, or hand-scope |
+| `NDW004` | an async/iterator state machine the weaver does not recognize (not compiled by Roslyn/C#: no `MoveNext`, no `<>t__builder` / `<>2__current`) | compile the method with the C# compiler, or don't scope it (real C# async/iterator methods weave fine) |
+| `NDW005` | the method has no body **and no inheritors** — an `extern` (an abstract or interface declaration carrying the attribute is the [contract its overrides inherit](#inheritance--virtual-abstract-and-interface-members), not an error) | remove the attribute |
+| `NDW006` | `[NDScoped]`/`[NDScopedAsync]` on a setter-only property | put the attribute on the getter accessor |
+| `NDW007` | the body contains a tail-call prefix | (the C# compiler does not emit these; refuse rather than mis-weave) |
+| `NDW008` | an async/iterator/Task-shaped target, but the referenced NumSharp predates the async scope seam | update the `NumSharp` package |
+| `NDW009` | an `async` method, async iterator, or `Task`/`ValueTask`-returning method marked `[NDScoped]` | mark it `[NDScopedAsync]` (that attribute owns the shapes that suspend across `await`) |
+| `NDW010` | a plain synchronous method or a **synchronous** iterator marked `[NDScopedAsync]` | mark it `[NDScoped]` (synchronous bodies and synchronous iterators are its job) |
+| `NDW011` | a method carries BOTH `[NDScoped]` and `[NDScopedAsync]` | keep only the one that matches the method's scoping model |
+| [`NDW012`](#ndw012) | an NDArray is created but never returned, out/ref'd, stored, disposed, or yielded to an `NDScope` — a transient left to the finalizer | mark the method `[NDScoped]`/`[NDScopedAsync]`, dispose it (`using`/`.Dispose()`), yield it via `scope.Returns(...)`, or hand it to an egress; tune via `.editorconfig` (`dotnet_diagnostic.NDW012.severity`) |
+| [`NDW013`](#ndw013) | `[NDScoped]`/`[NDScopedAsync]`/`[NDScopedExit]` used — carried by the member itself, or [inherited](#inheritance--virtual-abstract-and-interface-members) from a declaration in this or another assembly — but the `NumSharp.Build` package is not installed (or `-p:SkipNDScopeWeave=true`): the attributes are inert and the temporaries leak. Reported per member by the analyzer; project-wide by the MSBuild fallback scan when no analyzer runs | install `NumSharp.Build`, or remove the attributes (mark an inheriting override `[NDScopedCovered]`; detach a retained argument by hand with `NDScope.Detach`) and dispose by hand; suppress with `-p:NumSharpDisableWeaverMissingWarning=true` |
+| `NDW014` | `[NDScopedExit]` on an unsupported parameter type (a `ref`/`out`/`in`, a scalar, a bare buffer, an `INDArrayCarrier` struct, or a tuple with an ND-carrying component `Detach` cannot see through) | hand-detach with `NDScope.Detach` |
+| `NDW015` | an `out` parameter whose NDArray-carrying shape the out-escape cannot yield (`out List<NDArray>`, `out Task<NDArray>`, `out NDArray[,]`, `out T` with `T : NDArray`) | [hand-scope](#hand-scoping) and yield the final value explicitly |
+| [`NDW016`](#ndw016) | a class/struct stores NDArrays (a field or auto-property holding an NDArray, an array/tuple/collection/generic of them, a carrier struct, or another NDArray-owning type — ownership is contagious) but implements neither `IDisposable` nor `IAsyncDisposable` | implement `IDisposable`/`IAsyncDisposable` and dispose the members, make a transient result struct an `INDArrayCarrier`, give a `ref struct` a `Dispose()`, or mark a member / the type `[NDBorrowed]` when the arrays are owned elsewhere |
+| [`NDW017`](#ndw017) | a disposable type never disposes an NDArray-holding member on any path from its `Dispose`/`Dispose(bool)`/`DisposeAsync`/`DisposeAsyncCore` | dispose it there (directly, in a helper the path calls, in a `foreach`/`ForEach` over a collection, by handing it to a method), override an inherited `Dispose(bool)`, or mark it `[NDBorrowed]` |
+| [`NDW018`](#ndw018) | `dotnet pack` of a project whose reference to `NumSharp.Build` lacks `PrivateAssets="all"` — the weaver would ship as a **dependency** of your package and every consumer would restore it (a hand-written reference or Central Package Management; `dotnet add package` writes the metadata itself) | add `PrivateAssets="all"` to the `PackageReference`, restore and pack again; or `-p:NumSharpBuildAllowAsDependency=true` to ship it as a dependency on purpose (consumers are still never woven) |
+
+**An `[NDScoped]` method still allocates cold buffers in a loop.** Check the coverage gate — a method
+that carries the attribute but no `NDScope` local was not woven (a `-p:SkipNDScopeWeave=true` build,
+or the package/target missing). And remember the scope reclaims the method's *internal* transients:
+the result you receive is still yours to `using` / `Dispose` / `NDScope.Attach` in the hot loop.
+
+**Results changed after adding the package.** They should not — the weave is byte-neutral (it changes
+*when* buffers are reclaimed, never the values). If you see a difference, it is a bug; the value is
+covered by NumSharp's differential-fuzz gate against NumPy.
+
+<!-- Tests: NDScopeWeaveTests.EveryScopedMethod_WasWoven; NDScopeTests; NDScopeWeaveCarrierTests; NDScopeWeaveNestingTests; WeaverHarnessSelfTests; WeaverInheritanceTests; WeaverShapeTests; WeaverAnalyzerParityTests; WeaverHierarchyFuzzTests; WeaverCliTests; WeaverInheritanceBuildTests -->
+
+[gate-contract]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeTests.cs
+[gate-coverage]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveTests.cs
+[gate-carrier]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveCarrierTests.cs
+[gate-nesting]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeWeaveNestingTests.cs
+[gate-async]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeAsyncTests.cs
+[gate-exit]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Lifetime/NDScopeExitTests.cs
+[gate-sign]: https://github.com/SciSharp/NumSharp/blob/master/test/NumSharp.Tests/Assembly/StrongNameTests.cs

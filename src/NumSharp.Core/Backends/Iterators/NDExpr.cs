@@ -233,6 +233,9 @@ namespace NumSharp.Backends.Iteration
         public static NDExpr ASin(NDExpr x) => new UnaryNode(UnaryOp.ASin, x);
         public static NDExpr ACos(NDExpr x) => new UnaryNode(UnaryOp.ACos, x);
         public static NDExpr ATan(NDExpr x) => new UnaryNode(UnaryOp.ATan, x);
+        public static NDExpr Asinh(NDExpr x) => new UnaryNode(UnaryOp.Asinh, x);
+        public static NDExpr Acosh(NDExpr x) => new UnaryNode(UnaryOp.Acosh, x);
+        public static NDExpr Atanh(NDExpr x) => new UnaryNode(UnaryOp.Atanh, x);
         public static NDExpr Deg2Rad(NDExpr x) => new UnaryNode(UnaryOp.Deg2Rad, x);
         public static NDExpr Rad2Deg(NDExpr x) => new UnaryNode(UnaryOp.Rad2Deg, x);
 
@@ -628,10 +631,16 @@ namespace NumSharp.Backends.Iteration
         // vectorize Round/Truncate on .NET 9+ while (a) staying scalar on net8.0 and (b) NOT
         // crashing on integer rounding, where the typing keeps the dtype and there is no
         // Vector{N}.Floor(int) (the gate returns false -> scalar identity emit).
+        // exp/log/sin/cos are likewise type+host-gated: NDFloatMath's vector overloads are float32-only and need
+        // hardware FMA, so the fused path must defer to the same capability gate the direct kernel
+        // uses (at f8/f2 or without FMA it stays scalar — same bits, one lane at a time).
         private static bool IsSimdUnaryAt(UnaryOp op, NPTypeCode t)
             => IsRoundingOp(op)
                 ? DirectILKernelGenerator.RoundingVectorSimdAvailable(op, t)
-                : IsSimdUnary(op);
+                : (op == UnaryOp.Exp || op == UnaryOp.Log ||
+                   op == UnaryOp.Sin || op == UnaryOp.Cos || op == UnaryOp.Tanh)
+                    ? DirectILKernelGenerator.NumPyFloatKernelSimdAvailable(op, t)
+                    : IsSimdUnary(op);
 
         // Structural SIMD set used by the type-independent SupportsSimd. The rounding family
         // (Floor/Ceil/Round/Truncate) is gated per type+runtime by IsSimdUnaryAt instead, so it is

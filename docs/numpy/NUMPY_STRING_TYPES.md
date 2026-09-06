@@ -1,6 +1,6 @@
 # NumPy String Types - Complete Reference
 
-> **Source**: NumPy v2.4.2 (`src/numpy/`)
+> **Source**: NumPy v2.4.2 (`refs/numpy/`)
 > **Purpose**: Reference for implementing string support in NumSharp
 
 ---

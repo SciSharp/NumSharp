@@ -13,6 +13,7 @@ namespace NumSharp
         ///     (e.g. <c>ptp(uint8[0,255]) == 255</c>, <c>ptp(int8[-128,127]) == -1</c>).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ptp.html</remarks>
+        [NDScoped]
         public static NDArray ptp(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
@@ -21,9 +22,11 @@ namespace NumSharp
             var minRes = np.amin(a, axis, keepdims);
             var diff = maxRes - minRes;
 
-            return WriteOrReturn(diff, @out);
+            // Fresh 0-d ptp is a numpy SCALAR (read-only); out= returns the writeable out.
+            return @out is null ? diff.MarkReductionScalar() : WriteOrReturn(diff, @out);
         }
 
+        [NDScoped]
         public static NDArray ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));

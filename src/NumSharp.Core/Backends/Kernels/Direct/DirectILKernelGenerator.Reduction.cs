@@ -125,9 +125,16 @@ namespace NumSharp.Backends.Kernels
             if (!key.IsContiguous)
                 return false;
 
-            // SIMD for numeric types (not bool, char, decimal)
+            // SIMD for numeric types (not bool, char, decimal).
+            // EXCEPTION: Boolean ArgMax/ArgMin — EmitReductionSimdLoop dispatches those straight
+            // to ArgMaxBoolHelper/ArgMinBoolHelper (first-True / first-False block scans, no
+            // Vector<bool> locals involved), the analogue of NumPy's dedicated BOOL_argmax /
+            // memchr BOOL_argmin. Without this carve-out bool argmax fell to the scalar
+            // full-scan loop: 24 ms on a 10M array whose first True sits at index ~1, vs
+            // NumPy's 0.2 µs early exit.
             if (!CanUseSimd(key.InputType))
-                return false;
+                return key.InputType == NPTypeCode.Boolean &&
+                       (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin);
 
             // For Sum/Prod, SIMD vectors work on same type - can't widen int32 to int64 in SIMD
             // When accumulator type differs from input type, use scalar path to prevent overflow
@@ -1715,12 +1722,18 @@ namespace NumSharp.Backends.Kernels
             // Stack: [newValue]
             il.Emit(OpCodes.Dup); // [newValue, newValue]
 
-            // First check: newValue > accum (ArgMax) or newValue < accum (ArgMin)
+            // First check: newValue > accum (ArgMax) or newValue < accum (ArgMin) — ORDERED
+            // (Bgt/Blt, never *_Un): an unordered branch also fires when the ACCUM is NaN, letting
+            // every later finite value steal the index from the first NaN — argmax of a strided
+            // [nan,2,3,nan] walked to 3 instead of NumPy's 0 (first NaN always wins; caught by the
+            // reduce tier's flat argmax cells, G13). With the ordered compare a NaN accum wins every
+            // comparison here, and a NaN newValue is handled by the explicit IsNaN check below.
+            // The identity seed is ±inf (not NaN), so the ordered compare engages normally at i=0.
             il.Emit(OpCodes.Ldloc, locAccum); // [newValue, newValue, accum]
             if (op == ReductionOp.ArgMax)
-                il.Emit(OpCodes.Bgt_Un, lblUpdate); // NaN comparisons: Bgt_Un branches if unordered or greater
+                il.Emit(OpCodes.Bgt, lblUpdate);
             else
-                il.Emit(OpCodes.Blt_Un, lblUpdate); // NaN comparisons: Blt_Un branches if unordered or less
+                il.Emit(OpCodes.Blt, lblUpdate);
 
             // Stack: [newValue]
             // Second check: IsNaN(newValue) && !IsNaN(accum)

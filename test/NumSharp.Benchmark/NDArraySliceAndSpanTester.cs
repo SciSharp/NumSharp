@@ -11,7 +11,7 @@ using NumSharp.Generic;
 namespace NumSharp.Benchmark
 {
     //[RPlotExporter, RankColumn]
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 20)]
+    [SimpleJob(RunStrategy.ColdStart, iterationCount: 20)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class NDArraySliceAndSpanTester

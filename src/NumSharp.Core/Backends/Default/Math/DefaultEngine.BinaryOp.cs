@@ -25,6 +25,19 @@ namespace NumSharp.Backends
             NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
         };
 
+        // Element-count cutoff below which a SAME-DTYPE single-broadcast op skips
+        // the NDIter route in favour of the lighter direct SimdChunk kernel (see
+        // the gate in TryExecuteBinaryOpViaNDIter). NDIter's multi-operand
+        // construction costs a fixed ~0.5 µs that dominates a tiny broadcast:
+        // measured 1.8-2.3× faster on 1K row/col/3-D float64 broadcasts. The
+        // direct SimdChunk kernel matches or beats NDIter up to ~16K elements;
+        // above that NDIter's coalescing + vectorization pulls ahead, so the
+        // cutoff sits safely below the crossover (with margin for host-regime
+        // measurement noise). Env override NS_BROADCAST_DIRECT_MAX for tuning.
+        internal static readonly long DirectBroadcastMaxElements =
+            long.TryParse(Environment.GetEnvironmentVariable("NS_BROADCAST_DIRECT_MAX"), out var t) && t >= 0
+                ? t : 8192;
+
         /// <summary>
         /// Execute a binary operation using IL-generated kernels.
         /// Handles type promotion, broadcasting, and kernel dispatch.
@@ -146,18 +159,30 @@ namespace NumSharp.Backends
             // (e.g. int32[] * 2.5 -> float64) we leave it: the array genuinely needs a cast, which is
             // the mixed path's job. (scalar×scalar already returned above; value is identical either
             // way — the mixed path converts the same scalar to resultType per element.)
+            // NEP50 scalar-cast temp. Cast(..., copy:true) mints a FRESH 0-d/size-1 array and we
+            // REASSIGN the operand parameter to it, so the temp is unreachable once the op returns
+            // — an undisposed intermediate (a pooled buffer + a finalizable graph) reclaimable only
+            // by a future GC + finalizer pass. It is captured here and disposed at every exit below.
+            // Deliberately NOT an [NDScoped] boundary: ExecuteBinaryOp is the library's hottest path
+            // (every +,-,*,/,%,… on arrays), so a method scope would impose Open/Track/Dispose on ALL
+            // binary ops merely to reclaim a temp that ONLY this narrow array-op-scalar-needing-cast
+            // sub-path ever mints — the targeted dispose costs nothing on the common (same-dtype /
+            // array-array) path. Result buffers are always fresh (a kernel writes a new output from
+            // the operands), never an alias of this scalar temp, so disposing it at return is safe.
+            // Gate: UndisposedIntermediateTests.BinaryScalarCastTemp_IsDisposed.
+            NDArray scalarCastTemp = null;
             if (lhsType != rhsType)
             {
                 bool lhsScalarLike = lhs.Shape.IsScalar || lhs.Shape.size == 1;
                 bool rhsScalarLike = rhs.Shape.IsScalar || rhs.Shape.size == 1;
                 if (rhsScalarLike && !lhsScalarLike && lhsType == resultType)
                 {
-                    rhs = Cast(rhs, resultType, copy: true);
+                    scalarCastTemp = rhs = Cast(rhs, resultType, copy: true);
                     rhsType = resultType;
                 }
                 else if (lhsScalarLike && !rhsScalarLike && rhsType == resultType)
                 {
-                    lhs = Cast(lhs, resultType, copy: true);
+                    scalarCastTemp = lhs = Cast(lhs, resultType, copy: true);
                     lhsType = resultType;
                 }
             }
@@ -178,7 +203,7 @@ namespace NumSharp.Backends
             // below with behaviour unchanged.
             {
                 var trivial = TryTrivialContiguousBinaryOp(lhs, rhs, op, lhsType, rhsType, resultType);
-                if (trivial is not null) return trivial;
+                if (trivial is not null) { scalarCastTemp?.Dispose(); return trivial; }
             }
 
             // -------- NDIter Tier 3B fast path (all binary ops) -----------
@@ -198,7 +223,7 @@ namespace NumSharp.Backends
             // for the mixed-dtype cases the direct path used to handle.
             {
                 var routed = TryExecuteBinaryOpViaNDIter(lhs, rhs, op, lhsType, rhsType, resultType);
-                if (routed is not null) return routed;
+                if (routed is not null) { scalarCastTemp?.Dispose(); return routed; }
             }
 
             // Broadcast shapes
@@ -230,7 +255,10 @@ namespace NumSharp.Backends
             // memory when a sibling dim is 0 (e.g. (3,1,1) op (1,0,2) -> (3,0,2)).
             // (The NDIter fast path above returns early for the same reason.)
             if (result.size == 0)
+            {
+                scalarCastTemp?.Dispose();
                 return result;
+            }
 
             // L3-a: pre-coalesce adjacent dims with compatible strides for BOTH operands
             // (and the result). This collapses F-contig N-D to 1-D contig, so the path
@@ -277,8 +305,16 @@ namespace NumSharp.Backends
             // to match NumPy. The strict-all-F case skipped this branch by allocating F up
             // front and the equality below short-circuits.
             if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-                return result.copy('F');
+            {
+                scalarCastTemp?.Dispose();
+                // copy('F') mints a fresh F-contig array; the C-contig `result` the kernel wrote
+                // is now dead — dispose it rather than drop it to the finalizer (mechanism-3 leak).
+                var fResult = result.copy('F');
+                result.Dispose();
+                return fResult;
+            }
 
+            scalarCastTemp?.Dispose();
             return result;
         }
 
@@ -322,6 +358,20 @@ namespace NumSharp.Backends
             var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
             var cleanShape = leftShape.Clean();
 
+            // (Half,Half)→Half add/sub/mul/div DECLINE Tier 3B: the direct route serves
+            // them with the bit-exact SIMD widen-compute-narrow kernels
+            // (Binary.Arith.Half.cs — float32 compute + Giesen RTNE narrow, NumPy's
+            // exact HALF loop incl. the NaN-payload operand-order pin), while this
+            // route's scalar inner-loop body bridges Half through DOUBLE (its hardware
+            // (double)Half widen QUIETS sNaN before the op and double-rounds
+            // differently on exponent-gap sums). Contiguous same-shape pairs already
+            // took the trivial bypass; this redirect sends the scalar-broadcast
+            // layouts to SimdScalarLeft/Right and leaves strided on the same
+            // EmitScalarOperation numerics as before (via SimdChunk).
+            if (lhsType == NPTypeCode.Half && rhsType == NPTypeCode.Half && resultType == NPTypeCode.Half
+                && (op == BinaryOp.Add || op == BinaryOp.Subtract || op == BinaryOp.Multiply || op == BinaryOp.Divide))
+                return null;
+
             // NDIter's internal shape arithmetic is int-bounded; route only
             // when the broadcast result fits. Pre-existing test
             // LongIndexingBroadcastTest exercises the > int.MaxValue path via
@@ -331,6 +381,40 @@ namespace NumSharp.Backends
             if (cleanShape.size < 0) return null;
             for (int i = 0; i < cleanShape.NDim; i++)
                 if (cleanShape.dimensions[i] > int.MaxValue) return null;
+
+            // Small SAME-DTYPE single-broadcast fast path: for a tiny result the
+            // NDIter multi-operand construction (~0.5 µs) dominates, and the direct
+            // SimdChunk kernel (reached by falling through to the direct route below)
+            // is measurably faster there — 1.8-2.3× on 1K row/col/3-D float64
+            // broadcasts, bringing them from ~0.55× NumPy to faster-than-NumPy.
+            // Returning null hands the op to the direct path in ExecuteBinaryOp.
+            //
+            // The route is gated to exactly the cases the direct SimdChunk kernel is
+            // proven BIT-IDENTICAL to NDIter on (verified by the oracle FuzzMatrix
+            // AND the layout-parity integration gates):
+            //   • identical dtypes — the direct path's mixed-dtype convert loop
+            //     diverges from NDIter on some NEP50 promotions;
+            //   • a SIMD-capable op+dtype — Half/Decimal/Complex (and the scalar-only
+            //     ops Mod/Power/FloorDivide/ATan2) take a scalar path whose specials
+            //     diverge (e.g. float16  256 − inf);
+            //   • EXACTLY ONE operand broadcast (XOR) — a genuine single-operand
+            //     broadcast (row/col/N-D, one operand carries the full result shape).
+            //     A kron-style DOUBLE broadcast (both stretched on complementary axes)
+            //     leaves outputs unwritten in SimdChunk; a same-shape non-broadcast op
+            //     is either contiguous (already handled by the trivial bypass) or a
+            //     strided view SimdChunk mishandles — both must stay on NDIter;
+            //   • both operands C- or F-contiguous — SimdChunk mishandles a strided /
+            //     trailing-size-1 / negative-stride operand that NDIter absorbs
+            //     (the (N,1)-strided-view and reshape-view integration gates), so
+            //     only clean-layout inputs take this route.
+            // Above DirectBroadcastMaxElements NDIter's coalescing/vectorization wins,
+            // so the op stays here.
+            if (lhsType == rhsType && lhsType == resultType
+                && cleanShape.size < DirectBroadcastMaxElements
+                && (leftShape.IsBroadcasted ^ rightShape.IsBroadcasted)
+                && IsContiguousCorF(lhs.Shape) && IsContiguousCorF(rhs.Shape)
+                && DirectILKernelGenerator.CanUseSimdBinary(op, resultType))
+                return null;
 
             // Mirror the direct path: F-allocate output when every non-scalar
             // operand is strict-F. Otherwise default to C and let the
@@ -363,8 +447,7 @@ namespace NumSharp.Backends
             // scalar-only via CanUseSimdForOp.
             bool sameDtype = lhsType == rhsType && lhsType == resultType;
             bool simdViable = sameDtype
-                              && DirectILKernelGenerator.CanUseSimd(resultType)
-                              && DirectILKernelGenerator.CanUseSimdForOp(op);
+                              && DirectILKernelGenerator.CanUseSimdBinary(op, resultType);
 
             // NOTE (Wave 4, measured): the buffered-cast route (NumPy's ufunc
             // config — cast inputs to the computation dtype in 8192-element
@@ -403,8 +486,9 @@ namespace NumSharp.Backends
                 : null;
 
             // Cache key MUST encode all three dtypes; mixed-dtype kernels
-            // are distinct from same-dtype ones for the same op.
-            string cacheKey = $"npy_binop_{op}_{lhsType}_{rhsType}_{resultType}";
+            // are distinct from same-dtype ones for the same op. Packed key
+            // (no per-call string): npy_binop_{op}_{lhsType}_{rhsType}_{resultType}.
+            var cacheKey = InnerLoopKernelKey.Binary(op, lhsType, rhsType, resultType);
 
             try
             {
@@ -435,7 +519,11 @@ namespace NumSharp.Backends
             // the NumPy rule says it should be F because at least one input
             // is strict-F and no input is strict-C.
             if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-                return result.copy('F');
+            {
+                var fResult = result.copy('F');
+                result.Dispose();   // C-contig kernel output now dead (mechanism-3 leak)
+                return fResult;
+            }
 
             return result;
         }
@@ -628,6 +716,18 @@ namespace NumSharp.Backends
 
             DirectILKernelGenerator.EmitScalarOperation(il, op, resultType);
         }
+
+        /// <summary>
+        ///     True when <paramref name="s"/> presents a clean C- or F-contiguous
+        ///     layout (or is scalar/size-1, trivially contiguous). Gate for the
+        ///     small-broadcast direct-path route: the direct SimdChunk kernel is only
+        ///     verified bit-identical to NDIter when both operands are contiguous —
+        ///     a strided / trailing-size-1 / negative-stride operand (which NDIter
+        ///     absorbs but SimdChunk mishandles) must stay on the NDIter route.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static bool IsContiguousCorF(Shape s)
+            => s.size <= 1 || s.IsContiguous || s.IsFContiguous;
 
         /// <summary>
         /// NumPy-aligned rule: the output is F-contiguous when every non-scalar operand
@@ -1023,10 +1123,13 @@ namespace NumSharp.Backends
 
                 if (canMerge)
                 {
+                    // Use the pre-merge shapeW/shapeR locals (shape[writeAxis] is overwritten
+                    // below) so each operand's merged stride is resolved against the real axis
+                    // sizes — a size-1 axis must defer to its neighbour's stride.
+                    lhsStrides[writeAxis] = MergeStride(shapeW, lhsStrides[writeAxis], shapeR, lhsStrides[readAxis]);
+                    rhsStrides[writeAxis] = MergeStride(shapeW, rhsStrides[writeAxis], shapeR, rhsStrides[readAxis]);
+                    resStrides[writeAxis] = MergeStride(shapeW, resStrides[writeAxis], shapeR, resStrides[readAxis]);
                     shape[writeAxis] = shapeW * shapeR;
-                    lhsStrides[writeAxis] = MergeStride(lhsStrides[writeAxis], lhsStrides[readAxis]);
-                    rhsStrides[writeAxis] = MergeStride(rhsStrides[writeAxis], rhsStrides[readAxis]);
-                    resStrides[writeAxis] = MergeStride(resStrides[writeAxis], resStrides[readAxis]);
                 }
                 else
                 {
@@ -1057,13 +1160,31 @@ namespace NumSharp.Backends
             return !(hasC && hasF);
         }
 
+        /// <summary>
+        ///     The stride of an axis formed by merging an outer dim (<paramref name="shapeW"/>,
+        ///     <paramref name="strideW"/>) with the adjacent inner dim (<paramref name="shapeR"/>,
+        ///     <paramref name="strideR"/>). A valid merge (validated by
+        ///     <see cref="ClassifyMergePair"/>) is C-order (<c>strideW == strideR*shapeR</c>) or
+        ///     F-order (<c>strideR == strideW*shapeW</c>); the merged axis walks the pair in that
+        ///     order, so its stride is the INNER/fastest one — the stride of SMALLER MAGNITUDE.
+        ///
+        ///     The prior <c>strideW &lt; strideR</c> (smaller VALUE) was correct only for
+        ///     non-negative strides: for a reversed view whose merged pair is e.g. (-24, -8),
+        ///     smaller-value keeps -24 (the OUTER stride) where the merged axis must step by -8,
+        ///     so the kernel then read the wrong elements (silent garbage on float16 — the sole
+        ///     dtype routed to this direct path; every other dtype coalesces inside NDIter). A
+        ///     size-1 axis contributes no offset (its coord is always 0), so the merged axis is
+        ///     driven entirely by the OTHER axis's stride regardless of magnitude.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static long MergeStride(long strideW, long strideR)
+        private static long MergeStride(long shapeW, long strideW, long shapeR, long strideR)
         {
+            if (shapeW == 1) return strideR;   // outer phantom → inner drives
+            if (shapeR == 1) return strideW;   // inner phantom → outer drives
             if (strideW == 0 && strideR == 0) return 0;
             if (strideW == 0) return strideR;
             if (strideR == 0) return strideW;
-            return strideW < strideR ? strideW : strideR;
+            return Math.Abs(strideW) <= Math.Abs(strideR) ? strideW : strideR;
         }
 
         /// <summary>

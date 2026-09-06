@@ -55,6 +55,7 @@ namespace NumSharp.Backends.Kernels
 
         // c128 -> u32: deinterleave reals (a double) then the AVX2 f64->u32 kernel. NumPy drops
         // the imaginary part (ComplexWarning); bit-exact with Converts.ToUInt32(Complex).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkComplexToUInt32(double* p, uint* dst, long count)
         {
             long i = 0;
@@ -73,6 +74,7 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void ConvComplexToUInt32(void* s, void* d) => *(uint*)d = Converts.ToUInt32(*(Complex*)s);
 
         // c128 -> u64: deinterleave reals then the AVX2 f64->u64 kernel. Bit-exact with Converts.ToUInt64(Complex).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkComplexToUInt64(double* p, ulong* dst, long count)
         {
             long i = 0;
@@ -92,6 +94,7 @@ namespace NumSharp.Backends.Kernels
 
         // Deinterleave the real parts of 4 consecutive complex (at complex index ci)
         // into a Vector128<int> via cvttpd2dq. Requires Avx2 (vpermq).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe Vector128<int> ComplexRealsToInt32(double* p, long ci)
         {
             var a = Avx.LoadVector256(p + 2 * ci);       // re0 im0 re1 im1
@@ -101,6 +104,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // Deinterleave the real parts of 4 consecutive complex into a Vector256<double>.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe Vector256<double> ComplexReals4(double* p, long ci)
         {
             var a = Avx.LoadVector256(p + 2 * ci);       // re0 im0 re1 im1
@@ -110,6 +114,7 @@ namespace NumSharp.Backends.Kernels
 
         // 16 complex -> reals -> 16 f16 via the shared round-to-odd double->f16 (NaN -> scalar
         // fallback over the block). c128->f16 = realpart (NumPy ComplexWarning) then double->f16.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkComplexToHalf(double* p, ushort* dst, long count)
         {
             long i = 0;
@@ -140,6 +145,7 @@ namespace NumSharp.Backends.Kernels
 
         // ---- Complex -> bool: nonzero(z) = (re != 0) | (im != 0). OrderedEqual against 0 treats
         // +-0 as zero and NaN as nonzero (NaN is unordered -> not-equal), matching NumPy. ----
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe Vector256<long> ComplexNonzero4(double* p, long ci)
         {
             var a = Avx.LoadVector256(p + 2 * ci);       // re0 im0 re1 im1
@@ -176,6 +182,7 @@ namespace NumSharp.Backends.Kernels
         { if (UseFusedGather(ss, ds, nd)) FusedComplexToBool(s, d, ss, ds, sh, nd); else StridedComplexDriver(s, d, ss, ds, sh, nd, 1, &BulkComplexToBoolV, &ConvComplexToBool); }
 
         // Inner-strided: gather reals (idx) and imags (idx, base+1 double) per 4 logical complex.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedComplexToBool(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -224,6 +231,7 @@ namespace NumSharp.Backends.Kernels
 
         // 8 strided complex -> 2x VPGATHERQQ-reals -> round-to-odd double->f16 -> 8 u16; scalar mop-up.
         // (NaN in a gather group -> the 8 elements take the scalar DoubleToHalfBits fallback.)
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedComplexToHalf(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -254,6 +262,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 4 complex -> 4 i32.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkComplexToInt32(double* p, int* dst, long count)
         {
             long i = 0;
@@ -264,6 +273,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 8 complex -> 2x (4xi32) -> Narrow -> 8 i16.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkComplexToShort(double* p, short* dst, long count)
         {
             long i = 0;
@@ -278,6 +288,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 16 complex -> 4x (4xi32) -> 2x Narrow(i32->i16) -> 1x Narrow(i16->i8) -> 16 i8.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkComplexToByte(double* p, byte* dst, long count)
         {
             long i = 0;
@@ -393,6 +404,7 @@ namespace NumSharp.Backends.Kernels
 
         // Whole-array gather-real deinterleave for inner-strided complex->int. p points at re0 of the
         // row; idx steps by rs = 2*ss doubles so VPGATHERQQ pulls the reals of logical complex 0..3.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedComplexToInt32(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -416,6 +428,7 @@ namespace NumSharp.Backends.Kernels
 
         // Same as FusedComplexToInt32 but feeds the gathered reals through the AVX2 f64->u32
         // kernel (DoubleToU32x4) instead of plain cvttpd2dq, so the u32 modular-wrap is faithful.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedComplexToUInt32(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -438,6 +451,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // Gather reals then the AVX2 f64->u64 kernel (DoubleToU64x4) for inner-strided c128->u64.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedComplexToUInt64(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -473,6 +487,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 16 strided complex -> 4x VPGATHERQQ-reals+cvttpd (4xi32) -> 2-level Narrow -> 16 i8; 4-wide mop-up.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedComplexToByte(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim, bool unsignedDst)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -507,6 +522,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 8 strided complex -> 2x VPGATHERQQ-reals+cvttpd (4xi32) -> 1x Narrow -> 8 i16; 4-wide mop-up.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void FusedComplexToShort(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim, int kind)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;

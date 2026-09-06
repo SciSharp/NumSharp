@@ -215,7 +215,7 @@ NumPy has several dtype families that NumSharp deliberately does not implement. 
 | Structured / record dtypes | `(...)` in dtype string | NumPy allows composite dtypes like `np.dtype([('x', 'f4'), ('y', 'i4')])` for heterogeneous records. NumSharp throws on any dtype string containing `(`. Use a struct array or multiple parallel `NDArray`s. |
 | Sub-array dtypes | `('f4', (3,))` | NumPy dtype-with-subshape. Not supported. |
 
-Every row above is tested in `test/NumSharp.UnitTest/Creation/DTypeStringParityTests.cs` with an `ExpectThrow` assertion. If you run into one of these in ported NumPy code, the exception message tells you which NumSharp alternative to use.
+Every row above is tested in `test/NumSharp.Tests/Creation/DTypeStringParityTests.cs` with an `ExpectThrow` assertion. If you run into one of these in ported NumPy code, the exception message tells you which NumSharp alternative to use.
 
 ### Why Throw Instead of Silent Approximation?
 
@@ -451,7 +451,7 @@ Quick reference for common pairs:
 | `float16` | `float32` | `float32` | higher precision wins |
 | any | `complex128` | `complex128` | complex absorbs |
 
-For full 15×15 promotion rules see `np.find_common_type` (`src/NumSharp.Core/Logic/np.find_common_type.cs`). Tests in `test/NumSharp.UnitTest/Casting/DtypeConversionMatrixTests.cs` verify every pair against NumPy 2.4.2.
+For full 15×15 promotion rules see `np.find_common_type` (`src/NumSharp.Core/Logic/np.find_common_type.cs`). Tests in `test/NumSharp.Tests/Casting/DtypeConversionMatrixTests.cs` verify every pair against NumPy 2.4.2.
 
 For the deeper story on how NumPy 2.x promotion differs from NumPy 1.x, see [NumPy Compliance](compliance.md).
 

@@ -61,6 +61,7 @@ namespace NumSharp
         ///     preserved (boolean input yields boolean output via not_equal).
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.diff.html</remarks>
+        [NDScoped]
         public static NDArray diff(NDArray a, int n = 1, int axis = -1,
                                    object prepend = null, object append = null)
         {
@@ -83,6 +84,22 @@ namespace NumSharp
             if (ax < 0 || ax >= nd)
                 throw new ArgumentOutOfRangeException(nameof(axis),
                     $"axis {axis} is out of bounds for array of dimension {nd}");
+
+            // Fast path: a single difference along a C-contiguous innermost axis with no
+            // prepend/append is an adjacent-difference stencil — one fused kernel over the
+            // source (overlapping SIMD loads), no slice views, no NDIter. Covers 1-D and
+            // last-axis N-D. Boolean (not_equal), n>1, prepend/append, non-contiguous or
+            // non-innermost-axis diffs fall through to the general path below. Returns null
+            // when the dtype kernel is unavailable (→ general path).
+            if (n == 1 && prepend is null && append is null
+                && ax == nd - 1
+                && a.GetTypeCode != NPTypeCode.Boolean
+                && a.Shape.IsContiguous && !a.Shape.IsBroadcasted
+                && a.Shape.dimensions[ax] >= 2)
+            {
+                var fast = DiffAdjacentContiguous(a, ax);
+                if (fast is not null) return fast;
+            }
 
             // Build [prepend?, a, append?] and concatenate along the axis when
             // anything was supplied. `a` itself is never disposed here.
@@ -141,6 +158,51 @@ namespace NumSharp
             }
 
             return current;
+        }
+
+        /// <summary>
+        ///     Fused single-difference along the innermost axis of a C-contiguous array via
+        ///     <see cref="DirectILKernelGenerator.AdjacentDiffKernel"/>: for each row,
+        ///     <c>out[i] = a[i+1] - a[i]</c>. The result is a fresh, uninitialised
+        ///     C-contiguous array of <paramref name="a"/>'s shape with the innermost axis
+        ///     shrunk by one. Returns <c>null</c> when the dtype has no adjacent-diff kernel
+        ///     (Boolean, or a dtype the emitter rejects), signalling the caller to use the
+        ///     general slice-subtract path. Shared by <see cref="diff"/> and
+        ///     <see cref="ediff1d"/> (both are the same stencil).
+        ///     <para>
+        ///     Preconditions (asserted by callers): <paramref name="a"/> is C-contiguous,
+        ///     non-broadcast, <paramref name="axis"/> is the innermost axis, and that axis
+        ///     has length ≥ 2.
+        ///     </para>
+        /// </summary>
+        private static unsafe NDArray DiffAdjacentContiguous(NDArray a, int axis)
+        {
+            NPTypeCode dt = a.GetTypeCode;
+            var kernel = DirectILKernelGenerator.GetAdjacentDiffKernel(dt);
+            if (kernel is null) return null;
+
+            var s = a.Shape;
+            int nd = a.ndim;
+            long inLen = s.dimensions[nd - 1];
+
+            // Output shape: identical except the innermost axis loses one element. Rows =
+            // product of the outer axes (1 for a 1-D input).
+            long[] outDims = new long[nd];
+            long rows = 1;
+            for (int i = 0; i < nd - 1; i++)
+            {
+                outDims[i] = s.dimensions[i];
+                rows *= s.dimensions[i];
+            }
+            outDims[nd - 1] = inLen - 1;
+
+            var outp = new NDArray(a.dtype, new Shape(outDims), false);
+            if (outp.size == 0) return outp;
+
+            int elemSize = a.dtypesize;
+            byte* src = (byte*)a.Address + s.offset * elemSize;
+            kernel((void*)src, (void*)outp.Address, rows, inLen);
+            return outp;
         }
 
         /// <summary>

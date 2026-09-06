@@ -34,3 +34,20 @@
 *.exe binary
 *.pdb binary
 *.zip binary
+
+# --- Generated / data artifacts ---------------------------------------------
+# Machine-generated data dumps (benchmark snapshots, coverage, inventory and
+# fuzz-oracle corpora). These are committed on purpose but are never reviewed
+# line-by-line, so:
+#   linguist-generated=true -> collapsed in the PR "Files changed" view and
+#                              excluded from the repo's language statistics.
+#   -diff                    -> Git treats the file as binary, so GitHub renders
+#                              it as "Binary file not shown" and it contributes
+#                              0 additions / 0 deletions to the PR line count.
+# NOTE: only DATA subtrees are matched; hand-written source/docs stay reviewable.
+benchmark/history/**                       linguist-generated=true -diff
+benchmark/coverage/**                      linguist-generated=true -diff
+coverage/generated/**                      linguist-generated=true -diff
+test/inventory/generated/**                linguist-generated=true -diff
+docs/website-src/docs/data/**              linguist-generated=true -diff
+test/NumSharp.Tests.Oracle/Fuzz/corpus/**  linguist-generated=true -diff

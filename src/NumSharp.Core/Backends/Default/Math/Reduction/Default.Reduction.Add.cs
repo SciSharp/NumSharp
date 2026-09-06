@@ -7,8 +7,9 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null, NDArray @out = null)
+        public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             var shape = arr.Shape;
 
             if (shape.IsEmpty)
@@ -35,16 +36,18 @@ namespace NumSharp.Backends
             if (shape[axis] == 1)
                 return HandleTrivialAxisReduction(arr, axis, keepdims, outputType, @out);
 
-            // Half AXIS sum: NumPy accumulates float16 sums in float32 (NOT float16 — e.g.
-            // np.sum(ones(4096,f16)) == 4096, not the ~2048 an f16 accumulator saturates to).
-            // The legacy Direct axis kernel accumulated in Half (a real ~3.5% error). Accumulate
-            // in the wider Double (>= NumPy's float32, so the float16 result rounds identically)
-            // and cast back — the same accumulate-wide-then-cast policy Half MEAN uses. The flat
-            // (axis=None) path already accumulates in Double (SumElementwiseHalfFallback); an
-            // explicit dtype request is honored verbatim by the normal path below.
+            // Half AXIS sum: reproduce NumPy's HALF_add reduce (float32 intermediate, narrowed per
+            // inner-loop call) in a FLOAT32 shadow accumulator, then narrow to Half ONCE. The NDIter
+            // HalfSumKernel rounds the shadow to float16 precision (RoundToF16) per call — PINNED
+            // (contiguous reduced axis) folds the stripe in float32 pairwise (ones(4096)->4096); SLAB
+            // (reduced axis outer) rounds per step and SATURATES (ones((4096,3),axis=0)->2048). The
+            // float32 shadow (vs re-widening the half accumulator from memory every step) + the
+            // in-place RoundToF16 is what makes the large-kept SLAB beat NumPy instead of losing to
+            // its hardware F16C. The OLD Double-accumulator path returned 4096 for that SLAB case — a
+            // real divergence this fixes. An explicit dtype request is honored by the normal path.
             if (arr.typecode == NPTypeCode.Half && typeCode == null)
             {
-                var wide = ExecuteAxisReduction(arr, axis, keepdims, NPTypeCode.Double, null, ReductionOp.Sum);
+                var wide = ExecuteAxisReduction(arr, axis, keepdims, NPTypeCode.Single, null, ReductionOp.Sum);
                 var halfResult = wide.astype(NPTypeCode.Half);
                 if (@out is null) return halfResult;
                 for (long i = 0; i < halfResult.size; i++) @out.SetAtIndex(halfResult.GetAtIndex(i), i);
@@ -61,7 +64,7 @@ namespace NumSharp.Backends
             var r = NDArray.Scalar(result);
             if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
-            return r;
+            return r.MarkReductionScalar();
         }
 
         private unsafe NDArray ExecuteAxisReduction(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out, ReductionOp op)
@@ -102,7 +105,7 @@ namespace NumSharp.Backends
             var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
             NDArray result;
             if (@out is not null) { if (@out.Shape != outputShape) throw new IncorrectShapeException($"Output shape mismatch"); result = @out; }
-            else result = new NDArray(outputType, outputShape, false);
+            else result = AllocateReductionResult(outputType, outputDims, shape);
 
             long axisSize = shape.dimensions[axis];
             long outputSize = result.size > 0 ? result.size : 1;
@@ -116,12 +119,48 @@ namespace NumSharp.Backends
             }
 
             if (keepdims)
-            {
-                var ks = new long[arr.ndim];
-                for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : result.shape[sd++];
-                result.Storage.Reshape(new Shape(ks));
-            }
-            return result;
+                result.Storage.ExpandDimension(axis);
+            // A fresh 0-d result (1-D input reduced over its only axis) is a numpy SCALAR at the
+            // boundary — read-only; an out= operand returns writeable (PyArray_Return semantics).
+            return @out is not null ? result : result.MarkReductionScalar();
+        }
+
+        /// <summary>
+        ///     Allocates a reduction's output in the memory order NumPy's reduce iterator would pick
+        ///     with KEEPORDER: an F-contiguous input yields an F-contiguous result, a C-contiguous or
+        ///     general-strided input yields a C-contiguous result (issue #610). The reduction kernels
+        ///     write each output element through <c>outputStrides</c> (the general/slab paths use
+        ///     them directly; the C-contiguous fast paths are gated on a C-contiguous INPUT, so they
+        ///     are never reached for an F-contiguous input), so filling an F-strided buffer costs no
+        ///     extra copy — this is exactly how NumPy allocates the output operand and writes into it,
+        ///     rather than reordering after the fact. <paramref name="outputDims"/> is the input
+        ///     shape with the reduced axis removed; a 0-D or 1-D result is intrinsically both C- and
+        ///     F-contiguous, so only rank &gt;= 2 results consult the order. keepdims re-inserts the
+        ///     reduced axis with <see cref="UnmanagedStorage.ExpandDimension"/>, which preserves the
+        ///     order (unlike a Reshape to a fresh C-shape, which would reset it). ArgMax/ArgMin do NOT
+        ///     use this: NumPy allocates their index output in C-order regardless of input (probed 2.4.2).
+        /// </summary>
+        internal static NDArray AllocateReductionResult(NPTypeCode outputType, long[] outputDims, Shape inputShape)
+        {
+            if (outputDims.Length == 0)
+                return new NDArray(outputType, Shape.Scalar, false);
+            var order = outputDims.Length >= 2 ? OrderResolver.Resolve('K', inputShape) : 'C';
+            var outputShape = order == 'F' ? new Shape(outputDims, 'F') : new Shape(outputDims);
+            return new NDArray(outputType, outputShape, false);
+        }
+
+        /// <summary>
+        ///     Zero-filled sibling of <see cref="AllocateReductionResult"/>, for the degenerate
+        ///     size-1-axis std/var paths whose result is all zeros: the layout still follows the
+        ///     input's memory order (F for an F-contig input), matching NumPy (issue #610). Unlike
+        ///     the executors above, <paramref name="dims"/> is already the FINAL result shape (the
+        ///     caller having applied keepdims), so no ExpandDimension follows.
+        /// </summary>
+        internal static NDArray AllocateReductionZeros(NPTypeCode outputType, long[] dims, Shape inputShape)
+        {
+            var order = dims.Length >= 2 ? OrderResolver.Resolve('K', inputShape) : 'C';
+            var zeroShape = order == 'F' ? new Shape(dims, 'F') : new Shape(dims);
+            return np.zeros(zeroShape, outputType);
         }
 
         /// <summary>
@@ -144,14 +183,13 @@ namespace NumSharp.Backends
                        op == ReductionOp.Min || op == ReductionOp.Max ||
                        op == ReductionOp.Mean;
 
-            // Half SUM and MEAN accumulate in Double then cast back to Half (ReduceAdd's axis
-            // branch / ReduceMean do the cast). NumPy accumulates float16 reductions in float32,
-            // NOT float16 — np.sum(ones(4096,f16)) == 4096, not the ~2048 an f16 accumulator
-            // saturates to; the wider Double matches NumPy's float16 result. outputType==Double
-            // is the in-flight accumulator dtype here (the Direct axis kernel for Half accumulated
-            // in Half — a real ~3.5% error this routes around). Half PROD/MIN/MAX stay on Direct.
+            // Half SUM routes to the float32-shadow HalfSumKernel (outputType==Single; ReduceAdd
+            // narrows to Half) — NumPy's exact per-orientation reduce via per-call RoundToF16 (PINNED
+            // pairwise, SLAB per-step-round saturation). Half MEAN still accumulates in Double then
+            // divides and casts back (outputType==Double). Half PROD/MIN/MAX stay on the Direct path.
             if (inputType == NPTypeCode.Half)
-                return (op == ReductionOp.Mean || op == ReductionOp.Sum) && outputType == NPTypeCode.Double;
+                return (op == ReductionOp.Sum && outputType == NPTypeCode.Single)
+                    || (op == ReductionOp.Mean && outputType == NPTypeCode.Double);
 
             // Decimal: the legacy path is both cache-hostile AND lossy (it accumulates through
             // a double bridge). The NDIter kernels are full-precision Decimal on contiguous
@@ -224,7 +262,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                result = new NDArray(outputType, outputShape, false);
+                result = AllocateReductionResult(outputType, outputDims, shape);
             }
 
             // The per-chunk kernel folds into the existing output slot(s), so the output
@@ -242,12 +280,10 @@ namespace NumSharp.Backends
                 ILKernelGenerator.MeanDivideByCount(result, shape.dimensions[axis]);
 
             if (keepdims)
-            {
-                var ks = new long[arr.ndim];
-                for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : result.shape[sd++];
-                result.Storage.Reshape(new Shape(ks));
-            }
-            return result;
+                result.Storage.ExpandDimension(axis);
+            // Same PyArray_Return rule as ExecuteAxisReduction's exit; the output was already
+            // allocated in KEEPORDER (F for an F-contig input), so there is nothing to reorder.
+            return @out is not null ? result : result.MarkReductionScalar();
         }
 
         /// <summary>
@@ -299,7 +335,7 @@ namespace NumSharp.Backends
                 if (@out is not null) { @out.SetAtIndex(defaultVal, 0); return @out; }
                 var r = NDArray.Scalar(defaultVal);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
-                return r;
+                return r.MarkReductionScalar();
             }
             var axis = NormalizeAxis(axis_.Value, arr.ndim);
             var resultShape = Shape.GetAxis(shape, axis);
@@ -321,7 +357,9 @@ namespace NumSharp.Backends
             if (@out is not null) { @out.SetAtIndex(r.GetAtIndex(0), 0); return @out; }
             if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
-            return r;
+            // A 0-d exit — including keepdims over a 0-d input, whose (1,)*0 reshape is still
+            // 0-d — is a numpy SCALAR (read-only); (1,) keepdims results pass through writeable.
+            return r.MarkReductionScalar();
         }
 
         private NDArray HandleTrivialAxisReduction(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out)
@@ -335,9 +373,12 @@ namespace NumSharp.Backends
             {
                 var v = arr.GetAtIndex(0);
                 if (outputType != arr.GetTypeCode) v = Converts.ChangeType(v, outputType);
-                return NDArray.Scalar(v);
+                return NDArray.Scalar(v).MarkReductionScalar();
             }
-            var result = new NDArray(outputType, new Shape(resultDims), false);
+            // KEEPORDER: reducing a size-1 axis of an F-contiguous input keeps F-contig; SetAtIndex
+            // writes each element through the result's strides, so an F-order buffer fills correctly
+            // with no copy (resultDims already carries the final keepdims shape) (issue #610).
+            var result = AllocateReductionResult(outputType, resultDims, shape);
             if (outputType == arr.GetTypeCode) for (long i = 0; i < result.size; i++) result.SetAtIndex(arr.GetAtIndex(i), i);
             else for (long i = 0; i < result.size; i++) result.SetAtIndex(Converts.ChangeType(arr.GetAtIndex(i), outputType), i);
             return result;

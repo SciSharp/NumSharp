@@ -1,0 +1,154 @@
+<Project>
+
+  <!-- ====================================================================================
+       Strong-name signing — ONE place for every project in the repository.
+
+       WHAT THE KEY IS. `Open.snk` at the repo root is Microsoft's *published* open-source
+       strong-name key, byte-for-byte identical (596 bytes, md5 2fe5bdce4ef988fa5bd982debb350668)
+       to dotnet/arcade's `src/Microsoft.DotNet.Arcade.Sdk/tools/snk/Open.snk`. Its public key
+       token `cc7b13ffcd2ddd51` is the one carried by `netstandard`, `System.Memory`,
+       `System.Buffers`, `System.Text.Json` and `System.Runtime.CompilerServices.Unsafe` —
+       Microsoft strong-names those with this very key and publishes the PRIVATE half so OSS
+       builds can produce strong-named output without its real signing infrastructure.
+
+       SO THIS IS IDENTITY, NOT AUTHENTICITY. An .snk is a bare RSA key pair: no certificate,
+       no subject, no issuer, no chain. It lets the loader tell this `NumSharp` from someone
+       else's and bind versions; it attests NOTHING about origin, and with a key whose private
+       half is public, anyone can mint an assembly bearing our identity. That is the key's
+       stated purpose, not a leak. Real authenticity is Authenticode on the DLLs plus NuGet
+       author signing, needs a code-signing certificate, and is entirely separate from this file.
+       => Do NOT treat `InternalsVisibleTo` below as an access control. It is not one.
+
+       WHY THIS KEY AND NOT OUR OWN. TensorFlow.NET signs with the identical key, which is what
+       makes the cross-repo `InternalsVisibleTo("TensorFlowNET.UnitTest")` in
+       src/NumSharp.Core/Assembly/Properties.cs resolve. Minting a NumSharp-owned key would
+       break that friend reference for zero security gain.
+
+       HOW IT WAS BROKEN BEFORE. `SignAssembly` used to live in a `Publish|AnyCPU`-only
+       PropertyGroup in each csproj, and CI builds and packs `Release` — so nothing ever
+       shipped signed (every published NumSharp DLL reads `PublicKeyToken=null`). Worse, that
+       `Publish` configuration did not even COMPILE: strong-naming makes a keyless
+       `InternalsVisibleTo` a hard `CS1726`, and all five of ours were keyless. A dead
+       `#if !SIGNING` guard was meant to cover this, but `SIGNING` was defined only in the
+       *test* csproj, a different assembly, where it did nothing.
+
+       Opt out per project with `<SignAssembly>false</SignAssembly>` — Directory.Build.props is
+       imported BEFORE the project body, so a project's own value wins.
+       ==================================================================================== -->
+  <PropertyGroup>
+    <SignAssembly Condition="'$(SignAssembly)' == ''">true</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)Open.snk</AssemblyOriginatorKeyFile>
+
+    <!-- We hold the private half, so sign for real: not delay-signed (which would leave the
+         signature blank and require skip-verification registration) and not public-signed
+         (an OSS-build shortcut that stamps the public key without a valid signature). -->
+    <DelaySign>false</DelaySign>
+    <PublicSign>false</PublicSign>
+
+    <!-- The public key, for `InternalsVisibleTo(..., PublicKey=...)` and for anything else that
+         needs to name our identity. Kept here so the literal is written down exactly once; the
+         token is asserted at test time by StrongNameTests. -->
+    <NumSharpPublicKey>00240000048000009400000006020000002400005253413100040000010001004b86c4cb78549b34bab61a3b1800e23bfeb5b3ec390074041536a7e3cbd97f5f04cf0f857155a8928eaa29ebfd11cfbbad3ba70efea7bda3226c6a8d370a4cd303f714486b6ebc225985a638471e6ef571cc92a4613c00b8fa65d61ccee0cbe5f36330c9a01f4183559f1bef24cc2917c6d913e3a541333a1d05d9bed22b38cb</NumSharpPublicKey>
+    <NumSharpPublicKeyToken>cc7b13ffcd2ddd51</NumSharpPublicKeyToken>
+  </PropertyGroup>
+
+  <!-- ====================================================================================
+       JIT optimization posture — TieredCompilation + TieredPGO, ON for the whole repo.
+
+       WHAT THESE ARE. Both are PROCESS-level runtime knobs, not per-assembly switches: they are
+       written into the ENTRY process's `<app>.runtimeconfig.json` as
+       `System.Runtime.TieredCompilation` / `System.Runtime.TieredPGO`. Setting them here turns
+       them on for every project in the repo that PRODUCES a runtimeconfig — the test hosts, the
+       benchmarks, `tools/`, and the file-based `dotnet run` scripts under the repo root
+       (Directory.Build.props is an implicit import for those). Those processes then start with
+       tiered compilation AND profile-guided optimization, so hot methods are recompiled to
+       PGO-guided tier-1 — the most-optimized code the JIT produces.
+
+       WHY BOTH ENABLED, AND NOT `TieredCompilation=false`. TieredPGO REQUIRES tiering: it
+       instruments the tier-0 code to gather the profile that guides tier-1. So "optimize
+       aggressively using BOTH" can only mean both switched ON. Disabling tiering would skip
+       tier-0 entirely — which also drops PGO and slows every first-call/startup — a different and
+       usually worse steady-state trade, so it is deliberately NOT done globally here.
+
+       SCOPE / REAL EFFECT. On the src/ class LIBRARIES (NumSharp.Core, NumSharp.Bitmap,
+       NumSharp.Interop.*) this is INERT: a library emits no runtimeconfig, and the CONSUMING
+       app's own runtimeconfig governs the whole process. A downstream consumer that wants this
+       posture sets the same two properties in THEIR application project. Both values are also
+       the .NET 8+ defaults, so this pins the intent and guarantees it across SDKs/environments
+       rather than changing measured behaviour — the only setting that would change behaviour is
+       turning tiering OFF, which "both" excludes.
+
+       A project overrides in its own body (imported AFTER this file, so it wins), and the
+       `== ''` guards also let a command-line `-p:` / global property win — e.g.
+       benchmark/NumSharp.Benchmark.Sandbox deliberately sets both false to measure cold tier-1.
+       ==================================================================================== -->
+  <PropertyGroup>
+    <TieredCompilation Condition="'$(TieredCompilation)' == ''">true</TieredCompilation>
+    <TieredPGO Condition="'$(TieredPGO)' == ''">true</TieredPGO>
+  </PropertyGroup>
+
+  <!-- ====================================================================================
+       Package version — ONE number for every project in the repository.
+
+       `VersionPrefix` is the single source of truth. The SDK derives everything else from it
+       (Microsoft.NET.DefaultAssemblyInfo.targets, Microsoft.NET.GenerateAssemblyInfo.targets,
+       NuGet.Build.Tasks.Pack.targets), so NO csproj declares Version / PackageVersion /
+       AssemblyVersion / FileVersion:
+
+           Version              = VersionPrefix[-VersionSuffix]        0.60.0 or 0.60.0-rc.1
+           PackageVersion       = Version                              the nupkg version — and the
+                                                                       version a ProjectReference
+                                                                       becomes as a nuspec dependency
+           AssemblyVersion      = Version minus pre-release/metadata   0.60.0.0
+           FileVersion          = AssemblyVersion
+           InformationalVersion = Version+<SourceRevisionId>           the git commit (SourceLink)
+
+       WHY. The per-csproj copies had drifted: NumSharp.Bitmap carried a 4-part 0.60.0.0 beside the
+       others' 0.60.0, and every package hard-coded <PackageVersion> next to a
+       `$(Version)-$(VersionSuffix)` conditional — so `-p:VersionSuffix=rc.1` produced an rc.1
+       ASSEMBLY inside a non-rc PACKAGE (an explicit PackageVersion is never re-derived). Deriving
+       every number from one prefix makes those mismatches unrepresentable and keeps the five
+       packages — NumSharp, NumSharp.Bitmap, NumSharp.Interop.pythonnet, NumSharp.Interop.OpenBLAS,
+       NumSharp.Build — co-versioned by construction, nuspec dependency ranges included.
+
+       The release pipeline overrides all of it from the git tag with ONE global property,
+       `-p:Version=<tag>` (a global property beats every conditional here and in the SDK), so this
+       value is only the local-dev default; bump it when a release is cut. `-p:VersionSuffix=rc.1`
+       still gives a local pre-release pack, now consistent across assembly and package.
+       ==================================================================================== -->
+  <PropertyGroup>
+    <VersionPrefix Condition="'$(VersionPrefix)' == ''">0.70.0</VersionPrefix>
+  </PropertyGroup>
+
+  <!-- ====================================================================================
+       License acceptance — OFF for every package, in ONE place so they cannot drift apart.
+       All five packages are Apache-2.0 (the OpenBLAS interop adds the permissive BSD and
+       GCC-exception terms of the binaries it bundles); a click-through prompt on install buys
+       nothing for a permissive license and is unusual for OSS on nuget.org.
+       ==================================================================================== -->
+  <PropertyGroup>
+    <PackageRequireLicenseAcceptance Condition="'$(PackageRequireLicenseAcceptance)' == ''">false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+
+  <!-- ====================================================================================
+       Shared NuGet package icon — ONE brand asset for every shippable package, so it cannot
+       drift the way the per-csproj `PackageIconUrl` did. That element is deprecated (NU5048)
+       and renders NO icon on nuget.org; `PackageIcon` embeds a real image in the package.
+
+       Centralised here beside signing because it is identical across NumSharp / NumSharp.Bitmap /
+       NumSharp.Interop.* — a new package inherits it for free instead of copy-pasting a fourth
+       icon include. $(MSBuildThisFileDirectory) is the repo root, so the path resolves for a
+       project in any subdirectory, and the checked-in 128×128 PNG travels to CI with the repo.
+       The <None> is inert for non-packable projects (tests/benchmarks never pack); only the five
+       packable projects embed it, and only when packed explicitly with `dotnet pack` (nothing in
+       the repo packs on build). Override `PackageIcon` in a project to change it.
+       ==================================================================================== -->
+  <PropertyGroup>
+    <PackageIcon Condition="'$(PackageIcon)' == ''">numsharp.icon128.png</PackageIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)docs\website-src\images\numsharp.icon128.png"
+          Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

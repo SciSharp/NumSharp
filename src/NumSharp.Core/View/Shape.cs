@@ -20,10 +20,16 @@ namespace NumSharp
         /// <summary>Data is C-contiguous (row-major, last dimension varies fastest).</summary>
         C_CONTIGUOUS = 0x0001,
 
-        /// <summary>Data is F-contiguous (column-major). Reserved, always false for NumSharp.</summary>
+        /// <summary>Data is F-contiguous (column-major).</summary>
         F_CONTIGUOUS = 0x0002,
 
-        /// <summary>Array owns its data buffer.</summary>
+        /// <summary>
+        ///     Array owns its data buffer (NumPy's <c>NPY_ARRAY_OWNDATA</c>). Not derivable from
+        ///     dims/strides — maintained by <see cref="NumSharp.Backends.UnmanagedStorage.OnReshaped"/>
+        ///     at the storage funnels: set when the storage allocated its buffer
+        ///     (NumPy <c>ctors.c</c>: <c>fa-&gt;flags |= NPY_ARRAY_OWNDATA</c> when <c>data == NULL</c>),
+        ///     cleared for views and foreign-memory wraps (<c>base != NULL ⟹ !OWNDATA</c>).
+        /// </summary>
         OWNDATA = 0x0004,
 
         /// <summary>Data is aligned for the CPU (always true for managed allocations).</summary>
@@ -174,9 +180,12 @@ namespace NumSharp
 
         /// <summary>
         ///     Computes whether any dimension is broadcast (stride=0 with dim > 1).
+        ///     Internal so view-producers that pre-derive flags for the no-walk ctor
+        ///     (<see cref="np.split"/>'s <c>DeriveSubFlags</c>) judge broadcastness with the
+        ///     SAME rule the walking ctor uses.
         /// </summary>
         [MethodImpl(Inline)]
-        private static bool ComputeIsBroadcastedStatic(long[] dims, long[] strides)
+        internal static bool ComputeIsBroadcastedStatic(long[] dims, long[] strides)
         {
             if (strides == null || strides.Length == 0)
                 return false;
@@ -201,9 +210,13 @@ namespace NumSharp
         ///         <item>Any dimension of size 0 makes the array trivially both C- and F-contiguous.</item>
         ///     </list>
         ///     NumSharp uses element-indexed strides (sd starts at 1) rather than byte strides.
+        ///     Internal so view-producers that pre-derive flags for the no-walk ctor
+        ///     (<see cref="np.split"/>'s <c>DeriveSubFlags</c>) compute contiguity with the SAME
+        ///     size-1-relaxed walk the walking ctor uses — parent-flag algebra cannot express the
+        ///     relaxation (a <c>(1,4)</c> child of a C-only parent is BOTH C- and F-contiguous).
         /// </remarks>
         [MethodImpl(Inline)]
-        private static (bool isC, bool isF) ComputeContiguousFlagsStatic(long[] dims, long[] strides)
+        internal static (bool isC, bool isF) ComputeContiguousFlagsStatic(long[] dims, long[] strides)
         {
             if (dims == null || dims.Length == 0)
                 return (true, true); // scalar is both
@@ -351,9 +364,13 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Does this array own its data buffer?
-        ///     False for views (slices, transposes, broadcasts).
-        ///     Cached flag set at storage level.
+        ///     Does this array own its data buffer (NumPy's <c>flags.owndata</c>)?
+        ///     True for freshly allocated arrays (<c>np.arange</c>, <c>np.zeros</c>, <c>.copy()</c>);
+        ///     false for views (slices, transposes, broadcasts) and foreign-memory wraps (memmaps).
+        ///     Maintained at the <see cref="NumSharp.Backends.UnmanagedStorage"/> funnels
+        ///     (<see cref="NumSharp.Backends.UnmanagedStorage.OnReshaped"/>), mirroring
+        ///     <c>UnmanagedStorage.OwnsData</c> — meaningful only on a shape read off a storage
+        ///     (<c>nd.Shape</c>); a hand-built <see cref="Shape"/> carries no ownership claim.
         /// </summary>
         public readonly bool OwnsData
         {
@@ -562,12 +579,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Creates a shape with modified flags (for clearing WRITEABLE on broadcasts).
+        ///     Creates a shape with modified flags (for clearing WRITEABLE on broadcasts, or
+        ///     setting/clearing OWNDATA at the <see cref="NumSharp.Backends.UnmanagedStorage"/> funnels).
         /// </summary>
+        /// <remarks>
+        ///     Dimensions and strides are unchanged, so <see cref="size"/> and <see cref="_hashCode"/>
+        ///     are carried over verbatim through the no-walk constructor instead of being recomputed.
+        /// </remarks>
         public Shape WithFlags(ArrayFlags flagsToSet = ArrayFlags.None, ArrayFlags flagsToClear = ArrayFlags.None)
         {
             int newFlags = (_flags | (int)flagsToSet) & ~(int)flagsToClear;
-            return new Shape(dimensions, strides, offset, bufferSize, newFlags);
+            return new Shape(dimensions, strides, offset, bufferSize, newFlags, size, _hashCode);
         }
 
         /// <summary>
@@ -962,7 +984,7 @@ namespace NumSharp
 
             // Use bufferSize for bounds checking (NumPy-aligned: no ViewInfo dependency)
             long boundSize = bufferSize > 0 ? bufferSize : size;
-            if (offset >= boundSize)
+            if (offset >= boundSize && AddressesAnElement(dim))
                 throw new IndexOutOfRangeException($"The offset {offset} is out of range in Shape {boundSize}");
 
             if (indicies.Length == dimensions.Length)
@@ -976,6 +998,34 @@ namespace NumSharp
             //TODO! This is not full support of sliced,
             //TODO! when sliced it usually diverts from this function but it would be better if we add support for sliced arrays too.
             return (new Shape(innerShape), offset);
+        }
+
+        /// <summary>
+        ///     Does the sub-view left after consuming <paramref name="consumed"/> leading axes
+        ///     actually address an element?
+        /// </summary>
+        /// <remarks>
+        ///     The offset bounds-check above is a BUFFER backstop — the per-axis index validation
+        ///     that matches NumPy (<c>index N is out of bounds for axis I with size D</c>) already
+        ///     ran in <see cref="InferNegativeCoordinates(long[], long[])"/> before this method was
+        ///     called. A sub-view with a zero-sized extent will never be dereferenced, so there is
+        ///     no buffer to overrun and the backstop must not fire: <c>a[0]</c> on a <c>(2,3,0)</c>
+        ///     is <c>(3,0)</c> in NumPy, and used to throw here because a zero-sized array's
+        ///     bufferSize is 0 and so EVERY offset — the valid one included — compared "out of
+        ///     range". The same holds for an empty window carved out of a live buffer, where the
+        ///     offset can legitimately land one past the last element (<c>x[:, 2:2][4]</c>).
+        ///     <para>
+        ///     Only called once the check is already about to throw, so the ordinary path pays
+        ///     nothing for it.
+        ///     </para>
+        /// </remarks>
+        [MethodImpl(OptimizeAndInline)]
+        private readonly bool AddressesAnElement(int consumed)
+        {
+            for (int i = consumed; i < dimensions.Length; i++)
+                if (dimensions[i] == 0)
+                    return false;
+            return true;
         }
 
         /// <summary>
@@ -1526,6 +1576,24 @@ namespace NumSharp
 
         public override string ToString() =>
             "(" + string.Join(", ", dimensions) + ")";
+
+        /// <summary>
+        ///     This shape written the way a Python tuple prints — no space after the comma, and a
+        ///     TRAILING comma on a one-element shape (<c>(3,)</c>, not <c>(3)</c>).
+        /// </summary>
+        /// <remarks>
+        ///     <see cref="ToString"/> renders for humans and is used all over the library, so it is
+        ///     left alone; this is the spelling error messages need in order to read verbatim like
+        ///     NumPy's — "shapes (2,3) and (3,2) not aligned", never "shapes (2, 3) and …".
+        /// </remarks>
+        internal readonly string ToPythonTuple()
+        {
+            if (dimensions == null || dimensions.Length == 0)
+                return "()";
+            if (dimensions.Length == 1)
+                return "(" + dimensions[0] + ",)";
+            return "(" + string.Join(",", dimensions) + ")";
+        }
 
         /// <summary>Creates a new object that is a copy of the current instance.</summary>
         /// <returns>A new object that is a copy of this instance.</returns>

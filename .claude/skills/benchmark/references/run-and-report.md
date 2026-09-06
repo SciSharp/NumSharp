@@ -3,20 +3,40 @@
 ## Official run — `benchmark/run_benchmark.py` (the entry point)
 
 Builds the C# suite, runs each suite through BenchmarkDotNet (per-class JSON, resumable), sweeps warm NumPy across
-1K/100K/10M, merges on `(op, dtype, N)`, appends the five subsystems, archives raw scratch to
+the applicable size tiers, runs Managed/OpenBLAS profiles, merges on `(op, dtype, N, scenario)`,
+appends the five complementary subsystems, and archives raw scratch to
 `results/<ts>/` (gitignored), and writes the committable `history/<date>_<sha>/` snapshot.
 
 ```bash
-python run_benchmark.py                       # full official run (all 14 suites + 5 subsystems)
+python run_benchmark.py                       # interactive depth + dtype picker
+python run_benchmark.py --depth measure       # full official run (18 suites + backend profiles + subsystems)
 python run_benchmark.py --suites manipulation unary   # subset of the op matrix
 python run_benchmark.py --skip-build          # reuse existing Release build
 python run_benchmark.py --skip-csharp         # NumPy only
-python run_benchmark.py --quick               # dev: fewer NumPy iterations
+python run_benchmark.py --quick               # deprecated alias for --depth light
 python run_benchmark.py --no-history          # don't write the history snapshot
 # subsystem opt-outs: --skip-nditer --skip-layout --skip-operand --skip-cast --skip-fusion
+# backend profile opt-out: --skip-openblas
 ```
 
-**Cost:** the full matrix is long (µs–ms array ops × 15 dtypes × 3 sizes × 14 suites + subsystems). For iterating
+With no arguments in an interactive terminal, the runner opens a depth picker and then a dtype
+picker. Scripts and CI should be explicit:
+
+```bash
+python benchmark/run_benchmark.py --depth pass                 # 1 call/cell, 0 warmups; execution gate
+python benchmark/run_benchmark.py --depth light --dtypes f32   # rough ratio: 8/3 BDN, 1/6 NumPy budget
+python benchmark/run_benchmark.py --depth measure              # full publication-quality run
+python benchmark/run_benchmark.py --depth pass --dtypes f16,c128 --suites unary reduction
+```
+
+`--dtypes` accepts comma-separated NumSharp/NumPy names and short aliases. Parameterized BDN cases
+are filtered before execution. A scenario with more than one dtype axis matches if the requested
+dtype occurs on **any** side. Pass/light retain raw reports under `benchmark/results/<ts>/`, record
+`run-config.json`, validate every BDN sample count and pass-mode NumPy call count, skip complementary
+subsystem sheets, and never overwrite canonical root/docs/history artifacts. `--quick` is retained
+only as a deprecated alias for `--depth light`.
+
+**Cost:** the full matrix is long (µs–ms array ops × applicable dtypes/sizes × 18 suites + subsystems). For iterating
 on one op, `--suites <that suite>` or the smoke path (`--list flat` + `numpy_benchmark.py --suite <s> --quick`) is
 usually the right scope. A full measured run + committed snapshot is the post-release `.github/workflows/
 benchmark.yml` ritual, not something to kick off casually.
@@ -28,33 +48,110 @@ benchmark.yml` ritual, not something to kick off casually.
   ("project names need to be unique") because sibling `.claude/worktrees/` checkouts contain same-named benchmark
   projects. In-process also matches the warm long-lived NumPy process, so the cross-language ratio is fair.
 - **25 ms-capped, 50-iteration job** — BDN's default Throughput strategy ramps to thousands of invocations per
-  iteration for nanosecond microbenchmarks; for µs–ms array ops that made a single 10M case ~25 s and the full
-  matrix take days. Capping iteration time lets the pilot pick a per-op invocation count that fits 25 ms while
-  preserving all 50 iterations (~15× faster).
+  iteration for nanosecond microbenchmarks; for µs–ms array ops that would make a single 10M case take tens of
+  seconds and the full matrix take days. Capping iteration time lets the pilot pick a per-op invocation count that
+  fits 25 ms while preserving all 50 measured iterations — a large wall-clock saving at the same rigor.
 
 The nditer subsystem reports a section that crashes all retries (the known intermittent `AccessViolation`) as
 **NA/IGNORED**, never a failure.
 
 ## Reading the report
 
-- **Convention is NPY/NS** (NumPy_ms / NumSharp_ms, `>1` = NumSharp faster). Icons ✅ `≥1.0` 🟡 `≥0.5` 🟠 `≥0.2`
-  🔴 `<0.2`.
-- The report has a **per-size geomean summary** + the full **per-(op, dtype, N) ratio matrix**, then the five
-  appended subsystem sections.
+- **Convention is NPY/NS** (NumPy_ms / NumSharp_ms, `>1` = NumSharp faster). The **status icon** on each row is
+  assigned by `get_status()` (the faster→slower cutoffs) + `classify()` (the credibility gate) in
+  `scripts/merge-results.py` — read those for the exact numeric thresholds, which are tuned there rather than
+  pinned in this doc:
+  - **✅ faster** · **🟡 near-parity** · **🟠 slower** (optimization target) · **🔴 much slower** (priority fix)
+    — descending ratio bands.
+  - **▫ negligible** — a *non-throughput* cell: a semantic O(1)-in-N scenario, sub-µs work on either side, or an
+    implausible speedup above the credible cap. Kept in the raw per-suite tables but **excluded from every geomean
+    and ranking**.
+  - **⚪ pending** — no joined C# row at this (op, dtype, N); the merge found no match.
+  - **❌ failed** — the C# benchmark *ran but crashed / OOM'd* (no measurement). Distinct from ⚪ (which never ran).
+  The `%NumPy🕐` column = NumSharp_ms / NumPy_ms × 100 = share of NumPy's time NumSharp uses (<100% = faster).
+  (Note the legend the report *prints* is decorative and can lag the classifier; the two `merge-results.py`
+  functions are authoritative.)
+- **Credibility gating** (`merge-results.py` `classify()` + `scripts/credibility.py`): a row is a believable
+  throughput comparison only when the scenario is not semantically O(1) in element count, **both sides did at
+  least `WORK_FLOOR_MS` (1µs) of work**, and the speedup is within `MAX_CREDIBLE_SPEEDUP` (20×). Anything else is
+  ▫ negligible. The reviewed O(1)-in-N view/metadata/fixed-count-wrapper set lives in `credibility.py`; the proof
+  ledger is `benchmark/O1_EXCLUSIONS.md`. Raw rows stay inspectable and are never showcased.
+- The report has the full **per-(op, dtype, N, scenario) matrix**, both backend profiles, one fastest-valid
+  effective value, then the appended subsystem sections (NDIter + layout / operand / cast / fusion + backend).
 - A row missing a C# or NumPy value ("C# not run" / "NumPy only") almost always means the two names didn't
-  **normalize to the same join key** — check the C# `[Benchmark(Description)]` vs the NumPy `.name`.
+  **normalize to the same join key** — check the C# `[Benchmark(Description)]` against the NumPy `.name`, or run
+  `scripts/check_smoke_joins.py` (below) which does it structurally.
+
+## Source-level checks (no timing run)
+
+Two cheap audits answer "is the wiring right?" without executing a benchmark:
+
+- **`scripts/audit_coverage.py`** — the coverage audit. Cross-references the compiled NumPy API inventory
+  (`coverage/generated/coverage.json`) against the `[Benchmark(Description)]` attributes in the op-matrix
+  namespaces plus the reviewed `coverage/overrides.json`, and (re)writes `coverage/generated/summary.md` +
+  `coverage.{json,csv}`. Read `summary.md` to see headline coverage, the **Missing benchmark coverage** to-do
+  table, the reviewed exclusions, the OpenBLAS route map (which APIs are managed / optional-with-fallback /
+  required-LAPACK), and any **Unmatched benchmark descriptions** (a stale/renamed label that no longer maps to an
+  API row). The counts there are generated — treat that file as the source of truth rather than memorizing a
+  number.
+- **`scripts/check_smoke_joins.py`** — the join checker. From a quick NumPy smoke run
+  (`numpy_benchmark.py --quick --size small --output benchmark/results/smoke/<suite>.json` per suite), it verifies
+  every C# `[Benchmark(Description)]` ↔ NumPy `.name` join in **both directions** using the exact merge
+  normalizer, ignoring dtype/size cells. This is the fast way to catch a "C# not run" / "NumPy only" row before a
+  full measured run.
+
+The merge / backend-profile / O(1)-exclusion / universal-tier / snapshot logic is itself locked by
+`scripts/tests/test_*.py` (e.g. `test_merge_backend_profiles.py`, `test_o1_exclusions.py`,
+`test_universal_tier_coverage.py`, `test_snapshot_history.py`) — run those after changing a script under
+`scripts/`.
+
+## Reports & UI surfaces (canonical → human-facing)
+
+They drift — know which is which:
+- **`benchmark/benchmark-report.md`** — the canonical backend-aware report. Tracked; refreshed by CI. Start here.
+- **`benchmark-report.{managed,openblas}.json`** — separate profiles using the same schema; the unsuffixed
+  JSON contains both profiles plus the effective selection.
+- **`benchmark/history/latest/*`** — the committable snapshot the docs/CI reference.
+- **`benchmark/benchmark-dashboard.md`** — a dense ASCII-bar sheet from `scripts/render_dashboard.py`. Gitignored,
+  **NOT** wired into `run_benchmark.py` or CI — run it by hand to seed the DocFX dashboard's numbers.
+- **`docs/website-src/docs/benchmarks-dashboard.md`** — the **real UI**, promoted from the backend POC. It reads
+  only the canonical combined JSON and computes effective rollups/backend drill-downs from measured rows.
+- **`benchmark/README.md`** is a static orientation guide, **not** the report — CI never refreshes it.
+
+## Dashboard data delivery — the `master-code-data` branch
+
+The three live docs dashboards fetch same-origin JSON that DocFX bakes at build time. That data now has
+**two sources, reconciled by date at build time** (`master` stays a backwards-compatible fallback):
+
+- **Code branch (`master`)** — each dataset's committed copy (the historical path; still builds alone).
+- **Orphan `master-code-data` branch** — generated data as `<type>/<date>_<sha>/` snapshots + a git
+  symlink `latest`, one folder per type: `benchmark`, `tests-oracle`, `inventory` (NumPy API coverage),
+  `benchmark-coverage`. The branch's top-level + per-type READMEs are the authoritative spec.
+
+Tooling lives on the code branch in **`tools/dashboard_data/`** (stdlib-only):
+- `publish.py --type <t> --from <dir> --branch-worktree <wt> --sha <sha> --commit` — append a
+  `<date>_<sha>` snapshot for a type and repoint `latest`.
+- `resolve.py --data-worktree <wt> --into .` — at docs-build time, per dataset pick the newer of
+  master-vs-branch by **git commit date** and overlay it onto the paths DocFX already reads (so the UI's
+  relative `data/…` fetch is unchanged). `latest` is the newest pointer; missing → max `<date>_<sha>` fallback.
+- `common.py` — the per-type file/overlay map + `latest`/fallback/date helpers.
+
+CI: `benchmark.yml` publishes the fresh `benchmark` snapshot after a run; `docs.yml` publishes
+`inventory`/`tests-oracle`/`benchmark-coverage` on master pushes and runs `resolve.py` before `docfx build`.
+**`docfx.json` is unchanged** — the resolver stages winners into the paths its resource/content blocks already glob.
 
 ## History snapshots — what we commit
 
 | Path | Tracked? | Contents |
 |------|----------|----------|
 | `benchmark/results/<ts>/` | ❌ gitignored | raw per-run scratch (per-suite NumPy JSON, BDN per-class reports, merged json/csv). |
-| `benchmark/history/<date>_<sha>/` | ✅ tracked | the snapshot: `MANIFEST.md` + `benchmark-report.{md,json,csv}` + `numpy-results.json` + every subsystem `*_results.{md,tsv}` + `cards/`. |
+| `benchmark/history/<date>_<sha>/` | ✅ tracked | the snapshot: MANIFEST + combined/separate profile JSON + report/csv + NumPy input + subsystem results + cards. |
 | `benchmark/history/latest` | ✅ tracked symlink | → the newest snapshot. Stable path for docs/CI. |
 
 `benchmark/scripts/snapshot_history.py` assembles it (called by `run_benchmark.py`; `--commit` to also git-commit).
 **Publish ritual:** run → review → commit `benchmark/history/`. Reference `benchmark/history/latest/benchmark-report.md`,
-never the gitignored scratch.
+never the gitignored scratch. The same `benchmark/history/latest` snapshot is also published to the
+`master-code-data` branch (see *Dashboard data delivery* above) so the docs resolver can serve it to the site.
 
 ## The Debug-taint reminder (bears repeating)
 

@@ -41,33 +41,58 @@ namespace NumSharp
             => delete(arr, (long)obj, axis);
 
         /// <summary>
+        ///     NumPy's <c>delete</c>/<c>insert</c> allocate their output in the SOURCE's memory order —
+        ///     <c>arrorder = 'F' if arr.flags.fnc else 'C'</c> (<c>_function_base_impl.py</c>), so an
+        ///     F-ordered input yields an F-contiguous owned result (probed: num 1286). The composition
+        ///     kernels here build C-contiguous results, so relabel to F when the source was F-and-not-C.
+        ///     IDEMPOTENT (an already-F result passes through), so nested overload delegation is safe.
+        /// </summary>
+        internal static NDArray WithSourceOrder(NDArray arr, NDArray result)
+        {
+            if (result.ndim > 1
+                && arr.Shape.IsFContiguous && !arr.Shape.IsContiguous
+                && result.Shape.IsContiguous && !result.Shape.IsFContiguous)
+                return asfortranarray(result);
+            return result;
+        }
+
+        /// <summary>
         ///     Long-index overload of <see cref="delete(NDArray, int, int?)"/>.
         /// </summary>
+        // Scope: delete is a composition that owns transients — PrepareAxisContext mints a ravel
+        // `work` copy for axis=None on an N-D input, the DeleteXxx helpers build concatenated chunks,
+        // and WithSourceOrder mints an asfortranarray copy for an F-contiguous source (orphaning the
+        // C-contiguous intermediate). None were reclaimed (measured: one bucketed buffer escaped per
+        // delete). [NDScoped] reclaims them all while yielding the fresh result; a passthrough `work`
+        // (already 1-D input) is never tracked, and the bool-path's hand-disposed keepArr is idempotent.
+        [NDScoped]
         public static NDArray delete(NDArray arr, long obj, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
 
             var ctx = PrepareAxisContext(arr, axis);
-            return DeleteSingleIndex(ctx.work, obj, ctx.axis);
+            return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, obj, ctx.axis));
         }
 
         /// <summary>
         ///     Slice-index overload. <paramref name="obj"/> is interpreted via
         ///     Python <c>slice.indices(N)</c> against the axis length.
         /// </summary>
+        [NDScoped]
         public static NDArray delete(NDArray arr, Slice obj, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
             var ctx = PrepareAxisContext(arr, axis);
-            return DeleteSlice(ctx.work, obj, ctx.axis);
+            return WithSourceOrder(arr, DeleteSlice(ctx.work, obj, ctx.axis));
         }
 
         /// <summary>
         ///     Array-of-indices overload. Negative indices are normalized; duplicates
         ///     are silently collapsed (each axis position is removed at most once).
         /// </summary>
+        [NDScoped]
         public static NDArray delete(NDArray arr, int[] obj, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -77,19 +102,20 @@ namespace NumSharp
             for (int i = 0; i < obj.Length; i++) longs[i] = obj[i];
 
             var ctx = PrepareAxisContext(arr, axis);
-            return DeleteIndexArray(ctx.work, longs, ctx.axis);
+            return WithSourceOrder(arr, DeleteIndexArray(ctx.work, longs, ctx.axis));
         }
 
         /// <summary>
         ///     Long-array-of-indices overload.
         /// </summary>
+        [NDScoped]
         public static NDArray delete(NDArray arr, long[] obj, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
             var ctx = PrepareAxisContext(arr, axis);
-            return DeleteIndexArray(ctx.work, (long[])obj.Clone(), ctx.axis);
+            return WithSourceOrder(arr, DeleteIndexArray(ctx.work, (long[])obj.Clone(), ctx.axis));
         }
 
         /// <summary>
@@ -97,6 +123,7 @@ namespace NumSharp
         ///     inversion. Length must match the targeted axis size (NumPy raises
         ///     <c>ValueError</c> otherwise).
         /// </summary>
+        [NDScoped]
         public static NDArray delete(NDArray arr, bool[] obj, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -115,7 +142,7 @@ namespace NumSharp
             for (int i = 0; i < obj.Length; i++) keep[i] = !obj[i];
 
             var keepArr = np.array(keep);
-            try { return np.compress(keepArr, ctx.work, ctx.axis); }
+            try { return WithSourceOrder(arr, np.compress(keepArr, ctx.work, ctx.axis)); }
             finally { keepArr.Dispose(); }
         }
 
@@ -125,6 +152,7 @@ namespace NumSharp
         ///     integer arrays collapse to the scalar-index fast path (matching
         ///     NumPy's <c>obj.size == 1 and obj.dtype.kind in "ui": obj = obj.item()</c>).
         /// </summary>
+        [NDScoped]
         public static NDArray delete(NDArray arr, NDArray obj, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
@@ -146,7 +174,7 @@ namespace NumSharp
                 bool[] keep = new bool[N];
                 for (long i = 0; i < N; i++) keep[i] = !obj.GetBoolean((int)i);
                 var keepArr = np.array(keep);
-                try { return np.compress(keepArr, ctx.work, ctx.axis); }
+                try { return WithSourceOrder(arr, np.compress(keepArr, ctx.work, ctx.axis)); }
                 finally { keepArr.Dispose(); }
             }
 
@@ -154,12 +182,12 @@ namespace NumSharp
             if (obj.size == 1)
             {
                 long idx = ToInt64Scalar(obj, "delete");
-                return DeleteSingleIndex(ctx.work, idx, ctx.axis);
+                return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, idx, ctx.axis));
             }
 
             // Materialise indices into a managed long[] for the multi-index path.
             long[] indices = ToInt64Vector(obj, "delete");
-            return DeleteIndexArray(ctx.work, indices, ctx.axis);
+            return WithSourceOrder(arr, DeleteIndexArray(ctx.work, indices, ctx.axis));
         }
 
         // ---------------------------- helpers ----------------------------
@@ -411,6 +439,7 @@ namespace NumSharp
         ///     between deleted positions. Equivalent to the bool-mask + compress
         ///     path but skips the O(N) mask scan.
         /// </summary>
+        [NDScopedCovered] // only caller: DeleteIndexArray ← the [NDScoped] delete overloads
         private static NDArray DeleteChunkConcat(NDArray arr, long[] indices, int axis)
         {
             long N = arr.shape[axis];

@@ -11,7 +11,7 @@ exception type). The C# replayer (Fuzz/IndexOracleTests.cs) rebuilds the SAME ba
 the SAME index from a portable TOKEN encoding, runs get/set, and bit-compares shape + values +
 which-side-raised. No Python runs at test time or in CI.
 
-Output (JSONL, one case per line), into test/NumSharp.UnitTest/Fuzz/corpus/:
+Output (JSONL, one case per line), into test/NumSharp.Tests.Oracle/Fuzz/corpus/:
   index_curated.jsonl  — deterministic basic/fancy/bool/0-d-bool/mixed matrix + setters
   index_dtype.jsonl    — a handful of index forms swept across all 13 NumPy dtypes
   index_random_<seed>.jsonl — seeded random fuzz over the whole index space
@@ -21,7 +21,7 @@ Token encoding (portable; both sides interpret identically):
   ["arr",flat,shape] ["barr",flatbool,shape] ["b0",bool] ["a0",n]
 value (setter): ["scalar",n] | ["arr",flat,shape]
 
-Base recipes (mirrored in C#): S,V0,V1,V6,A,AT,ARS,ACS,ANR,ANC,ASO,ABC,B,BT,E03
+Base recipes (mirrored in C#): S,V0,V1,V6,A,AT,ARS,ACS,ANR,ANC,ASO,ABC,B,BT,E03,E30,E230
 (arange-filled; views built via the same slice/transpose/broadcast ops). All data int64 so
 values compare exactly as int64; the dtype sweep re-encodes per dtype (complex -> re/im pairs,
 bool -> 0/1, half -> double).
@@ -53,7 +53,9 @@ def make_base(name):
         "ABC": np.broadcast_to(np.arange(4), (3,4)),  # broadcast (3,4)
         "B":   B.copy(),
         "BT":  B.T,                                    # (4,3,2)
-        "E03": np.zeros((0,3), dtype=np.int64),        # empty 2-D
+        "E03": np.zeros((0,3), dtype=np.int64),        # empty 2-D, zero in the LEADING axis
+        "E30": np.zeros((3,0), dtype=np.int64),        # empty 2-D, zero in the TRAILING axis
+        "E230": np.zeros((2,3,0), dtype=np.int64),     # empty 3-D, zero in the TRAILING axis
     }[name]
 
 # dtype sweep bases: arange-filled (integer-valued so float/complex/half are exact)
@@ -99,9 +101,13 @@ def eval_get(base_name, tokens):
     except Exception as e:
         return {"ok":False, "err":type(e).__name__}
 
-def eval_set(base_name, tokens, value):
+def eval_set(base_name, tokens, value, order='C'):
     try:
-        b = make_base(base_name).copy()
+        # order='K' preserves a view base's memory layout (F-contig / strided) so the SET runs
+        # into a genuinely non-contiguous destination; the compared `vals` are ravel(order='C')
+        # (logical), so the expected answer is layout-independent — this only makes the C# side
+        # exercise the strided scatter path.
+        b = make_base(base_name).copy(order=order)
         b[np_index(tokens)] = val_to_np(value)
         return {"ok":True, "shape":list(b.shape), "vals":ravel_i64(b)}
     except Exception as e:
@@ -132,8 +138,11 @@ BASIC2 = [["int",0],["int",1],["int",-1]] + [S(s) for s in SLICES[:6]] + [["new"
 curated=[]
 def addg(base, tokens, tag):
     curated.append({"op":"get","base":base,"tokens":tokens,"tag":tag,"np":eval_get(base,tokens)})
-def adds(base, tokens, value, tag):
-    curated.append({"op":"set","base":base,"tokens":tokens,"value":value,"tag":tag,"np":eval_set(base,tokens,value)})
+def adds(base, tokens, value, tag, order='C'):
+    row = {"op":"set","base":base,"tokens":tokens,"value":value,"tag":tag,"np":eval_set(base,tokens,value,order)}
+    if order != 'C':                       # keep pre-existing case lines byte-identical
+        row["order"] = order
+    curated.append(row)
 
 # 1) BASIC indexing — exhaustive small tuples on V/A/B and every layout
 for base in ["V6","V1","V0","S"]:
@@ -262,6 +271,56 @@ addg("E03",[FARR["f08"]],"fancy1:f08")                        # arr []   -> (0,3
 adds("E03",[S([None,None,None])],SV["sc"],"set:colon=scalar") # no-op OK
 adds("E03",[["int",0]],SV["sc"],"set:int=scalar")             # err
 
+# 4c) E30 / E230 — the zero is in a TRAILING axis, so a leading integer index is VALID and
+# yields an empty view. E03 only ever exercised the raising direction (index into a length-0
+# axis); this is the other one, and it used to throw: Shape.GetSubshape bounds-checked the
+# offset against a buffer size of 0, so `a[0]` on a (2,3,0) raised where NumPy gives (3,0).
+addg("E30",[],"emptytuple")                                   # -> (3,0)
+addg("E30",[S([None,None,None])],"basic1")                    # [:]    -> (3,0)
+addg("E30",[["int",0]],"basic1")                              # [0]    -> (0,)
+addg("E30",[["int",2]],"basic1")                              # [2]    -> (0,)
+addg("E30",[["int",-1]],"basic1")                             # [-1]   -> (0,)
+addg("E30",[["int",3]],"basic1")                              # [3]    -> IndexError
+addg("E30",[S([None,None,None]),["int",0]],"basic2")          # [:, 0] -> IndexError
+addg("E30",[["int",0],["int",0]],"basic2")                    # [0, 0] -> IndexError
+addg("E30",[S([None,None,2])],"basic1")                       # [::2]  -> (2,0)
+addg("E30",[S([None,None,-1])],"basic1")                      # [::-1] -> (3,0)
+addg("E30",[["new"]],"newaxis")                               # [None] -> (1,3,0)
+addg("E30",[["ell"]],"ellipsis")                              # [...]  -> (3,0)
+addg("E30",[mask_for([3,0])],"bool:full")                     # mask   -> (0,)
+adds("E30",[["int",0]],SV["sc"],"set:int=scalar")             # empty target, no-op OK
+
+addg("E230",[],"emptytuple")                                  # -> (2,3,0)
+addg("E230",[["int",0]],"basic1")                             # [0]     -> (3,0)
+addg("E230",[["int",1]],"basic1")                             # [1]     -> (3,0)
+addg("E230",[["int",-1]],"basic1")                            # [-1]    -> (3,0)
+addg("E230",[["int",2]],"basic1")                             # [2]     -> IndexError
+addg("E230",[["int",0],["int",0]],"basic2")                   # [0,0]   -> (0,)
+addg("E230",[["int",1],["int",2]],"basic2")                   # [1,2]   -> (0,)
+addg("E230",[["int",0],["int",3]],"basic2")                   # [0,3]   -> IndexError
+addg("E230",[["int",0],["int",0],["int",0]],"basic3")         # [0,0,0] -> IndexError
+addg("E230",[S([None,None,None]),["int",1]],"basic2")         # [:, 1]  -> (2,0)
+addg("E230",[["int",0],S([None,None,None])],"basic2")         # [0, :]  -> (3,0)
+addg("E230",[["ell"],["int",0]],"ellipsis")                   # [..., 0]-> IndexError
+addg("E230",[["new"]],"newaxis")                              # [None]  -> (1,2,3,0)
+adds("E230",[["int",0]],SV["sc"],"set:int=scalar")            # empty target, no-op OK
+
+# 4d) Subshaped fancy SET into a NON-contiguous destination (order='K' copy keeps the view's
+# F-contig / strided layout). This is the exact trigger for SetIndicesNDNonLinear<T>: a fancy
+# index consuming FEWER axes than ndim selects strided sub-arrays, which the block-copy fast
+# path (SetIndicesND) would scatter as if contiguous — corrupting an F-contig / transposed
+# destination (an F-contig a[[0,2]]=v landed row 2 at consecutive buffer slots, not its column).
+# Appended after the whole curated block so every pre-existing ordinal / case id stays stable.
+# AT=(4,3) F-contig, BT=(4,3,2) F-contig are the layouts whose sub-arrays are genuinely strided.
+for base in ["AT","BT","ANR","ANC","ACS"]:
+    adds(base,[FARR["f01"]],SV["sc"],"set:fancy1=scalar",order='K')    # [0,1] valid for axis0>=2
+adds("AT",[FARR["f02"]],SV["sc"],"set:fancy=scalar",order='K')          # (4,3): rows 0,2 -> -1
+adds("AT",[FARR["f02"]],["arr",list(range(100,106)),[2,3]],"set:fancy=matched",order='K')  # (2,3)
+adds("AT",[FARR["f02"]],["arr",[10,20,30],[3]],"set:fancy=bcastrow",order='K')              # (3,)->(2,3)
+adds("AT",[FARR["f04"]],SV["sc"],"set:fancyNeg=scalar",order='K')       # [-1,-2] negative fancy
+adds("BT",[FARR["f02"]],["arr",list(range(1,13)),[2,3,2]],"set:fancy=grid",order='K')       # subShape (3,2)
+adds("BT",[FARR["f01"],FARR["f02"]],SV["sc"],"set:multifancy=scalar",order='K')             # 2 idx -> subShape (2,)
+
 # 5) DTYPE sweep — a handful of forms across all 13 dtypes
 dtype_forms = {
   "int":[["int",1]], "slice":[S([1,3,None])], "negslice":[S([None,None,-1])],
@@ -314,7 +373,7 @@ for (dt, toks, val) in SETTER_DTYPE_CASES:
 
 # 6) RANDOM FUZZ — seeded, explores the space far beyond the curated forms
 ND = {"V6":1,"V1":1,"V0":1,"S":0,"A":2,"AT":2,"ARS":2,"ACS":2,"ANR":2,"ANC":2,"ASO":2,"ABC":2,
-      "B":3,"BT":3,"E03":2}
+      "B":3,"BT":3,"E03":2,"E30":2,"E230":3}
 def rand_tokens(rng, ndim):
     L = rng.randint(0, ndim+2); toks=[]; used_ell=False
     for _ in range(L):
@@ -350,8 +409,15 @@ def random_fuzz(seed, ng, ns):
     rng = random.Random(seed)
     # G6: E03 (empty 2-D) + V0 (empty 1-D) joined the getter pool, E03 the setter pool —
     # empty bases were previously absent from the whole random space.
-    gpool=["V6","A","B","AT","ARS","ACS","ANR","ANC","ASO","ABC","BT","V1","S","E03","V0"]
-    spool=["V6","A","B","ARS","ANR","ASO","ACS","E03"]
+    # E30/E230 (the zero in a TRAILING axis) joined both pools once FANCY indexing stopped
+    # throwing on a zero-sized source. Random tokens reach fancy indexing, and the gather/scatter
+    # offset backstop used to reject every one of them: LargestReachableOffset is `size - 1` == -1
+    # for an empty array, below every offset it is compared against. It is now disengaged when the
+    # source holds no element (nothing is dereferenced there) while the per-axis validation that
+    # actually decides validity — ScanFancyBounds + PrepareIndexGetters — is untouched. E03 keeps
+    # exercising the RAISING direction: a zero in the LEADING axis makes even index 0 invalid.
+    gpool=["V6","A","B","AT","ARS","ACS","ANR","ANC","ASO","ABC","BT","V1","S","E03","V0","E30","E230"]
+    spool=["V6","A","B","ARS","ANR","ASO","ACS","E03","E30","E230"]
     for _ in range(ng):
         base=rng.choice(gpool); raddg(base, rand_tokens(rng, ND[base]), "rand")
     for _ in range(ns):
@@ -374,7 +440,7 @@ def write_jsonl(path, cases):
             f.write(json.dumps(row, separators=(",", ":")) + "\n")
 
 here = os.path.dirname(os.path.abspath(__file__))
-corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.UnitTest", "Fuzz", "corpus"))
+corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
 write_jsonl(os.path.join(corpus_dir, "index_curated.jsonl"), curated)
 write_jsonl(os.path.join(corpus_dir, "index_dtype.jsonl"),   dtype_cases)
 write_jsonl(os.path.join(corpus_dir, "index_setter_dtype.jsonl"), setter_dtype_cases)

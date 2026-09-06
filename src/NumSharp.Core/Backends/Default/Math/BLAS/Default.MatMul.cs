@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -65,7 +65,7 @@ namespace NumSharp.Backends
         /// stack dims — the matrix dims are left intact — then runs the 2-D kernel per batch element.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        protected static NDArray BatchedMatmul(NDArray lhs, NDArray rhs)
+        protected NDArray BatchedMatmul(NDArray lhs, NDArray rhs)
         {
             long n = lhs.shape[lhs.ndim - 2];
             long k = lhs.shape[lhs.ndim - 1];
@@ -84,7 +84,36 @@ namespace NumSharp.Backends
 
             var resultType = np._FindCommonArrayType(lhs.GetTypeCode, rhs.GetTypeCode);
             var resultShape = new Shape(batch.Concat(new[] { n, m }).ToArray());
-            var ret = new NDArray(resultType, resultShape);
+            // fillZeros is the ctor default, but it is spelled out because the k == 0 branch below
+            // RELIES on it: there, no kernel runs and this allocation is the only thing that ever
+            // writes the result. (The ordinary path does not need it — every 2-D kernel clears C
+            // before accumulating, exactly as NumPy's matmul_inner_noblas stores 0 before its
+            // summation loop.)
+            var ret = new NDArray(resultType, resultShape, fillZeros: true);
+
+            // An external BLAS, when one is installed — offered the WHOLE stack first. The trailing
+            // strides are identical for every element of it, so a backend can hoist its route
+            // decision and scratch out of the loop the way NumPy's matmul gufunc does; going
+            // through TryMatMul2D per element instead costs more than the products do once the
+            // matrices are small. Read the property once (see the note in Default.Dot.cs).
+            var blas = Blas;
+            if (blas != null && blas.TryMatMulBatched(lhsB, rhsB, ret))
+                return ret;
+
+            // A zero-sized extent anywhere makes every per-batch product degenerate. NumPy settles
+            // the whole family without entering a blas route — the `any_zero_dim` arm of
+            // @TYPE@_matmul forces matmul_inner_noblas — and there the answer falls out of the loop
+            // bounds. Two outcomes, and NEITHER needs the batch loop below:
+            //   * the result is EMPTY — an empty stack dim, or n == 0 / m == 0 — so nothing to write;
+            //   * the result is non-empty but k == 0, in which case every entry is an EMPTY SUM.
+            //     NumPy stores 0 into the output cell before its (zero-trip) accumulation loop, so
+            //     the answer is exactly zero — probed: nan(2,3,0) @ inf(2,0,5) is +0.0, not nan —
+            //     which is what the zero-filled allocation above already holds.
+            // The loop cannot run these anyway: the batch odometer rejects an empty iteration space,
+            // and a sub-view of a zero-sized operand cannot be taken (Shape.GetSubshape bounds-checks
+            // the offset against a buffer size of 0, so even a valid index throws).
+            if (ret.size == 0 || k == 0)
+                return ret;
 
             // Iterate the batch coordinates; each integer-index slice is a 2-D [n,k]·[k,m]->[n,m].
             // GetData(coords) is COORDINATE (sub-array) access — a raw long[] passed to the
@@ -95,7 +124,18 @@ namespace NumSharp.Backends
             var incr = new ValueCoordinatesIncrementor(ref iterShape);
             var index = incr.Index;
             for (long i = 0; i < len; i++, incr.Next())
-                MultiplyMatrix(lhsB.GetData(index), rhsB.GetData(index), ret.GetData(index));
+            {
+                // Per-iteration dispose, not a method scope: a scope would hold 3×batch sub-views
+                // alive simultaneously (the pool-bucket overflow NDScope's granularity note warns of).
+                var lhs2d = lhsB.GetData(index);
+                var rhs2d = rhsB.GetData(index);
+                var ret2d = ret.GetData(index);
+                var slot = MultiplyMatrix(lhs2d, rhs2d, ret2d);   // returns ret2d itself (the @out form)
+                lhs2d.Dispose();
+                rhs2d.Dispose();
+                slot.Dispose();
+                ret2d.Dispose();   // same instance as slot — Dispose is idempotent, the second call is a no-op
+            }
 
             return ret;
         }
@@ -113,6 +153,13 @@ namespace NumSharp.Backends
         /// <summary>
         /// Broadcast two batch (stack) dimension lists right-aligned, NumPy rules: equal, or one is 1.
         /// </summary>
+        /// <remarks>
+        /// The length-1 axis takes the OTHER extent, which may be 0 — <c>np.broadcast_shapes((0,), (1,))</c>
+        /// is <c>(0,)</c>, not <c>(1,)</c>. So the result is "the one that isn't 1", never <c>Math.Max</c>:
+        /// max would turn an empty stack into a one-element stack and then demand a <c>(0,n,k)</c>
+        /// operand be broadcast to <c>(1,n,k)</c>, which is not a legal stretch. Note 0 is only
+        /// compatible with 0 and 1 — <c>0</c> against <c>n &gt; 1</c> still raises.
+        /// </remarks>
         private static long[] BroadcastStackDims(long[] a, long[] b)
         {
             int nd = Math.Max(a.Length, b.Length);
@@ -122,7 +169,7 @@ namespace NumSharp.Backends
                 long da = i < nd - a.Length ? 1 : a[i - (nd - a.Length)];
                 long db = i < nd - b.Length ? 1 : b[i - (nd - b.Length)];
                 if (da == db || da == 1 || db == 1)
-                    outDims[i] = Math.Max(da, db);
+                    outDims[i] = da == 1 ? db : da;
                 else
                     throw new IncorrectShapeException(
                         $"matmul: stacked (batch) dimensions are not broadcastable: {da} vs {db}.");

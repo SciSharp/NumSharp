@@ -302,6 +302,30 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo MathAtan2 = typeof(Math).GetMethod(nameof(Math.Atan2), new[] { typeof(double), typeof(double) })
                 ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Atan2));
 
+            // np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign scalar kernels — one static
+            // helper per (op, loop dtype), resolved through GetLogAddNextMethod. Operands reach
+            // EmitScalarOperation already in the loop dtype, so the kernel is a single Call to the
+            // matching signature (double/float/Half/decimal). Same shape as the NDDiv helpers below.
+            private static MethodInfo LA(string name, Type t) =>
+                typeof(Utilities.NDLogAddExpMath).GetMethod(name, new[] { t, t })
+                ?? throw new MissingMethodException(typeof(Utilities.NDLogAddExpMath).FullName, name);
+            public static readonly MethodInfo LogAddExpD = LA(nameof(Utilities.NDLogAddExpMath.LogAddExp), typeof(double));
+            public static readonly MethodInfo LogAddExpF = LA(nameof(Utilities.NDLogAddExpMath.LogAddExpF), typeof(float));
+            public static readonly MethodInfo LogAddExpH = LA(nameof(Utilities.NDLogAddExpMath.LogAddExpHalf), typeof(Half));
+            public static readonly MethodInfo LogAddExpDec = LA(nameof(Utilities.NDLogAddExpMath.LogAddExpDecimal), typeof(decimal));
+            public static readonly MethodInfo LogAddExp2D = LA(nameof(Utilities.NDLogAddExpMath.LogAddExp2), typeof(double));
+            public static readonly MethodInfo LogAddExp2F = LA(nameof(Utilities.NDLogAddExpMath.LogAddExp2F), typeof(float));
+            public static readonly MethodInfo LogAddExp2H = LA(nameof(Utilities.NDLogAddExpMath.LogAddExp2Half), typeof(Half));
+            public static readonly MethodInfo LogAddExp2Dec = LA(nameof(Utilities.NDLogAddExpMath.LogAddExp2Decimal), typeof(decimal));
+            public static readonly MethodInfo NextAfterD = LA(nameof(Utilities.NDLogAddExpMath.NextAfter), typeof(double));
+            public static readonly MethodInfo NextAfterF = LA(nameof(Utilities.NDLogAddExpMath.NextAfterF), typeof(float));
+            public static readonly MethodInfo NextAfterH = LA(nameof(Utilities.NDLogAddExpMath.NextAfterHalf), typeof(Half));
+            public static readonly MethodInfo NextAfterDec = LA(nameof(Utilities.NDLogAddExpMath.NextAfterDecimal), typeof(decimal));
+            public static readonly MethodInfo CopySignD = LA(nameof(Utilities.NDLogAddExpMath.CopySign), typeof(double));
+            public static readonly MethodInfo CopySignF = LA(nameof(Utilities.NDLogAddExpMath.CopySignF), typeof(float));
+            public static readonly MethodInfo CopySignH = LA(nameof(Utilities.NDLogAddExpMath.CopySignHalf), typeof(Half));
+            public static readonly MethodInfo CopySignDec = LA(nameof(Utilities.NDLogAddExpMath.CopySignDecimal), typeof(decimal));
+
             // Integer power helpers (squared-exponentiation with native wrapping).
             // Used by EmitPowerOperation when result type is integer to preserve
             // NumPy's exact-wrap semantics that Math.Pow's double round-trip loses.
@@ -509,6 +533,22 @@ namespace NumSharp.Backends.Kernels
                 .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(double) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(Half));
             public static readonly MethodInfo DoubleToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(double));
+            // Half <-> float (F16C-lowered by the JIT: [Intrinsic] op_Explicit → vcvtph2ps / vcvtps2ph).
+            // These are the fast, NumPy-HALF-loop-matching conversions: NumPy's npy_half loops widen
+            // to float32 (npy_half_to_float), compute the CRT float function, and round back
+            // (npy_float_to_half) — see EmitUnaryHalfViaFloat. The double bridge above is 2 conversions
+            // deep (Half→float→double) and drags in the slower double math functions.
+            public static readonly MethodInfo HalfToFloat = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(float) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(Half));
+            public static readonly MethodInfo FloatToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(float));
+            // float.Exp2 == the CRT exp2f NumPy's HALF_exp2 loop calls (npy_exp2f). Used ONLY on the
+            // Half path: it is the correctly-rounded software 2^x, byte-identical to NumPy's half loop
+            // (finite AND NaN payload). The float32-array path uses NDFloatMath.Exp2 (the fast SIMD
+            // ≤1-ULP kernel) instead — but that kernel's scalar entry is far slower here than float.Exp2
+            // and blanks the NaN payload, so the half loop deliberately keeps the CRT.
+            public static readonly MethodInfo SingleExp2Crt = typeof(float).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(float).FullName, "Exp2(float)");
             public static readonly MethodInfo HalfIsNaN = typeof(Half).GetMethod("IsNaN", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "IsNaN");
 
@@ -547,6 +587,9 @@ namespace NumSharp.Backends.Kernels
             // Complex unary operator methods
             public static readonly MethodInfo ComplexNegate = typeof(System.Numerics.Complex).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_UnaryNegation");
+            // np.conjugate: Complex.Conjugate(z) flips the sign of the imaginary part (re - i*im).
+            public static readonly MethodInfo ComplexConjugate = typeof(System.Numerics.Complex).GetMethod("Conjugate", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Conjugate");
             // Sqrt/Exp/Sin/Cos/Tan route through NDComplexMath (not Complex.* directly): the BCL
             // matches NumPy on finite interiors but diverges at the C99 edges (non-finite, branch-cut
             // signs, signed zeros). NDComplexMath delegates the interior to the BCL and adds the fixups.
@@ -554,6 +597,66 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Sqrt");
             public static readonly MethodInfo ComplexExp = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Exp");
+            // float32 exp routes through NDFloatMath.Exp (port of NumPy's simd_exp_FLOAT), NOT
+            // MathF.Exp: the platform libm is ~correctly rounded while NumPy's Remez/Cody-Waite
+            // kernel carries up to 2.52 ULP of its own error, so "more accurate" reads as a
+            // divergence. The port is bit-exact against NumPy 2.4.2 over all 2^32 inputs.
+            public static readonly MethodInfo SingleExp = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Exp");
+            // The same kernel a whole register at a time, resolved for the width detected at
+            // startup. NULLABLE by design (unlike the entries above): a host with no SIMD has no
+            // width to bind, and the eligibility gate (ExpVectorSimdAvailable) reads this field to
+            // decide, so an absent overload must be a false rather than a type-load failure.
+            public static readonly MethodInfo SingleExpVector =
+                VectorBits == 0 ? null
+                : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static,
+                    new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
+            // float32 exp2 (2^x): NDFloatMath.Exp2, a fast replacement for (float)Math.Pow(2, x). NOT
+            // a NumPy-kernel port — the win-amd64 wheel runs a scalar exp2f (its SVML vector kernel is
+            // AVX-512/Linux-gated) — but ≤1 ULP and ~2.4x faster than that scalar loop. Same scalar/
+            // vector split as SingleExp; the vector overload is nullable for the no-SIMD host.
+            public static readonly MethodInfo SingleExp2 = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Exp2");
+            public static readonly MethodInfo SingleExp2Vector =
+                VectorBits == 0 ? null
+                : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static,
+                    new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
+            // float32 log: the sibling port (NumPy's simd_log_FLOAT), same reasoning as SingleExp.
+            public static readonly MethodInfo SingleLog = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Log");
+            public static readonly MethodInfo SingleLogVector =
+                VectorBits == 0 ? null
+                : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Log", BindingFlags.Public | BindingFlags.Static,
+                    new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
+            // float32 sin: port of NumPy's simd_sincos_f32 (loops_trigonometric).
+            public static readonly MethodInfo SingleSin = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Sin");
+            public static readonly MethodInfo SingleSinVector =
+                VectorBits == 0 ? null
+                : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static,
+                    new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
+            // float32 cos: port of NumPy's simd_sincos_f32 (loops_trigonometric).
+            public static readonly MethodInfo SingleCos = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Cos");
+            public static readonly MethodInfo SingleCosVector =
+                VectorBits == 0 ? null
+                : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static,
+                    new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
+            // tanh is the FIRST of these ports to cover float64 as well: NumPy ships its own
+            // kernel (loops_hyperbolic) at both widths, so unlike exp/log/sin/cos — where the
+            // platform libm already agrees with NumPy at f8 — BOTH the float and double BCL calls
+            // diverged and both are replaced. Non-nullable: the scalar entry points always exist.
+            public static readonly MethodInfo SingleTanh = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Tanh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Tanh");
+            public static readonly MethodInfo DoubleTanh = typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Tanh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDFloatMath).FullName, "Tanh");
+            // Vector form is float32-only (the f64 lookup would cost 18 gathers per 4 lanes, and the
+            // scalar f64 kernel already outruns NumPy). Nullable for the usual reason — a host with
+            // no SIMD has no width to bind.
+            public static readonly MethodInfo SingleTanhVector =
+                VectorBits == 0 ? null
+                : typeof(NumSharp.Utilities.NDFloatMath).GetMethod("Tanh", BindingFlags.Public | BindingFlags.Static,
+                    new[] { VectorMethodCache.V(VectorBits, typeof(float)) });
             // ComplexLog routes through NDComplexMath.Log (full npy_clog port): Complex.Log drops the
             // real part to 0 near |z|=1 (it lacks clog's log1p path). Reused by the Log2 composition
             // and by NDComplexMath.Log10/Log1p.
@@ -580,6 +683,14 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Acos");
             public static readonly MethodInfo ComplexAtan = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Atan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Atan");
+            // Inverse hyperbolic: NumSharp derives casinh/cacosh from the byte-exact Asin/Acos via the
+            // exact msun involution, and exposes the already-ported catanh (which drives Atan).
+            public static readonly MethodInfo ComplexAsinh = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Asinh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Asinh");
+            public static readonly MethodInfo ComplexAcosh = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Acosh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Acosh");
+            public static readonly MethodInfo ComplexAtanh = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Atanh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Atanh");
             public static readonly MethodInfo ComplexPow = typeof(System.Numerics.Complex).GetMethod("Pow", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Pow");
             // Log10/Reciprocal/Log1p route through NDComplexMath (Complex.Log10 drifts past 1 ULP from
@@ -633,8 +744,6 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Sin");
             public static readonly MethodInfo HalfCos = typeof(Half).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Cos");
-            public static readonly MethodInfo HalfTan = typeof(Half).GetMethod("Tan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Tan");
             public static readonly MethodInfo HalfExp = typeof(Half).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Exp");
             public static readonly MethodInfo HalfLog = typeof(Half).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
@@ -647,14 +756,12 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Truncate");
             public static readonly MethodInfo HalfAbs = typeof(Half).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Abs");
-            public static readonly MethodInfo HalfLog10 = typeof(Half).GetMethod("Log10", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Log10");
-            public static readonly MethodInfo HalfLog2 = typeof(Half).GetMethod("Log2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Log2");
-            public static readonly MethodInfo HalfCbrt = typeof(Half).GetMethod("Cbrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Cbrt");
-            public static readonly MethodInfo HalfExp2 = typeof(Half).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "Exp2");
+            // Sinh/Cosh/Tanh/ASin/ACos/ATan/Asinh/Acosh/Atanh/Tan/Cbrt/Log2/Log10/Exp2/Reciprocal/
+            // Square on Half now take the float32 fast path (EmitUnaryHalfViaFloat: `(Half)Xf((float)h)`,
+            // the F16C round-trip that mirrors NumPy's npy_half loop) rather than a BCL Half.* call or
+            // the double bridge — so the corresponding Half.* MethodInfos (HalfTan/Log10/Log2/Cbrt/Exp2/
+            // Asinh/Acosh/Atanh) were removed. Only the ops still on a dedicated Half path keep a cached
+            // method (Sqrt/Sin/Cos/Exp/Log/Floor/Ceiling/Truncate/Abs/Negate above).
             // Note: .NET's Half exposes log1p as LogP1 and expm1 as ExpM1 (IFloatingPointIeee754<Half>).
             // Half.LogP1/ExpM1 lose subnormal precision because internally they compute (1 + x) in
             // Half, which rounds x < Half.Epsilon (≈ 2^-11) to 0. NumPy promotes to a higher-precision
@@ -1200,6 +1307,17 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // np.logaddexp / np.logaddexp2 / np.nextafter — one static helper per (op, loop dtype).
+            // Operands arrive already in resultType (the generic binary loops converted both), and
+            // each helper is signatured (resultType, resultType) -> resultType, so the whole scalar
+            // op is a single Call. Intercept BEFORE the decimal/half routing (like min/max) so those
+            // dtypes flow through the shared helpers rather than EmitDecimal/HalfOperation.
+            if (op == BinaryOp.LogAddExp || op == BinaryOp.LogAddExp2 || op == BinaryOp.NextAfter || op == BinaryOp.CopySign)
+            {
+                EmitLogAddNextOperation(il, op, resultType);
+                return;
+            }
+
             // Special handling for decimal (uses operator methods)
             if (resultType == NPTypeCode.Decimal)
             {
@@ -1262,11 +1380,33 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            // Special handling for boolean
-            if (resultType == NPTypeCode.Boolean)
+            // Boolean and/or/xor use NumPy's LOGICAL loops (loops.h.src aliases the bool bitwise
+            // ufuncs onto logical_and / logical_or / not_equal): any nonzero byte is True, output
+            // always canonical 0/1. Must mirror EmitBoolVectorLogicalOp exactly, or the SIMD body
+            // and the scalar tail of one array would disagree on a non-canonical (frombuffer) bool.
+            // Stack in: [a(u1-as-i4), b(u1-as-i4)].
+            if (resultType == NPTypeCode.Boolean &&
+                (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor))
             {
-                // For bool, only meaningful ops are probably logical, but we'll support arithmetic
-                // Treat as byte arithmetic
+                if (op == BinaryOp.BitwiseOr)
+                {
+                    // (a | b) != 0
+                    il.Emit(OpCodes.Or);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Cgt_Un);
+                    return;
+                }
+
+                // (a != 0) and/xor (b != 0)
+                var locB = il.DeclareLocal(typeof(int));
+                il.Emit(OpCodes.Stloc, locB);       // [a]
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Cgt_Un);            // [na]
+                il.Emit(OpCodes.Ldloc, locB);
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Cgt_Un);            // [na, nb]
+                il.Emit(op == BinaryOp.BitwiseAnd ? OpCodes.And : OpCodes.Xor);
+                return;
             }
 
             var opcode = op switch
@@ -1439,6 +1579,62 @@ namespace NumSharp.Backends.Kernels
             }
             // Boolean (or any other) result reaching here: fall back to plain remainder.
             il.Emit(IsUnsigned(resultType) ? OpCodes.Rem_Un : OpCodes.Rem);
+        }
+
+        /// <summary>
+        /// Emit np.logaddexp / np.logaddexp2 / np.nextafter / np.copysign via the
+        /// <see cref="Utilities.NDLogAddExpMath"/> scalar helpers. Stack: [x1, x2] (already in the loop
+        /// dtype) -> [result]. Mirrors <see cref="EmitFloorDivideOperation"/>: resolve the per-dtype
+        /// helper, then a single Call.
+        /// </summary>
+        private static void EmitLogAddNextOperation(ILGenerator il, BinaryOp op, NPTypeCode resultType)
+            => il.EmitCall(OpCodes.Call, GetLogAddNextMethod(op, resultType), null);
+
+        /// <summary>
+        /// Return the <see cref="Utilities.NDLogAddExpMath"/> scalar helper for
+        /// (<paramref name="op"/>, <paramref name="resultType"/>). Every loop dtype resolves to
+        /// Half / Single / Double / Decimal (float-tier promotion, same as ATan2), so exactly one of
+        /// four signatures applies per op. Parallels <see cref="GetFloorDivideMethod"/> /
+        /// <see cref="GetRemainderMethod"/>, but the four ops are one family (intercepted together like
+        /// maximum/minimum), so they share a single op-keyed resolver.
+        /// </summary>
+        private static MethodInfo GetLogAddNextMethod(BinaryOp op, NPTypeCode resultType)
+        {
+            switch (op)
+            {
+                case BinaryOp.LogAddExp:
+                    return resultType switch
+                    {
+                        NPTypeCode.Half => CachedMethods.LogAddExpH,
+                        NPTypeCode.Single => CachedMethods.LogAddExpF,
+                        NPTypeCode.Decimal => CachedMethods.LogAddExpDec,
+                        _ => CachedMethods.LogAddExpD,
+                    };
+                case BinaryOp.LogAddExp2:
+                    return resultType switch
+                    {
+                        NPTypeCode.Half => CachedMethods.LogAddExp2H,
+                        NPTypeCode.Single => CachedMethods.LogAddExp2F,
+                        NPTypeCode.Decimal => CachedMethods.LogAddExp2Dec,
+                        _ => CachedMethods.LogAddExp2D,
+                    };
+                case BinaryOp.NextAfter:
+                    return resultType switch
+                    {
+                        NPTypeCode.Half => CachedMethods.NextAfterH,
+                        NPTypeCode.Single => CachedMethods.NextAfterF,
+                        NPTypeCode.Decimal => CachedMethods.NextAfterDec,
+                        _ => CachedMethods.NextAfterD,
+                    };
+                default: // BinaryOp.CopySign
+                    return resultType switch
+                    {
+                        NPTypeCode.Half => CachedMethods.CopySignH,
+                        NPTypeCode.Single => CachedMethods.CopySignF,
+                        NPTypeCode.Decimal => CachedMethods.CopySignDec,
+                        _ => CachedMethods.CopySignD,
+                    };
+            }
         }
 
         /// <summary>
@@ -1741,6 +1937,17 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// SIMD lane type for NPTypeCode. Boolean maps to <c>byte</c> — there is no
+        /// <c>Vector{N}&lt;bool&gt;</c> in the BCL, and a NumSharp bool is stored as one byte, so
+        /// bool kernels ride the byte lanes (NumPy's own BOOL loops do the same: its
+        /// <c>loops_logical</c> SIMD operates on <c>u8</c> vectors). Every other type is its CLR
+        /// type. Only the vector load/store/create helpers consult this; scalar loads keep
+        /// <see cref="GetClrType"/>.
+        /// </summary>
+        internal static Type GetSimdLaneType(NPTypeCode type)
+            => type == NPTypeCode.Boolean ? typeof(byte) : GetClrType(type);
+
+        /// <summary>
         /// Emit Vector.Load for NPTypeCode (adapts to V128/V256/V512).
         /// Prefers <c>Avx.LoadVector256</c> / <c>Sse.LoadVector128</c> / <c>Avx512F.LoadVector512</c>
         /// when running on x86 — the JIT generates ~1.8x faster code than the cross-platform
@@ -1748,7 +1955,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static void EmitVectorLoad(ILGenerator il, NPTypeCode type)
         {
-            var clrType = GetClrType(type);
+            var clrType = GetSimdLaneType(type);
             var x86 = VectorMethodCache.LoadX86(VectorBits, clrType);
             if (x86 != null)
             {
@@ -1761,9 +1968,11 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Emit Vector.Create for NPTypeCode (broadcasts scalar to all vector elements).
         /// Stack must have scalar value on top; result is Vector on stack.
+        /// (Boolean broadcasts through the byte lanes — the bool scalar sits on the IL stack as
+        /// its 0/1 byte value, which is exactly the <c>Vector.Create(byte)</c> argument.)
         /// </summary>
         internal static void EmitVectorCreate(ILGenerator il, NPTypeCode type)
-            => il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, GetClrType(type)), null);
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, GetSimdLaneType(type)), null);
 
         /// <summary>
         /// Emit Vector.Store for NPTypeCode (adapts to V128/V256/V512).
@@ -1773,7 +1982,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static void EmitVectorStore(ILGenerator il, NPTypeCode type)
         {
-            var clrType = GetClrType(type);
+            var clrType = GetSimdLaneType(type);
             var x86 = VectorMethodCache.StoreX86(VectorBits, clrType);
             if (x86 != null)
             {
@@ -1968,6 +2177,19 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static void EmitVectorOperation(ILGenerator il, BinaryOp op, NPTypeCode type)
         {
+            // Boolean rides the byte lanes with NumPy's LOGICAL semantics (loops.h.src aliases
+            // BOOL_bitwise_and -> BOOL_logical_and, _or -> logical_or, _xor -> not_equal): any
+            // nonzero byte counts as True and the output is always canonical 0/1 — a plain
+            // bytewise AND would call 0x01 & 0x80 False where NumPy says True. Normalization is
+            // one unsigned-byte Min against 1 (min(v,1): 0 -> 0, nonzero -> 1), NumPy's own
+            // byte_to_true reshaped for pminub.
+            if (type == NPTypeCode.Boolean &&
+                (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor))
+            {
+                EmitBoolVectorLogicalOp(il, op);
+                return;
+            }
+
             var clrType = GetClrType(type);
 
             if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
@@ -2030,6 +2252,61 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"Operation {op} not supported for SIMD")
             };
             il.EmitCall(OpCodes.Call, VectorMethodCache.Operator(VectorBits, clrType, operatorName), null);
+        }
+
+        /// <summary>
+        /// Boolean and/or/xor over byte lanes, NumPy-normalized (see <see cref="EmitVectorOperation"/>).
+        /// Stack: [a(V&lt;byte&gt;), b(V&lt;byte&gt;)] -> [result(V&lt;byte&gt;)], every result lane 0 or 1.
+        ///   and: min(min(a,b), 1)      — min(a,b) nonzero iff both nonzero (NumPy simd_logical_and_u8)
+        ///   or : min(a|b, 1)           — a|b nonzero iff either nonzero (NumPy simd_logical_or_u8)
+        ///   xor: min(a,1) ^ min(b,1)   — normalize each, then xor (NumPy BOOL_not_equal's cmpeq+xor)
+        /// </summary>
+        private static void EmitBoolVectorLogicalOp(ILGenerator il, BinaryOp op)
+        {
+            var laneType = typeof(byte);
+
+            void PushOnes()
+            {
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, laneType), null);
+            }
+
+            switch (op)
+            {
+                case BinaryOp.BitwiseAnd:
+                    EmitRawVectorMinOrMax(il, "Min", laneType);   // [min(a,b)]
+                    PushOnes();                                   // [min, 1]
+                    EmitRawVectorMinOrMax(il, "Min", laneType);   // [r]
+                    return;
+
+                case BinaryOp.BitwiseOr:
+                {
+                    var or = VectorMethodCache.BinaryX86(VectorBits, "BitwiseOr", laneType)
+                             ?? VectorMethodCache.Generic(VectorBits, "BitwiseOr", laneType, paramCount: 2);
+                    il.EmitCall(OpCodes.Call, or, null);          // [a|b]
+                    PushOnes();                                   // [a|b, 1]
+                    EmitRawVectorMinOrMax(il, "Min", laneType);   // [r]
+                    return;
+                }
+
+                case BinaryOp.BitwiseXor:
+                {
+                    var xor = VectorMethodCache.BinaryX86(VectorBits, "Xor", laneType)
+                              ?? VectorMethodCache.Generic(VectorBits, "Xor", laneType, paramCount: 2);
+                    var locNb = il.DeclareLocal(VectorMethodCache.V(VectorBits, laneType));
+                    PushOnes();                                   // [a, b, 1]
+                    EmitRawVectorMinOrMax(il, "Min", laneType);   // [a, nb]
+                    il.Emit(OpCodes.Stloc, locNb);                // [a]
+                    PushOnes();                                   // [a, 1]
+                    EmitRawVectorMinOrMax(il, "Min", laneType);   // [na]
+                    il.Emit(OpCodes.Ldloc, locNb);                // [na, nb]
+                    il.EmitCall(OpCodes.Call, xor, null);         // [r]
+                    return;
+                }
+
+                default:
+                    throw new NotSupportedException($"Operation {op} not supported for Boolean SIMD");
+            }
         }
 
         #endregion

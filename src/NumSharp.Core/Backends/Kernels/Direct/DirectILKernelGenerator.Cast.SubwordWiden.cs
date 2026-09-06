@@ -53,6 +53,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // i8 -> {i16,u16,char}: SIGN-extend. Odometer + inline inner (per the SubwordCopy PERF NOTE).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void SubwordWidenSigned1to2(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
@@ -125,6 +126,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // {bool,u8} -> {i16,u16,char}: ZERO-extend.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void SubwordWidenUnsigned1to2(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {

@@ -96,13 +96,19 @@ A full measured run is expensive and normally the post-release `benchmark.yml` j
 ```bash
 cd benchmark/NumSharp.Benchmark.CSharp
 dotnet build -c Release -v q --nologo
-dotnet run -c Release --no-build -f net10.0 -- --list flat | grep FlipRot     # BDN discovers the 7 methods
+dotnet run -c Release --no-build -f net10.0 -- --list flat | grep FlipRot     # BDN discovers the FlipRot methods
 cd ../NumSharp.Benchmark.Python
 python numpy_benchmark.py --suite manipulation --quick --size medium | grep -iE "flip|trim_zeros"   # NumPy rows emit
 ```
 
 `--list flat` is reflection-only (no toolchain), so it works despite the out-of-process-toolchain limitation.
 A direct-call `dotnet run -c Release` script (mirroring each benchmark body) confirms the C# calls execute.
+
+Two source-level checks confirm the wiring without a measured run: `python benchmark/scripts/check_smoke_joins.py`
+(after the smoke run above) proves the C# `[Benchmark(Description)]` and the NumPy `.name` normalize to the same
+join key in both directions; and — if you benchmarked a *new* API — `python benchmark/scripts/audit_coverage.py`
+refreshes `benchmark/coverage/generated/summary.md`, which should now count your op and drop it from that file's
+"Missing benchmark coverage" table (register a deliberate non-benchmark in `coverage/overrides.json`).
 
 ## 5. Full run (optional)
 
@@ -121,7 +127,7 @@ Only when your ops form a new category with no existing home:
 4. (legacy) optionally add the filter to `run-benchmarks.ps1`'s `ValidateSet` and Program.cs menu.
 
 Then the new suite runs in `python run_benchmark.py --suites <newsuite>` (and in the full run), joined and reported
-exactly like the built-in 14. Keep the C# `[Benchmark(Description)]` labels normalizing onto the NumPy `.name`s.
+exactly like the built-in 18. Keep the C# `[Benchmark(Description)]` labels normalizing onto the NumPy `.name`s.
 
 ## Choosing base class & size (quick reference)
 

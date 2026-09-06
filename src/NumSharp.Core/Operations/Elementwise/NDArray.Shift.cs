@@ -32,6 +32,9 @@ namespace NumSharp
         /// Element-wise left shift with any scalar or array-like on RHS.
         /// Converts RHS via <see cref="np.asanyarray(object)"/> (matches NumPy's PyArray_FromAny).
         /// </summary>
+        // Scope: np.asanyarray(rhs) mints a temp for a scalar/array-like operand; [NDScoped]
+        // reclaims it while leaving an NDArray-input passthrough untouched (see NDArray.AND.cs).
+        [NDScoped]
         public static NDArray operator <<(NDArray lhs, object rhs)
         {
             return lhs << np.asanyarray(rhs);
@@ -52,6 +55,9 @@ namespace NumSharp
         /// Element-wise right shift with any scalar or array-like on RHS.
         /// Converts RHS via <see cref="np.asanyarray(object)"/> (matches NumPy's PyArray_FromAny).
         /// </summary>
+        // Scope: np.asanyarray(rhs) mints a temp for a scalar/array-like operand; [NDScoped]
+        // reclaims it while leaving an NDArray-input passthrough untouched (see NDArray.AND.cs).
+        [NDScoped]
         public static NDArray operator >>(NDArray lhs, object rhs)
         {
             return lhs >> np.asanyarray(rhs);

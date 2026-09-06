@@ -20,7 +20,7 @@ public class MultiplyBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.ArithmeticTypes;
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
@@ -42,6 +42,10 @@ public class MultiplyBenchmarks : TypedBenchmarkBase
     [Benchmark(Description = "a * b (element-wise)")]
     [BenchmarkCategory("Elementwise")]
     public NDArray Multiply_Elementwise() => _a * _b;
+
+    [Benchmark(Description = "np.multiply(a, b)")]
+    [BenchmarkCategory("Elementwise", "ApiEntryPoint")]
+    public NDArray NpMultiply() => np.multiply(_a, _b);
 
     [Benchmark(Description = "a * a (square)")]
     [BenchmarkCategory("Elementwise")]

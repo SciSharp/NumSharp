@@ -31,7 +31,17 @@ namespace NumSharp.Backends.Kernels
         /// <summary>Element-wise maximum, NaN-ignoring (np.fmax): returns the non-NaN operand.</summary>
         FMax,
         /// <summary>Element-wise minimum, NaN-ignoring (np.fmin): returns the non-NaN operand.</summary>
-        FMin
+        FMin,
+        // Log-sum-exp + IEEE step (np.logaddexp/logaddexp2/nextafter) — float-tier binary ufuncs,
+        // same promotion as ATan2. Scalar-only (no Vector op); routed to NDLogAddExpMath helpers.
+        /// <summary>log(exp(x1)+exp(x2)) computed stably (np.logaddexp).</summary>
+        LogAddExp,
+        /// <summary>log2(2**x1 + 2**x2) computed stably (np.logaddexp2).</summary>
+        LogAddExp2,
+        /// <summary>Next representable value after x1 toward x2 (np.nextafter).</summary>
+        NextAfter,
+        /// <summary>Magnitude of x1 with the sign of x2 (np.copysign).</summary>
+        CopySign
     }
 
     /// <summary>
@@ -61,6 +71,10 @@ namespace NumSharp.Backends.Kernels
         ASin,
         ACos,
         ATan,
+        // Inverse hyperbolic (np.arcsinh/arccosh/arctanh; Array-API aliases asinh/acosh/atanh)
+        Asinh,
+        Acosh,
+        Atanh,
         Sign,
         Ceil,
         Floor,
@@ -85,7 +99,19 @@ namespace NumSharp.Backends.Kernels
         /// <summary>Test element-wise for NaN</summary>
         IsNan,
         /// <summary>Test element-wise for positive or negative infinity</summary>
-        IsInf
+        IsInf,
+        /// <summary>Test element-wise for positive infinity (np.isposinf). x == +inf.</summary>
+        IsPosInf,
+        /// <summary>Test element-wise for negative infinity (np.isneginf). x == -inf.</summary>
+        IsNegInf,
+
+        /// <summary>
+        /// Complex conjugate (np.conjugate / np.conj). Identity at every real dtype
+        /// (bool/int/char/half/single/double/decimal) — the loaded value IS the result — and
+        /// flips the sign of the imaginary part for Complex (via <c>System.Numerics.Complex.Conjugate</c>).
+        /// Dtype is preserved (never promoted), matching NumPy's per-dtype conjugate loops.
+        /// </summary>
+        Conjugate
     }
 
     /// <summary>

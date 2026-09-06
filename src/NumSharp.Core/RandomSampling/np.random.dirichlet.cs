@@ -41,40 +41,51 @@ namespace NumSharp
                     throw new ArgumentException("alpha <= 0", nameof(alpha));
             }
 
-            // Copy alpha to unmanaged storage for consistent long indexing
+            // Copy alpha to unmanaged storage for consistent long indexing. This is a RAW pooled
+            // buffer (SizeBucketedBufferPool.Take via the block ctor), NOT an NDArray — so no
+            // [NDScoped] scope can reclaim it (NDScope.Track fires only from NDArray.InitializeArc).
+            // It is private to this call and the result copies out of it, so free it to the pool in
+            // the finally once every sample is drawn.
             var alphaBlock = new UnmanagedMemoryBlock<double>(k);
             var alphaSlice = new ArraySlice<double>(alphaBlock);
-            for (long i = 0; i < k; i++)
-                alphaSlice[i] = alpha[i];
-
-            if (size == null)
+            try
             {
-                // Return single sample with shape (k,)
-                var result = new NDArray<double>(new Shape(k));
-                ArraySlice<double> data = result.Data<double>();
-                SampleDirichletUnmanaged(alphaSlice, k, data, 0);
-                return result;
+                for (long i = 0; i < k; i++)
+                    alphaSlice[i] = alpha[i];
+
+                if (size == null)
+                {
+                    // Return single sample with shape (k,)
+                    var result = new NDArray<double>(new Shape(k));
+                    ArraySlice<double> data = result.Data<double>();
+                    SampleDirichletUnmanaged(alphaSlice, k, data, 0);
+                    return result;
+                }
+
+                // Output shape is (*size, k)
+                var sizeVal = size.Value;
+                long[] outputDims = new long[sizeVal.NDim + 1];
+                for (long i = 0; i < sizeVal.NDim; i++)
+                    outputDims[i] = sizeVal.dimensions[i];
+                outputDims[sizeVal.NDim] = k;
+
+                var ret = new NDArray<double>(outputDims);
+                ArraySlice<double> retData = ret.Data<double>();
+
+                // Number of samples is product of size dimensions
+                long numSamples = sizeVal.size;
+
+                for (long s = 0; s < numSamples; s++)
+                {
+                    SampleDirichletUnmanaged(alphaSlice, k, retData, s * k);
+                }
+
+                return ret;
             }
-
-            // Output shape is (*size, k)
-            var sizeVal = size.Value;
-            long[] outputDims = new long[sizeVal.NDim + 1];
-            for (long i = 0; i < sizeVal.NDim; i++)
-                outputDims[i] = sizeVal.dimensions[i];
-            outputDims[sizeVal.NDim] = k;
-
-            var ret = new NDArray<double>(outputDims);
-            ArraySlice<double> retData = ret.Data<double>();
-
-            // Number of samples is product of size dimensions
-            long numSamples = sizeVal.size;
-
-            for (long s = 0; s < numSamples; s++)
+            finally
             {
-                SampleDirichletUnmanaged(alphaSlice, k, retData, s * k);
+                alphaSlice.DangerousFree();   // return the raw alpha-copy buffer to the pool
             }
-
-            return ret;
         }
 
         /// <summary>
@@ -88,47 +99,55 @@ namespace NumSharp
             long k = alpha.size;
 
             // Copy alpha (any layout, any numeric dtype) into a flat double buffer
-            // via NDIter.Copy — handles strided/broadcast alpha + any->double cast.
+            // via NDIter.Copy — handles strided/broadcast alpha + any->double cast. This is a RAW
+            // pooled buffer (not an NDArray), invisible to [NDScoped]; free it in the finally.
             var alphaBlock = new UnmanagedMemoryBlock<double>(k);
             var alphaSlice = new ArraySlice<double>(alphaBlock);
-            var alphaStorage = new UnmanagedStorage(alphaSlice, new Shape(k));
-            NDIter.Copy(alphaStorage, alpha.Storage);
-
-            // Validate
-            for (long i = 0; i < k; i++)
+            try
             {
-                if (alphaSlice[i] <= 0 || double.IsNaN(alphaSlice[i]))
-                    throw new ArgumentException("alpha <= 0", nameof(alpha));
-            }
+                var alphaStorage = new UnmanagedStorage(alphaSlice, new Shape(k));
+                NDIter.Copy(alphaStorage, alpha.Storage);
 
-            if (size == null)
+                // Validate
+                for (long i = 0; i < k; i++)
+                {
+                    if (alphaSlice[i] <= 0 || double.IsNaN(alphaSlice[i]))
+                        throw new ArgumentException("alpha <= 0", nameof(alpha));
+                }
+
+                if (size == null)
+                {
+                    // Return single sample with shape (k,)
+                    var result = new NDArray<double>(new Shape(k));
+                    ArraySlice<double> data = result.Data<double>();
+                    SampleDirichletUnmanaged(alphaSlice, k, data, 0);
+                    return result;
+                }
+
+                // Output shape is (*size, k)
+                var sizeVal2 = size.Value;
+                long[] outputDims = new long[sizeVal2.NDim + 1];
+                for (long i = 0; i < sizeVal2.NDim; i++)
+                    outputDims[i] = sizeVal2.dimensions[i];
+                outputDims[sizeVal2.NDim] = k;
+
+                var ret = new NDArray<double>(outputDims);
+                ArraySlice<double> retData = ret.Data<double>();
+
+                // Number of samples is product of size dimensions
+                long numSamples = sizeVal2.size;
+
+                for (long s = 0; s < numSamples; s++)
+                {
+                    SampleDirichletUnmanaged(alphaSlice, k, retData, s * k);
+                }
+
+                return ret;
+            }
+            finally
             {
-                // Return single sample with shape (k,)
-                var result = new NDArray<double>(new Shape(k));
-                ArraySlice<double> data = result.Data<double>();
-                SampleDirichletUnmanaged(alphaSlice, k, data, 0);
-                return result;
+                alphaSlice.DangerousFree();   // return the raw alpha-copy buffer to the pool
             }
-
-            // Output shape is (*size, k)
-            var sizeVal2 = size.Value;
-            long[] outputDims = new long[sizeVal2.NDim + 1];
-            for (long i = 0; i < sizeVal2.NDim; i++)
-                outputDims[i] = sizeVal2.dimensions[i];
-            outputDims[sizeVal2.NDim] = k;
-
-            var ret = new NDArray<double>(outputDims);
-            ArraySlice<double> retData = ret.Data<double>();
-
-            // Number of samples is product of size dimensions
-            long numSamples = sizeVal2.size;
-
-            for (long s = 0; s < numSamples; s++)
-            {
-                SampleDirichletUnmanaged(alphaSlice, k, retData, s * k);
-            }
-
-            return ret;
         }
 
         /// <summary>

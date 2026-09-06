@@ -353,7 +353,7 @@ src/NumSharp.Python/NumSharpPy/NumSharp.dll
 docfx_project/src
 /coverage.xml
 test/NumSharp.Benchmark/LocalBenches.cs
-test/NumSharp.UnitTest/DevTests*.cs
+test/NumSharp.Tests/DevTests*.cs
 
 # Local design documents (not tracked in git)
 docs/DESIGN.md
@@ -376,3 +376,10 @@ benchmark/.claude_*.log
 # DocFX build OUTPUT — regenerated in CI from docs/website-src/ and deployed via the Pages artifact.
 # (docs/website-src/ is the tracked source; this is just its stale generated output.)
 docs/website/
+
+# NumSharp.Interop.OpenBLAS bundled OpenBLAS runtime assets.
+# Downloaded on demand by src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py and verified against
+# the checked-in tools/openblas-manifest.json (that manifest IS the pin — the binaries themselves
+# are 186 MB and never belong in git).
+src/NumSharp.Interop.OpenBLAS/runtimes/
+src/NumSharp.Interop.OpenBLAS/tools/.wheel-cache/

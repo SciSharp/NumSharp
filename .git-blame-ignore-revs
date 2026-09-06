@@ -15,3 +15,25 @@ e0db3c3ed2bac06c255d4b1b7a327efc4e05447b
 
 # Rename benchmark projects GraphEngine->CSharp, Exploration->Sandbox (mechanical)
 002bc6219dae5ea8ebe0054dff2a91796375d0fb
+
+# Normalize mixed-case NdArray.* filenames to exact NDArray (case-only, pure git mv, R100)
+02cc162fc09c279b6be6abc3f25cc2b5c14ddc88
+
+# Normalize remaining ndarray-variant filenames to exact NDArray (+ ndarray.md case-collision cleanup)
+f677d43e6642b72b4d3c29070f02e42a0dddec32
+
+# Fix stale NdArray.* file-path references in comments/docs to renamed NDArray.* files
+f4cdc1ecdb9fd0ff3997dc63f9b82aa3ae7de100
+
+# Isolate the differential-fuzz oracle harness into NumSharp.UnitTest.Oracle (pure git mv, R100)
+e6fd25438ba488038494c60a2333b2850501ff64
+
+# Rename test projects to the NumSharp.Tests.* family (NumSharp.UnitTest -> NumSharp.Tests,
+# NumSharp.UnitTest.Oracle -> NumSharp.Tests.Oracle, NumSharp.Interop.UnitTests -> NumSharp.Tests.Interop):
+# mechanical dir/csproj/assembly/namespace rename + reference updates, no logic change.
+2696a1411b145b3fca337b9923e8daf638418e76
+
+# Relocate vendored reference trees src/{numpy,pocketfft,OpenBLAS,dotnet} -> refs/
+# (submodule git mv + BCL-snapshot R100 renames) + rewrite all path references
+# across docs/code. Mechanical, no logic change.
+1e7a0c86c313b4913833bbe2f46517a352d08bcd

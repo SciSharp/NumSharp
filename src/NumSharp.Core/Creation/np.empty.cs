@@ -65,10 +65,12 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <param name="dtype">Desired output data-type for the array, e.g, numpy.int8. Default is numpy.float64.</param>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of uninitialized (arbitrary) data of the given shape, dtype, and order. Object arrays will be initialized to None.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty.html</remarks>
-        public static NDArray empty(Shape shape, Type dtype)
+        public static NDArray empty(Shape shape, Type dtype, string device = null)
         {
+            ValidateDevice(device);
             return empty(shape, (dtype ?? typeof(double)).GetTypeCode());
         }
 

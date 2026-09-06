@@ -20,7 +20,7 @@ namespace NumSharp.Benchmark
     //|       MarshalAllocHGlobal1m |   3.111 ms |  0.3413 ms |  0.2258 ms |   2.943 ms |   3.675 ms |   3.029 ms |
     //|        GCHandleAllocArray1m | 584.897 ms | 13.0944 ms |  8.6612 ms | 575.367 ms | 599.496 ms | 583.491 ms |
 
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 10)]
+    [SimpleJob(RunStrategy.ColdStart, iterationCount: 10)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class ArrayCloning

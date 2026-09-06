@@ -7,6 +7,9 @@ NumSharp is designed to integrate with the broader .NET ecosystem. Extension pac
 | Package | Purpose |
 |---------|---------|
 | [NumSharp.Bitmap](bitmap.md) | Image ↔ NDArray conversion via `System.Drawing` |
+| [NumSharp.Interop.OpenBLAS](../interop/openblas.md) | OpenBLAS/LAPACK backend for the matrix products and `np.linalg` factorisations — byte-identical to NumPy 2.4.2 |
+| [NumSharp.Interop.pythonnet](../interop/pythonnet-numpy.md) | Zero-copy NumSharp ↔ Python/NumPy exchange via Python.NET |
+| [NumSharp.Build](../numsharp-build-compiler.md) | Build-time `[NDScoped]` IL weaver — deterministic `NDArray` memory reclamation (a development dependency, never a runtime one; the companion Roslyn analyzer ships inside the `NumSharp` package itself) |
 
 ## Build Your Own
 

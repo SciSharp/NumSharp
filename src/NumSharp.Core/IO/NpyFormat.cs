@@ -482,11 +482,11 @@ namespace NumSharp.IO
             {
                 headerBytes = version.StrictHeaderEncoding.GetBytes(header);
             }
-            catch (EncoderFallbackException)
+            catch (EncoderFallbackException e)
             {
                 // Not encodable in latin-1 -> the caller falls through to version 3.0 (UTF-8), the same
                 // way NumPy catches UnicodeEncodeError.
-                throw new UnicodeEncodeException();
+                throw new UnicodeEncodeException(e);
             }
 
             int hlen = headerBytes.Length + 1; // + the terminating newline
@@ -531,7 +531,11 @@ namespace NumSharp.IO
         }
 
         /// <summary>Signals a header that latin-1 cannot encode, mirroring Python's UnicodeEncodeError.</summary>
-        private sealed class UnicodeEncodeException : Exception { }
+        private sealed class UnicodeEncodeException : Exception
+        {
+            public UnicodeEncodeException() { }
+            public UnicodeEncodeException(Exception innerException) : base(null, innerException) { }
+        }
 
         // Pick the oldest version that can hold this header — NumPy's _wrap_header_guess_version().
         private static byte[] WrapHeaderGuessVersion(string header)
@@ -591,10 +595,10 @@ namespace NumSharp.IO
                 {
                     wrapped = WrapHeader(header, version.Value);
                 }
-                catch (UnicodeEncodeException)
+                catch (UnicodeEncodeException e)
                 {
                     throw new InvalidOperationException(
-                        $"Header cannot be encoded in latin-1 for version={version.Value}; use version (3, 0).");
+                        $"Header cannot be encoded in latin-1 for version={version.Value}; use version (3, 0).", e);
                 }
             }
             else
@@ -1022,8 +1026,16 @@ namespace NumSharp.IO
                     fs.Dispose();
                     transferred = true;
                     var empty = new NDArray(header.Dtype.TypeCode, new Shape(header.Shape));
+                    // NumPy's memmap reports owndata=False in EVERY mode (its base is the mmap object).
+                    empty.Storage.ExternalBase = true;
+                    empty.Storage.OnReshaped(); // drop the allocating ctor's OWNDATA bit
                     if (!writeable)
+                    {
+                        // NumPy refuses setflags(write=True) on an 'r' memmap even when it is empty
+                        // (its mmap base has no writable buffer) — mark it so ours refuses too.
+                        empty.Storage.WriteProtected = true;
                         empty.Storage.SetShapeUnsafe(empty.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
+                    }
                     return empty;
                 }
 
@@ -1111,6 +1123,23 @@ namespace NumSharp.IO
 
             NDArray nd = WrapMappedBlock(header.Dtype.TypeCode, (void*)dataPtr, count, free, new Shape(header.Shape));
 
+            // The mapped memory belongs to the file mapping, not the array — NumPy's memmap has the mmap
+            // object as its (non-array) base and reports owndata=False in EVERY mode ('r'/'r+'/'c').
+            nd.Storage.ExternalBase = true;
+            nd.Storage.OnReshaped(); // drop the wrap ctor's OWNDATA bit ('r+'/'c' take no later shape swap)
+
+            // 'r'/'readonly' → non-writeable, applied to the WRAP storage (the owner) BEFORE any view is
+            // taken: the F-order reshape/transpose below then inherit read-onlyness from it, and
+            // setflags(write: true) refuses both the owner (WriteProtected — NumPy's non-writable mmap
+            // buffer base) and every view of it (base non-writeable). Clearing only the FINAL view's
+            // shape would leave the wrap storage writeable underneath it, and the base-chain re-enable
+            // rule would then let a write reach PROT_READ pages.
+            if (!writeable)
+            {
+                nd.Storage.WriteProtected = true;
+                nd.Storage.SetShapeUnsafe(nd.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
+            }
+
             // The file holds F-order data: interpret the flat bytes with the reversed shape, then transpose
             // — NumPy's `array.reshape(shape[::-1]).transpose()`. The transpose is a zero-copy view, so the
             // result still shares the mapped memory.
@@ -1122,8 +1151,8 @@ namespace NumSharp.IO
                 nd = nd.reshape(reversed).T;
             }
 
-            // 'r'/'readonly' → a non-writeable view, matching NumPy's read-only memmap.
-            if (!writeable)
+            // Defensive: the wrap-storage clear above already propagates through reshape/transpose.
+            if (!writeable && nd.Shape.IsWriteable)
                 nd.Storage.SetShapeUnsafe(nd.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
 
             return nd;

@@ -44,8 +44,11 @@ using System.Runtime.Intrinsics.X86;
 //                                           accumulators — bit-identical)
 //   bool -> byte, char -> ushort            (alias routes)
 //   sbyte/byte/short/ushort/int/uint/float -> double
-//   (u)long -> double is NOT covered (no AVX2 64-bit-int <-> double convert);
-//   it falls back to the typed scalar path, as before.
+//   (u)long -> double via the split-and-magic bias trick (WidenI64ToF64 /
+//     WidenU64ToF64) — AVX2 has no 64-bit-int <-> double convert (VCVTQQ2PD is
+//     AVX-512DQ), but the low/high 32-bit halves are combined under the 2^52/2^84
+//     magic exponents with a single final rounding, so it is bit-exact with the
+//     scalar (double)x. This streams int64/uint64 mean (the reported 0.16x cell).
 // =============================================================================
 
 namespace NumSharp.Backends.Kernels
@@ -114,6 +117,11 @@ namespace NumSharp.Backends.Kernels
                 (NPTypeCode.Single, NPTypeCode.Double) => MakeWideningKernel<float, double, WidenF32ToF64>(op),
                 (NPTypeCode.Int32, NPTypeCode.Double) => MakeWideningKernel<int, double, WidenI32ToF64>(op),
                 (NPTypeCode.UInt32, NPTypeCode.Double) => MakeWideningKernel<uint, double, WidenU32ToF64>(op),
+                // (u)long -> double via the split-and-magic bias trick (no AVX2 64-bit convert).
+                // Serves mean(int64/uint64) — the dominant win — plus sum/prod/min/max at an explicit
+                // dtype=float64. Bit-exact widen + the shared streaming order = unchanged results.
+                (NPTypeCode.Int64, NPTypeCode.Double) => MakeWideningKernel<long, double, WidenI64ToF64>(op),
+                (NPTypeCode.UInt64, NPTypeCode.Double) => MakeWideningKernel<ulong, double, WidenU64ToF64>(op),
                 (NPTypeCode.Int16, NPTypeCode.Double) => MakeWideningKernel<short, double, WidenI16ToF64>(op),
                 (NPTypeCode.UInt16, NPTypeCode.Double) => MakeWideningKernel<ushort, double, WidenU16ToF64>(op),
                 (NPTypeCode.Char, NPTypeCode.Double) => MakeWideningKernel<ushort, double, WidenU16ToF64>(op),
@@ -155,6 +163,20 @@ namespace NumSharp.Backends.Kernels
         {
             // Mean accumulates as Sum, divides at the end.
             var loopOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
+
+            // int64/uint64 -> double is exact ONLY on the sequential WideningLeading order.
+            // Unlike every other →double pair (int32/int16/float — whose reductions sum to ≤2^53
+            // so any order is exact), a 64-bit int sum can round in double, and WideningInnermost's
+            // 8-accumulator tree-merge + horizontal reduce is an order NumPy's contiguous inner loop
+            // (sequential base ≤128, then pairwise) does not share. Keep those two pairs on the
+            // sequential path everywhere: WideningLeading (below) reproduces the current scalar
+            // sequential order bit-for-bit, and the innermost/consecutive-block cases are steered to
+            // the scalar helper — so int64/uint64 mean stays byte-identical to today, just streamed
+            // (input read once) on the leading axis instead of the cache-hostile per-column walk.
+            // (Min/Max are order-independent, but gating them too keeps the rule one-line and they
+            // are not a reported hot path.) Monomorphized, so the JIT folds this to a constant.
+            bool wideSeqOnly = typeof(TAcc) == typeof(double) &&
+                               (typeof(TIn) == typeof(long) || typeof(TIn) == typeof(ulong));
 
             // Fast path 1: leading axis (axis < ndim-1) with C-contig array,
             // or axis 0 with a contiguous inner slab (covers a[::2,:],
@@ -203,7 +225,9 @@ namespace NumSharp.Backends.Kernels
 
             // Fast path 2: innermost axis (axis == ndim-1) with C-contig array.
             // Each output reduces a contiguous run of axisSize inputs.
-            if (axis == ndim - 1 && IsCContig(inputStrides, inputShape, ndim))
+            // (int64/uint64→double excluded: WideningInnermost's order is not NumPy-exact for
+            // rounding 64-bit sums — see wideSeqOnly — so they fall to the scalar helper below.)
+            if (axis == ndim - 1 && !wideSeqOnly && IsCContig(inputStrides, inputShape, ndim))
             {
                 if (loopOp == ReductionOp.Sum &&
                     TrySumInnermostConcrete<TIn, TAcc>(input, output, outputSize, axisSize))
@@ -275,7 +299,8 @@ namespace NumSharp.Backends.Kernels
                 // cell reduces a contiguous run of axisSize elements. Covers F-order
                 // reduce-axis0 and a.T reduce-axis0. The block-consecutive guard
                 // rejects sliced F-order views (block gaps) — they stay scalar.
-                if (axisStride == 1L && inputStrides[other] == axisSize)
+                // (int64/uint64→double excluded — WideningInnermost order, see wideSeqOnly.)
+                if (axisStride == 1L && !wideSeqOnly && inputStrides[other] == axisSize)
                 {
                     if (loopOp == ReductionOp.Sum &&
                         TrySumInnermostConcrete<TIn, TAcc>(input, output, outputSize, axisSize))
@@ -1264,6 +1289,50 @@ namespace NumSharp.Backends.Kernels
 
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static double LoadScalar(byte* p) => *(uint*)p;
+        }
+
+        /// <summary>
+        /// long -> double. AVX2 has no 64-bit-int <-> double convert (that arrives with AVX-512DQ's
+        /// VCVTQQ2PD), so this uses the classic split-and-magic bias trick: the low 32 bits are
+        /// OR-ed under the 2^52 exponent and the high 32 under 2^84 (+2^63 to fold the sign), then
+        /// (hi - (2^84+2^63+2^52)) + lo reconstructs the value with a single final rounding — so it
+        /// is BIT-EXACT with the scalar (double)x over the WHOLE int64 range (verified 0 mismatches
+        /// over 1M values incl. ±MaxValue, 2^52/2^53±1, 2^63). This makes int64→double mean/sum axis
+        /// reductions stream (input read once) instead of falling to the cache-hostile per-column
+        /// scalar walk. LoadScalar and the summation order are identical to the shipping
+        /// int32→double path, so results are unchanged bit-for-bit.
+        /// </summary>
+        internal readonly unsafe struct WidenI64ToF64 : IWidenLoad<double>
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            public static Vector256<double> Load4(byte* p)
+            {
+                var v = Vector256.Load((long*)p);
+                var lo = Avx2.Blend(Vector256.Create(0x4330000000000000L).AsInt32(), v.AsInt32(), 0x55).AsDouble();
+                var hi = Avx2.Xor(Avx2.ShiftRightLogical(v, 32), Vector256.Create(0x4530000080000000L)).AsDouble();
+                return Avx.Add(Avx.Subtract(hi, Vector256.Create(0x4530000080100000L).AsDouble()), lo);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            public static double LoadScalar(byte* p) => *(long*)p;
+        }
+
+        /// <summary>ulong -> double (same magic bias trick as <see cref="WidenI64ToF64"/>, unsigned
+        /// magic constants). Bit-exact with (double)x over the whole uint64 range (verified incl.
+        /// ±MaxValue, 2^63, 2^53±1).</summary>
+        internal readonly unsafe struct WidenU64ToF64 : IWidenLoad<double>
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            public static Vector256<double> Load4(byte* p)
+            {
+                var v = Vector256.Load((ulong*)p);
+                var lo = Avx2.Blend(Vector256.Create(0x4330000000000000L).AsInt32(), v.AsInt32(), 0x55).AsDouble();
+                var hi = Avx2.Xor(Avx2.ShiftRightLogical(v, 32).AsInt64(), Vector256.Create(0x4530000000000000L)).AsDouble();
+                return Avx.Add(Avx.Subtract(hi, Vector256.Create(0x4530000000100000L).AsDouble()), lo);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            public static double LoadScalar(byte* p) => *(ulong*)p;
         }
 
         /// <summary>short -> double (VPMOVSXWD + VCVTDQ2PD).</summary>

@@ -8,29 +8,30 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Manipulation;
 /// Benchmarks for stacking and concatenation operations.
 /// </summary>
 [BenchmarkCategory("Manipulation", "Stack")]
-public class StackBenchmarks : BenchmarkBase
+public class StackBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _arr1D_a = null!;
     private NDArray _arr1D_b = null!;
     private NDArray _arr1D_c = null!;
     private NDArray _arr2D_a = null!;
     private NDArray _arr2D_b = null!;
+    private int WorkN => ArraySizeSource.ResolveMemoryHeavyWorkload(N);
 
-    [Params(ArraySizeSource.Small, ArraySizeSource.Medium)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _arr1D_a = np.random.rand(N) * 100;
-        _arr1D_b = np.random.rand(N) * 100;
-        _arr1D_c = np.random.rand(N) * 100;
+        _arr1D_a = CreateRandomArray(WorkN, DType);
+        _arr1D_b = CreateRandomArray(WorkN, DType, seed: 43);
+        _arr1D_c = CreateRandomArray(WorkN, DType, seed: 44);
 
-        var rows = (int)Math.Sqrt(N);
-        var cols = N / rows;
-        _arr2D_a = np.random.rand(rows, cols) * 100;
-        _arr2D_b = np.random.rand(rows, cols) * 100;
+        var rows = (int)Math.Sqrt(WorkN);
+        var cols = WorkN / rows;
+        _arr2D_a = CreateRandomArray2D(rows, cols, DType);
+        _arr2D_b = CreateRandomArray2D(rows, cols, DType, seed: 43);
     }
 
     [GlobalCleanup]

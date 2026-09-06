@@ -34,10 +34,15 @@ namespace NumSharp.Backends
         /// <param name="arr">Source array.</param>
         /// <param name="mask">Boolean mask matching a leading prefix of <paramref name="arr"/>'s shape.</param>
         /// <returns>Array of shape (count_true,) + arr.shape[mask.ndim:].</returns>
+        [NDScoped]
         public override NDArray BooleanMask(NDArray arr, NDArray mask)
         {
             if (mask.typecode != NPTypeCode.Boolean)
                 throw new ArgumentException("Mask must be boolean array", nameof(mask));
+
+            // Boundary scope: the typed mask aliases, the broadcast gather-mask and the flat
+            // gather buffer behind the reshaped result are reclaimed at exit; only the yielded
+            // result survives (arr/mask are the caller's — never tracked).
 
             int leadNdim = mask.ndim;
 
@@ -97,10 +102,14 @@ namespace NumSharp.Backends
         /// shape) is True. <paramref name="value"/> broadcasts to the selection
         /// shape (count_true,) + arr.shape[mask.ndim:] (NumPy semantics).
         /// </summary>
+        [NDScoped]
         public override void BooleanMaskSet(NDArray arr, NDArray mask, NDArray value)
         {
             if (mask.typecode != NPTypeCode.Boolean)
                 throw new ArgumentException("Mask must be boolean array", nameof(mask));
+
+            // Boundary scope (void — nothing escapes): typed mask aliases and the materialized
+            // value buffer are reclaimed once the scatter lands.
 
             int leadNdim = mask.ndim;
 
@@ -126,10 +135,10 @@ namespace NumSharp.Backends
                     var emptySel = BooleanMaskResultShape(trueCount, arr, leadNdim);
                     string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                     try { np.broadcast_to(value, emptySel); }
-                    catch (IncorrectShapeException)
+                    catch (IncorrectShapeException ex)
                     {
                         throw new ValueError($"shape mismatch: value array of shape {Tup(value.Shape.dimensions)} " +
-                                             $"could not be broadcast to indexing result of shape {Tup(emptySel.dimensions)}");
+                                             $"could not be broadcast to indexing result of shape {Tup(emptySel.dimensions)}", ex);
                     }
                 }
                 return;
@@ -183,6 +192,7 @@ namespace NumSharp.Backends
         /// it to arr.shape — a read-only stride-0 trailing view that turns a
         /// partial/axis-0 mask into a full element mask over arr.
         /// </summary>
+        [NDScopedCovered] // only reached from the [NDScoped] boolean-mask get/set kernels; rides their scope
         private static NDArray BroadcastMaskAcrossBlock(NDArray mask, NDArray arr)
         {
             int trailing = arr.ndim - mask.ndim;

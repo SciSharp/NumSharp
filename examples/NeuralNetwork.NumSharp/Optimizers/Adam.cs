@@ -46,11 +46,13 @@ namespace NeuralNetwork.NumSharp.Optimizers
 
         public override void Update(int iteration, BaseLayer layer)
         {
-            //If Decay rate is more than 0, the correct the learnng rate per iteration.
-            if (DecayRate > 0)
-            {
-                LearningRate = LearningRate * (1 / (1 + DecayRate * iteration));
-            }
+            // Keras inverse-time decay computed fresh from the BASE rate:
+            //   lr_t = lr0 / (1 + decay * t)
+            // LearningRate is never mutated — the old in-place multiply compounded
+            // the decay on every Update call (once per layer per step).
+            float lr = DecayRate > 0
+                ? LearningRate / (1f + DecayRate * iteration)
+                : LearningRate;
 
             //Loop through all the parameters in the layer
             foreach (var p in layer.Parameters.ToList())
@@ -64,8 +66,9 @@ namespace NeuralNetwork.NumSharp.Optimizers
                 //Get the weight values
                 NDArray param = p.Value;
 
-                //Get the gradient/partial derivative values
-                NDArray grad = layer.Grads[paramName];
+                //Get the gradient/partial derivative values, after any
+                //per-parameter clipping configured on the optimizer.
+                NDArray grad = ClipGradient(layer.Grads[paramName]);
 
                 //If this is first time, initialise all the moving average values with 0
                 if (!ms.ContainsKey(varName))
@@ -86,7 +89,7 @@ namespace NeuralNetwork.NumSharp.Optimizers
                 var v_cap = vs[varName] / (1 - (float)Math.Pow(Beta2, iteration));
 
                 //Update the weight of of the neurons
-                layer.Parameters[paramName] = param - (LearningRate * m_cap / (np.sqrt(v_cap) + Epsilon));
+                layer.Parameters[paramName] = param - (lr * m_cap / (np.sqrt(v_cap) + Epsilon));
             }
         }
     }

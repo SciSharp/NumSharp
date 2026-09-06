@@ -25,6 +25,7 @@ namespace NumSharp
         ///     <para><c>rot90(m, k=1, axes=(1, 0))</c> is the reverse of <c>rot90(m, k=1, axes=(0, 1))</c>.</para>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.rot90.html
         /// </remarks>
+        [NDScoped]
         public static NDArray rot90(NDArray m, int k = 1, int[] axes = null)
         {
             axes ??= new[] {0, 1};

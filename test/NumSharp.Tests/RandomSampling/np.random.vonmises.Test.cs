@@ -1,0 +1,290 @@
+using System;
+using NumSharp.Tests.Utilities;
+
+namespace NumSharp.Tests.RandomSampling
+{
+    /// <summary>
+    /// Tests for np.random.vonmises (von Mises / circular normal distribution).
+    /// Based on NumPy 2.4.2 behavior.
+    /// </summary>
+    
+    [TestClass]
+    public class np_random_vonmises_Tests : TestClass
+    {
+        #region Basic Functionality
+
+        [TestMethod]
+        public void VonMises_Scalar_ReturnsNDArray()
+        {
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1);
+
+            result.Should().NotBeNull();
+            result.ndim.Should().Be(0);  // Scalar
+        }
+
+        [TestMethod]
+        public void VonMises_1D_ReturnsCorrectShape()
+        {
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1, 5);
+
+            result.Should().BeShaped(5);
+            result.dtype.Should().Be(typeof(double));
+        }
+
+        [TestMethod]
+        public void VonMises_2D_ReturnsCorrectShape()
+        {
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1, new int[] { 2, 3 });
+
+            result.Should().BeShaped(2, 3);
+            result.dtype.Should().Be(typeof(double));
+        }
+
+        [TestMethod]
+        public void VonMises_SizeNull_ReturnsScalar()
+        {
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1);
+
+            result.ndim.Should().Be(0);
+        }
+
+        #endregion
+
+        #region Range Verification
+
+        [TestMethod]
+        public void VonMises_ResultsInRange_MinusPiToPi()
+        {
+            // All results should be in [-pi, pi]
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1, 10000);
+            var data = result.ToArray<double>();
+
+            foreach (var v in data)
+            {
+                v.Should().BeGreaterThanOrEqualTo(-System.Math.PI);
+                v.Should().BeLessThanOrEqualTo(System.Math.PI);
+            }
+        }
+
+        [TestMethod]
+        public void VonMises_Kappa0_UniformOnCircle()
+        {
+            // kappa=0 gives uniform distribution on [-pi, pi]
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 0, 10000);
+            var data = result.ToArray<double>();
+
+            // All in range
+            foreach (var v in data)
+            {
+                v.Should().BeGreaterThanOrEqualTo(-System.Math.PI);
+                v.Should().BeLessThanOrEqualTo(System.Math.PI);
+            }
+
+            // Mean should be close to 0 for uniform on symmetric interval
+            double mean = 0;
+            foreach (var v in data) mean += v;
+            mean /= data.Length;
+            System.Math.Abs(mean).Should().BeLessThan(0.1);
+        }
+
+        [TestMethod]
+        public void VonMises_HighKappa_ConcentratedAroundMu()
+        {
+            // High kappa = concentrated around mu
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 100, 10000);
+            var data = result.ToArray<double>();
+
+            double mean = 0;
+            foreach (var v in data) mean += v;
+            mean /= data.Length;
+
+            // Mean should be close to mu=0
+            System.Math.Abs(mean).Should().BeLessThan(0.05);
+
+            // Standard deviation should be small
+            double variance = 0;
+            foreach (var v in data) variance += (v - mean) * (v - mean);
+            variance /= data.Length;
+            double std = System.Math.Sqrt(variance);
+            std.Should().BeLessThan(0.15);
+        }
+
+        [TestMethod]
+        public void VonMises_HighKappa_ConcentratedAroundMuPiHalf()
+        {
+            // High kappa around mu=pi/2
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(System.Math.PI / 2, 100, 10000);
+            var data = result.ToArray<double>();
+
+            double mean = 0;
+            foreach (var v in data) mean += v;
+            mean /= data.Length;
+
+            // Mean should be close to pi/2 (~1.571)
+            System.Math.Abs(mean - System.Math.PI / 2).Should().BeLessThan(0.05);
+        }
+
+        #endregion
+
+        #region Kappa Parameter Ranges
+
+        [TestMethod]
+        public void VonMises_VerySmallKappa_NearUniform()
+        {
+            // kappa < 1e-8 uses uniform distribution
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1e-9, 10000);
+            var data = result.ToArray<double>();
+
+            // All in range
+            foreach (var v in data)
+            {
+                v.Should().BeGreaterThanOrEqualTo(-System.Math.PI);
+                v.Should().BeLessThanOrEqualTo(System.Math.PI);
+            }
+        }
+
+        [TestMethod]
+        public void VonMises_VeryHighKappa_WrappedNormalFallback()
+        {
+            // kappa > 1e6 uses wrapped normal approximation
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1e7, 1000);
+            var data = result.ToArray<double>();
+
+            // All in range
+            foreach (var v in data)
+            {
+                v.Should().BeGreaterThanOrEqualTo(-System.Math.PI);
+                v.Should().BeLessThanOrEqualTo(System.Math.PI);
+            }
+
+            // Should be very concentrated around 0
+            double mean = 0;
+            foreach (var v in data) mean += v;
+            mean /= data.Length;
+            System.Math.Abs(mean).Should().BeLessThan(0.01);
+        }
+
+        [TestMethod]
+        public void VonMises_VariousKappaValues_AllInRange()
+        {
+            var rng = np.random.RandomState(42);
+            foreach (double kappa in new[] { 0.0, 0.1, 1.0, 10.0, 100.0, 1000.0 })
+            {
+                var result = rng.vonmises(0, kappa, 1000);
+                var data = result.ToArray<double>();
+
+                foreach (var v in data)
+                {
+                    v.Should().BeGreaterThanOrEqualTo(-System.Math.PI);
+                    v.Should().BeLessThanOrEqualTo(System.Math.PI);
+                }
+            }
+        }
+
+        #endregion
+
+        #region Validation
+
+        [TestMethod]
+        public void VonMises_NegativeKappa_ThrowsArgumentException()
+        {
+            Assert.ThrowsException<ArgumentException>(() => np.random.vonmises(0, -1));
+        }
+
+        [TestMethod]
+        public void VonMises_SmallNegativeKappa_ThrowsArgumentException()
+        {
+            Assert.ThrowsException<ArgumentException>(() => np.random.vonmises(0, -0.001));
+        }
+
+        #endregion
+
+        #region Mu Parameter
+
+        [TestMethod]
+        public void VonMises_DifferentMu_MeanFollowsMu()
+        {
+            var rng = np.random.RandomState(42);
+            foreach (double mu in new[] { 0.0, System.Math.PI / 4, System.Math.PI / 2, -System.Math.PI / 2 })
+            {
+                var result = rng.vonmises(mu, 10, 5000);
+                var data = result.ToArray<double>();
+
+                double mean = 0;
+                foreach (var v in data) mean += v;
+                mean /= data.Length;
+
+                // Mean should be close to mu
+                System.Math.Abs(mean - mu).Should().BeLessThan(0.1);
+            }
+        }
+
+        [TestMethod]
+        public void VonMises_MuAtPi_WrapsCorrectly()
+        {
+            // mu = pi should wrap around properly
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(System.Math.PI, 10, 5000);
+            var data = result.ToArray<double>();
+
+            // All in range
+            foreach (var v in data)
+            {
+                v.Should().BeGreaterThanOrEqualTo(-System.Math.PI);
+                v.Should().BeLessThanOrEqualTo(System.Math.PI);
+            }
+        }
+
+        #endregion
+
+        #region Edge Cases
+
+        [TestMethod]
+        public void VonMises_EmptyShape_ReturnsEmptyArray()
+        {
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1, new int[] { 0 });
+
+            result.size.Should().Be(0);
+        }
+
+        [TestMethod]
+        public void VonMises_Size1_ReturnsSingleElementArray()
+        {
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1, 1);
+
+            result.size.Should().Be(1);
+        }
+
+        [TestMethod]
+        public void VonMises_Reproducibility_SameSeedSameResults()
+        {
+            var rng1 = np.random.RandomState(42);
+            var result1 = rng1.vonmises(0, 1, 10);
+
+            var rng2 = np.random.RandomState(42);
+            var result2 = rng2.vonmises(0, 1, 10);
+
+            var data1 = result1.ToArray<double>();
+            var data2 = result2.ToArray<double>();
+
+            for (int i = 0; i < data1.Length; i++)
+            {
+                data1[i].Should().Be(data2[i]);
+            }
+        }
+
+        #endregion
+    }
+}

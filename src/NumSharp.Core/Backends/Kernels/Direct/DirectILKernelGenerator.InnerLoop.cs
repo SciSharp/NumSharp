@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Iteration;
@@ -60,8 +61,47 @@ namespace NumSharp.Backends.Kernels
 
         internal static readonly ConcurrentDictionary<string, NDInnerLoopFunc> _innerLoopCache = new();
 
+        /// <summary>
+        /// Struct-keyed FRONT cache over <see cref="_innerLoopCache"/> for the production
+        /// ufunc routes. Those routes used to build their string key with an interpolated
+        /// <c>$"npy_binop_{op}_{lhs}_{rhs}_{res}"</c> on EVERY call — four enum formats plus a
+        /// string allocation, measured 45 ns + 96 B of garbage per call against ~10 ns for a
+        /// lookup on a prebuilt key — a fixed tax on every NDIter-routed op that dwarfs what
+        /// the iterator itself costs at small sizes. A hit here never touches a string; a
+        /// miss builds the SAME string (<see cref="InnerLoopKernelKey.ToCacheKey"/>) and
+        /// goes through <see cref="_innerLoopCache"/>, so DynamicMethod names, kernel
+        /// identity and <c>GeneratedDelegates.InnerLoopCount</c> are unchanged.
+        /// </summary>
+        internal static readonly ConcurrentDictionary<InnerLoopKernelKey, NDInnerLoopFunc> _innerLoopKeyCache = new();
+
         // Cache size + reset are centralized on GeneratedDelegates
         // (GeneratedDelegates.InnerLoopCount / GeneratedDelegates.ClearInnerLoop).
+
+        /// <summary>
+        /// Look up a production inner-loop kernel by its packed key without building a string.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static bool TryGetInnerLoop(in InnerLoopKernelKey key, out NDInnerLoopFunc kernel)
+            => _innerLoopKeyCache.TryGetValue(key, out kernel!);
+
+        /// <summary>
+        /// Struct-keyed <see cref="CompileInnerLoop(NPTypeCode[], Action{ILGenerator}, Action{ILGenerator}?, string)"/>:
+        /// serves the kernel from the front cache, else compiles it under the equivalent
+        /// string key and registers it in both caches.
+        /// </summary>
+        internal static NDInnerLoopFunc CompileInnerLoop(
+            NPTypeCode[] operandTypes,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            in InnerLoopKernelKey key)
+        {
+            if (_innerLoopKeyCache.TryGetValue(key, out var cached))
+                return cached;
+
+            var kernel = CompileInnerLoop(operandTypes, scalarBody, vectorBody, key.ToCacheKey());
+            _innerLoopKeyCache.TryAdd(key, kernel);
+            return kernel;
+        }
 
         #endregion
 
@@ -413,11 +453,15 @@ namespace NumSharp.Backends.Kernels
         /// own mixed-type IL, or accept the scalar fallback where the body
         /// handles conversion.
         /// </summary>
-        private static bool CanSimdAllOperands(NPTypeCode[] types)
+        internal static bool CanSimdAllOperands(NPTypeCode[] types)
         {
             if (VectorBits == 0) return false;
             NPTypeCode first = types[0];
-            if (!CanUseSimd(first)) return false;
+            // Boolean is admitted here even though CanUseSimd(Boolean) is false: bool loads/stores
+            // ride the byte lanes (GetSimdLaneType), and a bool vectorBody only ever EXISTS when
+            // the engine's op-aware gate (CanUseSimdBinary / CanUseUnarySimd) already approved the
+            // (op, bool) pairing — this shell activates a supplied body, it never invents one.
+            if (!CanUseSimd(first) && first != NPTypeCode.Boolean) return false;
             for (int i = 1; i < types.Length; i++)
                 if (types[i] != first) return false;
             return true;
@@ -579,7 +623,9 @@ namespace NumSharp.Backends.Kernels
             long unrollStep = vectorCount * 4;
 
             var clrType = GetClrType(dtype);
-            var vecType = VectorMethodCache.V(VectorBits, clrType);
+            // Vector LOCALS take the lane type (Boolean -> byte; Vector256<bool> is not a type);
+            // the scalar-tail local keeps the CLR type.
+            var vecType = VectorMethodCache.V(VectorBits, GetSimdLaneType(dtype));
 
             LocalBuilder scalarPtr = ptrLocals[scalarSide];
             LocalBuilder contigPtr = ptrLocals[1 - scalarSide];

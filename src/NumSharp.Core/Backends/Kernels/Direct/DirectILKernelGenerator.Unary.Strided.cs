@@ -232,7 +232,7 @@ namespace NumSharp.Backends.Kernels
             ILGenerator il, UnaryKernelKey key, int outSize, int vstep,
             LocalBuilder locSrc, LocalBuilder locStride, LocalBuilder locI, long elemBase)
         {
-            var inClr = GetClrType(key.InputType);
+            var inClr = GetSimdLaneType(key.InputType); // Boolean gathers into byte lanes
 
             // Build Vector<T> from vstep strided scalar loads. Lane k (Create arg k) <- lane 0
             // is the lowest element, so element (i+elemBase+k) of the logical source maps to

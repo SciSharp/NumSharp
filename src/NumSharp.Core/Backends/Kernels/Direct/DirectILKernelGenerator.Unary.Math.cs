@@ -37,6 +37,12 @@ namespace NumSharp.Backends.Kernels
             // copy). The loaded value already IS the result: emit nothing.
             if (op == UnaryOp.Positive)
                 return;
+            // np.conjugate is IDENTITY for every real dtype (bool/int/char/half/single/double/decimal):
+            // the loaded value already IS the result, so emit nothing. Only the Complex loop does work
+            // (routed to EmitUnaryComplexOperation below). Placed before the Decimal/Complex/Half
+            // redirects so Decimal/Half take the identity here rather than their op-switch default throw.
+            if (op == UnaryOp.Conjugate && type != NPTypeCode.Complex)
+                return;
             if ((op == UnaryOp.Floor || op == UnaryOp.Ceil || op == UnaryOp.Truncate || op == UnaryOp.Round) &&
                 (type == NPTypeCode.Boolean || type.IsInteger()))
                 return;
@@ -94,19 +100,40 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Exp:
-                    EmitMathCall(il, "Exp", type);
+                    // float32 gets NumPy's own kernel (NDFloatMath.Exp = simd_exp_FLOAT), which is
+                    // bit-exact with NumPy where MathF.Exp differs by up to 2 ULP on ~39% of inputs.
+                    // Deliberately NOT folded into EmitMathCall: Expm1 below composes "Exp then -1"
+                    // and must keep tracking npy_expm1f, whose kernel is a different function.
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleExp, null);
+                    else
+                        EmitMathCall(il, "Exp", type);
                     break;
 
                 case UnaryOp.Log:
-                    EmitMathCall(il, "Log", type);
+                    // float32 log is NumPy's own simd_log_FLOAT (see the Exp case above). NOT folded
+                    // into EmitMathCall: Log1p below composes "1+x then Log" and tracks npy_log1pf,
+                    // a different function.
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleLog, null);
+                    else
+                        EmitMathCall(il, "Log", type);
                     break;
 
                 case UnaryOp.Sin:
-                    EmitMathCall(il, "Sin", type);
+                    // float32 sin is NumPy's own simd_sincos_f32 kernel (see Exp/Log above).
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleSin, null);
+                    else
+                        EmitMathCall(il, "Sin", type);
                     break;
 
                 case UnaryOp.Cos:
-                    EmitMathCall(il, "Cos", type);
+                    // float32 cos is NumPy's own simd_sincos_f32 kernel (see Exp/Log above).
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleCos, null);
+                    else
+                        EmitMathCall(il, "Cos", type);
                     break;
 
                 case UnaryOp.Tan:
@@ -122,7 +149,15 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Tanh:
-                    EmitMathCall(il, "Tanh", type);
+                    // BOTH float widths are NumPy's own simd_tanh kernel (loops_hyperbolic), not the
+                    // platform libm — NumPy ships a table-driven tanh at f4 AND f8, so both BCL calls
+                    // diverged (9.7% / 8.1% of inputs). Half/Decimal/Complex keep EmitMathCall.
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleTanh, null);
+                    else if (type == NPTypeCode.Double)
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleTanh, null);
+                    else
+                        EmitMathCall(il, "Tanh", type);
                     break;
 
                 case UnaryOp.ASin:
@@ -137,9 +172,31 @@ namespace NumSharp.Backends.Kernels
                     EmitMathCall(il, "Atan", type);
                     break;
 
+                case UnaryOp.Asinh:
+                    // Math.Asinh/MathF.Asinh — byte-identical to NumPy 2.4.2 (npy_asinh/asinhf) on
+                    // this platform: both call the MSVC ucrtbase CRT. Verified 0-diff across 4521
+                    // adversarial inputs at f32 AND f64 (specials/±inf/NaN/subnormals/±0 included).
+                    EmitMathCall(il, "Asinh", type);
+                    break;
+
+                case UnaryOp.Acosh:
+                    // Math.Acosh/MathF.Acosh — byte-identical to NumPy 2.4.2 (npy_acosh/acoshf).
+                    EmitMathCall(il, "Acosh", type);
+                    break;
+
+                case UnaryOp.Atanh:
+                    // Math.Atanh/MathF.Atanh — byte-identical to NumPy 2.4.2 (npy_atanh/atanhf).
+                    EmitMathCall(il, "Atanh", type);
+                    break;
+
                 case UnaryOp.Exp2:
-                    // Use Math.Pow(2, x) since Math.Exp2 may not be available
-                    EmitExp2Call(il, type);
+                    // float32 routes through NDFloatMath.Exp2 (a fast 2^x, ≤1 ULP vs NumPy's scalar
+                    // exp2f, ~2.4x faster and vectorizable); every other dtype keeps the Math.Pow
+                    // bridge below. See the Exp case above for the same scalar/vector split.
+                    if (type == NPTypeCode.Single)
+                        il.EmitCall(OpCodes.Call, CachedMethods.SingleExp2, null);
+                    else
+                        EmitExp2Call(il, type);
                     break;
 
                 case UnaryOp.Expm1:
@@ -239,6 +296,16 @@ namespace NumSharp.Backends.Kernels
                     // For integer types: always false
                     // For float/double: use IsInfinity static method
                     EmitIsInfCall(il, type);
+                    break;
+
+                case UnaryOp.IsPosInf:
+                    // Test for +inf (np.isposinf). Integer types: always false.
+                    EmitIsPosInfCall(il, type);
+                    break;
+
+                case UnaryOp.IsNegInf:
+                    // Test for -inf (np.isneginf). Integer types: always false.
+                    EmitIsNegInfCall(il, type);
                     break;
 
                 default:
@@ -728,10 +795,15 @@ namespace NumSharp.Backends.Kernels
                         var locR = il.DeclareLocal(typeof(double));
                         var locI = il.DeclareLocal(typeof(double));
                         var lblNonZero = il.DefineLabel();
+                        var lblMagNotNaN = il.DefineLabel();
                         var lblFiniteMag = il.DefineLabel();
                         var lblBothInf = il.DefineLabel();
                         var lblImagInf = il.DefineLabel();
                         var lblEnd = il.DefineLabel();
+                        // NumPy sign(z) with a NaN component (no infinity) is (+NaN, +NaN) — a CANONICAL
+                        // positive NaN, NOT z/|z| (which would propagate each component's own NaN sign).
+                        // MSVC's NPY_NAN is positive; .NET double.NaN is 0xfff8. Match NumPy 2.4.2 bytes.
+                        double signPosNaN = BitConverter.Int64BitsToDouble(unchecked((long)0x7FF8000000000000L));
 
                         il.Emit(OpCodes.Stloc, locZ);
 
@@ -748,6 +820,18 @@ namespace NumSharp.Backends.Kernels
                         il.Emit(OpCodes.Br, lblEnd);
 
                         il.MarkLabel(lblNonZero);
+                        // NaN magnitude (a NaN component, no infinity) → (+NaN, +NaN), matching NumPy
+                        // (the canonical positive NaN — not the component-wise z/|z| that would keep a
+                        // -NaN input's sign). |z| is NaN here because NDComplexMath.Abs returns +NaN.
+                        il.Emit(OpCodes.Ldloc, locMag);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+                        il.Emit(OpCodes.Brfalse, lblMagNotNaN);
+                        il.Emit(OpCodes.Ldc_R8, signPosNaN);
+                        il.Emit(OpCodes.Ldc_R8, signPosNaN);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        il.MarkLabel(lblMagNotNaN);
                         // Check if magnitude is finite → fall through to z/|z|
                         il.Emit(OpCodes.Ldloc, locMag);
                         il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsInfinity, null);
@@ -768,8 +852,9 @@ namespace NumSharp.Backends.Kernels
                         il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsInfinity, null);
                         il.Emit(OpCodes.And);
                         il.Emit(OpCodes.Brfalse, lblBothInf);      // branch if NOT both-inf
-                        il.Emit(OpCodes.Ldc_R8, double.NaN);
-                        il.Emit(OpCodes.Ldc_R8, double.NaN);
+                        // both components infinite → (+NaN, +NaN) — NumPy's positive NPY_NAN, not .NET's 0xfff8
+                        il.Emit(OpCodes.Ldc_R8, signPosNaN);
+                        il.Emit(OpCodes.Ldc_R8, signPosNaN);
                         il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
                         il.Emit(OpCodes.Br, lblEnd);
 
@@ -917,8 +1002,11 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitDeg2RadCall(ILGenerator il, NPTypeCode type)
         {
+            // NumPy's DEG2RAD, evaluated at the operand's precision — see EmitRad2DegCall. (Here the
+            // float32 quotient and the rounded double quotient agree bit-for-bit, but spelling it
+            // NumPy's way keeps the two directions consistent.)
             const double Deg2RadFactor = Math.PI / 180.0;
-            const float Deg2RadFactorF = (float)(Math.PI / 180.0);
+            const float Deg2RadFactorF = (float)Math.PI / 180.0f;
 
             if (type == NPTypeCode.Single)
             {
@@ -945,8 +1033,15 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitRad2DegCall(ILGenerator il, NPTypeCode type)
         {
+            // NumPy's RAD2DEG is (180/PI) evaluated AT THE OPERAND'S PRECISION
+            // (npy_math_internal.h.src: `#define RAD2DEG (NPY__FP_SFX(180.0)/NPY__FP_SFX(NPY_PI))`,
+            // so the float32 loop divides two float32 constants). Rounding the DOUBLE quotient to
+            // float instead gives 0x42652ee1 where NumPy has 0x42652ee0 — one ULP low in the factor,
+            // which shifted 79% of all float32 rad2deg results by 1-2 ULP. Deg2Rad happens to round
+            // to the same float either way, but is written the same way here so the pair cannot
+            // drift apart again.
             const double Rad2DegFactor = 180.0 / Math.PI;
-            const float Rad2DegFactorF = (float)(180.0 / Math.PI);
+            const float Rad2DegFactorF = 180.0f / (float)Math.PI;
 
             if (type == NPTypeCode.Single)
             {

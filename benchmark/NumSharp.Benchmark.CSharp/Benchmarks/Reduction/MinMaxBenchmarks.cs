@@ -19,7 +19,7 @@ public class MinMaxBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.ArithmeticTypes;
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
@@ -47,6 +47,10 @@ public class MinMaxBenchmarks : TypedBenchmarkBase
     [BenchmarkCategory("Min")]
     public NDArray AMin_Full() => np.amin(_a1D);
 
+    [Benchmark(Description = "np.min(a)")]
+    [BenchmarkCategory("Min", "ApiEntryPoint")]
+    public NDArray Min_Full() => np.min(_a1D);
+
     [Benchmark(Description = "a.amin() [method]")]
     [BenchmarkCategory("Min")]
     public NDArray AMin_Method() => _a1D.amin();
@@ -62,6 +66,10 @@ public class MinMaxBenchmarks : TypedBenchmarkBase
     [Benchmark(Description = "np.amax(a) [full]")]
     [BenchmarkCategory("Max")]
     public NDArray AMax_Full() => np.amax(_a1D);
+
+    [Benchmark(Description = "np.max(a)")]
+    [BenchmarkCategory("Max", "ApiEntryPoint")]
+    public NDArray Max_Full() => np.max(_a1D);
 
     [Benchmark(Description = "a.amax() [method]")]
     [BenchmarkCategory("Max")]

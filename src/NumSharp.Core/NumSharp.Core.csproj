@@ -1,59 +1,265 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <PackageOutputPath>../../packages</PackageOutputPath>
     <Description>NumSharp is the fundamental library for scientific computing with .NET providing a similar API to python's numpy scientific library. NumSharp has full N-D, broadcasting and axis support.  If you want to use .NET to get started with machine learning, NumSharp will be your best tool.</Description>
-    <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
+    <PackageProjectUrl>https://scisharp.github.io/NumSharp/</PackageProjectUrl>
     <Copyright>2021 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <PackageReleaseNotes></PackageReleaseNotes>
-    <AssemblyVersion>0.60.0</AssemblyVersion>
-    <FileVersion>0.60.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
     <LangVersion>latest</LangVersion>
-    <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
+    <!-- The package icon, license acceptance and the VERSION are centralized in
+         ../../Directory.Build.props (PackageIcon / PackageRequireLicenseAcceptance / VersionPrefix);
+         PackageVersion, AssemblyVersion and FileVersion all derive from that one prefix.
+         The package is packed explicitly (`dotnet pack`), never on build. -->
     <PackageId>NumSharp</PackageId>
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp</RootNamespace>
-    <Version>0.60.0</Version>
-    <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
+    <!-- Strong-naming (key, DelaySign, SignAssembly) is set repo-wide in ../../Directory.Build.props. -->
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <Platforms>AnyCPU</Platforms>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <DelaySign>false</DelaySign>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <Configurations>Debug;Release;Publish</Configurations>
     <AssemblyName>NumSharp</AssemblyName>
-    <PackageVersion>0.60.0</PackageVersion>
-	<GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- GenerateDocumentationFile turns on the whole XML-doc-comment validation family. NumSharp
+         mirrors NumPy's API surface rather than curating per-member XML docs, so these are pure
+         noise here; we still EMIT the .xml doc file (for IntelliSense), we just don't validate it.
+         Every code below is exclusively an XML-documentation diagnostic — none overlaps a
+         code-correctness warning:
+           CS0419 ambiguous cref            CS1570 badly-formed XML          CS1571 dup param tag
+           CS1572 param tag, no param       CS1573 param, no param tag       CS1574 unresolved cref
+           CS1580 bad cref param type       CS1581 bad cref return type      CS1584 malformed cref
+           CS1587 comment not on element    CS1589/1590/1592/1598 <include>  CS1591 missing comment
+           CS1658 keyword in cref           CS1710/1712 typeparam tag        CS1711 typeparam, none
+           CS1723 cref to type param        CS1734 paramref, no param -->
+    <NoWarn>$(NoWarn);CS0419;CS1570;CS1571;CS1572;CS1573;CS1574;CS1580;CS1581;CS1584;CS1587;CS1589;CS1590;CS1591;CS1592;CS1598;CS1658;CS1710;CS1711;CS1712;CS1723;CS1734</NoWarn>
+    <!-- Two non-doc warnings on INTENTIONAL design choices, not fixable noise:
+           CS8981 the lowercase API type names (np, linalg, fft, …) that mirror NumPy's surface —
+                  the "may become reserved for the language" note is future-proofing we accept.
+           CS8500 address-of / pointer-to a managed type T in the unmanaged-storage unsafe kernels —
+                  inherent to NumSharp's raw-pointer memory model. -->
+    <NoWarn>$(NoWarn);CS8981;CS8500</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
     <Optimize>true</Optimize>
-	<SignAssembly>true</SignAssembly>
   </PropertyGroup>
 
   <ItemGroup>
     <None Remove="NumSharp.Core.csproj.DotSettings" />
-    <None Remove="Open.snk" />
     <None Include="..\..\LICENSE">
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <!-- Ships into the NumSharp package so a downstream consumer imports the NDW013 guard: a build
+         warning when [NDScoped]/[NDScopedAsync] is used but the NumSharp.Build package is not
+         installed (the attributes are then inert and the temporaries leak). See build/NumSharp.targets. -->
+    <!-- Under build/net8.0/, NOT the TFM-agnostic build/ root: NuGet treats a package that offers ANY
+         asset for a consumer's framework as compatible, so a root-level .targets made NumSharp "restore"
+         into netstandard2.0 / net6.0 / net7.0 projects with ZERO compile assets — the user then met a
+         bare CS0246 ("NumSharp could not be found") instead of NuGet's NU1202 naming the incompatibility.
+         Nearest-TFM selection hands build/net8.0/ to every net8.0+ consumer (net9.0, net10.0 included),
+         which is exactly the set lib/ serves; an older framework now gets no asset at all and NU1202. -->
+    <None Include="build/NumSharp.targets" Pack="true" PackagePath="build/net8.0/" />
   </ItemGroup>
+
+  <!-- ==================================================================================
+       Compile-time ownership analyzers (NDW012 + NDW016/NDW017) for NumSharp.Core's OWN build — AND
+       the analyzer the NumSharp PACKAGE ships to its consumers.
+
+       The NumSharp.Build.Analyzer flags an NDArray a method creates but never returns, out/ref's,
+       stores, disposes, or yields to an NDScope — a transient left to the finalizer (NDW012) — and,
+       at the TYPE level, a class/struct that stores NDArrays without being disposable (NDW016) or
+       without disposing them on its Dispose path (NDW017); ownership is contagious, opt-out is
+       [NDBorrowed]. Referencing it with OutputItemType="Analyzer" (ReferenceOutputAssembly=false, so
+       netstandard2.0 is never a runtime ref) runs it during Core's compile, so `dotnet build` on
+       NumSharp captures leaks in np.* code, not just in downstream consumers.
+
+       The analyzer ALSO carries the [NDScoped]-target gate (NDW002/003/005/006/009/010/011), but on
+       Core those are REDUNDANT with the self-weave (which validates every [NDScoped] method
+       post-compile) and have never run over Core's full attributed surface — so they are turned off
+       for Core's own build in src/NumSharp.Core/.editorconfig, leaving the NDW012/NDW016/NDW017
+       ownership warnings.
+
+       SHIPPING: the analyzer DLL is ALSO packed into THIS package's analyzers/dotnet/cs/ (see
+       _NumSharpCorePackAnalyzer below), so every PackageReference consumer of NumSharp gets the
+       NDW diagnostics — the [NDScoped]-target gate as compile ERRORS and the NDW012/NDW016/NDW017
+       ownership nudges — WITHOUT installing anything else. The NumSharp.Build package is weaver-ONLY (tool + targets,
+       no analyzers/): its job is the post-compile weave, and shipping the analyzer here instead of
+       there means the two packages installed together never double-apply it. The attributes and the
+       analyzer both living in/with NumSharp keeps them version-locked to the surface they validate.
+
+       Toggle: -p:EnableNDArrayLeakAnalyzer=false removes the analyzer from Core's COMPILE — the
+       P2P below stays (without OutputItemType) so the DLL is still BUILT and the package still
+       ships it; the toggle governs analysis of Core, never the package payload.
+       ================================================================================== -->
+  <PropertyGroup>
+    <EnableNDArrayLeakAnalyzer Condition="'$(EnableNDArrayLeakAnalyzer)' == ''">true</EnableNDArrayLeakAnalyzer>
+    <!-- NDW012/NDW016/NDW017 are non-breaking NUDGES, never build-breakers. Keep them WARNINGS even
+         if this build ever turns on TreatWarningsAsErrors, so a detected leak or ownership gap can
+         never fail Core's own build. -->
+    <WarningsNotAsErrors Condition="'$(EnableNDArrayLeakAnalyzer)' == 'true'">$(WarningsNotAsErrors);NDW012;NDW016;NDW017</WarningsNotAsErrors>
+  </PropertyGroup>
+  <!-- ReferenceNDArrayAnalyzer (default true) lets a build DROP the analyzer ProjectReference
+       entirely. A file-based app (dotnet run some.cs) forces TargetFramework=net8.0 as a GLOBAL onto
+       its whole ProjectReference graph during RESTORE, which then restores this netstandard2.0-only
+       analyzer for net8.0 it doesn't target -> NETSDK1005 and a broken build. The smoke runner
+       benchmark/scripts/smoke_benchmark_bodies.cs (which only EXECUTES benchmark bodies, never needs
+       the analyzer) passes ReferenceNDArrayAnalyzer=false to opt out; every ordinary build leaves it
+       true, so Core is analyzed and the analyzer DLL is built for packing exactly as before. -->
+  <ItemGroup Condition="'$(ReferenceNDArrayAnalyzer)' != 'false' and '$(EnableNDArrayLeakAnalyzer)' == 'true'">
+    <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
+  </ItemGroup>
+  <!-- Toggle OFF still builds the analyzer (no OutputItemType → it never analyzes Core): the pack
+       target below stages its DLL by GetTargetPath WITHOUT a rebuild, so the DLL must exist from
+       the ordinary build whatever the toggle says. PrivateAssets=all + IsPackable=false on the
+       analyzer keep this out of the nuspec dependency list in both branches. -->
+  <ItemGroup Condition="'$(ReferenceNDArrayAnalyzer)' != 'false' and '$(EnableNDArrayLeakAnalyzer)' != 'true'">
+    <ProjectReference Include="..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- ==================================================================================
+       Pack the analyzer into the NumSharp package (analyzers/dotnet/cs/).
+
+       NuGet auto-applies analyzers/dotnet/cs/ to a consumer's C# compile, so referencing
+       NumSharp alone turns on the NDW diagnostics. Same mechanics as the weaver package's
+       old staging (which moved here): GetTargetPath resolves the DLL WITHOUT a rebuild —
+       safe under a no-build pack (the way CI packs: build with Rebuild, then pack with no
+       rebuild; the P2P above built the DLL) — and RemoveProperties="TargetFramework" strips
+       a single-TFM pack's net8.0/net10.0 global so the analyzer resolves its own
+       netstandard2.0 output.
+
+       analyzers/ is a TFM-agnostic folder, so the DLL is staged ONCE, as an ordinary
+       Pack="true" <None> item added just before NuGet collects the package files
+       (_GetPackageFiles, a dependency of GenerateNuspec). That target runs exactly once per
+       pack — in the OUTER build of a multi-targeting pack, and in the one inner build of a
+       single-TFM pack (`dotnet pack -p:TargetFramework=net10.0`; `dotnet pack` has no -f) —
+       which is what makes the staging independent of WHICH TFMs are being packed. The previous hook (TargetsForTfmSpecificContentInPackage,
+       which runs once PER TFM and was therefore conditioned on the net8.0 pass to avoid a
+       duplicate-file NU5118) silently shipped an analyzer-less nupkg from any single-TFM pack
+       that was not net8.0.
+       ================================================================================== -->
+  <Target Name="_NumSharpCorePackAnalyzer" BeforeTargets="_GetPackageFiles">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build.Analyzer\NumSharp.Build.Analyzer.csproj"
+             Targets="GetTargetPath" Properties="Configuration=$(Configuration)" RemoveProperties="TargetFramework;TargetFrameworks;RuntimeIdentifier">
+      <Output TaskParameter="TargetOutputs" ItemName="_NumSharpCoreAnalyzer" />
+    </MSBuild>
+    <!-- Loud, actionable failure instead of a silently analyzer-less nupkg (the gates —
+         verify_strong_name.cs and verify_build_package.sh step 2 — assert presence too). -->
+    <Error Condition="'@(_NumSharpCoreAnalyzer)' == '' or !Exists('@(_NumSharpCoreAnalyzer)')"
+           Text="NumSharp pack: NumSharp.Build.Analyzer.dll not found (looked at '@(_NumSharpCoreAnalyzer)'). Build the solution (or NumSharp.Core, whose ProjectReference builds the analyzer) before packing with --no-build." />
+    <ItemGroup>
+      <None Include="@(_NumSharpCoreAnalyzer)" Pack="true" PackagePath="analyzers/dotnet/cs/" Visible="false" />
+    </ItemGroup>
+  </Target>
 
   <Target Name="LogDebugInfo">
     <Message Text="Building for $(TargetFramework) on $(OS)" Importance="High" />
   </Target>
 
-  <!-- System.Memory and System.Runtime.CompilerServices.Unsafe are built into net8.0+ -->
+  <!-- ==================================================================================
+       NDScope IL weaving — the SELF-WEAVE (see docs/website-src/docs/numsharp-build-compiler.md).
+
+       After each inner (per-TargetFramework) compile, tools/NumSharp.Build rewrites the
+       intermediate assembly: every [NDScoped]/[NDScopedAsync] method gets the
+       ambient-reclamation-scope pattern injected (scope = NDScope.Open() prologue, body
+       wrapped in try/finally with scope.Dispose(), every ret routed through scope.Returns,
+       out-NDArray params yielded) and every [NDScopedExit] parameter its Detach, so the
+       SOURCE keeps its 100% original body. The weaver re-signs with the repo key (IL
+       rewriting invalidates the compile-time strong-name signature — StrongNameTests gates
+       this) and rewrites the portable PDB in place.
+
+       ONE DEFINITION OF THE WEAVE STEP. The NDScopeWeave target that does this is NOT
+       spelled here: it is the very target every NumSharp.Build package consumer runs,
+       imported below from ../../tools/NumSharp.Build/build/NumSharp.Build.targets — the
+       file that ships as the package's build/NumSharp.Build.targets. Core used to carry a
+       private copy of it, and the two drifted (the copy had no NDW000 tool check, no
+       reference-list response file, no content pre-scan, an unconditional key argument);
+       importing the packaged file makes the self-weave and the consumer weave the same
+       code path by construction, so a fix or a hardening lands in both at once. What the
+       packaged file does on Core: the pre-scan finds 'NDScopedAttribute' in Core's own
+       metadata (Core DEFINES it) and spawns the tool; the response file carries Core's
+       framework references only (the tool resolves NDScope in-module first, so that list
+       is merely the resolver's probe set); the key argument is emitted because Core is
+       genuinely full-signed (SignAssembly, no DelaySign/PublicSign, Open.snk resolved into
+       KeyOriginatorFile by ResolveKeySource); $(NumSharpBuildActive)=true is declared, so
+       the analyzer running over Core never raises NDW013 for Core's own attributes.
+
+       The ONLY Core-specific piece is the one a package consumer never needs: the tool must
+       be BUILT FROM SOURCE before the imported target can run it. _NumSharpCoreBuildWeaver
+       (below) restores+builds tools/NumSharp.Build and points $(NumSharpBuildToolDll) — the
+       packaged target's tool-path knob, which the package would otherwise default to its
+       own tools/net8.0/any/ payload — at the build output, exactly as examples/NDScoping
+       points it at the same tool in source mode.
+
+       Incremental: both targets carry the SAME Inputs/Outputs (the per-TFM
+       NDScopeWeave.marker the imported target touches after weaving) so they are skipped
+       and run in lockstep — when CoreCompile was skipped neither runs; when it reran, the
+       fresh (unwoven) dll is newer than the marker and both run. The weaver itself is
+       additionally idempotent (a method whose body already opens an NDScope is skipped),
+       so double-weaving is impossible even if the marker is deleted by hand.
+
+       The weaver project is restored+built via two separate MSBuild task calls with
+       DIFFERENT global-property sets — a Restore and Build sharing one property set would
+       reuse the pre-restore project evaluation and fail the first clean build. It is built
+       Release whatever Core's own configuration is (a Debug Core still weaves with the
+       optimized tool).
+
+       Escape hatches (the imported target's, shared with every consumer):
+       -p:SkipNDScopeWeave=true skips entirely (the hand-written scope sites keep working —
+       weaving only ADDS scopes to attributed methods; the analyzer then reports NDW013 on
+       every attributed Core member, truthfully: they ARE inert in that build);
+       -p:NDScopeWeaveILVerify=true additionally runs the dotnet-ilverify global tool on
+       the woven assembly (kept opt-in so machines without the tool still build).
+       ================================================================================== -->
+  <PropertyGroup>
+    <NumSharpBuildProject>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\NumSharp.Build.csproj</NumSharpBuildProject>
+  </PropertyGroup>
+
+  <!-- The marker path is spelled inline (not via a body-level property): IntermediateOutputPath
+       is assigned by the SDK's .targets, which import AFTER the project body — a body-level
+       property would capture it EMPTY. Target Inputs/Outputs expand at target-execution time,
+       where the per-TFM obj path is final. BeforeTargets="NDScopeWeave" orders this right
+       before the imported weave target (after its DependsOnTargets, before its own
+       Inputs/Outputs check); the Condition mirrors the weave target's, because MSBuild runs a
+       BeforeTargets target even when the target it precedes is conditioned out. -->
+  <Target Name="_NumSharpCoreBuildWeaver"
+          BeforeTargets="NDScopeWeave"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipNDScopeWeave)' != 'true' and '@(IntermediateAssembly)' != ''"
+          Inputs="@(IntermediateAssembly)"
+          Outputs="$(IntermediateOutputPath)NDScopeWeave.marker">
+
+    <!-- RemoveProperties: the parent inner build's TargetFramework/RID globals must not leak
+         into the single-TFM weaver project (they mis-key its restore/build). -->
+    <MSBuild Projects="$(NumSharpBuildProject)" Targets="Restore" Properties="Configuration=Release"
+             RemoveProperties="TargetFramework;TargetFrameworks;RuntimeIdentifier;Platform;Platforms" />
+    <MSBuild Projects="$(NumSharpBuildProject)" Targets="Build" Properties="Configuration=Release;NDScopeWeaverInner=true"
+             RemoveProperties="TargetFramework;TargetFrameworks;RuntimeIdentifier;Platform;Platforms">
+      <Output TaskParameter="TargetOutputs" ItemName="_NumSharpCoreWeaverAssembly" />
+    </MSBuild>
+
+    <!-- A property set inside a target is global to the rest of the build, so the imported
+         NDScopeWeave target (which expands $(NumSharpBuildToolDll) at execution time, in its
+         NDW000 existence check and its Exec) sees the freshly built tool, not the package-layout
+         default the packaged file computed at evaluation. -->
+    <PropertyGroup>
+      <NumSharpBuildToolDll>@(_NumSharpCoreWeaverAssembly->'%(FullPath)')</NumSharpBuildToolDll>
+    </PropertyGroup>
+    <Error Condition="'$(NumSharpBuildToolDll)' == '' or !Exists('$(NumSharpBuildToolDll)')"
+           Text="NumSharp self-weave: building $(NumSharpBuildProject) produced no tool assembly (got '$(NumSharpBuildToolDll)')." />
+  </Target>
+
+  <!-- The packaged weave target itself — the same file NumSharp.Build ships as build/NumSharp.Build.targets. -->
+  <Import Project="..\..\tools\NumSharp.Build\build\NumSharp.Build.targets" />
 
   <ItemGroup>
     <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />

@@ -23,6 +23,7 @@ import sys
 # The absolute #:project path the author's .cs benches pin (so they can also be
 # run directly as `dotnet run -c Release - < file`). Rewritten per checkout.
 AUTHOR_CSPROJ = "K:/source/NumSharp/src/NumSharp.Core/NumSharp.Core.csproj"
+AUTHOR_OPENBLAS_CSPROJ = "K:/source/NumSharp/src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj"
 
 # An AV under heavy mixed load should fail FAST (non-zero exit) instead of
 # stalling while the runtime writes a crash dump — same policy as nditer.
@@ -31,6 +32,10 @@ NS_ENV_EXTRA = {"DOTNET_DbgEnableMiniDump": "0", "DOTNET_EnableCrashReport": "0"
 
 def core_csproj(repo):
     return os.path.join(repo, "src", "NumSharp.Core", "NumSharp.Core.csproj")
+
+
+def openblas_csproj(repo):
+    return os.path.join(repo, "src", "NumSharp.Interop.OpenBLAS", "NumSharp.Interop.OpenBLAS.csproj")
 
 
 def log(msg):
@@ -50,7 +55,20 @@ def build_core(repo):
     log("[build] ok")
 
 
-def run_cs(repo, cs_path, timeout=1200):
+def build_openblas(repo):
+    """Build the isolated OpenBLAS project in Release without producing a NuGet package."""
+    log("[build] NumSharp.Interop.OpenBLAS (Release)…")
+    b = subprocess.run(
+        ["dotnet", "build", openblas_csproj(repo), "-c", "Release", "-v", "q", "--nologo",
+         "-clp:NoSummary;ErrorsOnly", "-p:WarningLevel=0", "-p:GeneratePackageOnBuild=false"],
+        capture_output=True, text=True, cwd=repo)
+    if b.returncode != 0:
+        log("[build] FAILED:\n" + b.stdout[-1500:] + b.stderr[-1500:])
+        sys.exit(1)
+    log("[build] ok")
+
+
+def run_cs(repo, cs_path, timeout=1200, env_extra=None):
     """Run a file-based NumSharp bench (.cs) and return its stdout (the keyed TSV).
 
     The .cs is fed on stdin (`dotnet run -c Release -`) so sibling git worktrees
@@ -60,7 +78,8 @@ def run_cs(repo, cs_path, timeout=1200):
     with open(cs_path, encoding="utf-8") as f:
         src = f.read()
     src = src.replace(AUTHOR_CSPROJ, core_csproj(repo).replace(os.sep, "/"))
-    env = {**os.environ, **NS_ENV_EXTRA}
+    src = src.replace(AUTHOR_OPENBLAS_CSPROJ, openblas_csproj(repo).replace(os.sep, "/"))
+    env = {**os.environ, **NS_ENV_EXTRA, **(env_extra or {})}
     name = os.path.basename(cs_path)
     try:
         p = subprocess.run(["dotnet", "run", "-c", "Release", "-"], input=src,
@@ -74,12 +93,13 @@ def run_cs(repo, cs_path, timeout=1200):
     return p.stdout
 
 
-def run_py(repo, py_path, timeout=900):
+def run_py(repo, py_path, timeout=900, env_extra=None):
     """Run a NumPy twin bench (.py) and return its stdout (the keyed TSV)."""
     name = os.path.basename(py_path)
     try:
+        env = {**os.environ, **(env_extra or {})}
         p = subprocess.run([sys.executable, py_path], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", cwd=repo, timeout=timeout)
+                           encoding="utf-8", errors="replace", cwd=repo, env=env, timeout=timeout)
     except subprocess.TimeoutExpired:
         log(f"    [py] {name}: TIMED OUT ({timeout}s) — section dropped")
         return ""

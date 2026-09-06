@@ -74,7 +74,12 @@ namespace NumSharp.Backends.Iteration
             where T : unmanaged
             where TKernel : struct, INDAxisSameTypeKernel<T>
         {
-            var state = CreateState(src, dst, axis);
+            // Outer scratch sized by ndim (no fixed cap) — matches NDIter.Execution.cs's stackalloc idiom.
+            int axisNd = Math.Max(1, checked((int)src.Shape.NDim));
+            long* osBuf = stackalloc long[axisNd];
+            long* ssBuf = stackalloc long[axisNd];
+            long* dsBuf = stackalloc long[axisNd];
+            var state = CreateState(src, dst, axis, osBuf, ssBuf, dsBuf);
             if (state.AxisLength == 0 || state.OuterSize == 0)
                 return;
 
@@ -119,7 +124,10 @@ namespace NumSharp.Backends.Iteration
         public static void ReduceDouble<TKernel>(UnmanagedStorage src, UnmanagedStorage dst, int axis, int ddof)
             where TKernel : struct, INDAxisDoubleReductionKernel
         {
-            var state = CreateReductionState(src, dst, axis);
+            int axisNd = Math.Max(1, checked((int)src.Shape.NDim));
+            long* osBuf = stackalloc long[axisNd];
+            long* ssBuf = stackalloc long[axisNd];
+            var state = CreateReductionState(src, dst, axis, osBuf, ssBuf);
             if (state.AxisLength == 0 || state.OuterSize == 0)
                 return;
 
@@ -154,7 +162,10 @@ namespace NumSharp.Backends.Iteration
             where T : unmanaged
             where TKernel : struct, INDBooleanReductionKernel<T>
         {
-            var state = CreateReductionState(src, dst, axis);
+            int axisNd = Math.Max(1, checked((int)src.Shape.NDim));
+            long* osBuf = stackalloc long[axisNd];
+            long* ssBuf = stackalloc long[axisNd];
+            var state = CreateReductionState(src, dst, axis, osBuf, ssBuf);
             if (state.OuterSize == 0)
                 return;
 
@@ -216,15 +227,14 @@ namespace NumSharp.Backends.Iteration
             return NumSharp.Backends.Kernels.DirectILKernelGenerator.AnySimdHelper<T>(src, length);
         }
 
-        private static NDAxisState CreateState(UnmanagedStorage src, UnmanagedStorage dst, int axis)
+        private static NDAxisState CreateState(UnmanagedStorage src, UnmanagedStorage dst, int axis,
+            long* outerShape, long* srcOuterStrides, long* dstOuterStrides)
         {
             if (src.Shape.NDim != dst.Shape.NDim)
                 throw new NotSupportedException("NDAxisIter currently requires source and destination to have matching ranks.");
 
             int ndim = checked((int)src.Shape.NDim);
-            if (ndim > NDAxisState.MaxDims)
-                throw new NotSupportedException($"NDAxisIter currently supports up to {NDAxisState.MaxDims} dimensions.");
-
+            // NO ndim cap: the outer scratch is caller-provided (stackalloc sized by ndim), so any rank works.
             if ((uint)axis >= (uint)ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
@@ -236,11 +246,10 @@ namespace NumSharp.Backends.Iteration
                 DestinationAxisStride = dst.Shape.strides[axis],
                 Data0 = (IntPtr)((byte*)src.Address + (src.Shape.offset * src.InternalArray.ItemLength)),
                 Data1 = (IntPtr)((byte*)dst.Address + (dst.Shape.offset * dst.InternalArray.ItemLength)),
+                OuterShapePtr = outerShape,
+                SourceOuterStridesPtr = srcOuterStrides,
+                DestinationOuterStridesPtr = dstOuterStrides,
             };
-
-            var outerShape = state.GetOuterShapePointer();
-            var srcOuterStrides = state.GetSourceOuterStridesPointer();
-            var dstOuterStrides = state.GetDestinationOuterStridesPointer();
 
             int outerAxis = 0;
             long outerSize = 1;
@@ -276,12 +285,11 @@ namespace NumSharp.Backends.Iteration
             return state;
         }
 
-        private static NDAxisState CreateReductionState(UnmanagedStorage src, UnmanagedStorage dst, int axis)
+        private static NDAxisState CreateReductionState(UnmanagedStorage src, UnmanagedStorage dst, int axis,
+            long* outerShape, long* srcOuterStrides)
         {
             int ndim = checked((int)src.Shape.NDim);
-            if (ndim > NDAxisState.MaxDims)
-                throw new NotSupportedException($"NDAxisIter currently supports up to {NDAxisState.MaxDims} dimensions.");
-
+            // NO ndim cap: the outer scratch is caller-provided (stackalloc sized by ndim), so any rank works.
             if ((uint)axis >= (uint)ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
@@ -292,10 +300,9 @@ namespace NumSharp.Backends.Iteration
                 SourceAxisStride = src.Shape.strides[axis],
                 Data0 = (IntPtr)((byte*)src.Address + (src.Shape.offset * src.InternalArray.ItemLength)),
                 Data1 = (IntPtr)((byte*)dst.Address + (dst.Shape.offset * dst.InternalArray.ItemLength)),
+                OuterShapePtr = outerShape,
+                SourceOuterStridesPtr = srcOuterStrides,
             };
-
-            var outerShape = state.GetOuterShapePointer();
-            var srcOuterStrides = state.GetSourceOuterStridesPointer();
 
             int outerAxis = 0;
             long outerSize = 1;
@@ -465,7 +472,10 @@ namespace NumSharp.Backends.Iteration
             where T : unmanaged
             where TKernel : struct, INDAxisNumericReductionKernel<T>
         {
-            var state = CreateReductionState(src, dst, axis);
+            int axisNd = Math.Max(1, checked((int)src.Shape.NDim));
+            long* osBuf = stackalloc long[axisNd];
+            long* ssBuf = stackalloc long[axisNd];
+            var state = CreateReductionState(src, dst, axis, osBuf, ssBuf);
             if (state.OuterSize == 0)
                 return;
 

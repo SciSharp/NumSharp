@@ -4,6 +4,8 @@
 # regenerated outputs (the dashboard's tracked form is the DocFX page
 # docs/website-src/docs/benchmarks-dashboard.md, seeded from this file)
 /benchmark-report.json
+/benchmark-report.managed.json
+/benchmark-report.openblas.json
 /benchmark-report.csv
 /benchmark-dashboard.md
 
@@ -13,5 +15,4 @@
 # Python cache
 __pycache__/
 *.pyc
-
 

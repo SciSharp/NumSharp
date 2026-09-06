@@ -205,9 +205,9 @@ static class Gen
     public static void Main()
     {
         string here = AppContext.BaseDirectory;
-        // resolve test/oracle dir regardless of run cwd: walk up to find NumSharp.UnitTest sibling.
+        // resolve test/oracle dir regardless of run cwd: walk up to find NumSharp.Tests sibling.
         string oracleDir = FindOracleDir();
-        string corpus = Path.GetFullPath(Path.Combine(oracleDir, "..", "NumSharp.UnitTest", "Fuzz", "corpus"));
+        string corpus = Path.GetFullPath(Path.Combine(oracleDir, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"));
         Directory.CreateDirectory(corpus);
 
         var unary = new List<string>();
@@ -331,6 +331,14 @@ static class Gen
             reduce.Add(Case($"argmax/decimal/{ln}/{n++}", "argmax", pj0, new[] { o.Describe() },
                 "int64", new int[0], HexOf(Bytes(new[] { (long)iMax }))));
             reduce.Add(Case($"argmin/decimal/{ln}/{n++}", "argmin", pj0, new[] { o.Describe() },
+                "int64", new int[0], HexOf(Bytes(new[] { (long)iMin }))));
+            // G13: the FLAT (axis=None) form takes argmax_elementwise_il — a DIFFERENT code path
+            // from the axis kernel above, and the one whose Decimal IL compare was silently wrong
+            // (argmax([3,9,1,5]) returned 0 while this tier stayed green through the axis path).
+            string pjFlat = "{\"axis\":null,\"keepdims\":false}";
+            reduce.Add(Case($"argmax_flat/decimal/{ln}/{n++}", "argmax", pjFlat, new[] { o.Describe() },
+                "int64", new int[0], HexOf(Bytes(new[] { (long)iMax }))));
+            reduce.Add(Case($"argmin_flat/decimal/{ln}/{n++}", "argmin", pjFlat, new[] { o.Describe() },
                 "int64", new int[0], HexOf(Bytes(new[] { (long)iMin }))));
             reduce.Add(Case($"count_nonzero/decimal/{ln}/{n++}", "count_nonzero", pj0, new[] { o.Describe() },
                 "int64", new int[0], HexOf(Bytes(new[] { nz }))));
@@ -742,13 +750,13 @@ static class Gen
     static string FindOracleDir()
     {
         // this file lives in test/oracle/; AppContext.BaseDirectory is the build temp, so search upward
-        // from the current directory for a folder containing NumSharp.UnitTest.
+        // from the current directory for a folder containing NumSharp.Tests.
         var dir = Directory.GetCurrentDirectory();
         for (int i = 0; i < 8 && dir != null; i++)
         {
             var cand = Path.Combine(dir, "test", "oracle");
-            if (Directory.Exists(Path.Combine(dir, "test", "NumSharp.UnitTest"))) return cand;
-            if (Path.GetFileName(dir) == "oracle" && Directory.Exists(Path.Combine(dir, "..", "NumSharp.UnitTest"))) return dir;
+            if (Directory.Exists(Path.Combine(dir, "test", "NumSharp.Tests"))) return cand;
+            if (Path.GetFileName(dir) == "oracle" && Directory.Exists(Path.Combine(dir, "..", "NumSharp.Tests"))) return dir;
             dir = Path.GetDirectoryName(dir);
         }
         // fallback: assume invoked from test/oracle

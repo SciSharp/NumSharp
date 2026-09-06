@@ -12,7 +12,7 @@ namespace NumSharp.Benchmark.Unmanaged
     //| OffsetIncrementor | 898.2 us | 30.68 us | 416.4 us | 747.5 us | 682.0 us | 3,483.5 us |  1.41 |    0.70 |
     //|   GetOffset | 658.4 us | 10.43 us | 141.6 us | 612.6 us | 542.0 us | 2,724.8 us |  1.00 |    0.00 |
 
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 2000)]
+    [SimpleJob(RunStrategy.ColdStart, iterationCount: 2000)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class Incrementors

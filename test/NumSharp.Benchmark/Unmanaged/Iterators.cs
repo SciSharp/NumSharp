@@ -20,7 +20,7 @@ namespace NumSharp.Benchmark.Unmanaged
     // now measured through NDArray.GetAtIndex — the public C-order element accessor that
     // replaced AsIterator in ToString and np.broadcast(...).iters — against coordinate
     // GetOffset access.
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 2000)]
+    [SimpleJob(RunStrategy.ColdStart, iterationCount: 2000)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class Iterators

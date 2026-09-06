@@ -8,31 +8,31 @@ namespace NumSharp.Benchmark.CSharp.Benchmarks.Manipulation;
 /// Benchmarks for dimension manipulation: squeeze, expand_dims, swapaxes, moveaxis.
 /// </summary>
 [BenchmarkCategory("Manipulation", "Dims")]
-public class DimsBenchmarks : BenchmarkBase
+public class DimsBenchmarks : OfficialBenchmarkBase
 {
     private NDArray _arr1D = null!;
     private NDArray _arr2D = null!;
     private NDArray _arr3D = null!;
     private NDArray _arrWithSingleton = null!;
 
-    [Params(ArraySizeSource.Medium, ArraySizeSource.Large)]
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
     [GlobalSetup]
     public void Setup()
     {
         np.random.seed(Seed);
-        _arr1D = np.random.rand(N) * 100;
+        _arr1D = CreateRandomArray(N, DType);
 
         var rows = (int)Math.Sqrt(N);
         var cols = N / rows;
-        _arr2D = np.random.rand(rows, cols) * 100;
+        _arr2D = CreateRandomArray2D(rows, cols, DType);
 
         var d = (int)Math.Pow(N, 1.0 / 3);
-        _arr3D = np.random.rand(d, d, d) * 100;
+        _arr3D = CreateRandomArray3D(d, d, d, DType);
 
         // Array with singleton dimensions for squeeze tests
-        _arrWithSingleton = np.random.rand(rows, 1, cols) * 100;
+        _arrWithSingleton = CreateRandomArray(rows * cols, DType).reshape(rows, 1, cols);
     }
 
     [GlobalCleanup]

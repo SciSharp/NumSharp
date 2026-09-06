@@ -53,6 +53,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // ---- (4,1) i32/u32 -> i8/u8 : 32-wide (4 loads/gathers -> 2-level Narrow) ----
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void CastInt32ToByteStrided(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -94,6 +95,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // ---- (4,2) i32/u32 -> i16/u16/char : 16-wide (2 -> 1-level Narrow) ----
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void CastInt32ToShortStrided(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -129,6 +131,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // ---- (8,1) i64/u64 -> i8/u8 : 32-wide (8x4 gather -> 3-level Narrow) ----
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void CastInt64ToByteStrided(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -171,6 +174,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // ---- (8,2) i64/u64 -> i16/u16/char : 16-wide (4x4 gather -> 2-level Narrow) ----
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void CastInt64ToShortStrided(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
@@ -211,6 +215,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // ---- (8,4) i64/u64 -> i32/u32 : 8-wide (2x4 gather -> 1-level Narrow) ----
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void CastInt64ToIntStrided(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {
             byte* src = (byte*)srcV; byte* dst = (byte*)dstV;

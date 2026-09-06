@@ -243,6 +243,7 @@ namespace NumSharp.Backends.Kernels
 
         // AVX2 32-bit integer gather: 8 ints per pass, 4-byte scale.
         // Works for int / uint (the comparison `== 0` is bitwise-identical for both).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe bool ReduceStridedAxisBoolGatherInt32(int* data, long size, long stride, bool isAll)
         {
             int strideInt = (int)stride;
@@ -288,6 +289,7 @@ namespace NumSharp.Backends.Kernels
 
         // AVX2 64-bit integer gather: 4 longs per pass, 8-byte scale.
         // Works for long / ulong (the comparison `== 0` is bitwise-identical for both).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe bool ReduceStridedAxisBoolGatherInt64(long* data, long size, long stride, bool isAll)
         {
             int strideInt = (int)stride;
@@ -356,6 +358,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // AVX2 gather: 8 floats per pass, 4-byte scale.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe bool ReduceStridedAxisBoolGatherFloat(float* data, long size, long stride, bool isAll)
         {
             int strideInt = (int)stride;
@@ -403,6 +406,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // AVX2 gather: 4 doubles per pass, 8-byte scale.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe bool ReduceStridedAxisBoolGatherDouble(double* data, long size, long stride, bool isAll)
         {
             int strideInt = (int)stride;

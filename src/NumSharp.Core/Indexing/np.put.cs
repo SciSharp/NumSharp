@@ -30,6 +30,12 @@ namespace NumSharp
             if (indices is null) throw new ArgumentNullException(nameof(indices));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
+            // Writeability is checked FIRST — before the empty-indices no-op and the bounds/mode
+            // checks (probed 2.4.2: put(ro, [], []) and put(ro, [oob], v) both report read-only).
+            // The contiguous fast path (PutImpl) writes a.Address directly; the non-contiguous path
+            // is already guarded (it routes through np.copyto).
+            NumSharpException.ThrowIfNotWriteable(a.Shape, "put: output array");
+
             int modeInt = ParseMode(mode, nameof(mode));
 
             long indicesCount = indices.size;
@@ -71,8 +77,8 @@ namespace NumSharp
 
         private static unsafe void PutImpl(NDArray a, NDArray indices, NDArray values, int mode)
         {
-            // Cast indices to contig int64; cast values to contig a.dtype.
-            var idx64 = CastIndicesToInt64(indices, out bool ownIdx);
+            // Cast indices to contig int64 (a contig int32 array is read in place); cast values to contig a.dtype.
+            var idx64 = CastIndicesToInt64(indices, "safe", out bool ownIdx, out bool idx32);
 
             NDArray valsCast;
             bool ownVals;
@@ -95,21 +101,36 @@ namespace NumSharp
 
             try
             {
-                var kernel = DirectILKernelGenerator.GetPutKernel();
-                if (kernel == null)
-                    throw new NotSupportedException("np.put: IL kernel unavailable");
+                int copyKind = DirectILKernelGenerator.CopyKindFor(a.dtypesize);
 
                 byte* dstPtr = (byte*)a.Storage.Address + a.Shape.offset * a.dtypesize;
-                long* idxPtr = (long*)idx64.Storage.Address + idx64.Shape.offset;
+                // idx32: the index buffer holds int32 values; the kernels' `long*` parameter is a reinterpret.
+                long* idxPtr = idx32
+                    ? (long*)((int*)idx64.Storage.Address + idx64.Shape.offset)
+                    : (long*)idx64.Storage.Address + idx64.Shape.offset;
                 byte* valsPtr = (byte*)valsCast.Storage.Address + valsCast.Shape.offset * valsCast.dtypesize;
 
-                long status = kernel(dstPtr, idxPtr, indices.size,
-                                      valsPtr, valsCast.size,
-                                      a.size, a.dtypesize, mode);
+                long status;
+                // The lean flat scatter (DirectILKernelGenerator.GatherFlat.cs) serves RAISE mode with a
+                // compile-time element width; wrap/clip keep the general kernel.
+                var flat = mode == 0 ? DirectILKernelGenerator.GetPutFlatKernel(copyKind, idx32) : null;
+                if (flat != null)
+                {
+                    status = flat(dstPtr, idxPtr, indices.size, valsPtr, valsCast.size, a.size);
+                }
+                else
+                {
+                    var kernel = DirectILKernelGenerator.GetPutKernel(copyKind, idx32);
+                    if (kernel == null)
+                        throw new NotSupportedException("np.put: IL kernel unavailable");
+                    status = kernel(dstPtr, idxPtr, indices.size,
+                                    valsPtr, valsCast.size,
+                                    a.size, a.dtypesize, mode);
+                }
                 if (status < indices.size)
                 {
                     long badI = status;
-                    long badVal = idxPtr[badI];
+                    long badVal = idx32 ? ((int*)idxPtr)[badI] : idxPtr[badI];
                     throw new IndexOutOfRangeException(
                         $"index {badVal} is out of bounds for axis 0 with size {a.size}");
                 }

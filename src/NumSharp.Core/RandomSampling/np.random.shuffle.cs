@@ -37,6 +37,11 @@ namespace NumSharp
             if (x.ndim == 0)
                 throw new ArgumentException("cannot shuffle a 0-dimensional array", nameof(x));
 
+            // Fisher-Yates swaps write x.Address / SwapSlicesAxis0 directly, bypassing the guarded
+            // setters, so a non-writeable target (a broadcast view, or a read-only interop /
+            // mmap('r') array) must be rejected up front — NumPy: "array is read-only".
+            NumSharpException.ThrowIfNotWriteable(x.Shape, "array");
+
             var n = x.shape[0];  // Always shuffle along first axis
             if (n <= 1)
                 return; // Nothing to shuffle

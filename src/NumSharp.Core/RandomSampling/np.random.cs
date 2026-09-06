@@ -7,6 +7,7 @@ namespace NumSharp
     ///     Uses MT19937 (Mersenne Twister) for NumPy-compatible random number generation.
     /// </summary>
     /// <remarks>https://numpy.org/doc/stable/reference/random/index.html</remarks>
+    [ModuleName("np.random")]
     public partial class NumPyRandom
     {
         /// <summary>

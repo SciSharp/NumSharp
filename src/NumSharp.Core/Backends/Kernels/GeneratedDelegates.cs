@@ -57,6 +57,9 @@ namespace NumSharp.Backends.Kernels
         // DirectILKernelGenerator.InnerLoop.cs
         /// <summary>Cached kernels in <c>DirectILKernelGenerator._innerLoopCache</c>.</summary>
         public static int InnerLoopCount => DirectILKernelGenerator._innerLoopCache.Count;
+        // DirectILKernelGenerator.InnerLoop2D.cs
+        /// <summary>Cached kernels in <c>DirectILKernelGenerator._innerLoop2DCache</c> (2-D block kernels for narrow strided rows).</summary>
+        public static int InnerLoop2DCount => DirectILKernelGenerator._innerLoop2DCache.Count;
         // DirectILKernelGenerator.MatMul.cs
         /// <summary>Cached kernels in <c>DirectILKernelGenerator._matmulKernelCache</c>.</summary>
         public static int MatmulKernelCount => DirectILKernelGenerator._matmulKernelCache.Count;
@@ -102,9 +105,6 @@ namespace NumSharp.Backends.Kernels
         // DirectILKernelGenerator.Shift.cs
         /// <summary>Cached kernels in <c>DirectILKernelGenerator._shiftKernelCache</c>.</summary>
         public static int ShiftKernelCount => DirectILKernelGenerator._shiftKernelCache.Count;
-        // DirectILKernelGenerator.StorageAlias.cs
-        /// <summary>Cached kernels in <c>DirectILKernelGenerator._storageAliasFieldCopiers</c>.</summary>
-        public static int StorageAliasFieldCopiersCount => DirectILKernelGenerator._storageAliasFieldCopiers.Count;
         // DirectILKernelGenerator.Trace.cs
         /// <summary>Cached kernels in <c>DirectILKernelGenerator._trace</c>.</summary>
         public static int TraceCount => DirectILKernelGenerator._trace.Count;
@@ -145,12 +145,12 @@ namespace NumSharp.Backends.Kernels
             ArgwhereCount + ArgwhereFlatCount + ContiguousKernelCount + MaskedCastCount +
             MaskedCastUnsupportedCount + InnerCastCount + CastCount + CastUnsupportedCount +
             StridedCastCount + StridedCastUnsupportedCount + ClipKernelCount + ComparisonCount +
-            ComparisonScalarCount + CopyKernelCount + FilterAxisCount + InnerLoopCount +
+            ComparisonScalarCount + CopyKernelCount + FilterAxisCount + InnerLoopCount + InnerLoop2DCount +
             MatmulKernelCount + MixedTypeCount + QuantileKernelCount + BoolAxisReductionCount +
             NanAxisReductionCount + AxisReductionCount + NanElementReductionCount +
             ElementReductionCount + RepeatBroadcastCount + RepeatPerJCount + BinaryScalarCount +
             UnaryScalarCount + AxisScanCount + ScanCount + SearchCount + ShiftKernelCount +
-            StorageAliasFieldCopiersCount + TraceCount + StridedUnaryCount + UnaryCount +
+            TraceCount + StridedUnaryCount + UnaryCount +
             WeightedSumCount + WhereScalarXCount + WhereScalarXYCount + WhereScalarYCount +
             WhereKernelCount + PwFoldsCount + ReduceCount + CumSumCount + WhereInnerCount;
 
@@ -171,7 +171,15 @@ namespace NumSharp.Backends.Kernels
         internal static void ClearComparisonScalar() => DirectILKernelGenerator._comparisonScalarCache.Clear();
         internal static void ClearCopyKernel() => DirectILKernelGenerator._copyKernelCache.Clear();
         internal static void ClearFilterAxis() => DirectILKernelGenerator._filterAxis.Clear();
-        internal static void ClearInnerLoop() => DirectILKernelGenerator._innerLoopCache.Clear();
+        internal static void ClearInnerLoop()
+        {
+            // The packed-key front cache aliases the same delegates; clear both so a recompile
+            // is forced through every route. The 2-D block kernels are a separate delegate type
+            // keyed by the same (op, dtypes) identity — clear them too.
+            DirectILKernelGenerator._innerLoopKeyCache.Clear();
+            DirectILKernelGenerator._innerLoopCache.Clear();
+            DirectILKernelGenerator._innerLoop2DCache.Clear();
+        }
         internal static void ClearMatmulKernel() => DirectILKernelGenerator._matmulKernelCache.Clear();
         internal static void ClearMixedType() => DirectILKernelGenerator._mixedTypeCache.Clear();
         internal static void ClearQuantileKernel() => DirectILKernelGenerator._quantileKernelCache.Clear();
@@ -188,7 +196,6 @@ namespace NumSharp.Backends.Kernels
         internal static void ClearScan() => DirectILKernelGenerator._scanCache.Clear();
         internal static void ClearSearch() => DirectILKernelGenerator._searchCache.Clear();
         internal static void ClearShiftKernel() => DirectILKernelGenerator._shiftKernelCache.Clear();
-        internal static void ClearStorageAliasFieldCopiers() => DirectILKernelGenerator._storageAliasFieldCopiers.Clear();
         internal static void ClearTrace() => DirectILKernelGenerator._trace.Clear();
         internal static void ClearStridedUnary() => DirectILKernelGenerator._stridedUnaryCache.Clear();
         internal static void ClearUnary() => DirectILKernelGenerator._unaryCache.Clear();
@@ -237,7 +244,6 @@ namespace NumSharp.Backends.Kernels
             ClearScan();
             ClearSearch();
             ClearShiftKernel();
-            ClearStorageAliasFieldCopiers();
             ClearTrace();
             ClearStridedUnary();
             ClearUnary();

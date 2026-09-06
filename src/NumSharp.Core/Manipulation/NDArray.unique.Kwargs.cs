@@ -58,13 +58,25 @@ namespace NumSharp
             if (!return_index && !return_inverse && !return_counts)
                 return new[] { uniqueValuesOnly<T>(n) };
 
+            // Counts-only (no index/inverse): the perm is unused (counts are run-lengths of the
+            // sorted values). Integer-family → the hash path (fast low/med, radix bail at high card),
+            // same routing as np.unique_counts; Decimal keeps the BCL perm path below.
+            if (return_counts && !return_index && !return_inverse && typeof(T) != typeof(decimal) && n <= (1L << 28))
+            {
+                var (cv, cc) = UniqueHashSortedInt<T>(wantCounts: true);
+                return new[] { cv, cc };
+            }
+
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLong<T>(n, return_index, return_inverse, return_counts, firstNaN: -1);
 
             var (keys, perm) = ExtractKeysAndPerm<T>(n);
-            // No comparer → uses Comparer<T>.Default which delegates to IComparable<T>.
-            // Inlines well in the JIT for primitive types; no delegate dispatch.
-            System.Array.Sort(keys, perm);
+            // Radix argsort (LSD, comparison-free) replaces the BCL introsort for every radix-able
+            // dtype; Decimal (no monotonic key) keeps Comparer<T>.Default. Radix is stable so ties
+            // resolve ascending-index (first occurrence) — which the min-perm-within-run emit also
+            // recovers, so the outputs are byte-identical to the BCL path.
+            if (typeof(T) != typeof(decimal)) RadixArgSortKeysPerm(keys, perm, (int)n);
+            else System.Array.Sort(keys, perm);
 
             return BuildSortedResults<T>(keys, perm, n, return_index, return_inverse, return_counts, firstNaN: -1);
         }
@@ -75,11 +87,22 @@ namespace NumSharp
         private unsafe NDArray uniqueValuesOnly<T>(long n)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
+            // Integer-family values-only: the open-addressing hash path (NDArray.unique.Hash.cs)
+            // beats any sort at low/medium cardinality and bails to radix at high cardinality —
+            // mirroring NumPy's own hash selection for these dtypes, but bailing to radix where
+            // NumPy's std::unordered_set thrashes (int32 2M-distinct: NumPy 1540ms → us ~40ms). Its
+            // own n>2^28 guard falls back to the sort path, so route there only within that bound
+            // (else the fallback would re-enter here and recurse). Decimal has no monotonic radix key
+            // and no bitwise-hash (1.0m != 1.00m by bits) → BCL sort.
+            if (typeof(T) != typeof(decimal) && n <= (1L << 28))
+                return UniqueHashSortedInt<T>(wantCounts: false).values;
+
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLong<T>(n, false, false, false, firstNaN: -1)[0];
 
             var keys = ExtractKeysOnly<T>(n);
-            System.Array.Sort(keys);
+            if (typeof(T) != typeof(decimal)) RadixSortValues(keys, (int)n);
+            else System.Array.Sort(keys);
             return EmitValuesOnly<T>(keys, n);
         }
 
@@ -102,12 +125,22 @@ namespace NumSharp
             if (!return_index && !return_inverse && !return_counts)
                 return new[] { uniqueValuesOnlyDouble(n, equal_nan) };
 
+            // Counts-only: skip the perm argsort — counts are run-lengths of the sorted values, which
+            // the emit derives from the mask alone (the perm is only read for index/inverse).
+            if (return_counts && !return_index && !return_inverse && IsManagedSortableLength(n))
+            {
+                var kc = ExtractKeysOnly<double>(n);
+                long fn = PartitionNaN_DoubleKeysOnly(kc, n);
+                RadixSortValues(kc, (int)fn);
+                return EmitValuesAndCountsFloat<double>(kc, n, fn, equal_nan);
+            }
+
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongFloat<double>(n, equal_nan, return_index, return_inverse, return_counts);
 
             var (keys, perm) = ExtractKeysAndPerm<double>(n);
             long firstNaN = PartitionNaN_Double(keys, perm, n);
-            System.Array.Sort(keys, perm, 0, (int)firstNaN);
+            RadixArgSortKeysPerm(keys, perm, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
             StabilizeNaNTail(perm, firstNaN, n);
 
             return BuildMaskAndEmit<double>(keys, perm, n, firstNaN, equal_nan,
@@ -128,7 +161,7 @@ namespace NumSharp
 
             var keys = ExtractKeysOnly<double>(n);
             long firstNaN = PartitionNaN_DoubleKeysOnly(keys, n);
-            System.Array.Sort(keys, 0, (int)firstNaN);
+            RadixSortValues(keys, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
             return EmitValuesOnlyFloat<double>(keys, n, firstNaN, equal_nan);
         }
 
@@ -140,12 +173,21 @@ namespace NumSharp
             if (!return_index && !return_inverse && !return_counts)
                 return new[] { uniqueValuesOnlyFloat(n, equal_nan) };
 
+            // Counts-only: skip the perm argsort (see uniqueFlatSortedDouble).
+            if (return_counts && !return_index && !return_inverse && IsManagedSortableLength(n))
+            {
+                var kc = ExtractKeysOnly<float>(n);
+                long fn = PartitionNaN_FloatKeysOnly(kc, n);
+                RadixSortValues(kc, (int)fn);
+                return EmitValuesAndCountsFloat<float>(kc, n, fn, equal_nan);
+            }
+
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongFloat<float>(n, equal_nan, return_index, return_inverse, return_counts);
 
             var (keys, perm) = ExtractKeysAndPerm<float>(n);
             long firstNaN = PartitionNaN_Float(keys, perm, n);
-            System.Array.Sort(keys, perm, 0, (int)firstNaN);
+            RadixArgSortKeysPerm(keys, perm, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
             StabilizeNaNTail(perm, firstNaN, n);
 
             return BuildMaskAndEmit<float>(keys, perm, n, firstNaN, equal_nan,
@@ -159,7 +201,7 @@ namespace NumSharp
 
             var keys = ExtractKeysOnly<float>(n);
             long firstNaN = PartitionNaN_FloatKeysOnly(keys, n);
-            System.Array.Sort(keys, 0, (int)firstNaN);
+            RadixSortValues(keys, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
             return EmitValuesOnlyFloat<float>(keys, n, firstNaN, equal_nan);
         }
 
@@ -555,6 +597,65 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Counts-only emit for the float paths (Double/Single). Mirrors
+        ///     <see cref="EmitValuesOnlyFloat{T}"/> for the values AND <see cref="EmitOutputs{T}"/>'s
+        ///     counts branch (run-length between mask=true positions), so its output is byte-identical
+        ///     to the perm path's <c>BuildMaskAndEmit</c> for <c>return_counts</c>-only — but it needs
+        ///     NO perm (counts are run-lengths of the sorted values; the perm argsort is pure waste
+        ///     when neither index nor inverse is requested). <paramref name="keys"/>[0..firstNaN) is
+        ///     radix-sorted ascending; [firstNaN..n) is the NaN run (original bits, partition order).
+        /// </summary>
+        private unsafe NDArray[] EmitValuesAndCountsFloat<T>(T[] keys, long n, long firstNaN, bool equal_nan)
+            where T : unmanaged, IEquatable<T>
+        {
+            long uniqueCount = firstNaN > 0 ? 1 : 0;
+            for (long i = 1; i < firstNaN; i++)
+                if (!keys[i].Equals(keys[i - 1])) uniqueCount++;
+            long nanCount = n - firstNaN;
+            if (nanCount > 0) uniqueCount += equal_nan ? 1 : nanCount;
+
+            var vblock = new UnmanagedMemoryBlock<T>(uniqueCount);
+            var cblock = new UnmanagedMemoryBlock<long>(uniqueCount);
+            T* vp = vblock.Address;
+            long* cp = cblock.Address;
+            long vi = 0;
+
+            if (firstNaN > 0)
+            {
+                vp[vi] = keys[0];
+                long runStart = 0;
+                for (long i = 1; i < firstNaN; i++)
+                {
+                    if (!keys[i].Equals(keys[i - 1]))
+                    {
+                        cp[vi++] = i - runStart;   // count of the run that just ended
+                        vp[vi] = keys[i];
+                        runStart = i;
+                    }
+                }
+                cp[vi++] = firstNaN - runStart;    // last prefix run (up to the NaN boundary)
+            }
+
+            if (nanCount > 0)
+            {
+                if (equal_nan)
+                {
+                    vp[vi] = keys[firstNaN]; cp[vi] = nanCount; vi++;
+                }
+                else
+                {
+                    for (long i = firstNaN; i < n; i++) { vp[vi] = keys[i]; cp[vi] = 1; vi++; }
+                }
+            }
+
+            return new[]
+            {
+                new NDArray(new ArraySlice<T>(vblock), Shape.Vector(uniqueCount)),
+                new NDArray(new ArraySlice<long>(cblock), Shape.Vector(uniqueCount)),
+            };
+        }
+
+        /// <summary>
         ///     For non-NaN-capable types: mask[i] = !keys[i].Equals(keys[i-1]) (with mask[0]=true).
         ///     Float/complex paths handle their own mask construction inline using IEEE != to
         ///     preserve equal_nan=false semantics, then call EmitOutputs directly.
@@ -682,6 +783,11 @@ namespace NumSharp
 
         private NDArray[] uniqueAxisKwargs(int axis, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
+            // equal_nan has NO EFFECT on the axis path — NumPy consolidates each slab into a
+            // structured scalar whose dtype.kind is 'V', so _unique1d's equal_nan branch (guarded by
+            // kind in "cfmM") is skipped and the mask is a plain structured `!=`, under which every
+            // NaN slab is DISTINCT (nan != nan) regardless of equal_nan. Accepted for API symmetry.
+            _ = equal_nan;
             var moved = axis == 0 ? this : np.moveaxis(this, axis, 0);
             long n = moved.Shape.Dimensions[0];
 
@@ -692,7 +798,14 @@ namespace NumSharp
             for (int i = 0; i < n; i++) orig[i] = i;
 
             var movedCopy = moved.Shape.IsContiguous ? moved : moved.copy();
-            System.Array.Sort(orig, (a, b) => CompareSlabs(movedCopy, a, b, slabSize));
+            // Stable tie-break by original index: identical slabs (in particular NaN slabs, which
+            // compare EQUAL for ordering but are kept DISTINCT by the != mask below) keep input
+            // order — reproducing NumPy's mergesort argsort in the axis path.
+            System.Array.Sort(orig, (a, b) =>
+            {
+                int c = CompareSlabs(movedCopy, a, b, slabSize);
+                return c != 0 ? c : a.CompareTo(b);
+            });
 
             var sortedKeepIdx = new List<int>();
             var sortedFirstOrig = new List<long>();
@@ -701,7 +814,7 @@ namespace NumSharp
             for (int i = 0; i < n; i++)
             {
                 int cur = orig[i];
-                if (prev == -1 || !SlabsEqual(movedCopy, prev, cur, slabSize, equal_nan))
+                if (prev == -1 || !SlabsEqual(movedCopy, prev, cur, slabSize))
                 {
                     sortedKeepIdx.Add(cur);
                     sortedFirstOrig.Add(cur);
@@ -756,7 +869,7 @@ namespace NumSharp
                     for (int i = 0; i < n; i++)
                     {
                         int cur = orig[i];
-                        if (prevSorted == -1 || !SlabsEqual(movedCopy, prevSorted, cur, slabSize, equal_nan))
+                        if (prevSorted == -1 || !SlabsEqual(movedCopy, prevSorted, cur, slabSize))
                             keptSlot++;
                         p[cur] = keptSlot;
                         prevSorted = cur;
@@ -818,16 +931,22 @@ namespace NumSharp
             return 0;
         }
 
+        // The CompareSlabs* float/complex orderings use IEEE compares (`<`/`>`), NOT CompareTo, so
+        // that -0.0 and +0.0 compare EQUAL (CompareTo would order -0.0 < +0.0) — matching NumPy's
+        // structured sort, where the surviving zero's sign follows input order. NaN sorts to the end
+        // (all NaN equivalent); the stable tie-break then keeps identical NaN slabs in input order.
+
         private static unsafe int CompareSlabsDouble(NDArray src, int a, int b, long slabSize)
         {
             double* ptr = (double*)src.Address;
-            long aBase = a * slabSize;
-            long bBase = b * slabSize;
-            var cmp = NaNAwareDoubleComparer.Instance;
+            long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
-                int c = cmp.Compare(ptr[aBase + k], ptr[bBase + k]);
-                if (c != 0) return c;
+                double x = ptr[aBase + k], y = ptr[bBase + k];
+                bool xn = double.IsNaN(x), yn = double.IsNaN(y);
+                if (xn || yn) { if (xn && yn) continue; return xn ? 1 : -1; }
+                if (x < y) return -1;
+                if (x > y) return 1;
             }
             return 0;
         }
@@ -835,13 +954,14 @@ namespace NumSharp
         private static unsafe int CompareSlabsFloat(NDArray src, int a, int b, long slabSize)
         {
             float* ptr = (float*)src.Address;
-            long aBase = a * slabSize;
-            long bBase = b * slabSize;
-            var cmp = NaNAwareSingleComparer.Instance;
+            long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
-                int c = cmp.Compare(ptr[aBase + k], ptr[bBase + k]);
-                if (c != 0) return c;
+                float x = ptr[aBase + k], y = ptr[bBase + k];
+                bool xn = float.IsNaN(x), yn = float.IsNaN(y);
+                if (xn || yn) { if (xn && yn) continue; return xn ? 1 : -1; }
+                if (x < y) return -1;
+                if (x > y) return 1;
             }
             return 0;
         }
@@ -849,17 +969,14 @@ namespace NumSharp
         private static unsafe int CompareSlabsHalf(NDArray src, int a, int b, long slabSize)
         {
             Half* ptr = (Half*)src.Address;
-            long aBase = a * slabSize;
-            long bBase = b * slabSize;
+            long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
                 Half x = ptr[aBase + k], y = ptr[bBase + k];
-                int c;
-                if (Half.IsNaN(x) && Half.IsNaN(y)) c = 0;
-                else if (Half.IsNaN(x)) c = 1;
-                else if (Half.IsNaN(y)) c = -1;
-                else c = x.CompareTo(y);
-                if (c != 0) return c;
+                bool xn = Half.IsNaN(x), yn = Half.IsNaN(y);
+                if (xn || yn) { if (xn && yn) continue; return xn ? 1 : -1; }
+                if (x < y) return -1;
+                if (x > y) return 1;
             }
             return 0;
         }
@@ -867,18 +984,26 @@ namespace NumSharp
         private static unsafe int CompareSlabsComplex(NDArray src, int a, int b, long slabSize)
         {
             Complex* ptr = (Complex*)src.Address;
-            long aBase = a * slabSize;
-            long bBase = b * slabSize;
-            var cmp = NaNAwareComplexComparer.Instance;
+            long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
-                int c = cmp.Compare(ptr[aBase + k], ptr[bBase + k]);
-                if (c != 0) return c;
+                Complex x = ptr[aBase + k], y = ptr[bBase + k];
+                bool xn = double.IsNaN(x.Real) || double.IsNaN(x.Imaginary);
+                bool yn = double.IsNaN(y.Real) || double.IsNaN(y.Imaginary);
+                if (xn || yn) { if (xn && yn) continue; return xn ? 1 : -1; }
+                if (x.Real < y.Real) return -1;
+                if (x.Real > y.Real) return 1;
+                if (x.Imaginary < y.Imaginary) return -1;
+                if (x.Imaginary > y.Imaginary) return 1;
             }
             return 0;
         }
 
-        private static unsafe bool SlabsEqual(NDArray src, int a, int b, long slabSize, bool equal_nan)
+        // Slab EQUALITY uses IEEE `==` (via `!=`), matching NumPy's structured `!=` mask: NaN != NaN,
+        // so every NaN slab is DISTINCT (independent of equal_nan — see uniqueAxisKwargs), while
+        // -0.0 == +0.0 collapses signed-zero slabs. Integer/decimal/char have no NaN/-0 so the
+        // generic .Equals path (SlabsEqualT) is exact for them.
+        private static unsafe bool SlabsEqual(NDArray src, int a, int b, long slabSize)
         {
             switch (src.typecode)
             {
@@ -898,11 +1023,7 @@ namespace NumSharp
                     Half* ptr = (Half*)src.Address;
                     long aBase = a * slabSize, bBase = b * slabSize;
                     for (long k = 0; k < slabSize; k++)
-                    {
-                        Half x = ptr[aBase + k], y = ptr[bBase + k];
-                        if (equal_nan && Half.IsNaN(x) && Half.IsNaN(y)) continue;
-                        if (!x.Equals(y)) return false;
-                    }
+                        if (ptr[aBase + k] != ptr[bBase + k]) return false;
                     return true;
                 }
                 case NPTypeCode.Single:
@@ -910,11 +1031,7 @@ namespace NumSharp
                     float* ptr = (float*)src.Address;
                     long aBase = a * slabSize, bBase = b * slabSize;
                     for (long k = 0; k < slabSize; k++)
-                    {
-                        float x = ptr[aBase + k], y = ptr[bBase + k];
-                        if (equal_nan && float.IsNaN(x) && float.IsNaN(y)) continue;
-                        if (!x.Equals(y)) return false;
-                    }
+                        if (ptr[aBase + k] != ptr[bBase + k]) return false;
                     return true;
                 }
                 case NPTypeCode.Double:
@@ -922,11 +1039,7 @@ namespace NumSharp
                     double* ptr = (double*)src.Address;
                     long aBase = a * slabSize, bBase = b * slabSize;
                     for (long k = 0; k < slabSize; k++)
-                    {
-                        double x = ptr[aBase + k], y = ptr[bBase + k];
-                        if (equal_nan && double.IsNaN(x) && double.IsNaN(y)) continue;
-                        if (!x.Equals(y)) return false;
-                    }
+                        if (ptr[aBase + k] != ptr[bBase + k]) return false;
                     return true;
                 }
                 case NPTypeCode.Complex:
@@ -936,10 +1049,7 @@ namespace NumSharp
                     for (long k = 0; k < slabSize; k++)
                     {
                         Complex x = ptr[aBase + k], y = ptr[bBase + k];
-                        bool xNan = double.IsNaN(x.Real) || double.IsNaN(x.Imaginary);
-                        bool yNan = double.IsNaN(y.Real) || double.IsNaN(y.Imaginary);
-                        if (equal_nan && xNan && yNan) continue;
-                        if (!x.Equals(y)) return false;
+                        if (x.Real != y.Real || x.Imaginary != y.Imaginary) return false;
                     }
                     return true;
                 }

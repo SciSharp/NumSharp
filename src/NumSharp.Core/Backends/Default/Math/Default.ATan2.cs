@@ -12,22 +12,11 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="y">y-coordinates</param>
         /// <param name="x">x-coordinates. If y.shape != x.shape, they must be broadcastable.</param>
-        /// <param name="dtype">Output dtype (overrides type promotion)</param>
-        /// <returns>Array of angles in radians, range [-pi, pi]</returns>
-        public override NDArray ATan2(NDArray y, NDArray x, Type dtype)
-            => ATan2(y, x, dtype?.GetTypeCode());
-
-        /// <summary>
-        /// Element-wise arc tangent of y/x choosing the quadrant correctly.
-        /// NumPy: arctan2(y, x) returns the angle in radians between the positive x-axis
-        /// and the point (x, y), with correct quadrant determination.
-        /// </summary>
-        /// <param name="y">y-coordinates</param>
-        /// <param name="x">x-coordinates. If y.shape != x.shape, they must be broadcastable.</param>
         /// <param name="typeCode">Output dtype (overrides type promotion). If null, uses NumPy rules.</param>
         /// <returns>Array of angles in radians, range [-pi, pi]</returns>
-        public override NDArray ATan2(NDArray y, NDArray x, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
+        public override NDArray ATan2(NDArray y, NDArray x, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
+            NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy validation order: where parse -> loop resolution -> out
             // cast -> shape (probed 2.4.2).
             ValidateWhereMask(where);
@@ -47,7 +36,7 @@ namespace NumSharp.Backends
             // Direct MixedTypeKernel route.
             if (@out is not null || where is not null)
             {
-                var loopType = typeCode ?? PromoteATan2Binary(y.GetTypeCode, x.GetTypeCode);
+                var loopType = typeCode ?? PromoteATan2Binary(y, x);
                 return ExecuteBinaryUfuncInto(y, x, BinaryOp.ATan2,
                     y.GetTypeCode, x.GetTypeCode, loopType, @out, where);
             }
@@ -81,7 +70,7 @@ namespace NumSharp.Backends
             //   float16 / float32 / float64-> same
             //   decimal (NumSharp ext.)    -> decimal
             // The result is the larger of the two promotion targets.
-            NPTypeCode resultType = typeCode ?? PromoteATan2Binary(yType, xType);
+            NPTypeCode resultType = typeCode ?? PromoteATan2Binary(y, x);
 
             // Handle scalar x scalar case
             if (y.Shape.IsScalar && x.Shape.IsScalar)
@@ -147,6 +136,25 @@ namespace NumSharp.Backends
         /// Binary promotion for arctan2: take the "larger" of the two single-input targets.
         /// Order: Decimal > Double > Single > Half.
         /// </summary>
+        /// <summary>
+        ///     The NEP50-aware form the ufunc entry points use: a 0-d operand is a weak scalar (a C# literal arrives as
+        ///     one — <c>np.arctan2(f32, 1)</c> is <c>f32 × int32-0-d</c>), so the common type is resolved by
+        ///     <see cref="np._FindCommonType(NDArray, NDArray)"/> exactly as every other binary ufunc does and THEN
+        ///     mapped to the float tier: <c>arctan2(f32, 1)</c> stays float32, <c>arctan2(i32, 1.5)</c> is float64.
+        ///     The dtype-only overload below combines two ARRAY dtypes and sent every int literal on a float32/float16
+        ///     array to float64.
+        /// </summary>
+        private static NPTypeCode PromoteATan2Binary(NDArray y, NDArray x)
+        {
+            // Two ARRAYS keep the loop-list rule (uint8 × int8 → float16, exactly NumPy's `ee->e` loop, which
+            // result_type's int16 → float32 would get wrong — the oracle's arctan2/uint8,int8 cells pin it).
+            // Only a lone 0-d operand is the weak scalar that adopts the array's dtype-kind.
+            bool ys = y.ndim == 0, xs = x.ndim == 0;
+            if (ys == xs)
+                return PromoteATan2Binary(y.GetTypeCode, x.GetTypeCode);
+            return PromoteATan2Single(np._FindCommonType(y, x));
+        }
+
         private static NPTypeCode PromoteATan2Binary(NPTypeCode y, NPTypeCode x)
         {
             var py = PromoteATan2Single(y);

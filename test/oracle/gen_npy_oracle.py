@@ -2,10 +2,10 @@
 gen_npy_oracle.py — emit a committed, bytes-exact NumPy 2.4.2 oracle for the .npy/.npz format.
 
 NumPy is the oracle. This script writes REAL `np.save` / `np.savez` / `np.savez_compressed`
-output into a single zip; the C# harness (`test/NumSharp.UnitTest/IO/NpyOracleTests.cs`)
+output into a single zip; the C# harness (`test/NumSharp.Tests/IO/NpyOracleTests.cs`)
 replays it with NO Python at test time or in CI.
 
-Output: test/NumSharp.UnitTest/IO/corpus/npy_oracle.zip
+Output: test/NumSharp.Tests/IO/corpus/npy_oracle.zip
   manifest.json          the case list (schema below)
   cases/<name>.npy|.npz  the exact bytes NumPy produced
 
@@ -58,7 +58,7 @@ warnings.simplefilter("ignore")  # the 2.0/3.0 "stored array in format X" warnin
 
 OUT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "..", "NumSharp.UnitTest", "IO", "corpus", "npy_oracle.zip",
+    "..", "NumSharp.Tests", "IO", "corpus", "npy_oracle.zip",
 )
 
 # NumPy dtype -> NPTypeCode. Char (UTF-16) and Decimal have no NumPy analog and are handled

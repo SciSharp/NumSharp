@@ -5,23 +5,6 @@ namespace NumSharp
 {
     public partial class np
     {
-        /// <summary>
-        ///     Base-e exponential, element-wise.
-        /// </summary>
-        /// <param name="a">Input value.</param>
-        /// <param name="dtype">The dtype of the returned NDArray</param>
-        /// <returns>The natural logarithm of x, element-wise. This is a scalar NDArray.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp.html</remarks>
-        public static NDArray exp(NDArray a, Type dtype) => a.TensorEngine.Exp(a, dtype);
-
-        /// <summary>
-        ///     Base-e exponential, element-wise.
-        /// </summary>
-        /// <param name="a">Input value.</param>
-        /// <param name="typeCode">The dtype of the returned NDArray</param>
-        /// <returns>The natural logarithm of x, element-wise. This is a scalar NDArray.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp.html</remarks>
-        public static NDArray exp(NDArray a, NPTypeCode typeCode) => a.TensorEngine.Exp(a, typeCode);
 
         /// <summary>
         ///     Base-e exponential, element-wise.
@@ -40,24 +23,8 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the computation runs at this precision; integer/bool requests raise NumPy's "No loop matching" error.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp.html</remarks>
-        public static NDArray exp(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+        public static NDArray exp(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => a.TensorEngine.Exp(a, dtype, @out, where);
-        
-        /// <summary>
-        ///     Calculate 2**p for all p in the input array.
-        /// </summary>
-        /// <param name="a">Input value.</param>
-        /// <returns>Element-wise 2 to the power x. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp2.html</remarks>
-        public static NDArray exp2(NDArray a, Type dtype) => a.TensorEngine.Exp2(a, dtype);
-
-        /// <summary>
-        ///     Calculate 2**p for all p in the input array.
-        /// </summary>
-        /// <param name="a">Input value.</param>
-        /// <returns>Element-wise 2 to the power x. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp2.html</remarks>
-        public static NDArray exp2(NDArray a, NPTypeCode typeCode) => a.TensorEngine.Exp2(a, typeCode);
 
         /// <summary>
         ///     Mirrors NumPy's ufunc signature: <c>exp2(x, /, out=None, *, where=True, dtype=None)</c>.
@@ -67,7 +34,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): selects the loop; the input must be same_kind-castable to it.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp2.html</remarks>
-        public static NDArray exp2(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+        public static NDArray exp2(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => a.TensorEngine.Exp2(a, dtype, @out, where);
 
         /// <summary>
@@ -79,22 +46,6 @@ namespace NumSharp
         public static NDArray exp2(NDArray a) => a.TensorEngine.Exp2(a);        
 
         /// <summary>
-        ///     Calculate exp(x) - 1 for all elements in the array.
-        /// </summary>
-        /// <param name="a">Input value.</param>
-        /// <returns>Element-wise exponential minus one: out = exp(x) - 1. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.expm1.html</remarks>
-        public static NDArray expm1(NDArray a, Type dtype) => a.TensorEngine.Expm1(a, dtype);
-
-        /// <summary>
-        ///     Calculate exp(x) - 1 for all elements in the array.
-        /// </summary>
-        /// <param name="a">Input value.</param>
-        /// <returns>Element-wise exponential minus one: out = exp(x) - 1. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.expm1.html</remarks>
-        public static NDArray expm1(NDArray a, NPTypeCode typeCode) => a.TensorEngine.Expm1(a, typeCode);
-
-        /// <summary>
         ///     Mirrors NumPy's ufunc signature: <c>expm1(x, /, out=None, *, where=True, dtype=None)</c>.
         /// </summary>
         /// <param name="a">Input array.</param>
@@ -102,7 +53,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): selects the loop; the input must be same_kind-castable to it.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.expm1.html</remarks>
-        public static NDArray expm1(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+        public static NDArray expm1(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => a.TensorEngine.Expm1(a, dtype, @out, where);
 
         /// <summary>

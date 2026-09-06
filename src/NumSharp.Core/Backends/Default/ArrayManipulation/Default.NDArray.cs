@@ -5,7 +5,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray CreateNDArray(Shape shape, Type dtype = null, Array buffer = null, char order = 'C')
+        public override NDArray CreateNDArray(Shape shape, DType dtype = null, Array buffer = null, char order = 'C')
         {
             if (dtype == null)
                 dtype = np.float32;
@@ -121,7 +121,7 @@ namespace NumSharp.Backends
             return new NDArray(slice, shape: shape, order: order);
         }
 
-        public override NDArray CreateNDArray(Shape shape, Type dtype = null, IArraySlice buffer = null, char order = 'C')
+        public override NDArray CreateNDArray(Shape shape, DType dtype = null, IArraySlice buffer = null, char order = 'C')
         {
             if (dtype == null)
                 dtype = np.float32;

@@ -5,22 +5,24 @@ on:
     branches: ["master", "main"]
     paths:
       - 'src/**'
-      - 'tools/NumSharp.ApiInventory/**'
       - 'coverage/**'
+      - 'benchmark/**'
+      - 'test/**'
       - 'docs/website-src/**'
       - '.github/workflows/docs.yml'
   pull_request:
     branches: ["master", "main"]
     paths:
       - 'src/**'
-      - 'tools/NumSharp.ApiInventory/**'
       - 'coverage/**'
+      - 'benchmark/**'
+      - 'test/**'
       - 'docs/website-src/**'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # publish generated dashboard data to the master-code-data branch
   pages: write
   id-token: write
 
@@ -30,7 +32,7 @@ concurrency:
 
 jobs:
   api-coverage:
-    name: NumPy ↔ NumSharp API coverage
+    name: NumPy API + Tests & Oracle inventories
     runs-on: ubuntu-latest
 
     steps:
@@ -40,7 +42,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -59,12 +63,72 @@ jobs:
       - name: Verify checked-in dashboard data
         run: diff --recursive --unified coverage/generated artifacts/numpy-numsharp-coverage
 
+      - name: Generate Tests & Oracle inventory
+        run: python test/inventory/generate_test_inventory.py --output artifacts/tests-oracle-inventory
+
+      - name: Verify checked-in Tests & Oracle dashboard data
+        run: diff --recursive --unified test/inventory/generated artifacts/tests-oracle-inventory
+
+      - name: Verify benchmark API coverage artifact
+        run: python benchmark/scripts/audit_coverage.py --check
+
+      - name: Verify benchmark NumPy twin join keys
+        run: |
+          mkdir -p benchmark/results/smoke
+          for suite in arithmetic unary reduction broadcast creation manipulation slicing comparison bitwise logic statistics sorting linalg selection fft random ndarray api; do
+            python benchmark/NumSharp.Benchmark.Python/numpy_benchmark.py \
+              --suite "$suite" --quick --size small \
+              --output "benchmark/results/smoke/$suite.json" >/dev/null
+          done
+          python benchmark/scripts/check_smoke_joins.py
+
+      - name: Execute every official C# benchmark body once
+        # -p:ReferenceNDArrayAnalyzer=false: this file-based app forces net8.0 as a global onto the
+        # whole graph, which would otherwise restore NumSharp.Core's netstandard2.0-only NDArray
+        # analyzer for net8.0 (NETSDK1005). The smoke only runs benchmark bodies, so it drops the
+        # analyzer via a command-line global (a #:property in the .cs does not propagate to the ref).
+        run: dotnet run -c Release -f net8.0 --no-cache -p:ReferenceNDArrayAnalyzer=false benchmark/scripts/smoke_benchmark_bodies.cs
+
+      # Publish the just-verified data to the orphan master-code-data branch as a new
+      # <date>_<sha> snapshot per type + repointed `latest`. Only on master pushes (never PRs),
+      # so PR builds cannot mutate the data branch. The freshly generated artifacts feed the
+      # publish; benchmark-coverage rides here (its audit_coverage.py --check gate ran above),
+      # while the heavy `benchmark` report is published by benchmark.yml after a benchmark run.
+      - name: Publish dashboard data to master-code-data
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin master-code-data >/dev/null 2>&1; then
+            git fetch origin master-code-data --depth=1
+            git worktree add -B master-code-data /tmp/mcd origin/master-code-data
+          else
+            git worktree add --orphan -b master-code-data /tmp/mcd
+          fi
+          python tools/dashboard_data/publish.py --type inventory \
+            --from artifacts/numpy-numsharp-coverage --branch-worktree /tmp/mcd --sha "${GITHUB_SHA}" --commit
+          python tools/dashboard_data/publish.py --type tests-oracle \
+            --from artifacts/tests-oracle-inventory --branch-worktree /tmp/mcd --sha "${GITHUB_SHA}" --commit
+          python tools/dashboard_data/publish.py --type benchmark-coverage \
+            --from benchmark/coverage/generated --branch-worktree /tmp/mcd --sha "${GITHUB_SHA}" --commit
+          git -C /tmp/mcd push origin master-code-data
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: numpy-numsharp-api-coverage
           path: artifacts/numpy-numsharp-coverage/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Tests & Oracle inventory artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: numsharp-tests-oracle-inventory
+          path: artifacts/tests-oracle-inventory/
           if-no-files-found: error
           retention-days: 14
 
@@ -78,6 +142,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so resolve.py can read master-side commit dates
 
       - name: Use generated coverage artifact
         uses: actions/download-artifact@v4
@@ -85,10 +151,36 @@ jobs:
           name: numpy-numsharp-api-coverage
           path: coverage/generated
 
+      - name: Use generated Tests & Oracle inventory artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: numsharp-tests-oracle-inventory
+          path: test/inventory/generated
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Bake the newest of master-vs-master-code-data per dataset into the DocFX inputs.
+      # master's committed copies (above) stay the fallback, so the site builds from master alone.
+      - name: Resolve newest dashboard data (master vs master-code-data)
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin master-code-data >/dev/null 2>&1; then
+            git fetch origin master-code-data --depth=1
+            git worktree add /tmp/mcd origin/master-code-data
+            python tools/dashboard_data/resolve.py --data-worktree /tmp/mcd --into .
+          else
+            echo "master-code-data not found on origin; building from master's committed data (fallback)."
+          fi
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Install DocFX
         run: dotnet tool install -g docfx

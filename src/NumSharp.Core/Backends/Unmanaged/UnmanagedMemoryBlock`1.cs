@@ -37,6 +37,9 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(Optimize)]
         public UnmanagedMemoryBlock(long count)
         {
+            // A wrapped byte count asks the allocator for a small (often zero) block and gets one,
+            // so the corruption is silent. See AllocationGuard.
+            AllocationGuard.CheckElementCount(count, InfoOf<T>.Size);
             var bytes = BytesCount = count * InfoOf<T>.Size;
             var ptr = SizeBucketedBufferPool.Take(bytes);
             _disposer = new Disposer(ptr, bytes);
@@ -160,6 +163,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(Optimize)]
         private UnmanagedMemoryBlock(long count, Zeroed _)
         {
+            AllocationGuard.CheckElementCount(count, InfoOf<T>.Size);
             var bytes = BytesCount = count * InfoOf<T>.Size;
             Count = count;
 
@@ -855,7 +859,7 @@ namespace NumSharp.Backends.Unmanaged
             *(Address + index) = value;
         }
 
-        [MethodImpl(Optimize)]
+        [MethodImpl(OptimizeAndInline)]
         public void Free()
         {
             // Backwards-compatible "force free, ignore refcount" — used by
@@ -873,6 +877,9 @@ namespace NumSharp.Backends.Unmanaged
 
         [MethodImpl(OptimizeAndInline)]
         public void Release() => _disposer.Release();
+
+        [MethodImpl(OptimizeAndInline)]
+        public void Abandon() => _disposer.Abandon();
 
         public bool IsReleased => _disposer.IsReleased;
 
@@ -1261,6 +1268,7 @@ namespace NumSharp.Backends.Unmanaged
             /// <summary>
             /// Add a logical reference. Returns false if the buffer is already released.
             /// </summary>
+            [MethodImpl(OptimizeAndInline)]
             public bool TryAddRef()
             {
                 // Non-owning wraps are immortal — refcount is meaningless.
@@ -1278,6 +1286,7 @@ namespace NumSharp.Backends.Unmanaged
             /// <summary>
             /// Drop a logical reference. Frees the buffer when the final reference is released.
             /// </summary>
+            [MethodImpl(OptimizeAndInline)]
             public void Release()
             {
                 if (_type == AllocationType.Wrap) return;
@@ -1303,16 +1312,54 @@ namespace NumSharp.Backends.Unmanaged
                 }
             }
 
+            /// <summary>
+            /// Drop a logical reference WITHOUT claiming the eager free when the count
+            /// reaches zero — the finalizer-path counterpart of <see cref="Release"/>.
+            ///
+            /// An <see cref="NDArray"/> finalizer proves only that THAT wrapper became
+            /// unreachable; it proves nothing about other reachable aliases of the same
+            /// buffer (a bare <c>UnmanagedStorage</c>/<c>IArraySlice</c> handed out via
+            /// <c>GetData()</c> holds no counted reference). Claiming the 0 → -1 free
+            /// transition from a finalizer therefore freed memory such an alias still
+            /// reads — the <c>SlicingWithNegativeIndex1</c> use-after-free. Leaving the
+            /// count at 0 keeps the block alive for exactly as long as it stays
+            /// reachable: this Disposer's own finalizer frees (and pools) it in the GC
+            /// cycle after the LAST alias dies, and a later <see cref="TryAddRef"/>
+            /// (a new NDArray wrapping a live alias) legitimately revives 0 → 1.
+            /// Deterministic <see cref="Release"/> (Dispose / NDScope) keeps the eager
+            /// free — there the caller asserts no alias outlives.
+            /// </summary>
+            [MethodImpl(OptimizeAndInline)]
+            public void Abandon()
+            {
+                if (_type == AllocationType.Wrap) return;
+
+                long n = Interlocked.Decrement(ref _refCount);
+                if (n < 0)
+                {
+                    // Stray Abandon on an already-released block (same as Release's
+                    // stray handling): restore the -1 sentinel so TryAddRef rejects.
+                    Interlocked.Increment(ref _refCount);
+                }
+            }
+
             /// <summary>Diagnostic: true once the buffer has been freed.</summary>
-            public bool IsReleased => Volatile.Read(ref _freed) != 0;
+            public bool IsReleased
+            {
+                [MethodImpl(OptimizeAndInline)]
+                get => Volatile.Read(ref _freed) != 0;
+            }
 
             /// <summary>
             /// <c>true</c> when at most one logical reference is held (refcount &lt;= 1).
             /// Non-owning wraps are immortal (refcount is meaningless) and report
             /// <c>true</c>. Used by resize's refcheck to detect buffer sharing.
             /// </summary>
-            public bool IsUniquelyReferenced =>
-                _type == AllocationType.Wrap || Interlocked.Read(ref _refCount) <= 1;
+            public bool IsUniquelyReferenced
+            {
+                [MethodImpl(OptimizeAndInline)]
+                get => _type == AllocationType.Wrap || Interlocked.Read(ref _refCount) <= 1;
+            }
 
             /// <summary>
             /// Backwards-compatible "force free" entry point. Maps to the

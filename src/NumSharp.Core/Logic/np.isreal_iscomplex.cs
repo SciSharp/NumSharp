@@ -21,20 +21,23 @@ namespace NumSharp
         /// np.isreal(a)  // [True, True, True]
         /// </code>
         /// </example>
+        [NDScoped] // reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.equal
         public static NDArray isreal(NDArray a)
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
-            // For non-complex types, all elements are real
+            // NumPy (_type_check_impl.isreal): `return imag(x) == 0`.
+            // For a real/int/bool dtype the imaginary part is identically zero, so the answer is
+            // all-True regardless of value — emit a fresh C-contiguous bool array from the DIMENSIONS
+            // only (never `a.Shape`, whose strides/offset for a sliced/broadcast/strided view make
+            // np.ones read past the logical window and return garbage bytes).
             if (a.GetTypeCode != NPTypeCode.Complex)
-            {
-                return np.ones(a.Shape, NPTypeCode.Boolean);
-            }
+                return np.ones(new Shape(a.shape), NPTypeCode.Boolean);
 
-            // For complex arrays, check if imaginary part is zero
-            // TODO: Implement when complex support is added
-            return np.ones(a.Shape, NPTypeCode.Boolean);
+            // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
+            // IEEE `==` gives NumPy's semantics exactly: -0.0 == 0 (real), NaN/Inf != 0 (not real).
+            return np.equal(np.imag(a), NDArray.Scalar(0d));
         }
 
         /// <summary>
@@ -54,20 +57,22 @@ namespace NumSharp
         /// np.iscomplex(a)  // [False, False, False]
         /// </code>
         /// </example>
+        [NDScoped] // reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.not_equal
         public static NDArray iscomplex(NDArray a)
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
-            // For non-complex types, no elements are complex
+            // NumPy (_type_check_impl.iscomplex): complex dtype -> `ax.imag != 0`, otherwise
+            // `zeros(shape, bool)`. What is tested is the VALUE of the imaginary part, not the dtype.
+            // Non-complex short-circuits to all-False from the DIMENSIONS only (not `a.Shape`, whose
+            // view strides/offset would make np.zeros emit garbage bytes on a strided/broadcast input).
             if (a.GetTypeCode != NPTypeCode.Complex)
-            {
-                return np.zeros(a.Shape, NPTypeCode.Boolean);
-            }
+                return np.zeros(new Shape(a.shape), NPTypeCode.Boolean);
 
-            // For complex arrays, check if imaginary part is non-zero
-            // TODO: Implement when complex support is added
-            return np.zeros(a.Shape, NPTypeCode.Boolean);
+            // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
+            // IEEE `!=` gives NumPy's semantics exactly: -0.0 != 0 is False, NaN/Inf != 0 is True.
+            return np.not_equal(np.imag(a), NDArray.Scalar(0d));
         }
 
         /// <summary>

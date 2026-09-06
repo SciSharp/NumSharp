@@ -14,6 +14,7 @@ namespace NumSharp
         /// </summary>
         public unsafe _Unsafe Unsafe => new _Unsafe(this);
 
+        [NDBorrowed] // a facade over the array that created it (a back-pointer), never an owner
         public readonly unsafe struct _Unsafe
         {
             private readonly NDArray _this;
@@ -134,6 +135,7 @@ namespace NumSharp
             /// <remarks>Possible only when the ndarray is not sliced.</remarks>
             public readonly unsafe _Pinning Pin => new _Pinning(_this);
 
+            [NDBorrowed] // a facade over the array that created it (a back-pointer), never an owner
             public readonly struct _Pinning
             {
                 private readonly NDArray _this;

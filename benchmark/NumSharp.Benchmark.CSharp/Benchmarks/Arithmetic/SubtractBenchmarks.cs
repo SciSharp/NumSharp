@@ -20,7 +20,8 @@ public class SubtractBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.ArithmeticTypes;
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
+    private bool SupportsSubtract => DType != NPTypeCode.Boolean;
 
     [GlobalSetup]
     public void Setup()
@@ -41,13 +42,25 @@ public class SubtractBenchmarks : TypedBenchmarkBase
 
     [Benchmark(Description = "a - b (element-wise)")]
     [BenchmarkCategory("Elementwise")]
-    public NDArray Subtract_Elementwise() => _a - _b;
+    public object Subtract_Elementwise() => SupportsSubtract
+        ? _a - _b
+        : VerifyUnsupportedDtype(() => _a - _b);
+
+    [Benchmark(Description = "np.subtract(a, b)")]
+    [BenchmarkCategory("Elementwise", "ApiEntryPoint")]
+    public object NpSubtract() => SupportsSubtract
+        ? np.subtract(_a, _b)
+        : VerifyUnsupportedDtype(() => np.subtract(_a, _b));
 
     [Benchmark(Description = "a - scalar")]
     [BenchmarkCategory("Scalar")]
-    public NDArray Subtract_Scalar() => _a - _scalar;
+    public object Subtract_Scalar() => SupportsSubtract
+        ? _a - _scalar
+        : VerifyUnsupportedDtype(() => _a - _scalar);
 
     [Benchmark(Description = "scalar - a")]
     [BenchmarkCategory("Scalar")]
-    public NDArray Subtract_ScalarLeft() => _scalar - _a;
+    public object Subtract_ScalarLeft() => SupportsSubtract
+        ? _scalar - _a
+        : VerifyUnsupportedDtype(() => _scalar - _a);
 }

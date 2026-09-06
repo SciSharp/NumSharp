@@ -30,7 +30,7 @@ Outputs (committed artifacts):
 
 ## Why an orchestrator instead of one script
 
-`nditer_bench.cs` is **section-addressable** via the `NPYITER_SECTION` env var.
+`nditer_bench.cs` is **section-addressable** via the `NUMSHARP_BENCH_NDITER_SECTION` env var.
 The orchestrator runs each section in its own short-lived `dotnet run` process
 and **retries up to 4× on a crash**. This exists because the full mixed-family
 run intermittently hits an uncatchable `AccessViolation` under heavy
@@ -52,6 +52,13 @@ completes. *That crash is a real NumSharp memory-safety bug — see Findings.*
 - `copy` compares to `np.positive` (a real ufunc nditer), **never** `np.copyto`
   (a stripped raw-array walker, not nditer).
 - best-of-rounds timing; correctness is checked before timing every row.
+- **The orchestrator runs the C# side with `DOTNET_TC_CallCountingDelayMs=0`.** Tiered
+  compilation promotes a method to tier-1 only after a 100 ms window with no new tier-0
+  JIT activity, and a benchmark process keeps jitting new kernels/routes for most of a
+  200 ms row — so the first rows of each section were measured at tier-0 (2026-09-03:
+  `lessbool@1` 484 ns default vs 124 ns with the delay at 0, `astype@1` 755 vs 346;
+  the same call read 130 ns as a later row of the same process). Set it too when running
+  `nditer_bench.cs` by hand, or the scalar/1K tiers read 2–3× pessimistic.
 - `speedup = NumPy_time / NumSharp_time` → **> 1.0 means NumSharp is faster.**
 
 ## Sections / aspects covered
@@ -71,6 +78,16 @@ completes. *That crash is a real NumSharp memory-safety bug — see Findings.*
 
 Tiers: `scalar`=1 · `1K`=1 000 · `100K`=100 000 · `1M`=1 000 000.
 
+## Probes (`probes/`)
+
+Three `dotnet run` file-based apps with a RELATIVE `#:project`, plus their NumPy twin, for
+measuring the iterator outside the sheet: `fixed_cost_probe.cs` (construction, per-chunk,
+1M/10M attribution, the production `out=` routes with managed bytes per call, the glue
+components), `ab_ops_probe.cs` (48 NDIter-routed ops at 1K/100K, for A/B against a worktree
+of a baseline commit), `angles_probe.cs` (the candidate next levers as experiments) and
+`numpy_twins.py fixed|ab|angles|join`. The cost model, the traps and every number they
+produced on 2026-09-03 are in **`docs/NDITER_PERF_DISCOVERY.md`**.
+
 ## Findings ledger (kept current with each run)
 
 Tracked regressions surfaced by this benchmark (NumSharp slower than NumPy):
@@ -80,8 +97,11 @@ Tracked regressions surfaced by this benchmark (NumSharp slower than NumPy):
    still the top bug to fix.*
 2. **`np.any` full-scan** (all-false) — scalar scan, no SIMD: up to ~12× slower
    at 1M, while it wins 6–24× at small N and on early-exit. (`anyff`)
-3. **comparison→bool** (`np.less(out=bool)`) — 1-byte store not vectorized,
-   ~1.5–2.7× slower at every tier. (`lessbool`)
+3. **comparison→bool** (`np.less(out=bool)`) — *resolved 2026-09-03*: the `out=` route
+   compiled a scalar-only inner loop for every layout; it now runs the whole-array SIMD
+   comparison kernel through the iterator when the inputs share a dtype and the bool out is
+   contiguous in iteration order (`NDIterRef.TryExecuteComparison`). 100K: 43.4 µs → 9.3 µs
+   (NumPy 11.4). Mixed dtypes / cast out / strided-F out keep the scalar body. (`lessbool`)
 4. **fancy gather/scatter** (`a[idx]`) — MapIter path 1.2–3.4× slower. (`gather`/`scatter`)
 5. **`amin` axis-reduce** — 2.3–2.4× slower at 100K+ (lags the `sum` axis kernel).
 6. **broadcast-view reduce** — `path.bcast_reduce` ~50× slower (general
@@ -90,7 +110,22 @@ Tracked regressions surfaced by this benchmark (NumSharp slower than NumPy):
 8. **ALLOCATE out** — `path.allocate` ~2× slower (NumSharp zeros via `np.zeros`;
    NumPy allocates `empty`).
 9. small-N copy/cast & index-math (flatten/ravel/astype/unravel) lose to per-call
-   setup overhead; cross to wins by 1M.
+   setup overhead; cross to wins by 1M. *Partly addressed 2026-09-03*: the iterator's own
+   fixed cost fell from 146–197 ns to 62–113 ns (one recycled native block per iterator
+   instead of three calloc/free pairs — `NDIterRef.AllocateStateBlock`), the ufunc routes
+   stopped building an interpolated kernel-cache key per call (`InnerLoopKernelKey`,
+   −45 ns and −96 B garbage), the unbuffered EXTERNAL_LOOP driver advances with a direct
+   inlined call (per-chunk driver overhead 5.6 → 4.7 ns), the `out=` routes skip the
+   identity broadcast when every operand has the same dims (−55 ns), and the
+   COPY_IF_OVERLAP temp is disposed eagerly instead of leaking to the finalizer
+   (`inplace@1` 282 → 154 ns). Net at n=1 (ns, NumSharp → NumSharp | NumPy): `add out`
+   411 → 168 | 289, `less out` 366 → 140 | 300, `sqrt out` 338 → 183 | 258. What is left
+   there is the kernel-selection floor, not iterator overhead.
+10. **Do not trust the 2026-08-29 sheet's 1M/10M elementwise cells** (`add@10M` 0.33×,
+   `sqrt@10M` 0.23×, `mixbuf@10M` 0.50×): the section re-run in isolation reads
+   add@10M 8.64 ms vs NumPy 7.36 (0.85×), sqrt 6.64 vs 6.46 (0.97×), mixbuf 8.9 vs 9.9 —
+   parity. Both sides' committed 1M/10M numbers were 2–5× slower than a fresh run
+   (host contamination at snapshot time). Re-run a section alone before chasing a cell.
 
 Confirmed strengths: construction (~2.8× vs `np.nditer`), reductions (sum/
 count_nonzero 2–4×), buffered cast, int8 (~7×, verified correct), and the

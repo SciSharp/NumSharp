@@ -1,7 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 //
-// NumSharp port: adapted from System.Char (dotnet/runtime, src/dotnet/src/libraries/
+// NumSharp port: adapted from System.Char (dotnet/runtime, refs/dotnet/src/libraries/
 // System.Private.CoreLib/src/System/Char.cs) to a 1-byte character type modelled on
 // NumPy's `dtype('S1')` / `numpy.bytes_` and Python's single-byte `bytes`.
 //

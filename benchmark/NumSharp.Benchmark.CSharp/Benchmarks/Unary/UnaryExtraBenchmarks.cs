@@ -19,7 +19,7 @@ public class UnaryExtraBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.FloatingTypes;
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.AllNumericTypes;
 
     [GlobalSetup]
     public void Setup()
@@ -31,10 +31,18 @@ public class UnaryExtraBenchmarks : TypedBenchmarkBase
     [GlobalCleanup]
     public void Cleanup() { _a = null!; GC.Collect(); }
 
-    [Benchmark(Description = "np.cbrt(a)")] public NDArray Cbrt() => np.cbrt(_a);
+    [Benchmark(Description = "np.cbrt(a)")] public object Cbrt() => DType != NPTypeCode.Complex
+        ? np.cbrt(_a)
+        : VerifyUnsupportedDtype(() => np.cbrt(_a));
     [Benchmark(Description = "np.reciprocal(a)")] public NDArray Reciprocal() => np.reciprocal(_a);
     [Benchmark(Description = "np.square(a)")] public NDArray Square() => np.square(_a);
-    [Benchmark(Description = "np.negative(a)")] public NDArray Negative() => np.negative(_a);
-    [Benchmark(Description = "np.positive(a)")] public NDArray Positive() => np.positive(_a);
-    [Benchmark(Description = "np.trunc(a)")] public NDArray Trunc() => np.trunc(_a);
+    [Benchmark(Description = "np.negative(a)")] public object Negative() => DType != NPTypeCode.Boolean
+        ? np.negative(_a)
+        : VerifyUnsupportedDtype(() => np.negative(_a));
+    [Benchmark(Description = "np.positive(a)")] public object Positive() => DType != NPTypeCode.Boolean
+        ? np.positive(_a)
+        : VerifyUnsupportedDtype(() => np.positive(_a));
+    [Benchmark(Description = "np.trunc(a)")] public object Trunc() => DType != NPTypeCode.Complex
+        ? np.trunc(_a)
+        : VerifyUnsupportedDtype(() => np.trunc(_a));
 }

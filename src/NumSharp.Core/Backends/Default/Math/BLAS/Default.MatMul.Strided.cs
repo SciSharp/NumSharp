@@ -95,7 +95,12 @@ namespace NumSharp.Backends
                     RunSame<char>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
                 case NPTypeCode.Half:
-                    RunSame<Half>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
+                    // NOT RunSame<Half>: NumPy accumulates half products in FLOAT32 and rounds
+                    // once at the end (matmul_inner_noblas: `float sum = 0; ... *(op) =
+                    // npy_float_to_half(sum)`). Half is the one dtype where that matters and the
+                    // one float dtype NumPy does NOT send to cblas (USEBLAS=0 in matmul.c.src),
+                    // so this loop IS the reference implementation and can be matched exactly.
+                    RunHalf(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
                 case NPTypeCode.Single:
                     // Usually handled by the SIMD path in TryMatMulSimd — this
@@ -142,6 +147,75 @@ namespace NumSharp.Backends
             bool* c = (bool*)result.Address + result.Shape.offset;
             new UnmanagedSpan<bool>(c, M * N).Clear();
             MatMulStridedBool(a, aStride0, aStride1, b, bStride0, bStride1, c, M, N, K);
+        }
+
+        /// <summary>
+        /// Half GEMM with a FLOAT32 accumulator — the exact shape of NumPy's half loop.
+        /// Accumulating in Half instead does not merely lose a ulp, it SATURATES: half's spacing
+        /// above 2048 is 2, so <c>2048 + 1 == 2048</c> and <c>ones(4096)·ones(4096)</c> stalls at
+        /// 2048 where NumPy returns 4096.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void RunHalf(
+            NDArray left, NDArray right, NDArray result,
+            long aStride0, long aStride1, long bStride0, long bStride1,
+            long M, long N, long K)
+        {
+            Half* a = (Half*)left.Address   + left.Shape.offset;
+            Half* b = (Half*)right.Address  + right.Shape.offset;
+            Half* c = (Half*)result.Address + result.Shape.offset;
+            new UnmanagedSpan<Half>(c, M * N).Clear();
+            if (M == 0 || N == 0 || K == 0)
+                return;                       // k == 0 is the empty sum: the cleared C is the answer
+            MatMulStridedHalf(a, aStride0, aStride1, b, bStride0, bStride1, c, M, N, K);
+        }
+
+        /// <summary>
+        /// Stride-native Half GEMM. Every product is formed in float32 — exact, since the product
+        /// of two halves needs at most 22 significand bits and float32 has 24 — and accumulated in
+        /// float32, with a single narrowing back to Half per output cell.
+        /// <para>
+        /// The accumulator is a ROW (like <see cref="MatMulStridedMixed{TResult}"/>'s), not the
+        /// scalar NumPy uses, purely to keep the cache-friendly j-inner loop. The bits are
+        /// identical either way: for a given output cell the additions still run over k in
+        /// ascending order, which is all that fixes the result.
+        /// </para>
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void MatMulStridedHalf(
+            Half* A, long aStride0, long aStride1,
+            Half* B, long bStride0, long bStride1,
+            Half* C, long M, long N, long K)
+        {
+            var accBuf = new float[N];
+            fixed (float* accBase = accBuf)
+            {
+                float* acc = accBase;
+                for (long i = 0; i < M; i++)
+                {
+                    new UnmanagedSpan<float>(acc, N).Clear();
+                    long aRowBase = i * aStride0;
+                    for (long k = 0; k < K; k++)
+                    {
+                        float aik = (float)A[aRowBase + k * aStride1];
+                        long bRowBase = k * bStride0;
+                        if (bStride1 == 1)
+                        {
+                            for (long j = 0; j < N; j++)
+                                acc[j] += aik * (float)B[bRowBase + j];
+                        }
+                        else
+                        {
+                            for (long j = 0; j < N; j++)
+                                acc[j] += aik * (float)B[bRowBase + j * bStride1];
+                        }
+                    }
+
+                    Half* cRow = C + i * N;
+                    for (long j = 0; j < N; j++)
+                        cRow[j] = (Half)acc[j];
+                }
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -331,7 +405,11 @@ namespace NumSharp.Backends
                     MatMulStridedMixed<char>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
                 case NPTypeCode.Half:
-                    MatMulStridedMixed<Half>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
+                    // Half needs a FLOAT32 accumulator, not the double one — see RunHalf. Reached
+                    // when the operand dtypes differ but still promote to float16, i.e. half against
+                    // bool / int8 / uint8 (every value of those is exact in half, so reading them
+                    // through float loses nothing NumPy's own input cast would have kept).
+                    MatMulStridedMixedHalf(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
                 case NPTypeCode.Single:
                     MatMulStridedMixed<float>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
@@ -399,6 +477,58 @@ namespace NumSharp.Backends
                     TResult* cRow = c + i * N;
                     for (long j = 0; j < N; j++)
                         cRow[j] = Converts.ChangeType<TResult>(acc[j]);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Mixed-type matmul whose RESULT is Half. Identical to
+        /// <see cref="MatMulStridedMixed{TResult}"/> but accumulates in float32 rather than double,
+        /// because that is the width NumPy's half loop uses.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void MatMulStridedMixedHalf(
+            NDArray left, NDArray right, NDArray result,
+            long aStride0, long aStride1, long bStride0, long bStride1,
+            long M, long N, long K)
+        {
+            Half* c = (Half*)result.Address + result.Shape.offset;
+            void* aBase = (byte*)left.Address  + left.Shape.offset  * left.dtypesize;
+            void* bBase = (byte*)right.Address + right.Shape.offset * right.dtypesize;
+            var aTc = left.typecode;
+            var bTc = right.typecode;
+
+            new UnmanagedSpan<Half>(c, M * N).Clear();
+            if (M == 0 || N == 0 || K == 0)
+                return;
+
+            var accBuf = new float[N];
+            fixed (float* accBase = accBuf)
+            {
+                float* acc = accBase;
+                for (long i = 0; i < M; i++)
+                {
+                    new UnmanagedSpan<float>(acc, N).Clear();
+                    long aRowBase = i * aStride0;
+                    for (long k = 0; k < K; k++)
+                    {
+                        float aik = (float)ReadAsDouble(aBase, aTc, aRowBase + k * aStride1);
+                        long bRowBase = k * bStride0;
+                        if (bStride1 == 1)
+                        {
+                            for (long j = 0; j < N; j++)
+                                acc[j] += aik * (float)ReadAsDouble(bBase, bTc, bRowBase + j);
+                        }
+                        else
+                        {
+                            for (long j = 0; j < N; j++)
+                                acc[j] += aik * (float)ReadAsDouble(bBase, bTc, bRowBase + j * bStride1);
+                        }
+                    }
+
+                    Half* cRow = c + i * N;
+                    for (long j = 0; j < N; j++)
+                        cRow[j] = (Half)acc[j];
                 }
             }
         }

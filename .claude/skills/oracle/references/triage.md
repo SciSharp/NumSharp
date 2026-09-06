@@ -22,12 +22,26 @@ Everything else — including signed zero (`-0.0` ≠ `0.0`), integer wrap, floa
 
 2. **NumSharp is wrong → it's a real bug.** Fix the op. If you can't fix it now, carve the shrunk case into an
    `[OpenBugs]` reproduction (`OpenBugs.cs`, or a focused file like `OpenBugs.DtypeCoverage.cs` / `OpenBugs.Char.cs`)
-   so CI excludes it but it's tracked and un-silenced. Do NOT excuse a real bug in `MisalignedRegistry`.
+   so CI excludes it but it's tracked and un-silenced. Do NOT excuse a real bug in `MisalignedRegistry`. Once fixed,
+   if the divergence came from the nightly soak, drop the shrunk repro into `Fuzz/corpus/regressions/` — the
+   `FuzzRegression` tier auto-replays every `regressions/*.jsonl`, so that exact case is gated bit-exact forever after.
 
 3. **The difference is intended and defensible → excuse it in `MisalignedRegistry.cs`.** This is for documented,
    deliberate NumSharp-vs-NumPy differences (e.g. a dtype NumSharp handles differently by design, an error-text
-   divergence). Add an entry keyed to the op/case with a one-line rationale. The gate then treats it as expected,
-   not a pass and not a failure — and it shows up in the divergence ledger, never silently.
+   divergence, a bounded transcendental ULP gap). The mechanism is a branch in `MisalignedRegistry.Classify(...)`
+   that returns a one-line reason string (`null` = not excused = red); the runner counts and PRINTS each excused
+   reason per tier, so it is never silent. Three rules, all learned the hard way:
+   - **Scope the branch to the exact `(op, dtype, kind)` cell.** A blanket "any complex value diff" once excused a
+     gross complex-matmul regression. Match the op name, the `tc`, the `DivergenceKind`, and (for ULP gaps) a tight
+     tolerance — anything broader lets a neighbouring regression through.
+   - **Guard every ULP/near-miss branch with `diffs.Count > 0`.** `diffs.All(...)` is VACUOUSLY true on an empty
+     diff list, so an unrelated divergence (error-text, wrong arity) would otherwise be silently excused as
+     "within N ULP".
+   - **Pin the scope from BOTH sides** in `test/NumSharp.Tests.Oracle/OpenBugs.FuzzGate.cs`
+     (`MisalignedRegistryTightnessTests`): a paired NOT-excused test (a gross regression in the neighbouring cell →
+     `null`) and STILL-excused test (the documented divergence → non-null), so a future re-broadening turns red.
+   The gate then treats it as expected, not a pass and not a failure — keep the human-readable ledger
+   `test/NumSharp.Tests.Oracle/Fuzz/README.md` in sync.
 
 4. **The generator/registry is wrong → fix the corpus, not the excuse.** Common causes:
    - Wrong `OpRegistry` mapping (e.g. routed to the wrong overload, or read the wrong param key).
@@ -47,10 +61,20 @@ Everything else — including signed zero (`-0.0` ≠ `0.0`), integer wrap, floa
 
 ## Error parity
 
-Cases can also assert **error parity** — NumPy raising must correspond to NumSharp raising. The generator records
-raising cases it chooses to keep (many are skipped by `try/except`); the harness checks NumSharp raises too. If
-NumSharp succeeds where NumPy raised (or vice versa), that's a divergence to classify like any other. Verbatim
-error-message matching is generally handled by dedicated unit tests, not the byte corpus.
+Cases can also assert **error parity** — NumPy raising must correspond to NumSharp raising. Two tiers, deliberately
+different in strength:
+- **Weak ("threw something"):** `errors.jsonl`, plus any case flagged `expects_throw` with no recorded exception.
+  NumSharp must throw *anything*; type and message are not checked. NumSharp succeeding where NumPy raised (or vice
+  versa) is a divergence to classify like any other.
+- **Message parity:** `errors_full.jsonl`, plus any case carrying `error: {type, text}` (recorded verbatim at
+  generation time — the cells every value tier skips). `CheckError` (in `FuzzCorpusTests.Kinds.cs`) holds NumSharp to
+  BOTH the exception type (via the NumPy-class → .NET-type map `ErrorTypeMap`; identical names like
+  `ValueError`/`AxisError` always match) AND the message verbatim, after `NormalizeMessage` strips .NET's
+  `" (Parameter 'x')"` framing. **So verbatim error text IS gated by the corpus now** — this is no longer only a
+  unit-test concern.
+
+A message mismatch routes through `MisalignedRegistry` as an `ErrorText` divergence, so a documented wording gap is
+excused-but-printed, not silently accepted.
 
 ## The known teardown crash is NOT a divergence
 
@@ -58,7 +82,34 @@ A full `TestCategory=FuzzMatrix` run can end "Test host process crashed" (`Acces
 reported Passed. That's an intermittent teardown crash, not a red case. Re-run the specific `FuzzCorpusTests` class
 (it exits 0 cleanly) to confirm the tier is actually green.
 
+## Host-gated tiers go Inconclusive, not red
+
+Two classes of tier record bytes reproducible only on the authoring host (win-amd64), so off-host they assert
+**`Inconclusive`** — never red. A machine without NumPy's exact wheel/libm has nothing to be wrong about.
+
+- **Explicit host PINS** — `matmul_parity`, `linalg_parity`, `random_parity_host`, `generator_parity_host`. Gated by
+  the exact BLAS build + DYNAMIC_ARCH kernel + thread count NumPy used (or the win-amd64 CRT), checked via
+  `MatmulParityPin` (BLAS binary SHA-256 / core name) or an OS check.
+- **`RunHostLibmCorpus` tiers** — `unary`, `nan`, `precision`, `fft`, `numpy_f32_kernels`. Their transcendental /
+  FFT-twiddle / `Vector<T>` cells depend on the win-amd64 CRT libm (`ucrtbase`) and host SIMD reduction widths.
+  The runner itself asserts `Inconclusive` off-Windows before replaying. Every PORTABLE cell in these tiers is a
+  deterministic NumSharp kernel and is green on every platform by construction.
+
+Seeing "Inconclusive" on these tiers off-host is expected, not a failure. To gate against YOUR machine, regenerate
+the corpus there (`python gen_oracle.py matmul_parity` / `python gen_nan_oracle.py` / …) — but remember the committed
+corpus is win-amd64-authored, so don't commit a Linux/macOS regeneration of these (see `regenerate.md` → host
+sensitivity).
+
+## A red that is NOT a value divergence: a leak
+
+Adding an op to `OpRegistry` also enters the **oracle-free leak gate** (`UndisposedIntermediateTests`,
+`[TestCategory("FuzzMatrix")]`). It disposes every result and asserts the buffer pool balances at ZERO
+(`KnownEscapes` is empty). So a `FuzzMatrix` red can be a *bit-exact* op that STRANDS a pooled buffer — the failure
+names the op and the take/return imbalance, not a byte diff. Fix the leak in the op (dispose the intermediate /
+`[NDScoped]`), never add a `KnownEscapes` entry. `NativeAllocationChokepointTests` is the static twin: a new raw
+`NativeMemory.*`/`Marshal.AllocHGlobal` site fails until pooled or allowlisted.
+
 ## Ledger
 
-The complete, human-readable divergence ledger is `test/NumSharp.UnitTest/Fuzz/README.md`. Keep it and
+The complete, human-readable divergence ledger is `test/NumSharp.Tests.Oracle/Fuzz/README.md`. Keep it and
 `MisalignedRegistry.cs` in sync when you excuse something.

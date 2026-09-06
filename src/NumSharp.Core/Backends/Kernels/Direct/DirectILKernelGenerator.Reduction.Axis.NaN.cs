@@ -242,6 +242,7 @@ namespace NumSharp.Backends.Kernels
 
         #region Float SIMD Implementations
 
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe float NanReduceContiguousAxisFloat256(float* data, long size, ReductionOp op)
         {
             int vectorCount = Vector256<float>.Count;
@@ -340,6 +341,7 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe float NanReduceContiguousAxisFloat128(float* data, long size, ReductionOp op)
         {
             int vectorCount = Vector128<float>.Count;
@@ -501,6 +503,7 @@ namespace NumSharp.Backends.Kernels
 
         #region Double SIMD Implementations
 
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe double NanReduceContiguousAxisDouble256(double* data, long size, ReductionOp op)
         {
             int vectorCount = Vector256<double>.Count;
@@ -599,6 +602,7 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
+        [MethodImpl(OptimizeAndInline)]
         private static unsafe double NanReduceContiguousAxisDouble128(double* data, long size, ReductionOp op)
         {
             int vectorCount = Vector128<double>.Count;

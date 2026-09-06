@@ -1,3 +1,9 @@
 [submodule "src/numpy"]
-	path = src/numpy
+	path = refs/numpy
 	url = https://github.com/numpy/numpy.git
+[submodule "src/pocketfft"]
+	path = refs/pocketfft
+	url = https://github.com/mreineck/pocketfft.git
+[submodule "src/OpenBLAS"]
+	path = refs/OpenBLAS
+	url = https://github.com/OpenMathLib/OpenBLAS.git

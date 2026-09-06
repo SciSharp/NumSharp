@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Numerics;
 using NumSharp.Generic;
 
@@ -57,7 +58,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isfinite.html</remarks>
-        public static NDArray isfinite(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+        public static NDArray isfinite(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => a.TensorEngine.IsFinite(a, dtype, @out, where);
 
         /// <summary>
@@ -70,7 +71,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isnan.html</remarks>
-        public static NDArray isnan(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+        public static NDArray isnan(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => a.TensorEngine.IsNan(a, dtype, @out, where);
 
         /// <summary>
@@ -88,7 +89,7 @@ namespace NumSharp
         /// - Integer types: Always False (integers cannot be Inf)
         /// - NaN: Returns False (NaN is not infinity)
         /// </remarks>
-        public static NDArray isinf(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+        public static NDArray isinf(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => a.TensorEngine.IsInf(a, dtype, @out, where);
 
         /// <summary>
@@ -119,6 +120,69 @@ namespace NumSharp
 
             //type.IsPrimitive checks for: Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, IntPtr, UIntPtr, Char, Double, and Single.
             return type.IsPrimitive || obj is decimal;
+        }
+
+        /// <summary>
+        ///     Check whether or not an object can be iterated over. Returns <c>true</c> if
+        ///     <paramref name="y"/> has an iterator method or is a sequence, and <c>false</c> otherwise.
+        /// </summary>
+        /// <param name="y">Input object.</param>
+        /// <returns><c>true</c> if the object is iterable, <c>false</c> otherwise.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.iterable.html
+        ///     <para>
+        ///     Port of NumPy's <c>numpy.iterable</c> (<c>numpy/lib/_function_base_impl.py</c>), whose whole
+        ///     body is <c>try: iter(y); return True; except TypeError: return False</c>. It is a pure
+        ///     predicate — it does NOT iterate the data, it only tests whether iteration is possible — so it
+        ///     needs no kernel/NDIter/loop of any kind (O(1) rank/type check).
+        ///     </para>
+        ///     <para>
+        ///     The one surprise NumPy documents is 0-dimensional arrays: although a 0-d <see cref="NDArray"/>
+        ///     is a collection type, <c>iter()</c> on it raises <c>TypeError("iteration over a 0-d array")</c>
+        ///     (see <see cref="NDArray.GetEnumerator"/>), so <c>np.iterable(np.array(1.0))</c> is <c>false</c>
+        ///     while any array of rank ≥ 1 (empty included) is <c>true</c>.
+        ///     </para>
+        ///     C# type mapping (each matches NumPy's <c>iter()</c> outcome, probed against NumPy 2.4.2):
+        ///     <list type="bullet">
+        ///       <item><description><c>null</c> → false (NumPy's <c>iter(None)</c> raises TypeError).</description></item>
+        ///       <item><description><see cref="NDArray"/> → <c>ndim != 0</c> (0-d is the only non-iterable array).</description></item>
+        ///       <item><description><see cref="string"/> → true (Python strings are iterable).</description></item>
+        ///       <item><description>Any <see cref="IEnumerable"/> — C# arrays, lists, dictionaries, sets … → true.</description></item>
+        ///       <item><description>Everything else — the scalar value types int/double/bool/Complex/Half/decimal/char … → false.</description></item>
+        ///     </list>
+        ///     <para>
+        ///     Deliberate C# divergences (probed against NumPy 2.4.2): NumSharp maps Python's
+        ///     <c>iter()</c>-ability onto C#'s <see cref="IEnumerable"/> — i.e. "is this <c>foreach</c>-able?".
+        ///     Four inputs are iterable in Python but their C# analogs cannot be <c>foreach</c>'d, so they
+        ///     return <c>false</c> here while NumPy returns <c>true</c>: a bare <see cref="IEnumerator"/> /
+        ///     <c>IEnumerator&lt;T&gt;</c> cursor (a Python iterator is self-iterable, but a C# enumerator
+        ///     has no <c>GetEnumerator</c>), and <see cref="ValueTuple"/> / <see cref="Tuple"/> / <c>ITuple</c>
+        ///     (they implement no <see cref="IEnumerable"/>). Real ported code passes the collection itself —
+        ///     an array, <c>List</c>, or <see cref="NDArray"/>, all foreach-able — which matches NumPy exactly.
+        ///     </para>
+        /// </remarks>
+        public static bool iterable(object y)
+        {
+            switch (y)
+            {
+                case null:
+                    return false;
+                case NDArray nd:
+                    // A 0-d array is the only non-iterable array: iter() on it raises TypeError, exactly
+                    // as NDArray.GetEnumerator() does; every rank>=1 array (incl. empty) iterates. Checked
+                    // ahead of the IEnumerable case because NDArray itself implements IEnumerable.
+                    return nd.ndim != 0;
+                case string _:
+                    // Python str is iterable (np.iterable("abc") == True). string is also IEnumerable, so
+                    // this branch documents the deliberate parity choice rather than changing the outcome.
+                    return true;
+                case IEnumerable _:
+                    return true;
+                default:
+                    // Scalar value types (bool/byte/sbyte/short/ushort/int/uint/long/ulong/char/float/
+                    // double/Half/decimal/Complex) are not iterable — matching iter() on a NumPy scalar.
+                    return false;
+            }
         }
     }
 }

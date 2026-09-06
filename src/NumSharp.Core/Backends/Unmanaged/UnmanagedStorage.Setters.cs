@@ -355,10 +355,10 @@ namespace NumSharp.Backends
                     if (value.size != 1)
                     {
                         string TupE(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
-                        try { np.broadcast_to(value, targetView.Shape); }
-                        catch (IncorrectShapeException)
+                        try { np.broadcast_to(value, targetView.Shape).Dispose(); } // validate-only view — reclaim it
+                        catch (IncorrectShapeException ex)
                         {
-                            throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(targetView.Shape.dimensions)}");
+                            throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(targetView.Shape.dimensions)}", ex);
                         }
                     }
                     return;
@@ -408,10 +408,10 @@ namespace NumSharp.Backends
                 string TupE(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                 if (subShape.size == 0)
                 {
-                    try { np.broadcast_to(value, subShape); }
-                    catch (IncorrectShapeException)
+                    try { np.broadcast_to(value, subShape).Dispose(); } // validate-only view — reclaim it
+                    catch (IncorrectShapeException ex)
                     {
-                        throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(subShape.dimensions)}");
+                        throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(subShape.dimensions)}", ex);
                     }
 
                     return;
@@ -466,9 +466,9 @@ namespace NumSharp.Backends
             {
                 broadcasted = np.broadcast_to(vForBc, subShape);
             }
-            catch (IncorrectShapeException)
+            catch (IncorrectShapeException ex)
             {
-                throw new ValueError($"could not broadcast input array from shape {Tup(valueshape.dimensions)} into shape {Tup(subShape.dimensions)}");
+                throw new ValueError($"could not broadcast input array from shape {Tup(valueshape.dimensions)} into shape {Tup(subShape.dimensions)}", ex);
             }
 
             // A valid broadcast that needs stretching (value smaller than the region, or a
@@ -1069,7 +1069,10 @@ namespace NumSharp.Backends
             SetInternalArray(_ChangeTypeOfArray(values, _dtype));
 
             if (_shape.IsEmpty)
+            {
                 _shape = new Shape(values.Length);
+                OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+            }
         }
 
         /// <summary>
@@ -1082,7 +1085,10 @@ namespace NumSharp.Backends
             SetInternalArray(values);
 
             if (_shape.IsEmpty)
+            {
                 _shape = Shape.Vector(values.Count);
+                OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+            }
         }
 
         /// <summary>
@@ -1096,7 +1102,10 @@ namespace NumSharp.Backends
             SetInternalArray(values);
 
             if (_shape.IsEmpty)
+            {
                 _shape = Shape.Vector(values.Count);
+                OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
+            }
         }
 
         /// <summary>
@@ -1158,6 +1167,7 @@ namespace NumSharp.Backends
 
             //first try to convert to dtype only then we apply changes.
             _shape = nd.shape;
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             _dtype = nd.dtype;
             _typecode = nd.GetTypeCode;
             if (_typecode == NPTypeCode.Empty)
@@ -1181,6 +1191,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
 
             _shape = shape;
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             SetInternalArray(_ChangeTypeOfArray(values, _dtype));
         }
 
@@ -1193,6 +1204,7 @@ namespace NumSharp.Backends
         public void ReplaceData(IArraySlice values, Shape shape)
         {
             _shape = shape;
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             SetInternalArray(values);
         }
 
@@ -1206,6 +1218,7 @@ namespace NumSharp.Backends
         public void ReplaceData(IArraySlice values, Type dtype, Shape shape)
         {
             _shape = shape;
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             SetInternalArray(values);
         }
 
@@ -1231,6 +1244,7 @@ namespace NumSharp.Backends
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
             _shape = shape;
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             SetInternalArray(changedArray);
         }
 
@@ -1257,6 +1271,7 @@ namespace NumSharp.Backends
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
             _shape = shape;
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             SetInternalArray(changedArray);
         }
 
@@ -1278,6 +1293,7 @@ namespace NumSharp.Backends
                 throw new NotSupportedException($"{_dtype.Name} as a dtype is not supported.");
 
             _shape = shape;
+            OnReshaped(); // keep OWNDATA mirroring this storage's ownership (fresh shapes carry no bit)
             SetInternalArray(nd.Array);
         }
 

@@ -46,7 +46,8 @@ namespace NumSharp.Backends.Kernels
         // =====================================================================
 
         // Giesen branchless float -> half over 8 lanes; result low 16 bits = f16 pattern.
-        private static Vector256<int> FloatToHalfBits(Vector256<float> fv)
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
+        internal static Vector256<int> FloatToHalfBits(Vector256<float> fv)
         {
             var x0 = fv.AsInt32();
             var sign = Avx2.And(x0, Vector256.Create(unchecked((int)0x80000000)));
@@ -75,7 +76,8 @@ namespace NumSharp.Backends.Kernels
 
         // Scalar port of FloatToHalfBits — used for the < 16 tail and the strided scalar conv.
         // MUST match the vector path bit-for-bit (and therefore NumPy); NOT the BCL (Half) cast.
-        private static ushort SingleToHalfBits(float fval)
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
+        internal static ushort SingleToHalfBits(float fval)
         {
             int x0 = BitConverter.SingleToInt32Bits(fval);
             int sign = x0 & unchecked((int)0x80000000);
@@ -100,6 +102,7 @@ namespace NumSharp.Backends.Kernels
         // low-32-bit narrow is exact, then cvtdq2ps + Giesen. See the file header for the proof. ----
 
         // 8 i64 (two 4-lane vectors) -> 8 f16 bit patterns (low 16 bits of each Vector256<int> lane).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static Vector256<int> Int64x8ToHalfBits(Vector256<long> a, Vector256<long> b)
         {
             var c = Vector256.Create(65519L); var cm = Vector256.Create(-65519L);
@@ -113,6 +116,7 @@ namespace NumSharp.Backends.Kernels
             return FloatToHalfBits(Avx.ConvertToVector256Single(Vector256.Create(ai, bi)));
         }
         // 8 u64 -> 8 f16 bit patterns (unsigned clamp via the sign-bias compare trick).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static Vector256<int> UInt64x8ToHalfBits(Vector256<ulong> a, Vector256<ulong> b)
         {
             var bias = Vector256.Create(long.MinValue);
@@ -127,12 +131,14 @@ namespace NumSharp.Backends.Kernels
             return FloatToHalfBits(Avx.ConvertToVector256Single(Vector256.Create(ai, bi)));
         }
         // Scalar ports (the < 16 tail + strided scalar conv); finite |v| < 2^24 so (float) is exact.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static ushort Int64ToHalfBits(long v)
         {
             if (v >= 65520) return 0x7C00;            // +inf
             if (v <= -65520) return 0xFC00;           // -inf
             return SingleToHalfBits((float)v);
         }
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static ushort UInt64ToHalfBits(ulong v)
         {
             if (v >= 65520) return 0x7C00;            // +inf (u64 has no -inf)
@@ -147,6 +153,7 @@ namespace NumSharp.Backends.Kernels
         private static readonly Vector256<int> RtoSel = Vector256.Create(0, 2, 4, 6, 0, 2, 4, 6);
 
         // round 4 doubles to f32 with round-to-odd (chunk is finite — NaN handled by the caller).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static Vector128<float> RoundToOdd4(Vector256<double> d)
         {
             var f = Avx.ConvertToVector128Single(d);           // RTNE f64->f32
@@ -164,10 +171,12 @@ namespace NumSharp.Backends.Kernels
             return Avx2.BlendVariable(fi, fOdd, doOdd).AsSingle();
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static bool AnyNaN(Vector256<double> d)
             => Avx.MoveMask(Avx.Compare(d, d, FloatComparisonMode.UnorderedNonSignaling)) != 0;
 
         // Scalar double -> f16 bits, NumPy-faithful (round-to-odd + direct sNaN payload).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static ushort DoubleToHalfBits(double value)
         {
             if (double.IsNaN(value))
@@ -189,6 +198,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // 16 doubles -> 16 f16 (round-to-odd path; per-block scalar fallback when any lane is NaN).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkDoubleToHalf(void* s, void* d, long n)
         {
             double* src = (double*)s; ushort* dst = (ushort*)d; long i = 0;
@@ -209,6 +219,7 @@ namespace NumSharp.Backends.Kernels
         // >= 65536 -> +inf in f16) gets its high-bit-set lanes forced to +inf; everything below
         // 2^31 converts faithfully. Proven 0-diff vs NumPy over 2.07M cases. Scalar uses the
         // correct C# (float)(uint).
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkUInt32ToHalf(void* s, void* d, long n)
         {
             uint* src = (uint*)s; ushort* dst = (ushort*)d; long i = 0;
@@ -225,6 +236,7 @@ namespace NumSharp.Backends.Kernels
             return i;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkInt64ToHalf(void* s, void* d, long n)
         {
             long* src = (long*)s; ushort* dst = (ushort*)d; long i = 0;
@@ -236,6 +248,7 @@ namespace NumSharp.Backends.Kernels
             }
             return i;
         }
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkUInt64ToHalf(void* s, void* d, long n)
         {
             ulong* src = (ulong*)s; ushort* dst = (ushort*)d; long i = 0;
@@ -252,6 +265,7 @@ namespace NumSharp.Backends.Kernels
         // Each processes 16-at-a-time (two 8-lane Giesen -> truncating Narrow -> 16 u16) and
         // returns the count handled (multiple of 16); the caller scalar-converts the tail.
 
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkSingleToHalf(void* s, void* d, long n)
         {
             float* src = (float*)s; ushort* dst = (ushort*)d; long i = 0;
@@ -263,6 +277,7 @@ namespace NumSharp.Backends.Kernels
             }
             return i;
         }
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkInt32ToHalf(void* s, void* d, long n)
         {
             int* src = (int*)s; ushort* dst = (ushort*)d; long i = 0;
@@ -274,6 +289,7 @@ namespace NumSharp.Backends.Kernels
             }
             return i;
         }
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkInt16ToHalf(void* s, void* d, long n)   // sign-extend i16
         {
             short* src = (short*)s; ushort* dst = (ushort*)d; long i = 0;
@@ -285,6 +301,7 @@ namespace NumSharp.Backends.Kernels
             }
             return i;
         }
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkUInt16ToHalf(void* s, void* d, long n)  // zero-extend u16/char
         {
             ushort* src = (ushort*)s; ushort* dst = (ushort*)d; long i = 0;
@@ -296,6 +313,7 @@ namespace NumSharp.Backends.Kernels
             }
             return i;
         }
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkByteToHalf(void* s, void* d, long n)    // zero-extend bool/u8
         {
             byte* src = (byte*)s; ushort* dst = (ushort*)d; long i = 0;
@@ -307,6 +325,7 @@ namespace NumSharp.Backends.Kernels
             }
             return i;
         }
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkSByteToHalf(void* s, void* d, long n)   // sign-extend i8
         {
             sbyte* src = (sbyte*)s; ushort* dst = (ushort*)d; long i = 0;

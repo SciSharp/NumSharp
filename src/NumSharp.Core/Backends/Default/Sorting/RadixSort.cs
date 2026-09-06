@@ -21,6 +21,14 @@ namespace NumSharp.Backends.Sorting
     /// The caller fills the key buffer with a MONOTONIC unsigned transform of the dtype
     /// (so unsigned ascending order == NumPy's value order) and un-transforms on the way out.
     /// NaN floats are partitioned out by the caller before keys are built (NumPy sorts NaN last).
+    ///
+    /// <b>64-bit line lengths.</b> <paramref name="n"/> and every element position are <see cref="long"/>,
+    /// so a single line may exceed <see cref="int.MaxValue"/> (the caller supplies unmanaged key/tmp/idx
+    /// scratch, which is not bound by the ~2^31 managed-array element cap). The histograms are
+    /// <c>long*</c> because ONE byte-value bucket can hold up to <paramref name="n"/> counts, which can
+    /// itself exceed int range. The digit index, byte-pass counter and shift stay <see cref="int"/>
+    /// (0-255, 0-8, 0-56). The insertion-sort fallbacks stay int-indexed — they run only for
+    /// <c>n &lt;= InsertionThreshold</c> (≤120), far below int range.
     /// </summary>
     internal static unsafe class RadixSort
     {
@@ -98,21 +106,21 @@ namespace NumSharp.Backends.Sorting
         /// <paramref name="hist"/> is reusable scratch of length <c>nbytes·256</c> — ALL byte
         /// histograms, built in a SINGLE read pass (see <see cref="BuildHist32"/>).
         /// </summary>
-        internal static uint* SortU32(uint* keys, uint* tmp, int n, int nbytes, int* hist)
+        internal static uint* SortU32(uint* keys, uint* tmp, long n, int nbytes, long* hist)
         {
             if (n <= 1) return keys; // 0 or 1 element: already sorted (and guards null fixed-ptr on n==0)
-            if (n <= InsertionThreshold32) { InsertionU32(keys, n); return keys; }
+            if (n <= InsertionThreshold32) { InsertionU32(keys, (int)n); return keys; }
             BuildHist32(keys, n, nbytes, hist);   // one read pass builds every byte's histogram
             uint* src = keys, dst = tmp;
             for (int shift = 0, pass = 0; pass < nbytes; pass++, shift += 8)
             {
-                int* h = hist + pass * 256;
+                long* h = hist + (long)pass * 256;
                 // trivial-pass skip: a byte whose value is uniform across all keys needs no scatter.
                 // (The histograms are order-invariant, so this stays correct after earlier swaps.)
                 if (h[(int)((src[0] >> shift) & 0xFF)] == n)
                     continue;
                 Prefix(h);
-                for (int i = 0; i < n; i++)
+                for (long i = 0; i < n; i++)
                 {
                     int d = (int)((src[i] >> shift) & 0xFF);
                     dst[h[d]++] = src[i];
@@ -128,23 +136,23 @@ namespace NumSharp.Backends.Sorting
         /// the result; <paramref name="keys"/>/<paramref name="keyTmp"/> are scratch.
         /// </summary>
         internal static long* ArgSortU32(uint* keys, uint* keyTmp, long* idx, long* idxTmp,
-                                         int n, int nbytes, int* hist)
+                                         long n, int nbytes, long* hist)
         {
             if (n <= 1) return idx;
-            if (n <= InsertionThreshold32) { ArgInsertionU32(keys, idx, n); return idx; }
+            if (n <= InsertionThreshold32) { ArgInsertionU32(keys, idx, (int)n); return idx; }
             BuildHist32(keys, n, nbytes, hist);
             uint* ks = keys, kd = keyTmp;
             long* xs = idx, xd = idxTmp;
             for (int shift = 0, pass = 0; pass < nbytes; pass++, shift += 8)
             {
-                int* h = hist + pass * 256;
+                long* h = hist + (long)pass * 256;
                 if (h[(int)((ks[0] >> shift) & 0xFF)] == n)
                     continue;
                 Prefix(h);
-                for (int i = 0; i < n; i++)
+                for (long i = 0; i < n; i++)
                 {
                     int d = (int)((ks[i] >> shift) & 0xFF);
-                    int p = h[d]++;
+                    long p = h[d]++;
                     kd[p] = ks[i];
                     xd[p] = xs[i];
                 }
@@ -154,19 +162,56 @@ namespace NumSharp.Backends.Sorting
             return xs;
         }
 
-        internal static ulong* SortU64(ulong* keys, ulong* tmp, int n, int* hist)
+        /// <summary>
+        /// Keyed variant of <see cref="ArgSortU32"/>: co-sorts <paramref name="idx"/> by
+        /// <paramref name="keys"/> AND exposes the buffer holding the sorted KEYS via
+        /// <paramref name="sortedKeys"/> (either <paramref name="keys"/> or <paramref name="keyTmp"/>,
+        /// whichever the double-buffer parity landed on — the trivial-pass skip makes it unpredictable,
+        /// so it is tracked, not computed). Used by <c>np.unique</c>'s perm path so the sorted values
+        /// come back through the monotonic key's inverse transform with NO gather (the sorted key
+        /// column is already in memory-order), while the sorted index column supplies the permutation.
+        /// </summary>
+        internal static long* ArgSortU32(uint* keys, uint* keyTmp, long* idx, long* idxTmp,
+                                         long n, int nbytes, long* hist, out uint* sortedKeys)
+        {
+            if (n <= 1) { sortedKeys = keys; return idx; }
+            if (n <= InsertionThreshold32) { ArgInsertionU32(keys, idx, (int)n); sortedKeys = keys; return idx; }
+            BuildHist32(keys, n, nbytes, hist);
+            uint* ks = keys, kd = keyTmp;
+            long* xs = idx, xd = idxTmp;
+            for (int shift = 0, pass = 0; pass < nbytes; pass++, shift += 8)
+            {
+                long* h = hist + (long)pass * 256;
+                if (h[(int)((ks[0] >> shift) & 0xFF)] == n)
+                    continue;
+                Prefix(h);
+                for (long i = 0; i < n; i++)
+                {
+                    int d = (int)((ks[i] >> shift) & 0xFF);
+                    long p = h[d]++;
+                    kd[p] = ks[i];
+                    xd[p] = xs[i];
+                }
+                uint* tk = ks; ks = kd; kd = tk;
+                long* tx = xs; xs = xd; xd = tx;
+            }
+            sortedKeys = ks;
+            return xs;
+        }
+
+        internal static ulong* SortU64(ulong* keys, ulong* tmp, long n, long* hist)
         {
             if (n <= 1) return keys;
-            if (n <= InsertionThreshold64) { InsertionU64(keys, n); return keys; }
+            if (n <= InsertionThreshold64) { InsertionU64(keys, (int)n); return keys; }
             BuildHist64(keys, n, hist);   // one read pass builds all 8 byte histograms
             ulong* src = keys, dst = tmp;
             for (int shift = 0, pass = 0; pass < 8; pass++, shift += 8)
             {
-                int* h = hist + pass * 256;
+                long* h = hist + (long)pass * 256;
                 if (h[(int)((src[0] >> shift) & 0xFF)] == n)
                     continue;
                 Prefix(h);
-                for (int i = 0; i < n; i++)
+                for (long i = 0; i < n; i++)
                 {
                     int d = (int)((src[i] >> shift) & 0xFF);
                     dst[h[d]++] = src[i];
@@ -177,23 +222,23 @@ namespace NumSharp.Backends.Sorting
         }
 
         internal static long* ArgSortU64(ulong* keys, ulong* keyTmp, long* idx, long* idxTmp,
-                                         int n, int* hist)
+                                         long n, long* hist)
         {
             if (n <= 1) return idx;
-            if (n <= InsertionThreshold64) { ArgInsertionU64(keys, idx, n); return idx; }
+            if (n <= InsertionThreshold64) { ArgInsertionU64(keys, idx, (int)n); return idx; }
             BuildHist64(keys, n, hist);
             ulong* ks = keys, kd = keyTmp;
             long* xs = idx, xd = idxTmp;
             for (int shift = 0, pass = 0; pass < 8; pass++, shift += 8)
             {
-                int* h = hist + pass * 256;
+                long* h = hist + (long)pass * 256;
                 if (h[(int)((ks[0] >> shift) & 0xFF)] == n)
                     continue;
                 Prefix(h);
-                for (int i = 0; i < n; i++)
+                for (long i = 0; i < n; i++)
                 {
                     int d = (int)((ks[i] >> shift) & 0xFF);
-                    int p = h[d]++;
+                    long p = h[d]++;
                     kd[p] = ks[i];
                     xd[p] = xs[i];
                 }
@@ -203,9 +248,39 @@ namespace NumSharp.Backends.Sorting
             return xs;
         }
 
+        /// <summary>8-byte twin of the keyed <see cref="ArgSortU32(uint*,uint*,long*,long*,long,int,long*,out uint*)"/>:
+        /// exposes the sorted-key buffer alongside the sorted index column (see that overload).</summary>
+        internal static long* ArgSortU64(ulong* keys, ulong* keyTmp, long* idx, long* idxTmp,
+                                         long n, long* hist, out ulong* sortedKeys)
+        {
+            if (n <= 1) { sortedKeys = keys; return idx; }
+            if (n <= InsertionThreshold64) { ArgInsertionU64(keys, idx, (int)n); sortedKeys = keys; return idx; }
+            BuildHist64(keys, n, hist);
+            ulong* ks = keys, kd = keyTmp;
+            long* xs = idx, xd = idxTmp;
+            for (int shift = 0, pass = 0; pass < 8; pass++, shift += 8)
+            {
+                long* h = hist + (long)pass * 256;
+                if (h[(int)((ks[0] >> shift) & 0xFF)] == n)
+                    continue;
+                Prefix(h);
+                for (long i = 0; i < n; i++)
+                {
+                    int d = (int)((ks[i] >> shift) & 0xFF);
+                    long p = h[d]++;
+                    kd[p] = ks[i];
+                    xd[p] = xs[i];
+                }
+                ulong* tk = ks; ks = kd; kd = tk;
+                long* tx = xs; xs = xd; xd = tx;
+            }
+            sortedKeys = ks;
+            return xs;
+        }
+
         /// <summary>
         /// Builds ALL <paramref name="nbytes"/> byte-histograms of <paramref name="src"/> in ONE
-        /// read pass into <paramref name="hist"/> (<c>nbytes·256</c> ints, the b-th 256-block = byte
+        /// read pass into <paramref name="hist"/> (<c>nbytes·256</c> longs, the b-th 256-block = byte
         /// b's counts). Standard LSD radix re-reads the key array once per byte-pass purely to count;
         /// since each byte's value distribution is invariant under reordering by the OTHER bytes, all
         /// counts can be gathered up front, dropping <c>nbytes-1</c> full read passes (the bulk of the
@@ -214,13 +289,13 @@ namespace NumSharp.Backends.Sorting
         /// case is hand-unrolled so the four counter streams hit four distinct cache lines per key.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static void BuildHist32(uint* src, int n, int nbytes, int* hist)
+        private static void BuildHist32(uint* src, long n, int nbytes, long* hist)
         {
             int total = nbytes * 256;
             for (int b = 0; b < total; b++) hist[b] = 0;
             if (nbytes == 4)
             {
-                for (int i = 0; i < n; i++)
+                for (long i = 0; i < n; i++)
                 {
                     uint v = src[i];
                     hist[(int)(v & 0xFF)]++;
@@ -231,7 +306,7 @@ namespace NumSharp.Backends.Sorting
             }
             else
             {
-                for (int i = 0; i < n; i++)
+                for (long i = 0; i < n; i++)
                 {
                     uint v = src[i];
                     for (int p = 0, sh = 0; p < nbytes; p++, sh += 8)
@@ -242,10 +317,10 @@ namespace NumSharp.Backends.Sorting
 
         /// <summary>8-byte twin of <see cref="BuildHist32"/>: all 8 histograms in one read pass.</summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static void BuildHist64(ulong* src, int n, int* hist)
+        private static void BuildHist64(ulong* src, long n, long* hist)
         {
             for (int b = 0; b < 8 * 256; b++) hist[b] = 0;
-            for (int i = 0; i < n; i++)
+            for (long i = 0; i < n; i++)
             {
                 ulong v = src[i];
                 hist[(int)(v & 0xFF)]++;
@@ -262,10 +337,10 @@ namespace NumSharp.Backends.Sorting
         // (legacy per-pass Histogram32/Histogram64 removed — superseded by the single-pass BuildHist above)
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void Prefix(int* count)
+        private static void Prefix(long* count)
         {
-            int sum = 0;
-            for (int b = 0; b < 256; b++) { int c = count[b]; count[b] = sum; sum += c; }
+            long sum = 0;
+            for (int b = 0; b < 256; b++) { long c = count[b]; count[b] = sum; sum += c; }
         }
     }
 }

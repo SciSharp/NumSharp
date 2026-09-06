@@ -34,19 +34,28 @@ namespace NeuralNetwork.NumSharp.MnistMlp
         public SoftmaxCrossEntropy() : base("softmax_crossentropy") { }
 
         /// <summary>
-        /// Computes softmax(logits) row-wise, then cross-entropy against labels.
-        /// Returns a scalar NDArray containing the mean-per-sample loss.
-        /// Caches the softmax output for reuse in Backward.
+        /// Computes the cross-entropy directly in LOG space (log-softmax via
+        /// log-sum-exp), then caches the softmax for Backward:
+        ///
+        ///   shifted   = logits - rowmax
+        ///   logProbs  = shifted - log(sum(exp(shifted)))
+        ///   L         = -mean(sum(labels * logProbs, axis=1))
+        ///
+        /// The log-space form matches Keras CategoricalCrossentropy
+        /// (from_logits=True) exactly even for extreme logits: a clipped
+        /// softmax-then-log caps the loss at -log(eps) ≈ 16.1, where the true
+        /// value for e.g. logits (-1000, 0) is 1000 — pinned by the Keras
+        /// edge-case oracle (tests/corpus/keras_edge_oracle.json).
         /// </summary>
         public override NDArray Forward(NDArray preds, NDArray labels)
         {
-            NDArray softmax = ComputeSoftmax(preds);
-            _softmaxCache = softmax;
+            NDArray rowMax = preds.max(axis: 1, keepdims: true);
+            NDArray shifted = preds - rowMax;
+            NDArray exps = np.exp(shifted);
+            NDArray rowSum = np.sum(exps, axis: 1, keepdims: true);
+            _softmaxCache = exps / rowSum;
 
-            // Loss = -mean(sum(labels * log(softmax), axis=1))
-            // Clip softmax into [eps, 1] before log to avoid -infinity.
-            NDArray clipped = np.maximum(softmax, (NDArray)Epsilon);
-            NDArray logProbs = np.log(clipped);
+            NDArray logProbs = shifted - np.log(rowSum);             // log-softmax
             NDArray perSample = np.sum(labels * logProbs, axis: 1);  // (batch,)
             return -np.mean(perSample);
         }
@@ -69,21 +78,6 @@ namespace NeuralNetwork.NumSharp.MnistMlp
         // =================================================================
         // Helpers
         // =================================================================
-
-        /// <summary>
-        /// Row-wise numerically stable softmax: subtract per-row max, exponentiate,
-        /// divide by per-row sum. Produces float32 output matching the input dtype.
-        /// </summary>
-        private static NDArray ComputeSoftmax(NDArray logits)
-        {
-            // max(logits, axis=1, keepdims=true) → shape (batch, 1). Subtracting
-            // broadcasts across the class dim.
-            NDArray rowMax = logits.max(axis: 1, keepdims: true);
-            NDArray shifted = logits - rowMax;
-            NDArray exps = np.exp(shifted);
-            NDArray rowSum = np.sum(exps, axis: 1, keepdims: true);
-            return exps / rowSum;
-        }
 
         /// <summary>
         /// Builds a (N, numClasses) one-hot float32 matrix from a (N,) integer

@@ -26,7 +26,7 @@ namespace NumSharp.Benchmark
     //|   ModernIs |   100.975 us |  5.2199 us |  3.4526 us |    95.176 us |   105.901 us |   102.073 us |  35.59 |    1.84 |
     //| DirectCast |     7.990 us |  0.1783 us |  0.1061 us |     7.883 us |     8.235 us |     7.974 us |   2.83 |    0.17 |
     //|   Baseline |     2.837 us |  0.2768 us |  0.1647 us |     2.638 us |     3.159 us |     2.790 us |   1.00 |    0.00 |
-    [SimpleJob(launchCount: 1, warmupCount: 3, targetCount: 10)]
+    [SimpleJob(launchCount: 1, warmupCount: 3, iterationCount: 10)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class Cast

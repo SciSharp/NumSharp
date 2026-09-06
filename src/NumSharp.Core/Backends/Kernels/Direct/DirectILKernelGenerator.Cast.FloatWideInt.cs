@@ -38,6 +38,7 @@ namespace NumSharp.Backends.Kernels
             => (srcType == NPTypeCode.Single && dstType == NPTypeCode.Int32) ? CastSingleToInt32Strided : null;
 
         // f32 -> i32: ss==1 contig cvtt, ss!=1 VPGATHERDD+cvtt, scalar Converts tail.
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe void CastSingleToInt32Strided(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
         {

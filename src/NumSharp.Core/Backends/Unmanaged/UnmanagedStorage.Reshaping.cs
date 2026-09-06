@@ -101,11 +101,16 @@ namespace NumSharp.Backends
             // where logical size (e.g., 5x5=25) exceeds physical buffer (e.g., 5 elements).
             // This ensures ArraySlice bounds checks use the actual buffer capacity.
             Count = _shape.bufferSize;
+            // The incoming shape is usually freshly built (OWNDATA bit clear) — reconcile with this
+            // storage's actual ownership so an in-place reshape/setflags does not strip an owner's bit
+            // (NumPy: in-place shape/flag mutation never changes OWNDATA).
+            OnReshaped();
         }
 
         protected internal void ExpandDimension(int axis)
         {
             _shape = _shape.ExpandDimension(axis);
+            OnReshaped(); // rebuilt shape — keep OWNDATA mirroring this storage's ownership
         }
 
         #endregion

@@ -28,7 +28,7 @@ NumPy is the source of truth and if NumPy does A, we do A but in NumSharp's C# w
     - Do not implement struct kernel.
 ## 2. Implement np method/s
 - Implement np methods to the fullest, integrating into our existing infrastructure and patterns.
-- Our implementation might differ from NumPy's because NumPy uses C++ macros while we generate IL methods during runtime to achieve peak performance and cpu acceleration. But any input given to NumPy will produce same output with complete parity.
+- Our implementation might differ from NumPy's because NumPy uses C++ macros while we generate IL methods during runtime to achieve peak performance and cpu acceleration on 1k, 100k, 1m/10m length (1m on large dtypes). But any input given to NumPy will produce same output with complete parity.
 - Our implementation must provide same parameters as the NumPy function and support all dtypes NumSharp currently supports.
 - Do not create a function per dtype/NPTypeCode or if-else/switch-case per dtype/NPTypeCode to call a specialized path.
 - Do not use struct kernel pattern.
@@ -40,6 +40,8 @@ NumPy is the source of truth and if NumPy does A, we do A but in NumSharp's C# w
 "dotnet run <<'EOFDOTNET'" and "python <<'EOFPYTHON'" both can be used to asserting, validating, comparing, test and confirm how behaviors, edge cases, parameter variations, happyflow, unhappyflow are acting based on given input/s.
 These cli functions allow rapid development and experimentation.
 Specifying '#:project' and other '#' with paths must be absolute path.
+
+> **Large or quote-dense scripts:** do NOT inline them in a `<<'EOF'` heredoc — the Bash tool wraps every command in `eval '…'` and re-escapes each `'`, so a quote-dense heredoc stops balancing at scale and fails with `unexpected EOF while looking for matching '`. Write the script to a file in the session scratchpad directory (the path given in the system prompt — never the repo cwd, never `/tmp`; a bare `probe.cs` lands in the repo tree) and redirect it in: `dotnet run -c Release - < <scratchpad>/probe.cs` or `python <scratchpad>/probe.py`. Short snippets can stay inline. (Timing/benchmark scripts are file-based anyway — the `benchmark` skill mandates `dotnet run -c Release - < script.cs` with a fresh filename per rebuild.)
 
 ### Benchmarking
 Use "dotnet run <<'EOFDOTNET'" and "python <<'EOFPYTHON'" to produce professional benchmarks.

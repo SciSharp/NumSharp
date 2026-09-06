@@ -1,6 +1,6 @@
 using System;
+using System.Collections.Concurrent;
 using System.Reflection.Emit;
-using System.Threading;
 
 // =============================================================================
 // DirectILKernelGenerator.Place.cs — IL kernel for np.place
@@ -40,31 +40,30 @@ namespace NumSharp.Backends.Kernels
 
     public static partial class DirectILKernelGenerator
     {
-        private static PlaceKernel _placeKernel;
+        private static readonly ConcurrentDictionary<int, PlaceKernel> _placeKernels = new();
 
         /// <summary>
-        /// IL-emitted place kernel (singleton — same kernel handles any dtype
-        /// via the <c>elemBytes</c> runtime argument). Returns <c>null</c> only
-        /// when <see cref="Enabled"/> is false.
+        /// IL-emitted place kernel, generated once per copy-width (<paramref name="copyKind"/> — the
+        /// <see cref="CopyKindFor"/> of the dtype itemsize; always 1/2/4/8/16 for real dtypes, so the
+        /// masked write is a typed MOV rather than a per-element cpblk).
+        /// Returns <c>null</c> only when <see cref="Enabled"/> is false.
         /// </summary>
-        public static PlaceKernel GetPlaceKernel()
+        public static PlaceKernel GetPlaceKernel(int copyKind)
         {
             if (!Enabled)
                 return null;
 
-            var cached = _placeKernel;
-            if (cached != null)
+            if (_placeKernels.TryGetValue(copyKind, out var cached))
                 return cached;
 
             try
             {
-                var k = GeneratePlaceKernelIL();
-                Interlocked.CompareExchange(ref _placeKernel, k, null);
-                return _placeKernel;
+                var k = GeneratePlaceKernelIL(copyKind);
+                return _placeKernels.GetOrAdd(copyKind, k);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetPlaceKernel: {ex.GetType().Name}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetPlaceKernel({copyKind}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -86,10 +85,10 @@ namespace NumSharp.Backends.Kernels
         /// }
         /// </code>
         /// </summary>
-        private static PlaceKernel GeneratePlaceKernelIL()
+        private static PlaceKernel GeneratePlaceKernelIL(int copyKind)
         {
             var dm = new DynamicMethod(
-                name: "IL_Place",
+                name: $"IL_Place_c{copyKind}",
                 returnType: typeof(void),
                 parameterTypes: new[]
                 {
@@ -133,11 +132,9 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldind_U1);
             il.Emit(OpCodes.Brfalse, lblSkip);
 
-            // srcPtr = values + (j % valuesCount) * elemBytes
+            // srcPtr = values + j * elemBytes   (j is the wrapping values cursor — no per-element modulo)
             il.Emit(OpCodes.Ldarg_3);
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Ldarg, 4);
-            il.Emit(OpCodes.Rem);
             il.Emit(OpCodes.Ldarg, 5);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Conv_I);
@@ -153,18 +150,21 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locDstPtr);
 
-            // cpblk(dstPtr, srcPtr, elemBytes)
-            il.Emit(OpCodes.Ldloc, locDstPtr);
-            il.Emit(OpCodes.Ldloc, locSrcPtr);
-            il.Emit(OpCodes.Ldarg, 5);
-            il.Emit(OpCodes.Conv_U4);
-            il.Emit(OpCodes.Cpblk);
+            // Element copy: typed MOV(s) for the dtype width (copyKind), else cpblk with elemBytes (arg 5).
+            EmitElementCopy(il, copyKind, locDstPtr, locSrcPtr, () => il.Emit(OpCodes.Ldarg, 5));
 
-            // j++
+            // j++; if (j == valuesCount) j = 0;   (wrap the values cursor — the NumPy iterator model)
+            var lblJOk = il.DefineLabel();
             il.Emit(OpCodes.Ldloc, locJ);
             il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locJ);
+            il.Emit(OpCodes.Ldloc, locJ);
+            il.Emit(OpCodes.Ldarg, 4);           // valuesCount
+            il.Emit(OpCodes.Blt, lblJOk);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locJ);
+            il.MarkLabel(lblJOk);
 
             il.MarkLabel(lblSkip);
 

@@ -28,13 +28,18 @@ namespace NumSharp
         /// <param name="keepdims">If True, the reduced axes are left in the result as dimensions with size one.</param>
         /// <returns>A new boolean ndarray is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
+        [NDScoped] // boundary for the engine reduction tree (reshape/chained-axis temps); the reduced result is yielded
         public static NDArray<bool> all(NDArray nd, int axis, bool keepdims = false)
         {
             if (nd is null)
                 throw new ArgumentNullException(nameof(nd));
 
             if (nd.TensorEngine is DefaultEngine defaultEngine)
-                return defaultEngine.All(nd, axis, keepdims);
+            {
+                var reduced = defaultEngine.All(nd, axis, keepdims);
+                reduced.MarkReductionScalar(); // 1-D input reduced to 0-d -> numpy scalar (read-only)
+                return reduced;
+            }
 
             var result = nd.TensorEngine.All(nd, axis);
             if (keepdims && nd.ndim > 0)
@@ -58,6 +63,7 @@ namespace NumSharp
         /// <param name="keepdims">If True, the reduced axes are left in the result as dimensions with size one.</param>
         /// <returns>A new boolean ndarray is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
+        [NDScoped] // boundary for the engine multi-axis tree (axis-run reshape view, chained single-axis intermediates)
         public static NDArray<bool> all(NDArray nd, int[] axis, bool keepdims = false)
         {
             if (nd is null)
@@ -66,7 +72,11 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(axis));
 
             if (nd.TensorEngine is DefaultEngine defaultEngine)
-                return defaultEngine.All(nd, axis, keepdims);
+            {
+                var reduced = defaultEngine.All(nd, axis, keepdims);
+                reduced.MarkReductionScalar(); // every axis reduced away -> numpy scalar (read-only)
+                return reduced;
+            }
 
             // Fallback for non-default engines: chain single-axis reductions.
             if (axis.Length == 0)
@@ -129,13 +139,16 @@ namespace NumSharp
         ///     and contribute the identity value (True for <c>all</c>). Pass <c>null</c> for no mask.</param>
         /// <returns>The reduced array, or <paramref name="out"/> when supplied.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
+        [NDScoped] // reclaims the where-mask effective array and the reduced temp on the out= path
         public static NDArray all(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
             NDArray<bool> reduced = ReduceAllWithWhere(a, axis, keepdims, @where);
-            return @out is null ? reduced : WriteToOut(reduced, @out);
+            // A fresh 0-d result is a numpy SCALAR (np.bool_) at the boundary: read-only
+            // (PyArray_Return semantics); out= returns the writeable out array itself.
+            return @out is null ? reduced.MarkReductionScalar() : WriteToOut(reduced, @out);
         }
 
         /// <summary>
@@ -148,6 +161,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask, broadcastable against <paramref name="a"/>.</param>
         /// <returns>The reduced array, or <paramref name="out"/> when supplied.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
+        [NDScoped] // reclaims the where-mask effective array and the reduced temp on the out= path
         public static NDArray all(NDArray a, int[] axis, NDArray @out, bool keepdims = false, NDArray @where = null)
         {
             if (a is null)
@@ -175,6 +189,7 @@ namespace NumSharp
         // Builds the effective bool array under a where= mask for `all`:
         //   identity is True, so elements with mask=False contribute True.
         //   effective[i] = !mask[i] | bool(a[i])
+        [NDScopedCovered] // only callers: the [NDScoped] out=/where= np.all overloads (the !mask and ToBool temps are scope-reclaimed)
         private static NDArray ApplyWhereForAll(NDArray a, NDArray @where)
         {
             NDArray<bool> maskBool = ToBool(@where);
@@ -184,6 +199,7 @@ namespace NumSharp
         }
 
         // For np.any: effective[i] = mask[i] & bool(a[i]) (identity is False).
+        [NDScopedCovered] // only callers: the [NDScoped] out=/where= np.any overloads (the ToBool temps are scope-reclaimed)
         internal static NDArray ApplyWhereForAny(NDArray a, NDArray @where)
         {
             NDArray<bool> maskBool = ToBool(@where);

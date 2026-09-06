@@ -16,7 +16,10 @@ env:
   # XML doc warnings (CS15xx, CS17xx): ~7,200 of ~8,700 total — malformed/missing doc comments
   # CS8981: 'np' only contains lowercase chars — intentional for NumPy API compat
   # NU5048: PackageIconUrl deprecated — cosmetic NuGet warning
-  DOTNET_NOWARN: CS1570%3BCS1571%3BCS1572%3BCS1573%3BCS1574%3BCS1587%3BCS1591%3BCS1711%3BCS1734%3BCS8981%3BNU5048
+  # NU5100/NU5128 are BY-DESIGN for the tools-only NumSharp.Build package (assemblies under
+  # tools/, no lib/ per TFM) — a global -p:NoWarn OVERRIDES the csproj's own NoWarn accumulation,
+  # so they must ride here like NU5048 does.
+  DOTNET_NOWARN: CS1570%3BCS1571%3BCS1572%3BCS1573%3BCS1574%3BCS1587%3BCS1591%3BCS1711%3BCS1734%3BCS8981%3BNU5048%3BNU5100%3BNU5128
 
 jobs:
   test:
@@ -26,8 +29,6 @@ jobs:
         os: [ windows-latest, ubuntu-latest, macos-latest ]
 
     runs-on: ${{ matrix.os }}
-    # Ubuntu has intermittent OOM issues - allow failure while investigating
-    continue-on-error: ${{ matrix.os == 'ubuntu-latest' }}
 
     steps:
     - uses: actions/checkout@v4
@@ -38,10 +39,22 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
-        dotnet-quality: 'preview'
 
     - name: Build
-      run: dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+      run: dotnet build test/NumSharp.Tests/NumSharp.Tests.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    # The differential-fuzz ORACLE is its own project (isolated so the optional OpenBLAS engine can be
+    # managed apart from the managed-kernel tiers). It carries the FuzzMatrix gate plus the host-pinned
+    # matmul_parity / BlasBackendDelta tiers, so it must build and test on the release-blocking path.
+    - name: Build Oracle (differential-fuzz gate)
+      run: dotnet build test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    # The analyzer gate: NumSharp.Tests.Build.Analyzer runs the NDW012 leak analyzer + the NDW016/NDW017
+    # type-level ownership analyzer + the [NDScoped]-target gate (NDW002/003/005/006/009/010/011/015)
+    # in-process over the NumSharp.Tests.Build.Analyzer.Fixtures files and asserts the diagnostics land on
+    # exactly the tagged lines.
+    - name: Build Analyzer tests
+      run: dotnet build test/NumSharp.Tests.Build.Analyzer/NumSharp.Tests.Build.Analyzer.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # Test filtering:
     #   - OpenBugs: excluded (known-failing bug reproductions)
@@ -62,7 +75,7 @@ jobs:
         if [[ "$RUNNER_OS" != "Windows" ]]; then
           FILTER="$FILTER&TestCategory!=WindowsOnly"
         fi
-        dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+        dotnet test test/NumSharp.Tests/NumSharp.Tests.csproj \
           --configuration Release --no-build --framework net8.0 \
           --filter "$FILTER" --logger "trx"
 
@@ -77,9 +90,55 @@ jobs:
         if [[ "$RUNNER_OS" != "Windows" ]]; then
           FILTER="$FILTER&TestCategory!=WindowsOnly"
         fi
-        dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+        dotnet test test/NumSharp.Tests/NumSharp.Tests.csproj \
           --configuration Release --no-build --framework net10.0 \
           --filter "$FILTER" --logger "trx"
+
+    # The differential-fuzz gate (FuzzMatrix) now lives in NumSharp.Tests.Oracle. Same category
+    # filter — the Oracle project carries no OpenBugs/HighMemory tiers, but the filter is harmless and
+    # keeps the two suites symmetric.
+    - name: Test Oracle (net8.0)
+      shell: bash
+      timeout-minutes: 10
+      run: |
+        FILTER="TestCategory!=OpenBugs&TestCategory!=HighMemory"
+        if [[ "$RUNNER_OS" != "Windows" ]]; then
+          FILTER="$FILTER&TestCategory!=WindowsOnly"
+        fi
+        dotnet test test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj \
+          --configuration Release --no-build --framework net8.0 \
+          --filter "$FILTER" --logger "trx"
+
+    - name: Test Oracle (net10.0)
+      shell: bash
+      timeout-minutes: 10
+      run: |
+        FILTER="TestCategory!=OpenBugs&TestCategory!=HighMemory"
+        if [[ "$RUNNER_OS" != "Windows" ]]; then
+          FILTER="$FILTER&TestCategory!=WindowsOnly"
+        fi
+        dotnet test test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj \
+          --configuration Release --no-build --framework net10.0 \
+          --filter "$FILTER" --logger "trx"
+
+    # The analyzer gate. AnalyzerBuild is excluded: that one test spawns `dotnet build` to exercise the
+    # MSBuild NDW013 warning (also covered by tools/verify_build_package.sh step 17); the in-process
+    # Roslyn-analyzer assertions here are the cross-platform gate.
+    - name: Test Analyzer (net8.0)
+      shell: bash
+      timeout-minutes: 10
+      run: |
+        dotnet test test/NumSharp.Tests.Build.Analyzer/NumSharp.Tests.Build.Analyzer.csproj \
+          --configuration Release --no-build --framework net8.0 \
+          --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=AnalyzerBuild" --logger "trx"
+
+    - name: Test Analyzer (net10.0)
+      shell: bash
+      timeout-minutes: 10
+      run: |
+        dotnet test test/NumSharp.Tests.Build.Analyzer/NumSharp.Tests.Build.Analyzer.csproj \
+          --configuration Release --no-build --framework net10.0 \
+          --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=AnalyzerBuild" --logger "trx"
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
@@ -89,8 +148,254 @@ jobs:
         path: ${{ github.workspace }}/**/TestResults/**/*.trx
         retention-days: 5
 
+  # Strong-naming gate, on EVERY push and PR.
+  #
+  # The identical check also runs in build-nuget below, but that job only exists on a tag push — and
+  # a release-only gate is how the original defect survived six years: signing was configured in a
+  # `Publish` configuration nothing built, so nothing ever evaluated it until someone looked at a
+  # shipped DLL. Packing here costs ~1 min and means a regression is caught by the PR that causes it
+  # rather than on release day, when the fix is a re-tag.
+  #
+  # This packs a THROWAWAY version into a scratch directory; it publishes nothing.
+  verify-signing:
+    name: Verify strong naming
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+
+    # The key is committed and marked `binary` in .gitattributes (without which `* text=auto eol=lf`
+    # would rewrite CRLF bytes inside it and corrupt the key). Assert both facts before building, so
+    # a checkout/attribute problem reports as itself instead of as a confusing signing failure.
+    - name: Key is present and intact
+      run: |
+        test -f Open.snk || { echo "::error::Open.snk missing from checkout — signing cannot work."; exit 1; }
+        SIZE=$(stat -c%s Open.snk)
+        SHA=$(sha256sum Open.snk | cut -d' ' -f1)
+        echo "Open.snk: $SIZE bytes, sha256 $SHA"
+        [ "$SIZE" = "596" ] || { echo "::error::Open.snk is $SIZE bytes, expected 596 — likely line-ending corruption; check the '*.snk binary' rule in .gitattributes."; exit 1; }
+        [ "$SHA" = "b897629e0b20090c9219ac80392c037fa4cfcc2bdc21d3c45d9bf74b8df0f671" ] || { echo "::error::Open.snk content changed."; exit 1; }
+
+    - name: Pack (throwaway) and verify every shipped assembly is signed
+      run: |
+        mkdir -p artifacts/signing-check
+        for proj in src/NumSharp.Core/NumSharp.Core.csproj \
+                    src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
+                    src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
+                    src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj \
+                    tools/NumSharp.Build/NumSharp.Build.csproj; do
+          # Tolerate absence: the interop packages do not exist on every branch.
+          [ -f "$proj" ] || { echo "skip (absent): $proj"; continue; }
+          echo "::group::pack $proj"
+          # A plain restore→build→pack. Nothing in the repo packs on build any more: the old
+          # GeneratePackageOnBuild=true in every csproj re-packed on every dotnet build/test (for
+          # the OpenBLAS package that re-zipped ~186 MB of runtimes each time) and, combined with
+          # `dotnet pack` + multi-targeting, drew NU5026.
+          dotnet pack "$proj" --configuration Release --output artifacts/signing-check \
+            -p:NoWarn=${{ env.DOTNET_NOWARN }}
+          echo "::endgroup::"
+        done
+        dotnet run .github/scripts/verify_strong_name.cs -- artifacts/signing-check
+
+  # Python.NET interop. Kept as its OWN job rather than extra steps on `test`:
+  # the embedded-CPython setup must not slow down or destabilise the main gate,
+  # and a red here is immediately attributable to interop.
+  #
+  # Building is itself a gate — this is the ONLY place CI compiles
+  # src/NumSharp.Interop.pythonnet, whose sources reach into NumSharp.Core
+  # internals and would otherwise break unnoticed.
+  #
+  # The suite needs a Python that can host pythonnet AND import numpy. Discovery
+  # is left to PythonSession's own probe (the shipped code path, so CI exercises
+  # what users hit); when it finds nothing, every interop test reports
+  # Inconclusive — a runner without a usable libpython goes SKIPPED, never red.
+  # The "Report Python host" step below prints exactly the values that probe
+  # reads, so a silent skip is diagnosable straight from the log.
+  interop-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-latest, macos-latest ]
+
+    runs-on: ${{ matrix.os }}
+
+    # This job installs Python + numpy below, so the engine MUST start here. Requiring the engine is
+    # now PythonSession's DEFAULT (an absent engine hard-fails instead of skipping), so this line is
+    # explicit belt-and-suspenders — it also guards against an ambient NUMSHARP_PYTHONNET_REQUIRE_ENGINE=0
+    # from the runner environment silently re-enabling the green-by-skipping failure mode.
+    env:
+      NUMSHARP_PYTHONNET_REQUIRE_ENGINE: '1'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+
+    # 3.12 sits inside pythonnet 3.0.5's supported range (PythonSession rejects
+    # anything outside 3.7-3.13) and has numpy 2.x wheels on all three OSes.
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    # The interop suite's byte-exact parity tests compare NumSharp's OpenBLAS-backed LAPACK/BLAS
+    # against THIS live numpy, so both MUST call the identical binary. Two things pin that:
+    #
+    #   (1) VERSION — numpy==2.4.2. NumSharp bundles scipy-openblas 0.3.31.22.0, the exact build
+    #       numpy 2.4.2 pins (numpy.libs is byte-identical). A newer numpy (e.g. 2.5.x) ships a
+    #       DIFFERENT openblas build, so its results diverge ~1 ULP and every *_ByteExact test reds.
+    #       Keep in lockstep with tools/openblas-manifest.json's numpy_version.
+    #
+    #   (2) BLAS FLAVOUR on macOS — numpy 2.4.2 ships TWO Apple-silicon wheels: macosx_14_0_arm64
+    #       links Apple **Accelerate**, macosx_11_0_arm64 bundles **scipy-openblas**. On a macOS 14+
+    #       runner (ours is macos-26) pip prefers the newer tag, so a plain `pip install numpy` links
+    #       Accelerate — a WHOLLY DIFFERENT BLAS than NumSharp's bundle, which no version pin or
+    #       OpenBLAS bump can reconcile (Accelerate is not OpenBLAS). Force the OpenBLAS wheel so both
+    #       sides call scipy-openblas 0.3.31.22.0, exactly as Windows/Linux already do. (Windows and
+    #       Linux numpy wheels are OpenBLAS by default, so they just take the version pin.)
+    - name: Install numpy
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        if [ "$RUNNER_OS" = "macOS" ] && [ "$(uname -m)" = "arm64" ]; then
+          python -m pip download --only-binary=:all: --platform macosx_11_0_arm64 \
+            --python-version 312 --implementation cp --abi cp312 --no-deps \
+            -d "$RUNNER_TEMP/np" "numpy==2.4.2"
+          python -m pip install "$RUNNER_TEMP"/np/numpy-*.whl
+        else
+          python -m pip install "numpy==2.4.2"
+        fi
+        python -c "import numpy; print('numpy', numpy.__version__); numpy.show_config()"
+
+    # Prints precisely what PythonSession.Probe consumes, so if the interop tests
+    # report Inconclusive the reason is visible without reproducing locally.
+    - name: Report Python host
+      shell: bash
+      run: |
+        python -c "import sys, sysconfig, numpy; \
+        print('python      ', sys.version.replace('\n', ' ')); \
+        print('numpy       ', numpy.__version__); \
+        print('base_prefix ', sys.base_prefix); \
+        print('INSTSONAME  ', sysconfig.get_config_var('INSTSONAME')); \
+        print('LIBDIR      ', sysconfig.get_config_var('LIBDIR'))"
+
+    # The bundled OpenBLAS binaries are gitignored, so a clean checkout has none. This suite runs
+    # with OpenBLAS as its DEFAULT backend (PythonSession.Start calls OpenBlasEngine.TryEnable), and
+    # the Backend_IsOpenBlas* tests hard-assert OpenBlasEngine.Enabled. Stage the pinned per-RID
+    # assets before the build so the current RID's native library is copied into the test output.
+    # (fetch_openblas.py is stdlib-only; Python is already set up above.)
+    - name: Stage OpenBLAS native assets
+      run: python src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py
+
+    - name: Build
+      run: dotnet build test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    # The current-RID OpenBLAS native flows to the test output as CopyToOutputDirectory content
+    # across the ProjectReference — but on a clean runner it can be missing (RID-specific runtime
+    # assets don't always flow to a portable, no-RID build). Copy the staged runtimes into the test
+    # output as a self-heal, and log both what landed AND the .so's dynamic deps, so a genuine
+    # load failure (a missing libgfortran/libquadmath) is visible rather than a silent Enabled=false.
+    - name: Ensure + diagnose OpenBLAS native in test output
+      shell: bash
+      run: |
+        for tfm in net8.0 net10.0; do
+          out="test/NumSharp.Tests.Interop/bin/Release/$tfm"
+          mkdir -p "$out/runtimes"
+          cp -r src/NumSharp.Interop.OpenBLAS/runtimes/* "$out/runtimes/" 2>/dev/null || true
+          echo "=== $out native assets ==="
+          find "$out" -path "*native*" \( -name "*openblas*" -o -name "*scipy*" \) 2>/dev/null || echo "  (none — content did not flow)"
+        done
+        so=$(find src/NumSharp.Interop.OpenBLAS/runtimes -name "*openblas*.so" 2>/dev/null | head -1)
+        if [ -n "$so" ] && command -v ldd >/dev/null 2>&1; then
+          echo "=== ldd $so ==="; ldd "$so" 2>&1 | grep -i "not found" || echo "  (all deps resolved)"
+        fi
+
+    # No category filter: the interop suite carries no OpenBugs/HighMemory tests,
+    # and every test already self-asserts a LiveExports/LiveImports leak baseline.
+    - name: Test (net8.0)
+      timeout-minutes: 10
+      run: |
+        dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
+          --configuration Release --no-build --framework net8.0 --logger "trx"
+      shell: bash
+
+    - name: Test (net10.0)
+      timeout-minutes: 10
+      run: |
+        dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
+          --configuration Release --no-build --framework net10.0 --logger "trx"
+      shell: bash
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: interop-test-results-${{ matrix.os }}
+        path: ${{ github.workspace }}/**/TestResults/**/*.trx
+        retention-days: 5
+
+  # The nupkg-CONSUMER gate for NumSharp.Interop.OpenBLAS, on all three OSes.
+  #
+  # Every other job consumes the package by ProjectReference, where a Content item copies files
+  # a PackageReference restore never sees — which is exactly how the macOS package shipped a
+  # dylib whose vendored Fortran runtime sat in a folder NuGet silently drops ("Library not
+  # loaded" on every Mac, green CI). This job packs the REAL nupkg into a local feed, restores
+  # it into a scratch consumer by PackageReference, and proves the bundled OpenBLAS LOADS in
+  # every layout a consumer can end up with: the portable runtimes/ tree, a read-only install,
+  # and a RID-specific (flattened) publish. macOS is the one that matters; Linux and Windows
+  # run the same script so a layout regression on any RID is caught by the PR that causes it.
+  package-consumer-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-latest, macos-latest ]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+
+    # fetch_openblas.py (stdlib-only) stages the pinned per-RID assets the script packs.
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Pack, restore by PackageReference, load in every layout
+      shell: bash
+      run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_package_consumer.sh
+
+    # The build-time version-override gate (15 steps; PyPI once, then the per-user cache). It
+    # never ran in CI before; it belongs here because the override task co-extracts the vendored
+    # Fortran runtime into its cache entry and stages it beside the override — a Linux/macOS-only
+    # branch a Windows developer box cannot exercise (the Windows DLL is self-contained).
+    - name: Build-time version override, end to end
+      shell: bash
+      run: bash src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
+
   validate-release:
-    needs: test
+    # Interop now ships as a package, so a broken interop must block the release — and so must a
+    # package that restores but cannot load its own bundled binary.
+    needs: [test, interop-test, package-consumer-smoke]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     outputs:
@@ -133,39 +438,96 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
-        dotnet-quality: 'preview'
 
+    - name: Setup Python (for OpenBLAS native-asset staging)
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    # NumSharp.Interop.OpenBLAS bundles the prebuilt OpenBLAS binaries NumPy pins as per-RID runtime
+    # assets. They are gitignored, so a clean release checkout has none — fetch_openblas.py downloads
+    # all 8 RIDs from PyPI and verifies two sha256s each against the checked-in manifest (pure stdlib,
+    # no pip needed). RequireOpenBlasAssets=true at build/pack (below) then makes a missing asset a
+    # hard error, so the package can never publish as an empty managed shell.
+    - name: Stage OpenBLAS native assets
+      run: python src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py
+
+    # ONE version property. The repo derives every other number from it (Directory.Build.props
+    # VersionPrefix + the SDK's GenerateAssemblyInfo/NuGet pack targets): PackageVersion = Version,
+    # AssemblyVersion = FileVersion = Version minus the pre-release tag (0.70.0-rc.1 → 0.70.0.0),
+    # InformationalVersion = Version+<commit>. Passing AssemblyVersion / FileVersion / PackageVersion
+    # separately, as this job once did, only created a second place for them to disagree.
+    #
+    # SourceRevisionId is the FULL commit SHA. The SDK's built-in SourceLink derives exactly that
+    # from git, and NuGet copies it verbatim into the nuspec <repository commit="…"> (which
+    # nuget.org links to and SourceLink resolves sources through) — a 7-char abbreviation here
+    # would have overridden a correct value with a short one. ContinuousIntegrationBuild=true maps
+    # the pdb source paths onto the deterministic /_/ root; release binaries ONLY, because a test
+    # locates repo files through [CallerFilePath] and needs real paths in the test jobs.
     - name: Get version info
       id: version
       shell: bash
       run: |
         VERSION="${GITHUB_REF#refs/tags/v}"
-        ASSEMBLY_VERSION="${VERSION%%-*}"
-        COMMIT_SHA="${GITHUB_SHA:0:7}"
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-        echo "ASSEMBLY_VERSION=$ASSEMBLY_VERSION" >> $GITHUB_OUTPUT
-        echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
-        echo "Building version $VERSION (assembly: $ASSEMBLY_VERSION) +$COMMIT_SHA"
+        echo "Building version $VERSION @ $GITHUB_SHA"
 
     - name: Build
       run: |
+        # -t:Rebuild (NOT incremental): every shipping project now emits XML docs
+        # (GenerateDocumentationFile), and the Pack steps below run --no-build. An incremental
+        # build can declare a stale target-framework up-to-date and skip CoreCompile, leaving no
+        # .xml on disk — pack then fails NU5026, or (worse) packs stale output. Rebuild forces a
+        # clean compile of every TFM so --no-build always packs a complete, current tree. This is
+        # the repo convention for anything that gets packed (see .claude/CLAUDE.md / OpenBLAS design).
         dotnet build src/NumSharp.Core/NumSharp.Core.csproj \
           --configuration Release \
+          -t:Rebuild \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
-          -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
         dotnet build src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
           --configuration Release \
+          -t:Rebuild \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
-          -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
+
+        # Interop packs its NumSharp.Core ProjectReference as a NuGet dependency
+        # on "NumSharp" $(Version), so the same -p:Version keeps the two in lockstep
+        # (the Directory.Build.props VersionPrefix is only the local-dev default).
+        dotnet build src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
+          --configuration Release \
+          -t:Rebuild \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
+
+        # OpenBLAS: native assets were staged above. Whether they are present is checked at PACK
+        # time (RequireOpenBlasAssets=true on the Pack step below turns a missing bundle into a
+        # hard error); nothing packs during the build.
+        dotnet build src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj \
+          --configuration Release \
+          -t:Rebuild \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
+
+        # The weaver: a tools-only build-time package (no lib/, no dependencies — see
+        # tools/verify_build_package.sh). Its pack target publishes the tool into tools/,
+        # which under --no-build below stages the outputs this Rebuild produced.
+        dotnet build tools/NumSharp.Build/NumSharp.Build.csproj \
+          --configuration Release \
+          -t:Rebuild \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
     - name: Pack
       run: |
@@ -177,9 +539,8 @@ jobs:
           --output artifacts/nuget \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
         dotnet pack src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
           --configuration Release \
@@ -187,12 +548,46 @@ jobs:
           --output artifacts/nuget \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
-          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
-          -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
+
+        dotnet pack src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
+          --configuration Release \
+          --no-build \
+          --output artifacts/nuget \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
+
+        dotnet pack src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj \
+          --configuration Release \
+          --no-build \
+          --output artifacts/nuget \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:RequireOpenBlasAssets=true \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
+
+        dotnet pack tools/NumSharp.Build/NumSharp.Build.csproj \
+          --configuration Release \
+          --no-build \
+          --output artifacts/nuget \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
 
         echo "Packages built:"
         ls -la artifacts/nuget/
+
+    # Last gate before the artifact leaves the machine. Asserts every managed assembly inside every
+    # packed .nupkg carries NumSharp's public key AND a real signature (not delay-signed), and fails
+    # rather than passing vacuously if pack produced nothing. This is the check whose absence let six
+    # years of releases ship with PublicKeyToken=null.
+    - name: Verify strong naming of packed assemblies
+      run: dotnet run .github/scripts/verify_strong_name.cs -- artifacts/nuget
 
     - name: Upload NuGet Packages
       uses: actions/upload-artifact@v4
@@ -251,6 +646,9 @@ jobs:
           echo '```'
           echo "dotnet add package NumSharp --version ${VERSION}"
           echo "dotnet add package NumSharp.Bitmap --version ${VERSION}"
+          echo "dotnet add package NumSharp.Interop.pythonnet --version ${VERSION}"
+          echo "dotnet add package NumSharp.Interop.OpenBLAS --version ${VERSION}"
+          echo "dotnet add package NumSharp.Build --version ${VERSION}"
           echo '```'
           echo ""
           echo "### Packages"
@@ -259,6 +657,9 @@ jobs:
           echo "|---------|-------|"
           echo "| NumSharp | [![NuGet](https://img.shields.io/nuget/v/NumSharp.svg)](https://www.nuget.org/packages/NumSharp/${VERSION}) |"
           echo "| NumSharp.Bitmap | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Bitmap.svg)](https://www.nuget.org/packages/NumSharp.Bitmap/${VERSION}) |"
+          echo "| NumSharp.Interop.pythonnet | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.pythonnet.svg)](https://www.nuget.org/packages/NumSharp.Interop.pythonnet/${VERSION}) |"
+          echo "| NumSharp.Interop.OpenBLAS | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.OpenBLAS.svg)](https://www.nuget.org/packages/NumSharp.Interop.OpenBLAS/${VERSION}) |"
+          echo "| NumSharp.Build | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Build.svg)](https://www.nuget.org/packages/NumSharp.Build/${VERSION}) |"
         } > RELEASE_BODY.md
         if [ -f "$NOTES_FILE" ]; then
           { echo ""; echo "---"; echo ""; cat "$NOTES_FILE"; } >> RELEASE_BODY.md
@@ -294,7 +695,9 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: |
+          8.0.x
+          10.0.x
 
     - name: Push to NuGet
       run: |

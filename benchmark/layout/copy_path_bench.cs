@@ -19,7 +19,18 @@ if (dbg?.IsJITOptimizerDisabled ?? false) { Console.Error.WriteLine("FATAL: Debu
 
 double Best(Action f, int it, int wm, int rd)
 {
-    for (int i = 0; i < wm; i++) f();
+    // Warmup; its timed tail (first call excluded — JIT/pool-cold) doubles as a per-call pilot.
+    f();
+    var pw = Stopwatch.StartNew();
+    for (int i = 1; i < Math.Max(2, wm); i++) f();
+    pw.Stop();
+    double perCall = pw.Elapsed.TotalMilliseconds / Math.Max(1, Math.Max(2, wm) - 1);
+    // Min-time policy: a call >20 ms/call runs EXACTLY 100 times (min over 100); everything else
+    // batches ~1 ms windows and accumulates enough of them to span ~200 ms total (time-bound, not a
+    // fixed round count — the caller's it/rd hints are superseded).
+    bool slow = perCall > 20.0;
+    it = slow ? 1 : Math.Clamp((int)Math.Round(1.0 / Math.Max(perCall, 1e-6)), 1, 1_000_000);
+    rd = slow ? 100 : Math.Max(2, (int)Math.Ceiling(200.0 / Math.Max(it * perCall, 1e-9)));
     double b = 1e9;
     for (int r = 0; r < rd; r++) { var sw = Stopwatch.StartNew(); for (int i = 0; i < it; i++) f(); b = Math.Min(b, sw.Elapsed.TotalMilliseconds / it); }
     return b;

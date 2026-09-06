@@ -1,188 +1,133 @@
-﻿//using System.Linq;
-//using BenchmarkDotNet.Attributes;
-//using NumSharp.Backends.Unmanaged;
+using System.Runtime.CompilerServices;
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Configs;
+using NumSharp.Backends.Unmanaged;
 
-//namespace NumSharp.Benchmark.Unmanaged
-//{
-//    //|        Method |         Mean |       Error |      StdDev |       Median |           Min |          Max |    Ratio | RatioSD |
-//    //|-------------- |-------------:|------------:|------------:|-------------:|--------------:|-------------:|---------:|--------:|
-//    //|        DArray |     3.891 us |   0.2508 us |   0.6992 us |     3.900 us |     2.5000 us |     6.000 us |     2.96 |    0.78 |
-//    //|   DArrayLarge | 2,942.060 us | 106.4932 us | 303.8311 us | 2,820.150 us | 2,616.8000 us | 3,954.100 us | 2,231.85 |  460.13 |
-//    //|   DirectLarge | 3,963.200 us |  30.9955 us |  88.4319 us | 3,944.650 us | 3,836.9000 us | 4,212.300 us | 3,015.53 |  592.78 |
-//    //|        Direct |     1.365 us |   0.0957 us |   0.2685 us |     1.300 us |     0.9000 us |     2.000 us |     1.00 |    0.00 |
-//    //|      NDArray_ |    12.508 us |   0.4499 us |   1.2764 us |    12.500 us |    10.5000 us |    16.500 us |     9.50 |    2.04 |
-//    //| NDArray_Large |   972.432 us |   5.4667 us |  14.9649 us |   967.100 us |   958.7500 us | 1,039.550 us |   743.08 |  134.96 |
-//    [MinColumn, MaxColumn, MeanColumn, MedianColumn]
-//    [SimpleJob(launchCount: 2, warmupCount: 10, targetCount: 50)]
-//    public class DArrayMath
-//    {
-//        private const int iterations = 10;
-//        UnmanagedByteStorage<int> a;
-//        UnmanagedByteStorage<int> b;
-//        UnmanagedByteStorage<int> a_large;
-//        UnmanagedByteStorage<int> b_large;
-//        NDArray nd1;
-//        NDArray nd2;
-//        NDArray nd1_large;
-//        NDArray nd2_large;
-//        int[] arr_a;
-//        int[] arr_b;
-//        int[] arr_a_large;
-//        int[] arr_b_large;
+namespace NumSharp.Benchmark.Unmanaged
+{
+    // Revived 2026-08 (was fully commented out). Compares three implementations of an element-wise int
+    // add across two sizes. The size is a [Params] axis, so BenchmarkDotNet gives each N its OWN
+    // baseline instead of dividing a 100k/500k arm by a 25-element one (the original mixed a 25-element
+    // baseline with 100k/500k "Large" arms — and even labelled 100k and 500k arms both "Large", a
+    // straight unequal-work bug). Each invocation performs `Repeats` adds; OperationsPerInvoke =
+    // Repeats, so the reported Mean is the cost of ONE add.
+    //   * UnmanagedBlockAdd — allocate an UnmanagedMemoryBlock<int> result and add via raw int*.
+    //                         (Replaces the old UnmanagedByteStorage<int> `a + b` arm — that
+    //                          shape-aware storage type with its own operator+ was deleted.)
+    //   * Direct (baseline) — managed int[] result + add loop (returned so BDN consumes it)
+    //   * NDArray_          — NDArray operator+ (returned so BDN consumes it)
+    //
+    // All three arms operate on int32 data of the SAME length N. The NDArray operands are cast to int32
+    // (np.arange is int64) so they are element-for-element comparable with the int[] / block arms —
+    // otherwise the NDArray arm would add 8-byte elements against the others' 4-byte, a size confound.
+    // Inputs are immutable, so setup is [GlobalSetup].
 
-//        [IterationSetup]
-//        public void Setup()
-//        {
-//            nd1 = (NDArray)Enumerable.Range(0, 25).ToArray();
-//            nd2 = (NDArray)Enumerable.Range(0, 25).ToArray();
-//            nd1_large = (NDArray)Enumerable.Range(0, 100000).ToArray();
-//            nd2_large = (NDArray)Enumerable.Range(0, 100000).ToArray();
-//            a = new UnmanagedByteStorage<int>(new Shape(5, 5), 0);
-//            b = new UnmanagedByteStorage<int>(Enumerable.Range(0, 25).ToArray(), new Shape(5, 5));
-//            a_large = new UnmanagedByteStorage<int>(new Shape(100000, 5), 0);
-//            b_large = new UnmanagedByteStorage<int>(new Shape(100000, 5), 0);
-//            arr_a = Enumerable.Range(0, 25).ToArray();
-//            arr_b = Enumerable.Range(0, 25).ToArray();
-//            arr_a_large = Enumerable.Range(0, count: 500000).ToArray();
-//            arr_b_large = Enumerable.Range(0, count: 500000).ToArray();
+    // ── Latest results (net10.0 Release, InProcessEmit Throughput, per-op via OperationsPerInvoke; 2026-08-21).
+    //    Mean = cost of ONE add; Direct is the per-N baseline. At N=25 the scalar int[] loop wins (alloc
+    //    overhead dominates tiny work); at N=100000 the SIMD NDArray add and the raw-block add are ~2x
+    //    FASTER than the naive scalar loop. (Allocated is managed-only, so the NDArray/block arms'
+    //    unmanaged result buffers are invisible — Direct's int[] is fully counted.) ──
+    //   | Method            | N      | Mean         | Ratio | Rank | Allocated |
+    //   |------------------ |------- |-------------:|------:|-----:|----------:|
+    //   | UnmanagedBlockAdd | 25     |    106.89 ns |  7.60 |    2 |      96 B |
+    //   | Direct (baseline) | 25     |     14.07 ns |  1.00 |    1 |     128 B |
+    //   | NDArray_          | 25     |    955.32 ns | 67.92 |    3 |    1365 B |
+    //   | UnmanagedBlockAdd | 100000 | 25,197.75 ns |  0.45 |    1 |     163 B |
+    //   | Direct (baseline) | 100000 | 55,916.63 ns |  1.00 |    3 |  400252 B |
+    //   | NDArray_          | 100000 | 27,706.40 ns |  0.50 |    2 |    1427 B |
+    [Config(typeof(UnmanagedThroughputConfig))]
+    public unsafe class DArrayMath
+    {
+        [Params(25, 100_000)]
+        public int N { get; set; }
 
-//            var _ = UnmanagedByteStorage<int>.TypeCode;
-//        }
+        private const int Repeats = 5;
 
-//        [Benchmark]
-//        public void DArray()
-//        {
-//            UnmanagedByteStorage<int> c;
-//            //for (int i = 0; i < iterations; i++) {
-//            c = a + b;
-//            c = a + b;
-//            c = a + b;
-//            c = a + b;
-//            c = a + b;
-//            //}
-//        }
+        UnmanagedMemoryBlock<int> a;
+        UnmanagedMemoryBlock<int> b;
+        NDArray nd1;
+        NDArray nd2;
+        int[] arr_a;
+        int[] arr_b;
 
-//        [Benchmark]
-//        public void DArrayLarge()
-//        {
-//            UnmanagedByteStorage<int> c;
-//            //for (int i = 0; i < iterations; i++) {
-//            c = a_large + b_large;
-//            c = a_large + b_large;
-//            c = a_large + b_large;
-//            c = a_large + b_large;
-//            c = a_large + b_large;
-//            //}
-//        }
+        [GlobalSetup]
+        public void Setup()
+        {
+            nd1 = np.arange(N).astype(NPTypeCode.Int32);
+            nd2 = np.arange(N).astype(NPTypeCode.Int32);
 
-//        [Benchmark]
-//        public void DirectLarge()
-//        {
-//            //for (int j = 0; j < iterations; j++) {
-//            var len = arr_a_large.Length;
-//            var ret = new int[len];
-//            for (int i = 0; i < len; i++)
-//            {
-//                ret[i] = arr_a_large[i] + arr_b_large[i];
-//            }
+            a = new UnmanagedMemoryBlock<int>(N);
+            b = new UnmanagedMemoryBlock<int>(N);
 
-//            len = arr_a_large.Length;
-//            ret = new int[len];
-//            for (int i = 0; i < len; i++)
-//            {
-//                ret[i] = arr_a_large[i] + arr_b_large[i];
-//            }
+            arr_a = new int[N];
+            arr_b = new int[N];
 
-//            len = arr_a_large.Length;
-//            ret = new int[len];
-//            for (int i = 0; i < len; i++)
-//            {
-//                ret[i] = arr_a_large[i] + arr_b_large[i];
-//            }
+            for (int i = 0; i < N; i++)
+            {
+                a.Address[i] = i;
+                b.Address[i] = 2 * i;
+                arr_a[i] = i;
+                arr_b[i] = 2 * i;
+            }
+        }
 
-//            len = arr_a_large.Length;
-//            ret = new int[len];
-//            for (int i = 0; i < len; i++)
-//            {
-//                ret[i] = arr_a_large[i] + arr_b_large[i];
-//            }
+        [GlobalCleanup]
+        public void Cleanup()
+        {
+            // Untimed correctness guard: a[i]=i, b[i]=2i  =>  sum must be 3i.
+            var ret = new UnmanagedMemoryBlock<int>(a.Count);
+            int* rp = ret.Address, xp = a.Address, yp = b.Address;
+            for (long i = 0; i < a.Count; i++)
+                rp[i] = xp[i] + yp[i];
+            for (long i = 0; i < a.Count; i++)
+                if (rp[i] != 3 * i) throw new System.Exception("add verification failed");
+            ret.Free();
 
-//            len = arr_a_large.Length;
-//            ret = new int[len];
-//            for (int i = 0; i < len; i++)
-//            {
-//                ret[i] = arr_a_large[i] + arr_b_large[i];
-//            }
+            a.Free();
+            b.Free();
+        }
 
-//            // }
-//        }
+        [MethodImpl(OptimizeAndInline)]
+        private static void AddBlocks(UnmanagedMemoryBlock<int> x, UnmanagedMemoryBlock<int> y)
+        {
+            var n = x.Count;
+            var ret = new UnmanagedMemoryBlock<int>(n);
+            int* rp = ret.Address, xp = x.Address, yp = y.Address;
+            for (long i = 0; i < n; i++)
+                rp[i] = xp[i] + yp[i];
+            ret.Free();
+        }
 
-//        [Benchmark(Baseline = true)]
-//        public void Direct()
-//        {
-//            //for (int j = 0; j < iterations; j++) {
-//            var len = arr_a.Length;
-//            var ret = new int[25];
-//            for (int i = 0; i < len; i++)
-//            {
-//                ret[i] = arr_a[i] + arr_b[i];
-//            }
+        [Benchmark(OperationsPerInvoke = Repeats)]
+        public void UnmanagedBlockAdd()
+        {
+            for (int rep = 0; rep < Repeats; rep++)
+                AddBlocks(a, b);
+        }
 
-//            len = arr_a.Length;
-//            ret = new int[25];
-//            for (int i = 0; i < len; i++)
-//            {
-//                ret[i] = arr_a[i] + arr_b[i];
-//            }
+        [Benchmark(Baseline = true, OperationsPerInvoke = Repeats)]
+        public int[] Direct()
+        {
+            int[] ret = null;
+            for (int rep = 0; rep < Repeats; rep++)
+            {
+                var len = arr_a.Length;
+                ret = new int[len];
+                for (int i = 0; i < len; i++)
+                {
+                    ret[i] = arr_a[i] + arr_b[i];
+                }
+            }
+            return ret;
+        }
 
-//            len = arr_a.Length;
-//            ret = new int[25];
-//            for (int i = 0; i < len; i++)
-//            {
-//                ret[i] = arr_a[i] + arr_b[i];
-//            }
-
-//            len = arr_a.Length;
-//            ret = new int[25];
-//            for (int i = 0; i < len; i++)
-//            {
-//                ret[i] = arr_a[i] + arr_b[i];
-//            }
-
-//            len = arr_a.Length;
-//            ret = new int[25];
-//            for (int i = 0; i < len; i++)
-//            {
-//                ret[i] = arr_a[i] + arr_b[i];
-//            }
-
-//            //}
-//        }
-
-//        [Benchmark()]
-//        public void NDArray_()
-//        {
-//            NDArray ret;
-//            //for (int j = 0; j < iterations; j++) {
-//            ret = nd1 + nd2;
-//            ret = nd1 + nd2;
-//            ret = nd1 + nd2;
-//            ret = nd1 + nd2;
-//            ret = nd1 + nd2;
-//            //}
-//        }
-
-//        [Benchmark()]
-//        public void NDArray_Large()
-//        {
-//            NDArray ret;
-//            //for (int j = 0; j < iterations; j++) {
-//            ret = nd1_large + nd2_large;
-//            ret = nd1_large + nd2_large;
-//            ret = nd1_large + nd2_large;
-//            ret = nd1_large + nd2_large;
-//            ret = nd1_large + nd2_large;
-//            //}
-//        }
-//    }
-//}
+        [Benchmark(OperationsPerInvoke = Repeats)]
+        public NDArray NDArray_()
+        {
+            NDArray ret = null;
+            for (int rep = 0; rep < Repeats; rep++)
+                ret = nd1 + nd2;
+            return ret;
+        }
+    }
+}

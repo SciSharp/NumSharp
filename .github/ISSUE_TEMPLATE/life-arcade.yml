@@ -1,0 +1,36 @@
+name: Life Arcade bug
+description: Report gameplay, rendering, build, or packaging problems in examples/LifeAndPong.
+title: '[Life Arcade] '
+body:
+  - type: input
+    id: revision
+    attributes:
+      label: Revision or ZIP checksum
+      description: Include the commit from git rev-parse HEAD, or the Windows ZIP SHA-256.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS/version, display scaling, window size, and .NET SDK version if building from source.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include controls used, run state, and reduced-motion/high-contrast options if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Optional screenshot, short recording, exception, or build output. Remove private paths and personal information.

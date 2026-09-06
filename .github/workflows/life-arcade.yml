@@ -1,0 +1,59 @@
+name: Life Arcade
+
+on:
+  push:
+    paths:
+      - 'examples/LifeAndPong/**'
+      - 'src/NumSharp.Core/**'
+      - 'tools/NumSharp.Build/**'
+      - 'tools/NumSharp.Build.Analyzer/**'
+      - 'Directory.Build.*'
+      - 'global.json'
+      - 'Open.snk'
+      - 'LICENSE'
+      - '.github/workflows/life-arcade.yml'
+  pull_request:
+    paths:
+      - 'examples/LifeAndPong/**'
+      - 'src/NumSharp.Core/**'
+      - 'tools/NumSharp.Build/**'
+      - 'tools/NumSharp.Build.Analyzer/**'
+      - 'Directory.Build.*'
+      - 'global.json'
+      - 'Open.snk'
+      - 'LICENSE'
+      - '.github/workflows/life-arcade.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: life-arcade-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: examples/LifeAndPong
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: examples/LifeAndPong/global.json
+      - name: Build focused solution
+        run: dotnet build NumSharp.LifeAndPong.sln -c Release --nologo
+      - name: Package portable Windows app
+        run: ./publish-windows.ps1
+      - name: Upload Windows ZIP and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: Life-Arcade-win-x64
+          path: |
+            examples/LifeAndPong/artifacts/release-*/*.zip
+            examples/LifeAndPong/artifacts/release-*/SHA256SUMS
+          if-no-files-found: error
