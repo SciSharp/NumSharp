@@ -96,7 +96,14 @@ public class BincountBenchmarks : TypedBenchmarkBase
     public void Setup()
     {
         np.random.seed(Seed);
-        _values = np.random.randint(0, Math.Max(2, WorkN / 10), new Shape(WorkN)).astype(DType);
+        // np.bincount requires NON-NEGATIVE integers. randint(0, WorkN/10) can exceed a narrow
+        // signed dtype's positive max (SByte 127, Int16 32767); .astype(DType) would then wrap to
+        // negative values and np.bincount would (correctly, matching NumPy) reject them, leaving the
+        // cell with zero measurements. Cap the exclusive upper bound to what the dtype represents
+        // non-negatively so every swept dtype gets valid input, while the wide dtypes (Int32+) keep
+        // the NumPy twin's full WorkN/10 range for a comparable join.
+        int upper = Math.Min(Math.Max(2, WorkN / 10), NonNegativeUpperBound(DType));
+        _values = np.random.randint(0, upper, new Shape(WorkN)).astype(DType);
     }
 
     [GlobalCleanup]
@@ -110,4 +117,18 @@ public class BincountBenchmarks : TypedBenchmarkBase
         NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.SByte or NPTypeCode.Int16 or
         NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or
         NPTypeCode.UInt64 or NPTypeCode.Char;
+
+    /// <summary>Exclusive randint upper bound that keeps every generated value non-negative and
+    /// representable in <paramref name="dtype"/> after astype — bincount rejects negatives, and a
+    /// value above the dtype's positive max wraps to a negative on the narrow signed types.</summary>
+    private static int NonNegativeUpperBound(NPTypeCode dtype) => dtype switch
+    {
+        NPTypeCode.Boolean => 2,     // {0, 1}
+        NPTypeCode.SByte   => 128,   // 0..127
+        NPTypeCode.Byte    => 256,   // 0..255
+        NPTypeCode.Int16   => 32768, // 0..32767
+        NPTypeCode.UInt16  => 65536, // 0..65535
+        NPTypeCode.Char    => 65536, // 0..65535 (uint16 proxy)
+        _ => int.MaxValue,           // Int32/UInt32/Int64/UInt64: WorkN/10 (<=100000) always fits
+    };
 }
