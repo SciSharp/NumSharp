@@ -685,6 +685,22 @@ jobs:
     if: needs.validate-release.outputs.is_valid == 'true'
     runs-on: ubuntu-latest
 
+    # Trusted Publishing (OIDC) — no long-lived API key. GitHub mints a short-lived, signed OIDC
+    # token (id-token: write); NuGet/login POSTs it to nuget.org's token endpoint, which validates
+    # the token's repo-owner / repo / workflow-file claims against the Trusted Publishing policy
+    # registered under the SciSharp owner (workflow file .github/workflows/build-and-release.yml, no
+    # environment, scope "Push new packages and package versions", glob *NumSharp*) and returns a
+    # temporary API key valid for 1 hour. The push then uses that key.
+    #
+    # A job-level permissions block REPLACES the top-level `write-all` for THIS job, so id-token is
+    # granted explicitly (write-all's coverage of id-token is not something to rely on) and the rest
+    # is least-privilege: contents:read is unused here (no checkout) but harmless; actions:read lets
+    # download-artifact read this run's nuget-packages artifact.
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+
     steps:
     - name: Download NuGet Packages
       uses: actions/download-artifact@v7
@@ -699,12 +715,22 @@ jobs:
           8.0.x
           10.0.x
 
+    # Exchange the GitHub OIDC token for a short-lived nuget.org API key. `user` is the nuget.org
+    # account USERNAME (profile name, NOT an email) that owns the Trusted Publishing policy; set it as
+    # the NUGET_USER repo secret. Requested here, immediately before the push, so the 1-hour temp key
+    # cannot expire before use. Output: steps.nuget-login.outputs.NUGET_API_KEY.
+    - name: NuGet login (OIDC trusted publishing)
+      uses: NuGet/login@v1
+      id: nuget-login
+      with:
+        user: ${{ secrets.NUGET_USER }}
+
     - name: Push to NuGet
       run: |
         for package in artifacts/*.nupkg; do
           echo "Pushing $package..."
           dotnet nuget push "$package" \
-            --api-key ${{ secrets.NUGETAPIKEY }} \
+            --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
         done
