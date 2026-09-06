@@ -12,6 +12,8 @@ Read the documents that own the area you intend to change:
 - [SPECIFICATION.md](SPECIFICATION.md) for implementation ownership and limits
 - [ARCADE_DESIGN.md](ARCADE_DESIGN.md) for adopted gameplay behavior
 - [PHYSICS.md](PHYSICS.md) for collision behavior and acceptance cases
+- [PLAYTEST.md](PLAYTEST.md) for the complete player journey and manual
+  fun/balance evidence checklist
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and [SECURITY.md](SECURITY.md) for
   community and reporting expectations
 
@@ -51,6 +53,12 @@ from the repository root:
 ```powershell
 .\examples\LifeAndPong\build.ps1
 ```
+
+The focused solution deliberately compiles NumSharp.Core and its analyzer
+dependency. At candidate `ad8442bd`, a cold build can therefore emit committed
+dependency warnings even when Life Arcade has no warnings or errors; the current
+approved run recorded 633 such warnings and 36/36 passing game tests. Preserve
+the actual counts and file ownership when reporting a local result.
 
 To run each stage directly from `examples\LifeAndPong`:
 
@@ -134,6 +142,9 @@ executable, runtime, NumSharp assemblies, `LICENSE`, all root Markdown guides,
 - Keep [ARCADE_DESIGN.md](ARCADE_DESIGN.md), [PHYSICS.md](PHYSICS.md), and
   [SPECIFICATION.md](SPECIFICATION.md) consistent with the implementation.
 - For packaging changes, verify a fresh ZIP and its `SHA256SUMS` entry.
+- For player-journey or tuning changes, record observed manual evidence against
+  [PLAYTEST.md](PLAYTEST.md); automated checks and render fixtures do not prove
+  subjective fun or balance.
 - Remove private paths, personal information, credentials, and generated local
   profile data from logs and screenshots.
 - Confirm that no unrelated worktree changes were included.

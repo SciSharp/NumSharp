@@ -25,12 +25,32 @@ side-by-side Life editor and two-paddle Pong game.
   destroyed.
 - Cell awards within one shot are `+1, +2, +4, +6, +8, ...`. Physical contact
   with the paddle resets the next award and shot counter. Effects escalate at
-  20, 50, and 100 destroyed cells in one shot.
+  exactly 20 (**Surge**), 50 (**Overdrive**), and 100 (**Supernova**) destroyed
+  cells in one shot; these tiers are cosmetic and do not change gameplay or
+  physics.
 - Sound, reduced-motion, and high-contrast options are available from the menu.
   Sound playback is implemented by the Windows desktop host.
+- Losing focus or deactivating the window pauses the entire game and clears held
+  keyboard and pointer input. Return to the window and resume explicitly.
 
 The adopted gameplay rules are maintained in [ARCADE_DESIGN.md](ARCADE_DESIGN.md),
 and the collision solver is specified in [PHYSICS.md](PHYSICS.md).
+
+## Physics scope
+
+The controller advances fixed 120 Hz steps and resolves the earliest swept
+contact, phase crossing, paddle stop, or miss before consuming the rest of the
+step. Ball contacts use the physical wall, rounded-cell, or capsule-paddle
+normal. An isolated paddle response is calculated in the moving surface frame
+and includes limited Coulomb friction and solid-disc spin; simultaneous contact
+manifolds resolve their normal constraints together.
+
+Once per resolved wall, cell, or paddle contact manifold, the game adds one
+uniformly sampled signed perpendicular component bounded to 5%, then preserves
+the computed post-contact translational speed. It does not add free-flight
+steering or noise. This is an idealized 2D arcade model: there is no gravity,
+air drag, or Magnus force, and it does not claim full real-world aerodynamics.
+See [PHYSICS.md](PHYSICS.md) for equations, geometry, and safety behavior.
 
 ## Contributor quickstart
 
@@ -53,6 +73,12 @@ dotnet run --project .\NumSharp.LifeAndPong.Desktop\NumSharp.LifeAndPong.Desktop
 `build.ps1` resolves paths from its own directory, restores and builds the
 focused solution, and runs the game tests. It can also be invoked by its path
 from another current working directory.
+
+At candidate `ad8442bd`, a cold focused build can print existing committed
+warnings from the included NumSharp.Core and analyzer projects. The approved
+gate and the command above completed with zero errors and 36 passing game tests;
+do not describe a run as warning-free unless its own output says so, and
+distinguish dependency warnings from warnings in Life Arcade sources.
 
 ### Visual Studio
 
@@ -120,8 +146,13 @@ the application reports the local persistence error.
 
 ## Project status and platform limits
 
-- The checked-in source, tests, and packaging script are the supported
-  contributor artifacts; this guide does not assert that a public binary
+- Exact code candidate `ad8442bd16bc7d8d476409ec1b98e9f824787ea7` is
+  code-QA-approved for Windows in
+  `E-01a07513-643b-7a93-aa6a-41754178b785`. Documentation QA, a fresh package
+  containing the reviewed guide revision, and subjective owner play acceptance
+  remain separate gates.
+- The checked-in source, tests, and packaging script support local contributor
+  builds. A locally produced ZIP is not evidence that a public or hosted binary
   release exists.
 - The portable package targets Windows x64. Windows audio uses `winmm.dll`.
 - Other desktop operating systems and mobile heads are not validated or
@@ -137,6 +168,8 @@ the application reports the local persistence error.
 - [SPECIFICATION.md](SPECIFICATION.md) — current implementation guide
 - [ARCADE_DESIGN.md](ARCADE_DESIGN.md) — adopted gameplay behavior
 - [PHYSICS.md](PHYSICS.md) — adopted collision model
+- [PLAYTEST.md](PLAYTEST.md) — complete player journey and pending owner
+  fun/balance checklist
 - [SECURITY.md](SECURITY.md) — vulnerability-reporting guidance
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — link to the NumSharp conduct policy
 - [CHANGELOG.md](CHANGELOG.md) — unreleased changes only

@@ -2,14 +2,19 @@
 
 Status: adopted baseline, amended by owner steering `DEC-life-arcade-steering-005`
 and realistic-collision revision `DEC-life-arcade-physics-006`.
-Implementation and fresh QA are in progress; historical packages are not evidence of this revision.
+Implemented by exact candidate `ad8442bd16bc7d8d476409ec1b98e9f824787ea7`;
+Windows code QA is approved in `E-01a07513-643b-7a93-aa6a-41754178b785`.
+This design document does not grant documentation QA, verify a package rebuilt
+with reviewed guides, or establish subjective owner play acceptance. Historical
+packages are not evidence of this revision.
 
 - Work: `WORK-legacy` — NumSharp Life Arcade
 - Design job: `JOB-life-arcade-design-003`
 - Baseline: `SPEC-life-arcade-003`
 - Decision: `DEC-life-arcade-003`
 - Supersedes the separate-game premise of `SPEC-numsharp-life-pong-001`.
-- Existing implementation inspected: `journey3`, HEAD `2a7dbe74`.
+- Current candidate: `ad8442bd16bc7d8d476409ec1b98e9f824787ea7`
+  for `DU-life-arcade-004`.
 
 ## 1. The game in one sentence
 
@@ -34,9 +39,10 @@ the award sequence `1, 2, n+2`, a text-free playfield, and escalating effects at
 sequence as `+1, +2, +4, +6, +8, ...`, not powers of two. These requirements
 supersede the former rally-long doubling chain and 50/50 layout.
 
-Three lives, population thresholds, sector progression, boundary behavior,
-anti-stall assistance, effect art direction and controls remain Lead design
-decisions. Numeric tuning values are not evidence of a proven difficulty balance.
+Lead-adopted supporting rules include three lives, bounded replenishment,
+sector progression, contact-loop safety behavior, effect art direction, and
+controls. Numeric tuning values and automated checks are not evidence of a
+proven difficulty balance.
 
 ## 2. The central rhythm
 
@@ -298,8 +304,15 @@ do not call the arcade balanced merely because automated tests pass.
 
 ## 10. Delivery state
 
-The initial scripted visual study and the e6b99006 executable predate the latest
-owner steering. They are not current scoring/layout acceptance evidence. The
-revised C# build must pass fresh code and documentation gates. Milestone image
-fixtures exercise real event/rendering paths but do not claim human-earned
-20/50/100-hit records. Human difficulty balance remains subject to playtesting.
+Exact candidate `ad8442bd16bc7d8d476409ec1b98e9f824787ea7` has current
+Windows code QA approval in `E-01a07513-643b-7a93-aa6a-41754178b785`. The gate
+covers the focused build, 36 automated tests, deterministic render fixtures,
+and a locally generated self-contained Windows x64 package. It is not evidence
+of a hosted/public release or subjective player acceptance.
+
+Milestone image fixtures exercise real event and rendering paths but do not
+claim human-earned 20/50/100-hit records. The complete ready/launch/play/miss/
+pause/retry journey and honest ten-minute owner checklist are in
+[PLAYTEST.md](PLAYTEST.md). Documentation QA, a fresh package containing the
+reviewed guide bytes, Lead final-artifact verification, and owner fun/balance
+acceptance require separate evidence; no product-completion claim is made here.

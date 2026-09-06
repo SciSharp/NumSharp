@@ -1,9 +1,13 @@
 # Life Arcade implementation guide
 
 This document maps the current Life Arcade behavior to its implementation and
-contributor operations. It describes source baseline
-`5f6b551aabf01e2539554eedd3bc40ebad759c09`; the hash identifies reviewed source
-and is not a public-release claim.
+contributor operations. The exact code candidate is
+`ad8442bd16bc7d8d476409ec1b98e9f824787ea7`, approved on Windows by code QA in
+`E-01a07513-643b-7a93-aa6a-41754178b785` for `DU-life-arcade-004`. This identifies
+reviewed source, not a public-release claim. This writer-authored guide does not
+grant its own documentation approval, prove a package contains its reviewed
+bytes, or establish subjective owner play acceptance; use the current gate,
+artifact, and acceptance records for those outcomes.
 
 Behavioral authority is split deliberately:
 
@@ -66,10 +70,11 @@ also resets the chain, consumes one life, and preserves the accumulated score.
 Life births, ordinary Life deaths, walls, and paddle hits award no points.
 
 The implementation saturates awards and total score instead of wrapping.
-Presentation effects escalate at 20, 50, and 100 cells destroyed during one
-shot. These effects do not mutate simulation state. Sector progression is based
-on total cells destroyed, with the pending sector increasing every 40 cells and
-being adopted at a launch or paddle contact.
+Presentation effects escalate at 20 (**Surge**), 50 (**Overdrive**), and 100
+(**Supernova**) cells destroyed during one shot. These effects do not mutate
+simulation state. Sector progression is based on total cells destroyed, with
+the pending sector increasing every 40 cells and being adopted at a launch or
+paddle contact.
 
 ## Physics boundary
 
@@ -77,6 +82,11 @@ being adopted at a launch or paddle contact.
 collision, phase crossing, paddle stop, or goal before consuming the remainder
 of the step. `CollisionMath` performs swept circle-versus-rounded-box queries,
 elastic manifold response, and isolated moving-paddle friction/spin response.
+
+The result is an idealized planar model rather than full real-world
+aerodynamics. The ball travels in straight lines between contacts; gravity, air
+drag, and Magnus force are not modeled. The paddle is kinematic, while walls
+and cells are fixed surfaces.
 
 After a resolved physical contact manifold, the session adds a uniformly drawn
 perpendicular perturbation bounded by 5%, renormalized to the computed physical
@@ -159,6 +169,13 @@ dotnet build .\NumSharp.LifeAndPong.sln -c Release --no-restore --nologo
 dotnet test .\NumSharp.LifeAndPong.Tests\NumSharp.LifeAndPong.Tests.csproj -c Release --no-build --no-restore --nologo
 ```
 
+At candidate `ad8442bd`, a cold focused build can expose committed warning
+noise from the included NumSharp.Core and analyzer projects. Current code QA
+recorded 633 such dependency warnings on its first cold build, no Life Arcade
+warnings or errors, and 36/36 passing game tests; later incremental output may
+differ. Report the output actually observed rather than converting a successful
+exit into a zero-warning claim.
+
 For IDE use, open `NumSharp.LifeAndPong.sln` and set
 `NumSharp.LifeAndPong.Desktop` as the startup project.
 
@@ -193,11 +210,16 @@ that a hosted workflow run or public binary release has occurred.
 - This example does not define a detached-source distribution or a separate
   support/version lifecycle from the NumSharp repository.
 
-## Historical design trail
+## Current authority and superseded predecessor
 
-The following identifiers are preserved for traceability only. They describe
-the superseded, separate Life-editor and two-paddle Pong product and are not
-evidence for current Life Arcade behavior or delivery status:
+The active authority chain is `SPEC-life-arcade-003`, amended by
+`DEC-life-arcade-steering-005` and `DEC-life-arcade-physics-006`, implemented by
+candidate `ad8442bd16bc7d8d476409ec1b98e9f824787ea7`, and code-QA-approved in
+`E-01a07513-643b-7a93-aa6a-41754178b785`.
+
+The following identifiers are predecessor history only. They describe the
+superseded separate Life editor and two-paddle Pong product and do not define
+current Life Arcade behavior, QA status, or package contents:
 
 - Product baseline `SPEC-numsharp-life-pong-001`
 - Delivered unit `DU-life-pong-finish-002`
@@ -205,10 +227,6 @@ evidence for current Life Arcade behavior or delivery status:
 - Historical implementation `996dba5d`, reviewed in
   `E-01a0711f-cf00-7883-9a8a-1d109cda19cb`
 
-The subsequent unified-arcade design lineage is recorded in
-[ARCADE_DESIGN.md](ARCADE_DESIGN.md): `WORK-legacy`,
-`JOB-life-arcade-design-003`, `SPEC-life-arcade-003`, and
-`DEC-life-arcade-003`, later amended by `DEC-life-arcade-steering-005` and
-`DEC-life-arcade-physics-006`. These identifiers document design history; the
-current source and the three authority documents named at the top of this guide
-define the implementation contributors should follow.
+The complete unified-arcade design lineage remains in
+[ARCADE_DESIGN.md](ARCADE_DESIGN.md). Current source plus the active authority
+chain above define the implementation contributors should follow.
