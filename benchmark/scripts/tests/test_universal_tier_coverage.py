@@ -102,16 +102,18 @@ class UniversalTierCoverageTests(unittest.TestCase):
             bench.MEMORY_HEAVY_LARGE_WORKLOAD = 1_000
             bench.benchmark = fake_benchmark
             creation = bench.run_creation_benchmarks(1_000, "float64", 1)
-            manipulation = bench.run_manipulation_benchmarks(1_000, 1)
+            manipulation = bench.run_manipulation_benchmarks(1_000, "float64", 1)
             logic = sum((bench.run_logic_benchmarks(1_000, dtype, 1)
                          for dtype in bench.FLOAT_DTYPES), [])
-            statistics = bench.run_statistics_benchmarks(1_000, "float64", 1)
+            # int32 exercises the Histogram family (np.bincount); a float64 array only
+            # produces its rejection evidence, so that family would go untested.
+            statistics = bench.run_statistics_benchmarks(1_000, "int32", 1)
             sorting = sum((bench.run_sorting_benchmarks(1_000, dtype, 1)
                            for dtype in bench.COMMON_DTYPES), [])
-            fft = bench.run_fft_benchmarks(1_000, 1)
-            random = bench.run_random_benchmarks(1_000, 1)
-            ndarray = bench.run_ndarray_benchmarks(1_000, 1)
-            selection = bench.run_where_benchmarks(1_000, 1)
+            fft = bench.run_fft_benchmarks(1_000, "float64", 1)
+            random = bench.run_random_benchmarks(1_000, "float64", 1)
+            ndarray = bench.run_ndarray_benchmarks(1_000, "float64", 1)
+            selection = bench.run_where_benchmarks(1_000, "float64", 1)
         finally:
             bench.ARRAY_SIZES["large"] = original_large
             bench.MEMORY_HEAVY_LARGE_WORKLOAD = original_cap
@@ -119,13 +121,13 @@ class UniversalTierCoverageTests(unittest.TestCase):
 
         self.assertEqual(14, sum(row.category == "Conversion" for row in creation))
         self.assertEqual(9, sum(row.category == "Stack" for row in manipulation))
-        self.assertEqual(20, sum(row.category == "SetOperations" for row in manipulation))  # 10 set/unique ops × int32 + float64
+        self.assertEqual(10, sum(row.category == "SetOperations" for row in manipulation))  # 10 set/unique ops per dtype
         self.assertEqual(22, sum(row.category == "ExtendedShape" for row in manipulation))
         self.assertEqual(6, sum(row.category == "Close" for row in logic))
-        self.assertEqual(12, sum(row.category in {"Signal", "Histogram"} for row in statistics))
+        self.assertEqual(12, sum(row.category in {"Signal", "Histogram"} for row in statistics))  # 11 Signal + 1 Histogram (int32)
         self.assertEqual(40, len(sorting))       # 3 base + 7 formerly capped, across four dtypes
-        self.assertEqual(26, len(fft))
-        self.assertEqual(52, len(random))
+        self.assertEqual(18, len(fft))
+        self.assertEqual(43, len(random))
         self.assertEqual(42, len(ndarray))
         self.assertEqual(18, len(selection))     # 2 where + 16 formerly capped indexing cases
 
