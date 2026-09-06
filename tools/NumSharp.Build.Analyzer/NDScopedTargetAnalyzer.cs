@@ -95,8 +95,10 @@ namespace NumSharp.Build.Analyzer
         private const string InstallHint =
             "Install the weaver with 'dotnet add package NumSharp.Build' (a build-time development dependency, not a runtime dependency)";
 
-        private static DiagnosticDescriptor Warning013(string title, string message) =>
-            new DiagnosticDescriptor("NDW013", title, message, Category, DiagnosticSeverity.Warning,
+        // 'id' first (always "NDW013") mirrors the Error(...) helper so the analyzer-release-tracking
+        // analyzer reads the rule id from the factory's first argument (see AnalyzerReleases.*.md).
+        private static DiagnosticDescriptor Warning013(string id, string title, string message) =>
+            new DiagnosticDescriptor(id, title, message, Category, DiagnosticSeverity.Warning,
                 isEnabledByDefault: true, description: null, helpLinkUri: HelpLink + "#ndw013");
 
         /// <summary>
@@ -104,17 +106,17 @@ namespace NumSharp.Build.Analyzer
         ///     property for a property-level attribute). Three descriptors share the one id — same code, same
         ///     severity, same fix — because the three shapes call for three different sentences.
         /// </summary>
-        internal static readonly DiagnosticDescriptor Nw013 = Warning013(
+        internal static readonly DiagnosticDescriptor Nw013 = Warning013("NDW013",
             "[NDScoped] used, but the weaver is not installed",
             "{0} on '{1}' has no effect: the NumSharp.Build package is not installed (or weaving is disabled), so the attribute is INERT — no NDScope is injected and the member's NDArray temporaries are left to the finalizer instead of being reclaimed. " + InstallHint + ", or remove the attribute and dispose the temporaries by hand");
 
         /// <summary>NDW013 at an override/implementation INHERITING the scope attribute from its declaration (this assembly or another).</summary>
-        internal static readonly DiagnosticDescriptor Nw013Inherited = Warning013(
+        internal static readonly DiagnosticDescriptor Nw013Inherited = Warning013("NDW013",
             "Inherited [NDScoped] target, but the weaver is not installed",
             "method '{0}' inherits {1} from '{2}' but the NumSharp.Build package is not installed (or weaving is disabled), so the attribute is INERT here — no NDScope is injected and the method's NDArray temporaries are left to the finalizer. " + InstallHint + ", mark the override [NDScopedCovered] to opt out of the inherited scope, or dispose the temporaries by hand");
 
         /// <summary>NDW013 at a method whose parameter carries (or inherits, by position) <c>[NDScopedExit]</c> and that draws no scope-attribute NDW013 of its own.</summary>
-        internal static readonly DiagnosticDescriptor Nw013Exit = Warning013(
+        internal static readonly DiagnosticDescriptor Nw013Exit = Warning013("NDW013",
             "[NDScopedExit] used, but the weaver is not installed",
             "[NDScopedExit] on parameter {0} of '{1}'{2} has no effect: the NumSharp.Build package is not installed (or weaving is disabled), so the argument is NOT detached from the caller's NDScope and may be reclaimed while '{1}' still holds it. " + InstallHint + ", or detach the argument by hand with NDScope.Detach");
 

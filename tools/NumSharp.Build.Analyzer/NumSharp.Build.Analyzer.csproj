@@ -29,8 +29,10 @@
     <IsPackable>false</IsPackable>
     <IncludeBuildOutput>false</IncludeBuildOutput>
 
-    <!-- RS2008 wants an AnalyzerReleases tracking file (release-notes tooling we don't ship here). -->
-    <NoWarn>$(NoWarn);RS2008</NoWarn>
+    <!-- RS2008 (analyzer-release tracking) is satisfied by AnalyzerReleases.{Shipped,Unshipped}.md
+         in this directory — Microsoft.CodeAnalysis.Analyzers auto-includes them as AdditionalFiles
+         when present. Declaring every NDW rule there clears RS2008 in EVERY build path; the previous
+         per-project NoWarn was honoured by a plain build but NOT by the docs/docfx metadata build. -->
     <PackageId>NumSharp.Build.Analyzer</PackageId>
   </PropertyGroup>
 

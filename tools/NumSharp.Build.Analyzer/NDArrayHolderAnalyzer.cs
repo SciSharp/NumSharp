@@ -55,7 +55,7 @@ namespace NumSharp.Build.Analyzer
             "NDW017",
             "NDArray-holding member is never disposed",
             "'{0}' implements {1} but never disposes '{2}' (a {3} holding NDArrays) on any path from its " +
-            "Dispose/DisposeAsync — dispose it there{4}, or mark it [NDBorrowed] if it references an array owned elsewhere.",
+            "Dispose/DisposeAsync — dispose it there{4}, or mark it [NDBorrowed] if it references an array owned elsewhere",
             Category,
             DiagnosticSeverity.Warning,
             isEnabledByDefault: true,
