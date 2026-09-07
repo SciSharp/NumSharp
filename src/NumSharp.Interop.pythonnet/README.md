@@ -144,6 +144,7 @@ NDArray  v = py.AsNDArray();        // view   (As… = share, like numpy array/a
 
 ```csharp
 NDArrayPythonInterop.RegisterCodec();     // once per engine session; idempotent
+Py.RegisterNumSharpCodecs();              // identical alias, reads beside Py.Import / Py.GIL
 
 using (Py.GIL())
 {
@@ -152,6 +153,13 @@ using (Py.GIL())
     NDArray r = ((PyObject)np.matmul(a, b)).As<NDArray>();   // decoded back, no explicit calls
 }
 ```
+
+`Py.RegisterNumSharpCodecs()` is a static extension member (C# 14) on pythonnet's `Py`, so it sits
+beside `Py.Import(...)` / `Py.GIL()` at the call site. It forwards verbatim to
+`NDArrayPythonInterop.RegisterCodec()` (both overloads — the no-arg and the `NumpyCodecOptions` one),
+so the sticky/idempotent/per-session semantics are identical; it is an alias, not a second
+registration. The `Py.` spelling is visible wherever `using NumSharp.Interop.PythonNet;` is in scope
+(which is already the case anywhere you use `NDArray`).
 
 `NumpyCodecOptions` controls the policies via **`NumpyCodecMode`** — one enum for both directions (`EncodeMode` / `DecodeMode`):
 

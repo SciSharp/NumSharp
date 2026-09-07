@@ -29,6 +29,23 @@ namespace NumSharp.Tests.Interop
         }
 
         [TestMethod]
+        public void PyExtension_RegisterNumSharpCodecs_HitsTheSameStickyRegistration()
+        {
+            // Py.RegisterNumSharpCodecs() is a C#-14 static extension member that forwards verbatim to
+            // NDArrayPythonInterop.RegisterCodec(). After the direct call has registered, the alias must
+            // observe the SAME process-global registration and report the no-op — proving it is not a
+            // separate or dead registration path.
+            EnsureCodec();
+            Py.RegisterNumSharpCodecs().Should().BeFalse("the alias shares the direct call's sticky registration");
+
+            // And the codec is genuinely active after going through the Py.* entry point.
+            var nd = np.arange(3).astype(NPTypeCode.Double);
+            using (Gil())
+                Scope.Set("pyalias", nd);
+            PyStr("type(pyalias).__name__").Should().Be("ndarray", "the registered codec auto-encodes NDArray -> numpy");
+        }
+
+        [TestMethod]
         public void AutoEncode_OnScopeSet_ProducesASharedNumpyView()
         {
             EnsureCodec();
