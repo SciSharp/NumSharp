@@ -38,7 +38,7 @@ learning infrastructure, and projects that want NumPy-style array operations in
 ordinary .NET code.
 
 NumSharp's edge is utilizing the power of [C#'s dynamic IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.html) and [fused kernels](https://scisharp.github.io/NumSharp/docs/NDIter.html) translating to assembly generated with [JIT optimizations](https://learn.microsoft.com/en-us/dotnet/standard/managed-execution-process#compilation-by-the-jit-compiler) and [SIMD CPU acceleration](https://en.wikipedia.org/wiki/Hardware_acceleration).
-This edge leads the design of NumSharp's backend and by that to higher performance mark than NumPy on many functions as can be seen in [Performance](https://github.com/SciSharp/NumSharp/edit/master/README.md#performance).
+This edge leads the design of NumSharp's backend and by that to higher performance mark than NumPy on many functions as can be seen in [Performance](#performance).
 
 NumSharp focuses on:
 
@@ -55,24 +55,24 @@ NumSharp focuses on:
 ## Features
 
 - **NumPy-style `NDArray`** - N-dimensional arrays with shape, strides, offsets,
-  slicing, and view semantics. Start with [NDArray fundamentals](https://scisharp.github.io/NumSharp/docs/intro.md)
-  and [NDArray](https://scisharp.github.io/NumSharp/docs/NDArray.md).
+  slicing, and view semantics. Start with [NDArray fundamentals](https://scisharp.github.io/NumSharp/docs/intro.html)
+  and [NDArray](https://scisharp.github.io/NumSharp/docs/NDArray.html).
 - **Broadcasting** - NumPy-style shape expansion without materializing repeated
-  values. See [Broadcasting](https://scisharp.github.io/NumSharp/docs/broadcasting.md).
+  values. See [Broadcasting](https://scisharp.github.io/NumSharp/docs/broadcasting.html).
 - **Dtype-aware operations** - 15 core dtypes with NumPy-oriented promotion and
-  conversion behavior. See [Dtypes](https://scisharp.github.io/NumSharp/docs/dtypes.md) and
-  [NumPy compliance](https://scisharp.github.io/NumSharp/docs/compliance.md).
+  conversion behavior. See [Dtypes](https://scisharp.github.io/NumSharp/docs/dtypes.html) and
+  [NumPy compliance](https://scisharp.github.io/NumSharp/docs/compliance.html).
 - **Broad `np.*` API surface** - Creation, manipulation, math, reductions,
   comparisons, logic, random sampling, I/O, and formatting. Browse the
-  [API reference](docs/website-src/api/index.md).
+  [API reference](https://scisharp.github.io/NumSharp/api/index.html).
 - **Generated IL and SIMD kernels** - Runtime-specialized kernels for supported
-  dtype and layout combinations. See [IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.md).
+  dtype and layout combinations. See [IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.html).
 - **Iterator and fusion infrastructure** - NDIter-style execution and fused
   `np.evaluate` expressions for reducing intermediate allocations. See
-  [NDIter](https://scisharp.github.io/NumSharp/docs/NDIter.md).
+  [NDIter](https://scisharp.github.io/NumSharp/docs/NDIter.html).
 - **Tracked performance reports** - Release snapshots with dashboard summaries,
   raw reports, and subsystem matrices. See the
-  [benchmark dashboard](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.md).
+  [benchmark dashboard](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html).
 
 ## Features Support and Implementation Map
 
