@@ -42,6 +42,16 @@ Usage
   python run_benchmark.py --skip-nditer          # no NDIter section
   python run_benchmark.py --skip-layout --skip-cast --skip-fusion   # op matrix (+NDIter) only
   python run_benchmark.py --quick                 # deprecated alias for --depth light
+  python run_benchmark.py --no-lock-clock         # leave turbo boost on (default: locked off for the run)
+  python run_benchmark.py --no-pin-core           # don't pin C#/NumPy to one performance core
+
+Host stability (scripts/benchmark_host.py)
+------------------------------------------
+Both languages are pinned to the SAME single performance core (NUMSHARP_BENCHMARK_AFFINITY, honored
+by both C# runners and numpy_benchmark.py) and the CPU clock is locked (turbo boost Disabled on the
+High-performance scheme, restored on exit) for every measured phase. On the hybrid, Aggressive-boost
+i9-13900K this suite runs on, the unpinned/boosting configuration produced 30-50 % faster excursions
+in 2 of 50 BDN iterations that never reproduced - and became Statistics.Min.
 """
 import argparse
 import hashlib
@@ -59,6 +69,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
 from benchmark_modes import ALL_DTYPES, DEPTHS, parse_dtypes  # noqa: E402
 from benchmark_session import Session, RunLock, atomic_json, read_json, provenance, check_resume  # noqa: E402
 from numpy_checkpoint import validate_checkpoint  # noqa: E402
+from benchmark_host import ClockLock, logical_cpus_of, pick_benchmark_core  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 HISTORY_DIR = HERE / "history"
@@ -260,6 +271,12 @@ def parser():
     ap.add_argument("--verbose", action="store_true", help="Also echo child output; full output always goes to logs/")
     ap.add_argument("--attempts", type=int, default=3, help="Attempts per incomplete matrix suite; completed cases are retained (default 3)")
     ap.add_argument("--process-timeout", type=float, help="Optional maximum seconds per child process; kills its process tree on expiry")
+    ap.add_argument("--no-lock-clock", action="store_true",
+                    help="Leave turbo boost as-is (default: boost Disabled on the High-performance scheme "
+                         "for every measured phase, restored on exit; system-wide, so both languages)")
+    ap.add_argument("--no-pin-core", action="store_true",
+                    help="Do not pin the C# and NumPy processes to one performance core "
+                         "(default: NUMSHARP_BENCHMARK_AFFINITY is exported to every child)")
     return ap
 
 
@@ -439,6 +456,9 @@ def execute(args, raw, directory):
     config_fields = CONFIG_FIELDS
     print("Checking benchmark code and environment identity...", flush=True)
     current = provenance(HERE.parent)
+    # Host stability lever 1 (core pin): pick one performance core now so its mask can be recorded in
+    # the durable run-config and exported to every measured child (scripts/benchmark_host.py).
+    pin_mask = None if args.no_pin_core else pick_benchmark_core()
     if args.resume:
         if not config_path.exists():
             raise ValueError("This directory has no resumable run-config.json; use old reports with --rerun instead.")
@@ -460,6 +480,8 @@ def execute(args, raw, directory):
         requested = parse_dtypes(args.dtypes)
         saved = {"schema_version": 1, "depth": args.depth, "dtypes": list(requested),
                  "suites": args.suites, "provenance": current,
+                 "pin_core_mask": hex(pin_mask) if pin_mask else None,
+                 "lock_clock": not args.no_lock_clock,
                  "options": {key: str(getattr(args, key)) if isinstance(getattr(args, key), Path)
                              else getattr(args, key) for key in config_fields}}
     # A partial or exploratory run must never replace the full published benchmark.
@@ -487,6 +509,14 @@ def execute(args, raw, directory):
     atomic_json(HERE / "results" / "last-run.json", {"directory": str(directory.resolve())})
     os.environ["NUMSHARP_BENCHMARK_DEPTH"] = args.depth
     os.environ["NUMSHARP_BENCHMARK_DTYPES"] = ",".join(requested)
+    # Host stability (scripts/benchmark_host.py): both languages measure on ONE performance core - no
+    # P/E-core migration, no SMT-sibling noise, identical silicon. The C# runners
+    # (Infrastructure/BenchmarkHost.cs) and numpy_benchmark.py honor this variable; the clock lock in
+    # execute_stages() is system-wide and needs no child contract.
+    if pin_mask:
+        os.environ["NUMSHARP_BENCHMARK_AFFINITY"] = hex(pin_mask)
+    else:
+        os.environ.pop("NUMSHARP_BENCHMARK_AFFINITY", None)
     os.environ["PYTHONUTF8"] = "1"
     os.environ["PYTHONUNBUFFERED"] = "1"
     # Never inherit a previous caller's allowlist/checkpoint destination during discovery.
@@ -499,6 +529,9 @@ def execute(args, raw, directory):
         session.prepare_retry()
     ACTIVE_SESSION = session
     print(f"Results: {directory}\nDepth: {args.depth}; dtypes: {', '.join(requested)}", flush=True)
+    pin_note = (f"pinned to logical CPU {logical_cpus_of(pin_mask)} ({hex(pin_mask)})" if pin_mask
+                else "not pinned")
+    print(f"Host: {pin_note} · clock lock {'off (--no-lock-clock)' if args.no_lock_clock else 'on'}", flush=True)
     try:
         return execute_stages(args, directory, session, requested, eligible)
     except BaseException:
@@ -534,6 +567,12 @@ def execute_stages(args, directory, session, requested, eligible):
     if args.resume and image_path.exists() and read_json(image_path) != images:
         raise ValueError("Built benchmark binaries changed; start a new run instead of mixing measurements")
     atomic_json(image_path, images)
+    # Host stability lever 2 (clock lock): turbo boost off for every measured phase below (NumPy, C#
+    # managed + OpenBLAS, and the complementary subsystems). System-wide, so one mechanism covers both
+    # languages; restored on every exit path Python controls (atexit) and self-healed from the state
+    # file after a hard kill. Released right after the last measurement, before the merge/report steps.
+    clock = ClockLock(enabled=not args.no_lock_clock, state_file=HERE / "results" / ".clock-lock.json")
+    clock.lock()
     plan_file = directory / "plan.json"
     if args.resume and plan_file.exists():
         plan = read_json(plan_file)
@@ -652,6 +691,8 @@ def execute_stages(args, directory, session, requested, eligible):
         else:
             session.stage_state[stage] = "incomplete"
             print(f"!! {name}: no fresh successful report; old output excluded", flush=True)
+    # Host stability: last measured phase is done - restore turbo boost before merge/report steps.
+    clock.restore()
     incomplete = any(session.outcomes.get(key) != "ok" for key in session.cells)
     incomplete |= any(value != "complete" for key, value in session.stage_state.items() if key.startswith("subsystem:"))
     session.stage = "merge reports"

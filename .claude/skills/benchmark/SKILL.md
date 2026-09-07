@@ -130,6 +130,15 @@ The most common task. Full worked example in **`references/add-benchmark.md`**. 
   status. The proof ledger is `benchmark/O1_EXCLUSIONS.md`. Ops doing real work (trim_zeros, reductions) are
   where ratios are meaningful.
 
+- **A 30–50 % *faster* excursion in a few BDN iterations that never reproduces is turbo boost, not code.**
+  The host is a hybrid i9-13900K whose High-performance plan boosts *Aggressively* (~1.7× clock swing,
+  hidden from `powercfg -query` until unhidden); BDN keeps fast outliers, so the lucky window becomes
+  `Statistics.Min`. `run_benchmark.py` now locks the clock (boost Disabled, restored on exit) and pins
+  BOTH languages to one P-core (`NUMSHARP_BENCHMARK_AFFINITY`, default `0x4`) — see
+  `benchmark/scripts/benchmark_host.py`; `--no-lock-clock` / `--no-pin-core` opt out. Pinning trap: a
+  bare `ctypes.windll.kernel32.SetProcessAffinityMask(GetCurrentProcess(), …)` (no `argtypes`/`restype`)
+  fails silently — always read the mask back.
+
 ## References
 
 - `references/add-benchmark.md` — the detailed add-a-benchmark playbook (C# + NumPy twin + join-key rules + smoke).

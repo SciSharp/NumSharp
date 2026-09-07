@@ -570,13 +570,17 @@ def join(before, after, numpy_tsv=None):
 
 
 def pin_affinity():
-    """NS_PROBE_AFFINITY=<hex mask> pins the process like the C# probes do (hybrid-core hosts)."""
-    import os
-    aff = os.environ.get("NS_PROBE_AFFINITY")
-    if aff and sys.platform == "win32":
-        import ctypes
-        k32 = ctypes.windll.kernel32
-        k32.SetProcessAffinityMask(k32.GetCurrentProcess(), ctypes.c_size_t(int(aff, 16)))
+    """NS_PROBE_AFFINITY=<hex mask> pins the process like the C# probes do (hybrid-core hosts).
+
+    Delegates to benchmark/scripts/benchmark_host.py — the ONE pin implementation the official
+    orchestrator, numpy_benchmark.py and this probe share. The previous in-place ctypes call had
+    no argtypes/restype, so GetCurrentProcess() returned a 32-bit -1, the HANDLE was invalid and
+    SetProcessAffinityMask failed SILENTLY: this twin was never actually pinned while the C#
+    probe was. benchmark_host reads the mask back and logs the outcome either way."""
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+    from benchmark_host import pin_current_process_from_env
+    pin_current_process_from_env()
 
 
 if __name__ == "__main__":

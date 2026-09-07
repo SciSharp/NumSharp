@@ -85,6 +85,11 @@ public class OfficialBenchmarkConfig : ManualConfig
 {
     public OfficialBenchmarkConfig()
     {
+        // Both official runners (Core-only and OpenBLAS) construct this config, so this is the one
+        // seam that pins every C# measurement to the orchestrator's chosen performance core.
+        // See BenchmarkHost for the why (hybrid P/E cores + Aggressive turbo boost).
+        BenchmarkHost.PinToBenchmarkCore();
+
         var depth = BenchmarkRunSelection.Depth;
         // IterationTime is capped at 25 ms. BenchmarkDotNet's default Throughput strategy
         // ramps the per-iteration invocation count until each iteration takes ~0.5 s — which

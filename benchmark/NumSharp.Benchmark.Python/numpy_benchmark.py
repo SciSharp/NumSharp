@@ -51,6 +51,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 from benchmark_modes import ALL_DTYPES, DEPTHS, parse_dtypes, selected  # noqa: E402
 from numpy_checkpoint import CheckpointStore, atomic_json, case_id  # noqa: E402
+from benchmark_host import pin_current_process_from_env  # noqa: E402
 
 # =============================================================================
 # Configuration
@@ -2519,6 +2520,9 @@ def discover_scenarios() -> List[Dict[str, Any]]:
 
 
 def main():
+    # Honor the orchestrator's core pin BEFORE any timing runs (scripts/benchmark_host.py): the
+    # NumPy side must measure on the same single performance core as the C# runners do.
+    pin_current_process_from_env()
     parser = argparse.ArgumentParser(description="NumPy Performance Benchmarks")
     parser.add_argument("--suite", choices=["dispatch", "fusion", "arithmetic", "unary", "reduction",
                                             "broadcast", "creation", "manipulation", "slicing",

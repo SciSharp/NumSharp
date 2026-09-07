@@ -650,6 +650,8 @@ python run_benchmark.py --suites arithmetic unary
 python run_benchmark.py --skip-build         # reuse the existing Release build
 python run_benchmark.py --skip-csharp        # NumPy only
 python run_benchmark.py --quick              # deprecated alias for --depth light
+python run_benchmark.py --no-lock-clock      # leave turbo boost on (default: locked OFF for the run)
+python run_benchmark.py --no-pin-core        # don't pin C#/NumPy to one performance core
 ```
 
 ### Durable runs and targeted reruns
@@ -736,6 +738,31 @@ The C# side runs under `OfficialBenchmarkConfig` (Infrastructure/BenchmarkConfig
   rescue stress that outlasts a whole case (~seconds) — a uniformly slow window inflates the min
   too; that regime is only catchable by re-measuring against a reference (see the contamination
   notes in `benchmark/history/` MANIFESTs).
+
+- **Host stability: locked clock + one performance core** (`scripts/benchmark_host.py`; on by
+  default, opt out with `--no-lock-clock` / `--no-pin-core`). Two ambient sources of wall-clock
+  variance were measured on the i9-13900K this suite runs on (8 P + 16 E cores). **Turbo boost:**
+  the High-performance plan ships "Processor performance boost mode" = **Aggressive**, a setting
+  *hidden* from `powercfg -query` until `powercfg -attributes SUB_PROCESSOR <guid> -ATTRIB_HIDE`;
+  Min/Max processor state 100 %/100 % does NOT stop it (those cap the non-turbo P0 state, boost sits
+  above). A pinned spin load reads 166–174 % "Processor Performance" with boost on, 91–95 % with it
+  Disabled — a ~1.7× clock swing that surfaced as a 30–50 % *faster* excursion in 2 of 50 BDN
+  iterations that never reproduced, and — because BDN keeps fast outliers (`OutlierMode.RemoveUpper`)
+  — became `Statistics.Min`, the harness's best-window basis. **Core placement:** an unpinned thread
+  migrates between P-cores of differing boost residency or lands on an E-core (2–3× slower); only the
+  nditer probes were pinned. The orchestrator now (a) sets boost to Disabled on the High-performance
+  scheme (the one BDN itself activates) for every measured phase — NumPy, C# managed + OpenBLAS, the
+  subsystems — and restores it via `atexit` plus a self-heal state file (`results/.clock-lock.json`,
+  repaired on the next start after a hard kill); and (b) picks one P-core (first SMT thread of the
+  second P-core → logical 2, mask `0x4`, avoiding CPU 0's interrupt work) and exports
+  `NUMSHARP_BENCHMARK_AFFINITY`, which `Infrastructure/BenchmarkHost.cs` (called from
+  `OfficialBenchmarkConfig`, so BOTH C# runners) and `numpy_benchmark.py` honor. Both sides then run on
+  identical silicon at a fixed clock; absolute times drop by the base/boost ratio on both sides
+  equally — repeatable ratios instead of peak numbers. **Trap:** a `ctypes.windll.kernel32`
+  `SetProcessAffinityMask(GetCurrentProcess(), …)` call with no `argtypes`/`restype` fails
+  SILENTLY (the pseudo-handle -1 is truncated to a 32-bit int → invalid HANDLE → returns 0) — the
+  probes' `numpy_twins.py` carried exactly that and was never actually pinned; `benchmark_host`
+  declares the signatures and reads the mask back, so a pin is proven, never assumed.
 
 The language merge keys on `(op, dtype, N)`. The targeted backend harness then measures all 39
 backend-sensitive APIs under Managed C# and OpenBLAS, capturing MissingBackendException and
