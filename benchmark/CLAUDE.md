@@ -716,6 +716,30 @@ The C# side runs under `OfficialBenchmarkConfig` (Infrastructure/BenchmarkConfig
   fails here ("project names need to be unique") because sibling git worktrees under
   `.claude/worktrees/` contain same-named copies of the benchmark project. In-process also
   matches the warm long-lived Python/NumPy process, so the cross-language ratio is fair.
+- **In-process timeout 30 min (`OfficialToolchain.InProcess`), and no measured child ever holds the
+  console.** BDN's `InProcessEmitToolchain.Instance` carries a 5-minute per-benchmark execution
+  timeout that is NOT a soft failure: `InProcessEmitExecutor` THROWS `InvalidOperationException`
+  ("takes too long to run"), nothing in BDN catches it, and a class's finished cases live only in
+  memory until the class exports — one false timeout discards the class. The 2026-09-07 unary run
+  lost 941 finished `UnaryFamilyBenchmarks` cases (3.25 h) that way, and the trigger was the
+  **console**: a Pause/Ctrl+S keystroke in the Windows Terminal pane set conhost's
+  `CONSOLE_OUTPUT_SUSPENDED` (its cooked `ENABLE_LINE_INPUT` mode; released by the next
+  non-modifier key, which conhost swallows), after which conhost parks every `WriteConsole` from
+  every process on that console. The BDN worker blocked on its 48th `WorkloadActual` line, the
+  5-min timeout threw on the main thread, the runtime's unhandled-exception printer
+  (`DefaultCatchHandler` → `PrintToStdErrW` → `NtWriteFile`) blocked on the same console in
+  cooperative-GC mode, and the next GC — a low-memory notification handled on the finalizer thread —
+  spun `SuspendEE` at 100 % of one core forever waiting to suspend it: alive, not exiting, and
+  undebuggable by EventPipe (`dotnet-stack`/`dotnet-counters` hang; a full dump + `clrthreads` shows
+  the finalizer marked `(GC)` and the main thread Cooperative inside `NtWriteFile`). Fixes: the
+  30-min toolchain; both runners catch a BDN abort in `Program.cs` and exit 70 instead of taking the
+  crash path; and `run_benchmark.py`'s `run_logged` sends every measured child (NumPy suites, C#
+  shards, NDIter, the matrix subsystems) to `results/<ts>/logs/<phase>.log`, mirrored to the console
+  by a daemon tail thread — a suspended console now stalls only the mirror. **Recovery when an
+  inherited-console run (an ad-hoc `dotnet run`) does freeze:** press any key in that pane; a process
+  already past the timeout then prints the unhandled exception and dies, and the classes it had
+  exported are still in `BenchmarkDotNet.Artifacts/results`. Never `dotnet build` the runner while a
+  frozen run is alive (its DLLs are locked) — verify in a detached worktree.
 - **Iteration time capped at 25 ms** with 50 measured iterations. BDN's default Throughput
   strategy ramps to ~8192 invocations/iteration for nanosecond microbenchmarks; for µs–ms
   array ops that made a single 10M case take ~25 s and the full matrix take days. Capping the

@@ -30,6 +30,12 @@ Design notes
   source/build identity make interrupted runs resumable without repeating completed cases.
 * NumPy side sweeps all three sizes in one invocation per suite (``--cache-sizes``); each
   result carries its own ``n``, which the merge keys on.
+* No measured child ever holds the console. Every long measured phase streams its stdout+stderr
+  to ``results/<ts>/logs/<phase>.log`` with a daemon thread mirroring the file to this console
+  (``Session.run`` for the matrix phases, the ``run_logged`` helper for a direct child launch) —
+  so a console whose output is suspended (conhost parks EVERY write from EVERY attached process
+  after a Pause/Ctrl+S in the pane, until the next key) stalls only the mirror, never the
+  measurement. With an inherited console an unbuffered write froze a 7-hour shard mid-class.
 
 Usage
 -----
@@ -61,6 +67,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -148,6 +155,75 @@ def run(cmd, cwd=None, check=False, env=None):
         return ACTIVE_SESSION.run(cmd, cwd=cwd, check=check, env=env)
     print(f"\n$ {' '.join(str(c) for c in cmd)}", flush=True)
     return subprocess.run([str(c) for c in cmd], cwd=str(cwd) if cwd else None, check=check, env=env)
+
+
+def run_logged(cmd, log_path, cwd=None, check=False, env=None):
+    """Run a long MEASURED child with stdout+stderr redirected to ``log_path`` (appended) and
+    mirrored to this console by a daemon thread that tails the file.
+
+    Why not the inherited console that ``run`` hands out: a console handle is a shared,
+    BLOCKING sink. While a console's output is suspended, conhost parks every WriteConsole from
+    every process attached to it (``DoWriteConsole`` -> ``CONSOLE_STATUS_WAIT``) — and a single
+    Pause or Ctrl+S keystroke in the pane suspends it (``CONSOLE_OUTPUT_SUSPENDED``, set whenever
+    the input buffer is in the cooked ``ENABLE_LINE_INPUT`` mode every shell leaves on; released
+    only by the next non-modifier key, which conhost swallows). Windows Terminal forwards those
+    keys unchanged. On 2026-09-07 one such keystroke froze the unary shard 7 h in: the BDN worker
+    thread blocked writing its 48th ``WorkloadActual`` line, the in-process executor's 5-minute
+    timeout then THREW an unhandled InvalidOperationException on the main thread, the runtime's
+    unhandled-exception printer blocked on the same console in cooperative-GC mode, and the next
+    GC (a low-memory notification handled on the finalizer thread) spun ``SuspendEE`` at 100 % of
+    one core forever waiting for it — a process that was alive, not exiting, undebuggable by
+    EventPipe, and the in-flight class (941 finished cases, 3.25 h) was lost with it.
+
+    With the child writing to a FILE nothing it does can block on the terminal: a suspended
+    console stalls only this mirror thread (daemon — the run moves on; the mirror catches up when
+    a key is pressed). A pipe + echoing reader would not do: the reader blocks on the same
+    suspension, the pipe fills, and the child is back to blocking on its own writes."""
+    print(f"\n$ {' '.join(str(c) for c in cmd)}\n  [stdout+stderr -> {log_path}]", flush=True)
+    log_path = Path(log_path)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    finished = threading.Event()
+
+    def mirror(start):
+        # Raw bytes pass through untouched (BDN emits UTF-8 + ANSI colours). A mirror failure —
+        # the console closed or lost — is not the run's problem: the log file is the record.
+        out = getattr(sys.stdout, "buffer", None)
+        try:
+            with open(log_path, "rb") as tail:
+                tail.seek(start)
+                while True:
+                    chunk = tail.read()
+                    if chunk:
+                        if out is not None:
+                            out.write(chunk)
+                            out.flush()
+                        else:
+                            sys.stdout.write(chunk.decode("utf-8", "replace"))
+                            sys.stdout.flush()
+                    elif finished.is_set():
+                        return
+                    else:
+                        finished.wait(0.25)
+        except (OSError, ValueError):
+            return
+
+    with open(log_path, "ab") as log:
+        # The child (and every grandchild — `dotnet run` hands the handle to the BDN exe) appends
+        # through the inherited handle, so all three share ONE file position: mirror from where
+        # the file ends now, not from the previous phase that may have used the same log.
+        thread = threading.Thread(target=mirror, args=(log_path.stat().st_size,),
+                                  name=f"mirror:{log_path.name}", daemon=True)
+        thread.start()
+        try:
+            proc = subprocess.run([str(c) for c in cmd], cwd=str(cwd) if cwd else None, env=env,
+                                  stdout=log, stderr=subprocess.STDOUT)
+        finally:
+            finished.set()
+            # A suspended console keeps the mirror stuck in its write; never wait on it.
+            thread.join(timeout=5.0)
+    if check and proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, proc.args)
+    return proc
 
 
 def append_section(report_md, src_md, title):

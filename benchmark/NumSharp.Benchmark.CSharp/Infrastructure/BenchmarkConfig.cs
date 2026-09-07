@@ -7,6 +7,7 @@ using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Reports;
 using BenchmarkDotNet.Filters;
 using BenchmarkDotNet.Validators;
+using BenchmarkDotNet.Toolchains;
 using BenchmarkDotNet.Toolchains.InProcess.Emit;
 using BenchmarkDotNet.Running;
 using Perfolizer.Horology;
@@ -69,6 +70,30 @@ public class QuickBenchmarkConfig : ManualConfig
 }
 
 /// <summary>
+/// The in-process toolchain every official job runs on: <see cref="InProcessEmitToolchain"/> with a
+/// 30-minute per-benchmark execution timeout instead of the 5-minute
+/// <see cref="InProcessEmitExecutor.DefaultTimeout"/> that <see cref="InProcessEmitToolchain.Instance"/>
+/// carries.
+///
+/// That timeout is not a soft failure. <see cref="InProcessEmitExecutor"/> joins its runner thread
+/// and, when the join times out, THROWS an <see cref="InvalidOperationException"/> ("takes too long
+/// to run"); nothing in BenchmarkDotNet catches it, and every case the CURRENT class had already
+/// finished exists only in memory until the class exports — one false timeout discards the whole
+/// class (2026-09-07: 941 finished UnaryFamilyBenchmarks cases, 3.25 h, lost). A genuine hang now
+/// costs 30 minutes instead of 5; a false timeout costs hours. The heaviest cell's execute phase
+/// (a 10M-element sort/FFT/argsort under the 25 ms iteration cap, plus the MemoryDiagnoser rerun)
+/// is well under a minute, so the margin only ever pays for host stalls the harness cannot remove
+/// (page-fault storms, swap, a suspended process). The one observed trigger — a console whose
+/// output was suspended by a Pause/Ctrl+S in the pane — is removed at the source: run_benchmark.py
+/// (run_logged) no longer lets a measured child hold the console at all.
+/// </summary>
+internal static class OfficialToolchain
+{
+    public static readonly IToolchain InProcess =
+        new InProcessEmitToolchain(TimeSpan.FromMinutes(30), logOutput: true);
+}
+
+/// <summary>
 /// Official benchmark configuration for the NumSharp-vs-NumPy comparison report.
 ///
 /// Uses the <see cref="InProcessEmitToolchain"/> rather than the default out-of-process
@@ -108,19 +133,19 @@ public class OfficialBenchmarkConfig : ManualConfig
         var job = depth switch
         {
             BenchmarkDepth.Pass => Job.Dry
-                .WithToolchain(InProcessEmitToolchain.Instance)
+                .WithToolchain(OfficialToolchain.InProcess)
                 .WithLaunchCount(1)
                 .WithWarmupCount(0)
                 .WithIterationCount(1)
                 .WithInvocationCount(1)
                 .WithUnrollFactor(1),
             BenchmarkDepth.Light => Job.Default
-                .WithToolchain(InProcessEmitToolchain.Instance)
+                .WithToolchain(OfficialToolchain.InProcess)
                 .WithIterationTime(TimeInterval.FromMilliseconds(25))
                 .WithWarmupCount(3)
                 .WithIterationCount(8),
             _ => Job.Default
-                .WithToolchain(InProcessEmitToolchain.Instance)
+                .WithToolchain(OfficialToolchain.InProcess)
                 .WithIterationTime(TimeInterval.FromMilliseconds(25))
                 .WithWarmupCount(5)
                 .WithIterationCount(50),

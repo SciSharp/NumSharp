@@ -91,4 +91,20 @@ if (args.Length == 0)
 // Apply the official config (InProcessEmitToolchain + Full rigor) as the base so the
 // out-of-process CsProj toolchain — which fails here due to duplicate project names in
 // sibling .claude/worktrees/ checkouts — is never used. CLI args (e.g. --filter) extend it.
-BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, new OfficialBenchmarkConfig());
+try
+{
+    BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, new OfficialBenchmarkConfig());
+}
+catch (Exception ex)
+{
+    // BenchmarkDotNet aborts a run by THROWING out of BenchmarkSwitcher.Run — e.g. the in-process
+    // executor's "takes too long to run" timeout (see OfficialToolchain). Left unhandled, that
+    // exception takes the runtime's crash path: the unhandled-exception printer writes to stderr
+    // in cooperative-GC mode, so with a stalled console on stderr the process can neither exit
+    // nor be suspended for a GC (2026-09-07: the finalizer thread spun one core at 100 % for hours
+    // with the process alive and undebuggable). Report it here and exit non-zero instead. The
+    // classes already exported to BenchmarkDotNet.Artifacts/results are intact; the orchestrator
+    // (check=False on measure runs) collects them and moves on to the next suite.
+    Console.Error.WriteLine($"NumSharp.Benchmark.CSharp: BenchmarkDotNet aborted the run: {ex}");
+    Environment.ExitCode = 70;
+}

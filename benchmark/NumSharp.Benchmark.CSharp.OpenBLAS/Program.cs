@@ -19,5 +19,17 @@ if (!OpenBlasEngine.Enabled)
     throw new InvalidOperationException("The OpenBLAS benchmark profile could not enable its backend.");
 
 Console.WriteLine($"PROFILE openblas; {OpenBlasEngine.Info}");
-BenchmarkSwitcher.FromAssembly(typeof(LinAlgBenchmarks).Assembly)
-    .Run(args, new OfficialBenchmarkConfig());
+try
+{
+    BenchmarkSwitcher.FromAssembly(typeof(LinAlgBenchmarks).Assembly)
+        .Run(args, new OfficialBenchmarkConfig());
+}
+catch (Exception ex)
+{
+    // Same contract as the Core runner's Program.cs: a BenchmarkDotNet abort (e.g. the in-process
+    // executor's timeout, see OfficialToolchain) is reported here and exits non-zero rather than
+    // taking the runtime's unhandled-exception path, whose stderr write in cooperative-GC mode
+    // wedges the process for good when the console is stalled. Exported classes stay on disk.
+    Console.Error.WriteLine($"NumSharp.Benchmark.CSharp.OpenBLAS: BenchmarkDotNet aborted the run: {ex}");
+    Environment.ExitCode = 70;
+}
