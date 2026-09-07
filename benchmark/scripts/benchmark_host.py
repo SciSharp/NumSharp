@@ -53,6 +53,19 @@ BOOST_MODE_NAMES = {
 # it. NS_PROBE_AFFINITY is the nditer probes' older spelling, accepted as a fallback.
 AFFINITY_VARIABLE = "NUMSHARP_BENCHMARK_AFFINITY"
 LEGACY_AFFINITY_VARIABLE = "NS_PROBE_AFFINITY"
+# Driver-to-driver contract (orchestrator -> sheets): "=0" opts a driven sheet out of pinning /
+# locking (set from --no-pin-core / --no-lock-clock), and CLOCK_LOCKED_MARKER=1 says a parent
+# already holds the clock lock so a child driver must never nest one (a nested lock would record
+# "Disabled" as the original value and restore to it).
+PIN_OPT_OUT_VARIABLE = "NUMSHARP_BENCHMARK_PIN"
+LOCK_OPT_OUT_VARIABLE = "NUMSHARP_BENCHMARK_LOCK_CLOCK"
+CLOCK_LOCKED_MARKER = "NUMSHARP_BENCHMARK_CLOCK_LOCKED"
+
+
+def default_state_file() -> Path:
+    """benchmark/results/.clock-lock.json — one shared self-heal location for every driver
+    (results/ is gitignored; only one lock is ever active, the marker prevents nesting)."""
+    return Path(__file__).resolve().parent.parent / "results" / ".clock-lock.json"
 
 
 def _log(message: str) -> None:
@@ -264,6 +277,10 @@ class ClockLock:
             self.summary = "clock lock unavailable on this platform (powercfg is Windows-only)"
             _log(self.summary)
             return False
+        if os.environ.get(CLOCK_LOCKED_MARKER) == "1":
+            self.summary = "clock already locked by a parent runner (not nesting)"
+            _log(self.summary)
+            return False
         self._repair_from_state_file()
         # The setting is hidden until this attribute flip; -query returns nothing for it otherwise.
         _powercfg("-attributes", SUB_PROCESSOR, PERFBOOSTMODE, "-ATTRIB_HIDE")
@@ -286,6 +303,7 @@ class ClockLock:
             self.restore()
             return False
         self.locked = True
+        os.environ[CLOCK_LOCKED_MARKER] = "1"   # inherited by every child driver -> no nesting
         atexit.register(self.restore)
         self.summary = (f"clock LOCKED: boost mode {BOOST_MODE_NAMES.get(ac, ac)}/{BOOST_MODE_NAMES.get(dc, dc)} "
                         f"-> Disabled on the High-performance scheme (restored on exit)")
@@ -297,6 +315,7 @@ class ClockLock:
             return
         values, self.original = self.original, None
         self.locked = False
+        os.environ.pop(CLOCK_LOCKED_MARKER, None)
         self._apply(values)
         ac, dc = _read_boost_mode(values["scheme"])
         _log(f"clock restored: boost mode back to {BOOST_MODE_NAMES.get(ac, ac)}/{BOOST_MODE_NAMES.get(dc, dc)}")
@@ -312,6 +331,49 @@ class ClockLock:
 
     def __exit__(self, *_exc) -> None:
         self.restore()
+
+
+def apply_runner_controls(lock_clock: bool | None = None, pin: bool | None = None,
+                          state_file: Path | None = None) -> tuple[ClockLock, int | None]:
+    """The ONE call every benchmark DRIVER makes right before launching its measured children —
+    the orchestrator, every *_sheet.py through bench_common, the backend-profile harness — and
+    AFTER any build step (a pinned build compiles on one core, a locked one at base clock).
+
+    Pin: honor NUMSHARP_BENCHMARK_AFFINITY if a parent exported it, else pick a P-core; pin THIS
+    process so every child inherits the mask at spawn (Windows CreateProcess and Linux fork both
+    inherit affinity — verified child AND grandchild), and export it so children that self-pin
+    (the BDN runners, numpy_benchmark.py, the *_bench scripts) agree. That is what makes the fix
+    universal: a `dotnet run -c Release -` script and its Python twin are pinned without a line of
+    code in them. Clock: lock unless a parent already holds it (never nest).
+
+    ``None`` = read the opt-out variables (NUMSHARP_BENCHMARK_PIN / NUMSHARP_BENCHMARK_LOCK_CLOCK,
+    "0" disables), which the orchestrator sets from --no-pin-core / --no-lock-clock so a driven
+    sheet respects the same choice. Returns (lock, mask); call ``lock.restore()`` after the last
+    measured child (atexit covers every other exit path)."""
+    if pin is None:
+        pin = os.environ.get(PIN_OPT_OUT_VARIABLE, "1") != "0"
+    if lock_clock is None:
+        lock_clock = os.environ.get(LOCK_OPT_OUT_VARIABLE, "1") != "0"
+
+    mask = None
+    if pin:
+        mask = (parse_mask(os.environ.get(AFFINITY_VARIABLE))
+                or parse_mask(os.environ.get(LEGACY_AFFINITY_VARIABLE))
+                or pick_benchmark_core())
+        if mask and pin_current_process(mask):
+            os.environ[AFFINITY_VARIABLE] = hex(mask)
+        else:
+            mask = None
+    else:
+        os.environ[PIN_OPT_OUT_VARIABLE] = "0"
+        os.environ.pop(AFFINITY_VARIABLE, None)
+        _log("core pin off (--no-pin-core)")
+
+    if not lock_clock:
+        os.environ[LOCK_OPT_OUT_VARIABLE] = "0"
+    lock = ClockLock(enabled=lock_clock, state_file=state_file or default_state_file())
+    lock.lock()
+    return lock, mask
 
 
 @contextmanager

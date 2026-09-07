@@ -7,6 +7,12 @@ using BenchmarkDotNet.Reports;
 using NumSharp.Benchmark.CSharp;
 using NumSharp.Benchmark.CSharp.Infrastructure;
 
+// Host stability: pin this process to the orchestrator's performance core BEFORE any path runs —
+// interactive menu, --filter, the audits — so every BenchmarkDotNet config in this process
+// (Official, NumSharpBenchmarkConfig, Quick) measures on it. Idempotent with the call inside
+// OfficialBenchmarkConfig; an absent NUMSHARP_BENCHMARK_AFFINITY leaves the process unpinned.
+BenchmarkHost.PinToBenchmarkCore();
+
 if (BenchmarkCheckpoint.TryWritePlan(typeof(Program).Assembly, args))
     return;
 

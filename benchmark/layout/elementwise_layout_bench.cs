@@ -12,6 +12,12 @@
 using System.Diagnostics;
 using NumSharp;
 
+// Host pin: a driven run (the sheet / run_benchmark.py) already inherits the pinned core; this makes a
+// standalone `dotnet run -c Release - < file` honor NUMSHARP_BENCHMARK_AFFINITY (or the probes' NS_PROBE_AFFINITY).
+if ((Environment.GetEnvironmentVariable("NUMSHARP_BENCHMARK_AFFINITY")
+     ?? Environment.GetEnvironmentVariable("NS_PROBE_AFFINITY")) is { Length: > 0 } hostAffinity)
+    System.Diagnostics.Process.GetCurrentProcess().ProcessorAffinity = (IntPtr)Convert.ToInt64(hostAffinity, 16);
+
 var dbg = Attribute.GetCustomAttribute(typeof(np).Assembly, typeof(DebuggableAttribute)) as DebuggableAttribute;
 if (dbg?.IsJITOptimizerDisabled ?? false) { Console.Error.WriteLine("FATAL: Debug core — use dotnet run -c Release - < file"); return; }
 

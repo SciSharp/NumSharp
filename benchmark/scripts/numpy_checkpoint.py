@@ -15,6 +15,9 @@ from pathlib import Path
 RESULT_FIELDS = {
     "name", "category", "suite", "dtype", "n", "mean_ms", "stddev_ms", "min_ms", "max_ms",
     "iterations", "ops_per_sec", "allocated_mb",
+    # Symmetric-Tukey (OutlierMode.RemoveAll) provenance carried on every BenchmarkResult; the merge
+    # never reads it, but the persisted result dict carries it, so the validator must allow it.
+    "outliers_removed",
 }
 
 

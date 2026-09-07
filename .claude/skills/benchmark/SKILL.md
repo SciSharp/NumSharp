@@ -135,7 +135,10 @@ The most common task. Full worked example in **`references/add-benchmark.md`**. 
   hidden from `powercfg -query` until unhidden); BDN keeps fast outliers, so the lucky window becomes
   `Statistics.Min`. `run_benchmark.py` now locks the clock (boost Disabled, restored on exit) and pins
   BOTH languages to one P-core (`NUMSHARP_BENCHMARK_AFFINITY`, default `0x4`) — see
-  `benchmark/scripts/benchmark_host.py`; `--no-lock-clock` / `--no-pin-core` opt out. Pinning trap: a
+  `benchmark/scripts/benchmark_host.py`; `--no-lock-clock` / `--no-pin-core` opt out — and it covers EVERY
+  runner (sheets, backend profiles and the nditer harness pin themselves after their build, and every
+  `dotnet run -` script / Python twin inherits the mask at spawn). Both languages also trim outliers on
+  BOTH tails (`OutlierMode.RemoveAll` in every BDN config, Tukey k=1.5 in `numpy_benchmark.py`). Pinning trap: a
   bare `ctypes.windll.kernel32.SetProcessAffinityMask(GetCurrentProcess(), …)` (no `argtypes`/`restype`)
   fails silently — always read the mask back.
 

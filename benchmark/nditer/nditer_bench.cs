@@ -29,6 +29,12 @@ using NumSharp;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 
+// Host pin: a driven run (nditer_sheet.py / run_benchmark.py) already inherits the pinned core; this makes a
+// standalone `dotnet run -c Release - < file` honor NUMSHARP_BENCHMARK_AFFINITY (or the probes' NS_PROBE_AFFINITY).
+if ((Environment.GetEnvironmentVariable("NUMSHARP_BENCHMARK_AFFINITY")
+     ?? Environment.GetEnvironmentVariable("NS_PROBE_AFFINITY")) is { Length: > 0 } hostAffinity)
+    System.Diagnostics.Process.GetCurrentProcess().ProcessorAffinity = (IntPtr)Convert.ToInt64(hostAffinity, 16);
+
 var dbgScript = Attribute.GetCustomAttribute(typeof(K).Assembly, typeof(DebuggableAttribute)) as DebuggableAttribute;
 var dbgCore = Attribute.GetCustomAttribute(typeof(np).Assembly, typeof(DebuggableAttribute)) as DebuggableAttribute;
 if ((dbgScript?.IsJITOptimizerDisabled ?? false) || (dbgCore?.IsJITOptimizerDisabled ?? false))

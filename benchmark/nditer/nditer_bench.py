@@ -11,6 +11,10 @@ import os
 import sys
 import time
 import numpy as np
+# Host pin: inherit the driving sheet's core when driven; honor NUMSHARP_BENCHMARK_AFFINITY standalone.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+from benchmark_host import pin_current_process_from_env  # noqa: E402
+pin_current_process_from_env()
 
 SECTION = os.environ.get("NUMSHARP_BENCH_NDITER_SECTION", "all").strip().lower()
 

@@ -10,6 +10,7 @@ using BenchmarkDotNet.Validators;
 using BenchmarkDotNet.Toolchains.InProcess.Emit;
 using BenchmarkDotNet.Running;
 using Perfolizer.Horology;
+using Perfolizer.Mathematics.OutlierDetection;
 using NumSharp;
 
 namespace NumSharp.Benchmark.CSharp.Infrastructure;
@@ -26,6 +27,7 @@ public class NumSharpBenchmarkConfig : ManualConfig
         AddJob(Job.Default
             .WithWarmupCount(3)
             .WithIterationCount(20)
+            .WithOutlierMode(OutlierMode.RemoveAll)   // both tails, like the official config
             .AsDefault());
 
         // Diagnosers
@@ -58,7 +60,8 @@ public class QuickBenchmarkConfig : ManualConfig
     {
         AddJob(Job.Dry
             .WithWarmupCount(1)
-            .WithIterationCount(3));
+            .WithIterationCount(3)
+            .WithOutlierMode(OutlierMode.RemoveAll));   // both tails, like the official config
 
         AddDiagnoser(MemoryDiagnoser.Default);
         AddExporter(JsonExporter.Brief);
@@ -78,7 +81,9 @@ public class QuickBenchmarkConfig : ManualConfig
 /// measured (a single warmed interpreter), which makes the cross-language ratio fairer.
 ///
 /// Rigor: warmup 5 / 50 measured iterations (the "Full" tier), with BenchmarkDotNet's
-/// standard statistical engine (outlier removal, margin-of-error). JSON export feeds
+/// standard statistical engine — outlier removal on BOTH tails (<see cref="OutlierMode.RemoveAll"/>,
+/// mirrored by numpy_benchmark.py's Tukey filter) and margin-of-error. The process is pinned to the
+/// orchestrator's performance core first (<see cref="BenchmarkHost"/>). JSON export feeds
 /// scripts/merge-results.py.
 /// </summary>
 public class OfficialBenchmarkConfig : ManualConfig
@@ -120,6 +125,13 @@ public class OfficialBenchmarkConfig : ManualConfig
                 .WithWarmupCount(5)
                 .WithIterationCount(50),
         };
+        // Symmetric outlier removal (Tukey, both fences). BenchmarkDotNet's default RemoveUpper
+        // trims only SLOW iterations and keeps fast ones — a transient turbo-boost window (2 of 50
+        // iterations 30–50 % faster, never reproducing) therefore survived into Statistics.Min, the
+        // harness's best-window basis, and over-credited the cell. RemoveAll drops both tails;
+        // numpy_benchmark.py applies the same Tukey k=1.5 rule so both languages trim alike.
+        // (Pass runs one iteration: the mode is a no-op there and kept for uniformity.)
+        job = job.WithOutlierMode(OutlierMode.RemoveAll);
         AddJob(job.AsDefault());
 
         // MemoryDiagnoser performs auxiliary workload executions. Pass mode is an execution gate:

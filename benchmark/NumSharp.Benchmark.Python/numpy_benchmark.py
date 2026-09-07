@@ -138,6 +138,27 @@ class BenchmarkResult:
     iterations: int
     ops_per_sec: float
     allocated_mb: float = 0.0
+    # Samples dropped by the symmetric Tukey filter (both fences), mirroring BenchmarkDotNet's
+    # OutlierMode.RemoveAll on the C# side; provenance only — the merge never reads it.
+    outliers_removed: int = 0
+
+
+def _remove_outliers_tukey(values, k: float = 1.5):
+    """Tukey fences on BOTH sides (Q1 - k*IQR, Q3 + k*IQR), k = 1.5 — the same rule BenchmarkDotNet
+    applies with OutlierMode.RemoveAll, so both languages trim the same way. RemoveUpper alone (BDN's
+    default) keeps a lucky-FAST window — a transient turbo-boost excursion — and hands it straight to
+    min_ms, the harness's best-window basis; trimming both sides drops it. Fewer than 4 samples have
+    no meaningful quartiles and are kept as-is; a filter that would empty the set is not applied."""
+    if len(values) < 4:
+        return list(values), 0
+    q1, q3 = np.percentile(values, [25, 75])
+    iqr = q3 - q1
+    lo, hi = q1 - k * iqr, q3 + k * iqr
+    kept = [v for v in values if lo <= v <= hi]
+    if not kept:
+        return list(values), 0
+    return kept, len(values) - len(kept)
+
 
 def benchmark(func: Callable, n: int, warmup: int = 10, iterations: int = 50,
               min_measure_ms: float = 1.0, pilot_ms: float = 0.3) -> BenchmarkResult:
@@ -254,6 +275,10 @@ def _benchmark_impl(func: Callable, n: int, warmup: int = 10, iterations: int = 
             func()
         times.append((time.perf_counter() - start) * 1000.0 / inner)  # per-call ms
 
+    # Symmetric outlier removal — both fences, matching the C# side's OutlierMode.RemoveAll. Every
+    # statistic below (mean/stddev/min/max) is over the trimmed set, as BDN's Statistics are over
+    # its post-removal WorkloadResult set; `iterations` stays the total calls actually executed.
+    times, outliers_removed = _remove_outliers_tukey(times)
     mean = statistics.mean(times)
     stddev = statistics.stdev(times) if len(times) > 1 else 0
 
@@ -268,7 +293,8 @@ def _benchmark_impl(func: Callable, n: int, warmup: int = 10, iterations: int = 
         min_ms=min(times),
         max_ms=max(times),
         iterations=samples * inner,   # total op calls executed (50 for a slow op, many for fast)
-        ops_per_sec=1000.0 / mean if mean > 0 else 0
+        ops_per_sec=1000.0 / mean if mean > 0 else 0,
+        outliers_removed=outliers_removed,
     )
 
 def create_random_array(n: int, dtype_name: str, seed: int = 42) -> np.ndarray:

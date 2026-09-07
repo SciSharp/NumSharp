@@ -11,6 +11,8 @@ if (BenchmarkCheckpoint.TryWritePlan(typeof(LinAlgBenchmarks).Assembly, args))
 // so its Managed profile can never accidentally load or install a native backend. This runner reuses
 // the EXACT SAME benchmark classes and OfficialBenchmarkConfig, but installs single-thread OpenBLAS
 // before BenchmarkDotNet discovers/executes them.
+// Host stability: pin to the orchestrator's performance core first (same seam as the Core runner).
+BenchmarkHost.PinToBenchmarkCore();
 np.multithreading(false);
 OpenBlasEngine.Enable(threads: 1);
 if (!OpenBlasEngine.Enabled)

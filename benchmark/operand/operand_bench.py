@@ -1,4 +1,9 @@
 import numpy as np, time, sys
+import os as _os
+# Host pin: inherit the driving sheet's core when driven; honor NUMSHARP_BENCHMARK_AFFINITY standalone.
+sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "scripts"))
+from benchmark_host import pin_current_process_from_env  # noqa: E402
+pin_current_process_from_env()
 # operand_bench.py — NumPy twin of operand_bench.cs (identical keys).
 # Layout classes the op×layout×dtype matrix omits: 1-D contig/strided/reversed,
 # scalar operand, mixed operand layouts (C+F, C+T), binary broadcast (row+col),

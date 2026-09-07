@@ -29,6 +29,24 @@ AUTHOR_OPENBLAS_CSPROJ = "K:/source/NumSharp/src/NumSharp.Interop.OpenBLAS/NumSh
 # stalling while the runtime writes a crash dump — same policy as nditer.
 NS_ENV_EXTRA = {"DOTNET_DbgEnableMiniDump": "0", "DOTNET_EnableCrashReport": "0"}
 
+# Host stability (benchmark_host.py): applied ONCE, lazily, at the first measured child — i.e. after
+# the sheet's build_core()/build_openblas() — so the build compiles unpinned at full clock while every
+# measured `dotnet run -c Release -` script and Python twin INHERITS the pinned core (child and
+# grandchild inherit the affinity mask at spawn) under a locked clock. Under run_benchmark.py the
+# orchestrator already holds both (NUMSHARP_BENCHMARK_AFFINITY exported, NUMSHARP_BENCHMARK_CLOCK_LOCKED=1)
+# and apply_runner_controls() then re-pins to the same mask and refuses to nest the lock; a sheet run
+# standalone gets the same treatment on its own. Restored by atexit when the sheet exits.
+_runner_controls = None
+
+
+def _ensure_runner_controls():
+    global _runner_controls
+    if _runner_controls is None:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import benchmark_host
+        _runner_controls = benchmark_host.apply_runner_controls()
+    return _runner_controls
+
 
 def core_csproj(repo):
     return os.path.join(repo, "src", "NumSharp.Core", "NumSharp.Core.csproj")
@@ -75,6 +93,7 @@ def run_cs(repo, cs_path, timeout=1200, env_extra=None):
     under .claude/worktrees/ can't confuse the project search; the author's
     absolute #:project path is rewritten to this checkout's csproj first.
     """
+    _ensure_runner_controls()
     with open(cs_path, encoding="utf-8") as f:
         src = f.read()
     src = src.replace(AUTHOR_CSPROJ, core_csproj(repo).replace(os.sep, "/"))
@@ -95,6 +114,7 @@ def run_cs(repo, cs_path, timeout=1200, env_extra=None):
 
 def run_py(repo, py_path, timeout=900, env_extra=None):
     """Run a NumPy twin bench (.py) and return its stdout (the keyed TSV)."""
+    _ensure_runner_controls()
     name = os.path.basename(py_path)
     try:
         env = {**os.environ, **(env_extra or {})}

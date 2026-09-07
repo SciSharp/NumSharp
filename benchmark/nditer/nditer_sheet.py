@@ -155,6 +155,13 @@ def collect(sections, skip_build, resume):
             log("[build] FAILED:\n" + b.stdout[-1500:])
             sys.exit(1)
         log("[build] ok")
+    # Host stability (benchmark/scripts/benchmark_host.py), applied AFTER the build so it compiles
+    # unpinned at full clock: this driver is pinned to one performance core — every run_ns / run_np
+    # child inherits the mask at spawn — under a locked clock. Under run_benchmark.py the
+    # orchestrator already holds both; this then re-pins to the same mask and refuses to nest the lock.
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+    from benchmark_host import apply_runner_controls
+    apply_runner_controls()
     # Resume: seed from any prior tsv so a crash mid-sweep doesn't lose progress.
     pairs = load_tsv() if (resume and os.path.exists(TSV)) else {}
     for s in sections:

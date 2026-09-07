@@ -723,7 +723,9 @@ The C# side runs under `OfficialBenchmarkConfig` (Infrastructure/BenchmarkConfig
   still get hundreds–thousands of invocations, slow ops drop to 1/iteration. (~15× faster,
   all 50 iterations preserved.)
 - **Timing basis: best window (min), not the mean.** `merge-results.py` compares each side's
-  per-case MINIMUM (BDN `Statistics.Min` / NumPy `min_ms`): interference — GC pauses, page-fault
+  per-case MINIMUM (BDN `Statistics.Min` / NumPy `min_ms` — both taken AFTER symmetric Tukey outlier
+  removal, `OutlierMode.RemoveAll` / `_remove_outliers_tukey`, so a lucky-FAST window cannot become
+  the min; BDN's default RemoveUpper trimmed only the slow tail): interference — GC pauses, page-fault
   storms, ambient machine load — only ever *adds* time, and it lands almost entirely in the
   NumSharp side's right tail (measured on a full run: NS mean/min p75 = 1.68 vs NumPy's 1.08,
   enough to move the credible-row geomean **0.86 → 0.99 from the same raw data**), so comparing
@@ -762,7 +764,18 @@ The C# side runs under `OfficialBenchmarkConfig` (Infrastructure/BenchmarkConfig
   `SetProcessAffinityMask(GetCurrentProcess(), …)` call with no `argtypes`/`restype` fails
   SILENTLY (the pseudo-handle -1 is truncated to a 32-bit int → invalid HANDLE → returns 0) — the
   probes' `numpy_twins.py` carried exactly that and was never actually pinned; `benchmark_host`
-  declares the signatures and reads the mask back, so a pin is proven, never assumed.
+  declares the signatures and reads the mask back, so a pin is proven, never assumed. **Every runner
+  is covered, not just the op matrix:** a child process inherits its parent's affinity mask at spawn
+  (verified child AND grandchild), so each *driver* pins itself after its build — `run_benchmark.py`,
+  every `*_sheet.py` through `bench_common.run_cs/run_py` (lazily, at the first measured child),
+  `nditer_sheet.collect`, `backend_profiles.py` — and the `dotnet run -c Release -` scripts and Python
+  twins they launch are pinned with no code of their own; each also honors the variable standalone.
+  The driver-to-driver contract: `NUMSHARP_BENCHMARK_PIN=0` / `NUMSHARP_BENCHMARK_LOCK_CLOCK=0`
+  propagate the opt-outs, `NUMSHARP_BENCHMARK_CLOCK_LOCKED=1` says a parent holds the lock (never
+  nest — a nested lock would record "Disabled" as the original). **Outliers on BOTH tails, both
+  languages:** every BDN config uses `OutlierMode.RemoveAll` and `numpy_benchmark.py` applies the same
+  Tukey k=1.5 rule (`_remove_outliers_tukey`, `outliers_removed` recorded per row) — BDN's default
+  `RemoveUpper` kept the fast turbo window and handed it to `Statistics.Min`.
 
 The language merge keys on `(op, dtype, N)`. The targeted backend harness then measures all 39
 backend-sensitive APIs under Managed C# and OpenBLAS, capturing MissingBackendException and

@@ -69,7 +69,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
 from benchmark_modes import ALL_DTYPES, DEPTHS, parse_dtypes  # noqa: E402
 from benchmark_session import Session, RunLock, atomic_json, read_json, provenance, check_resume  # noqa: E402
 from numpy_checkpoint import validate_checkpoint  # noqa: E402
-from benchmark_host import ClockLock, logical_cpus_of, pick_benchmark_core  # noqa: E402
+from benchmark_host import apply_runner_controls, logical_cpus_of, pick_benchmark_core  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 HISTORY_DIR = HERE / "history"
@@ -509,14 +509,6 @@ def execute(args, raw, directory):
     atomic_json(HERE / "results" / "last-run.json", {"directory": str(directory.resolve())})
     os.environ["NUMSHARP_BENCHMARK_DEPTH"] = args.depth
     os.environ["NUMSHARP_BENCHMARK_DTYPES"] = ",".join(requested)
-    # Host stability (scripts/benchmark_host.py): both languages measure on ONE performance core - no
-    # P/E-core migration, no SMT-sibling noise, identical silicon. The C# runners
-    # (Infrastructure/BenchmarkHost.cs) and numpy_benchmark.py honor this variable; the clock lock in
-    # execute_stages() is system-wide and needs no child contract.
-    if pin_mask:
-        os.environ["NUMSHARP_BENCHMARK_AFFINITY"] = hex(pin_mask)
-    else:
-        os.environ.pop("NUMSHARP_BENCHMARK_AFFINITY", None)
     os.environ["PYTHONUTF8"] = "1"
     os.environ["PYTHONUNBUFFERED"] = "1"
     # Never inherit a previous caller's allowlist/checkpoint destination during discovery.
@@ -567,12 +559,18 @@ def execute_stages(args, directory, session, requested, eligible):
     if args.resume and image_path.exists() and read_json(image_path) != images:
         raise ValueError("Built benchmark binaries changed; start a new run instead of mixing measurements")
     atomic_json(image_path, images)
-    # Host stability lever 2 (clock lock): turbo boost off for every measured phase below (NumPy, C#
-    # managed + OpenBLAS, and the complementary subsystems). System-wide, so one mechanism covers both
-    # languages; restored on every exit path Python controls (atexit) and self-healed from the state
-    # file after a hard kill. Released right after the last measurement, before the merge/report steps.
-    clock = ClockLock(enabled=not args.no_lock_clock, state_file=HERE / "results" / ".clock-lock.json")
-    clock.lock()
+    # Host controls for EVERY measured phase below - NumPy, C# managed + OpenBLAS, the NDIter harness,
+    # the matrix subsystems, the backend profiles (scripts/benchmark_host.py). Placed after the build
+    # on purpose (a pinned build compiles on one core; a locked one at base clock).
+    #   * pin: this process is pinned to one performance core, and every child it spawns - `dotnet run`
+    #     and the BDN exe, numpy_benchmark.py, each *_sheet.py and the `dotnet run -` scripts + Python
+    #     twins they launch - INHERITS that mask at spawn. NUMSHARP_BENCHMARK_AFFINITY is exported so
+    #     the runners that also self-pin agree; --no-pin-core propagates as NUMSHARP_BENCHMARK_PIN=0.
+    #   * clock: turbo boost Disabled system-wide (one mechanism for both languages); restored on every
+    #     exit path Python controls (atexit) and self-healed from the state file after a hard kill;
+    #     NUMSHARP_BENCHMARK_CLOCK_LOCKED=1 tells every child driver not to nest a lock. Released right
+    #     after the last measurement, before the merge/report steps.
+    clock, _ = apply_runner_controls(lock_clock=not args.no_lock_clock, pin=not args.no_pin_core)
     plan_file = directory / "plan.json"
     if args.resume and plan_file.exists():
         plan = read_json(plan_file)

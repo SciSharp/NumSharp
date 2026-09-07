@@ -2,6 +2,11 @@
 import time
 
 import numpy as np
+import os as _os, sys as _sys
+# Host pin: inherit the driving sheet's core when driven; honor NUMSHARP_BENCHMARK_AFFINITY standalone.
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "scripts"))
+from benchmark_host import pin_current_process_from_env  # noqa: E402
+pin_current_process_from_env()
 
 N = 4_000_000
 a = np.arange(N, dtype=np.float64) + 1.0

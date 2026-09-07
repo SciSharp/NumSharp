@@ -1,4 +1,8 @@
 import numpy as np, time, sys, os
+# Host pin: inherit the driving sheet's core when driven; honor NUMSHARP_BENCHMARK_AFFINITY standalone.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+from benchmark_host import pin_current_process_from_env  # noqa: E402
+pin_current_process_from_env()
 # cast_matrix_bench.py — NumPy side. Phase 0 of CAST_BEAT_NUMPY_PLAN.md.
 # For every src dtype x layout x dst dtype at 1M, times v.astype(dst, copy=True).
 # Output key: 1M|{src}|{layout}|{dst}\t{ms}  (identical keys to the C# side).
