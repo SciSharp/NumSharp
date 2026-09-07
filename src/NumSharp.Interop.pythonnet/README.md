@@ -154,22 +154,24 @@ using (Py.GIL())
 }
 ```
 
-Two static extension members (C# 14) on pythonnet's `Py` mirror the registration surface, so it reads
-beside `Py.Import(...)` / `Py.GIL()` at the call site:
+`Py.RegisterNumSharpCodec()` is a static extension member (C# 14) on pythonnet's `Py`, so it reads
+beside `Py.Import(...)` / `Py.GIL()` at the call site. It forwards verbatim to
+`NDArrayPythonInterop.RegisterCodec()` (both the no-arg and the `NumpyCodecOptions` overload) — an
+alias, not a second registration.
 
-| Alias | Forwards to |
-|---|---|
-| `Py.RegisterNumSharpCodec()` / `Py.RegisterNumSharpCodec(options)` | `NDArrayPythonInterop.RegisterCodec()` / `RegisterCodec(options)` |
-| `Py.RegisterNumSharpArrayAdapter(adapter)` | `NDArrayPythonInterop.RegisterArrayAdapter(adapter)` |
-
-Each forwards verbatim, so semantics and return values are identical — they are aliases, not second
-registrations. The `Py.` spelling is visible wherever `using NumSharp.Interop.PythonNet;` is in scope
-(already the case anywhere you use `NDArray`).
+**This one call enables ALL of NumSharp's support**; `NumpyCodecOptions` is the single control surface
+and every support is a flag defaulting ON — `NDArray`⇄numpy (`EncodeMode`/`DecodeMode`), PEP 3118
+buffers (`DecodeAnyBuffer`), the built-in **torch/pandas** (and any registered) adapters
+(`DecodeArrayAdapters`), list/tuple/scalar array-likes (`DecodeArrayLike`), and C# tuples ⇄ Python
+tuples (`ConvertTuples`). So torch and pandas support is part of this call — there is no separate
+"register the adapters" step. Adding your OWN third-party adapter is the one thing outside it, a rare
+extension point on `NDArrayPythonInterop.RegisterArrayAdapter(IPythonArrayAdapter)` (it takes an
+adapter instance; it is not a support toggle).
 
 > **Your project must compile with C# 14** to use the `Py.` spelling. Static extension members are
 > resolved at the call site by the C# 14+ compiler (the .NET 10 SDK); a consumer on C# 13 or earlier
-> (the .NET 8/9 SDK default) gets `CS9202` and should call the `NDArrayPythonInterop.*` methods
-> instead — they are identical and compile on every C# version.
+> (the .NET 8/9 SDK default) gets `CS9202` and should call `NDArrayPythonInterop.RegisterCodec()`
+> instead — it is identical and compiles on every C# version.
 
 `NumpyCodecOptions` controls the policies via **`NumpyCodecMode`** — one enum for both directions (`EncodeMode` / `DecodeMode`):
 

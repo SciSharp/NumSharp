@@ -1,4 +1,3 @@
-using System;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
@@ -9,9 +8,9 @@ using Python.Runtime;
 namespace NumSharp.Tests.Interop
 {
     /// <summary>
-    ///     The C#-14 static extension members on pythonnet's <see cref="Py"/> class
-    ///     (<see cref="PyNumSharpExtensions"/>) are thin aliases that must forward verbatim to
-    ///     <see cref="NDArrayPythonInterop"/>. These tests prove each alias hits the SAME underlying
+    ///     The C#-14 static extension member on pythonnet's <see cref="Py"/> class
+    ///     (<see cref="PyNumSharpExtensions"/>) is a thin alias that must forward verbatim to
+    ///     <see cref="NDArrayPythonInterop.RegisterCodec()"/>. This proves it hits the SAME underlying
     ///     registration as the direct call — not a separate or dead path.
     /// </summary>
     [TestClass]
@@ -31,27 +30,6 @@ namespace NumSharp.Tests.Interop
             using (Gil())
                 Scope.Set("pyalias_codec", nd);
             PyStr("type(pyalias_codec).__name__").Should().Be("ndarray", "the registered codec auto-encodes NDArray -> numpy");
-        }
-
-        [TestMethod]
-        public void RegisterNumSharpArrayAdapter_ForwardsToTheRegistry()
-        {
-            // A fresh, uniquely-named adapter registers exactly once in the process; the second call is
-            // the registry's idempotent-by-Name no-op, and the direct call agrees — proving the alias
-            // targets the real PythonArrayAdapterRegistry, not a separate list.
-            var adapter = new NoopAdapter("pytest-py-alias-" + Guid.NewGuid().ToString("N"));
-            Py.RegisterNumSharpArrayAdapter(adapter).Should().BeTrue("a fresh adapter Name registers");
-            Py.RegisterNumSharpArrayAdapter(adapter).Should().BeFalse("the same Name is idempotent");
-            NDArrayPythonInterop.RegisterArrayAdapter(adapter).Should().BeFalse("the direct call sees the same registry");
-        }
-
-        /// <summary>Minimal adapter: only its Name matters for a registration test; it never adapts.</summary>
-        private sealed class NoopAdapter : IPythonArrayAdapter
-        {
-            public NoopAdapter(string name) => Name = name;
-            public string Name { get; }
-            public bool CanAdapt(PyType objectType) => false;
-            public PyObject Adapt(PyObject source, bool allowCopy) => null;
         }
     }
 }
