@@ -144,7 +144,7 @@ NDArray  v = py.AsNDArray();        // view   (As… = share, like numpy array/a
 
 ```csharp
 NDArrayPythonInterop.RegisterCodec();     // once per engine session; idempotent
-Py.RegisterNumSharpCodecs();              // identical alias, reads beside Py.Import / Py.GIL
+Py.RegisterNumSharpCodec();               // identical alias, reads beside Py.Import / Py.GIL
 
 using (Py.GIL())
 {
@@ -154,12 +154,22 @@ using (Py.GIL())
 }
 ```
 
-`Py.RegisterNumSharpCodecs()` is a static extension member (C# 14) on pythonnet's `Py`, so it sits
-beside `Py.Import(...)` / `Py.GIL()` at the call site. It forwards verbatim to
-`NDArrayPythonInterop.RegisterCodec()` (both overloads — the no-arg and the `NumpyCodecOptions` one),
-so the sticky/idempotent/per-session semantics are identical; it is an alias, not a second
-registration. The `Py.` spelling is visible wherever `using NumSharp.Interop.PythonNet;` is in scope
-(which is already the case anywhere you use `NDArray`).
+Two static extension members (C# 14) on pythonnet's `Py` mirror the registration surface, so it reads
+beside `Py.Import(...)` / `Py.GIL()` at the call site:
+
+| Alias | Forwards to |
+|---|---|
+| `Py.RegisterNumSharpCodec()` / `Py.RegisterNumSharpCodec(options)` | `NDArrayPythonInterop.RegisterCodec()` / `RegisterCodec(options)` |
+| `Py.RegisterNumSharpArrayAdapter(adapter)` | `NDArrayPythonInterop.RegisterArrayAdapter(adapter)` |
+
+Each forwards verbatim, so semantics and return values are identical — they are aliases, not second
+registrations. The `Py.` spelling is visible wherever `using NumSharp.Interop.PythonNet;` is in scope
+(already the case anywhere you use `NDArray`).
+
+> **Your project must compile with C# 14** to use the `Py.` spelling. Static extension members are
+> resolved at the call site by the C# 14+ compiler (the .NET 10 SDK); a consumer on C# 13 or earlier
+> (the .NET 8/9 SDK default) gets `CS9202` and should call the `NDArrayPythonInterop.*` methods
+> instead — they are identical and compile on every C# version.
 
 `NumpyCodecOptions` controls the policies via **`NumpyCodecMode`** — one enum for both directions (`EncodeMode` / `DecodeMode`):
 
