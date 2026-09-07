@@ -36,6 +36,7 @@ Usage
   python benchmark/scripts/snapshot_history.py --no-stage          # don't git add
 """
 import argparse
+import json
 import os
 import platform
 import re
@@ -71,7 +72,8 @@ CARDS = [BENCH / "nditer" / "cards" / "ops.png", BENCH / "nditer" / "cards" / "c
 # core artifacts that live in results/<ts>/ (the .md is also mirrored at benchmark/ root)
 CORE_FROM_RESULTS = ["benchmark-report.md", "benchmark-report.json",
                      "benchmark-report.managed.json", "benchmark-report.openblas.json",
-                     "benchmark-report.csv", "numpy-results.json"]
+                     "benchmark-report.csv", "numpy-results.json",
+                     "run-config.json", "build-identity.json"]
 
 
 def git(*args):
@@ -298,6 +300,10 @@ def make_snapshot(results_dir=None, snap_name=None, head=None, stage=True,
         src = (results_dir / name) if results_dir and (results_dir / name).exists() else (BENCH / name)
         if src.exists():
             shutil.copy(src, snap / name)
+            if name == "run-config.json":
+                config = json.loads((snap / name).read_text(encoding="utf-8"))
+                config["resume_supported"] = False
+                (snap / name).write_text(json.dumps(config, indent=2), encoding="utf-8")
             copied.append(name)
         else:
             log(f"  [warn] missing core artifact: {name}")

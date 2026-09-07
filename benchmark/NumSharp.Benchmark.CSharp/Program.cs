@@ -7,6 +7,9 @@ using BenchmarkDotNet.Reports;
 using NumSharp.Benchmark.CSharp;
 using NumSharp.Benchmark.CSharp.Infrastructure;
 
+if (BenchmarkCheckpoint.TryWritePlan(typeof(Program).Assembly, args))
+    return;
+
 // Machine-readable, no-timing discovery used by benchmark/scripts/generate_scenarios_html.py.
 // It reflects BenchmarkDotNet's own [Benchmark] / [ParamsSource] metadata, so the dtype audit
 // cannot drift from the cases BDN would schedule.

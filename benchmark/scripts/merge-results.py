@@ -183,7 +183,7 @@ def parse_bdn_benchmark(bench: dict, failures: Optional[list] = None) -> Optiona
         # threw, so there is no measurement). Record it as a FAILURE — a benchmark that RAN and
         # failed is a real error, not a missing benchmark — and drop the row. The identity is
         # captured here (op/dtype/N + BDN FullName) because the null Statistics carries no timing.
-        stats = bench.get('Statistics')
+        stats = bench.get('Statistics') if bench.get('CheckpointStatus') != 'failed' else None
         if not stats:
             if failures is not None:
                 failures.append({

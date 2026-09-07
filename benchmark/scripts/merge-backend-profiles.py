@@ -323,8 +323,9 @@ def validate_linear_algebra_profile_coverage(managed: dict[str, Any], openblas: 
             f"{preview}{suffix}")
 
 
-def combine(managed: dict[str, Any], openblas: dict[str, Any]) -> dict[str, Any]:
-    validate_linear_algebra_profile_coverage(managed, openblas)
+def combine(managed: dict[str, Any], openblas: dict[str, Any], *, allow_partial: bool = False) -> dict[str, Any]:
+    if not allow_partial:
+        validate_linear_algebra_profile_coverage(managed, openblas)
     all_rows: dict[tuple[str, str, int, str], dict[str, Any]] = {}
     for profile, envelope in (("managed", managed), ("openblas", openblas)):
         for source in envelope["rows"]:
@@ -465,6 +466,8 @@ def main() -> None:
     parser.add_argument("--snapshot-date", help="Override the report provenance date (YYYY-MM-DD)")
     parser.add_argument("--commit", help="Override the benchmarked commit hash")
     parser.add_argument("--numpy-version", help="Override the measured NumPy version")
+    parser.add_argument("--allow-partial-profiles", action="store_true",
+                        help="Render incomplete/targeted runs without requiring full OpenBLAS coverage")
     args = parser.parse_args()
 
     managed_rows = load_json_profile(args.managed, "managed")
@@ -489,7 +492,7 @@ def main() -> None:
         metadata["numpy_version"] = args.numpy_version
     managed = profile_envelope("managed", managed_rows, metadata)
     openblas = profile_envelope("openblas", openblas_rows, metadata)
-    combined = combine(managed, openblas)
+    combined = combine(managed, openblas, allow_partial=args.allow_partial_profiles)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.with_suffix(".managed.json").write_text(json.dumps(managed, indent=2), encoding="utf-8")

@@ -125,6 +125,11 @@ public class OfficialBenchmarkConfig : ManualConfig
         if (BenchmarkRunSelection.RequestedDtypes.Count > 0)
             AddFilter(new RequestedDtypeFilter());
 
+        AddFilter(new RequestedCaseFilter());
+        var checkpointDirectory = Environment.GetEnvironmentVariable("NUMSHARP_BENCHMARK_CHECKPOINT_DIR");
+        if (!string.IsNullOrWhiteSpace(checkpointDirectory))
+            AddEventProcessor(new BenchmarkCheckpointProcessor(checkpointDirectory));
+
         AddExporter(JsonExporter.FullCompressed);
         AddExporter(MarkdownExporter.GitHub);
 

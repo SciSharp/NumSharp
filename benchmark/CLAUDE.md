@@ -2,6 +2,13 @@
 
 This document provides comprehensive guidance for working with the NumSharp benchmark infrastructure. It covers architecture, patterns, API usage, extending benchmarks, and troubleshooting.
 
+Interactive startup (`run_benchmark.py` without arguments) offers the newest unfinished
+compatible run before the depth/dtype picker. Discovery includes the last custom output
+directory via `results/last-run.json`, excludes complete/planned/active runs, and checks
+source/environment compatibility. Probe the OS lock rather than treating a surviving
+lock file as an active process. Explicit CLI invocations never prompt; non-interactive
+invocations require explicit options. Gate: `scripts/tests/test_benchmark_startup.py`.
+
 ---
 
 ## ⚠️ CRITICAL: ad-hoc `dotnet run` scripts build DEBUG by default
@@ -210,8 +217,9 @@ benchmark/
    - Statistical analysis (mean, stddev, min, max)
 
 3. Export Phase:
-   - C#: JSON via BenchmarkDotNet exporters
-   - Python: JSON via --output flag
+   - C#: BenchmarkCheckpoint event processor atomically exports each case in BDN's full JSON format
+   - Python: numpy_checkpoint stores each case atomically before announcing completion
+   - The parent rebuilds aggregate NumPy JSON from successful checkpoints; logs are diagnostic, not resume state
 
 4. Report Phase:
    - run_benchmark.py → scripts/merge-results.py joins C# + NumPy on (op, dtype, N)
@@ -506,7 +514,9 @@ python numpy_benchmark.py --size large          # 10M elements
 python numpy_benchmark.py --output results.json # JSON export
 ```
 
-> `run_benchmark.py` invokes this per suite as `--suite <s> --cache-sizes --output <tmp>`; each result carries its own `n`, which the merge keys on.
+> `run_benchmark.py` first discovers exact case IDs, then invokes each suite with `--cache-sizes`,
+> `--cases-file`, and `--checkpoint-dir`. Each result carries its own `n`; completed cases survive
+> an interrupted suite, and aggregate `--output` JSON can be rebuilt from the checkpoints.
 
 ### Result Format
 
@@ -554,9 +564,9 @@ NumSharp uses):
 | Icon | Status | Ratio | `%NumPy🕐` | Meaning |
 |:-:|--------|:-----:|:---------:|---------|
 | ✅ | faster | ≥ 1.05× | ≤ 95.2% | NumSharp materially faster |
-| 🟡 | close | 0.5–1.05× | 95.2–200% | near parity / within 2× slower |
-| 🟠 | slower | 0.2–0.5× | 200–500% | optimization target |
-| 🔴 | much_slower | < 0.2× | > 500% | priority fix |
+| 🟡 | close | 0.8–<1.05× | >95.2–125% | near parity / up to 25% slower |
+| 🟠 | slower | 0.33–<0.8× | >125–303.0% | optimization target |
+| 🔴 | much_slower | < 0.33× | >303.0% | priority fix |
 | ▫ | **negligible** | semantic O(1)-in-N scenario, < 1µs either side, or > 20× | — | not a credible throughput comparison — kept in raw tables but **excluded from every rollup and ranking** |
 | ⚪ | no_data | — | — | C# side has no row at this (op, dtype, N) — the join found no match |
 
@@ -625,20 +635,78 @@ Legacy `run-benchmarks.ps1` icons (NS/NPY — NumSharp_ms / NumPy_ms, **lower is
 
 ### Official run — `run_benchmark.py` (cross-platform, recommended)
 
-`run_benchmark.py` is the single reusable entry point for the official NumSharp-vs-NumPy
-comparison. It builds the C# suite, runs each suite through BenchmarkDotNet (per-class JSON,
-so it is resumable), sweeps NumPy across the three cache-tier sizes (1K / 100K / 10M), merges,
-archives the raw run to `results/<timestamp>/` (gitignored), and finally writes the committable
-`history/<date>_<sha>/` snapshot + repoints `history/latest` (see **History snapshots & the
-publish ritual** below; `--no-history` opts out).
+`run_benchmark.py` builds, discovers an exact execution plan, measures the selected NumPy and
+BenchmarkDotNet cells, and merges the result. Both engines save each case atomically before
+announcing completion; recovery does not depend on a suite or class finishing. Runs live under
+`results/<timestamp>/` or `--run-dir` (gitignored by default). Only a successful full `measure` run
+updates the canonical root/docs reports and committable history snapshot; subsets, pass/light,
+targeted reruns, and incomplete runs remain local to their run directory. `--no-history` skips
+the snapshot of an otherwise publication-eligible run.
 
 ```bash
-python run_benchmark.py                      # full official run, all comparison suites
+python run_benchmark.py                      # interactive depth + dtype picker
+python run_benchmark.py --depth measure --run-dir results/nightly
 python run_benchmark.py --suites arithmetic unary
 python run_benchmark.py --skip-build         # reuse the existing Release build
 python run_benchmark.py --skip-csharp        # NumPy only
-python run_benchmark.py --quick              # dev: fewer NumPy iterations
+python run_benchmark.py --quick              # deprecated alias for --depth light
 ```
+
+### Durable runs and targeted reruns
+
+Commands here run from `benchmark/`. Use `--plan-only` to build/discover/save without timing,
+then `--resume results/nightly` (or `--resume latest`) to execute the saved selection:
+
+```bash
+python run_benchmark.py --depth measure --run-dir results/nightly --plan-only
+python run_benchmark.py --resume results/nightly --attempts 3 --progress-interval 10
+python run_benchmark.py --resume latest --process-timeout 3600 --verbose --no-title
+python run_benchmark.py --depth light --operations "np.add*" --plan-only
+python run_benchmark.py --rerun failed --from-results results/nightly
+python run_benchmark.py --rerun bad --from-results history/latest/benchmark-report.json --plan-only
+python run_benchmark.py --rerun degraded --from-results results/current --baseline results/baseline --regression-percent 10
+```
+
+The parent owns the global terminal/title progress across child processes: discovered matrix
+total, completed, remaining, failures, approximate ETA, and current stage. Totals count NumPy,
+Managed, and OpenBLAS cases independently. They must come from discovery, never a hard-coded
+scenario count: existing September 6 raw runs contain 21,720 C# rows alone. Subsystems expose
+separate pending stages; their internal cases are not included in the matrix count or ETA.
+
+`--attempts` limits attempts per incomplete matrix suite (default 3); each retry keeps completed
+cases. `--process-timeout` optionally bounds each child process in seconds and terminates its
+process tree on expiry. All output is logged; `--verbose` also echoes it and `--no-title` disables
+title updates. Ctrl+C leaves a resumable directory. Source/environment fingerprints and saved
+options prevent a resume from mixing different code, runtimes, or measurement configurations;
+after changing code, create a new targeted rerun instead.
+
+`failed` selects actual failures. `bad` adds pending/unmeasured and credible slower/much_slower
+results, excluding known missing_backend/not_supported states and negligible work. `degraded`
+compares absolute NumSharp **minimum** times against the same baseline profile and exact
+operation/dtype/N/scenario, selecting increases strictly above the percentage threshold. A change
+in NumPy's timing or effective fastest profile does not establish a NumSharp regression. Available
+provenance is checked; older missing metadata is reported. Selection cannot broaden a subsystem
+scenario into a different official workload; unmatched selectors are recorded.
+
+Run files and ownership:
+
+| File/directory | Contract |
+|---|---|
+| `run-config.json`, `plan.json` | Fixed selection and code/environment provenance; exact engine/case IDs |
+| `run-state.json`, `events.jsonl` | Parent progress/stage state and append-only completion events |
+| `numpy-checkpoints/` | Atomic per-case NumPy success/failure records |
+| `csharp/`, `csharp-openblas/` | Atomic per-case BDN reports, including raw measurements |
+| `logs/`, `selection.json` | Full child output and selection reasons/unmatched cases |
+| `numpy-results.json`, `benchmark-report.*` | Rebuilt aggregates and comparisons |
+
+The implementation is split between `scripts/benchmark_session.py`, `scripts/benchmark_selection.py`,
+`scripts/numpy_checkpoint.py`, and C# `Infrastructure/BenchmarkCheckpoint.cs`. Matrix resume skips
+successful exact cells; subsystem resume skips successful **stages**, and only fresh successful
+subsystem output is copied. Legacy history snapshots and pre-checkpoint runs are selection inputs,
+not resumable execution state: raw BDN measurements were omitted from snapshots. The audited old
+`results/20260906-230207/` contains 4,996 NumPy rows, only 990 copied C# rows, and no final report.
+
+### Official measurement configuration
 
 The C# side runs under `OfficialBenchmarkConfig` (Infrastructure/BenchmarkConfig.cs):
 
@@ -722,10 +790,11 @@ reference*, distinct from the gitignored raw scratch:
 
 `benchmark/scripts/snapshot_history.py` assembles the snapshot, repoints `latest`, and
 auto-generates `MANIFEST.md` (provenance, env, methodology, headline geomeans, NDIter/Cast
-headlines). `run_benchmark.py` invokes it at the end of every run (skip with `--no-history`):
+headlines). `run_benchmark.py` invokes it only after a successful publication-eligible full
+`measure` run (skip with `--no-history`):
 
 ```bash
-python run_benchmark.py                                   # run + write history/<date>_<sha>/ + latest
+python run_benchmark.py --depth measure                   # full successful run writes history/<date>_<sha>/ + latest
 python benchmark/scripts/snapshot_history.py              # (re)build from newest results/ at HEAD
 python benchmark/scripts/snapshot_history.py --commit     # also git-commit the snapshot + latest
 python benchmark/scripts/snapshot_history.py \
@@ -1218,27 +1287,15 @@ jobs:
 
 ### Regression Detection
 
-Compare current results against baseline:
+Use the official selector to preserve size, dtype, scenario, backend, timing basis, and provenance:
 
-```python
-import json
-
-def check_regression(current_file, baseline_file, threshold=1.2):
-    """Alert if any operation is >threshold slower than baseline."""
-    current = json.load(open(current_file))
-    baseline = json.load(open(baseline_file))
-
-    baseline_map = {r['name']: r['mean_ms'] for r in baseline}
-
-    regressions = []
-    for r in current:
-        if r['name'] in baseline_map:
-            ratio = r['mean_ms'] / baseline_map[r['name']]
-            if ratio > threshold:
-                regressions.append((r['name'], ratio))
-
-    return regressions
+```bash
+python run_benchmark.py --rerun degraded --from-results results/current --baseline results/baseline --regression-percent 10 --plan-only
 ```
+
+Inspect `selection.json`, then resume the saved plan. The threshold compares same-profile
+NumSharp minimum time, not a name-only mean or a NumPy/NumSharp ratio. See
+[Durable runs and targeted reruns](#durable-runs-and-targeted-reruns).
 
 ---
 

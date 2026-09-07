@@ -36,6 +36,15 @@ def row(profile, availability, numsharp_ms=None, numpy_ms=1.0,
 
 
 class BackendProfileMergeTests(unittest.TestCase):
+    def test_targeted_profiles_can_render_without_weakening_full_run_coverage(self):
+        managed = module.profile_envelope("managed", [row("managed", module.AVAILABLE, numsharp_ms=2)])
+        openblas = module.profile_envelope("openblas", [row("openblas", module.AVAILABLE, numsharp_ms=1,
+                                                           operation="np.linalg.inv(a)")])
+        with self.assertRaisesRegex(RuntimeError, "complete measured LinearAlgebra"):
+            module.combine(managed, openblas)
+        combined = module.combine(managed, openblas, allow_partial=True)
+        self.assertEqual(2, len(combined["rows"]))
+
     def test_failed_timing_survives_profile_and_combined_envelopes(self):
         failed = row("managed", module.FAILED)
         managed = module.profile_envelope("managed", [failed])

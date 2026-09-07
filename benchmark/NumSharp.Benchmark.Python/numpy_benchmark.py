@@ -50,6 +50,7 @@ SCRIPT_DIR = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 from benchmark_modes import ALL_DTYPES, DEPTHS, parse_dtypes, selected  # noqa: E402
+from numpy_checkpoint import CheckpointStore, atomic_json, case_id  # noqa: E402
 
 # =============================================================================
 # Configuration
@@ -91,10 +92,19 @@ DTYPES = {
 ACTIVE_BENCHMARK_DEPTH = "measure"
 ACTIVE_DTYPES = set(DTYPES)
 
-# Full names ("np.abs (float16)") of ops that RAISED during this process (an intermittent
-# NumPy failure absorbed by benchmark()). main() drops EVERY tier of such an op so a partial
-# group (e.g. 1K+100K present, 10M skipped) never reaches merge-results.py's universal-tier
-# gate — which is check=True and would otherwise turn one flaky op into a whole-run failure.
+# Discovery builds only small fixture arrays while preserving branches on the requested tier.
+# It intercepts the execution primitive, including expected-rejection evidence, before any
+# workload body runs. Result objects are retained until builders have attached their metadata.
+DISCOVERY_TIER_N = None
+DISCOVERY_CALLS = None
+ACTIVE_CASE_EXECUTION = None
+
+
+def tier_n(n):
+    return n if DISCOVERY_TIER_N is None else DISCOVERY_TIER_N
+
+# Failed operation names for suite diagnostics. Successful tiers remain independent evidence;
+# the parent runner decides when an incomplete tier group is ready for report publication.
 SKIPPED_OP_NAMES: set = set()
 
 # Common types for quick benchmarks
@@ -146,16 +156,36 @@ def benchmark(func: Callable, n: int, warmup: int = 10, iterations: int = 50,
     orchestrator side by ``run_benchmark.py`` retrying the suite subprocess and
     continuing past a suite that keeps crashing.
     """
+    return _execute_case(func, n, lambda: _benchmark_impl(
+        func, n, warmup, iterations, min_measure_ms, pilot_ms))
+
+
+def _failed_result(func, n, exc):
+    fname = getattr(func, "__name__", None) or str(func)
+    print(f"[benchmark] SKIPPED {fname}: {type(exc).__name__}: {exc}",
+          file=sys.stderr, flush=True)
+    nan = float("nan")
+    return BenchmarkResult(name=fname, category="", suite="", dtype="", n=n,
+                           mean_ms=nan, stddev_ms=nan, min_ms=nan, max_ms=nan,
+                           iterations=0, ops_per_sec=0.0)
+
+
+def _workload_key(func):
+    code = getattr(func, "__code__", None)
+    return (code.co_firstlineno, code.co_name) if code else repr(func)
+
+
+def _execute_case(func, n, measure):
+    if DISCOVERY_CALLS is not None:
+        result = BenchmarkResult("", "", "", "", n, 0.0, 0.0, 0.0, 0.0, 1, 0.0)
+        DISCOVERY_CALLS.append((result, _workload_key(func)))
+        return result
+    if ACTIVE_CASE_EXECUTION is not None:
+        return ACTIVE_CASE_EXECUTION.execute(func, n, measure)
     try:
-        return _benchmark_impl(func, n, warmup, iterations, min_measure_ms, pilot_ms)
+        return measure()
     except Exception as exc:  # deliberately broad: any single-op failure is non-fatal
-        fname = getattr(func, "__name__", None) or str(func)
-        print(f"[benchmark] SKIPPED {fname}: {type(exc).__name__}: {exc}",
-              file=sys.stderr, flush=True)
-        nan = float("nan")
-        return BenchmarkResult(name=fname, category="", suite="", dtype="", n=n,
-                               mean_ms=nan, stddev_ms=nan, min_ms=nan, max_ms=nan,
-                               iterations=0, ops_per_sec=0.0)
+        return _failed_result(func, n, exc)
 
 
 def _benchmark_impl(func: Callable, n: int, warmup: int = 10, iterations: int = 50,
@@ -914,7 +944,7 @@ def run_creation_benchmarks(n: int, dtype_name: str, iterations: int) -> List[Be
     r.name, r.category, r.suite, r.dtype = f"np.full_like(a, 42) ({dtype_name})", "Like", "Creation", dtype_name
     results.append(r)
 
-    if dtype_name in {"int32", "float64"} and n <= ARRAY_SIZES["large"]:
+    if dtype_name in {"int32", "float64"} and tier_n(n) <= ARRAY_SIZES["large"]:
         work_n = memory_heavy_work_n(n)
         conversion_source = create_random_array(work_n, dtype_name)
         side = int(work_n ** 0.5)
@@ -1031,7 +1061,7 @@ def run_manipulation_benchmarks(n: int, dtype_name: str, iterations: int) -> Lis
         results.append(_b(func, n, iterations, name, "Manipulation", dtype_name, "Dims"))
 
     # Stack — the universal 10M tier uses 1M physical elements for this allocation-heavy family.
-    if n <= ARRAY_SIZES["large"]:
+    if tier_n(n) <= ARRAY_SIZES["large"]:
         stack_n = memory_heavy_work_n(n)
         stack_rows = int(np.sqrt(stack_n))
         stack_cols = stack_n // stack_rows
@@ -1194,7 +1224,7 @@ def run_manipulation_benchmarks(n: int, dtype_name: str, iterations: int) -> Lis
     r.name, r.category, r.suite, r.dtype = "np.ix_", "IndexTricks", "Manipulation", dtype_name
     results.append(r)
 
-    if n <= ARRAY_SIZES["large"]:
+    if tier_n(n) <= ARRAY_SIZES["large"]:
         work_n = memory_heavy_work_n(n)
         np.random.seed(42)
         # Set operations are meaningful for both the historical int32 corpus and the universal
@@ -1561,16 +1591,18 @@ def _rejection_evidence(func, n, name, suite, dtype, category="UnsupportedDtype"
     """
     if dtype not in ACTIVE_DTYPES:
         return None
-    try:
-        func()
-    except TypeError:
-        pass
-    else:
-        raise AssertionError(f"{name} unexpectedly accepted dtype {dtype}")
-    return BenchmarkResult(
-        name=f"{name} ({dtype})", category=category, suite=suite, dtype=dtype, n=n,
-        mean_ms=0.0, stddev_ms=0.0, min_ms=0.0, max_ms=0.0,
-        iterations=1, ops_per_sec=0.0)
+    def prove_rejection():
+        try:
+            func()
+        except TypeError:
+            pass
+        else:
+            raise AssertionError(f"{name} unexpectedly accepted dtype {dtype}")
+        return BenchmarkResult("", "", "", "", n, 0.0, 0.0, 0.0, 0.0, 1, 0.0)
+
+    result = _execute_case(func, n, prove_rejection)
+    result.name, result.category, result.suite, result.dtype = f"{name} ({dtype})", category, suite, dtype
+    return result
 
 
 def run_comparison_benchmarks(n, dtype_name, iterations):
@@ -1643,7 +1675,7 @@ def run_logic_benchmarks(n, dtype_name, iterations):
         _b(lambda: np.isfortran(a), n, iterations, "np.isfortran(a)", "Logic", dtype_name),
         _b(lambda: np.array_equal(a, b), n, iterations, "np.array_equal(a, b)", "Logic", dtype_name),
     ]
-    if n <= ARRAY_SIZES["large"]:
+    if tier_n(n) <= ARRAY_SIZES["large"]:
         close_n = memory_heavy_work_n(n)
         close_a = a[:close_n]
         close_b = b[:close_n]
@@ -1716,7 +1748,7 @@ def run_statistics_benchmarks(n, dtype_name, iterations):
         _b(lambda: np.ptp(a), n, iterations, "np.ptp(a)", "Statistics", dtype_name),
         _b(lambda: np.count_nonzero(a), n, iterations, "np.count_nonzero(a)", "Statistics", dtype_name),
     ]
-    if dtype_name in {"int32", "float64"} and n <= ARRAY_SIZES["large"]:
+    if dtype_name in {"int32", "float64"} and tier_n(n) <= ARRAY_SIZES["large"]:
         work_n = memory_heavy_work_n(n)
         signal_a = a[:work_n]
         b = create_random_array(work_n, dtype_name, seed=43)
@@ -1764,7 +1796,7 @@ def run_sorting_benchmarks(n, dtype_name, iterations):
         # overhead, not a throughput comparison.
         _b(lambda: np.searchsorted(srt, a), n, iterations, "np.searchsorted(a, v)", "Sorting", dtype_name),
     ]
-    if n <= ARRAY_SIZES["large"]:
+    if tier_n(n) <= ARRAY_SIZES["large"]:
         work_n = memory_heavy_work_n(n)
         extended_a = a[:work_n]
         b = create_random_array(work_n, dtype_name, seed=43)
@@ -1833,7 +1865,7 @@ def run_linalg_benchmarks(n, dtype_name, iterations):
 
 
 def run_fft_benchmarks(n, dtype_name, iterations):
-    if n > ARRAY_SIZES["large"]:
+    if tier_n(n) > ARRAY_SIZES["large"]:
         return []
     work_n = memory_heavy_work_n(n)
     np.random.seed(42)
@@ -1871,7 +1903,7 @@ def run_fft_benchmarks(n, dtype_name, iterations):
 
 
 def run_random_benchmarks(n, dtype_name, iterations):
-    if n > ARRAY_SIZES["large"]:
+    if tier_n(n) > ARRAY_SIZES["large"]:
         return []
     work_n = memory_heavy_work_n(n)
     np.random.seed(42)
@@ -1947,7 +1979,7 @@ def run_random_benchmarks(n, dtype_name, iterations):
 
 
 def run_ndarray_benchmarks(n, dtype_name, iterations):
-    if n > ARRAY_SIZES["large"]:
+    if tier_n(n) > ARRAY_SIZES["large"]:
         return []
     import os
     import tempfile
@@ -2038,7 +2070,7 @@ def run_ndarray_benchmarks(n, dtype_name, iterations):
 def run_api_surface_benchmarks(n, dtype_name, iterations):
     # N=1 (Scalar) is the pure dispatch/call-overhead tier for the scalar/dtype/text ops —
     # "scalar x scalar"; the real-work poly/IO ops are emitted only at the standard size.
-    if n not in (1, ARRAY_SIZES["small"]):
+    if tier_n(n) not in (1, ARRAY_SIZES["small"]):
         return []
     import os
     import tempfile
@@ -2098,7 +2130,7 @@ def run_api_surface_benchmarks(n, dtype_name, iterations):
 
     # The real-work families (Polynomial, IO) only make sense at the standard size — at the
     # N=1 dispatch tier they would produce no-op cells with no matching C# benchmark.
-    if n != ARRAY_SIZES["small"]:
+    if tier_n(n) != ARRAY_SIZES["small"]:
         return rows
 
     rows.extend(_b(func, n, iterations, name, "ApiSurface", dtype_name, "Polynomial") for name, func in polynomial_cases)
@@ -2138,7 +2170,7 @@ def run_where_benchmarks(n, dtype_name, iterations):
         _b(lambda: np.where(cond, a, b), n, iterations, "np.where(cond, a, b)", "Selection", dtype_name),
         _b(lambda: np.where(cond), n, iterations, "np.where(cond)", "Selection", dtype_name),
     ]
-    if n <= ARRAY_SIZES["large"]:
+    if tier_n(n) <= ARRAY_SIZES["large"]:
         work_n = memory_heavy_work_n(n)
         select_a = a[:work_n]
         select_b = b[:work_n]
@@ -2326,6 +2358,8 @@ def run_suites(n: int, suite: str, dtypes_to_run: List[str], iterations: int) ->
     for row in results_all:
         if row is None or row.dtype not in ACTIVE_DTYPES:
             continue
+        if getattr(row, "_not_selected", False):
+            continue
         if isinstance(row.mean_ms, float) and math.isnan(row.mean_ms):
             skipped.append(row.name)
             SKIPPED_OP_NAMES.add(row.name)
@@ -2345,6 +2379,111 @@ OFFICIAL_SCENARIO_SUITES = (
 )
 
 
+def _operation(row):
+    suffix = f" ({row.dtype})"
+    return row.name[:-len(suffix)] if row.name.endswith(suffix) else row.name
+
+
+def discover_case_templates(suite, dtypes, sizes):
+    """Capture ordered execution slots with bounded fixtures and no workload calls.
+
+    The same builders provide both the plan and the eventual timings. Branches use tier_n()
+    during discovery; allocations and reshape setup use N=1000 regardless of the real tier.
+    Each slot retains its workload code location to detect discovery/execution drift before
+    a result can be attributed to the wrong operation.
+    """
+    global DISCOVERY_TIER_N, DISCOVERY_CALLS, ACTIVE_DTYPES
+    previous = DISCOVERY_TIER_N, DISCOVERY_CALLS, ACTIVE_DTYPES
+    templates = []
+    try:
+        ACTIVE_DTYPES = set(dtypes)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            for n in sizes:
+                DISCOVERY_TIER_N, DISCOVERY_CALLS = n, []
+                run_suites(ARRAY_SIZES["small"], suite, dtypes, 1)
+                for row, workload in DISCOVERY_CALLS:
+                    row.n = n
+                    suite_key = {
+                        "Broadcasting": "broadcast", "LinearAlgebra": "linalg",
+                        "Fourier": "fft", "ApiSurface": "api",
+                    }.get(row.suite, row.suite.lower())
+                    operation = _operation(row)
+                    case = {"id": case_id(suite_key, operation, row.dtype, n),
+                            "suite": suite_key, "operation": operation, "dtype": row.dtype, "n": n}
+                    templates.append({"case": case, "result": asdict(row), "workload": workload})
+    finally:
+        DISCOVERY_TIER_N, DISCOVERY_CALLS, ACTIVE_DTYPES = previous
+    identities = [template["case"]["id"] for template in templates]
+    if len(identities) != len(set(identities)):
+        raise RuntimeError("NumPy discovery produced duplicate case IDs")
+    return templates
+
+
+class CaseExecution:
+    """Select, checkpoint and report at the timing primitive, not after the suite finishes."""
+
+    def __init__(self, templates, allowed, store):
+        self.templates = templates
+        self.allowed = allowed
+        self.store = store
+        self.index = 0
+        self.failed = 0
+        self.results = []
+
+    def emit(self, event, case, **extra):
+        print("@@BENCHMARK " + json.dumps({"event": event, **case, **extra}), flush=True)
+
+    def execute(self, func, n, measure):
+        if self.index >= len(self.templates):
+            raise RuntimeError("NumPy execution exceeded its discovered plan")
+        template = self.templates[self.index]
+        if template["workload"] != _workload_key(func) or template["case"]["n"] != n:
+            raise RuntimeError(f"NumPy execution differs from its discovered plan at {template['case']['id']}")
+        self.index += 1
+        case = template["case"]
+        if case["id"] not in self.allowed:
+            result = BenchmarkResult(**template["result"])
+            result._not_selected = True
+            return result
+        saved = self.store.completed(case)
+        if saved is not None:
+            result = BenchmarkResult(**saved)
+            self.results.append(result)
+            return result
+        self.emit("start", case)
+        error = None
+        try:
+            result = measure()
+            if not all(math.isfinite(getattr(result, field)) and getattr(result, field) >= 0
+                       for field in ("mean_ms", "stddev_ms", "min_ms", "max_ms", "ops_per_sec")):
+                raise ValueError("Benchmark returned invalid timing statistics")
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            result = _failed_result(func, n, exc)
+        # Builders normally attach these after benchmark() returns. The dry capture makes
+        # them available now, so the complete canonical row is durable before the next call.
+        for field in ("name", "category", "suite", "dtype", "n"):
+            setattr(result, field, template["result"][field])
+        status = "failed" if error else "ok"
+        self.failed += bool(error)
+        checkpoint = self.store.save(case, status, None if error else asdict(result), error)
+        self.emit("complete", case, status=status, checkpoint=checkpoint, error=error)
+        if not error:
+            self.results.append(result)
+        return result
+
+    def setup_failed(self, exc):
+        """Account for cases a builder could not reach, preserving already completed cells."""
+        for template in self.templates[self.index:]:
+            case = template["case"]
+            if case["id"] not in self.allowed or self.store.completed(case) is not None:
+                continue
+            error = f"Suite setup failed: {type(exc).__name__}: {exc}"
+            checkpoint = self.store.save(case, "failed", error=error)
+            self.failed += 1
+            self.emit("complete", case, status="failed", checkpoint=checkpoint, error=error)
+
+
 def discover_scenarios() -> List[Dict[str, Any]]:
     """Discover the Python twin titles/dtypes without executing timed benchmark bodies.
 
@@ -2352,23 +2491,10 @@ def discover_scenarios() -> List[Dict[str, Any]]:
     replaced, so dtype loops, conditional cases, titles, suites, and categories are exactly what
     an official run would schedule at the standard tier.
     """
-    original_benchmark = globals()["benchmark"]
-
-    def discovery_benchmark(_func, n, **_kwargs):
-        return BenchmarkResult("", "", "", "", n, 0.0, 0.0, 0.0, 0.0, 1, 0.0)
-
     rows: List[BenchmarkResult] = []
-    globals()["benchmark"] = discovery_benchmark
-    try:
-        # Suite builders print progress and may trigger benign NumPy warnings while constructing
-        # inputs. Discovery stdout must remain pure JSON for the generator.
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            for suite in OFFICIAL_SCENARIO_SUITES:
-                rows.extend(run_suites(
-                    ARRAY_SIZES["small"], suite,
-                    [dtype for dtype in ALL_DTYPES if dtype in DTYPES], 1))
-    finally:
-        globals()["benchmark"] = original_benchmark
+    for suite in OFFICIAL_SCENARIO_SUITES:
+        rows.extend(BenchmarkResult(**template["result"]) for template in discover_case_templates(
+            suite, [dtype for dtype in ALL_DTYPES if dtype in DTYPES], [ARRAY_SIZES["small"]]))
 
     grouped: Dict[tuple, set] = {}
     metadata: Dict[tuple, tuple] = {}
@@ -2411,6 +2537,12 @@ def main():
     parser.add_argument("--output", type=str, default=None, help="Output JSON to file")
     parser.add_argument("--list-scenarios-json", action="store_true",
                         help="Discover official scenario titles/dtypes without running timings")
+    parser.add_argument("--plan-json", metavar="PATH",
+                        help="Write exact case IDs for these suites/types/sizes without running workloads")
+    parser.add_argument("--cases-file", metavar="PATH",
+                        help="Run only case IDs in this JSON array (created from --plan-json)")
+    parser.add_argument("--checkpoint-dir", metavar="PATH",
+                        help="Durably save each case; reuse successful cases on the next invocation")
     args = parser.parse_args()
 
     if args.list_scenarios_json:
@@ -2422,7 +2554,7 @@ def main():
         }, indent=2))
         return
 
-    global ACTIVE_BENCHMARK_DEPTH, ACTIVE_DTYPES
+    global ACTIVE_BENCHMARK_DEPTH, ACTIVE_DTYPES, ACTIVE_CASE_EXECUTION
     if args.quick:
         if args.depth != "measure":
             parser.error("--quick cannot be combined with --depth; use --depth light")
@@ -2466,23 +2598,54 @@ def main():
 
     print(f"Sizes to run: {[f'{n:,}' for n in sizes_to_run]}")
 
+    if any(n <= 0 for n in sizes_to_run):
+        parser.error("Array sizes must be positive")
+    templates = discover_case_templates(args.suite, dtypes_to_run, sizes_to_run)
+    plan = [template["case"] for template in templates if template["case"]["dtype"] in ACTIVE_DTYPES]
+    if args.plan_json:
+        atomic_json(args.plan_json, plan)
+        print(f"Plan written to: {args.plan_json} ({len(plan)} cases)")
+        return
+    allowed = {case["id"] for case in plan}
+    if args.cases_file:
+        try:
+            requested = json.loads(Path(args.cases_file).read_text(encoding="utf-8"))
+            if not isinstance(requested, list) or not all(isinstance(item, str) for item in requested):
+                raise ValueError("--cases-file must contain a JSON array of case ID strings")
+            unknown = set(requested) - allowed
+            if unknown:
+                raise ValueError(f"Unknown case IDs for this selection: {sorted(unknown)[:3]}")
+            allowed = set(requested)
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
+    store = CheckpointStore(args.checkpoint_dir, {
+        "depth": args.depth, "iterations": args.iterations, "numpy_version": np.__version__,
+    })
+    SKIPPED_OP_NAMES.clear()
     all_results = []
+    total_failed = 0
     for n in sizes_to_run:
+        tier_templates = [template for template in templates if template["case"]["n"] == n]
+        selected_templates = [template for template in tier_templates if template["case"]["id"] in allowed]
+        # A fully resumed/filtered tier should not allocate its original 10M-element fixtures.
+        saved = [store.completed(template["case"]) for template in selected_templates]
+        if all(result is not None for result in saved):
+            all_results.extend(BenchmarkResult(**result) for result in saved)
+            continue
         print(f"\n{'#'*64}\n#  ARRAY SIZE  N = {n:,}\n{'#'*64}")
-        all_results.extend(run_suites(n, args.suite, dtypes_to_run, args.iterations))
-
-    # An op that RAISED at ANY size (SKIPPED_OP_NAMES) is dropped at EVERY size, so a partial
-    # group (e.g. it succeeded at 1K/100K but the intermittent NumPy corruption hit it at 10M)
-    # never reaches merge-results.py's universal-tier gate — which is check=True and would turn
-    # one flaky op into a whole-run failure. Losing the other tiers of one rare flaky op is the
-    # correct trade for a completed measurement; the alternative was aborting the entire run.
-    if SKIPPED_OP_NAMES:
-        before = len(all_results)
-        all_results = [r for r in all_results if r.name not in SKIPPED_OP_NAMES]
-        print(f"\n[main] dropped {before - len(all_results)} row(s) for "
-              f"{len(SKIPPED_OP_NAMES)} skipped op(s) (all tiers): "
-              f"{', '.join(sorted(SKIPPED_OP_NAMES)[:12])}"
-              f"{' …' if len(SKIPPED_OP_NAMES) > 12 else ''}", file=sys.stderr, flush=True)
+        execution = CaseExecution(tier_templates, allowed, store)
+        ACTIVE_CASE_EXECUTION = execution
+        try:
+            run_suites(n, args.suite, dtypes_to_run, args.iterations)
+            if execution.index != len(tier_templates):
+                raise RuntimeError("NumPy execution ended before its discovered plan")
+        except Exception as exc:
+            print(f"[benchmark] Suite interrupted: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+            execution.setup_failed(exc)
+        finally:
+            ACTIVE_CASE_EXECUTION = None
+        all_results.extend(execution.results)
+        total_failed += execution.failed
 
     # Tier-key invariant: MEMORY_HEAVY_LARGE_WORKLOAD (1M) is a PHYSICAL cap only, never a
     # published tier — a memory-heavy row must keep n=10M so every calc, geomean, and UI size
@@ -2499,8 +2662,7 @@ def main():
     if args.json or args.output:
         json_output = json.dumps([asdict(r) for r in all_results], indent=2)
         if args.output:
-            with open(args.output, 'w') as f:
-                f.write(json_output)
+            atomic_json(args.output, [asdict(r) for r in all_results])
             print(f"\nJSON results written to: {args.output}")
         if args.json:
             print("\n" + json_output)
@@ -2508,8 +2670,9 @@ def main():
         print_summary(all_results)
 
     print(f"\n{'='*60}")
-    print(f"  Benchmark complete ({len(all_results)} results)")
+    print(f"  Benchmark complete ({len(all_results)} results, {total_failed} failed)")
     print(f"{'='*60}")
+    return 1 if total_failed else 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

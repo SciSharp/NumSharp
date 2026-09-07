@@ -26,8 +26,8 @@ Design notes
   nanosecond-microbenchmark invocation ramp, which would make the full run take days).
   Because the config is baked into the assembly, this orchestrator passes only ``--filter``
   to ``dotnet run`` — never ``--job``.
-* Per-suite C# runs are independent: each benchmark class exports its own JSON, so a crash
-  mid-run keeps every completed class. Re-running a single suite is cheap.
+* Each completed C# and NumPy case is atomically checkpointed. A durable plan and
+  source/build identity make interrupted runs resumable without repeating completed cases.
 * NumPy side sweeps all three sizes in one invocation per suite (``--cache-sizes``); each
   result carries its own ``n``, which the merge keys on.
 
@@ -44,7 +44,9 @@ Usage
   python run_benchmark.py --quick                 # deprecated alias for --depth light
 """
 import argparse
+import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -55,6 +57,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
 from benchmark_modes import ALL_DTYPES, DEPTHS, parse_dtypes  # noqa: E402
+from benchmark_session import Session, RunLock, atomic_json, read_json, provenance, check_resume  # noqa: E402
+from numpy_checkpoint import validate_checkpoint  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 HISTORY_DIR = HERE / "history"
@@ -122,35 +126,17 @@ SUITES = {
 }
 
 
+ACTIVE_SESSION = None
+CONFIG_FIELDS = ("depth", "dtypes", "suites", "operations", "skip_csharp", "skip_python", "skip_nditer",
+                 "skip_layout", "skip_operand", "skip_cast", "skip_fusion", "skip_openblas", "no_history",
+                 "rerun", "from_results", "baseline", "regression_percent", "numpy_results")
+
+
 def run(cmd, cwd=None, check=False, env=None):
+    if ACTIVE_SESSION is not None:
+        return ACTIVE_SESSION.run(cmd, cwd=cwd, check=check, env=env)
     print(f"\n$ {' '.join(str(c) for c in cmd)}", flush=True)
     return subprocess.run([str(c) for c in cmd], cwd=str(cwd) if cwd else None, check=check, env=env)
-
-
-def run_numpy_suite(cmd, suite, strict, attempts=3):
-    """Run one NumPy suite subprocess, retrying an intermittent HARD crash.
-
-    numpy_benchmark.benchmark() already absorbs a single op that RAISES (the
-    catchable ``_UFuncNoLoopError`` from NumPy's intermittent ufunc-loop memory
-    corruption on long Windows runs), so a suite now exits non-zero only on a
-    genuine segfault / access violation — which a fresh process almost always
-    survives. Retry a few times before giving up.
-
-    On repeated failure: raise when ``strict`` (the pass/light gate — a crash
-    there is a real signal), else warn and return False so the REMAINING suites
-    still run. This replaces the old ``check=True`` that let one flaky suite
-    abort a multi-hour measurement and discard every suite after it."""
-    for attempt in range(1, attempts + 1):
-        proc = run(cmd, check=False)
-        if proc.returncode == 0:
-            return True
-        print(f"!! NumPy suite '{suite}' exited {proc.returncode} "
-              f"(attempt {attempt}/{attempts})", flush=True)
-    if strict:
-        raise RuntimeError(f"NumPy suite '{suite}' failed after {attempts} attempts")
-    print(f"!! SKIPPING NumPy suite '{suite}' after {attempts} attempts — "
-          f"continuing with the remaining suites", flush=True)
-    return False
 
 
 def append_section(report_md, src_md, title):
@@ -169,25 +155,6 @@ def append_section(report_md, src_md, title):
         return
     existing = report_md.read_text(encoding="utf-8") if report_md.exists() else ""
     report_md.write_text(f"{existing}\n\n---\n\n## {title}\n\n{body}\n", encoding="utf-8")
-
-
-def run_matrix_subsystem(name, sheet, results_md, title, report_md, results_dir, skip_build):
-    """Run one matrix subsystem's *_sheet.py and append its rendered section to
-    the unified report. Crash-resilient: a failing subsystem just omits its
-    section (the sheet itself never raises into the orchestrator)."""
-    print(f"\n=== {name} subsystem (benchmark/{name}) ===", flush=True)
-    cmd = [sys.executable, str(sheet)]
-    if skip_build:
-        cmd.append("--skip-build")
-    run(cmd, check=False)
-    if results_md.exists():
-        shutil.copy(results_md, results_dir / results_md.name)
-        tsv = results_md.with_suffix(".tsv")
-        if tsv.exists():
-            shutil.copy(tsv, results_dir / tsv.name)
-        for profile_json in results_md.parent.glob(f"{results_md.stem}.*.json"):
-            shutil.copy(profile_json, results_dir / profile_json.name)
-    append_section(report_md, results_md, title)
 
 
 def validate_execution_depth(results_dir: Path, depth: str) -> None:
@@ -269,277 +236,511 @@ def prompt_run_options(input_fn=input) -> list[str]:
     return argv
 
 
-def main(argv=None):
-    ap = argparse.ArgumentParser(description="NumSharp vs NumPy official benchmark")
-    ap.add_argument("--suites", nargs="*", default=list(SUITES), choices=list(SUITES),
-                    help="Subset of comparison suites to run (default: all)")
-    ap.add_argument("--skip-csharp", action="store_true", help="Skip the C# benchmarks")
-    ap.add_argument("--skip-python", action="store_true", help="Skip the NumPy benchmarks")
-    ap.add_argument("--skip-build", action="store_true", help="Reuse the existing Release build")
+def parser():
+    ap = argparse.ArgumentParser(description="Durable NumSharp vs NumPy benchmark runs")
+    ap.add_argument("--suites", nargs="*", default=list(SUITES), choices=list(SUITES))
+    ap.add_argument("--depth", choices=tuple(DEPTHS), default="measure")
+    ap.add_argument("--dtypes", help="Comma-separated dtype names or aliases")
+    ap.add_argument("--operations", nargs="+", help="Operation title glob(s), e.g. 'np.add*'")
+    for name in ("csharp", "python", "build", "nditer", "layout", "operand", "cast", "fusion", "openblas"):
+        ap.add_argument(f"--skip-{name}", action="store_true")
     ap.add_argument("--quick", action="store_true", help="Deprecated alias for --depth light")
-    ap.add_argument("--depth", choices=tuple(DEPTHS), default="measure",
-                    help="pass=single execution; light=1/6 budget; measure=full rigor")
-    ap.add_argument("--dtypes", help="Comma-separated dtype filter; multi-dtype cases match any side")
-    ap.add_argument("--skip-nditer", action="store_true",
-                    help="Skip the NDIter iterator benchmark (benchmark/nditer)")
-    ap.add_argument("--skip-layout", action="store_true",
-                    help="Skip the Layout suite (benchmark/layout)")
-    ap.add_argument("--skip-cast", action="store_true",
-                    help="Skip the Cast matrix (benchmark/cast)")
-    ap.add_argument("--skip-fusion", action="store_true",
-                    help="Skip the Fusion gate (benchmark/fusion)")
-    ap.add_argument("--skip-operand", action="store_true",
-                    help="Skip the Operand-layout subsystem (benchmark/operand)")
-    ap.add_argument("--skip-openblas", action="store_true",
-                    help="Skip the full LinearAlgebra OpenBLAS profile and targeted backend extras")
-    ap.add_argument("--no-history", action="store_true",
-                    help="Skip writing the committable benchmark/history/<date>_<sha>/ snapshot + latest symlink")
-    raw_argv = list(sys.argv[1:] if argv is None else argv)
-    if not raw_argv:
-        raw_argv = prompt_run_options()
-    args = ap.parse_args(raw_argv)
+    ap.add_argument("--no-history", action="store_true")
+    ap.add_argument("--run-dir", type=Path, help="New results directory (must not already contain a run)")
+    ap.add_argument("--resume", nargs="?", const="latest", help="Resume a run directory, or latest")
+    ap.add_argument("--rerun", choices=("failed", "bad", "degraded"), help="Create a new run of selected problem cells")
+    ap.add_argument("--from-results", type=Path, help="Run directory or report JSON used for rerun selection")
+    ap.add_argument("--baseline", type=Path, help="Reference report/directory for degraded selection")
+    ap.add_argument("--regression-percent", type=float, default=10,
+                    help="Degraded: NumSharp time increase over baseline (default 10%%)")
+    ap.add_argument("--numpy-results", type=Path, help="Explicit NumPy JSON to reuse with --skip-python")
+    ap.add_argument("--plan-only", action="store_true", help="Discover and save selected cases without timing them")
+    ap.add_argument("--progress-interval", type=float, default=10, help="Terminal heartbeat seconds (default 10)")
+    ap.add_argument("--no-title", action="store_true", help="Only report progress in the terminal")
+    ap.add_argument("--verbose", action="store_true", help="Also echo child output; full output always goes to logs/")
+    ap.add_argument("--attempts", type=int, default=3, help="Attempts per incomplete matrix suite; completed cases are retained (default 3)")
+    ap.add_argument("--process-timeout", type=float, help="Optional maximum seconds per child process; kills its process tree on expiry")
+    return ap
 
+
+def valid_run_config(config):
+    """Recognize complete durable configuration records without trusting JSON types."""
+    if not isinstance(config, dict) or config.get("schema_version") != 1:
+        return False
+    options = config.get("options")
+    if not isinstance(options, dict) or not all(field in options for field in CONFIG_FIELDS):
+        return False
+    if not isinstance(config.get("provenance"), dict) or not config["provenance"]:
+        return False
+    if not isinstance(config.get("depth"), str) or config["depth"] not in DEPTHS:
+        return False
+    if not isinstance(config.get("dtypes"), list) or not config["dtypes"]:
+        return False
+    if not all(isinstance(dtype, str) and dtype in ALL_DTYPES for dtype in config["dtypes"]):
+        return False
+    if not isinstance(config.get("suites"), list) or not all(
+            isinstance(suite, str) and suite in SUITES for suite in config["suites"]):
+        return False
+    if options["depth"] != config["depth"] or options["suites"] != config["suites"]:
+        return False
+    if options["dtypes"] is not None and not isinstance(options["dtypes"], str):
+        return False
+    try:
+        if list(parse_dtypes(options["dtypes"])) != config["dtypes"]:
+            return False
+    except ValueError:
+        return False
+    if any(type(options[name]) is not bool for name in CONFIG_FIELDS if name.startswith("skip_") or name == "no_history"):
+        return False
+    if options["operations"] is not None and (not isinstance(options["operations"], list)
+            or not all(isinstance(value, str) for value in options["operations"])):
+        return False
+    if options["rerun"] not in (None, "failed", "bad", "degraded"):
+        return False
+    if any(options[name] is not None and not isinstance(options[name], str)
+           for name in ("from_results", "baseline", "numpy_results")):
+        return False
+    percent = options["regression_percent"]
+    return type(percent) in (int, float) and math.isfinite(percent) and percent >= 0
+
+
+def recent_runs():
+    """Newest valid run records, including the last custom --run-dir destination."""
+    results = HERE / "results"
+    paths = set(results.glob("*/run-config.json"))
+    try:
+        pointer = read_json(results / "last-run.json")
+        if isinstance(pointer, dict) and isinstance(pointer.get("directory"), str):
+            paths.add(Path(pointer["directory"]) / "run-config.json")
+    except (ValueError, OSError):
+        pass
+    candidates = []
+    for path in paths:
+        try:
+            config = read_json(path)
+            if valid_run_config(config) and config.get("resume_supported") is not False:
+                candidates.append((path.stat().st_mtime_ns, path.parent.resolve(), config))
+        except (ValueError, OSError):
+            continue
+    return sorted(candidates, key=lambda item: (item[0], str(item[1])), reverse=True)
+
+
+def prompt_startup_options(input_fn=input):
+    """Offer an unfinished, inactive run before the normal new-run picker."""
+    current = None
+    for _modified, directory, config in recent_runs():
+        try:
+            state = read_json(directory / "run-state.json")
+        except (ValueError, OSError):
+            state = {}
+        if not isinstance(state, dict):
+            state = {}
+        if state.get("status") in ("complete", "planned"):
+            continue
+        # Lock files outlive their owner. Probe the OS lock, never the file's existence.
+        # execute() acquires the locks again after the user answers to close the race.
+        try:
+            with RunLock(directory):
+                pass
+        except (RuntimeError, OSError):
+            continue
+        if current is None:
+            current = provenance(HERE.parent)
+        try:
+            check_resume(config["provenance"], current)
+        except ValueError as error:
+            print(f"\nUnfinished run cannot resume: {directory}\n{error}", flush=True)
+            continue
+        print(f"\nUnfinished benchmark found: {directory}")
+        print(f"Depth: {config['depth']} · dtypes: {', '.join(config['dtypes'])}")
+        completed, total = state.get("completed"), state.get("total")
+        if isinstance(completed, int) and isinstance(total, int):
+            print(f"Last saved progress: {completed:,}/{total:,} successful cases; "
+                  f"stage: {state.get('stage', 'unknown')}. Checkpoints will be rechecked.")
+        else:
+            print("Stopped before progress was saved. Checkpoints will be checked on resume.")
+        while True:
+            answer = input_fn("Resume this benchmark? [Y/n]: ").strip().lower()
+            if answer in {"", "y", "yes"}:
+                return ["--resume", str(directory)]
+            if answer in {"n", "no"}:
+                return prompt_run_options(input_fn)
+            print("Enter y to resume or n to choose a new benchmark.")
+    return prompt_run_options(input_fn)
+
+
+def resolve_run(value):
+    if str(value) == "latest":
+        candidates = recent_runs()
+        if not candidates:
+            raise ValueError("No resumable run found. Older runs have no per-case checkpoints.")
+        return candidates[0][1]
+    return Path(value).resolve()
+
+
+def main(argv=None):
+    ap = parser()
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if not raw:
+        if not sys.stdin.isatty():
+            ap.error("Non-interactive runs require explicit options, e.g. --depth measure or --resume latest")
+        try:
+            raw = prompt_startup_options()
+        except (EOFError, KeyboardInterrupt):
+            print("\nBenchmark startup cancelled; no work was started.", flush=True)
+            return 130
+        except (ValueError, RuntimeError, OSError, subprocess.CalledProcessError) as error:
+            print(f"Benchmark startup failed: {error}", file=sys.stderr, flush=True)
+            return 1
+    args = ap.parse_args(raw)
+    if not math.isfinite(args.progress_interval) or not math.isfinite(args.regression_percent) or args.progress_interval <= 0 or args.regression_percent < 0:
+        ap.error("progress interval must be positive; regression percent must be non-negative")
+    if args.attempts < 1 or (args.process_timeout is not None and
+            (not math.isfinite(args.process_timeout) or args.process_timeout <= 0)):
+        ap.error("attempts and process timeout must be positive")
+    if args.from_results and not args.rerun:
+        ap.error("--from-results requires --rerun")
+    if args.baseline and args.rerun != "degraded":
+        ap.error("--baseline applies only to --rerun degraded")
+    if args.resume and (args.run_dir or args.rerun):
+        ap.error("--resume cannot be combined with --run-dir or --rerun")
+    if args.resume and args.quick:
+        ap.error("Resume uses the saved depth; --quick cannot change it")
+    if args.rerun and not args.from_results:
+        ap.error("--rerun requires --from-results")
+    if args.rerun == "degraded" and not args.baseline:
+        ap.error("--rerun degraded requires --baseline")
     if args.quick:
         if args.depth != "measure":
-            ap.error("--quick cannot be combined with --depth; use --depth light")
-        print("--quick is deprecated; using --depth light", flush=True)
+            ap.error("--quick cannot be combined with --depth")
         args.depth = "light"
+    if args.skip_csharp and args.skip_python:
+        ap.error("At least one benchmark engine must be enabled")
     try:
-        requested_dtypes = parse_dtypes(args.dtypes)
-    except ValueError as error:
-        ap.error(str(error))
+        directory = resolve_run(args.resume) if args.resume else (
+            args.run_dir.resolve() if args.run_dir else HERE / "results" / datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+        if not args.resume and directory.exists() and any(directory.iterdir()):
+            raise ValueError("A new run needs an empty directory; existing results must use --resume or --rerun")
+        with RunLock(directory), RunLock(HERE / "results" / ".workspace"):
+            return execute(args, raw, directory)
+    except KeyboardInterrupt:
+        print(f"\nInterrupted. Completed cases are saved. Resume: python benchmark/run_benchmark.py --resume \"{directory}\"", flush=True)
+        return 130
+    except (ValueError, RuntimeError, OSError, subprocess.CalledProcessError) as error:
+        print(f"\nBenchmark stopped: {error}", file=sys.stderr, flush=True)
+        if 'directory' in locals():
+            print(f"Results/logs: {directory}\nResume: python benchmark/run_benchmark.py --resume \"{directory}\"", file=sys.stderr)
+        return 1
 
-    # One contract for every child process: BDN configuration, NumPy timing, and standalone
-    # matrices read these values. Canonical names avoid cross-language alias drift.
+
+def execute(args, raw, directory):
+    global ACTIVE_SESSION
+    config_path = directory / "run-config.json"
+    config_fields = CONFIG_FIELDS
+    print("Checking benchmark code and environment identity...", flush=True)
+    current = provenance(HERE.parent)
+    if args.resume:
+        if not config_path.exists():
+            raise ValueError("This directory has no resumable run-config.json; use old reports with --rerun instead.")
+        saved = read_json(config_path)
+        if isinstance(saved, dict) and saved.get("resume_supported") is False:
+            raise ValueError("History snapshots preserve provenance, not checkpoints; use --rerun with this snapshot")
+        if not valid_run_config(saved):
+            raise ValueError("This run lacks a valid durable configuration; use its report with --rerun instead.")
+        check_resume(saved["provenance"], current)
+        for field in config_fields:
+            flag = "--" + field.replace("_", "-")
+            if any(token == flag or token.startswith(flag + "=") for token in raw):
+                raise ValueError(f"{flag} is fixed by the saved run. Start a new run to change its selection.")
+            setattr(args, field, saved["options"][field])
+        requested = tuple(saved["dtypes"])
+    else:
+        if config_path.exists():
+            raise ValueError(f"A run already exists at {directory}; use --resume")
+        requested = parse_dtypes(args.dtypes)
+        saved = {"schema_version": 1, "depth": args.depth, "dtypes": list(requested),
+                 "suites": args.suites, "provenance": current,
+                 "options": {key: str(getattr(args, key)) if isinstance(getattr(args, key), Path)
+                             else getattr(args, key) for key in config_fields}}
+    # A partial or exploratory run must never replace the full published benchmark.
+    eligible = (args.depth == "measure" and not args.rerun and not args.operations
+                and set(args.suites) == set(SUITES) and requested == ALL_DTYPES
+                and not any(getattr(args, "skip_" + name) for name in (
+                    "csharp", "python", "nditer", "layout", "operand", "cast", "fusion", "openblas")))
+    saved["publication_eligible"] = eligible
+    if args.skip_python:
+        reference = directory / "numpy-reference.json"
+        if args.resume:
+            if not reference.exists() or hashlib.sha256(reference.read_bytes()).hexdigest() != saved.get("numpy_reference_sha256"):
+                raise ValueError("The saved NumPy reference is missing or changed; start a new run")
+        else:
+            source = Path(args.numpy_results) if args.numpy_results else HERE / "numpy-results.json"
+            if not source.exists():
+                raise ValueError("--skip-python needs an existing --numpy-results JSON file")
+            rows = read_json(source)
+            if not isinstance(rows, list) or any(not isinstance(row, dict) or not {"name", "dtype", "n"}.issubset(row) for row in rows):
+                raise ValueError("--numpy-results must be raw NumPy result rows, not a merged report")
+            atomic_json(reference, rows)
+            saved["numpy_reference_sha256"] = hashlib.sha256(reference.read_bytes()).hexdigest()
+        atomic_json(directory / "numpy-results.json", read_json(reference))
+    atomic_json(config_path, saved)
+    atomic_json(HERE / "results" / "last-run.json", {"directory": str(directory.resolve())})
     os.environ["NUMSHARP_BENCHMARK_DEPTH"] = args.depth
-    os.environ["NUMSHARP_BENCHMARK_DTYPES"] = ",".join(requested_dtypes)
-    non_measure = args.depth != "measure"
-    skip_official_openblas = args.skip_openblas or "float64" not in requested_dtypes
-    if non_measure:
-        # Pass/light validate execution or provide a rough local estimate. They must never replace
-        # publication-quality root/docs/history artifacts.
-        args.no_history = True
+    os.environ["NUMSHARP_BENCHMARK_DTYPES"] = ",".join(requested)
+    os.environ["PYTHONUTF8"] = "1"
+    os.environ["PYTHONUNBUFFERED"] = "1"
+    # Never inherit a previous caller's allowlist/checkpoint destination during discovery.
+    for name in ("NUMSHARP_BENCHMARK_CASES_FILE", "NUMSHARP_BENCHMARK_CHECKPOINT_DIR"):
+        os.environ.pop(name, None)
+    initial_plan = read_json(directory / "plan.json") if args.resume and (directory / "plan.json").exists() else []
+    session = Session(directory, initial_plan, interval=args.progress_interval, title=not args.no_title,
+                      verbose=args.verbose, process_timeout=args.process_timeout)
+    if args.resume:
+        session.prepare_retry()
+    ACTIVE_SESSION = session
+    print(f"Results: {directory}\nDepth: {args.depth}; dtypes: {', '.join(requested)}", flush=True)
+    try:
+        return execute_stages(args, directory, session, requested, eligible)
+    except BaseException:
+        session.progress(force=True, status="interrupted")
+        raise
+    finally:
+        ACTIVE_SESSION = None
 
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    results_dir = HERE / "results" / ts
-    results_dir.mkdir(parents=True, exist_ok=True)
-    csharp_out = results_dir / "csharp"
-    csharp_out.mkdir(exist_ok=True)
-    openblas_csharp_out = results_dir / "csharp-openblas"
-    openblas_csharp_out.mkdir(exist_ok=True)
-    numpy_json = results_dir / "numpy-results.json"
-    (results_dir / "run-config.json").write_text(json.dumps({
-        "depth": args.depth,
-        "dtypes": list(requested_dtypes),
-        "suites": list(args.suites),
-        "publication_eligible": not non_measure,
-    }, indent=2), encoding="utf-8")
-    print(f"Results -> {results_dir}")
-    print(f"Depth: {args.depth} · dtypes: {', '.join(requested_dtypes)}")
 
-    t0 = time.time()
-
-    # 1. Build the C# benchmark project (Release).
-    if not args.skip_csharp and not args.skip_build:
-        run(["dotnet", "build", "-c", "Release", "-f", TFM, str(CSHARP_PROJ),
-             "-v", "q", "--nologo", "-clp:NoSummary;ErrorsOnly", "-p:WarningLevel=0"], check=True)
-        if "linalg" in args.suites and not skip_official_openblas:
-            run(["dotnet", "build", "-c", "Release", str(OPENBLAS_CSHARP_PROJ),
-                 "-v", "q", "--nologo", "-clp:NoSummary;ErrorsOnly", "-p:WarningLevel=0",
-                 "-p:GeneratePackageOnBuild=false"], check=True)
-
-    # 2. NumPy: sweep all three sizes per suite, concatenate into one JSON.
+def execute_stages(args, directory, session, requested, eligible):
+    import fnmatch
+    official_openblas = not args.skip_openblas and not args.skip_csharp and "linalg" in args.suites and "float64" in requested
+    projects = [("managed", CSHARP_PROJ, CSHARP_DIR)] if not args.skip_csharp else []
+    if official_openblas:
+        projects.append(("openblas", OPENBLAS_CSHARP_PROJ, OPENBLAS_CSHARP_DIR))
+    for engine, project, cwd in projects:
+        if not args.skip_build:
+            session.stage = "build:" + engine
+            run(["dotnet", "build", "-c", "Release", "-f", TFM, project, "-v", "q", "--nologo",
+                 "-clp:NoSummary;ErrorsOnly", "-p:WarningLevel=0", "-p:GeneratePackageOnBuild=false"], check=True)
+    # Pin the actual binaries as well as source: --skip-build can intentionally use a
+    # stale build, but a later rebuild must not silently mix implementations on resume.
+    session.stage = "verify build identity"
+    images = {}
+    for engine, project, _cwd in projects:
+        output = project.parent / "bin" / "Release" / TFM
+        for path in sorted(output.rglob("*")):
+            if path.is_file() and (path.suffix in (".dll", ".so", ".dylib") or path.name.endswith((".deps.json", ".runtimeconfig.json"))):
+                images[f"{engine}/{path.relative_to(output).as_posix()}"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        if not any(key.startswith(engine + "/") for key in images):
+            raise ValueError(f"Missing Release build for {engine}; rerun without --skip-build")
+    image_path = directory / "build-identity.json"
+    if args.resume and image_path.exists() and read_json(image_path) != images:
+        raise ValueError("Built benchmark binaries changed; start a new run instead of mixing measurements")
+    atomic_json(image_path, images)
+    plan_file = directory / "plan.json"
+    if args.resume and plan_file.exists():
+        plan = read_json(plan_file)
+    else:
+        plan = []
+        for engine, project, cwd in projects:
+            session.stage = "discover:" + engine
+            target = directory / f"plan-{engine}.json"
+            run(["dotnet", "run", "-c", "Release", "--no-build", "-f", TFM, "--project", project,
+                 "--", "--benchmark-plan-json", target], cwd=cwd, check=True)
+            plan.extend({**row, "engine": engine} for row in read_json(target)
+                        if row["suite"] in args.suites and (engine != "openblas" or row["suite"] == "linalg"))
+        if not args.skip_python:
+            for suite in args.suites:
+                session.stage = "discover:numpy:" + suite
+                target = directory / f"plan-numpy-{suite}.json"
+                cmd = numpy_command(args, requested, suite) + ["--plan-json", target]
+                run(cmd, check=True)
+                plan.extend({**row, "engine": "numpy"} for row in read_json(target))
+        if args.operations:
+            plan = [row for row in plan if any(fnmatch.fnmatchcase(row["operation"], pattern)
+                                             for pattern in args.operations)]
+        if args.rerun:
+            from benchmark_selection import select_plan
+            plan, selection = select_plan(plan, Path(args.from_results), args.rerun,
+                                          Path(args.baseline) if args.baseline else None, args.regression_percent)
+            atomic_json(directory / "selection.json", selection)
+            print(f"Rerun selection: {len(plan):,} engine/case pairs; details: {directory / 'selection.json'}")
+            for warning in selection.get("warnings", []):
+                print(f"Selection: {warning}")
+            if selection.get("unmatched") or selection.get("noncomparable"):
+                print(f"Selection excluded {len(selection.get('unmatched', []))} unmatched and "
+                      f"{len(selection.get('noncomparable', []))} non-comparable source cells; see selection.json")
+        atomic_json(plan_file, plan)
+    if len({(row["engine"], row["id"]) for row in plan}) != len(plan):
+        raise ValueError("Discovery returned duplicate case IDs")
+    session.set_plan(plan)
+    if args.skip_python:
+        from benchmark_selection import reference_rows_for_plan
+        atomic_json(directory / "numpy-results.json",
+                    reference_rows_for_plan(read_json(directory / "numpy-reference.json"), plan))
+    if args.resume:
+        session.prepare_retry()
+    sheets = []
+    if args.depth == "measure" and not args.rerun and not args.operations:
+        if not args.skip_nditer:
+            sheets.append(("nditer", NPYITER_SHEET, NPYITER_REPORT, "NDIter iterator benchmark"))
+        sheets.extend(item for item in MATRIX_SUBSYSTEMS if not getattr(args, "skip_" + item[0]))
+    for name, *_ in sheets:
+        session.stage_state.setdefault("subsystem:" + name, "pending")
+    session.stage = "plan saved"
+    session.progress(force=True)
+    if args.plan_only:
+        session.progress(force=True, status="planned")
+        print(f"Plan: {plan_file}\nRun it: python benchmark/run_benchmark.py --resume \"{directory}\"")
+        return 0
+    if not plan and not sheets:
+        print("No cases match the selection; no benchmarks or published reports changed.")
+        session.progress(force=True, status="complete")
+        return 0
+    for folder in ("csharp", "csharp-openblas", "numpy-checkpoints", "cases"):
+        (directory / folder).mkdir(exist_ok=True)
+    for engine in ("numpy", "managed", "openblas"):
+        for suite in args.suites:
+            pending = session.pending(engine, suite)
+            if not pending:
+                continue
+            session.engine = engine
+            session.stage = f"{engine}:{suite}"
+            session.stage_state[session.stage] = "running"
+            for attempt in range(1, args.attempts + 1):
+                if attempt > 1:
+                    print(f"Retry {attempt}/{args.attempts}: {len(pending)} pending/failed cases in {engine}:{suite}")
+                session.prepare_retry(pending)
+                try:
+                    run_matrix_attempt(args, requested, directory, engine, suite, pending)
+                except TimeoutError as error:
+                    print(f"!! {error}", flush=True)
+                # Any scheduled cell without an event remains pending. End this attempt
+                # before reloading failed checkpoints; the next attempt explicitly requeues them.
+                session.retry_pending.difference_update((engine, row["id"]) for row in pending)
+                session.recover()
+                if engine == "numpy":
+                    materialize_numpy(directory, plan)
+                pending = session.pending(engine, suite)
+                if not pending:
+                    break
+            session.stage_state[session.stage] = "complete" if not session.pending(engine, suite) else "incomplete"
+            session.progress(force=True)
+    session.engine = None
     if not args.skip_python:
-        merged = []
-        for s in args.suites:
-            tmp = results_dir / f"numpy-{s}.json"
-            cmd = [sys.executable, str(PY_BENCH), "--suite", s, "--cache-sizes",
-                   "--depth", args.depth, "--dtypes", ",".join(requested_dtypes),
-                   "--output", str(tmp)]
-            # The api suite carries the scalar/dtype/text dispatch ops — also sweep the N=1
-            # (Scalar) pure-dispatch tier there (the "scalar x scalar" point). Scoped to this
-            # suite so no other suite emits unmatched N=1 rows.
-            if s == "api":
-                cmd.append("--with-scalar")
-            ok = run_numpy_suite(cmd, s, strict=non_measure)
-            if ok and tmp.exists():
-                merged.extend(json.loads(tmp.read_text()))
-        numpy_json.write_text(json.dumps(merged, indent=2))
-        print(f"NumPy: {len(merged)} results across {len(args.suites)} suites")
-
-    # 3. C# BenchmarkDotNet per suite (config provides the job + JSON exporter). BDN cleans
-    #    its artifacts dir on each run, so copy out each suite's class reports immediately
-    #    after that suite finishes — otherwise only the last suite would survive.
-    if not args.skip_csharp:
-        for s in args.suites:
-            if ARTIFACTS.exists():
-                shutil.rmtree(ARTIFACTS, ignore_errors=True)
-            print(f"\n=== C# suite: {s} ({SUITES[s]}) ===", flush=True)
-            run(["dotnet", "run", "-c", "Release", "--no-build", "-f", TFM,
-                 "--project", str(CSHARP_PROJ), "--", "--filter", SUITES[s]],
-                cwd=CSHARP_DIR, check=non_measure)
-            if ARTIFACTS.exists():
-                for f in ARTIFACTS.glob("*-report-full-compressed.json"):
-                    shutil.copy(f, csharp_out / f.name)
-        print(f"C#: collected {len(list(csharp_out.glob('*.json')))} class reports")
-
-    # 3b. The COMPLETE official LinearAlgebra suite under OpenBLAS. This is a separate executable,
-    #     not a hand-copied case list: it discovers the same LinAlgBenchmarks/LinalgApiBenchmarks
-    #     classes and uses the same OfficialBenchmarkConfig as the Managed run. The process boundary
-    #     keeps Core-only Managed runs unable to load a native backend by construction.
-    openblas_matrix_base = results_dir / "benchmark-report.openblas-matrix"
-    merge_env = {**os.environ, "PYTHONUTF8": "1"}
-    if not args.skip_csharp and not skip_official_openblas and "linalg" in args.suites:
-        if OPENBLAS_ARTIFACTS.exists():
-            shutil.rmtree(OPENBLAS_ARTIFACTS, ignore_errors=True)
-        print("\n=== C# suite: linalg (OpenBLAS profile; complete official suite) ===", flush=True)
-        openblas_env = {
-            **os.environ,
-            "NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL": "0",
-            "OPENBLAS_NUM_THREADS": "1",
-            "OMP_NUM_THREADS": "1",
-        }
-        run(["dotnet", "run", "-c", "Release", "--no-build", "-f", TFM,
-             "--project", str(OPENBLAS_CSHARP_PROJ), "--", "--filter", SUITES["linalg"]],
-            cwd=OPENBLAS_CSHARP_DIR, check=non_measure, env=openblas_env)
-        if OPENBLAS_ARTIFACTS.exists():
-            for f in OPENBLAS_ARTIFACTS.glob("*-report-full-compressed.json"):
-                shutil.copy(f, openblas_csharp_out / f.name)
-        numpy_linalg = results_dir / "numpy-linalg.json"
-        if numpy_linalg.exists() and any(openblas_csharp_out.glob("*.json")):
-            run([sys.executable, str(MERGE), "--numpy", str(numpy_linalg),
-                 "--csharp", str(openblas_csharp_out), "--output", str(openblas_matrix_base),
-                 "--require-universal-tiers"],
-                check=True, env=merge_env)
-        print(f"OpenBLAS C#: collected {len(list(openblas_csharp_out.glob('*.json')))} class reports")
-
-    # 4. Merge into the unified per-(op, dtype, N) ratio report.
-    managed_matrix_base = results_dir / "benchmark-report.managed-matrix"
-    run([sys.executable, str(MERGE), "--numpy", str(numpy_json),
-         "--csharp", str(csharp_out), "--output", str(managed_matrix_base),
-         "--require-universal-tiers"], check=True, env=merge_env)
-
-    # The unified report the op-matrix merge just wrote; the iterator + matrix
-    # subsystems below each append one section to it.
-    report_md = results_dir / "benchmark-report.managed-matrix.md"
-
-    # Pass/light are exact op-matrix execution profiles. The complementary subsystems own distinct
-    # timing models and tracked output files; publication runs continue to execute them below.
-    effective_skip_nditer = args.skip_nditer or non_measure
-    effective_skip_layout = args.skip_layout or non_measure
-    effective_skip_operand = args.skip_operand or non_measure
-    effective_skip_cast = args.skip_cast or non_measure
-    effective_skip_fusion = args.skip_fusion or non_measure
-    effective_skip_targeted_openblas = skip_official_openblas or non_measure
-    if non_measure:
-        print("\nPass/light profile: complementary subsystem sheets are skipped; "
-              "all 499 official BDN/NumPy scenarios remain in scope.", flush=True)
-
-    # 4b. NDIter iterator benchmark — complementary harness (file-based, section-
-    #     isolated, crash-resilient: a NumSharp AccessViolation is IGNORED and the
-    #     section reported NA). Its result model is aspect x tier, not op/dtype/N,
-    #     so it is APPENDED to the report as its own section rather than merged —
-    #     preserving the iterator-isolation value the op matrix cannot express.
-    if not effective_skip_nditer:
-        print("\n=== NDIter iterator benchmark (benchmark/nditer) ===", flush=True)
-        sheet_cmd = [sys.executable, str(NPYITER_SHEET)]
-        if args.skip_build:
-            sheet_cmd.append("--skip-build")
-        run(sheet_cmd, check=False)
-        run([sys.executable, str(NPYITER_CARDS)], check=False)
-        for src in (NPYITER_REPORT, NPYITER_TSV):
-            if src.exists():
-                shutil.copy(src, results_dir / src.name)
-        cards_src = NPYITER_DIR / "cards"
-        if cards_src.exists():
-            shutil.copytree(cards_src, results_dir / "nditer_cards", dirs_exist_ok=True)
-        if NPYITER_REPORT.exists():
-            section = ("\n\n---\n\n## NDIter iterator benchmark\n\n"
-                       "_Complementary harness: measures the iterator machinery itself "
-                       "(construction, traversal, reductions, selection, dtypes, pathologies, "
-                       "dividends) across cache tiers — not part of the op/dtype/N matrix above. "
-                       "speedup = NumPy / NumSharp; NA = section ignored due to a known "
-                       "intermittent NumSharp AccessViolation._\n\n")
-            existing = report_md.read_text(encoding="utf-8") if report_md.exists() else ""
-            report_md.write_text(existing + section + NPYITER_REPORT.read_text(encoding="utf-8"),
-                                 encoding="utf-8")
-
-    # 4c. Complementary subsystems — layout / operand / cast / fusion / OpenBLAS.
-    #     op/dtype/N matrix cannot express and appends its own rendered section.
-    skip_matrix = {"layout": effective_skip_layout, "operand": effective_skip_operand,
-                   "cast": effective_skip_cast, "fusion": effective_skip_fusion,
-                   "openblas": effective_skip_targeted_openblas}
-    for name, sheet, results, title in MATRIX_SUBSYSTEMS:
-        if skip_matrix[name]:
+        materialize_numpy(directory, plan)
+    for name, sheet, source, title in sheets:
+        stage = "subsystem:" + name
+        dest = directory / source.name
+        if session.stage_state.get(stage) == "complete" and dest.exists():
             continue
-        run_matrix_subsystem(name, sheet, results, title, report_md, results_dir, args.skip_build)
-
-    # 4d. Canonical backend-profile merge. The full Managed C# matrix and the targeted backend
-    #     harness use the SAME JSON row schema. Separate profile files remain available, while
-    #     benchmark-report.json stores both measurements and an effective fastest-valid value per
-    #     exact operation/dtype/N/scenario cell. MissingBackendException and NotSupportedException
-    #     are availability states emitted by the targeted harness, never timed failures.
-    profile_cmd = [sys.executable, str(PROFILE_MERGE),
-                   "--managed", str(Path(str(managed_matrix_base) + ".json")),
-                   "--output", str(results_dir / "benchmark-report")]
-    backend_managed = HERE / "openblas" / "openblas_results.managed.json"
-    backend_openblas = HERE / "openblas" / "openblas_results.openblas.json"
-    if backend_managed.exists() and not effective_skip_targeted_openblas:
-        profile_cmd.extend(["--managed-extra", str(backend_managed)])
-    official_openblas = Path(str(openblas_matrix_base) + ".json")
-    if official_openblas.exists() and not skip_official_openblas:
-        profile_cmd.extend(["--openblas", str(official_openblas)])
-        if backend_openblas.exists() and not effective_skip_targeted_openblas:
-            profile_cmd.extend(["--openblas-extra", str(backend_openblas)])
-    elif backend_openblas.exists() and not effective_skip_targeted_openblas:
-        profile_cmd.extend(["--openblas", str(backend_openblas)])
-    run(profile_cmd, check=True)
-
-    if non_measure:
-        validate_execution_depth(results_dir, args.depth)
-
-    # Append the complementary subsystem sheets to the newly generated profile-aware report.
-    report_md = results_dir / "benchmark-report.md"
-    if not effective_skip_nditer:
-        append_section(report_md, NPYITER_REPORT, "NDIter iterator benchmark")
-    for name, _sheet, results, title in MATRIX_SUBSYSTEMS:
-        if not skip_matrix[name]:
-            append_section(report_md, results, title)
-
-    # 5. Copy the headline artifacts to the benchmark/ root for convenience.
-    if not non_measure:
-        for name in ["benchmark-report.md", "benchmark-report.json", "benchmark-report.csv",
-                     "benchmark-report.managed.json", "benchmark-report.openblas.json", "numpy-results.json"]:
-            src = results_dir / name
+        session.stage = stage
+        session.stage_state[stage] = "running"
+        before = source.stat().st_mtime_ns if source.exists() else None
+        cmd = [sys.executable, sheet] + (["--skip-build"] if args.skip_build else [])
+        result = run(cmd)
+        fresh = source.exists() and source.stat().st_mtime_ns != before
+        if result.returncode == 0 and fresh:
+            for artifact in source.parent.glob(source.stem + ".*"):
+                shutil.copy2(artifact, directory / artifact.name)
+            if name == "nditer":
+                cards_result = run([sys.executable, NPYITER_CARDS])
+                if cards_result.returncode == 0 and (NPYITER_DIR / "cards").exists():
+                    shutil.copytree(NPYITER_DIR / "cards", directory / "nditer_cards", dirs_exist_ok=True)
+                else:
+                    session.stage_state[stage] = "incomplete"
+                    print("!! NDIter cards were not generated; resume will retry this stage", flush=True)
+                    continue
+            session.stage_state[stage] = "complete"
+        else:
+            session.stage_state[stage] = "incomplete"
+            print(f"!! {name}: no fresh successful report; old output excluded", flush=True)
+    incomplete = any(session.outcomes.get(key) != "ok" for key in session.cells)
+    incomplete |= any(value != "complete" for key, value in session.stage_state.items() if key.startswith("subsystem:"))
+    session.stage = "merge reports"
+    session.progress(force=True)
+    merge_reports(directory, sheets, session, require_tiers=not args.rerun and not args.operations and not incomplete)
+    if args.depth != "measure" and not incomplete:
+        validate_execution_depth(directory, args.depth)
+    if eligible and not incomplete:
+        for name in ("benchmark-report.md", "benchmark-report.json", "benchmark-report.csv",
+                     "benchmark-report.managed.json", "benchmark-report.openblas.json", "numpy-results.json"):
+            src = directory / name
             if src.exists():
-                shutil.copy(src, HERE / name)
+                shutil.copy2(src, HERE / name)
+                if name.startswith("benchmark-report") and name.endswith(".json"):
+                    DOCS_BENCHMARK_JSON.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, DOCS_BENCHMARK_JSON.parent / name)
+        if not args.no_history:
+            session.stage = "history snapshot"
+            run([sys.executable, HERE / "scripts" / "snapshot_history.py", "--results-dir", directory, "--no-stage"], check=True)
+    session.stage = "finished"
+    session.progress(force=True, status="incomplete" if incomplete else "complete")
+    print(f"Report: {directory / 'benchmark-report.md'}\nRun state: {session.state_path}")
+    if incomplete:
+        print(f"Incomplete cases retained. Resume: python benchmark/run_benchmark.py --resume \"{directory}\"")
+    return 1 if incomplete else 0
 
-    # The rich DocFX dashboard fetches this relative URL at runtime. Keep it generated from the
-    # exact same merge result instead of leaving the Function Explorer with a missing asset.
-    if not non_measure:
-        DOCS_BENCHMARK_JSON.parent.mkdir(parents=True, exist_ok=True)
-        for name in ["benchmark-report.json", "benchmark-report.managed.json", "benchmark-report.openblas.json"]:
-            src = results_dir / name
-            if src.exists():
-                shutil.copy(src, DOCS_BENCHMARK_JSON.parent / name)
 
-    # 6. History snapshot + latest symlink — the committable provenance/publish step
-    #    (benchmark/scripts/snapshot_history.py): copies the report + both profile JSON files and subsystem
-    #    sheets + cards into benchmark/history/<date>_<sha>/, writes a MANIFEST, and
-    #    repoints benchmark/history/latest at it (a git-tracked symlink). results/<ts>/
-    #    stays the gitignored raw scratch; benchmark/history/ is what we commit + reference.
-    #    --no-stage: writing the snapshot must NOT mutate the git index. Staging is the
-    #    human's "review" step (run -> review -> commit), and CI stages benchmark/history/
-    #    explicitly. A local perf check shouldn't silently `git add` ~16 files.
-    if not args.no_history:
-        print("\n=== history snapshot + latest (benchmark/history) ===", flush=True)
-        run([sys.executable, str(HERE / "scripts" / "snapshot_history.py"),
-             "--results-dir", str(results_dir), "--no-stage"], check=False)
+def numpy_command(args, requested, suite):
+    return [sys.executable, PY_BENCH, "--suite", suite, "--cache-sizes", "--depth", args.depth,
+            "--dtypes", ",".join(requested)] + (["--with-scalar"] if suite == "api" else [])
 
-    print(f"\nDone in {time.time() - t0:.0f}s. Report: {HERE / 'benchmark-report.md'}")
-    print(f"Archive: {results_dir}")
-    print(f"Snapshot: {HISTORY_DIR / 'latest'} -> newest benchmark/history/<date>_<sha>/")
+
+def run_matrix_attempt(args, requested, directory, engine, suite, pending):
+    allowlist = directory / "cases" / f"{engine}-{suite}.json"
+    atomic_json(allowlist, [row["id"] for row in pending])
+    if engine == "numpy":
+        return run(numpy_command(args, requested, suite) + ["--cases-file", allowlist,
+                   "--checkpoint-dir", directory / "numpy-checkpoints", "--output", directory / f"numpy-{suite}.json"])
+    project, cwd, folder = ((CSHARP_PROJ, CSHARP_DIR, "csharp") if engine == "managed"
+                            else (OPENBLAS_CSHARP_PROJ, OPENBLAS_CSHARP_DIR, "csharp-openblas"))
+    env = {**os.environ, "NUMSHARP_BENCHMARK_CASES_FILE": str(allowlist),
+           "NUMSHARP_BENCHMARK_CHECKPOINT_DIR": str(directory / folder)}
+    if engine == "openblas":
+        env.update(NUMSHARP_OPENBLAS_BUNDLE_AUTOINSTALL="0", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+    return run(["dotnet", "run", "-c", "Release", "--no-build", "-f", TFM,
+                "--project", project, "--", "--filter", SUITES[suite]], cwd=cwd, env=env)
+
+
+def materialize_numpy(directory, plan):
+    selected = {row["id"] for row in plan if row["engine"] == "numpy"}
+    rows = []
+    for path in (directory / "numpy-checkpoints").glob("*.json"):
+        try:
+            payload = read_json(path)
+        except (ValueError, OSError):
+            continue
+        if payload.get("id") in selected and payload.get("status") == "ok" and validate_checkpoint(payload):
+            rows.append(payload["result"])
+    atomic_json(directory / "numpy-results.json", rows)
+
+
+def merge_reports(directory, sheets, session, require_tiers):
+    bases = []
+    for engine, folder in (("managed", "csharp"), ("openblas", "csharp-openblas")):
+        if engine == "openblas" and not any((directory / folder).glob("*.json")):
+            continue
+        base = directory / f"benchmark-report.{engine}-matrix"
+        cmd = [sys.executable, MERGE, "--numpy", directory / "numpy-results.json", "--csharp", directory / folder, "--output", base]
+        if require_tiers:
+            cmd.append("--require-universal-tiers")
+        run(cmd, check=True)
+        bases.append((engine, Path(str(base) + ".json")))
+    cmd = [sys.executable, PROFILE_MERGE, "--managed", bases[0][1], "--output", directory / "benchmark-report"]
+    if not require_tiers:
+        cmd.append("--allow-partial-profiles")
+    for engine, path in bases[1:]:
+        cmd.extend(["--openblas", path])
+    if session.stage_state.get("subsystem:openblas") == "complete":
+        for profile in ("managed", "openblas"):
+            path = directory / f"openblas_results.{profile}.json"
+            if path.exists():
+                flag = "--managed-extra" if profile == "managed" else (
+                    "--openblas-extra" if len(bases) > 1 else "--openblas")
+                cmd.extend([flag, path])
+    run(cmd, check=True)
+    for name, _sheet, source, title in sheets:
+        if session.stage_state.get("subsystem:" + name) == "complete":
+            append_section(directory / "benchmark-report.md", directory / source.name, title)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

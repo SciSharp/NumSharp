@@ -21,6 +21,14 @@ def row(n, name="np.example(a)", dtype="float64"):
 
 
 class UniversalTierCoverageTests(unittest.TestCase):
+    def test_failed_checkpoint_with_partial_statistics_is_a_failure(self):
+        failures = []
+        result = module.parse_bdn_benchmark({"Method": "Example", "MethodTitle": "np.example(a)",
+            "Parameters": "N=1000&DType=Double", "CheckpointStatus": "failed",
+            "Statistics": {"Min": 1000, "Mean": 1100}}, failures)
+        self.assertIsNone(result)
+        self.assertEqual(1, len(failures))
+
     def test_completed_zero_duration_is_negligible_not_no_data(self):
         self.assertEqual("negligible", module.classify(0.0002, 0.0, None))
         self.assertEqual("no_data", module.classify(0.0002, None, None))
