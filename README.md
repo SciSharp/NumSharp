@@ -143,32 +143,6 @@ dotnet test test/NumSharp.Tests/NumSharp.Tests.csproj \
 
 CI runs on Windows, Linux, and macOS for `net8.0` and `net10.0`.
 
-## NumPy vs NumSharp, Key Differences
-
-NumSharp follows NumPy's model where it can, but it is still a native .NET
-implementation. These are the differences that matter most when reading docs,
-porting code, or interpreting benchmark results.
-
-| Topic | NumPy | NumSharp | Practical impact |
-| --- | --- | --- | --- |
-| Runtime | CPython package backed by C/Fortran/native extensions | Native .NET library | No embedded Python runtime; Python extension modules do not automatically work. |
-| Main array type | `numpy.ndarray` | `NumSharp.NDArray` | Same mental model: shape, dtype, strides, indexing, views. C# syntax differs. |
-| API entry point | `import numpy as np` | `using NumSharp;` then `np.*` | Function names are intentionally familiar; C# overloads can differ where the language requires it. |
-| Compatibility target | NumPy 2.x | NumPy 2.x behavior target | NumPy is the source of truth for edge cases and tests. |
-| View semantics | Slices usually return views | Slices usually return views | Mutating a writeable view can mutate the base array. |
-| Broadcasting | Broadcasted dimensions use stride-zero views | Broadcasted dimensions use stride-zero views | Avoids materializing repeated data; broadcast views are protected from unsafe writes. |
-| Core dtype set | Large dtype universe, including platform-specific and Python-object-oriented dtypes | 15 core dtypes: bool, signed/unsigned ints, `char`, `Half`, `float`, `double`, `decimal`, `Complex` | Most numeric code maps directly; dtype-specialized NumPy code may need review. |
-| Integer names | `int8`, `uint8`, `int16`, ... | `SByte`, `Byte`, `Int16`, `UInt16`, ... | Same storage widths, .NET-oriented names. See [Dtypes](https://scisharp.github.io/NumSharp/docs/dtypes.md). |
-| `float16` | `float16` | `System.Half` | Supported, but some arithmetic paths are scalar because .NET has limited `Half` vector arithmetic. |
-| Complex | `complex64`, `complex128` | `System.Numerics.Complex` | Complex support is closer to `complex128`; no separate `complex64` dtype. |
-| Decimal | Usually object/extension territory | Native `Decimal` dtype | Useful for .NET decimal precision, but not a direct NumPy built-in dtype match. |
-| Text/object dtypes | String, unicode, object, and newer string dtype paths | No broad object/string dtype parity; `Char` is .NET-specific | Port text/object-heavy ndarray code deliberately. |
-| Type promotion | NumPy 2.x promotion rules | NumPy 2.x promotion target | Promotion-sensitive code should be checked against [NumPy compliance](https://scisharp.github.io/NumSharp/docs/compliance.md). |
-| Memory layout | C/F order and rich stride combinations | C-order default with stride/view/order-aware APIs | Layout-sensitive performance depends on contiguity, slicing, broadcasting, and dtype. |
-| Execution engine | NumPy ufuncs and native kernels | C# engine with generated IL/SIMD kernels | Performance differs by dtype, size, and layout. See [IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.md). |
-| Benchmarks | NumPy is the comparison baseline | Ratios are reported as `NumPy_ms / NumSharp_ms` | `>1.0x` means NumSharp is faster. See the [benchmark dashboard](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.md). |
-| Missing surface | Full NumPy package | Broad but not complete `np.*` surface | Some APIs remain unimplemented or intentionally different; use docs/API reference as the current source. |
-
 ## Related Projects
 
 If you need to call the full CPython NumPy runtime from .NET, including Python
