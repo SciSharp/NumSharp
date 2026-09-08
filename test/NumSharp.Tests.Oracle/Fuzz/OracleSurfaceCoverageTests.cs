@@ -51,6 +51,10 @@ namespace NumSharp.Tests.Fuzz
             // corpus representation (the same reason block needs a bespoke multi-operand oracle path);
             // gated by the dedicated np.bmat.Tests.cs suite verified against NumPy 2.4.2.
             "bmat",
+            // datetime_data reads the (unit, count) parameter off a datetime64/timedelta64 DESCRIPTOR — a dtype-level
+            // accessor with no array operand or result bytes (the datetime classes have no storage yet, Stage A of
+            // docs/plans/dtype-system.md). Gated by test/NumSharp.Tests/DTypes/*, probed against NumPy 2.4.2.
+            "datetime_data",
             "evaluate", "finfo", "flat",
             "format_float_positional", "format_float_scientific",
             "get_printoptions", "iinfo", "load", "load_npy", "load_npz",

@@ -184,7 +184,8 @@ public class AuditV2_CastingRandomUtilities
     //   strips the prefix and unconditionally sets byteorder = '='. The
     //   constructor hardcodes byteorder = '=' regardless of the input string.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.51")]
+    // FIXED (dtype-system Stage A): the descriptor keeps a non-native byte order ('>' on this little-endian host).
+    [TestMethod]
     public void T1_51_DType_Byteorder_BigEndianPrefix_LostAsNative()
     {
         // Host machines are little-endian, so '<' and '=' are NumPy-equivalent.
@@ -200,7 +201,7 @@ public class AuditV2_CastingRandomUtilities
     //   bool → '?' (TYPECHAR for bool, NumPy kind is 'b').
     //   Char → 'S' (S = byte string, NumPy kind for U-class is 'U').
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.52")]
+    [TestMethod] // FIXED (dtype-system Stage A): DType.kind comes from the DType class ('b' for bool, 'u' for char)
     public void T1_52_DType_Kind_Bool_UsesTypecharNotKind()
     {
         // NumPy: np.dtype(bool).kind == 'b'
@@ -209,7 +210,7 @@ public class AuditV2_CastingRandomUtilities
             "NumPy: np.dtype(bool).kind == 'b' (kind), not '?' (TYPECHAR)");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.52")]
+    [TestMethod] // FIXED (dtype-system Stage A): DType.kind comes from the DType class ('b' for bool, 'u' for char)
     public void T1_52_DType_Kind_Char_UsesStringInsteadOfUnicode()
     {
         // NumSharp's `Char` corresponds to System.Char (2-byte UTF-16 unit). The
@@ -227,7 +228,7 @@ public class AuditV2_CastingRandomUtilities
     //   name = type.Name — yields "Int32", "Double", "Boolean", "Complex".
     //   NumPy: int32, float64, bool, complex128.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.53")]
+    [TestMethod] // FIXED: DType.name is NumPy's bit-name ("int32", "float64", "bool", "complex128")
     public void T1_53_DType_Name_ReturnsCSharpType_NotNumpyName()
     {
         np.dtype("int32").name.Should().Be("int32",

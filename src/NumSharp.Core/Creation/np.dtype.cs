@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,340 +8,6 @@ using NumSharp.Backends;
 
 namespace NumSharp
 {
-    /// <summary>
-    ///     NumSharp's data-type descriptor — the reference type that stands in for NumPy's <c>numpy.dtype</c>,
-    ///     and the <b>single dtype spelling</b> every dtype-taking API in NumSharp accepts.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    ///     <b>Why it exists.</b> NumPy funnels every <c>dtype=</c> argument through one coercion point,
-    ///     <c>numpy.dtype(...)</c>, so a Python type (<c>float</c>), a NumPy scalar type (<c>np.float32</c>),
-    ///     a <c>np.dtype</c> instance and a dtype <b>string</b> (<c>'float32'</c>, <c>'f4'</c>, <c>'&lt;f8'</c>)
-    ///     are ALL valid there. NumSharp historically had three separate spellings — a C# <see cref="System.Type"/>,
-    ///     an <see cref="NPTypeCode"/> enum, and this descriptor from <see cref="np.dtype(string)"/> — which forced
-    ///     two-or-three overloads per function. <see cref="DType"/> collapses them: it is the one type every
-    ///     dtype-taking overload accepts, and each of the other spellings converts to it IMPLICITLY, so a caller
-    ///     writes whichever is convenient and it binds the single overload — mirroring NumPy's one <c>dtype=</c>.
-    /// </para>
-    /// <para>
-    ///     <b>The four spellings, all implicit.</b> The following are equivalent and all bind the one
-    ///     <c>DType</c> overload (e.g. <c>np.sqrt(x, dtype: …)</c>):
-    ///     <list type="bullet">
-    ///       <item><description><b><see cref="System.Type"/></b> — <c>typeof(float)</c> (NumPy's Python/NumPy scalar type).</description></item>
-    ///       <item><description><b><see cref="NPTypeCode"/></b> — <c>NPTypeCode.Single</c> (NumSharp's compact enum; no NumPy counterpart).</description></item>
-    ///       <item><description><b>NumPy dtype string</b> — <c>"float32"</c> / <c>"f4"</c> / <c>"&lt;f8"</c> (NumPy's <c>dtype='float32'</c> — see the casing rules below).</description></item>
-    ///       <item><description><b><see cref="DType"/> itself</b> — <c>DType.Single</c>, <c>np.dtype("f4")</c>, <c>DType.From(...)</c>.</description></item>
-    ///     </list>
-    ///     A <see cref="DType"/> also converts back to <see cref="System.Type"/> and <see cref="NPTypeCode"/>
-    ///     implicitly, so it drops straight into code expecting either.
-    /// </para>
-    /// <para>
-    ///     <b>None / infer is <see langword="null"/>.</b> A <see langword="null"/> <see cref="DType"/> is the
-    ///     "none/infer" state — the analog of NumPy's <c>dtype=None</c>. This is precisely why <see cref="DType"/>
-    ///     is a <b>class, not a struct</b>: a nullable <c>DType dtype = null</c> parameter is a drop-in replacement
-    ///     for the old <c>Type dtype = null</c> parameter, so the engine's existing null idioms keep working
-    ///     verbatim — <c>dtype?.GetTypeCode()</c> yields <c>NPTypeCode?</c> (null when none) and <c>dtype == null</c>
-    ///     tests the none state. Converting a <see langword="null"/>/<see cref="NPTypeCode.Empty"/> spelling yields
-    ///     a <see langword="null"/> <see cref="DType"/> (never a throwing conversion); the explicit
-    ///     <see cref="DType(System.Type)"/> / <see cref="DType(NPTypeCode)"/> constructors, by contrast, reject
-    ///     null/Empty (use a <see langword="null"/> <see cref="DType"/> for none).
-    /// </para>
-    /// <para>
-    ///     <b>NumPy string casing (source of truth: NumPy 2.4.2).</b> Strings are parsed by
-    ///     <see cref="np.dtype(string)"/> with NumPy's exact, <b>case-sensitive</b> spelling — the single-character
-    ///     codes differ by case:
-    ///     <list type="table">
-    ///       <listheader><term>code</term><description>type</description></listheader>
-    ///       <item><term>?</term><description>bool</description></item>
-    ///       <item><term>b / B</term><description>int8 / uint8</description></item>
-    ///       <item><term>h / H</term><description>int16 / uint16</description></item>
-    ///       <item><term>i / I</term><description>int32 / uint32</description></item>
-    ///       <item><term>q / Q</term><description>int64 / uint64</description></item>
-    ///       <item><term>e / f / d</term><description>float16 / float32 / float64</description></item>
-    ///       <item><term>D</term><description>complex128</description></item>
-    ///     </list>
-    ///     Sized forms (<c>"i4"</c>, <c>"f8"</c>, <c>"c16"</c>), lowercase names (<c>"float64"</c>, <c>"int32"</c>,
-    ///     <c>"complex128"</c>) and byte-order prefixes (<c>"&lt;f8"</c>, <c>"&gt;i4"</c>, <c>"=u2"</c>, <c>"|b1"</c>)
-    ///     are all accepted; the prefix is stripped because NumSharp is host-endian only.
-    /// </para>
-    /// <para>
-    ///     <b>Deliberately narrowed to NumSharp's capability</b> (the same narrowing as <see cref="np.dtype(string)"/>):
-    ///     only NumSharp's <b>15 element types</b> are representable. Two consequences differ from NumPy and are
-    ///     intentional — (1) <b>complex64</b> (<c>'F'</c>, <c>"c8"</c>, <c>"complex64"</c>) is rejected with
-    ///     <see cref="NotSupportedException"/> (NumSharp has only complex128), as are structured / datetime /
-    ///     void / object / (byte)string dtypes; (2) NumSharp additionally accepts a <b>superset</b> of NumPy's
-    ///     casing — the C# / <see cref="NPTypeCode"/> PascalCase names (<c>"Int32"</c>, <c>"Single"</c>,
-    ///     <c>"Boolean"</c>, <c>"SByte"</c>, <c>"Decimal"</c>, <c>"Char"</c>) that NumPy 2.4.2 rejects — as a
-    ///     convenience for C# callers. Byte order is always native (<c>'='</c>); <see cref="newbyteorder"/> throws.
-    /// </para>
-    /// <para>
-    ///     <b>Descriptor surface</b> (mirrors <c>numpy.dtype</c>): <see cref="type"/> (the C# <see cref="System.Type"/>),
-    ///     <see cref="typecode"/> (<see cref="NPTypeCode"/>), <see cref="name"/>, <see cref="kind"/>
-    ///     ('b'/'i'/'u'/'f'/'c'/'S'…), <see cref="char"/> (the type char code), <see cref="itemsize"/> (bytes) and
-    ///     <see cref="byteorder"/>. Equality is by <see cref="typecode"/> and null-safe.
-    /// </para>
-    /// <example>
-    /// <code>
-    /// np.sqrt(x, dtype: typeof(float));      // Type
-    /// np.sqrt(x, dtype: NPTypeCode.Single);  // NPTypeCode enum
-    /// np.sqrt(x, dtype: "float32");          // NumPy string  (== NumPy's dtype='float32')
-    /// np.sqrt(x, dtype: DType.Single);       // DType spelling
-    /// np.sqrt(x);                            // dtype omitted  == None / infer
-    ///
-    /// DType d  = np.dtype("&lt;f8");           // full descriptor: d.type==typeof(double), d.kind=='f', d.itemsize==8
-    /// Type t   = DType.Double;               // implicit DType -&gt; Type
-    /// NPTypeCode c = (DType)"int32";         // implicit string -&gt; DType -&gt; NPTypeCode
-    /// bool same = DType.Single == (DType)"f4"; // true — value equality by typecode
-    /// </code>
-    /// </example>
-    /// </remarks>
-    /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype</remarks>
-    public class DType : IEquatable<DType>
-    {
-        internal static readonly FrozenDictionary<NPTypeCode, char> _kind_list_map = new Dictionary<NPTypeCode, char>()
-        {
-            {NPTypeCode.Complex, 'c'},
-            {NPTypeCode.Boolean, '?'},
-            {NPTypeCode.SByte, 'i'},
-            {NPTypeCode.Byte, 'u'},
-            {NPTypeCode.Int16, 'i'},
-            {NPTypeCode.UInt16, 'u'},
-            {NPTypeCode.Int32, 'i'},
-            {NPTypeCode.UInt32, 'u'},
-            {NPTypeCode.Int64, 'i'},
-            {NPTypeCode.UInt64, 'u'},
-            {NPTypeCode.Char, 'S'},
-            {NPTypeCode.Half, 'f'},
-            {NPTypeCode.Double, 'f'},
-            {NPTypeCode.Single, 'f'},
-            {NPTypeCode.Decimal, 'f'},
-            {NPTypeCode.String, 'S'},
-        }.ToFrozenDictionary();
-
-        /// <summary>
-        ///     Builds a descriptor for a C# <see cref="System.Type"/>. Identical to <see cref="From(System.Type)"/>.
-        ///     For the "none/infer" state use a <see langword="null"/> <see cref="DType"/> (this ctor throws on a
-        ///     <see langword="null"/> type; the implicit <c>Type</c>→<c>DType</c> conversion yields <see langword="null"/>).
-        /// </summary>
-        public DType(Type type)
-        {
-            this.type = type ?? throw new ArgumentNullException(nameof(type));
-            this.typecode = type.GetTypeCode();
-            this.name = NumpyName(this.typecode);
-            this.byteorder = '=';
-            this.itemsize = this.typecode.SizeOf();
-            this.TYPECHAR = this.typecode.ToTYPECHAR();
-            this.kind = _kind_list_map[this.typecode];
-        }
-
-        /// <summary>
-        ///     Builds a descriptor for an <see cref="NPTypeCode"/>. Identical to <see cref="From(NPTypeCode)"/>.
-        ///     For the "none/infer" state use a <see langword="null"/> <see cref="DType"/> (this ctor throws on
-        ///     <see cref="NPTypeCode.Empty"/>; the implicit <c>NPTypeCode</c>→<c>DType</c> conversion yields <see langword="null"/>).
-        /// </summary>
-        public DType(NPTypeCode typecode)
-        {
-            if (typecode == NPTypeCode.Empty)
-                throw new ArgumentException("NPTypeCode.Empty has no dtype; use a null DType for the none/infer state.", nameof(typecode));
-
-            this.typecode = typecode;
-            this.type = typecode.AsType();
-            this.name = NumpyName(typecode);
-            this.byteorder = '=';
-            this.itemsize = typecode.SizeOf();
-            this.TYPECHAR = typecode.ToTYPECHAR();
-            this.kind = _kind_list_map[typecode];
-        }
-
-        /// <summary>
-        ///     A character indicating the byte-order of this data-type object.<br></br>
-        ///     One of:<br></br>
-        ///     
-        ///     '='	native<br></br>
-        ///     '\&lt;'	little-endian<br></br>
-        ///     '&gt;'	big-endian<br></br>
-        ///     '|'	not applicable<br></br>
-        /// </summary>
-        public readonly char byteorder;
-
-        /// <summary>
-        ///     The size of the dtype in bytes.
-        /// </summary>
-        public readonly int itemsize;
-
-        /// <summary>
-        ///     The name of this dtype.
-        /// </summary>
-        public readonly string name;
-
-        /// <summary>
-        ///     NumPy's <c>dtype.name</c> spelling (<c>"float32"</c>, <c>"int64"</c>, <c>"bool"</c>, <c>"complex128"</c>) —
-        ///     the CLR <see cref="Type.Name"/> (<c>"Single"</c>) is not a NumPy name and does not round-trip through
-        ///     <see cref="np.dtype(string)"/>. The three NumSharp-only dtypes have no NumPy analog and get lowercase
-        ///     names of their own rather than the nearest NumPy stand-in (<c>uint16</c>/<c>float64</c>), which would misreport them.
-        /// </summary>
-        private static string NumpyName(NPTypeCode typecode) => typecode switch
-        {
-            NPTypeCode.Char => "char",
-            NPTypeCode.Decimal => "decimal",
-            NPTypeCode.String => "str",
-            _ => typecode.AsNumpyDtypeName(),
-        };
-
-        /// <summary>
-        ///     The actual type this dtype represents.
-        /// </summary>
-        public readonly Type type;
-
-        /// <summary>
-        ///     The NumSharp type code.
-        /// </summary>
-        public readonly NPTypeCode typecode;
-
-        /// <summary>
-        ///     A unique character code for each of the 21 different built-in types.
-        /// </summary>
-        internal readonly NPY_TYPECHAR TYPECHAR;
-
-        /// <summary>
-        ///     A character code (one of ‘biufcmMOSUV’) identifying the general kind of data.<br></br><br></br>
-        ///     b boolean<br></br>
-        ///     i signed integer<br></br>
-        ///     u   unsigned integer<br></br>
-        ///     f floating-point<br></br>
-        ///     c   complex floating-point<br></br>
-        ///     m   timedelta<br></br>
-        ///     M   datetime<br></br>
-        ///     O   object<br></br>
-        ///     S(byte-)string<br></br>
-        ///     U   Unicode<br></br>
-        ///     V   void<br></br>
-        /// </summary>
-        public readonly char kind;
-
-        /// <summary>
-        /// A unique character code for each of the 21 different built-in types.
-        /// </summary>
-        public char @char => (char)TYPECHAR;
-
-        // ---- factories (public ctors are identical) ----
-
-        /// <summary>Builds a descriptor from a C# <see cref="System.Type"/>. Same as <c>new DType(type)</c>.</summary>
-        public static DType From(Type type) => new DType(type);
-
-        /// <summary>Builds a descriptor from an <see cref="NPTypeCode"/>. Same as <c>new DType(typecode)</c>.</summary>
-        public static DType From(NPTypeCode typecode) => new DType(typecode);
-
-        /// <summary>Builds a descriptor from a NumPy dtype <b>string</b> (NumPy's case-sensitive spelling). Same as <see cref="np.dtype(string)"/>.</summary>
-        public static DType From(string dtype) => np.dtype(dtype);
-
-        /// <summary>
-        ///     Returns this descriptor's <see cref="NPTypeCode"/>. Combined with a nullable <see cref="DType"/>
-        ///     this keeps the old <c>Type dtype</c> idiom drop-in: <c>dtype?.GetTypeCode()</c> yields
-        ///     <c>NPTypeCode?</c> (<see langword="null"/> for the none/infer state where <c>dtype == null</c>).
-        /// </summary>
-        public NPTypeCode GetTypeCode() => typecode;
-
-        // ---- one static spelling per NPTypeCode (the 15 NumSharp element types) ----
-
-        /// <summary>The <see cref="System.Boolean"/> descriptor.</summary>
-        public static DType Boolean => new DType(NPTypeCode.Boolean);
-        /// <summary>The <see cref="System.Byte"/> (uint8) descriptor.</summary>
-        public static DType Byte => new DType(NPTypeCode.Byte);
-        /// <summary>The <see cref="System.SByte"/> (int8) descriptor.</summary>
-        public static DType SByte => new DType(NPTypeCode.SByte);
-        /// <summary>The <see cref="System.Int16"/> descriptor.</summary>
-        public static DType Int16 => new DType(NPTypeCode.Int16);
-        /// <summary>The <see cref="System.UInt16"/> descriptor.</summary>
-        public static DType UInt16 => new DType(NPTypeCode.UInt16);
-        /// <summary>The <see cref="System.Int32"/> descriptor.</summary>
-        public static DType Int32 => new DType(NPTypeCode.Int32);
-        /// <summary>The <see cref="System.UInt32"/> descriptor.</summary>
-        public static DType UInt32 => new DType(NPTypeCode.UInt32);
-        /// <summary>The <see cref="System.Int64"/> descriptor.</summary>
-        public static DType Int64 => new DType(NPTypeCode.Int64);
-        /// <summary>The <see cref="System.UInt64"/> descriptor.</summary>
-        public static DType UInt64 => new DType(NPTypeCode.UInt64);
-        /// <summary>The <see cref="System.Char"/> descriptor.</summary>
-        public static DType Char => new DType(NPTypeCode.Char);
-        /// <summary>The <see cref="System.Half"/> (float16) descriptor.</summary>
-        public static DType Half => new DType(NPTypeCode.Half);
-        /// <summary>The <see cref="System.Single"/> (float32) descriptor.</summary>
-        public static DType Single => new DType(NPTypeCode.Single);
-        /// <summary>The <see cref="System.Double"/> (float64) descriptor.</summary>
-        public static DType Double => new DType(NPTypeCode.Double);
-        /// <summary>The <see cref="System.Decimal"/> descriptor.</summary>
-        public static DType Decimal => new DType(NPTypeCode.Decimal);
-        /// <summary>The <see cref="System.Numerics.Complex"/> (complex128) descriptor.</summary>
-        public static DType Complex => new DType(NPTypeCode.Complex);
-
-        // ---- implicit conversions: DType is the single spelling Type / NPTypeCode / NumPy-string collapse into ----
-
-        /// <summary>A C# <see cref="System.Type"/> converts to a descriptor (<see langword="null"/> ⇒ none).</summary>
-        public static implicit operator DType(Type type) => type == null ? null : new DType(type);
-
-        /// <summary>An <see cref="NPTypeCode"/> converts to a descriptor (<see cref="NPTypeCode.Empty"/> ⇒ none).</summary>
-        public static implicit operator DType(NPTypeCode typecode) => typecode == NPTypeCode.Empty ? null : new DType(typecode);
-
-        /// <summary>A nullable <see cref="NPTypeCode"/> converts to a descriptor (<see langword="null"/>/<see cref="NPTypeCode.Empty"/> ⇒ none).</summary>
-        public static implicit operator DType(NPTypeCode? typecode) => typecode.HasValue ? (DType)typecode.Value : null;
-
-        /// <summary>
-        ///     A NumPy dtype <b>string</b> converts to a descriptor via <see cref="np.dtype(string)"/> — NumPy's exact,
-        ///     case-sensitive spelling (<c>"f4"</c>, <c>"float32"</c>, <c>"&lt;f8"</c>, <c>"F"</c>). <see langword="null"/> ⇒ none.
-        /// </summary>
-        public static implicit operator DType(string dtype) => dtype == null ? null : np.dtype(dtype);
-
-        /// <summary>A descriptor converts back to its <see cref="System.Type"/> (none/<see langword="null"/> ⇒ null).</summary>
-        public static implicit operator Type(DType dtype) => dtype?.type;
-
-        /// <summary>A descriptor converts back to its <see cref="NPTypeCode"/> (none/<see langword="null"/> ⇒ <see cref="NPTypeCode.Empty"/>).</summary>
-        public static implicit operator NPTypeCode(DType dtype) => dtype is null ? NPTypeCode.Empty : dtype.typecode;
-
-        // ---- value equality (by typecode, null-safe) ----
-
-        /// <inheritdoc/>
-        public bool Equals(DType other) => other is not null && typecode == other.typecode;
-
-        /// <inheritdoc/>
-        public override bool Equals(object obj) => Equals(obj as DType);
-
-        /// <inheritdoc/>
-        public override int GetHashCode() => (int)typecode;
-
-        /// <summary>Value equality by <see cref="typecode"/> (null-safe).</summary>
-        public static bool operator ==(DType left, DType right)
-        {
-            if (left is null) return right is null;
-            return right is not null && left.typecode == right.typecode;
-        }
-
-        /// <summary>Value inequality by <see cref="typecode"/> (null-safe).</summary>
-        public static bool operator !=(DType left, DType right) => !(left == right);
-
-        /// <inheritdoc/>
-        public override string ToString() => name ?? "None";
-
-        /// <summary>
-        ///     Return a new dtype with a different byte order.
-        ///     Changes are also made in all fields and sub-arrays of the data type.
-        /// </summary>
-        /// <param name="new_order">
-        ///     Byte order to force; a value from the byte order specifications below.<br></br> The default value (‘S’) results in swapping the current byte order.<br></br> new_order codes can be any of:<br></br>
-        ///     ‘S’ - swap dtype from current to opposite endian<br></br>
-        ///     '='	- native order<br></br>
-        ///     '\&lt;'	- little-endian<br></br>
-        ///     '&gt;' - big-endian<br></br>
-        ///     '|'	- ignore(no change to byte order)<br></br>
-        ///     The code does a case-insensitive check on the first letter of new_order for these alternatives.<br></br>For example, any of ‘>’ or ‘B’ or ‘b’ or ‘brian’ are valid to specify big-endian.
-        /// </param>
-        /// <returns>New dtype object with the given change to the byte order.</returns>
-        public DType newbyteorder(char new_order = 'S')
-        {
-            throw new NotSupportedException();
-        }
-    }
-
     public static partial class np
     {
         /// <summary>
@@ -413,16 +79,20 @@ namespace NumSharp
         private static readonly Type _uintpType = IntPtr.Size == 8 ? typeof(ulong) : typeof(uint);
 
         /// <summary>
-        ///     Full NumPy 2.x dtype string → Type lookup. Built to match
-        ///     <c>numpy.dtype(str)</c> exactly, with NumSharp-specific adaptations:
+        ///     NumPy's <c>typeDict</c>: the dtype NAME lookup (<c>"float64"</c>, <c>"intc"</c>, <c>"longlong"</c>, …) plus the
+        ///     single-character codes and NumSharp's own aliases. Built to match <c>numpy.dtype(str)</c> exactly, with
+        ///     NumSharp-specific adaptations:
         ///     <list type="bullet">
-        ///       <item>NumPy types NumSharp doesn't implement (S/U/M/m/O/V/a) throw NotSupportedException.</item>
+        ///       <item>NumPy types NumSharp doesn't implement (S/U/V/O/a) throw NotSupportedException.</item>
         ///       <item>complex64 ('F'/'c8'/'complex64') throws NotSupportedException — NumSharp only has complex128.</item>
         ///       <item>'l'/'L'/'long'/'ulong' are platform-detected to match NumPy's C-long convention:
         ///             32-bit on Windows (MSVC), 64-bit on 64-bit Linux/Mac (gcc LP64).</item>
         ///       <item>'int'/'int_'/'intp' → int64 on 64-bit (matches NumPy 2.x where int_ == intp).</item>
         ///       <item>Aliases unique to .NET (SByte/Decimal/Char) are accepted.</item>
         ///     </list>
+        ///     The sized codes (<c>"i4"</c>, <c>"f8"</c>) are NOT looked up here: NumPy parses <c>kind + size</c>
+        ///     arithmetically (<c>PyArray_TypestrConvert</c>) before consulting the name table, and so does
+        ///     <see cref="dtype(string)"/>.
         /// </summary>
         private static readonly FrozenDictionary<string, Type> _dtype_string_map = BuildDtypeStringMap();
 
@@ -432,32 +102,32 @@ namespace NumSharp
 
             void Add(string key, Type t) => map[key] = t;
 
-            // ---- single-char NumPy type codes (sized OR unsized forms) ----
+            // ---- single-char NumPy type codes ----
             // bool
-            Add("?",  typeof(bool));     Add("b1", typeof(bool));
+            Add("?",  typeof(bool));
             // signed int
-            Add("b",  typeof(sbyte));    Add("i1", typeof(sbyte));
-            Add("h",  typeof(short));    Add("i2", typeof(short));
-            Add("i",  typeof(int));      Add("i4", typeof(int));
+            Add("b",  typeof(sbyte));
+            Add("h",  typeof(short));
+            Add("i",  typeof(int));
             Add("l",  _cLongType);       // C long: 32-bit on Windows (MSVC), 64-bit on *nix (gcc LP64)
-            Add("q",  typeof(long));     Add("i8", typeof(long));
+            Add("q",  typeof(long));
             Add("p",  _intpType);        // intptr
             // unsigned int
-            Add("B",  typeof(byte));     Add("u1", typeof(byte));
-            Add("H",  typeof(ushort));   Add("u2", typeof(ushort));
-            Add("I",  typeof(uint));     Add("u4", typeof(uint));
+            Add("B",  typeof(byte));
+            Add("H",  typeof(ushort));
+            Add("I",  typeof(uint));
             Add("L",  _cULongType);      // C unsigned long: same platform rule as 'l'
-            Add("Q",  typeof(ulong));    Add("u8", typeof(ulong));
+            Add("Q",  typeof(ulong));
             Add("P",  _uintpType);       // uintptr
             // float
-            Add("e",  typeof(Half));     Add("f2", typeof(Half));
-            Add("f",  typeof(float));    Add("f4", typeof(float));
-            Add("d",  typeof(double));   Add("f8", typeof(double));
+            Add("e",  typeof(Half));
+            Add("f",  typeof(float));
+            Add("d",  typeof(double));
             Add("g",  typeof(double));   // long double collapses to double
             // complex — NumSharp only has complex128 (System.Numerics.Complex = 2 × float64).
             // complex64 ('F', 'c8', 'complex64') is NOT supported and throws NotSupportedException
             // via _unsupported_numpy_codes below — users must explicitly opt into complex128.
-            Add("D",  typeof(Complex));  Add("c16", typeof(Complex));
+            Add("D",  typeof(Complex));
             Add("G",  typeof(Complex));  // long-double complex collapses to complex128
 
             // ---- NumPy lowercase names ----
@@ -539,65 +209,330 @@ namespace NumSharp
         // Users should explicitly use 'complex128' / 'D' / 'c16' / 'complex'.
         private static readonly FrozenSet<string> _unsupported_numpy_codes = new HashSet<string>(StringComparer.Ordinal)
         {
-            "S", "U", "V", "O", "M", "m", "a", "c", // c = S1 (1-byte string), NOT complex
-            "F", "c8", "complex64",                 // complex64 — NumSharp has no 32-bit complex
-            "datetime64", "timedelta64", "object", "object_", "bytes_", "str_", "str", "void", "unicode",
+            "S", "U", "V", "O", "a", "c", // c = S1 (1-byte string), NOT complex
+            "F", "c8", "complex64",       // complex64 — NumSharp has no 32-bit complex
+            "object", "object_", "bytes_", "str_", "str", "void", "unicode", "bytes",
+        }.ToFrozenSet();
+
+        // NumPy 2.0 removed these bit-suffixed aliases; the message is NumPy's verbatim.
+        private static readonly FrozenSet<string> _removed_numpy_aliases = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "int0", "uint0", "void0", "object0", "str0", "bytes0", "bool8",
         }.ToFrozenSet();
 
         /// <summary>
-        ///     Parse a string into a <see cref="DType"/>. 1:1 NumPy 2.x parity (with adaptations
-        ///     documented in <see cref="_dtype_string_map"/>).
+        ///     Create a data type object from a NumPy dtype string — the port of <c>descriptor.c</c>'s
+        ///     <c>_convert_from_str</c> (NumPy 2.4.2), the coercion point behind <c>np.dtype('…')</c> and every
+        ///     <c>dtype=</c> keyword.
         /// </summary>
-        /// <param name="dtype">Any NumPy-style dtype string (e.g. "int8", "f4", "&lt;i2", "complex128").</param>
-        /// <returns>Matching <see cref="DType"/>.</returns>
+        /// <param name="dtype">
+        ///     Any NumPy-style dtype string: a single type code (<c>"d"</c>, <c>"?"</c>, <c>"q"</c>), a kind plus byte size
+        ///     (<c>"i4"</c>, <c>"f8"</c>, <c>"c16"</c>, <c>"b1"</c>), a name (<c>"float64"</c>, <c>"intc"</c>, <c>"longlong"</c>,
+        ///     <c>"complex128"</c>), a datetime typestr (<c>"M8[ns]"</c>, <c>"m8"</c>, <c>"datetime64[10ns]"</c>,
+        ///     <c>"timedelta64[s/2]"</c>), optionally prefixed with a byte order (<c>"&lt;i4"</c>, <c>"&gt;f8"</c>, <c>"=u2"</c>,
+        ///     <c>"|b1"</c>), or one of NumSharp's PascalCase aliases (<c>"Int32"</c>, <c>"Single"</c>).
+        /// </param>
+        /// <returns>
+        ///     The matching descriptor: the class's canonical instance for a native builtin (so <c>np.dtype("i8")</c>
+        ///     is the same object every call), a fresh instance for a non-native byte order (<c>"&gt;i4"</c> keeps
+        ///     <c>byteorder == '&gt;'</c>, <c>isnative == false</c>) and for every datetime64/timedelta64 descriptor.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="NotSupportedException">
-        ///     Thrown for valid-NumPy types NumSharp doesn't implement (S, U, M, m, O, V, a, c=S1),
-        ///     or for syntactically invalid strings (e.g. "f16", "b4", "xyz").
+        ///     A valid NumPy dtype NumSharp does not implement — bytes/str (S, U, a, c), void, object, complex64,
+        ///     structured / sub-array / comma-string dtypes — or an invalid string, reported with NumPy's own
+        ///     <c>data type 'X' not understood</c> / <c>Alias 'bool8' was removed in NumPy 2.0. …</c> texts.
         /// </exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/arrays.dtypes.html</remarks>
+        /// <exception cref="TypeError">A malformed datetime unit (<c>Invalid datetime metadata string "[5]" at position 2</c>, verbatim).</exception>
+        /// <exception cref="ValueError">A datetime divisor that is not a multiple of a lower unit (verbatim).</exception>
+        /// <remarks>
+        ///     Grammar, in NumPy's order: a comma-string / parenthesised sub-array is a structured dtype (unsupported);
+        ///     the byte-order character is consumed (<c>'|'</c> reads as native, and a lone byte-order character is
+        ///     invalid); a datetime typestr (<c>M8</c>/<c>m8</c>/<c>datetime64</c>/<c>timedelta64</c> + metadata) is
+        ///     parsed by <see cref="DatetimeMetaData.Parse"/>; a one-character code is a type code; a code whose tail is
+        ///     an integer is <c>kind + size</c> (<c>PyArray_TypestrConvert</c> — so <c>"b1"</c> is bool while <c>"b"</c> is
+        ///     int8, <c>"i3"</c>, <c>"f16"</c> and <c>"?1"</c> are invalid); anything else is a NAME looked up in the
+        ///     type dictionary. Case matters everywhere (<c>"I4"</c> is not <c>"i4"</c>), whitespace is never stripped.
+        ///     <para>https://numpy.org/doc/stable/reference/arrays.dtypes.html</para>
+        /// </remarks>
         public static DType dtype(string dtype)
         {
             if (dtype == null)
                 throw new ArgumentNullException(nameof(dtype));
 
-            if (dtype.Contains("("))
+            string type = dtype;
+
+            /* Empty string is invalid */
+            if (type.Length == 0)
+                throw NotUnderstood(dtype);
+
+            /* check for commas present or first (or second) element a digit */
+            if (CheckForCommaString(type))
+                throw new NotSupportedException("NumSharp does not support structured (comma-string / field list) dtypes");
+            if (type.Contains('('))
                 throw new NotSupportedException("NumSharp does not support custom nested array dtypes");
 
-            // NumPy accepts byte-order prefixes (<, >, =, |). Strip before lookup — NumSharp is
-            // host-endian only.
-            string key = dtype;
-            if (key.Length > 1 && (key[0] == '<' || key[0] == '>' || key[0] == '=' || key[0] == '|'))
-                key = key.Substring(1);
-
-            // Prefer the lookup first so c8/c16 resolve to Complex before any "unsupported" check
-            // intercepts 'c' as S1.
-            if (_dtype_string_map.TryGetValue(key, out Type t))
-                return new DType(t);
-
-            // Reject valid-NumPy codes NumSharp doesn't implement.
-            if (_unsupported_numpy_codes.Contains(key))
-                throw new NotSupportedException($"NumPy dtype '{key}' is not supported by NumSharp");
-
-            // Bytestring/unicode/void/datetime with size suffix: "S10", "U32", "V16", "a5", "M8", "m8".
-            // (c is excluded because c8/c16 are complex sizes — already caught by the map above.)
-            if (key.Length > 1 && char.IsDigit(key[1]))
+            /* Process the endian character. '|' is replaced by '='*/
+            char endian = DType.NativeByteOrder;
+            switch (type[0])
             {
-                char first = key[0];
-                if (first == 'S' || first == 'U' || first == 'V' || first == 'a' ||
-                    first == 'M' || first == 'm')
-                    throw new NotSupportedException($"NumPy dtype '{key}' is not supported by NumSharp");
+                case '>':
+                case '<':
+                case '=':
+                    endian = type[0];
+                    type = type.Substring(1);
+                    break;
+
+                case '|':
+                    endian = DType.NativeByteOrder;
+                    type = type.Substring(1);
+                    break;
             }
 
-            // Fall back to C# Enum name (handles "Int32", "Complex", etc. — redundant with aliases
-            // above but belt-and-suspenders for case-insensitive eng names).
-            if (Enum.TryParse<NPTypeCode>(key, out var code) && code != NPTypeCode.Empty)
+            /* Just an endian character is invalid */
+            if (type.Length == 0)
+                throw NotUnderstood(dtype);
+
+            /* Check for datetime format */
+            if (IsDatetimeTypestr(type))
+                return ParseDatetimeTypestr(type).WithByteOrder(endian);
+
+            Type resolved = null;
+            /* A typecode like 'd' */
+            if (type.Length == 1)
             {
-                var resolved = code.AsType();
-                if (resolved != null)
-                    return new DType(resolved);
+                // NumPy's PyArray_DescrFromType maps the datetime LETTERS to the generic-unit descriptors
+                // (np.dtype('M') is dtype('<M8'), np.dtype('m') is dtype('<m8')).
+                if (type[0] == 'M')
+                    return DTypeRegistry.DateTime64.DefaultDescr().WithByteOrder(endian);
+                if (type[0] == 'm')
+                    return DTypeRegistry.TimeDelta64.DefaultDescr().WithByteOrder(endian);
+                if (!_dtype_string_map.TryGetValue(type, out resolved))
+                    resolved = null;
+            }
+            /* Possibly a kind + size like 'f8' but also could be 'bool' */
+            else if (TryParseSizeSuffix(type, out int elsize))
+            {
+                char kind = type[0];
+                switch (kind)
+                {
+                    case 'S':
+                    case 'a':
+                    case 'U':
+                    case 'V':
+                        throw new NotSupportedException($"NumPy dtype '{type}' is not supported by NumSharp");
+                    default:
+                        if (elsize != 0)
+                        {
+                            resolved = TypestrConvert(elsize, kind, type);
+                            if (resolved == null)
+                                throw NotUnderstood(dtype);
+                        }
+                        break;
+                }
             }
 
-            throw new NotSupportedException($"NumSharp cannot parse dtype '{dtype}' — not a recognized NumPy type string");
+            if (resolved == null)
+            {
+                /* Now check to see if the object is registered in typeDict */
+                if (_unsupported_numpy_codes.Contains(type))
+                    throw new NotSupportedException($"NumPy dtype '{type}' is not supported by NumSharp");
+                if (!_dtype_string_map.TryGetValue(type, out resolved))
+                {
+                    if (_removed_numpy_aliases.Contains(type))
+                        throw new NotSupportedException($"Alias '{type}' was removed in NumPy 2.0. Use a name without a digit at the end.");
+                    throw NotUnderstood(dtype);
+                }
+            }
+
+            var descr = DType.From(resolved);
+            if (endian != DType.NativeByteOrder && endian != DType.HostByteOrder && descr.byteorder != DType.NotApplicableByteOrder)
+                return descr.WithByteOrder(endian);
+            return descr;
+        }
+
+        /// <summary>The descriptor of a C# <see cref="System.Type"/> — <c>np.dtype(typeof(int))</c> (NumPy's <c>np.dtype(np.int32)</c>).</summary>
+        public static DType dtype(Type type) => DType.From(type ?? throw new ArgumentNullException(nameof(type)));
+
+        /// <summary>The descriptor of an <see cref="NPTypeCode"/> — NumSharp's storage enum spelling.</summary>
+        public static DType dtype(NPTypeCode typecode) => DType.From(typecode);
+
+        /// <summary>A descriptor converts to itself — <c>np.dtype(np.dtype('f8'))</c>.</summary>
+        public static DType dtype(DType dtype) => dtype ?? throw new ArgumentNullException(nameof(dtype));
+
+        private static NotSupportedException NotUnderstood(string dtype)
+            => new NotSupportedException($"data type '{dtype}' not understood");
+
+        /// <summary>
+        ///     NumPy's <c>_check_for_commastring</c>: a comma anywhere, or a leading digit (after an optional byte-order
+        ///     character), marks a structured "comma string" dtype (<c>"i4,f8"</c>, <c>"3f8"</c>).
+        /// </summary>
+        private static bool CheckForCommaString(string type)
+        {
+            /* Check for ints at start of string */
+            int start = 0;
+            if (type.Length > 1 && (type[0] == '>' || type[0] == '<' || type[0] == '|' || type[0] == '='))
+                start = 1;
+            if (start < type.Length && type[start] >= '0' && type[start] <= '9')
+                return true;
+            /* Check for empty tuple */
+            if (type.Length > 1 && type[0] == '(' && type[1] == ')')
+                return true;
+            /* Check for presence of commas outside square [] brackets */
+            int sqbracket = 0;
+            foreach (char c in type)
+            {
+                switch (c)
+                {
+                    case ',':
+                        if (sqbracket == 0) return true;
+                        break;
+                    case '[':
+                        ++sqbracket;
+                        break;
+                    case ']':
+                        --sqbracket;
+                        break;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>NumPy's <c>is_datetime_typestr</c>: <c>M8…</c>, <c>m8…</c>, <c>datetime64…</c>, <c>timedelta64…</c>.</summary>
+        private static bool IsDatetimeTypestr(string type)
+        {
+            if (type.Length < 2)
+                return false;
+            if (type[1] == '8' && (type[0] == 'M' || type[0] == 'm'))
+                return true;
+            if (type.Length < 10)
+                return false;
+            if (string.CompareOrdinal(type, 0, "datetime64", 0, 10) == 0)
+                return true;
+            if (type.Length < 11)
+                return false;
+            return string.CompareOrdinal(type, 0, "timedelta64", 0, 11) == 0;
+        }
+
+        /// <summary>NumPy's <c>parse_dtype_from_datetime_typestr</c>: split the root from the metadata string and parse the latter.</summary>
+        private static DType ParseDatetimeTypestr(string typestr)
+        {
+            bool isTimedelta;
+            string metastr;
+            if (typestr[0] == 'm' && typestr[1] == '8')
+            {
+                isTimedelta = true;
+                metastr = typestr.Substring(2);
+            }
+            else if (typestr[0] == 'M' && typestr[1] == '8')
+            {
+                isTimedelta = false;
+                metastr = typestr.Substring(2);
+            }
+            else if (typestr.Length >= 11 && string.CompareOrdinal(typestr, 0, "timedelta64", 0, 11) == 0)
+            {
+                isTimedelta = true;
+                metastr = typestr.Substring(11);
+            }
+            else if (typestr.Length >= 10 && string.CompareOrdinal(typestr, 0, "datetime64", 0, 10) == 0)
+            {
+                isTimedelta = false;
+                metastr = typestr.Substring(10);
+            }
+            else
+            {
+                throw new TypeError($"Invalid datetime typestr \"{typestr}\"");
+            }
+
+            var meta = DatetimeMetaData.Parse(metastr);
+            return (isTimedelta ? DTypeRegistry.TimeDelta64 : DTypeRegistry.DateTime64).Descr(meta);
+        }
+
+        /// <summary>
+        ///     C <c>strtol(type + 1, &amp;typeend, 10)</c> with NumPy's acceptance test: the tail after the kind letter
+        ///     must parse entirely as a non-negative integer (leading whitespace and an explicit sign are what
+        ///     <c>strtol</c> accepts, so <c>"i 4"</c> and <c>"i+4"</c> read as <c>"i4"</c> in NumPy too).
+        /// </summary>
+        private static bool TryParseSizeSuffix(string type, out int elsize)
+        {
+            elsize = 0;
+            int i = 1;
+            while (i < type.Length && char.IsWhiteSpace(type[i]))
+                i++;
+            bool negative = false;
+            if (i < type.Length && (type[i] == '+' || type[i] == '-'))
+            {
+                negative = type[i] == '-';
+                i++;
+            }
+            int digitsStart = i;
+            long value = 0;
+            while (i < type.Length && type[i] >= '0' && type[i] <= '9')
+            {
+                value = value * 10 + (type[i] - '0');
+                if (value > int.MaxValue)
+                    return false; // overflow → "not understood"
+                i++;
+            }
+            if (i == digitsStart || i != type.Length)
+                return false;
+            if (negative && value != 0)
+                return false; // "make sure it doesn't overflow or go negative"
+            elsize = (int)value;
+            return true;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_TypestrConvert</c> restricted to NumSharp's types: kind letter + byte size → type.
+        ///     Sizes with no NumSharp type return null ("not understood"); NumPy-valid-but-unsupported ones
+        ///     (<c>c8</c> complex64, <c>O8</c> object) raise <see cref="NotSupportedException"/>.
+        /// </summary>
+        private static Type TypestrConvert(int itemsize, char gentype, string type)
+        {
+            switch (gentype)
+            {
+                case 'b':
+                    return itemsize == 1 ? typeof(bool) : null;
+                case 'i':
+                    switch (itemsize)
+                    {
+                        case 1: return typeof(sbyte);
+                        case 2: return typeof(short);
+                        case 4: return typeof(int);
+                        case 8: return typeof(long);
+                        default: return null;
+                    }
+                case 'u':
+                    switch (itemsize)
+                    {
+                        case 1: return typeof(byte);
+                        case 2: return typeof(ushort);
+                        case 4: return typeof(uint);
+                        case 8: return typeof(ulong);
+                        default: return null;
+                    }
+                case 'f':
+                    switch (itemsize)
+                    {
+                        case 2: return typeof(Half);
+                        case 4: return typeof(float);
+                        case 8: return typeof(double);
+                        default: return null; // no extended precision (f16 is invalid on NumPy's win-amd64 build too)
+                    }
+                case 'c':
+                    switch (itemsize)
+                    {
+                        case 8: throw new NotSupportedException($"NumPy dtype '{type}' is not supported by NumSharp");
+                        case 16: return typeof(Complex);
+                        default: return null;
+                    }
+                case 'O':
+                    if (itemsize == IntPtr.Size)
+                        throw new NotSupportedException($"NumPy dtype '{type}' is not supported by NumSharp");
+                    return null;
+                default:
+                    return null;
+            }
         }
     }
 

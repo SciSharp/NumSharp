@@ -81,6 +81,78 @@ namespace NumSharp
         }
 
         /// <summary>
+        /// Returns True if the descriptor is of a specified category — NumPy 2.x's <c>np.isdtype(dtype, kind)</c> over a
+        /// <see cref="DType"/>: <paramref name="kind"/> is one of <c>"bool"</c>, <c>"signed integer"</c>,
+        /// <c>"unsigned integer"</c>, <c>"integral"</c>, <c>"real floating"</c>, <c>"complex floating"</c>, <c>"numeric"</c>
+        /// (case-sensitive, as in NumPy). The datetime classes belong to none of them (NumPy builds the categories from
+        /// <c>sctypes</c>, which exclude <c>datetime64</c>/<c>timedelta64</c>).
+        /// </summary>
+        /// <exception cref="ValueError"><c>kind argument is a string, but '…' is not a known kind name.</c> — verbatim NumPy.</exception>
+        public static bool isdtype(DType dtype, string kind)
+        {
+            if (dtype is null) throw new ArgumentNullException(nameof(dtype));
+            if (kind is null) throw new TypeError("kind argument must be comprised of NumPy dtypes or strings only, but is a null.");
+            switch (kind)
+            {
+                case "bool":
+                case "signed integer":
+                case "unsigned integer":
+                case "integral":
+                case "real floating":
+                case "complex floating":
+                case "numeric":
+                    break;
+                default:
+                    throw new ValueError($"kind argument is a string, but '{kind}' is not a known kind name.");
+            }
+
+            if (!dtype.Meta.HasStorage)
+                return false; // datetime64 / timedelta64: not in NumPy's sctypes categories
+            return NPTypeHierarchy.IsSubType(dtype.typecode, kind);
+        }
+
+        /// <summary>
+        /// Returns True if the descriptor is of any of the specified categories (NumPy's tuple form).
+        /// </summary>
+        public static bool isdtype(DType dtype, params string[] kinds)
+        {
+            if (dtype is null) throw new ArgumentNullException(nameof(dtype));
+            if (kinds is null) throw new ArgumentNullException(nameof(kinds));
+            bool result = false;
+            foreach (var kind in kinds)
+                result |= isdtype(dtype, kind); // every kind is validated, as NumPy processes the whole tuple first
+            return result;
+        }
+
+        /// <summary>
+        /// Returns True if the two descriptors are instances of the same DType class — NumPy's <c>np.isdtype(dtype, other_dtype)</c>
+        /// compares the scalar TYPES, so <c>isdtype('M8[s]', 'M8[ns]')</c> is True while <c>isdtype(float32, float64)</c> is False.
+        /// </summary>
+        public static bool isdtype(DType dtype, DType kind)
+        {
+            if (dtype is null) throw new ArgumentNullException(nameof(dtype));
+            if (kind is null) throw new TypeError("kind argument must be comprised of NumPy dtypes or strings only, but is a null.");
+            return ReferenceEquals(dtype.Meta, kind.Meta);
+        }
+
+        /// <summary>
+        /// <see cref="isdtype(DType, string)"/> for a dtype STRING (<c>np.isdtype("i4", "integral")</c>). Exists so that a
+        /// string first argument binds the dtype grammar rather than NumSharp's string→<see cref="NDArray"/> conversion.
+        /// </summary>
+        public static bool isdtype(string dtype, string kind)
+        {
+            if (dtype is null) throw new ArgumentNullException(nameof(dtype));
+            return isdtype(np.dtype(dtype), kind);
+        }
+
+        /// <summary><see cref="isdtype(DType, string[])"/> for a dtype STRING.</summary>
+        public static bool isdtype(string dtype, params string[] kinds)
+        {
+            if (dtype is null) throw new ArgumentNullException(nameof(dtype));
+            return isdtype(np.dtype(dtype), kinds);
+        }
+
+        /// <summary>
         /// Returns True if the CLR type is of a specified category.
         /// </summary>
         /// <param name="type">The CLR type to check.</param>

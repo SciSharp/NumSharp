@@ -1,9 +1,57 @@
 using System;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
     public partial class np
     {
+        /// <summary>
+        /// Returns True if cast between data types can occur according to the casting rule — NumPy's
+        /// <c>np.can_cast(from_, to, casting='safe')</c> over two descriptors (<c>PyArray_CanCastTypeTo</c>, NEP 43):
+        /// the <see cref="CastingImpl"/> registered for the two DType CLASSES answers, so byte order and datetime units
+        /// take part (<c>can_cast('&gt;i4', 'i4', 'equiv')</c> is True and <c>'no'</c> is False;
+        /// <c>can_cast('M8[D]', 'M8[s]', 'safe')</c> is True and the reverse is False).
+        /// </summary>
+        /// <param name="from">Data type to cast from (any spelling that converts to <see cref="DType"/>).</param>
+        /// <param name="to">Data type to cast to.</param>
+        /// <param name="casting">
+        /// Controls what kind of data casting may occur (case-sensitive, as in NumPy):
+        /// - "no" means the data types should not be cast at all.
+        /// - "equiv" means only byte-order changes are allowed.
+        /// - "safe" means only casts which can preserve values are allowed.
+        /// - "same_kind" means only safe casts or casts within a kind (int to int, float to float) are allowed.
+        /// - "unsafe" means any data conversions may be done.
+        /// </param>
+        /// <returns>True if cast can occur according to the casting rule.</returns>
+        /// <exception cref="ValueError"><c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')</c> — verbatim NumPy.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.can_cast.html</remarks>
+        public static bool can_cast(DType from, DType to, string casting = "safe")
+        {
+            if (from is null) throw new ArgumentNullException(nameof(from));
+            if (to is null) throw new TypeError("did not understand one of the types; 'None' not accepted");
+            return DTypeCasting.CanCastTypeTo(from, to, DTypeCasting.ParseCasting(casting));
+        }
+
+        /// <summary>
+        /// <see cref="can_cast(DType, DType, string)"/> for a dtype STRING source (<c>np.can_cast("i4", "i8")</c>). Exists so that a
+        /// string first argument binds the dtype grammar rather than NumSharp's string→<see cref="NDArray"/> (character array) conversion.
+        /// </summary>
+        public static bool can_cast(string from, DType to, string casting = "safe")
+        {
+            if (from is null) throw new ArgumentNullException(nameof(from));
+            return can_cast(dtype(from), to, casting);
+        }
+
+        /// <summary>
+        /// Returns True if cast between data types can occur according to the casting rule (the <see cref="NPY_CASTING"/> spelling).
+        /// </summary>
+        public static bool can_cast(DType from, DType to, NPY_CASTING casting)
+        {
+            if (from is null) throw new ArgumentNullException(nameof(from));
+            if (to is null) throw new TypeError("did not understand one of the types; 'None' not accepted");
+            return DTypeCasting.CanCastTypeTo(from, to, casting);
+        }
+
         /// <summary>
         /// Returns True if cast between data types can occur according to the casting rule.
         /// </summary>
@@ -20,29 +68,27 @@ namespace NumSharp
         /// <returns>True if cast can occur according to the casting rule.</returns>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.can_cast.html
+        ///
+        /// The <see cref="NPTypeCode"/> spelling of <see cref="can_cast(DType, DType, string)"/>: the same NEP 43 engine,
+        /// whose answers for the storage-backed types are the rules this overload always applied
+        /// (<c>safe ⇔ promote(from, to) == to</c>; <c>same_kind</c> ⇔ safe or the source kind orders at or below the
+        /// destination kind).
         /// </remarks>
         /// <example>
         /// <code>
         /// np.can_cast(NPTypeCode.Int32, NPTypeCode.Int64)           // True
         /// np.can_cast(NPTypeCode.Int64, NPTypeCode.Int32)           // False
-        /// np.can_cast(NPTypeCode.Int32, NPTypeCode.Single, "same_kind")  // False (different kind)
+        /// np.can_cast(NPTypeCode.Int32, NPTypeCode.Single, "same_kind")  // True (int -> float is allowed)
         /// np.can_cast(NPTypeCode.Int32, NPTypeCode.Int16, "unsafe") // True
         /// </code>
         /// </example>
         public static bool can_cast(NPTypeCode from, NPTypeCode to, string casting = "safe")
         {
+            var rule = DTypeCasting.ParseCasting(casting);
             if (from == to)
                 return true;
 
-            return casting.ToLowerInvariant() switch
-            {
-                "no" => false,  // No casting allowed except same type
-                "equiv" => false,  // Only byte-order changes (not applicable in NumSharp)
-                "safe" => CanCastSafe(from, to),
-                "same_kind" => CanCastSameKind(from, to),
-                "unsafe" => true,  // Any cast allowed
-                _ => throw new ArgumentException($"Invalid casting rule: {casting}", nameof(casting))
-            };
+            return DTypeCasting.CanCastTypeTo(DType.From(from), DType.From(to), rule);
         }
 
         /// <summary>
@@ -64,9 +110,14 @@ namespace NumSharp
         /// <param name="to">Data type to cast to.</param>
         /// <param name="casting">Controls what kind of data casting may occur.</param>
         /// <returns>True if the value can be cast to the target type.</returns>
+        /// <remarks>
+        /// NumSharp extension: NumPy 2.x refuses Python scalars here ("can_cast() does not support Python ints, floats,
+        /// and complex because the result used to depend on the value", NEP 50); NumSharp keeps the value-based answer
+        /// as a documented convenience.
+        /// </remarks>
         public static bool can_cast(int value, NPTypeCode to, string casting = "safe")
         {
-            if (casting.ToLowerInvariant() == "unsafe")
+            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return true;
             return ValueFitsInType(value, to);
         }
@@ -76,7 +127,7 @@ namespace NumSharp
         /// </summary>
         public static bool can_cast(long value, NPTypeCode to, string casting = "safe")
         {
-            if (casting.ToLowerInvariant() == "unsafe")
+            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return true;
             return ValueFitsInType(value, to);
         }
@@ -86,7 +137,7 @@ namespace NumSharp
         /// </summary>
         public static bool can_cast(double value, NPTypeCode to, string casting = "safe")
         {
-            if (casting.ToLowerInvariant() == "unsafe")
+            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return true;
             return ValueFitsInType(value, to);
         }
@@ -96,7 +147,7 @@ namespace NumSharp
         /// </summary>
         public static bool can_cast(byte value, NPTypeCode to, string casting = "safe")
         {
-            if (casting.ToLowerInvariant() == "unsafe")
+            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return true;
             return ValueFitsInType(value, to);
         }
@@ -106,7 +157,7 @@ namespace NumSharp
         /// </summary>
         public static bool can_cast(short value, NPTypeCode to, string casting = "safe")
         {
-            if (casting.ToLowerInvariant() == "unsafe")
+            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return true;
             return ValueFitsInType(value, to);
         }
@@ -116,7 +167,7 @@ namespace NumSharp
         /// </summary>
         public static bool can_cast(ushort value, NPTypeCode to, string casting = "safe")
         {
-            if (casting.ToLowerInvariant() == "unsafe")
+            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return true;
             return ValueFitsInType(value, to);
         }
@@ -126,7 +177,7 @@ namespace NumSharp
         /// </summary>
         public static bool can_cast(uint value, NPTypeCode to, string casting = "safe")
         {
-            if (casting.ToLowerInvariant() == "unsafe")
+            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return true;
             return ValueFitsInType(value, to);
         }
@@ -136,7 +187,7 @@ namespace NumSharp
         /// </summary>
         public static bool can_cast(ulong value, NPTypeCode to, string casting = "safe")
         {
-            if (casting.ToLowerInvariant() == "unsafe")
+            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return true;
             return ValueFitsInType(value, to);
         }
@@ -146,7 +197,7 @@ namespace NumSharp
         /// </summary>
         public static bool can_cast(float value, NPTypeCode to, string casting = "safe")
         {
-            if (casting.ToLowerInvariant() == "unsafe")
+            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return true;
             return ValueFitsInType(value, to);
         }
@@ -156,7 +207,7 @@ namespace NumSharp
         /// </summary>
         public static bool can_cast(decimal value, NPTypeCode to, string casting = "safe")
         {
-            if (casting.ToLowerInvariant() == "unsafe")
+            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return true;
             return ValueFitsInType(value, to);
         }
@@ -166,7 +217,7 @@ namespace NumSharp
         /// </summary>
         public static bool can_cast(bool value, NPTypeCode to, string casting = "safe")
         {
-            if (casting.ToLowerInvariant() == "unsafe")
+            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return true;
             return ValueFitsInType(value, to);
         }
@@ -200,7 +251,8 @@ namespace NumSharp
         /// <param name="casting">Controls what kind of data casting may occur.</param>
         /// <returns>True if the value can be cast to the target type.</returns>
         /// <remarks>
-        /// Scalar values can often be cast to smaller types if the value fits.
+        /// Scalar values can often be cast to smaller types if the value fits (NumSharp extension — see
+        /// <see cref="can_cast(int, NPTypeCode, string)"/>).
         /// </remarks>
         /// <example>
         /// <code>
@@ -213,10 +265,8 @@ namespace NumSharp
             if (value == null)
                 return false;
 
-            var from = value.GetType().GetTypeCode();
-
             // For "unsafe" casting, any value can be cast
-            if (casting.ToLowerInvariant() == "unsafe")
+            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
                 return true;
 
             // Check if the value fits in the target type
@@ -237,47 +287,13 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Check if casting from one type to another preserves values (safe casting).
+        /// Returns True if cast from the array's dtype can occur according to the casting rule (NumPy's array form of
+        /// <c>can_cast</c>; arrays are never inspected by value under NEP 50).
         /// </summary>
-        /// <remarks>
-        /// A cast is safe if and only if the target type is the common type of both types.
-        /// This leverages the type promotion tables in <see cref="_FindCommonType_Array"/>
-        /// which encode NumPy's type hierarchy.
-        ///
-        /// Mathematically: can_cast(A, B) ⟺ promote_types(A, B) == B
-        /// </remarks>
-        private static bool CanCastSafe(NPTypeCode from, NPTypeCode to)
+        public static bool can_cast(NDArray from, DType to, string casting = "safe")
         {
-            if (from == to)
-                return true;
-
-            // Safe cast iff the target type is the common type of both
-            // This reuses the type promotion tables, avoiding duplicate type knowledge
-            return _FindCommonType_Array(from, to) == to;
-        }
-
-        /// <summary>
-        /// Check if casting is allowed under NumPy's <c>same_kind</c> rule.
-        /// </summary>
-        /// <remarks>
-        /// NumPy's same_kind is DIRECTIONAL, driven by a kind ordering
-        /// (bool &lt; unsigned &lt; signed &lt; float &lt; complex), NOT a symmetric "same category":
-        /// a cast is allowed iff it is already safe OR the source kind orders at or below the
-        /// destination kind (<see cref="NPTypeHierarchy.CanCastSameKindOrder"/>). Consequences,
-        /// all matching NumPy 2.4.2:
-        /// - int16 -> int8 allowed (signed -> signed), but int16 -> uint8 NOT allowed (signed -> unsigned);
-        /// - uint64 -> int8 allowed (unsigned -> signed);
-        /// - int/uint -> float allowed, but float -> int NOT allowed;
-        /// - float64 -> float16 allowed (float -> float); complex -> float NOT allowed.
-        /// </remarks>
-        private static bool CanCastSameKind(NPTypeCode from, NPTypeCode to)
-        {
-            // Safe casts are always allowed
-            if (CanCastSafe(from, to))
-                return true;
-
-            // Otherwise allow casts that do not move DOWN NumPy's kind ordering.
-            return NPTypeHierarchy.CanCastSameKindOrder(from, to);
+            if (from is null) throw new ArgumentNullException(nameof(from));
+            return can_cast(DType.From(from.GetTypeCode), to, casting);
         }
 
         /// <summary>
@@ -300,7 +316,7 @@ namespace NumSharp
                             // Byte range (0..255) fits exactly in Half (exact up to 2048).
                             NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
                             NPTypeCode.Complex => true,
-                            _ => CanCastSafe(NPTypeCode.Byte, to)
+                            _ => can_cast(NPTypeCode.Byte, to, "safe")
                         };
 
                     case sbyte sb:

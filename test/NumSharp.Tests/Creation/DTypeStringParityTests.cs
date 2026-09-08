@@ -220,11 +220,52 @@ namespace NumSharp.Tests.Creation
         [TestMethod] public void Unsupported_V()    => ExpectThrow("V");
         [TestMethod] public void Unsupported_V16()  => ExpectThrow("V16");
         [TestMethod] public void Unsupported_O()    => ExpectThrow("O");
-        [TestMethod] public void Unsupported_M()    => ExpectThrow("M");
-        [TestMethod] public void Unsupported_M8()   => ExpectThrow("M8");
-        [TestMethod] public void Unsupported_m()    => ExpectThrow("m");
-        [TestMethod] public void Unsupported_m8()   => ExpectThrow("m8");
         [TestMethod] public void Unsupported_a()    => ExpectThrow("a");
+        // NumPy's PyArray_DescrFromType maps the bare datetime LETTERS to the generic descriptors: np.dtype('M') is
+        // dtype('<M8') and np.dtype('m') is dtype('<m8') (probed 2.4.2).
+        [TestMethod] public void SingleChar_M_GenericDatetime()  => np.dtype("M").Should().Be(np.dtype("M8"));
+        [TestMethod] public void SingleChar_m_GenericTimedelta() => np.dtype("m").Should().Be(np.dtype("m8"));
+
+        // ---------------------------------------------------------------------
+        // datetime64 / timedelta64: DESCRIPTOR-level support (dtype-system Stage A). The typestrs parse into
+        // parametric descriptors — kind 'M'/'m', itemsize 8, generic unit — but carry no storage yet, so the
+        // NPTypeCode / Type conversions raise NotSupportedException naming the missing piece.
+        // ---------------------------------------------------------------------
+
+        [TestMethod] public void Datetime_M8_IsGenericDatetimeDescriptor()
+        {
+            var d = np.dtype("M8");
+            d.kind.Should().Be('M');
+            d.@char.Should().Be('M');
+            d.itemsize.Should().Be(8);
+            d.num.Should().Be(21);
+            d.name.Should().Be("datetime64");
+            d.str.Should().Be("<M8");
+            d.Meta.Should().BeSameAs(np.dtypes.DateTime64DType);
+            np.datetime_data(d).Should().Be(("generic", 1));
+            Action act = () => { NPTypeCode _ = d; };
+            act.Should().Throw<NotSupportedException>();
+        }
+
+        [TestMethod] public void Datetime_m8_IsGenericTimedeltaDescriptor()
+        {
+            var d = np.dtype("m8");
+            d.kind.Should().Be('m');
+            d.@char.Should().Be('m');
+            d.itemsize.Should().Be(8);
+            d.num.Should().Be(22);
+            d.name.Should().Be("timedelta64");
+            d.str.Should().Be("<m8");
+            d.Meta.Should().BeSameAs(np.dtypes.TimeDelta64DType);
+        }
+
+        [TestMethod] public void Datetime_Names_Parse()
+        {
+            np.dtype("datetime64").Should().Be(np.dtype("M8"));
+            np.dtype("timedelta64").Should().Be(np.dtype("m8"));
+            np.dtype("datetime64[ns]").Should().Be(np.dtype("M8[ns]"));
+            np.dtype("timedelta64[ms]").str.Should().Be("<m8[ms]");
+        }
         [TestMethod] public void Unsupported_a5()   => ExpectThrow("a5");
         [TestMethod] public void Unsupported_c_IsS1_NotComplex() => ExpectThrow("c");
         [TestMethod] public void Unsupported_str()  => ExpectThrow("str");
@@ -232,8 +273,9 @@ namespace NumSharp.Tests.Creation
         [TestMethod] public void Unsupported_bytes_() => ExpectThrow("bytes_");
         [TestMethod] public void Unsupported_object() => ExpectThrow("object");
         [TestMethod] public void Unsupported_object_() => ExpectThrow("object_");
-        [TestMethod] public void Unsupported_datetime64() => ExpectThrow("datetime64");
-        [TestMethod] public void Unsupported_timedelta64() => ExpectThrow("timedelta64");
+        // datetime64 / timedelta64 parse into generic-unit descriptors since dtype-system Stage A (see Datetime_* below).
+        [TestMethod] public void Named_datetime64_IsGenericDatetime()  => np.dtype("datetime64").str.Should().Be("<M8");
+        [TestMethod] public void Named_timedelta64_IsGenericTimedelta() => np.dtype("timedelta64").str.Should().Be("<m8");
 
         // ---------------------------------------------------------------------
         // Case-sensitive: NumPy is case-sensitive for single chars — 'I4' throws
@@ -259,7 +301,9 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void NullInput_Throws()
         {
-            Action act = () => np.dtype(null);
+            // np.dtype now has string / Type / NPTypeCode / DType overloads, so a bare `null` literal is ambiguous at
+            // compile time; the string spelling is the one this suite exercises.
+            Action act = () => np.dtype((string)null);
             act.Should().Throw<ArgumentNullException>();
         }
 

@@ -876,7 +876,78 @@ allocation would. See `Manipulation/np.isin.cs`; gate: `Manipulation/np.isin.Tes
 The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped overload each** — `f(x[, x2], NDArray out = null, NDArray where = null, NPTypeCode? dtype = null)` (no bare/out split). It returns plain `NDArray` — NumPy's `np.less(a, b, out=f64)` returns the f64 out itself; `True→1` at any numeric out dtype since bool casts same_kind to all of them. A plain call still returns an `NDArray<bool>` *instance* (TensorEngine contract), so the typed wrapper is one zero-alloc cast away and the C# comparison operators (`==`, `<`, …) keep the `NDArray<bool>` static type via `AsGeneric<bool>()`. `dtype=` is validate-only (probed 2.4.2): bool loops only — `dtype: Boolean` is a no-op, anything else raises `No loop matching the specified signature and casting was found for ufunc <name>`. Comparisons compare at `result_type(lhs, rhs)` inside the kernel (probed: `greater(i8 2^53+1, f8 2^53)` → False, `equal` → True). Engine members follow the house order `(inputs, typeCode, out, where)`.
 
 ### Type Promotion & Dtype
-`can_cast`, `common_type`, `find_common_type`, `finfo`, `iinfo`, `issubdtype`, `min_scalar_type`, `mintypecode`, `promote_types`, `result_type`
+`can_cast`, `common_type`, `datetime_data`, `dtype`, `dtypes` (the `np.dtypes` class module), `find_common_type`, `finfo`, `iinfo`, `isdtype`, `issubdtype`, `min_scalar_type`, `mintypecode`, `promote_types`, `result_type`
+
+**The dtype system is NumPy 2.x's two-level model (NEP 40/41/42/43/50/56), Stage A of `docs/plans/dtype-system.md`**
+(`src/NumSharp.Core/DTypes/`, gates `test/NumSharp.Tests/DTypes/*` + the `dtype_text` fuzz tier; every rule probed
+against 2.4.2). A **`DTypeMeta`** is the DType CLASS (`type(np.dtype('f8'))` = `np.dtypes.Float64DType`): one live
+object per class with the NEP 42 slots as virtuals — `CommonDType` (null = `NotImplemented`), `CommonInstance`,
+`DefaultDescr`, `EnsureCanonical`, `DiscoverDescrFromObject`, `IsKnownScalarType`, the NEP 55 reservations
+`HasReferences`/`GetClearLoop`/`GetFillZeroLoop`, and the per-class-pair **`CastingImpl`** table (NEP 43
+`ArrayMethod`: `ResolveDescriptors` + `GetStridedLoop`, the latter unused until Stage C; `Casting` is the impl's
+minimal safety). A **`DType`** is the INSTANCE (the descriptor, `numpy.dtype`): `Meta` + `byteorder` + the parametric
+payload (`DatetimeMetadata`), with NumPy's whole surface — `num`/`kind`/`char`/`itemsize`/`alignment`/`name`/`str`/
+`descr`/`isbuiltin`/`isnative`/`hasobject`/`flags`/`newbyteorder`, `ToString()` = `str(dtype)` and `ToString(true)` =
+`repr(dtype)`. **`NPTypeCode` stays the storage/kernel discriminator**: every storage class exposes it as
+`Meta.TypeCode`, kernels keep dispatching on it, and a class without storage (the datetime pair in Stage A) has
+`TypeCode == Empty` — its descriptors parse, print, promote and cast-check, but converting one to `NPTypeCode`/`Type`
+raises `NotSupportedException` naming Stage C rather than degrading to the "infer" state. Classes:
+`LegacyBuiltinDTypeMeta` × 16 (the 15 storage types + the vestigial `String` slot; NumPy type numbers in the LP64
+convention — `Int32 = 5 'i'`, `Int64 = 7 'l'`, `Half = 23`; Decimal 256 / Char 257 are the user-defined range, so their
+descriptors report `isbuiltin == 2`, repr `dtype(decimal)`), `DatetimeDTypeMeta` × 2 (`DateTime64DType` 21 `'M'`,
+`TimeDelta64DType` 22 `'m'`, PARAMETRIC), `PyScalarDTypeMeta` × 3 (`_PyLongDType`/`_PyFloatDType`/`_PyComplexDType`,
+ABSTRACT — the NEP 50 weak literals). `DTypeRegistry` owns them (`FromTypeCode`/`FromScalarType`/`FromTypeNum`/
+`FromName`, `Register` for future classes, casting-impl registration); `np.dtypes` is the NumPy-named facade with NumPy's
+aliases (`ByteDType`, `IntDType`, platform `LongDType`, `LongLongDType`, `LongDoubleDType`→Float64, …).
+
+**Engines.** `DTypePromotion` is `common_dtype.c`/`convert_datatype.c` verbatim: `CommonDType` (two-sided protocol, then
+`DTypePromotionError` — a `TypeError` — with NumPy's text), `PromoteDTypeSequence` (`reduce_dtypes_to_most_knowledgeable`,
+order-independent; the OLD fold dropped every other pair, so `result_type(i1, i1, f8, i1)` used to be `int8`),
+`PromoteTypes` (identical-native fast path → common CLASS → default descr, or for a parametric class cast both operands
+to it and take `CommonInstance`), `CastDescrToDType`, and `ResultType` = NEP 50: every `NDArray` (0-d too), `DType`,
+`NPTypeCode`, `Type`, dtype string, `bool`/`char`/`Half`/`decimal` is STRONG; C# integer/`float`/`double`/`Complex`
+literals are WEAK (`result_type(int8_dtype, 300)` → `int8`, `+ 1.5` → `float64`, lone literal → int64/float64/complex128).
+For the storage builtins `CommonDType` IS the frozen `np._nptypemap_arr_arr` table (deferring to the larger type number,
+as NumPy does), so every two-operand answer the `dtype_text` tier gates is unchanged; the three internal engines
+(`np._FindCommonType*`, `NDExprTypeRules.PromoteStrong`, `NDIterCasting.PromoteTypes`) are deliberately untouched.
+`DTypeCasting` is `PyArray_CanCastTypeTo`/`CheckCastSafety`/`GetCastInfo`/`EquivTypes`/`MinCastSafety` over the impl
+table: the builtin impls encode the old `np.can_cast` rules exactly (same class → `equiv`, `promote(from,to)==to` →
+`safe`, kind-order `b<u<i<f<c` → `same_kind`, else `unsafe`; Char↔UInt16 are distinct classes, never `equiv`), and the
+table adds what an enum could not express — byte order (`can_cast('>i4','i4','equiv')` True, `'no'` False) and the
+datetime unit rules (`time_to_time`: exact 10³ᵏ folds are no-casts, generic→concrete `safe`, concrete→generic `unsafe`,
+timedelta years/months barrier `unsafe`, finer-and-divides `safe`, else `same_kind`; numeric→`m8` `safe` for bool/ints
+except 64-bit unsigned (`same_kind`), floats `unsafe`; anything↔`M8` `unsafe`). Casting strings are case-sensitive with
+NumPy's `casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')` `ValueError`.
+
+**`np.dtype(string)` is `_convert_from_str` ported**: comma-string/sub-array → unsupported; byte-order char consumed
+(`'|'` reads native; a NON-native prefix is KEPT — `np.dtype(">i4")` has `byteorder '>'`, `isnative false`, `str ">i4"`,
+`repr dtype('>i4')`, `isbuiltin 0`); datetime typestrs (`M8`, `m8`, `M`, `m`, `datetime64[10ns]`, `timedelta64[s/2]` →
+`m8[500ms]`, the divisor→multiple table incl. NumPy's `M8[W/11]` → `M8[0Y]` quirk) via `DatetimeMetaData.Parse` with the
+verbatim `Invalid datetime metadata string "[5]" at position 2` / `Invalid datetime unit in metadata string "[5x]"` /
+`divisor (7) is not a multiple of a lower-unit …` texts (a zero divisor raises where CPython crashes); one-char codes;
+`kind+size` parsed with `strtol` semantics (`i04`, `i 4`, `i+4` are int32; `b1` bool; `i3`/`f16`/`?1` invalid); then the
+name table. Invalid strings keep `NotSupportedException` but adopt NumPy's `data type 'X' not understood` /
+`Alias 'bool8' was removed in NumPy 2.0. Use a name without a digit at the end.` wording. Builtins are singletons
+(`np.dtype("i8")` is the same object every call, `isbuiltin 1`); datetime and non-native descriptors are fresh. `DType`
+equality is STRUCTURAL (class + byte order + unit: `M8[ns] != M8[s]`, `M8[1s] == M8[s]`, `>i4 != i4`; hash =
+class+byteorder so `hash(M8[ns]) == hash(M8[s])` as in NumPy); `Equals(object/string/Type/NPTypeCode)` COERCES like
+`dtype.__eq__` (`d.Equals("garbage")` is false, never an error). `<`/`<=`/`>`/`>=` are NumPy's safe-cast ordering.
+
+**Traps pinned by tests:** (1) NEVER add `==(DType, string)` operators — a `null` literal binds them over
+`==(DType, DType)` and every `descr == null` inside the engine silently answers false (it NRE'd the whole promotion
+engine once); the coercing string comparison lives on `Equals(string)`. (2) C# scalar literals bind NumSharp's
+scalar→`NDArray` conversion before `params object[]`, so `np.result_type(int8_array, 300)` reaches the STRONG
+`(NDArray, NDArray)` overload; the weak rule is reachable through the dtype: `np.result_type(a.dtype, 300)`. A dtype
+STRING likewise binds string→`NDArray` (a character array) and is ambiguous against `params DType[]`, which is why
+`result_type(params string[])`, `can_cast(string, DType, …)`, `issubdtype(string, string)`, `isdtype(string, …)` exist.
+(3) `promote_types('m8[Y]', 'M8[D]')` is `M8[D]` — `PromoteTypes` casts the timedelta operand to the DATETIME class first
+(keeping its unit) and only then runs the GCD, so the strict years/months barrier bites on `m8 × m8` only. (4)
+NumPy's `dtype.__eq__` (`PyArray_EquivTypes`) is ASYMMETRIC for the metric-prefix folds (`M8[1000ms] == M8[s]` but not the
+reverse); `DType.Equals` stays structural and the NumPy relation is `DTypeCasting.EquivTypes` (`[Misaligned]`). (5)
+`result_type(f4, 1j)` is `complex128` (NumPy `complex64`) — the single-complex-width collapse (`[Misaligned]`). (6) The
+legacy `DType._kind_list_map` (`'?'` for bool, `'S'` for char) is what `np._FindCommonType` orders kinds through and must
+not move; the descriptor's own `kind` is `'b'`/`'u'`. Stage B (`NDArray.dtype → DType`), C (datetime storage, NaT,
+ISO-8601, arithmetic loops registered as `ArrayMethod`s — `docs/plans/datetime64.md`) and D (strings) are next.
 
 ### Selection
 `choose`, `compress`, `extract`, `index_exp`, `indices`, `ix_`, `place`, `put`, `ravel_multi_index`, `s_`, `select`, `take`, `take_along_axis`, `unravel_index`, `where`
